@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, MarkdownView } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, MarkdownView, setIcon } from 'obsidian';
 import { RangeSetBuilder } from '@codemirror/state';
 import {
   Decoration,
@@ -76,7 +76,9 @@ const sectionPlugin = ViewPlugin.fromClass(
 const FACET_BTN_CLASS = 'forge-facet-btn';
 
 function facetLabel(isPython: boolean) {
-  return `Forge Facet: ${isPython ? 'Python' : 'English'}`;
+  return isPython
+    ? 'Current Facet: Code\nClick for English'
+    : 'Current Facet: English\nClick for Code';
 }
 
 function applyFacetClass(el: HTMLElement, isPython: boolean) {
@@ -84,8 +86,14 @@ function applyFacetClass(el: HTMLElement, isPython: boolean) {
   el.classList.toggle('forge-facet-python', isPython);
 }
 
+const FACET_ICON = {
+  english: 'laptop',
+  python: 'user',
+} as const;
+
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
+  private facetIconEl: HTMLElement | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -133,10 +141,13 @@ export default class ForgePlugin extends Plugin {
     // Avoid duplicates
     if (view.containerEl.querySelector(`.${FACET_BTN_CLASS}`)) return;
 
-    const btn = view.addAction('layers', facetLabel(this.settings.isPythonFacet), () => {
-      this.toggleFacet();
-    });
+    const btn = view.addAction(
+      this.settings.isPythonFacet ? FACET_ICON.python : FACET_ICON.english,
+      facetLabel(this.settings.isPythonFacet),
+      () => { this.toggleFacet(); }
+    );
     btn.addClass(FACET_BTN_CLASS);
+    this.facetIconEl = btn;
   }
 
   toggleFacet() {
@@ -151,9 +162,11 @@ export default class ForgePlugin extends Plugin {
 
     applyFacetClass(activeView.containerEl, this.settings.isPythonFacet);
 
-    // Update tooltip to reflect the new active facet
-    const btn = activeView.containerEl.querySelector(`.${FACET_BTN_CLASS}`) as HTMLElement | null;
-    if (btn) btn.setAttribute('aria-label', facetLabel(this.settings.isPythonFacet));
+    // Swap icon and tooltip to reflect the new active facet
+    if (this.facetIconEl) {
+      setIcon(this.facetIconEl, this.settings.isPythonFacet ? FACET_ICON.python : FACET_ICON.english);
+      this.facetIconEl.setAttribute('aria-label', facetLabel(this.settings.isPythonFacet));
+    }
 
     // new Notice(`Forge: Switched to ${this.settings.isPythonFacet ? 'Python' : 'English'} Facet`);
   }
