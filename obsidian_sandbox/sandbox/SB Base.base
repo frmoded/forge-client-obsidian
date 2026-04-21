@@ -1,0 +1,16 @@
+views:
+  - type: table
+    name: Table
+    order:
+      - file.name
+      - Cost
+      - file.backlinks
+      - type
+    sort:
+      - property: Cost
+        direction: ASC
+      - property: formula.Cost
+        direction: ASC
+  - type: list
+    name: View
+    cardSize: 220
