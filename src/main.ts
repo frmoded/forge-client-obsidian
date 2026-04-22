@@ -8,6 +8,8 @@ import {
   ViewUpdate,
 } from '@codemirror/view';
 
+import { spawn } from 'child_process';
+
 interface ForgeSettings {
   serverUrl: string;
   isPythonFacet: boolean;
@@ -125,6 +127,7 @@ export default class ForgePlugin extends Plugin {
         this.toggleFacet();
       },
     });
+    this.ensureServerRunning();
   }
 
   async loadSettings() {
@@ -183,7 +186,44 @@ export default class ForgePlugin extends Plugin {
       console.log('Forge API Error: Server offline');
     }
   }
+
+  private spawnForgeServer(url: string) {
+    const port = new URL(url).port || '8000';
+    // TODO: Make the Python path and working directory configurable
+    const pythonPath = '/Users/odedfuhrmann/projects/forge/.venv/bin/python';
+    const serverProcess = spawn(pythonPath, [
+      '-m', 'uvicorn',
+      'forge.api.server:app',
+      '--host', '127.0.0.1',
+      '--port', port
+    ], {
+      cwd: '/Users/odedfuhrmann/projects/forge',
+      detached: true,
+      stdio: 'ignore'
+    });
+
+    serverProcess.unref();
+
+    console.log(`Forge: Spawning server on port ${port}...`);
+    new Notice('Forge: Starting background server');
+  }
+
+  async ensureServerRunning() {
+    try {
+      // Heartbeat check on the established test endpoint
+      const res = await requestUrl({ url: `${this.settings.serverUrl}/test`, method: 'GET' });
+      if (res.status === 200) {
+        console.log('Forge: Server heartbeat detected');
+        return;
+      }
+    } catch (e) {
+      console.log('Forge: Server offline, attempting to spawn...');
+      this.spawnForgeServer(this.settings.serverUrl);
+    }
+  }
 }
+
+
 
 class ForgeSettingTab extends PluginSettingTab {
   plugin: ForgePlugin;
