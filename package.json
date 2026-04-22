@@ -4,7 +4,7 @@
   "description": "Obsidian client for Forge.",
   "main": "main.js",
   "scripts": {
-    "build": "npx esbuild src/main.ts --bundle --external:obsidian --external:@codemirror/view --external:@codemirror/state --format=cjs --outfile=main.js",
+    "build": "npx esbuild src/main.ts --bundle --external:obsidian --external:@codemirror/view --external:@codemirror/state --external:child_process --format=cjs --outfile=main.js",
     "dev": "npm run build -- --watch"
   },
   "keywords": [],
