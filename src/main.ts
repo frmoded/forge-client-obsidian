@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, MarkdownView, setIcon } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, MarkdownView, setIcon, requestUrl } from 'obsidian';
 import { RangeSetBuilder } from '@codemirror/state';
 import {
   Decoration,
@@ -14,7 +14,7 @@ interface ForgeSettings {
 }
 
 const DEFAULT_SETTINGS: ForgeSettings = {
-  serverUrl: 'http://localhost:3000',
+  serverUrl: 'http://localhost:8000',
   isPythonFacet: false,
 };
 
@@ -121,7 +121,9 @@ export default class ForgePlugin extends Plugin {
     this.addCommand({
       id: 'forge-toggle-facet',
       name: 'Toggle Facet (English/Python)',
-      callback: () => this.toggleFacet(),
+      callback: () => {
+        this.toggleFacet();
+      },
     });
   }
 
@@ -159,6 +161,7 @@ export default class ForgePlugin extends Plugin {
 
     this.settings.isPythonFacet = !this.settings.isPythonFacet;
     this.saveSettings();
+    console.log(`Forge Facet Toggled. Current mode: ${this.settings.isPythonFacet ? 'Python' : 'English'}`);
 
     applyFacetClass(activeView.containerEl, this.settings.isPythonFacet);
 
@@ -168,7 +171,17 @@ export default class ForgePlugin extends Plugin {
       this.facetIconEl.setAttribute('aria-label', facetLabel(this.settings.isPythonFacet));
     }
 
-    // new Notice(`Forge: Switched to ${this.settings.isPythonFacet ? 'Python' : 'English'} Facet`);
+    this.pingServer();
+  }
+
+  async pingServer() {
+    try {
+      const res = await requestUrl({ url: `${this.settings.serverUrl}/test`, method: 'GET' });
+      console.log('Forge API Result:', res.json);
+      new Notice('Forge: Data retrieved');
+    } catch {
+      console.log('Forge API Error: Server offline');
+    }
   }
 }
 
