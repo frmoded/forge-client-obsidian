@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, MarkdownView, setIcon, requestUrl } from 'obsidian';
+import { App, Modal, Plugin, PluginSettingTab, Setting, Notice, MarkdownView, setIcon, requestUrl } from 'obsidian';
 import { RangeSetBuilder } from '@codemirror/state';
 import {
   Decoration,
@@ -76,6 +76,7 @@ const sectionPlugin = ViewPlugin.fromClass(
 );
 
 const FACET_BTN_CLASS = 'forge-facet-btn';
+const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 
 function facetLabel(isPython: boolean) {
   return isPython
@@ -153,6 +154,11 @@ export default class ForgePlugin extends Plugin {
     );
     btn.addClass(FACET_BTN_CLASS);
     this.facetIconEl = btn;
+
+    if (!view.containerEl.querySelector(`.${SNIPPET_BTN_CLASS}`)) {
+      const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
+      snippetBtn.addClass(SNIPPET_BTN_CLASS);
+    }
   }
 
   toggleFacet() {
@@ -175,6 +181,10 @@ export default class ForgePlugin extends Plugin {
     }
 
     this.pingServer();
+  }
+
+  private createNewSnippet() {
+    new ForgeSnippetModal(this.app).open();
   }
 
   async pingServer() {
@@ -224,6 +234,75 @@ export default class ForgePlugin extends Plugin {
 }
 
 
+
+type SnippetType = 'action' | 'data';
+
+const TEMPLATES: Record<SnippetType, (name: string) => string> = {
+  action: (name) =>
+    `---\ntype: action\ndescription: ${name}\n---\n\n# English\n\n\n\n---\n\n# Python\n\ndef run(context):\n  pass\n`,
+  data: (name) =>
+    `---\ntype: data\ndescription: ${name}\n---\n\n# Parameters\n\n\n`,
+};
+
+class ForgeSnippetModal extends Modal {
+  private snippetName = '';
+  private snippetType: SnippetType = 'action';
+
+  constructor(app: App) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('h2', { text: 'New Snippet' });
+
+    new Setting(contentEl)
+      .setName('Snippet Name')
+      .addText(text =>
+        text.setPlaceholder('my-snippet').onChange(v => { this.snippetName = v.trim(); })
+      );
+
+    new Setting(contentEl)
+      .setName('Snippet Type')
+      .addDropdown(drop =>
+        drop
+          .addOption('action', 'Action')
+          .addOption('data', 'Data')
+          .setValue(this.snippetType)
+          .onChange(v => { this.snippetType = v as SnippetType; })
+      );
+
+    new Setting(contentEl)
+      .addButton(btn =>
+        btn
+          .setButtonText('Create')
+          .setCta()
+          .onClick(() => this.submit())
+      );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+
+  private async submit() {
+    if (!this.snippetName) {
+      new Notice('Forge: Snippet name is required.');
+      return;
+    }
+
+    const path = `${this.snippetName}.md`;
+    const content = TEMPLATES[this.snippetType](this.snippetName);
+
+    try {
+      await this.app.vault.create(path, content);
+      new Notice(`Forge: Created ${path}`);
+      this.close();
+    } catch {
+      new Notice(`Forge: Could not create file — does it already exist?`);
+    }
+  }
+}
 
 class ForgeSettingTab extends PluginSettingTab {
   plugin: ForgePlugin;
