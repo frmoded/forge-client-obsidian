@@ -14,6 +14,21 @@ export async function connectVault(serverUrl: string, vaultPath: string) {
   return res.json;
 }
 
+export async function generateSnippet(
+  serverUrl: string,
+  vaultPath: string,
+  snippetId: string,
+  recursive: boolean
+) {
+  const res = await requestUrl({
+    url: `${serverUrl}/generate`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId, recursive }),
+  });
+  return res.json;
+}
+
 export async function executeSnippet(
   serverUrl: string,
   vaultPath: string,

@@ -9,7 +9,15 @@ import {
   FACET_ICON,
 } from './facet';
 import { ForgeSnippetModal } from './modal';
-import { pingServer, ensureServerRunning, executeSnippet, connectVault } from './server';
+import { pingServer, ensureServerRunning, executeSnippet, connectVault, generateSnippet } from './server';
+
+function replacePythonSection(content: string, code: string): string {
+  const lines = content.split('\n');
+  const idx = lines.findIndex(l => l.trim() === '# Python');
+  if (idx === -1) return content;
+  const before = lines.slice(0, idx).join('\n');
+  return `${before}\n# Python\n\n\`\`\`python\n${code}\n\`\`\`\n`;
+}
 
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 const RUN_BTN_CLASS = 'forge-run-btn';
@@ -60,10 +68,12 @@ export default class ForgePlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  // Adds action buttons to the active MarkdownView if not already present.
+  // Adds action buttons and syncs facet CSS class to the active MarkdownView.
   syncFacetButton() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return;
+
+    applyFacetClass(view.containerEl, this.settings.isPythonFacet);
 
     if (!view.containerEl.querySelector(`.${FACET_BTN_CLASS}`)) {
       const btn = view.addAction(
@@ -117,12 +127,57 @@ export default class ForgePlugin extends Plugin {
     new ForgeSnippetModal(this.app).open();
   }
 
-  private forgeSnippet() {
-    new Notice('Forge: Recursive forging — coming soon.');
+  private async forgeSnippet() {
+    await this.generate(true);
   }
 
-  private hammerSnippet() {
-    new Notice('Forge: Single snippet write — coming soon.');
+  private async hammerSnippet() {
+    await this.generate(false);
+  }
+
+  private async generate(recursive: boolean) {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('No active note to generate.');
+      return;
+    }
+
+    const snippetId = view.file.basename;
+    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+
+    try {
+      await connectVault(this.settings.serverUrl, vaultPath);
+    } catch (e) {
+      console.error('Forge Connect Error:', e);
+      new Notice('Forge: Connect failed — check console.');
+      return;
+    }
+
+    try {
+      new Notice(`Forge: Generating ${recursive ? '(recursive)' : '(single)'}…`);
+      const result = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
+      console.log('Forge Generate Result:', result);
+      await this.writeGeneratedCode(result.generated);
+      new Notice(`Forge: ${Object.keys(result.generated).length} snippet(s) written.`);
+    } catch (e) {
+      console.error('Forge Generate Error:', e);
+      new Notice('Forge: Generation failed — check console.');
+    }
+  }
+
+  private async writeGeneratedCode(generated: Record<string, string>) {
+    const files = this.app.vault.getMarkdownFiles();
+
+    for (const [id, code] of Object.entries(generated)) {
+      const file = files.find(f => f.basename === id);
+      if (!file) {
+        console.warn(`Forge: no file found for snippet '${id}'`);
+        continue;
+      }
+      const content = await this.app.vault.read(file);
+      const updated = replacePythonSection(content, code);
+      await this.app.vault.modify(file, updated);
+    }
   }
 
   private async runSnippet() {
