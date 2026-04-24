@@ -13,3 +13,52 @@
 .forge-facet-python .cm-editor .cm-content .cm-line.forge-python-line {
   display: block;
 }
+
+/* Forge Output view */
+.forge-output-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-weight: 600;
+}
+
+.forge-output-body {
+  padding: 8px;
+  overflow-y: auto;
+  height: calc(100% - 40px);
+}
+
+.forge-output-entry {
+  margin-bottom: 12px;
+  border-left: 3px solid var(--interactive-accent);
+  padding-left: 8px;
+}
+
+.forge-output-meta {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.forge-output-id {
+  font-weight: 600;
+  color: var(--interactive-accent);
+}
+
+.forge-output-time {
+  color: var(--text-muted);
+  font-size: 0.85em;
+}
+
+.forge-output-stdout,
+.forge-output-result {
+  margin: 2px 0;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  background: var(--background-secondary);
+  padding: 4px 6px;
+  border-radius: 4px;
+}

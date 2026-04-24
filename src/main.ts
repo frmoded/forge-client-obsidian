@@ -1,4 +1,5 @@
-import { Plugin, Notice, MarkdownView } from 'obsidian';
+import { Plugin, Notice, MarkdownView, WorkspaceLeaf } from 'obsidian';
+import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import {
   sectionPlugin,
@@ -32,6 +33,7 @@ export default class ForgePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
+    this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerEditorExtension([sectionPlugin]);
 
     this.registerEvent(
@@ -204,6 +206,16 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
+  private async getOutputView(): Promise<ForgeOutputView> {
+    const existing = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
+    if (existing) return existing.view as ForgeOutputView;
+
+    const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+    return leaf.view as ForgeOutputView;
+  }
+
   private async executeSnippetWithArgs(vaultPath: string, snippetId: string, kwargs: Record<string, unknown>) {
     console.log('Forge Run →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, kwargs });
 
@@ -218,8 +230,8 @@ export default class ForgePlugin extends Plugin {
     try {
       const result = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId, kwargs);
       console.log('Forge Run Result:', result);
-      const output = result.result ?? result.stdout?.trim() ?? '(no output)';
-      new Notice(`Forge: ${snippetId} → ${output}`);
+      const view = await this.getOutputView();
+      view.append(snippetId, result.stdout ?? '', result.result);
     } catch (e) {
       console.error('Forge Execute Error:', e);
       new Notice('Forge: Execute failed — check console.');
