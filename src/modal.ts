@@ -1,5 +1,53 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
 
+export class ForgeRunModal extends Modal {
+  private values: Record<string, string> = {};
+
+  constructor(
+    app: App,
+    private snippetId: string,
+    private inputs: string[],
+    private cached: Record<string, string>,
+    private onRun: (kwargs: Record<string, unknown>, raw: Record<string, string>) => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('h2', { text: `Run: ${this.snippetId}` });
+
+    for (const name of this.inputs) {
+      this.values[name] = this.cached[name] ?? '';
+      new Setting(contentEl)
+        .setName(name)
+        .addText(text => {
+          text.setValue(this.values[name])
+            .setPlaceholder(name)
+            .onChange(v => { this.values[name] = v; });
+        });
+    }
+
+    new Setting(contentEl)
+      .addButton(btn =>
+        btn.setButtonText('Run').setCta().onClick(() => this.submit())
+      );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+
+  private submit() {
+    const kwargs: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(this.values)) {
+      try { kwargs[k] = JSON.parse(v); } catch { kwargs[k] = v; }
+    }
+    this.close();
+    this.onRun(kwargs, { ...this.values });
+  }
+}
+
 type SnippetType = 'action' | 'data';
 
 const TEMPLATES: Record<SnippetType, (name: string) => string> = {

@@ -8,7 +8,7 @@ import {
   FACET_BTN_CLASS,
   FACET_ICON,
 } from './facet';
-import { ForgeSnippetModal } from './modal';
+import { ForgeSnippetModal, ForgeRunModal } from './modal';
 import { pingServer, ensureServerRunning, executeSnippet, connectVault, generateSnippet } from './server';
 
 function replacePythonSection(content: string, code: string): string {
@@ -27,6 +27,7 @@ const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
   private facetIconEl: HTMLElement | null = null;
+  private inputCache: Record<string, Record<string, string>> = {};
 
   async onload() {
     await this.loadSettings();
@@ -189,11 +190,25 @@ export default class ForgePlugin extends Plugin {
 
     const snippetId = view.file.basename;
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
-    console.log('Forge Run →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId });
+    const frontmatter = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+    const inputs: string[] = frontmatter?.inputs ?? [];
+
+    if (inputs.length > 0) {
+      const cached = this.inputCache[snippetId] ?? {};
+      new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
+        this.inputCache[snippetId] = raw;
+        this.executeSnippetWithArgs(vaultPath, snippetId, kwargs);
+      }).open();
+    } else {
+      await this.executeSnippetWithArgs(vaultPath, snippetId, {});
+    }
+  }
+
+  private async executeSnippetWithArgs(vaultPath: string, snippetId: string, kwargs: Record<string, unknown>) {
+    console.log('Forge Run →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, kwargs });
 
     try {
       await connectVault(this.settings.serverUrl, vaultPath);
-      console.log('Forge: vault connected');
     } catch (e) {
       console.error('Forge Connect Error:', e);
       new Notice('Forge: Connect failed — check console.');
@@ -201,7 +216,7 @@ export default class ForgePlugin extends Plugin {
     }
 
     try {
-      const result = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId);
+      const result = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId, kwargs);
       console.log('Forge Run Result:', result);
       const output = result.result ?? result.stdout?.trim() ?? '(no output)';
       new Notice(`Forge: ${snippetId} → ${output}`);
