@@ -9,9 +9,12 @@ import {
   FACET_ICON,
 } from './facet';
 import { ForgeSnippetModal } from './modal';
-import { pingServer, ensureServerRunning } from './server';
+import { pingServer, ensureServerRunning, executeSnippet, connectVault } from './server';
 
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
+const RUN_BTN_CLASS = 'forge-run-btn';
+const FORGE_BTN_CLASS = 'forge-forge-btn';
+const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -76,6 +79,21 @@ export default class ForgePlugin extends Plugin {
       const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
       snippetBtn.addClass(SNIPPET_BTN_CLASS);
     }
+
+    if (!view.containerEl.querySelector(`.${RUN_BTN_CLASS}`)) {
+      const runBtn = view.addAction('play', 'Run Snippet', () => { this.runSnippet(); });
+      runBtn.addClass(RUN_BTN_CLASS);
+    }
+
+    if (!view.containerEl.querySelector(`.${FORGE_BTN_CLASS}`)) {
+      const forgeBtn = view.addAction('gavel', 'Forge Snippet (recursive)', () => { this.forgeSnippet(); });
+      forgeBtn.addClass(FORGE_BTN_CLASS);
+    }
+
+    if (!view.containerEl.querySelector(`.${HAMMER_BTN_CLASS}`)) {
+      const hammerBtn = view.addAction('hammer', 'Hammer Snippet (single)', () => { this.hammerSnippet(); });
+      hammerBtn.addClass(HAMMER_BTN_CLASS);
+    }
   }
 
   toggleFacet() {
@@ -97,5 +115,44 @@ export default class ForgePlugin extends Plugin {
 
   private createNewSnippet() {
     new ForgeSnippetModal(this.app).open();
+  }
+
+  private forgeSnippet() {
+    new Notice('Forge: Recursive forging — coming soon.');
+  }
+
+  private hammerSnippet() {
+    new Notice('Forge: Single snippet write — coming soon.');
+  }
+
+  private async runSnippet() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('No active note to run.');
+      return;
+    }
+
+    const snippetId = view.file.basename;
+    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    console.log('Forge Run →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId });
+
+    try {
+      await connectVault(this.settings.serverUrl, vaultPath);
+      console.log('Forge: vault connected');
+    } catch (e) {
+      console.error('Forge Connect Error:', e);
+      new Notice('Forge: Connect failed — check console.');
+      return;
+    }
+
+    try {
+      const result = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId);
+      console.log('Forge Run Result:', result);
+      const output = result.result ?? result.stdout?.trim() ?? '(no output)';
+      new Notice(`Forge: ${snippetId} → ${output}`);
+    } catch (e) {
+      console.error('Forge Execute Error:', e);
+      new Notice('Forge: Execute failed — check console.');
+    }
   }
 }

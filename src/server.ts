@@ -1,6 +1,34 @@
 import { Notice, requestUrl } from 'obsidian';
 import { spawn } from 'child_process';
 
+export async function connectVault(serverUrl: string, vaultPath: string) {
+  const res = await requestUrl({
+    url: `${serverUrl}/connect`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vault_path: vaultPath, force: true }),
+  });
+  if (res.json?.warnings?.length) {
+    console.warn('Forge Connect warnings:', res.json.warnings);
+  }
+  return res.json;
+}
+
+export async function executeSnippet(
+  serverUrl: string,
+  vaultPath: string,
+  snippetId: string,
+  kwargs: Record<string, unknown> = {}
+) {
+  const res = await requestUrl({
+    url: `${serverUrl}/execute`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId, kwargs }),
+  });
+  return res.json;
+}
+
 export async function pingServer(serverUrl: string) {
   try {
     const res = await requestUrl({ url: `${serverUrl}/test`, method: 'GET' });
