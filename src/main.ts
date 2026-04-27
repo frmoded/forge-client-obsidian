@@ -1,16 +1,9 @@
 import { Plugin, Notice, MarkdownView, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
-import {
-  sectionPlugin,
-  applyFacetClass,
-  updateFacetButton,
-  facetLabel,
-  FACET_BTN_CLASS,
-  FACET_ICON,
-} from './facet';
+import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal } from './modal';
-import { pingServer, ensureServerRunning, executeSnippet, connectVault, generateSnippet } from './server';
+import { ensureServerRunning, executeSnippet, connectVault, generateSnippet } from './server';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -27,7 +20,6 @@ const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
-  private facetIconEl: HTMLElement | null = null;
   private inputCache: Record<string, Record<string, string>> = {};
 
   async onload() {
@@ -37,28 +29,15 @@ export default class ForgePlugin extends Plugin {
     this.registerEditorExtension([sectionPlugin]);
 
     this.registerEvent(
-      this.app.workspace.on('layout-change', () => this.syncFacetButton())
+      this.app.workspace.on('layout-change', () => this.syncButtons())
     );
+    this.syncButtons();
 
-    // Apply saved state and button to any already-open views
-    this.app.workspace.iterateAllLeaves(leaf => {
-      if (leaf.view instanceof MarkdownView) {
-        applyFacetClass(leaf.view.containerEl, this.settings.isPythonFacet);
-      }
-    });
-    this.syncFacetButton();
-
-    this.addRibbonIcon('zap', 'Forge', () => {
-      new Notice('Hello Forge TS1.');
+    this.addRibbonIcon('zap', 'New Snippet', () => {
+      this.createNewSnippet();
     });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
-
-    this.addCommand({
-      id: 'forge-toggle-facet',
-      name: 'Toggle Facet (English/Python)',
-      callback: () => { this.toggleFacet(); },
-    });
 
     ensureServerRunning(this.settings.serverUrl);
   }
@@ -71,59 +50,29 @@ export default class ForgePlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  // Adds action buttons and syncs facet CSS class to the active MarkdownView.
-  syncFacetButton() {
+  syncButtons() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return;
 
-    applyFacetClass(view.containerEl, this.settings.isPythonFacet);
-
-    if (!view.containerEl.querySelector(`.${FACET_BTN_CLASS}`)) {
-      const btn = view.addAction(
-        this.settings.isPythonFacet ? FACET_ICON.python : FACET_ICON.english,
-        facetLabel(this.settings.isPythonFacet),
-        () => { this.toggleFacet(); }
-      );
-      btn.addClass(FACET_BTN_CLASS);
-      this.facetIconEl = btn;
-    }
-
     if (!view.containerEl.querySelector(`.${SNIPPET_BTN_CLASS}`)) {
-      const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
-      snippetBtn.addClass(SNIPPET_BTN_CLASS);
+      const btn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
+      btn.addClass(SNIPPET_BTN_CLASS);
     }
 
     if (!view.containerEl.querySelector(`.${RUN_BTN_CLASS}`)) {
-      const runBtn = view.addAction('play', 'Run Snippet', () => { this.runSnippet(); });
-      runBtn.addClass(RUN_BTN_CLASS);
+      const btn = view.addAction('play', 'Run Snippet', () => { this.runSnippet(); });
+      btn.addClass(RUN_BTN_CLASS);
     }
 
     if (!view.containerEl.querySelector(`.${FORGE_BTN_CLASS}`)) {
-      const forgeBtn = view.addAction('gavel', 'Forge Snippet (recursive)', () => { this.forgeSnippet(); });
-      forgeBtn.addClass(FORGE_BTN_CLASS);
+      const btn = view.addAction('gavel', 'Forge Snippet (recursive)', () => { this.forgeSnippet(); });
+      btn.addClass(FORGE_BTN_CLASS);
     }
 
     if (!view.containerEl.querySelector(`.${HAMMER_BTN_CLASS}`)) {
-      const hammerBtn = view.addAction('hammer', 'Hammer Snippet (single)', () => { this.hammerSnippet(); });
-      hammerBtn.addClass(HAMMER_BTN_CLASS);
+      const btn = view.addAction('hammer', 'Hammer Snippet (single)', () => { this.hammerSnippet(); });
+      btn.addClass(HAMMER_BTN_CLASS);
     }
-  }
-
-  toggleFacet() {
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!activeView) {
-      new Notice('No active note to toggle.');
-      return;
-    }
-
-    this.settings.isPythonFacet = !this.settings.isPythonFacet;
-    this.saveSettings();
-    console.log(`Forge Facet Toggled. Current mode: ${this.settings.isPythonFacet ? 'Python' : 'English'}`);
-
-    applyFacetClass(activeView.containerEl, this.settings.isPythonFacet);
-    updateFacetButton(activeView, this.facetIconEl, this.settings.isPythonFacet);
-
-    pingServer(this.settings.serverUrl);
   }
 
   private createNewSnippet() {
@@ -178,8 +127,7 @@ export default class ForgePlugin extends Plugin {
         continue;
       }
       const content = await this.app.vault.read(file);
-      const updated = replacePythonSection(content, code);
-      await this.app.vault.modify(file, updated);
+      await this.app.vault.modify(file, replacePythonSection(content, code));
     }
   }
 
@@ -230,8 +178,8 @@ export default class ForgePlugin extends Plugin {
     try {
       const result = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId, kwargs);
       console.log('Forge Run Result:', result);
-      const view = await this.getOutputView();
-      view.append(snippetId, result.stdout ?? '', result.result);
+      const outputView = await this.getOutputView();
+      outputView.append(snippetId, result.stdout ?? '', result.result);
     } catch (e) {
       console.error('Forge Execute Error:', e);
       new Notice('Forge: Execute failed — check console.');

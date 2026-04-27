@@ -1,18 +1,3 @@
-/* English facet: hide all lines, reveal only English section */
-.forge-facet-english .cm-editor .cm-content .cm-line {
-  display: none;
-}
-.forge-facet-english .cm-editor .cm-content .cm-line.forge-english-line {
-  display: block;
-}
-
-/* Python facet: hide all lines, reveal only Python section */
-.forge-facet-python .cm-editor .cm-content .cm-line {
-  display: none;
-}
-.forge-facet-python .cm-editor .cm-content .cm-line.forge-python-line {
-  display: block;
-}
 
 /* Forge Output view */
 .forge-output-header {
