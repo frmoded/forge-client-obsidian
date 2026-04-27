@@ -1,5 +1,6 @@
 import { Plugin, Notice, MarkdownView, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
+import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal } from './modal';
@@ -26,6 +27,7 @@ export default class ForgePlugin extends Plugin {
     await this.loadSettings();
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
+    this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
     this.registerEditorExtension([sectionPlugin]);
 
     this.registerEvent(
@@ -38,6 +40,16 @@ export default class ForgePlugin extends Plugin {
     });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
+
+    this.addCommand({
+      id: 'forge-open-3d',
+      name: 'Open 3D View',
+      callback: async () => {
+        const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+        await leaf.setViewState({ type: THREE_VIEW_TYPE, active: true });
+        this.app.workspace.revealLeaf(leaf);
+      },
+    });
 
     ensureServerRunning(this.settings.serverUrl);
   }
@@ -88,7 +100,12 @@ export default class ForgePlugin extends Plugin {
   }
 
   private async generate(recursive: boolean) {
+    try {
+    console.log('Forge: generate clicked v2', { recursive });
+    new Notice(`Forge: ${recursive ? 'Forging' : 'Hammering'}…`);
+
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    console.log('Forge: view?', !!view, 'file?', !!view?.file);
     if (!view?.file) {
       new Notice('No active note to generate.');
       return;
@@ -96,9 +113,12 @@ export default class ForgePlugin extends Plugin {
 
     const snippetId = view.file.basename;
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    console.log('Forge: snippetId, vaultPath →', snippetId, vaultPath);
 
+    console.log('Forge: connecting to', this.settings.serverUrl, vaultPath);
     try {
       await connectVault(this.settings.serverUrl, vaultPath);
+      console.log('Forge: connected');
     } catch (e) {
       console.error('Forge Connect Error:', e);
       new Notice('Forge: Connect failed — check console.');
@@ -106,6 +126,7 @@ export default class ForgePlugin extends Plugin {
     }
 
     try {
+      console.log('Forge: calling /generate', { snippetId, recursive });
       new Notice(`Forge: Generating ${recursive ? '(recursive)' : '(single)'}…`);
       const result = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
       console.log('Forge Generate Result:', result);
@@ -114,6 +135,10 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       console.error('Forge Generate Error:', e);
       new Notice('Forge: Generation failed — check console.');
+    }
+    } catch (outer) {
+      console.error('Forge: unexpected error in generate', outer);
+      new Notice('Forge: unexpected error — check console.');
     }
   }
 
