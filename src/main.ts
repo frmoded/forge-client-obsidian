@@ -76,25 +76,22 @@ export default class ForgePlugin extends Plugin {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return;
 
-    if (!view.containerEl.querySelector(`.${SNIPPET_BTN_CLASS}`)) {
-      const btn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
-      btn.addClass(SNIPPET_BTN_CLASS);
-    }
+    // Remove any stale Forge buttons from a previous plugin load before adding fresh ones.
+    view.containerEl.querySelectorAll(
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${HAMMER_BTN_CLASS}`
+    ).forEach(el => el.remove());
 
-    if (!view.containerEl.querySelector(`.${RUN_BTN_CLASS}`)) {
-      const btn = view.addAction('play', 'Zap', () => { this.runZapLine(); });
-      btn.addClass(RUN_BTN_CLASS);
-    }
+    const snippetBtn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
+    snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
-    if (!view.containerEl.querySelector(`.${FORGE_BTN_CLASS}`)) {
-      const btn = view.addAction('gavel', 'Forge Snippet (recursive)', () => { this.forgeSnippet(); });
-      btn.addClass(FORGE_BTN_CLASS);
-    }
+    const runBtn = view.addAction('play', 'Zap', () => { this.runZapLine(); });
+    runBtn.addClass(RUN_BTN_CLASS);
 
-    if (!view.containerEl.querySelector(`.${HAMMER_BTN_CLASS}`)) {
-      const btn = view.addAction('hammer', 'Hammer Snippet (single)', () => { this.hammerSnippet(); });
-      btn.addClass(HAMMER_BTN_CLASS);
-    }
+    const forgeBtn = view.addAction('gavel', 'Forge Snippet (recursive)', () => { this.forgeSnippet(); });
+    forgeBtn.addClass(FORGE_BTN_CLASS);
+
+    const hammerBtn = view.addAction('hammer', 'Hammer Snippet (single)', () => { this.hammerSnippet(); });
+    hammerBtn.addClass(HAMMER_BTN_CLASS);
   }
 
   private createNewSnippet() {

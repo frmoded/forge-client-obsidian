@@ -30,16 +30,26 @@ Edit or delete this note anytime — Forge won't recreate it.
 
 export async function runFirstRunCheck(app: App): Promise<void> {
   const adapter = app.vault.adapter;
+  console.log('Forge: runFirstRunCheck starting');
 
-  if (await adapter.exists(SENTINEL_PATH)) return;
+  try {
+    const hasSentinel = await adapter.exists(SENTINEL_PATH);
+    console.log('Forge: sentinel exists?', hasSentinel);
+    if (hasSentinel) return;
 
-  // Create the welcome note only if it doesn't already exist (don't clobber).
-  if (!(await adapter.exists(WELCOME_PATH))) {
-    await app.vault.create(WELCOME_PATH, WELCOME_NOTE);
+    const hasWelcome = await adapter.exists(WELCOME_PATH);
+    console.log('Forge: Welcome.md exists?', hasWelcome);
+    if (!hasWelcome) {
+      await app.vault.create(WELCOME_PATH, WELCOME_NOTE);
+      console.log('Forge: created Welcome.md');
+    }
+
+    if (!(await adapter.exists(SENTINEL_DIR))) {
+      await adapter.mkdir(SENTINEL_DIR);
+    }
+    await adapter.write(SENTINEL_PATH, '1');
+    console.log('Forge: wrote sentinel');
+  } catch (e) {
+    console.error('Forge: runFirstRunCheck failed', e);
   }
-
-  if (!(await adapter.exists(SENTINEL_DIR))) {
-    await adapter.mkdir(SENTINEL_DIR);
-  }
-  await adapter.write(SENTINEL_PATH, '1');
 }
