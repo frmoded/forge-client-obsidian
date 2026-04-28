@@ -5,6 +5,8 @@ import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal } from './modal';
 import { ensureServerRunning, executeSnippet, connectVault, generateSnippet } from './server';
+import { runFirstRunCheck } from './welcome';
+import { parseZapLine } from './zap';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -22,6 +24,7 @@ const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
   private inputCache: Record<string, Record<string, string>> = {};
+  private snippetInventory: Record<string, string[]> = {};
 
   async onload() {
     await this.loadSettings();
@@ -51,6 +54,13 @@ export default class ForgePlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'forge-zap-line',
+      name: 'Zap line',
+      callback: () => { this.runZapLine(); },
+    });
+
+    await runFirstRunCheck(this.app);
     ensureServerRunning(this.settings.serverUrl);
   }
 
@@ -72,7 +82,7 @@ export default class ForgePlugin extends Plugin {
     }
 
     if (!view.containerEl.querySelector(`.${RUN_BTN_CLASS}`)) {
-      const btn = view.addAction('play', 'Run Snippet', () => { this.runSnippet(); });
+      const btn = view.addAction('play', 'Zap', () => { this.runZapLine(); });
       btn.addClass(RUN_BTN_CLASS);
     }
 
@@ -117,7 +127,8 @@ export default class ForgePlugin extends Plugin {
 
     console.log('Forge: connecting to', this.settings.serverUrl, vaultPath);
     try {
-      await connectVault(this.settings.serverUrl, vaultPath);
+      const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
+      this.snippetInventory = connectRes?.snippets ?? {};
       console.log('Forge: connected');
     } catch (e) {
       console.error('Forge Connect Error:', e);
@@ -156,6 +167,30 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
+  // Line-first Zap: if the cursor's line contains [[id]] (with optional args),
+  // run that. Otherwise fall back to the legacy whole-note behavior.
+  private async runZapLine() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('No active note to zap.');
+      return;
+    }
+
+    const editor = view.editor;
+    const lineNum = editor.getCursor().line;
+    const line = editor.getLine(lineNum);
+    const parsed = parseZapLine(line);
+
+    if (parsed) {
+      const vaultPath = (this.app.vault.adapter as any).basePath as string;
+      await this.executeSnippetWithArgs(vaultPath, parsed.snippetId, parsed.args, parsed.inputs);
+      return;
+    }
+
+    // Fallback: run the whole note as a snippet (basename = snippet_id).
+    await this.runSnippet();
+  }
+
   private async runSnippet() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
@@ -172,10 +207,10 @@ export default class ForgePlugin extends Plugin {
       const cached = this.inputCache[snippetId] ?? {};
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
-        this.executeSnippetWithArgs(vaultPath, snippetId, kwargs);
+        this.executeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>);
       }).open();
     } else {
-      await this.executeSnippetWithArgs(vaultPath, snippetId, {});
+      await this.executeSnippetWithArgs(vaultPath, snippetId, [], {});
     }
   }
 
@@ -189,25 +224,64 @@ export default class ForgePlugin extends Plugin {
     return leaf.view as ForgeOutputView;
   }
 
-  private async executeSnippetWithArgs(vaultPath: string, snippetId: string, kwargs: Record<string, unknown>) {
-    console.log('Forge Run →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, kwargs });
+  private async executeSnippetWithArgs(
+    vaultPath: string,
+    snippetId: string,
+    args: unknown[],
+    inputs: Record<string, unknown>,
+  ) {
+    console.log('Forge Run →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs });
 
     try {
-      await connectVault(this.settings.serverUrl, vaultPath);
+      const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
+      this.snippetInventory = connectRes?.snippets ?? {};
     } catch (e) {
       console.error('Forge Connect Error:', e);
       new Notice('Forge: Connect failed — check console.');
       return;
     }
 
+    let res;
     try {
-      const result = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId, kwargs);
-      console.log('Forge Run Result:', result);
-      const outputView = await this.getOutputView();
-      outputView.append(snippetId, result.stdout ?? '', result.result);
+      res = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId, args, inputs);
     } catch (e) {
       console.error('Forge Execute Error:', e);
       new Notice('Forge: Execute failed — check console.');
+      return;
+    }
+
+    const outputView = await this.getOutputView();
+
+    if (res.status >= 400) {
+      const detail = res.json?.detail;
+      const errorMsg = (detail && typeof detail === 'object' && detail.error)
+        ? detail.error
+        : (typeof detail === 'string' ? detail : `HTTP ${res.status}`);
+      const stdout = (detail && typeof detail === 'object' && detail.stdout) ? detail.stdout : '';
+      console.warn('Forge Execute non-2xx:', res.status, detail);
+      outputView.appendError(snippetId, errorMsg, stdout);
+      return;
+    }
+
+    const result = res.json;
+    console.log('Forge Run Result:', result);
+    outputView.append(snippetId, result.stdout ?? '', result.result);
+
+    // Surface install metadata to the debug log; the message is rendered to the user.
+    if (snippetId === 'install' && result.result && typeof result.result === 'object') {
+      console.log('Forge Install:', {
+        vault_name: result.result.vault_name,
+        version: result.result.version,
+      });
+
+      // Refresh inventory so newly installed snippets become visible.
+      try {
+        const refreshed = await connectVault(this.settings.serverUrl, vaultPath);
+        this.snippetInventory = refreshed?.snippets ?? {};
+        console.log('Forge inventory after install:', this.snippetInventory);
+      } catch (e) {
+        console.warn('Forge: post-install refresh failed', e);
+      }
     }
   }
 }

@@ -47,3 +47,19 @@
   padding: 4px 6px;
   border-radius: 4px;
 }
+
+.forge-output-message {
+  margin: 2px 0;
+  white-space: pre-wrap;
+}
+
+.forge-output-entry.is-error {
+  border-left-color: var(--text-error, #d33);
+}
+
+.forge-output-error {
+  margin: 2px 0;
+  color: var(--text-error, #d33);
+  font-weight: 500;
+  white-space: pre-wrap;
+}

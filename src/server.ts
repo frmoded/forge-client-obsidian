@@ -29,19 +29,26 @@ export async function generateSnippet(
   return res.json;
 }
 
+export interface ExecuteResponse {
+  status: number;
+  json: any;
+}
+
 export async function executeSnippet(
   serverUrl: string,
   vaultPath: string,
   snippetId: string,
-  kwargs: Record<string, unknown> = {}
-) {
+  args: unknown[] = [],
+  inputs: Record<string, unknown> = {}
+): Promise<ExecuteResponse> {
   const res = await requestUrl({
     url: `${serverUrl}/execute`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId, kwargs }),
+    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId, args, inputs }),
+    throw: false,
   });
-  return res.json;
+  return { status: res.status, json: res.json };
 }
 
 export async function pingServer(serverUrl: string) {
