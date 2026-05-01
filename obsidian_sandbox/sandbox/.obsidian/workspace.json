@@ -4,35 +4,24 @@
     "type": "split",
     "children": [
       {
-        "id": "d5c00e82754d03c2",
+        "id": "a27a9a1220cac1b5",
         "type": "tabs",
         "children": [
           {
-            "id": "aa16b1870b1f2eb4",
-            "type": "leaf",
-            "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
-            }
-          },
-          {
-            "id": "b339e29c1e982ddf",
+            "id": "3fca84647f8e8eb9",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "hello.md",
+                "file": "hello_forge.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "hello"
+              "title": "hello_forge"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "vertical"
@@ -167,21 +156,31 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Foo.md",
+                "file": "hello_forge.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Foo"
+              "title": "Outline of hello_forge"
+            }
+          },
+          {
+            "id": "699fe9115180c8ce",
+            "type": "leaf",
+            "state": {
+              "type": "forge-output",
+              "state": {},
+              "icon": "zap",
+              "title": "Forge Output"
             }
           }
-        ]
+        ],
+        "currentTab": 5
       }
     ],
     "direction": "horizontal",
-    "width": 300,
-    "collapsed": true
+    "width": 469.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -193,19 +192,44 @@
       "command-palette:Open command palette": false,
       "bases:Create new base": false,
       "obsidian42-brat:BRAT": false,
-      "forge-client-obsidian:Forge": false
+      "forge-client-obsidian:New Snippet": false
     }
   },
-  "active": "b339e29c1e982ddf",
+  "active": "3fca84647f8e8eb9",
   "lastOpenFiles": [
-    "SB Base.base",
-    "hello.md",
-    "Foo.md",
-    "main.md",
-    "main.md.md",
-    "hello.md.md",
-    "Untitled.canvas",
+    "hello_forge.md",
+    "greet.md",
+    "hello_forge copy.md",
     "Welcome.md",
+    "SB Base.base",
+    "Untitled.md",
+    "random_range.md",
+    "hello_numpy.md",
+    "call_foo.md",
+    "hello_world.md",
+    "tamar_blocks",
+    "tamar_blocks/foo.md",
+    "fibonacci.md",
+    "forge-core/hello_registry.md",
+    "forge.toml",
+    "forge-core/forge.toml",
+    "forge-core/README.md",
+    "forge-core/LICENSE",
+    "forge-core",
+    "install.md",
+    "Untitled 1.md",
+    "main.md",
+    "hello.md",
+    "FOO1.md",
+    "hello_forgey.md",
+    "hello copy.md",
+    "bluh.md",
+    "bluh1.md",
+    "Foo.md",
+    "Document.md",
+    "Foo1.md",
+    "Untitled 1",
+    "Untitled.canvas",
     "Untitled.base"
   ]
 }
