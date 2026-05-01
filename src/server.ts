@@ -29,20 +29,20 @@ export async function generateSnippet(
   return res.json;
 }
 
-export interface ExecuteResponse {
+export interface ComputeResponse {
   status: number;
   json: any;
 }
 
-export async function executeSnippet(
+export async function computeSnippet(
   serverUrl: string,
   vaultPath: string,
   snippetId: string,
   args: unknown[] = [],
   inputs: Record<string, unknown> = {}
-): Promise<ExecuteResponse> {
+): Promise<ComputeResponse> {
   const res = await requestUrl({
-    url: `${serverUrl}/execute`,
+    url: `${serverUrl}/compute`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId, args, inputs }),

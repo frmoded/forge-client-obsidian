@@ -66,7 +66,7 @@ const TEMPLATES: Record<SnippetType, (name: string) => string> = {
     '',
     '# Python',
     '',
-    'def run(context):',
+    'def compute(context):',
     '  pass',
     '',
   ].join('\n'),

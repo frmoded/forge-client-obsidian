@@ -4,7 +4,7 @@ import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal } from './modal';
-import { ensureServerRunning, executeSnippet, connectVault, generateSnippet } from './server';
+import { ensureServerRunning, computeSnippet, connectVault, generateSnippet } from './server';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 
@@ -18,7 +18,6 @@ function replacePythonSection(content: string, code: string): string {
 
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 const RUN_BTN_CLASS = 'forge-run-btn';
-const FORGE_BTN_CLASS = 'forge-forge-btn';
 const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 
 export default class ForgePlugin extends Plugin {
@@ -78,7 +77,7 @@ export default class ForgePlugin extends Plugin {
 
     // Remove any stale Forge buttons from a previous plugin load before adding fresh ones.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${HAMMER_BTN_CLASS}`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .forge-forge-btn`
     ).forEach(el => el.remove());
 
     const snippetBtn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
@@ -87,19 +86,12 @@ export default class ForgePlugin extends Plugin {
     const runBtn = view.addAction('play', 'Zap', () => { this.runZapLine(); });
     runBtn.addClass(RUN_BTN_CLASS);
 
-    const forgeBtn = view.addAction('gavel', 'Forge Snippet (recursive)', () => { this.forgeSnippet(); });
-    forgeBtn.addClass(FORGE_BTN_CLASS);
-
-    const hammerBtn = view.addAction('hammer', 'Hammer Snippet (single)', () => { this.hammerSnippet(); });
+    const hammerBtn = view.addAction('hammer', 'Hammer Snippet', () => { this.hammerSnippet(); });
     hammerBtn.addClass(HAMMER_BTN_CLASS);
   }
 
   private createNewSnippet() {
     new ForgeSnippetModal(this.app).open();
-  }
-
-  private async forgeSnippet() {
-    await this.generate(true);
   }
 
   private async hammerSnippet() {
@@ -180,7 +172,7 @@ export default class ForgePlugin extends Plugin {
 
     if (parsed) {
       const vaultPath = (this.app.vault.adapter as any).basePath as string;
-      await this.executeSnippetWithArgs(vaultPath, parsed.snippetId, parsed.args, parsed.inputs);
+      await this.computeSnippetWithArgs(vaultPath, parsed.snippetId, parsed.args, parsed.inputs);
       return;
     }
 
@@ -204,10 +196,10 @@ export default class ForgePlugin extends Plugin {
       const cached = this.inputCache[snippetId] ?? {};
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
-        this.executeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>);
+        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>);
       }).open();
     } else {
-      await this.executeSnippetWithArgs(vaultPath, snippetId, [], {});
+      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {});
     }
   }
 
@@ -221,13 +213,13 @@ export default class ForgePlugin extends Plugin {
     return leaf.view as ForgeOutputView;
   }
 
-  private async executeSnippetWithArgs(
+  private async computeSnippetWithArgs(
     vaultPath: string,
     snippetId: string,
     args: unknown[],
     inputs: Record<string, unknown>,
   ) {
-    console.log('Forge Run →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs });
+    console.log('Forge Compute →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs });
 
     try {
       const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
@@ -240,10 +232,10 @@ export default class ForgePlugin extends Plugin {
 
     let res;
     try {
-      res = await executeSnippet(this.settings.serverUrl, vaultPath, snippetId, args, inputs);
+      res = await computeSnippet(this.settings.serverUrl, vaultPath, snippetId, args, inputs);
     } catch (e) {
-      console.error('Forge Execute Error:', e);
-      new Notice('Forge: Execute failed — check console.');
+      console.error('Forge Compute Error:', e);
+      new Notice('Forge: Compute failed — check console.');
       return;
     }
 
@@ -255,13 +247,13 @@ export default class ForgePlugin extends Plugin {
         ? detail.error
         : (typeof detail === 'string' ? detail : `HTTP ${res.status}`);
       const stdout = (detail && typeof detail === 'object' && detail.stdout) ? detail.stdout : '';
-      console.warn('Forge Execute non-2xx:', res.status, detail);
+      console.warn('Forge Compute non-2xx:', res.status, detail);
       outputView.appendError(snippetId, errorMsg, stdout);
       return;
     }
 
     const result = res.json;
-    console.log('Forge Run Result:', result);
+    console.log('Forge Compute Result:', result);
     outputView.append(snippetId, result.stdout ?? '', result.result);
 
     // Surface install metadata to the debug log; the message is rendered to the user.
