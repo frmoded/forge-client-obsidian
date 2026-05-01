@@ -1,4 +1,5 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { renderMusicXMLToSVG } from './verovio';
 
 export const OUTPUT_VIEW_TYPE = 'forge-output';
 
@@ -37,18 +38,48 @@ export class ForgeOutputView extends ItemView {
       entry.createEl('pre', { text: stdout, cls: 'forge-output-stdout' });
     }
 
-    // If result is an object with a `message` field, render the message verbatim
-    // (e.g. install snippet's user-facing string). Otherwise stringify.
-    if (isObjectWithMessage(result)) {
-      entry.createEl('p', { text: result.message, cls: 'forge-output-message' });
-    } else if (result !== null && result !== undefined) {
-      entry.createEl('pre', {
-        text: `→ ${JSON.stringify(result)}`,
-        cls: 'forge-output-result',
-      });
+    this.renderResult(entry, result);
+    entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  private renderResult(entry: HTMLElement, result: unknown) {
+    if (result === null || result === undefined) return;
+
+    // Tagged payloads from the backend (musicxml, future: svg, ifc, ...)
+    if (isTagged(result)) {
+      switch (result.type) {
+        case 'musicxml':
+          this.renderMusicXML(entry, (result as any).content as string);
+          return;
+        // case 'svg':  case 'ifc':  // when those land
+      }
     }
 
-    entry.scrollIntoView({ behavior: 'smooth' });
+    // Install-style messages: render as plain text.
+    if (isObjectWithMessage(result)) {
+      entry.createEl('p', { text: result.message, cls: 'forge-output-message' });
+      return;
+    }
+
+    // Plain values fall through to a stringified preview.
+    entry.createEl('pre', {
+      text: `→ ${JSON.stringify(result)}`,
+      cls: 'forge-output-result',
+    });
+  }
+
+  private renderMusicXML(entry: HTMLElement, musicxml: string) {
+    const host = entry.createDiv({ cls: 'forge-output-musicxml' });
+    host.setText('Rendering score…');
+    renderMusicXMLToSVG(musicxml).then(svg => {
+      host.empty();
+      host.innerHTML = svg;
+    }).catch(e => {
+      console.error('Forge: Verovio render failed', e);
+      host.empty();
+      host.createEl('p', { text: 'Score render failed — see console.', cls: 'forge-output-error' });
+      host.createEl('pre', { text: musicxml, cls: 'forge-output-stdout' });
+    });
   }
 
   appendError(snippetId: string, errorMsg: string, stdout: string) {
@@ -72,4 +103,8 @@ export class ForgeOutputView extends ItemView {
 
 function isObjectWithMessage(v: unknown): v is { message: string } {
   return typeof v === 'object' && v !== null && typeof (v as any).message === 'string';
+}
+
+function isTagged(v: unknown): v is { type: string } {
+  return typeof v === 'object' && v !== null && typeof (v as any).type === 'string';
 }

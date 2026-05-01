@@ -63,3 +63,16 @@
   font-weight: 500;
   white-space: pre-wrap;
 }
+
+.forge-output-musicxml {
+  margin: 6px 0;
+  background: var(--background-primary);
+  padding: 8px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.forge-output-musicxml svg {
+  max-width: 100%;
+  height: auto;
+}
