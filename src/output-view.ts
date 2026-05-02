@@ -71,14 +71,17 @@ export class ForgeOutputView extends ItemView {
   private renderMusicXML(entry: HTMLElement, musicxml: string) {
     const host = entry.createDiv({ cls: 'forge-output-musicxml' });
     host.setText('Rendering score…');
-    renderMusicXMLToSVG(musicxml).then(svg => {
-      host.empty();
-      host.innerHTML = svg;
-    }).catch(e => {
-      console.error('Forge: Verovio render failed', e);
-      host.empty();
-      host.createEl('p', { text: 'Score render failed — see console.', cls: 'forge-output-error' });
-      host.createEl('pre', { text: musicxml, cls: 'forge-output-stdout' });
+    // Defer one frame so clientWidth reflects the actual layout width.
+    requestAnimationFrame(() => {
+      renderMusicXMLToSVG(musicxml, host.clientWidth).then(svg => {
+        host.empty();
+        host.innerHTML = svg;
+      }).catch(e => {
+        console.error('Forge: Verovio render failed', e);
+        host.empty();
+        host.createEl('p', { text: 'Score render failed — see console.', cls: 'forge-output-error' });
+        host.createEl('pre', { text: musicxml, cls: 'forge-output-stdout' });
+      });
     });
   }
 
