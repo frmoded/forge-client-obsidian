@@ -10,7 +10,6 @@ print "Hello Forge"
 
 ---
 
-x
 `
 # Python
 
