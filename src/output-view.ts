@@ -1,5 +1,28 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
-import { renderMusicXMLToSVG } from './verovio';
+import { renderMusicXMLAndMIDI, getTimeForElement } from './verovio';
+
+// html-midi-player registers <midi-player> as a custom element on import. We
+// load it lazily and guard against re-registration (plugin reload would
+// otherwise throw on the second import and crash the whole plugin).
+let midiPlayerLoaded = false;
+async function ensureMidiPlayerLoaded() {
+  if (midiPlayerLoaded || customElements.get('midi-player')) {
+    midiPlayerLoaded = true;
+    return;
+  }
+  await import('html-midi-player');
+  midiPlayerLoaded = true;
+}
+
+// We parse MIDI bytes to a NoteSequence ourselves and set player.noteSequence
+// directly. The alternative — passing a `data:` URI as src — sends Magenta
+// down a fetch() path that the bundled node-fetch can't follow ("Only HTTP(S)
+// protocols are supported"). NoteSequence skips the fetch entirely.
+async function midiBase64ToNoteSequence(midiBase64: string): Promise<any> {
+  const mm: any = await import('@magenta/music/esm/core/midi_io');
+  const bytes = Uint8Array.from(atob(midiBase64), c => c.charCodeAt(0));
+  return mm.midiToSequenceProto(bytes);
+}
 
 export const OUTPUT_VIEW_TYPE = 'forge-output';
 
@@ -72,16 +95,49 @@ export class ForgeOutputView extends ItemView {
     const host = entry.createDiv({ cls: 'forge-output-musicxml' });
     host.setText('Rendering score…');
     // Defer one frame so clientWidth reflects the actual layout width.
-    requestAnimationFrame(() => {
-      renderMusicXMLToSVG(musicxml, host.clientWidth).then(svg => {
+    requestAnimationFrame(async () => {
+      try {
+        const { svg, midiBase64 } = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
         host.empty();
-        host.innerHTML = svg;
-      }).catch(e => {
+
+        // Try to mount the player; if it fails, render the SVG without
+        // playback rather than dropping the whole entry.
+        let player: any = null;
+        try {
+          await ensureMidiPlayerLoaded();
+          const noteSequence = await midiBase64ToNoteSequence(midiBase64);
+          player = document.createElement('midi-player');
+          player.soundFont = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
+          player.noteSequence = noteSequence;
+          player.classList.add('forge-midi-player');
+          host.appendChild(player);
+        } catch (e) {
+          console.warn('Forge: MIDI player init failed; score will render without playback.', e);
+        }
+
+        const scoreWrap = host.createDiv({ cls: 'forge-output-score' });
+        scoreWrap.innerHTML = svg;
+
+        if (player) {
+          scoreWrap.addEventListener('click', async (ev) => {
+            const target = ev.target as Element | null;
+            const noteEl = target?.closest('.note') as Element | null;
+            if (!noteEl?.id) return;
+            try {
+              const ms = await getTimeForElement(musicxml, noteEl.id);
+              player.currentTime = ms / 1000;
+              player.start();
+            } catch (e) {
+              console.error('Forge: click-to-play failed', e);
+            }
+          });
+        }
+      } catch (e) {
         console.error('Forge: Verovio render failed', e);
         host.empty();
         host.createEl('p', { text: 'Score render failed — see console.', cls: 'forge-output-error' });
         host.createEl('pre', { text: musicxml, cls: 'forge-output-stdout' });
-      });
+      }
     });
   }
 

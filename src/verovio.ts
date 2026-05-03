@@ -21,11 +21,7 @@ async function getToolkit(): Promise<any> {
   return toolkitPromise;
 }
 
-export async function renderMusicXMLToSVG(musicxml: string, hostWidthPx?: number): Promise<string> {
-  const toolkit = await getToolkit();
-  // adjustPageHeight: trim whitespace below the score.
-  // pageWidth is in 1/100 mm; sized roughly to the host so we get a sensible
-  // line break / margin layout instead of Verovio's full-sheet default.
+function applyOptions(toolkit: any, hostWidthPx?: number) {
   const targetWidth = hostWidthPx && hostWidthPx > 0 ? hostWidthPx * 5 : 2100;
   toolkit.setOptions({
     adjustPageHeight: true,
@@ -37,6 +33,33 @@ export async function renderMusicXMLToSVG(musicxml: string, hostWidthPx?: number
     pageMarginRight: 50,
     scale: 40,
   });
+}
+
+export interface RenderedScore {
+  svg: string;
+  midiBase64: string;
+}
+
+export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: number): Promise<RenderedScore> {
+  const toolkit = await getToolkit();
+  applyOptions(toolkit, hostWidthPx);
   toolkit.loadData(musicxml);
-  return toolkit.renderToSVG(1);
+  const svg = toolkit.renderToSVG(1);
+  const midiBase64 = toolkit.renderToMIDI();
+  return { svg, midiBase64 };
+}
+
+// Backward-compat shim — older callers that only need the SVG.
+export async function renderMusicXMLToSVG(musicxml: string, hostWidthPx?: number): Promise<string> {
+  return (await renderMusicXMLAndMIDI(musicxml, hostWidthPx)).svg;
+}
+
+// Time of an element (note, rest, ...) in milliseconds within the current
+// MIDI rendering. The toolkit holds whatever was last loaded — callers should
+// re-load the relevant score before asking, in case multiple scores live in
+// the panel.
+export async function getTimeForElement(musicxml: string, elementId: string): Promise<number> {
+  const toolkit = await getToolkit();
+  toolkit.loadData(musicxml);
+  return toolkit.getTimeForElement(elementId);
 }

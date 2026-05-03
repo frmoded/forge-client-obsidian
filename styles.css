@@ -76,3 +76,17 @@
   max-width: 100%;
   height: auto;
 }
+
+.forge-midi-player {
+  display: block;
+  margin-bottom: 6px;
+  width: 100%;
+}
+
+.forge-output-score .note {
+  cursor: pointer;
+}
+
+.forge-output-score .note:hover {
+  fill: var(--interactive-accent);
+}
