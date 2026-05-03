@@ -14,6 +14,23 @@ export async function connectVault(serverUrl: string, vaultPath: string) {
   return res.json;
 }
 
+export async function freezeEdge(
+  serverUrl: string,
+  vaultPath: string,
+  caller: string,
+  callee: string,
+  state: 'frozen' | 'live',
+): Promise<{ status: number; json: any }> {
+  const res = await requestUrl({
+    url: `${serverUrl}/freeze`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vault_path: vaultPath, caller, callee, state }),
+    throw: false,
+  });
+  return { status: res.status, json: res.json };
+}
+
 export async function generateSnippet(
   serverUrl: string,
   vaultPath: string,

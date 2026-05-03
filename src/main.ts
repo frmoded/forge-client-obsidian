@@ -3,8 +3,8 @@ import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
-import { ForgeSnippetModal, ForgeRunModal } from './modal';
-import { ensureServerRunning, computeSnippet, connectVault, generateSnippet } from './server';
+import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal } from './modal';
+import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge } from './server';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 
@@ -24,6 +24,7 @@ export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
   private inputCache: Record<string, Record<string, string>> = {};
   private snippetInventory: Record<string, string[]> = {};
+  private freezeCache: { caller?: string; callee?: string } = {};
 
   async onload() {
     await this.loadSettings();
@@ -59,6 +60,18 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.runZapLine(); },
     });
 
+    this.addCommand({
+      id: 'forge-freeze-edge',
+      name: 'Freeze edge',
+      callback: () => { this.openFreezeModal('frozen'); },
+    });
+
+    this.addCommand({
+      id: 'forge-unfreeze-edge',
+      name: 'Unfreeze edge',
+      callback: () => { this.openFreezeModal('live'); },
+    });
+
     await runFirstRunCheck(this.app);
     ensureServerRunning(this.settings.serverUrl);
   }
@@ -92,6 +105,28 @@ export default class ForgePlugin extends Plugin {
 
   private createNewSnippet() {
     new ForgeSnippetModal(this.app).open();
+  }
+
+  private openFreezeModal(state: 'frozen' | 'live') {
+    new ForgeFreezeModal(this.app, state, this.freezeCache, async (caller, callee) => {
+      this.freezeCache = { caller, callee };
+      const vaultPath = (this.app.vault.adapter as any).basePath as string;
+      const verb = state === 'frozen' ? 'freeze' : 'unfreeze';
+      try {
+        const res = await freezeEdge(this.settings.serverUrl, vaultPath, caller, callee, state);
+        if (res.status === 200) {
+          new Notice(`Forge: ${verb}d ${caller} → ${callee}`);
+        } else if (res.status === 404) {
+          new Notice(`Forge: no snapshot for ${caller} → ${callee}. Run the edge first.`);
+        } else {
+          const detail = res.json?.detail ?? `HTTP ${res.status}`;
+          new Notice(`Forge: ${verb} failed — ${detail}`);
+        }
+      } catch (e) {
+        console.error(`Forge ${verb} error:`, e);
+        new Notice(`Forge: ${verb} failed — check console.`);
+      }
+    }).open();
   }
 
   private async hammerSnippet() {

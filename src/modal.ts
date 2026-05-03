@@ -1,5 +1,55 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
 
+export class ForgeFreezeModal extends Modal {
+  private caller = '';
+  private callee = '';
+
+  constructor(
+    app: App,
+    private action: 'frozen' | 'live',
+    private cached: { caller?: string; callee?: string },
+    private onSubmit: (caller: string, callee: string) => void,
+  ) {
+    super(app);
+    this.caller = cached.caller ?? '';
+    this.callee = cached.callee ?? '';
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    const title = this.action === 'frozen' ? 'Freeze edge' : 'Unfreeze edge';
+    contentEl.createEl('h2', { text: title });
+    contentEl.createEl('p', {
+      text: 'Identify the edge by qualified caller and callee snippet IDs (e.g. "authoring/foo", "forge-core/hello_registry").',
+    });
+
+    new Setting(contentEl)
+      .setName('Caller')
+      .addText(t => t.setValue(this.caller).setPlaceholder('authoring/caller_id').onChange(v => { this.caller = v.trim(); }));
+
+    new Setting(contentEl)
+      .setName('Callee')
+      .addText(t => t.setValue(this.callee).setPlaceholder('authoring/callee_id').onChange(v => { this.callee = v.trim(); }));
+
+    new Setting(contentEl).addButton(btn =>
+      btn.setButtonText(this.action === 'frozen' ? 'Freeze' : 'Unfreeze').setCta().onClick(() => this.submit())
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+
+  private submit() {
+    if (!this.caller || !this.callee) {
+      new Notice('Forge: caller and callee are required.');
+      return;
+    }
+    this.close();
+    this.onSubmit(this.caller, this.callee);
+  }
+}
+
 export class ForgeRunModal extends Modal {
   private values: Record<string, string> = {};
 
