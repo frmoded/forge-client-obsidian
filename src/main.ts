@@ -3,6 +3,7 @@ import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
 import { invalidateLibraryVaultCache } from './edges';
+import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal } from './modal';
@@ -84,6 +85,9 @@ export default class ForgePlugin extends Plugin {
       name: 'Unfreeze edge',
       callback: () => { this.openFreezeModal('live'); },
     });
+
+    const detachHover = attachEdgeHover(this.app, () => this.settings.serverUrl);
+    this.register(detachHover);
 
     await runFirstRunCheck(this.app);
     ensureServerRunning(this.settings.serverUrl);

@@ -202,3 +202,68 @@
   color: var(--text-muted);
   margin: 4px 0;
 }
+
+/* Hover popover */
+.forge-edge-popover {
+  position: fixed;
+  z-index: 1000;
+  max-width: 360px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  padding: 8px 10px;
+  font-size: 0.9em;
+}
+
+.forge-edge-popover-head {
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.forge-edge-popover-id {
+  color: var(--text-normal);
+}
+
+.forge-edge-popover-arrow {
+  color: var(--text-muted);
+  margin: 0 4px;
+}
+
+.forge-edge-popover-body p {
+  margin: 4px 0;
+}
+
+.forge-edge-popover-state-live {
+  color: var(--background-modifier-success, #2c5);
+}
+
+.forge-edge-popover-state-frozen {
+  color: var(--background-modifier-cover, #88c);
+}
+
+.forge-edge-popover-time {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.forge-edge-popover-empty {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.forge-edge-popover-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.forge-edge-popover-open {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  cursor: pointer;
+}
