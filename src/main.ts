@@ -1,6 +1,8 @@
 import { Plugin, Notice, MarkdownView, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
+import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
+import { invalidateLibraryVaultCache } from './edges';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal } from './modal';
@@ -31,6 +33,7 @@ export default class ForgePlugin extends Plugin {
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
+    this.registerView(EDGES_VIEW_TYPE, leaf => new ForgeEdgesView(leaf, () => this.settings.serverUrl));
     this.registerEditorExtension([sectionPlugin]);
 
     this.registerEvent(
@@ -42,7 +45,17 @@ export default class ForgePlugin extends Plugin {
       this.createNewSnippet();
     });
 
+    this.addRibbonIcon('git-branch', 'Forge Edges', () => {
+      this.openEdgesView();
+    });
+
     this.addSettingTab(new ForgeSettingTab(this.app, this));
+
+    this.addCommand({
+      id: 'forge-show-edges-panel',
+      name: 'Show edges panel',
+      callback: () => { this.openEdgesView(); },
+    });
 
     this.addCommand({
       id: 'forge-open-3d',
@@ -105,6 +118,17 @@ export default class ForgePlugin extends Plugin {
 
   private createNewSnippet() {
     new ForgeSnippetModal(this.app).open();
+  }
+
+  private async openEdgesView() {
+    const existing = this.app.workspace.getLeavesOfType(EDGES_VIEW_TYPE)[0];
+    if (existing) {
+      this.app.workspace.revealLeaf(existing);
+      return;
+    }
+    const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    await leaf.setViewState({ type: EDGES_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
   }
 
   private openFreezeModal(state: 'frozen' | 'live') {
@@ -302,6 +326,7 @@ export default class ForgePlugin extends Plugin {
       try {
         const refreshed = await connectVault(this.settings.serverUrl, vaultPath);
         this.snippetInventory = refreshed?.snippets ?? {};
+        invalidateLibraryVaultCache();
         console.log('Forge inventory after install:', this.snippetInventory);
       } catch (e) {
         console.warn('Forge: post-install refresh failed', e);
