@@ -66,6 +66,13 @@ export function relativeTime(iso: string): string {
   return `${Math.floor(sec / 86400)}d ago`;
 }
 
+export function absoluteTime(iso: string): string {
+  if (!iso) return '';
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return iso;
+  return t.toLocaleString();
+}
+
 export function snapshotPath(callerId: string, calleeId: string): string {
   return `${EDGES_DIR}/${callerId}/${calleeId}.md`;
 }

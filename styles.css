@@ -207,25 +207,57 @@
 .forge-edge-popover {
   position: fixed;
   z-index: 1000;
+  min-width: 280px;
   max-width: 360px;
   background: var(--background-primary);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  padding: 8px 10px;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  padding: 12px;
   font-size: 0.9em;
 }
 
-.forge-edge-popover-head {
-  font-family: var(--font-monospace);
-  font-size: 0.85em;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-  word-break: break-all;
+.forge-edge-popover-pill-row {
+  margin-bottom: 8px;
 }
 
-.forge-edge-popover-id {
+.forge-edge-popover-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: white;
+  transition: background-color 0.2s ease;
+}
+
+.forge-edge-popover-pill.is-live {
+  background: #16a34a;
+}
+
+.forge-edge-popover-pill.is-frozen {
+  background: #d97706;
+}
+
+.forge-edge-popover-pill.is-none {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.forge-edge-popover-pill-icon {
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.forge-edge-popover-path {
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
   color: var(--text-normal);
+  margin-bottom: 6px;
+  word-break: break-all;
 }
 
 .forge-edge-popover-arrow {
@@ -233,37 +265,32 @@
   margin: 0 4px;
 }
 
-.forge-edge-popover-body p {
-  margin: 4px 0;
-}
-
-.forge-edge-popover-state-live {
-  color: var(--background-modifier-success, #2c5);
-}
-
-.forge-edge-popover-state-frozen {
-  color: var(--background-modifier-cover, #88c);
-}
-
 .forge-edge-popover-time {
-  font-size: 0.85em;
+  font-size: 0.78em;
   color: var(--text-muted);
+  margin-bottom: 10px;
 }
 
 .forge-edge-popover-empty {
+  font-size: 0.85em;
   font-style: italic;
   color: var(--text-muted);
+  margin-bottom: 10px;
 }
 
 .forge-edge-popover-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 6px;
+  gap: 12px;
 }
 
 .forge-edge-popover-open {
-  font-size: 0.8em;
+  font-size: 0.78em;
   color: var(--text-muted);
   cursor: pointer;
+  text-decoration: underline;
+}
+
+.forge-edge-popover-open:hover {
+  color: var(--text-normal);
 }

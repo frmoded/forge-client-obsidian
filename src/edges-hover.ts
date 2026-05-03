@@ -1,5 +1,6 @@
 import { App, MarkdownView, Notice } from 'obsidian';
 import {
+  absoluteTime,
   pathToSnippetId,
   readSnapshot,
   relativeTime,
@@ -119,30 +120,56 @@ class EdgePopover {
   private render(callerId: string, calleeId: string, snapshot: any) {
     this.el.empty();
 
-    const head = this.el.createDiv({ cls: 'forge-edge-popover-head' });
-    head.createEl('span', { text: callerId, cls: 'forge-edge-popover-id' });
-    head.createEl('span', { text: ' → ', cls: 'forge-edge-popover-arrow' });
-    head.createEl('span', { text: calleeId, cls: 'forge-edge-popover-id' });
-
-    const body = this.el.createDiv({ cls: 'forge-edge-popover-body' });
-
+    // 1. State pill — top-most, most visually prominent.
+    const pillRow = this.el.createDiv({ cls: 'forge-edge-popover-pill-row' });
+    const pill = pillRow.createEl('span', { cls: 'forge-edge-popover-pill' });
     if (!snapshot) {
-      body.createEl('p', {
-        text: 'No snapshot yet — run the calling snippet to capture this edge.',
+      pill.addClass('is-none');
+      pill.createEl('span', { text: '◌', cls: 'forge-edge-popover-pill-icon' });
+      pill.createEl('span', { text: 'NO SNAPSHOT' });
+    } else if (snapshot.state === 'frozen') {
+      pill.addClass('is-frozen');
+      pill.createEl('span', { text: '🔒', cls: 'forge-edge-popover-pill-icon' });
+      pill.createEl('span', { text: 'FROZEN' });
+    } else {
+      pill.addClass('is-live');
+      pill.createEl('span', { text: '▶', cls: 'forge-edge-popover-pill-icon' });
+      pill.createEl('span', { text: 'LIVE' });
+    }
+
+    // 2. caller → callee path, smaller, monospace.
+    const path = this.el.createDiv({ cls: 'forge-edge-popover-path' });
+    path.createEl('span', { text: callerId });
+    path.createEl('span', { text: ' → ', cls: 'forge-edge-popover-arrow' });
+    path.createEl('span', { text: calleeId });
+
+    // 3. Captured-at line, smallest, with absolute time tooltip.
+    if (snapshot) {
+      const timeEl = this.el.createEl('div', {
+        text: `captured ${relativeTime(snapshot.captured_at)}`,
+        cls: 'forge-edge-popover-time',
+      });
+      timeEl.title = absoluteTime(snapshot.captured_at);
+    } else {
+      this.el.createEl('div', {
+        text: 'Run the calling snippet to capture this edge.',
         cls: 'forge-edge-popover-empty',
       });
-      const btn = body.createEl('button', { text: 'Freeze edge' });
+    }
+
+    // 4. Actions: primary CTA + a quieter "open snapshot" link.
+    const actions = this.el.createDiv({ cls: 'forge-edge-popover-actions' });
+    if (!snapshot) {
+      const btn = actions.createEl('button', { text: 'Freeze edge' });
       btn.disabled = true;
       btn.title = 'Freeze requires a captured snapshot';
       return;
     }
-
-    body.createEl('p', { text: `state: ${snapshot.state}`, cls: `forge-edge-popover-state forge-edge-popover-state-${snapshot.state}` });
-    body.createEl('p', { text: `captured ${relativeTime(snapshot.captured_at)}`, cls: 'forge-edge-popover-time' });
-
-    const actions = body.createDiv({ cls: 'forge-edge-popover-actions' });
     const next = snapshot.state === 'frozen' ? 'live' : 'frozen';
-    const btn = actions.createEl('button', { text: snapshot.state === 'frozen' ? 'Unfreeze edge' : 'Freeze edge' });
+    const btn = actions.createEl('button', {
+      text: snapshot.state === 'frozen' ? 'Unfreeze edge' : 'Freeze edge',
+      cls: 'mod-cta',
+    });
     btn.onclick = () => this.toggle(callerId, calleeId, next);
 
     const open = actions.createEl('a', { text: 'open snapshot', cls: 'forge-edge-popover-open' });
