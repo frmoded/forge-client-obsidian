@@ -46,16 +46,16 @@ export default class ForgePlugin extends Plugin {
       this.createNewSnippet();
     });
 
-    this.addRibbonIcon('git-branch', 'Forge Edges', () => {
-      this.openEdgesView();
+    this.addRibbonIcon('git-branch', 'Forge: Toggle edges panel', () => {
+      this.toggleEdgesView();
     });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
     this.addCommand({
-      id: 'forge-show-edges-panel',
-      name: 'Show edges panel',
-      callback: () => { this.openEdgesView(); },
+      id: 'forge-toggle-edges-panel',
+      name: 'Toggle edges panel',
+      callback: () => { this.toggleEdgesView(); },
     });
 
     this.addCommand({
@@ -124,10 +124,10 @@ export default class ForgePlugin extends Plugin {
     new ForgeSnippetModal(this.app).open();
   }
 
-  private async openEdgesView() {
+  private async toggleEdgesView() {
     const existing = this.app.workspace.getLeavesOfType(EDGES_VIEW_TYPE)[0];
     if (existing) {
-      this.app.workspace.revealLeaf(existing);
+      existing.detach();
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
