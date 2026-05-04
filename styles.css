@@ -203,6 +203,42 @@
   margin: 4px 0;
 }
 
+.forge-edges-drift {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-left: 3px solid #d97706;
+  border-radius: 4px;
+  background: var(--background-secondary);
+}
+
+.forge-edges-drift-icon {
+  color: #d97706;
+  font-size: 1.1em;
+  flex-shrink: 0;
+}
+
+.forge-edges-drift-msg {
+  flex: 1;
+  font-size: 0.85em;
+  color: var(--text-normal);
+}
+
+.forge-edges-drift-msg div {
+  margin: 2px 0;
+}
+
+.forge-edges-drift-actions {
+  flex-shrink: 0;
+}
+
+.forge-edges-drift-actions button {
+  font-size: 0.8em;
+}
+
 /* Hover popover */
 .forge-edge-popover {
   position: fixed;
@@ -294,3 +330,4 @@
 .forge-edge-popover-open:hover {
   color: var(--text-normal);
 }
+

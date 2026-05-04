@@ -7,7 +7,7 @@ import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal } from './modal';
-import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge } from './server';
+import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies } from './server';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 
@@ -22,6 +22,7 @@ function replacePythonSection(content: string, code: string): string {
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 const RUN_BTN_CLASS = 'forge-run-btn';
 const HAMMER_BTN_CLASS = 'forge-hammer-btn';
+const EDGES_BTN_CLASS = 'forge-edges-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -46,16 +47,18 @@ export default class ForgePlugin extends Plugin {
       this.createNewSnippet();
     });
 
-    this.addRibbonIcon('git-branch', 'Forge: Toggle edges panel', () => {
-      this.toggleEdgesView();
-    });
-
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
     this.addCommand({
       id: 'forge-toggle-edges-panel',
       name: 'Toggle edges panel',
       callback: () => { this.toggleEdgesView(); },
+    });
+
+    this.addCommand({
+      id: 'forge-sync-edges',
+      name: 'Sync edges',
+      callback: () => { this.syncEdgesForActive(); },
     });
 
     this.addCommand({
@@ -107,7 +110,7 @@ export default class ForgePlugin extends Plugin {
 
     // Remove any stale Forge buttons from a previous plugin load before adding fresh ones.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .forge-forge-btn`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .forge-dag-btn, .forge-forge-btn`
     ).forEach(el => el.remove());
 
     const snippetBtn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
@@ -118,6 +121,9 @@ export default class ForgePlugin extends Plugin {
 
     const hammerBtn = view.addAction('hammer', 'Hammer Snippet', () => { this.hammerSnippet(); });
     hammerBtn.addClass(HAMMER_BTN_CLASS);
+
+    const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
+    edgesBtn.addClass(EDGES_BTN_CLASS);
   }
 
   private createNewSnippet() {
@@ -207,6 +213,7 @@ export default class ForgePlugin extends Plugin {
 
   private async writeGeneratedCode(generated: Record<string, string>) {
     const files = this.app.vault.getMarkdownFiles();
+    const vaultPath = (this.app.vault.adapter as any).basePath as string;
 
     for (const [id, code] of Object.entries(generated)) {
       const file = files.find(f => f.basename === id);
@@ -216,6 +223,33 @@ export default class ForgePlugin extends Plugin {
       }
       const content = await this.app.vault.read(file);
       await this.app.vault.modify(file, replacePythonSection(content, code));
+
+      // After writing the new Python, ask the BE to sync the # Dependencies
+      // section so the body reflects the just-written code (B7).
+      try {
+        await syncDependencies(this.settings.serverUrl, vaultPath, id);
+      } catch (e) {
+        console.warn(`Forge: sync_dependencies failed for '${id}'`, e);
+      }
+    }
+  }
+
+  private async syncEdgesForActive() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('No active snippet to sync.');
+      return;
+    }
+    const snippetId = view.file.basename;
+    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const res = await syncDependencies(this.settings.serverUrl, vaultPath, snippetId);
+    if (res.status === 200) {
+      const deps: string[] = res.json?.dependencies ?? [];
+      new Notice(`Forge: synced ${deps.length} dependenc${deps.length === 1 ? 'y' : 'ies'}.`);
+    } else {
+      const detail = res.json?.detail ?? `HTTP ${res.status}`;
+      new Notice(`Forge: sync failed — ${detail}`);
+      console.error('Forge sync_dependencies failed', res);
     }
   }
 

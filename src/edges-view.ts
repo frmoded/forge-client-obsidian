@@ -7,7 +7,8 @@ import {
   relativeTime,
   snapshotPath,
 } from './edges';
-import { freezeEdge } from './server';
+import { detectDrift } from './dependencies';
+import { freezeEdge, syncDependencies } from './server';
 
 export const EDGES_VIEW_TYPE = 'forge-edges-view';
 
@@ -61,8 +62,45 @@ export class ForgeEdgesView extends ItemView {
     this.bodyEl.empty();
     this.bodyEl.createEl('p', { text: this.currentSnippetId, cls: 'forge-edges-active' });
 
+    await this.renderDriftBanner(view);
+
     this.renderSection('Outgoing', outgoing, 'caller', this.currentSnippetId);
     this.renderSection('Incoming', incoming, 'callee', this.currentSnippetId);
+  }
+
+  private async renderDriftBanner(view: MarkdownView) {
+    if (!view.file) return;
+    const content = await this.app.vault.read(view.file);
+    const drift = detectDrift(content);
+    if (!drift.hasDrift) return;
+
+    const banner = this.bodyEl.createDiv({ cls: 'forge-edges-drift' });
+    const icon = banner.createEl('span', { text: '⚠', cls: 'forge-edges-drift-icon' });
+    void icon;
+    const msg = banner.createDiv({ cls: 'forge-edges-drift-msg' });
+
+    if (drift.missingFromDeps.length > 0) {
+      const ids = drift.missingFromDeps.map(s => `[[${s}]]`).join(' ');
+      msg.createEl('div', { text: `Python uses ${ids} which isn't in Dependencies.` });
+    }
+    if (drift.stale.length > 0) {
+      const ids = drift.stale.map(s => `[[${s}]]`).join(' ');
+      msg.createEl('div', { text: `Dependencies still lists ${ids} but Python no longer calls it.` });
+    }
+
+    const actions = banner.createDiv({ cls: 'forge-edges-drift-actions' });
+    const sync = actions.createEl('button', { text: 'Sync edges', cls: 'mod-cta' });
+    sync.onclick = async () => {
+      if (!this.currentSnippetId) return;
+      const vaultPath = (this.app.vault.adapter as any).basePath as string;
+      const res = await syncDependencies(this.serverUrl(), vaultPath, this.currentSnippetId);
+      if (res.status === 200) {
+        new Notice('Forge: edges synced.');
+        await this.refresh();
+      } else {
+        new Notice(`Forge: sync failed (${res.status})`);
+      }
+    };
   }
 
   private renderSection(
