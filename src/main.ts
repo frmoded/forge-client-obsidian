@@ -6,7 +6,7 @@ import { invalidateLibraryVaultCache } from './edges';
 import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
-import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal } from './modal';
+import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
 import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies } from './server';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
@@ -168,12 +168,7 @@ export default class ForgePlugin extends Plugin {
   }
 
   private async generate(recursive: boolean) {
-    try {
-    console.log('Forge: generate clicked v2', { recursive });
-    new Notice(`Forge: ${recursive ? 'Forging' : 'Hammering'}…`);
-
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    console.log('Forge: view?', !!view, 'file?', !!view?.file);
     if (!view?.file) {
       new Notice('No active note to generate.');
       return;
@@ -181,33 +176,38 @@ export default class ForgePlugin extends Plugin {
 
     const snippetId = view.file.basename;
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
-    console.log('Forge: snippetId, vaultPath →', snippetId, vaultPath);
+    console.log('Forge: generate', { recursive, snippetId, vaultPath });
 
-    console.log('Forge: connecting to', this.settings.serverUrl, vaultPath);
-    try {
-      const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
-      this.snippetInventory = connectRes?.snippets ?? {};
-      console.log('Forge: connected');
-    } catch (e) {
-      console.error('Forge Connect Error:', e);
-      new Notice('Forge: Connect failed — check console.');
-      return;
-    }
+    const modal = new ForgeGenerationModal(
+      this.app,
+      recursive ? `Forging ${snippetId}…` : `Hammering ${snippetId}…`,
+    );
+    modal.open();
 
     try {
-      console.log('Forge: calling /generate', { snippetId, recursive });
-      new Notice(`Forge: Generating ${recursive ? '(recursive)' : '(single)'}…`);
-      const result = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
-      console.log('Forge Generate Result:', result);
-      await this.writeGeneratedCode(result.generated);
-      new Notice(`Forge: ${Object.keys(result.generated).length} snippet(s) written.`);
-    } catch (e) {
-      console.error('Forge Generate Error:', e);
-      new Notice('Forge: Generation failed — check console.');
-    }
+      try {
+        const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
+        this.snippetInventory = connectRes?.snippets ?? {};
+      } catch (e) {
+        console.error('Forge Connect Error:', e);
+        new Notice('Forge: Connect failed — check console.');
+        return;
+      }
+
+      try {
+        const result = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
+        console.log('Forge Generate Result:', result);
+        await this.writeGeneratedCode(result.generated);
+        new Notice(`Forge: ${Object.keys(result.generated).length} snippet(s) written.`);
+      } catch (e) {
+        console.error('Forge Generate Error:', e);
+        new Notice('Forge: Generation failed — check console.');
+      }
     } catch (outer) {
       console.error('Forge: unexpected error in generate', outer);
       new Notice('Forge: unexpected error — check console.');
+    } finally {
+      modal.finish();
     }
   }
 

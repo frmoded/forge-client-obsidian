@@ -1,5 +1,37 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
 
+// Blocking modal shown during generation. Clicking outside, the X button, and
+// pressing Escape all funnel through close(); we no-op those until the caller
+// invokes finish() so the user can't interact with the workspace mid-LLM call.
+export class ForgeGenerationModal extends Modal {
+  private allowClose = false;
+
+  constructor(app: App, private label: string) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl, modalEl } = this;
+    modalEl.addClass('forge-generation-modal');
+    // Hide the default close button — there's no escape until generation completes.
+    modalEl.querySelector('.modal-close-button')?.remove();
+
+    const wrap = contentEl.createDiv({ cls: 'forge-generation-wrap' });
+    const spinner = wrap.createDiv({ cls: 'forge-spinner' });
+    spinner.createDiv({ cls: 'forge-spinner-ring' });
+    wrap.createEl('p', { text: this.label, cls: 'forge-generation-label' });
+  }
+
+  close() {
+    if (this.allowClose) super.close();
+  }
+
+  finish() {
+    this.allowClose = true;
+    super.close();
+  }
+}
+
 export class ForgeFreezeModal extends Modal {
   private caller = '';
   private callee = '';
