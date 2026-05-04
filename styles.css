@@ -91,6 +91,34 @@
   fill: var(--interactive-accent);
 }
 
+.forge-output-score .note.is-playing,
+.forge-output-score .note.is-playing * {
+  fill: #d97706;
+  stroke: #d97706;
+  transition: fill 0.05s linear, stroke 0.05s linear;
+}
+
+.forge-output-downloads {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.forge-output-download {
+  font-size: 0.78em;
+  padding: 2px 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.forge-output-download:hover {
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
+}
+
 /* Forge Edges side panel */
 .forge-edges-view {
   padding: 0;

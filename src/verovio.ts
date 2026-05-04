@@ -63,3 +63,18 @@ export async function getTimeForElement(musicxml: string, elementId: string): Pr
   toolkit.loadData(musicxml);
   return toolkit.getTimeForElement(elementId);
 }
+
+// Load a score into the singleton toolkit so subsequent getElementsAtTime
+// calls operate on it. Used by the score-follower at playback start.
+export async function loadScore(musicxml: string): Promise<void> {
+  const toolkit = await getToolkit();
+  toolkit.loadData(musicxml);
+}
+
+// Notes (and other elements) sounding at the given time in ms. Caller must
+// have invoked loadScore for the relevant MusicXML first.
+export async function getElementsAtTime(ms: number): Promise<string[]> {
+  const toolkit = await getToolkit();
+  const result = toolkit.getElementsAtTime(ms);
+  return result?.notes ?? [];
+}
