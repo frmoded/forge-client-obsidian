@@ -35,9 +35,16 @@ function applyOptions(toolkit: any, hostWidthPx?: number) {
   });
 }
 
+export interface TimeBucket {
+  ms: number;
+  ids: string[];
+}
+
 export interface RenderedScore {
   svg: string;
   midiBase64: string;
+  // Sorted by ms. Notes whose start time matches play together.
+  timeMap: TimeBucket[];
 }
 
 export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: number): Promise<RenderedScore> {
@@ -46,7 +53,28 @@ export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: numb
   toolkit.loadData(musicxml);
   const svg = toolkit.renderToSVG(1);
   const midiBase64 = toolkit.renderToMIDI();
-  return { svg, midiBase64 };
+  // Capture the time map BEFORE any other render mutates toolkit state.
+  // Verovio assigns fresh IDs on every loadData, so we can never re-query
+  // time-for-element later — the IDs in `svg` will have been replaced.
+  const timeMap = buildTimeMap(toolkit, svg);
+  return { svg, midiBase64, timeMap };
+}
+
+function buildTimeMap(toolkit: any, svg: string): TimeBucket[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svg, 'image/svg+xml');
+  const buckets = new Map<number, string[]>();
+  doc.querySelectorAll('.note').forEach(el => {
+    const id = el.id;
+    if (!id) return;
+    const ms = toolkit.getTimeForElement(id);
+    if (typeof ms !== 'number' || ms < 0) return;
+    if (!buckets.has(ms)) buckets.set(ms, []);
+    buckets.get(ms)!.push(id);
+  });
+  return [...buckets.entries()]
+    .map(([ms, ids]) => ({ ms, ids }))
+    .sort((a, b) => a.ms - b.ms);
 }
 
 // Backward-compat shim — older callers that only need the SVG.

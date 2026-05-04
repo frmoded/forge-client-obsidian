@@ -1,5 +1,5 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
-import { renderMusicXMLAndMIDI, getTimeForElement, getElementsAtTime, loadScore } from './verovio';
+import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -97,7 +97,7 @@ export class ForgeOutputView extends ItemView {
     // Defer one frame so clientWidth reflects the actual layout width.
     requestAnimationFrame(async () => {
       try {
-        const { svg, midiBase64 } = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
+        const { svg, midiBase64, timeMap } = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
         host.empty();
 
         // Download links — always available, even if playback init fails.
@@ -135,7 +135,7 @@ export class ForgeOutputView extends ItemView {
             }
           });
 
-          attachScoreFollower(scoreWrap, player, musicxml);
+          attachScoreFollower(scoreWrap, player, timeMap);
         }
       } catch (e) {
         console.error('Forge: Verovio render failed', e);
@@ -191,49 +191,52 @@ function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string
   return bar;
 }
 
-function attachScoreFollower(scoreWrap: HTMLElement, player: any, musicxml: string): void {
-  let rafId: number | null = null;
+function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeBucket[]): void {
   let highlighted: Element[] = [];
+  let timer: number | null = null;
 
   const clearHighlights = () => {
     for (const el of highlighted) el.classList.remove('is-playing');
     highlighted = [];
   };
 
-  const tick = async () => {
-    rafId = requestAnimationFrame(tick);
+  // Active = the latest bucket whose start time has already elapsed.
+  // Notes are highlighted from their start-time forward until the next bucket.
+  // This is an approximation; overlapping voices with different start times
+  // won't all light up at once, but for monophonic-like passages it's clean.
+  const findActiveIds = (currentMs: number): string[] => {
+    let active: string[] = [];
+    for (const bucket of timeMap) {
+      if (bucket.ms > currentMs) break;
+      active = bucket.ids;
+    }
+    return active;
+  };
+
+  const highlight = () => {
     const sec = (player.currentTime ?? 0) as number;
-    try {
-      const ids = await getElementsAtTime(sec * 1000);
-      clearHighlights();
-      for (const id of ids) {
-        const el = scoreWrap.querySelector(`#${CSS.escape(id)}`);
-        if (el) {
-          el.classList.add('is-playing');
-          highlighted.push(el);
-        }
+    const ids = findActiveIds(sec * 1000);
+    clearHighlights();
+    for (const id of ids) {
+      const el = scoreWrap.querySelector(`#${CSS.escape(id)}`);
+      if (el) {
+        el.classList.add('is-playing');
+        highlighted.push(el);
       }
-    } catch {
-      // Toolkit might be on a different score (multiple scores in panel) —
-      // skip this frame quietly rather than spamming the console.
     }
   };
 
-  player.addEventListener('start', async () => {
-    // Re-load the singleton toolkit with this score so getElementsAtTime
-    // queries the right MusicXML, even if another score was rendered or
-    // played in the meantime.
-    try { await loadScore(musicxml); } catch (e) { console.warn('Forge: loadScore failed', e); }
-    if (rafId === null) rafId = requestAnimationFrame(tick);
-  });
-
+  const start = () => {
+    if (timer === null) timer = window.setInterval(highlight, 33);
+  };
   const stop = () => {
-    if (rafId !== null) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
+    if (timer !== null) {
+      window.clearInterval(timer);
+      timer = null;
     }
     clearHighlights();
   };
+
+  player.addEventListener('start', start);
   player.addEventListener('stop', stop);
-  player.addEventListener('pause', stop);
 }
