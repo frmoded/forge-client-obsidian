@@ -21,7 +21,112 @@ async function ensureMidiPlayerLoaded() {
 async function midiBase64ToNoteSequence(midiBase64: string): Promise<any> {
   const mm: any = await import('@magenta/music/esm/core/midi_io');
   const bytes = Uint8Array.from(atob(midiBase64), c => c.charCodeAt(0));
-  return mm.midiToSequenceProto(bytes);
+  const ns = mm.midiToSequenceProto(bytes);
+  // Magenta's parser leaves note.program at the default for non-piano
+  // instruments, so the SoundFontPlayer only ever loads piano samples. Walk
+  // the raw MIDI for program-change events and write the resulting program
+  // onto every note that follows on the same channel.
+  try {
+    applyProgramChangesToNotes(ns, bytes);
+  } catch (e) {
+    console.error('Forge: applyProgramChangesToNotes threw —', e);
+  }
+  return ns;
+}
+
+interface ProgramEvent {
+  ticks: number;
+  channel: number;
+  program: number;
+}
+
+function readProgramChanges(bytes: Uint8Array): ProgramEvent[] {
+  const out: ProgramEvent[] = [];
+  if (bytes.length < 14 || String.fromCharCode(...bytes.slice(0, 4)) !== 'MThd') return out;
+  // header chunk: skip
+  const headerLen = (bytes[4] << 24) | (bytes[5] << 16) | (bytes[6] << 8) | bytes[7];
+  let i = 8 + headerLen;
+
+  while (i < bytes.length) {
+    if (i + 8 > bytes.length) break;
+    const tag = String.fromCharCode(bytes[i], bytes[i+1], bytes[i+2], bytes[i+3]);
+    const trackLen = (bytes[i+4] << 24) | (bytes[i+5] << 16) | (bytes[i+6] << 8) | bytes[i+7];
+    i += 8;
+    const trackEnd = i + trackLen;
+    if (tag !== 'MTrk') { i = trackEnd; continue; }
+
+    let lastStatus = 0;
+    let ticks = 0;
+    while (i < trackEnd) {
+      // var-length delta
+      let delta = 0;
+      let b = 0;
+      do { b = bytes[i++]; delta = (delta << 7) | (b & 0x7F); } while (b & 0x80 && i < trackEnd);
+      ticks += delta;
+      if (i >= trackEnd) break;
+      let status = bytes[i];
+      if (status & 0x80) i++; else status = lastStatus;
+      lastStatus = status;
+      const type = status & 0xF0;
+      const channel = status & 0x0F;
+      if (status === 0xFF) {
+        i++; // meta type
+        let len = 0;
+        do { b = bytes[i++]; len = (len << 7) | (b & 0x7F); } while (b & 0x80 && i < trackEnd);
+        i += len;
+      } else if (status === 0xF0 || status === 0xF7) {
+        let len = 0;
+        do { b = bytes[i++]; len = (len << 7) | (b & 0x7F); } while (b & 0x80 && i < trackEnd);
+        i += len;
+      } else if (type === 0xC0) {
+        out.push({ ticks, channel, program: bytes[i] });
+        i += 1;
+      } else if (type === 0xD0) {
+        i += 1;
+      } else {
+        // 2-byte channel events
+        i += 2;
+      }
+    }
+    i = trackEnd;
+  }
+  return out;
+}
+
+function applyProgramChangesToNotes(ns: any, midiBytes: Uint8Array): void {
+  if (!ns?.notes?.length) return;
+  const events = readProgramChanges(midiBytes);
+  if (events.length === 0) return;
+
+  // Single-program case (the common one — music21 emits one instrument per
+  // part): stamp every note with the first program seen on the lowest
+  // channel. No reliable tick→seconds mapping for a per-note pairing, so
+  // this is the safe simplification for typical Forge snippets.
+  const programByChannel = new Map<number, number>();
+  for (const ev of events) {
+    if (!programByChannel.has(ev.channel)) {
+      programByChannel.set(ev.channel, ev.program);
+    }
+  }
+  const defaultProgram = programByChannel.get(Math.min(...programByChannel.keys())) ?? 0;
+  for (const note of ns.notes) {
+    if (!note.isDrum) note.program = defaultProgram;
+  }
+}
+
+// Magenta's SoundFont synth has a few tens of ms of startup latency when
+// the audio context warms up. Notes scheduled at t=0 can be clipped or lost
+// entirely. Shifting every note forward gives the synth a quiet lead-in so
+// the first downbeat lands cleanly.
+const PLAYBACK_LEAD_IN_SECS = 0.15;
+
+function applyPlaybackLeadIn(ns: any, secs: number): void {
+  if (!ns?.notes) return;
+  for (const note of ns.notes) {
+    if (typeof note.startTime === 'number') note.startTime += secs;
+    if (typeof note.endTime === 'number') note.endTime += secs;
+  }
+  if (typeof ns.totalTime === 'number') ns.totalTime += secs;
 }
 
 export const OUTPUT_VIEW_TYPE = 'forge-output';
@@ -109,6 +214,7 @@ export class ForgeOutputView extends ItemView {
         try {
           await ensureMidiPlayerLoaded();
           const noteSequence = await midiBase64ToNoteSequence(midiBase64);
+          applyPlaybackLeadIn(noteSequence, PLAYBACK_LEAD_IN_SECS);
           player = document.createElement('midi-player');
           player.soundFont = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
           player.noteSequence = noteSequence;
@@ -214,7 +320,14 @@ function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeB
   };
 
   const highlight = () => {
-    const sec = (player.currentTime ?? 0) as number;
+    // Subtract the same lead-in we added to the noteSequence so timeMap
+    // (which is in original Verovio MIDI time) lines up with player time.
+    const sec = ((player.currentTime ?? 0) as number) - PLAYBACK_LEAD_IN_SECS;
+    if (sec < 0) {
+      // Still in the silent lead-in — no notes are sounding yet.
+      clearHighlights();
+      return;
+    }
     const ids = findActiveIds(sec * 1000);
     clearHighlights();
     for (const id of ids) {
