@@ -164,7 +164,7 @@ export default class ForgePlugin extends Plugin {
   }
 
   private async hammerSnippet() {
-    await this.generate(false);
+    await this.generate(true);
   }
 
   private async generate(recursive: boolean) {
