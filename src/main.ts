@@ -126,8 +126,21 @@ export default class ForgePlugin extends Plugin {
     edgesBtn.addClass(EDGES_BTN_CLASS);
   }
 
-  private createNewSnippet() {
-    new ForgeSnippetModal(this.app).open();
+  private async createNewSnippet() {
+    // Fetch content_types from /connect so the modal's data-snippet dropdown
+    // stays in sync with the backend's deserialize_from_wire registry. If the
+    // call fails (server offline, older backend), the modal falls back to a
+    // hardcoded list — creation still works.
+    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    let contentTypes: string[] | undefined;
+    try {
+      const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
+      this.snippetInventory = connectRes?.snippets ?? {};
+      contentTypes = connectRes?.content_types;
+    } catch (e) {
+      console.warn('Forge: connect failed before opening New Snippet modal; falling back to default content_types', e);
+    }
+    new ForgeSnippetModal(this.app, contentTypes).open();
   }
 
   private async toggleEdgesView() {
