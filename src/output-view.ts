@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownRenderer, WorkspaceLeaf } from 'obsidian';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
@@ -168,6 +168,81 @@ export class ForgeOutputView extends ItemView {
 
     this.renderResult(entry, result, snippetId);
     entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // Replace (not append) the panel with a rendering of a hand-authored data
+  // snippet's body. Called from the file-open hook when the active note is a
+  // type:data snippet. Replace semantics match the user mental model — the
+  // panel reflects what they're looking at, not a log of every preview.
+  async previewDataSnippet(snippetId: string, contentType: string, body: string, sourcePath: string) {
+    this.outputEl.empty();
+    const entry = this.makeEntry(snippetId);
+    entry.addClass('is-data-preview');
+    await this.renderDataBody(entry, contentType, body, snippetId, sourcePath);
+  }
+
+  private async renderDataBody(
+    entry: HTMLElement,
+    contentType: string,
+    body: string,
+    snippetId: string,
+    sourcePath: string,
+  ) {
+    switch (contentType) {
+      case 'musicxml':
+        this.renderMusicXML(entry, body, snippetId);
+        return;
+      case 'json':
+        this.renderJSON(entry, body);
+        return;
+      case 'text':
+        this.renderText(entry, body);
+        return;
+      case 'markdown':
+        await this.renderMarkdown(entry, body, sourcePath);
+        return;
+      case 'svg':
+        // Reserved — SVG support hasn't landed yet.
+        entry.createEl('p', {
+          text: `SVG rendering not yet implemented.`,
+          cls: 'forge-output-error',
+        });
+        entry.createEl('pre', { text: body, cls: 'forge-output-stdout' });
+        return;
+      default:
+        entry.createEl('p', {
+          text: `No renderer for content_type '${contentType}'.`,
+          cls: 'forge-output-error',
+        });
+        entry.createEl('pre', { text: body, cls: 'forge-output-stdout' });
+    }
+  }
+
+  private renderJSON(entry: HTMLElement, body: string) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(body);
+    } catch (e) {
+      entry.createEl('p', {
+        text: `Invalid JSON: ${(e as Error).message}`,
+        cls: 'forge-output-error',
+      });
+      entry.createEl('pre', { text: body, cls: 'forge-output-stdout' });
+      return;
+    }
+    entry.createEl('pre', {
+      text: JSON.stringify(parsed, null, 2),
+      cls: 'forge-output-result',
+    });
+  }
+
+  private renderText(entry: HTMLElement, body: string) {
+    entry.createEl('pre', { text: body, cls: 'forge-output-result' });
+  }
+
+  private async renderMarkdown(entry: HTMLElement, body: string, sourcePath: string) {
+    const host = entry.createDiv({ cls: 'forge-output-markdown' });
+    await MarkdownRenderer.render(this.app, body, host, sourcePath, this);
   }
 
   private renderResult(entry: HTMLElement, result: unknown, snippetId: string) {
