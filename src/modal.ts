@@ -188,7 +188,7 @@ function dataTemplate(name: string, contentType: string): string {
     '',
     '# English',
     '',
-    '',
+    'Describe what this data represents and how snippets that consume it should use it.',
     '',
     '# Body',
     '',
