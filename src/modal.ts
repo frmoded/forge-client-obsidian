@@ -134,7 +134,7 @@ type SnippetType = 'action' | 'data';
 
 // Used when /connect doesn't carry a content_types list (older backend, or
 // connect failed). Keep aligned with forge.core.serialization.SUPPORTED_CONTENT_TYPES.
-const FALLBACK_CONTENT_TYPES = ['json', 'text', 'markdown', 'musicxml', 'svg'];
+const FALLBACK_CONTENT_TYPES = ['json', 'text', 'markdown', 'musicxml', 'svg', 'jpeg'];
 
 // Fence language tag per content_type. Obsidian's preview renders these
 // nicely; the Phase 2 rendering work will lean on the same mapping.
@@ -144,6 +144,7 @@ const FENCE_LANG: Record<string, string> = {
   markdown: 'markdown',
   musicxml: 'xml',
   svg: 'xml',
+  jpeg: 'text',
 };
 
 // Seed payload per content_type — short and instructive where possible,
@@ -154,6 +155,7 @@ const SEED: Record<string, string> = {
   markdown: '',
   musicxml: '<!-- Replace with valid MusicXML. Use music21 to export an example. -->',
   svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"></svg>',
+  jpeg: '',
 };
 
 function actionTemplate(name: string): string {

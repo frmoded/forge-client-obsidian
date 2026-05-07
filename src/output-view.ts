@@ -204,6 +204,9 @@ export class ForgeOutputView extends ItemView {
       case 'svg':
         this.renderSVG(entry, body);
         return;
+      case 'jpeg':
+        this.renderJPEG(entry, body);
+        return;
       default:
         entry.createEl('p', {
           text: `No renderer for content_type '${contentType}'.`,
@@ -247,6 +250,15 @@ export class ForgeOutputView extends ItemView {
     // here. If the markup is invalid, the browser will silently render
     // whatever it can parse.
     host.innerHTML = body.trim();
+  }
+
+  private renderJPEG(entry: HTMLElement, body: string) {
+    const host = entry.createDiv({ cls: 'forge-output-jpeg' });
+    // Body is base64-encoded JPEG. Strip whitespace (line wraps from the
+    // markdown body) and embed as a data URI.
+    const b64 = body.replace(/\s+/g, '');
+    const img = host.createEl('img', { cls: 'forge-output-image' });
+    img.src = `data:image/jpeg;base64,${b64}`;
   }
 
   private renderResult(entry: HTMLElement, result: unknown, snippetId: string) {
