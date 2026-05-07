@@ -1,4 +1,4 @@
-import { Plugin, Notice, MarkdownView, WorkspaceLeaf } from 'obsidian';
+import { Plugin, Notice, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
@@ -10,6 +10,7 @@ import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModa
 import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies } from './server';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
+import { extractDataBody } from './data-snippet';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -42,6 +43,13 @@ export default class ForgePlugin extends Plugin {
       this.app.workspace.on('layout-change', () => this.syncButtons())
     );
     this.syncButtons();
+
+    // Phase 2 — Render data-snippet bodies in the output panel when the user
+    // navigates to one. Local parse (no /compute round-trip) and "replace"
+    // semantics: the panel reflects the file currently being viewed.
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => { this.maybePreviewDataSnippet(file); })
+    );
 
     this.addRibbonIcon('zap', 'New Snippet', () => {
       this.createNewSnippet();
@@ -310,6 +318,33 @@ export default class ForgePlugin extends Plugin {
       }).open();
     } else {
       await this.computeSnippetWithArgs(vaultPath, snippetId, [], {});
+    }
+  }
+
+  // Triggered on every file-open. Cheap-checks frontmatter; only does real
+  // work when the file is a hand-authored data snippet with a known
+  // content_type.
+  private async maybePreviewDataSnippet(file: TFile | null) {
+    if (!file) return;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (fm?.type !== 'data') return;
+    const contentType = fm.content_type as string | undefined;
+    if (!contentType) return;
+
+    let content: string;
+    try {
+      content = await this.app.vault.read(file);
+    } catch (e) {
+      console.warn('Forge: could not read data snippet for preview', e);
+      return;
+    }
+    const body = extractDataBody(content);
+
+    try {
+      const outputView = await this.getOutputView();
+      await outputView.previewDataSnippet(file.basename, contentType, body, file.path);
+    } catch (e) {
+      console.error('Forge: data snippet preview failed', e);
     }
   }
 
