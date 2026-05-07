@@ -132,8 +132,30 @@ export class ForgeRunModal extends Modal {
 
 type SnippetType = 'action' | 'data';
 
-const TEMPLATES: Record<SnippetType, (name: string) => string> = {
-  action: (name) => [
+// Used when /connect doesn't carry a content_types list (older backend, or
+// connect failed). Keep aligned with forge.core.serialization.SUPPORTED_CONTENT_TYPES.
+const FALLBACK_CONTENT_TYPES = ['json', 'text', 'markdown', 'musicxml'];
+
+// Fence language tag per content_type. Obsidian's preview renders these
+// nicely; the Phase 2 rendering work will lean on the same mapping.
+const FENCE_LANG: Record<string, string> = {
+  json: 'json',
+  text: 'text',
+  markdown: 'markdown',
+  musicxml: 'xml',
+};
+
+// Seed payload per content_type — short and instructive where possible,
+// blank where any concrete seed would feel arbitrary.
+const SEED: Record<string, string> = {
+  json: '{}',
+  text: '',
+  markdown: '',
+  musicxml: '<!-- Replace with valid MusicXML. Use music21 to export an example. -->',
+};
+
+function actionTemplate(name: string): string {
+  return [
     '---',
     'type: action',
     `description: ${name}`,
@@ -151,26 +173,48 @@ const TEMPLATES: Record<SnippetType, (name: string) => string> = {
     'def compute(context):',
     '  pass',
     '',
-  ].join('\n'),
+  ].join('\n');
+}
 
-  data: (name) => [
+function dataTemplate(name: string, contentType: string): string {
+  const lang = FENCE_LANG[contentType] ?? 'text';
+  const seed = SEED[contentType] ?? '';
+  return [
     '---',
     'type: data',
+    `content_type: ${contentType}`,
     `description: ${name}`,
     '---',
     '',
-    '# Parameters',
+    '# English',
     '',
+    'Describe what this data represents and how snippets that consume it should use it.',
     '',
-  ].join('\n'),
-};
+    '# Body',
+    '',
+    '```' + lang,
+    seed,
+    '```',
+    '',
+  ].join('\n');
+}
 
 export class ForgeSnippetModal extends Modal {
   private snippetName = '';
   private snippetType: SnippetType = 'action';
+  private contentType: string;
+  private contentTypes: string[];
+  private contentTypeSetting?: Setting;
 
-  constructor(app: App) {
+  // contentTypes comes from /connect's response; the caller fetches it before
+  // opening the modal. Falls back to a hardcoded list if absent (older backend
+  // or /connect failed) so the modal still works without a live server.
+  constructor(app: App, contentTypes?: string[]) {
     super(app);
+    this.contentTypes = (contentTypes && contentTypes.length > 0)
+      ? contentTypes
+      : FALLBACK_CONTENT_TYPES;
+    this.contentType = this.contentTypes[0];
   }
 
   onOpen() {
@@ -190,8 +234,21 @@ export class ForgeSnippetModal extends Modal {
           .addOption('action', 'Action')
           .addOption('data', 'Data')
           .setValue(this.snippetType)
-          .onChange(v => { this.snippetType = v as SnippetType; })
+          .onChange(v => {
+            this.snippetType = v as SnippetType;
+            this.updateContentTypeVisibility();
+          })
       );
+
+    this.contentTypeSetting = new Setting(contentEl)
+      .setName('Content Type')
+      .setDesc('Format of the data payload (only used for Data snippets)')
+      .addDropdown(drop => {
+        for (const ct of this.contentTypes) drop.addOption(ct, ct);
+        drop.setValue(this.contentType).onChange(v => { this.contentType = v; });
+      });
+
+    this.updateContentTypeVisibility();
 
     new Setting(contentEl)
       .addButton(btn =>
@@ -206,6 +263,12 @@ export class ForgeSnippetModal extends Modal {
     this.contentEl.empty();
   }
 
+  private updateContentTypeVisibility() {
+    if (!this.contentTypeSetting) return;
+    this.contentTypeSetting.settingEl.style.display =
+      this.snippetType === 'data' ? '' : 'none';
+  }
+
   private async submit() {
     if (!this.snippetName) {
       new Notice('Forge: Snippet name is required.');
@@ -213,14 +276,28 @@ export class ForgeSnippetModal extends Modal {
     }
 
     const path = `${this.snippetName}.md`;
-    const content = TEMPLATES[this.snippetType](this.snippetName);
+    const content = this.snippetType === 'data'
+      ? dataTemplate(this.snippetName, this.contentType)
+      : actionTemplate(this.snippetName);
 
+    let file;
     try {
-      await this.app.vault.create(path, content);
-      new Notice(`Forge: Created ${path}`);
-      this.close();
+      file = await this.app.vault.create(path, content);
     } catch {
       new Notice(`Forge: Could not create file — does it already exist?`);
+      return;
+    }
+
+    new Notice(`Forge: Created ${path}`);
+    this.close();
+
+    // Open the new file so the user can immediately start authoring — the
+    // whole point of the data snippet is the body content they're about to
+    // paste, so saving them a second click matters.
+    try {
+      await this.app.workspace.getLeaf(false).openFile(file);
+    } catch (e) {
+      console.warn('Forge: could not open newly created snippet', e);
     }
   }
 }

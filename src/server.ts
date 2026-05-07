@@ -1,7 +1,22 @@
 import { Notice, requestUrl } from 'obsidian';
 import { spawn } from 'child_process';
 
-export async function connectVault(serverUrl: string, vaultPath: string) {
+export interface ConnectResponse {
+  status: string;
+  vault_path: string;
+  warnings: string[];
+  // The snippets payload is intentionally untyped here — its shape (a
+  // map of vault → list of {id, type}) is consumed by several call sites
+  // that still treat it as Record<string, string[]>. Tightening it is a
+  // separate cleanup.
+  snippets: any;
+  // Backend-supplied list of content_types accepted by deserialize_from_wire.
+  // Optional so the plugin remains compatible with older backends — callers
+  // should fall back to a hardcoded default when missing.
+  content_types?: string[];
+}
+
+export async function connectVault(serverUrl: string, vaultPath: string): Promise<ConnectResponse> {
   const res = await requestUrl({
     url: `${serverUrl}/connect`,
     method: 'POST',
@@ -11,7 +26,7 @@ export async function connectVault(serverUrl: string, vaultPath: string) {
   if (res.json?.warnings?.length) {
     console.warn('Forge Connect warnings:', res.json.warnings);
   }
-  return res.json;
+  return res.json as ConnectResponse;
 }
 
 export async function syncDependencies(
