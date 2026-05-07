@@ -202,12 +202,7 @@ export class ForgeOutputView extends ItemView {
         await this.renderMarkdown(entry, body, sourcePath);
         return;
       case 'svg':
-        // Reserved — SVG support hasn't landed yet.
-        entry.createEl('p', {
-          text: `SVG rendering not yet implemented.`,
-          cls: 'forge-output-error',
-        });
-        entry.createEl('pre', { text: body, cls: 'forge-output-stdout' });
+        this.renderSVG(entry, body);
         return;
       default:
         entry.createEl('p', {
@@ -243,6 +238,15 @@ export class ForgeOutputView extends ItemView {
   private async renderMarkdown(entry: HTMLElement, body: string, sourcePath: string) {
     const host = entry.createDiv({ cls: 'forge-output-markdown' });
     await MarkdownRenderer.render(this.app, body, host, sourcePath, this);
+  }
+
+  private renderSVG(entry: HTMLElement, body: string) {
+    const host = entry.createDiv({ cls: 'forge-output-svg' });
+    // The body is the user's own SVG markup from a file they authored — same
+    // trust boundary as any other content in their vault. innerHTML is fine
+    // here. If the markup is invalid, the browser will silently render
+    // whatever it can parse.
+    host.innerHTML = body.trim();
   }
 
   private renderResult(entry: HTMLElement, result: unknown, snippetId: string) {
