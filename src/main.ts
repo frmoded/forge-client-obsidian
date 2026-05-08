@@ -21,9 +21,13 @@ function replacePythonSection(content: string, code: string): string {
 }
 
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
+// RUN_BTN_CLASS and HAMMER_BTN_CLASS are kept only so syncButtons() can sweep
+// stale buttons left over by older plugin loads after the Run+Generate -> Forge
+// consolidation. They are no longer attached to any new button.
 const RUN_BTN_CLASS = 'forge-run-btn';
 const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 const EDGES_BTN_CLASS = 'forge-edges-btn';
+const FORGE_BTN_CLASS = 'forge-forge-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -85,6 +89,21 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.runZapLine(); },
     });
 
+    // Direct backend access for debugging and the lock mechanism that's coming
+    // later. The Forge button calls /generate then /run; these expose each leg
+    // on its own.
+    this.addCommand({
+      id: 'forge-generate-only',
+      name: 'Generate only',
+      callback: () => { this.generate(true); },
+    });
+
+    this.addCommand({
+      id: 'forge-run-only',
+      name: 'Run only (active snippet)',
+      callback: () => { this.runSnippet(); },
+    });
+
     this.addCommand({
       id: 'forge-freeze-edge',
       name: 'Freeze edge',
@@ -117,18 +136,17 @@ export default class ForgePlugin extends Plugin {
     if (!view) return;
 
     // Remove any stale Forge buttons from a previous plugin load before adding fresh ones.
+    // RUN_BTN_CLASS / HAMMER_BTN_CLASS are listed so users still get the old Run+Generate
+    // buttons swept after upgrading past the Forge consolidation.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .forge-dag-btn, .forge-forge-btn`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .forge-dag-btn`
     ).forEach(el => el.remove());
 
     const snippetBtn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
-    const runBtn = view.addAction('play', 'Zap', () => { this.runZapLine(); });
-    runBtn.addClass(RUN_BTN_CLASS);
-
-    const hammerBtn = view.addAction('hammer', 'Hammer Snippet', () => { this.hammerSnippet(); });
-    hammerBtn.addClass(HAMMER_BTN_CLASS);
+    const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
+    forgeBtn.addClass(FORGE_BTN_CLASS);
 
     const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
     edgesBtn.addClass(EDGES_BTN_CLASS);
@@ -184,15 +202,28 @@ export default class ForgePlugin extends Plugin {
     }).open();
   }
 
-  private async hammerSnippet() {
-    await this.generate(true);
+  // The merged toolbar button: generate, then (on success) run.
+  private async forgeSnippet() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('No active note to forge.');
+      return;
+    }
+    const ok = await this.generate(true, 'Forge failed during generation');
+    if (!ok) return;
+    await this.runSnippet('Forge failed during execution');
   }
 
-  private async generate(recursive: boolean) {
+  // Returns true on success. When errorPrefix is set (forge flow), error
+  // notices use the prefix and include the actual error message; the success
+  // notice is suppressed so the caller can show its own. When errorPrefix is
+  // unset (standalone command), notices follow the existing "check console"
+  // convention.
+  private async generate(recursive: boolean, errorPrefix?: string): Promise<boolean> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       new Notice('No active note to generate.');
-      return;
+      return false;
     }
 
     const snippetId = view.file.basename;
@@ -211,22 +242,30 @@ export default class ForgePlugin extends Plugin {
         this.snippetInventory = connectRes?.snippets ?? {};
       } catch (e) {
         console.error('Forge Connect Error:', e);
-        new Notice('Forge: Connect failed — check console.');
-        return;
+        const detail = e instanceof Error ? e.message : String(e);
+        new Notice(errorPrefix ? `${errorPrefix}: connect failed — ${detail}` : 'Forge: Connect failed — check console.');
+        return false;
       }
 
       try {
         const result = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
         console.log('Forge Generate Result:', result);
         await this.writeGeneratedCode(result.generated);
-        new Notice(`Forge: ${Object.keys(result.generated).length} snippet(s) written.`);
+        if (!errorPrefix) {
+          new Notice(`Forge: ${Object.keys(result.generated).length} snippet(s) written.`);
+        }
+        return true;
       } catch (e) {
         console.error('Forge Generate Error:', e);
-        new Notice('Forge: Generation failed — check console.');
+        const detail = e instanceof Error ? e.message : String(e);
+        new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: Generation failed — check console.');
+        return false;
       }
     } catch (outer) {
       console.error('Forge: unexpected error in generate', outer);
-      new Notice('Forge: unexpected error — check console.');
+      const detail = outer instanceof Error ? outer.message : String(outer);
+      new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: unexpected error — check console.');
+      return false;
     } finally {
       modal.finish();
     }
@@ -298,7 +337,9 @@ export default class ForgePlugin extends Plugin {
     await this.runSnippet();
   }
 
-  private async runSnippet() {
+  // errorPrefix forwards into computeSnippetWithArgs so the forge flow can
+  // tag execution-side errors with "Forge failed during execution".
+  private async runSnippet(errorPrefix?: string) {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       new Notice('No active note to run.');
@@ -314,10 +355,10 @@ export default class ForgePlugin extends Plugin {
       const cached = this.inputCache[snippetId] ?? {};
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
-        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>);
+        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix);
       }).open();
     } else {
-      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {});
+      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix);
     }
   }
 
@@ -363,6 +404,7 @@ export default class ForgePlugin extends Plugin {
     snippetId: string,
     args: unknown[],
     inputs: Record<string, unknown>,
+    errorPrefix?: string,
   ) {
     console.log('Forge Compute →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs });
 
@@ -371,7 +413,8 @@ export default class ForgePlugin extends Plugin {
       this.snippetInventory = connectRes?.snippets ?? {};
     } catch (e) {
       console.error('Forge Connect Error:', e);
-      new Notice('Forge: Connect failed — check console.');
+      const detail = e instanceof Error ? e.message : String(e);
+      new Notice(errorPrefix ? `${errorPrefix}: connect failed — ${detail}` : 'Forge: Connect failed — check console.');
       return;
     }
 
@@ -380,7 +423,8 @@ export default class ForgePlugin extends Plugin {
       res = await computeSnippet(this.settings.serverUrl, vaultPath, snippetId, args, inputs);
     } catch (e) {
       console.error('Forge Compute Error:', e);
-      new Notice('Forge: Compute failed — check console.');
+      const detail = e instanceof Error ? e.message : String(e);
+      new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: Compute failed — check console.');
       return;
     }
 
@@ -393,6 +437,12 @@ export default class ForgePlugin extends Plugin {
         : (typeof detail === 'string' ? detail : `HTTP ${res.status}`);
       const stdout = (detail && typeof detail === 'object' && detail.stdout) ? detail.stdout : '';
       console.warn('Forge Compute non-2xx:', res.status, detail);
+      // Always show the detailed error in the output view. When invoked from
+      // the forge flow, also pop a notice so the user sees "during execution"
+      // attribution without scanning the output panel.
+      if (errorPrefix) {
+        new Notice(`${errorPrefix}: ${errorMsg}`);
+      }
       outputView.appendError(snippetId, errorMsg, stdout);
       return;
     }
