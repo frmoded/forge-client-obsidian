@@ -429,3 +429,32 @@
   max-height: 70vh;
   display: block;
 }
+
+/* "Save as data snippet" affordance below a compute-result entry. Sits on a
+   row of its own so a long result doesn't push the button off-screen. */
+.forge-output-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.forge-output-save-btn {
+  font-size: 0.78em;
+  padding: 4px 10px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+}
+
+.forge-output-save-btn:hover {
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
+}
+
+.forge-modal-meta {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin: 4px 0 12px 0;
+}

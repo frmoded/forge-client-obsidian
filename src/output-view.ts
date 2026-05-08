@@ -1,5 +1,6 @@
-import { ItemView, MarkdownRenderer, WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from 'obsidian';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio';
+import { ForgeSaveDataModal, dataTemplate } from './modal';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -167,7 +168,46 @@ export class ForgeOutputView extends ItemView {
     }
 
     this.renderResult(entry, result, snippetId);
+
+    // Offer "Save as data snippet" only when the result is something we know
+    // how to capture — tagged musicxml/svg, plain string, or any
+    // JSON-serializable value. Status messages (install) and null results
+    // don't get the button.
+    const captured = captureResult(result);
+    if (captured) {
+      const actions = entry.createDiv({ cls: 'forge-output-actions' });
+      const saveBtn = actions.createEl('button', {
+        text: 'Save as data snippet',
+        cls: 'forge-output-save-btn',
+      });
+      saveBtn.onclick = () => {
+        this.openSaveAsDataModal(`${snippetId}_output`, captured.contentType, captured.body);
+      };
+    }
+
     entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  private openSaveAsDataModal(suggestedName: string, contentType: string, body: string) {
+    const onCreate = async (name: string): Promise<boolean> => {
+      const path = `${name}.md`;
+      const md = dataTemplate(name, contentType, body);
+      let file;
+      try {
+        file = await this.app.vault.create(path, md);
+      } catch {
+        new Notice(`Forge: could not create ${path} — does it already exist?`);
+        return false;
+      }
+      new Notice(`Forge: Created ${path}`);
+      try {
+        await this.app.workspace.getLeaf(false).openFile(file);
+      } catch (e) {
+        console.warn('Forge: could not open new data snippet', e);
+      }
+      return true;
+    };
+    new ForgeSaveDataModal(this.app, suggestedName, contentType, onCreate).open();
   }
 
   // Replace (not append) the panel with a rendering of a hand-authored data
@@ -392,6 +432,44 @@ function isObjectWithMessage(v: unknown): v is { message: string } {
 
 function isTagged(v: unknown): v is { type: string } {
   return typeof v === 'object' && v !== null && typeof (v as any).type === 'string';
+}
+
+// Decide whether a compute result is capturable as a data snippet, and if so,
+// what content_type to declare and what body to write.
+//
+// - Tagged musicxml / svg payloads: use their content as-is, declare the tag
+//   as the content_type.
+// - Plain strings: stored as text. (We don't try to detect markdown — the user
+//   can change content_type after saving if they want markdown rendering.)
+// - Any JSON-serializable value (numbers, arrays, dicts): stored as json.
+// - null/undefined and install-style {message: ...} payloads: not capturable.
+//
+// Binary results from /compute (a (bytes, content_type) tuple from a binary
+// data snippet) aren't reachable today — /compute can't JSON-encode bytes —
+// so binary save isn't wired up here. Pending phase 1's binary /compute path.
+export function captureResult(result: unknown): { contentType: string; body: string } | null {
+  if (result === null || result === undefined) return null;
+
+  if (isTagged(result)) {
+    const tag = (result as any).type;
+    const content = (result as any).content;
+    if (typeof content !== 'string') return null;
+    if (tag === 'musicxml') return { contentType: 'musicxml', body: content };
+    if (tag === 'svg') return { contentType: 'svg', body: content };
+    return null;
+  }
+
+  if (isObjectWithMessage(result)) return null;
+
+  if (typeof result === 'string') {
+    return { contentType: 'text', body: result };
+  }
+
+  try {
+    return { contentType: 'json', body: JSON.stringify(result, null, 2) };
+  } catch {
+    return null;
+  }
 }
 
 function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string): HTMLElement {

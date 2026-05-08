@@ -180,9 +180,11 @@ function actionTemplate(name: string): string {
   ].join('\n');
 }
 
-function dataTemplate(name: string, contentType: string): string {
+// When `content` is provided (e.g., from "Save as data snippet"), it replaces
+// the per-content_type seed payload and lands inside the same fenced block.
+export function dataTemplate(name: string, contentType: string, content?: string): string {
   const lang = FENCE_LANG[contentType] ?? 'text';
-  const seed = SEED[contentType] ?? '';
+  const body = content ?? SEED[contentType] ?? '';
   return [
     '---',
     'type: data',
@@ -191,7 +193,7 @@ function dataTemplate(name: string, contentType: string): string {
     '---',
     '',
     '```' + lang,
-    seed,
+    body,
     '```',
     '',
   ].join('\n');
@@ -443,5 +445,55 @@ export class ForgeSnippetModal extends Modal {
     } catch (e) {
       console.warn('Forge: could not open newly created snippet', e);
     }
+  }
+}
+
+// Lightweight modal for the "Save as data snippet" output-panel button.
+// Single name field; content_type is auto-detected upstream and shown as
+// read-only context. Content is captured at click time and passed in via
+// the onCreate callback, which writes the file and returns success.
+export class ForgeSaveDataModal extends Modal {
+  private name: string;
+
+  constructor(
+    app: App,
+    suggestedName: string,
+    private contentType: string,
+    private onCreate: (name: string) => Promise<boolean>,
+  ) {
+    super(app);
+    this.name = suggestedName;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('h2', { text: 'Save as data snippet' });
+    contentEl.createEl('p', {
+      text: `content_type: ${this.contentType}  (auto-detected from result)`,
+      cls: 'forge-modal-meta',
+    });
+
+    new Setting(contentEl)
+      .setName('Snippet name')
+      .addText(text => {
+        text.setValue(this.name).onChange(v => { this.name = v.trim(); });
+        // Pre-select so the suggested name is easy to overwrite.
+        setTimeout(() => { text.inputEl.focus(); text.inputEl.select(); }, 0);
+      });
+
+    new Setting(contentEl).addButton(btn =>
+      btn.setButtonText('Save').setCta().onClick(async () => {
+        if (!this.name) {
+          new Notice('Forge: name is required.');
+          return;
+        }
+        const ok = await this.onCreate(this.name);
+        if (ok) this.close();
+      }),
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
   }
 }
