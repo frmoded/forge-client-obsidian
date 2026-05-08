@@ -181,6 +181,42 @@ export class ForgeOutputView extends ItemView {
     await this.renderDataBody(entry, contentType, body, snippetId, sourcePath);
   }
 
+  // Binary preview: payload lives in a sibling asset file at `contentRef`
+  // (vault-relative). We don't load the bytes — we hand the asset's resource
+  // URL to a native HTML element and let the browser do the work. Image/audio/
+  // video each get their format-appropriate element.
+  async previewBinarySnippet(snippetId: string, contentType: string, contentRef: string) {
+    this.outputEl.empty();
+    const entry = this.makeEntry(snippetId);
+    entry.addClass('is-data-preview');
+    const resourceUrl = this.app.vault.adapter.getResourcePath(contentRef);
+
+    if (contentType.startsWith('image/') || contentType === 'jpeg') {
+      const host = entry.createDiv({ cls: 'forge-output-image' });
+      const img = host.createEl('img', { cls: 'forge-output-image-img' });
+      img.src = resourceUrl;
+      return;
+    }
+    if (contentType.startsWith('audio/')) {
+      const host = entry.createDiv({ cls: 'forge-output-audio' });
+      const audio = host.createEl('audio') as HTMLAudioElement;
+      audio.controls = true;
+      audio.src = resourceUrl;
+      return;
+    }
+    if (contentType.startsWith('video/')) {
+      const host = entry.createDiv({ cls: 'forge-output-video' });
+      const video = host.createEl('video') as HTMLVideoElement;
+      video.controls = true;
+      video.src = resourceUrl;
+      return;
+    }
+    entry.createEl('p', {
+      text: `No renderer for binary content_type '${contentType}'.`,
+      cls: 'forge-output-error',
+    });
+  }
+
   private async renderDataBody(
     entry: HTMLElement,
     contentType: string,
@@ -203,9 +239,6 @@ export class ForgeOutputView extends ItemView {
         return;
       case 'svg':
         this.renderSVG(entry, body);
-        return;
-      case 'jpeg':
-        this.renderJPEG(entry, body);
         return;
       default:
         entry.createEl('p', {
@@ -250,15 +283,6 @@ export class ForgeOutputView extends ItemView {
     // here. If the markup is invalid, the browser will silently render
     // whatever it can parse.
     host.innerHTML = body.trim();
-  }
-
-  private renderJPEG(entry: HTMLElement, body: string) {
-    const host = entry.createDiv({ cls: 'forge-output-jpeg' });
-    // Body is base64-encoded JPEG. Strip whitespace (line wraps from the
-    // markdown body) and embed as a data URI.
-    const b64 = body.replace(/\s+/g, '');
-    const img = host.createEl('img', { cls: 'forge-output-image' });
-    img.src = `data:image/jpeg;base64,${b64}`;
   }
 
   private renderResult(entry: HTMLElement, result: unknown, snippetId: string) {

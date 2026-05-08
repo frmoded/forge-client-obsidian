@@ -391,3 +391,41 @@
   color: var(--text-normal);
 }
 
+
+/* Binary asset drop zone in the New Snippet modal. Shown when the selected
+   data content_type is binary (image/*, audio/*, video/*). */
+.forge-modal-drop {
+  border: 2px dashed var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 18px 12px;
+  text-align: center;
+  font-size: 0.9em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.forge-modal-drop.is-active {
+  border-color: var(--interactive-accent);
+  color: var(--text-normal);
+  background-color: var(--background-modifier-hover);
+}
+
+/* Binary preview hosts in the output panel. The native element fits into the
+   available column; we cap height for video so a long clip doesn't push the
+   rest of the panel offscreen. */
+.forge-output-image .forge-output-image-img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+.forge-output-audio audio {
+  width: 100%;
+}
+
+.forge-output-video video {
+  max-width: 100%;
+  max-height: 70vh;
+  display: block;
+}

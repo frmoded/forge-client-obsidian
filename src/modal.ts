@@ -197,12 +197,53 @@ function dataTemplate(name: string, contentType: string): string {
   ].join('\n');
 }
 
+// Wrapper .md for a binary data snippet. The bytes live at content_ref; the
+// body is intentionally empty (the backend rejects content_ref + body content
+// in the same snippet).
+function binaryTemplate(name: string, contentType: string, contentRef: string): string {
+  return [
+    '---',
+    'type: data',
+    `content_type: "${contentType}"`,
+    `content_ref: ${contentRef}`,
+    `description: ${name}`,
+    '---',
+    '',
+  ].join('\n');
+}
+
+function isBinaryContentType(ct: string): boolean {
+  return ct.startsWith('image/') || ct.startsWith('audio/') || ct.startsWith('video/') || ct === 'jpeg';
+}
+
+// Map a binary MIME content_type to a canonical file extension. Falls back to
+// the dropped file's own extension when we don't have a preferred one.
+function extensionFor(contentType: string, originalName: string): string {
+  const map: Record<string, string> = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'audio/mpeg': '.mp3',
+    'audio/wav': '.wav',
+    'video/mp4': '.mp4',
+    'jpeg': '.jpg',
+  };
+  if (map[contentType]) return map[contentType];
+  const i = originalName.lastIndexOf('.');
+  return i > 0 ? originalName.slice(i) : '';
+}
+
 export class ForgeSnippetModal extends Modal {
   private snippetName = '';
   private snippetType: SnippetType = 'action';
   private contentType: string;
   private contentTypes: string[];
   private contentTypeSetting?: Setting;
+  private dropSetting?: Setting;
+  private dropZoneEl?: HTMLElement;
+  // For binary content_types: the file the user dropped (or picked). Held in
+  // memory until submit; on submit we write it to <vault>/_assets/<name><ext>
+  // and emit a wrapper .md with content_ref pointing there.
+  private droppedFile: File | null = null;
 
   // contentTypes comes from /connect's response; the caller fetches it before
   // opening the modal. Falls back to a hardcoded list if absent (older backend
@@ -243,8 +284,18 @@ export class ForgeSnippetModal extends Modal {
       .setDesc('Format of the data payload (only used for Data snippets)')
       .addDropdown(drop => {
         for (const ct of this.contentTypes) drop.addOption(ct, ct);
-        drop.setValue(this.contentType).onChange(v => { this.contentType = v; });
+        drop.setValue(this.contentType).onChange(v => {
+          this.contentType = v;
+          this.updateContentTypeVisibility();
+        });
       });
+
+    this.dropSetting = new Setting(contentEl)
+      .setName('Asset file')
+      .setDesc('Drop a file here (or click to browse). The bytes live in <vault>/_assets/, the .md just points at them.');
+    this.dropZoneEl = this.dropSetting.controlEl.createDiv({ cls: 'forge-modal-drop' });
+    this.dropZoneEl.setText('Drop file here, or click to choose');
+    this.attachDropHandlers(this.dropZoneEl);
 
     this.updateContentTypeVisibility();
 
@@ -261,15 +312,54 @@ export class ForgeSnippetModal extends Modal {
     this.contentEl.empty();
   }
 
+  private attachDropHandlers(el: HTMLElement) {
+    el.addEventListener('click', () => {
+      const inp = document.createElement('input');
+      inp.type = 'file';
+      inp.onchange = () => {
+        const f = inp.files?.[0];
+        if (f) this.setDroppedFile(f);
+      };
+      inp.click();
+    });
+    el.addEventListener('dragover', e => {
+      e.preventDefault();
+      el.addClass('is-active');
+    });
+    el.addEventListener('dragleave', () => { el.removeClass('is-active'); });
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.removeClass('is-active');
+      const f = e.dataTransfer?.files?.[0];
+      if (f) this.setDroppedFile(f);
+    });
+  }
+
+  private setDroppedFile(f: File) {
+    this.droppedFile = f;
+    if (this.dropZoneEl) {
+      this.dropZoneEl.empty();
+      const kb = (f.size / 1024).toFixed(1);
+      this.dropZoneEl.setText(`${f.name} — ${kb} KB`);
+    }
+  }
+
   private updateContentTypeVisibility() {
-    if (!this.contentTypeSetting) return;
-    this.contentTypeSetting.settingEl.style.display =
-      this.snippetType === 'data' ? '' : 'none';
+    if (!this.contentTypeSetting || !this.dropSetting) return;
+    const isData = this.snippetType === 'data';
+    const isBinary = isData && isBinaryContentType(this.contentType);
+    this.contentTypeSetting.settingEl.style.display = isData ? '' : 'none';
+    this.dropSetting.settingEl.style.display = isBinary ? '' : 'none';
   }
 
   private async submit() {
     if (!this.snippetName) {
       new Notice('Forge: Snippet name is required.');
+      return;
+    }
+
+    if (this.snippetType === 'data' && isBinaryContentType(this.contentType)) {
+      await this.submitBinary();
       return;
     }
 
@@ -294,6 +384,62 @@ export class ForgeSnippetModal extends Modal {
     // paste, so saving them a second click matters.
     try {
       await this.app.workspace.getLeaf(false).openFile(file);
+    } catch (e) {
+      console.warn('Forge: could not open newly created snippet', e);
+    }
+  }
+
+  // Binary submit: copy the dropped bytes into <vault>/_assets/<name><ext>,
+  // then write the wrapper .md with content_ref pointing at the asset.
+  private async submitBinary() {
+    if (!this.droppedFile) {
+      new Notice('Forge: drop a file first — binary data snippets need an asset.');
+      return;
+    }
+
+    const ext = extensionFor(this.contentType, this.droppedFile.name);
+    const assetRel = `_assets/${this.snippetName}${ext}`;
+    const mdRel = `${this.snippetName}.md`;
+
+    // Ensure the assets dir exists. createFolder throws if it already does;
+    // we swallow that and continue.
+    try {
+      await this.app.vault.createFolder('_assets');
+    } catch {
+      /* dir already exists — fine */
+    }
+
+    let buf: ArrayBuffer;
+    try {
+      buf = await this.droppedFile.arrayBuffer();
+    } catch (e) {
+      console.error('Forge: failed to read dropped file bytes', e);
+      new Notice('Forge: could not read dropped file — check console.');
+      return;
+    }
+
+    try {
+      await this.app.vault.createBinary(assetRel, buf);
+    } catch (e) {
+      console.error('Forge: createBinary failed', e);
+      new Notice(`Forge: could not write ${assetRel} — does it already exist?`);
+      return;
+    }
+
+    let mdFile;
+    try {
+      const md = binaryTemplate(this.snippetName, this.contentType, assetRel);
+      mdFile = await this.app.vault.create(mdRel, md);
+    } catch (e) {
+      console.error('Forge: create wrapper .md failed', e);
+      new Notice(`Forge: wrote ${assetRel} but could not create ${mdRel} — does it already exist?`);
+      return;
+    }
+
+    new Notice(`Forge: Created ${mdRel} + ${assetRel}`);
+    this.close();
+    try {
+      await this.app.workspace.getLeaf(false).openFile(mdFile);
     } catch (e) {
       console.warn('Forge: could not open newly created snippet', e);
     }

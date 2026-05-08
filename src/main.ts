@@ -364,13 +364,25 @@ export default class ForgePlugin extends Plugin {
 
   // Triggered on every file-open. Cheap-checks frontmatter; only does real
   // work when the file is a hand-authored data snippet with a known
-  // content_type.
+  // content_type. Binary data (content_ref present) goes to the asset-based
+  // renderer; text data renders the body inline.
   private async maybePreviewDataSnippet(file: TFile | null) {
     if (!file) return;
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (fm?.type !== 'data') return;
     const contentType = fm.content_type as string | undefined;
     if (!contentType) return;
+
+    const contentRef = fm.content_ref as string | undefined;
+    if (contentRef) {
+      try {
+        const outputView = await this.getOutputView();
+        await outputView.previewBinarySnippet(file.basename, contentType, contentRef);
+      } catch (e) {
+        console.error('Forge: binary data snippet preview failed', e);
+      }
+      return;
+    }
 
     let content: string;
     try {
