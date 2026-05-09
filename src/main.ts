@@ -20,6 +20,32 @@ function replacePythonSection(content: string, code: string): string {
   return `${before}\n# Python\n\n\`\`\`python\n${code}\n\`\`\`\n`;
 }
 
+// Plain-text content under a markdown heading (any level, case-insensitive),
+// stopping at the next heading or `---` separator. Mirrors
+// forge.core.executor.extract_section so the plugin can compute its own
+// drift hash without a server round-trip.
+function extractSection(content: string, heading: string): string {
+  const re = new RegExp(`^#{1,6}\\s+${heading}\\s*$`, 'i');
+  const lines = content.split('\n');
+  const out: string[] = [];
+  let collecting = false;
+  for (const line of lines) {
+    if (re.test(line.trim())) { collecting = true; continue; }
+    if (!collecting) continue;
+    if (line.startsWith('#') || line.trim() === '---') break;
+    out.push(line);
+  }
+  return out.join('\n').trim();
+}
+
+async function sha256Hex(s: string): Promise<string> {
+  const buf = new TextEncoder().encode(s);
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hashBuf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 // RUN_BTN_CLASS and HAMMER_BTN_CLASS are kept only so syncButtons() can sweep
 // stale buttons left over by older plugin loads after the Run+Generate -> Forge
@@ -28,6 +54,7 @@ const RUN_BTN_CLASS = 'forge-run-btn';
 const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 const EDGES_BTN_CLASS = 'forge-edges-btn';
 const FORGE_BTN_CLASS = 'forge-forge-btn';
+const LOCK_BTN_CLASS = 'forge-lock-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -93,13 +120,24 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.runZapLine(); },
     });
 
-    // Direct backend access for debugging and the lock mechanism that's coming
-    // later. The Forge button calls /generate then /run; these expose each leg
-    // on its own.
+    // Direct backend access for debugging and the lock mechanism. The Forge
+    // button calls /generate then /run; these expose each leg on its own.
+    // Generate-only respects the lock — a locked snippet shows a notice and
+    // bails rather than burning LLM tokens that the server would skip anyway.
     this.addCommand({
       id: 'forge-generate-only',
       name: 'Generate only',
-      callback: () => { this.generate(true); },
+      callback: () => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (view?.file) {
+          const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+          if (fm?.locked === true) {
+            new Notice(`Forge: ${view.file.basename} is locked — unlock first to regenerate.`);
+            return;
+          }
+        }
+        this.generate(true);
+      },
     });
 
     this.addCommand({
@@ -143,7 +181,7 @@ export default class ForgePlugin extends Plugin {
     // RUN_BTN_CLASS / HAMMER_BTN_CLASS are listed so users still get the old Run+Generate
     // buttons swept after upgrading past the Forge consolidation.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .forge-dag-btn`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .forge-dag-btn`
     ).forEach(el => el.remove());
 
     const snippetBtn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
@@ -152,8 +190,82 @@ export default class ForgePlugin extends Plugin {
     const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
     forgeBtn.addClass(FORGE_BTN_CLASS);
 
+    // Lock toggle — only meaningful for action snippets (data lock is a
+    // future phase). The button reads the active note's frontmatter; if the
+    // file isn't an action snippet, skip rendering.
+    const fm = view.file
+      ? this.app.metadataCache.getFileCache(view.file)?.frontmatter
+      : undefined;
+    if (fm?.type === 'action') {
+      const isLocked = fm.locked === true;
+      const lockBtn = view.addAction(
+        isLocked ? 'lock' : 'unlock',
+        isLocked ? 'Unlock snippet (allow regenerate)' : 'Lock snippet (freeze python)',
+        () => { this.toggleLock(); },
+      );
+      lockBtn.addClass(LOCK_BTN_CLASS);
+      // Drift indicator: when locked, hash the current English section and
+      // compare against the snapshot taken at lock time. If they differ,
+      // the body has drifted and the user probably wants to re-lock.
+      if (isLocked && view.file) {
+        this.markDriftAsync(view.file, lockBtn, fm.locked_english_hash);
+      }
+    }
+
     const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
     edgesBtn.addClass(EDGES_BTN_CLASS);
+  }
+
+  private async markDriftAsync(file: TFile, btn: HTMLElement, storedHash: unknown) {
+    try {
+      const content = await this.app.vault.read(file);
+      const english = extractSection(content, 'english');
+      const currentHash = await sha256Hex(english);
+      if (typeof storedHash !== 'string' || currentHash !== storedHash) {
+        btn.addClass('is-drifted');
+        btn.setAttr(
+          'aria-label',
+          'Locked, but English has changed since lock time — re-lock to acknowledge.',
+        );
+      }
+    } catch (e) {
+      console.warn('Forge: drift check failed', e);
+    }
+  }
+
+  private async toggleLock() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('No active note to lock.');
+      return;
+    }
+    const file = view.file;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (fm?.type !== 'action') {
+      new Notice('Lock is only supported on action snippets right now.');
+      return;
+    }
+    const wasLocked = fm.locked === true;
+
+    if (wasLocked) {
+      await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+        delete fm.locked;
+        delete fm.locked_english_hash;
+      });
+      new Notice(`Forge: unlocked ${file.basename}`);
+    } else {
+      // Hash the current English section BEFORE flipping the flag, so the
+      // stored hash reflects the locked-at-this-moment baseline.
+      const content = await this.app.vault.read(file);
+      const english = extractSection(content, 'english');
+      const hash = await sha256Hex(english);
+      await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+        fm.locked = true;
+        fm.locked_english_hash = hash;
+      });
+      new Notice(`Forge: locked ${file.basename}`);
+    }
+    this.syncButtons();
   }
 
   private async createNewSnippet() {
@@ -207,10 +319,17 @@ export default class ForgePlugin extends Plugin {
   }
 
   // The merged toolbar button: generate, then (on success) run.
+  // Locked snippets skip the generate leg and run cached python directly.
   private async forgeSnippet() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       new Notice('No active note to forge.');
+      return;
+    }
+    const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+    if (fm?.locked === true) {
+      new Notice(`Forge: ${view.file.basename} is locked — running cached code (unlock to regenerate).`);
+      await this.runSnippet('Forge failed during execution');
       return;
     }
     const ok = await this.generate(true, 'Forge failed during generation');
