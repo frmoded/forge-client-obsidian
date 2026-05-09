@@ -108,6 +108,43 @@ function getEditMode(fm: any): EditMode {
   return 'english';
 }
 
+// Replace literal tab characters in the LEADING whitespace of every line
+// inside the snippet's ```python code fence with 4 spaces. Obsidian's
+// editor inserts a real `\t` on Tab when "Use tabs" is on (the default),
+// so a user who Tab-indents inside the Python facet ends up with a body
+// the Python parser rejects ("inconsistent use of tabs and spaces in
+// indentation") the next time /compute runs. Returns the input unchanged
+// if no leading-whitespace tab is present, so the caller can no-op skip
+// the rewrite.
+function sanitizePythonFacet(content: string): string {
+  const lines = content.split('\n');
+  const headingIdx = lines.findIndex(l => l.trim() === '# Python');
+  if (headingIdx === -1) return content;
+  let codeStart = -1;
+  let codeEnd = -1;
+  for (let i = headingIdx + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (codeStart === -1) {
+      if (t.startsWith('```python')) codeStart = i + 1;
+      else if (t.startsWith('#') || t === '---') return content;
+    } else {
+      if (t === '```') { codeEnd = i; break; }
+    }
+  }
+  if (codeStart === -1) return content;
+  if (codeEnd === -1) codeEnd = lines.length;
+
+  let changed = false;
+  for (let i = codeStart; i < codeEnd; i++) {
+    const line = lines[i];
+    const m = line.match(/^[\t ]+/);
+    if (!m || !m[0].includes('\t')) continue;
+    lines[i] = m[0].replace(/\t/g, '    ') + line.slice(m[0].length);
+    changed = true;
+  }
+  return changed ? lines.join('\n') : content;
+}
+
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 // RUN_BTN_CLASS and HAMMER_BTN_CLASS are kept only so syncButtons() can sweep
 // stale buttons left over by older plugin loads after the Run+Generate -> Forge
@@ -132,6 +169,14 @@ export default class ForgePlugin extends Plugin {
   // current. Editing the body fires modify on every keystroke; we coalesce
   // bursts so the lock button only re-renders once the user pauses.
   private modifyDebounceTimer: number | null = null;
+  // Separate, longer debounce for the Python-facet tab sanitizer. Longer
+  // because rewriting the file mid-typing forces a setViewData refresh on
+  // the open editor — fine when the user has actually paused, jarring
+  // otherwise. Files we've just sanitized show up in the modify event
+  // again from our own write; the sanitizer is idempotent so the second
+  // pass is a no-op early-exit, but we still want to avoid re-debouncing
+  // pointlessly.
+  private sanitizeDebounceTimer: number | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -150,6 +195,12 @@ export default class ForgePlugin extends Plugin {
     // and re-run syncButtons after a short pause — long enough that we're
     // not thrashing on every keystroke, short enough that the yellow dot
     // appears almost as soon as the user stops typing.
+    //
+    // Same hook also kicks the Python-facet tab sanitizer on its own
+    // longer debounce — Obsidian inserts literal \t for Tab and that
+    // breaks Python's indentation parser; rewriting leading tabs to 4
+    // spaces here means /compute doesn't 422 on "inconsistent use of
+    // tabs and spaces". See sanitizePythonFacet for the rewrite rules.
     this.registerEvent(
       this.app.vault.on('modify', (file) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -161,6 +212,19 @@ export default class ForgePlugin extends Plugin {
           this.modifyDebounceTimer = null;
           this.syncButtons();
         }, 300);
+
+        if (file instanceof TFile && file.extension === 'md') {
+          const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+          if (fm?.type === 'action') {
+            if (this.sanitizeDebounceTimer !== null) {
+              window.clearTimeout(this.sanitizeDebounceTimer);
+            }
+            this.sanitizeDebounceTimer = window.setTimeout(() => {
+              this.sanitizeDebounceTimer = null;
+              this.sanitizePythonTabs(file);
+            }, 800);
+          }
+        }
       }),
     );
 
@@ -498,6 +562,34 @@ export default class ForgePlugin extends Plugin {
 
     new Notice(`Forge: synced English ← Python on ${snippetId}`);
     this.syncButtons();
+  }
+
+  // Rewrite leading-tab indentation in the snippet's Python facet to 4-
+  // space indentation. Triggered from the modify-event hook on a long
+  // debounce so it only fires after the user pauses. No-op exits early
+  // when sanitizePythonFacet finds nothing to change, so the modify
+  // event our own write fires doesn't recurse.
+  private async sanitizePythonTabs(file: TFile) {
+    let writtenContent: string | null = null;
+    try {
+      await this.app.vault.process(file, (content) => {
+        const sanitized = sanitizePythonFacet(content);
+        if (sanitized === content) return content;
+        writtenContent = sanitized;
+        return sanitized;
+      });
+    } catch (e) {
+      console.warn('Forge sanitize: write failed', e);
+      return;
+    }
+    if (writtenContent === null) return;
+    // Same setViewData dance as syncEnglishFromPython — vault.process's
+    // saving=true gate keeps the open editor from auto-reloading, so push
+    // the rewritten content into the active view explicitly.
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (view?.file?.path === file.path) {
+      view.setViewData(writtenContent, false);
+    }
   }
 
   private async createNewSnippet() {
