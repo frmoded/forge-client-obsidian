@@ -1,4 +1,4 @@
-import { EditorState, RangeSetBuilder, Text, Transaction } from '@codemirror/state';
+import { EditorState, RangeSetBuilder, Text } from '@codemirror/state';
 import {
   Decoration,
   DecorationSet,
@@ -199,12 +199,17 @@ export const sectionPlugin = ViewPlugin.fromClass(
 );
 
 // Reject user-input transactions that touch the inactive facet's range.
-// Programmatic transactions (no userEvent annotation) pass through — that's
-// what carries the post-/generate writeback that Forge does in English mode,
-// and the frontmatter rewrite when toggleEditMode flips edit_mode.
+// Only `input.*` and `delete.*` user events count as "the user is typing
+// in this range" — everything else passes through. In particular `set`
+// (dispatched by Obsidian's MarkdownView.setViewData → mode.set diff
+// path when reloading the editor from disk after a plugin write) MUST
+// pass through, otherwise the editor's view stays stuck on the pre-write
+// content. We saw this bite Sync English ← Python in Phase-6.5 testing:
+// the disk got the new English but the editor didn't, because this filter
+// silently dropped the refresh.
 export const readOnlyFacetFilter = EditorState.transactionFilter.of((tr) => {
   if (!tr.docChanged) return tr;
-  if (!tr.annotation(Transaction.userEvent)) return tr;
+  if (!tr.isUserEvent('input') && !tr.isUserEvent('delete')) return tr;
 
   const doc = tr.startState.doc;
   const info = analyzeDoc(doc);

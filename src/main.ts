@@ -67,6 +67,37 @@ function replaceEnglishSection(content: string, english: string): string {
   return `${before}\n\n${english.trim()}\n\n${after}`;
 }
 
+// Set a single scalar field in the YAML frontmatter block. Used by Sync
+// English ← Python so we can update locked_english_hash inside the same
+// vault.process call that rewrites the # English body — earlier this was a
+// separate processFrontMatter() right after vault.modify(), and the two
+// back-to-back writes raced against the open editor's pending refresh,
+// leaving the editor view stuck on the old English even though disk had
+// the new content. One atomic write avoids that race.
+//
+// Only handles plain `key: value` lines. The frontmatter we own here is
+// flat scalars only (type, edit_mode, locked_english_hash, …) so a YAML
+// parser would be overkill.
+function setFrontmatterField(content: string, key: string, value: string): string {
+  const lines = content.split('\n');
+  if (lines[0] !== '---') return content;
+  let endIdx = -1;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i] === '---') { endIdx = i; break; }
+  }
+  if (endIdx === -1) return content;
+  const re = new RegExp(`^${key}:\\s*`);
+  const newLine = `${key}: ${value}`;
+  for (let i = 1; i < endIdx; i++) {
+    if (re.test(lines[i])) {
+      lines[i] = newLine;
+      return lines.join('\n');
+    }
+  }
+  lines.splice(endIdx, 0, newLine);
+  return lines.join('\n');
+}
+
 // Phase 6.5: edit_mode replaces the binary locked flag. `locked: true` is
 // still accepted as a one-cycle alias for `edit_mode: python` so existing
 // vaults work without migration.
@@ -429,24 +460,42 @@ export default class ForgePlugin extends Plugin {
     }
     const newEnglish = response.json.english as string;
 
+    // Body update + (in Python mode) re-snapshot of locked_english_hash, in
+    // a single atomic vault.process call. Splitting these into vault.modify +
+    // processFrontMatter (the previous shape) raced against the open
+    // editor's pending refresh: the second write read the editor's stale
+    // CodeMirror state and put the old English back, so the visible editor
+    // view never updated even though disk eventually settled on the new
+    // text. One write, one editor refresh.
+    const isPythonMode = getEditMode(fm) === 'python';
+    const newHash = isPythonMode ? await sha256Hex(newEnglish.trim()) : null;
+    let writtenContent: string | null = null;
     try {
-      const content = await this.app.vault.read(file);
-      const updated = replaceEnglishSection(content, newEnglish);
-      await this.app.vault.modify(file, updated);
+      await this.app.vault.process(file, (content) => {
+        let updated = replaceEnglishSection(content, newEnglish);
+        if (newHash !== null) {
+          updated = setFrontmatterField(updated, 'locked_english_hash', newHash);
+        }
+        writtenContent = updated;
+        return updated;
+      });
     } catch (e) {
       console.error('Forge canonicalize: write failed', e);
       new Notice('Forge: canonicalize wrote the model output but the file write failed — check console.');
       return;
     }
 
-    // If we're in Python mode, re-snapshot the english hash so the drift
-    // indicator clears (the new English IS the canonical baseline now).
-    if (getEditMode(fm) === 'python') {
-      const hash = await sha256Hex(newEnglish.trim());
-      await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-        fm.locked_english_hash = hash;
-      });
+    // Obsidian's MarkdownView reload-on-modify handler is gated on
+    // `!file.saving`. vault.process flips that flag to true for the duration
+    // of the write, so the modify event fires while the gate is closed and
+    // the editor view never picks up the new content. After the write the
+    // flag is cleared but no second refresh is queued. Force the active
+    // view to absorb the new content here.
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (writtenContent !== null && activeView?.file?.path === file.path) {
+      activeView.setViewData(writtenContent, false);
     }
+
     new Notice(`Forge: synced English ← Python on ${snippetId}`);
     this.syncButtons();
   }
