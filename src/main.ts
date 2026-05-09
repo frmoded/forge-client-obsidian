@@ -202,19 +202,35 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.syncEnglishFromPython(); },
     });
 
-    // The same action via the file context menu (right-click on the .md
-    // tab or in the file explorer) — the spec wants this off the toolbar
-    // because it's deliberate and infrequent.
+    // The same action via the file/editor context menus — the spec wants
+    // this off the toolbar because it's deliberate and infrequent. Two
+    // event registrations cover the two right-click surfaces:
+    //  - file-menu fires for right-click on a file tab or in the file
+    //    explorer pane.
+    //  - editor-menu fires for right-click inside the open editor body,
+    //    which is where users naturally right-click while reading the
+    //    snippet.
+    const addSyncMenuItem = (menu: any, file: TFile) => {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      if (fm?.type !== 'action') return;
+      menu.addItem((item: any) =>
+        item.setTitle('Forge: Sync English ← Python')
+          .setIcon('file-text')
+          .onClick(() => { this.syncEnglishFromPython(file); }),
+      );
+    };
+
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
         if (!(file instanceof TFile) || file.extension !== 'md') return;
-        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-        if (fm?.type !== 'action') return;
-        menu.addItem(item =>
-          item.setTitle('Forge: Sync English ← Python')
-            .setIcon('file-text')
-            .onClick(() => { this.syncEnglishFromPython(file); }),
-        );
+        addSyncMenuItem(menu, file);
+      }),
+    );
+    this.registerEvent(
+      this.app.workspace.on('editor-menu', (menu, _editor, info: any) => {
+        const file = info?.file;
+        if (!(file instanceof TFile) || file.extension !== 'md') return;
+        addSyncMenuItem(menu, file);
       }),
     );
 
