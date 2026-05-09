@@ -158,18 +158,22 @@ function buildSectionDecorations(view: EditorView): DecorationSet {
     if (trimmed === '# English') {
       section = 'english';
       builder.add(line.from, line.from, englishLineDeco);
+      // Inactive English (we're in Python mode): to edit English, the user
+      // must switch to English mode. The label names the mode to switch to.
       if (englishReadOnly) {
         builder.add(line.to, line.to, Decoration.widget({
-          widget: new ReadOnlyLabelWidget('Python'),
+          widget: new ReadOnlyLabelWidget('English'),
           side: 1,
         }));
       }
     } else if (trimmed === '# Python') {
       section = 'python';
       builder.add(line.from, line.from, pythonLineDeco);
+      // Inactive Python (we're in English mode): to edit Python, switch
+      // to Python mode.
       if (pythonReadOnly) {
         builder.add(line.to, line.to, Decoration.widget({
-          widget: new ReadOnlyLabelWidget('English'),
+          widget: new ReadOnlyLabelWidget('Python'),
           side: 1,
         }));
       }
