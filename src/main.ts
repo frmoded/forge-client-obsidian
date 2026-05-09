@@ -306,10 +306,16 @@ export default class ForgePlugin extends Plugin {
       const currentHash = await sha256Hex(english);
       if (typeof storedHash !== 'string' || currentHash !== storedHash) {
         btn.addClass('is-drifted');
-        btn.setAttr(
-          'aria-label',
-          'Drifted from English: the English facet has changed since you switched to Python mode. Sync English ← Python to canonicalize, or switch back to English mode to regenerate.',
-        );
+        const text =
+          'Drifted from English: the English facet has changed since you switched to Python mode. Sync English ← Python to canonicalize, or switch back to English mode to regenerate.';
+        // Set both aria-label (for screen readers / Obsidian's tooltip
+        // helper) and the standard HTML `title` attribute so the
+        // browser-native hover tooltip surfaces — Obsidian's tooltip
+        // helper caches its text at element-creation time and ignores
+        // later aria-label changes, so we'd otherwise see only the color
+        // change with no hover hint.
+        btn.setAttribute('aria-label', text);
+        btn.setAttribute('title', text);
       }
     } catch (e) {
       console.warn('Forge: drift check failed', e);
@@ -483,6 +489,12 @@ export default class ForgePlugin extends Plugin {
     }
     const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
     if (getEditMode(fm) === 'python') {
+      // The server log won't show a "skipped (edit_mode=python)" line
+      // because we don't call /generate at all in this branch — the
+      // server-side guard is defense-in-depth, not the primary signal.
+      // Log here so devs have explicit confirmation in the browser
+      // console alongside the existing Notice.
+      console.log(`Forge: skipping /generate, ${view.file.basename} is in Python mode`);
       new Notice(`Forge: ${view.file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
       await this.runSnippet('Forge failed during execution');
       return;
