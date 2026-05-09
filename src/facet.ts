@@ -5,7 +5,6 @@ import {
   EditorView,
   ViewPlugin,
   ViewUpdate,
-  WidgetType,
 } from '@codemirror/view';
 
 // Phase 6.5: when a snippet is in `edit_mode: python`, the # English facet
@@ -106,23 +105,6 @@ function analyzeDoc(doc: Text): DocAnalysis {
   };
 }
 
-// Inline pill rendered at the end of the inactive facet's heading line.
-// Subtle font + opacity so it doesn't compete with the heading itself; the
-// dimming on the body below is the primary "this is read-only" signal.
-class ReadOnlyLabelWidget extends WidgetType {
-  constructor(private switchToMode: 'English' | 'Python') { super(); }
-  eq(other: ReadOnlyLabelWidget) {
-    return other.switchToMode === this.switchToMode;
-  }
-  toDOM() {
-    const span = document.createElement('span');
-    span.className = 'forge-facet-readonly-label';
-    span.textContent = `  read-only · switch to ${this.switchToMode} mode to edit`;
-    return span;
-  }
-  ignoreEvent() { return true; }
-}
-
 function buildSectionDecorations(view: EditorView): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
   const doc = view.state.doc;
@@ -142,6 +124,26 @@ function buildSectionDecorations(view: EditorView): DecorationSet {
       : 'forge-python-line',
   });
 
+  // Heading lines for the inactive facet get a `data-forge-ro-label`
+  // attribute carrying the label text. CSS uses ::after with attr(...) to
+  // render the label inline on the heading. We tried a Decoration.widget
+  // initially but Live Preview's heading-folding plugin pulled the widget
+  // into the folded markup region, sometimes displaying it on the WRONG
+  // heading line. The attribute + ::after path is rendered as part of the
+  // line's container element and isn't subject to Live Preview's fold.
+  const englishHeadingReadOnlyDeco = Decoration.line({
+    class: 'forge-english-line forge-facet-readonly',
+    attributes: {
+      'data-forge-ro-label': '  read-only · switch to English mode to edit',
+    },
+  });
+  const pythonHeadingReadOnlyDeco = Decoration.line({
+    class: 'forge-python-line forge-facet-readonly',
+    attributes: {
+      'data-forge-ro-label': '  read-only · switch to Python mode to edit',
+    },
+  });
+
   type Section = 'none' | 'frontmatter' | 'english' | 'python';
   let section: Section = 'none';
 
@@ -157,26 +159,16 @@ function buildSectionDecorations(view: EditorView): DecorationSet {
 
     if (trimmed === '# English') {
       section = 'english';
-      builder.add(line.from, line.from, englishLineDeco);
-      // Inactive English (we're in Python mode): to edit English, the user
-      // must switch to English mode. The label names the mode to switch to.
-      if (englishReadOnly) {
-        builder.add(line.to, line.to, Decoration.widget({
-          widget: new ReadOnlyLabelWidget('English'),
-          side: 1,
-        }));
-      }
+      builder.add(
+        line.from, line.from,
+        englishReadOnly ? englishHeadingReadOnlyDeco : englishLineDeco,
+      );
     } else if (trimmed === '# Python') {
       section = 'python';
-      builder.add(line.from, line.from, pythonLineDeco);
-      // Inactive Python (we're in English mode): to edit Python, switch
-      // to Python mode.
-      if (pythonReadOnly) {
-        builder.add(line.to, line.to, Decoration.widget({
-          widget: new ReadOnlyLabelWidget('Python'),
-          side: 1,
-        }));
-      }
+      builder.add(
+        line.from, line.from,
+        pythonReadOnly ? pythonHeadingReadOnlyDeco : pythonLineDeco,
+      );
     } else if (trimmed === '---') {
       section = 'none';
     } else if (section === 'english') {

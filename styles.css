@@ -483,10 +483,15 @@
 }
 
 /* Inline label rendered at the end of the inactive facet's heading line
-   ("read-only · switch to <Other> mode to edit"). Subtle italics + muted
-   text so it doesn't compete with the heading. */
-.forge-facet-readonly-label {
-  margin-left: 0.6em;
+   ("read-only · switch to <Other> mode to edit"). The label text lives on
+   a data-attribute applied to the heading's line element by the CodeMirror
+   plugin; ::after pulls it out via attr(). This is more robust than a
+   Decoration.widget because Live Preview's heading folding doesn't
+   relocate ::after content. Subtle italics + muted text so it doesn't
+   compete with the heading. */
+.forge-english-line[data-forge-ro-label]::after,
+.forge-python-line[data-forge-ro-label]::after {
+  content: attr(data-forge-ro-label);
   font-size: 0.78em;
   font-style: italic;
   font-weight: normal;
