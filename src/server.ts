@@ -44,6 +44,24 @@ export async function syncDependencies(
   return { status: res.status, json: res.json };
 }
 
+// Phase 6.5: reverse direction of /generate. Server reads the snippet's
+// python facet, asks the LLM for a canonical English description, returns
+// it as plain text. The plugin owns the file write.
+export async function canonicalizeSnippet(
+  serverUrl: string,
+  vaultPath: string,
+  snippetId: string,
+): Promise<{ status: number; json: any }> {
+  const res = await requestUrl({
+    url: `${serverUrl}/canonicalize`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId }),
+    throw: false,
+  });
+  return { status: res.status, json: res.json };
+}
+
 export async function freezeEdge(
   serverUrl: string,
   vaultPath: string,

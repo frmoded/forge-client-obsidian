@@ -459,9 +459,12 @@
   margin: 4px 0 12px 0;
 }
 
-/* Lock toolbar button — drift state when the English section has changed
-   since the snapshot taken at lock time. The icon picks up a warm yellow
-   to flag "you locked this, but the spec moved underneath you". */
+/* Edit-mode toggle button — drift state when the English section has
+   changed since the snippet entered Python mode. The icon picks up a warm
+   yellow to flag "you switched to Python, but the English moved
+   underneath you". The legacy `.forge-lock-btn` selector is kept for one
+   release so Phase-5 vaults that still render the old button stay tinted. */
+.forge-mode-btn.is-drifted svg,
 .forge-lock-btn.is-drifted svg {
   color: #cc9a00;
 }

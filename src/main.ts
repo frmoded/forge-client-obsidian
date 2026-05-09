@@ -7,7 +7,7 @@ import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
-import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies } from './server';
+import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies, canonicalizeSnippet } from './server';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
@@ -46,6 +46,37 @@ async function sha256Hex(s: string): Promise<string> {
     .join('');
 }
 
+// Replace the body of the # English section. Keeps the heading line itself
+// in place, swaps out everything between it and the next heading or `---`
+// separator. Used by "Sync English ← Python" so we don't disturb the rest
+// of the file (Python facet, Dependencies block, etc.).
+function replaceEnglishSection(content: string, english: string): string {
+  const lines = content.split('\n');
+  const startIdx = lines.findIndex(l => /^#{1,6}\s+english\s*$/i.test(l.trim()));
+  if (startIdx === -1) return content;
+  let endIdx = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t.startsWith('#') || t === '---') {
+      endIdx = i;
+      break;
+    }
+  }
+  const before = lines.slice(0, startIdx + 1).join('\n');
+  const after = lines.slice(endIdx).join('\n');
+  return `${before}\n\n${english.trim()}\n\n${after}`;
+}
+
+// Phase 6.5: edit_mode replaces the binary locked flag. `locked: true` is
+// still accepted as a one-cycle alias for `edit_mode: python` so existing
+// vaults work without migration.
+type EditMode = 'english' | 'python';
+function getEditMode(fm: any): EditMode {
+  if (fm?.edit_mode === 'python') return 'python';
+  if (fm?.locked === true) return 'python';
+  return 'english';
+}
+
 const SNIPPET_BTN_CLASS = 'forge-snippet-btn';
 // RUN_BTN_CLASS and HAMMER_BTN_CLASS are kept only so syncButtons() can sweep
 // stale buttons left over by older plugin loads after the Run+Generate -> Forge
@@ -55,6 +86,7 @@ const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 const EDGES_BTN_CLASS = 'forge-edges-btn';
 const FORGE_BTN_CLASS = 'forge-forge-btn';
 const LOCK_BTN_CLASS = 'forge-lock-btn';
+const MODE_BTN_CLASS = 'forge-mode-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -144,10 +176,10 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.runZapLine(); },
     });
 
-    // Direct backend access for debugging and the lock mechanism. The Forge
-    // button calls /generate then /run; these expose each leg on its own.
-    // Generate-only respects the lock — a locked snippet shows a notice and
-    // bails rather than burning LLM tokens that the server would skip anyway.
+    // Direct backend access for debugging. The Forge button calls /generate
+    // then /run; these expose each leg on its own. Generate-only respects
+    // edit mode — a Python-mode snippet shows a notice and bails rather
+    // than burning LLM tokens that the server would skip anyway.
     this.addCommand({
       id: 'forge-generate-only',
       name: 'Generate only',
@@ -155,14 +187,36 @@ export default class ForgePlugin extends Plugin {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (view?.file) {
           const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
-          if (fm?.locked === true) {
-            new Notice(`Forge: ${view.file.basename} is locked — unlock first to regenerate.`);
+          if (getEditMode(fm) === 'python') {
+            new Notice(`Forge: ${view.file.basename} is in Python mode — switch to English mode to regenerate.`);
             return;
           }
         }
         this.generate(true);
       },
     });
+
+    this.addCommand({
+      id: 'forge-sync-english-from-python',
+      name: 'Sync English ← Python',
+      callback: () => { this.syncEnglishFromPython(); },
+    });
+
+    // The same action via the file context menu (right-click on the .md
+    // tab or in the file explorer) — the spec wants this off the toolbar
+    // because it's deliberate and infrequent.
+    this.registerEvent(
+      this.app.workspace.on('file-menu', (menu, file) => {
+        if (!(file instanceof TFile) || file.extension !== 'md') return;
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        if (fm?.type !== 'action') return;
+        menu.addItem(item =>
+          item.setTitle('Forge: Sync English ← Python')
+            .setIcon('file-text')
+            .onClick(() => { this.syncEnglishFromPython(file); }),
+        );
+      }),
+    );
 
     this.addCommand({
       id: 'forge-run-only',
@@ -202,10 +256,11 @@ export default class ForgePlugin extends Plugin {
     if (!view) return;
 
     // Remove any stale Forge buttons from a previous plugin load before adding fresh ones.
-    // RUN_BTN_CLASS / HAMMER_BTN_CLASS are listed so users still get the old Run+Generate
-    // buttons swept after upgrading past the Forge consolidation.
+    // RUN_BTN_CLASS / HAMMER_BTN_CLASS / LOCK_BTN_CLASS are listed so users still get
+    // their predecessors swept after the Run+Generate→Forge and lock→edit-mode
+    // refactors.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .forge-dag-btn`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .${MODE_BTN_CLASS}, .forge-dag-btn`
     ).forEach(el => el.remove());
 
     const snippetBtn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
@@ -214,25 +269,29 @@ export default class ForgePlugin extends Plugin {
     const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
     forgeBtn.addClass(FORGE_BTN_CLASS);
 
-    // Lock toggle — only meaningful for action snippets (data lock is a
-    // future phase). The button reads the active note's frontmatter; if the
-    // file isn't an action snippet, skip rendering.
+    // Edit-mode toggle for action snippets. English mode = LLM-driven,
+    // Forge regenerates Python from English. Python mode = hand-tuned,
+    // Forge skips generation and runs whatever's in the body.
+    // Replaces the binary lock toggle from Phase 5 with the explicit
+    // direction the user is editing. Data snippets stay on the lock
+    // mechanism (different shape, different rename — see Phase 6.5 spec).
     const fm = view.file
       ? this.app.metadataCache.getFileCache(view.file)?.frontmatter
       : undefined;
     if (fm?.type === 'action') {
-      const isLocked = fm.locked === true;
-      const lockBtn = view.addAction(
-        isLocked ? 'lock' : 'unlock',
-        isLocked ? 'Unlock snippet (allow regenerate)' : 'Lock snippet (freeze python)',
-        () => { this.toggleLock(); },
+      const mode = getEditMode(fm);
+      const modeBtn = view.addAction(
+        mode === 'python' ? 'code' : 'pencil-line',
+        mode === 'python'
+          ? 'Editing: Python (click to switch to English mode — Forge will regenerate)'
+          : 'Editing: English (click to switch to Python mode — Forge will skip regenerate)',
+        () => { this.toggleEditMode(); },
       );
-      lockBtn.addClass(LOCK_BTN_CLASS);
-      // Drift indicator: when locked, hash the current English section and
-      // compare against the snapshot taken at lock time. If they differ,
-      // the body has drifted and the user probably wants to re-lock.
-      if (isLocked && view.file) {
-        this.markDriftAsync(view.file, lockBtn, fm.locked_english_hash);
+      modeBtn.addClass(MODE_BTN_CLASS);
+      // Drift indicator: in Python mode, the English facet might have moved
+      // since we switched. Hash and compare; yellow tint if it drifted.
+      if (mode === 'python' && view.file) {
+        this.markDriftAsync(view.file, modeBtn, fm.locked_english_hash);
       }
     }
 
@@ -249,7 +308,7 @@ export default class ForgePlugin extends Plugin {
         btn.addClass('is-drifted');
         btn.setAttr(
           'aria-label',
-          'Locked, but English has changed since lock time — re-lock to acknowledge.',
+          'Drifted from English: the English facet has changed since you switched to Python mode. Sync English ← Python to canonicalize, or switch back to English mode to regenerate.',
         );
       }
     } catch (e) {
@@ -257,38 +316,109 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
-  private async toggleLock() {
+  // Toggle between english (LLM-driven) and python (hand-tuned) edit modes.
+  // Replaces toggleLock from Phase 5; semantics are the same but the field
+  // name moves from `locked: true` to `edit_mode: python`. Reads either
+  // form when computing current state, only writes the new form.
+  private async toggleEditMode() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('No active note to lock.');
+      new Notice('No active note.');
       return;
     }
     const file = view.file;
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (fm?.type !== 'action') {
-      new Notice('Lock is only supported on action snippets right now.');
+      new Notice('Edit mode is only meaningful for action snippets.');
       return;
     }
-    const wasLocked = fm.locked === true;
+    const current = getEditMode(fm);
 
-    if (wasLocked) {
+    if (current === 'python') {
       await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-        delete fm.locked;
+        delete fm.edit_mode;
+        delete fm.locked;             // legacy alias — clean up while we're here
         delete fm.locked_english_hash;
       });
-      new Notice(`Forge: unlocked ${file.basename}`);
+      new Notice(`Forge: ${file.basename} → English mode`);
     } else {
-      // Hash the current English section BEFORE flipping the flag, so the
-      // stored hash reflects the locked-at-this-moment baseline.
+      // Snapshot the current English so we can detect drift later. The hash
+      // field name stays `locked_english_hash` for one cycle so Phase-5
+      // vaults don't lose their drift baseline; new writes use the same key.
       const content = await this.app.vault.read(file);
       const english = extractSection(content, 'english');
       const hash = await sha256Hex(english);
       await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-        fm.locked = true;
+        fm.edit_mode = 'python';
+        fm.locked_english_hash = hash;
+        delete fm.locked;             // migrate off the legacy field
+      });
+      new Notice(`Forge: ${file.basename} → Python mode`);
+    }
+    this.syncButtons();
+  }
+
+  // Sync English ← Python: ask the backend's /canonicalize endpoint to
+  // produce an English summary of the snippet's current python facet, then
+  // overwrite the # English section with the result. Silent overwrite —
+  // Cmd+Z is the safety net. Also re-snapshots `locked_english_hash` if the
+  // snippet is in Python mode so the drift indicator clears immediately.
+  private async syncEnglishFromPython(target?: TFile) {
+    const file = target ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+    if (!file) {
+      new Notice('No active note for sync.');
+      return;
+    }
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (fm?.type !== 'action') {
+      new Notice('Sync English ← Python is only for action snippets.');
+      return;
+    }
+
+    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const snippetId = file.basename;
+    const modal = new ForgeGenerationModal(this.app, `Canonicalizing ${snippetId}…`);
+    modal.open();
+
+    let response;
+    try {
+      response = await canonicalizeSnippet(this.settings.serverUrl, vaultPath, snippetId);
+    } catch (e) {
+      console.error('Forge canonicalize: network error', e);
+      new Notice('Forge: canonicalize failed — check console.');
+      modal.finish();
+      return;
+    } finally {
+      modal.finish();
+    }
+
+    if (response.status !== 200 || typeof response.json?.english !== 'string') {
+      const detail = response.json?.detail ?? `HTTP ${response.status}`;
+      new Notice(`Forge: canonicalize failed — ${detail}`);
+      console.error('Forge canonicalize:', response);
+      return;
+    }
+    const newEnglish = response.json.english as string;
+
+    try {
+      const content = await this.app.vault.read(file);
+      const updated = replaceEnglishSection(content, newEnglish);
+      await this.app.vault.modify(file, updated);
+    } catch (e) {
+      console.error('Forge canonicalize: write failed', e);
+      new Notice('Forge: canonicalize wrote the model output but the file write failed — check console.');
+      return;
+    }
+
+    // If we're in Python mode, re-snapshot the english hash so the drift
+    // indicator clears (the new English IS the canonical baseline now).
+    if (getEditMode(fm) === 'python') {
+      const hash = await sha256Hex(newEnglish.trim());
+      await this.app.fileManager.processFrontMatter(file, (fm: any) => {
         fm.locked_english_hash = hash;
       });
-      new Notice(`Forge: locked ${file.basename}`);
     }
+    new Notice(`Forge: synced English ← Python on ${snippetId}`);
     this.syncButtons();
   }
 
@@ -343,7 +473,8 @@ export default class ForgePlugin extends Plugin {
   }
 
   // The merged toolbar button: generate, then (on success) run.
-  // Locked snippets skip the generate leg and run cached python directly.
+  // Snippets in Python edit-mode skip the generate leg and run cached
+  // python directly — same shape as the Phase-5 locked path.
   private async forgeSnippet() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
@@ -351,8 +482,8 @@ export default class ForgePlugin extends Plugin {
       return;
     }
     const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
-    if (fm?.locked === true) {
-      new Notice(`Forge: ${view.file.basename} is locked — running cached code (unlock to regenerate).`);
+    if (getEditMode(fm) === 'python') {
+      new Notice(`Forge: ${view.file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
       await this.runSnippet('Forge failed during execution');
       return;
     }
