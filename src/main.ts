@@ -65,6 +65,10 @@ export default class ForgePlugin extends Plugin {
   // it (e.g., an empty stub overlaying a builtin).
   private snippetInventory: Record<string, Array<{ id: string; type: string; inputs: string[] }>> = {};
   private freezeCache: { caller?: string; callee?: string } = {};
+  // Debounce handle for the file-modify hook that keeps the drift indicator
+  // current. Editing the body fires modify on every keystroke; we coalesce
+  // bursts so the lock button only re-renders once the user pauses.
+  private modifyDebounceTimer: number | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -77,6 +81,26 @@ export default class ForgePlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on('layout-change', () => this.syncButtons())
     );
+
+    // Body edits don't fire layout-change, so the drift indicator on the
+    // lock button would never refresh as the user types. Hook vault.modify
+    // and re-run syncButtons after a short pause — long enough that we're
+    // not thrashing on every keystroke, short enough that the yellow dot
+    // appears almost as soon as the user stops typing.
+    this.registerEvent(
+      this.app.vault.on('modify', (file) => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!view?.file || view.file.path !== file.path) return;
+        if (this.modifyDebounceTimer !== null) {
+          window.clearTimeout(this.modifyDebounceTimer);
+        }
+        this.modifyDebounceTimer = window.setTimeout(() => {
+          this.modifyDebounceTimer = null;
+          this.syncButtons();
+        }, 300);
+      }),
+    );
+
     this.syncButtons();
 
     // Phase 2 — Render data-snippet bodies in the output panel when the user
