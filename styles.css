@@ -468,3 +468,29 @@
 .forge-lock-btn.is-drifted svg {
   color: #cc9a00;
 }
+
+/* Phase 6.5: read-only treatment for the inactive facet of an action
+   snippet. CodeMirror's line decorator tags every line of the inactive
+   facet's body (and its heading) with .forge-facet-readonly. The opacity
+   is exposed as a CSS variable so it's tunable without a code change.
+   Stop at 0.7 — the spec is explicit that the code must stay readable. */
+:root {
+  --forge-facet-readonly-opacity: 0.7;
+}
+
+.forge-facet-readonly {
+  opacity: var(--forge-facet-readonly-opacity);
+}
+
+/* Inline label rendered at the end of the inactive facet's heading line
+   ("read-only · switch to <Other> mode to edit"). Subtle italics + muted
+   text so it doesn't compete with the heading. */
+.forge-facet-readonly-label {
+  margin-left: 0.6em;
+  font-size: 0.78em;
+  font-style: italic;
+  font-weight: normal;
+  color: var(--text-muted);
+  opacity: 0.6;
+  user-select: none;
+}

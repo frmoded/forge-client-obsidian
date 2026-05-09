@@ -5,7 +5,7 @@ import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
 import { invalidateLibraryVaultCache } from './edges';
 import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
-import { sectionPlugin } from './facet';
+import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
 import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies, canonicalizeSnippet } from './server';
 import { runFirstRunCheck } from './welcome';
@@ -108,7 +108,7 @@ export default class ForgePlugin extends Plugin {
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
     this.registerView(EDGES_VIEW_TYPE, leaf => new ForgeEdgesView(leaf, () => this.settings.serverUrl));
-    this.registerEditorExtension([sectionPlugin]);
+    this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
 
     this.registerEvent(
       this.app.workspace.on('layout-change', () => this.syncButtons())
