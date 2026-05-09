@@ -404,6 +404,13 @@ export default class ForgePlugin extends Plugin {
 
     let response;
     try {
+      // Force-refresh the server's registry first. /canonicalize otherwise
+      // 404s on freshly-authored snippets that the cached registry doesn't
+      // know about yet (we saw this on a newly-created hello.md in
+      // Phase-6.5 testing — server registry was loaded before the file
+      // existed). connectVault sets force=true unconditionally; this is
+      // just making sure we re-scan before resolving snippet_id.
+      await connectVault(this.settings.serverUrl, vaultPath);
       response = await canonicalizeSnippet(this.settings.serverUrl, vaultPath, snippetId);
     } catch (e) {
       console.error('Forge canonicalize: network error', e);
