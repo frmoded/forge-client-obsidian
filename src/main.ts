@@ -32,7 +32,11 @@ const FORGE_BTN_CLASS = 'forge-forge-btn';
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
   private inputCache: Record<string, Record<string, string>> = {};
-  private snippetInventory: Record<string, string[]> = {};
+  // Snapshot of the registry inventory from /connect. Shape per vault:
+  //   [{id, type, inputs}, ...]
+  // Used as a fallback for snippet metadata when the local .md doesn't carry
+  // it (e.g., an empty stub overlaying a builtin).
+  private snippetInventory: Record<string, Array<{ id: string; type: string; inputs: string[] }>> = {};
   private freezeCache: { caller?: string; callee?: string } = {};
 
   async onload() {
@@ -349,7 +353,14 @@ export default class ForgePlugin extends Plugin {
     const snippetId = view.file.basename;
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const frontmatter = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
-    const inputs: string[] = frontmatter?.inputs ?? [];
+
+    // Local frontmatter is the source of truth when it exists. When it
+    // doesn't (e.g., the user has an empty install.md stub over the builtin),
+    // fall back to the inventory snapshot from /connect so we still ask for
+    // the right inputs.
+    const inputs: string[] = frontmatter
+      ? (frontmatter.inputs ?? [])
+      : (this.lookupInventoryInputs(snippetId) ?? []);
 
     if (inputs.length > 0) {
       const cached = this.inputCache[snippetId] ?? {};
@@ -360,6 +371,22 @@ export default class ForgePlugin extends Plugin {
     } else {
       await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix);
     }
+  }
+
+  // Walk the inventory to find a snippet's declared inputs. Resolution order
+  // isn't carried over the wire, so the first match wins; the empty-stub
+  // case (the only place the fallback fires) doesn't have an authoring entry
+  // anyway.
+  private lookupInventoryInputs(bareId: string): string[] | null {
+    for (const vault of Object.values(this.snippetInventory)) {
+      if (!Array.isArray(vault)) continue;
+      for (const entry of vault) {
+        if (entry?.id === bareId && Array.isArray(entry?.inputs)) {
+          return entry.inputs;
+        }
+      }
+    }
+    return null;
   }
 
   // Triggered on every file-open. Cheap-checks frontmatter; only does real
