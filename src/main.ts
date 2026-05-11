@@ -2,6 +2,7 @@ import { Plugin, Notice, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
+import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view';
 import { invalidateLibraryVaultCache } from './edges';
 import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
@@ -184,6 +185,7 @@ export default class ForgePlugin extends Plugin {
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
     this.registerView(EDGES_VIEW_TYPE, leaf => new ForgeEdgesView(leaf, () => this.settings.serverUrl));
+    this.registerView(MODA_VIEW_TYPE, leaf => new ForgeModaView(leaf));
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
 
     this.registerEvent(
@@ -239,6 +241,16 @@ export default class ForgePlugin extends Plugin {
 
     this.addRibbonIcon('zap', 'New Snippet', () => {
       this.createNewSnippet();
+    });
+
+    this.addRibbonIcon('atom', 'Open MoDa simulation', () => {
+      this.openModaView();
+    });
+
+    this.addCommand({
+      id: 'forge-open-moda',
+      name: 'Open MoDa simulation',
+      callback: () => { this.openModaView(); },
     });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
@@ -607,6 +619,17 @@ export default class ForgePlugin extends Plugin {
       console.warn('Forge: connect failed before opening New Snippet modal; falling back to default content_types', e);
     }
     new ForgeSnippetModal(this.app, contentTypes).open();
+  }
+
+  private async openModaView() {
+    const existing = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
+    if (existing) {
+      this.app.workspace.revealLeaf(existing);
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf('tab');
+    await leaf.setViewState({ type: MODA_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
   }
 
   private async toggleEdgesView() {
