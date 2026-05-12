@@ -65,6 +65,18 @@ export class ForgeEdgesView extends ItemView {
       const activeMd = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (activeMd?.file) {
         this.currentFile = activeMd.file;
+      } else if (!this.currentFile) {
+        // First-open / post-hot-reload case: no markdown is the active
+        // leaf, currentFile was never set. Walk the open markdown leaves
+        // and pick the first one's file so we have something to query.
+        const mdLeaves = this.app.workspace.getLeavesOfType('markdown');
+        for (const leaf of mdLeaves) {
+          const v = leaf.view;
+          if (v instanceof MarkdownView && v.file) {
+            this.currentFile = v.file;
+            break;
+          }
+        }
       }
 
       if (!this.currentFile) {
