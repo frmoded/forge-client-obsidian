@@ -1,4 +1,4 @@
-import { ItemView, MarkdownView, Notice, WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import {
   SnapshotMeta,
   listIncoming,
@@ -15,6 +15,15 @@ export const EDGES_VIEW_TYPE = 'forge-edges-view';
 export class ForgeEdgesView extends ItemView {
   private bodyEl!: HTMLElement;
   private currentSnippetId: string | null = null;
+  // Tracks the last markdown file the user looked at. Updated only when
+  // a real markdown leaf is active, so clicking the panel's own Refresh
+  // button (which makes the edges leaf active) doesn't clobber the
+  // shown snippet to "no markdown view → empty state".
+  private currentFile: TFile | null = null;
+  // Single-flight guard. active-leaf-change can fire twice in rapid
+  // succession during tab switching; without this, two refresh() calls
+  // race past each other's bodyEl.empty() and the panel renders doubled.
+  private refreshing = false;
 
   constructor(leaf: WorkspaceLeaf, private serverUrl: () => string) {
     super(leaf);
@@ -45,27 +54,44 @@ export class ForgeEdgesView extends ItemView {
   }
 
   async refresh() {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
+    if (this.refreshing) return;
+    this.refreshing = true;
+    try {
+      // Only adopt the active leaf's file when it really is a markdown view.
+      // Clicking Refresh focuses this panel, which makes
+      // getActiveViewOfType(MarkdownView) return null — without the
+      // currentFile fallback we'd flip to "Open a snippet to see its
+      // edges." every time the user hit Refresh.
+      const activeMd = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (activeMd?.file) {
+        this.currentFile = activeMd.file;
+      }
+
+      if (!this.currentFile) {
+        this.bodyEl.empty();
+        this.bodyEl.createEl('p', { text: 'Open a snippet to see its edges.', cls: 'forge-edges-empty' });
+        this.currentSnippetId = null;
+        return;
+      }
+
+      this.currentSnippetId = await pathToSnippetId(this.app, this.currentFile.path);
+      const [outgoing, incoming] = await Promise.all([
+        listOutgoing(this.app, this.currentSnippetId),
+        listIncoming(this.app, this.currentSnippetId),
+      ]);
+
       this.bodyEl.empty();
-      this.bodyEl.createEl('p', { text: 'Open a snippet to see its edges.', cls: 'forge-edges-empty' });
-      this.currentSnippetId = null;
-      return;
+      this.bodyEl.createEl('p', { text: this.currentSnippetId, cls: 'forge-edges-active' });
+
+      if (activeMd) {
+        await this.renderDriftBanner(activeMd);
+      }
+
+      this.renderSection('Outgoing', outgoing, 'caller', this.currentSnippetId);
+      this.renderSection('Incoming', incoming, 'callee', this.currentSnippetId);
+    } finally {
+      this.refreshing = false;
     }
-
-    this.currentSnippetId = await pathToSnippetId(this.app, view.file.path);
-    const [outgoing, incoming] = await Promise.all([
-      listOutgoing(this.app, this.currentSnippetId),
-      listIncoming(this.app, this.currentSnippetId),
-    ]);
-
-    this.bodyEl.empty();
-    this.bodyEl.createEl('p', { text: this.currentSnippetId, cls: 'forge-edges-active' });
-
-    await this.renderDriftBanner(view);
-
-    this.renderSection('Outgoing', outgoing, 'caller', this.currentSnippetId);
-    this.renderSection('Incoming', incoming, 'callee', this.currentSnippetId);
   }
 
   private async renderDriftBanner(view: MarkdownView) {
