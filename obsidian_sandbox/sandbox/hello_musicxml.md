@@ -1,16 +1,8 @@
 ---
 type: data
 content_type: musicxml
-description: hello_musicxml
+description: "A short blues phrase in MusicXML — minimal example for the musicxml content_type. The plugin's output panel renders this via Verovio with playback and click-to-play. Imported from Blues#1.musicxml."
 ---
-
-# English
-
-A short blues phrase in MusicXML — minimal example for the musicxml
-content_type. The plugin's output panel renders this via Verovio with
-playback and click-to-play. Imported from Blues#1.musicxml.
-
-# Body
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>

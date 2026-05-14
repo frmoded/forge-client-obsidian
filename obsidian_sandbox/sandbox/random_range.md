@@ -17,9 +17,11 @@ Print it.
 # Python
 
 ```python
-def random_range(context, min, max):
-    min_val = context.get("min", 0)
-    max_val = context.get("max", 1)
-    result = random.randint(min_val, max_val)
+def compute(context, min, max, shift):
+    result = random.randint(min, max)
+    result = result * 3
+    result = result + shift
+    print(result)
+    result = context.compute("greet", param=result)
     return result
 ```

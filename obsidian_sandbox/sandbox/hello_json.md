@@ -1,14 +1,8 @@
 ---
 type: data
 content_type: json
-description: hello_json
+description: "height and weight and animal_type for a Hypo. Set some reasonable values."
 ---
-
-# English
-
-height and weight and animal_type for a Hypo. Set some reasonable values.
-
-# Body
 
 ```json
 {

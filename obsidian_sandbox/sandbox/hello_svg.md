@@ -1,18 +1,8 @@
 ---
 type: data
 content_type: svg
-description: hello_svg
+description: "A vector illustration of the Forge — a dimly lit forge with a glowing anvil, neon haze, and floating code/equation glyphs. Used as a smoke-test for the svg content_type. The body is real SVG markup (filters, gradients, paths) — the plugin embeds it directly into the output panel."
 ---
-
-# English
-
-A vector illustration of the Forge — a dimly lit forge with a glowing
-anvil, neon haze, and floating code/equation glyphs. Used as a
-smoke-test for the svg content_type. The body is real SVG markup
-(filters, gradients, paths) — the plugin embeds it directly into
-the output panel.
-
-# Body
 
 ```xml
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">

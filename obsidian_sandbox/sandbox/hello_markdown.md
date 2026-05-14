@@ -1,17 +1,8 @@
 ---
 type: data
 content_type: markdown
-description: hello_markdown
+description: "A short markdown sample exercising headings, lists, emphasis, and a blockquote — minimal example for the markdown content_type. Snippets that consume this get the literal markdown source; the plugin's preview renders it via Obsidian's MarkdownRenderer."
 ---
-
-# English
-
-A short markdown sample exercising headings, lists, emphasis, and a
-blockquote — minimal example for the markdown content_type. Snippets
-that consume this get the literal markdown source; the plugin's preview
-renders it via Obsidian's MarkdownRenderer.
-
-# Body
 
 ```markdown
 # Hello, Forge

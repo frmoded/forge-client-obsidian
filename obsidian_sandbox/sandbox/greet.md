@@ -1,12 +1,13 @@
 ---
 type: action
-inputs: [name]
-description: Reusable logic component that generates a personalized greeting.  
+inputs:
+  - name
+description: Reusable logic component that generates a personalized greeting.
 ---
 
 # English
 
-Print "Hello " followed by name.
+Print "Hello m" followed by name.
 
 ---
 
@@ -14,5 +15,5 @@ Print "Hello " followed by name.
 
 ```python
 def compute(context, name):
-    print("Hello " + name)
+    print(f"Hello m{name}")
 ```
