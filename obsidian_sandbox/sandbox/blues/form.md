@@ -15,39 +15,38 @@ The harmonic skeleton of standard 12-bar blues in E. Twelve bars in 12/8, slow (
 ```python
 def compute(context):
     import copy
-
     progression = context.compute("twelve_bar_blues_progression")
-
-    tonic = 'E'
-    mode = 'major'
-    k = key.Key(tonic, mode)
+    k = key.Key('E', 'major')
     ts = meter.TimeSignature('12/8')
     bar_ql = ts.barDuration.quarterLength
     mm = tempo.MetronomeMark(number=70, referent=duration.Duration(type='quarter', dots=1))
-
     part = stream.Part()
     part.append(instrument.Piano())
-
     for i, numeral in enumerate(progression):
         m = stream.Measure(number=i + 1)
         if i == 0:
             m.append(copy.deepcopy(k))
             m.append(copy.deepcopy(ts))
             m.append(copy.deepcopy(mm))
-
         rn = roman.RomanNumeral(numeral, k)
-        cs = harmony.ChordSymbol()
-        cs.figure = rn.figure
+        root_name = rn.root().name
+        quality_map = {
+            'major': '',
+            'minor': 'm',
+            'diminished': 'dim',
+            'augmented': 'aug',
+            'dominant-seventh': '7',
+            'major-seventh': 'maj7',
+            'minor-seventh': 'm7',
+        }
+        suffix = quality_map.get(rn.quality, '')
+        cs_figure = root_name + suffix
+        cs = harmony.ChordSymbol(cs_figure)
         cs.key = k
-
-        pitches = rn.pitches
-        sounding = chord.Chord(list(pitches), quarterLength=bar_ql)
-
+        sounding = chord.Chord(list(rn.pitches), quarterLength=bar_ql)
         m.insert(0, cs)
         m.insert(0, sounding)
-
         part.append(m)
-
     score = stream.Score()
     score.append(part)
     return score
