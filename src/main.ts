@@ -239,7 +239,7 @@ export default class ForgePlugin extends Plugin {
       this.app.workspace.on('file-open', (file) => { this.maybePreviewDataSnippet(file); })
     );
 
-    this.addRibbonIcon('zap', 'New Snippet', () => {
+    this.addRibbonIcon('file-plus', 'New Snippet', () => {
       this.createNewSnippet();
     });
 
@@ -386,11 +386,13 @@ export default class ForgePlugin extends Plugin {
       `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .${MODE_BTN_CLASS}, .forge-dag-btn`
     ).forEach(el => el.remove());
 
-    const snippetBtn = view.addAction('zap', 'New Snippet', () => { this.createNewSnippet(); });
-    snippetBtn.addClass(SNIPPET_BTN_CLASS);
-
+    // Order matters: addAction renders icons left-to-right in call
+    // order, so Forge is added first (leftmost) and New Snippet second.
     const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
     forgeBtn.addClass(FORGE_BTN_CLASS);
+
+    const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
+    snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
     // Edit-mode toggle for action snippets. English mode = LLM-driven,
     // Forge regenerates Python from English. Python mode = hand-tuned,
