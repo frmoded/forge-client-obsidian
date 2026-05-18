@@ -386,13 +386,13 @@ export default class ForgePlugin extends Plugin {
       `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .${MODE_BTN_CLASS}, .forge-dag-btn`
     ).forEach(el => el.remove());
 
-    // Order matters: addAction renders icons left-to-right in call
-    // order, so Forge is added first (leftmost) and New Snippet second.
-    const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
-    forgeBtn.addClass(FORGE_BTN_CLASS);
-
-    const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
-    snippetBtn.addClass(SNIPPET_BTN_CLASS);
+    // Order matters: Obsidian's view.addAction PREPENDS — the most
+    // recently added action renders leftmost. So to get the visual
+    // left-to-right order [Forge, New Snippet, (mode), edges] we add
+    // them in the REVERSE of that: edges first, then the mode toggle,
+    // then New Snippet, and Forge LAST so it lands at the far left.
+    const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
+    edgesBtn.addClass(EDGES_BTN_CLASS);
 
     // Edit-mode toggle for action snippets. English mode = LLM-driven,
     // Forge regenerates Python from English. Python mode = hand-tuned,
@@ -420,8 +420,12 @@ export default class ForgePlugin extends Plugin {
       }
     }
 
-    const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
-    edgesBtn.addClass(EDGES_BTN_CLASS);
+    const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
+    snippetBtn.addClass(SNIPPET_BTN_CLASS);
+
+    // Added last → prepended first → leftmost.
+    const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
+    forgeBtn.addClass(FORGE_BTN_CLASS);
   }
 
   private async markDriftAsync(file: TFile, btn: HTMLElement, storedHash: unknown) {
