@@ -499,3 +499,29 @@
   opacity: 0.6;
   user-select: none;
 }
+
+/* Snippet UI polish #3: Obsidian's native Properties panel renders at
+   its small UI font (var(--font-ui-small), ~13px), which makes the
+   Properties block visibly smaller than the English / Python /
+   Dependencies sections (editor body text, var(--font-text-size)).
+   Match the body text size so all four sections read at one scale.
+   Scoped to the markdown views (Live Preview source + reading) so the
+   standalone "All properties" core view and other UI surfaces keep
+   Obsidian's intended sizing. Inputs/keys/values are set explicitly
+   because form controls don't inherit font-size from the container. */
+.markdown-source-view .metadata-container,
+.markdown-reading-view .metadata-container,
+.markdown-source-view .metadata-property,
+.markdown-reading-view .metadata-property,
+.markdown-source-view .metadata-property-key,
+.markdown-reading-view .metadata-property-key,
+.markdown-source-view .metadata-property-value,
+.markdown-reading-view .metadata-property-value,
+.markdown-source-view .metadata-property-key-input,
+.markdown-reading-view .metadata-property-key-input,
+.markdown-source-view .metadata-property-value .metadata-input-longtext,
+.markdown-reading-view .metadata-property-value .metadata-input-longtext,
+.markdown-source-view .metadata-property-value input,
+.markdown-reading-view .metadata-property-value input {
+  font-size: var(--font-text-size);
+}
