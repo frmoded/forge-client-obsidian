@@ -10,6 +10,8 @@ import {
   parseDomainsField,
   isValidVaultName,
   renderForgeToml,
+  replaceForgeTomlDomains,
+  unionDomains,
 } from './forge-action-core.ts';
 
 test('forgeActionContext: no forge.toml → init wizard', () => {
@@ -89,4 +91,45 @@ test('renderForgeToml: declared domains round-trip through parseDomainsField', (
     kind: 'domains',
     domains: ['moda', 'music'],
   });
+});
+
+test('unionDomains: undefined existing treated as []', () => {
+  assert.deepEqual(unionDomains(undefined, ['moda']), ['moda']);
+});
+
+test('unionDomains: preserves existing order, drops duplicates', () => {
+  assert.deepEqual(
+    unionDomains(['moda'], ['moda', 'music']),
+    ['moda', 'music'],
+  );
+  assert.deepEqual(unionDomains(['a', 'b'], ['b', 'c']), ['a', 'b', 'c']);
+});
+
+test('replaceForgeTomlDomains: single-line array, other fields intact', () => {
+  const toml =
+    'name = "v"\nversion = "0.1.0"\ndomains = ["moda"]\n';
+  const out = replaceForgeTomlDomains(toml, ['moda', 'music']);
+  assert.equal(
+    out, 'name = "v"\nversion = "0.1.0"\ndomains = ["moda", "music"]\n');
+  assert.deepEqual(parseDomainsField(out), ['moda', 'music']);
+});
+
+test('replaceForgeTomlDomains: multi-line array (installer reformat) not corrupted', () => {
+  const toml =
+    'name = "dry-run-vault"\nversion = "0.0.0"\n' +
+    'dependencies = [\n    { name = "forge-moda", version = "0.4.0" },\n]\n' +
+    'domains = [\n    "moda",\n]\n';
+  const out = replaceForgeTomlDomains(toml, ['moda', 'music']);
+  assert.deepEqual(parseDomainsField(out), ['moda', 'music']);
+  // The dependencies array must survive untouched.
+  assert.ok(out.includes('{ name = "forge-moda", version = "0.4.0" }'));
+  // No dangling array remnants from a line-only replace.
+  assert.ok(!out.includes('\n    "moda",\n]'));
+});
+
+test('replaceForgeTomlDomains: legacy vault with no domains field appends one', () => {
+  const toml = 'name = "v"\nversion = "0.1.0"\n';
+  const out = replaceForgeTomlDomains(toml, ['moda']);
+  assert.deepEqual(parseDomainsField(out), ['moda']);
+  assert.ok(out.startsWith('name = "v"\nversion = "0.1.0"'));
 });

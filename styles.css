@@ -543,3 +543,10 @@
   user-select: all;
   word-break: break-all;
 }
+
+/* Per-row install status in the "Add domain to this vault" modal. */
+.forge-add-domain-status {
+  margin-left: 0.75em;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}

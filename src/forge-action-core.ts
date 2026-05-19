@@ -63,3 +63,40 @@ export function renderForgeToml(name: string, domains: string[]): string {
     '',
   ].join('\n');
 }
+
+/** Rewrite (or append) the `domains` field of an EXISTING forge.toml
+ *  body, leaving every other field intact. Used when extending a vault
+ *  that already has a manifest — unlike renderForgeToml, which writes a
+ *  fresh file from scratch and would clobber name/version/dependencies.
+ *
+ *  The array matcher is multi-line aware (`[\s\S]*?` up to the first
+ *  `]`): the installer reformats `domains` to a multi-line array, so a
+ *  line-anchored `.*` replace would rewrite only `domains = [` and leave
+ *  the `"moda",` / `]` lines dangling — corrupting the file. */
+export function replaceForgeTomlDomains(
+  toml: string,
+  domains: string[],
+): string {
+  const list =
+    '[' + domains.map(d => `"${d}"`).join(', ') + ']';
+  if (/^\s*domains\s*=\s*\[[\s\S]*?\]/m.test(toml)) {
+    return toml.replace(
+      /^\s*domains\s*=\s*\[[\s\S]*?\]/m, `domains = ${list}`);
+  }
+  // Legacy vault with no `domains` field at all → append one.
+  return toml.replace(/\n*$/, `\ndomains = ${list}\n`);
+}
+
+/** Union of an existing domain list with newly chosen ids, order
+ *  preserved (existing first), duplicates dropped. `undefined` existing
+ *  (legacy / field absent) is treated as `[]`. */
+export function unionDomains(
+  existing: string[] | undefined,
+  added: string[],
+): string[] {
+  const out: string[] = [];
+  for (const d of [...(existing ?? []), ...added]) {
+    if (!out.includes(d)) out.push(d);
+  }
+  return out;
+}

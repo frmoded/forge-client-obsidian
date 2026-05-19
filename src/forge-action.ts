@@ -8,6 +8,8 @@ import {
   parseDomainsField,
   isValidVaultName,
   renderForgeToml,
+  replaceForgeTomlDomains,
+  unionDomains,
 } from './forge-action-core';
 
 // Pure dispatcher logic lives in forge-action-core.ts so it can be
@@ -19,6 +21,8 @@ export {
   parseDomainsField,
   isValidVaultName,
   renderForgeToml,
+  replaceForgeTomlDomains,
+  unionDomains,
 };
 export type { ForgeActionContext };
 
@@ -95,8 +99,14 @@ function showActionMenu(
       i.setTitle('Update forge.toml: declare domains')
         .setIcon('settings')
         .onClick(() => new DeclareDomainsModal(host).open()));
-    menu.addSeparator();
   }
+
+  // Structural action — sits above the operational/domain-specific
+  // entries because it changes what the vault *is*, not what it does.
+  menu.addItem(i =>
+    i.setTitle('Add domain to this vault…').setIcon('plus-circle')
+      .onClick(() => new AddDomainToVaultModal(host).open()));
+  menu.addSeparator();
 
   if (domainActive(declared, 'moda')) {
     menu.addItem(i =>
@@ -164,6 +174,24 @@ async function registryLatest(vaultName: string): Promise<string | null> {
       vaults?: Record<string, { latest?: string }>;
     };
     return idx.vaults?.[vaultName]?.latest ?? null;
+  } catch (e) {
+    console.error('Forge: registry fetch failed', e);
+    return null;
+  }
+}
+
+// Full registry vault map (description + latest), fetched lazily when a
+// UI that needs descriptions opens. Returns null on network failure so
+// callers can surface that honestly rather than show a stale/empty list.
+async function fetchRegistryVaults(): Promise<
+  Record<string, { description?: string; latest?: string }> | null
+> {
+  try {
+    const res = await requestUrl({ url: REGISTRY_URL, method: 'GET' });
+    const idx = res.json as {
+      vaults?: Record<string, { description?: string; latest?: string }>;
+    };
+    return idx.vaults ?? {};
   } catch (e) {
     console.error('Forge: registry fetch failed', e);
     return null;
@@ -243,15 +271,154 @@ class DeclareDomainsModal extends Modal {
       new Notice('Forge: forge.toml unreadable.');
       return;
     }
-    const list =
-      '[' + Array.from(this.picked).map(d => `"${d}"`).join(', ') + ']';
-    const next = /^\s*domains\s*=.*$/m.test(toml)
-      ? toml.replace(/^\s*domains\s*=.*$/m, `domains = ${list}`)
-      : toml.replace(/\n*$/, `\ndomains = ${list}\n`);
+    const next = replaceForgeTomlDomains(toml, Array.from(this.picked));
     await adapter.write('forge.toml', next);
     await this.host.reloadActiveDomains();
     this.close();
     new Notice('Forge: domains declared. Reopen the Forge menu for scoped actions.');
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Add-domain-to-this-vault dialog (extend an existing vault)
+//
+// The wizard's extend-existing-vault counterpart: reuses the registry
+// fetch + installVault + manifest writer, scoped to "add domains to a
+// vault that already has a forge.toml". Additive only — removal is a
+// manual forge.toml edit by design.
+// ---------------------------------------------------------------------------
+
+class AddDomainToVaultModal extends Modal {
+  private current: string[] = [];          // domains already declared
+  private picked = new Set<string>();
+  private rows = new Map<string, HTMLElement>(); // domain id → status cell
+  private addBtn?: { setDisabled(v: boolean): unknown };
+
+  constructor(private host: ForgeHost) {
+    super(host.app);
+  }
+
+  async onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('h2', { text: 'Add domain to this vault' });
+    const loading = contentEl.createEl('p', { text: 'Fetching registry…' });
+
+    // Snapshot current domains once at open (per the read-once
+    // constraint). The final write does a fresh read anyway.
+    try {
+      const toml = await this.host.app.vault.adapter.read('forge.toml');
+      this.current = parseDomainsField(toml) ?? [];
+    } catch {
+      this.current = [];
+    }
+
+    const registry = await fetchRegistryVaults();
+    loading.remove();
+    if (registry === null) {
+      new Notice('Forge: could not reach the registry — try again later.');
+      this.close();
+      return;
+    }
+
+    contentEl.createEl('p', {
+      text:
+        'Choose one or more domains to add. Forge will install the ' +
+        'matching registry vaults and update your forge.toml. Remove a ' +
+        'domain by editing forge.toml directly.',
+    });
+
+    const available = KNOWN_DOMAINS.filter(
+      d => !this.current.includes(d.id));
+    if (available.length === 0) {
+      contentEl.createEl('p', {
+        text: 'All known domains are already declared in this vault.',
+      });
+      new Setting(contentEl).addButton(b =>
+        b.setButtonText('Close').onClick(() => this.close()));
+      return;
+    }
+
+    for (const d of KNOWN_DOMAINS) {
+      const already = this.current.includes(d.id);
+      const desc = d.vault
+        ? registry[d.vault]?.description ?? ''
+        : '';
+      const name = desc ? `${d.id} — ${desc}` : d.id;
+      const s = new Setting(contentEl)
+        .setName(already ? `${name}  (already declared)` : name)
+        .addToggle(t =>
+          t.setValue(false).setDisabled(already).onChange(v => {
+            if (v) this.picked.add(d.id);
+            else this.picked.delete(d.id);
+            this.refreshAddBtn();
+          }));
+      // Per-row status cell, updated during the install loop.
+      const status = s.controlEl.createSpan({ cls: 'forge-add-domain-status' });
+      this.rows.set(d.id, status);
+    }
+
+    new Setting(contentEl)
+      .addButton(b => {
+        this.addBtn = b;
+        b.setButtonText('Add').setCta().setDisabled(true)
+          .onClick(() => this.submit());
+      })
+      .addButton(b =>
+        b.setButtonText('Cancel').onClick(() => this.close()));
+  }
+
+  private refreshAddBtn() {
+    this.addBtn?.setDisabled(this.picked.size === 0);
+  }
+
+  private async submit() {
+    const chosen = KNOWN_DOMAINS.filter(d => this.picked.has(d.id));
+    this.addBtn?.setDisabled(true);
+
+    // Sequential installs; stop on first failure WITHOUT touching
+    // forge.toml so we never persist a partial state.
+    for (const d of chosen) {
+      const status = this.rows.get(d.id);
+      if (!d.vault) {
+        if (status) status.setText(`— ${d.id}: not registry-installable`);
+        continue;
+      }
+      if (status) status.setText(`Installing ${d.vault} …`);
+      const ok = await installVault(this.host, d.vault);
+      if (!ok) {
+        if (status) status.setText(`Installing ${d.vault} … failed`);
+        new Notice(
+          `Forge: install of ${d.vault} failed — forge.toml unchanged. ` +
+          `Fix the issue and retry, or cancel.`);
+        this.refreshAddBtn();
+        return; // modal stays open; no manifest write
+      }
+      if (status) status.setText(`Installing ${d.vault} … done`);
+    }
+
+    // All installs succeeded → write the union into forge.toml. Fresh
+    // read so an external edit during the session isn't clobbered;
+    // unionDomains de-dupes (defense in depth vs the disabled toggle).
+    const adapter = this.host.app.vault.adapter;
+    let toml = '';
+    try {
+      toml = await adapter.read('forge.toml');
+    } catch {
+      new Notice('Forge: forge.toml unreadable — installs done but ' +
+        'manifest not updated.');
+      return;
+    }
+    const next = unionDomains(
+      parseDomainsField(toml), chosen.map(d => d.id));
+    await adapter.write('forge.toml', replaceForgeTomlDomains(toml, next));
+    await this.host.reloadActiveDomains();
+    this.close();
+    new Notice('Forge: vault updated. Reopen the Forge menu for the ' +
+      'new domain actions.');
   }
 
   onClose() {
