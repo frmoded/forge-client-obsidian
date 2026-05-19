@@ -12,6 +12,7 @@ import {
   renderForgeToml,
   replaceForgeTomlDomains,
   unionDomains,
+  diffDomains,
 } from './forge-action-core.ts';
 
 test('forgeActionContext: no forge.toml → init wizard', () => {
@@ -125,6 +126,44 @@ test('replaceForgeTomlDomains: multi-line array (installer reformat) not corrupt
   assert.ok(out.includes('{ name = "forge-moda", version = "0.4.0" }'));
   // No dangling array remnants from a line-only replace.
   assert.ok(!out.includes('\n    "moda",\n]'));
+});
+
+test('diffDomains: empty / empty → empty diff', () => {
+  assert.deepEqual(diffDomains([], []), { to_add: [], to_remove: [] });
+});
+
+test('diffDomains: add-only', () => {
+  assert.deepEqual(diffDomains([], ['moda']), {
+    to_add: ['moda'], to_remove: [],
+  });
+  assert.deepEqual(diffDomains(['moda'], ['moda', 'music']), {
+    to_add: ['music'], to_remove: [],
+  });
+});
+
+test('diffDomains: remove-only', () => {
+  assert.deepEqual(diffDomains(['moda'], []), {
+    to_add: [], to_remove: ['moda'],
+  });
+  assert.deepEqual(diffDomains(['moda', 'music'], ['moda']), {
+    to_add: [], to_remove: ['music'],
+  });
+});
+
+test('diffDomains: mixed add + remove', () => {
+  assert.deepEqual(diffDomains(['moda'], ['music']), {
+    to_add: ['music'], to_remove: ['moda'],
+  });
+});
+
+test('diffDomains: same on both sides → no-op (Save button stays disabled)', () => {
+  assert.deepEqual(diffDomains(['moda', 'music'], ['moda', 'music']), {
+    to_add: [], to_remove: [],
+  });
+  // Order on the "next" side shouldn't matter for the diff.
+  assert.deepEqual(diffDomains(['moda', 'music'], ['music', 'moda']), {
+    to_add: [], to_remove: [],
+  });
 });
 
 test('replaceForgeTomlDomains: legacy vault with no domains field appends one', () => {

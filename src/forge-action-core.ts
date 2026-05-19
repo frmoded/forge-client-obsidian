@@ -100,3 +100,20 @@ export function unionDomains(
   }
   return out;
 }
+
+/** Diff a target domain list against the current one — what would have
+ *  to be installed (to_add) and what would be removed from the manifest
+ *  (to_remove). Order in each result follows the source list it came
+ *  from. Used by the Edit-vault-domains modal to decide whether to
+ *  show the removal-confirmation dialog. */
+export function diffDomains(
+  prev: string[],
+  next: string[],
+): { to_add: string[]; to_remove: string[] } {
+  const prevSet = new Set(prev);
+  const nextSet = new Set(next);
+  return {
+    to_add: next.filter(d => !prevSet.has(d)),
+    to_remove: prev.filter(d => !nextSet.has(d)),
+  };
+}

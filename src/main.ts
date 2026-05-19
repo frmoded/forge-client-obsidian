@@ -254,18 +254,17 @@ export default class ForgePlugin extends Plugin {
       openForgeAction(this.forgeHost(), evt);
     });
 
-    this.addRibbonIcon('file-plus', 'New Snippet', () => {
-      this.createNewSnippet();
-    });
+    // Menu-cleanup PR: the New-Snippet and Open-MoDa ribbon icons are
+    // gone — the Forge `package` icon is the single ribbon entry point.
+    // The corresponding palette commands stay registered below so power
+    // users keep them via Cmd+P; reach New Snippet via the per-note
+    // toolbar action.
 
-    // Domain scoping (B9): only register the MoDa surface in a vault
-    // that declares the "moda" domain (or declares none — back-compat).
+    // Domain scoping (B9): only register the MoDa palette commands in
+    // a vault that declares the "moda" domain (or declares none —
+    // back-compat).
     await this.loadActiveDomains();
     if (this.isDomainActive('moda')) {
-      this.addRibbonIcon('atom', 'Open MoDa simulation', () => {
-        this.openModaView();
-      });
-
       this.addCommand({
         id: 'forge-open-moda',
         name: 'Open MoDa simulation',

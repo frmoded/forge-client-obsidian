@@ -10,6 +10,7 @@ import {
   renderForgeToml,
   replaceForgeTomlDomains,
   unionDomains,
+  diffDomains,
 } from './forge-action-core';
 
 // Pure dispatcher logic lives in forge-action-core.ts so it can be
@@ -23,6 +24,7 @@ export {
   renderForgeToml,
   replaceForgeTomlDomains,
   unionDomains,
+  diffDomains,
 };
 export type { ForgeActionContext };
 
@@ -104,17 +106,16 @@ function showActionMenu(
   // Structural action — sits above the operational/domain-specific
   // entries because it changes what the vault *is*, not what it does.
   menu.addItem(i =>
-    i.setTitle('Add domain to this vault…').setIcon('plus-circle')
-      .onClick(() => new AddDomainToVaultModal(host).open()));
+    i.setTitle('Edit vault domains…').setIcon('plus-circle')
+      .onClick(() => new EditVaultDomainsModal(host).open()));
   menu.addSeparator();
 
   if (domainActive(declared, 'moda')) {
     menu.addItem(i =>
       i.setTitle('Open MoDa simulation').setIcon('atom')
         .onClick(() => host.openModaView()));
-    menu.addItem(i =>
-      i.setTitle('Step MoDa simulation').setIcon('step-forward')
-        .onClick(() => host.stepModaSimulation()));
+    // "Step MoDa simulation" removed from the menu — still reachable
+    // via Cmd+P (forge-step-moda command stays registered in main.ts).
   }
   // (music actions land here when they exist)
 
@@ -129,13 +130,8 @@ function showActionMenu(
   menu.addItem(i =>
     i.setTitle('Create new Forge vault…').setIcon('folder-plus')
       .onClick(() => new CreateNewForgeVaultModal(host.app).open()));
-
-  menu.addSeparator();
-  menu.addItem(i =>
-    i.setTitle('View forge.toml').setIcon('file-text')
-      .onClick(() => {
-        host.app.workspace.openLinkText('forge.toml', '', false);
-      }));
+  // "View forge.toml" removed — the file is reachable via Obsidian's
+  // file tree if anyone needs it.
 
   menu.showAtMouseEvent(evt);
 }
@@ -284,19 +280,20 @@ class DeclareDomainsModal extends Modal {
 }
 
 // ---------------------------------------------------------------------------
-// Add-domain-to-this-vault dialog (extend an existing vault)
+// Edit-vault-domains dialog (add + remove against the manifest)
 //
-// The wizard's extend-existing-vault counterpart: reuses the registry
-// fetch + installVault + manifest writer, scoped to "add domains to a
-// vault that already has a forge.toml". Additive only — removal is a
-// manual forge.toml edit by design.
+// Replaces the earlier add-only AddDomainToVaultModal. Toggle a row to
+// express the desired final state; Save computes the diff. Removals
+// trigger a NameError-warning confirmation. Removed domains are wiped
+// from forge.toml only — installed subdirectories stay on disk so we
+// never destroy data the user might still reference.
 // ---------------------------------------------------------------------------
 
-class AddDomainToVaultModal extends Modal {
-  private current: string[] = [];          // domains already declared
-  private picked = new Set<string>();
+class EditVaultDomainsModal extends Modal {
+  private prev: string[] = [];                  // domains in forge.toml at open
+  private state = new Map<string, boolean>();   // domain id → desired-checked
   private rows = new Map<string, HTMLElement>(); // domain id → status cell
-  private addBtn?: { setDisabled(v: boolean): unknown };
+  private saveBtn?: { setDisabled(v: boolean): unknown };
 
   constructor(private host: ForgeHost) {
     super(host.app);
@@ -304,16 +301,20 @@ class AddDomainToVaultModal extends Modal {
 
   async onOpen() {
     const { contentEl } = this;
-    contentEl.createEl('h2', { text: 'Add domain to this vault' });
+    contentEl.createEl('h2', { text: 'Edit vault domains' });
     const loading = contentEl.createEl('p', { text: 'Fetching registry…' });
 
-    // Snapshot current domains once at open (per the read-once
-    // constraint). The final write does a fresh read anyway.
+    // Snapshot current domains once at open (read-once constraint).
+    // The final write does a fresh read so concurrent edits aren't
+    // clobbered.
     try {
       const toml = await this.host.app.vault.adapter.read('forge.toml');
-      this.current = parseDomainsField(toml) ?? [];
+      this.prev = parseDomainsField(toml) ?? [];
     } catch {
-      this.current = [];
+      this.prev = [];
+    }
+    for (const d of KNOWN_DOMAINS) {
+      this.state.set(d.id, this.prev.includes(d.id));
     }
 
     const registry = await fetchRegistryVaults();
@@ -326,65 +327,86 @@ class AddDomainToVaultModal extends Modal {
 
     contentEl.createEl('p', {
       text:
-        'Choose one or more domains to add. Forge will install the ' +
-        'matching registry vaults and update your forge.toml. Remove a ' +
-        'domain by editing forge.toml directly.',
+        'Check a domain to add it (Forge will install the matching ' +
+        'registry vault). Uncheck to remove it from forge.toml. ' +
+        'Removing a domain edits forge.toml only — installed vault ' +
+        'files stay on disk in case you want to keep them as ' +
+        'reference. Delete the subdirectory manually if you want it gone.',
     });
 
-    const available = KNOWN_DOMAINS.filter(
-      d => !this.current.includes(d.id));
-    if (available.length === 0) {
-      contentEl.createEl('p', {
-        text: 'All known domains are already declared in this vault.',
-      });
-      new Setting(contentEl).addButton(b =>
-        b.setButtonText('Close').onClick(() => this.close()));
-      return;
-    }
-
     for (const d of KNOWN_DOMAINS) {
-      const already = this.current.includes(d.id);
-      const desc = d.vault
-        ? registry[d.vault]?.description ?? ''
-        : '';
+      const desc = d.vault ? registry[d.vault]?.description ?? '' : '';
       const name = desc ? `${d.id} — ${desc}` : d.id;
       const s = new Setting(contentEl)
-        .setName(already ? `${name}  (already declared)` : name)
+        .setName(name)
         .addToggle(t =>
-          t.setValue(false).setDisabled(already).onChange(v => {
-            if (v) this.picked.add(d.id);
-            else this.picked.delete(d.id);
-            this.refreshAddBtn();
+          t.setValue(this.state.get(d.id) ?? false).onChange(v => {
+            this.state.set(d.id, v);
+            this.refreshSaveBtn();
           }));
-      // Per-row status cell, updated during the install loop.
       const status = s.controlEl.createSpan({ cls: 'forge-add-domain-status' });
       this.rows.set(d.id, status);
     }
 
     new Setting(contentEl)
       .addButton(b => {
-        this.addBtn = b;
-        b.setButtonText('Add').setCta().setDisabled(true)
-          .onClick(() => this.submit());
+        this.saveBtn = b;
+        b.setButtonText('Save').setCta().setDisabled(true)
+          .onClick(() => this.onSaveClicked());
       })
       .addButton(b =>
         b.setButtonText('Cancel').onClick(() => this.close()));
   }
 
-  private refreshAddBtn() {
-    this.addBtn?.setDisabled(this.picked.size === 0);
+  private desiredNext(): string[] {
+    // Retained: prev domains the user didn't uncheck, in original
+    // order. Added: known domains the user just checked that weren't
+    // in prev, in KNOWN_DOMAINS order. Unknown-extra domains from the
+    // manifest (e.g., a future domain the plugin doesn't know about
+    // yet) are preserved as retained too.
+    const retained = this.prev.filter(id => {
+      // If we don't render a toggle for it (unknown domain), keep it.
+      if (!this.state.has(id)) return true;
+      return this.state.get(id) === true;
+    });
+    const added = KNOWN_DOMAINS
+      .map(d => d.id)
+      .filter(id => this.state.get(id) === true && !this.prev.includes(id));
+    return [...retained, ...added];
   }
 
-  private async submit() {
-    const chosen = KNOWN_DOMAINS.filter(d => this.picked.has(d.id));
-    this.addBtn?.setDisabled(true);
+  private currentDiff() {
+    return diffDomains(this.prev, this.desiredNext());
+  }
 
-    // Sequential installs; stop on first failure WITHOUT touching
-    // forge.toml so we never persist a partial state.
-    for (const d of chosen) {
-      const status = this.rows.get(d.id);
-      if (!d.vault) {
-        if (status) status.setText(`— ${d.id}: not registry-installable`);
+  private refreshSaveBtn() {
+    const { to_add, to_remove } = this.currentDiff();
+    this.saveBtn?.setDisabled(to_add.length === 0 && to_remove.length === 0);
+  }
+
+  private onSaveClicked() {
+    const diff = this.currentDiff();
+    if (diff.to_remove.length > 0) {
+      new ConfirmRemoveDomainsModal(
+        this.host.app, diff.to_remove,
+        () => this.applyDiff(diff),
+      ).open();
+      return;
+    }
+    this.applyDiff(diff);
+  }
+
+  private async applyDiff(diff: { to_add: string[]; to_remove: string[] }) {
+    this.saveBtn?.setDisabled(true);
+
+    // Run adds sequentially first — same stop-on-failure-without-write
+    // pattern as the previous add-only modal. Removals happen as part
+    // of the single forge.toml rewrite once installs succeed.
+    for (const id of diff.to_add) {
+      const d = KNOWN_DOMAINS.find(x => x.id === id);
+      const status = this.rows.get(id);
+      if (!d?.vault) {
+        if (status) status.setText(`— ${id}: not registry-installable`);
         continue;
       }
       if (status) status.setText(`Installing ${d.vault} …`);
@@ -394,15 +416,16 @@ class AddDomainToVaultModal extends Modal {
         new Notice(
           `Forge: install of ${d.vault} failed — forge.toml unchanged. ` +
           `Fix the issue and retry, or cancel.`);
-        this.refreshAddBtn();
+        this.refreshSaveBtn();
         return; // modal stays open; no manifest write
       }
       if (status) status.setText(`Installing ${d.vault} … done`);
     }
 
-    // All installs succeeded → write the union into forge.toml. Fresh
-    // read so an external edit during the session isn't clobbered;
-    // unionDomains de-dupes (defense in depth vs the disabled toggle).
+    // Write the final domain list (desired state). Fresh read so an
+    // external edit during the session isn't clobbered; we still
+    // compute "final" from this.desiredNext() because that reflects
+    // the user's intent vs. what may have changed on disk.
     const adapter = this.host.app.vault.adapter;
     let toml = '';
     try {
@@ -412,13 +435,55 @@ class AddDomainToVaultModal extends Modal {
         'manifest not updated.');
       return;
     }
-    const next = unionDomains(
-      parseDomainsField(toml), chosen.map(d => d.id));
+    const next = this.desiredNext();
     await adapter.write('forge.toml', replaceForgeTomlDomains(toml, next));
     await this.host.reloadActiveDomains();
     this.close();
     new Notice('Forge: vault updated. Reopen the Forge menu for the ' +
       'new domain actions.');
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+// Confirmation shown when an Edit-vault-domains save would remove one
+// or more domains. Spelled out as its own modal class so the warning
+// wording lives in one place and the parent's checkbox state stays put
+// if the user backs out.
+class ConfirmRemoveDomainsModal extends Modal {
+  constructor(
+    app: App,
+    private toRemove: string[],
+    private onConfirm: () => void,
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl('h2', { text: 'Remove domains?' });
+    const n = this.toRemove.length;
+    contentEl.createEl('p', {
+      text:
+        `Removing ${n} domain${n === 1 ? '' : 's'} (` +
+        this.toRemove.join(', ') +
+        `) — snippets in this vault that use injected names from ` +
+        `${n === 1 ? 'that domain' : 'those domains'} (e.g. ` +
+        `\`Particle\`, \`music21\`) will fail at compute time with ` +
+        `NameError after this change. Installed vault files stay on ` +
+        `disk; only forge.toml is edited. Continue?`,
+    });
+    new Setting(contentEl)
+      .addButton(b =>
+        b.setButtonText('Cancel').onClick(() => this.close()))
+      .addButton(b =>
+        b.setButtonText('Remove anyway').setWarning()
+          .onClick(() => {
+            this.close();
+            this.onConfirm();
+          }));
   }
 
   onClose() {
