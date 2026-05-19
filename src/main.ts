@@ -178,6 +178,12 @@ export default class ForgePlugin extends Plugin {
   // pass is a no-op early-exit, but we still want to avoid re-debouncing
   // pointlessly.
   private sanitizeDebounceTimer: number | null = null;
+  // Domain scoping (constitution B9). null = the vault declared no
+  // `domains` in forge.toml (or it's unreadable) → back-compat: treat
+  // as "all domains", register every command. A Set means the vault
+  // declared `domains = [...]`; a command/ribbon for domain D registers
+  // only if the set has D. Empty set = core-only (no domain commands).
+  private activeDomains: Set<string> | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -243,21 +249,26 @@ export default class ForgePlugin extends Plugin {
       this.createNewSnippet();
     });
 
-    this.addRibbonIcon('atom', 'Open MoDa simulation', () => {
-      this.openModaView();
-    });
+    // Domain scoping (B9): only register the MoDa surface in a vault
+    // that declares the "moda" domain (or declares none — back-compat).
+    await this.loadActiveDomains();
+    if (this.isDomainActive('moda')) {
+      this.addRibbonIcon('atom', 'Open MoDa simulation', () => {
+        this.openModaView();
+      });
 
-    this.addCommand({
-      id: 'forge-open-moda',
-      name: 'Open MoDa simulation',
-      callback: () => { this.openModaView(); },
-    });
+      this.addCommand({
+        id: 'forge-open-moda',
+        name: 'Open MoDa simulation',
+        callback: () => { this.openModaView(); },
+      });
 
-    this.addCommand({
-      id: 'forge-step-moda',
-      name: 'Step MoDa simulation',
-      callback: () => { this.stepModaSimulation(); },
-    });
+      this.addCommand({
+        id: 'forge-step-moda',
+        name: 'Step MoDa simulation',
+        callback: () => { this.stepModaSimulation(); },
+      });
+    }
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
@@ -631,6 +642,36 @@ export default class ForgePlugin extends Plugin {
       console.warn('Forge: connect failed before opening New Snippet modal; falling back to default content_types', e);
     }
     new ForgeSnippetModal(this.app, contentTypes).open();
+  }
+
+  // Read the vault's forge.toml `domains` once at load (constitution
+  // B9). Obsidian is one-vault-per-window, so there's no in-session
+  // vault switch to react to — a forge.toml change is picked up on the
+  // next plugin reload. Minimal hand-parse (forge.toml is tiny and the
+  // engine owns the authoritative parse); any miss falls back to
+  // null = "all domains" so we never hide commands by accident.
+  private async loadActiveDomains() {
+    try {
+      const raw = await this.app.vault.adapter.read('forge.toml');
+      // Match `domains = [ ... ]` (single- or multi-line array body).
+      const m = raw.match(/^\s*domains\s*=\s*\[([\s\S]*?)\]/m);
+      if (!m) {
+        this.activeDomains = null; // field absent → back-compat "all"
+        return;
+      }
+      const names = Array.from(m[1].matchAll(/["']([^"']+)["']/g)).map(x => x[1]);
+      this.activeDomains = new Set(names); // possibly empty = core-only
+    } catch (e) {
+      // No forge.toml / unreadable → back-compat "all", don't crash.
+      console.warn('Forge: could not read forge.toml domains; registering all commands', e);
+      this.activeDomains = null;
+    }
+  }
+
+  // null (no declaration / unreadable) → every domain is "active"
+  // (back-compat). Otherwise active iff the declared set contains it.
+  private isDomainActive(domain: string): boolean {
+    return this.activeDomains === null || this.activeDomains.has(domain);
   }
 
   private async openModaView() {
