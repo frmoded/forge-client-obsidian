@@ -525,3 +525,21 @@
 .markdown-reading-view .metadata-property-value input {
   font-size: var(--font-text-size);
 }
+
+/* "Create new Forge vault" explainer modal. Native modal styling is
+   fine; we only make the steps readable and the BRAT URL copy-distinct. */
+.forge-new-vault-steps li {
+  margin-bottom: 0.5em;
+  line-height: 1.4;
+}
+.forge-new-vault-modal .forge-brat-url {
+  margin-top: 0.4em;
+  padding: 0.4em 0.6em;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  user-select: all;
+  word-break: break-all;
+}

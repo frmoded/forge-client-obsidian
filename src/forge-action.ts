@@ -28,6 +28,12 @@ export type { ForgeActionContext };
 const REGISTRY_URL =
   'https://raw.githubusercontent.com/frmoded/forge-registry/main/index.json';
 
+// The repo BRAT installs this plugin from. Single source of truth — the
+// "Create new Forge vault" explainer reuses this rather than re-typing
+// the literal (per the prompt's reuse constraint).
+export const BRAT_REPO_URL =
+  'https://github.com/frmoded/forge-client-obsidian';
+
 // ---------------------------------------------------------------------------
 // Minimal surface the action UI needs from the plugin (keeps this module
 // from importing main.ts and creating a cycle).
@@ -108,6 +114,11 @@ function showActionMenu(
       i.setTitle('Update installed domain vaults').setIcon('refresh-cw')
         .onClick(() => updateDeclaredVaults(host, declared)));
   }
+
+  menu.addSeparator();
+  menu.addItem(i =>
+    i.setTitle('Create new Forge vault…').setIcon('folder-plus')
+      .onClick(() => new CreateNewForgeVaultModal(host.app).open()));
 
   menu.addSeparator();
   menu.addItem(i =>
@@ -249,6 +260,96 @@ class DeclareDomainsModal extends Modal {
 }
 
 // ---------------------------------------------------------------------------
+// Create-new-Forge-vault explainer
+//
+// Plugins can't create Obsidian vaults or cross-vault-install plugins, so
+// this is a hand-off: explain the BRAT-per-vault dance, copy the repo URL,
+// and (if Obsidian exposes the command) jump to the vault manager.
+// ---------------------------------------------------------------------------
+
+class CreateNewForgeVaultModal extends Modal {
+  // Steps as [text, isUrlStep] so the URL line can render distinctly.
+  private static readonly STEPS: Array<string> = [
+    'Open Obsidian\'s vault manager: click the vault name at the ' +
+      'bottom-left, then "Manage vaults" → "Create new vault."',
+    'Open the new empty vault.',
+    'Settings → Community plugins → "Turn on community plugins."',
+    'Browse → search "BRAT" → Install → Enable.',
+    'Settings → BRAT → Add Beta plugin → paste the URL below, click Add.',
+    'Settings → Community plugins → Installed → toggle "Forge Client" on.',
+  ];
+
+  onOpen() {
+    const { contentEl, modalEl } = this;
+    modalEl.addClass('forge-new-vault-modal');
+    contentEl.createEl('h2', { text: 'Create new Forge vault' });
+
+    contentEl.createEl('p', {
+      text:
+        'To create a new Forge vault you\'ll repeat the Obsidian plugin ' +
+        'install in the new vault. This is Obsidian\'s per-vault plugin ' +
+        'model — annoying but unavoidable. Six steps:',
+    });
+
+    const ol = contentEl.createEl('ol', { cls: 'forge-new-vault-steps' });
+    CreateNewForgeVaultModal.STEPS.forEach((step, i) => {
+      const li = ol.createEl('li', { text: step });
+      // The BRAT URL belongs visually with step 5 (index 4): boxed
+      // monospace so it reads as "the thing you copy."
+      if (i === 4) {
+        li.createEl('div', {
+          text: BRAT_REPO_URL,
+          cls: 'forge-brat-url',
+        });
+      }
+    });
+
+    contentEl.createEl('p', {
+      text:
+        'After step 6 the Forge ribbon icon appears in the new vault. ' +
+        'Click it to run the wizard and initialize the new vault.',
+    });
+
+    const buttons = new Setting(contentEl);
+    buttons.addButton(b =>
+      b.setButtonText('Copy BRAT URL').setCta().onClick(async () => {
+        try {
+          await navigator.clipboard.writeText(BRAT_REPO_URL);
+          new Notice('Copied!');
+        } catch {
+          new Notice('Copy failed — select the URL in step 5 manually.');
+        }
+      }));
+
+    // Only surface the vault-manager shortcut if Obsidian actually
+    // registers the command — otherwise the text instructions stand on
+    // their own and a dead button would just confuse.
+    const commands = (this.app as any).commands;
+    const hasOpenVault =
+      commands?.commands?.['app:open-vault'] !== undefined ||
+      typeof commands?.findCommand === 'function' &&
+        commands.findCommand('app:open-vault') !== undefined;
+    if (hasOpenVault) {
+      buttons.addButton(b =>
+        b.setButtonText('Open vault manager').onClick(() => {
+          try {
+            commands.executeCommandById('app:open-vault');
+          } catch (e) {
+            console.warn('Forge: app:open-vault failed', e);
+          }
+        }));
+    }
+
+    buttons.addButton(b =>
+      b.setButtonText('Close').onClick(() => this.close()));
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Initialize-as-Forge-vault wizard
 // ---------------------------------------------------------------------------
 
@@ -331,6 +432,18 @@ class InitializeForgeVaultWizard extends Modal {
 
     new Setting(contentEl).addButton(b =>
       b.setButtonText('Initialize').setCta().onClick(() => this.initialize()));
+
+    // Escape hatch: the user realized they want to start fresh in a
+    // *different* Obsidian vault rather than initialize this one. Closes
+    // the wizard and opens the cross-vault explainer.
+    new Setting(contentEl)
+      .setDesc('Want to start fresh somewhere else instead?')
+      .addButton(b =>
+        b.setButtonText('Create new Forge vault (in a different Obsidian vault)…')
+          .onClick(() => {
+            this.close();
+            new CreateNewForgeVaultModal(this.app).open();
+          }));
   }
 
   private chosenDomains(): string[] {
