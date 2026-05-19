@@ -253,6 +253,12 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.openModaView(); },
     });
 
+    this.addCommand({
+      id: 'forge-step-moda',
+      name: 'Step MoDa simulation',
+      callback: () => { this.stepModaSimulation(); },
+    });
+
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
     this.addCommand({
@@ -636,6 +642,22 @@ export default class ForgePlugin extends Plugin {
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.setViewState({ type: MODA_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  // Advance every open MoDa view one tick by postMessage'ing the
+  // embedded simulator. No backend involvement here — the React app's
+  // handleStep does the single /moda/compute round-trip. Notice if
+  // there's no MoDa view (or the iframe hasn't loaded yet).
+  private stepModaSimulation() {
+    const leaves = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE);
+    let stepped = 0;
+    for (const leaf of leaves) {
+      const view = leaf.view;
+      if (view instanceof ForgeModaView && view.step()) stepped++;
+    }
+    if (stepped === 0) {
+      new Notice('No MoDa view open — open one first (Forge: Open MoDa simulation).');
+    }
   }
 
   private async toggleEdgesView() {
