@@ -12,6 +12,7 @@ import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, fre
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
+import { openForgeAction, ForgeHost } from './forge-action';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -244,6 +245,14 @@ export default class ForgePlugin extends Plugin {
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => { this.maybePreviewDataSnippet(file); })
     );
+
+    // Single context-aware Forge entry point (constitution B9 / ribbon
+    // spec). Dispatches by forge.toml state: absent → init wizard;
+    // present-without-domains → legacy menu; declared → scoped action
+    // menu. Distinct from the per-snippet flame button (generate+run).
+    this.addRibbonIcon('package', 'Forge', (evt: MouseEvent) => {
+      openForgeAction(this.forgeHost(), evt);
+    });
 
     this.addRibbonIcon('file-plus', 'New Snippet', () => {
       this.createNewSnippet();
@@ -642,6 +651,21 @@ export default class ForgePlugin extends Plugin {
       console.warn('Forge: connect failed before opening New Snippet modal; falling back to default content_types', e);
     }
     new ForgeSnippetModal(this.app, contentTypes).open();
+  }
+
+  // Adapter handed to the Forge ribbon action module so it never has to
+  // import this class (avoids a cycle). Closes over `this`, so the
+  // private openModaView / stepModaSimulation / loadActiveDomains stay
+  // private to the plugin while still reachable from the action UI.
+  private forgeHost(): ForgeHost {
+    return {
+      app: this.app,
+      serverUrlOf: () => this.settings.serverUrl,
+      vaultPathOf: () => (this.app.vault.adapter as any).basePath as string,
+      reloadActiveDomains: () => this.loadActiveDomains(),
+      openModaView: () => { this.openModaView(); },
+      stepModaSimulation: () => { this.stepModaSimulation(); },
+    };
   }
 
   // Read the vault's forge.toml `domains` once at load (constitution

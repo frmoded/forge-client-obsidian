@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "build": "npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --format=cjs --outfile=main.js",
-    "dev": "npm run build -- --watch"
+    "dev": "npm run build -- --watch",
+    "test": "node --test src/*.test.ts"
   },
   "keywords": [],
   "author": "Oded Fuhrmann",
