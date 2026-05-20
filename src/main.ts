@@ -158,6 +158,7 @@ const EDGES_BTN_CLASS = 'forge-edges-btn';
 const FORGE_BTN_CLASS = 'forge-forge-btn';
 const LOCK_BTN_CLASS = 'forge-lock-btn';
 const MODE_BTN_CLASS = 'forge-mode-btn';
+const CHIPS_BTN_CLASS = 'forge-chips-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -418,14 +419,21 @@ export default class ForgePlugin extends Plugin {
     // their predecessors swept after the Run+Generate→Forge and lock→edit-mode
     // refactors.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .${MODE_BTN_CLASS}, .forge-dag-btn`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .${MODE_BTN_CLASS}, .${CHIPS_BTN_CLASS}, .forge-dag-btn`
     ).forEach(el => el.remove());
 
     // Order matters: Obsidian's view.addAction PREPENDS — the most
     // recently added action renders leftmost. So to get the visual
-    // left-to-right order [Forge, New Snippet, (mode), edges] we add
-    // them in the REVERSE of that: edges first, then the mode toggle,
-    // then New Snippet, and Forge LAST so it lands at the far left.
+    // left-to-right order [Forge, New Snippet, (mode), edges, chips]
+    // we add them in the REVERSE of that: chips first (when moda is
+    // active), then edges, mode, New Snippet, and Forge LAST so it
+    // lands at the far left.
+    if (this.isDomainActive('moda')) {
+      const chipsBtn = view.addAction(
+        'puzzle', 'Forge: Open MoDa chips',
+        () => { this.openModaChipsView(); });
+      chipsBtn.addClass(CHIPS_BTN_CLASS);
+    }
     const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
     edgesBtn.addClass(EDGES_BTN_CLASS);
 
