@@ -712,7 +712,6 @@ export default class ForgePlugin extends Plugin {
       reloadActiveDomains: () => this.loadActiveDomains(),
       openModaView: () => { this.openModaView(); },
       stepModaSimulation: () => { this.stepModaSimulation(); },
-      hasChips: () => this.chipPalette.length > 0,
       openChipsView: () => { this.openChipsView(); },
     };
   }
