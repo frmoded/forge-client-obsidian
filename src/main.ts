@@ -3,7 +3,9 @@ import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view';
-import { ModaChipsView, MODA_CHIPS_VIEW_TYPE } from './moda-chips-view';
+import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view';
+import { ChipsManifest, loadChipsForActiveVault } from './chips';
+import { ChipPaletteGroup } from './chips-core';
 import { invalidateLibraryVaultCache } from './edges';
 import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
@@ -195,9 +197,8 @@ export default class ForgePlugin extends Plugin {
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
     this.registerView(EDGES_VIEW_TYPE, leaf => new ForgeEdgesView(leaf, () => this.settings.serverUrl));
     this.registerView(MODA_VIEW_TYPE, leaf => new ForgeModaView(leaf));
-    this.registerView(MODA_CHIPS_VIEW_TYPE, leaf => new ModaChipsView(leaf, {
-      isMoDaVault: () => this.isDomainActive('moda'),
-    }));
+    this.registerView(CHIPS_VIEW_TYPE, leaf =>
+      new ChipsView(leaf, this.chipsHost()));
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
 
     this.registerEvent(
@@ -282,12 +283,24 @@ export default class ForgePlugin extends Plugin {
         callback: () => { this.stepModaSimulation(); },
       });
 
-      this.addCommand({
-        id: 'forge-open-moda-chips',
-        name: 'Open MoDa chips',
-        callback: () => { this.openModaChipsView(); },
-      });
     }
+
+    // Chips v2 is domain-agnostic: load once at activate, surface the
+    // palette via the chips view. The "Forge: Open chips palette"
+    // command and per-snippet icon stay available even when the
+    // palette is empty — the view itself renders an explanatory
+    // empty-state message.
+    await this.reloadChipPalette();
+    this.addCommand({
+      id: 'forge-open-chips',
+      name: 'Open chips palette',
+      callback: () => { this.openChipsView(); },
+    });
+    this.addCommand({
+      id: 'forge-refresh-chips',
+      name: 'Refresh chip palette',
+      callback: () => { this.reloadChipPalette(/*refreshOpenView=*/ true); },
+    });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
@@ -425,13 +438,13 @@ export default class ForgePlugin extends Plugin {
     // Order matters: Obsidian's view.addAction PREPENDS — the most
     // recently added action renders leftmost. So to get the visual
     // left-to-right order [Forge, New Snippet, (mode), edges, chips]
-    // we add them in the REVERSE of that: chips first (when moda is
-    // active), then edges, mode, New Snippet, and Forge LAST so it
-    // lands at the far left.
-    if (this.isDomainActive('moda')) {
+    // we add them in the REVERSE of that: chips first (when the
+    // palette is non-empty), then edges, mode, New Snippet, and
+    // Forge LAST so it lands at the far left.
+    if (this.chipPalette.length > 0) {
       const chipsBtn = view.addAction(
-        'puzzle', 'Forge: Open MoDa chips',
-        () => { this.openModaChipsView(); });
+        'puzzle', 'Forge: Open chips palette',
+        () => { this.openChipsView(); });
       chipsBtn.addClass(CHIPS_BTN_CLASS);
     }
     const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
@@ -726,19 +739,60 @@ export default class ForgePlugin extends Plugin {
     this.app.workspace.revealLeaf(leaf);
   }
 
-  // Chip-palette POC. Opens (or reveals) the MoDa chips pane in the
-  // right sidebar. The view itself is dormant outside moda vaults; the
-  // command is only registered when "moda" is in scope anyway.
-  private async openModaChipsView() {
-    const existing = this.app.workspace.getLeavesOfType(
-      MODA_CHIPS_VIEW_TYPE)[0];
+  // Chips v2. Domain-agnostic palette pane in the right sidebar. The
+  // view reads `_chips.md` from the vault root + each declared-domain
+  // subdir on open / on refresh; renders an empty-state message if
+  // no chips are defined.
+  private async openChipsView() {
+    const existing = this.app.workspace.getLeavesOfType(CHIPS_VIEW_TYPE)[0];
     if (existing) {
       this.app.workspace.revealLeaf(existing);
       return;
     }
     const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
-    await leaf.setViewState({ type: MODA_CHIPS_VIEW_TYPE, active: true });
+    await leaf.setViewState({ type: CHIPS_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
+  }
+
+  // Cached merged palette. Drives the toolbar-icon visibility (only
+  // shown when chips exist) and lets the open view ask the plugin
+  // for a snapshot rather than re-reading disk per render. Reloaded
+  // on plugin activate and on the explicit "Refresh chip palette"
+  // command.
+  private chipPalette: ChipPaletteGroup[] = [];
+  private openChipsViews = new Set<ChipsView>();
+
+  private async reloadChipPalette(refreshOpenView = false) {
+    try {
+      this.chipPalette = await loadChipsForActiveVault(
+        this.app, this.chipsManifest());
+    } catch (e) {
+      console.error('Forge chips: load failed', e);
+      this.chipPalette = [];
+    }
+    if (refreshOpenView) {
+      for (const v of this.openChipsViews) {
+        void v.refresh();
+      }
+    }
+    // Toolbar icon's visibility depends on chipPalette.length — keep
+    // it in sync after a refresh.
+    this.syncButtons();
+  }
+
+  private chipsManifest(): ChipsManifest {
+    return {
+      vaultName: this.app.vault.getName(),
+      domains: this.activeDomains ? Array.from(this.activeDomains) : null,
+    };
+  }
+
+  private chipsHost(): ChipsHost {
+    return {
+      getManifest: () => this.chipsManifest(),
+      registerView: (v) => { this.openChipsViews.add(v); },
+      unregisterView: (v) => { this.openChipsViews.delete(v); },
+    };
   }
 
   // Advance every open MoDa view one tick by postMessage'ing the

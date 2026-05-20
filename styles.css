@@ -572,3 +572,51 @@
 .forge-moda-chips-view .forge-chip:hover {
   background: var(--interactive-hover);
 }
+
+/* Chips v2 — generalized palette view. Old .forge-moda-chips-view
+   selectors above are left in place harmlessly (no DOM uses them after
+   the v2 rename) — sweeping them belongs to a separate UX-polish pass. */
+.forge-chips-view h3 {
+  margin-top: 0;
+}
+.forge-chips-view .forge-chips-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.4em;
+}
+.forge-chips-view .forge-chips-refresh {
+  padding: 0.2em 0.6em;
+  font-size: 0.8em;
+}
+.forge-chips-view .forge-chips-group {
+  margin-bottom: 0.8em;
+}
+.forge-chips-view .forge-chips-group-header {
+  margin: 0.3em 0;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.forge-chips-view .forge-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+.forge-chips-view .forge-chip {
+  padding: 0.3em 0.7em;
+  font-size: 0.9em;
+  border-radius: 999px;
+  background: var(--interactive-normal);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+.forge-chips-view .forge-chip:hover {
+  background: var(--interactive-hover);
+}
+.forge-chips-view .forge-chips-empty {
+  color: var(--text-muted);
+  font-size: 0.9em;
+}
