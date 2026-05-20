@@ -79,7 +79,18 @@ export class ModaChipsView extends ItemView {
         text: chip.label,
         cls: 'forge-chip',
       });
-      btn.onclick = () => this.insertChip(active, chip.insertText);
+      // Resolve the active markdown view at CLICK time, not render
+      // time — render-time capture goes stale if the user switches
+      // files between the chip pane re-rendering and clicking.
+      btn.onclick = () => {
+        const current = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!current?.file) {
+          new Notice('Forge chips: no markdown file is focused. ' +
+            'Click into the moda snippet first, then click the chip.');
+          return;
+        }
+        this.insertChip(current, chip.insertText);
+      };
     }
   }
 
@@ -87,47 +98,86 @@ export class ModaChipsView extends ItemView {
    *  active file's `# English` section (just below the last non-blank
    *  content line, before the next heading or EOF).
    *
-   *  Goes through the editor API rather than vault.modify so undo
-   *  works as one step and the open editor view picks up the change
-   *  without a reload race.
+   *  Prefers the editor API (so undo is a single step in Source / Live
+   *  Preview). Falls back to vault.process in Reading mode — in
+   *  reading mode the CodeMirror editor has no live DOM, so
+   *  editor.replaceRange would be a silent no-op for the user. The
+   *  fallback writes through the file and the reading view re-renders.
    */
-  private insertChip(view: MarkdownView, text: string) {
-    const editor = view.editor;
-    const total = editor.lineCount();
+  private async insertChip(view: MarkdownView, text: string) {
+    const mode = view.getMode();  // 'source' (incl. Live Preview) | 'preview'
 
-    // Locate the # English heading.
-    let englishStart = -1;
-    for (let i = 0; i < total; i++) {
-      if (/^#{1,6}\s+english\s*$/i.test(editor.getLine(i).trim())) {
-        englishStart = i;
-        break;
+    if (mode === 'source') {
+      const editor = view.editor;
+      const total = editor.lineCount();
+      const found = findEnglishInsertLine(total, (i) => editor.getLine(i));
+      if (found === null) {
+        new Notice('Forge chips: this file has no # English section — ' +
+          'nothing to insert into.');
+        return;
       }
-    }
-    if (englishStart === -1) {
-      new Notice(
-        'Forge chips: this file has no # English section — nothing to insert into.');
+      const lineText = editor.getLine(found);
+      const insertPos = { line: found, ch: lineText.length };
+      editor.replaceRange('\n' + text, insertPos, insertPos);
+      new Notice(`Forge chips: inserted "${text}".`);
       return;
     }
 
-    // Find the section boundary: next heading or `---`, else EOF.
-    let endIdx = total;
-    for (let i = englishStart + 1; i < total; i++) {
-      const t = editor.getLine(i).trim();
-      if (t.startsWith('#') || t === '---') { endIdx = i; break; }
+    // Reading mode: rewrite through the vault. Cmd+Z in the editor
+    // won't undo this (no editor history) but Cmd+Z on the file via
+    // Obsidian's file-history works; the trade is fine for an
+    // explicit-action button.
+    const file = view.file;
+    if (!file) {
+      new Notice('Forge chips: no file to write to.');
+      return;
     }
-
-    // Last non-blank content line within the English section, falling
-    // back to the heading line itself when the section is empty.
-    let lastContent = englishStart;
-    for (let i = endIdx - 1; i > englishStart; i--) {
-      if (editor.getLine(i).trim() !== '') { lastContent = i; break; }
-    }
-
-    // Insert at end of `lastContent` so the result is one new line
-    // directly below the last content. CodeMirror treats the inserted
-    // '\n' + text as a single undoable edit.
-    const lineText = editor.getLine(lastContent);
-    const insertPos = { line: lastContent, ch: lineText.length };
-    editor.replaceRange('\n' + text, insertPos, insertPos);
+    let succeeded = false;
+    await view.app.vault.process(file, (content) => {
+      const lines = content.split('\n');
+      const found = findEnglishInsertLine(lines.length, (i) => lines[i]);
+      if (found === null) return content;
+      const result = [
+        ...lines.slice(0, found + 1),
+        text,
+        ...lines.slice(found + 1),
+      ].join('\n');
+      succeeded = true;
+      return result;
+    });
+    new Notice(succeeded
+      ? `Forge chips: inserted "${text}".`
+      : 'Forge chips: this file has no # English section — nothing to insert into.');
   }
+}
+
+/** Shared between source-mode (editor API) and reading-mode (file
+ *  rewrite) paths. Returns the 0-indexed line number to insert AFTER
+ *  — the last non-blank content line of `# English`, falling back to
+ *  the heading itself when the section is empty. `null` = no
+ *  `# English` heading in the file. */
+function findEnglishInsertLine(
+  total: number,
+  getLine: (i: number) => string,
+): number | null {
+  let englishStart = -1;
+  for (let i = 0; i < total; i++) {
+    if (/^#{1,6}\s+english\s*$/i.test(getLine(i).trim())) {
+      englishStart = i;
+      break;
+    }
+  }
+  if (englishStart === -1) return null;
+
+  let endIdx = total;
+  for (let i = englishStart + 1; i < total; i++) {
+    const t = getLine(i).trim();
+    if (t.startsWith('#') || t === '---') { endIdx = i; break; }
+  }
+
+  let lastContent = englishStart;
+  for (let i = endIdx - 1; i > englishStart; i--) {
+    if (getLine(i).trim() !== '') { lastContent = i; break; }
+  }
+  return lastContent;
 }
