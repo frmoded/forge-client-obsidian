@@ -63,12 +63,6 @@ export class ModaChipsView extends ItemView {
     root.empty();
     root.addClass('forge-moda-chips-view');
     root.createEl('h3', { text: 'MoDa chips' });
-    const activeNow = this.app.workspace.getActiveViewOfType(MarkdownView);
-    console.log('[forge-chips] render', {
-      isMoDaVault: this.host.isMoDaVault(),
-      activePath: activeNow?.file?.path,
-      activeMode: activeNow?.getMode?.(),
-    });
 
     // Vault-level gate first: if the surrounding vault isn't a moda
     // vault, the entire pane is dormant. Obsidian is one-vault-per-
@@ -102,18 +96,11 @@ export class ModaChipsView extends ItemView {
         text: chip.label,
         cls: 'forge-chip',
       });
-      btn.addEventListener('click', (ev) => {
-        console.log('[forge-chips] click', { chip, ev });
+      btn.addEventListener('click', () => {
         // Re-resolve at click time, with the tracked-view fallback so
         // the chip pane stealing focus doesn't leave us with nothing.
         const live = this.app.workspace.getActiveViewOfType(MarkdownView);
         const view = live ?? this.lastMarkdownView;
-        console.log('[forge-chips] view at click', {
-          hasLive: !!live,
-          hasFallback: !!this.lastMarkdownView,
-          path: view?.file?.path,
-          mode: view?.getMode?.(),
-        });
         if (!view?.file) {
           new Notice('Forge chips: no markdown file is focused. ' +
             'Click into the moda snippet first, then click the chip.');
@@ -136,23 +123,11 @@ export class ModaChipsView extends ItemView {
    */
   private async insertChip(view: MarkdownView, text: string) {
     const mode = view.getMode();  // 'source' (incl. Live Preview) | 'preview'
-    const fm = this.app.metadataCache.getFileCache(view.file!)?.frontmatter;
-    console.log('[forge-chips] insertChip', {
-      mode,
-      path: view.file?.path,
-      edit_mode: fm?.edit_mode,
-      type: fm?.type,
-      locked: fm?.locked,
-    });
 
     if (mode === 'source') {
       const editor = view.editor;
       const total = editor.lineCount();
       const found = findEnglishInsertLine(total, (i) => editor.getLine(i));
-      console.log('[forge-chips] source-mode insert target', {
-        total, found,
-        lineText: found !== null ? editor.getLine(found) : null,
-      });
       if (found === null) {
         new Notice('Forge chips: this file has no # English section — ' +
           'nothing to insert into.');
@@ -162,12 +137,7 @@ export class ModaChipsView extends ItemView {
       const insertPos = { line: found, ch: lineText.length };
       const beforeLen = editor.getValue().length;
       editor.replaceRange('\n' + text, insertPos, insertPos);
-      const afterLen = editor.getValue().length;
-      const delta = afterLen - beforeLen;
-      console.log('[forge-chips] replaceRange done', {
-        beforeLen, afterLen, delta,
-        expectedDelta: 1 + text.length,
-      });
+      const delta = editor.getValue().length - beforeLen;
       if (delta === 0) {
         // The CM transaction was silently rejected — almost certainly
         // the readOnlyFacetFilter (Phase-6.5: # English is read-only
@@ -201,10 +171,6 @@ export class ModaChipsView extends ItemView {
     await view.app.vault.process(file, (content) => {
       const lines = content.split('\n');
       const found = findEnglishInsertLine(lines.length, (i) => lines[i]);
-      console.log('[forge-chips] vault.process insert target', {
-        lineCount: lines.length, found,
-        lineText: found !== null ? lines[found] : null,
-      });
       if (found === null) return content;
       const result = [
         ...lines.slice(0, found + 1),
@@ -214,7 +180,6 @@ export class ModaChipsView extends ItemView {
       succeeded = true;
       return result;
     });
-    console.log('[forge-chips] vault.process done', { succeeded });
     new Notice(succeeded
       ? `Forge chips: inserted "${text}".`
       : 'Forge chips: this file has no # English section — nothing to insert into.');
