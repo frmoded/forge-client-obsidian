@@ -52,6 +52,11 @@ export interface ForgeHost {
   reloadActiveDomains(): Promise<void>;
   openModaView(): void;
   stepModaSimulation(): void;
+  // Chip palette availability + open. The "Open chips palette" menu
+  // entry shows only when `hasChips()` returns true; clicking it
+  // delegates to the same path the `forge-open-chips` command uses.
+  hasChips(): boolean;
+  openChipsView(): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +114,17 @@ function showActionMenu(
     i.setTitle('Edit vault domains…').setIcon('plus-circle')
       .onClick(() => new EditVaultDomainsModal(host).open()));
   menu.addSeparator();
+
+  // Chips palette — canonical entry point per the chips-v2 follow-up.
+  // Hidden when the cached palette has no chips so vaults without
+  // `_chips.md` don't see a dead menu item. Sits between the
+  // structural action above and the operational actions below.
+  if (host.hasChips()) {
+    menu.addItem(i =>
+      i.setTitle('Open chips palette').setIcon('puzzle')
+        .onClick(() => host.openChipsView()));
+    menu.addSeparator();
+  }
 
   if (domainActive(declared, 'moda')) {
     menu.addItem(i =>
