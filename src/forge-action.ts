@@ -165,6 +165,24 @@ async function updateDeclaredVaults(host: ForgeHost, declared: string[]) {
   for (const d of targets) {
     const ok = await installVault(host, d.vault as string);
     if (!ok) return; // stop on first failure (per spec)
+    // Two-vault refactor: after each install completes, walk the
+    // freshly-extracted library for any `role: root` snippets
+    // (constitution A5.2) and copy missing ones to the vault root.
+    // This closes the upgrade-path gap — a vault installed at a
+    // pre-role-tagged version (e.g. forge-moda 0.4.0) that's now
+    // bumped to a role-tagged version (0.5.0+) picks up the
+    // shadow entry points without the user having to re-run the
+    // wizard. Existing root files are NOT clobbered (skipped, with
+    // a per-conflict Notice via copyLibraryRoots).
+    const { copied, skipped } = await copyLibraryRoots(host, d.vault as string);
+    if (copied.length > 0) {
+      new Notice(`Forge: ${d.vault}: copied ${copied.length} new ` +
+        `role:root snippet(s) to vault root (${copied.join(', ')}).`);
+    }
+    if (skipped.length > 0) {
+      new Notice(`Forge: ${d.vault}: ${skipped.length} role:root ` +
+        `snippet(s) already at vault root — preserved (${skipped.join(', ')}).`);
+    }
   }
   new Notice('Forge: domain vaults updated to latest.');
 }

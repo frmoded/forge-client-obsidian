@@ -629,12 +629,18 @@
    file-open / layout-change, never via active-leaf-change. */
 .forge-shadow-file .markdown-source-view,
 .forge-shadow-file .markdown-reading-view {
-  box-shadow: inset 4px 0 0 var(--text-accent);
+  box-shadow: inset 8px 0 0 var(--text-accent);
+}
+/* Faint header-row tint so the shadow status reads at the tab
+   level too, not just at the editor stripe. Translucent so it
+   plays nicely with both light and dark themes. */
+.forge-shadow-file .view-header {
+  background: color-mix(in srgb, var(--text-accent) 8%, transparent);
 }
 .forge-shadow-file .view-header-title::after {
-  content: "  · shadows library";
+  content: " · shadows library";
   color: var(--text-accent);
   font-size: 0.85em;
+  font-weight: 500;
   margin-left: 0.4em;
-  opacity: 0.8;
 }
