@@ -550,3 +550,25 @@
   font-size: 0.85em;
   color: var(--text-muted);
 }
+
+/* MoDa chips POC — sidebar pane with one (eventually more) chip
+   button. Match Obsidian's native button look; nothing fancy for v1. */
+.forge-moda-chips-view h3 {
+  margin-top: 0;
+}
+.forge-moda-chips-view .forge-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+}
+.forge-moda-chips-view .forge-chip {
+  padding: 0.3em 0.7em;
+  font-size: 0.9em;
+  border-radius: 999px;
+  background: var(--interactive-normal);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+}
+.forge-moda-chips-view .forge-chip:hover {
+  background: var(--interactive-hover);
+}

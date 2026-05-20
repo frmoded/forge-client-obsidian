@@ -3,6 +3,7 @@ import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view';
+import { ModaChipsView, MODA_CHIPS_VIEW_TYPE } from './moda-chips-view';
 import { invalidateLibraryVaultCache } from './edges';
 import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
@@ -193,6 +194,9 @@ export default class ForgePlugin extends Plugin {
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
     this.registerView(EDGES_VIEW_TYPE, leaf => new ForgeEdgesView(leaf, () => this.settings.serverUrl));
     this.registerView(MODA_VIEW_TYPE, leaf => new ForgeModaView(leaf));
+    this.registerView(MODA_CHIPS_VIEW_TYPE, leaf => new ModaChipsView(leaf, {
+      isMoDaVault: () => this.isDomainActive('moda'),
+    }));
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
 
     this.registerEvent(
@@ -275,6 +279,12 @@ export default class ForgePlugin extends Plugin {
         id: 'forge-step-moda',
         name: 'Step MoDa simulation',
         callback: () => { this.stepModaSimulation(); },
+      });
+
+      this.addCommand({
+        id: 'forge-open-moda-chips',
+        name: 'Open MoDa chips',
+        callback: () => { this.openModaChipsView(); },
       });
     }
 
@@ -705,6 +715,21 @@ export default class ForgePlugin extends Plugin {
     }
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.setViewState({ type: MODA_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+  }
+
+  // Chip-palette POC. Opens (or reveals) the MoDa chips pane in the
+  // right sidebar. The view itself is dormant outside moda vaults; the
+  // command is only registered when "moda" is in scope anyway.
+  private async openModaChipsView() {
+    const existing = this.app.workspace.getLeavesOfType(
+      MODA_CHIPS_VIEW_TYPE)[0];
+    if (existing) {
+      this.app.workspace.revealLeaf(existing);
+      return;
+    }
+    const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    await leaf.setViewState({ type: MODA_CHIPS_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
 
