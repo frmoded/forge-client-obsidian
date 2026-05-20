@@ -26,16 +26,29 @@ const CHIPS: Chip[] = [
 ];
 
 export class ModaChipsView extends ItemView {
+  // Last MarkdownView the user had focused. Updated on file-open and
+  // when render() observes one. Used so the chip click still has a
+  // target after focus shifts to the side pane (which would otherwise
+  // make getActiveViewOfType(MarkdownView) return undefined).
+  private lastMarkdownView: MarkdownView | null = null;
+
   constructor(leaf: WorkspaceLeaf, private host: ModaChipsHost) {
     super(leaf);
-    // The view's contents depend on which file is active, so re-render
-    // on the two events that change that. file-open is the primary
-    // one; active-leaf-change covers the "user moved focus to a
-    // different already-open tab" case.
+    // ONLY file-open re-renders the pane. We deliberately do NOT
+    // listen on active-leaf-change: clicking the chip button shifts
+    // active leaf to this side pane, which would synchronously fire
+    // active-leaf-change → render() → contentEl.empty() — destroying
+    // the button mid-click and eating the click event. file-open is
+    // safe because clicking the side pane doesn't open a file.
     this.registerEvent(
-      this.app.workspace.on('active-leaf-change', () => this.render()));
-    this.registerEvent(
-      this.app.workspace.on('file-open', () => this.render()));
+      this.app.workspace.on('file-open', (file) => {
+        // Refresh our tracked markdown view from the file that was
+        // just opened (or focused). getActiveViewOfType is the
+        // canonical lookup.
+        const v = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (v && v.file?.path === file?.path) this.lastMarkdownView = v;
+        this.render();
+      }));
   }
 
   getViewType() { return MODA_CHIPS_VIEW_TYPE; }
@@ -70,11 +83,15 @@ export class ModaChipsView extends ItemView {
       return;
     }
 
-    // File-level gate: we need an active markdown editor to insert
-    // into. If nothing's open (or the open file isn't markdown),
-    // explain rather than render a chip that would fail on click.
+    // File-level gate: prefer the currently-active markdown view;
+    // fall back to the last one we observed (covers the case where
+    // the chip pane itself is focused — getActiveViewOfType returns
+    // undefined then, but we still know which snippet the user was
+    // editing).
     const active = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!active?.file) {
+    if (active?.file) this.lastMarkdownView = active;
+    const target = active ?? this.lastMarkdownView;
+    if (!target?.file) {
       root.createEl('p', { text: 'Open a moda snippet to see chips.' });
       return;
     }
@@ -85,23 +102,24 @@ export class ModaChipsView extends ItemView {
         text: chip.label,
         cls: 'forge-chip',
       });
-      // Resolve the active markdown view at CLICK time, not render
-      // time — render-time capture goes stale if the user switches
-      // files between the chip pane re-rendering and clicking.
       btn.addEventListener('click', (ev) => {
         console.log('[forge-chips] click', { chip, ev });
-        const current = this.app.workspace.getActiveViewOfType(MarkdownView);
-        console.log('[forge-chips] active MarkdownView at click', {
-          hasView: !!current,
-          path: current?.file?.path,
-          mode: current?.getMode?.(),
+        // Re-resolve at click time, with the tracked-view fallback so
+        // the chip pane stealing focus doesn't leave us with nothing.
+        const live = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const view = live ?? this.lastMarkdownView;
+        console.log('[forge-chips] view at click', {
+          hasLive: !!live,
+          hasFallback: !!this.lastMarkdownView,
+          path: view?.file?.path,
+          mode: view?.getMode?.(),
         });
-        if (!current?.file) {
+        if (!view?.file) {
           new Notice('Forge chips: no markdown file is focused. ' +
             'Click into the moda snippet first, then click the chip.');
           return;
         }
-        this.insertChip(current, chip.insertText);
+        this.insertChip(view, chip.insertText);
       });
     }
   }
