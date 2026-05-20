@@ -194,6 +194,13 @@ export default class ForgePlugin extends Plugin {
   // declared `domains = [...]`; a command/ribbon for domain D registers
   // only if the set has D. Empty set = core-only (no domain commands).
   private activeDomains: Set<string> | null = null;
+  // Two-vault refactor (constitution A5.1): top-level subdirectories of
+  // the vault that are library vaults (each contains a forge.toml).
+  // Populated on plugin activate and refreshed on vault.create /
+  // vault.delete events. Drives the shadow-detection helpers
+  // (isShadowed, findLibraryHome) used by the editor marker and the
+  // file-menu Customize / Reset affordances.
+  private libraryDirs: Set<string> = new Set();
 
   async onload() {
     await this.loadSettings();
@@ -275,6 +282,27 @@ export default class ForgePlugin extends Plugin {
     // a vault that declares the "moda" domain (or declares none —
     // back-compat).
     await this.loadActiveDomains();
+    await this.loadLibraryDirs();
+
+    // A library subdir comes into existence when the user runs the
+    // moda-learning wizard (or installs forge-moda manually), and
+    // shadow files appear / disappear from create / delete. Refresh
+    // the cached library set on either; syncButtons re-runs on
+    // layout-change so the editor marker updates immediately.
+    this.registerEvent(
+      this.app.vault.on('create', () => this.loadLibraryDirs())
+    );
+    this.registerEvent(
+      this.app.vault.on('delete', () => this.loadLibraryDirs())
+    );
+
+    // Two-vault Customize / Reset affordances on the file-menu (right-
+    // click on a file in the explorer or its tab).
+    this.registerEvent(
+      this.app.workspace.on('file-menu', (menu, file) => {
+        if (file instanceof TFile) this.addTwoVaultMenuItems(menu, file);
+      })
+    );
     if (this.isDomainActive('moda')) {
       this.addCommand({
         id: 'forge-open-moda',
@@ -431,6 +459,7 @@ export default class ForgePlugin extends Plugin {
   syncButtons() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return;
+    this.syncShadowMarker(view);
 
     // Remove any stale Forge buttons from a previous plugin load before adding fresh ones.
     // RUN_BTN_CLASS / HAMMER_BTN_CLASS / LOCK_BTN_CLASS are listed so users still get
@@ -728,6 +757,142 @@ export default class ForgePlugin extends Plugin {
   // (back-compat). Otherwise active iff the declared set contains it.
   private isDomainActive(domain: string): boolean {
     return this.activeDomains === null || this.activeDomains.has(domain);
+  }
+
+  // ------ Two-vault refactor: library subdir discovery + shadow helpers ------
+
+  // Walk top-level subdirectories of the vault root; record any that
+  // contain a forge.toml as library vaults. Called on activate and on
+  // vault.create / vault.delete (file events fire when a library is
+  // first installed, when a library subdir is deleted, or when a
+  // shadow / library snippet is added or removed). No file-watch loop.
+  private async loadLibraryDirs() {
+    const dirs = new Set<string>();
+    try {
+      const root = await this.app.vault.adapter.list('/');
+      for (const folder of root.folders) {
+        const name = folder.replace(/^\/+|\/+$/g, '');
+        if (!name || name.startsWith('.')) continue;
+        if (await this.app.vault.adapter.exists(`${name}/forge.toml`)) {
+          dirs.add(name);
+        }
+      }
+    } catch (e) {
+      console.warn('Forge: library-dir discovery failed', e);
+    }
+    this.libraryDirs = dirs;
+  }
+
+  // A vault-root .md is "shadowed" when there's a same-basename .md
+  // inside any library subdir. The root copy wins resolution per A4;
+  // the library copy stays on disk. We surface this in the editor
+  // (marker stripe) and in the file menu (Reset to library version).
+  private isShadowedFile(file: TFile): { shadowed: true; libraryPath: string } | { shadowed: false } {
+    if (file.extension !== 'md') return { shadowed: false };
+    const parts = file.path.split('/');
+    if (parts.length !== 1) return { shadowed: false };  // not at root
+    const name = parts[0];
+    for (const dir of this.libraryDirs) {
+      const candidate = `${dir}/${name}`;
+      // app.vault.getAbstractFileByPath is synchronous and uses
+      // Obsidian's in-memory file index — no disk hit.
+      if (this.app.vault.getAbstractFileByPath(candidate)) {
+        return { shadowed: true, libraryPath: candidate };
+      }
+    }
+    return { shadowed: false };
+  }
+
+  // A library-side .md is the inverse: it lives inside a library
+  // subdir AND it's not already shadowed at root. These get the
+  // "Customize (create editable copy at vault root)" affordance.
+  private libraryFileInfo(file: TFile): { libraryDir: string; alreadyShadowed: boolean } | null {
+    if (file.extension !== 'md') return null;
+    const slash = file.path.indexOf('/');
+    if (slash === -1) return null;
+    const dir = file.path.slice(0, slash);
+    if (!this.libraryDirs.has(dir)) return null;
+    const basename = file.path.slice(slash + 1);
+    if (basename.includes('/')) return null;       // not directly under libdir
+    const alreadyShadowed = this.app.vault.getAbstractFileByPath(basename) !== null;
+    return { libraryDir: dir, alreadyShadowed };
+  }
+
+  // Add or remove the shadow marker on the active editor's container.
+  // Called from syncButtons (same hook chain — layout-change /
+  // file-open / debounced modify) so it's a static update tied to
+  // discrete file events, never to active-leaf-change.
+  private syncShadowMarker(view: MarkdownView) {
+    const el = view.containerEl;
+    el.removeClass('forge-shadow-file');
+    if (view.file) {
+      const info = this.isShadowedFile(view.file);
+      if (info.shadowed) {
+        el.addClass('forge-shadow-file');
+        el.setAttribute('data-forge-shadow-of', info.libraryPath);
+      } else {
+        el.removeAttribute('data-forge-shadow-of');
+      }
+    }
+  }
+
+  // Right-click "Customize" / "Reset to library" affordances on the
+  // file menu. Wired from the file-menu event registered in onload —
+  // this method just builds the per-file items.
+  private addTwoVaultMenuItems(menu: any, file: TFile) {
+    const shadow = this.isShadowedFile(file);
+    if (shadow.shadowed) {
+      menu.addItem((item: any) =>
+        item.setTitle('Forge: Reset to library version')
+          .setIcon('undo-2')
+          .onClick(() => this.resetToLibrary(file)));
+      return;
+    }
+    const lib = this.libraryFileInfo(file);
+    if (lib && !lib.alreadyShadowed) {
+      menu.addItem((item: any) =>
+        item.setTitle('Forge: Customize (create editable copy at vault root)')
+          .setIcon('copy')
+          .onClick(() => this.customizeFromLibrary(file)));
+    }
+  }
+
+  private async resetToLibrary(file: TFile) {
+    // Two-step confirmation via a tiny Modal would be the polished
+    // path; for v1 we use the synchronous browser confirm so the
+    // affordance ships in one PR. Polish later.
+    const ok = window.confirm(
+      `Reset ${file.path} to library version? This deletes the shadow ` +
+      `file and discards your changes. The library version will be the ` +
+      `one used by /compute and /generate afterward.`);
+    if (!ok) return;
+    try {
+      await this.app.vault.delete(file);
+      new Notice(`Forge: ${file.basename} reset — library version now active.`);
+    } catch (e) {
+      console.error('Forge: reset failed', e);
+      new Notice(`Forge: reset of ${file.basename} failed — check console.`);
+    }
+  }
+
+  private async customizeFromLibrary(file: TFile) {
+    const targetPath = file.name;  // basename → vault root
+    if (this.app.vault.getAbstractFileByPath(targetPath)) {
+      new Notice(`Forge: ${targetPath} already exists at vault root.`);
+      return;
+    }
+    try {
+      const body = await this.app.vault.read(file);
+      const created = await this.app.vault.create(targetPath, body);
+      new Notice(`Forge: customized ${targetPath} — edit at vault root; ` +
+        `your copy shadows the library version.`);
+      // Open the new file so the user immediately lands on their copy.
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(created as TFile);
+    } catch (e) {
+      console.error('Forge: customize failed', e);
+      new Notice(`Forge: customize of ${file.basename} failed — check console.`);
+    }
   }
 
   private async openModaView() {

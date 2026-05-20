@@ -620,3 +620,21 @@
   color: var(--text-muted);
   font-size: 0.9em;
 }
+
+/* Two-vault refactor (constitution A5.1): editor marker for a vault-
+   root snippet that shadows a same-name library snippet. A4
+   resolution makes the root copy authoritative; the marker tells the
+   user at a glance which file they're editing is overriding library
+   behavior. Static class — added/removed via syncShadowMarker on
+   file-open / layout-change, never via active-leaf-change. */
+.forge-shadow-file .markdown-source-view,
+.forge-shadow-file .markdown-reading-view {
+  box-shadow: inset 4px 0 0 var(--text-accent);
+}
+.forge-shadow-file .view-header-title::after {
+  content: "  · shadows library";
+  color: var(--text-accent);
+  font-size: 0.85em;
+  margin-left: 0.4em;
+  opacity: 0.8;
+}

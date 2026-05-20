@@ -601,7 +601,56 @@ class CreateNewForgeVaultModal extends Modal {
 // Initialize-as-Forge-vault wizard
 // ---------------------------------------------------------------------------
 
-type Flavor = 'quick' | 'moda' | 'music' | 'multi' | 'empty';
+type Flavor = 'quick' | 'moda' | 'moda-learning' | 'music' | 'multi' | 'empty';
+
+/** Copy every `role: root` snippet from a freshly-installed library
+ *  subdir into the vault root. Returns the list of files copied vs
+ *  skipped (conflict — a same-named file already exists at root, and
+ *  we never clobber user content). Consumed by the moda-learning
+ *  wizard flavor (constitution A5.2). */
+async function copyLibraryRoots(
+  host: ForgeHost,
+  libraryDirName: string,
+): Promise<{ copied: string[]; skipped: string[] }> {
+  const adapter = host.app.vault.adapter;
+  const out = { copied: [] as string[], skipped: [] as string[] };
+  let listing;
+  try {
+    listing = await adapter.list(libraryDirName);
+  } catch (e) {
+    console.warn(`Forge: could not list library dir ${libraryDirName}`, e);
+    return out;
+  }
+  for (const filePath of listing.files) {
+    if (!filePath.endsWith('.md')) continue;
+    let content: string;
+    try {
+      content = await adapter.read(filePath);
+    } catch {
+      continue;
+    }
+    if (!hasRoleRoot(content)) continue;
+    const name = filePath.split('/').pop()!;
+    if (await adapter.exists(name)) {
+      out.skipped.push(name);
+      continue;
+    }
+    await adapter.write(name, content);
+    out.copied.push(name);
+  }
+  return out;
+}
+
+/** Quick YAML-frontmatter check for `role: root` without dragging in
+ *  a YAML parser. Frontmatter is the leading `---`...`---` block;
+ *  anywhere inside that block, a line matching `role: root` (with
+ *  optional surrounding whitespace) qualifies. */
+function hasRoleRoot(content: string): boolean {
+  if (!content.startsWith('---')) return false;
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return false;
+  return /^\s*role:\s*root\s*$/m.test(content.slice(0, end));
+}
 
 class InitializeForgeVaultWizard extends Modal {
   private flavor: Flavor = 'quick';
@@ -645,8 +694,10 @@ class InitializeForgeVaultWizard extends Modal {
     const flavors: Array<[Flavor, string, string]> = [
       ['quick', 'Quick try (recommended)',
         'forge.toml (domains = []) + a one-line forge-hello snippet.'],
-      ['moda', 'MoDa',
-        'domains = ["moda"], installs forge-moda from the registry, drops a welcome note.'],
+      ['moda', 'MoDa (library only)',
+        'domains = ["moda"], installs forge-moda from the registry, drops a welcome note. Library snippets stay in forge-moda/ — for vaults that author against the library without editing it.'],
+      ['moda-learning', 'MoDa learning vault (recommended for new users)',
+        'Same as MoDa, plus copies the library\'s role: root snippets (setup, on_mouse_click, go) to the vault root as your editable entry points. Library leaves stay in forge-moda/ and can be customized later.'],
       ['music', 'Music',
         'domains = ["music"], installs forge-music (if registered), drops a welcome note.'],
       ['multi', 'Multi-domain',
@@ -696,7 +747,8 @@ class InitializeForgeVaultWizard extends Modal {
 
   private chosenDomains(): string[] {
     switch (this.flavor) {
-      case 'moda': return ['moda'];
+      case 'moda':
+      case 'moda-learning': return ['moda'];
       case 'music': return ['music'];
       case 'multi': return Array.from(this.multi);
       case 'quick':
@@ -739,13 +791,31 @@ class InitializeForgeVaultWizard extends Modal {
       }
     }
 
-    // 3. starter content
+    // 3. moda-learning flavor: copy role:root snippets from the
+    //    installed library subdir to the vault root, where the user
+    //    can edit them and they'll shadow the library via A4. The
+    //    library's leaves stay in forge-moda/ and become customizable
+    //    later via the "Customize" affordance. Per constitution A5.2.
+    if (this.flavor === 'moda-learning') {
+      const { copied, skipped } = await copyLibraryRoots(this.host, 'forge-moda');
+      if (copied.length > 0) {
+        new Notice(`Forge: copied ${copied.length} role:root snippet(s) ` +
+          `to vault root (${copied.join(', ')}).`);
+      }
+      if (skipped.length > 0) {
+        new Notice(`Forge: skipped ${skipped.length} role:root copy ` +
+          `(conflict — same name already at vault root): ${skipped.join(', ')}`);
+      }
+    }
+
+    // 4. starter content
     if (this.flavor === 'quick') {
       await this.createIfAbsent('forge-hello.md',
         '---\ntype: action\ninputs: []\ndescription: hello forge\n---\n\n' +
         "# English\n\nReturn the string 'hello forge'.\n\n# Python\n\n" +
         '```python\n```\n');
-    } else if (this.flavor === 'moda' || this.flavor === 'music' ||
+    } else if (this.flavor === 'moda' || this.flavor === 'moda-learning' ||
+               this.flavor === 'music' ||
                (this.flavor === 'multi' && domains.length > 0)) {
       const where = domains.includes('moda')
         ? 'Open the Forge ribbon → "Open MoDa simulation" to launch the sim.'
