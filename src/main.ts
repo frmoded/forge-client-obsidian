@@ -1,4 +1,4 @@
-import { Plugin, Notice, MarkdownView, TFile, WorkspaceLeaf } from 'obsidian';
+import { Plugin, Notice, MarkdownView, TFile, TFolder, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
@@ -194,13 +194,13 @@ export default class ForgePlugin extends Plugin {
   // declared `domains = [...]`; a command/ribbon for domain D registers
   // only if the set has D. Empty set = core-only (no domain commands).
   private activeDomains: Set<string> | null = null;
-  // Two-vault refactor (constitution A5.1): top-level subdirectories of
-  // the vault that are library vaults (each contains a forge.toml).
-  // Populated on plugin activate and refreshed on vault.create /
-  // vault.delete events. Drives the shadow-detection helpers
-  // (isShadowed, findLibraryHome) used by the editor marker and the
-  // file-menu Customize / Reset affordances.
-  private libraryDirs: Set<string> = new Set();
+  // Two-vault refactor (constitution A5.1): library-subdir discovery
+  // resolves synchronously from Obsidian's in-memory file index on
+  // every call — no cache. The earlier cached-set + vault.on('create')
+  // shape missed library subdirs that landed via the engine's install
+  // path (Python file writes don't reliably trigger Obsidian's vault
+  // events before the user right-clicks). The synchronous index walk
+  // is cheap and always fresh.
 
   async onload() {
     await this.loadSettings();
@@ -282,22 +282,10 @@ export default class ForgePlugin extends Plugin {
     // a vault that declares the "moda" domain (or declares none —
     // back-compat).
     await this.loadActiveDomains();
-    await this.loadLibraryDirs();
-
-    // A library subdir comes into existence when the user runs the
-    // moda-learning wizard (or installs forge-moda manually), and
-    // shadow files appear / disappear from create / delete. Refresh
-    // the cached library set on either; syncButtons re-runs on
-    // layout-change so the editor marker updates immediately.
-    this.registerEvent(
-      this.app.vault.on('create', () => this.loadLibraryDirs())
-    );
-    this.registerEvent(
-      this.app.vault.on('delete', () => this.loadLibraryDirs())
-    );
 
     // Two-vault Customize / Reset affordances on the file-menu (right-
-    // click on a file in the explorer or its tab).
+    // click on a file in the explorer or its tab). Library discovery
+    // is synchronous via libraryDirNames() — fresh on every menu open.
     this.registerEvent(
       this.app.workspace.on('file-menu', (menu, file) => {
         if (file instanceof TFile) this.addTwoVaultMenuItems(menu, file);
@@ -761,26 +749,23 @@ export default class ForgePlugin extends Plugin {
 
   // ------ Two-vault refactor: library subdir discovery + shadow helpers ------
 
-  // Walk top-level subdirectories of the vault root; record any that
-  // contain a forge.toml as library vaults. Called on activate and on
-  // vault.create / vault.delete (file events fire when a library is
-  // first installed, when a library subdir is deleted, or when a
-  // shadow / library snippet is added or removed). No file-watch loop.
-  private async loadLibraryDirs() {
-    const dirs = new Set<string>();
-    try {
-      const root = await this.app.vault.adapter.list('/');
-      for (const folder of root.folders) {
-        const name = folder.replace(/^\/+|\/+$/g, '');
-        if (!name || name.startsWith('.')) continue;
-        if (await this.app.vault.adapter.exists(`${name}/forge.toml`)) {
-          dirs.add(name);
-        }
+  // Walk Obsidian's in-memory file index for top-level folders that
+  // contain a forge.toml — those are library vaults installed under
+  // this user vault (per A5.1). Synchronous, always reflects current
+  // state. Called from isShadowedFile / libraryFileInfo on each menu
+  // open / editor marker refresh, so the affordances appear
+  // immediately after an install instead of waiting for a watcher.
+  private libraryDirNames(): Set<string> {
+    const out = new Set<string>();
+    const root = this.app.vault.getRoot();
+    for (const child of root.children) {
+      if (!(child instanceof TFolder)) continue;
+      if (child.name.startsWith('.')) continue;
+      if (this.app.vault.getAbstractFileByPath(`${child.name}/forge.toml`)) {
+        out.add(child.name);
       }
-    } catch (e) {
-      console.warn('Forge: library-dir discovery failed', e);
     }
-    this.libraryDirs = dirs;
+    return out;
   }
 
   // A vault-root .md is "shadowed" when there's a same-basename .md
@@ -792,10 +777,8 @@ export default class ForgePlugin extends Plugin {
     const parts = file.path.split('/');
     if (parts.length !== 1) return { shadowed: false };  // not at root
     const name = parts[0];
-    for (const dir of this.libraryDirs) {
+    for (const dir of this.libraryDirNames()) {
       const candidate = `${dir}/${name}`;
-      // app.vault.getAbstractFileByPath is synchronous and uses
-      // Obsidian's in-memory file index — no disk hit.
       if (this.app.vault.getAbstractFileByPath(candidate)) {
         return { shadowed: true, libraryPath: candidate };
       }
@@ -811,7 +794,7 @@ export default class ForgePlugin extends Plugin {
     const slash = file.path.indexOf('/');
     if (slash === -1) return null;
     const dir = file.path.slice(0, slash);
-    if (!this.libraryDirs.has(dir)) return null;
+    if (!this.libraryDirNames().has(dir)) return null;
     const basename = file.path.slice(slash + 1);
     if (basename.includes('/')) return null;       // not directly under libdir
     const alreadyShadowed = this.app.vault.getAbstractFileByPath(basename) !== null;
