@@ -12,31 +12,46 @@ import {
   mergeChipSources,
 } from './chips-core';
 
-const CHIPS_FILENAME = '_chips.md';
+// v3+ convention: chip data lives at `_meta/_chips.md` (alongside
+// README and other infrastructure files). v2 shipped at the bare
+// `_chips.md`. We probe both, preferring the new path.
+const CHIPS_RELATIVE_PATHS = ['_meta/_chips.md', '_chips.md'];
+
+/** True iff `path` could be a chips source file the plugin loads
+ *  from. Used by the file-watch handler in main.ts to decide
+ *  whether a modify event should trigger a palette reload. */
+export function isChipsFilePath(path: string): boolean {
+  for (const rel of CHIPS_RELATIVE_PATHS) {
+    if (path === rel || path.endsWith(`/${rel}`)) return true;
+  }
+  return false;
+}
 
 interface ChipSource {
-  filePath: string;     // path relative to vault root
+  paths: string[];      // candidate paths in preference order
   sourceName: string;   // group header in the palette
 }
 
 /** Enumerate the canonical chip source paths for a vault: one at the
  *  vault root plus one under each declared-domain subdirectory
  *  (matches the installer's <vault>/<domain-vault>/ layout — e.g.
- *  forge-moda chips live at <vault>/forge-moda/_chips.md). `null`
- *  declared domains (back-compat: no `domains` field) is treated as
- *  "no installed-domain chip lookups" so we don't probe arbitrary
- *  subdirs. */
+ *  forge-moda chips live at <vault>/forge-moda/_meta/_chips.md per
+ *  the v3 cleanup, with the v2 `forge-moda/_chips.md` path kept as
+ *  a fallback so vaults upgraded across the move still resolve).
+ *  `null` declared domains (back-compat: no `domains` field) is
+ *  treated as "no installed-domain chip lookups" so we don't probe
+ *  arbitrary subdirs. */
 export function chipSourcesFor(
   vaultName: string,
   domains: string[] | null,
 ): ChipSource[] {
   const out: ChipSource[] = [
-    { filePath: CHIPS_FILENAME, sourceName: vaultName },
+    { paths: CHIPS_RELATIVE_PATHS.slice(), sourceName: vaultName },
   ];
   if (domains) {
     for (const d of domains) {
       out.push({
-        filePath: `forge-${d}/${CHIPS_FILENAME}`,
+        paths: CHIPS_RELATIVE_PATHS.map(p => `forge-${d}/${p}`),
         sourceName: `forge-${d}`,
       });
     }
@@ -64,18 +79,24 @@ export async function loadChipsForActiveVault(
   const collected: Array<{ sourceName: string; chips: Chip[] }> = [];
 
   for (const src of sources) {
-    let raw: string;
-    try {
-      if (!(await adapter.exists(src.filePath))) continue;
-      raw = await adapter.read(src.filePath);
-    } catch (e) {
-      console.warn(`Forge chips: read failed for ${src.filePath}`, e);
-      continue;
+    let raw: string | null = null;
+    let chosenPath: string | null = null;
+    for (const candidate of src.paths) {
+      try {
+        if (await adapter.exists(candidate)) {
+          raw = await adapter.read(candidate);
+          chosenPath = candidate;
+          break;
+        }
+      } catch (e) {
+        console.warn(`Forge chips: read failed for ${candidate}`, e);
+      }
     }
-    const parsed = parseChipsFile(raw, src.filePath);
+    if (raw === null || chosenPath === null) continue;
+    const parsed = parseChipsFile(raw, chosenPath);
     if (isParseError(parsed)) {
       console.warn(
-        `Forge chips: ${src.filePath} parse error: ${parsed.error}`);
+        `Forge chips: ${chosenPath} parse error: ${parsed.error}`);
       continue;
     }
     collected.push({ sourceName: src.sourceName, chips: parsed.chips });
@@ -126,4 +147,27 @@ function isParseError(
   x: { chips: Chip[] } | ChipsParseError,
 ): x is ChipsParseError {
   return (x as ChipsParseError).error !== undefined;
+}
+
+/** Resolve a chip's `refs:` entry (a snippet basename like
+ *  `set_ink_mass`) to an actual vault-relative path, following A4
+ *  shadow resolution: check the vault root first (user-edited
+ *  shadow wins), then each declared library subdir. Returns null if
+ *  the snippet isn't found anywhere — caller surfaces that as a
+ *  broken-ref tooltip / hidden context menu item. Synchronous via
+ *  Obsidian's in-memory file index. */
+export function resolveSnippetPath(
+  app: App,
+  basename: string,
+  manifest: ChipsManifest,
+): string | null {
+  const rootPath = `${basename}.md`;
+  if (app.vault.getAbstractFileByPath(rootPath)) return rootPath;
+  if (manifest.domains) {
+    for (const d of manifest.domains) {
+      const libPath = `forge-${d}/${basename}.md`;
+      if (app.vault.getAbstractFileByPath(libPath)) return libPath;
+    }
+  }
+  return null;
 }

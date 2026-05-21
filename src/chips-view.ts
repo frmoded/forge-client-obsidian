@@ -1,10 +1,11 @@
-import { ItemView, WorkspaceLeaf, MarkdownView, Notice, TFile } from 'obsidian';
+import { ItemView, Menu, WorkspaceLeaf, MarkdownView, Notice, TFile, setTooltip } from 'obsidian';
 import {
+  Chip,
   ChipPaletteGroup,
   CHIPS_NO_ENGLISH_SECTION,
   insertChipText,
 } from './chips-core';
-import { ChipsManifest, loadChipsForActiveVault } from './chips';
+import { ChipsManifest, loadChipsForActiveVault, resolveSnippetPath } from './chips';
 
 export const CHIPS_VIEW_TYPE = 'forge-chips';
 
@@ -89,6 +90,71 @@ export class ChipsView extends ItemView {
     } catch {
       return null;
     }
+  }
+
+  // ------ V3: refs-driven hover preview + right-click navigate ------
+
+  /** Pre-attach a hover tooltip to a chip button with the
+   *  description(s) of its referenced snippet(s). Resolves each ref
+   *  via A4 (root shadow wins over library subdir); pulls the
+   *  description from frontmatter, falling back to the English
+   *  facet's first non-Inputs line (~80 chars), then to a
+   *  "No description available." sentinel. Chips without `refs` or
+   *  with all refs broken get no tooltip. Fire-and-forget — the
+   *  first hover after render shows the result. */
+  private async preloadChipTooltip(btn: HTMLElement, chip: Chip) {
+    if (!chip.refs || chip.refs.length === 0) return;
+    const manifest = this.host.getManifest();
+    const lines: string[] = [];
+    for (const ref of chip.refs) {
+      const path = resolveSnippetPath(this.app, ref, manifest);
+      if (!path) {
+        lines.push(`${ref} — Snippet not found.`);
+        continue;
+      }
+      const desc = await this.readSnippetDescription(path);
+      lines.push(chip.refs.length > 1 ? `${ref} — ${desc}` : desc);
+    }
+    if (lines.length > 0) setTooltip(btn, lines.join('\n'));
+  }
+
+  private async readSnippetDescription(path: string): Promise<string> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) return 'No description available.';
+    let content: string;
+    try {
+      content = await this.app.vault.cachedRead(file);
+    } catch {
+      return 'No description available.';
+    }
+    const fmDesc = extractFrontmatterDescription(content);
+    if (fmDesc) return fmDesc;
+    const englishLead = extractEnglishLead(content);
+    if (englishLead) return englishLead;
+    return 'No description available.';
+  }
+
+  /** Right-click context menu on a chip: one "Go to <ref>" item per
+   *  resolvable ref. Clicking opens the snippet in the active
+   *  editor (Obsidian's openLinkText handles the file resolution
+   *  including shadow vs library). If no refs resolve, the menu
+   *  doesn't show — silent — rather than surfacing a dead menu. */
+  private showRefsContextMenu(chip: Chip, e: MouseEvent) {
+    const manifest = this.host.getManifest();
+    const menu = new Menu();
+    let hasItems = false;
+    for (const ref of chip.refs ?? []) {
+      const path = resolveSnippetPath(this.app, ref, manifest);
+      if (!path) continue;
+      hasItems = true;
+      menu.addItem(item =>
+        item.setTitle(`Go to ${ref}`).setIcon('arrow-up-right')
+          .onClick(() => {
+            this.app.workspace.openLinkText(ref, '', false);
+          }));
+    }
+    if (!hasItems) return;
+    menu.showAtMouseEvent(e);
   }
 
   private async render() {
@@ -181,6 +247,13 @@ export class ChipsView extends ItemView {
           btn.addEventListener('click', () => {
             void this.onChipClick(chip.insertion);
           });
+          // V3: right-click → "Go to <ref>" context menu. Hover →
+          // tooltip with referenced snippets' descriptions.
+          btn.addEventListener('contextmenu', (e: MouseEvent) => {
+            e.preventDefault();
+            this.showRefsContextMenu(chip, e);
+          });
+          void this.preloadChipTooltip(btn, chip);
         }
       }
     }
@@ -237,4 +310,37 @@ export class ChipsView extends ItemView {
       new Notice('Snippet has no # English section to insert into.');
     }
   }
+}
+
+// ------ Pure helpers for V3 tooltip extraction ------
+
+/** Extract the `description:` frontmatter field from a snippet's
+ *  raw markdown body, if present. Tolerates quoted or unquoted
+ *  values; returns the trimmed text or null when missing. */
+function extractFrontmatterDescription(content: string): string | null {
+  if (!content.startsWith('---')) return null;
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return null;
+  const fm = content.slice(0, end);
+  const m = fm.match(/^description:\s*["']?([^"'\n]+?)["']?\s*$/m);
+  return m ? m[1].trim() : null;
+}
+
+/** Pull the first usable English-facet line from a snippet body —
+ *  used as a description fallback when frontmatter has none. Skips
+ *  the `Inputs:` declaration; returns the first non-blank prose
+ *  line, truncated to ~80 chars with an ellipsis when longer. */
+function extractEnglishLead(content: string): string | null {
+  const idx = content.search(/^# English\s*$/m);
+  if (idx < 0) return null;
+  const lines = content.slice(idx).split('\n').slice(1);
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    if (t.startsWith('#')) break;            // next heading
+    if (t.startsWith('---')) break;          // section break
+    if (t.startsWith('Inputs:')) continue;   // skip frontmatter-like decl
+    return t.length > 80 ? t.slice(0, 80) + '…' : t;
+  }
+  return null;
 }

@@ -4,7 +4,7 @@ import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view';
-import { ChipsManifest, loadChipsForActiveVault } from './chips';
+import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips';
 import { ChipPaletteGroup } from './chips-core';
 import { invalidateLibraryVaultCache } from './edges';
 import { attachEdgeHover } from './edges-hover';
@@ -323,6 +323,25 @@ export default class ForgePlugin extends Plugin {
       name: 'Refresh chip palette',
       callback: () => { this.reloadChipPalette(/*refreshOpenView=*/ true); },
     });
+
+    // V3: auto-reload chip palette when any `_chips.md` is modified
+    // on disk. The refresh button stays as an escape hatch (manual
+    // reload when the watcher misses an edit or when the parser
+    // cache needs a kick). Debounced to coalesce rapid saves and to
+    // give Obsidian's metadata pipeline a moment to settle.
+    this.registerEvent(
+      this.app.vault.on('modify', (file) => {
+        if (file instanceof TFile && isChipsFilePath(file.path)) {
+          if (this.chipsReloadTimer !== null) {
+            window.clearTimeout(this.chipsReloadTimer);
+          }
+          this.chipsReloadTimer = window.setTimeout(() => {
+            this.chipsReloadTimer = null;
+            void this.reloadChipPalette(/*refreshOpenView=*/ true);
+          }, 300);
+        }
+      }),
+    );
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
@@ -916,6 +935,10 @@ export default class ForgePlugin extends Plugin {
   // command.
   private chipPalette: ChipPaletteGroup[] = [];
   private openChipsViews = new Set<ChipsView>();
+  // V3 file-watch debounce: coalesce rapid `_chips.md` modify events
+  // (e.g. a save flurry while typing in the data snippet) so we only
+  // reload the palette once when the dust settles.
+  private chipsReloadTimer: number | null = null;
 
   private async reloadChipPalette(refreshOpenView = false) {
     try {
