@@ -34,6 +34,9 @@ export class ChipsView extends ItemView {
     // because clicking the side pane doesn't open a file.
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => {
+        // Re-render so the active-file gating (chips vs "open an
+        // action snippet" placeholder) reflects the new file.
+        void this.render();
         const v = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (v && v.file?.path === file?.path) this.lastMarkdownView = v;
       }));
@@ -65,7 +68,30 @@ export class ChipsView extends ItemView {
     this.render();
   }
 
-  private render() {
+  /** Resolve a file's frontmatter `type` robustly. Tries Obsidian's
+   *  metadataCache first (synchronous, usually correct); falls back
+   *  to a direct vault.cachedRead + frontmatter regex when the cache
+   *  has no usable answer. metadataCache occasionally fails to parse
+   *  frontmatter containing literal-block YAML (e.g. multi-line
+   *  `generation_notes: |` blocks on go.md), which would otherwise
+   *  cause the action-snippet gate to spuriously reject the file. */
+  private async fileType(file: TFile): Promise<string | null> {
+    const cached = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (cached && typeof cached.type === 'string') return cached.type;
+    try {
+      const content = await this.app.vault.cachedRead(file);
+      if (!content.startsWith('---')) return null;
+      const end = content.indexOf('\n---', 4);
+      if (end === -1) return null;
+      const fm = content.slice(0, end);
+      const m = fm.match(/^type:\s*["']?(\w+)["']?\s*$/m);
+      return m ? m[1] : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async render() {
     const root = this.contentEl;
     root.empty();
     root.addClass('forge-chips-view');
@@ -84,6 +110,31 @@ export class ChipsView extends ItemView {
         text:
           'No chips defined. Add a `_chips.md` data snippet to your ' +
           'vault to surface authoring chips here.',
+      });
+      return;
+    }
+
+    // Active-file gate: show a placeholder when the focused file
+    // isn't an action snippet, so chips aren't visible while editing
+    // README, _chips.md, or a plain note (where insertion wouldn't
+    // make sense). Uses the robust fileType() that falls back to
+    // vault.cachedRead — survives metadataCache mis-parses on
+    // multi-line YAML literal-block frontmatter.
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const target = active ?? this.lastMarkdownView;
+    const targetFile = target?.file;
+    if (!targetFile) {
+      root.createEl('p', {
+        cls: 'forge-chips-empty',
+        text: 'Open an action snippet to use chips.',
+      });
+      return;
+    }
+    const type = await this.fileType(targetFile);
+    if (type !== 'action') {
+      root.createEl('p', {
+        cls: 'forge-chips-empty',
+        text: 'Chips only insert into action snippets. Switch to an action snippet to use chips.',
       });
       return;
     }
@@ -149,9 +200,12 @@ export class ChipsView extends ItemView {
 
     // Action-snippet gate (per spec): chips only insert into snippets
     // whose frontmatter declares type: action. Data snippets / plain
-    // notes are off-limits.
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (fm?.type !== 'action') {
+    // notes are off-limits. Uses the robust fileType helper so a
+    // metadataCache mis-parse (e.g. on go.md's multi-line
+    // generation_notes literal block) falls back to a direct file
+    // read instead of trapping a real action snippet.
+    const type = await this.fileType(file);
+    if (type !== 'action') {
       new Notice('Chips only insert into action snippets.');
       return;
     }
