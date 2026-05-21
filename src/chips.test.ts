@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseChipsBody,
+  validateChipsList,
   mergeChipSources,
   insertChipText,
   CHIPS_NO_ENGLISH_SECTION,
@@ -53,12 +54,14 @@ test('parseChipsBody: entry missing insertion dropped', () => {
   assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Call a.' }]);
 });
 
-test('parseChipsBody: unknown fields tolerated and stripped', () => {
+test('parseChipsBody: refs preserved, other unknown fields stripped', () => {
+  // v2: `refs` is now a recognized optional field (preserved on the
+  // chip for future graph-view linking). Other fields stay stripped.
   const r = parseChipsBody(JSON.stringify([
     { label: 'a', insertion: 'Call a.', refs: ['x'], future: 42 },
   ]));
   assert.ok('chips' in r);
-  assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Call a.' }]);
+  assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Call a.', refs: ['x'] }]);
 });
 
 test('mergeChipSources: empty input → empty groups', () => {
@@ -133,4 +136,63 @@ test('insertChipText: insertion lands in English even when Python is longer', ()
   const idxIns = r.body.indexOf('NEW');
   const idxPy = r.body.indexOf('# Python');
   assert.ok(idxIns < idxPy && idxIns > r.body.indexOf('# English'));
+});
+
+
+// validateChipsList — exercises the pure validation directly on
+// already-decoded JS values. chips.ts's YAML decode path calls this
+// after parseYaml; these tests cover the shapes Tamar's _chips.md
+// can take without needing a YAML parser in the test process.
+
+test('validateChipsList: bare array (v1 shape) accepted', () => {
+  const r = validateChipsList([
+    { label: 'a', insertion: 'Call a.' },
+  ]);
+  assert.ok('chips' in r);
+  assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Call a.' }]);
+});
+
+test('validateChipsList: {chips: [...]} wrapper unwrapped (v2 YAML shape)', () => {
+  const r = validateChipsList({
+    chips: [{ label: 'a', insertion: 'Call a.' }],
+  });
+  assert.ok('chips' in r);
+  assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Call a.' }]);
+});
+
+test('validateChipsList: group field preserved', () => {
+  const r = validateChipsList([
+    { label: 'a', insertion: 'Call a.', group: 'Setup' },
+    { label: 'b', insertion: 'Call b.', group: 'Click' },
+  ]);
+  assert.ok('chips' in r);
+  assert.equal(r.chips[0].group, 'Setup');
+  assert.equal(r.chips[1].group, 'Click');
+});
+
+test('validateChipsList: refs preserved when present, dropped when malformed', () => {
+  const r = validateChipsList([
+    { label: 'a', insertion: 'Call a.', refs: ['x', 'y'] },
+    { label: 'b', insertion: 'Call b.', refs: [123, 'z'] },     // non-strings stripped
+    { label: 'c', insertion: 'Call c.', refs: 'not-an-array' }, // wrong shape dropped
+    { label: 'd', insertion: 'Call d.' },                       // no refs OK
+  ]);
+  assert.ok('chips' in r);
+  assert.deepEqual(r.chips[0].refs, ['x', 'y']);
+  assert.deepEqual(r.chips[1].refs, ['z']);
+  assert.equal(r.chips[2].refs, undefined);
+  assert.equal(r.chips[3].refs, undefined);
+});
+
+test('validateChipsList: non-array non-wrapped object → error', () => {
+  const r = validateChipsList({ label: 'a', insertion: 'x' });
+  assert.ok('error' in r);
+});
+
+test('validateChipsList: empty group string ignored (treats as no-group)', () => {
+  const r = validateChipsList([
+    { label: 'a', insertion: 'Call a.', group: '' },
+  ]);
+  assert.ok('chips' in r);
+  assert.equal(r.chips[0].group, undefined);
 });

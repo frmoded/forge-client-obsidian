@@ -5,6 +5,18 @@
 export interface Chip {
   label: string;
   insertion: string;
+  // Optional secondary grouping within a source vault. The view
+  // renders one sub-header per distinct `group` value, in
+  // first-appearance order. Chips with no `group` field cluster
+  // under an unlabeled sub-section. v2 forge-moda uses this to
+  // partition the 16-chip palette into Setup / Click / Go /
+  // Particle actions / Temperature.
+  group?: string;
+  // Optional list of snippet IDs the chip references. Tolerated by
+  // the parser, preserved on the Chip object, but unused by the
+  // view in v2 — reserved for future graph-view linking. Other
+  // unknown fields are tolerated and stripped.
+  refs?: string[];
 }
 
 export interface ChipsParseError {
@@ -16,27 +28,42 @@ export interface ChipPaletteGroup {
   chips: Chip[];
 }
 
-/** Parse a `_chips.md` JSON body. The body is expected to be a JSON
- *  array of objects with at least `label` and `insertion` (strings).
- *  Unknown fields are tolerated and stripped; malformed entries are
- *  dropped silently with a console warning (don't break a whole
- *  palette for one bad row). Returns either the chip list or a typed
- *  error if the body itself is not parseable / not an array. */
-export function parseChipsBody(
-  body: string,
+/** Validate an already-decoded chips list and return the typed
+ *  `Chip[]`. Accepts either a bare array (`[{label, insertion, ...},
+ *  ...]`) or an object with a `chips:` key wrapping the array (the
+ *  shape forge-moda's `_chips.md` uses in YAML). Per-entry: `label`
+ *  and `insertion` are required strings; `group` and `refs` are
+ *  preserved when present and well-typed; everything else is
+ *  tolerated and stripped (forward-compat). Malformed entries are
+ *  dropped silently with a console warning — one bad row doesn't
+ *  break the whole palette.
+ *
+ *  Pure (no obsidian / no I/O), so the chips test suite exercises
+ *  it directly. The Obsidian-coupled reader in chips.ts decodes the
+ *  format (JSON or YAML) and hands the result here. */
+export function validateChipsList(
+  decoded: unknown,
 ): { chips: Chip[] } | ChipsParseError {
-  let json: unknown;
-  try {
-    json = JSON.parse(body);
-  } catch (e) {
-    return { error: `chips JSON parse failed: ${(e as Error).message}` };
+  // Unwrap the `{chips: [...]}` wrapper if present. This is the
+  // shape the v2 spec uses for YAML readability; a bare array is
+  // also accepted (back-compat with the v1 single-chip JSON shape).
+  let list: unknown = decoded;
+  if (
+    list !== null && typeof list === 'object' && !Array.isArray(list) &&
+    Array.isArray((list as Record<string, unknown>).chips)
+  ) {
+    list = (list as Record<string, unknown>).chips;
   }
-  if (!Array.isArray(json)) {
-    return { error: `chips body must be a JSON array, got ${typeof json}` };
+  if (!Array.isArray(list)) {
+    return {
+      error:
+        `chips body must be a list or { chips: [...] }, got ${typeof decoded}`,
+    };
   }
+
   const chips: Chip[] = [];
-  for (let i = 0; i < json.length; i++) {
-    const raw = json[i];
+  for (let i = 0; i < list.length; i++) {
+    const raw = list[i];
     if (raw === null || typeof raw !== 'object') {
       console.warn(`Forge chips: entry [${i}] is not an object; dropping`);
       continue;
@@ -51,9 +78,33 @@ export function parseChipsBody(
         `Forge chips: entry [${i}] (${r.label}) missing string insertion; dropping`);
       continue;
     }
-    chips.push({ label: r.label, insertion: r.insertion });
+    const chip: Chip = { label: r.label, insertion: r.insertion };
+    if (typeof r.group === 'string' && r.group.length > 0) {
+      chip.group = r.group;
+    }
+    if (Array.isArray(r.refs)) {
+      const refs = r.refs.filter((x): x is string => typeof x === 'string');
+      if (refs.length > 0) chip.refs = refs;
+    }
+    chips.push(chip);
   }
   return { chips };
+}
+
+/** Convenience: parse a JSON-string body into a chip list. Same
+ *  validation as validateChipsList; just runs JSON.parse first.
+ *  Used by the test suite + by chips.ts when a `_chips.md` declares
+ *  `content_type: json`. */
+export function parseChipsBody(
+  body: string,
+): { chips: Chip[] } | ChipsParseError {
+  let json: unknown;
+  try {
+    json = JSON.parse(body);
+  } catch (e) {
+    return { error: `chips JSON parse failed: ${(e as Error).message}` };
+  }
+  return validateChipsList(json);
 }
 
 /** Merge per-source chip lists into the palette's display shape.

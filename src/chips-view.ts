@@ -94,16 +94,43 @@ export class ChipsView extends ItemView {
         text: group.sourceName,
         cls: 'forge-chips-group-header',
       });
-      const row = section.createDiv({ cls: 'forge-chip-row' });
+
+      // Sub-group by chip.group field. First-appearance order
+      // preserves the author's intended sequence in `_chips.md`.
+      // Chips with no `group` cluster under an unlabeled sub-section
+      // at the top, matching the v1 flat rendering when no chip
+      // declares a group.
+      const subGroups: Array<{ label: string | null; chips: typeof group.chips }> = [];
+      const seen = new Map<string, number>();
       for (const chip of group.chips) {
-        const btn = row.createEl('button', {
-          text: chip.label,
-          cls: 'forge-chip',
-        });
-        btn.setAttribute('aria-label', chip.insertion);
-        btn.addEventListener('click', () => {
-          void this.onChipClick(chip.insertion);
-        });
+        const key = chip.group ?? '';
+        let idx = seen.get(key);
+        if (idx === undefined) {
+          idx = subGroups.length;
+          seen.set(key, idx);
+          subGroups.push({ label: chip.group ?? null, chips: [] });
+        }
+        subGroups[idx].chips.push(chip);
+      }
+
+      for (const sub of subGroups) {
+        if (sub.label) {
+          section.createEl('h5', {
+            text: sub.label,
+            cls: 'forge-chips-subgroup-header',
+          });
+        }
+        const row = section.createDiv({ cls: 'forge-chip-row' });
+        for (const chip of sub.chips) {
+          const btn = row.createEl('button', {
+            text: chip.label,
+            cls: 'forge-chip',
+          });
+          btn.setAttribute('aria-label', chip.insertion);
+          btn.addEventListener('click', () => {
+            void this.onChipClick(chip.insertion);
+          });
+        }
       }
     }
   }

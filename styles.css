@@ -644,3 +644,13 @@
   font-weight: 500;
   margin-left: 0.4em;
 }
+
+/* Chips v2-full — sub-group headers within a source group, when
+   chips declare a `group` field (e.g. forge-moda's 16 chips split
+   into Setup / Click / Go / Particle actions / Temperature). */
+.forge-chips-view .forge-chips-subgroup-header {
+  margin: 0.6em 0 0.3em 0;
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--text-normal);
+}

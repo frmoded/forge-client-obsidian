@@ -160,12 +160,13 @@ const EDGES_BTN_CLASS = 'forge-edges-btn';
 const FORGE_BTN_CLASS = 'forge-forge-btn';
 const LOCK_BTN_CLASS = 'forge-lock-btn';
 const MODE_BTN_CLASS = 'forge-mode-btn';
-// CHIPS_BTN_CLASS used to live here for the per-snippet chip
-// toolbar icon. The chips-v2 follow-up retired that icon — chips
-// reach via the ribbon menu / Cmd+P. The class name is still listed
-// in the stale-button sweep selector below so users who upgrade
-// across the retirement get any leftover DOM elements cleaned up
-// on first plugin load.
+// Per-snippet chip toolbar icon. Retired in the chips-v2 follow-up
+// (e4ed813) and restored in chips v2-full per the user's choice —
+// some redundancy with the Forge-ribbon-menu "Open chips palette"
+// entry, but the per-snippet location keeps the affordance close to
+// where insertion lands. Gated on chipPalette.length > 0 so vaults
+// without `_chips.md` don't see a dead icon.
+const CHIPS_BTN_CLASS = 'forge-chips-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -459,11 +460,16 @@ export default class ForgePlugin extends Plugin {
 
     // Order matters: Obsidian's view.addAction PREPENDS — the most
     // recently added action renders leftmost. So to get the visual
-    // left-to-right order [Forge, New Snippet, (mode), edges] we add
-    // them in the REVERSE of that: edges first, then mode, New
-    // Snippet, and Forge LAST so it lands at the far left. The
-    // chip-palette icon was here too in chips-v2 but the v2 follow-up
-    // retired it — chips are reached via the ribbon menu and Cmd+P.
+    // left-to-right order [Forge, New Snippet, (mode), edges, chips]
+    // we add them in REVERSE: chips first (when the palette is
+    // non-empty), then edges, mode, New Snippet, and Forge LAST so
+    // it lands at the far left.
+    if (this.chipPalette.length > 0) {
+      const chipsBtn = view.addAction(
+        'puzzle', 'Forge: Open chips palette',
+        () => { this.openChipsView(); });
+      chipsBtn.addClass(CHIPS_BTN_CLASS);
+    }
     const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
     edgesBtn.addClass(EDGES_BTN_CLASS);
 
