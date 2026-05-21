@@ -180,29 +180,28 @@ export class ChipsView extends ItemView {
       return;
     }
 
-    // Active-file gate: show a placeholder when the focused file
-    // isn't an action snippet, so chips aren't visible while editing
-    // README, _chips.md, or a plain note (where insertion wouldn't
-    // make sense). Uses the robust fileType() that falls back to
-    // vault.cachedRead — survives metadataCache mis-parses on
-    // multi-line YAML literal-block frontmatter.
+    // Active-file gate: show a placeholder ONLY when we positively
+    // know the focused file isn't an action snippet (README,
+    // _chips.md, plain note). When no markdown view is focused —
+    // common right after a plugin reload, before the user clicks
+    // back into the editor — default to SHOWING chips. The click
+    // handler still enforces the action-snippet rule, so an early
+    // chip click without focus just bounces with a Notice. Earlier
+    // shape gated the pane in both cases, which trapped users
+    // post-reload with "Open an action snippet" and no clear
+    // recovery.
     const active = this.app.workspace.getActiveViewOfType(MarkdownView);
     const target = active ?? this.lastMarkdownView;
     const targetFile = target?.file;
-    if (!targetFile) {
-      root.createEl('p', {
-        cls: 'forge-chips-empty',
-        text: 'Open an action snippet to use chips.',
-      });
-      return;
-    }
-    const type = await this.fileType(targetFile);
-    if (type !== 'action') {
-      root.createEl('p', {
-        cls: 'forge-chips-empty',
-        text: 'Chips only insert into action snippets. Switch to an action snippet to use chips.',
-      });
-      return;
+    if (targetFile) {
+      const type = await this.fileType(targetFile);
+      if (type !== 'action') {
+        root.createEl('p', {
+          cls: 'forge-chips-empty',
+          text: 'Chips only insert into action snippets. Switch to an action snippet to use chips.',
+        });
+        return;
+      }
     }
 
     for (const group of this.groups) {
