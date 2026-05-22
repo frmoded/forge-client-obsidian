@@ -1081,20 +1081,40 @@ export default class ForgePlugin extends Plugin {
         return false;
       }
 
+      let response;
       try {
-        const result = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
-        console.log('Forge Generate Result:', result);
-        await this.writeGeneratedCode(result.generated);
-        if (!errorPrefix) {
-          new Notice(`Forge: ${Object.keys(result.generated).length} snippet(s) written.`);
-        }
-        return true;
+        response = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
       } catch (e) {
-        console.error('Forge Generate Error:', e);
+        // Reaches here only on transport-level failures (server
+        // unreachable, etc.) — the response itself uses throw:false
+        // so HTTP non-2xx flows through below.
+        console.error('Forge Generate Error (transport):', e);
         const detail = e instanceof Error ? e.message : String(e);
         new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: Generation failed — check console.');
         return false;
       }
+
+      if (response.status === 200) {
+        console.log('Forge Generate Result:', response.json);
+        await this.writeGeneratedCode(response.json.generated);
+        if (!errorPrefix) {
+          new Notice(`Forge: ${Object.keys(response.json.generated).length} snippet(s) written.`);
+        }
+        return true;
+      }
+
+      // Non-2xx path. The engine's /generate handler returns a
+      // structured `detail` body for known failure modes — most
+      // importantly, the 503/502 Anthropic-error path which carries
+      // `retryable: bool` so we can render an actionable Notice
+      // (transient → "try again", terminal → "fix and retry").
+      const detail = response.json?.detail;
+      const status = response.status;
+      console.error('Forge Generate Error:', { status, detail });
+      const noticeText = this.formatGenerateErrorNotice(
+        status, detail, errorPrefix);
+      new Notice(noticeText);
+      return false;
     } catch (outer) {
       console.error('Forge: unexpected error in generate', outer);
       const detail = outer instanceof Error ? outer.message : String(outer);
@@ -1103,6 +1123,31 @@ export default class ForgePlugin extends Plugin {
     } finally {
       modal.finish();
     }
+  }
+
+  // Format the user-facing Notice for a non-2xx /generate response.
+  // The engine's structured 503/502 path carries `{error, retryable,
+  // upstream_status, kind}` so we can say "LLM overloaded — try again"
+  // vs "auth error — fix the API key" rather than a generic
+  // "Generation failed." Everything else falls back to the generic
+  // shape so unstructured errors still surface a usable message.
+  private formatGenerateErrorNotice(
+    status: number,
+    detail: any,
+    errorPrefix?: string,
+  ): string {
+    const prefix = errorPrefix ?? 'Forge: Generation failed';
+    if (detail && typeof detail === 'object' && 'retryable' in detail) {
+      const { error, retryable, kind } = detail;
+      const tail = retryable
+        ? 'transient — try again in a moment.'
+        : 'not retryable — check API key / billing and retry.';
+      return `${prefix}: ${error ?? `Anthropic ${kind}`} (${tail})`;
+    }
+    if (typeof detail === 'string') {
+      return `${prefix}: ${detail}`;
+    }
+    return `${prefix}: HTTP ${status} — check console.`;
   }
 
   private async writeGeneratedCode(generated: Record<string, string>) {

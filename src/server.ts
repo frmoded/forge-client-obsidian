@@ -79,19 +79,31 @@ export async function freezeEdge(
   return { status: res.status, json: res.json };
 }
 
+export interface GenerateResponse {
+  status: number;
+  json: any;
+}
+
 export async function generateSnippet(
   serverUrl: string,
   vaultPath: string,
   snippetId: string,
-  recursive: boolean
-) {
+  recursive: boolean,
+): Promise<GenerateResponse> {
+  // Pass `throw: false` so non-2xx responses come back with their
+  // status + body intact instead of Obsidian's HTTP layer throwing
+  // a generic Error. The caller branches on status to render the
+  // right Notice — particularly for the 503/502 Anthropic-error
+  // path, where the engine's structured detail body carries a
+  // `retryable` flag the user wants to see.
   const res = await requestUrl({
     url: `${serverUrl}/generate`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId, recursive }),
+    throw: false,
   });
-  return res.json;
+  return { status: res.status, json: res.json };
 }
 
 export interface ComputeResponse {
