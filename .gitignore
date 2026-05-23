@@ -10,8 +10,11 @@ main.js
 # BRAT bundle these into the distribution zip from the local working
 # copy. Engine + vault content under assets/engine/ + assets/vaults/
 # ARE committed — they're plugin-owned text content.
+#
+# Pyodide WASM/JS/stdlib + numpy/pyyaml/micropip wheels all live in
+# assets/pyodide/ together (matches Pyodide's "full" distribution
+# layout; loadPackage resolves wheel URLs relative to indexURL).
 assets/pyodide/
-assets/wheels/
 # The combined manifest depends on which wheels are present after
 # setup-assets runs; regenerated on every build.
 assets/manifest.json

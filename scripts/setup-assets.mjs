@@ -64,8 +64,14 @@ console.log(`Pyodide core: ${CORE.length} files, ${(coreBytes / 1024 / 1024).toF
 // 3. Stock wheels (numpy + pyyaml + micropip). Pyodide caches these
 //    on first loadPackage call. If they're not present yet, warm by
 //    running a tiny Pyodide session.
+//
+//    Important: Pyodide's loadPackage resolves wheel URLs relative
+//    to the indexURL (i.e., assets/pyodide/). Wheels MUST live in
+//    that same directory, alongside pyodide-lock.json — not in a
+//    sibling `wheels/` dir. This matches Pyodide's official "full"
+//    distribution layout where pyodide.asm.* + python_stdlib.zip +
+//    every wheel live together.
 const WHEELS_NEEDED = ["numpy", "pyyaml", "micropip"];
-fs.mkdirSync(path.join(ASSETS, "wheels"), { recursive: true });
 
 function findWheel(name) {
   const all = fs.readdirSync(PYODIDE_NPM);
@@ -98,10 +104,10 @@ for (const name of WHEELS_NEEDED) {
     process.exit(1);
   }
   const src = path.join(PYODIDE_NPM, wheel);
-  fs.copyFileSync(src, path.join(ASSETS, "wheels", wheel));
+  fs.copyFileSync(src, path.join(ASSETS, "pyodide", wheel));
   wheelBytes += fs.statSync(src).size;
 }
-console.log(`Wheels: ${WHEELS_NEEDED.length} files, ${(wheelBytes / 1024 / 1024).toFixed(2)} MB`);
+console.log(`Wheels: ${WHEELS_NEEDED.length} files copied into assets/pyodide/, ${(wheelBytes / 1024 / 1024).toFixed(2)} MB`);
 
 // 4. Regenerate manifest (engine + vaults already committed; we just
 //    need the combined manifest fresh).
