@@ -188,10 +188,24 @@ export class ForgeModaView extends ItemView {
     error?: string,
   ): Promise<void> {
     const view = await this.getOrOpenOutputView();
+    // Belt-and-braces: getOrOpenOutputView force-materializes the
+    // view, but if Obsidian's deferred-view machinery still gives
+    // us a placeholder (unlikely after the materialize step), fall
+    // back to inlining the error/stdout as a regular append. Better
+    // a missing red-styled error band than a hard TypeError.
     if (error) {
-      view.appendError(snippetId, error, stdout);
+      if (typeof (view as unknown as { appendError?: unknown }).appendError === 'function') {
+        view.appendError(snippetId, error, stdout);
+      } else {
+        const body = stdout ? `[error] ${error}\n${stdout}` : `[error] ${error}`;
+        view.append?.(snippetId, body, null);
+      }
     } else {
-      view.append(snippetId, stdout, result);
+      if (typeof (view as unknown as { append?: unknown }).append === 'function') {
+        view.append(snippetId, stdout, result);
+      } else {
+        console.error('Forge: OutputView.append not available; compute-result lost', { snippetId });
+      }
     }
   }
 
@@ -200,10 +214,25 @@ export class ForgeModaView extends ItemView {
    *  owner, but this view doesn't have a handle to it and replicating
    *  the few lines is cleaner than wiring an injection. Picks the
    *  right-leaf convention to match the open-on-demand UX everywhere
-   *  else in the plugin. */
+   *  else in the plugin.
+   *
+   *  Obsidian lazy-loads leaves from prior sessions: leaf.view is a
+   *  DeferredView placeholder until the leaf is activated or its
+   *  view is explicitly loaded. The placeholder doesn't have
+   *  ForgeOutputView's subclass methods (append, appendError), so a
+   *  naive cast → method call throws "not a function". We
+   *  force-materialize by calling setViewState with the same type;
+   *  Obsidian then swaps in the real ForgeOutputView instance. */
   private async getOrOpenOutputView(): Promise<ForgeOutputView> {
     const existing = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
-    if (existing) return existing.view as ForgeOutputView;
+    if (existing) {
+      if (!(existing.view instanceof ForgeOutputView)) {
+        // Deferred view — force load by re-asserting the view state.
+        await existing.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
+      }
+      this.app.workspace.revealLeaf(existing);
+      return existing.view as ForgeOutputView;
+    }
     const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
     await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);

@@ -240,6 +240,7 @@ import uuid
 from forge.core.snippet_registry import SnippetRegistry
 from forge.core.graph_resolver import GraphResolver
 from forge.core.executor import extract_python, exec_python
+from forge.core.serialization import serialize_result
 
 _forge_vault_registries = {}
 
@@ -274,9 +275,20 @@ def _forge_run_snippet(snippet_id: str, args, vault_name: str):
 
 def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
     """Phase 1 entry point — kept for backward compat. inputs is the
-    second positional in the old signature; we forward through."""
+    second positional in the old signature; we forward through.
+
+    Mirrors the HTTP /compute endpoint's serialize_result step:
+    raw Python return values (ParticleState dataclasses, music21
+    Streams, etc.) become wire-shape dicts like
+    {type: "moda_sim_state", content: {tick, particles: [...]}}.
+    Without this, raw dataclasses leak through Pyodide's toJs as
+    non-cloneable PyProxies, breaking the iframe's postMessage
+    relay AND the structured rendering in Forge Output."""
     _ = inputs
-    stdout, result = _forge_run_snippet(snippet_id, args, vault_name)
+    reg, resolver = _forge_get_resolver(vault_name)
+    snip = resolver.resolve(snippet_id)
+    stdout, raw_result = _forge_run_snippet(snippet_id, args, vault_name)
+    result = serialize_result(raw_result, snip)
     return result, stdout
 
 # ---- Moda live-loop helpers (Phase 2) ---------------------------
