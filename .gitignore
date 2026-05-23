@@ -5,16 +5,11 @@ main.js
 .claude/
 .hotreload
 
-# Pyodide binary assets — populated by `npm run setup-assets`. Kept
-# out of git history (large + externally sourced). Release builds for
-# BRAT bundle these into the distribution zip from the local working
-# copy. Engine + vault content under assets/engine/ + assets/vaults/
-# ARE committed — they're plugin-owned text content.
+# Pyodide binary assets (assets/pyodide/) ARE committed for BRAT
+# distribution — Tamar's closed-beta audience can't run terminal
+# commands post-install. `npm run setup-assets` is still useful for
+# re-populating after Pyodide version upgrades. ~14.6 MB in repo.
 #
-# Pyodide WASM/JS/stdlib + numpy/pyyaml/micropip wheels all live in
-# assets/pyodide/ together (matches Pyodide's "full" distribution
-# layout; loadPackage resolves wheel URLs relative to indexURL).
-assets/pyodide/
-# The combined manifest depends on which wheels are present after
-# setup-assets runs; regenerated on every build.
+# The combined asset manifest regenerates on every `npm run build`
+# (paths depend on which wheels are present); stays gitignored.
 assets/manifest.json
