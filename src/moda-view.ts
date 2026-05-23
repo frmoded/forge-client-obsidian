@@ -1,4 +1,5 @@
 import { ItemView, TFile, WorkspaceLeaf } from 'obsidian';
+import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 
 export const MODA_VIEW_TYPE = 'forge-moda';
 
@@ -37,22 +38,75 @@ export class ForgeModaView extends ItemView {
     iframe.style.display = 'block';
     this.iframeEl = iframe;
 
-    // Featured-snippet discovery handshake. The iframe posts
-    // `{type:'iframe-ready'}` on mount; we respond with the
-    // discovery info. Done as a handshake (not a fixed-delay post)
-    // because the iframe's React mount + useEffect registration
-    // happens AFTER the iframe `load` event, and a too-early post
-    // would arrive before the listener attached. The iframe's
-    // listener also ignores duplicates safely (single setState).
+    // Featured-snippet discovery handshake + compute-result relay.
+    // Two message types arrive from the iframe on this channel:
+    //   - `iframe-ready` (sent on mount) — we respond with the
+    //     featured-snippet discovery info. Done as a handshake
+    //     because the iframe's React mount + useEffect listener
+    //     registration happens AFTER the iframe `load` event; a
+    //     too-early post would arrive before the listener attached.
+    //   - `compute-result` (sent after a featured-button click) —
+    //     we forward snippet_id + stdout + result into Forge Output
+    //     via OutputView.append(). This is the plugin-side half of
+    //     the unify-stdout-sink wiring: featured-button stdout no
+    //     longer lands on the floor.
+    // Both filter on `e.source === iframeEl.contentWindow` to drop
+    // stray cross-frame messages from other Obsidian content.
     this.readyListener = (e: MessageEvent) => {
-      const data = e.data;
-      if (!data || data.type !== 'iframe-ready') return;
-      // Confirm the message actually came from our iframe — drops
-      // any stray cross-frame messages from other Obsidian content.
       if (e.source !== this.iframeEl?.contentWindow) return;
-      void this.postFeaturedSnippet();
+      const data = e.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'iframe-ready') {
+        void this.postFeaturedSnippet();
+        return;
+      }
+      if (data.type === 'compute-result'
+          && typeof data.snippet_id === 'string') {
+        void this.relayComputeResult(
+          data.snippet_id,
+          typeof data.stdout === 'string' ? data.stdout : '',
+          data.result,
+          typeof data.error === 'string' ? data.error : undefined,
+        );
+      }
     };
     window.addEventListener('message', this.readyListener);
+  }
+
+  /** Forward a compute-result from the iframe into Forge Output. Mirrors
+   *  the convention of `getOutputView` in main.ts — open the output
+   *  panel on demand if none is present, then append. Errors get
+   *  routed through appendError; otherwise the success append carries
+   *  the stdout + structured result for OutputView.renderResult to
+   *  pick its renderer (raw JSON fallback for `moda_sim_state` today;
+   *  the canvas in the iframe is the visual surface for that shape). */
+  private async relayComputeResult(
+    snippetId: string,
+    stdout: string,
+    result: unknown,
+    error?: string,
+  ): Promise<void> {
+    const view = await this.getOrOpenOutputView();
+    if (error) {
+      view.appendError(snippetId, error, stdout);
+    } else {
+      view.append(snippetId, stdout, result);
+    }
+  }
+
+  /** Resolve or open the Forge Output view. Replicates main.ts's
+   *  `getOutputView` shape — the plugin's main class is the canonical
+   *  owner, but this view doesn't have a handle to it and replicating
+   *  the few lines is cleaner than wiring an injection. Picks the
+   *  right-leaf convention to match the open-on-demand UX everywhere
+   *  else in the plugin. */
+  private async getOrOpenOutputView(): Promise<ForgeOutputView> {
+    const existing = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
+    if (existing) return existing.view as ForgeOutputView;
+    const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
+    this.app.workspace.revealLeaf(leaf);
+    return leaf.view as ForgeOutputView;
   }
 
   /** Advance the embedded simulator one tick. The React app listens for
