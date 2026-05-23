@@ -128,17 +128,50 @@ export class PyodideHost {
     const t0 = performance.now();
     console.log("Forge: initializing Pyodide…");
 
-    // Load Pyodide's bootstrap. The package ships `pyodide.mjs` (ESM)
-    // and `pyodide.asm.js` (UMD). We dynamic-import the ESM build
-    // from the local plugin URL.
-    const pyodideJsUrl = this.pluginAssetUrl("pyodide/pyodide.mjs");
+    // Obsidian's Electron renderer exposes `process.versions.node`
+    // (Node integration is enabled), which trips Pyodide's
+    // environment detection — Pyodide's check is
+    //   typeof process.versions.node == "string" && !process.browser
+    // and it then tries `await import("node:url")` to load Node's
+    // filesystem helpers. The renderer's CORS layer blocks `node:`
+    // URLs ("only chrome, chrome-extension, data, http, https
+    // schemes are supported"), so the load fails.
+    //
+    // Fix: set `process.browser = true` for the duration of the
+    // Pyodide module evaluation. That flips Pyodide's IN_NODE
+    // constant to false → it takes the browser code path (MEMFS,
+    // fetch-based asset loading) — exactly what we want anyway,
+    // since we mount everything via FS.writeFile after init.
+    //
+    // IN_NODE is computed once at module evaluation, so we only
+    // need `process.browser` truthy during the import + loadPyodide
+    // call. We restore the original value in finally so unrelated
+    // code that inspects `process.browser` isn't affected.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pyodideModule: any = await import(/* @vite-ignore */ pyodideJsUrl);
-    const loadPyodide = pyodideModule.loadPyodide;
+    const proc = (globalThis as any).process;
+    const hadBrowser = proc && Object.prototype.hasOwnProperty.call(proc, "browser");
+    const prevBrowser = proc?.browser;
+    if (proc) proc.browser = true;
 
-    const indexURL = this.pluginAssetUrl("pyodide/");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pyodide: PyodideInstance = await loadPyodide({ indexURL });
+    let pyodide: PyodideInstance;
+    try {
+      // Load Pyodide's bootstrap. The package ships `pyodide.mjs` (ESM)
+      // and `pyodide.asm.js` (UMD). We dynamic-import the ESM build
+      // from the local plugin URL.
+      const pyodideJsUrl = this.pluginAssetUrl("pyodide/pyodide.mjs");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pyodideModule: any = await import(/* @vite-ignore */ pyodideJsUrl);
+      const loadPyodide = pyodideModule.loadPyodide;
+
+      const indexURL = this.pluginAssetUrl("pyodide/");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pyodide = await loadPyodide({ indexURL });
+    } finally {
+      if (proc) {
+        if (hadBrowser) proc.browser = prevBrowser;
+        else delete proc.browser;
+      }
+    }
     console.log(`Forge: Pyodide loaded in ${(performance.now() - t0).toFixed(0)}ms`);
 
     // Fetch the asset manifest to know what to mount.
