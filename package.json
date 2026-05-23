@@ -4,9 +4,11 @@
   "description": "Obsidian client for Forge.",
   "main": "main.js",
   "scripts": {
-    "build": "npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --format=cjs --outfile=main.js",
+    "build": "npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --format=cjs --outfile=main.js && node scripts/copy-assets.mjs",
     "dev": "npm run build -- --watch",
-    "test": "node --test src/*.test.ts"
+    "test": "node --test src/*.test.ts",
+    "build-manifest": "node scripts/build-manifest.mjs",
+    "setup-assets": "node scripts/setup-assets.mjs"
   },
   "keywords": [],
   "author": "Oded Fuhrmann",

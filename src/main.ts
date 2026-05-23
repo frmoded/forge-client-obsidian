@@ -11,7 +11,8 @@ import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
-import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies, canonicalizeSnippet } from './server';
+import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost } from './server';
+import { PyodideHost } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
@@ -205,6 +206,13 @@ export default class ForgePlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+
+    // V1 Phase 1: wire the Pyodide host. Lazy init — actual Pyodide
+    // load only happens on the first computeSnippet call for a
+    // bundled-library snippet. Per V1 architecture, plugin (not
+    // iframe) is the Pyodide host.
+    const pyodideHost = new PyodideHost(this.app, this.manifest.id);
+    setPyodideHost(pyodideHost);
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));

@@ -4,3 +4,14 @@ main.js
 .gitkeep
 .claude/
 .hotreload
+
+# Pyodide binary assets — populated by `npm run setup-assets`. Kept
+# out of git history (large + externally sourced). Release builds for
+# BRAT bundle these into the distribution zip from the local working
+# copy. Engine + vault content under assets/engine/ + assets/vaults/
+# ARE committed — they're plugin-owned text content.
+assets/pyodide/
+assets/wheels/
+# The combined manifest depends on which wheels are present after
+# setup-assets runs; regenerated on every build.
+assets/manifest.json
