@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "html-midi-player": "^1.6.0",
+    "pyodide": "^0.29.4",
     "verovio": "^6.1.0"
   }
 }

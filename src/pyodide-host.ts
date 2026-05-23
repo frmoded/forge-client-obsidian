@@ -58,6 +58,28 @@ export interface ComputeResult {
   stdout: string;
 }
 
+/** Wire shape returned by moda init / compute — matches the existing
+ *  /moda/init and /moda/compute HTTP responses so the iframe's adapter
+ *  consumers don't need to change. The simState carries the per-row
+ *  particle list (id/type/x/y/mass); headings/speeds stay internal in
+ *  the Python-side ParticleState. */
+export interface ModaInitResult {
+  sessionId: string;
+  state: { tick: number; particles: Array<{ id: number; type: string; x: number; y: number; mass: string }> };
+  config: { width: number; height: number; temperatureLevels: ["zero", "low", "medium", "high"] };
+  stdout: string;
+}
+
+export interface ModaComputeResult {
+  state: { tick: number; particles: Array<{ id: number; type: string; x: number; y: number; mass: string }> };
+  stdout: string;
+}
+
+export interface ModaClickResult {
+  ack: true;
+  stdout: string;
+}
+
 interface AssetManifest {
   pyodide: string[];
   wheels: string[];
@@ -151,11 +173,16 @@ export class PyodideHost {
     console.log(`Forge: bundle mounted in ${(performance.now() - t0).toFixed(0)}ms`);
 
     // Engine on sys.path; build the resolver per bundled vault.
+    // Also inject the moda-specific helpers that maintain ParticleState
+    // in Python globals between engine-request round-trips (Phase 2):
+    // state never crosses the JS↔Python boundary; only its wire
+    // serialization (the per-row Particle list) does.
     pyodide.runPython(`
 import sys
 sys.path.insert(0, "/bundle/engine")
 
 import io
+import uuid
 from forge.core.snippet_registry import SnippetRegistry
 from forge.core.graph_resolver import GraphResolver
 from forge.core.executor import extract_python, exec_python
@@ -169,14 +196,17 @@ def _forge_get_resolver(vault_name: str):
         _forge_vault_registries[vault_name] = (reg, GraphResolver(reg))
     return _forge_vault_registries[vault_name]
 
-def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
+def _forge_run_snippet(snippet_id: str, args, vault_name: str):
+    """Run a snippet and return (stdout, result). Action and data
+    snippets dispatch via the same path the engine's /compute endpoint
+    uses internally."""
     reg, resolver = _forge_get_resolver(vault_name)
     snip = resolver.resolve(snippet_id)
     snippet_type = snip.get("meta", {}).get("type")
     if snippet_type == "action":
         code = extract_python(snip["body"])
         stdout, result = exec_python(
-            code, inputs, resolver, args=tuple(args),
+            code, {}, resolver, args=tuple(args),
             vault_path=f"/bundle/vaults/{vault_name}",
             registry=reg, snippet_id=snip["snippet_id"],
         )
@@ -186,7 +216,86 @@ def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
         stdout = ""
     else:
         raise ValueError(f"unknown snippet type '{snippet_type}' for {snippet_id!r}")
+    return stdout, result
+
+def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
+    """Phase 1 entry point — kept for backward compat. inputs is the
+    second positional in the old signature; we forward through."""
+    _ = inputs
+    stdout, result = _forge_run_snippet(snippet_id, args, vault_name)
     return result, stdout
+
+# ---- Moda live-loop helpers (Phase 2) ---------------------------
+# State lives in Python globals between engine-request calls. The
+# wire serializer (_forge_moda_state_to_wire) mirrors
+# forge.api.moda._serialize_particles: per-row Particle dicts, with
+# heading/speed/width/height intentionally absent from the wire view.
+
+_forge_moda_state = None      # ParticleState dataclass instance, or None until init
+_forge_moda_session_id = None
+
+def _forge_moda_state_to_wire(state):
+    """Mirror of forge.api.moda._serialize_particles."""
+    ids = state.ids
+    types = state.types
+    xs = state.xs
+    ys = state.ys
+    masses = state.masses
+    particles = [
+        {
+            "id": int(ids[i]),
+            "type": str(types[i]),
+            "x": float(xs[i]),
+            "y": float(ys[i]),
+            "mass": str(masses[i]),
+        }
+        for i in range(int(ids.shape[0]))
+    ]
+    return {"tick": int(state.tick), "particles": particles}
+
+def _forge_moda_init():
+    """Run setup("medium") to produce the initial ParticleState. Same
+    initial-temperature convention as forge.api.moda._init's hardcoded
+    "medium" (the slider's value takes over on the first compute)."""
+    global _forge_moda_state, _forge_moda_session_id
+    stdout, state = _forge_run_snippet("setup", ("medium",), "forge-moda")
+    _forge_moda_state = state
+    _forge_moda_session_id = uuid.uuid4().hex
+    return {
+        "sessionId": _forge_moda_session_id,
+        "state": _forge_moda_state_to_wire(state),
+        "config": {
+            "width": int(state.width),
+            "height": int(state.height),
+            "temperatureLevels": ["zero", "low", "medium", "high"],
+        },
+        "stdout": stdout,
+    }
+
+def _forge_moda_compute(dt, temperature):
+    """Run go(state, dt, temperature). Mirrors forge.api.moda.compute."""
+    global _forge_moda_state
+    if _forge_moda_state is None:
+        raise RuntimeError("moda-compute called before moda-init")
+    stdout, new_state = _forge_run_snippet(
+        "go", (_forge_moda_state, dt, temperature), "forge-moda",
+    )
+    _forge_moda_state = new_state
+    return {
+        "state": _forge_moda_state_to_wire(new_state),
+        "stdout": stdout,
+    }
+
+def _forge_moda_click(x, y):
+    """Run on_mouse_click(state, x, y). Mirrors forge.api.moda.click."""
+    global _forge_moda_state
+    if _forge_moda_state is None:
+        raise RuntimeError("moda-click called before moda-init")
+    stdout, new_state = _forge_run_snippet(
+        "on_mouse_click", (_forge_moda_state, x, y), "forge-moda",
+    )
+    _forge_moda_state = new_state
+    return {"ack": True, "stdout": stdout}
 `);
     console.log(`Forge: engine ready in ${(performance.now() - t0).toFixed(0)}ms`);
 
@@ -210,9 +319,13 @@ def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
   }
 }
 
-/** The handle returned by `PyodideHost.getInstance()`. */
+/** The handle returned by `PyodideHost.getInstance()`. Generic compute
+ *  + the moda fast-path live here; Phase 2 added the moda methods. */
 export interface PyodideHostInstance {
   computeViaEngine(snippet_id: string, args: unknown[], vault_name: string): Promise<ComputeResult>;
+  modaInit(): Promise<ModaInitResult>;
+  modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
+  modaClick(x: number, y: number): Promise<ModaClickResult>;
 }
 
 class PyodideHostInstanceImpl implements PyodideHostInstance {
@@ -222,33 +335,78 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
     this.pyodide = pyodide;
   }
 
+  /** Generic compute via the engine's resolver + executor. Used by
+   *  the plugin's Forge-click paths (Phase 1) and the iframe's
+   *  featured-button via engine-request op="compute" (Phase 2). */
   async computeViaEngine(snippet_id: string, args: unknown[], vault_name: string): Promise<ComputeResult> {
-    // Marshal args + inputs through Pyodide's JS↔Python bridge. The
-    // engine's exec_python accepts a tuple of positionals and a dict
-    // of kwargs; we pass empty inputs for now (Phase 1 just exercises
-    // the positional-args path).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set("_forge_args_in", args as any);
     this.pyodide.globals.set("_forge_snippet_id", snippet_id);
     this.pyodide.globals.set("_forge_vault_name", vault_name);
-
     const tuple = this.pyodide.runPython(`
 _forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_name)
 `);
-    // tuple is a PyProxy of (result, stdout). Convert to plain JS.
     const result = tuple.get(0);
     const stdout = tuple.get(1);
-    // PyProxies for non-primitive results need explicit toJs(); strings come through.
-    let resultJs: unknown = result;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (result && typeof (result as any).toJs === "function") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      resultJs = (result as any).toJs({ dict_converter: Object.fromEntries });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (result as any).destroy?.();
-    }
+    const resultJs = this._unwrap(result);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tuple.destroy?.();
     return { result: resultJs, stdout: String(stdout ?? "") };
   }
+
+  /** Moda fast-path: setup → ParticleState stored in Python globals;
+   *  return the wire-shape init response. Mirrors the existing
+   *  /moda/init HTTP response so the iframe consumer doesn't change. */
+  async modaInit(): Promise<ModaInitResult> {
+    const proxy = this.pyodide.runPython(`_forge_moda_init()`);
+    return this._unwrap(proxy) as ModaInitResult;
+  }
+
+  /** Moda fast-path: go(state, dt, temperature). State is read +
+   *  updated in Python globals; only the wire-shape result crosses
+   *  the JS boundary. */
+  async modaCompute(dt: number, temperature: string): Promise<ModaComputeResult> {
+    this.pyodide.globals.set("_forge_in_dt", dt);
+    this.pyodide.globals.set("_forge_in_temperature", temperature);
+    const proxy = this.pyodide.runPython(`_forge_moda_compute(_forge_in_dt, _forge_in_temperature)`);
+    return this._unwrap(proxy) as ModaComputeResult;
+  }
+
+  /** Moda fast-path: on_mouse_click(state, x, y). Updates state in
+   *  Python globals; returns the ack envelope. */
+  async modaClick(x: number, y: number): Promise<ModaClickResult> {
+    this.pyodide.globals.set("_forge_in_x", x);
+    this.pyodide.globals.set("_forge_in_y", y);
+    const proxy = this.pyodide.runPython(`_forge_moda_click(_forge_in_x, _forge_in_y)`);
+    return this._unwrap(proxy) as ModaClickResult;
+  }
+
+  /** Convert a Pyodide PyProxy to a plain JS value, destroying the
+   *  proxy to release the Python-side reference. Primitives pass
+   *  through unchanged; dicts come out as plain Objects. */
+  private _unwrap(value: unknown): unknown {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const v = value as any;
+    if (v && typeof v.toJs === "function") {
+      const out = v.toJs({ dict_converter: Object.fromEntries });
+      v.destroy?.();
+      return out;
+    }
+    return value;
+  }
+}
+
+// Module-level singleton accessor — mirror of the existing setter
+// pattern in server.ts. main.ts constructs the host once on plugin
+// onload and calls setPyodideHost; moda-view.ts reaches for it via
+// getPyodideHost() rather than threading the plugin instance through
+// the ItemView constructor.
+let _moduleSingleton: PyodideHost | null = null;
+
+export function setPyodideHostSingleton(host: PyodideHost | null): void {
+  _moduleSingleton = host;
+}
+
+export function getPyodideHost(): PyodideHost | null {
+  return _moduleSingleton;
 }

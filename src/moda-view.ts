@@ -1,23 +1,48 @@
 import { ItemView, TFile, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
+import { getPyodideHost } from './pyodide-host';
+import type { ForgeSettings } from './settings';
 
 export const MODA_VIEW_TYPE = 'forge-moda';
 
-// TODO: surface the iframe URL as a plugin setting once forge-moda-client is
-// hosted somewhere other than the local Vite dev server.
-const MODA_CLIENT_URL = 'http://localhost:5173';
+// V1 Phase 2: iframe loads from the plugin's bundled assets by
+// default; the `useDevIframe` setting flips to the Vite dev server
+// for iterative iframe development.
+const DEV_IFRAME_URL = 'http://localhost:5173';
 
 interface FeaturedSnippet {
   snippet_id: string;
   label: string;
 }
 
+// Settings accessor injected by main.ts via the registerView factory.
+// Kept narrow (just the fields moda-view actually uses) so we don't
+// need a circular import on the full plugin instance.
+type ModaViewDeps = {
+  getSettings: () => ForgeSettings;
+  pluginId: string;
+};
+
 export class ForgeModaView extends ItemView {
   private iframeEl: HTMLIFrameElement | null = null;
   private readyListener: ((e: MessageEvent) => void) | null = null;
+  private deps: ModaViewDeps;
 
-  constructor(leaf: WorkspaceLeaf) {
+  constructor(leaf: WorkspaceLeaf, deps: ModaViewDeps) {
     super(leaf);
+    this.deps = deps;
+  }
+
+  /** Resolve the iframe source: dev (Vite at localhost:5173) when
+   *  the `useDevIframe` setting is on, else the bundled iframe from
+   *  the plugin's installed assets. */
+  private iframeSrc(): string {
+    if (this.deps.getSettings().useDevIframe) {
+      return DEV_IFRAME_URL;
+    }
+    const relpath = `.obsidian/plugins/${this.deps.pluginId}/assets/iframe/index.html`;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (this.app.vault.adapter as any).getResourcePath(relpath);
   }
 
   getViewType() { return MODA_VIEW_TYPE; }
@@ -31,7 +56,7 @@ export class ForgeModaView extends ItemView {
     container.style.overflow = 'hidden';
 
     const iframe = container.createEl('iframe');
-    iframe.src = MODA_CLIENT_URL;
+    iframe.src = this.iframeSrc();
     iframe.style.width = '100%';
     iframe.style.height = '100%';
     iframe.style.border = 'none';
@@ -68,9 +93,85 @@ export class ForgeModaView extends ItemView {
           data.result,
           typeof data.error === 'string' ? data.error : undefined,
         );
+        return;
+      }
+      // V1 Phase 2: iframe sends engine-request for /moda/* and the
+      // generic /compute path. Dispatch via the plugin-side Pyodide
+      // host; reply with engine-response carrying the matching
+      // request_id.
+      if (data.type === 'engine-request'
+          && typeof data.request_id === 'string'
+          && typeof data.op === 'string') {
+        void this.handleEngineRequest(
+          data.request_id,
+          data.op,
+          Array.isArray(data.args) ? data.args : [],
+          typeof data.vault_name === 'string' ? data.vault_name : undefined,
+        );
       }
     };
     window.addEventListener('message', this.readyListener);
+  }
+
+  /** Dispatch a single engine-request via the plugin's Pyodide host,
+   *  then postMessage the result back to the iframe's contentWindow
+   *  with the matching request_id. State for moda-compute / moda-click
+   *  lives in Pyodide globals (per-instance) between calls — the
+   *  iframe's adapter passes only dt/temperature and x/y; the Python
+   *  side reads + updates `_forge_moda_state`. */
+  private async handleEngineRequest(
+    requestId: string,
+    op: string,
+    args: unknown[],
+    vault_name: string | undefined,
+  ): Promise<void> {
+    const respond = (resp: { ok: boolean; result?: unknown; error?: string }) => {
+      this.iframeEl?.contentWindow?.postMessage(
+        { type: 'engine-response', request_id: requestId, ...resp },
+        '*',
+      );
+    };
+    try {
+      const hostManager = getPyodideHost();
+      if (!hostManager) {
+        throw new Error('Pyodide host not initialized');
+      }
+      const host = await hostManager.getInstance();
+      let result: unknown;
+      switch (op) {
+        case 'moda-init':
+          result = await host.modaInit();
+          break;
+        case 'moda-compute': {
+          const [dt, temperature] = args as [number, string];
+          result = await host.modaCompute(dt, temperature);
+          break;
+        }
+        case 'moda-click': {
+          const [x, y] = args as [number, number];
+          result = await host.modaClick(x, y);
+          break;
+        }
+        case 'compute': {
+          const [snippet_id] = args as [string];
+          const r = await host.computeViaEngine(
+            snippet_id, [], vault_name ?? 'forge-moda',
+          );
+          // Shape to match the existing GenericComputeResponse the
+          // iframe's computeSnippet consumer expects.
+          result = { type: 'action', result: r.result, stdout: r.stdout };
+          break;
+        }
+        default:
+          throw new Error(`unknown engine-request op: ${op}`);
+      }
+      respond({ ok: true, result });
+    } catch (e) {
+      respond({
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 
   /** Forward a compute-result from the iframe into Forge Output. Mirrors

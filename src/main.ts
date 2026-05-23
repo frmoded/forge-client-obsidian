@@ -12,7 +12,7 @@ import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
 import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost } from './server';
-import { PyodideHost } from './pyodide-host';
+import { PyodideHost, setPyodideHostSingleton } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
@@ -210,14 +210,20 @@ export default class ForgePlugin extends Plugin {
     // V1 Phase 1: wire the Pyodide host. Lazy init — actual Pyodide
     // load only happens on the first computeSnippet call for a
     // bundled-library snippet. Per V1 architecture, plugin (not
-    // iframe) is the Pyodide host.
+    // iframe) is the Pyodide host. Phase 2 also routes the iframe's
+    // /moda/* and /compute requests through here via engine-request
+    // postMessages (see moda-view.ts).
     const pyodideHost = new PyodideHost(this.app, this.manifest.id);
     setPyodideHost(pyodideHost);
+    setPyodideHostSingleton(pyodideHost);
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
     this.registerView(EDGES_VIEW_TYPE, leaf => new ForgeEdgesView(leaf, () => this.settings.serverUrl));
-    this.registerView(MODA_VIEW_TYPE, leaf => new ForgeModaView(leaf));
+    this.registerView(MODA_VIEW_TYPE, leaf => new ForgeModaView(leaf, {
+      getSettings: () => this.settings,
+      pluginId: this.manifest.id,
+    }));
     this.registerView(CHIPS_VIEW_TYPE, leaf =>
       new ChipsView(leaf, this.chipsHost()));
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
