@@ -102,13 +102,34 @@ export class PyodideHost {
   }
 
   /** Resolve a plugin asset path (relative to assets/) to a URL the
-   *  browser can fetch. Uses Obsidian's `getResourcePath`. */
+   *  browser can fetch. Uses Obsidian's `getResourcePath`, with the
+   *  cache-busting query string stripped.
+   *
+   *  Why strip the query: Obsidian's `getResourcePath` appends
+   *  `?<timestamp>` for cache invalidation. That's fine for one-shot
+   *  fetches, but Pyodide's `loadPyodide({indexURL})` concatenates
+   *  the indexURL with subsequent filenames (e.g.,
+   *  `pyodide-lock.json`, `pyodide.asm.wasm`). The result becomes
+   *  `assets/pyodide/?TIMESTAMP/pyodide-lock.json` — and Obsidian's
+   *  URL resolver treats everything after `?` as the query string,
+   *  so the actual fetched path becomes `assets/pyodide/` (a
+   *  directory), returning 404. Pyodide can't load its lockfile,
+   *  stdlib, or wasm.
+   *
+   *  Solution: strip the query. Pyodide's URL concatenation then
+   *  produces clean paths like `assets/pyodide/pyodide-lock.json`.
+   *  The cache-buster's only job was cache invalidation; for our
+   *  static read-only assets that's not needed (plugin reload
+   *  rebuilds the bundle anyway). */
   private pluginAssetUrl(relpath: string): string {
     // Plugin install location: <vault>/.obsidian/plugins/<plugin-id>/
     // assets/ sits next to main.js inside that directory.
     const vaultPath = `.obsidian/plugins/${this.pluginId}/assets/${relpath}`;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this.app.vault.adapter as any).getResourcePath(vaultPath);
+    const fullUrl: string = (this.app.vault.adapter as any).getResourcePath(vaultPath);
+    // Strip everything from the first `?` onward — the cache-buster.
+    const q = fullUrl.indexOf("?");
+    return q >= 0 ? fullUrl.slice(0, q) : fullUrl;
   }
 
   /** Initialize Pyodide if not already done, then return the host handle. */
