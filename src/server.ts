@@ -2,56 +2,19 @@ import { Notice, requestUrl } from 'obsidian';
 import { spawn } from 'child_process';
 import type { PyodideHost } from './pyodide-host';
 
-// V1 Phase 1: plugin-side Pyodide host for engine-compute paths.
+// V1: plugin-side Pyodide host for engine-compute paths.
 // Set once at plugin init (main.ts wires it). When non-null, the
-// engine-compute path (`computeSnippet` below) prefers Pyodide over
-// HTTP for the bundled forge-moda library. LLM endpoints
-// (/generate, /canonicalize), iframe endpoints (/moda/*), and
-// freeze/sync_dependencies/connect stay on the HTTP path for now —
-// Phase 2 routes /moda/*, the transpile-service prompt routes
-// /generate, and freeze/sync_dependencies are moved in a follow-up
-// because they need the same vault-resolution decision as compute.
+// engine-compute path (`computeSnippet` below) routes every snippet
+// resolution through Pyodide against the mounted user-vault. The
+// resolver's A4 + A5.1 handles user shadows vs. bundled libraries.
+// HTTP fallback remains in place for the case where Pyodide isn't
+// wired yet (defensive) and for endpoints we haven't migrated:
+// LLM-driven (/generate, /canonicalize), freeze/sync_dependencies/
+// connect — those stay on uvicorn until follow-up prompts.
 let _pyodideHost: PyodideHost | null = null;
-const BUNDLED_LIBRARY = 'forge-moda';  // The only library V1 Phase 1 ships.
 
 export function setPyodideHost(host: PyodideHost | null): void {
   _pyodideHost = host;
-}
-
-/** Heuristic: should this snippet be resolved against the bundled
- *  Pyodide library? V1 Phase 1 answers yes if the snippet ID matches
- *  a known bundled moda snippet basename. Anything else falls
- *  through to HTTP for compatibility with user-vault snippets that
- *  the user authored in their own vault root. This intentionally
- *  drops user-shadowing of moda library snippets — a documented V1
- *  Phase 1 regression; see prompt 0800 feedback for the rationale. */
-const _BUNDLED_MODA_SNIPPETS = new Set<string>([
-  // Auto-generated from `ls assets/vaults/forge-moda/*.md` at the
-  // time of V1 Phase 1 bundling (forge-moda v0.4.16). Update by
-  // re-running `npm run build-manifest` + lifting this list when the
-  // bundled vault version changes.
-  'ask_all_particles', 'ask_water_particles', 'bounce_off_particle',
-  'bounce_off_wall', 'create_ink_particles', 'create_water_particles',
-  'go', 'if_particle_then_bounce', 'if_temp_high_set_speed',
-  'if_temp_low_set_speed', 'if_temp_medium_set_speed',
-  'if_temp_zero_set_speed', 'if_wall_then_bounce', 'interact',
-  'move', 'on_mouse_click', 'sample_clicks', 'sample_state',
-  'set_ink_mass', 'set_ink_speed', 'set_speed_high',
-  'set_speed_low', 'set_speed_medium', 'set_speed_zero',
-  'set_water_mass', 'set_water_speed', 'setup', 'simulation',
-  'speed_for_temperature',
-]);
-
-function _isBundledLibrarySnippet(snippetId: string): boolean {
-  // Snippet IDs in plugin code take the form "snippet_name" (just
-  // the basename, no path). Engine-side qualified IDs like
-  // "forge-moda/setup" would also resolve, but the plugin's call
-  // sites pass basenames. Drop a leading "forge-moda/" prefix if
-  // present for robustness.
-  const bare = snippetId.startsWith('forge-moda/')
-    ? snippetId.slice('forge-moda/'.length)
-    : snippetId;
-  return _BUNDLED_MODA_SNIPPETS.has(bare);
 }
 
 export interface ConnectResponse {
@@ -171,21 +134,20 @@ export async function computeSnippet(
   args: unknown[] = [],
   inputs: Record<string, unknown> = {}
 ): Promise<ComputeResponse> {
-  // V1 Phase 1: route bundled-library compute through Pyodide. Falls
-  // through to the HTTP path when (a) no Pyodide host is wired or
-  // (b) the snippet isn't a bundled moda snippet (e.g., a user-
-  // authored snippet in their own vault root, or any future library
-  // that hasn't been bundled yet).
-  if (_pyodideHost && _isBundledLibrarySnippet(snippetId)) {
+  // V1: every compute routes through Pyodide. The mounted user-vault
+  // contains the user's authoring snippets + bundled libraries as
+  // subdirectories, so A4 resolves shadows naturally. HTTP fallback
+  // only fires when no Pyodide host is wired (defensive — main.ts
+  // wires one on plugin onload).
+  if (_pyodideHost) {
     try {
       const host = await _pyodideHost.getInstance();
-      const out = await host.computeViaEngine(snippetId, args, BUNDLED_LIBRARY);
+      // vault_name is vestigial under the single-user-vault model
+      // but kept on the API surface for the iframe's engine-request
+      // dispatch shape. Any value works; the Python side ignores it.
+      const out = await host.computeViaEngine(snippetId, args, '');
       // Shape the response to match the existing /compute return
       // contract (status + json envelope, json carries result + stdout).
-      // The engine's /compute server returns `{type, result, stdout}`
-      // for generic action snippets; the plugin's downstream code
-      // tolerates the simpler `{result, stdout}` we emit here. See
-      // main.ts's compute-result handlers.
       return {
         status: 200,
         json: {
@@ -207,9 +169,8 @@ export async function computeSnippet(
     }
   }
 
-  // HTTP fallback — user-vault snippets, non-bundled libraries, or
-  // any path that needs the running uvicorn (today: anything not
-  // bundled, until follow-up prompts widen the Pyodide scope).
+  // HTTP fallback — fires when Pyodide isn't yet initialized.
+  // Pre-V1 code path; rarely hit in production.
   const res = await requestUrl({
     url: `${serverUrl}/compute`,
     method: 'POST',

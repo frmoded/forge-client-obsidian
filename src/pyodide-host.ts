@@ -34,6 +34,21 @@
 
 import type { App } from "obsidian";
 
+// V1 user-vault mount: bundled-library subdirectory names. Files
+// under these top-level directories in the user's vault are SKIPPED
+// when mounting into MEMFS — the plugin ships its own trusted copy
+// of each library, and the user's local install (e.g., a stale
+// version from a prior `Forge: install …`) is intentionally
+// ignored. Bundled wins. Add new libraries here when Phase 3+ ship
+// (forge-music is next).
+const BUNDLED_LIBRARY_NAMES = new Set<string>(["forge-moda"]);
+
+// Frontmatter `type:` values that mark a file as a Forge snippet
+// rather than a plain note. The resolver only registers files whose
+// type is one of these; we mirror that filter at mount time to
+// avoid uselessly streaming plain notes into MEMFS.
+const FORGE_SNIPPET_TYPES = new Set<string>(["action", "data", "snapshot"]);
+
 // Pyodide's runtime type isn't exported as a clean public type; the
 // loader returns an `any`-ish object. We narrow what we touch.
 export interface PyodideInstance {
@@ -206,10 +221,24 @@ export class PyodideHost {
     await pyodide.loadPackage(["numpy", "pyyaml", "micropip"]);
     console.log(`Forge: stock packages loaded in ${(performance.now() - t0).toFixed(0)}ms`);
 
-    // Mount the engine + vaults into MEMFS.
+    // Mount the engine + user vault + bundled libraries into MEMFS.
+    //
+    // V1 layout (post-shadow-fix):
+    //   /bundle/engine/                  forge.core.* + forge.moda.types
+    //   /bundle/user-vault/              user's active vault (root only)
+    //     forge.toml                     user's deps declaration
+    //     <user shadows>.md              user's authoring snippets at root
+    //     forge-moda/                    BUNDLED library (NOT user's local copy)
+    //       setup.md, go.md, ...
+    //
+    // The user-vault is the resolver's authoring vault. A4 + A5.1
+    // resolve shadows naturally: a user's root-level shadow takes
+    // precedence over the bundled library subdirectory copy. The
+    // user's OWN forge-moda/ subdir (if they have one from a stale
+    // /install) is intentionally skipped — V1 ships self-contained.
     pyodide.FS.mkdir("/bundle");
     pyodide.FS.mkdir("/bundle/engine");
-    pyodide.FS.mkdir("/bundle/vaults");
+    pyodide.FS.mkdir("/bundle/user-vault");
     for (const relpath of manifest.engine) {
       // relpath is e.g. "engine/forge/core/executor.py"
       const url = this.pluginAssetUrl(relpath);
@@ -217,13 +246,60 @@ export class PyodideHost {
       this._mkdirP(pyodide, "/bundle/" + relpath);
       pyodide.FS.writeFile("/bundle/" + relpath, bytes);
     }
+
+    // Step 1: walk the user's active vault. Filter to Forge-shaped
+    // markdown files (frontmatter `type: action | data | snapshot`).
+    // Skip files under bundled-library subdirs — those would shadow
+    // the trusted bundled copy below.
+    //
+    // The metadata cache is populated by the time the first compute
+    // request fires (this _init is lazy; plugin onload + layout-ready
+    // settle long before the user clicks anything). If a stragglers
+    // file's frontmatter isn't yet in the cache it gets skipped this
+    // session; iframe reload picks it up next time.
+    const userFiles = this.app.vault.getMarkdownFiles();
+    let userMounted = 0;
+    for (const file of userFiles) {
+      const topDir = file.path.split("/")[0];
+      if (BUNDLED_LIBRARY_NAMES.has(topDir)) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const fm: any = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      if (!fm || !FORGE_SNIPPET_TYPES.has(fm.type)) continue;
+      const content = await this.app.vault.read(file);
+      const target = "/bundle/user-vault/" + file.path;
+      this._mkdirP(pyodide, target);
+      pyodide.FS.writeFile(target, content);
+      userMounted++;
+    }
+
+    // Step 2: mount user's forge.toml if present. The resolver reads
+    // this for `domains` declarations, which gate which prompt-
+    // fragment library is available to snippet generation. Optional —
+    // missing forge.toml is fine for compute-only V1 paths.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const adapter = this.app.vault.adapter as any;
+      if (await adapter.exists?.("forge.toml")) {
+        const toml = await adapter.read("forge.toml");
+        pyodide.FS.writeFile("/bundle/user-vault/forge.toml", toml);
+      }
+    } catch (e) {
+      console.warn("Forge: could not read forge.toml from user vault", e);
+    }
+
+    // Step 3: mount bundled libraries (forge-moda for V1) as
+    // subdirectories of the user-vault. Each `manifest.vaults` entry
+    // is "vaults/<lib>/<file>"; we rewrite to "user-vault/<lib>/<file>"
+    // so A5.1's library-subdir convention finds them under the
+    // authoring vault root.
     for (const relpath of manifest.vaults) {
-      // relpath is e.g. "vaults/forge-moda/simulation.md"
+      const targetRel = relpath.replace(/^vaults\//, "user-vault/");
       const url = this.pluginAssetUrl(relpath);
       const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
-      this._mkdirP(pyodide, "/bundle/" + relpath);
-      pyodide.FS.writeFile("/bundle/" + relpath, bytes);
+      this._mkdirP(pyodide, "/bundle/" + targetRel);
+      pyodide.FS.writeFile("/bundle/" + targetRel, bytes);
     }
+    console.log(`Forge: user vault mounted (${userMounted} files; edits require iframe reload).`);
     console.log(`Forge: bundle mounted in ${(performance.now() - t0).toFixed(0)}ms`);
 
     // Engine on sys.path; build the resolver per bundled vault.
@@ -242,16 +318,27 @@ from forge.core.graph_resolver import GraphResolver
 from forge.core.executor import extract_python, exec_python
 from forge.core.serialization import serialize_result
 
-_forge_vault_registries = {}
+# V1 user-vault model: single registry against /bundle/user-vault/.
+# That directory holds the user's authoring snippets at the root +
+# bundled libraries (forge-moda for V1) as subdirectories. A4 + A5.1
+# handle shadow resolution: user's root-level overrides bundled
+# library subdir; bundled subdir is the fall-through for anything
+# the user didn't shadow.
+_forge_user_vault = "/bundle/user-vault"
+_forge_registry = SnippetRegistry()
+_forge_registry.scan(_forge_user_vault)
+_forge_resolver = GraphResolver(_forge_registry)
 
-def _forge_get_resolver(vault_name: str):
-    if vault_name not in _forge_vault_registries:
-        reg = SnippetRegistry()
-        reg.scan(f"/bundle/vaults/{vault_name}")
-        _forge_vault_registries[vault_name] = (reg, GraphResolver(reg))
-    return _forge_vault_registries[vault_name]
+def _forge_get_resolver(vault_name=None):
+    """vault_name is vestigial — kept for backward compat in
+    moda-view.ts's engine-request dispatch, but V1's single
+    user-vault registry handles everything. A4 resolves qualified
+    ('forge-moda/setup') and unqualified ('setup') snippet IDs
+    naturally; we always return the same registry+resolver pair."""
+    _ = vault_name
+    return _forge_registry, _forge_resolver
 
-def _forge_run_snippet(snippet_id: str, args, vault_name: str):
+def _forge_run_snippet(snippet_id: str, args, vault_name=None):
     """Run a snippet and return (stdout, result). Action and data
     snippets dispatch via the same path the engine's /compute endpoint
     uses internally."""
@@ -262,7 +349,7 @@ def _forge_run_snippet(snippet_id: str, args, vault_name: str):
         code = extract_python(snip["body"])
         stdout, result = exec_python(
             code, {}, resolver, args=tuple(args),
-            vault_path=f"/bundle/vaults/{vault_name}",
+            vault_path=_forge_user_vault,
             registry=reg, snippet_id=snip["snippet_id"],
         )
     elif snippet_type in ("data", "snapshot"):
@@ -322,9 +409,13 @@ def _forge_moda_state_to_wire(state):
 def _forge_moda_init():
     """Run setup("medium") to produce the initial ParticleState. Same
     initial-temperature convention as forge.api.moda._init's hardcoded
-    "medium" (the slider's value takes over on the first compute)."""
+    "medium" (the slider's value takes over on the first compute).
+
+    Resolves 'setup' via A4 against /bundle/user-vault/ — finds the
+    bundled forge-moda copy, OR a user shadow at vault root if the
+    student has authored one."""
     global _forge_moda_state, _forge_moda_session_id
-    stdout, state = _forge_run_snippet("setup", ("medium",), "forge-moda")
+    stdout, state = _forge_run_snippet("setup", ("medium",))
     _forge_moda_state = state
     _forge_moda_session_id = uuid.uuid4().hex
     return {
@@ -344,7 +435,7 @@ def _forge_moda_compute(dt, temperature):
     if _forge_moda_state is None:
         raise RuntimeError("moda-compute called before moda-init")
     stdout, new_state = _forge_run_snippet(
-        "go", (_forge_moda_state, dt, temperature), "forge-moda",
+        "go", (_forge_moda_state, dt, temperature),
     )
     _forge_moda_state = new_state
     return {
@@ -358,7 +449,7 @@ def _forge_moda_click(x, y):
     if _forge_moda_state is None:
         raise RuntimeError("moda-click called before moda-init")
     stdout, new_state = _forge_run_snippet(
-        "on_mouse_click", (_forge_moda_state, x, y), "forge-moda",
+        "on_mouse_click", (_forge_moda_state, x, y),
     )
     _forge_moda_state = new_state
     return {"ack": True, "stdout": stdout}
