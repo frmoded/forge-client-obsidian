@@ -163,11 +163,16 @@ export class ForgeOutputView extends ItemView {
   append(snippetId: string, stdout: string, result: unknown) {
     const entry = this.makeEntry(snippetId);
 
+    // A6 ordering: rendered return value on top, stdout text log below.
+    // Stdout is the secondary band — print()-style debug output sits
+    // under the result rather than above it so a glance lands on the
+    // computed value first. Stdout block only renders when non-empty
+    // (a snippet that prints nothing shouldn't bloat the panel).
+    this.renderResult(entry, result, snippetId);
+
     if (stdout) {
       entry.createEl('pre', { text: stdout, cls: 'forge-output-stdout' });
     }
-
-    this.renderResult(entry, result, snippetId);
 
     // Offer "Save as data snippet" only when the result is something we know
     // how to capture — tagged musicxml/svg, plain string, or any
