@@ -329,12 +329,17 @@ _forge_registry = SnippetRegistry()
 _forge_registry.scan(_forge_user_vault)
 
 # Ensure bundled-library subdirs are reachable via bare-snippet
-# resolution. _auto_set_resolution_order reads the user-vault's
-# forge.toml; when that's absent (vault has no declared deps), the
-# order falls back to [authoring, forge (built-in)] and the
-# library subdirs the resolver DID register under their own vault
-# name become unreachable for bare lookups. Mirrors the JS-side
-# BUNDLED_LIBRARY_NAMES (kept hand-synced; one source).
+# resolution. The registry's _scan_library_vault DOES register
+# bundled-library snippets under their own vault name, but
+# _auto_set_resolution_order reads the AUTHORING vault's forge.toml
+# to populate the search order — and when that's absent (a brand-new
+# user vault with no declared deps), the order falls back to
+# [authoring, forge (built-in)] and the library subdirs are
+# unreachable for bare lookups.
+#
+# This list mirrors the JS-side BUNDLED_LIBRARY_NAMES (kept
+# hand-synced; one source of truth per language). When Phase 3
+# ships music, add "forge-music" here AND in the JS-side constant.
 _BUNDLED_LIBRARIES_V1 = ["forge-moda"]
 _existing_order = [v for v in _forge_registry.resolution_order() if v != "forge"]
 for _lib in _BUNDLED_LIBRARIES_V1:
