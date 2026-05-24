@@ -327,6 +327,21 @@ from forge.core.serialization import serialize_result
 _forge_user_vault = "/bundle/user-vault"
 _forge_registry = SnippetRegistry()
 _forge_registry.scan(_forge_user_vault)
+
+# Ensure bundled-library subdirs are reachable via bare-snippet
+# resolution. _auto_set_resolution_order reads the user-vault's
+# forge.toml; when that's absent (vault has no declared deps), the
+# order falls back to [authoring, forge (built-in)] and the
+# library subdirs the resolver DID register under their own vault
+# name become unreachable for bare lookups. Mirrors the JS-side
+# BUNDLED_LIBRARY_NAMES (kept hand-synced; one source).
+_BUNDLED_LIBRARIES_V1 = ["forge-moda"]
+_existing_order = [v for v in _forge_registry.resolution_order() if v != "forge"]
+for _lib in _BUNDLED_LIBRARIES_V1:
+    if _lib not in _existing_order:
+        _existing_order.append(_lib)
+_forge_registry.set_resolution_order(_existing_order)
+
 _forge_resolver = GraphResolver(_forge_registry)
 
 def _forge_get_resolver(vault_name=None):
