@@ -13,3 +13,7 @@ main.js
 # The combined asset manifest regenerates on every `npm run build`
 # (paths depend on which wheels are present); stays gitignored.
 assets/manifest.json
+
+# Release zips for V1 distribution; produced by `npm run release-zip`.
+# Upload to GitHub Releases manually per V1 closed-beta workflow.
+dist/

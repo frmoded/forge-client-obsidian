@@ -8,13 +8,15 @@
     "dev": "npm run build -- --watch",
     "test": "node --test src/*.test.ts",
     "build-manifest": "node scripts/build-manifest.mjs",
-    "setup-assets": "node scripts/setup-assets.mjs"
+    "setup-assets": "node scripts/setup-assets.mjs",
+    "release-zip": "node scripts/build-release-zip.mjs"
   },
   "keywords": [],
   "author": "Oded Fuhrmann",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^16.11.6",
+    "archiver": "^8.0.0",
     "builtin-modules": "3.3.0",
     "esbuild": "0.17.3",
     "obsidian": "latest",
