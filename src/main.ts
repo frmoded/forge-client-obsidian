@@ -762,6 +762,14 @@ export default class ForgePlugin extends Plugin {
   // engine owns the authoritative parse); any miss falls back to
   // null = "all domains" so we never hide commands by accident.
   private async loadActiveDomains() {
+    // Absent forge.toml is the common case for student vaults that
+    // haven't run `Forge: install` — silent fall-through to back-compat
+    // "all domains" without alarming Console noise. Distinguish from
+    // "present but unreadable" below, which IS a real error worth logging.
+    if (!(await this.app.vault.adapter.exists('forge.toml'))) {
+      this.activeDomains = null;
+      return;
+    }
     try {
       const raw = await this.app.vault.adapter.read('forge.toml');
       // Match `domains = [ ... ]` (single- or multi-line array body).
@@ -773,7 +781,7 @@ export default class ForgePlugin extends Plugin {
       const names = Array.from(m[1].matchAll(/["']([^"']+)["']/g)).map(x => x[1]);
       this.activeDomains = new Set(names); // possibly empty = core-only
     } catch (e) {
-      // No forge.toml / unreadable → back-compat "all", don't crash.
+      // forge.toml present but read/parse failed → real error.
       console.warn('Forge: could not read forge.toml domains; registering all commands', e);
       this.activeDomains = null;
     }
