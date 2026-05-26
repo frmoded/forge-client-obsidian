@@ -360,7 +360,14 @@ _forge_resolver = GraphResolver(_forge_registry)
 # in the engine repo. anthropic_client.build_user_prompt in the
 # forge-transpile repo consumes the resulting payload. Re-vendor when
 # any of those drift.
-_FORGE_ID_CHARS = r"[\w./-]+"
+# NOTE: every regex backslash below is intentionally doubled. This
+# Python source lives inside a JS template literal — V8 strips
+# unrecognized escape sequences (backslash-w to w, backslash-[ to [,
+# backslash-quote to plain quote), which both corrupts regex metachars
+# silently AND prematurely terminates f-strings whose escaped quote
+# vanishes. Fix is JS-side: write two backslashes in the source so
+# Python receives one. Keep every metachar double-escaped if you edit.
+_FORGE_ID_CHARS = r"[\\w./-]+"
 
 def _forge_find_deps(body: str):
     """Mirror of forge.core.llm._find_deps. Walks the snippet body for
@@ -369,13 +376,13 @@ def _forge_find_deps(body: str):
     deps = []
     seen = set()
     for m in _forge_re.finditer(
-        rf'\[\[({_FORGE_ID_CHARS})(?:\|[^\]]*)?\]\]', body or ""
+        rf'\\[\\[({_FORGE_ID_CHARS})(?:\\|[^\\]]*)?\\]\\]', body or ""
     ):
         dep = m.group(1).strip()
         if dep and dep not in seen:
             deps.append(dep); seen.add(dep)
     for m in _forge_re.finditer(
-        rf'context\.compute\(\s*["\']({_FORGE_ID_CHARS})["\']', body or ""
+        rf'context\\.compute\\(\\s*["\\']({_FORGE_ID_CHARS})["\\']', body or ""
     ):
         dep = m.group(1).strip()
         if dep and dep not in seen:
