@@ -313,9 +313,10 @@ sys.path.insert(0, "/bundle/engine")
 
 import io
 import uuid
+import re as _forge_re
 from forge.core.snippet_registry import SnippetRegistry
 from forge.core.graph_resolver import GraphResolver
-from forge.core.executor import extract_python, exec_python
+from forge.core.executor import extract_python, exec_python, extract_section
 from forge.core.serialization import serialize_result
 
 # V1 user-vault model: single registry against /bundle/user-vault/.
@@ -348,6 +349,78 @@ for _lib in _BUNDLED_LIBRARIES_V1:
 _forge_registry.set_resolution_order(_existing_order)
 
 _forge_resolver = GraphResolver(_forge_registry)
+
+# V1 α: hosted /generate inventory helper. The hosted transpile service
+# is stateless — the plugin posts a materialized snippet inventory so
+# the service builds the same prompt the engine's _build_prompt would
+# construct locally. This mirror lives close to the resolver because
+# it needs the same registry the engine compute path uses.
+#
+# Source of truth on the JS side: forge.core.llm._find_deps + _build_prompt
+# in the engine repo. anthropic_client.build_user_prompt in the
+# forge-transpile repo consumes the resulting payload. Re-vendor when
+# any of those drift.
+_FORGE_ID_CHARS = r"[\w./-]+"
+
+def _forge_find_deps(body: str):
+    """Mirror of forge.core.llm._find_deps. Walks the snippet body for
+    [[wikilinks]] and context.compute("id") calls, returns the deduped
+    list of referenced snippet IDs in first-seen order."""
+    deps = []
+    seen = set()
+    for m in _forge_re.finditer(
+        rf'\[\[({_FORGE_ID_CHARS})(?:\|[^\]]*)?\]\]', body or ""
+    ):
+        dep = m.group(1).strip()
+        if dep and dep not in seen:
+            deps.append(dep); seen.add(dep)
+    for m in _forge_re.finditer(
+        rf'context\.compute\(\s*["\']({_FORGE_ID_CHARS})["\']', body or ""
+    ):
+        dep = m.group(1).strip()
+        if dep and dep not in seen:
+            deps.append(dep); seen.add(dep)
+    return deps
+
+def _forge_get_generate_inventory(snippet_id: str):
+    """Materialize the inventory α's POST /generate consumes. Plain-dict
+    return shape — structured-clone-safe across the JS↔Python bridge.
+
+    Field-by-field parity with what the engine's _build_prompt would
+    assemble from its own VaultSessionManager:
+      - snippet_id, description, inputs, generation_notes: from meta
+      - english: from the snippet body's '# English' section (mirror of
+        forge.core.executor.extract_section, which lives in the bundled
+        engine and is imported above)
+      - deps: extracted from the existing body via _forge_find_deps,
+        then each dep's description + inputs read from the resolver
+    active_domains is populated JS-side (from settings/forge.toml) and
+    appended to the payload before POST; not included here."""
+    snip = _forge_resolver.resolve(snippet_id)
+    meta = snip.get("meta") or {}
+    body = snip.get("body", "") or ""
+    dep_ids = _forge_find_deps(body)
+    dep_infos = []
+    for dep_id in dep_ids:
+        try:
+            dep_snip = _forge_resolver.resolve(dep_id)
+        except Exception:
+            # Dangling ref — skip rather than fail the whole request.
+            continue
+        dep_meta = dep_snip.get("meta") or {}
+        dep_infos.append({
+            "snippet_id": dep_id,
+            "description": (dep_meta.get("description") or "").strip(),
+            "inputs": [str(i) for i in (dep_meta.get("inputs") or [])],
+        })
+    return {
+        "snippet_id": snippet_id,
+        "description": (meta.get("description") or "").strip(),
+        "english": extract_section(body, "english") or "",
+        "inputs": [str(i) for i in (meta.get("inputs") or [])],
+        "generation_notes": (meta.get("generation_notes") or "").strip(),
+        "deps": dep_infos,
+    }
 
 def _forge_get_resolver(vault_name=None):
     """vault_name is vestigial — kept for backward compat in
@@ -496,13 +569,30 @@ def _forge_moda_click(x, y):
   }
 }
 
+/** Materialized inventory the hosted α `/generate` consumes. Plugin
+ *  builds this from the local Pyodide registry; service uses it to
+ *  construct the same prompt the engine's _build_prompt would. */
+export interface GenerateInventory {
+  snippet_id: string;
+  description: string;
+  english: string;
+  inputs: string[];
+  generation_notes: string;
+  deps: Array<{ snippet_id: string; description: string; inputs: string[] }>;
+}
+
 /** The handle returned by `PyodideHost.getInstance()`. Generic compute
- *  + the moda fast-path live here; Phase 2 added the moda methods. */
+ *  + the moda fast-path live here; Phase 2 added the moda methods;
+ *  v0.2.4 added `getGenerateInventory` for the hosted /generate swap. */
 export interface PyodideHostInstance {
   computeViaEngine(snippet_id: string, args: unknown[], vault_name: string): Promise<ComputeResult>;
   modaInit(): Promise<ModaInitResult>;
   modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
   modaClick(x: number, y: number): Promise<ModaClickResult>;
+  /** Materialize the per-snippet inventory the hosted α service needs.
+   *  Resolves the snippet via the in-Pyodide engine resolver — same
+   *  A4 shadow + A5.1 library-subdir rules as the local compute path. */
+  getGenerateInventory(snippet_id: string): Promise<GenerateInventory>;
 }
 
 class PyodideHostInstanceImpl implements PyodideHostInstance {
@@ -556,6 +646,16 @@ _forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_n
     this.pyodide.globals.set("_forge_in_y", y);
     const proxy = this.pyodide.runPython(`_forge_moda_click(_forge_in_x, _forge_in_y)`);
     return this._unwrap(proxy) as ModaClickResult;
+  }
+
+  /** v0.2.4 α swap: materialize the snippet inventory the hosted
+   *  /generate consumes. Goes through the same engine resolver the
+   *  local compute path uses, so A4 shadows + A5.1 library subdirs
+   *  resolve correctly. */
+  async getGenerateInventory(snippet_id: string): Promise<GenerateInventory> {
+    this.pyodide.globals.set("_forge_gen_id", snippet_id);
+    const proxy = this.pyodide.runPython(`_forge_get_generate_inventory(_forge_gen_id)`);
+    return this._unwrap(proxy) as GenerateInventory;
   }
 
   /** Convert a Pyodide PyProxy to a plain JS value, destroying the

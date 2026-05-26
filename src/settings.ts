@@ -9,12 +9,20 @@ export interface ForgeSettings {
   // development. Defaults to false (production: load the bundled
   // iframe from the plugin's installed assets/iframe/).
   useDevIframe: boolean;
+  // V1 α (v0.2.4): hosted /generate endpoint. The plugin no longer
+  // proxies to the local engine for transpilation — it POSTs to a
+  // hosted service that holds the Anthropic key server-side. Single
+  // shared secret per closed-beta cohort; per-user tokens are v1.1.
+  transpileServiceUrl: string;
+  transpileServiceToken: string;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
   serverUrl: 'http://localhost:8000',
   isPythonFacet: false,
   useDevIframe: false,
+  transpileServiceUrl: 'https://forge.thecodingarena.com',
+  transpileServiceToken: '',
 };
 
 export class ForgeSettingTab extends PluginSettingTab {
@@ -29,9 +37,63 @@ export class ForgeSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
+    // --- Transpile service (hosted /generate) ---------------------
+    // First section — the token field is the one thing students must
+    // configure post-install before /generate works.
+    containerEl.createEl('h3', { text: 'Transpile service' });
+
+    new Setting(containerEl)
+      .setName('Transpile service URL')
+      .setDesc(
+        'Hosted /generate endpoint. Default is the seminar service. '
+        + 'Change only if pointing at a different α instance '
+        + '(e.g. http://localhost:8001 for local α dev).'
+      )
+      .addText(text =>
+        text
+          .setPlaceholder('https://forge.thecodingarena.com')
+          .setValue(this.plugin.settings.transpileServiceUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.transpileServiceUrl = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Transpile service token')
+      .setDesc(
+        'Paste the auth token you received by email. Required for '
+        + 'English → Python transpilation. Stored locally in this '
+        + "vault's plugin data; never shared except as the "
+        + 'Authorization header on /generate requests.'
+      )
+      .addText(text => {
+        text
+          .setPlaceholder('paste token here')
+          .setValue(this.plugin.settings.transpileServiceToken)
+          .onChange(async (value) => {
+            this.plugin.settings.transpileServiceToken = value.trim();
+            await this.plugin.saveSettings();
+          });
+        // Mask the input. The underlying element is a standard
+        // HTMLInputElement; type='password' works directly.
+        text.inputEl.type = 'password';
+        text.inputEl.autocomplete = 'off';
+        text.inputEl.spellcheck = false;
+      });
+
+    // --- Local engine (dev, secondary endpoints) ------------------
+    containerEl.createEl('h3', { text: 'Local engine (dev)' });
+
     new Setting(containerEl)
       .setName('Server URL')
-      .setDesc('URL of the Forge server.')
+      .setDesc(
+        'URL of the local Forge engine. Used by /canonicalize and '
+        + '/sync_dependencies (non-/generate endpoints). V1 plugin '
+        + "uses Pyodide for compute and the transpile service above "
+        + 'for /generate — this field only matters if you run the '
+        + 'local engine for those secondary endpoints.'
+      )
       .addText(text =>
         text
           .setPlaceholder('http://localhost:8000')

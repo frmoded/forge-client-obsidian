@@ -11,8 +11,9 @@ import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
-import { ensureServerRunning, computeSnippet, connectVault, generateSnippet, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost } from './server';
-import { PyodideHost, setPyodideHostSingleton } from './pyodide-host';
+import { ensureServerRunning, computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost } from './server';
+import type { AlphaGenerateRequest } from './server';
+import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
@@ -403,7 +404,7 @@ export default class ForgePlugin extends Plugin {
             return;
           }
         }
-        this.generate(true);
+        this.generate();
       },
     });
 
@@ -1065,17 +1066,22 @@ export default class ForgePlugin extends Plugin {
       await this.runSnippet('Forge failed during execution');
       return;
     }
-    const ok = await this.generate(true, 'Forge failed during generation');
+    const ok = await this.generate('Forge failed during generation');
     if (!ok) return;
     await this.runSnippet('Forge failed during execution');
   }
 
-  // Returns true on success. When errorPrefix is set (forge flow), error
-  // notices use the prefix and include the actual error message; the success
-  // notice is suppressed so the caller can show its own. When errorPrefix is
-  // unset (standalone command), notices follow the existing "check console"
-  // convention.
-  private async generate(recursive: boolean, errorPrefix?: string): Promise<boolean> {
+  // v0.2.4 α swap: /generate now POSTs to the hosted transpile
+  // service instead of the local engine. The plugin materializes the
+  // snippet inventory via Pyodide (same resolver the engine uses) and
+  // sends it in the body. Recursive walks are dropped — single
+  // snippet per call; the plugin can be enhanced later to walk
+  // dependencies client-side if needed.
+  //
+  // Returns true on success. errorPrefix is set by the Forge-button
+  // flow (so notices read "Forge failed during generation: …" rather
+  // than the standalone "check console" voice).
+  private async generate(errorPrefix?: string): Promise<boolean> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       new Notice('No active note to generate.');
@@ -1083,58 +1089,103 @@ export default class ForgePlugin extends Plugin {
     }
 
     const snippetId = view.file.basename;
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
-    console.log('Forge: generate', { recursive, snippetId, vaultPath });
+    const settings = this.settings;
 
-    const modal = new ForgeGenerationModal(
-      this.app,
-      recursive ? `Forging ${snippetId}…` : `Hammering ${snippetId}…`,
-    );
+    // Fail-fast on empty token: actionable Notice without spending a
+    // network round-trip discovering a 401.
+    if (!settings.transpileServiceToken) {
+      const msg = 'Set your transpile token in Settings → Forge → Transpile token before using /generate.';
+      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      return false;
+    }
+
+    console.log('Forge: generate (α)', {
+      snippetId,
+      serviceUrl: settings.transpileServiceUrl,
+    });
+
+    const modal = new ForgeGenerationModal(this.app, `Forging ${snippetId}…`);
     modal.open();
 
     try {
+      // 1. Materialize the inventory via Pyodide. Same resolver path
+      //    the local compute uses, so A4 shadows + A5.1 library subdirs
+      //    are honored. Pyodide is lazy-init; first /generate call pays
+      //    the ~1.5s warm-up cost.
+      let payload: AlphaGenerateRequest;
       try {
-        const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
-        this.snippetInventory = connectRes?.snippets ?? {};
+        const pyodideHost = getPyodideHost();
+        if (!pyodideHost) {
+          throw new Error('Pyodide host not initialized');
+        }
+        const host = await pyodideHost.getInstance();
+        const inv = await host.getGenerateInventory(snippetId);
+        payload = {
+          snippet_id: inv.snippet_id,
+          description: inv.description,
+          english: inv.english,
+          inputs: inv.inputs,
+          generation_notes: inv.generation_notes,
+          deps: inv.deps,
+          // active_domains plumbs forge.toml's `domains` field
+          // through to the system prompt. null = "all registered"
+          // (back-compat for vaults without forge.toml); empty array
+          // = core-only; specific list = that subset.
+          active_domains:
+            this.activeDomains === null ? null : Array.from(this.activeDomains),
+        };
       } catch (e) {
-        console.error('Forge Connect Error:', e);
+        console.error('Forge: inventory materialization failed', e);
         const detail = e instanceof Error ? e.message : String(e);
-        new Notice(errorPrefix ? `${errorPrefix}: connect failed — ${detail}` : 'Forge: Connect failed — check console.');
+        new Notice(errorPrefix ? `${errorPrefix}: inventory failed — ${detail}` : `Forge: inventory failed — ${detail}`);
         return false;
       }
 
+      // 2. POST to the hosted service.
       let response;
       try {
-        response = await generateSnippet(this.settings.serverUrl, vaultPath, snippetId, recursive);
+        response = await generateSnippetAlpha(
+          settings.transpileServiceUrl,
+          settings.transpileServiceToken,
+          payload,
+        );
       } catch (e) {
-        // Reaches here only on transport-level failures (server
-        // unreachable, etc.) — the response itself uses throw:false
-        // so HTTP non-2xx flows through below.
+        // Transport-level (DNS, TCP, TLS handshake). The hosted-α
+        // path uses requestUrl + throw:false so HTTP non-2xx never
+        // gets here — only true network failures.
         console.error('Forge Generate Error (transport):', e);
         const detail = e instanceof Error ? e.message : String(e);
-        new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: Generation failed — check console.');
+        const msg = `Could not reach transpile service at ${settings.transpileServiceUrl}. Check your internet connection + Settings → Forge → Transpile service URL. (${detail})`;
+        new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
         return false;
       }
 
       if (response.status === 200) {
-        console.log('Forge Generate Result:', response.json);
-        await this.writeGeneratedCode(response.json.generated);
+        const code: string | undefined = response.json?.code;
+        const returnedId: string = response.json?.snippet_id ?? snippetId;
+        if (!code) {
+          const msg = 'Service returned empty code field';
+          new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
+          console.error('Forge: empty α response', response.json);
+          return false;
+        }
+        await this.writeGeneratedCode({ [returnedId]: code });
         if (!errorPrefix) {
-          new Notice(`Forge: ${Object.keys(response.json.generated).length} snippet(s) written.`);
+          new Notice(`Forge: ${returnedId} written.`);
         }
         return true;
       }
 
-      // Non-2xx path. The engine's /generate handler returns a
-      // structured `detail` body for known failure modes — most
-      // importantly, the 503/502 Anthropic-error path which carries
-      // `retryable: bool` so we can render an actionable Notice
-      // (transient → "try again", terminal → "fix and retry").
+      // Non-2xx path. Map status + detail shape to the right
+      // actionable Notice. The α service preserves the engine's
+      // Anthropic-error translation: {error, retryable,
+      // upstream_status, kind} for 502/503; FastAPI's {detail:str}
+      // for everything else (including 401).
       const detail = response.json?.detail;
       const status = response.status;
-      console.error('Forge Generate Error:', { status, detail });
-      const noticeText = this.formatGenerateErrorNotice(
-        status, detail, errorPrefix);
+      console.error('Forge α Generate Error:', { status, detail });
+      const noticeText = this.formatAlphaErrorNotice(
+        status, detail, settings.transpileServiceUrl, errorPrefix);
       new Notice(noticeText);
       return false;
     } catch (outer) {
@@ -1147,23 +1198,29 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
-  // Format the user-facing Notice for a non-2xx /generate response.
-  // The engine's structured 503/502 path carries `{error, retryable,
-  // upstream_status, kind}` so we can say "LLM overloaded — try again"
-  // vs "auth error — fix the API key" rather than a generic
-  // "Generation failed." Everything else falls back to the generic
-  // shape so unstructured errors still surface a usable message.
-  private formatGenerateErrorNotice(
+  // Format the user-facing Notice for a non-2xx α /generate response.
+  // - 401: token-side problem (rejected by the service).
+  // - 502/503 with retryable flag: Anthropic upstream — translate per
+  //   the retryable hint (transient → try again; terminal → escalate).
+  // - 500: server-side misconfiguration (e.g., FORGE_TRANSPILE_SECRET
+  //   not set). Surface the detail string for the service operator.
+  // - Anything else: include the status + raw detail for visibility.
+  private formatAlphaErrorNotice(
     status: number,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     detail: any,
+    serviceUrl: string,
     errorPrefix?: string,
   ): string {
     const prefix = errorPrefix ?? 'Forge: Generation failed';
+    if (status === 401) {
+      return `${prefix}: Transpile token rejected — check Settings → Forge → Transpile token, or contact the service operator (${serviceUrl}) if you believe it should be valid.`;
+    }
     if (detail && typeof detail === 'object' && 'retryable' in detail) {
       const { error, retryable, kind } = detail;
       const tail = retryable
         ? 'transient — try again in a moment.'
-        : 'not retryable — check API key / billing and retry.';
+        : 'not retryable — paste the error to the service operator.';
       return `${prefix}: ${error ?? `Anthropic ${kind}`} (${tail})`;
     }
     if (typeof detail === 'string') {

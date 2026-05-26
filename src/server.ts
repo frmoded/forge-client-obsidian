@@ -95,28 +95,60 @@ export async function freezeEdge(
   return { status: res.status, json: res.json };
 }
 
+// v0.2.4 α swap: /generate moves from the local engine
+// (vault_path-based, server-side registry walk) to the hosted
+// service (stateless, client materializes the inventory). The
+// request shape mirrors forge-transpile/main.py's GenerateRequest.
+export interface AlphaDependencyInfo {
+  snippet_id: string;
+  description: string;
+  inputs: string[];
+}
+
+export interface AlphaGenerateRequest {
+  snippet_id: string;
+  description: string;
+  english: string;
+  inputs: string[];
+  generation_notes: string;
+  deps: AlphaDependencyInfo[];
+  active_domains: string[] | null;
+}
+
 export interface GenerateResponse {
   status: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   json: any;
 }
 
-export async function generateSnippet(
-  serverUrl: string,
-  vaultPath: string,
-  snippetId: string,
-  recursive: boolean,
+/** POST the materialized snippet inventory to the hosted α service.
+ *  Auth via Authorization: Bearer <token>; token comes from settings.
+ *
+ *  Returns the same {status, json} envelope the engine's /generate
+ *  did so callers can keep their existing status-branch handling.
+ *  Empty token short-circuits to status=0 with an actionable detail
+ *  — caller surfaces it as a Notice without hitting the network. */
+export async function generateSnippetAlpha(
+  serviceUrl: string,
+  token: string,
+  payload: AlphaGenerateRequest,
 ): Promise<GenerateResponse> {
-  // Pass `throw: false` so non-2xx responses come back with their
-  // status + body intact instead of Obsidian's HTTP layer throwing
-  // a generic Error. The caller branches on status to render the
-  // right Notice — particularly for the 503/502 Anthropic-error
-  // path, where the engine's structured detail body carries a
-  // `retryable` flag the user wants to see.
+  if (!token) {
+    return {
+      status: 0,
+      json: {
+        detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.',
+      },
+    };
+  }
   const res = await requestUrl({
-    url: `${serverUrl}/generate`,
+    url: `${serviceUrl}/generate`,
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId, recursive }),
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
     throw: false,
   });
   return { status: res.status, json: res.json };

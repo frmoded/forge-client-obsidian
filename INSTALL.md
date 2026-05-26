@@ -7,13 +7,13 @@ needed on your machine — everything is bundled into a single zip.
 
 ### 1. Download the release zip
 
-Open the [v0.2.3 release page](https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.3)
-and download `forge-client-obsidian-v0.2.3.zip` from the **Assets**
+Open the [v0.2.4 release page](https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.4)
+and download `forge-client-obsidian-v0.2.4.zip` from the **Assets**
 section. Save it somewhere convenient (e.g. your Downloads folder).
 
-> **Closed-beta note:** this guide pins to **v0.2.3** specifically.
+> **Closed-beta note:** this guide pins to **v0.2.4** specifically.
 > Newer releases may exist on the [Releases page](https://github.com/frmoded/forge-client-obsidian/releases)
-> but haven't been verified for this cohort — use v0.2.3 unless the
+> but haven't been verified for this cohort — use v0.2.4 unless the
 > link in this doc has been updated.
 
 ### 2. Find your Obsidian vault's plugin directory
@@ -27,7 +27,7 @@ section. Save it somewhere convenient (e.g. your Downloads folder).
 
 ### 3. Unzip into the plugins directory
 
-- Unzip `forge-client-obsidian-v0.2.3.zip`. You'll get a folder
+- Unzip `forge-client-obsidian-v0.2.4.zip`. You'll get a folder
   called `forge-client-obsidian`.
 - Move (or extract directly to) that folder so it lives at
   `<your-vault>/.obsidian/plugins/forge-client-obsidian/`.
@@ -44,6 +44,32 @@ section. Save it somewhere convenient (e.g. your Downloads folder).
 - You should see **Forge Client** in the installed plugins list.
   Toggle the switch on the right to enable it.
 - Reload Obsidian if prompted (or `Cmd-P` → "Reload app without saving").
+
+## Token setup (one-time)
+
+The plugin uses a hosted service to transpile English snippet
+descriptions into Python via an LLM. You should have received a
+token by email.
+
+1. Open Obsidian → **Settings** → scroll the left sidebar to
+   **Forge Client** (under Community plugins).
+2. In the right pane, find the **Transpile service** section at
+   the top.
+3. Paste your token into the **Transpile service token** field.
+   The input is masked (●●●●) — that's expected.
+4. Leave **Transpile service URL** at the default
+   (`https://forge.thecodingarena.com`) unless instructed
+   otherwise.
+
+The token is stored locally in this vault's plugin data; it never
+leaves your machine except as the `Authorization` header on
+`/generate` requests to the service URL above.
+
+> **No token yet?** The moda simulator works without one — the
+> simulation runs locally via bundled snippets. Only English →
+> Python authoring (the **Forge** button on a snippet's English
+> facet) needs the token. Contact the service operator if you
+> need one.
 
 ## Verifying it works
 
