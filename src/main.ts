@@ -11,7 +11,7 @@ import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
-import { ensureServerRunning, computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost } from './server';
+import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost } from './server';
 import type { AlphaGenerateRequest } from './server';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
@@ -477,7 +477,11 @@ export default class ForgePlugin extends Plugin {
     this.register(detachHover);
 
     await runFirstRunCheck(this.app);
-    ensureServerRunning(this.settings.serverUrl);
+
+    // v0.2.8: ensureServerRunning() was called here in pre-V1 builds
+    // to auto-spawn uvicorn from a hardcoded venv path. Pyodide makes
+    // that obsolete — the plugin never starts an engine subprocess.
+    // Local-uvicorn dev workflows manage their own server lifecycle.
 
     // v0.2.7: one-shot welcome notice. Persists `seenWelcome` so the
     // notice fires exactly once per (vault, plugin install) pair.

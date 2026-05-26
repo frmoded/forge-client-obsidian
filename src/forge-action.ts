@@ -1,6 +1,6 @@
 import { App, Menu, Modal, Notice, Setting, requestUrl } from 'obsidian';
 import { ForgeGenerationModal } from './modal';
-import { ensureServerRunning, connectVault, computeSnippet } from './server';
+import { connectVault, computeSnippet } from './server';
 import {
   KNOWN_DOMAINS,
   ForgeActionContext,
@@ -242,7 +242,9 @@ async function installVault(host: ForgeHost, vaultName: string): Promise<boolean
     host.app, `Installing ${vaultName}@${version}…`);
   modal.open();
   try {
-    await ensureServerRunning(host.serverUrlOf());
+    // v0.2.8: ensureServerRunning() removed. Both connectVault and
+    // computeSnippet are Pyodide-routed now, so the spawn-prelude is
+    // unnecessary; install computes entirely inside Pyodide.
     const vaultPath = host.vaultPathOf();
     await connectVault(host.serverUrlOf(), vaultPath);
     const res = await computeSnippet(
