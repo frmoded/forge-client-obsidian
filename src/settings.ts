@@ -15,6 +15,13 @@ export interface ForgeSettings {
   // shared secret per closed-beta cohort; per-user tokens are v1.1.
   transpileServiceUrl: string;
   transpileServiceToken: string;
+  // v0.2.7: persisted across sessions via Obsidian's loadData/saveData.
+  // Defaults to false so a fresh install fires the welcome notice once;
+  // flipped to true immediately after the notice is shown. Migrating
+  // users from v0.2.6 also get the notice once because the field
+  // doesn't exist in their data.json — Object.assign keeps the
+  // DEFAULT_SETTINGS value during loadSettings.
+  seenWelcome: boolean;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -23,6 +30,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   useDevIframe: false,
   transpileServiceUrl: 'https://forge.thecodingarena.com',
   transpileServiceToken: '',
+  seenWelcome: false,
 };
 
 export class ForgeSettingTab extends PluginSettingTab {

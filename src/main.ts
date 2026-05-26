@@ -18,6 +18,7 @@ import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
 import { openForgeAction, ForgeHost } from './forge-action';
+import { isNetRefusalError, welcomeMessage } from './closed-beta-ux';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -179,6 +180,14 @@ export default class ForgePlugin extends Plugin {
   // it (e.g., an empty stub overlaying a builtin).
   private snippetInventory: Record<string, Array<{ id: string; type: string; inputs: string[] }>> = {};
   private freezeCache: { caller?: string; callee?: string } = {};
+  // v0.2.7: closed-beta polish. With no uvicorn running,
+  // writeGeneratedCode's syncDependencies call hits ECONNREFUSED on
+  // every Forge-click. The error is non-fatal (Python facet is already
+  // written; only the B7 # Dependencies section refresh is missed),
+  // but a yellow stack on every click worries students. Log an
+  // info-level explainer exactly once per session via this flag; reset
+  // by class re-instantiation on plugin reload.
+  private b7SyncSkippedLogged = false;
   // Debounce handle for the file-modify hook that keeps the drift indicator
   // current. Editing the body fires modify on every keystroke; we coalesce
   // bursts so the lock button only re-renders once the user pauses.
@@ -469,6 +478,32 @@ export default class ForgePlugin extends Plugin {
 
     await runFirstRunCheck(this.app);
     ensureServerRunning(this.settings.serverUrl);
+
+    // v0.2.7: one-shot welcome notice. Persists `seenWelcome` so the
+    // notice fires exactly once per (vault, plugin install) pair.
+    // Migrating users from v0.2.6 → v0.2.7 also see it once because
+    // the field doesn't exist in their data.json and Object.assign in
+    // loadSettings preserves the DEFAULT_SETTINGS false. The token-
+    // status branch handles both first-install paths cleanly.
+    if (!this.settings.seenWelcome) {
+      const hasToken = !!this.settings.transpileServiceToken?.trim();
+      // 10-second timeout (vs Obsidian's 5s default) because closed-
+      // beta students may be mid-other-task when Obsidian finishes
+      // loading; 5s is too easy to miss.
+      new Notice(welcomeMessage(hasToken), 10000);
+      this.settings.seenWelcome = true;
+      await this.saveSettings();
+    }
+  }
+
+  async onunload() {
+    // v0.2.7: reset the once-per-session b7-sync explainer flag so a
+    // Cmd-R / disable-enable cycle re-fires the info line. The class
+    // is also re-instantiated on plugin reload (which would reset the
+    // field via the class-field initializer anyway), but the explicit
+    // reset here documents the intent + protects against any future
+    // pattern where Obsidian reuses the instance.
+    this.b7SyncSkippedLogged = false;
   }
 
   async loadSettings() {
@@ -1247,7 +1282,23 @@ export default class ForgePlugin extends Plugin {
       try {
         await syncDependencies(this.settings.serverUrl, vaultPath, id);
       } catch (e) {
-        console.warn(`Forge: sync_dependencies failed for '${id}'`, e);
+        const msg = e instanceof Error ? e.message : String(e);
+        if (isNetRefusalError(msg)) {
+          // Closed-beta typical path: no uvicorn → ECONNREFUSED on every
+          // Forge-click. Log the explainer once per session at info
+          // level so dev console doesn't bloom yellow stacks.
+          if (!this.b7SyncSkippedLogged) {
+            console.info(
+              'Forge: dependency sync skipped — no local engine reachable at '
+              + `${this.settings.serverUrl}. This is expected in closed-beta; `
+              + 'dependency-section refresh is engine-side only.',
+            );
+            this.b7SyncSkippedLogged = true;
+          }
+        } else {
+          // Non-network failure — keep the warn so real bugs surface.
+          console.warn(`Forge: sync_dependencies failed for '${id}'`, e);
+        }
       }
     }
   }
