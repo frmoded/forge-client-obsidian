@@ -33,6 +33,24 @@ export interface ConnectResponse {
 }
 
 export async function connectVault(serverUrl: string, vaultPath: string): Promise<ConnectResponse> {
+  // V1: when Pyodide is wired, build the inventory from the in-process
+  // resolver instead of round-tripping through uvicorn. Matches the
+  // computeSnippet pattern (same _pyodideHost module-level var). Closed
+  // beta needs this because the only HTTP endpoint reachable for those
+  // users is the hosted α (which exposes /health + /generate only —
+  // no /connect). Without this route the pre-compute handshake 404s.
+  if (_pyodideHost) {
+    const host = await _pyodideHost.getInstance();
+    const inv = await host.getConnectInventory(vaultPath);
+    if (inv.warnings?.length) {
+      console.warn('Forge Connect warnings:', inv.warnings);
+    }
+    return inv as ConnectResponse;
+  }
+
+  // HTTP fallback — pre-V1 / no-Pyodide path. Kept defensively so a
+  // future regression in main.ts's Pyodide wiring doesn't immediately
+  // break local-uvicorn dev workflows.
   const res = await requestUrl({
     url: `${serverUrl}/connect`,
     method: 'POST',
@@ -45,6 +63,14 @@ export async function connectVault(serverUrl: string, vaultPath: string): Promis
   return res.json as ConnectResponse;
 }
 
+// NOTE (v0.2.6): syncDependencies stays on HTTP. It IS called on the
+// post-/generate write path (main.ts writeGeneratedCode line ~1248) so
+// closed-beta users will see it fail; the call is wrapped in try/catch
+// with console.warn and is non-fatal — the Python facet is already
+// written by then, and compute proceeds without the # Dependencies
+// section being refreshed. Migrating B7 dep-sync to Pyodide requires
+// mirroring the engine's full body-rewrite logic and is deferred to
+// v1.1 alongside the forge.core.llm centralization.
 export async function syncDependencies(
   serverUrl: string,
   vaultPath: string,
@@ -63,6 +89,12 @@ export async function syncDependencies(
 // Phase 6.5: reverse direction of /generate. Server reads the snippet's
 // python facet, asks the LLM for a canonical English description, returns
 // it as plain text. The plugin owns the file write.
+//
+// NOTE (v0.2.6): canonicalize stays on HTTP per prompt 2026-05-26-0000 §6.
+// The hosted α service doesn't expose /canonicalize yet — adding it is
+// v1.1 work. Closed-beta users invoking the canonicalize flow will hit
+// ECONNREFUSED against the default localhost:8000; that's the documented
+// closed-beta behavior. Only the English→Python direction is supported.
 export async function canonicalizeSnippet(
   serverUrl: string,
   vaultPath: string,
@@ -78,6 +110,11 @@ export async function canonicalizeSnippet(
   return { status: res.status, json: res.json };
 }
 
+// NOTE (v0.2.6): freezeEdge stays on HTTP. Only reachable via the
+// explicit "Freeze edge"/"Unfreeze edge" command palette entries
+// (main.ts openFreezeModal line ~1026) — not on the Forge-click path.
+// Closed-beta users who don't run uvicorn simply can't freeze edges,
+// which is fine for the seminar scope.
 export async function freezeEdge(
   serverUrl: string,
   vaultPath: string,

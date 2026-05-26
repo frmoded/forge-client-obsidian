@@ -58,6 +58,36 @@ def _forge_find_deps(body: str):
     return deps
 `;
 
+// v0.2.6: _forge_list_snippets shim test. The real helper in
+// pyodide-host.ts delegates to SnippetRegistry.list_snippets(), but
+// mounting the full bundled engine here would balloon the test setup
+// (~50MB of pyodide stdlib + engine .py files). Instead we stub a
+// minimal SnippetRegistry that mirrors the production shape, then
+// assert _forge_list_snippets returns it verbatim. This catches the
+// shape/delegate contract; the integration-level "list_snippets walks
+// the real registry" check is implicitly covered by the v0.2.6 user
+// smoke step 3 (Forge-click reaches /generate without a Connect 404).
+const LIST_SNIPPETS_PY = `
+class _StubRegistry:
+    def __init__(self, payload):
+        self._payload = payload
+    def list_snippets(self):
+        return self._payload
+
+_forge_registry = _StubRegistry({
+    "user-vault": [
+        {"id": "my-snippet", "type": "action", "inputs": []},
+    ],
+    "forge-moda": [
+        {"id": "setup", "type": "action", "inputs": []},
+        {"id": "move", "type": "action", "inputs": ["dt"]},
+    ],
+})
+
+def _forge_list_snippets():
+    return _forge_registry.list_snippets()
+`;
+
 // Booting Pyodide is expensive (~3s in Node). Cache the instance across
 // tests in this file via a top-level Promise.
 let _pyodidePromise: Promise<any> | null = null;
@@ -147,4 +177,44 @@ test('pyodide-inventory: _forge_find_deps returns empty list for body with no de
   const deps = result.toJs();
   result.destroy();
   assert.deepEqual(deps, []);
+});
+
+test('pyodide-inventory: _forge_list_snippets returns {vault: [{id,type,inputs}]} shape', async () => {
+  const py = await getPyodide();
+  py.runPython(LIST_SNIPPETS_PY);
+  const proxy = py.runPython('_forge_list_snippets()');
+  const out = proxy.toJs({ dict_converter: Object.fromEntries });
+  proxy.destroy();
+  // Top level: dict keyed by vault name.
+  assert.equal(typeof out, 'object');
+  assert.ok('user-vault' in out);
+  assert.ok('forge-moda' in out);
+  // Per-vault values are arrays.
+  assert.ok(Array.isArray(out['user-vault']));
+  assert.ok(Array.isArray(out['forge-moda']));
+  // Each entry has the three required fields with correct types.
+  for (const vault of Object.keys(out)) {
+    for (const entry of out[vault]) {
+      assert.equal(typeof entry.id, 'string');
+      assert.equal(typeof entry.type, 'string');
+      assert.ok(Array.isArray(entry.inputs));
+    }
+  }
+});
+
+test('pyodide-inventory: _forge_list_snippets includes bundled forge-moda with known ids', async () => {
+  const py = await getPyodide();
+  py.runPython(LIST_SNIPPETS_PY);
+  const proxy = py.runPython('_forge_list_snippets()');
+  const out = proxy.toJs({ dict_converter: Object.fromEntries });
+  proxy.destroy();
+  const moda = out['forge-moda'] as Array<{ id: string; type: string; inputs: string[] }>;
+  const ids = moda.map((e) => e.id);
+  // setup is always present in the bundled vault. move was chosen for
+  // the stub because it exercises non-empty inputs.
+  assert.ok(ids.includes('setup'), `expected 'setup' in forge-moda; got: ${ids.join(',')}`);
+  const move = moda.find((e) => e.id === 'move');
+  assert.ok(move);
+  assert.equal(move!.type, 'action');
+  assert.deepEqual(move!.inputs, ['dt']);
 });

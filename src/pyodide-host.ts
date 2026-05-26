@@ -429,6 +429,15 @@ def _forge_get_generate_inventory(snippet_id: str):
         "deps": dep_infos,
     }
 
+def _forge_list_snippets():
+    """v0.2.6 — serve connectVault from Pyodide. Returns the engine's
+    /connect inventory shape: {vault_name: [{id, type, inputs}, ...]}
+    sorted by id. SnippetRegistry.list_snippets() already produces
+    exactly this shape (engine source: forge/core/snippet_registry.py
+    line ~96), so we delegate. Structured-clone-safe — plain dict,
+    plain lists, plain strings."""
+    return _forge_registry.list_snippets()
+
 def _forge_get_resolver(vault_name=None):
     """vault_name is vestigial — kept for backward compat in
     moda-view.ts's engine-request dispatch, but V1's single
@@ -588,6 +597,17 @@ export interface GenerateInventory {
   deps: Array<{ snippet_id: string; description: string; inputs: string[] }>;
 }
 
+/** v0.2.6 connect-handshake inventory shape. Mirrors what the engine's
+ *  `/connect` returned so server.ts:connectVault's callers don't change.
+ *  `snippets` is keyed by vault name; each entry's shape matches
+ *  SnippetRegistry.list_snippets() in the engine. */
+export interface ConnectInventory {
+  status: string;
+  vault_path: string;
+  warnings: string[];
+  snippets: Record<string, Array<{ id: string; type: string; inputs: string[] }>>;
+}
+
 /** The handle returned by `PyodideHost.getInstance()`. Generic compute
  *  + the moda fast-path live here; Phase 2 added the moda methods;
  *  v0.2.4 added `getGenerateInventory` for the hosted /generate swap. */
@@ -600,6 +620,11 @@ export interface PyodideHostInstance {
    *  Resolves the snippet via the in-Pyodide engine resolver — same
    *  A4 shadow + A5.1 library-subdir rules as the local compute path. */
   getGenerateInventory(snippet_id: string): Promise<GenerateInventory>;
+  /** v0.2.6: serve the connect-handshake from the in-Pyodide registry.
+   *  Replaces the engine's HTTP `/connect` for V1 closed-beta, where
+   *  no uvicorn is running. Caller passes the vault path it would have
+   *  POSTed; we echo it back for the response envelope. */
+  getConnectInventory(vault_path: string): Promise<ConnectInventory>;
 }
 
 class PyodideHostInstanceImpl implements PyodideHostInstance {
@@ -663,6 +688,26 @@ _forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_n
     this.pyodide.globals.set("_forge_gen_id", snippet_id);
     const proxy = this.pyodide.runPython(`_forge_get_generate_inventory(_forge_gen_id)`);
     return this._unwrap(proxy) as GenerateInventory;
+  }
+
+  /** v0.2.6 — replace the HTTP /connect handshake. Engine-side warnings
+   *  (registry load errors) would have surfaced at Pyodide init when
+   *  the registry built; we return [] here rather than re-emitting them
+   *  on every connect. content_types is intentionally omitted —
+   *  ConnectResponse.content_types is optional and callers fall back to
+   *  a hardcoded default (server.ts:32). */
+  async getConnectInventory(vault_path: string): Promise<ConnectInventory> {
+    const proxy = this.pyodide.runPython(`_forge_list_snippets()`);
+    const snippets = this._unwrap(proxy) as Record<
+      string,
+      Array<{ id: string; type: string; inputs: string[] }>
+    >;
+    return {
+      status: 'connected',
+      vault_path,
+      warnings: [],
+      snippets,
+    };
   }
 
   /** Convert a Pyodide PyProxy to a plain JS value, destroying the
