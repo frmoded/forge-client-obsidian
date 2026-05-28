@@ -3,7 +3,11 @@ import type ForgePlugin from './main';
 
 export interface ForgeSettings {
   serverUrl: string;
-  isPythonFacet: boolean;
+  // v0.2.9: isPythonFacet removed — dead field, never read after
+  // Phase 6.5 moved facet mode into snippet frontmatter
+  // (edit_mode: english|python). Existing data.json copies of the
+  // field are harmless: Object.assign in loadSettings drops unknowns
+  // on first save.
   // V1 Phase 2: when true, the moda simulator iframe loads from the
   // Vite dev server (http://localhost:5173) for iterative iframe
   // development. Defaults to false (production: load the bundled
@@ -26,7 +30,6 @@ export interface ForgeSettings {
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
   serverUrl: 'http://localhost:8000',
-  isPythonFacet: false,
   useDevIframe: false,
   transpileServiceUrl: 'https://forge.thecodingarena.com',
   transpileServiceToken: '',

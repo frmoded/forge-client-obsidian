@@ -213,7 +213,11 @@ export async function computeSnippet(
       // vault_name is vestigial under the single-user-vault model
       // but kept on the API surface for the iframe's engine-request
       // dispatch shape. Any value works; the Python side ignores it.
-      const out = await host.computeViaEngine(snippetId, args, '');
+      // v0.2.9: vault_name third arg dropped — single-user-vault model
+      // makes it vestigial. Python side still accepts vault_name=None;
+      // the JS↔Python boundary call inside computeViaEngine feeds it
+      // an empty-string sentinel.
+      const out = await host.computeViaEngine(snippetId, args);
       // Shape the response to match the existing /compute return
       // contract (status + json envelope, json carries result + stdout).
       return {

@@ -5,7 +5,7 @@
 // (forge.core.* + forge.moda.types) and curated forge-moda vault
 // content into Pyodide's MEMFS so `from forge.core.snippet_registry
 // import SnippetRegistry` works and the resolver can find moda
-// snippets. Exposes `computeViaEngine(snippet_id, args, vault_name)`
+// snippets. Exposes `computeViaEngine(snippet_id, args)` (v0.2.9
 // for the plugin's existing engine-compute call sites to invoke
 // instead of HTTP-to-localhost:8000.
 //
@@ -612,7 +612,15 @@ export interface ConnectInventory {
  *  + the moda fast-path live here; Phase 2 added the moda methods;
  *  v0.2.4 added `getGenerateInventory` for the hosted /generate swap. */
 export interface PyodideHostInstance {
-  computeViaEngine(snippet_id: string, args: unknown[], vault_name: string): Promise<ComputeResult>;
+  // v0.2.9: vault_name dropped from the JS surface. Single-user-vault
+  // model makes it vestigial — A4 + A5.1 resolve qualified and bare
+  // ids against the same registry regardless. Python side still
+  // accepts `vault_name=None` on its compute helpers (see
+  // pyodide-host.ts Python block, "vestigial" comment); the JS↔Python
+  // boundary call below feeds it `""` rather than dropping it
+  // entirely, to keep the engine signature stable for a follow-up
+  // server-side cleanup prompt.
+  computeViaEngine(snippet_id: string, args: unknown[]): Promise<ComputeResult>;
   modaInit(): Promise<ModaInitResult>;
   modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
   modaClick(x: number, y: number): Promise<ModaClickResult>;
@@ -637,11 +645,15 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
   /** Generic compute via the engine's resolver + executor. Used by
    *  the plugin's Forge-click paths (Phase 1) and the iframe's
    *  featured-button via engine-request op="compute" (Phase 2). */
-  async computeViaEngine(snippet_id: string, args: unknown[], vault_name: string): Promise<ComputeResult> {
+  async computeViaEngine(snippet_id: string, args: unknown[]): Promise<ComputeResult> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set("_forge_args_in", args as any);
     this.pyodide.globals.set("_forge_snippet_id", snippet_id);
-    this.pyodide.globals.set("_forge_vault_name", vault_name);
+    // v0.2.9: vault_name dropped from the JS surface. Python's
+    // _forge_compute still has the parameter (engine-side cleanup is
+    // a separate prompt); feed it the empty-string sentinel the
+    // single-user-vault model already ignored.
+    this.pyodide.globals.set("_forge_vault_name", "");
     const tuple = this.pyodide.runPython(`
 _forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_name)
 `);

@@ -154,9 +154,14 @@ export class ForgeModaView extends ItemView {
         }
         case 'compute': {
           const [snippet_id] = args as [string];
-          const r = await host.computeViaEngine(
-            snippet_id, [], vault_name ?? 'forge-moda',
-          );
+          // v0.2.9: vault_name dropped from computeViaEngine — the
+          // single-user-vault model resolves A4 + A5.1 the same
+          // regardless of which vault the iframe announces. The
+          // iframe-side `vault_name` parameter on the engine-request
+          // postMessage payload is kept for now to avoid touching the
+          // iframe contract; it just isn't forwarded into compute.
+          void vault_name;
+          const r = await host.computeViaEngine(snippet_id, []);
           // Shape to match the existing GenericComputeResponse the
           // iframe's computeSnippet consumer expects.
           result = { type: 'action', result: r.result, stdout: r.stdout };

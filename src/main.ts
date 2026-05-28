@@ -188,6 +188,10 @@ export default class ForgePlugin extends Plugin {
   // info-level explainer exactly once per session via this flag; reset
   // by class re-instantiation on plugin reload.
   private b7SyncSkippedLogged = false;
+  // v0.2.9: tracks whether the Python-mode discoverability Notice has
+  // been shown this session. Once per session is enough — students
+  // learn the toolbar / palette / right-click affordances fast.
+  private pythonModeNoticeShown = false;
   // Debounce handle for the file-modify hook that keeps the drift indicator
   // current. Editing the body fires modify on every keystroke; we coalesce
   // bursts so the lock button only re-renders once the user pauses.
@@ -461,6 +465,37 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.runSnippet(); },
     });
 
+    // v0.2.9: surface the edit-mode toggle in Cmd+P. Single command
+    // (not two switch-to-X variants) because (a) it mirrors the
+    // toolbar button's semantics exactly and (b) the Notice fired
+    // inside toggleEditModeForFile already announces the new mode,
+    // so "which direction" is never ambiguous post-invocation.
+    this.addCommand({
+      id: 'forge-toggle-edit-mode',
+      name: 'Toggle Python/English editing mode',
+      callback: () => { this.toggleEditMode(); },
+    });
+
+    // v0.2.9: right-click discoverability. Edit-mode entry on the
+    // file-menu for any `forge` action snippet — target IS the
+    // clicked file (toggleEditModeForFile), not the active view.
+    this.registerEvent(
+      this.app.workspace.on('file-menu', (menu, file) => {
+        if (!(file instanceof TFile) || file.extension !== 'md') return;
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        if (fm?.type !== 'action') return;
+        const current = getEditMode(fm);
+        const target = current === 'python' ? 'English' : 'Python';
+        menu.addItem((item) => {
+          item.setTitle(`Forge: Switch to ${target} editing mode`)
+            .setIcon(current === 'python' ? 'pencil-line' : 'code')
+            .onClick(async () => {
+              await this.toggleEditModeForFile(file);
+            });
+        });
+      }),
+    );
+
     this.addCommand({
       id: 'forge-freeze-edge',
       name: 'Freeze edge',
@@ -508,6 +543,9 @@ export default class ForgePlugin extends Plugin {
     // reset here documents the intent + protects against any future
     // pattern where Obsidian reuses the instance.
     this.b7SyncSkippedLogged = false;
+    // v0.2.9: same once-per-session reset semantics for the Python-
+    // mode discoverability Notice.
+    this.pythonModeNoticeShown = false;
   }
 
   async loadSettings() {
@@ -607,13 +645,20 @@ export default class ForgePlugin extends Plugin {
   // Replaces toggleLock from Phase 5; semantics are the same but the field
   // name moves from `locked: true` to `edit_mode: python`. Reads either
   // form when computing current state, only writes the new form.
+  //
+  // v0.2.9: split into a TFile-taking helper so the right-click file-menu
+  // entry can target a non-active file. toggleEditMode() preserves the
+  // active-view semantics for the toolbar button + command palette callers.
   private async toggleEditMode() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       new Notice('No active note.');
       return;
     }
-    const file = view.file;
+    await this.toggleEditModeForFile(view.file);
+  }
+
+  private async toggleEditModeForFile(file: TFile) {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (fm?.type !== 'action') {
       new Notice('Edit mode is only meaningful for action snippets.');
@@ -641,6 +686,20 @@ export default class ForgePlugin extends Plugin {
         delete fm.locked;             // migrate off the legacy field
       });
       new Notice(`Forge: ${file.basename} → Python mode`);
+      // v0.2.9: discoverability nudge. The unlock affordances (toolbar
+      // pencil, Cmd+P entry, right-click) were too easy to miss in
+      // closed-beta smoke. Fire a longer explainer Notice the first
+      // time the user enters Python mode this session.
+      if (!this.pythonModeNoticeShown) {
+        new Notice(
+          'Python facet is now editable. To switch back, click the '
+          + 'pencil icon in the toolbar, use Cmd+P → '
+          + '"Forge: Toggle Python/English editing mode", or right-click '
+          + 'the file.',
+          12000,
+        );
+        this.pythonModeNoticeShown = true;
+      }
     }
     this.syncButtons();
   }
