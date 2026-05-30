@@ -1527,7 +1527,15 @@ export default class ForgePlugin extends Plugin {
     };
 
     const existing = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
-    if (existing) return waitForRealView(existing);
+    if (existing) {
+      // v0.2.11: also reveal when the leaf already exists. Without
+      // this, an existing output leaf parked in the right sidebar
+      // (e.g., persisted from a prior session) stays offscreen if the
+      // sidebar is collapsed or focus is on a different tab — the
+      // append succeeds but the user sees nothing happen.
+      this.app.workspace.revealLeaf(existing);
+      return waitForRealView(existing);
+    }
 
     const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
     await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
