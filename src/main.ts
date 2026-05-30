@@ -1497,13 +1497,42 @@ export default class ForgePlugin extends Plugin {
   }
 
   private async getOutputView(): Promise<ForgeOutputView> {
+    // v0.2.10: Obsidian sometimes parks a DeferredView placeholder on
+    // the leaf right after setViewState resolves — the real view's
+    // onload() hasn't run yet, so `leaf.view as ForgeOutputView` is a
+    // structural lie and method calls (`append`, `appendError`) 404.
+    // Symptom: "TypeError: outputView.append is not a function" on
+    // the success path of a fresh Forge-click that opens the panel
+    // for the first time. The same bug bit the iframe relay path in
+    // V1 Phase 2 (fixed there); the plugin's own getOutputView still
+    // had the naive cast.
+    //
+    // Fix: confirm the cast holds before returning. Poll up to ~10
+    // microtask ticks (≈50ms wall clock); in practice the view
+    // resolves within 1-2 ticks. If the cast still fails after the
+    // budget, fall back to a second setViewState — Obsidian will
+    // construct a fresh ForgeOutputView synchronously the second
+    // time around.
+    const waitForRealView = async (leaf: WorkspaceLeaf): Promise<ForgeOutputView> => {
+      for (let i = 0; i < 10; i++) {
+        if (leaf.view instanceof ForgeOutputView) return leaf.view;
+        await new Promise(r => setTimeout(r, 5));
+      }
+      // Last-ditch — re-fire setViewState. Obsidian's deferred-view
+      // logic resolves on the second call in the small handful of
+      // real-world cases that get here.
+      await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
+      if (leaf.view instanceof ForgeOutputView) return leaf.view;
+      throw new Error('Forge: output view failed to materialize after retry');
+    };
+
     const existing = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
-    if (existing) return existing.view as ForgeOutputView;
+    if (existing) return waitForRealView(existing);
 
     const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
     await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
-    return leaf.view as ForgeOutputView;
+    return waitForRealView(leaf);
   }
 
   private async computeSnippetWithArgs(
