@@ -1,6 +1,7 @@
 import { App } from 'obsidian';
 import { copyDirRecursive } from './copy-dir-core';
 import { ensureForgeTomlStub } from './forge-toml-stub';
+import { vaultDeclaresMusic } from './forge-music-gate';
 export { copyDirRecursive };
 
 // .forge/ is managed by Forge — safe to write cache, logs, future state files here.
@@ -111,6 +112,13 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     } catch (e) {
       console.warn('Forge: ensureForgeTomlStub failed', e);
     }
+
+    // v0.2.15: extract bundled forge-music IFF the user's forge.toml
+    // declares "music" in its domains array. Gated unlike forge-moda
+    // (which is V1's default-on library) because music isn't on the
+    // seminar curriculum — most students won't want forge-music/
+    // appearing in their vault.
+    await ensureBundledForgeMusic(app);
   } catch (e) {
     console.error('Forge: runFirstRunCheck failed', e);
   }
@@ -141,6 +149,44 @@ async function ensureBundledForgeModa(app: App): Promise<void> {
     // without forge-moda extracted as authoring content. Surface as
     // warn rather than throwing so plugin load doesn't abort.
     console.warn('Forge: ensureBundledForgeModa failed', e);
+  }
+}
+
+/** v0.2.15: extract bundled forge-music if the vault declares "music"
+ *  in its forge.toml domains. Same skip-if-target-exists semantics as
+ *  ensureBundledForgeModa. The gate is per-vault opt-in because music
+ *  isn't on the V1 seminar curriculum; defaulting it on would leave
+ *  unwanted files in most closed-beta vaults. */
+async function ensureBundledForgeMusic(app: App): Promise<void> {
+  const adapter = app.vault.adapter;
+  const tomlPath = 'forge.toml';
+  const targetDir = 'forge-music';
+
+  try {
+    if (!(await adapter.exists(tomlPath))) {
+      // No forge.toml means no domain declaration; nothing to extract.
+      // (v0.2.14's stub usually creates one, but defensive against
+      // races and adapter quirks.)
+      return;
+    }
+    const tomlBody = await adapter.read(tomlPath);
+    if (!vaultDeclaresMusic(tomlBody)) {
+      return;
+    }
+
+    if (await adapter.exists(targetDir)) {
+      console.log('Forge: forge-music already in vault; skipping bundle extraction');
+      return;
+    }
+    const sourceDir = '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-music';
+    if (!(await adapter.exists(sourceDir))) {
+      console.warn('Forge: bundled forge-music missing from plugin assets; skipping extraction');
+      return;
+    }
+    await copyDirRecursive(adapter, sourceDir, targetDir);
+    console.log('Forge: extracted bundled forge-music into vault');
+  } catch (e) {
+    console.warn('Forge: ensureBundledForgeMusic failed', e);
   }
 }
 

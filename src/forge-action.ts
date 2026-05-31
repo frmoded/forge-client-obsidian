@@ -235,25 +235,40 @@ async function fetchRegistryVaults(): Promise<
 // v0.2.14: installVault neutered. V1 closed-beta has no hosted vault
 // registry; the engine's `install` snippet that this routed to isn't
 // bundled into assets/engine/ either. Three call sites still reach
-// here (`forge-action.ts` lines ~168, ~453, ~807) via the
-// "Edit vault domains" modal and the InitializeForgeVaultWizard.
-// Rather than rip out each call site (bigger UX surgery — see v1.0
-// audit task #19), neuter the function and surface a clear Notice
-// to the user, then return false so the existing call-site failure
-// branches handle the "didn't install" case gracefully.
+// here via the "Edit vault domains" modal and the
+// InitializeForgeVaultWizard. Rather than rip out each call site
+// (bigger UX surgery — see v1.0 audit task #19), neuter the function
+// and surface a clear Notice to the user, then return false so the
+// existing call-site failure branches handle the "didn't install"
+// case gracefully.
 //
-// `host` and `vaultName` are kept on the signature so the call sites
-// don't need touching. `host` becomes unused; eslint-disable kept
-// minimal.
+// v0.2.15: bundled vaults (forge-moda, forge-music) need no install —
+// their content already ships at assets/vaults/<name>/. Return true
+// for them so the EditVaultDomainsModal proceeds with the forge.toml
+// declaration write. welcome.ts:ensureBundledForgeMusic extracts the
+// content into the vault root on next plugin load, gated on the new
+// domain declaration. v1.0 audit (task #19) consolidates the BUNDLED
+// set with pyodide-host.ts's BUNDLED_LIBRARY_NAMES — currently three
+// copies hand-synced.
+//
+// `host` is kept on the signature so the call sites don't need
+// touching; underscored to silence unused-param.
+const BUNDLED_VAULTS = new Set(['forge-moda', 'forge-music']);
+
 async function installVault(_host: ForgeHost, vaultName: string): Promise<boolean> {
+  if (BUNDLED_VAULTS.has(vaultName)) {
+    console.log(`Forge: ${vaultName} bundled — no install needed.`);
+    return true;
+  }
+
   console.warn(
     `Forge: install requested for "${vaultName}" — V1 closed beta `
     + 'does not support remote vault install.',
   );
   new Notice(
     `Forge: install of "${vaultName}" skipped — V1 closed beta has `
-    + 'no remote vault registry. forge-moda is pre-bundled; '
-    + 'additional vaults (e.g. music) are deferred to v1.1+.',
+    + 'no remote vault registry. Only bundled vaults (forge-moda, '
+    + 'forge-music) are available; additional vaults are deferred to v1.1+.',
     10000,
   );
   return false;

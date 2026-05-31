@@ -56,6 +56,8 @@ const REQUIRED_FILES = [
   { path: "assets/pyodide/python_stdlib.zip",                 hint: "Run `npm run setup-assets` first." },
   { path: "assets/engine/forge/core/executor.py",             hint: "Repo is missing the engine bundle — unexpected." },
   { path: "assets/vaults/forge-moda/forge.toml",              hint: "Repo is missing the forge-moda vault bundle — unexpected." },
+  { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle (v0.2.15) — copy ~/projects/forge-music/{forge.toml,form.md,twelve_bar_blues_progression.md} into assets/vaults/forge-music/." },
+  { path: "assets/vaults/forge-music/form.md",                hint: "forge-music bundle missing form.md — see hint above." },
 ];
 
 async function exists(p) {

@@ -41,7 +41,14 @@ import type { App } from "obsidian";
 // version from a prior `Forge: install …`) is intentionally
 // ignored. Bundled wins. Add new libraries here when Phase 3+ ship
 // (forge-music is next).
-const BUNDLED_LIBRARY_NAMES = new Set<string>(["forge-moda"]);
+// v0.2.15: forge-music joins forge-moda as a bundled library. Both
+// ship as plugin assets and resolve via the same A4 / A5.1 path; no
+// install step needed. Keep this set in sync with the Python-side
+// _BUNDLED_LIBRARIES_V1 list (around line ~344) AND with
+// forge-action.ts:installVault's BUNDLED set — three copies, all
+// load-bearing. v1.0 audit (task #19 in v1-deployment-plan) collapses
+// them into one shared constant.
+const BUNDLED_LIBRARY_NAMES = new Set<string>(["forge-moda", "forge-music"]);
 
 // Frontmatter `type:` values that mark a file as a Forge snippet
 // rather than a plain note. The resolver only registers files whose
@@ -339,9 +346,11 @@ _forge_registry.scan(_forge_user_vault)
 # unreachable for bare lookups.
 #
 # This list mirrors the JS-side BUNDLED_LIBRARY_NAMES (kept
-# hand-synced; one source of truth per language). When Phase 3
-# ships music, add "forge-music" here AND in the JS-side constant.
-_BUNDLED_LIBRARIES_V1 = ["forge-moda"]
+# hand-synced; one source of truth per language). v0.2.15: forge-music
+# joined the bundle alongside forge-moda. v1.0 audit (task #19)
+# collapses the JS-side + Python-side + forge-action.ts copies into
+# one shared constant.
+_BUNDLED_LIBRARIES_V1 = ["forge-moda", "forge-music"]
 _existing_order = [v for v in _forge_registry.resolution_order() if v != "forge"]
 for _lib in _BUNDLED_LIBRARIES_V1:
     if _lib not in _existing_order:
