@@ -465,6 +465,21 @@ def _forge_run_snippet(snippet_id: str, args, vault_name=None):
     snippet_type = snip.get("meta", {}).get("type")
     if snippet_type == "action":
         code = extract_python(snip["body"])
+        # v0.2.16: diagnostic. The greet-snippet investigation in
+        # prompt 2026-05-31-2345 couldn't reproduce the user's empty-
+        # stdout bug at suite-time (the engine extracts + executes the
+        # body correctly). Add a one-line trace so the user's next
+        # attempt produces evidence about what the Pyodide engine
+        # actually saw: snippet_id, body length, extracted-code length,
+        # code preview. Goes to Pyodide's stdout (browser dev console),
+        # not the exec_python capture buf.
+        _body_len = len(snip.get("body", "") or "")
+        _code_len = len(code) if code else 0
+        _code_preview = (code or "<empty>")[:200].replace("\\n", " | ")
+        print(
+            f"Forge debug: run_snippet({snippet_id!r}) "
+            f"body={_body_len}ch code={_code_len}ch preview={_code_preview!r}"
+        )
         stdout, result = exec_python(
             code, {}, resolver, args=tuple(args),
             vault_path=_forge_user_vault,
