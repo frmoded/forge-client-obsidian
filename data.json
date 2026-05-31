@@ -1,4 +1,8 @@
 {
   "serverUrl": "http://localhost:3000",
-  "isPythonFacet": true
+  "isPythonFacet": true,
+  "useDevIframe": false,
+  "transpileServiceUrl": "https://forge.thecodingarena.com",
+  "transpileServiceToken": "",
+  "seenWelcome": true
 }
