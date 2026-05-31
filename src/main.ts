@@ -1338,7 +1338,25 @@ export default class ForgePlugin extends Plugin {
         continue;
       }
       const content = await this.app.vault.read(file);
-      await this.app.vault.modify(file, replacePythonSection(content, code));
+      const newContent = replacePythonSection(content, code);
+      await this.app.vault.modify(file, newContent);
+
+      // v0.2.17: keep Pyodide's MEMFS-mounted user vault in sync with
+      // this disk write. The v0.2.16 diagnostic confirmed compute reads
+      // from the pre-init MEMFS snapshot — without this sync, the next
+      // Forge-click runs the PRE-write Python (stale "hello", not the
+      // just-written "hello1"). Non-fatal: if the host isn't wired yet,
+      // log + continue; defensive fallback because writeGeneratedCode
+      // ran on the HTTP path before v0.2.6 routed compute to Pyodide.
+      try {
+        const hostManager = getPyodideHost();
+        if (hostManager) {
+          const host = await hostManager.getInstance();
+          await host.syncUserVaultFile(file.path, newContent);
+        }
+      } catch (e) {
+        console.warn(`Forge: MEMFS sync after write failed for '${id}'`, e);
+      }
 
       // After writing the new Python, ask the BE to sync the # Dependencies
       // section so the body reflects the just-written code (B7).

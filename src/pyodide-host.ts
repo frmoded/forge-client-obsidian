@@ -438,6 +438,30 @@ def _forge_get_generate_inventory(snippet_id: str):
         "deps": dep_infos,
     }
 
+def _forge_sync_user_file(relpath: str, new_body: str):
+    """v0.2.17 — sync a single user-vault file change into MEMFS AND
+    refresh the SnippetRegistry's cached entry for it. Called from JS
+    after writeGeneratedCode writes to disk via Obsidian's vault API.
+
+    Without this, Pyodide compute reads from the MEMFS snapshot taken
+    at plugin init — disk and MEMFS diverge silently and the user sees
+    stale results. v0.2.16's diagnostic surfaced the issue;
+    v0.2.17 closes it.
+
+    relpath is relative to the user-vault root (e.g. "Greet.md",
+    "forge-moda/setup.md"). Frontmatter strip + body re-parse happen
+    inside SnippetRegistry.refresh_file. ~1ms per call — surgical, no
+    full vault rescan.
+    """
+    import os as _forge_os
+    target = f"/bundle/user-vault/{relpath}"
+    parent = _forge_os.path.dirname(target)
+    if parent:
+        _forge_os.makedirs(parent, exist_ok=True)
+    with open(target, "w") as f:
+        f.write(new_body)
+    _forge_registry.refresh_file(target)
+
 def _forge_list_snippets():
     """v0.2.6 — serve connectVault from Pyodide. Returns the engine's
     /connect inventory shape: {vault_name: [{id, type, inputs}, ...]}
@@ -657,6 +681,13 @@ export interface PyodideHostInstance {
    *  no uvicorn is running. Caller passes the vault path it would have
    *  POSTed; we echo it back for the response envelope. */
   getConnectInventory(vault_path: string): Promise<ConnectInventory>;
+  /** v0.2.17: sync a single user-vault file change into MEMFS so the
+   *  next compute sees the new content. Call after every disk write
+   *  to a user-vault file (writeGeneratedCode, manual editor saves
+   *  caught via file-modify event, etc.). `relPath` is vault-relative
+   *  (no leading slash); content is the full file body including
+   *  frontmatter. */
+  syncUserVaultFile(relPath: string, content: string): Promise<void>;
 }
 
 class PyodideHostInstanceImpl implements PyodideHostInstance {
@@ -744,6 +775,18 @@ _forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_n
       warnings: [],
       snippets,
     };
+  }
+
+  /** v0.2.17 — push a single user-vault file's new body into MEMFS +
+   *  refresh the SnippetRegistry's cached entry. After v0.2.16's
+   *  diagnostic confirmed the MEMFS-staleness bug, the only path to
+   *  next-compute correctness is calling this after every disk write
+   *  on a user-vault file. The Python helper handles parent-dir
+   *  creation + frontmatter re-parse via SnippetRegistry.refresh_file. */
+  async syncUserVaultFile(relPath: string, content: string): Promise<void> {
+    this.pyodide.globals.set('_forge_sync_relpath', relPath);
+    this.pyodide.globals.set('_forge_sync_body', content);
+    this.pyodide.runPython(`_forge_sync_user_file(_forge_sync_relpath, _forge_sync_body)`);
   }
 
   /** Convert a Pyodide PyProxy to a plain JS value, destroying the
