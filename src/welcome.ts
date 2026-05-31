@@ -1,5 +1,6 @@
 import { App } from 'obsidian';
 import { copyDirRecursive } from './copy-dir-core';
+import { ensureForgeTomlStub } from './forge-toml-stub';
 export { copyDirRecursive };
 
 // .forge/ is managed by Forge — safe to write cache, logs, future state files here.
@@ -99,6 +100,17 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // vaults (sentinel present but vault has no forge-moda dir
     // yet, e.g. a vault initialized before forge-moda was bundled).
     await ensureBundledForgeModa(app);
+
+    // v0.2.14: write a minimal forge.toml at the vault root if
+    // missing. Pre-empts the InitializeForgeVaultWizard auto-open
+    // trigger on fresh-vault first ribbon click. Same independent-
+    // of-sentinel semantics as ensureBundledForgeModa above.
+    try {
+      const wrote = await ensureForgeTomlStub(adapter);
+      if (wrote) console.log('Forge: wrote V1 stub forge.toml');
+    } catch (e) {
+      console.warn('Forge: ensureForgeTomlStub failed', e);
+    }
   } catch (e) {
     console.error('Forge: runFirstRunCheck failed', e);
   }

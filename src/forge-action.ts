@@ -232,39 +232,31 @@ async function fetchRegistryVaults(): Promise<
   }
 }
 
-async function installVault(host: ForgeHost, vaultName: string): Promise<boolean> {
-  const version = await registryLatest(vaultName);
-  if (!version) {
-    new Notice(
-      `Forge: "${vaultName}" is not in the registry — declared the ` +
-      `domain but skipped install.`);
-    return false;
-  }
-  const modal = new ForgeGenerationModal(
-    host.app, `Installing ${vaultName}@${version}…`);
-  modal.open();
-  try {
-    // v0.2.8: ensureServerRunning() removed. Both connectVault and
-    // computeSnippet are Pyodide-routed now, so the spawn-prelude is
-    // unnecessary; install computes entirely inside Pyodide.
-    const vaultPath = host.vaultPathOf();
-    await connectVault(host.serverUrlOf(), vaultPath);
-    const res = await computeSnippet(
-      host.serverUrlOf(), vaultPath, 'install', [vaultName, version]);
-    if (res.status !== 200) {
-      const detail = res.json?.detail ?? `HTTP ${res.status}`;
-      new Notice(`Forge: install of ${vaultName} failed — ${detail}`);
-      return false;
-    }
-    new Notice(`Forge: installed ${vaultName}@${version}.`);
-    return true;
-  } catch (e) {
-    console.error('Forge: install error', e);
-    new Notice(`Forge: install of ${vaultName} failed — check console.`);
-    return false;
-  } finally {
-    modal.finish();
-  }
+// v0.2.14: installVault neutered. V1 closed-beta has no hosted vault
+// registry; the engine's `install` snippet that this routed to isn't
+// bundled into assets/engine/ either. Three call sites still reach
+// here (`forge-action.ts` lines ~168, ~453, ~807) via the
+// "Edit vault domains" modal and the InitializeForgeVaultWizard.
+// Rather than rip out each call site (bigger UX surgery — see v1.0
+// audit task #19), neuter the function and surface a clear Notice
+// to the user, then return false so the existing call-site failure
+// branches handle the "didn't install" case gracefully.
+//
+// `host` and `vaultName` are kept on the signature so the call sites
+// don't need touching. `host` becomes unused; eslint-disable kept
+// minimal.
+async function installVault(_host: ForgeHost, vaultName: string): Promise<boolean> {
+  console.warn(
+    `Forge: install requested for "${vaultName}" — V1 closed beta `
+    + 'does not support remote vault install.',
+  );
+  new Notice(
+    `Forge: install of "${vaultName}" skipped — V1 closed beta has `
+    + 'no remote vault registry. forge-moda is pre-bundled; '
+    + 'additional vaults (e.g. music) are deferred to v1.1+.',
+    10000,
+  );
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -453,9 +445,11 @@ class EditVaultDomainsModal extends Modal {
       const ok = await installVault(this.host, d.vault);
       if (!ok) {
         if (status) status.setText(`Installing ${d.vault} … failed`);
-        new Notice(
-          `Forge: install of ${d.vault} failed — forge.toml unchanged. ` +
-          `Fix the issue and retry, or cancel.`);
+        // v0.2.14: secondary Notice removed. installVault's v0.2.14
+        // neuter already surfaced "V1 closed beta has no remote vault
+        // registry…" — the previous "Fix the issue and retry" message
+        // is confusing because there's no issue to fix. The in-modal
+        // status update above stays so the user sees which row failed.
         this.refreshSaveBtn();
         return; // modal stays open; no manifest write
       }
@@ -806,9 +800,11 @@ class InitializeForgeVaultWizard extends Modal {
     for (const d of toInstall) {
       const ok = await installVault(this.host, d.vault as string);
       if (!ok) {
-        new Notice(
-          `Forge: forge.toml written, but install of ${d.vault} did not ` +
-          `complete. Fix the issue and use the Forge menu → Update.`);
+        // v0.2.14: secondary Notice removed. installVault's v0.2.14
+        // neuter Notice already explains "V1 has no remote registry";
+        // the previous "use the Forge menu → Update" message pointed
+        // at the same broken path. Reload domains + close the wizard
+        // so the user can move on without confusion.
         await this.host.reloadActiveDomains();
         this.close();
         return;
