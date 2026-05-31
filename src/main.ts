@@ -1533,6 +1533,19 @@ export default class ForgePlugin extends Plugin {
       // (e.g., persisted from a prior session) stays offscreen if the
       // sidebar is collapsed or focus is on a different tab — the
       // append succeeds but the user sees nothing happen.
+      // v0.2.12: expand the containing sidebar first if collapsed.
+      // revealLeaf alone activates the tab but does NOT unfold a
+      // collapsed WorkspaceSplit in some Obsidian versions — the
+      // leaf stays offscreen and the user sees nothing happen.
+      // Cast through {collapsed?, expand?} because Obsidian's public
+      // WorkspaceItem type doesn't surface those, but WorkspaceSplit
+      // (the actual runtime type for sidebar roots) has both. The
+      // typeof check covers the case where the leaf's root isn't a
+      // sidebar at all (user dragged it into the main rootSplit).
+      const root = existing.getRoot() as unknown as { collapsed?: boolean; expand?: () => void };
+      if (root?.collapsed && typeof root.expand === 'function') {
+        root.expand();
+      }
       this.app.workspace.revealLeaf(existing);
       return waitForRealView(existing);
     }
