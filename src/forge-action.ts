@@ -137,12 +137,14 @@ function showActionMenu(
   }
   // (music actions land here when they exist)
 
-  if (declared !== null) {
-    menu.addSeparator();
-    menu.addItem(i =>
-      i.setTitle('Update installed domain vaults').setIcon('refresh-cw')
-        .onClick(() => updateDeclaredVaults(host, declared)));
-  }
+  // v0.2.13: "Update installed domain vaults" menu item removed.
+  // It dispatched to updateDeclaredVaults → installVault, which posts
+  // to a hosted vault registry that V1 doesn't have. The bundled
+  // forge-moda runs from plugin assets and is auto-extracted on first
+  // run by welcome.ts:ensureBundledForgeModa — no install step needed.
+  // updateDeclaredVaults + installVault become dead helpers; the v1.0
+  // audit pass (see v1-deployment-plan task #19) handles the cleanup
+  // along with the other tactical dead code.
 
   menu.addSeparator();
   menu.addItem(i =>
