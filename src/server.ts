@@ -217,7 +217,12 @@ export async function computeSnippet(
       // makes it vestigial. Python side still accepts vault_name=None;
       // the JS↔Python boundary call inside computeViaEngine feeds it
       // an empty-string sentinel.
-      const out = await host.computeViaEngine(snippetId, args);
+      // v0.2.22: pass modal-supplied kwargs through to Python. The
+      // pre-v0.2.22 call dropped them silently — JS-side signature
+      // didn't accept inputs. Forge-click on a snippet whose Python
+      // signature has params crashed with TypeError missing required
+      // positional. Latent since v0.2.6.
+      const out = await host.computeViaEngine(snippetId, args, inputs);
       // Shape the response to match the existing /compute return
       // contract (status + json envelope, json carries result + stdout).
       return {

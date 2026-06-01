@@ -772,7 +772,11 @@ export interface PyodideHostInstance {
   // boundary call below feeds it `""` rather than dropping it
   // entirely, to keep the engine signature stable for a follow-up
   // server-side cleanup prompt.
-  computeViaEngine(snippet_id: string, args: unknown[]): Promise<ComputeResult>;
+  // v0.2.22: `inputs` (optional) carries modal-supplied kwargs across
+  // the JS↔Python boundary. Pre-v0.2.22 dropped them silently — the
+  // latent Greet TypeError. Existing callers that don't pass kwargs
+  // (the moda fast-path, iframe protocol) still work via the default.
+  computeViaEngine(snippet_id: string, args: unknown[], inputs?: Record<string, unknown>): Promise<ComputeResult>;
   modaInit(): Promise<ModaInitResult>;
   modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
   modaClick(x: number, y: number): Promise<ModaClickResult>;
@@ -818,17 +822,34 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
   /** Generic compute via the engine's resolver + executor. Used by
    *  the plugin's Forge-click paths (Phase 1) and the iframe's
    *  featured-button via engine-request op="compute" (Phase 2). */
-  async computeViaEngine(snippet_id: string, args: unknown[]): Promise<ComputeResult> {
+  async computeViaEngine(
+    snippet_id: string,
+    args: unknown[],
+    inputs: Record<string, unknown> = {},
+  ): Promise<ComputeResult> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set("_forge_args_in", args as any);
     this.pyodide.globals.set("_forge_snippet_id", snippet_id);
+    // v0.2.22: thread modal-supplied kwargs to the Python side. The
+    // .to_py() cast is canonical Pyodide for JS object → Python dict;
+    // a bare `dict(_forge_inputs_in)` fails because JsProxy isn't
+    // dict-iterable. The latent bug fixed here goes back to v0.2.6
+    // — the JS-side signature never accepted `inputs`, so modal
+    // kwargs were silently dropped at this boundary.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.pyodide.globals.set("_forge_inputs_in", inputs as any);
     // v0.2.9: vault_name dropped from the JS surface. Python's
     // _forge_compute still has the parameter (engine-side cleanup is
     // a separate prompt); feed it the empty-string sentinel the
     // single-user-vault model already ignored.
     this.pyodide.globals.set("_forge_vault_name", "");
     const tuple = this.pyodide.runPython(`
-_forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_name)
+_forge_compute(
+    _forge_snippet_id,
+    list(_forge_args_in or []),
+    _forge_inputs_in.to_py() if _forge_inputs_in else {},
+    _forge_vault_name,
+)
 `);
     const result = tuple.get(0);
     const stdout = tuple.get(1);
