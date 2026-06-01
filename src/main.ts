@@ -20,6 +20,7 @@ import { extractDataBody } from './data-snippet';
 import { openForgeAction, ForgeHost } from './forge-action';
 import { isNetRefusalError, welcomeMessage } from './closed-beta-ux';
 import { shouldSkipForMemfsSync } from './memfs-sync-paths';
+import { reconcileInputs } from './frontmatter-inputs-reconcile';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -1417,6 +1418,22 @@ export default class ForgePlugin extends Plugin {
         console.warn(`Forge: MEMFS sync after write failed for '${id}'`, e);
       }
 
+      // v0.2.24: reconcile frontmatter `inputs:` with the Python
+      // signature we just wrote. Pre-v0.2.24 the frontmatter stayed
+      // empty (or stale) while compute() carried new params; the
+      // modal worked via signature inference (v0.2.20) but the file
+      // looked self-contradictory to a student reader. Best-effort:
+      // failure is non-fatal — frontmatter drift is a readability
+      // concern, not a correctness one. Order matters: MEMFS sync
+      // (above) MUST run first so getInputNames sees the just-
+      // written Python; reconcile runs SECOND so the frontmatter
+      // catches up; dependency-sync (below) runs THIRD.
+      try {
+        await this.reconcileFrontmatterInputs(file, id);
+      } catch (e) {
+        console.warn(`Forge: frontmatter reconciliation failed for '${id}'`, e);
+      }
+
       // After writing the new Python, ask the BE to sync the # Dependencies
       // section so the body reflects the just-written code (B7).
       try {
@@ -1441,6 +1458,34 @@ export default class ForgePlugin extends Plugin {
         }
       }
     }
+  }
+
+  /** v0.2.24: glue between writeGeneratedCode and the pure-core
+   *  reconcileInputs helper. Routes the three obsidian-coupled
+   *  operations (getInputNames via Pyodide host, read current
+   *  frontmatter via metadataCache, write new frontmatter via
+   *  processFrontMatter) through the structural adapter so the
+   *  decision-logic stays testable without an obsidian shim. */
+  private async reconcileFrontmatterInputs(file: TFile, snippetId: string): Promise<void> {
+    await reconcileInputs(snippetId, {
+      getInferredInputs: async (id) => {
+        const hostManager = getPyodideHost();
+        if (!hostManager) throw new Error('Pyodide host not wired');
+        const host = await hostManager.getInstance();
+        return host.getInputNames(id);
+      },
+      readCurrentInputs: () => {
+        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        return Array.isArray(fm?.inputs)
+          ? (fm!.inputs as unknown[]).map(String)
+          : [];
+      },
+      writeInputs: async (next) => {
+        await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+          fm.inputs = next;
+        });
+      },
+    });
   }
 
   private async syncEdgesForActive() {
