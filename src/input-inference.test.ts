@@ -131,6 +131,12 @@ _forge_resolver = GraphResolver(_forge_registry)
 # forge.core.* collapses these duplicates.
 import ast as _forge_ast
 def _forge_get_input_names(snippet_id):
+    # v0.2.21 race fix: refresh registry from MEMFS before resolving.
+    relpath = f"/bundle/user-vault/{snippet_id}.md"
+    try:
+        _forge_registry.refresh_file(relpath)
+    except Exception:
+        pass
     snip = _forge_resolver.resolve(snippet_id)
     meta = snip.get("meta") or {}
     declared = [str(i) for i in (meta.get("inputs") or [])]
