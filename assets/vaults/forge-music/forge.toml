@@ -1,4 +1,4 @@
 name = "forge-music"
-version = "0.3.0"
+version = "0.3.1"
 description = "Forge vault for music composition and analysis."
 domains = ["music"]
