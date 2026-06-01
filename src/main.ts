@@ -1499,13 +1499,30 @@ export default class ForgePlugin extends Plugin {
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const frontmatter = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
 
-    // Local frontmatter is the source of truth when it exists. When it
-    // doesn't (e.g., the user has an empty install.md stub over the builtin),
-    // fall back to the inventory snapshot from /connect so we still ask for
-    // the right inputs.
-    const inputs: string[] = frontmatter
-      ? (frontmatter.inputs ?? [])
-      : (this.lookupInventoryInputs(snippetId) ?? []);
+    // v0.2.20: Python signature is the source of truth for which
+    // params compute() actually needs. Ask the engine for the
+    // signature-augmented input names; fall back to frontmatter-
+    // only if Pyodide isn't ready yet (early-Forge-click edge case
+    // before host warm-up).
+    let inputs: string[];
+    try {
+      const hostManager = getPyodideHost();
+      if (!hostManager) throw new Error('Pyodide host not wired');
+      const host = await hostManager.getInstance();
+      inputs = await host.getInputNames(snippetId);
+    } catch (e) {
+      console.warn(
+        `Forge: signature-inferred inputs unavailable for '${snippetId}', falling back to frontmatter`,
+        e,
+      );
+      // Local frontmatter is the source of truth when it exists.
+      // When it doesn't (e.g., empty install.md stub over the
+      // builtin), fall back to the inventory snapshot from /connect
+      // so we still ask for the right inputs.
+      inputs = frontmatter
+        ? (frontmatter.inputs ?? [])
+        : (this.lookupInventoryInputs(snippetId) ?? []);
+    }
 
     if (inputs.length > 0) {
       const cached = this.inputCache[snippetId] ?? {};

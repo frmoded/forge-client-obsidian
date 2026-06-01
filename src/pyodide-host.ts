@@ -438,6 +438,63 @@ def _forge_get_generate_inventory(snippet_id: str):
         "deps": dep_infos,
     }
 
+def _forge_get_input_names(snippet_id: str):
+    """v0.2.20: derive the inputs to request from the user by
+    parsing the Python facet's compute() signature, then unioning
+    with the frontmatter-declared inputs list.
+
+    The Python signature is the source of truth for what compute()
+    actually needs — the LLM may write a signature with params not
+    declared in frontmatter (the Greet bug — empty frontmatter
+    inputs + def compute(context, name)), and the modal must still
+    surface those so the user can supply values.
+
+    Ordering: declared inputs first (preserves user-intended UI
+    order), then any signature-only params appended at the end.
+
+    Defensive fallbacks:
+      - malformed Python (SyntaxError): return declared.
+      - missing/empty Python facet: return declared.
+      - missing compute() function: return declared.
+      - 'context' param is always filtered (engine implicitly
+        passes it; user never supplies via the modal)."""
+    import ast as _forge_ast
+    snip = _forge_resolver.resolve(snippet_id)
+    meta = snip.get("meta") or {}
+    declared = [str(i) for i in (meta.get("inputs") or [])]
+
+    body = snip.get("body") or ""
+    try:
+        code = extract_python(body)
+    except Exception:
+        return declared
+    if not code or not code.strip():
+        return declared
+
+    try:
+        tree = _forge_ast.parse(code)
+    except SyntaxError:
+        return declared
+
+    sig_args = None
+    for node in _forge_ast.walk(tree):
+        if isinstance(node, _forge_ast.FunctionDef) and node.name == "compute":
+            sig_args = (
+                [a.arg for a in node.args.args]
+                + [a.arg for a in node.args.kwonlyargs]
+            )
+            break
+    if sig_args is None:
+        return declared
+
+    sig_args = [a for a in sig_args if a != "context"]
+
+    out = list(declared)
+    for a in sig_args:
+        if a not in out:
+            out.append(a)
+    return out
+
 def _forge_preflight_then_inventory(snippet_id: str):
     """v0.2.19: pre-flight inventory helper. Refreshes the registry's
     cached entry for this snippet from current MEMFS state, then
@@ -727,6 +784,14 @@ export interface PyodideHostInstance {
    *  to bypass the async `vault.on('modify')` race during fast
    *  Forge-clicks (Cmd-S → immediate Forge-click within ~100ms). */
   preflightThenInventory(snippetId: string): Promise<GenerateInventory>;
+  /** v0.2.20: derive the inputs to request from the user by parsing
+   *  the Python facet's compute() signature, unioned with the
+   *  frontmatter-declared inputs list. Used by the Forge-click
+   *  modal-open path to decide which inputs to ask for — the Python
+   *  signature is the source of truth, so LLM-generated signatures
+   *  with params not declared in frontmatter still surface to the
+   *  user. */
+  getInputNames(snippetId: string): Promise<string[]>;
 }
 
 class PyodideHostInstanceImpl implements PyodideHostInstance {
@@ -838,6 +903,16 @@ _forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_n
     this.pyodide.globals.set('_forge_preflight_snippet_id', snippetId);
     const proxy = this.pyodide.runPython(`_forge_preflight_then_inventory(_forge_preflight_snippet_id)`);
     return this._unwrap(proxy) as GenerateInventory;
+  }
+
+  /** v0.2.20 — see interface doc. Routes through the Python helper
+   *  which parses ast → unions with frontmatter declared inputs. */
+  async getInputNames(snippetId: string): Promise<string[]> {
+    this.pyodide.globals.set('_forge_input_names_snippet_id', snippetId);
+    const proxy = this.pyodide.runPython(
+      `list(_forge_get_input_names(_forge_input_names_snippet_id))`,
+    );
+    return this._unwrap(proxy) as string[];
   }
 
   /** Convert a Pyodide PyProxy to a plain JS value, destroying the
