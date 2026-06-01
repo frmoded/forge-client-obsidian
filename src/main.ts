@@ -1246,6 +1246,14 @@ export default class ForgePlugin extends Plugin {
       //    the local compute uses, so A4 shadows + A5.1 library subdirs
       //    are honored. Pyodide is lazy-init; first /generate call pays
       //    the ~1.5s warm-up cost.
+      //
+      // v0.2.19: pre-flight sync to close the vault.on('modify')
+      // race. Cmd-S → modify event fires async → Forge-click within
+      // ~100ms can beat the handler to /generate. Reading fresh disk
+      // content + syncing to MEMFS synchronously here makes the
+      // timing local to the Forge-click handler instead of dependent
+      // on hook completion. v0.2.18's hook remains as belt-and-
+      // suspenders for the between-clicks case.
       let payload: AlphaGenerateRequest;
       try {
         const pyodideHost = getPyodideHost();
@@ -1253,7 +1261,22 @@ export default class ForgePlugin extends Plugin {
           throw new Error('Pyodide host not initialized');
         }
         const host = await pyodideHost.getInstance();
-        const inv = await host.getGenerateInventory(snippetId);
+
+        // v0.2.19: pre-flight disk→MEMFS sync. Best-effort: if the
+        // file can't be located or read, fall through to the
+        // preflight inventory call which still refreshes from
+        // whatever MEMFS currently contains.
+        try {
+          const file = this.app.vault.getAbstractFileByPath(`${snippetId}.md`);
+          if (file instanceof TFile) {
+            const freshContent = await this.app.vault.read(file);
+            await host.syncUserVaultFile(file.path, freshContent);
+          }
+        } catch (e) {
+          console.warn('Forge: pre-flight sync failed before /generate', e);
+        }
+
+        const inv = await host.preflightThenInventory(snippetId);
         payload = {
           snippet_id: inv.snippet_id,
           description: inv.description,

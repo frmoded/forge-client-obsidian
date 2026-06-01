@@ -175,20 +175,17 @@ def _forge_get_generate_inventory(snippet_id):
         "deps": dep_infos,
     }
 
-# Intentionally NOT defined:
-#
-# def _forge_preflight_then_inventory(snippet_id: str):
-#     """v0.2.19: sync any current MEMFS file content for this snippet
-#     into the registry before returning the inventory. Closes the
-#     race between async vault.on('modify') and synchronous /generate.
-#     Called from JS-side forgeSnippet's pre-/generate path."""
-#     # 1. Find the snippet's vault-relative path. For V1 single-vault,
-#     #    snippet basename + ".md" under authoring root.
-#     # 2. Read fresh content from MEMFS at /bundle/user-vault/{relpath}.
-#     # 3. Call _forge_registry.refresh_file(relpath) to update cache.
-#     # 4. Return _forge_get_generate_inventory(snippet_id).
-#
-# The four tests below fail until the fix prompt adds this helper.
+# v0.2.19: verbatim copy of pyodide-host.ts:_forge_preflight_then_inventory.
+# The 4 failing-test cases below flip to pass once this is defined.
+# Drift-protection NOTE from v0.2.5 applies: keep aligned with the
+# inlined Python in src/pyodide-host.ts.
+def _forge_preflight_then_inventory(snippet_id: str):
+    relpath = f"/bundle/user-vault/{snippet_id}.md"
+    try:
+        _reg.refresh_file(relpath)
+    except Exception:
+        pass
+    return _forge_get_generate_inventory(snippet_id)
 `);
 
   return py;

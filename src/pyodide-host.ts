@@ -438,6 +438,39 @@ def _forge_get_generate_inventory(snippet_id: str):
         "deps": dep_infos,
     }
 
+def _forge_preflight_then_inventory(snippet_id: str):
+    """v0.2.19: pre-flight inventory helper. Refreshes the registry's
+    cached entry for this snippet from current MEMFS state, then
+    returns the inventory.
+
+    Called from JS-side forgeSnippet BEFORE /generate to close the
+    race between async vault.on('modify') and synchronous Forge-
+    click. The JS caller is responsible for syncing fresh disk
+    content INTO MEMFS first (via syncUserVaultFile); this helper
+    handles the registry-refresh + inventory step in one atomic
+    call.
+
+    Path inference: V1 single-vault convention is that snippet_id
+    maps to a relative path of "<snippet_id>.md". Qualified IDs
+    like "forge-moda/setup" become "forge-moda/setup.md". For the
+    user's authoring vault, snippets live at the root, so
+    unqualified IDs work directly. For bundled libraries
+    (forge-moda, forge-music), the qualified prefix matches the
+    library subdir.
+
+    Unknown / non-existent paths silently no-op the refresh, then
+    let _forge_get_generate_inventory's own resolve() raise the
+    canonical SnippetResolutionError. Matches the contract test
+    (d) asserts."""
+    relpath = f"/bundle/user-vault/{snippet_id}.md"
+    try:
+        _forge_registry.refresh_file(relpath)
+    except Exception:
+        # Path may not exist (bundle-only snippet, qualified-id
+        # edge case). Defer to resolve()'s canonical error.
+        pass
+    return _forge_get_generate_inventory(snippet_id)
+
 def _forge_sync_user_file(relpath: str, new_body: str):
     """v0.2.17 — sync a single user-vault file change into MEMFS AND
     refresh the SnippetRegistry's cached entry for it. Called from JS
@@ -688,6 +721,12 @@ export interface PyodideHostInstance {
    *  (no leading slash); content is the full file body including
    *  frontmatter. */
   syncUserVaultFile(relPath: string, content: string): Promise<void>;
+  /** v0.2.19: synchronous pre-flight inventory. Refreshes the
+   *  registry's cached entry for the snippet from current MEMFS
+   *  state, then returns the inventory. Use after `syncUserVaultFile`
+   *  to bypass the async `vault.on('modify')` race during fast
+   *  Forge-clicks (Cmd-S → immediate Forge-click within ~100ms). */
+  preflightThenInventory(snippetId: string): Promise<GenerateInventory>;
 }
 
 class PyodideHostInstanceImpl implements PyodideHostInstance {
@@ -787,6 +826,18 @@ _forge_compute(_forge_snippet_id, list(_forge_args_in or []), {}, _forge_vault_n
     this.pyodide.globals.set('_forge_sync_relpath', relPath);
     this.pyodide.globals.set('_forge_sync_body', content);
     this.pyodide.runPython(`_forge_sync_user_file(_forge_sync_relpath, _forge_sync_body)`);
+  }
+
+  /** v0.2.19 — see interface doc. Atomically refreshes the registry's
+   *  cached entry for snippet_id from MEMFS, then materializes the
+   *  inventory. The combo replaces the v0.2.17 + v0.2.18 two-step
+   *  (syncUserVaultFile → getGenerateInventory) at the Forge-click
+   *  hot path where the race matters; the two-step still exists for
+   *  callers that DON'T need the race-fix semantics. */
+  async preflightThenInventory(snippetId: string): Promise<GenerateInventory> {
+    this.pyodide.globals.set('_forge_preflight_snippet_id', snippetId);
+    const proxy = this.pyodide.runPython(`_forge_preflight_then_inventory(_forge_preflight_snippet_id)`);
+    return this._unwrap(proxy) as GenerateInventory;
   }
 
   /** Convert a Pyodide PyProxy to a plain JS value, destroying the
