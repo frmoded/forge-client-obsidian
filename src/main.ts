@@ -21,6 +21,7 @@ import { openForgeAction, ForgeHost } from './forge-action';
 import { isNetRefusalError, welcomeMessage } from './closed-beta-ux';
 import { shouldSkipForMemfsSync } from './memfs-sync-paths';
 import { reconcileInputs } from './frontmatter-inputs-reconcile';
+import { snippetIdFromPath } from './snippet-id-from-path';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -759,7 +760,8 @@ export default class ForgePlugin extends Plugin {
     }
 
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
-    const snippetId = file.basename;
+    // v0.2.26: qualified snippet_id for library subdir files.
+    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     const modal = new ForgeGenerationModal(this.app, `Canonicalizing ${snippetId}…`);
     modal.open();
 
@@ -1223,7 +1225,8 @@ export default class ForgePlugin extends Plugin {
       return false;
     }
 
-    const snippetId = view.file.basename;
+    // v0.2.26: qualified snippet_id for library subdir files.
+    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
     const settings = this.settings;
 
     // Fail-fast on empty token: actionable Notice without spending a
@@ -1494,7 +1497,8 @@ export default class ForgePlugin extends Plugin {
       new Notice('No active snippet to sync.');
       return;
     }
-    const snippetId = view.file.basename;
+    // v0.2.26: qualified snippet_id for library subdir files.
+    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const res = await syncDependencies(this.settings.serverUrl, vaultPath, snippetId);
     if (res.status === 200) {
@@ -1540,7 +1544,13 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
-    const snippetId = view.file.basename;
+    // v0.2.26: derive a qualified snippet_id when the file lives
+    // inside a library-vault subdir (forge-music/blues/song.md →
+    // "forge-music/blues/song"). Pre-v0.2.26 used view.file.basename
+    // which produced bare "song" for any subdir file — invisible to
+    // the registry, which indexes library subdir snippets under
+    // qualified bare IDs like `blues/song`.
+    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const frontmatter = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
 
