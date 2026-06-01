@@ -224,8 +224,14 @@ export class PyodideHost {
 
     // Load stock packages. numpy + pyyaml are Pyodide-stock; they
     // resolve from the indexURL we set above (which points at our
-    // local pyodide/ directory). micropip same.
-    await pyodide.loadPackage(["numpy", "pyyaml", "micropip"]);
+    // local pyodide/ directory). v0.2.27 dropped micropip — we used
+    // to load it for future-proofing, but the music21-bundling work
+    // proved micropip pulls transitive deps via loadPackage (calling
+    // out to indexURL → the CDN in dev, 404 in production-no-network)
+    // even with deps=False. We vendor wheels directly under
+    // assets/wheels/ and extract them via stdlib zipfile in the
+    // runPython block below.
+    await pyodide.loadPackage(["numpy", "pyyaml"]);
     console.log(`Forge: stock packages loaded in ${(performance.now() - t0).toFixed(0)}ms`);
 
     // Mount the engine + user vault + bundled libraries into MEMFS.
@@ -252,6 +258,23 @@ export class PyodideHost {
       const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
       this._mkdirP(pyodide, "/bundle/" + relpath);
       pyodide.FS.writeFile("/bundle/" + relpath, bytes);
+    }
+
+    // v0.2.27: mount vendored wheels (music21 + minimum deps) into
+    // /bundle/wheels/. The runPython block below extracts them into
+    // /bundle/site-packages/ via stdlib zipfile. No micropip; no
+    // network. See music21-bundle.test.ts for the verification harness.
+    if (manifest.wheels && manifest.wheels.length > 0) {
+      pyodide.FS.mkdir("/bundle/wheels");
+      pyodide.FS.mkdir("/bundle/site-packages");
+      for (const relpath of manifest.wheels) {
+        // relpath is e.g. "wheels/music21-8.3.0-py3-none-any.whl"
+        const url = this.pluginAssetUrl(relpath);
+        const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+        this._mkdirP(pyodide, "/bundle/" + relpath);
+        pyodide.FS.writeFile("/bundle/" + relpath, bytes);
+      }
+      console.log(`Forge: ${manifest.wheels.length} wheels mounted (music21 + deps).`);
     }
 
     // Step 1: walk the user's active vault. Filter to Forge-shaped
@@ -327,6 +350,22 @@ export class PyodideHost {
     pyodide.runPython(`
 import sys
 sys.path.insert(0, "/bundle/engine")
+
+# v0.2.27: extract vendored wheels (music21 + minimum deps) into a
+# site-packages dir and put it on sys.path. No micropip — see the
+# JS-side comment above the wheel mount for why. The wheels mount is
+# optional (older builds don't have manifest.wheels); guard the
+# directory existence.
+import os
+if os.path.isdir("/bundle/wheels"):
+    import zipfile
+    SITE = "/bundle/site-packages"
+    if SITE not in sys.path:
+        sys.path.insert(0, SITE)
+    for fname in sorted(os.listdir("/bundle/wheels")):
+        if fname.endswith(".whl"):
+            with zipfile.ZipFile(os.path.join("/bundle/wheels", fname)) as zf:
+                zf.extractall(SITE)
 
 import io
 import uuid

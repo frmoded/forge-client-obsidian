@@ -58,6 +58,12 @@ const REQUIRED_FILES = [
   { path: "assets/vaults/forge-moda/forge.toml",              hint: "Repo is missing the forge-moda vault bundle — unexpected." },
   { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle (v0.2.15) — copy ~/projects/forge-music/{forge.toml,form.md,twelve_bar_blues_progression.md} into assets/vaults/forge-music/." },
   { path: "assets/vaults/forge-music/form.md",                hint: "forge-music bundle missing form.md — see hint above." },
+  // v0.2.27: vendored music21 + minimum deps so the music domain
+  // actually works in Pyodide (closed-beta has no network). Pin
+  // versions in the hint so a fresh setup can re-vendor the same
+  // wheel files; see src/music21-bundle.test.ts for the verification.
+  { path: "assets/wheels/music21-8.3.0-py3-none-any.whl",     hint: "music21 wheel missing — re-vendor: pip download --no-deps -d assets/wheels music21==8.3.0 chardet jsonpickle more-itertools webcolors joblib requests urllib3 certifi idna; charset-normalizer needs --platform any --python-version 313 --only-binary :all: for the pure-Python wheel." },
+  { path: "assets/engine/forge/music/lib.py",                 hint: "forge.music.lib missing from engine bundle — copy from ~/projects/forge/forge/music/{__init__.py,lib.py} into assets/engine/forge/music/." },
 ];
 
 async function exists(p) {
