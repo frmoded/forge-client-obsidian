@@ -19,6 +19,7 @@ import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
 import { openForgeAction, ForgeHost } from './forge-action';
 import { isNetRefusalError, welcomeMessage } from './closed-beta-ux';
+import { shouldSkipForMemfsSync } from './memfs-sync-paths';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -367,6 +368,41 @@ export default class ForgePlugin extends Plugin {
             this.chipsReloadTimer = null;
             void this.reloadChipPalette(/*refreshOpenView=*/ true);
           }, 300);
+        }
+      }),
+    );
+
+    // v0.2.18: keep the Pyodide-mounted user vault in sync with
+    // direct editor edits. v0.2.17 fixed the writeGeneratedCode →
+    // next-compute path, but smoke surfaced that a user editing
+    // an English facet in the Obsidian editor + saving → clicking
+    // Forge still hit a stale-inventory bug on the FIRST click
+    // (α saw pre-edit English; second click worked because the
+    // first click's writeGeneratedCode triggered the explicit
+    // sync). This hook closes that gap.
+    //
+    // Obsidian throttles vault.on('modify') to roughly autosave
+    // cadence (~1s post-keystroke) plus an immediate fire on
+    // explicit Cmd-S. No app-side debounce needed for interactive
+    // editing. shouldSkipForMemfsSync filters .obsidian/, .forge/,
+    // .trash/, and non-markdown paths so the hook stays quiet on
+    // workspace-state churn.
+    //
+    // Non-fatal try/catch matches v0.2.17's writeGeneratedCode
+    // sync — a failed MEMFS push doesn't lose the user's edit
+    // (still on disk), just leaves the registry temporarily stale.
+    this.registerEvent(
+      this.app.vault.on('modify', async (file) => {
+        if (!(file instanceof TFile)) return;
+        if (shouldSkipForMemfsSync(file.path)) return;
+        try {
+          const hostManager = getPyodideHost();
+          if (!hostManager) return;
+          const host = await hostManager.getInstance();
+          const content = await this.app.vault.read(file);
+          await host.syncUserVaultFile(file.path, content);
+        } catch (e) {
+          console.warn(`Forge: MEMFS sync on modify failed for '${file.path}'`, e);
         }
       }),
     );

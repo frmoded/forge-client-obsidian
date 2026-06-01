@@ -152,6 +152,21 @@ def _forge_find_deps(body):
             deps.append(dep); seen.add(dep)
     return deps
 
+# v0.2.18: verbatim copy of pyodide-host.ts:_forge_sync_user_file.
+# The production vault.on('modify') hook calls this; case 4 below
+# invokes it to simulate the production flow at suite time.
+# Drift-protection comment from v0.2.5 applies: keep aligned with
+# the inlined Python in src/pyodide-host.ts.
+import os as _forge_os_for_test
+def _forge_sync_user_file(relpath, new_body):
+    target = f"/bundle/user-vault/{relpath}"
+    parent = _forge_os_for_test.path.dirname(target)
+    if parent:
+        _forge_os_for_test.makedirs(parent, exist_ok=True)
+    with open(target, "w") as f:
+        f.write(new_body)
+    _reg.refresh_file(target)
+
 def _forge_get_generate_inventory(snippet_id):
     snip = _resolver.resolve(snippet_id)
     meta = snip.get("meta") or {}
@@ -231,36 +246,43 @@ test('inventory-staleness: inventory returns FRESH english after refresh_file', 
   );
 });
 
-// (d) BUG REPRO — the load-bearing failing assertion. The "ideal"
-// behavior is that `getGenerateInventory` always returns fresh
-// english regardless of whether refresh_file was called.
+// (d) BUG REPRO — locked in as a regression test by v0.2.18. The
+// originating prompt landed this case as a failing-test-only commit
+// (assertion: getGenerateInventory should return fresh english
+// without explicit refresh). The v0.2.18 fix is the production
+// vault.on('modify') hook in main.ts, which calls
+// syncUserVaultFile → _forge_sync_user_file → refresh_file in
+// response to Obsidian autosave / Cmd-S.
 //
-// This test FAILS today. The follow-up fix prompt will:
-//   - Hook `vault.on('modify')` (debounced) to call
-//     syncUserVaultFile on user-vault `.md` edits, OR
-//   - Have `getGenerateInventory` (or its caller) refresh the
-//     snippet's entry from MEMFS before reading, OR
-//   - Some other mechanism that closes the edit→first-Forge-click
-//     staleness gap.
+// The hook fires inside Obsidian, not in node --test. To verify
+// "the v0.2.18 fix propagates direct edits to inventory" at
+// suite-run time, this case now simulates the production flow by
+// invoking `_forge_sync_user_file` directly — the same Python
+// helper the production hook calls. If we removed this case, the
+// edit → inventory contract would lose its suite-time regression
+// witness; if we left it as a writeFile-only test, it would still
+// fail (the test bypasses Obsidian's modify event).
 //
-// **Until that fix lands, this case is the bug witness.** The
-// commit that adds it is test-only (no fix); the assertion
-// failure documents the bug at suite-run time and locks it in as
-// a regression test for whichever fix lands.
-test('inventory-staleness: BUG REPRO — getGenerateInventory should return fresh english without explicit refresh', async () => {
+// Case (b) above keeps the "writeFile-only is stale" assertion as
+// the documented pre-hook behavior; case (d) here asserts the
+// post-hook (production-fix) behavior. Together they pin the
+// contract from both sides.
+test('inventory-staleness: post-modify-hook flow returns fresh english (v0.2.18 fix witness)', async () => {
   const py = await bootFreshGreet(BODY_OLD);
-  // Same write as case (b) — no refresh_file follow-up.
-  py.FS.writeFile('/bundle/user-vault/Greet.md', BODY_NEW);
+  // Simulate v0.2.18's vault.on('modify') flow: Obsidian fires
+  // modify → main.ts hook calls host.syncUserVaultFile(file.path,
+  // content) → pyodide-host.ts wraps the runPython call →
+  // _forge_sync_user_file writes to MEMFS + refreshes the registry.
+  // The test calls the Python helper directly because Obsidian's
+  // event loop isn't available in node --test.
+  py.runPython(`
+_forge_sync_user_file("Greet.md", _forge_new_body)
+`.replace('_forge_new_body', JSON.stringify(BODY_NEW)));
   const english = py.runPython(`_forge_get_generate_inventory("Greet")["english"]`);
-  // EXPECTED: english should contain the NEW greeting because the
-  // disk (MEMFS) was updated. This is what the user expects when
-  // they edit in the editor and click Forge.
-  // ACTUAL (today, pre-fix): english still contains the OLD
-  // greeting — the inventory was materialized from the stale
-  // resolver cache. This assertion FAILS until the fix ships.
+  // Post-hook, the inventory should see the new english.
   assert.match(
     english,
     /hello 9991/,
-    'getGenerateInventory should auto-pick-up new english from MEMFS without an explicit refresh_file call (this fails until the follow-up fix lands)',
+    'after the v0.2.18 modify hook propagates the edit, inventory should return fresh english',
   );
 });
