@@ -107,54 +107,52 @@ async function bootGreet(): Promise<any> {
 
   await py.loadPackage(['pyyaml', 'numpy']);
 
-  // Install the engine + the production _forge_compute / _forge_run_snippet
-  // helpers verbatim. Drift-protection NOTE: keep aligned with
-  // src/pyodide-host.ts.
-  py.runPython(`
-import sys
-if '/bundle/engine' not in sys.path:
-    sys.path.insert(0, '/bundle/engine')
+  // v0.2.23: load the production inline Python block from
+  // src/pyodide-host.ts dynamically. The block is bounded by the
+  // `// _PYTHON_BLOCK_BEGIN` / `// _PYTHON_BLOCK_END` markers that
+  // were added in v0.2.23. Extracting + executing it here means the
+  // tests below exercise the SAME production helpers Pyodide loads
+  // at plugin onload — not a hand-written mirror that can drift.
+  //
+  // This closes the v0.2.22 drift trap: the prior fixture defined
+  // `_forge_run_snippet` with a 4-arg signature claiming "verbatim
+  // mirror", but production was the 3-arg buggy version. Suite tests
+  // passed against the fixture's pre-applied fix; production stayed
+  // broken. The new approach makes that class of drift mechanically
+  // impossible.
+  //
+  // The block expects `_forge_user_vault` to be the mount root the
+  // engine scans; production sets `/bundle/user-vault`. We also need
+  // the engine on sys.path — both prerequisites match what production
+  // sets up before runPython hits the marker.
+  const hostSource = fs.readFileSync(
+    path.resolve(process.cwd(), 'src/pyodide-host.ts'),
+    'utf-8',
+  );
+  const blockMatch = hostSource.match(
+    /\/\/ _PYTHON_BLOCK_BEGIN[\s\S]*?pyodide\.runPython\(`([\s\S]*?)`\);\s*\/\/ _PYTHON_BLOCK_END/,
+  );
+  if (!blockMatch) {
+    throw new Error(
+      'Could not locate the _PYTHON_BLOCK in src/pyodide-host.ts — '
+      + 'the BEGIN/END markers are missing or the inline runPython('
+      + ' shape has changed.',
+    );
+  }
+  // The template literal lives inside the source as ES-string-escaped
+  // text. Pyodide's runPython expects the un-escaped bytes (newlines,
+  // single backslashes for Python escapes). esbuild/V8 do the
+  // unescape at runtime; we must reproduce that here. The two
+  // sequences that matter for our block:
+  //   `\\` (source) → `\` (Python sees)
+  //   `\${` (source) → `${` (Python sees — string interpolation
+  //                           pass-through)
+  // No other escapes are in the block currently. Keep this minimal.
+  const productionPython = blockMatch[1]
+    .replace(/\\\\/g, '\\')
+    .replace(/\\\$\{/g, '${');
 
-from forge.core.snippet_registry import SnippetRegistry
-from forge.core.graph_resolver import GraphResolver
-from forge.core.executor import extract_python, exec_python
-from forge.core.serialization import serialize_result
-
-_forge_user_vault = '/bundle/user-vault'
-_forge_registry = SnippetRegistry()
-_forge_registry.scan(_forge_user_vault)
-_forge_resolver = GraphResolver(_forge_registry)
-
-def _forge_get_resolver(vault_name=None):
-    return _forge_registry, _forge_resolver
-
-def _forge_run_snippet(snippet_id, args, inputs, vault_name=None):
-    reg, resolver = _forge_get_resolver(vault_name)
-    snip = resolver.resolve(snippet_id)
-    snippet_type = snip.get("meta", {}).get("type")
-    if snippet_type == "action":
-        code = extract_python(snip["body"])
-        stdout, result = exec_python(
-            code, inputs, resolver, args=tuple(args),
-            vault_path=_forge_user_vault,
-            registry=reg, snippet_id=snip["snippet_id"],
-        )
-    elif snippet_type in ("data", "snapshot"):
-        from forge.core.executor import read_data_snippet
-        result = read_data_snippet(snip)
-        stdout = ""
-    else:
-        raise ValueError(f"unknown snippet type '{snippet_type}'")
-    return stdout, result
-
-def _forge_compute(snippet_id, args, inputs, vault_name):
-    _ = inputs  # forwarded into run_snippet below
-    reg, resolver = _forge_get_resolver(vault_name)
-    snip = resolver.resolve(snippet_id)
-    stdout, raw_result = _forge_run_snippet(snippet_id, args, inputs, vault_name)
-    result = serialize_result(raw_result, snip)
-    return result, stdout
-`);
+  py.runPython(productionPython);
 
   return py;
 }

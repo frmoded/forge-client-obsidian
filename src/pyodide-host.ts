@@ -314,6 +314,16 @@ export class PyodideHost {
     // in Python globals between engine-request round-trips (Phase 2):
     // state never crosses the JS↔Python boundary; only its wire
     // serialization (the per-row Particle list) does.
+    //
+    // _PYTHON_BLOCK_BEGIN
+    // v0.2.23: src/compute-kwargs.test.ts extracts the inline Python
+    // between the BEGIN/END markers and runs it inside Pyodide-in-Node
+    // so the suite exercises the same helpers production loads. This
+    // closes the v0.2.22 drift trap (test fixture mirrored a fixed
+    // version while production stayed broken). Don't add Python that
+    // depends on JS-side prep above this marker, and don't remove
+    // these markers unless the dynamic-load fixture in
+    // compute-kwargs.test.ts is updated to match.
     pyodide.runPython(`
 import sys
 sys.path.insert(0, "/bundle/engine")
@@ -584,10 +594,18 @@ def _forge_get_resolver(vault_name=None):
     _ = vault_name
     return _forge_registry, _forge_resolver
 
-def _forge_run_snippet(snippet_id: str, args, vault_name=None):
+def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None):
     """Run a snippet and return (stdout, result). Action and data
     snippets dispatch via the same path the engine's /compute endpoint
-    uses internally."""
+    uses internally.
+
+    v0.2.23: 'inputs' parameter added. Pre-v0.2.23 hardcoded '{}'
+    into exec_python, silently dropping any kwargs threaded from the
+    JS-side modal. The 'inputs=None' default keeps the moda-fast-path
+    and iframe-protocol callers (which pass only positional args)
+    compatible — they still get the empty-kwargs behavior."""
+    if inputs is None:
+        inputs = {}
     reg, resolver = _forge_get_resolver(vault_name)
     snip = resolver.resolve(snippet_id)
     snippet_type = snip.get("meta", {}).get("type")
@@ -609,7 +627,7 @@ def _forge_run_snippet(snippet_id: str, args, vault_name=None):
             f"body={_body_len}ch code={_code_len}ch preview={_code_preview!r}"
         )
         stdout, result = exec_python(
-            code, {}, resolver, args=tuple(args),
+            code, inputs, resolver, args=tuple(args),
             vault_path=_forge_user_vault,
             registry=reg, snippet_id=snip["snippet_id"],
         )
@@ -623,7 +641,9 @@ def _forge_run_snippet(snippet_id: str, args, vault_name=None):
 
 def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
     """Phase 1 entry point — kept for backward compat. inputs is the
-    second positional in the old signature; we forward through.
+    third positional; v0.2.23 threads it through to _forge_run_snippet
+    (pre-v0.2.23 silently discarded via '_ = inputs', which was the
+    root cause of the Greet TypeError that v0.2.17-v0.2.22 chased).
 
     Mirrors the HTTP /compute endpoint's serialize_result step:
     raw Python return values (ParticleState dataclasses, music21
@@ -632,10 +652,9 @@ def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
     Without this, raw dataclasses leak through Pyodide's toJs as
     non-cloneable PyProxies, breaking the iframe's postMessage
     relay AND the structured rendering in Forge Output."""
-    _ = inputs
     reg, resolver = _forge_get_resolver(vault_name)
     snip = resolver.resolve(snippet_id)
-    stdout, raw_result = _forge_run_snippet(snippet_id, args, vault_name)
+    stdout, raw_result = _forge_run_snippet(snippet_id, args, inputs, vault_name)
     result = serialize_result(raw_result, snip)
     return result, stdout
 
@@ -715,6 +734,7 @@ def _forge_moda_click(x, y):
     _forge_moda_state = new_state
     return {"ack": True, "stdout": stdout}
 `);
+    // _PYTHON_BLOCK_END
     console.log(`Forge: engine ready in ${(performance.now() - t0).toFixed(0)}ms`);
 
     return new PyodideHostInstanceImpl(pyodide);
