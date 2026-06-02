@@ -13,6 +13,8 @@ Should feel like the song breaks open — denser than the vocal choruses, taking
 
 Twelve bars matching [[form]]'s harmonic progression (I for 4 bars, IV for 2, I for 2, V-IV-I-V turnaround). The solo line should breathe with the underlying chord changes — lean on chord tones at the bar boundaries, especially when the harmony shifts to IV (bar 5), V (bar 9), and through the turnaround — but feel improvisational within each bar. Uses minor pentatonic with the blue note (b5), with occasional chromatic passing tones.
 
+Uses minor pentatonic regardless of [[form]]'s declared mode — blues instrumental-solo convention: minor-pentatonic line over the major-mode chord progression. The `mode='minor'` kwargs in the Python facet are deliberate.
+
 Reads the key and structure from [[form]]. Inherits time signature (12/8) and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] as well, so the whole song stays coherent if any of those change at the source.
 
 ---

@@ -11,6 +11,8 @@ The B line of the AAB lyric — the answer, the punchline, the resolution. Four 
 
 Starts higher than [[vocal_phrase_a]] — entering around the octave above the tonic, or on the minor third above that — with more melodic activity than the A line. Descends through the minor-pentatonic scale degrees, with a touch of the blue note (b5) as a bend, and resolves to the tonic in the home octave by the last bar. More notes, fewer rests than the A line. Should feel like the singer arrives at the conclusion they've been building toward across the AAB pattern. Ends with a slight downward bend on the tonic.
 
+Uses minor pentatonic regardless of [[form]]'s declared mode — same blues convention as [[vocal_phrase_a]]: minor-pentatonic vocal line over the major-mode chord progression. The `mode='minor'` kwargs in the Python facet are deliberate.
+
 Reads the key from [[form]]. Inherits time signature (12/8) and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] as well, so the whole song stays coherent if any of those change at the source.
 
 ---
