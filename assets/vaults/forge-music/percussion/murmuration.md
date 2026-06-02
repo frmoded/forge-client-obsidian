@@ -22,6 +22,8 @@ Eight 4-bar sections at 96 BPM in 4/4, structured symmetrically around a peak:
 
 The arc is the piece. Velocity carries the dynamic story: quiet at the edges, loud at the peak. Articulation distinguishes closed-hi-hat calm from open-hi-hat punch. Uses `with_velocity()` for the dynamic profile per section; uses `closed_hihat()`, `open_hihat()`, `low_tom()`, `mid_tom()`, `crash_cymbal()` from the lib.
 
+The dynamic arc is now marked in the score itself (`pp` at edges, `ff` at the Murmuration peak, hairpins on Crescendo/Decrescendo sections) — visible in MuseScore, not just heard in MIDI — via `with_velocity(..., mark_dynamics=True)`.
+
 Renders as multiple stacked staves in Verovio (one per instrument); for high-fidelity rendering, download the MusicXML and open in MuseScore.
 
 ---
@@ -89,7 +91,7 @@ def compute(context):
             for it in items:
                 m.append(it)
             measures.append(m)
-        with_velocity(all_notes, profile)
+        with_velocity(all_notes, profile, mark_dynamics=True)
         return measures
 
     # ---- Per-instrument section schedules ----
