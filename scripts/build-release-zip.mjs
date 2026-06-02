@@ -56,8 +56,9 @@ const REQUIRED_FILES = [
   { path: "assets/pyodide/python_stdlib.zip",                 hint: "Run `npm run setup-assets` first." },
   { path: "assets/engine/forge/core/executor.py",             hint: "Repo is missing the engine bundle — unexpected." },
   { path: "assets/vaults/forge-moda/forge.toml",              hint: "Repo is missing the forge-moda vault bundle — unexpected." },
-  { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle (v0.2.15) — copy ~/projects/forge-music/{forge.toml,form.md,twelve_bar_blues_progression.md} into assets/vaults/forge-music/." },
-  { path: "assets/vaults/forge-music/form.md",                hint: "forge-music bundle missing form.md — see hint above." },
+  { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle — re-sync ~/projects/forge-music/ into assets/vaults/forge-music/." },
+  { path: "assets/vaults/forge-music/blues/form.md",          hint: "forge-music bundle missing blues/form.md — re-sync the blues subdir. v0.3.4 deletion: top-level form.md was removed; blues/form.md is now canonical." },
+  { path: "assets/vaults/forge-music/blues/twelve_bar_blues_progression.md", hint: "forge-music bundle missing blues/twelve_bar_blues_progression.md — re-sync the blues subdir." },
   // v0.2.27: vendored music21 + minimum deps so the music domain
   // actually works in Pyodide (closed-beta has no network). Pin
   // versions in the hint so a fresh setup can re-vendor the same
