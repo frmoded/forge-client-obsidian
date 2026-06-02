@@ -109,6 +109,47 @@ if "/bundle/engine" not in sys.path:
   return py;
 }
 
+test('registry can scan a library vault (forge.toml read) without tomli_w', async () => {
+  // v0.2.32: regression test for the v0.2.30/v0.2.31 production
+  // failure where _scan_library_vault silently failed in Pyodide
+  // because forge.core.manifest had unconditional imports of
+  // tomli_w + packaging.version + forge.installer.exceptions —
+  // none of which are available in the closed-beta Pyodide bundle.
+  // Scan result: 0 library vaults registered; lookups for qualified
+  // IDs (forge-music/blues/song) all failed with SnippetResolutionError.
+  //
+  // Without this test, the failure mode only surfaces when a user
+  // forge-clicks a snippet inside a library subdir — too late.
+  const py = await bootWithMusic21();
+  // Lay down a minimal library vault in MEMFS.
+  py.runPython(`
+import os
+os.makedirs("/tmp/forge_scan_test/forge-music/blues", exist_ok=True)
+with open("/tmp/forge_scan_test/forge-music/forge.toml", "w") as f:
+    f.write('name = "forge-music"\\nversion = "0.3.4"\\ndescription = "test"\\ndomains = ["music"]\\n')
+with open("/tmp/forge_scan_test/forge-music/blues/song.md", "w") as f:
+    f.write('---\\ntype: action\\ndescription: x\\ninputs: []\\n---\\n\\n# English\\n\\nplay\\n')
+from forge.core.snippet_registry import SnippetRegistry
+_reg = SnippetRegistry()
+_reg.scan("/tmp/forge_scan_test")
+`);
+  const vaults = py.runPython(`list(_reg._vaults.keys())`).toJs();
+  const errors = py.runPython(`list(_reg.errors)`).toJs();
+  const songFound = py.runPython(`_reg.get_in_vault("forge-music", "blues/song") is not None`);
+  assert.deepEqual(
+    errors, [],
+    `scan should produce zero errors; got: ${JSON.stringify(errors)}`,
+  );
+  assert.ok(
+    vaults.includes('forge-music'),
+    `forge-music should be registered as a library vault; vaults=${JSON.stringify(vaults)}`,
+  );
+  assert.equal(
+    songFound, true,
+    'blues/song should be reachable via get_in_vault("forge-music", "blues/song")',
+  );
+});
+
 test('music21 importable after boot', async () => {
   const py = await bootWithMusic21();
   // Will raise ModuleNotFoundError if music21 wheel wasn't vendored
