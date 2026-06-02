@@ -615,6 +615,26 @@ def _forge_sync_user_file(relpath: str, new_body: str):
         f.write(new_body)
     _forge_registry.refresh_file(target)
 
+def _forge_set_edge_state(caller_id: str, callee_id: str, state: str, vault_name: str = ""):
+    """v0.2.30: flip an edge's snapshot state (live ↔ frozen) by
+    calling the engine's set_snapshot_state directly. Routes the
+    /freeze HTTP path through Pyodide so closed-beta users (no
+    uvicorn) can actually freeze edges. Per constitution F4, F5, F6:
+    freeze is a user gesture; this helper is the JS-callable entry
+    point.
+
+    state must be 'live' or 'frozen'. Raises FileNotFoundError if
+    the snapshot doesn't exist (edge hasn't been traversed yet;
+    can't freeze what hasn't been captured per F5).
+
+    vault_name kept vestigial-but-accepted for symmetry with the
+    other _forge_* helpers (the single-user-vault model resolves
+    everything against _forge_user_vault).
+    """
+    _ = vault_name
+    from forge.core.snapshots import set_snapshot_state
+    set_snapshot_state(_forge_user_vault, caller_id, callee_id, state)
+
 def _forge_list_snippets():
     """v0.2.6 — serve connectVault from Pyodide. Returns the engine's
     /connect inventory shape: {vault_name: [{id, type, inputs}, ...]}
@@ -855,6 +875,12 @@ export interface PyodideHostInstance {
    *  (no leading slash); content is the full file body including
    *  frontmatter. */
   syncUserVaultFile(relPath: string, content: string): Promise<void>;
+  /** v0.2.30: flip an edge's snapshot state via Pyodide (closes the
+   *  HTTP-only gap for `/freeze`). `state` is `'live'` or `'frozen'`.
+   *  Raises if the snapshot file at `.forge/edges/<caller>/<callee>.md`
+   *  doesn't exist (per constitution F5 — can't freeze what hasn't
+   *  been captured). */
+  setEdgeState(callerId: string, calleeId: string, state: 'live' | 'frozen'): Promise<void>;
   /** v0.2.19: synchronous pre-flight inventory. Refreshes the
    *  registry's cached entry for the snippet from current MEMFS
    *  state, then returns the inventory. Use after `syncUserVaultFile`
@@ -985,6 +1011,19 @@ _forge_compute(
     this.pyodide.globals.set('_forge_sync_relpath', relPath);
     this.pyodide.globals.set('_forge_sync_body', content);
     this.pyodide.runPython(`_forge_sync_user_file(_forge_sync_relpath, _forge_sync_body)`);
+  }
+
+  async setEdgeState(
+    callerId: string,
+    calleeId: string,
+    state: 'live' | 'frozen',
+  ): Promise<void> {
+    this.pyodide.globals.set('_forge_freeze_caller', callerId);
+    this.pyodide.globals.set('_forge_freeze_callee', calleeId);
+    this.pyodide.globals.set('_forge_freeze_state', state);
+    this.pyodide.runPython(
+      `_forge_set_edge_state(_forge_freeze_caller, _forge_freeze_callee, _forge_freeze_state, "")`,
+    );
   }
 
   /** v0.2.19 — see interface doc. Atomically refreshes the registry's

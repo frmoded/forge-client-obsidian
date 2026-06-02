@@ -109,11 +109,15 @@ export async function canonicalizeSnippet(
   return { status: res.status, json: res.json };
 }
 
-// NOTE (v0.2.6): freezeEdge stays on HTTP. Only reachable via the
-// explicit "Freeze edge"/"Unfreeze edge" command palette entries
-// (main.ts openFreezeModal line ~1026) — not on the Forge-click path.
-// Closed-beta users who don't run uvicorn simply can't freeze edges,
-// which is fine for the seminar scope.
+// v0.2.30: freezeEdge routes through Pyodide. The engine's
+// snapshots.py:set_snapshot_state has the right function; HTTP was
+// just the legacy delivery path. Closed beta has no uvicorn, so the
+// HTTP fallback effectively dead-codes for production — kept only for
+// dev mode where uvicorn IS running. Pre-v0.2.30 closed-beta users
+// who hit Freeze got a silent localhost:8000 failure; now they hit
+// the in-Pyodide path that mirrors the engine's HTTP /freeze
+// handler. Status-200 envelope mirrors what /freeze returns so
+// main.ts callers branch on `status` unchanged.
 export async function freezeEdge(
   serverUrl: string,
   vaultPath: string,
@@ -121,6 +125,22 @@ export async function freezeEdge(
   callee: string,
   state: 'frozen' | 'live',
 ): Promise<{ status: number; json: any }> {
+  if (_pyodideHost) {
+    try {
+      const host = await _pyodideHost.getInstance();
+      await host.setEdgeState(caller, callee, state);
+      return {
+        status: 200,
+        json: { status: 'ok', caller, callee, state },
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('Forge freeze failed:', e);
+      return { status: 500, json: { detail: msg } };
+    }
+  }
+
+  // HTTP fallback — dev mode only.
   const res = await requestUrl({
     url: `${serverUrl}/freeze`,
     method: 'POST',
