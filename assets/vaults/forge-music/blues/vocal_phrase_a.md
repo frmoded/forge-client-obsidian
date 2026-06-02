@@ -11,7 +11,7 @@ The first vocal phrase of a 12-bar blues lyric (the A line of AAB). Four bars in
 
 A weary descending line. Starts on the 5th of the key, drifts down through the minor-pentatonic scale degrees, leans on the flat-7 in the third bar, and settles on the tonic by the end. Lots of rests. Sparse. Should sound like someone sighing through it. The setup of the lyric, not the punchline.
 
-Uses minor pentatonic regardless of [[form]]'s declared mode — this is the blues convention: minor-pentatonic vocal line over the major-mode chord progression. Do NOT "fix" the `mode='minor'` kwarg to track `found_key.mode`; the override is intentional.
+Uses `minor_pentatonic(...)` — the minor-pentatonic-over-major-progression pattern is the blues convention.
 
 Reads the key from [[form]]. Inherits time signature (12/8) and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] as well, so the whole song stays coherent if any of those change at the source.
 
@@ -37,8 +37,8 @@ def compute(context):
     ts = meter.TimeSignature(ts_str)
     bar_ql = ts.barDuration.quarterLength
 
-    scale_pitches = pentatonic(found_key if found_key else key.Key(tonic_name, mode),
-                               mode='minor', octave_range=(4, 5), include_blue=True)
+    scale_pitches = minor_pentatonic(found_key if found_key else key.Key(tonic_name, mode),
+                                     octave_range=(4, 5), include_blue=True)
 
     def pitch_named(name, octave):
         return pitch.Pitch(name + str(octave))
@@ -63,57 +63,51 @@ def compute(context):
     ref_dur = duration.Duration(type='quarter', dots=1)
     mm = tempo.MetronomeMark(number=bpm, referent=ref_dur)
 
-    def _pad(measure, total):
-        # 2026-06-02 (forge-music v0.3.2): note.Rest(quarterLength=0)
-        # silently defaults to quarterLength=1.0 in music21, which
-        # overflowed every bar to 7.0 in 12/8 (expected 6.0). Guard
-        # the trailing-rest append so zero-padding is a no-op.
-        remaining = bar_ql - total
-        if remaining > 0:
-            measure.append(note.Rest(quarterLength=remaining))
-
-    m1 = stream.Measure(number=1)
-    m1.append(ks)
-    m1.append(ts1)
-    m1.append(mm)
-    n1 = note.Rest(quarterLength=1.5)
-    n2 = note.Note(fifth_p.nameWithOctave, quarterLength=1.5)
-    n3 = note.Note(fourth_p.nameWithOctave, quarterLength=1.0)
-    n4 = note.Note(third_p.nameWithOctave, quarterLength=0.5)
-    n5 = note.Rest(quarterLength=1.5)
-    total1 = 1.5 + 1.5 + 1.0 + 0.5 + 1.5
-    m1.append(n1); m1.append(n2); m1.append(n3); m1.append(n4); m1.append(n5)
-    _pad(m1, total1)
-
-    m2 = stream.Measure(number=2)
-    r1 = note.Rest(quarterLength=1.5)
-    p1 = note.Note(third_p.nameWithOctave, quarterLength=1.0)
-    p2 = note.Note(tonic_p.nameWithOctave, quarterLength=0.5)
-    p3 = note.Note(pitch.Pitch(k.pitchFromDegree(3).name + '4').nameWithOctave, quarterLength=1.5)
-    r2 = note.Rest(quarterLength=1.5)
-    total2 = 1.5 + 1.0 + 0.5 + 1.5 + 1.5
-    m2.append(r1); m2.append(p1); m2.append(p2); m2.append(p3); m2.append(r2)
-    _pad(m2, total2)
-
     flat7_name = flat7_p.nameWithOctave
 
-    m3 = stream.Measure(number=3)
-    s1 = note.Rest(quarterLength=1.5)
-    s2 = note.Note(flat7_name, quarterLength=2.0)
-    s3 = note.Note(fourth_p.nameWithOctave, quarterLength=1.0)
-    s4 = note.Rest(quarterLength=1.5)
-    total3 = 1.5 + 2.0 + 1.0 + 1.5
-    m3.append(s1); m3.append(s2); m3.append(s3); m3.append(s4)
-    _pad(m3, total3)
+    # v0.3.3: lib.bar() handles trailing-rest padding (the rule the
+    # v0.3.2 _pad helper used to enforce manually). m1 carries the
+    # song-frame metadata (key, mm); inserted at offset 0 after bar()
+    # builds the measure with its time signature.
+    m1 = bar(
+        note.Rest(quarterLength=1.5),
+        note.Note(fifth_p.nameWithOctave, quarterLength=1.5),
+        note.Note(fourth_p.nameWithOctave, quarterLength=1.0),
+        note.Note(third_p.nameWithOctave, quarterLength=0.5),
+        note.Rest(quarterLength=1.5),
+        time_signature=ts1,
+        number=1,
+    )
+    m1.insert(0, mm)
+    m1.insert(0, ks)
 
-    m4 = stream.Measure(number=4)
-    t1 = note.Rest(quarterLength=1.5)
-    t2 = note.Note(third_p.nameWithOctave, quarterLength=1.0)
-    t3 = note.Note(tonic_p.nameWithOctave, quarterLength=2.0)
-    t4 = note.Rest(quarterLength=1.5)
-    total4 = 1.5 + 1.0 + 2.0 + 1.5
-    m4.append(t1); m4.append(t2); m4.append(t3); m4.append(t4)
-    _pad(m4, total4)
+    m2 = bar(
+        note.Rest(quarterLength=1.5),
+        note.Note(third_p.nameWithOctave, quarterLength=1.0),
+        note.Note(tonic_p.nameWithOctave, quarterLength=0.5),
+        note.Note(pitch.Pitch(k.pitchFromDegree(3).name + '4').nameWithOctave, quarterLength=1.5),
+        note.Rest(quarterLength=1.5),
+        time_signature=ts1,
+        number=2,
+    )
+
+    m3 = bar(
+        note.Rest(quarterLength=1.5),
+        note.Note(flat7_name, quarterLength=2.0),
+        note.Note(fourth_p.nameWithOctave, quarterLength=1.0),
+        note.Rest(quarterLength=1.5),
+        time_signature=ts1,
+        number=3,
+    )
+
+    m4 = bar(
+        note.Rest(quarterLength=1.5),
+        note.Note(third_p.nameWithOctave, quarterLength=1.0),
+        note.Note(tonic_p.nameWithOctave, quarterLength=2.0),
+        note.Rest(quarterLength=1.5),
+        time_signature=ts1,
+        number=4,
+    )
 
     part = stream.Part()
     part.append(instrument.Vocalist())

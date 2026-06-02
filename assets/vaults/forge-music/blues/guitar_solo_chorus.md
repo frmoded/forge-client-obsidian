@@ -13,7 +13,7 @@ Should feel like the song breaks open — denser than the vocal choruses, taking
 
 Twelve bars matching [[form]]'s harmonic progression (I for 4 bars, IV for 2, I for 2, V-IV-I-V turnaround). The solo line should breathe with the underlying chord changes — lean on chord tones at the bar boundaries, especially when the harmony shifts to IV (bar 5), V (bar 9), and through the turnaround — but feel improvisational within each bar. Uses minor pentatonic with the blue note (b5), with occasional chromatic passing tones.
 
-Uses minor pentatonic regardless of [[form]]'s declared mode — blues instrumental-solo convention: minor-pentatonic line over the major-mode chord progression. The `mode='minor'` kwargs in the Python facet are deliberate.
+Uses `minor_pentatonic(...)` — blues instrumental-solo convention: minor-pentatonic line over the major-mode chord progression.
 
 Reads the key and structure from [[form]]. Inherits time signature (12/8) and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] as well, so the whole song stays coherent if any of those change at the source.
 
@@ -46,14 +46,14 @@ def compute(context):
 
     ks = key.Key(tonic_name, key_mode)
 
-    scale_pitches = pentatonic(ks, mode='minor', octave_range=(4, 6), include_blue=True)
+    scale_pitches = minor_pentatonic(ks, octave_range=(4, 6), include_blue=True)
 
     def pitch_names_in_range(octave_range):
-        return pentatonic(ks, mode='minor', octave_range=octave_range, include_blue=True)
+        return minor_pentatonic(ks, octave_range=octave_range, include_blue=True)
 
-    scale_low = pentatonic(ks, mode='minor', octave_range=(4, 5), include_blue=True)
-    scale_mid = pentatonic(ks, mode='minor', octave_range=(4, 6), include_blue=True)
-    scale_high = pentatonic(ks, mode='minor', octave_range=(5, 6), include_blue=True)
+    scale_low = minor_pentatonic(ks, octave_range=(4, 5), include_blue=True)
+    scale_mid = minor_pentatonic(ks, octave_range=(4, 6), include_blue=True)
+    scale_high = minor_pentatonic(ks, octave_range=(5, 6), include_blue=True)
 
     def chord_tones_for(root_name, quality, octave=4):
         if quality == 'minor':
@@ -179,7 +179,7 @@ def compute(context):
         measures.append(m)
 
     iv_ct_higher = chord_tones_for(iv_root, 'minor', 5)
-    iv_scale = pentatonic(ks, mode='minor', octave_range=(5, 6), include_blue=True)
+    iv_scale = minor_pentatonic(ks, octave_range=(5, 6), include_blue=True)
     for b in range(2):
         density = 'high' if b == 0 else 'medium'
         m = make_expressive_bar(5 + b, iv_ct_higher, iv_scale, 5 + b, density=density)

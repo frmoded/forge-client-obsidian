@@ -11,7 +11,7 @@ The B line of the AAB lyric — the answer, the punchline, the resolution. Four 
 
 Starts higher than [[vocal_phrase_a]] — entering around the octave above the tonic, or on the minor third above that — with more melodic activity than the A line. Descends through the minor-pentatonic scale degrees, with a touch of the blue note (b5) as a bend, and resolves to the tonic in the home octave by the last bar. More notes, fewer rests than the A line. Should feel like the singer arrives at the conclusion they've been building toward across the AAB pattern. Ends with a slight downward bend on the tonic.
 
-Uses minor pentatonic regardless of [[form]]'s declared mode — same blues convention as [[vocal_phrase_a]]: minor-pentatonic vocal line over the major-mode chord progression. The `mode='minor'` kwargs in the Python facet are deliberate.
+Uses `minor_pentatonic(...)` — same blues convention as [[vocal_phrase_a]]: minor-pentatonic vocal line over the major-mode chord progression.
 
 Reads the key from [[form]]. Inherits time signature (12/8) and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] as well, so the whole song stays coherent if any of those change at the source.
 
@@ -40,7 +40,7 @@ def compute(context):
     mm = tempo.MetronomeMark(number=bpm, referent=referent)
     ks = key.Key(tonic_name, mode)
 
-    scale_pitches = pentatonic(ks, mode='minor', octave_range=(4, 6), include_blue=True)
+    scale_pitches = minor_pentatonic(ks, octave_range=(4, 6), include_blue=True)
 
     def find_pitch(name, octave):
         for p in scale_pitches:
@@ -55,9 +55,9 @@ def compute(context):
     tonic_high = pitch.Pitch(tonic_name + '5')
 
     k_obj = key.Key(tonic_name, mode)
-    scale_high = pentatonic(k_obj, mode='minor', octave_range=(5, 6), include_blue=True)
-    scale_mid = pentatonic(k_obj, mode='minor', octave_range=(4, 5), include_blue=True)
-    scale_all = pentatonic(k_obj, mode='minor', octave_range=(4, 6), include_blue=True)
+    scale_high = minor_pentatonic(k_obj, octave_range=(5, 6), include_blue=True)
+    scale_mid = minor_pentatonic(k_obj, octave_range=(4, 5), include_blue=True)
+    scale_all = minor_pentatonic(k_obj, octave_range=(4, 6), include_blue=True)
 
     def pitch_at(name, preferred_octave):
         candidates = [p for p in scale_all if p.name == name]
@@ -83,7 +83,7 @@ def compute(context):
     def pn(name, oct):
         return pitch.Pitch(name + str(oct))
 
-    k_scale = pentatonic(ks, mode='minor', octave_range=(4, 6), include_blue=True)
+    k_scale = minor_pentatonic(ks, octave_range=(4, 6), include_blue=True)
 
     def get_degree(semitones_above_tonic, preferred_octave):
         tonic_midi = pitch.Pitch(tonic_name + str(preferred_octave)).midi
