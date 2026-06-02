@@ -385,6 +385,35 @@ _forge_user_vault = "/bundle/user-vault"
 _forge_registry = SnippetRegistry()
 _forge_registry.scan(_forge_user_vault)
 
+# v0.2.31: post-scan diagnostic. Print MEMFS layout + registered
+# vault names + per-vault snippet counts + scan errors. Output goes
+# to Pyodide stdout → JS console via the existing fd_write bridge.
+# Lines prefixed "FORGE-DEBUG:" for grep-ability.
+import os as _forge_os_diag
+def _forge_dbg(msg):
+    print("FORGE-DEBUG:", msg)
+_forge_dbg(f"vaults registered: {list(_forge_registry._vaults.keys())}")
+for _vn in list(_forge_registry._vaults.keys()):
+    _forge_dbg(f"  {_vn}: {len(_forge_registry._vaults[_vn])} snippets")
+_forge_dbg(f"scan errors: {_forge_registry.errors}")
+_forge_dbg(f"resolution_order: {_forge_registry.resolution_order()}")
+if _forge_os_diag.path.isdir(_forge_user_vault):
+    _forge_dbg(f"user-vault listing: {sorted(_forge_os_diag.listdir(_forge_user_vault))}")
+else:
+    _forge_dbg(f"user-vault NOT a directory!")
+_fmu = _forge_user_vault + "/forge-music"
+if _forge_os_diag.path.isdir(_fmu):
+    _forge_dbg(f"forge-music listing: {sorted(_forge_os_diag.listdir(_fmu))}")
+    _fmb = _fmu + "/blues"
+    if _forge_os_diag.path.isdir(_fmb):
+        _forge_dbg(f"forge-music/blues listing: {sorted(_forge_os_diag.listdir(_fmb))}")
+    else:
+        _forge_dbg("forge-music/blues NOT a directory!")
+else:
+    _forge_dbg("forge-music NOT a directory at user-vault root!")
+del _forge_dbg
+del _forge_os_diag
+
 # Ensure bundled-library subdirs are reachable via bare-snippet
 # resolution. The registry's _scan_library_vault DOES register
 # bundled-library snippets under their own vault name, but

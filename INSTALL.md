@@ -7,13 +7,13 @@ needed on your machine — everything is bundled into a single zip.
 
 ### 1. Download the release zip
 
-Open the [v0.2.30 release page](https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.30)
-and download `forge-client-obsidian-v0.2.30.zip` from the **Assets**
+Open the [v0.2.31 release page](https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.31)
+and download `forge-client-obsidian-v0.2.31.zip` from the **Assets**
 section. Save it somewhere convenient (e.g. your Downloads folder).
 
-> **Closed-beta note:** this guide pins to **v0.2.30** specifically.
+> **Closed-beta note:** this guide pins to **v0.2.31** specifically.
 > Newer releases may exist on the [Releases page](https://github.com/frmoded/forge-client-obsidian/releases)
-> but haven't been verified for this cohort — use v0.2.30 unless the
+> but haven't been verified for this cohort — use v0.2.31 unless the
 > link in this doc has been updated.
 
 ### 2. Find your Obsidian vault's plugin directory
@@ -27,7 +27,7 @@ section. Save it somewhere convenient (e.g. your Downloads folder).
 
 ### 3. Unzip into the plugins directory
 
-- Unzip `forge-client-obsidian-v0.2.30.zip`. You'll get a folder
+- Unzip `forge-client-obsidian-v0.2.31.zip`. You'll get a folder
   called `forge-client-obsidian`.
 - Move (or extract directly to) that folder so it lives at
   `<your-vault>/.obsidian/plugins/forge-client-obsidian/`.
