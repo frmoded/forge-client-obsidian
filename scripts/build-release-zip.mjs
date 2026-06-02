@@ -71,6 +71,85 @@ async function exists(p) {
   try { await fs.access(p); return true; } catch { return false; }
 }
 
+// In-scope predicate for the engine-bundle drift check. Mirrors
+// src/engine-bundle-drift-core.ts's `isInScope`. Both files own the
+// same rule; if you change one, change the other. (Tests in
+// src/engine-bundle-drift.test.ts verify the helper-side; the
+// hand-mirror here is unavoidable because the preflight runs in a
+// pure-node CJS-via-mjs context that can't import .ts.)
+const ENGINE_EXCLUDED_TOP_LEVEL_DIRS = new Set([
+  "api", "installer", "sdk", "builtins", "__pycache__", "tests",
+]);
+const ENGINE_EXCLUDED_TOP_LEVEL_FILES = new Set(["config.py"]);
+
+function engineIsInScope(relPath) {
+  if (!relPath.endsWith(".py")) return false;
+  const parts = relPath.split(path.sep);
+  const top = parts[0];
+  if (parts.length === 1) {
+    if (ENGINE_EXCLUDED_TOP_LEVEL_FILES.has(top)) return false;
+    return top === "__init__.py";
+  }
+  if (ENGINE_EXCLUDED_TOP_LEVEL_DIRS.has(top)) return false;
+  if (parts.includes("__pycache__")) return false;
+  return true;
+}
+
+function engineWalk(dir, base = "") {
+  const fsSync = require("node:fs");
+  const out = [];
+  if (!fsSync.existsSync(dir)) return out;
+  for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
+    const rel = base ? path.join(base, entry.name) : entry.name;
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...engineWalk(abs, rel));
+    else out.push(rel.split(path.sep).join("/"));
+  }
+  return out;
+}
+
+async function assertNoEngineBundleDrift() {
+  const sourceRoot = path.resolve(ROOT, "..", "forge", "forge");
+  const bundleRoot = path.resolve(ROOT, "assets", "engine", "forge");
+
+  // The drift check is informational if the source repo isn't on
+  // disk (e.g. CI build that only has the plugin clone). Don't gate
+  // the release on a missing sibling — just log and proceed.
+  if (!(await exists(sourceRoot))) {
+    console.log("\nEngine-bundle drift check: skipped (no sibling forge repo).");
+    return;
+  }
+
+  const sourceFiles = new Set(engineWalk(sourceRoot).filter(engineIsInScope));
+  const bundleFiles = new Set(engineWalk(bundleRoot).filter(engineIsInScope));
+  const drift = [];
+  for (const rel of [...sourceFiles].sort()) {
+    if (!bundleFiles.has(rel)) {
+      drift.push({ relPath: rel, status: "missing-in-bundle" });
+      continue;
+    }
+    const a = await fs.readFile(path.join(sourceRoot, rel));
+    const b = await fs.readFile(path.join(bundleRoot, rel));
+    if (!a.equals(b)) drift.push({ relPath: rel, status: "content-mismatch" });
+  }
+  for (const rel of [...bundleFiles].sort()) {
+    if (!sourceFiles.has(rel)) drift.push({ relPath: rel, status: "orphaned-in-bundle" });
+  }
+  drift.sort((a, b) => a.relPath.localeCompare(b.relPath));
+
+  if (drift.length === 0) {
+    console.log("\nEngine-bundle drift check: clean.");
+    return;
+  }
+
+  console.error("\nENGINE-BUNDLE DRIFT DETECTED:");
+  for (const { relPath, status } of drift) {
+    console.error(`  ✗ forge/${relPath}  [${status}]`);
+  }
+  console.error("\nRun 'npm run sync-engine-bundle' to resolve.");
+  process.exit(1);
+}
+
 async function main() {
   console.log("=== forge-client-obsidian release zip ===\n");
 
@@ -101,6 +180,19 @@ async function main() {
     console.error("\nMissing required files. Run the suggested commands above and retry.");
     process.exit(1);
   }
+
+  // 2b. Engine-bundle drift preflight. The plugin's bundled engine
+  //     under assets/engine/forge/ must be byte-equal to the source
+  //     of truth in ../forge/forge/ (excluding api/, installer/, sdk/,
+  //     builtins/, config.py, __pycache__/, tests/). Drift would mean
+  //     the user gets a different engine than the test suite verified.
+  //     `npm run sync-engine-bundle` resolves drift; rerun release-zip.
+  //
+  //     The drift helper lives in src/engine-bundle-drift-core.ts and
+  //     is exercised by src/engine-bundle-drift.test.ts. We invoke it
+  //     here via a filesystem-backed adapter that matches the
+  //     in-scope predicate.
+  await assertNoEngineBundleDrift();
 
   // 3. Ensure dist/ exists. Clean any prior zip for this version
   //    so the run is reproducible (no leftover archiver state).

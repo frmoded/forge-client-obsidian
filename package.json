@@ -9,6 +9,7 @@
     "test": "node --test src/*.test.ts",
     "build-manifest": "node scripts/build-manifest.mjs",
     "setup-assets": "node scripts/setup-assets.mjs",
+    "sync-engine-bundle": "node scripts/sync-engine-bundle.mjs",
     "release-zip": "node scripts/build-release-zip.mjs"
   },
   "keywords": [],

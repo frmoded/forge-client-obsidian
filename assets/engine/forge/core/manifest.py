@@ -1,37 +1,18 @@
-"""V1 read-only manifest reader for the Pyodide-bundled engine.
-
-Upstream forge.core.manifest has full read/write/validate, but the
-write + validate paths pull in tomli_w, packaging, and
-forge.installer.exceptions — none of which we want to ship in a
-plugin asset bundle. V1's plugin engine only NEEDS the read path
-(via SnippetRegistry._scan_library_vault and _auto_set_resolution_order,
-which use `.name` and `.dependencies` and nothing else).
-
-Validation isn't required: any forge.toml that reaches this code path
-has already been validated upstream when its library was published
-to the registry. We accept whatever the file says.
-
-Mirrors the upstream public API surface:
-  read_manifest(vault_dir) -> Manifest
-  Manifest(name, version, description, dependencies, domains)
-  Dependency(name, version)
-
-If/when the plugin gains write-side flows (snippet authoring, dep
-management), revisit by either bundling the full upstream module
-or splitting upstream into read-only + write-side modules.
-"""
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import List, Optional
+import tomli_w
+from packaging.version import Version, InvalidVersion
+from forge.installer.exceptions import ValidationError
 
 try:
   import tomllib
 except ImportError:
-  # Python <3.11 fallback. Pyodide 0.29 ships Python 3.13 so this
-  # branch is unreachable today, but keeps the shim portable.
-  import tomli as tomllib  # type: ignore
+  import tomli as tomllib
 
 MANIFEST_FILENAME = "forge.toml"
+_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,63}$")
 
 
 @dataclass(frozen=True)
@@ -46,33 +27,112 @@ class Manifest:
   version: str
   description: str
   dependencies: List[Dependency] = field(default_factory=list)
-  # Domain scoping (constitution B9). None = field absent ("all
-  # registered domains"); [] = core-only opt-out; ["moda", ...] =
-  # specific. Read-through; not validated here.
+  # Domain scoping (constitution B9). None = field absent in forge.toml
+  # → interpret as "all registered domains" (back-compat for vaults
+  # authored before the field existed; load-time warning). [] = explicit
+  # opt-out (core-only: base globals + base prompt only). ["moda", ...] =
+  # exactly those domains' injected globals + prompt fragments.
   domains: Optional[List[str]] = None
 
 
-def read_manifest(vault_dir) -> Manifest:
-  """Read a vault's forge.toml. Raises FileNotFoundError when the
-  file is absent (mirrors upstream's ValidationError shape via
-  the same exception class hierarchy — both subclass Exception, and
-  callers in snippet_registry.py just `except Exception as e`)."""
+def read_manifest(vault_dir: Path) -> Manifest:
   path = Path(vault_dir) / MANIFEST_FILENAME
   if not path.is_file():
-    raise FileNotFoundError(f"manifest not found at {path}")
+    raise ValidationError(f"manifest not found at {path}")
   with open(path, "rb") as f:
     raw = tomllib.load(f)
+  return _from_dict(raw)
+
+
+def write_manifest(vault_dir: Path, manifest: Manifest) -> None:
+  _validate(manifest)
+  path = Path(vault_dir) / MANIFEST_FILENAME
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with open(path, "wb") as f:
+    tomli_w.dump(_to_dict(manifest), f)
+
+
+def add_or_update_dep(manifest: Manifest, name: str, version: str) -> Manifest:
+  """Returns a new Manifest with the dep added or its version updated."""
+  new_deps = []
+  found = False
+  for dep in manifest.dependencies:
+    if dep.name == name:
+      new_deps.append(Dependency(name=name, version=version))
+      found = True
+    else:
+      new_deps.append(dep)
+  if not found:
+    new_deps.append(Dependency(name=name, version=version))
+  return replace(manifest, dependencies=new_deps)
+
+
+def _from_dict(raw: dict) -> Manifest:
+  for required in ("name", "version", "description"):
+    if required not in raw:
+      raise ValidationError(f"manifest missing required field: {required}")
 
   deps_raw = raw.get("dependencies", []) or []
-  deps: List[Dependency] = []
-  for entry in deps_raw:
-    if isinstance(entry, dict) and "name" in entry and "version" in entry:
-      deps.append(Dependency(name=entry["name"], version=entry["version"]))
+  if not isinstance(deps_raw, list):
+    raise ValidationError("'dependencies' must be an array of tables")
 
-  return Manifest(
-    name=raw.get("name", ""),
-    version=raw.get("version", ""),
-    description=raw.get("description", ""),
+  deps: List[Dependency] = []
+  for i, entry in enumerate(deps_raw):
+    if not isinstance(entry, dict):
+      raise ValidationError(f"dependencies[{i}] must be a table")
+    if "name" not in entry or "version" not in entry:
+      raise ValidationError(f"dependencies[{i}] missing 'name' or 'version'")
+    deps.append(Dependency(name=entry["name"], version=entry["version"]))
+
+  # `domains`: absent → None ("all", back-compat); present → must be a
+  # list of strings (possibly empty, meaning core-only).
+  domains_raw = raw.get("domains", None)
+  if domains_raw is not None:
+    if not isinstance(domains_raw, list) or not all(
+      isinstance(d, str) for d in domains_raw
+    ):
+      raise ValidationError("'domains' must be a list of strings")
+
+  m = Manifest(
+    name=raw["name"],
+    version=raw["version"],
+    description=raw["description"],
     dependencies=deps,
-    domains=raw.get("domains"),
+    domains=domains_raw,
   )
+  _validate(m)
+  return m
+
+
+def _to_dict(manifest: Manifest) -> dict:
+  out: dict = {
+    "name": manifest.name,
+    "version": manifest.version,
+    "description": manifest.description,
+  }
+  if manifest.dependencies:
+    out["dependencies"] = [{"name": d.name, "version": d.version} for d in manifest.dependencies]
+  if manifest.domains is not None:
+    out["domains"] = list(manifest.domains)
+  return out
+
+
+def _validate(manifest: Manifest) -> None:
+  if not _NAME_RE.match(manifest.name):
+    raise ValidationError(
+      f"invalid name '{manifest.name}': must be 3-64 chars, lowercase a-z/0-9/'-', start with a letter"
+    )
+  _validate_semver(manifest.version, "manifest.version")
+  if not (1 <= len(manifest.description) <= 200):
+    raise ValidationError("description must be 1-200 chars")
+  for d in manifest.dependencies:
+    if not _NAME_RE.match(d.name):
+      raise ValidationError(f"dependency name '{d.name}' has invalid format")
+    _validate_semver(d.version, f"dependency '{d.name}' version")
+
+
+def _validate_semver(s: str, label: str) -> None:
+  try:
+    Version(s)
+  except InvalidVersion as e:
+    raise ValidationError(f"{label} is not valid SemVer: {e}")
