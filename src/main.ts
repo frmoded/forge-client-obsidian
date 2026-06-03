@@ -510,11 +510,42 @@ export default class ForgePlugin extends Plugin {
     // basename; callee is the wikilink target; both auto-qualify via
     // _forge_set_edge_state (v0.2.40). Decision logic lives in the
     // pure-core wikilink-freeze-menu-core helper for testability.
+    //
+    // v0.2.43: editor.getCursor() returns the editor's LAST cursor
+    // position, not the right-click position. In live preview (Obsidian's
+    // default mode), right-clicking on a rendered wikilink doesn't move
+    // the cursor — so findWikilinkAtCursor ran against the wrong line
+    // and silently returned null. Fix: capture the contextmenu event's
+    // DOM coordinates via a document.body listener (capture phase, runs
+    // before editor-menu), translate to a document offset via
+    // CodeMirror's posAtCoords, store on the plugin instance, consume in
+    // the editor-menu handler. Same DOM-walking pattern edges-hover.ts
+    // uses for the hover popover (see edges-hover.ts:59-68 for the
+    // reading-mode / live-preview / source-mode breakdown).
+    let lastContextmenuPos: { line: number; ch: number } | null = null;
+    const contextmenuHandler = (ev: MouseEvent) => {
+      lastContextmenuPos = null;
+      const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (!activeView) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cm = (activeView.editor as any).cm;
+      if (!cm || typeof cm.posAtCoords !== 'function') return;
+      const offset = cm.posAtCoords({ x: ev.clientX, y: ev.clientY }, false);
+      if (typeof offset !== 'number' || offset < 0) return;
+      lastContextmenuPos = activeView.editor.offsetToPos(offset);
+    };
+    document.body.addEventListener('contextmenu', contextmenuHandler, true);
+    this.register(() => {
+      document.body.removeEventListener('contextmenu', contextmenuHandler, true);
+    });
+
     this.registerEvent(
       this.app.workspace.on('editor-menu', (menu, editor, info: any) => {
         const file = info?.file;
         if (!(file instanceof TFile) || file.extension !== 'md') return;
-        const cursor = editor.getCursor();
+        // v0.2.43: prefer the right-click-derived position over the
+        // editor's last cursor position (which is wrong in live preview).
+        const cursor = lastContextmenuPos ?? editor.getCursor();
         const lineText = editor.getLine(cursor.line);
         const target = findWikilinkAtCursor(lineText, cursor.ch);
         if (target === null) return;
