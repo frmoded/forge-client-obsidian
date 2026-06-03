@@ -1,0 +1,106 @@
+// Pure-core tests for wikilink-freeze-menu-core.ts.
+//
+// Decides whether the editor-menu handler should surface "Freeze edge"
+// / "Unfreeze edge" items when the user right-clicks a wikilink inside
+// a Forge snippet. Inputs: current file basename, wikilink target
+// string, registry lookup. Output: showMenu + qualified caller/callee.
+//
+// v0.2.41 — bypasses the modal's bare-ID-typing UX surfaced by the
+// URGENT 2026-06-03-0000 freeze bug. The wikilink target is what the
+// user clicked; caller is inferred from the current file; both
+// auto-qualify via the registry. Zero typing, zero modal.
+//
+// Pure-core extraction No. 12. Same `node --test` + `node:assert/strict`
+// convention as forge-music-gate, copy-dir-core, forge-toml-stub,
+// engine-bundle-drift, chips, closed-beta-ux, forge-action, freeze-
+// edge, install-md-pin, compute-kwargs, bundled-vault-version.
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  decideWikilinkFreezeMenu,
+  type SnippetRegistryLike,
+} from './wikilink-freeze-menu-core.ts';
+
+/** Tiny fake registry that knows about a fixed set of qualified IDs.
+ *  Mirrors the resolution-order semantics of the real
+ *  SnippetRegistry.get_bare (snippet_registry.py:106) by returning
+ *  the first match in declaration order. */
+function makeRegistry(entries: Array<[string, string]>): SnippetRegistryLike {
+  return {
+    qualifyBareId(bareId: string): string | null {
+      for (const [bare, qualified] of entries) {
+        if (bare === bareId) return qualified;
+      }
+      return null;
+    },
+  };
+}
+
+test('decideWikilinkFreezeMenu: target is a known snippet → menu offered with qualified caller + callee', () => {
+  const registry = makeRegistry([
+    ['hello_random', 'authoring/hello_random'],
+    ['random_name',  'authoring/random_name'],
+  ]);
+  const decision = decideWikilinkFreezeMenu('hello_random', 'random_name', registry);
+  assert.deepEqual(decision, {
+    showMenu: true,
+    caller: 'authoring/hello_random',
+    callee: 'authoring/random_name',
+  });
+});
+
+test('decideWikilinkFreezeMenu: target is NOT a known snippet → menu suppressed', () => {
+  // Caller resolves, callee does not — common case for plain-markdown
+  // wikilinks to non-snippet notes.
+  const registry = makeRegistry([
+    ['hello_random', 'authoring/hello_random'],
+    // random_name intentionally absent
+  ]);
+  const decision = decideWikilinkFreezeMenu('hello_random', 'random_name', registry);
+  assert.equal(decision.showMenu, false);
+});
+
+test('decideWikilinkFreezeMenu: current file is NOT a snippet → menu suppressed', () => {
+  // User opened a plain markdown note (not in the registry) and
+  // right-clicked a wikilink in its body. No caller context exists,
+  // so no edge to freeze.
+  const registry = makeRegistry([
+    ['random_name', 'authoring/random_name'],
+    // hello_random (the would-be caller) intentionally absent
+  ]);
+  const decision = decideWikilinkFreezeMenu('plain_note', 'random_name', registry);
+  assert.equal(decision.showMenu, false);
+});
+
+test('decideWikilinkFreezeMenu: target equals current file (self-reference) → menu suppressed', () => {
+  // Defensive: freezing a self-edge is undefined. Even if both bare
+  // names resolve to the same qualified ID, suppress the menu.
+  const registry = makeRegistry([
+    ['hello_random', 'authoring/hello_random'],
+  ]);
+  const decision = decideWikilinkFreezeMenu('hello_random', 'hello_random', registry);
+  assert.equal(decision.showMenu, false);
+});
+
+test('decideWikilinkFreezeMenu: ambiguous bare match → first-match-wins per registry semantics', () => {
+  // Design call: the helper delegates ambiguity to the registry's
+  // resolution-order semantics (same as context.compute('bare_id')).
+  // Whatever the registry's qualifyBareId returns IS the chosen
+  // qualified ID; explicit ambiguity UI deferred to a future drain.
+  //
+  // Fake registry returns the first match (forge-music namespace
+  // before authoring), simulating a resolution order where music
+  // libraries are searched first.
+  const registry = makeRegistry([
+    ['random_name', 'forge-music/random_name'],  // resolution-order winner
+    ['random_name', 'authoring/random_name'],    // second match — never seen
+    ['hello_random', 'authoring/hello_random'],
+  ]);
+  const decision = decideWikilinkFreezeMenu('hello_random', 'random_name', registry);
+  assert.deepEqual(decision, {
+    showMenu: true,
+    caller: 'authoring/hello_random',
+    callee: 'forge-music/random_name',  // registry's first-match
+  });
+});
