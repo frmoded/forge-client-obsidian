@@ -711,6 +711,12 @@ def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
     Without this, raw dataclasses leak through Pyodide's toJs as
     non-cloneable PyProxies, breaking the iframe's postMessage
     relay AND the structured rendering in Forge Output."""
+    # FORGE-DEBUG investigation v0.2.40
+    print(
+        f"FORGE-DEBUG _forge_compute: snippet_id={snippet_id!r} "
+        f"args={args!r} inputs={inputs!r} "
+        f"vault_path={_forge_user_vault!r}"
+    )
     reg, resolver = _forge_get_resolver(vault_name)
     snip = resolver.resolve(snippet_id)
     stdout, raw_result = _forge_run_snippet(snippet_id, args, inputs, vault_name)
