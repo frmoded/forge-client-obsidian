@@ -1,7 +1,8 @@
-import { App } from 'obsidian';
+import { App, DataAdapter } from 'obsidian';
 import { copyDirRecursive } from './copy-dir-core';
 import { ensureForgeTomlStub } from './forge-toml-stub';
 import { vaultDeclaresMusic } from './forge-music-gate';
+import { compareBundledVaultVersion } from './bundled-vault-version-core';
 export { copyDirRecursive };
 
 // .forge/ is managed by Forge — safe to write cache, logs, future state files here.
@@ -124,26 +125,123 @@ export async function runFirstRunCheck(app: App): Promise<void> {
   }
 }
 
+/** Rename `targetDir` to `<targetDir>.bak.<oldVersion>`, appending a
+ *  numeric suffix if that backup name already exists. Lets multiple
+ *  drift events accumulate side-by-side rather than clobbering each
+ *  other (`forge-music.bak.0.3.5`, `forge-music.bak.0.3.5.2`, …).
+ *
+ *  Tries `adapter.rename` first — atomic on POSIX. Falls back to a
+ *  copy-then-recursive-delete dance if rename throws (mobile-only
+ *  quirks have shown up here in earlier Obsidian releases).
+ *
+ *  v0.2.39 — preserves user edits to bundled snippets across drift
+ *  events. Even though V1 closed-beta is consumer-only, the cheap
+ *  insurance matters for the "I poked at a bundled file to learn"
+ *  corner case. */
+async function renameWithBackup(
+  adapter: DataAdapter,
+  targetDir: string,
+  oldVersion: string,
+): Promise<void> {
+  let backupName = `${targetDir}.bak.${oldVersion}`;
+  let counter = 1;
+  while (await adapter.exists(backupName)) {
+    counter += 1;
+    backupName = `${targetDir}.bak.${oldVersion}.${counter}`;
+  }
+  try {
+    await adapter.rename(targetDir, backupName);
+  } catch (e) {
+    // Some Obsidian builds disallow directory rename through the
+    // adapter; fall back to copy-then-delete. copyDirRecursive +
+    // rmdir(recursive) is the same primitive pair welcome.ts has
+    // used since v0.2.13.
+    console.warn(
+      `Forge: rename ${targetDir} → ${backupName} failed; using copy fallback`,
+      e,
+    );
+    await copyDirRecursive(adapter, targetDir, backupName);
+    await adapter.rmdir(targetDir, true);
+  }
+}
+
+/** Shared extraction routine for bundled vaults (forge-moda + forge-
+ *  music). Compares the bundled forge.toml version against the
+ *  extracted one and either skips, copies (first install), or
+ *  backs-up-then-re-extracts (drift detected). v0.2.39 replaces the
+ *  pre-v0.2.39 `exists(targetDir) → skip` gate that left users
+ *  running stale extracted vaults until they manually `rm -rf`.
+ *
+ *  Behavior matrix:
+ *  - bundled forge.toml missing → warn, skip (no source to extract).
+ *  - target dir missing → first-install copy.
+ *  - target dir present, both versions equal → skip (logged).
+ *  - target dir present, versions differ → backup + re-extract.
+ *  - target dir present, either version unparseable → warn, skip
+ *    (avoid data loss; user can re-bootstrap manually). */
+async function ensureBundledVault(
+  adapter: DataAdapter,
+  sourceDir: string,
+  targetDir: string,
+  label: string,
+): Promise<void> {
+  if (!(await adapter.exists(sourceDir))) {
+    console.warn(`Forge: bundled ${label} missing from plugin assets; skipping extraction`);
+    return;
+  }
+
+  const bundledTomlPath = `${sourceDir}/forge.toml`;
+  const extractedTomlPath = `${targetDir}/forge.toml`;
+  const bundledBody = (await adapter.exists(bundledTomlPath))
+    ? await adapter.read(bundledTomlPath)
+    : null;
+  const extractedBody =
+    (await adapter.exists(targetDir)) && (await adapter.exists(extractedTomlPath))
+      ? await adapter.read(extractedTomlPath)
+      : null;
+
+  const status = compareBundledVaultVersion(bundledBody, extractedBody);
+
+  if (status.kind === 'no-bundled') {
+    console.warn(`Forge: bundled ${label} forge.toml missing or unreadable; skipping`);
+    return;
+  }
+  if (status.kind === 'unparseable') {
+    console.warn(
+      `Forge: cannot compare ${label} versions (${status.reason}); skipping to avoid data loss`,
+    );
+    return;
+  }
+  if (status.kind === 'match') {
+    console.log(`Forge: ${label} already at version ${status.version}; skipping`);
+    return;
+  }
+  if (status.kind === 'drift') {
+    console.log(
+      `Forge: ${label} drift detected (extracted ${status.extracted} → bundled ${status.bundled}); backing up + re-extracting`,
+    );
+    await renameWithBackup(adapter, targetDir, status.extracted);
+  }
+  // 'no-extracted' falls through to the copy below.
+
+  await copyDirRecursive(adapter, sourceDir, targetDir);
+  console.log(`Forge: extracted bundled ${label} into vault`);
+}
+
 /** Copy the bundled forge-moda content from the plugin's assets dir
- *  into the user's vault root if it isn't already there. Skips the
- *  copy if the target already exists — protects user edits in
- *  existing vaults and avoids re-copying on every plugin load. */
+ *  into the user's vault root. v0.2.39 — version-aware: replaces the
+ *  pre-v0.2.39 `exists(targetDir) → skip` gate with a version compare
+ *  so drift triggers a backup + re-extract instead of silently leaving
+ *  stale content. See ensureBundledVault. */
 async function ensureBundledForgeModa(app: App): Promise<void> {
   const adapter = app.vault.adapter;
-  const targetDir = 'forge-moda';
-
   try {
-    if (await adapter.exists(targetDir)) {
-      console.log('Forge: forge-moda already in vault; skipping bundle extraction');
-      return;
-    }
-    const sourceDir = '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-moda';
-    if (!(await adapter.exists(sourceDir))) {
-      console.warn('Forge: bundled forge-moda missing from plugin assets; skipping extraction');
-      return;
-    }
-    await copyDirRecursive(adapter, sourceDir, targetDir);
-    console.log('Forge: extracted bundled forge-moda into vault');
+    await ensureBundledVault(
+      adapter,
+      '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-moda',
+      'forge-moda',
+      'forge-moda',
+    );
   } catch (e) {
     // Non-fatal — the simulator and own-snippet authoring still work
     // without forge-moda extracted as authoring content. Surface as
@@ -153,14 +251,14 @@ async function ensureBundledForgeModa(app: App): Promise<void> {
 }
 
 /** v0.2.15: extract bundled forge-music if the vault declares "music"
- *  in its forge.toml domains. Same skip-if-target-exists semantics as
- *  ensureBundledForgeModa. The gate is per-vault opt-in because music
- *  isn't on the V1 seminar curriculum; defaulting it on would leave
- *  unwanted files in most closed-beta vaults. */
+ *  in its forge.toml domains. v0.2.39 — version-aware re-extract on
+ *  drift, sharing the ensureBundledVault helper with forge-moda. The
+ *  gate is per-vault opt-in because music isn't on the V1 seminar
+ *  curriculum; defaulting it on would leave unwanted files in most
+ *  closed-beta vaults. */
 async function ensureBundledForgeMusic(app: App): Promise<void> {
   const adapter = app.vault.adapter;
   const tomlPath = 'forge.toml';
-  const targetDir = 'forge-music';
 
   try {
     if (!(await adapter.exists(tomlPath))) {
@@ -174,17 +272,12 @@ async function ensureBundledForgeMusic(app: App): Promise<void> {
       return;
     }
 
-    if (await adapter.exists(targetDir)) {
-      console.log('Forge: forge-music already in vault; skipping bundle extraction');
-      return;
-    }
-    const sourceDir = '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-music';
-    if (!(await adapter.exists(sourceDir))) {
-      console.warn('Forge: bundled forge-music missing from plugin assets; skipping extraction');
-      return;
-    }
-    await copyDirRecursive(adapter, sourceDir, targetDir);
-    console.log('Forge: extracted bundled forge-music into vault');
+    await ensureBundledVault(
+      adapter,
+      '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-music',
+      'forge-music',
+      'forge-music',
+    );
   } catch (e) {
     console.warn('Forge: ensureBundledForgeMusic failed', e);
   }
