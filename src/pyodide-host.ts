@@ -615,6 +615,27 @@ def _forge_sync_user_file(relpath: str, new_body: str):
         f.write(new_body)
     _forge_registry.refresh_file(target)
 
+def _forge_qualify_snippet_id(snippet_id: str) -> str:
+    """v0.2.40: bare → qualified ID via registry lookup. The capture
+    path writes snapshots keyed by qualified IDs ({vault}/{bare}, set
+    in snippet_registry.py:213-220), so freeze requests that pass bare
+    IDs (the natural user-facing form, and what ForgeFreezeModal
+    collects) miss the file by walking the wrong path.
+
+    Already-qualified IDs ('/' in id) pass through unchanged.
+    Bare IDs that don't resolve in the registry pass through unchanged
+    too — downstream raises the appropriate FileNotFoundError per F5.
+
+    Match semantics follow registry resolution order — bare matches
+    pick the first vault that has the snippet, same as
+    `context.compute('bare_id')` from a top-level call site."""
+    if '/' in snippet_id:
+        return snippet_id
+    snip = _forge_registry.get_bare(snippet_id)
+    if snip:
+        return snip['snippet_id']
+    return snippet_id
+
 def _forge_set_edge_state(caller_id: str, callee_id: str, state: str, vault_name: str = ""):
     """v0.2.30: flip an edge's snapshot state (live ↔ frozen) by
     calling the engine's set_snapshot_state directly. Routes the
@@ -627,12 +648,20 @@ def _forge_set_edge_state(caller_id: str, callee_id: str, state: str, vault_name
     the snapshot doesn't exist (edge hasn't been traversed yet;
     can't freeze what hasn't been captured per F5).
 
+    v0.2.40: bare IDs supplied by ForgeFreezeModal (e.g. 'hello_random'
+    not 'authoring/hello_random') auto-qualify via the registry before
+    routing to set_snapshot_state. Previously, bare IDs threaded
+    through unchanged and missed the capture-written qualified path,
+    producing the URGENT 2026-06-03-0000 FileNotFoundError.
+
     vault_name kept vestigial-but-accepted for symmetry with the
     other _forge_* helpers (the single-user-vault model resolves
     everything against _forge_user_vault).
     """
     _ = vault_name
     from forge.core.snapshots import set_snapshot_state
+    caller_id = _forge_qualify_snippet_id(caller_id)
+    callee_id = _forge_qualify_snippet_id(callee_id)
     set_snapshot_state(_forge_user_vault, caller_id, callee_id, state)
 
 def _forge_list_snippets():
@@ -711,12 +740,6 @@ def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
     Without this, raw dataclasses leak through Pyodide's toJs as
     non-cloneable PyProxies, breaking the iframe's postMessage
     relay AND the structured rendering in Forge Output."""
-    # FORGE-DEBUG investigation v0.2.40
-    print(
-        f"FORGE-DEBUG _forge_compute: snippet_id={snippet_id!r} "
-        f"args={args!r} inputs={inputs!r} "
-        f"vault_path={_forge_user_vault!r}"
-    )
     reg, resolver = _forge_get_resolver(vault_name)
     snip = resolver.resolve(snippet_id)
     stdout, raw_result = _forge_run_snippet(snippet_id, args, inputs, vault_name)
