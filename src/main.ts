@@ -27,14 +27,15 @@ import {
   findWikilinkAtCursor,
   type SnippetRegistryLike,
 } from './wikilink-freeze-menu-core';
+import { replacePythonSection } from './replace-python-section-core';
 
-function replacePythonSection(content: string, code: string): string {
-  const lines = content.split('\n');
-  const idx = lines.findIndex(l => l.trim() === '# Python');
-  if (idx === -1) return content;
-  const before = lines.slice(0, idx).join('\n');
-  return `${before}\n# Python\n\n\`\`\`python\n${code}\n\`\`\`\n`;
-}
+// v0.2.42: replacePythonSection extracted to pure-core
+// src/replace-python-section-core.ts so the trailing-content
+// preservation can be tested under `node --test` without an
+// obsidian shim. The inline version here (pre-v0.2.42) discarded
+// everything after the `# Python` fence — silently wiping the
+// `# Dependencies` block on every Forge-click. See the core file
+// + freeze-menu drain for the user-visible regression history.
 
 // Plain-text content under a markdown heading (any level, case-insensitive),
 // stopping at the next heading or `---` separator. Mirrors
