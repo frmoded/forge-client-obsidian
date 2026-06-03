@@ -87,6 +87,18 @@ leaves your machine except as the `Authorization` header on
 
 If you see the ink dispersions, the install is healthy.
 
+## Network requirements
+
+The Pyodide compute path is fully offline once installed: all Python,
+the music21 library, and the forge engine run inside your browser
+without contacting any server. **One exception**: audio playback (the
+play button on rendered music scores) uses `html-midi-player`, which
+fetches SoundFont samples from `storage.googleapis.com/magentadata/`
+on first play. The samples are browser-cached, so subsequent plays
+work offline. If you're behind a strict firewall or air-gapped, audio
+playback won't initialize — visual score rendering, all computation,
+and freezing snippets still work without network access.
+
 ## Troubleshooting
 
 ### Plugin doesn't appear in Settings → Community plugins
