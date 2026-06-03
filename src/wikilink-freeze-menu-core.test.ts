@@ -19,6 +19,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   decideWikilinkFreezeMenu,
+  findWikilinkAtCursor,
   type SnippetRegistryLike,
 } from './wikilink-freeze-menu-core.ts';
 
@@ -81,6 +82,48 @@ test('decideWikilinkFreezeMenu: target equals current file (self-reference) → 
   ]);
   const decision = decideWikilinkFreezeMenu('hello_random', 'hello_random', registry);
   assert.equal(decision.showMenu, false);
+});
+
+// --- findWikilinkAtCursor ---
+
+test('findWikilinkAtCursor: cursor inside `[[target]]` returns target', () => {
+  const line = 'See [[random_name]] for details.';
+  // Cursor on 'a' of 'random' (index 8 of the line).
+  assert.equal(findWikilinkAtCursor(line, 8), 'random_name');
+});
+
+test('findWikilinkAtCursor: cursor outside any wikilink returns null', () => {
+  const line = 'See [[random_name]] for details.';
+  // Cursor at start of 'for' (index 20).
+  assert.equal(findWikilinkAtCursor(line, 25), null);
+});
+
+test('findWikilinkAtCursor: piped wikilink `[[target|alias]]` returns target only', () => {
+  const line = 'Call [[random_name|the random helper]] here.';
+  assert.equal(findWikilinkAtCursor(line, 10), 'random_name');
+});
+
+test('findWikilinkAtCursor: heading anchor `[[target#heading]]` returns target only', () => {
+  const line = 'See [[song#chorus]] for the chorus.';
+  assert.equal(findWikilinkAtCursor(line, 7), 'song');
+});
+
+test('findWikilinkAtCursor: block anchor `[[target^block]]` returns target only', () => {
+  const line = 'Ref [[song^abc]] block.';
+  assert.equal(findWikilinkAtCursor(line, 7), 'song');
+});
+
+test('findWikilinkAtCursor: multiple wikilinks on one line picks the bracketing one', () => {
+  const line = '[[caller]] calls [[callee]].';
+  // Cursor on '[[callee]]' (index 18).
+  assert.equal(findWikilinkAtCursor(line, 20), 'callee');
+  // Cursor on '[[caller]]' (index 3).
+  assert.equal(findWikilinkAtCursor(line, 3), 'caller');
+});
+
+test('findWikilinkAtCursor: empty wikilink `[[]]` returns null', () => {
+  const line = 'broken [[]] here';
+  assert.equal(findWikilinkAtCursor(line, 9), null);
 });
 
 test('decideWikilinkFreezeMenu: ambiguous bare match → first-match-wins per registry semantics', () => {

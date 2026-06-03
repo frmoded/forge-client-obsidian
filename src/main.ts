@@ -22,6 +22,11 @@ import { isNetRefusalError, welcomeMessage } from './closed-beta-ux';
 import { shouldSkipForMemfsSync } from './memfs-sync-paths';
 import { reconcileInputs } from './frontmatter-inputs-reconcile';
 import { snippetIdFromPath } from './snippet-id-from-path';
+import {
+  decideWikilinkFreezeMenu,
+  findWikilinkAtCursor,
+  type SnippetRegistryLike,
+} from './wikilink-freeze-menu-core';
 
 function replacePythonSection(content: string, code: string): string {
   const lines = content.split('\n');
@@ -494,6 +499,85 @@ export default class ForgePlugin extends Plugin {
         const file = info?.file;
         if (!(file instanceof TFile) || file.extension !== 'md') return;
         addSyncMenuItem(menu, file);
+      }),
+    );
+
+    // v0.2.41: right-click a wikilink in a snippet body → freeze /
+    // unfreeze the edge directly, no modal. Bypasses the modal-typing
+    // UX that surfaced its first real failure as the URGENT
+    // 2026-06-03-0000 freeze-capture bug. Caller is the current file's
+    // basename; callee is the wikilink target; both auto-qualify via
+    // _forge_set_edge_state (v0.2.40). Decision logic lives in the
+    // pure-core wikilink-freeze-menu-core helper for testability.
+    this.registerEvent(
+      this.app.workspace.on('editor-menu', (menu, editor, info: any) => {
+        const file = info?.file;
+        if (!(file instanceof TFile) || file.extension !== 'md') return;
+        const cursor = editor.getCursor();
+        const lineText = editor.getLine(cursor.line);
+        const target = findWikilinkAtCursor(lineText, cursor.ch);
+        if (target === null) return;
+
+        // Build a SnippetRegistryLike on top of Obsidian's metadata
+        // cache. Returns the resolved file's basename for known
+        // snippets, null otherwise. The auto-qualify in
+        // _forge_set_edge_state (v0.2.40) translates basenames to
+        // qualified IDs Python-side, so we don't need to construct
+        // qualified strings here.
+        const registry: SnippetRegistryLike = {
+          qualifyBareId: (bareId: string): string | null => {
+            const resolved = this.app.metadataCache.getFirstLinkpathDest(
+              bareId, file.path,
+            );
+            if (!resolved) return null;
+            const fm = this.app.metadataCache.getFileCache(resolved)?.frontmatter;
+            if (!fm) return null;
+            const t = (fm as any).type;
+            if (t !== 'action' && t !== 'data' && t !== 'snapshot') return null;
+            return resolved.basename;
+          },
+        };
+
+        const decision = decideWikilinkFreezeMenu(file.basename, target, registry);
+        if (!decision.showMenu) return;
+
+        const caller = decision.caller as string;
+        const callee = decision.callee as string;
+
+        const fireFreeze = async (state: 'frozen' | 'live') => {
+          const vaultPath = (this.app.vault.adapter as any).basePath as string;
+          const verb = state === 'frozen' ? 'freeze' : 'unfreeze';
+          try {
+            const res = await freezeEdge(
+              this.settings.serverUrl, vaultPath, caller, callee, state,
+            );
+            if (res.status === 200) {
+              new Notice(`Forge: ${verb}d ${caller} → ${callee}`);
+            } else if (res.status === 404) {
+              new Notice(
+                `Forge: no snapshot for ${caller} → ${callee}. ` +
+                `Forge-click ${caller} once to capture it.`,
+              );
+            } else {
+              const detail = res.json?.detail ?? `HTTP ${res.status}`;
+              new Notice(`Forge: ${verb} failed — ${detail}`);
+            }
+          } catch (e) {
+            console.error(`Forge ${verb} error:`, e);
+            new Notice(`Forge: ${verb} failed — check console.`);
+          }
+        };
+
+        menu.addItem((item) => {
+          item.setTitle(`Forge: Freeze edge ${caller} → ${callee}`)
+            .setIcon('snowflake')
+            .onClick(() => { void fireFreeze('frozen'); });
+        });
+        menu.addItem((item) => {
+          item.setTitle(`Forge: Unfreeze edge ${caller} → ${callee}`)
+            .setIcon('flame')
+            .onClick(() => { void fireFreeze('live'); });
+        });
       }),
     );
 
