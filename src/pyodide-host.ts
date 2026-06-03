@@ -33,6 +33,7 @@
 // which is a significant follow-up.
 
 import type { App } from "obsidian";
+import { parseSnapshotState } from "./snapshot-state-core";
 
 // V1 user-vault mount: bundled-library subdirectory names. Files
 // under these top-level directories in the user's vault are SKIPPED
@@ -121,6 +122,15 @@ export class PyodideHost {
   constructor(app: App, pluginId: string) {
     this.app = app;
     this.pluginId = pluginId;
+  }
+
+  /** v0.2.44: sync accessor for the loaded Pyodide handle, returning
+   *  null when Pyodide hasn't initialized yet. Used by the right-click
+   *  freeze menu to decide enabled/disabled state at menu-build time
+   *  (sync — `editor-menu` doesn't allow awaits). Null fallback shows
+   *  both items enabled, matching pre-v0.2.44 behavior. */
+  tryGetInstance(): PyodideHostInstance | null {
+    return this.instance;
   }
 
   /** Resolve a plugin asset path (relative to assets/) to a URL the
@@ -910,6 +920,21 @@ export interface PyodideHostInstance {
    *  doesn't exist (per constitution F5 — can't freeze what hasn't
    *  been captured). */
   setEdgeState(callerId: string, calleeId: string, state: 'live' | 'frozen'): Promise<void>;
+  /** v0.2.44: synchronous read of the snapshot file's `state:` field
+   *  from MEMFS for the (caller, callee) edge. Used by the right-click
+   *  freeze menu to decide which item to gray out at menu-build time.
+   *  Bare IDs auto-qualify via `_forge_qualify_snippet_id` (the same
+   *  helper `_forge_set_edge_state` uses). Returns `'no-snapshot'` if
+   *  the file is absent, malformed, or the state field can't be read.
+   *
+   *  Why sync: `editor-menu` event handlers can't await before adding
+   *  items. Pyodide's `FS.readFile` is sync (Emscripten contract), and
+   *  the YAML parse is pure-text — fits the constraint.
+   *
+   *  Capture path writes to MEMFS only (the persistence-to-host-disk
+   *  gap is a separately-flagged audit item); this reader honors the
+   *  actual write target. */
+  readSnapshotStateSync(callerId: string, calleeId: string): 'frozen' | 'live' | 'no-snapshot';
   /** v0.2.19: synchronous pre-flight inventory. Refreshes the
    *  registry's cached entry for the snippet from current MEMFS
    *  state, then returns the inventory. Use after `syncUserVaultFile`
@@ -1053,6 +1078,46 @@ _forge_compute(
     this.pyodide.runPython(
       `_forge_set_edge_state(_forge_freeze_caller, _forge_freeze_callee, _forge_freeze_state, "")`,
     );
+  }
+
+  /** v0.2.44 — see interface doc. Sync MEMFS read + pure-text parse.
+   *  Bare IDs auto-qualify via the same Python helper
+   *  `_forge_set_edge_state` uses (the v0.2.40 fix). Wrapped in try/
+   *  catch because Pyodide's FS.readFile throws when the path is
+   *  absent — that's the no-snapshot signal. */
+  readSnapshotStateSync(
+    callerId: string,
+    calleeId: string,
+  ): 'frozen' | 'live' | 'no-snapshot' {
+    // Resolve bare → qualified the same way _forge_set_edge_state does.
+    let qCaller: string;
+    let qCallee: string;
+    try {
+      this.pyodide.globals.set('_forge_state_q_caller_in', callerId);
+      this.pyodide.globals.set('_forge_state_q_callee_in', calleeId);
+      qCaller = this.pyodide.runPython(
+        '_forge_qualify_snippet_id(_forge_state_q_caller_in)',
+      ) as string;
+      qCallee = this.pyodide.runPython(
+        '_forge_qualify_snippet_id(_forge_state_q_callee_in)',
+      ) as string;
+    } catch {
+      // Pre-v0.2.40 engine bundle without the qualify helper — fall
+      // back to bare IDs. The downstream FS read will then miss the
+      // qualified-path file, returning no-snapshot.
+      qCaller = callerId;
+      qCallee = calleeId;
+    }
+    const path = `/bundle/user-vault/.forge/edges/${qCaller}/${qCallee}.md`;
+    let body: string | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      body = (this.pyodide.FS as any).readFile(path, { encoding: 'utf8' }) as string;
+    } catch {
+      body = null;
+    }
+    // Defer to the pure-core parser so the YAML grammar isn't duplicated.
+    return parseSnapshotState(body);
   }
 
   /** v0.2.19 — see interface doc. Atomically refreshes the registry's

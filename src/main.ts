@@ -7,7 +7,18 @@ import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view';
 import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips';
 import { ChipPaletteGroup } from './chips-core';
 import { invalidateLibraryVaultCache } from './edges';
-import { attachEdgeHover } from './edges-hover';
+// v0.2.44: attachEdgeHover removed — the hover popover read snapshot
+// state from host disk via the vault adapter, but capture writes go to
+// Pyodide's MEMFS (the documented persistence gap), so the popover
+// always reported "no snapshot" with a disabled Freeze button — a
+// false-negative affordance. The right-click freeze menu (v0.2.41 +
+// v0.2.43 + v0.2.44 state-aware items) is now the single freeze
+// surface; it reads MEMFS sync via PyodideHost.readSnapshotStateSync
+// so the displayed state matches reality. Restoring the hover requires
+// either the MEMFS-to-host-disk writeback drain (separately flagged)
+// or routing the popover's snapshot read through Pyodide — both are
+// out of scope for v0.2.44.
+// import { attachEdgeHover } from './edges-hover';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
@@ -600,14 +611,29 @@ export default class ForgePlugin extends Plugin {
           }
         };
 
+        // v0.2.44: state-aware items. Query the current snapshot
+        // state via Pyodide's sync MEMFS read so the inapplicable
+        // action is grayed out at menu-build time. Disable Freeze if
+        // already frozen; disable Unfreeze if not frozen (live or
+        // no-snapshot). The null-host fallback (Pyodide not loaded
+        // yet) leaves both enabled — matches pre-v0.2.44 behavior.
+        const hostManager = getPyodideHost();
+        const host = hostManager?.tryGetInstance();
+        const state: 'frozen' | 'live' | 'no-snapshot' | null =
+          host ? host.readSnapshotStateSync(caller, callee) : null;
+        const freezeDisabled = state === 'frozen';
+        const unfreezeDisabled = state !== 'frozen';
+
         menu.addItem((item) => {
           item.setTitle(`Forge: Freeze edge ${caller} → ${callee}`)
             .setIcon('snowflake')
+            .setDisabled(freezeDisabled)
             .onClick(() => { void fireFreeze('frozen'); });
         });
         menu.addItem((item) => {
           item.setTitle(`Forge: Unfreeze edge ${caller} → ${callee}`)
             .setIcon('flame')
+            .setDisabled(unfreezeDisabled)
             .onClick(() => { void fireFreeze('live'); });
         });
       }),
@@ -662,8 +688,9 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.openFreezeModal('live'); },
     });
 
-    const detachHover = attachEdgeHover(this.app, () => this.settings.serverUrl);
-    this.register(detachHover);
+    // v0.2.44: hover popover removed — see import-site comment.
+    // const detachHover = attachEdgeHover(this.app, () => this.settings.serverUrl);
+    // this.register(detachHover);
 
     await runFirstRunCheck(this.app);
 
