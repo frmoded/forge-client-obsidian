@@ -628,7 +628,7 @@ def _forge_qualify_snippet_id(snippet_id: str) -> str:
 
     Match semantics follow registry resolution order — bare matches
     pick the first vault that has the snippet, same as
-    `context.compute('bare_id')` from a top-level call site."""
+    context.compute('bare_id') from a top-level call site."""
     if '/' in snippet_id:
         return snippet_id
     snip = _forge_registry.get_bare(snippet_id)
