@@ -39,6 +39,7 @@ import {
   type SnippetRegistryLike,
 } from './wikilink-freeze-menu-core';
 import { replacePythonSection } from './replace-python-section-core';
+import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -743,13 +744,34 @@ export default class ForgePlugin extends Plugin {
       `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .${MODE_BTN_CLASS}, .forge-chips-btn, .forge-dag-btn`
     ).forEach(el => el.remove());
 
+    // v0.2.46: hoist the frontmatter lookup so the chip-toolbar
+    // decision can use it. Previously fm was computed below for the
+    // edit-mode toggle only. Moving it up keeps a single source of
+    // truth + lets both toolbar buttons branch on the same data.
+    const fm = view.file
+      ? this.app.metadataCache.getFileCache(view.file)?.frontmatter
+      : undefined;
+
     // Order matters: Obsidian's view.addAction PREPENDS — the most
     // recently added action renders leftmost. So to get the visual
     // left-to-right order [Forge, New Snippet, (mode), edges, chips]
-    // we add them in REVERSE: chips first (when the palette is
-    // non-empty), then edges, mode, New Snippet, and Forge LAST so
-    // it lands at the far left.
-    if (this.chipPalette.length > 0) {
+    // we add them in REVERSE: chips first, then edges, mode,
+    // New Snippet, and Forge LAST so it lands at the far left.
+    //
+    // v0.2.46: chip-toolbar visibility moved to the pure-core helper
+    // shouldShowChipsToolbarButton. Pre-v0.2.46 gated on
+    // `chipPalette.length > 0`, which hid the button in any vault
+    // without a loaded _chips.md — a discoverability trap mirroring
+    // the action-menu trap fixed in c3848d9. New gate: file type is
+    // `action` (chip insertion is meaningful for action-snippet
+    // authoring only; the chips view's empty-state messaging
+    // handles the no-chips-yet discovery surface). See
+    // src/chip-toolbar-button-core.ts for the decision logic +
+    // src/chip-toolbar-button-core.test.ts for the 7 cases.
+    if (shouldShowChipsToolbarButton({
+      fileType: typeof fm?.type === 'string' ? fm.type : undefined,
+      chipsCount: this.chipPalette.length,
+    })) {
       const chipsBtn = view.addAction(
         'puzzle', 'Forge: Open chips palette',
         () => { this.openChipsView(); });
@@ -764,9 +786,6 @@ export default class ForgePlugin extends Plugin {
     // Replaces the binary lock toggle from Phase 5 with the explicit
     // direction the user is editing. Data snippets stay on the lock
     // mechanism (different shape, different rename — see Phase 6.5 spec).
-    const fm = view.file
-      ? this.app.metadataCache.getFileCache(view.file)?.frontmatter
-      : undefined;
     if (fm?.type === 'action') {
       const mode = getEditMode(fm);
       const modeBtn = view.addAction(
