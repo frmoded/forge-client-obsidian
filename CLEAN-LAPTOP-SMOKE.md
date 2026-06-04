@@ -9,11 +9,19 @@ prior Forge state — with explicit expected outcomes at each step.
 an Obsidian plugin: write a snippet's behavior in plain English, click
 **Forge**, get Python that runs locally inside Obsidian via Pyodide.
 
-**Pinned to plugin version v0.2.44 + forge-music vault v0.3.8.**
-When future versions ship, this document needs a refresh — see *Doc
-version pin* at the bottom.
+**Install path used by this smoke:** the canonical closed-beta
+student path — **BRAT → Forge Installer → auto-fetched Forge Client
+release**. BRAT installs latest by default; the smoke targets
+"current latest stable" with **v0.2.44 as the floor**. Pin to a
+specific version via Forge Installer's settings tab if you need
+cohort consistency.
 
-**Success criterion:** when you finish *Phase 7*, Forge is fully
+The manual direct-zip path (documented in `INSTALL.md`) is the
+power-user / debugging fallback for operators who can't use BRAT —
+it's NOT exercised here. Validating the BRAT path is the V1-ship
+gate.
+
+**Success criterion:** when you finish *Phase 8*, Forge is fully
 validated for V1 closed-beta on this machine. You can stop after any
 earlier phase if the validator's scope is narrower (e.g., "moda only,
 no music").
@@ -23,20 +31,19 @@ no music").
 Before starting, gather:
 
 - **A mint laptop or fresh macOS user account.** This means no
-  pre-installed Obsidian, no prior Forge install, no leftover `.obsidian`
-  folders in `~`, no transpile token in keychain. If you're running on
-  a long-used machine, the smoke can still work but masks the gaps a
-  closed-beta student would hit — that's exactly the failure mode this
-  document exists to prevent.
-- **Internet access.** Phase 5 (Greet authoring) and Phase 6 (music
-  audio playback) both need outbound HTTPS to `forge.thecodingarena.com`
-  and `storage.googleapis.com` respectively. Air-gapped machines can
-  complete Phases 1-4 only.
-- **The transpile token.** A short string you should have received by
-  email from the Forge service operator. Required from Phase 5 onward;
-  Phases 1-4 work without it.
-- **The download URL for the v0.2.44 release zip:**
-  https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.44
+  pre-installed Obsidian, no prior Forge install, no leftover
+  `.obsidian` folders in `~`, no transpile token in keychain. If
+  you're running on a long-used machine, the smoke can still work
+  but masks the gaps a closed-beta student would hit — that's
+  exactly the failure mode this document exists to prevent.
+- **Internet access.** BRAT and Forge Installer both fetch from
+  GitHub; Phase 6 (Greet authoring) needs the transpile service;
+  Phase 7 (music audio playback) needs `storage.googleapis.com`.
+  Air-gapped machines can't complete the BRAT install path at all
+  — they need the manual fallback in `INSTALL.md`.
+- **The transpile token.** A short string you should have received
+  by email from the Forge service operator. Required from Phase 6
+  onward; Phases 1-5 work without it.
 
 **Estimated time:** 20-30 minutes if everything works on first try.
 1-2 hours if you hit issues that require digging into the *Failure
@@ -71,139 +78,157 @@ wherever you chose).
 
 ---
 
-## Phase 2 — Install the Forge plugin
+## Phase 2 — Turn on Community plugins + install BRAT
 
-This phase mirrors `INSTALL.md` steps 1-4 verbatim with explicit
-expected-outcome assertions added.
+This phase mirrors `closed-beta-onboarding.md` §3.1 + §3.2 with
+explicit expected-outcome assertions added per step.
 
-**Step 2.1 — Download the release zip.** Open
-https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.44
-in a browser. Under **Assets**, click `forge-client-obsidian-v0.2.44.zip`
-to download.
-Expected: a ~33 MB zip downloads to `~/Downloads/`. Filename:
-`forge-client-obsidian-v0.2.44.zip`.
+**Step 2.1 — Open Community plugins settings.** Click the gear icon
+at the bottom-left to open **Settings**. Click **Community plugins**
+in the left sidebar.
+Expected: the right pane shows a panel that either offers a "Turn
+on community plugins" button (fresh install) or already shows the
+**Browse** / **Installed** / **Updates** tabs (Community plugins
+were enabled previously, e.g., on a re-smoke).
 
-**Step 2.2 — Find the vault's plugin directory.** In Obsidian, open
-**Settings** (gear icon at bottom-left, or `Cmd+,`). Click **About**
-in the left sidebar. Click **Open vault folder**. A Finder window
-opens showing your vault's contents.
+**Step 2.2 — Turn on community plugins.** If you see a **Turn on
+community plugins** button, click it. A warning dialog appears
+explaining that community plugins are third-party code; click
+**Turn on community plugins** to confirm.
+Expected: the warning dialog dismisses; the right pane now shows
+**Browse** / **Installed** / **Updates** tabs. Community plugins
+are enabled.
 
-In Finder, enable hidden files: `Cmd+Shift+.` (the `.obsidian/` folder
-is hidden because it starts with a dot). Navigate into `.obsidian/`,
-then into `plugins/`.
-
-If `plugins/` doesn't exist yet, create it (right-click → New Folder →
-name it `plugins`).
-Expected: an empty `plugins/` folder inside `.obsidian/`. Full path:
-`~/forge-vaults/forge-clean-smoke/.obsidian/plugins/`.
-
-**Step 2.3 — Unzip into the plugins directory.** Double-click the
-`forge-client-obsidian-v0.2.44.zip` in `~/Downloads/`. macOS unzips it
-to `~/Downloads/forge-client-obsidian/`. Drag the unzipped folder into
-the `plugins/` directory from Step 2.2.
-
-After the move, the directory tree should look like:
-
-```
-~/forge-vaults/forge-clean-smoke/.obsidian/plugins/forge-client-obsidian/
-  ├── main.js              (~12 MB)
-  ├── manifest.json        (small)
-  ├── styles.css           (small)
-  └── assets/
-      ├── engine/          (Python source bundle)
-      ├── iframe/          (Moda-web bundle)
-      ├── pyodide/         (~15 MB WASM + stdlib)
-      ├── vaults/          (forge-moda + forge-music bundled content)
-      └── wheels/          (~23 MB Python wheels including music21)
-```
-
-If after the move the path reads
-`.obsidian/plugins/forge-client-obsidian/forge-client-obsidian/main.js`
-(nested twice), move the inner folder up one level — this is a common
-mistake.
-
-**Step 2.4 — Enable the plugin.** Back in Obsidian, go to
-**Settings → Community plugins**. If a "Turn on community plugins"
-button appears, click it. You should see **Forge Client** in the
-installed-plugins list with its toggle in the off position. Click the
-toggle to enable.
-Expected: a brief "Forge: initializing Pyodide…" notice or similar
-appears at the bottom-right. After ~10 seconds the plugin is loaded.
-Open the DevTools panel with `Cmd+Opt+I` (macOS) /
-`Ctrl+Shift+I` (Linux/Windows) and switch to the **Console** tab.
-You should see `Forge: runFirstRunCheck starting` and other
-`Forge:`-prefixed log lines. The exact lines depend on whether music
-is gated on (Phase 6) — for now, just confirm the plugin loaded
-without red errors.
+**Step 2.3 — Install BRAT.** Click **Browse** in the Community
+plugins panel. In the search box, type `BRAT`. Find
+**Obsidian42 - BRAT** in the list. Click **Install**, wait for it
+to download, then click **Enable**.
+Expected: BRAT installs (~1-2 seconds — it's tiny), enables, and
+its plugin entry now shows the toggle in the on position. A new
+**BRAT** entry appears in the left sidebar under "Community
+plugins". BRAT's command palette entries (e.g.,
+`BRAT: Add a beta plugin to install`) are now available via
+`Cmd+P` (macOS) / `Ctrl+P` (Linux/Windows).
 
 ---
 
-## Phase 3 — Token setup
+## Phase 3 — Install Forge via BRAT → Forge Installer
 
-**Step 3.1 — Open the Forge Client settings.** In Obsidian
-**Settings**, scroll the left sidebar to **Community plugins**, find
-**Forge Client** in the list of installed plugins, and click it. The
-right pane should show Forge Client's settings UI.
-Expected: a section labeled **Transpile service** at the top with two
-fields — **Transpile service token** (a masked input) and
-**Transpile service URL** (default `https://forge.thecodingarena.com`).
+This phase mirrors `closed-beta-onboarding.md` §3.3 + §3.4. The two-
+indirection install (BRAT installs Forge Installer; Forge Installer
+auto-downloads Forge Client) is the canonical path because Forge
+Client ships ~33 MB of bundled assets (Pyodide WASM, engine bundle,
+forge-moda and forge-music vault content, music21 wheels) that BRAT
+alone can't carry. Forge Installer is a ~20 KB bootstrapper that
+BRAT *can* carry; on enable it downloads the full Forge Client
+release zip and unpacks it into the vault's plugin directory.
 
-**Step 3.2 — Paste the token.** Click the **Transpile service token**
-field and paste your token from the email. The input is masked
-(shows ●●●● after paste) — that's expected, not a bug.
+**Step 3.1 — Add Forge Installer via BRAT.** Open the command
+palette (`Cmd+P` (macOS) / `Ctrl+P` (Linux/Windows)) and type
+**BRAT: Add a beta plugin to install**. Select that command. A
+dialog appears asking for a repository.
+In the dialog, paste the bootstrap repo: `frmoded/forge-installer`
+Click **Add Plugin**.
+Expected: the dialog dismisses. Forge Installer is fetched from
+GitHub (~1-2 seconds) and auto-enables.
+
+**Step 3.2 — Wait for the first Notice.** Watch the bottom-right of
+the Obsidian window for a Notice toast reading
+**"Forge Installer: downloading v0.X.Y …"** (where `v0.X.Y` is the
+current Forge Client release tag, e.g., `v0.2.44`).
+Expected: this Notice appears within ~5 seconds of the previous
+step. If it doesn't appear, the installer didn't auto-run on enable
+— see Failure mode F2 below.
+
+**Step 3.3 — Wait for the install-completion Notice.** ~30 seconds
+later (depending on your connection), a second Notice appears:
+**"Forge Client installed — fresh → v0.X.Y"**.
+Expected: this confirms the ~33 MB release zip was downloaded,
+SHA-verified, unpacked into
+`<vault>/.obsidian/plugins/forge-client-obsidian/`, and the
+plugin is now ready to load. If the Notice never appears, see
+Failure mode F3 below.
+
+**Step 3.4 — Reload Obsidian.** Open the command palette (`Cmd+P`)
+and select **Reload app without saving**. Obsidian reloads.
+Expected: after reload, both **Forge Installer** AND **Forge Client**
+appear in Settings → Community plugins → Installed, both with
+their toggles in the on position. Forge Client's plugin process
+starts; you'll see a "Forge: initializing Pyodide…" indicator
+briefly, then nothing — the plugin is loaded.
+
+**Footnote on rate-limiting.** GitHub's API rate-limits unauthenticated
+requests. If Step 3.2 or 3.3 fails with a Notice mentioning
+**"Forge Installer failed: GitHub API: …"**, that's almost always
+transient. Open the command palette and run
+**Check for Forge Client updates now** to manually re-trigger the
+install flow. Same path; just on-demand instead of auto-fire.
+
+---
+
+## Phase 4 — Token setup
+
+**Step 4.1 — Open Forge Client settings.** In Obsidian Settings,
+scroll the left sidebar to **Forge Client** under "Community
+plugins" (it'll appear below "Forge Installer"). Click it.
+Expected: the right pane shows Forge Client's settings UI with a
+section labeled **Transpile service** at the top.
+
+**Step 4.2 — Paste the token.** Click the **Transpile service
+token** field and paste your token from the email. The input is
+masked (shows ●●●● after paste).
 Expected: the field displays the masked-out token. Leave the
-**Transpile service URL** field at its default unless instructed
+**Transpile service URL** field at its default
+(`https://forge.thecodingarena.com`) unless you've been told
 otherwise.
 
-**Step 3.3 — Verify persistence.** Close the Settings window
-(`Esc` or click the X). Reopen Settings → Community plugins → Forge
-Client. The token field should still show ●●●●.
+**Step 4.3 — Verify persistence.** Close Settings (`Esc` or click
+the X). Reopen Settings → Community plugins → Forge Client. The
+token field should still show ●●●●.
 Expected: persistence works. The token is now in
-`<vault>/.obsidian/plugins/forge-client-obsidian/data.json` (not in
-keychain — vault-local).
+`<vault>/.obsidian/plugins/forge-client-obsidian/data.json` —
+vault-local, not in keychain. Forge Installer preserves
+`data.json` across plugin updates, so your token survives future
+Forge Client upgrades.
 
 ---
 
-## Phase 4 — Verify base install (moda simulator)
+## Phase 5 — Verify base install (moda simulator)
 
 This phase exercises the bundled `forge-moda` vault content without
-needing the transpile token. If Phase 4 passes, the install is
-healthy; you can confidently proceed to Phases 5-7 (which depend on
+needing the transpile token. If Phase 5 passes, the install is
+healthy; you can confidently proceed to Phases 6-8 (which depend on
 the token).
 
-**Step 4.1 — Open the moda simulator.** Open the command palette:
-`Cmd+P` (macOS) / `Ctrl+P` (Linux/Windows). Type **Forge** —
-matching commands appear. Select **Forge: Open MoDa simulation**.
-Expected: a panel opens in Obsidian with a particle-simulation
-canvas: roughly 500 small pale-blue water particles arranged inside
-a rectangle, plus a header bar with a **Run simulation** button.
+**Step 5.1 — Open the moda simulator.** Open the command palette
+(`Cmd+P` / `Ctrl+P`). Type **Forge** — matching commands appear.
+Select **Forge: Open MoDa simulation**.
+Expected: a panel opens with a particle-simulation canvas — roughly
+500 small pale-blue water particles in a rectangle, plus a header
+bar with a **Run simulation** button.
 
-**Step 4.2 — Run a simulation.** Click the **Run simulation** button
-in the panel header. The first run pays a one-time ~1-2 second
-Pyodide warmup. After ~8 seconds the canvas redraws with three
-distinct ink dispersions (colored particles) overlaid on the water.
-Expected: visible dispersion of three ink injections. If you see
-this, base install is healthy.
-Interpretation: the canvas stays static or shows only water → Pyodide
-didn't fully boot; see Failure mode F4 below.
+**Step 5.2 — Run a simulation.** Click **Run simulation** in the
+panel header. The first run pays a one-time ~1-2 second Pyodide
+warmup; after ~8 seconds the canvas redraws with three distinct ink
+dispersions overlaid on the water.
+Expected: visible dispersion of three colored ink injections. If
+you see this, base install is healthy.
+Interpretation: the canvas stays static or shows only water →
+Pyodide didn't fully boot. See Failure mode F4.
 
 ---
 
-## Phase 5 — Author + Forge-click a Greet snippet
+## Phase 6 — Author + Forge-click a Greet snippet
 
-This phase exercises the load-bearing core workflow:
-English-facet authoring → transpile to Python via the hosted service
-→ run via Pyodide → output panel renders. Requires the transpile
-token from Phase 3.
+Load-bearing core workflow validation. Requires the transpile token
+from Phase 4.
 
-**Step 5.1 — Create a snippet file.** In Obsidian's file tree
-(left sidebar), right-click the vault root → **New note**. Name the
-file `greet.md`. The note opens in the editor.
+**Step 6.1 — Create a snippet file.** In Obsidian's file tree,
+right-click the vault root → **New note**. Name it `greet.md`. The
+note opens in the editor.
 
-**Step 5.2 — Paste the snippet content.** Copy the block below
-(triple-backtick-fenced YAML + markdown) and paste it as the
-ENTIRE content of `greet.md`, overwriting any default Obsidian
-welcome text:
+**Step 6.2 — Paste the snippet content.** Replace the file's content
+with:
 
 ```
 ---
@@ -227,54 +252,45 @@ def compute(context, name):
 ```
 
 Save with `Cmd+S`.
-Expected: the file is saved. Obsidian's live-preview shows the YAML
-frontmatter at the top, then a **# English** heading with a one-line
-paragraph, then a separator (`---`), then a **# Python** heading
-with a fenced code block.
+Expected: file saved. Live preview shows the YAML frontmatter,
+`# English` heading + paragraph, separator, `# Python` heading +
+fenced code block.
 
-**Step 5.3 — Forge-click the snippet.** With `greet.md` open and
-active in the editor, click the **Forge** (flame) icon in the
-right-side action-bar at the top of the editor. (Alternatively:
-`Cmd+P` → **Forge: Run only (active snippet)** if you've already
-transpiled; for this first Forge-click on a fresh snippet, use the
-flame icon to trigger Generate + Run.)
-Expected: a small modal appears with a `name` input field (because
-the snippet's frontmatter declares `inputs: [name]`). Type `world`
-and click **Run**.
+**Step 6.3 — Forge-click.** With `greet.md` active, click the
+**Forge** (flame) icon in the editor's right-side action bar.
+Expected: a small modal appears with a `name` input field
+(because the snippet's frontmatter declares `inputs: [name]`).
+Type `world` and click **Run**.
 
-**Step 5.4 — Observe the output.** A network round-trip happens — the
-hosted transpile service receives the English facet and returns
+**Step 6.4 — Observe the output.** A network round-trip happens —
+the hosted transpile service receives the English facet and returns
 Python. The Python is written back to the `# Python` section of
-`greet.md`. Then Pyodide executes it.
+`greet.md`. Pyodide executes it.
 Expected: a **Forge Output** panel opens on the right showing
 `Hello world` (no trailing punctuation). The `greet.md` file's
 `# Python` section may show a slightly different `def compute`
-implementation than what you pasted (the LLM-generated one), but
-the printed output is the load-bearing assertion.
+implementation than what you pasted (the LLM-generated one) — the
+printed output is the load-bearing assertion.
 Interpretation: see Failure mode F5 if you see `Error: transpile
 failed` or no output panel.
 
-**Step 5.5 — Re-Forge-click to confirm idempotency.** Click the
-**Forge** flame icon a second time on the same `greet.md`. The same
-modal appears.
+**Step 6.5 — Re-Forge-click to confirm idempotency.** Click the
+**Forge** flame icon a second time. The same modal appears.
 Expected: type `world` again → same output (`Hello world`). The
-transpile step still happens — the LLM re-generates the Python — but
-the output is identical. This is the expected baseline; it confirms
-the workflow is repeatable.
+transpile step still happens (LLM re-generates), but the
+printed output is identical.
 
 ---
 
-## Phase 6 — Music domain (stretch but recommended for V1)
+## Phase 7 — Music domain (stretch but recommended for V1)
 
-This phase enables the music domain, triggers auto-extraction of the
-bundled `forge-music` vault (v0.3.8 at this pin), and exercises a
-score-rendering snippet.
+Enables the music domain, triggers auto-extraction of the bundled
+`forge-music` vault, and exercises a score-rendering snippet.
 
-**Step 6.1 — Edit `forge.toml`.** In Obsidian's file tree, locate
-`forge.toml` at the vault root. If it doesn't exist, create it
-(right-click vault → New note → name it `forge.toml`). Edit the
-contents to include a `domains = ["music"]` line. Minimal valid
-content:
+**Step 7.1 — Edit `forge.toml`.** In the vault file tree, locate
+`forge.toml` at the vault root (create it if missing: right-click
+vault → New note → name it `forge.toml`). Edit to include
+`domains = ["music"]`. Minimal valid content:
 
 ```
 name = "forge-clean-smoke"
@@ -284,115 +300,103 @@ domains = ["music"]
 ```
 
 Save with `Cmd+S`.
-Expected: file saved. The `domains = ["music"]` declaration is the
-gate that triggers forge-music extraction on next plugin load.
+Expected: file saved. The `domains = ["music"]` declaration gates
+forge-music extraction on next plugin load.
 
-**Step 6.2 — Quit Obsidian completely.** Press `Cmd+Q` (macOS) —
+**Step 7.2 — Quit Obsidian completely.** Press `Cmd+Q` (macOS) —
 NOT `Cmd+W`. `Cmd+W` only closes the current window; the plugin
-process stays warm and won't re-evaluate `forge.toml`. `Cmd+Q` fully
-quits.
-Expected: Obsidian's dock icon disappears (or the application stops
-appearing in `Activity Monitor` if you check).
+process stays warm and won't re-evaluate `forge.toml`. `Cmd+Q`
+fully quits.
+Expected: Obsidian's dock icon disappears.
 
-**Step 6.3 — Relaunch + observe extraction.** Reopen Obsidian (it
-should remember the vault). Open DevTools (`Cmd+Opt+I`) → **Console**
+**Step 7.3 — Relaunch + observe extraction.** Reopen Obsidian (it
+remembers the vault). Open Developer Tools with `Cmd+Opt+I`
+(macOS) / `Ctrl+Shift+I` (Linux/Windows). Switch to the **Console**
 tab. Filter on `Forge:` in the console's search box.
 Expected log lines on this first music-enabled boot:
 - `Forge: runFirstRunCheck starting`
-- `Forge: forge-moda already at version 0.4.16; skipping` (moda is
-  always bundled regardless of the music gate)
-- `Forge: extracted bundled forge-music into vault` (first install
-  of the music vault — no prior extraction to compare against)
-- File tree on the left now shows a new `forge-music/` directory at
-  the vault root with subdirectories `blues/`, `percussion/`, plus
-  some top-level snippets and a `forge.toml`.
+- `Forge: forge-moda already at version 0.4.16; skipping` (moda
+  is always bundled regardless of the music gate)
+- `Forge: extracted bundled forge-music into vault` (first install)
+- File tree on the left now shows `forge-music/` at the vault root
+  with subdirectories `blues/`, `percussion/`, plus top-level
+  snippets and a `forge.toml`.
 
-On subsequent Obsidian restarts (with no version change), you'll
-instead see `Forge: forge-music already at version 0.3.8; skipping`
-— that's the v0.2.38 auto-re-extract path's match case.
+Subsequent restarts (no version change) show
+`Forge: forge-music already at version 0.3.8; skipping` — the
+v0.2.38 auto-re-extract match case.
 
-**Step 6.4 — Forge-click a music snippet.** Open
-`forge-music/blues/song.md`. This is a hand-authored snippet
-(English + Python facets) that composes the whole 12-bar blues
-song. Click the **Forge** flame icon (or `Cmd+P` →
-**Forge: Run only (active snippet)**).
-Expected: a Forge Output panel opens. After ~5-10 seconds of
-computation (music21 is heavy), the panel shows a rendered SVG
-score: multiple staves with notation, plus an audio playback
-widget (`html-midi-player`) at the bottom with a play button.
+**Step 7.4 — Forge-click a music snippet.** Open
+`forge-music/blues/song.md`. Click the **Forge** flame icon.
+Expected: after ~5-10 seconds of computation (music21 is heavy),
+the Forge Output panel shows a rendered SVG score — multiple
+staves with notation, plus an audio playback widget at the bottom.
 
-**Step 6.5 — Audio playback (caveat).** Click the play button on
+**Step 7.5 — Audio playback (caveat).** Click the play button on
 the audio widget. The first play fetches a SoundFont file from
 `storage.googleapis.com/magentadata/` (~1-2 MB). After the fetch
 completes, the score plays through your speakers.
 Expected: audible blues song.
-Caveat: this is a documented closed-beta network dependency (see
-INSTALL.md → Network requirements). Air-gapped machines fail this
-step but the visual score still renders. If the SoundFont fetch
-fails (firewall blocking `storage.googleapis.com`), you'll see a
-red error in DevTools but the score itself is unaffected.
+Caveat: documented closed-beta network dependency. Air-gapped
+machines fail this step but the visual score still renders.
 
 ---
 
-## Phase 7 — Freeze affordance (stretch but recommended for V1)
+## Phase 8 — Freeze affordance (stretch but recommended for V1)
 
-This phase exercises the v0.2.41+ wikilink-context-menu freeze
-affordance, then the v0.2.40 engine-side auto-qualify under the
-hood, then the v0.2.44 state-aware menu items.
+Exercises the v0.2.41+ wikilink-context-menu freeze affordance, the
+v0.2.40 engine-side auto-qualify under the hood, and the v0.2.44
+state-aware menu items.
 
-**Step 7.1 — Confirm `forge-music/blues/song.md` has a Dependencies
-block.** Scroll to the bottom of `song.md`. You should see a
-`# Dependencies` heading followed by wikilinks like
+**Step 8.1 — Confirm `forge-music/blues/song.md` has Dependencies.**
+Scroll to the bottom of `song.md`. You should see a `# Dependencies`
+heading followed by wikilinks like
 `[[chorus]] [[solo_chorus]] [[drum_chorus]]`.
-Expected: the block is present. (If you authored a different snippet
-without `# Dependencies`, append one manually per the **Authoring
-notes** section of INSTALL.md — this is the v0.2.41 gotcha.)
+Expected: the block is present (forge-music ships it). If you
+authored a different snippet without the block, append one
+manually per the **Authoring notes** section of INSTALL.md — this
+is the v0.2.41 hand-authored-snippet gotcha.
 
-**Step 7.2 — Forge-click song.md to capture edges.** With `song.md`
-active, Forge-click it (flame icon). Wait for the Forge Output
-panel to show the rendered score (~5-10 seconds).
+**Step 8.2 — Forge-click song.md to capture edges.** With `song.md`
+active, Forge-click. Wait for the score to render (~5-10 seconds).
 Expected: score renders. This Forge-click writes snapshot files
-for each `context.compute()` call in the song's Python — those are
-the edges you'll freeze.
+for each `context.compute()` call in song's Python — the edges
+you'll freeze.
 
-**Step 7.3 — Right-click a wikilink in the Dependencies block.**
-In the `# Dependencies` section at the bottom of `song.md`, position
-the cursor inside one of the wikilinks — for example, `[[chorus]]`.
-Click directly on the link text, then right-click.
-Expected: a context menu appears with two new entries:
-- `Forge: Freeze edge song → chorus` (enabled — the edge is currently
-  live)
-- `Forge: Unfreeze edge song → chorus` (grayed out / disabled —
-  nothing to unfreeze yet, state-aware menu from v0.2.44)
+**Step 8.3 — Right-click a wikilink.** In the `# Dependencies`
+block, position the cursor inside `[[chorus]]`. Click directly on
+the link text, then right-click.
+Expected: context menu shows two new entries:
+- `Forge: Freeze edge song → chorus` (enabled — currently live)
+- `Forge: Unfreeze edge song → chorus` (grayed out — nothing to
+  unfreeze yet; v0.2.44 state-aware behavior)
 
-**Step 7.4 — Click Freeze.** Select the `Forge: Freeze edge song →
-chorus` item.
-Expected: a brief Obsidian Notice toast in the bottom-right reads
-`Forge: frozen song → chorus`. No errors in DevTools.
+**Step 8.4 — Click Freeze.** Select
+`Forge: Freeze edge song → chorus`.
+Expected: a Notice toast: `Forge: frozen song → chorus`. No
+errors in DevTools.
 
-**Step 7.5 — Forge-click again to confirm freeze.** Forge-click
-`song.md` again. The compute runs.
-Expected: the chorus output is identical to its previous value (the
-frozen snapshot is being read instead of the chorus snippet
-re-running). The rest of the song (solo, drums) re-runs freshly each
-time, so total output may still vary subtly — but the chorus part
-is pinned.
+**Step 8.5 — Forge-click again to confirm freeze.** Forge-click
+`song.md`.
+Expected: chorus output is identical to its previous value (the
+frozen snapshot is read instead of chorus re-running). The rest
+of the song (solo, drums) re-runs freshly, so total output may
+still vary subtly — but the chorus part is pinned.
 
-**Step 7.6 — Right-click → Unfreeze.** Right-click `[[chorus]]` in
-the Dependencies block again. This time the menu shows:
-- `Forge: Freeze edge song → chorus` (grayed / disabled — already
-  frozen)
+**Step 8.6 — Right-click → Unfreeze.** Right-click `[[chorus]]`
+again. This time:
+- `Forge: Freeze edge song → chorus` (grayed — already frozen)
 - `Forge: Unfreeze edge song → chorus` (enabled)
 
 Click the Unfreeze item.
-Expected: Notice `Forge: lived song → chorus`. The cosmetic "lived"
-verb construction is `${verb}d` from the state name `live` — it's a
-known minor wart, not a bug.
+Expected: Notice `Forge: lived song → chorus`. The cosmetic
+"lived" verb construction (`${verb}d` from state name `live`) is
+a known minor wart, not a bug.
 
-**Step 7.7 — Confirm randomness restored.** Forge-click `song.md`
-again. The chorus part can now re-randomize each call.
-Expected: the whole song re-runs fresh; chorus differs from the
-frozen value.
+**Step 8.7 — Confirm randomness restored.** Forge-click `song.md`
+again.
+Expected: chorus can re-randomize each call. Song re-runs fresh;
+chorus differs from the previously-frozen value.
 
 ---
 
@@ -402,69 +406,75 @@ frozen value.
 cannot be opened because the developer cannot be verified."**
 Likely cause: macOS Gatekeeper blocks unsigned downloads on first
 open. Fix: right-click `Obsidian.app` in Applications → select
-**Open** → confirm in the dialog that appears. Subsequent launches
-work normally.
+**Open** → confirm in the dialog.
 
-**F2 (Phase 2.2) — Settings → About has no "Open vault folder"
-button.**
-Likely cause: you skipped Phase 1.3 (no vault was created). Open
-the vault picker (Obsidian icon → File → Open Vault…) and create one
-before continuing.
+**F2 (Phase 3.2) — "Forge Installer: downloading …" Notice never
+appears.**
+The `frmoded/forge-installer` plugin didn't auto-run on enable.
+Open the command palette and run **Check for Forge Client updates
+now** — that's the same flow, manually triggered. (Canonical
+workaround per `closed-beta-onboarding.md` §6.)
 
-**F3 (Phase 2.3) — Plugin installs but Obsidian Community plugins
-list doesn't show Forge Client.**
-Likely cause: the unzip nested the folder twice. Check
-`<vault>/.obsidian/plugins/forge-client-obsidian/main.js` exists at
-that exact path; if it's at
-`.obsidian/plugins/forge-client-obsidian/forge-client-obsidian/main.js`,
-move the inner folder up one level. After fixing, in
-Settings → Community plugins click the "Reload" icon to rescan.
+**F3 (Phase 3.3) — Notice says "Forge Installer failed: GitHub
+API: …" or the install-completion Notice never appears.**
+Almost always a transient GitHub rate-limit or network blip. Open
+the command palette → **Check for Forge Client updates now** to
+retry. If it persistently fails, contact the cohort operator.
 
-**F4 (Phase 4.2) — Moda simulation canvas stays static after Run
+**F4 (Phase 3.4) — After reload, Forge Client doesn't appear in
+Settings → Community plugins.**
+Likely cause: partial unzip or Obsidian didn't re-scan the plugin
+directory. Two fixes in order:
+- Toggle **Community plugins** off and back on once; Obsidian
+  re-scans on enable.
+- If still missing, disable + re-enable Forge Installer to
+  re-trigger the download and unpack flow.
+
+**F5 (Phase 5.2) — Moda simulation canvas stays static after Run
 simulation.**
-Likely cause: Pyodide didn't finish booting (the warmup is sometimes
-slow on first run). Open DevTools → Console; look for red errors. If
-you see `Forge: initializing Pyodide…` still pending, wait 30 more
-seconds. If you see a stack trace, the bundled engine may be corrupt
-(re-do Step 2.3 unzip carefully).
+Likely cause: Pyodide didn't finish booting. Open DevTools →
+Console; look for red errors. If you see `Forge: initializing
+Pyodide…` still pending, wait 30 more seconds. If you see a stack
+trace, the bundled engine may be corrupt — disable + re-enable
+Forge Installer to re-fetch the release zip.
 
-**F5 (Phase 5.4) — Forge-click on greet.md produces `Error: transpile
-failed` or no output panel.**
+**F6 (Phase 6.4) — Forge-click on greet.md produces `Error:
+transpile failed` or no output panel.**
 Three possible causes, check in order:
 - Network blocked: confirm `curl -I https://forge.thecodingarena.com`
   returns `HTTP/1.1 200 OK` from Terminal.
 - Token invalid: copy the token from your email more carefully (no
   leading/trailing spaces); re-paste in Settings → Forge Client →
-  Transpile service token; click outside the field; reopen Settings
-  to verify persistence per Step 3.3.
-- Service down: contact the operator. Phases 1-4 still work without
-  the transpile service.
+  Transpile service token; verify persistence per Step 4.3.
+- Service down: contact the operator. Phases 1-5 still work
+  without the transpile service.
 
-**F6 (Phase 6.3) — Plugin reload doesn't show
-`Forge: extracted bundled forge-music into vault` log line.**
-Likely cause: `forge.toml` doesn't actually have the domains line, or
-Obsidian wasn't fully quit. Check `forge.toml` content with the
-File menu (the `domains = ["music"]` line must NOT be commented out
-or inside an array on multiple lines). Then `Cmd+Q` (not `Cmd+W`)
-and relaunch.
+**F7 (Phase 7.3) — Plugin reload doesn't show `Forge: extracted
+bundled forge-music into vault` log line.**
+Likely cause: `forge.toml` doesn't actually have the domains line,
+or Obsidian wasn't fully quit. Check `forge.toml` content (the
+`domains = ["music"]` line must NOT be commented out or inside a
+multi-line array). Then `Cmd+Q` (not `Cmd+W`) and relaunch.
 
-**F7 (Phase 6.4) — `forge-music/blues/song.md` Forge-click produces
+**F8 (Phase 7.4) — `forge-music/blues/song.md` Forge-click produces
 `SnippetResolutionError: Snippet 'chorus' not found`.**
-Likely cause: forge-music extraction was incomplete (a v0.2.38 bug
-edge case). Check `<vault>/forge-music/blues/` contains `chorus.md`,
-`solo_chorus.md`, etc. If not, manually delete the entire
-`<vault>/forge-music/` directory, `Cmd+Q`, relaunch — the auto-
-extract will redo the install from the bundle.
+Likely cause: forge-music extraction was incomplete. Check
+`<vault>/forge-music/blues/` contains `chorus.md`, `solo_chorus.md`,
+etc. If not, manually delete the entire `<vault>/forge-music/`
+directory, `Cmd+Q`, relaunch — the auto-extract will redo the
+install from the bundle. If `<vault>/forge-music/` is still missing
+content after relaunch, that points back to F3 (incomplete install
+from Forge Installer); re-run the Forge Installer update flow.
 
-**F8 (Phase 7.3) — Right-click on `[[chorus]]` shows no
+**F9 (Phase 8.3) — Right-click on `[[chorus]]` shows no
 `Forge: Freeze edge` items in the context menu.**
-Likely cause: cursor wasn't actually inside the wikilink bracket
-span at right-click time (live preview hides the `[[` `]]` brackets,
-so the click target visual differs from the cursor position).
-Click directly on the link text (the word `chorus`), then right-
-click without moving the mouse much. If still missing, in DevTools
+Likely cause: cursor wasn't inside the wikilink bracket span at
+right-click time (live preview hides the `[[` `]]` brackets, so
+the click target visual differs from the cursor position). Click
+directly on the link text (the word `chorus`), then right-click
+without moving the mouse much. If still missing, in DevTools
 Console run `app.metadataCache.getFileCache(app.workspace.getActiveFile()).frontmatter.type`
-and verify it prints `"action"` — if anything else, the file isn't
+and verify it prints `"action"` — anything else and the file isn't
 detected as a snippet.
 
 ---
@@ -476,22 +486,23 @@ for re-validation. Persistent state:
 
 - **Transpile token** lives in
   `<vault>/.obsidian/plugins/forge-client-obsidian/data.json` —
-  survives Obsidian restarts but is vault-local.
+  survives Obsidian restarts AND Forge Client upgrades (Forge
+  Installer preserves `data.json` across release zip unpacks).
 - **forge-music vault** lives at `<vault>/forge-music/` — survives.
-  If a future version of the plugin bundles a newer forge-music, the
-  auto-re-extract path will back up the old version to
-  `<vault>/forge-music.bak.0.3.8/` and re-extract fresh. You can
-  delete these `.bak.*` directories if they accumulate (they're not
-  re-used).
-- **Snapshot files** from Phase 7 freeze/unfreeze are written to
+  Future Forge Client versions with newer `forge-music` bundles
+  trigger the v0.2.38 auto-re-extract path (`<vault>/forge-music/`
+  backed up to `<vault>/forge-music.bak.0.3.8/`, fresh copy
+  extracted). You can delete accumulated `.bak.*` directories;
+  they're not re-used.
+- **Snapshot files** from Phase 8 freeze/unfreeze are written to
   Pyodide's MEMFS and do NOT persist across Obsidian quit-and-
-  reopen (known MEMFS-to-disk persistence gap, separate audit item).
-  Re-doing Phase 7 after a restart starts fresh.
+  reopen (known MEMFS-to-disk persistence gap; separate audit
+  item). Re-doing Phase 8 after a restart starts fresh.
 
-To reset for a clean re-smoke from Phase 4 onward:
-- Delete `<vault>/greet.md` (Phase 5 artifact).
-- Delete `<vault>/forge.toml` (Phase 6 setup).
-- Delete `<vault>/forge-music/` (Phase 6 extraction).
+To reset for a clean re-smoke from Phase 5 onward:
+- Delete `<vault>/greet.md` (Phase 6 artifact).
+- Delete `<vault>/forge.toml` (Phase 7 setup).
+- Delete `<vault>/forge-music/` (Phase 7 extraction).
 - Restart Obsidian.
 
 To reset everything (Phase 1+):
@@ -503,13 +514,33 @@ To reset everything (Phase 1+):
 
 ## Doc version pin
 
-This document is pinned to:
+This document targets:
 
-- **forge-client-obsidian** v0.2.44 (manifest.json)
-- **forge-music** v0.3.8 (bundled vault forge.toml)
+- **forge-client-obsidian** v0.2.44 or later (manifest.json floor;
+  BRAT installs latest by default).
+- **forge-music** v0.3.8 or later (bundled vault forge.toml floor).
 
-When future versions ship, re-validate the steps and refresh the
-version numbers, sample log lines, and any UX details that may have
-changed (modal labels, command names, etc.). The structure (Phases
-1-7 + failure modes + cleanup) should remain stable; the version
-specifics shift per release.
+The `frmoded/forge-installer` plugin can pin to a specific Forge
+Client version via its settings tab (**Pin to specific version**)
+— useful for cohort-wide rollback to a known-good release. Leave
+the pin empty to track latest.
+
+When future versions ship with substantively different behavior
+(modal labels, command names, log lines, etc.), refresh this
+document to match. The structure (Phases 1-8 + failure modes +
+cleanup) should remain stable; the version-specific details shift
+per release.
+
+---
+
+## Revision history
+
+**2026-06-04**: rewrote Phases 2-3 to use the canonical
+BRAT → Forge Installer install path. Earlier version (commit
+`75264da`) used direct-zip download which is the manual / fallback
+path documented in `INSTALL.md`, not the canonical student flow
+documented in `closed-beta-onboarding.md`. The protocol-level "no
+BRAT" rule from `cc-prompt-queue.md` and the original 1930 prompt's
+direct-zip-only framing were both based on a misreading of
+INSTALL.md as canonical; this revision corrects to the actual
+canonical path.
