@@ -283,3 +283,27 @@ async function ensureBundledForgeMusic(app: App): Promise<void> {
   }
 }
 
+/** v0.2.45: dispatch to the right ensureBundled* helper for a domain
+ *  whose activation just landed via EditVaultDomainsModal.applyDiff.
+ *  Mirrors the per-domain branch list inside runFirstRunCheck.
+ *
+ *  - 'music' → ensureBundledForgeMusic (the only domain-gated bundled
+ *    vault today; moda is unconditionally extracted at onload).
+ *  - Other domain ids → no-op + warn (forward-compat against future
+ *    domains added to forge.toml without a matching helper here).
+ *
+ *  Idempotent: re-firing for an already-extracted vault no-ops via
+ *  ensureBundledVault's match-case (the v0.2.39 drift-detection's
+ *  "already at version" path). */
+export async function ensureBundledFor(domain: string, app: App): Promise<void> {
+  if (domain === 'music') {
+    await ensureBundledForgeMusic(app);
+    return;
+  }
+  // moda is unconditionally extracted regardless of domains; nothing
+  // to do on activation. Other domain ids are forward-compat.
+  console.log(
+    `Forge: ensureBundledFor('${domain}') — no bundled-vault helper for this domain; skipping`,
+  );
+}
+

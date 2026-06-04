@@ -12,6 +12,11 @@ import {
   unionDomains,
   diffDomains,
 } from './forge-action-core';
+import {
+  computeDomainActivationActions,
+  DOMAIN_INVENTORY,
+} from './domain-activation-core';
+import { ensureBundledFor } from './welcome';
 
 // Pure dispatcher logic lives in forge-action-core.ts so it can be
 // unit-tested under `node --test` without an obsidian shim. Re-export it
@@ -58,6 +63,15 @@ export interface ForgeHost {
   // in the vault, so users discover the affordance there rather
   // than being gated out by a hidden menu item.
   openChipsView(): void;
+  // v0.2.45: snapshot of currently-active domains, used by
+  // EditVaultDomainsModal.applyDiff to compute the activation diff
+  // before reloadActiveDomains shifts the in-memory state. Returns a
+  // copy so the caller can hold it across the reload.
+  currentActiveDomains(): Set<string> | null;
+  // v0.2.45: register the command-palette entries for a domain that
+  // just became active. Idempotent — addCommand on a duplicate id
+  // overwrites silently.
+  registerDomainCommands(domain: string): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -485,11 +499,55 @@ class EditVaultDomainsModal extends Modal {
       return;
     }
     const next = this.desiredNext();
+    // v0.2.45: capture the active-domain set BEFORE reloadActiveDomains
+    // so we can compute which activation actions need to fire for
+    // newly-added domains.
+    const oldActive = this.host.currentActiveDomains();
     await adapter.write('forge.toml', replaceForgeTomlDomains(toml, next));
     await this.host.reloadActiveDomains();
+    const newActive = this.host.currentActiveDomains();
+
+    // v0.2.45: re-fire domain-gated onload paths for newly-active
+    // domains. Without this, EditVaultDomainsModal updated forge.toml
+    // and refreshed activeDomains but never fired registerDomainCommands
+    // or ensureBundledFor — user had to fully quit + reopen Obsidian
+    // to see the effect. Surfaced by the mint-laptop V1 smoke
+    // (2026-06-03 evening). Decision: domain-activation-core's pure-
+    // core helper computes the action list; this glue dispatches each
+    // action via the host or via the welcome-flow's ensureBundledFor.
+    const actions = computeDomainActivationActions(
+      oldActive, newActive, DOMAIN_INVENTORY,
+    );
+    let extractFailures = 0;
+    for (const action of actions) {
+      try {
+        if (action.type === 'extract') {
+          await ensureBundledFor(action.domain, this.host.app);
+        } else if (action.type === 'register-commands') {
+          this.host.registerDomainCommands(action.domain);
+        }
+      } catch (e) {
+        console.warn(`Forge: domain-activation action ${action.type}/${action.domain} failed`, e);
+        if (action.type === 'extract') extractFailures += 1;
+      }
+    }
     this.close();
-    new Notice('Forge: vault updated. Reopen the Forge menu for the ' +
-      'new domain actions.');
+    // v0.2.45: Notice text aligned with the new behavior. The
+    // pre-v0.2.45 "Reopen the Forge menu for the new domain actions"
+    // was misleading — reopening the menu didn't help; only a full
+    // Cmd-Q + reopen did. Now activation is in-band; the Notice just
+    // confirms the update.
+    if (extractFailures > 0) {
+      new Notice(
+        `Forge: vault updated, but ${extractFailures} bundled-vault ` +
+        `extraction(s) failed. Check DevTools console; you may need ` +
+        `to fully quit Obsidian (Cmd-Q) and reopen.`,
+      );
+    } else if (actions.length > 0) {
+      new Notice('Forge: vault updated. New domain actions are now available.');
+    } else {
+      new Notice('Forge: vault updated.');
+    }
   }
 
   onClose() {

@@ -340,19 +340,12 @@ export default class ForgePlugin extends Plugin {
         if (file instanceof TFile) this.addTwoVaultMenuItems(menu, file);
       })
     );
+    // v0.2.45: per-domain command registration extracted into a
+    // helper so EditVaultDomainsModal.applyDiff can re-fire it when
+    // a domain is added mid-session (without requiring a full
+    // Obsidian quit + reopen).
     if (this.isDomainActive('moda')) {
-      this.addCommand({
-        id: 'forge-open-moda',
-        name: 'Open MoDa simulation',
-        callback: () => { this.openModaView(); },
-      });
-
-      this.addCommand({
-        id: 'forge-step-moda',
-        name: 'Step MoDa simulation',
-        callback: () => { this.stepModaSimulation(); },
-      });
-
+      this.registerDomainCommands('moda');
     }
 
     // Chips v2 is domain-agnostic: load once at activate, surface the
@@ -1033,6 +1026,9 @@ export default class ForgePlugin extends Plugin {
       openModaView: () => { this.openModaView(); },
       stepModaSimulation: () => { this.stepModaSimulation(); },
       openChipsView: () => { this.openChipsView(); },
+      // v0.2.45: domain-activation plumbing for EditVaultDomainsModal.
+      currentActiveDomains: () => this.currentActiveDomains(),
+      registerDomainCommands: (domain: string) => { this.registerDomainCommands(domain); },
     };
   }
 
@@ -1072,6 +1068,36 @@ export default class ForgePlugin extends Plugin {
   // (back-compat). Otherwise active iff the declared set contains it.
   private isDomainActive(domain: string): boolean {
     return this.activeDomains === null || this.activeDomains.has(domain);
+  }
+
+  // v0.2.45: snapshot of the current active-domain set (or null for
+  // back-compat all-active). Returns a copy so the caller doesn't see
+  // mutation from a subsequent reloadActiveDomains call.
+  public currentActiveDomains(): Set<string> | null {
+    return this.activeDomains === null ? null : new Set(this.activeDomains);
+  }
+
+  // v0.2.45: register the command-palette entries for a given domain.
+  // Called from onload (for each domain active at boot) AND from
+  // EditVaultDomainsModal.applyDiff (for each newly-added domain).
+  // Obsidian's addCommand is idempotent on duplicate id (latest call
+  // wins), so re-firing for an already-registered domain is safe.
+  public registerDomainCommands(domain: string): void {
+    if (domain === 'moda') {
+      this.addCommand({
+        id: 'forge-open-moda',
+        name: 'Open MoDa simulation',
+        callback: () => { this.openModaView(); },
+      });
+      this.addCommand({
+        id: 'forge-step-moda',
+        name: 'Step MoDa simulation',
+        callback: () => { this.stepModaSimulation(); },
+      });
+    }
+    // music has no commands today; flag DOMAIN_INVENTORY in
+    // src/domain-activation-core.ts when music commands ship and add
+    // the branch here.
   }
 
   // ------ Two-vault refactor: library subdir discovery + shadow helpers ------
