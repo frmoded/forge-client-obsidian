@@ -10,12 +10,15 @@ import {
   parseChipsBody,
   validateChipsList,
   mergeChipSources,
+  chipSourcesFor,
+  CHIPS_RELATIVE_PATHS,
+  type ChipsManifest,
 } from './chips-core';
 
-// v3+ convention: chip data lives at `_meta/_chips.md` (alongside
-// README and other infrastructure files). v2 shipped at the bare
-// `_chips.md`. We probe both, preferring the new path.
-const CHIPS_RELATIVE_PATHS = ['_meta/_chips.md', '_chips.md'];
+// Re-export so existing import sites in the codebase keep working
+// without churn.
+export { chipSourcesFor };
+export type { ChipsManifest };
 
 /** True iff `path` could be a chips source file the plugin loads
  *  from. Used by the file-watch handler in main.ts to decide
@@ -25,44 +28,6 @@ export function isChipsFilePath(path: string): boolean {
     if (path === rel || path.endsWith(`/${rel}`)) return true;
   }
   return false;
-}
-
-interface ChipSource {
-  paths: string[];      // candidate paths in preference order
-  sourceName: string;   // group header in the palette
-}
-
-/** Enumerate the canonical chip source paths for a vault: one at the
- *  vault root plus one under each declared-domain subdirectory
- *  (matches the installer's <vault>/<domain-vault>/ layout — e.g.
- *  forge-moda chips live at <vault>/forge-moda/_meta/_chips.md per
- *  the v3 cleanup, with the v2 `forge-moda/_chips.md` path kept as
- *  a fallback so vaults upgraded across the move still resolve).
- *  `null` declared domains (back-compat: no `domains` field) is
- *  treated as "no installed-domain chip lookups" so we don't probe
- *  arbitrary subdirs. */
-export function chipSourcesFor(
-  vaultName: string,
-  domains: string[] | null,
-): ChipSource[] {
-  const out: ChipSource[] = [
-    { paths: CHIPS_RELATIVE_PATHS.slice(), sourceName: vaultName },
-  ];
-  if (domains) {
-    for (const d of domains) {
-      out.push({
-        paths: CHIPS_RELATIVE_PATHS.map(p => `forge-${d}/${p}`),
-        sourceName: `forge-${d}`,
-      });
-    }
-  }
-  return out;
-}
-
-/** Snapshot of vault state the chip loader needs. */
-export interface ChipsManifest {
-  vaultName: string;
-  domains: string[] | null;
 }
 
 /** Read every present chip source for the active vault and produce
@@ -75,7 +40,7 @@ export async function loadChipsForActiveVault(
   manifest: ChipsManifest,
 ): Promise<ChipPaletteGroup[]> {
   const adapter = app.vault.adapter;
-  const sources = chipSourcesFor(manifest.vaultName, manifest.domains);
+  const sources = chipSourcesFor(manifest.vaultName, manifest.libraryDirNames);
   const collected: Array<{ sourceName: string; chips: Chip[] }> = [];
 
   for (const src of sources) {
@@ -163,11 +128,14 @@ export function resolveSnippetPath(
 ): string | null {
   const rootPath = `${basename}.md`;
   if (app.vault.getAbstractFileByPath(rootPath)) return rootPath;
-  if (manifest.domains) {
-    for (const d of manifest.domains) {
-      const libPath = `forge-${d}/${basename}.md`;
-      if (app.vault.getAbstractFileByPath(libPath)) return libPath;
-    }
+  // v0.2.47: iterate installed library subdirs directly (the
+  // manifest's libraryDirNames already include the `forge-` prefix).
+  // Previously domains-driven, which missed forge-moda for vaults
+  // with `domains = ["music"]` even though moda content is
+  // unconditionally extracted.
+  for (const libDir of manifest.libraryDirNames) {
+    const libPath = `${libDir}/${basename}.md`;
+    if (app.vault.getAbstractFileByPath(libPath)) return libPath;
   }
   return null;
 }

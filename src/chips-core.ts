@@ -28,6 +28,62 @@ export interface ChipPaletteGroup {
   chips: Chip[];
 }
 
+// v3+ convention: chip data lives at `_meta/_chips.md` (alongside
+// README and other infrastructure files). v2 shipped at the bare
+// `_chips.md`. We probe both, preferring the new path.
+export const CHIPS_RELATIVE_PATHS = ['_meta/_chips.md', '_chips.md'];
+
+export interface ChipSource {
+  paths: string[];
+  sourceName: string;
+}
+
+/** Snapshot of vault state the chip loader needs to compute which
+ *  chip-source files to read.
+ *
+ *  v0.2.47 — the previous field `domains: string[] | null` (active
+ *  declared domains from forge.toml) was the wrong driver. forge-moda
+ *  is unconditionally extracted into the vault regardless of declared
+ *  domains, so users with `domains = ["music"]` had moda content on
+ *  disk but moda chips invisible. The right driver is the on-disk
+ *  set of installed library subdirs (via main.ts:libraryDirNames),
+ *  which gives a true picture of what content is available to
+ *  compose with.
+ *
+ *  `libraryDirNames` entries are the full subdir names with their
+ *  `forge-` prefix (e.g. `['forge-moda', 'forge-music']`) — they're
+ *  the literal directory names, not stripped domain ids. */
+export interface ChipsManifest {
+  vaultName: string;
+  libraryDirNames: string[];
+}
+
+/** Produce the list of chip-source files to probe for the given
+ *  vault state. Always includes the vault-root paths first (so a
+ *  user-authored vault-root `_chips.md` takes precedence over
+ *  library chips with the same group/label per `mergeChipSources`'s
+ *  declaration-order rule). Then one entry per installed library
+ *  subdir.
+ *
+ *  v0.2.47 — signature changed from `(vaultName, domains: string[] |
+ *  null)` to `(vaultName, libraryDirNames: string[])`. See
+ *  ChipsManifest docstring for rationale. */
+export function chipSourcesFor(
+  vaultName: string,
+  libraryDirNames: string[],
+): ChipSource[] {
+  const out: ChipSource[] = [
+    { paths: CHIPS_RELATIVE_PATHS.slice(), sourceName: vaultName },
+  ];
+  for (const libDir of libraryDirNames) {
+    out.push({
+      paths: CHIPS_RELATIVE_PATHS.map(p => `${libDir}/${p}`),
+      sourceName: libDir,
+    });
+  }
+  return out;
+}
+
 /** Validate an already-decoded chips list and return the typed
  *  `Chip[]`. Accepts either a bare array (`[{label, insertion, ...},
  *  ...]`) or an object with a `chips:` key wrapping the array (the

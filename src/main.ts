@@ -1309,7 +1309,15 @@ export default class ForgePlugin extends Plugin {
   private chipsManifest(): ChipsManifest {
     return {
       vaultName: this.app.vault.getName(),
-      domains: this.activeDomains ? Array.from(this.activeDomains) : null,
+      // v0.2.47: chip source discovery driven by on-disk installed
+      // library subdirs (libraryDirNames), not by declared domains.
+      // Pre-v0.2.47 used `domains: this.activeDomains` — which missed
+      // forge-moda chips in vaults with `domains = ["music"]` even
+      // though forge-moda is unconditionally extracted (welcome.ts:104).
+      // The chip view's empty-state messaging discovered the gap
+      // during v0.2.46 smoke when the user opened the chips palette
+      // from forge-moda/simulation.md and saw nothing.
+      libraryDirNames: Array.from(this.libraryDirNames()),
     };
   }
 

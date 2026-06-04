@@ -7,6 +7,7 @@ import {
   validateChipsList,
   mergeChipSources,
   insertChipText,
+  chipSourcesFor,
   CHIPS_NO_ENGLISH_SECTION,
 } from './chips-core.ts';
 
@@ -195,4 +196,61 @@ test('validateChipsList: empty group string ignored (treats as no-group)', () =>
   ]);
   assert.ok('chips' in r);
   assert.equal(r.chips[0].group, undefined);
+});
+
+// --- chipSourcesFor (v0.2.47 — moved to pure-core, signature
+// changed from `domains` to `libraryDirNames`) ---
+
+test('chipSourcesFor: empty libraryDirNames → just the vault-root entry', () => {
+  const out = chipSourcesFor('myvault', []);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].sourceName, 'myvault');
+  assert.deepEqual(out[0].paths, ['_meta/_chips.md', '_chips.md']);
+});
+
+test('chipSourcesFor: includes forge-moda chips even when moda is NOT in declared domains (the v0.2.47 fix)', () => {
+  // Bug surfaced in the v0.2.46 smoke: smoke vault has
+  // `domains = ["music"]` and forge-moda unconditionally extracted.
+  // Pre-v0.2.47 chipSourcesFor was driven by declared domains, so
+  // forge-moda chips never loaded — leaving the chips view empty
+  // even when the user was in forge-moda/simulation.md.
+  // Post-fix: signature takes on-disk library subdirs (the
+  // libraryDirNames set from main.ts), so forge-moda contributes
+  // chips whenever its directory is present, regardless of
+  // declared-domains content.
+  const out = chipSourcesFor('myvault', ['forge-moda', 'forge-music']);
+  const moda = out.find(s => s.sourceName === 'forge-moda');
+  assert.ok(moda, 'forge-moda source should be present');
+  assert.deepEqual(
+    moda.paths,
+    ['forge-moda/_meta/_chips.md', 'forge-moda/_chips.md'],
+  );
+});
+
+test('chipSourcesFor: vault-root entry precedes library entries (declaration-order matters for mergeChipSources)', () => {
+  const out = chipSourcesFor('myvault', ['forge-music', 'forge-moda']);
+  assert.equal(out[0].sourceName, 'myvault', 'vault-root must come first');
+  assert.equal(out[1].sourceName, 'forge-music');
+  assert.equal(out[2].sourceName, 'forge-moda');
+});
+
+test('chipSourcesFor: libraryDirNames preserved verbatim (no forge- prefix re-added)', () => {
+  // Defensive: the helper consumes literal directory names with
+  // their forge- prefix already present (per ChipsManifest
+  // docstring). Don't accidentally double-prefix to
+  // `forge-forge-moda/...`.
+  const out = chipSourcesFor('myvault', ['forge-moda']);
+  const moda = out.find(s => s.sourceName === 'forge-moda');
+  assert.ok(moda);
+  for (const p of moda.paths) {
+    assert.ok(p.startsWith('forge-moda/'), `unexpected path prefix: ${p}`);
+    assert.ok(!p.startsWith('forge-forge-'), `double-prefix bug: ${p}`);
+  }
+});
+
+test('chipSourcesFor: idempotent (same input → same output, no-op stays no-op)', () => {
+  const input = ['forge-moda', 'forge-music'];
+  const a = chipSourcesFor('v', input);
+  const b = chipSourcesFor('v', input);
+  assert.deepEqual(a, b);
 });
