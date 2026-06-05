@@ -3,6 +3,7 @@ import { copyDirRecursive } from './copy-dir-core';
 import { ensureForgeTomlStub } from './forge-toml-stub';
 import { vaultDeclaresMusic } from './forge-music-gate';
 import { compareBundledVaultVersion } from './bundled-vault-version-core';
+import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core';
 export { copyDirRecursive };
 
 // .forge/ is managed by Forge — safe to write cache, logs, future state files here.
@@ -103,6 +104,14 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // yet, e.g. a vault initialized before forge-moda was bundled).
     await ensureBundledForgeModa(app);
 
+    // v0.2.52: one-shot `_meta/_chips.md` v1→v2 upgrade. Cohort
+    // vaults that installed v0.2.48-v0.2.51 had stuck v1 files
+    // because the v0.2.38 auto re-extract only fires on forge.toml
+    // version drift and the schema-v2 migration shipped without
+    // bumping forge-moda's forge.toml. Idempotent via schema_version
+    // detection — second run is a no-op.
+    await migrateChipsMdToV2(adapter, 'forge-moda');
+
     // v0.2.14: write a minimal forge.toml at the vault root if
     // missing. Pre-empts the InitializeForgeVaultWizard auto-open
     // trigger on fresh-vault first ribbon click. Same independent-
@@ -120,6 +129,13 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // seminar curriculum — most students won't want forge-music/
     // appearing in their vault.
     await ensureBundledForgeMusic(app);
+
+    // v0.2.52: same one-shot v1→v2 migration for forge-music. No-op
+    // when forge-music isn't extracted (gated by domains) OR when
+    // forge-music has no _meta/_chips.md (today's state — forge-music
+    // hasn't shipped a curator file yet). Wired in advance so future
+    // forge-music _chips.md drains don't need to revisit welcome.ts.
+    await migrateChipsMdToV2(adapter, 'forge-music');
   } catch (e) {
     console.error('Forge: runFirstRunCheck failed', e);
   }
@@ -280,6 +296,109 @@ async function ensureBundledForgeMusic(app: App): Promise<void> {
     );
   } catch (e) {
     console.warn('Forge: ensureBundledForgeMusic failed', e);
+  }
+}
+
+/** v0.2.52: one-shot `_meta/_chips.md` v1→v2 upgrade for a single
+ *  library subdir. Detects v1 shape via `classifyChipsMd` (absence
+ *  of `schema_version: 2` in frontmatter), backs the v1 file up to
+ *  `_chips.md.bak.v1` (with collision-suffix), and overwrites with
+ *  the bundled v2 file from the plugin assets dir.
+ *
+ *  Idempotent: subsequent runs see `schema_version: 2` and no-op.
+ *
+ *  No-op paths (in order):
+ *  - Vault has no extracted `<libraryDirName>/_meta/_chips.md` (e.g.
+ *    the library wasn't extracted, or the curator hasn't shipped a
+ *    `_chips.md` yet). Returns silently.
+ *  - Extracted file is already v2 (`schema_version: 2`). Returns
+ *    silently.
+ *  - Extracted file is unparseable (no `---` frontmatter
+ *    delimiters). Warns + returns to avoid clobbering an unexpected
+ *    file shape.
+ *  - Extracted file is v1 BUT bundled v2 file is missing from plugin
+ *    assets. Warns + returns (likely a dev-mode setup; nothing safe
+ *    to migrate from).
+ *
+ *  Migration path (extracted=v1, bundled present):
+ *  1. Compute collision-free backup name via `chooseBackupName`
+ *     against the actual `_meta/` listing.
+ *  2. Rename v1 → backup. Falls back to copy+delete on rename
+ *     failure (same mobile-Obsidian quirk pattern as
+ *     `renameWithBackup`).
+ *  3. Write bundled v2 body to the original path.
+ *  4. Log success.
+ *
+ *  Errors during the migration are caught and warn-logged so plugin
+ *  onload doesn't abort. The user's existing v1 file stays on disk
+ *  if the migration fails. */
+async function migrateChipsMdToV2(
+  adapter: DataAdapter,
+  libraryDirName: string,
+): Promise<void> {
+  const extractedPath = `${libraryDirName}/_meta/_chips.md`;
+  const bundledPath =
+    `.obsidian/plugins/forge-client-obsidian/assets/vaults/${libraryDirName}/_meta/_chips.md`;
+  const metaDir = `${libraryDirName}/_meta`;
+
+  try {
+    if (!(await adapter.exists(extractedPath))) {
+      return;  // 'absent' — nothing to migrate
+    }
+    const extractedBody = await adapter.read(extractedPath);
+    const status = classifyChipsMd(extractedBody);
+
+    if (status.kind === 'v2') return;  // idempotent
+    if (status.kind === 'absent') return;  // unreachable (exists checked)
+    if (status.kind === 'unparseable') {
+      console.warn(
+        `Forge: ${extractedPath} is unparseable; skipping v2 migration`,
+      );
+      return;
+    }
+
+    // status.kind === 'v1' — needs migration
+    if (!(await adapter.exists(bundledPath))) {
+      console.warn(
+        `Forge: bundled ${bundledPath} missing; cannot migrate ` +
+        `${extractedPath} to v2`,
+      );
+      return;
+    }
+
+    // Compute backup name from the on-disk _meta/ listing.
+    const listing = await adapter.list(metaDir);
+    const existingNames = new Set(
+      listing.files.map(p => p.slice(metaDir.length + 1)),
+    );
+    const backupName = chooseBackupName(existingNames);
+    const backupPath = `${metaDir}/${backupName}`;
+
+    // Backup v1 → restore as <backupName>. Try rename, fall back to
+    // copy+delete if rename throws (mobile-Obsidian quirk pattern
+    // matching renameWithBackup).
+    try {
+      await adapter.rename(extractedPath, backupPath);
+    } catch (e) {
+      console.warn(
+        `Forge: rename ${extractedPath} → ${backupPath} failed; ` +
+        `using copy+delete fallback`,
+        e,
+      );
+      const v1Body = await adapter.read(extractedPath);
+      await adapter.write(backupPath, v1Body);
+      await adapter.remove(extractedPath);
+    }
+
+    // Overwrite with bundled v2.
+    const bundledBody = await adapter.read(bundledPath);
+    await adapter.write(extractedPath, bundledBody);
+    console.log(
+      `Forge: migrated ${extractedPath} v1→v2; previous version ` +
+      `backed up as ${backupName}`,
+    );
+  } catch (e) {
+    console.warn(`Forge: migrateChipsMdToV2(${libraryDirName}) failed`, e);
   }
 }
 
