@@ -382,7 +382,7 @@ import uuid
 import re as _forge_re
 from forge.core.snippet_registry import SnippetRegistry
 from forge.core.graph_resolver import GraphResolver
-from forge.core.executor import extract_python, exec_python, extract_section
+from forge.core.executor import extract_python, exec_python, extract_section, resolve_action_code
 from forge.core.serialization import serialize_result
 
 # V1 user-vault model: single registry against /bundle/user-vault/.
@@ -708,7 +708,12 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None):
     snip = resolver.resolve(snippet_id)
     snippet_type = snip.get("meta", {}).get("type")
     if snippet_type == "action":
-        code = extract_python(snip["body"])
+        # v0.2.55: resolve_action_code returns either the cached
+        # Python facet OR transpiles via E-- for facet_form: canonical
+        # snippets. Free-English snippets continue to require a
+        # pre-generated Python facet (populated by the plugin's
+        # /generate call before this runs).
+        code = resolve_action_code(snip)
         # v0.2.16: diagnostic. The greet-snippet investigation in
         # prompt 2026-05-31-2345 couldn't reproduce the user's empty-
         # stdout bug at suite-time (the engine extracts + executes the

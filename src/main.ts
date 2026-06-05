@@ -6,6 +6,7 @@ import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view';
 import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips';
 import { ChipPaletteGroup } from './chips-core';
+import { getFacetForm } from './facet-form-core';
 import { invalidateLibraryVaultCache } from './edges';
 // v0.2.44: attachEdgeHover removed — the hover popover read snapshot
 // state from host disk via the vault adapter, but capture writes go to
@@ -1396,6 +1397,16 @@ export default class ForgePlugin extends Plugin {
       // console alongside the existing Notice.
       console.log(`Forge: skipping /generate, ${view.file.basename} is in Python mode`);
       new Notice(`Forge: ${view.file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
+      await this.runSnippet('Forge failed during execution');
+      return;
+    }
+    // v0.2.55: Stage 2 — opt-in canonical E-- compile path.
+    // `facet_form: canonical` snippets skip /generate entirely; the
+    // engine's resolve_action_code (forge.core.executor) transpiles
+    // the English facet via the vendored forge.e_minus_minus
+    // package at runtime. No LLM call, deterministic compile.
+    if (getFacetForm(fm) === 'canonical') {
+      console.log(`Forge: skipping /generate, ${view.file.basename} is in canonical E-- mode`);
       await this.runSnippet('Forge failed during execution');
       return;
     }
