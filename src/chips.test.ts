@@ -535,3 +535,130 @@ test('mergeChipsWithOverrides: idempotent (no-op stays no-op)', () => {
 
 // Add ChipsV2Config import for the merge tests above.
 import type { ChipsV2Config } from './chips-core.ts';
+
+// ===========================================================================
+// v0.2.54 — top-level snippet auto-discovery + dedupe duplicate group headers
+// ===========================================================================
+
+import {
+  discoverTopLevelSnippets,
+  shouldRenderSubgroupHeader,
+  PERSONAL_GROUP_NAME,
+} from './chips-core.ts';
+
+// --- discoverTopLevelSnippets (Option A) ---
+
+test('discoverTopLevelSnippets: empty input → empty output', () => {
+  assert.deepEqual(discoverTopLevelSnippets([], new Set()), []);
+});
+
+test('discoverTopLevelSnippets: top-level .md passes', () => {
+  const files = [{ path: 'foo.md' }];
+  assert.deepEqual(
+    discoverTopLevelSnippets(files, new Set(['forge-moda'])),
+    [{ path: 'foo.md' }],
+  );
+});
+
+test('discoverTopLevelSnippets: library-subdir file is excluded', () => {
+  const files = [{ path: 'forge-moda/setup.md' }];
+  assert.deepEqual(
+    discoverTopLevelSnippets(files, new Set(['forge-moda'])),
+    [],
+  );
+});
+
+test('discoverTopLevelSnippets: vault-root _underscore.md skipped per S7', () => {
+  const files = [{ path: '_chips.md' }, { path: '_meta_notes.md' }];
+  assert.deepEqual(
+    discoverTopLevelSnippets(files, new Set(['forge-moda'])),
+    [],
+  );
+});
+
+test('discoverTopLevelSnippets: nested-non-library file excluded under Option A', () => {
+  // Per prompt §Phase1A Option A: vault-root only; nested-non-library
+  // subdir files are NOT included. Default-conservative; Option C is
+  // a future expansion.
+  const files = [{ path: 'foo/bar.md' }];
+  assert.deepEqual(
+    discoverTopLevelSnippets(files, new Set(['forge-moda'])),
+    [],
+  );
+});
+
+test('discoverTopLevelSnippets: mix of top-level + library + nested + underscore', () => {
+  const files = [
+    { path: 'snippet_a.md' },                  // top-level → keep
+    { path: 'forge-moda/setup.md' },           // library subdir → drop
+    { path: 'forge-music/blues/song.md' },     // library subdir nested → drop
+    { path: 'misc/draft.md' },                 // nested non-library → drop (Option A)
+    { path: '_internal.md' },                  // S7 → drop
+    { path: 'snippet_b.md' },                  // top-level → keep
+  ];
+  assert.deepEqual(
+    discoverTopLevelSnippets(files, new Set(['forge-moda', 'forge-music'])),
+    [{ path: 'snippet_a.md' }, { path: 'snippet_b.md' }],
+  );
+});
+
+test('discoverTopLevelSnippets: idempotent (same input → same output)', () => {
+  const files = [
+    { path: 'a.md' },
+    { path: 'forge-moda/x.md' },
+    { path: '_skip.md' },
+  ];
+  const dirs = new Set(['forge-moda']);
+  const a = discoverTopLevelSnippets(files, dirs);
+  const b = discoverTopLevelSnippets(files, dirs);
+  assert.deepEqual(a, b);
+});
+
+test('discoverTopLevelSnippets: preserves caller-defined extra fields on T', () => {
+  // The helper is generic on T extends {path}; extra fields ride
+  // through untouched.
+  const files = [
+    { path: 'a.md', extra: 'kept', basename: 'a' },
+    { path: 'forge-moda/b.md', extra: 'dropped' },
+  ];
+  const out = discoverTopLevelSnippets(files, new Set(['forge-moda']));
+  assert.equal(out.length, 1);
+  assert.equal((out[0] as { extra: string }).extra, 'kept');
+  assert.equal((out[0] as { basename: string }).basename, 'a');
+});
+
+test('PERSONAL_GROUP_NAME exported as the synthetic library name', () => {
+  assert.equal(PERSONAL_GROUP_NAME, 'Personal');
+});
+
+// --- shouldRenderSubgroupHeader (Finding 2 fix) ---
+
+test('shouldRenderSubgroupHeader: null label → false (no header)', () => {
+  assert.equal(shouldRenderSubgroupHeader(null, 'Anything'), false);
+});
+
+test('shouldRenderSubgroupHeader: label matches sourceName → false (dedupe)', () => {
+  // v2 forge-moda per-library case. sourceName "Setup" comes from
+  // groups[].label; chip.group "Setup" comes from overrides[].group.
+  // They duplicate visually; h5 must skip.
+  assert.equal(shouldRenderSubgroupHeader('Setup', 'Setup'), false);
+});
+
+test('shouldRenderSubgroupHeader: label differs from sourceName → true (render)', () => {
+  // v1 vault-root _chips.md case. Source "myvault" (the vault name),
+  // chip.group "Setup" (the v1 group field). Sub-header still useful.
+  assert.equal(shouldRenderSubgroupHeader('Setup', 'myvault'), true);
+});
+
+test('shouldRenderSubgroupHeader: case-sensitive match (different case → render)', () => {
+  // Defensive: case mismatch is preserved as a distinct sub-group.
+  // CSS uppercase makes 'Setup' and 'SETUP' visually identical at the
+  // h4 layer, but the data carries the distinction.
+  assert.equal(shouldRenderSubgroupHeader('Setup', 'setup'), true);
+});
+
+test('shouldRenderSubgroupHeader: empty string label → false', () => {
+  // Per chips-view's render loop, sub.label is null when chip.group is
+  // undefined. An empty string is also defensively treated as null-equivalent.
+  assert.equal(shouldRenderSubgroupHeader('', 'Setup'), false);
+});

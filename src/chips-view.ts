@@ -4,6 +4,7 @@ import {
   ChipPaletteGroup,
   CHIPS_NO_ENGLISH_SECTION,
   insertChipText,
+  shouldRenderSubgroupHeader,
 } from './chips-core';
 import { ChipsManifest, loadChipsForActiveVault, resolveSnippetPath } from './chips';
 
@@ -230,9 +231,18 @@ export class ChipsView extends ItemView {
       }
 
       for (const sub of subGroups) {
-        if (sub.label) {
+        // v0.2.54 — gate the h5 sub-header on shouldRenderSubgroupHeader.
+        // v2 per-library groups have sub.label === group.sourceName
+        // (e.g. both "Setup") because mergeChipsWithOverrides sets
+        // chip.group to the group id and the source name to its
+        // display label; the h4 already conveys the identity. The
+        // helper suppresses the redundant h5 in that case while
+        // preserving sub-headers for v1 vault-root _chips.md files
+        // (where chips inside one source can declare distinct group
+        // values).
+        if (shouldRenderSubgroupHeader(sub.label, group.sourceName)) {
           section.createEl('h5', {
-            text: sub.label,
+            text: sub.label as string,
             cls: 'forge-chips-subgroup-header',
           });
         }

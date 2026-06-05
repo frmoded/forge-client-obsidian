@@ -42,6 +42,8 @@ import {
   autoDeriveChips,
   parseChipsV2Config,
   mergeChipsWithOverrides,
+  discoverTopLevelSnippets,
+  PERSONAL_GROUP_NAME,
   type ChipsManifest,
   type SnippetMetaForChips,
 } from './chips-core';
@@ -83,6 +85,16 @@ export async function loadChipsForActiveVault(
     const libGroups = await loadLibraryChips(app, libDir);
     collected.push(...libGroups);
   }
+
+  // v0.2.54 — top-level (vault-root) snippet auto-discovery, grouped
+  // under the synthetic "Personal" library name. Per the Mission's
+  // low-floor framing: a beginner who authors at the vault root gets
+  // immediate chip availability without first moving the file into a
+  // library subdir. Pure auto-discovery; no curation file at root.
+  const personalGroups = await loadPersonalChips(
+    app, new Set(manifest.libraryDirNames));
+  collected.push(...personalGroups);
+
   return collected;
 }
 
@@ -202,6 +214,61 @@ async function loadLibraryChips(
   // v1 curator-authored list takes precedence over auto-derive for
   // back-compat. (Curators who want both must migrate to v2.)
   return mergeChipSources([{ sourceName: libDir, chips: parsed.chips }]);
+}
+
+/** v0.2.54 — auto-discover action/data snippets at the vault root
+ *  (not inside any library subdir) and surface them under the
+ *  synthetic "Personal" group. Closes the "first-snippet authored
+ *  at the most natural location must appear in the chip palette"
+ *  Mission gap surfaced in v0.2.52 smoke. Pure auto-discovery —
+ *  there's no v2 `_chips.md` curation at vault root (curators who
+ *  want curation at root use the v1 path via loadVaultRootV1Chips).
+ *
+ *  Logic:
+ *    1. Filter `vault.getMarkdownFiles()` via `discoverTopLevelSnippets`
+ *       (pure-core; Option A scope per prompt 2026-06-05-1030).
+ *    2. Read each candidate's frontmatter via cachedRead + parseYaml
+ *       (same v0.2.49 fresh-read path as library inventory).
+ *    3. Build SnippetMetaForChips with `parentDir = PERSONAL_GROUP_NAME`
+ *       so deriveChip surfaces the chip under "Personal".
+ *    4. Run autoDeriveChips + mergeChipsWithOverrides(null) for the
+ *       palette shape.
+ *
+ *  Returns empty when no top-level action/data snippets are present
+ *  → the Personal group doesn't appear in the palette at all (no
+ *  empty-group header noise). */
+async function loadPersonalChips(
+  app: App,
+  libraryDirs: Set<string>,
+): Promise<ChipPaletteGroup[]> {
+  const candidates = discoverTopLevelSnippets(
+    app.vault.getMarkdownFiles().map(f => ({ path: f.path, file: f })),
+    libraryDirs,
+  );
+  const inventory: SnippetMetaForChips[] = [];
+  for (const c of candidates) {
+    const fm = await readSnippetFrontmatter(app, c.file);
+    if (!fm) continue;
+    const type = typeof fm.type === 'string' ? fm.type : undefined;
+    if (type !== 'action' && type !== 'data') continue;
+    const basename = c.file.basename;
+    // id = bare basename (vault-root files are unqualified).
+    const id = basename;
+    const inputs = Array.isArray(fm.inputs)
+      ? fm.inputs.filter((x: unknown): x is string => typeof x === 'string')
+      : undefined;
+    const chip = typeof fm.chip === 'boolean' ? fm.chip : undefined;
+    inventory.push({
+      id,
+      basename,
+      type,
+      inputs,
+      chip,
+      parentDir: PERSONAL_GROUP_NAME,
+    });
+  }
+  const autoChips = autoDeriveChips(inventory);
+  return mergeChipsWithOverrides(autoChips, null);
 }
 
 /** Walk Obsidian's markdown file index for files inside `libDir/`

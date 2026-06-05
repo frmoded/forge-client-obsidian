@@ -489,6 +489,71 @@ export function autoDeriveChips(
   return out;
 }
 
+// ===========================================================================
+// v0.2.54 — top-level snippet auto-discovery (Finding 1) +
+//           duplicate subgroup-header suppression (Finding 2)
+// ===========================================================================
+// See feedback for 2026-06-05-1030-chip-palette-top-level-discovery-and-
+// duplicate-group-headers.md for the investigation that motivated these.
+
+/** Display group name for vault-root snippets in the chip palette.
+ *  Surfaces a beginner's first-authored snippet under a friendly
+ *  group rather than the default `(library)` fallback. Used by
+ *  buildTopLevelInventory in chips.ts. */
+export const PERSONAL_GROUP_NAME = 'Personal';
+
+/** Pure-core: filter a list of vault-file references down to those
+ *  that should auto-discover as "personal" chips. Per the Mission's
+ *  low-floor framing: a beginner who authors a snippet at the vault
+ *  root (the most natural location) gets immediate chip availability.
+ *
+ *  Option A scope (per prompt 2026-06-05-1030 §Phase1A):
+ *  - Top-level only (no `/` in path).
+ *  - S7: `_*.md` excluded (infrastructure files).
+ *  - Files inside any library subdir excluded (auto-discovered by
+ *    their library's walk; don't double-count).
+ *
+ *  `libraryDirs` is accepted-but-unused for Option A; it lets the
+ *  signature stay stable if a future drain widens the scope to
+ *  Option C (nested-non-library). Pure: caller does the
+ *  vault.getMarkdownFiles() I/O. */
+export function discoverTopLevelSnippets<T extends { path: string }>(
+  allFiles: T[],
+  libraryDirs: Set<string>,
+): T[] {
+  void libraryDirs;  // accepted but unused for Option A
+  return allFiles.filter(f => {
+    if (f.path.includes('/')) return false;            // not top-level
+    if (f.path.startsWith('_')) return false;          // S7
+    return true;
+  });
+}
+
+/** Pure-core: render decision for the chip palette's per-source
+ *  sub-group header. v2 ChipPaletteGroups carry `sourceName` (the
+ *  group's display label) AND each chip's `chip.group` field is
+ *  set to the same value by mergeChipsWithOverrides. The
+ *  chips-view render loop creates an h4 for sourceName AND an h5
+ *  per distinct chip.group — producing two identical headers in
+ *  series.
+ *
+ *  This helper says: render the h5 ONLY when the sub-group label
+ *  carries information beyond the source name. v1 vault-root
+ *  `_chips.md` files (multiple chips with distinct `group` values
+ *  inside a single source) still get sub-headers; v2 per-library
+ *  files (one source per group → trivially-matching sub-label)
+ *  collapse to a single h4.
+ *
+ *  v0.2.54 — added (per prompt 2026-06-05-1030 Finding 2). */
+export function shouldRenderSubgroupHeader(
+  subgroupLabel: string | null,
+  sourceName: string,
+): boolean {
+  if (!subgroupLabel) return false;
+  if (subgroupLabel === sourceName) return false;
+  return true;
+}
+
 /** Sentinel for "no `# English` section to insert into" — the caller
  *  surfaces this as a user-visible notice rather than silently
  *  modifying the file. */
