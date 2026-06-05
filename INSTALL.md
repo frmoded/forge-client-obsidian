@@ -7,13 +7,13 @@ needed on your machine — everything is bundled into a single zip.
 
 ### 1. Download the release zip
 
-Open the [v0.2.55 release page](https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.55)
-and download `forge-client-obsidian-v0.2.55.zip` from the **Assets**
+Open the [v0.2.56 release page](https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.56)
+and download `forge-client-obsidian-v0.2.56.zip` from the **Assets**
 section. Save it somewhere convenient (e.g. your Downloads folder).
 
-> **Closed-beta note:** this guide pins to **v0.2.55** specifically.
+> **Closed-beta note:** this guide pins to **v0.2.56** specifically.
 > Newer releases may exist on the [Releases page](https://github.com/frmoded/forge-client-obsidian/releases)
-> but haven't been verified for this cohort — use v0.2.55 unless the
+> but haven't been verified for this cohort — use v0.2.56 unless the
 > link in this doc has been updated.
 
 ### 2. Find your Obsidian vault's plugin directory
@@ -27,7 +27,7 @@ section. Save it somewhere convenient (e.g. your Downloads folder).
 
 ### 3. Unzip into the plugins directory
 
-- Unzip `forge-client-obsidian-v0.2.55.zip`. You'll get a folder
+- Unzip `forge-client-obsidian-v0.2.56.zip`. You'll get a folder
   called `forge-client-obsidian`.
 - Move (or extract directly to) that folder so it lives at
   `<your-vault>/.obsidian/plugins/forge-client-obsidian/`.
@@ -70,6 +70,32 @@ leaves your machine except as the `Authorization` header on
 > Python authoring (the **Forge** button on a snippet's English
 > facet) needs the token. Contact the service operator if you
 > need one.
+
+## First Forge-click
+
+When you open a fresh vault for the first time after install, the
+plugin extracts two starter snippets to vault root: `welcome.md`
+and `greet.md`. Try them as your first Forge interaction.
+
+1. In Obsidian's file tree, click `welcome.md`.
+2. Click the **Forge** button at the top of the editor (or
+   **Cmd-P** → "Forge: Forge active snippet").
+3. The Forge Output panel on the right shows two lines:
+
+   ```
+   Welcome to Forge.
+   Hello world
+   ```
+
+That's the call graph in action: `welcome.md` prints its line, then
+calls `greet.md` with `name = "world"`. Edit either file (rename
+"world" to your own name, change the welcome text) and re-click
+Forge to see your change.
+
+If you don't see `welcome.md` and `greet.md` at vault root: the
+extraction only runs when BOTH files are absent. Deleting one and
+keeping the other signals "I'm past welcome" — the plugin won't
+restore. Delete both and reload Obsidian to get them back.
 
 ## Verifying it works
 

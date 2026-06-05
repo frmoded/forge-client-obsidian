@@ -4,6 +4,7 @@ import { ensureForgeTomlStub } from './forge-toml-stub';
 import { vaultDeclaresMusic } from './forge-music-gate';
 import { compareBundledVaultVersion } from './bundled-vault-version-core';
 import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core';
+import { ensureWelcomeFiles } from './welcome-files-core';
 export { copyDirRecursive };
 
 // .forge/ is managed by Forge — safe to write cache, logs, future state files here.
@@ -95,6 +96,32 @@ export async function runFirstRunCheck(app: App): Promise<void> {
       }
       await adapter.write(SENTINEL_PATH, '1');
       console.log('Forge: wrote sentinel');
+    }
+
+    // v0.2.56: extract bundled welcome.md + greet.md to vault root
+    // when both are absent. Per the 2026-06-05-1145 prompt: the
+    // user's first action after install becomes a Forge-click on
+    // welcome.md that produces "Welcome to Forge.\nHello world"
+    // in the output panel — Mission's "low floor" property as a
+    // concrete artifact. Idempotent + respectful of partial deletion
+    // (if user kept greet.md, we don't restore welcome).
+    //
+    // Order: welcome BEFORE moda — welcome is the lower floor.
+    try {
+      const result = await ensureWelcomeFiles(adapter, {
+        welcomeBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md',
+        greetBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md',
+      });
+      if (result.kind === 'extracted') {
+        console.log('Forge: extracted welcome.md + greet.md to vault root');
+      } else if (result.kind === 'skip-no-bundle') {
+        console.warn(`Forge: bundled welcome asset missing (${result.missing}); skipping welcome extraction`);
+      } else if (result.kind === 'error') {
+        console.warn(`Forge: ensureWelcomeFiles failed — ${result.message}`);
+      }
+      // 'skip-existing' is the steady-state expected path; silent.
+    } catch (e) {
+      console.warn('Forge: ensureWelcomeFiles threw unexpectedly', e);
     }
 
     // v0.2.13: extract bundled forge-moda content if the vault
