@@ -1,8 +1,23 @@
-// Obsidian-coupled chip reader. Pure parse + merge live in
-// chips-core.ts; this module wires them to the vault adapter.
+// Obsidian-coupled chip reader. Pure parse + merge + auto-derive
+// live in chips-core.ts; this module wires them to the vault
+// adapter.
+//
+// v0.2.48 — schema v2 adoption. Loader now:
+//   1. Walks each library subdir for action/data snippets (via
+//      Obsidian's in-memory metadata cache).
+//   2. Auto-derives chips per spec (every non-`_`-prefixed action +
+//      data snippet without `chip: false` becomes a chip).
+//   3. Reads `_chips.md` (canonical: `<lib>/_meta/_chips.md`)
+//      and parses as v2 if it declares `schema_version: 2`.
+//   4. Merges auto-derived list with v2 overrides per spec.
+//   5. Falls through to v1 path (curator-authored chip list) when
+//      `_chips.md` lacks `schema_version: 2` — preserves back-compat.
+//   6. Vault-root `_chips.md` keeps the v1 path (no auto-derive at
+//      vault root since libraries own the auto-discovery surface).
 
 import { App, parseYaml } from 'obsidian';
 import { extractDataBody } from './data-snippet';
+import { snippetIdFromPath } from './snippet-id-from-path';
 import {
   Chip,
   ChipPaletteGroup,
@@ -12,7 +27,11 @@ import {
   mergeChipSources,
   chipSourcesFor,
   CHIPS_RELATIVE_PATHS,
+  autoDeriveChips,
+  parseChipsV2Config,
+  mergeChipsWithOverrides,
   type ChipsManifest,
+  type SnippetMetaForChips,
 } from './chips-core';
 
 // Re-export so existing import sites in the codebase keep working
@@ -30,43 +49,195 @@ export function isChipsFilePath(path: string): boolean {
   return false;
 }
 
-/** Read every present chip source for the active vault and produce
- *  the palette groups. Missing files are silent (a vault without
- *  `_chips.md` just contributes no group). Parse errors are logged
- *  and the offending source is skipped so the rest of the palette
- *  still renders. */
+/** Top-level entry. Builds palette groups for the active vault by:
+ *  (a) auto-deriving from each library subdir's snippets + v2
+ *  `_chips.md` curation; (b) layering vault-root `_chips.md` (v1
+ *  authored shape) on top. Per-source failures are logged and the
+ *  source is skipped so the rest of the palette still renders. */
 export async function loadChipsForActiveVault(
   app: App,
   manifest: ChipsManifest,
 ): Promise<ChipPaletteGroup[]> {
-  const adapter = app.vault.adapter;
-  const sources = chipSourcesFor(manifest.vaultName, manifest.libraryDirNames);
-  const collected: Array<{ sourceName: string; chips: Chip[] }> = [];
+  const collected: ChipPaletteGroup[] = [];
 
-  for (const src of sources) {
-    let raw: string | null = null;
-    let chosenPath: string | null = null;
-    for (const candidate of src.paths) {
-      try {
-        if (await adapter.exists(candidate)) {
-          raw = await adapter.read(candidate);
-          chosenPath = candidate;
-          break;
-        }
-      } catch (e) {
-        console.warn(`Forge chips: read failed for ${candidate}`, e);
-      }
-    }
-    if (raw === null || chosenPath === null) continue;
-    const parsed = parseChipsFile(raw, chosenPath);
-    if (isParseError(parsed)) {
-      console.warn(
-        `Forge chips: ${chosenPath} parse error: ${parsed.error}`);
-      continue;
-    }
-    collected.push({ sourceName: src.sourceName, chips: parsed.chips });
+  // Vault-root v1 chip list (user-authored curation; pre-v2 shape).
+  // Loaded first so it appears at the top of the palette per the
+  // declaration-order rule from chipSourcesFor.
+  const rootGroups = await loadVaultRootV1Chips(app, manifest.vaultName);
+  collected.push(...rootGroups);
+
+  // Per-library auto-discovery + v2 `_chips.md` curation.
+  for (const libDir of manifest.libraryDirNames) {
+    const libGroups = await loadLibraryChips(app, libDir);
+    collected.push(...libGroups);
   }
-  return mergeChipSources(collected);
+  return collected;
+}
+
+/** Load the vault-root `_chips.md` (v1-shaped: bare `chips: [...]`).
+ *  Vault root doesn't have auto-discovery (no library context); this
+ *  preserves the v1 user-curated path so existing vault-root
+ *  `_chips.md` files keep working. */
+async function loadVaultRootV1Chips(
+  app: App,
+  vaultName: string,
+): Promise<ChipPaletteGroup[]> {
+  const adapter = app.vault.adapter;
+  for (const rel of CHIPS_RELATIVE_PATHS) {
+    try {
+      if (!(await adapter.exists(rel))) continue;
+      const raw = await adapter.read(rel);
+      const parsed = parseChipsFile(raw, rel);
+      if (isParseError(parsed)) {
+        console.warn(`Forge chips: ${rel} parse error: ${parsed.error}`);
+        return [];
+      }
+      return mergeChipSources([{ sourceName: vaultName, chips: parsed.chips }]);
+    } catch (e) {
+      console.warn(`Forge chips: read failed for ${rel}`, e);
+    }
+  }
+  return [];
+}
+
+/** Load chips for one library subdir. Auto-derives from every
+ *  action/data snippet in the subdir, then layers `_chips.md`
+ *  curation (v2 overrides) on top. Falls back to v1 path when
+ *  `_chips.md` is present but lacks `schema_version: 2`. */
+async function loadLibraryChips(
+  app: App,
+  libDir: string,
+): Promise<ChipPaletteGroup[]> {
+  // Step 1: build the snippet inventory from the in-memory metadata
+  // cache. No disk reads — Obsidian indexes frontmatter at load time
+  // and we just consume it.
+  const inventory = buildSnippetInventory(app, libDir);
+  const autoChips = autoDeriveChips(inventory);
+
+  // Step 2: look for `_chips.md` (canonical or legacy path).
+  const adapter = app.vault.adapter;
+  let raw: string | null = null;
+  let chosenPath: string | null = null;
+  for (const rel of CHIPS_RELATIVE_PATHS) {
+    const candidate = `${libDir}/${rel}`;
+    try {
+      if (await adapter.exists(candidate)) {
+        raw = await adapter.read(candidate);
+        chosenPath = candidate;
+        break;
+      }
+    } catch (e) {
+      console.warn(`Forge chips: read failed for ${candidate}`, e);
+    }
+  }
+
+  // Step 3: no `_chips.md` → pure auto-discovery output.
+  if (raw === null || chosenPath === null) {
+    return mergeChipsWithOverrides(autoChips, null);
+  }
+
+  // Step 4: try to parse as v2. If schema_version isn't 2, fall
+  // through to v1 path (preserves curator-authored v1 files until
+  // they migrate).
+  const body = extractDataBody(raw);
+  const contentType =
+    (readFrontmatterField(raw, 'content_type') || '').toLowerCase();
+  let v2Result: unknown = null;
+  if (contentType === 'yaml') {
+    try {
+      v2Result = parseYaml(body);
+    } catch (e) {
+      console.warn(
+        `Forge chips: ${chosenPath} YAML parse failed: ${(e as Error).message}`,
+      );
+    }
+  }
+  if (v2Result !== null && typeof v2Result === 'object') {
+    const sv = (v2Result as Record<string, unknown>).schema_version;
+    if (sv === 2) {
+      const cfg = parseChipsV2Config(v2Result);
+      if (isParseError(cfg)) {
+        console.warn(
+          `Forge chips: ${chosenPath} v2 parse error: ${cfg.error} — ` +
+          `falling through to auto-discovery only`,
+        );
+        return mergeChipsWithOverrides(autoChips, null);
+      }
+      return mergeChipsWithOverrides(autoChips, cfg);
+    }
+    if (sv !== undefined) {
+      console.warn(
+        `Forge chips: ${chosenPath} schema_version=${JSON.stringify(sv)} ` +
+        `is not 2 — skipping file, using pure auto-discovery`,
+      );
+      return mergeChipsWithOverrides(autoChips, null);
+    }
+  }
+
+  // Step 5: no schema_version → v1 curator-authored shape. Parse the
+  // v1 chip list and emit it under the library's sourceName.
+  const parsed = parseChipsFile(raw, chosenPath);
+  if (isParseError(parsed)) {
+    console.warn(
+      `Forge chips: ${chosenPath} v1 parse error: ${parsed.error} — ` +
+      `falling through to auto-discovery`,
+    );
+    return mergeChipsWithOverrides(autoChips, null);
+  }
+  // v1 curator-authored list takes precedence over auto-derive for
+  // back-compat. (Curators who want both must migrate to v2.)
+  return mergeChipSources([{ sourceName: libDir, chips: parsed.chips }]);
+}
+
+/** Walk Obsidian's markdown file index for files inside `libDir/`
+ *  and build a SnippetMetaForChips per file from the in-memory
+ *  metadata cache. Files at any depth under libDir are included
+ *  (e.g. `forge-music/blues/song.md`). The snippet's `id` follows
+ *  the v0.2.26 qualified-id rule (full library-relative path); the
+ *  `parentDir` is the subdir relative to libDir (or empty for files
+ *  at libDir root). */
+function buildSnippetInventory(
+  app: App,
+  libDir: string,
+): SnippetMetaForChips[] {
+  const prefix = `${libDir}/`;
+  const libraryDirNames = new Set([libDir]);
+  const out: SnippetMetaForChips[] = [];
+  for (const file of app.vault.getMarkdownFiles()) {
+    if (!file.path.startsWith(prefix)) continue;
+    const meta = app.metadataCache.getFileCache(file);
+    const fm = meta?.frontmatter;
+    if (!fm) continue;                                  // not a snippet
+    const type = typeof fm.type === 'string' ? fm.type : undefined;
+    // Auto-discovery applies to action + data snippets per the spec.
+    // Snapshots and untyped files are excluded here too (deriveChip
+    // also drops them, but skipping early avoids a needless entry).
+    if (type !== 'action' && type !== 'data') continue;
+    const id = snippetIdFromPath(file.path, libraryDirNames);
+    // Strip the leading `libDir/` from the id to produce the
+    // user-facing snippet_id (e.g. `forge-moda/setup` → `setup`,
+    // `forge-music/blues/song` → `blues/song`).
+    const bareId = id.startsWith(prefix) ? id.slice(prefix.length) : id;
+    const basename = file.basename;
+    // parentDir relative to libDir. `forge-moda/setup.md` → "".
+    // `forge-music/blues/song.md` → "blues".
+    const relPath = file.path.slice(prefix.length);     // e.g. "blues/song.md"
+    const lastSlash = relPath.lastIndexOf('/');
+    const parentDir = lastSlash === -1 ? '' : relPath.slice(0, lastSlash);
+    const inputs = Array.isArray(fm.inputs)
+      ? fm.inputs.filter((x: unknown): x is string => typeof x === 'string')
+      : undefined;
+    const chip = typeof fm.chip === 'boolean' ? fm.chip : undefined;
+    out.push({
+      id: bareId,
+      basename,
+      type,
+      inputs,
+      chip,
+      parentDir,
+    });
+  }
+  return out;
 }
 
 /** Decode a chips-file's body via its frontmatter `content_type`,
@@ -108,8 +279,8 @@ function readFrontmatterField(raw: string, key: string): string | null {
   return m ? m[1].trim() : null;
 }
 
-function isParseError(
-  x: { chips: Chip[] } | ChipsParseError,
+function isParseError<T>(
+  x: T | ChipsParseError,
 ): x is ChipsParseError {
   return (x as ChipsParseError).error !== undefined;
 }

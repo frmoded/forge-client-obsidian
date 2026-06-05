@@ -8,6 +8,11 @@ import {
   mergeChipSources,
   insertChipText,
   chipSourcesFor,
+  humanizeSnippetId,
+  deriveChip,
+  autoDeriveChips,
+  parseChipsV2Config,
+  mergeChipsWithOverrides,
   CHIPS_NO_ENGLISH_SECTION,
 } from './chips-core.ts';
 
@@ -254,3 +259,279 @@ test('chipSourcesFor: idempotent (same input → same output, no-op stays no-op)
   const b = chipSourcesFor('v', input);
   assert.deepEqual(a, b);
 });
+
+// ===========================================================================
+// Schema v2 — auto-discovery + signature-sourcing + overrides
+// ===========================================================================
+
+// --- humanizeSnippetId ---
+
+test('humanizeSnippetId: snake_case basename → words with capitalized first letter', () => {
+  assert.equal(humanizeSnippetId('create_water_particles'), 'Create water particles');
+});
+
+test('humanizeSnippetId: path-qualified id → last path segment only', () => {
+  assert.equal(humanizeSnippetId('forge-music/blues/song'), 'Song');
+});
+
+test('humanizeSnippetId: already-capitalized single word stays sensible', () => {
+  assert.equal(humanizeSnippetId('setup'), 'Setup');
+});
+
+test('humanizeSnippetId: empty input → empty string (defensive)', () => {
+  assert.equal(humanizeSnippetId(''), '');
+});
+
+// --- deriveChip: action snippets ---
+
+test('deriveChip: action snippet with inputs → B7.1-canonical insertion with <placeholders>', () => {
+  const chip = deriveChip({
+    id: 'greet', basename: 'greet', type: 'action',
+    inputs: ['name'], parentDir: 'greetings',
+  });
+  assert.deepEqual(chip, {
+    label: 'Greet',
+    insertion: 'Do [[greet]](<name>).',
+    group: 'greetings',
+  });
+});
+
+test('deriveChip: action snippet with no inputs → empty parens', () => {
+  const chip = deriveChip({
+    id: 'banner', basename: 'banner', type: 'action', parentDir: 'common',
+  });
+  assert.deepEqual(chip, {
+    label: 'Banner',
+    insertion: 'Do [[banner]]().',
+    group: 'common',
+  });
+});
+
+test('deriveChip: action snippet with multiple inputs → comma-separated placeholders', () => {
+  const chip = deriveChip({
+    id: 'render', basename: 'render', type: 'action',
+    inputs: ['x', 'y', 'color'],
+  });
+  assert.equal(chip?.insertion, 'Do [[render]](<x>, <y>, <color>).');
+});
+
+test('deriveChip: action snippet with `chip: false` → null', () => {
+  const chip = deriveChip({
+    id: 'helper', basename: 'helper', type: 'action', chip: false,
+  });
+  assert.equal(chip, null);
+});
+
+test('deriveChip: basename starting with underscore → null (S7)', () => {
+  const chip = deriveChip({
+    id: '_meta/_chips', basename: '_chips', type: 'data',
+  });
+  assert.equal(chip, null);
+});
+
+// --- deriveChip: data + snapshot ---
+
+test('deriveChip: data snippet → Set <name> to [[id]]() form', () => {
+  const chip = deriveChip({
+    id: 'water_color', basename: 'water_color', type: 'data',
+    parentDir: 'palette',
+  });
+  assert.deepEqual(chip, {
+    label: 'Water color',
+    insertion: 'Set <name> to [[water_color]]().',
+    group: 'palette',
+  });
+});
+
+test('deriveChip: snapshot type → null (S6 — system-managed, never a chip)', () => {
+  const chip = deriveChip({
+    id: 'some_snapshot', basename: 'some_snapshot', type: 'snapshot',
+  });
+  assert.equal(chip, null);
+});
+
+test('deriveChip: unknown type → null', () => {
+  const chip = deriveChip({
+    id: 'mystery', basename: 'mystery', type: 'experimental',
+  });
+  assert.equal(chip, null);
+});
+
+test('deriveChip: missing parentDir → group `(library)` default', () => {
+  const chip = deriveChip({
+    id: 'top_level_snippet', basename: 'top_level_snippet', type: 'action',
+  });
+  assert.equal(chip?.group, '(library)');
+});
+
+// --- autoDeriveChips ---
+
+test('autoDeriveChips: walks inventory, attaches target to each, drops null derivations', () => {
+  const inventory = [
+    { id: 'a', basename: 'a', type: 'action' as const, inputs: ['x'], parentDir: 'g' },
+    { id: '_meta/_chips', basename: '_chips', type: 'data' as const, parentDir: 'meta' },
+    { id: 'b', basename: 'b', type: 'data' as const, parentDir: 'g' },
+    { id: 'opt_out', basename: 'opt_out', type: 'action' as const, chip: false },
+  ];
+  const out = autoDeriveChips(inventory);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].target, 'a');
+  assert.equal(out[1].target, 'b');
+});
+
+// --- parseChipsV2Config ---
+
+test('parseChipsV2Config: schema_version: 2 + empty body → valid empty config', () => {
+  const cfg = parseChipsV2Config({ schema_version: 2 });
+  assert.deepEqual(cfg, { schema_version: 2 });
+});
+
+test('parseChipsV2Config: schema_version missing → error', () => {
+  const result = parseChipsV2Config({ overrides: [] });
+  assert.ok('error' in result);
+});
+
+test('parseChipsV2Config: schema_version !== 2 → error (forward-compat hook)', () => {
+  const result = parseChipsV2Config({ schema_version: 3 });
+  assert.ok('error' in result);
+});
+
+test('parseChipsV2Config: overrides + groups + hide all preserved when well-formed', () => {
+  const cfg = parseChipsV2Config({
+    schema_version: 2,
+    overrides: [
+      { target: 'a', label: 'A label', group: 'G1', insertion: 'Do [[a]]().' },
+    ],
+    groups: [{ id: 'G1', order: 1, label: 'Group One' }],
+    hide: ['debug'],
+  });
+  if ('error' in cfg) {
+    assert.fail(`unexpected error: ${cfg.error}`);
+  } else {
+    assert.equal(cfg.overrides?.length, 1);
+    assert.equal(cfg.groups?.length, 1);
+    assert.deepEqual(cfg.hide, ['debug']);
+  }
+});
+
+test('parseChipsV2Config: malformed overrides entry dropped silently', () => {
+  const cfg = parseChipsV2Config({
+    schema_version: 2,
+    overrides: [
+      { target: 'good', label: 'Good' },
+      { label: 'No target!' },   // missing target — drop
+      'not an object',           // wrong shape — drop
+    ],
+  });
+  if ('error' in cfg) {
+    assert.fail(`unexpected error: ${cfg.error}`);
+  } else {
+    assert.equal(cfg.overrides?.length, 1);
+    assert.equal(cfg.overrides?.[0].target, 'good');
+  }
+});
+
+// --- mergeChipsWithOverrides ---
+
+test('mergeChipsWithOverrides: no config → groups by auto-derived `group` field', () => {
+  const autoChips = [
+    { target: 'a', label: 'Aaa', insertion: 'Do [[a]]().', group: 'G1' },
+    { target: 'b', label: 'Bbb', insertion: 'Do [[b]]().', group: 'G2' },
+    { target: 'c', label: 'Ccc', insertion: 'Do [[c]]().', group: 'G1' },
+  ];
+  const result = mergeChipsWithOverrides(autoChips, null);
+  // G1 first (first appearance), then G2.
+  assert.equal(result.length, 2);
+  assert.equal(result[0].sourceName, 'G1');
+  assert.equal(result[0].chips.length, 2);
+  assert.equal(result[1].sourceName, 'G2');
+});
+
+test('mergeChipsWithOverrides: override replaces specified fields, preserves unspecified', () => {
+  const autoChips = [
+    { target: 'a', label: 'Aaa', insertion: 'Do [[a]]().', group: 'G1' },
+  ];
+  const cfg: ChipsV2Config = {
+    schema_version: 2,
+    overrides: [{ target: 'a', label: 'Custom A' }],  // only label
+  };
+  const result = mergeChipsWithOverrides(autoChips, cfg);
+  assert.equal(result[0].chips[0].label, 'Custom A');
+  assert.equal(result[0].chips[0].insertion, 'Do [[a]]().');  // preserved
+});
+
+test('mergeChipsWithOverrides: hide[] removes matching targets', () => {
+  const autoChips = [
+    { target: 'a', label: 'A', insertion: 'Do [[a]]().', group: 'G' },
+    { target: 'b', label: 'B', insertion: 'Do [[b]]().', group: 'G' },
+  ];
+  const cfg: ChipsV2Config = { schema_version: 2, hide: ['a'] };
+  const result = mergeChipsWithOverrides(autoChips, cfg);
+  assert.equal(result[0].chips.length, 1);
+  assert.equal(result[0].chips[0].label, 'B');
+});
+
+test('mergeChipsWithOverrides: override on non-existent target logged + dropped', () => {
+  const autoChips = [
+    { target: 'a', label: 'A', insertion: 'Do [[a]]().', group: 'G' },
+  ];
+  const cfg: ChipsV2Config = {
+    schema_version: 2,
+    overrides: [{ target: 'ghost', label: 'Phantom' }],
+  };
+  const result = mergeChipsWithOverrides(autoChips, cfg);
+  // 'ghost' shouldn't materialize as a chip.
+  assert.equal(result[0].chips.length, 1);
+  assert.equal(result[0].chips[0].label, 'A');
+});
+
+test('mergeChipsWithOverrides: groups[] controls group order + display label', () => {
+  const autoChips = [
+    { target: 'a', label: 'Aaa', insertion: 'Do [[a]]().', group: 'second' },
+    { target: 'b', label: 'Bbb', insertion: 'Do [[b]]().', group: 'first' },
+  ];
+  const cfg: ChipsV2Config = {
+    schema_version: 2,
+    groups: [
+      { id: 'first',  order: 1, label: 'First Things' },
+      { id: 'second', order: 2, label: 'Second Things' },
+    ],
+  };
+  const result = mergeChipsWithOverrides(autoChips, cfg);
+  assert.equal(result[0].sourceName, 'First Things');  // declared label
+  assert.equal(result[1].sourceName, 'Second Things');
+});
+
+test('mergeChipsWithOverrides: chips within group sorted by `order` then alphabetical', () => {
+  const autoChips = [
+    { target: 'c', label: 'Charlie', insertion: 'Do [[c]]().', group: 'G' },
+    { target: 'a', label: 'Alpha', insertion: 'Do [[a]]().', group: 'G' },
+    { target: 'b', label: 'Bravo', insertion: 'Do [[b]]().', group: 'G' },
+  ];
+  const cfg: ChipsV2Config = {
+    schema_version: 2,
+    overrides: [
+      { target: 'b', order: 1 },  // bravo forced to top
+    ],
+  };
+  const result = mergeChipsWithOverrides(autoChips, cfg);
+  const labels = result[0].chips.map(c => c.label);
+  // bravo (order=1) first; then Alpha + Charlie alphabetical.
+  assert.deepEqual(labels, ['Bravo', 'Alpha', 'Charlie']);
+});
+
+test('mergeChipsWithOverrides: idempotent (no-op stays no-op)', () => {
+  const autoChips = [
+    { target: 'a', label: 'A', insertion: 'Do [[a]]().', group: 'G' },
+  ];
+  const cfg: ChipsV2Config = {
+    schema_version: 2,
+    overrides: [{ target: 'a', label: 'A overridden' }],
+  };
+  const once = mergeChipsWithOverrides(autoChips, cfg);
+  const twice = mergeChipsWithOverrides(autoChips, cfg);
+  assert.deepEqual(once, twice);
+});
+
+// Add ChipsV2Config import for the merge tests above.
+import type { ChipsV2Config } from './chips-core.ts';
