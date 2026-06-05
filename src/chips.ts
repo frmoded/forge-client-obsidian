@@ -124,6 +124,13 @@ async function loadLibraryChips(
   // in-memory text cache so this is cheap.
   const inventory = await buildSnippetInventory(app, libDir);
   const autoChips = autoDeriveChips(inventory);
+  // v0.2.50 diagnostic — temporary instrumentation for B.3 smoke
+  // failure investigation. Logs per-library inventory + auto-derive
+  // output so the failure mode is visible in devtools.
+  console.log(`[Forge chips v0.2.50] ${libDir}: inventory ${inventory.length} snippets`,
+    inventory.map(s => `${s.id} (type=${s.type}, chip=${s.chip ?? 'unset'}, parentDir="${s.parentDir}")`));
+  console.log(`[Forge chips v0.2.50] ${libDir}: autoDerived ${autoChips.length} chips`,
+    autoChips.map(c => `${c.target} → "${c.label}" group="${c.group}"`));
 
   // Step 2: look for `_chips.md` (canonical or legacy path).
   const adapter = app.vault.adapter;
@@ -144,7 +151,10 @@ async function loadLibraryChips(
 
   // Step 3: no `_chips.md` → pure auto-discovery output.
   if (raw === null || chosenPath === null) {
-    return mergeChipsWithOverrides(autoChips, null);
+    const result = mergeChipsWithOverrides(autoChips, null);
+    console.log(`[Forge chips v0.2.50] ${libDir}: no _chips.md → ${result.length} groups`,
+      result.map(g => `${g.sourceName} (${g.chips.length}): [${g.chips.map(c => c.label).join(', ')}]`));
+    return result;
   }
 
   // Step 4: try to parse as v2. If schema_version isn't 2, fall
@@ -172,9 +182,15 @@ async function loadLibraryChips(
           `Forge chips: ${chosenPath} v2 parse error: ${cfg.error} — ` +
           `falling through to auto-discovery only`,
         );
-        return mergeChipsWithOverrides(autoChips, null);
+        const result = mergeChipsWithOverrides(autoChips, null);
+        console.log(`[Forge chips v0.2.50] ${libDir}: v2 parse error → ${result.length} groups`,
+          result.map(g => `${g.sourceName} (${g.chips.length})`));
+        return result;
       }
-      return mergeChipsWithOverrides(autoChips, cfg);
+      const result = mergeChipsWithOverrides(autoChips, cfg);
+      console.log(`[Forge chips v0.2.50] ${libDir}: v2 merged → ${result.length} groups`,
+        result.map(g => `${g.sourceName} (${g.chips.length}): [${g.chips.map(c => c.label).join(', ')}]`));
+      return result;
     }
     if (sv !== undefined) {
       console.warn(
@@ -223,10 +239,13 @@ async function buildSnippetInventory(
   const prefix = `${libDir}/`;
   const libraryDirNames = new Set([libDir]);
   const out: SnippetMetaForChips[] = [];
+  let scannedCount = 0;
+  let skippedNoFm = 0;
   for (const file of app.vault.getMarkdownFiles()) {
     if (!file.path.startsWith(prefix)) continue;
+    scannedCount++;
     const fm = await readSnippetFrontmatter(app, file);
-    if (!fm) continue;                                  // not a snippet
+    if (!fm) { skippedNoFm++; continue; }                // not a snippet
     const type = typeof fm.type === 'string' ? fm.type : undefined;
     // Auto-discovery applies to action + data snippets per the spec.
     // Snapshots and untyped files are excluded here too (deriveChip
@@ -256,6 +275,7 @@ async function buildSnippetInventory(
       parentDir,
     });
   }
+  console.log(`[Forge chips v0.2.50] ${libDir}: scanned ${scannedCount} files in prefix, ${skippedNoFm} had no frontmatter, ${out.length} entered inventory`);
   return out;
 }
 
