@@ -3,8 +3,7 @@
 // adapter.
 //
 // v0.2.48 — schema v2 adoption. Loader now:
-//   1. Walks each library subdir for action/data snippets (via
-//      Obsidian's in-memory metadata cache).
+//   1. Walks each library subdir for action/data snippets.
 //   2. Auto-derives chips per spec (every non-`_`-prefixed action +
 //      data snippet without `chip: false` becomes a chip).
 //   3. Reads `_chips.md` (canonical: `<lib>/_meta/_chips.md`)
@@ -14,8 +13,17 @@
 //      `_chips.md` lacks `schema_version: 2` — preserves back-compat.
 //   6. Vault-root `_chips.md` keeps the v1 path (no auto-derive at
 //      vault root since libraries own the auto-discovery surface).
+//
+// v0.2.49 — buildSnippetInventory swaps `metadataCache.getFileCache`
+// for a fresh `vault.cachedRead` + inline YAML parse of each
+// snippet's frontmatter block. metadataCache is async-indexed and
+// can lag behind on-disk content after a `chip: false` ↔ `chip:
+// true` toggle, which caused B.5 of the v0.2.48 smoke to fail
+// silently (chip stayed hidden despite the flag flip). Trades a
+// per-snippet read (cheap — cachedRead hits the in-memory text
+// cache) for cache-freshness guarantees.
 
-import { App, parseYaml } from 'obsidian';
+import { App, parseYaml, TFile } from 'obsidian';
 import { extractDataBody } from './data-snippet';
 import { snippetIdFromPath } from './snippet-id-from-path';
 import {
@@ -108,10 +116,13 @@ async function loadLibraryChips(
   app: App,
   libDir: string,
 ): Promise<ChipPaletteGroup[]> {
-  // Step 1: build the snippet inventory from the in-memory metadata
-  // cache. No disk reads — Obsidian indexes frontmatter at load time
-  // and we just consume it.
-  const inventory = buildSnippetInventory(app, libDir);
+  // Step 1: build the snippet inventory by reading each candidate
+  // file's frontmatter via vault.cachedRead. v0.2.49 — switched from
+  // metadataCache.getFileCache to fresh-read because the cache is
+  // async-indexed and can return stale frontmatter after the user
+  // edits `chip: false` ↔ `chip: true`. cachedRead hits Obsidian's
+  // in-memory text cache so this is cheap.
+  const inventory = await buildSnippetInventory(app, libDir);
   const autoChips = autoDeriveChips(inventory);
 
   // Step 2: look for `_chips.md` (canonical or legacy path).
@@ -190,23 +201,31 @@ async function loadLibraryChips(
 }
 
 /** Walk Obsidian's markdown file index for files inside `libDir/`
- *  and build a SnippetMetaForChips per file from the in-memory
- *  metadata cache. Files at any depth under libDir are included
- *  (e.g. `forge-music/blues/song.md`). The snippet's `id` follows
- *  the v0.2.26 qualified-id rule (full library-relative path); the
- *  `parentDir` is the subdir relative to libDir (or empty for files
- *  at libDir root). */
-function buildSnippetInventory(
+ *  and build a SnippetMetaForChips per file by reading each file's
+ *  frontmatter via vault.cachedRead. Files at any depth under libDir
+ *  are included (e.g. `forge-music/blues/song.md`). The snippet's
+ *  `id` follows the v0.2.26 qualified-id rule (full library-relative
+ *  path); the `parentDir` is the subdir relative to libDir (or
+ *  empty for files at libDir root).
+ *
+ *  v0.2.49 — fresh-read via cachedRead instead of metadataCache to
+ *  dodge a B.5-smoke staleness bug: when the user toggled `chip:
+ *  false` → `chip: true`, the metadata cache hadn't re-indexed yet,
+ *  so deriveChip still saw the stale `chip: false` and silently
+ *  dropped the chip from the palette. cachedRead always returns
+ *  current file content (it's a text cache invalidated on modify),
+ *  so the inline parseYaml of the frontmatter block sees the live
+ *  on-disk values. */
+async function buildSnippetInventory(
   app: App,
   libDir: string,
-): SnippetMetaForChips[] {
+): Promise<SnippetMetaForChips[]> {
   const prefix = `${libDir}/`;
   const libraryDirNames = new Set([libDir]);
   const out: SnippetMetaForChips[] = [];
   for (const file of app.vault.getMarkdownFiles()) {
     if (!file.path.startsWith(prefix)) continue;
-    const meta = app.metadataCache.getFileCache(file);
-    const fm = meta?.frontmatter;
+    const fm = await readSnippetFrontmatter(app, file);
     if (!fm) continue;                                  // not a snippet
     const type = typeof fm.type === 'string' ? fm.type : undefined;
     // Auto-discovery applies to action + data snippets per the spec.
@@ -238,6 +257,38 @@ function buildSnippetInventory(
     });
   }
   return out;
+}
+
+/** Read `file`'s frontmatter block from the vault and parse it as
+ *  YAML. Returns null when the file has no `---` frontmatter (not a
+ *  snippet) or when the YAML doesn't parse to an object. Uses
+ *  vault.cachedRead for the read (text cache; invalidated on file
+ *  modify) so a freshly-edited file's frontmatter is returned
+ *  current, not the metadataCache's possibly-stale snapshot. */
+async function readSnippetFrontmatter(
+  app: App,
+  file: TFile,
+): Promise<Record<string, unknown> | null> {
+  let content: string;
+  try {
+    content = await app.vault.cachedRead(file);
+  } catch {
+    return null;
+  }
+  if (!content.startsWith('---')) return null;
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return null;
+  const fmYaml = content.slice(4, end);  // strip leading "---\n"
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(fmYaml);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  return parsed as Record<string, unknown>;
 }
 
 /** Decode a chips-file's body via its frontmatter `content_type`,
