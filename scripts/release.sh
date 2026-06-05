@@ -14,6 +14,16 @@
 #   - git working tree clean (or only manifest.json modified)
 #   - logged into `gh` CLI (run `gh auth login` once if not)
 #   - npm + esbuild work (i.e., `npm run build` succeeds)
+#
+# When called for a version that's ALREADY been released (i.e., the
+# previous commit is already `Release vX.Y.Z` for the same version),
+# the script exits gracefully without creating a stray empty commit.
+# v0.2.53 — added (per 2026-06-05-1000 prompt). Pre-fix, running
+# release.sh twice in a row for the same version produced two empty
+# `Release vX.Y.Z` commits side-by-side (the second one orphaned
+# because the tag already pointed at the first). To intentionally
+# re-release (e.g. to update assets), drop the existing tag first
+# via `git tag -d vX.Y.Z && git push origin :vX.Y.Z`.
 
 set -euo pipefail
 
@@ -97,6 +107,27 @@ if [ -n "$DIRTY" ]; then
   echo "$DIRTY"
   echo "Commit or stash before releasing."
   exit 1
+fi
+
+# Detect "already released this version" and exit cleanly. Guards
+# against running release.sh twice in succession for the same version
+# (common during smoke / debugging). Pre-fix, the second invocation
+# created a stray empty `Release vX.Y.Z` commit before failing at
+# the duplicate-tag step — see v0.2.51 history (47fe3ed/cba97d1).
+# v0.2.53 — added (per 2026-06-05-1000 prompt). Only fires on the
+# SKIP_BUMP path because that's the only path where the prior commit
+# could already be the release marker without intermediate work.
+LAST_COMMIT_MSG="$(git log -1 --pretty=%s)"
+if [ "$SKIP_BUMP" = "yes" ] && [ "$LAST_COMMIT_MSG" = "Release v${NEW_VERSION}" ]; then
+  echo
+  echo "=== Already released v${NEW_VERSION} (previous commit is the release marker) ==="
+  echo "Nothing to do. The tag + GH release exist; install-latest.sh works."
+  echo
+  echo "If you intended to re-run the release for some reason (e.g., asset"
+  echo "update), drop the existing tag with:"
+  echo "  git tag -d v${NEW_VERSION} && git push origin :v${NEW_VERSION}"
+  echo "and run release.sh again."
+  exit 0
 fi
 
 # Tag message
