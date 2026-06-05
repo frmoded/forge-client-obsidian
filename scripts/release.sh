@@ -68,16 +68,32 @@ if ! [[ "$NEW_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 1
 fi
 
-# Validate progression
+# Validate progression. Pre-bumped manifest is a tolerated case
+# (common when an upstream commit bumped manifest as part of the
+# same change set — multi-repo prompts where the manifest bump
+# rides on the main work commit). v0.2.51 — fixed (per
+# 2026-06-05-0700 prompt). Pre-fix, this hard-rejected and CC had
+# to drive 10+ releases by hand.
 if [ "$NEW_VERSION" = "$CURRENT_VERSION" ]; then
-  echo "ERROR: new version equals current ($CURRENT_VERSION). Bump it."
-  exit 1
+  echo "Manifest already at $NEW_VERSION — skipping bump + commit step."
+  echo "(Common when an upstream commit bumped manifest as part of"
+  echo " the same change set.)"
+  SKIP_BUMP="yes"
+else
+  SKIP_BUMP="no"
 fi
 
-# Don't allow release on a dirty tree (except manifest.json itself)
-DIRTY="$(git status --porcelain | grep -v '^.. manifest.json$' || true)"
+# Don't allow release on a dirty tree (except manifest.json itself,
+# which release.sh may modify in the bump step). When SKIP_BUMP=yes
+# the manifest is already committed too, so a fully clean tree is
+# required.
+if [ "$SKIP_BUMP" = "yes" ]; then
+  DIRTY="$(git status --porcelain || true)"
+else
+  DIRTY="$(git status --porcelain | grep -v '^.. manifest.json$' || true)"
+fi
 if [ -n "$DIRTY" ]; then
-  echo "ERROR: working tree has uncommitted changes beyond manifest.json:"
+  echo "ERROR: working tree has uncommitted changes:"
   echo "$DIRTY"
   echo "Commit or stash before releasing."
   exit 1
@@ -86,11 +102,13 @@ fi
 # Tag message
 TAG_MSG="${2:-Release v${NEW_VERSION}}"
 
-# --- Bump manifest ---
-echo
-echo "=== Bumping manifest.json: $CURRENT_VERSION → $NEW_VERSION ==="
-tmp="$(mktemp)"
-jq --arg v "$NEW_VERSION" '.version = $v' manifest.json > "$tmp" && mv "$tmp" manifest.json
+# --- Bump manifest (skipped when pre-bumped upstream) ---
+if [ "$SKIP_BUMP" = "no" ]; then
+  echo
+  echo "=== Bumping manifest.json: $CURRENT_VERSION → $NEW_VERSION ==="
+  tmp="$(mktemp)"
+  jq --arg v "$NEW_VERSION" '.version = $v' manifest.json > "$tmp" && mv "$tmp" manifest.json
+fi
 
 # --- Build ---
 echo
@@ -109,9 +127,18 @@ STYLES_PRESENT="no"
 
 # --- Commit, tag, push ---
 echo
-echo "=== Committing version bump ==="
-git add manifest.json
-git commit -m "Release v${NEW_VERSION}"
+if [ "$SKIP_BUMP" = "no" ]; then
+  echo "=== Committing version bump ==="
+  git add manifest.json
+  git commit -m "Release v${NEW_VERSION}"
+else
+  echo "=== Manifest already committed at v${NEW_VERSION}; creating empty release commit ==="
+  # Empty commit preserves the "Release vX.Y.Z" marker in
+  # `git log --oneline`, matching the non-skip path's shape. The
+  # tag itself is the canonical release marker, but the consistent
+  # commit shape keeps `git log` patterns predictable.
+  git commit --allow-empty -m "Release v${NEW_VERSION}"
+fi
 
 echo
 echo "=== Tagging v${NEW_VERSION} ==="
@@ -122,16 +149,36 @@ echo "=== Pushing to origin ==="
 git push origin main
 git push origin "v${NEW_VERSION}"
 
+# --- Build release zip ---
+# v0.2.51 — added (per 2026-06-05-0700 prompt). install-latest.sh
+# downloads forge-client-obsidian-vX.Y.Z.zip from the release
+# assets; pre-fix this script only uploaded main.js + manifest.json
+# + styles.css, so install-latest.sh hit 404 on every release until
+# CC manually ran npm run release-zip + gh release upload (10
+# releases handled manually before this patch).
+echo
+echo "=== Building release zip ==="
+npm run release-zip
+
+ZIP_PATH="dist/forge-client-obsidian-v${NEW_VERSION}.zip"
+if [ ! -f "$ZIP_PATH" ]; then
+  echo "ERROR: expected zip at $ZIP_PATH not produced by 'npm run release-zip'."
+  echo "Check scripts/build-release-zip.mjs output path."
+  exit 1
+fi
+echo "Built: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
+
 # --- Create GitHub release with assets ---
 echo
 echo "=== Creating GitHub release v${NEW_VERSION} ==="
 
 ASSETS=(main.js manifest.json)
 [ "$STYLES_PRESENT" = "yes" ] && ASSETS+=(styles.css)
+ASSETS+=("$ZIP_PATH")
 
 gh release create "v${NEW_VERSION}" \
   --title "v${NEW_VERSION} — ${TAG_MSG}" \
-  --notes "Release v${NEW_VERSION}. BRAT users: run 'Check for updates' to pull." \
+  --notes "Release v${NEW_VERSION}. BRAT users: run 'Check for updates' to pull main.js. Fresh installs: use install-latest.sh against the attached zip." \
   "${ASSETS[@]}"
 
 echo
@@ -139,3 +186,4 @@ echo "=== Done ==="
 echo "Release v${NEW_VERSION} published."
 echo "BRAT users: Settings → BRAT → Check for updates → pulls the new main.js."
 echo "  styles.css included: $STYLES_PRESENT"
+echo "  zip:                 $ZIP_PATH"
