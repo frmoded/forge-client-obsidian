@@ -391,9 +391,33 @@ test('parseChipsV2Config: schema_version missing → error', () => {
   assert.ok('error' in result);
 });
 
-test('parseChipsV2Config: schema_version !== 2 → error (forward-compat hook)', () => {
+test('parseChipsV2Config: schema_version 3 ACCEPTED (v3 spec adoption 2026-06-06)', () => {
+  // v3 spec authorized 2026-06-06 — schema_version 2 OR 3 are valid;
+  // 4+ remain rejected as the forward-compat hook.
   const result = parseChipsV2Config({ schema_version: 3 });
+  assert.ok(!('error' in result));
+  if (!('error' in result)) assert.equal(result.schema_version, 3);
+});
+
+test('parseChipsV2Config: schema_version 4+ → error (forward-compat hook)', () => {
+  const result = parseChipsV2Config({ schema_version: 4 });
   assert.ok('error' in result);
+});
+
+test('parseChipsV2Config: schema_version: 3 + synthetic_chips[] → parsed and integrated', () => {
+  // v3 file with synthetic_chips emits them through chips-core into
+  // the config (lazy-loaded from synthetic-chips-core).
+  const cfg = parseChipsV2Config({
+    schema_version: 3,
+    synthetic_chips: [
+      { label: 'print', insertion: 'Do [[print]]("<msg>").', group: 'Builtins' },
+    ],
+  });
+  assert.ok(!('error' in cfg));
+  if (!('error' in cfg)) {
+    assert.equal(cfg.synthetic_chips?.length, 1);
+    assert.equal(cfg.synthetic_chips?.[0].label, 'print');
+  }
 });
 
 test('parseChipsV2Config: overrides + groups + hide all preserved when well-formed', () => {

@@ -2,6 +2,8 @@
 // chips.test.ts under `node --test`; the obsidian-coupled reader +
 // view re-export from here for runtime use.
 
+import { parseSyntheticChips } from './synthetic-chips-core.ts';
+
 export interface Chip {
   label: string;
   insertion: string;
@@ -215,12 +217,21 @@ export interface ChipGroup {
   label?: string;
 }
 
-/** Parsed shape of a v2 `_chips.md` body. */
+/** Parsed shape of a v2 / v3 `_chips.md` body. v3 (authorized 2026-
+ *  06-06) layers `synthetic_chips[]` on top of v2's surface; the v2
+ *  fields remain unchanged. Loaders that ingest both versions see the
+ *  same shape regardless — `synthetic_chips` is undefined / empty for
+ *  v2 files. */
 export interface ChipsV2Config {
-  schema_version: 2;
+  schema_version: 2 | 3;
   overrides?: ChipOverride[];
   groups?: ChipGroup[];
   hide?: string[];
+  /** v3.2 — synthetic chips declared in this `_chips.md` (chips with
+   *  no backing snippet file). Each entry is fully owned by this
+   *  config; merge-across-levels happens in synthetic-chips-core's
+   *  `mergeSyntheticChipsHigherWins`. */
+  synthetic_chips?: import('./synthetic-chips-core').SyntheticChip[];
 }
 
 /** Humanize a snippet id for the chip palette's `label` field.
@@ -277,33 +288,39 @@ export function deriveChip(snippet: SnippetMetaForChips): Chip | null {
   return null;
 }
 
-/** Parse the v2 `_chips.md` YAML body into a ChipsV2Config. The body
- *  is already YAML-decoded (caller does the YAML parse via
+/** Parse the v2 OR v3 `_chips.md` YAML body into a ChipsV2Config. The
+ *  body is already YAML-decoded (caller does the YAML parse via
  *  `parseYaml` from obsidian); this helper just validates shape +
  *  the schema_version check.
  *
  *  Returns ChipsParseError when:
- *    - `schema_version` is missing or != 2 (forward-compat hook;
- *      future v3 will land its own loader).
+ *    - `schema_version` is missing.
+ *    - `schema_version` != 2 AND != 3 (forward-compat hook for v4+).
  *    - The top-level shape isn't an object.
  *
- *  Tolerates missing `overrides` / `groups` / `hide` (each defaults
- *  to []). Drops malformed entries with a console warning (one bad
- *  row doesn't break the whole config). */
+ *  Tolerates missing `overrides` / `groups` / `hide` / `synthetic_chips`
+ *  (each defaults to undefined / []). Drops malformed entries with a
+ *  console warning (one bad row doesn't break the whole config).
+ *
+ *  v3 additions:
+ *    - schema_version: 3 accepted (in addition to 2).
+ *    - synthetic_chips[] parsed via synthetic-chips-core's
+ *      `parseSyntheticChips`. The v2 surface is unchanged — a v2 file
+ *      stays semantically v2 even under the v3-aware parser. */
 export function parseChipsV2Config(
   decoded: unknown,
 ): ChipsV2Config | ChipsParseError {
   if (decoded === null || typeof decoded !== 'object' || Array.isArray(decoded)) {
-    return { error: `chips v2 body must be a YAML object, got ${typeof decoded}` };
+    return { error: `chips v2/v3 body must be a YAML object, got ${typeof decoded}` };
   }
   const r = decoded as Record<string, unknown>;
-  if (r.schema_version !== 2) {
+  if (r.schema_version !== 2 && r.schema_version !== 3) {
     return {
       error:
-        `chips _chips.md schema_version must be 2, got ${JSON.stringify(r.schema_version)}`,
+        `chips _chips.md schema_version must be 2 or 3, got ${JSON.stringify(r.schema_version)}`,
     };
   }
-  const cfg: ChipsV2Config = { schema_version: 2 };
+  const cfg: ChipsV2Config = { schema_version: r.schema_version };
   if (Array.isArray(r.overrides)) {
     const overrides: ChipOverride[] = [];
     for (let i = 0; i < r.overrides.length; i++) {
@@ -349,6 +366,13 @@ export function parseChipsV2Config(
   }
   if (Array.isArray(r.hide)) {
     cfg.hide = r.hide.filter((x): x is string => typeof x === 'string');
+  }
+  // v3.2 — synthetic chips. Parsed in both schema_version: 2 and 3
+  // files (a v2 file that happens to declare synthetic_chips[] gets
+  // the v3 behavior for free; backward-compat for any vault that
+  // adopts the field before bumping schema_version).
+  if (Array.isArray(r.synthetic_chips)) {
+    cfg.synthetic_chips = parseSyntheticChips(r);
   }
   return cfg;
 }

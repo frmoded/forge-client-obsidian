@@ -48,6 +48,11 @@ import {
   type SnippetMetaForChips,
 } from './chips-core';
 import { isSourceVault } from './source-vault-core';
+import {
+  applyHideToSyntheticChips,
+  type SyntheticChip,
+} from './synthetic-chips-core';
+import type { ChipsV2Config } from './chips-core';
 
 // v0.2.62 — names of bundled libraries the plugin knows how to extract
 // (matches welcome.ts's ensureBundledForgeModa + ensureBundledForgeMusic
@@ -285,21 +290,25 @@ async function loadLibraryChips(
   }
   if (v2Result !== null && typeof v2Result === 'object') {
     const sv = (v2Result as Record<string, unknown>).schema_version;
-    if (sv === 2) {
+    if (sv === 2 || sv === 3) {
       const cfg = parseChipsV2Config(v2Result);
       if (isParseError(cfg)) {
         console.warn(
-          `Forge chips: ${chosenPath} v2 parse error: ${cfg.error} — ` +
+          `Forge chips: ${chosenPath} v${sv} parse error: ${cfg.error} — ` +
           `falling through to auto-discovery only`,
         );
         return mergeChipsWithOverrides(autoChips, null);
       }
-      return mergeChipsWithOverrides(autoChips, cfg);
+      const groups = mergeChipsWithOverrides(autoChips, cfg);
+      // v3.2 — synthetic chips. Append them as their own group(s) so
+      // they appear alongside auto-derived chips. `hide[]` from the
+      // same config applies to synthetic chip labels per spec.
+      return appendSyntheticChipGroups(groups, cfg);
     }
     if (sv !== undefined) {
       console.warn(
         `Forge chips: ${chosenPath} schema_version=${JSON.stringify(sv)} ` +
-        `is not 2 — skipping file, using pure auto-discovery`,
+        `is not 2 or 3 — skipping file, using pure auto-discovery`,
       );
       return mergeChipsWithOverrides(autoChips, null);
     }
@@ -318,6 +327,55 @@ async function loadLibraryChips(
   // v1 curator-authored list takes precedence over auto-derive for
   // back-compat. (Curators who want both must migrate to v2.)
   return mergeChipSources([{ sourceName: libDir, chips: parsed.chips }]);
+}
+
+/** v3.2 — append synthetic chips from a parsed v3 config as their own
+ *  ChipPaletteGroup(s), grouped by the synthetic chip's `group` field
+ *  (default "Synthetic"). `hide[]` from the same config applies to
+ *  synthetic chip labels per spec.
+ *
+ *  Each synthetic chip becomes a regular Chip in the palette — click
+ *  handler inserts `chip.insertion` verbatim, B7.2 wikilink-click
+ *  suppression (v0.2.59) handles any `[[builtin_name]]` markup in the
+ *  insertion text.
+ *
+ *  Returns the input groups with synthetic groups appended. Pure: no
+ *  mutation of input. */
+function appendSyntheticChipGroups(
+  baseGroups: ChipPaletteGroup[],
+  cfg: ChipsV2Config,
+): ChipPaletteGroup[] {
+  const syntheticChips = cfg.synthetic_chips ?? [];
+  if (syntheticChips.length === 0) return baseGroups;
+  // Apply hide[] (matches by label).
+  const visible = applyHideToSyntheticChips(syntheticChips, cfg.hide);
+  if (visible.length === 0) return baseGroups;
+  // Bucket by group field; sort within each by `order` then label.
+  const buckets = new Map<string, SyntheticChip[]>();
+  for (const c of visible) {
+    if (!buckets.has(c.group)) buckets.set(c.group, []);
+    buckets.get(c.group)!.push(c);
+  }
+  for (const arr of buckets.values()) {
+    arr.sort((a, b) => {
+      if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+      if (a.order !== undefined) return -1;
+      if (b.order !== undefined) return 1;
+      return a.label.localeCompare(b.label);
+    });
+  }
+  const out = baseGroups.slice();
+  for (const [groupName, chips] of buckets) {
+    out.push({
+      sourceName: groupName,
+      chips: chips.map(c => ({
+        label: c.label,
+        insertion: c.insertion,
+        group: c.group,
+      })),
+    });
+  }
+  return out;
 }
 
 /** v0.2.54 — auto-discover action/data snippets at the vault root
