@@ -156,6 +156,35 @@ done
 STYLES_PRESENT="no"
 [ -f styles.css ] && STYLES_PRESENT="yes"
 
+# --- Build release zip (drift preflight runs inside) ---
+# v0.2.51 — added (per 2026-06-05-0700 prompt). install-latest.sh
+# downloads forge-client-obsidian-vX.Y.Z.zip from the release
+# assets; pre-fix this script only uploaded main.js + manifest.json
+# + styles.css, so install-latest.sh hit 404 on every release until
+# CC manually ran npm run release-zip + gh release upload (10
+# releases handled manually before this patch).
+#
+# 2026-06-06-0930 — MOVED EARLIER in the script (was after push,
+# now before commit). build-release-zip.mjs's section 2b runs the
+# engine-bundle drift preflight; if drift is detected, it exits 1
+# here, BEFORE any commit / tag / push state mutation. Pre-fix,
+# drift caught at the late position left orphaned tags (v0.2.58
+# wart). When SKIP_BUMP=no AND drift fires here, manifest.json is
+# left at the new version (dirty); user reverts via
+# `git checkout -- manifest.json`, runs `npm run sync-engine-bundle`,
+# and re-runs release.sh. SKIP_BUMP=yes leaves nothing dirty.
+echo
+echo "=== Building release zip (drift preflight runs inside) ==="
+npm run release-zip
+
+ZIP_PATH="dist/forge-client-obsidian-v${NEW_VERSION}.zip"
+if [ ! -f "$ZIP_PATH" ]; then
+  echo "ERROR: expected zip at $ZIP_PATH not produced by 'npm run release-zip'."
+  echo "Check scripts/build-release-zip.mjs output path."
+  exit 1
+fi
+echo "Built: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
+
 # --- Commit, tag, push ---
 echo
 if [ "$SKIP_BUMP" = "no" ]; then
@@ -179,25 +208,6 @@ echo
 echo "=== Pushing to origin ==="
 git push origin main
 git push origin "v${NEW_VERSION}"
-
-# --- Build release zip ---
-# v0.2.51 — added (per 2026-06-05-0700 prompt). install-latest.sh
-# downloads forge-client-obsidian-vX.Y.Z.zip from the release
-# assets; pre-fix this script only uploaded main.js + manifest.json
-# + styles.css, so install-latest.sh hit 404 on every release until
-# CC manually ran npm run release-zip + gh release upload (10
-# releases handled manually before this patch).
-echo
-echo "=== Building release zip ==="
-npm run release-zip
-
-ZIP_PATH="dist/forge-client-obsidian-v${NEW_VERSION}.zip"
-if [ ! -f "$ZIP_PATH" ]; then
-  echo "ERROR: expected zip at $ZIP_PATH not produced by 'npm run release-zip'."
-  echo "Check scripts/build-release-zip.mjs output path."
-  exit 1
-fi
-echo "Built: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
 
 # --- Create GitHub release with assets ---
 echo
