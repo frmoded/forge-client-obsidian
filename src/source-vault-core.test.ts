@@ -1,8 +1,56 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isSourceVault } from './source-vault-core.ts';
+import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
 
 const KNOWN = new Set(['forge-music', 'forge-moda']);
+
+// ---------- shouldSkipBundledExtract (v0.2.66 symmetric gate) ----------
+//
+// The 5 cases from prompt 2026-06-06-1900 §Tests, mapped onto the pure-
+// core decision layer. welcome.ts wraps each gate around the
+// corresponding extractor; the pure-core helper captures the boolean.
+
+test('shouldSkipBundledExtract: cross-library — forge-music vault skips forge-moda extract', () => {
+  // Brief (e) followup load-bearing case: vault root `name = "forge-music"`
+  // means ensureBundledForgeModa() must NOT fire (v0.2.64 narrow same-name
+  // gate had let it through, polluting `~/projects/forge-music/forge-moda/`).
+  assert.equal(shouldSkipBundledExtract('forge-music'), true);
+});
+
+test('shouldSkipBundledExtract: cross-library reverse — forge-moda vault skips forge-music extract', () => {
+  // Symmetric to the above. Less common in practice (forge-moda is the
+  // default-on library) but the gate behavior must be symmetric.
+  assert.equal(shouldSkipBundledExtract('forge-moda'), true);
+});
+
+test('shouldSkipBundledExtract: same-library — forge-music vault still skips forge-music (v0.2.64 regression)', () => {
+  // The original same-name skip rule must keep working under the new
+  // symmetric gate.
+  assert.equal(shouldSkipBundledExtract('forge-music'), true);
+});
+
+test('shouldSkipBundledExtract: normal vault — null source → do NOT skip (regression)', () => {
+  // ~/forge-vaults/smoke-v0.2.13 has `name = "smoke-v0.2.13"` which is
+  // NOT in KNOWN_BUNDLED_LIBRARIES, so isSourceVault returns null and
+  // both library extractions proceed normally.
+  assert.equal(shouldSkipBundledExtract(null), false);
+});
+
+test('shouldSkipBundledExtract: welcome.md gate — any source vault skips welcome (regression from v0.2.64)', () => {
+  // ensureWelcomeFiles uses the same helper now (was already symmetric
+  // in v0.2.64; this regression-tests the existing behavior).
+  assert.equal(shouldSkipBundledExtract('forge-music'), true);
+  assert.equal(shouldSkipBundledExtract('forge-moda'), true);
+  assert.equal(shouldSkipBundledExtract(null), false);
+});
+
+test('shouldSkipBundledExtract: idempotent (same input → same output)', () => {
+  for (const v of ['forge-music', 'forge-moda', null]) {
+    const a = shouldSkipBundledExtract(v);
+    const b = shouldSkipBundledExtract(v);
+    assert.equal(a, b);
+  }
+});
 
 test('isSourceVault: null body → null (no forge.toml present)', () => {
   assert.equal(isSourceVault(null, KNOWN), null);

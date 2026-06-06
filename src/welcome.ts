@@ -5,7 +5,7 @@ import { vaultDeclaresMusic } from './forge-music-gate';
 import { compareBundledVaultVersion } from './bundled-vault-version-core';
 import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core';
 import { ensureWelcomeFiles } from './welcome-files-core';
-import { isSourceVault } from './source-vault-core';
+import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core';
 export { copyDirRecursive };
 
 // v0.2.64 — names of bundled libraries the auto-extract path may
@@ -143,9 +143,10 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // v0.2.64 — skipped entirely when vault is a source repo for any
     // bundled library (per brief (e)). Source repos are dev workflows,
     // not first-Forge-click introductions.
-    if (sourceVaultName !== null) {
+    if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
-        `Forge: skipping welcome.md extraction — vault is the source repo for ${sourceVaultName}`,
+        `Forge: skipping welcome.md extraction — vault root declares ` +
+        `itself as source repo for ${sourceVaultName}`,
       );
     } else {
       try {
@@ -173,9 +174,14 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // yet, e.g. a vault initialized before forge-moda was bundled).
     //
     // v0.2.64 — skipped when vault IS forge-moda's source repo.
-    if (sourceVaultName === 'forge-moda') {
+    // v0.2.66 — symmetric gate per brief (e) followup: skip when vault
+    // is ANY known source repo, not just same-name. forge-music's repo
+    // (`name = "forge-music"`) was still getting forge-moda extracted
+    // into it under v0.2.64's narrow same-name gate.
+    if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
-        'Forge: skipping forge-moda extraction — vault is the source repo',
+        `Forge: skipping forge-moda extraction — vault root declares ` +
+        `itself as source repo for ${sourceVaultName}`,
       );
     } else {
       await ensureBundledForgeModa(app);
@@ -208,9 +214,12 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     //
     // v0.2.64 — also skipped when vault IS forge-music's source repo
     // (per brief (e)).
-    if (sourceVaultName === 'forge-music') {
+    // v0.2.66 — symmetric gate per brief (e) followup: any source vault
+    // (not just same-name) skips forge-music extraction too.
+    if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
-        'Forge: skipping forge-music extraction — vault is the source repo',
+        `Forge: skipping forge-music extraction — vault root declares ` +
+        `itself as source repo for ${sourceVaultName}`,
       );
     } else {
       await ensureBundledForgeMusic(app);

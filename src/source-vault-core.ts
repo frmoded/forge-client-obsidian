@@ -35,6 +35,24 @@
  *  Comment lines starting with `#` are ignored.
  *
  *  Idempotent + side-effect-free; safe to call repeatedly. */
+/** Decide whether the welcome-flow's bundled-content extractors
+ *  (ensureBundledForgeModa, ensureBundledForgeMusic, ensureWelcomeFiles)
+ *  should skip when the vault root has been detected as a source repo.
+ *
+ *  v0.2.66 — symmetric gate. Any non-null `sourceVaultName` triggers
+ *  the skip regardless of which library is being extracted (the
+ *  same-name vs cross-library distinction is gone). forge-music's
+ *  repo (`name = "forge-music"`) opened as a vault no longer gets
+ *  forge-moda extracted into it either.
+ *
+ *  Pure: caller (welcome.ts) wraps the boolean in the actual extract
+ *  call. */
+export function shouldSkipBundledExtract(
+  sourceVaultName: string | null,
+): boolean {
+  return sourceVaultName !== null;
+}
+
 export function isSourceVault(
   rootTomlBody: string | null,
   knownLibraries: Set<string>,
