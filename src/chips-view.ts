@@ -7,6 +7,11 @@ import {
   shouldRenderSubgroupHeader,
 } from './chips-core';
 import { ChipsManifest, loadChipsForActiveVault, resolveSnippetPath } from './chips';
+import { findFallbackMarkdownView } from './find-fallback-markdown-view-core';
+import type {
+  MarkdownLeafLike,
+  MarkdownViewLike,
+} from './find-fallback-markdown-view-core';
 
 export const CHIPS_VIEW_TYPE = 'forge-chips';
 
@@ -43,7 +48,12 @@ export class ChipsView extends ItemView {
         // which left `this.groups` stale across file switches.
         void this.refresh();
         const v = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (v && v.file?.path === file?.path) this.lastMarkdownView = v;
+        // v0.2.69 — loosened from the strict
+        // `v.file?.path === file?.path` equality check. The strict
+        // check missed workspace-boot races where v is set but its
+        // file hasn't synced to the file-open arg yet. Any v with a
+        // file is a valid snapshot. Bug 2 partial fix.
+        if (v && v.file) this.lastMarkdownView = v;
       }));
   }
 
@@ -53,6 +63,15 @@ export class ChipsView extends ItemView {
 
   async onOpen() {
     this.host.registerView(this);
+    // v0.2.69 — eagerly snapshot any currently-active markdown view
+    // so chip clicks work when the plugin enabled with a file already
+    // open (Path A install workflow, where Obsidian restores last
+    // workspace state). Pre-v0.2.69 lastMarkdownView stayed null
+    // until the next file-open event fired; clicking a chip while
+    // still inside the restored file triggered the guard Notice.
+    // Bug 2 fix.
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (active && active.file) this.lastMarkdownView = active;
     await this.refresh();
   }
 
@@ -272,11 +291,29 @@ export class ChipsView extends ItemView {
   }
 
   private async onChipClick(insertion: string) {
-    // Re-resolve at click time, with the tracked-view fallback so
-    // the pane stealing focus doesn't leave us without a target.
-    const live = this.app.workspace.getActiveViewOfType(MarkdownView);
-    const view = live ?? this.lastMarkdownView;
-    const file = view?.file;
+    // v0.2.69 — re-resolve via the pure-core fallback chain so chip
+    // clicks land even when the plugin enabled with a file already
+    // open (Path A install) AND the user hasn't switched files since.
+    // Pre-v0.2.69 this was inline `live ?? this.lastMarkdownView`,
+    // which returned null whenever both lastMarkdownView was unset
+    // AND focus had moved to the chip side pane (the pane's own
+    // active-view-of-type returns null for non-markdown views).
+    // Bug 2 fix.
+    const resolved = findFallbackMarkdownView(
+      {
+        getActiveMarkdownView: () =>
+          this.app.workspace.getActiveViewOfType(MarkdownView) as
+            unknown as MarkdownViewLike | null,
+        getMarkdownLeaves: () =>
+          this.app.workspace.getLeavesOfType('markdown') as
+            unknown as MarkdownLeafLike[],
+        getMostRecentLeaf: () =>
+          this.app.workspace.getMostRecentLeaf() as
+            unknown as MarkdownLeafLike | null,
+      },
+      this.lastMarkdownView as unknown as MarkdownViewLike | null,
+    );
+    const file = resolved?.file as TFile | undefined;
     if (!file) {
       new Notice('Forge chips: click into an action snippet first, ' +
         'then click the chip.');
