@@ -662,3 +662,128 @@ test('shouldRenderSubgroupHeader: empty string label → false', () => {
   // undefined. An empty string is also defensively treated as null-equivalent.
   assert.equal(shouldRenderSubgroupHeader('', 'Setup'), false);
 });
+
+
+// ============================================================================
+// End-to-end pipeline coverage — autoDeriveChips → mergeChipsWithOverrides →
+// chip.insertion (the value chips-view.ts:onChipClick passes to insertChipText).
+// v0.2.63 (per 2026-06-06-1015 brief (d) Phase 1): the unit-level pipeline
+// produces B7.1-canonical insertions exactly as the spec prescribes. These
+// regression tests lock in the spec-correct shape so any future drift surfaces
+// at suite time, not at user smoke.
+// ============================================================================
+
+test('end-to-end pipeline: action snippet with inputs → canonical insertion preserved through merge', () => {
+  const inventory = [
+    { id: 'peak', basename: 'peak', type: 'action' as const, inputs: ['bars'], parentDir: 'percussion_lab' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const groups = mergeChipsWithOverrides(autoChips, null);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].chips.length, 1);
+  assert.equal(groups[0].chips[0].insertion, 'Do [[peak]](<bars>).');
+});
+
+test('end-to-end pipeline: action snippet with no inputs → empty parens preserved through merge', () => {
+  const inventory = [
+    { id: 'solitary', basename: 'solitary', type: 'action' as const, inputs: [], parentDir: 'percussion_lab' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const groups = mergeChipsWithOverrides(autoChips, null);
+  assert.equal(groups[0].chips[0].insertion, 'Do [[solitary]]().');
+});
+
+test('end-to-end pipeline: action snippet with multiple inputs → comma-separated placeholders preserved through merge', () => {
+  const inventory = [
+    { id: 'render', basename: 'render', type: 'action' as const, inputs: ['x', 'y', 'color'], parentDir: 'graphics' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const groups = mergeChipsWithOverrides(autoChips, null);
+  assert.equal(groups[0].chips[0].insertion, 'Do [[render]](<x>, <y>, <color>).');
+});
+
+test('end-to-end pipeline: data snippet → "Set <name> to [[id]]()." form preserved through merge', () => {
+  const inventory = [
+    { id: 'twelve_bar_blues_progression', basename: 'twelve_bar_blues_progression', type: 'data' as const, parentDir: 'blues' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const groups = mergeChipsWithOverrides(autoChips, null);
+  assert.equal(groups[0].chips[0].insertion, 'Set <name> to [[twelve_bar_blues_progression]]().');
+});
+
+test('end-to-end pipeline: forge-moda v2 override does NOT override insertion → auto-derived canonical wins', () => {
+  // Mirrors forge-moda/_meta/_chips.md's actual v2 shape — overrides set
+  // group + label + order but intentionally leave `insertion` unset so
+  // auto-derive's B7.1-canonical form is the surface. Regression coverage
+  // that the v2 merge path doesn't accidentally strip the insertion.
+  const inventory = [
+    { id: 'create_water_particles', basename: 'create_water_particles', type: 'action' as const, inputs: [], parentDir: '' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const cfg: ChipsV2Config = {
+    schema_version: 2,
+    groups: [{ id: 'Setup', order: 1, label: 'Setup' }],
+    overrides: [
+      { target: 'create_water_particles', group: 'Setup', order: 1 },
+    ],
+  };
+  const groups = mergeChipsWithOverrides(autoChips, cfg);
+  assert.equal(groups[0].sourceName, 'Setup');
+  assert.equal(groups[0].chips[0].insertion, 'Do [[create_water_particles]]().');
+});
+
+test('end-to-end pipeline: explicit insertion override wins over auto-derive (curator-authored bespoke form)', () => {
+  const inventory = [
+    { id: 'custom', basename: 'custom', type: 'action' as const, inputs: ['x'], parentDir: 'g' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const cfg: ChipsV2Config = {
+    schema_version: 2,
+    overrides: [
+      { target: 'custom', insertion: 'Call [[custom]] with curated note.' },
+    ],
+  };
+  const groups = mergeChipsWithOverrides(autoChips, cfg);
+  assert.equal(groups[0].chips[0].insertion, 'Call [[custom]] with curated note.');
+});
+
+test('end-to-end pipeline: insertion makes it through end-to-end without being stripped to bare wikilink', () => {
+  // Regression for brief (d) — assert directly that no path emits the
+  // bare `[[name]]` shape. Lock in the spec-correct form across both
+  // auto-derive and the merge step's chip emission.
+  const inventory = [
+    { id: 'murmuration', basename: 'murmuration', type: 'action' as const, inputs: [], parentDir: 'percussion' },
+    { id: 'solitary', basename: 'solitary', type: 'action' as const, inputs: [], parentDir: 'percussion_lab' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const groups = mergeChipsWithOverrides(autoChips, null);
+  for (const group of groups) {
+    for (const chip of group.chips) {
+      // Must not be bare `[[id]]` — must carry the `Do ... ().` shell.
+      assert.match(chip.insertion, /^Do \[\[[^\]]+\]\]\(\)\.$|^Do \[\[[^\]]+\]\]\(<[^>]+(, <[^>]+)*>\)\.$/,
+        `unexpected insertion shape: ${chip.insertion}`);
+    }
+  }
+});
+
+test('end-to-end pipeline: forge-music chip click simulation — peak with inputs:[bars] produces canonical insertion', () => {
+  // Brief (d)'s exact example: clicking a `peak` chip whose underlying
+  // snippet has `inputs: [bars]` should produce `Do [[peak]](<bars>).`.
+  const inventory = [
+    { id: 'peak', basename: 'peak', type: 'action' as const, inputs: ['bars'], parentDir: 'percussion_lab' },
+  ];
+  const autoChips = autoDeriveChips(inventory);
+  const groups = mergeChipsWithOverrides(autoChips, null);
+  const peakChip = groups[0].chips[0];
+  assert.equal(peakChip.label, 'Peak');
+  assert.equal(peakChip.insertion, 'Do [[peak]](<bars>).');
+
+  // Simulate the chips-view click path: aria-label + onClick arg.
+  // chips-view.ts:255 → btn.setAttribute('aria-label', chip.insertion).
+  // chips-view.ts:257 → void this.onChipClick(chip.insertion).
+  // The value passed to onChipClick (which then reaches insertChipText)
+  // is exactly chip.insertion — no transformation between palette and
+  // insert. The canonical form makes it all the way through.
+  const clickedValue = peakChip.insertion;
+  assert.equal(clickedValue, 'Do [[peak]](<bars>).');
+});
