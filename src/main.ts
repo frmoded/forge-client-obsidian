@@ -7,6 +7,7 @@ import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view';
 import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips';
 import { ChipPaletteGroup } from './chips-core';
 import { getFacetForm } from './facet-form-core';
+import { isPythonBuiltin, bareWikilinkTarget } from './python-builtins-core';
 import { invalidateLibraryVaultCache } from './edges';
 // v0.2.44: attachEdgeHover removed — the hover popover read snapshot
 // state from host disk via the vault adapter, but capture writes go to
@@ -385,6 +386,38 @@ export default class ForgePlugin extends Plugin {
         }
       }),
     );
+
+    // v0.2.58: B7.2 — intercept wikilink-clicks whose target is a
+    // recognized Python builtin. Without this, canonical snippets
+    // that reference `[[print]]`, `[[len]]`, etc. would pollute the
+    // user's vault with stray `print.md`, `len.md`, etc. on every
+    // click (Obsidian's default "create unresolved file" behavior).
+    //
+    // Coverage: document-level click capture matches both reading-
+    // mode (<a class="internal-link">) and live-preview (<span
+    // class="cm-hmd-internal-link">) renders via the closest()
+    // walk. Source-mode raw `[[...]]` has no rendered link and is
+    // an accepted gap. capture=true fires before Obsidian's
+    // default handler, so preventDefault stops the file-creation.
+    this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+      const target = evt.target as Element | null;
+      if (!target) return;
+      const linkEl =
+        target.closest('a.internal-link') as HTMLElement | null
+        ?? target.closest('.cm-hmd-internal-link, .cm-link') as HTMLElement | null;
+      if (!linkEl) return;
+      // Extract link target. Reading mode carries it on data-href;
+      // live preview spans use innerText. Pattern from edges-hover.ts.
+      const raw =
+        linkEl.getAttribute('data-href')
+        ?? (linkEl as HTMLElement).innerText
+        ?? '';
+      const bareTarget = bareWikilinkTarget(raw);
+      if (!isPythonBuiltin(bareTarget)) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      new Notice(`'${bareTarget}' is a Python builtin — no Forge snippet to navigate to.`);
+    }, { capture: true });
 
     // v0.2.18: keep the Pyodide-mounted user vault in sync with
     // direct editor edits. v0.2.17 fixed the writeGeneratedCode →
