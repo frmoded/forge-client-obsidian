@@ -36,9 +36,12 @@ export class ChipsView extends ItemView {
     // because clicking the side pane doesn't open a file.
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => {
-        // Re-render so the active-file gating (chips vs "open an
-        // action snippet" placeholder) reflects the new file.
-        void this.render();
+        // v0.2.67 — file-open now triggers a full `refresh()` (not just
+        // a render) so v3.1 walk-up sees the new active file path
+        // (threaded through `host.getManifest()`) and re-computes the
+        // per-chapter palette. Pre-v0.2.67 this called only `render()`,
+        // which left `this.groups` stale across file switches.
+        void this.refresh();
         const v = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (v && v.file?.path === file?.path) this.lastMarkdownView = v;
       }));

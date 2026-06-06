@@ -42,6 +42,7 @@ import {
   autoDeriveChips,
   parseChipsV2Config,
   mergeChipsWithOverrides,
+  mergeChipsConfigsWalkUp,
   discoverTopLevelSnippets,
   PERSONAL_GROUP_NAME,
   type ChipsManifest,
@@ -52,6 +53,7 @@ import {
   applyHideToSyntheticChips,
   type SyntheticChip,
 } from './synthetic-chips-core';
+import { walkUpChipsConfigs } from './chips-walk-up-core';
 import type { ChipsV2Config } from './chips-core';
 
 // v0.2.62 — names of bundled libraries the plugin knows how to extract
@@ -94,9 +96,12 @@ export async function loadChipsForActiveVault(
   const rootGroups = await loadVaultRootV1Chips(app, manifest.vaultName);
   collected.push(...rootGroups);
 
-  // Per-library auto-discovery + v2 `_chips.md` curation.
+  // Per-library auto-discovery + v2/v3 `_chips.md` curation.
+  // v0.2.67 — pass through manifest.activeFilePath so loadLibraryChips
+  // can run the v3.1 walk-up when the file lives inside this library.
   for (const libDir of manifest.libraryDirNames) {
-    const libGroups = await loadLibraryChips(app, libDir);
+    const libGroups = await loadLibraryChips(
+      app, libDir, manifest.activeFilePath ?? null);
     collected.push(...libGroups);
   }
 
@@ -240,18 +245,54 @@ async function loadVaultRootV1Chips(
 async function loadLibraryChips(
   app: App,
   libDir: string,
+  activeFilePath?: string | null,
 ): Promise<ChipPaletteGroup[]> {
-  // Step 1: build the snippet inventory by reading each candidate
-  // file's frontmatter via vault.cachedRead. v0.2.49 — switched from
-  // metadataCache.getFileCache to fresh-read because the cache is
-  // async-indexed and can return stale frontmatter after the user
-  // edits `chip: false` ↔ `chip: true`. cachedRead hits Obsidian's
-  // in-memory text cache so this is cheap.
-  const inventory = await buildSnippetInventory(app, libDir);
+  // Step 1: v3.1 walk-up — when an active file is provided AND it
+  // lives inside this library, build the walk-up path list. The
+  // most-specific path (closest to the active file) determines
+  // auto-discovery scope; all matched levels' configs merge per the
+  // v3.1 precedence rules. When walk-up yields no matches, the loader
+  // falls through to the v0.2.65 single-file behavior.
+  const walkPaths = activeFilePathInLibrary(activeFilePath, libDir)
+    ? walkUpChipsConfigs(
+        activeFilePath as string,
+        libDir,
+        markdownFilesPathSet(app),
+      )
+    : [];
+
+  // Step 2: derive auto-discovery scope from the walk. If the
+  // most-specific `_chips.md` lives at a subdir below libDir, narrow
+  // scope to that subdir; otherwise scope to the full library
+  // (libDir/) — same as the v0.2.65 default.
+  const scopePrefix = deriveAutoDiscoveryScope(walkPaths, libDir);
+  const inventory = await buildSnippetInventory(app, libDir, scopePrefix);
   const autoChips = autoDeriveChips(inventory);
 
-  // Step 2: look for `_chips.md` (canonical or legacy path).
+  // Step 3: walk-up multi-level merge. Read every matched path; parse
+  // each as v2/v3 config; collect non-error results in walk order
+  // (most-specific FIRST) and feed mergeChipsConfigsWalkUp.
   const adapter = app.vault.adapter;
+  if (walkPaths.length > 0) {
+    const levelConfigs: ChipsV2Config[] = [];
+    for (const path of walkPaths) {
+      try {
+        const cfg = await readChipsConfigAt(adapter, path);
+        if (cfg) levelConfigs.push(cfg);
+      } catch (e) {
+        console.warn(`Forge chips: read failed for ${path}`, e);
+      }
+    }
+    if (levelConfigs.length > 0) {
+      const merged = mergeChipsConfigsWalkUp(levelConfigs);
+      const groups = mergeChipsWithOverrides(autoChips, merged);
+      return appendSyntheticChipGroups(groups, merged);
+    }
+  }
+
+  // Step 4 (no walk-up matches OR no activeFilePath in this library):
+  // v0.2.65 single-`_chips.md` path. Look for `_chips.md` at the
+  // library root (canonical or legacy path).
   let raw: string | null = null;
   let chosenPath: string | null = null;
   for (const rel of CHIPS_RELATIVE_PATHS) {
@@ -327,6 +368,93 @@ async function loadLibraryChips(
   // v1 curator-authored list takes precedence over auto-derive for
   // back-compat. (Curators who want both must migrate to v2.)
   return mergeChipSources([{ sourceName: libDir, chips: parsed.chips }]);
+}
+
+// ------------- v0.2.67 (v3.1 walk-up) helpers ---------------------------
+
+/** True when `activeFilePath` is a non-empty vault-relative path inside
+ *  the given library directory (i.e., starts with `libDir + '/'`). */
+function activeFilePathInLibrary(
+  activeFilePath: string | null | undefined,
+  libDir: string,
+): boolean {
+  if (!activeFilePath) return false;
+  return activeFilePath.startsWith(`${libDir}/`);
+}
+
+/** Build a set of all vault-relative markdown file paths Obsidian
+ *  currently sees. Cheap (in-memory index); reused as the
+ *  `existingFiles` argument to `walkUpChipsConfigs`. */
+function markdownFilesPathSet(app: App): Set<string> {
+  const out = new Set<string>();
+  for (const f of app.vault.getMarkdownFiles()) out.add(f.path);
+  return out;
+}
+
+/** Derive the auto-discovery scope prefix per the v3.1 spec: when the
+ *  most-specific `_chips.md` lives at a subdir BELOW the library root,
+ *  narrow auto-discovery to that subdir. Otherwise return the library
+ *  root's prefix (same as v0.2.65 default). */
+function deriveAutoDiscoveryScope(
+  walkPaths: string[],
+  libDir: string,
+): string {
+  const libPrefix = `${libDir}/`;
+  if (walkPaths.length === 0) return libPrefix;
+  const mostSpecific = walkPaths[0];
+  // walkPaths come back with vault-relative paths ending in `_chips.md`
+  // (or `_meta/_chips.md` at the library root). Derive the directory
+  // of the most-specific path; if it's exactly the library root (or
+  // libDir/_meta), keep the library-wide scope.
+  const lastSlash = mostSpecific.lastIndexOf('/');
+  if (lastSlash === -1) {
+    // vault-root _chips.md — only relevant when libDir is the empty
+    // string (source-vault scenarios route through loadSourceVaultChips
+    // separately). Defensive: keep the library-wide scope.
+    return libPrefix;
+  }
+  const dir = mostSpecific.slice(0, lastSlash);
+  if (dir === libDir) return libPrefix;
+  if (dir === `${libDir}/_meta`) return libPrefix;
+  return `${dir}/`;
+}
+
+/** Read + parse a single `_chips.md` at `path`. Returns the
+ *  parsed v2/v3 config when successful, or null on any read or parse
+ *  failure (silent; the walk-up tolerates per-level errors). */
+async function readChipsConfigAt(
+  adapter: { exists(p: string): Promise<boolean>; read(p: string): Promise<string> },
+  path: string,
+): Promise<ChipsV2Config | null> {
+  let raw: string;
+  try {
+    if (!(await adapter.exists(path))) return null;
+    raw = await adapter.read(path);
+  } catch {
+    return null;
+  }
+  const body = extractDataBody(raw);
+  const contentType =
+    (readFrontmatterField(raw, 'content_type') || '').toLowerCase();
+  if (contentType !== 'yaml') return null;
+  let decoded: unknown;
+  try {
+    decoded = parseYaml(body);
+  } catch (e) {
+    console.warn(
+      `Forge chips: ${path} YAML parse failed: ${(e as Error).message}`,
+    );
+    return null;
+  }
+  if (decoded === null || typeof decoded !== 'object') return null;
+  const sv = (decoded as Record<string, unknown>).schema_version;
+  if (sv !== 2 && sv !== 3) return null;
+  const cfg = parseChipsV2Config(decoded);
+  if (isParseError(cfg)) {
+    console.warn(`Forge chips: ${path} v${sv} parse error: ${cfg.error}`);
+    return null;
+  }
+  return cfg;
 }
 
 /** v3.2 — append synthetic chips from a parsed v3 config as their own
@@ -452,12 +580,18 @@ async function loadPersonalChips(
 async function buildSnippetInventory(
   app: App,
   libDir: string,
+  scopePrefix?: string,
 ): Promise<SnippetMetaForChips[]> {
+  // v0.2.67 — `scopePrefix` (optional) narrows the snippet inventory
+  // to a subdir per v3.1 walk-up's auto-discovery scope rule. Caller
+  // passes the most-specific `_chips.md`-containing dir + '/'. When
+  // omitted, behavior is identical to v0.2.65 (full library walk).
   const prefix = `${libDir}/`;
+  const filterPrefix = scopePrefix ?? prefix;
   const libraryDirNames = new Set([libDir]);
   const out: SnippetMetaForChips[] = [];
   for (const file of app.vault.getMarkdownFiles()) {
-    if (!file.path.startsWith(prefix)) continue;
+    if (!file.path.startsWith(filterPrefix)) continue;
     const fm = await readSnippetFrontmatter(app, file);
     if (!fm) continue;                                  // not a snippet
     const type = typeof fm.type === 'string' ? fm.type : undefined;

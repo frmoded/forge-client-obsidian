@@ -2,7 +2,7 @@
 // chips.test.ts under `node --test`; the obsidian-coupled reader +
 // view re-export from here for runtime use.
 
-import { parseSyntheticChips } from './synthetic-chips-core.ts';
+import { parseSyntheticChips, mergeSyntheticChipsHigherWins, type SyntheticChip } from './synthetic-chips-core.ts';
 
 export interface Chip {
   label: string;
@@ -58,6 +58,15 @@ export interface ChipSource {
 export interface ChipsManifest {
   vaultName: string;
   libraryDirNames: string[];
+  /** v0.2.67 (v3.1 walk-up) — vault-relative path of the active file
+   *  at the moment the chip palette computes. Optional: when absent,
+   *  the palette falls back to library-wide auto-discovery (v0.2.65
+   *  behavior). When present and the file lives inside a library
+   *  subdir, the loader walks up via `chips-walk-up-core` to pick up
+   *  per-chapter `_chips.md` files, merges configs per the v3.1 spec,
+   *  and (when a subdir-level `_chips.md` exists) narrows auto-
+   *  discovery scope to that subdir. */
+  activeFilePath?: string | null;
 }
 
 /** Produce the list of chip-source files to probe for the given
@@ -576,6 +585,75 @@ export function shouldRenderSubgroupHeader(
   if (!subgroupLabel) return false;
   if (subgroupLabel === sourceName) return false;
   return true;
+}
+
+/** v0.2.67 — Merge per-walk-level chips configs into a single ChipsV2Config
+ *  per the v3.1 spec precedence rules:
+ *    - overrides[]: same `target` → higher-specificity (closer to active
+ *      file) wins. perLevelConfigs[0] is MOST-specific.
+ *    - groups[]: same `id` → higher-specificity wins.
+ *    - hide[]: union across all levels (once hidden, hidden).
+ *    - synthetic_chips[]: same `label` → higher-specificity wins (delegated
+ *      to mergeSyntheticChipsHigherWins; same precedence).
+ *    - schema_version: any v3 input promotes the result to v3 (so callers
+ *      that branch on schema_version see "the walk used v3 features").
+ *
+ *  Idempotent + side-effect-free: re-running with the same inputs yields
+ *  an equal-shape config.
+ *
+ *  Pure-core. Caller (chips.ts:loadLibraryChips) loads each level's
+ *  config via parseChipsV2Config, then hands them here in walk order. */
+export function mergeChipsConfigsWalkUp(
+  perLevelConfigs: ChipsV2Config[],
+): ChipsV2Config {
+  if (perLevelConfigs.length === 0) {
+    return { schema_version: 2 };
+  }
+  const overrideByTarget = new Map<string, ChipOverride>();
+  const groupById = new Map<string, ChipGroup>();
+  const hideSet = new Set<string>();
+  const perLevelSynthetic: SyntheticChip[][] = [];
+  let sawV3 = false;
+
+  for (const cfg of perLevelConfigs) {
+    if (cfg.schema_version === 3) sawV3 = true;
+    if (cfg.overrides) {
+      for (const o of cfg.overrides) {
+        if (!overrideByTarget.has(o.target)) overrideByTarget.set(o.target, o);
+      }
+    }
+    if (cfg.groups) {
+      for (const g of cfg.groups) {
+        if (!groupById.has(g.id)) groupById.set(g.id, g);
+      }
+    }
+    if (cfg.hide) {
+      for (const h of cfg.hide) hideSet.add(h);
+    }
+    if (cfg.synthetic_chips) {
+      perLevelSynthetic.push(cfg.synthetic_chips);
+    }
+  }
+
+  const merged: ChipsV2Config = {
+    schema_version: sawV3 ? 3 : 2,
+  };
+  if (overrideByTarget.size > 0) {
+    merged.overrides = Array.from(overrideByTarget.values());
+  }
+  if (groupById.size > 0) {
+    merged.groups = Array.from(groupById.values());
+  }
+  if (hideSet.size > 0) {
+    merged.hide = Array.from(hideSet);
+  }
+  if (perLevelSynthetic.length > 0) {
+    // Delegate to synthetic-chips-core; same higher-specificity-wins rule
+    // applies (perLevelSynthetic[0] is most-specific).
+    const synth = mergeSyntheticChipsHigherWins(perLevelSynthetic);
+    if (synth.length > 0) merged.synthetic_chips = synth;
+  }
+  return merged;
 }
 
 /** Sentinel for "no `# English` section to insert into" — the caller

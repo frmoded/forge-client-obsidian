@@ -811,3 +811,118 @@ test('end-to-end pipeline: forge-music chip click simulation — peak with input
   const clickedValue = peakChip.insertion;
   assert.equal(clickedValue, 'Do [[peak]](<bars>).');
 });
+
+
+// ===========================================================================
+// v0.2.67 — v3.1 walk-up: mergeChipsConfigsWalkUp integration cases.
+// Pure-core helper that the chips.ts loader uses to fuse per-walk-level
+// configs into a single merged config before passing to mergeChipsWithOverrides.
+// ===========================================================================
+
+import { mergeChipsConfigsWalkUp } from './chips-core.ts';
+
+test('walk-up merge: empty input → minimal v2 config', () => {
+  const merged = mergeChipsConfigsWalkUp([]);
+  assert.equal(merged.schema_version, 2);
+  assert.equal(merged.overrides, undefined);
+  assert.equal(merged.hide, undefined);
+});
+
+test('walk-up merge: higher-specificity overrides[].target wins', () => {
+  // Walk: chapter (specific) first, library (general) second.
+  const chapter: ChipsV2Config = {
+    schema_version: 3,
+    overrides: [{ target: 'solitary', label: 'Chapter-specific Solitary' }],
+  };
+  const library: ChipsV2Config = {
+    schema_version: 3,
+    overrides: [{ target: 'solitary', label: 'Library-wide Solitary' }],
+  };
+  const merged = mergeChipsConfigsWalkUp([chapter, library]);
+  assert.equal(merged.overrides?.length, 1);
+  assert.equal(merged.overrides?.[0].label, 'Chapter-specific Solitary');
+});
+
+test('walk-up merge: hide[] unions across levels (once hidden, hidden)', () => {
+  const chapter: ChipsV2Config = { schema_version: 3, hide: ['Set'] };
+  const library: ChipsV2Config = { schema_version: 3, hide: ['print', 'Set'] };
+  const merged = mergeChipsConfigsWalkUp([chapter, library]);
+  const hideSet = new Set(merged.hide);
+  assert.equal(hideSet.size, 2);
+  assert.ok(hideSet.has('Set'));
+  assert.ok(hideSet.has('print'));
+});
+
+test('walk-up merge: same-id groups[] — higher-specificity wins', () => {
+  const chapter: ChipsV2Config = {
+    schema_version: 3,
+    groups: [{ id: 'Setup', label: 'Chapter Setup', order: 1 }],
+  };
+  const library: ChipsV2Config = {
+    schema_version: 3,
+    groups: [{ id: 'Setup', label: 'Library Setup', order: 9 }],
+  };
+  const merged = mergeChipsConfigsWalkUp([chapter, library]);
+  assert.equal(merged.groups?.length, 1);
+  assert.equal(merged.groups?.[0].label, 'Chapter Setup');
+  assert.equal(merged.groups?.[0].order, 1);
+});
+
+test('walk-up merge: same-label synthetic_chips[] — higher-specificity wins', () => {
+  const chapter: ChipsV2Config = {
+    schema_version: 3,
+    synthetic_chips: [
+      { label: 'print', insertion: 'Chapter print', group: 'Builtins' },
+    ],
+  };
+  const library: ChipsV2Config = {
+    schema_version: 3,
+    synthetic_chips: [
+      { label: 'print', insertion: 'Library print', group: 'Builtins' },
+      { label: 'Set', insertion: 'Library Set', group: 'Statements' },
+    ],
+  };
+  const merged = mergeChipsConfigsWalkUp([chapter, library]);
+  assert.equal(merged.synthetic_chips?.length, 2);
+  // Chapter's `print` insertion wins; library's `Set` survives.
+  const byLabel = new Map(merged.synthetic_chips!.map(c => [c.label, c.insertion]));
+  assert.equal(byLabel.get('print'), 'Chapter print');
+  assert.equal(byLabel.get('Set'), 'Library Set');
+});
+
+test('walk-up merge: schema_version promotes to 3 when any input is v3', () => {
+  const v2: ChipsV2Config = { schema_version: 2 };
+  const v3: ChipsV2Config = { schema_version: 3 };
+  assert.equal(mergeChipsConfigsWalkUp([v2, v3]).schema_version, 3);
+  assert.equal(mergeChipsConfigsWalkUp([v2]).schema_version, 2);
+  assert.equal(mergeChipsConfigsWalkUp([v3]).schema_version, 3);
+});
+
+test('walk-up merge: distinct targets accumulate across levels', () => {
+  // Chapter overrides `solitary`; library overrides `peak` — both survive.
+  const chapter: ChipsV2Config = {
+    schema_version: 3,
+    overrides: [{ target: 'solitary', label: 'Chapter Solitary' }],
+  };
+  const library: ChipsV2Config = {
+    schema_version: 3,
+    overrides: [{ target: 'peak', label: 'Library Peak' }],
+  };
+  const merged = mergeChipsConfigsWalkUp([chapter, library]);
+  assert.equal(merged.overrides?.length, 2);
+  const targets = new Set(merged.overrides!.map(o => o.target));
+  assert.ok(targets.has('solitary'));
+  assert.ok(targets.has('peak'));
+});
+
+test('walk-up merge: idempotent (same input → same output)', () => {
+  const cfg: ChipsV2Config = {
+    schema_version: 3,
+    overrides: [{ target: 'a', label: 'A' }],
+    hide: ['x'],
+    synthetic_chips: [{ label: 'print', insertion: 'Do.', group: 'Synthetic' }],
+  };
+  const a = mergeChipsConfigsWalkUp([cfg]);
+  const b = mergeChipsConfigsWalkUp([cfg]);
+  assert.deepEqual(a, b);
+});

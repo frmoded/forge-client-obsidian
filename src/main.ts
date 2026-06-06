@@ -1341,6 +1341,12 @@ export default class ForgePlugin extends Plugin {
   }
 
   private chipsManifest(): ChipsManifest {
+    // v0.2.67 — populate `activeFilePath` from the workspace so the
+    // chip palette loader can run v3.1 walk-up against per-chapter
+    // `_chips.md` files. Snapshot taken at manifest-read time so each
+    // `loadChipsForActiveVault` invocation sees a coherent view of
+    // "what file is active right now."
+    const activeFile = this.app.workspace.getActiveFile();
     return {
       vaultName: this.app.vault.getName(),
       // v0.2.47: chip source discovery driven by on-disk installed
@@ -1352,6 +1358,7 @@ export default class ForgePlugin extends Plugin {
       // during v0.2.46 smoke when the user opened the chips palette
       // from forge-moda/simulation.md and saw nothing.
       libraryDirNames: Array.from(this.libraryDirNames()),
+      activeFilePath: activeFile?.path ?? null,
     };
   }
 
