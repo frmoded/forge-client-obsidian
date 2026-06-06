@@ -86,3 +86,37 @@ test('isSourceVault: whitespace around = tolerated', () => {
   assert.equal(isSourceVault('name="forge-moda"', KNOWN), 'forge-moda');
   assert.equal(isSourceVault('name   =   "forge-moda"', KNOWN), 'forge-moda');
 });
+
+// v0.2.64 — production-set regression (per brief (e)). Verifies the
+// exact set both welcome.ts and chips.ts use against the typical
+// cohort-vault shape that should NOT trigger source-vault gating.
+test('isSourceVault: production set excludes a normal cohort vault', () => {
+  const PROD_SET = new Set(['forge-moda', 'forge-music']);
+  // Cohort vault with arbitrary name + the two cohort domains.
+  const body = [
+    'name = "smoke-v0.2.13"',
+    'domains = ["moda", "music"]',
+  ].join('\n');
+  assert.equal(isSourceVault(body, PROD_SET), null);
+});
+
+test('isSourceVault: production set includes forge-music source repo', () => {
+  const PROD_SET = new Set(['forge-moda', 'forge-music']);
+  const body = [
+    'name = "forge-music"',
+    'version = "0.3.9"',
+    'description = "Forge vault for music composition and analysis."',
+    'domains = ["music"]',
+  ].join('\n');
+  assert.equal(isSourceVault(body, PROD_SET), 'forge-music');
+});
+
+test('isSourceVault: production set includes forge-moda source repo', () => {
+  const PROD_SET = new Set(['forge-moda', 'forge-music']);
+  const body = [
+    'name = "forge-moda"',
+    'version = "0.4.17"',
+    'domains = ["moda"]',
+  ].join('\n');
+  assert.equal(isSourceVault(body, PROD_SET), 'forge-moda');
+});

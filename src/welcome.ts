@@ -5,7 +5,31 @@ import { vaultDeclaresMusic } from './forge-music-gate';
 import { compareBundledVaultVersion } from './bundled-vault-version-core';
 import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core';
 import { ensureWelcomeFiles } from './welcome-files-core';
+import { isSourceVault } from './source-vault-core';
 export { copyDirRecursive };
+
+// v0.2.64 — names of bundled libraries the auto-extract path may
+// detect as "the vault IS this library's source repo." Must match
+// chips.ts's KNOWN_BUNDLED_LIBRARIES (intentional duplication —
+// both glue layers consult the same set, but neither owns the
+// source of truth, so a tiny copy is cheaper than a new shared file).
+const KNOWN_BUNDLED_LIBRARIES = new Set(['forge-moda', 'forge-music']);
+
+/** Read the vault root's `forge.toml` (if any) and return the matched
+ *  bundled-library identity when the vault IS that library's source
+ *  repo. v0.2.64 — used by ensureBundled* + ensureWelcomeFiles gates
+ *  to skip auto-extract on source repos (per brief (e)). Defensive:
+ *  missing/unreadable forge.toml → null (treat as a normal vault). */
+async function detectSourceVault(adapter: DataAdapter): Promise<string | null> {
+  try {
+    if (!(await adapter.exists('forge.toml'))) return null;
+    const body = await adapter.read('forge.toml');
+    return isSourceVault(body, KNOWN_BUNDLED_LIBRARIES);
+  } catch (e) {
+    console.warn('Forge: detectSourceVault read failed', e);
+    return null;
+  }
+}
 
 // .forge/ is managed by Forge — safe to write cache, logs, future state files here.
 const SENTINEL_DIR = '.forge';
@@ -98,6 +122,14 @@ export async function runFirstRunCheck(app: App): Promise<void> {
       console.log('Forge: wrote sentinel');
     }
 
+    // v0.2.64 — detect source-vault BEFORE any auto-extract decision
+    // (per brief (e)). When the vault root's forge.toml declares
+    // `name = "forge-music"` or `name = "forge-moda"`, this IS the
+    // library's source repo; auto-extracting bundled content INTO
+    // the source tree just pollutes git status. The detection result
+    // gates the three extract call sites below.
+    const sourceVaultName = await detectSourceVault(adapter);
+
     // v0.2.56: extract bundled welcome.md + greet.md to vault root
     // when both are absent. Per the 2026-06-05-1145 prompt: the
     // user's first action after install becomes a Forge-click on
@@ -107,21 +139,31 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // (if user kept greet.md, we don't restore welcome).
     //
     // Order: welcome BEFORE moda — welcome is the lower floor.
-    try {
-      const result = await ensureWelcomeFiles(adapter, {
-        welcomeBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md',
-        greetBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md',
-      });
-      if (result.kind === 'extracted') {
-        console.log('Forge: extracted welcome.md + greet.md to vault root');
-      } else if (result.kind === 'skip-no-bundle') {
-        console.warn(`Forge: bundled welcome asset missing (${result.missing}); skipping welcome extraction`);
-      } else if (result.kind === 'error') {
-        console.warn(`Forge: ensureWelcomeFiles failed — ${result.message}`);
+    //
+    // v0.2.64 — skipped entirely when vault is a source repo for any
+    // bundled library (per brief (e)). Source repos are dev workflows,
+    // not first-Forge-click introductions.
+    if (sourceVaultName !== null) {
+      console.log(
+        `Forge: skipping welcome.md extraction — vault is the source repo for ${sourceVaultName}`,
+      );
+    } else {
+      try {
+        const result = await ensureWelcomeFiles(adapter, {
+          welcomeBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md',
+          greetBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md',
+        });
+        if (result.kind === 'extracted') {
+          console.log('Forge: extracted welcome.md + greet.md to vault root');
+        } else if (result.kind === 'skip-no-bundle') {
+          console.warn(`Forge: bundled welcome asset missing (${result.missing}); skipping welcome extraction`);
+        } else if (result.kind === 'error') {
+          console.warn(`Forge: ensureWelcomeFiles failed — ${result.message}`);
+        }
+        // 'skip-existing' is the steady-state expected path; silent.
+      } catch (e) {
+        console.warn('Forge: ensureWelcomeFiles threw unexpectedly', e);
       }
-      // 'skip-existing' is the steady-state expected path; silent.
-    } catch (e) {
-      console.warn('Forge: ensureWelcomeFiles threw unexpectedly', e);
     }
 
     // v0.2.13: extract bundled forge-moda content if the vault
@@ -129,7 +171,15 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // fresh vaults (sentinel absent) AND upgrade-without-content
     // vaults (sentinel present but vault has no forge-moda dir
     // yet, e.g. a vault initialized before forge-moda was bundled).
-    await ensureBundledForgeModa(app);
+    //
+    // v0.2.64 — skipped when vault IS forge-moda's source repo.
+    if (sourceVaultName === 'forge-moda') {
+      console.log(
+        'Forge: skipping forge-moda extraction — vault is the source repo',
+      );
+    } else {
+      await ensureBundledForgeModa(app);
+    }
 
     // v0.2.52: one-shot `_meta/_chips.md` v1→v2 upgrade. Cohort
     // vaults that installed v0.2.48-v0.2.51 had stuck v1 files
@@ -155,7 +205,16 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // (which is V1's default-on library) because music isn't on the
     // seminar curriculum — most students won't want forge-music/
     // appearing in their vault.
-    await ensureBundledForgeMusic(app);
+    //
+    // v0.2.64 — also skipped when vault IS forge-music's source repo
+    // (per brief (e)).
+    if (sourceVaultName === 'forge-music') {
+      console.log(
+        'Forge: skipping forge-music extraction — vault is the source repo',
+      );
+    } else {
+      await ensureBundledForgeMusic(app);
+    }
 
     // v0.2.52: same one-shot v1→v2 migration for forge-music. No-op
     // when forge-music isn't extracted (gated by domains) OR when
