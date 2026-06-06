@@ -47,6 +47,15 @@ import {
   type ChipsManifest,
   type SnippetMetaForChips,
 } from './chips-core';
+import { isSourceVault } from './source-vault-core';
+
+// v0.2.62 — names of bundled libraries the plugin knows how to extract
+// (matches welcome.ts's ensureBundledForgeModa + ensureBundledForgeMusic
+// surface). Used by isSourceVault detection: when the vault root's
+// forge.toml `name` equals one of these, the vault IS that library's
+// source repo (Path A workflow), and chip discovery walks vault-root
+// subdirs as the library's content.
+const KNOWN_BUNDLED_LIBRARIES = new Set(['forge-moda', 'forge-music']);
 
 // Re-export so existing import sites in the codebase keep working
 // without churn.
@@ -86,16 +95,111 @@ export async function loadChipsForActiveVault(
     collected.push(...libGroups);
   }
 
+  // v0.2.62 — Path A source-vault chip discovery (per brief (c)).
+  // When the user opens a bundled library's source repo directly as
+  // an Obsidian vault (forge-music's primary workflow), the vault
+  // root IS the library and its subdirs (percussion/, percussion_lab/,
+  // blues/) are the library's content. Standard library-subdir
+  // discovery skips them because `libraryDirNames` only enumerates
+  // top-level folders containing `forge.toml` — the vault root
+  // itself is never in the set. Detect via vault-root forge.toml's
+  // `name` field; walk vault-root subdirs as the library's content.
+  // Fires AFTER per-library discovery so chip ordering puts standard
+  // library content first, then source-vault content.
+  const sourceVaultName = await detectSourceVault(app);
+  if (sourceVaultName !== null) {
+    const sourceGroups = await loadSourceVaultChips(
+      app, sourceVaultName, new Set(manifest.libraryDirNames));
+    collected.push(...sourceGroups);
+  }
+
   // v0.2.54 — top-level (vault-root) snippet auto-discovery, grouped
   // under the synthetic "Personal" library name. Per the Mission's
   // low-floor framing: a beginner who authors at the vault root gets
   // immediate chip availability without first moving the file into a
   // library subdir. Pure auto-discovery; no curation file at root.
-  const personalGroups = await loadPersonalChips(
-    app, new Set(manifest.libraryDirNames));
-  collected.push(...personalGroups);
+  // In a source vault, "Personal" surfaces the same files as the
+  // source-vault walk above; we skip Personal to avoid double-counting.
+  if (sourceVaultName === null) {
+    const personalGroups = await loadPersonalChips(
+      app, new Set(manifest.libraryDirNames));
+    collected.push(...personalGroups);
+  }
 
   return collected;
+}
+
+/** Read the vault root's `forge.toml` (if any) and check whether the
+ *  vault IS the source repo for a known bundled library. Returns the
+ *  matched library name (e.g. `"forge-music"`) when Path A is
+ *  detected, otherwise null. Defensive: missing/unreadable
+ *  `forge.toml` → null. v0.2.62 — added (per prompt 2026-06-06-1000). */
+async function detectSourceVault(app: App): Promise<string | null> {
+  const adapter = app.vault.adapter;
+  try {
+    if (!(await adapter.exists('forge.toml'))) return null;
+    const body = await adapter.read('forge.toml');
+    return isSourceVault(body, KNOWN_BUNDLED_LIBRARIES);
+  } catch (e) {
+    console.warn('Forge chips: detectSourceVault read failed', e);
+    return null;
+  }
+}
+
+/** Walk the vault root and every subdir NOT inside an existing
+ *  library subdir (those are covered by `loadLibraryChips`) and emit
+ *  chip groups as if the vault root IS the library named
+ *  `libraryName`. Per brief (c) (v0.2.62). Skips dot-prefixed dirs
+ *  (`.obsidian/`, `.forge/`, `.trash/`). Skips known-bundled-library
+ *  nested extractions (forge-moda/forge-music nested inside a source
+ *  vault) — `excludeTopDirs` carries the set of top-level folders
+ *  already handled by `loadLibraryChips`. */
+async function loadSourceVaultChips(
+  app: App,
+  libraryName: string,
+  excludeTopDirs: Set<string>,
+): Promise<ChipPaletteGroup[]> {
+  const inventory: SnippetMetaForChips[] = [];
+  for (const file of app.vault.getMarkdownFiles()) {
+    const firstSlash = file.path.indexOf('/');
+    const topDir = firstSlash === -1 ? '' : file.path.slice(0, firstSlash);
+    // Exclude dot-prefixed top-level folders and any folder already
+    // discovered by `loadLibraryChips`.
+    if (topDir.startsWith('.')) continue;
+    if (topDir !== '' && excludeTopDirs.has(topDir)) continue;
+    const fm = await readSnippetFrontmatter(app, file);
+    if (!fm) continue;
+    const type = typeof fm.type === 'string' ? fm.type : undefined;
+    if (type !== 'action' && type !== 'data') continue;
+    // Bare id is the file's vault-relative path without `.md` —
+    // e.g. `percussion/murmuration` or `solitary` (vault-root file).
+    const noExt = file.path.replace(/\.md$/, '');
+    const basename = file.basename;
+    // parentDir for deriveChip's group:
+    //   - vault-root file → '' (deriveChip → "(library)")
+    //   - one-deep file (`percussion/foo.md`) → 'percussion'
+    //   - nested (`percussion/sub/foo.md`) → 'percussion/sub'
+    const lastSlash = noExt.lastIndexOf('/');
+    const parentDir = lastSlash === -1 ? '' : noExt.slice(0, lastSlash);
+    const inputs = Array.isArray(fm.inputs)
+      ? fm.inputs.filter((x: unknown): x is string => typeof x === 'string')
+      : undefined;
+    const chip = typeof fm.chip === 'boolean' ? fm.chip : undefined;
+    inventory.push({
+      id: noExt,
+      basename,
+      type,
+      inputs,
+      chip,
+      parentDir,
+    });
+  }
+  // Mark the source name on the result so the UI labels the section
+  // with the library identity (e.g. "forge-music") rather than the
+  // "(library)" default.
+  void libraryName;
+  const autoChips = autoDeriveChips(inventory);
+  return mergeChipsWithOverrides(autoChips, null);
 }
 
 /** Load the vault-root `_chips.md` (v1-shaped: bare `chips: [...]`).
