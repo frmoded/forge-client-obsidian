@@ -210,6 +210,94 @@ export async function generateSnippetAlpha(
   return { status: res.status, json: res.json };
 }
 
+/** v0.2.70 Phase 2 §1.3 — try to extract a SlotCacheMissError payload
+ *  from a Python-via-Pyodide exception message. The Python exception
+ *  encodes its missing list as JSON; if msg parses cleanly and
+ *  contains a `slot_cache_miss` key, returns the array. Otherwise
+ *  returns null (treat as a normal compute error). Tolerant of extra
+ *  prefix/suffix text Pyodide may prepend to the error.
+ *
+ *  Exported for testing (slot-cache-miss-extract.test.ts). */
+export function _maybeExtractSlotCacheMiss(msg: string): any[] | null {
+  // Pyodide's error message often looks like:
+  //   "SlotCacheMissError: {\"slot_cache_miss\": [...]}"
+  // OR raw "{...}" depending on the call path.
+  // Find the first `{` and try to parse from there to end.
+  const open = msg.indexOf('{');
+  if (open < 0) return null;
+  // Try parsing different suffixes (some Pyodide error strings have
+  // trailing context). Walk from the end backwards looking for a `}`.
+  for (let end = msg.length; end > open; end--) {
+    if (msg[end - 1] !== '}') continue;
+    const candidate = msg.slice(open, end);
+    try {
+      const obj = JSON.parse(candidate);
+      if (obj && Array.isArray(obj.slot_cache_miss)) {
+        return obj.slot_cache_miss;
+      }
+    } catch {
+      // try next suffix
+    }
+  }
+  return null;
+}
+
+// v0.2.70 Phase 2 §1.3 — slot resolution hosted endpoint caller.
+// Mirrors generateSnippetAlpha's bearer-token plumbing.
+
+export interface SlotRequestPayload {
+  slot_text: string;
+  snippet_id: string;
+  surrounding_context: string;
+  domain_hints: string[];
+}
+
+export interface SlotResponsePayload {
+  python_expr: string;
+  cache_key: string;
+}
+
+export interface BatchedSlotResponse {
+  status: number;
+  json: {
+    responses?: SlotResponsePayload[];
+    detail?: any;
+  };
+}
+
+/** POST a batch of slot requests to the hosted `/resolve-slot` endpoint.
+ *  Single round-trip for N slots — the server resolves each via Anthropic
+ *  haiku (model-pinned) and returns python_expr + cache_key for each in
+ *  request order.
+ *
+ *  Empty token short-circuits with detail mirroring generateSnippetAlpha's
+ *  shape — caller surfaces as a Notice without hitting the network. */
+export async function resolveSlotsAlpha(
+  serviceUrl: string,
+  token: string,
+  requests: SlotRequestPayload[],
+): Promise<BatchedSlotResponse> {
+  if (!token) {
+    return {
+      status: 0,
+      json: {
+        detail: 'Set your transpile token in Settings → Forge → Transpile token before resolving slots.',
+      },
+    };
+  }
+  const res = await requestUrl({
+    url: `${serviceUrl}/resolve-slot`,
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ requests }),
+    throw: false,
+  });
+  return { status: res.status, json: res.json };
+}
+
 export interface ComputeResponse {
   status: number;
   json: any;
@@ -254,10 +342,26 @@ export async function computeSnippet(
         },
       };
     } catch (e) {
+      // v0.2.70 Phase 2 §1.3 — detect SlotCacheMissError surfaced
+      // from the engine. The Python exception's str() is a JSON
+      // payload `{"slot_cache_miss": [...]}` (encoded in
+      // forge.core.slot_cache.SlotCacheMissError.__init__). Pyodide
+      // surfaces it as the JS Error's message. Parse it; if it
+      // matches the cache-miss shape, return a structured 409
+      // envelope main.ts can route to /resolve-slot.
+      const msg = e instanceof Error ? e.message : String(e);
+      const cacheMiss = _maybeExtractSlotCacheMiss(msg);
+      if (cacheMiss !== null) {
+        return {
+          status: 409,
+          json: {
+            slot_cache_miss: cacheMiss,
+          },
+        };
+      }
       // Surface the Pyodide failure with the same envelope the HTTP
       // path uses for non-2xx responses. main.ts inspects status and
       // json.detail; we shape ours to match.
-      const msg = e instanceof Error ? e.message : String(e);
       console.error('Forge Pyodide compute failed:', e);
       return {
         status: 500,

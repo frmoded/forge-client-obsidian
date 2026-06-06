@@ -24,8 +24,9 @@ import { invalidateLibraryVaultCache } from './edges';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
-import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost } from './server';
-import type { AlphaGenerateRequest } from './server';
+import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server';
+import type { AlphaGenerateRequest, SlotRequestPayload } from './server';
+import { mergeSlotCacheUpdates } from './slot-cache-writer-core';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
@@ -1981,6 +1982,42 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
+    // v0.2.70 Phase 2 §1.3 — slot cache miss path. Engine surfaces
+    // SlotCacheMissError when a canonical snippet's { { } } slot is
+    // not in the # Slots heading. Plugin batches the missing slots
+    // into one /resolve-slot call, writes the resolved entries back
+    // to the snippet's # Slots heading, and re-fires compute (which
+    // should now hit a populated cache).
+    if (res.status === 409 && Array.isArray(res.json?.slot_cache_miss)) {
+      const handled = await this.handleSlotCacheMiss(
+        snippetId, res.json.slot_cache_miss as SlotRequestPayload[],
+        errorPrefix);
+      if (handled) {
+        // Retry compute. Second pass should be a clean cache hit; if
+        // it surfaces ANOTHER cache miss, abort (defensive — bounds
+        // the loop).
+        try {
+          res = await computeSnippet(this.settings.serverUrl, vaultPath, snippetId, args, inputs);
+        } catch (e) {
+          console.error('Forge Compute (retry after slot resolution) Error:', e);
+          const detail = e instanceof Error ? e.message : String(e);
+          new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: Compute failed — check console.');
+          return;
+        }
+        if (res.status === 409) {
+          console.error('Forge: slot resolution retry STILL surfaces cache miss; aborting');
+          new Notice(errorPrefix
+            ? `${errorPrefix}: slot resolution did not populate the cache; check console`
+            : 'Forge: slot resolution failed; check console.');
+          return;
+        }
+      } else {
+        // handleSlotCacheMiss already surfaced a Notice on failure;
+        // just abort.
+        return;
+      }
+    }
+
     const outputView = await this.getOutputView();
 
     if (res.status >= 400) {
@@ -2021,5 +2058,112 @@ export default class ForgePlugin extends Plugin {
         console.warn('Forge: post-install refresh failed', e);
       }
     }
+  }
+
+  /** v0.2.70 Phase 2 §1.3 — handle a slot-cache miss surfaced from
+   *  compute. Batches the missing slots into one `/resolve-slot`
+   *  call, writes the resolved entries back to the snippet's
+   *  `# Slots` heading via vault.process, and returns true on
+   *  success so the caller retries compute. On any failure,
+   *  surfaces a Notice and returns false. */
+  private async handleSlotCacheMiss(
+    snippetId: string,
+    missing: SlotRequestPayload[],
+    errorPrefix?: string,
+  ): Promise<boolean> {
+    console.log('Forge: slot cache miss', { snippetId, missingCount: missing.length });
+
+    // Locate the snippet's file in the vault. Snippet IDs may include
+    // a vault prefix (e.g. "forge-moda/slot_demo") — try the literal
+    // path with .md suffix; the resolver already canonicalized it.
+    const snippetPath = `${snippetId}.md`;
+    let file = this.app.vault.getAbstractFileByPath(snippetPath);
+    if (!(file instanceof TFile)) {
+      // Try without a vault prefix (bare-name snippet).
+      const bare = snippetId.split('/').pop() ?? snippetId;
+      file = this.app.vault.getAbstractFileByPath(`${bare}.md`);
+    }
+    if (!(file instanceof TFile)) {
+      const msg = `slot cache write failed — could not locate ${snippetId}.md in vault`;
+      console.error('Forge:', msg);
+      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      return false;
+    }
+
+    // Build the batched request for /resolve-slot. Per Phase 2 design
+    // §A, the surrounding_context field flows in for disambiguation
+    // but does not contribute to the cache key. Per delta #1, we send
+    // an empty string for now; future work may extract the actual
+    // surrounding English line from the snippet body.
+    const requests: SlotRequestPayload[] = missing.map((m) => ({
+      slot_text: m.slot_text,
+      snippet_id: m.snippet_id ?? snippetId,
+      surrounding_context: m.surrounding_context ?? '',
+      domain_hints: [],
+    }));
+
+    let resolved;
+    try {
+      resolved = await resolveSlotsAlpha(
+        this.settings.transpileServiceUrl,
+        this.settings.transpileServiceToken,
+        requests,
+      );
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error('Forge slot resolution call failed:', e);
+      new Notice(errorPrefix
+        ? `${errorPrefix}: slot resolution failed — ${detail}`
+        : `Forge: slot resolution failed — ${detail}`);
+      return false;
+    }
+
+    if (resolved.status === 0) {
+      // No token configured — short-circuit message already in detail.
+      const msg = resolved.json?.detail ?? 'Slot resolution requires a transpile token.';
+      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      return false;
+    }
+    if (resolved.status >= 400) {
+      const detail = resolved.json?.detail;
+      const errorMsg = (detail && typeof detail === 'object' && detail.error)
+        ? detail.error
+        : (typeof detail === 'string' ? detail : `HTTP ${resolved.status}`);
+      console.error('Forge slot resolution non-2xx:', resolved.status, detail);
+      new Notice(errorPrefix
+        ? `${errorPrefix}: slot resolution failed — ${errorMsg}`
+        : `Forge: slot resolution failed — ${errorMsg}`);
+      return false;
+    }
+
+    const responses = resolved.json?.responses ?? [];
+    if (!Array.isArray(responses) || responses.length !== requests.length) {
+      const msg = `slot resolution returned ${responses?.length ?? 0} responses for ${requests.length} requests; bailing`;
+      console.error('Forge:', msg);
+      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      return false;
+    }
+
+    // Build the updates dict: cache_key → python_expr.
+    const updates: Record<string, string> = {};
+    for (const r of responses) {
+      updates[r.cache_key] = r.python_expr;
+    }
+
+    // Write back to the snippet file via vault.process for atomicity.
+    try {
+      await this.app.vault.process(file, (content) =>
+        mergeSlotCacheUpdates(content, updates));
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error('Forge slot cache write failed:', e);
+      new Notice(errorPrefix
+        ? `${errorPrefix}: slot cache write failed — ${detail}`
+        : `Forge: slot cache write failed — ${detail}`);
+      return false;
+    }
+
+    console.log('Forge: slot cache write succeeded', { snippetId, count: responses.length });
+    return true;
   }
 }
