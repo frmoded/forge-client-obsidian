@@ -6,6 +6,7 @@ import { compareBundledVaultVersion } from './bundled-vault-version-core';
 import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core';
 import { ensureWelcomeFiles } from './welcome-files-core';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core';
+import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core';
 export { copyDirRecursive };
 
 // v0.2.64 — names of bundled libraries the auto-extract path may
@@ -102,17 +103,38 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     const hasSentinel = await adapter.exists(SENTINEL_PATH);
     console.log('Forge: sentinel exists?', hasSentinel);
 
-    // Welcome-note + sentinel: gated by the existing sentinel check.
-    // Pre-V1 vaults with sentinel-true won't get the new welcome text
-    // (they had a pre-V1 version and have already moved past it).
-    // That's intentional — the new note is for fresh vaults; existing
-    // users can delete and recreate manually if they want it.
+    // v0.2.64 — detect source-vault BEFORE any auto-extract decision
+    // (per brief (e)). When the vault root's forge.toml declares
+    // `name = "forge-music"` or `name = "forge-moda"`, this IS the
+    // library's source repo; auto-extracting bundled content INTO
+    // the source tree just pollutes git status. The detection result
+    // gates the three extract call sites below.
+    //
+    // v0.2.69 — moved BEFORE the sentinel block so the legacy
+    // capital-W Welcome.md create path (below) can ALSO consult the
+    // gate. Pre-v0.2.69 the lowercase ensureWelcomeFiles path was
+    // gated but the older capital-W path was not, so source vaults
+    // got a phantom Welcome.md each first run. Bug 1 fix.
+    const sourceVaultName = await detectSourceVault(adapter);
+
+    // Welcome-note + sentinel: gated by the existing sentinel check
+    // AND, v0.2.69, the source-vault gate so opening forge-music's
+    // source repo as a vault doesn't drop a phantom Welcome.md at the
+    // repo root. Sentinel write still fires even for source vaults —
+    // idempotency preserved (no re-check on subsequent reloads).
     if (!hasSentinel) {
-      const hasWelcome = await adapter.exists(WELCOME_PATH);
-      console.log('Forge: Welcome.md exists?', hasWelcome);
-      if (!hasWelcome) {
-        await app.vault.create(WELCOME_PATH, WELCOME_NOTE);
-        console.log('Forge: created Welcome.md');
+      if (shouldCreateLegacyWelcomeMd(hasSentinel, sourceVaultName)) {
+        const hasWelcome = await adapter.exists(WELCOME_PATH);
+        console.log('Forge: Welcome.md exists?', hasWelcome);
+        if (!hasWelcome) {
+          await app.vault.create(WELCOME_PATH, WELCOME_NOTE);
+          console.log('Forge: created Welcome.md');
+        }
+      } else {
+        console.log(
+          `Forge: skipping legacy Welcome.md create — vault root ` +
+          `declares itself as source repo for ${sourceVaultName}`,
+        );
       }
 
       if (!(await adapter.exists(SENTINEL_DIR))) {
@@ -121,14 +143,6 @@ export async function runFirstRunCheck(app: App): Promise<void> {
       await adapter.write(SENTINEL_PATH, '1');
       console.log('Forge: wrote sentinel');
     }
-
-    // v0.2.64 — detect source-vault BEFORE any auto-extract decision
-    // (per brief (e)). When the vault root's forge.toml declares
-    // `name = "forge-music"` or `name = "forge-moda"`, this IS the
-    // library's source repo; auto-extracting bundled content INTO
-    // the source tree just pollutes git status. The detection result
-    // gates the three extract call sites below.
-    const sourceVaultName = await detectSourceVault(adapter);
 
     // v0.2.56: extract bundled welcome.md + greet.md to vault root
     // when both are absent. Per the 2026-06-05-1145 prompt: the
