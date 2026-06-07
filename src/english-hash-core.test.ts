@@ -85,3 +85,73 @@ test('computeEnglishHash: idempotent', async () => {
     assert.strictEqual(await computeEnglishHash(text), base);
   }
 });
+
+
+// --- v0.2.74 property tests for cross-language parity ----------------
+// Each pinned hex MUST equal the Python compute_english_hash output
+// for the same input (locked via the parallel test in
+// forge/tests/core/test_english_hash.py). Any future normalization
+// change that breaks one side without the other will trip these
+// assertions.
+
+test('parity pin: slot_demo storybook English (real bundled fixture)', async () => {
+  const english = (
+    "Set greeting to {{a friendly hello message in the style of a "
+    + "children's storybook}}.\n"
+    + "Do [[print]](greeting).");
+  assert.strictEqual(
+    await computeEnglishHash(english),
+    'f44f75cfaa0c23cd390f587cddd56718f6639de5be62e918ccdafe0cc4b635db');
+});
+
+test('parity pin: Victorian slot text', async () => {
+  const english = (
+    "Set greeting to {{a formal hello message in the style of a "
+    + "Victorian letter}}.\n"
+    + "Do [[print]](greeting).");
+  assert.strictEqual(
+    await computeEnglishHash(english),
+    '5fe21a3d85ff8df536854a08a8c22556b249a236858f2d7d5737b98b4b6ccada');
+});
+
+test('parity pin: trailing newline normalized', async () => {
+  const english =
+    'Set greeting to {{a friendly hello}}.\nDo [[print]](greeting).\n';
+  assert.strictEqual(
+    await computeEnglishHash(english),
+    '43415de15a03032addd6f759f30d51718c451c52f3d31e56e00a1526cbc33a54');
+});
+
+test('parity pin: leading blank lines stripped', async () => {
+  const english =
+    '\n\n\nSet greeting to {{a friendly hello}}.\nDo [[print]](greeting).';
+  assert.strictEqual(
+    await computeEnglishHash(english),
+    '43415de15a03032addd6f759f30d51718c451c52f3d31e56e00a1526cbc33a54');
+});
+
+test('parity pin: trailing per-line whitespace normalized', async () => {
+  const english =
+    'Set greeting to {{a friendly hello}}.   \n'
+    + 'Do [[print]](greeting).   ';
+  assert.strictEqual(
+    await computeEnglishHash(english),
+    '43415de15a03032addd6f759f30d51718c451c52f3d31e56e00a1526cbc33a54');
+});
+
+test('parity pin: paragraph break distinguishes from no-break baseline', async () => {
+  const broken =
+    'Set greeting to {{a friendly hello}}.\n\nDo [[print]](greeting).';
+  const baseline = await computeEnglishHash(
+    'Set greeting to {{a friendly hello}}.\nDo [[print]](greeting).');
+  const withBreak = await computeEnglishHash(broken);
+  assert.notStrictEqual(withBreak, baseline);
+});
+
+test('parity pin: unicode em-dash in slot text', async () => {
+  const english =
+    'Set greeting to {{a calm blue — pale}}.\nDo [[print]](greeting).';
+  assert.strictEqual(
+    await computeEnglishHash(english),
+    '60db14eaad97f67da98197da61bb32db2ffd3a19921e135760f76792f0639bd3');
+});
