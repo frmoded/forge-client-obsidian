@@ -27,6 +27,7 @@ import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModa
 import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server';
 import type { AlphaGenerateRequest, SlotRequestPayload } from './server';
 import { mergeSlotCacheUpdates } from './slot-cache-writer-core';
+import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
 import { parseZapLine } from './zap';
@@ -2161,6 +2162,40 @@ export default class ForgePlugin extends Plugin {
         ? `${errorPrefix}: slot cache write failed — ${detail}`
         : `Forge: slot cache write failed — ${detail}`);
       return false;
+    }
+
+    // v0.2.71 hotfix: explicit MEMFS sync after vault.process write.
+    // Mirrors v0.2.19's preflight pattern at main.ts:~1510 — closes
+    // the vault.on('modify') race so the immediate retry sees the
+    // updated body. Without this, retry reads stale MEMFS and
+    // surfaces the same SlotCacheMissError, hitting the defensive
+    // abort at the call site in computeSnippetWithArgs.
+    //
+    // Defensive try/catch: if the Pyodide host isn't ready (init
+    // race during plugin startup) or the sync throws, log + continue.
+    // The retry's defensive abort still catches the failure mode if
+    // MEMFS truly didn't catch up via the async vault.on('modify').
+    try {
+      const pyodideHost = getPyodideHost();
+      if (pyodideHost) {
+        const host = await pyodideHost.getInstance();
+        await syncFileToMemfsAfterWrite(
+          file.path,
+          { readPath: (path) => {
+            const f = this.app.vault.getAbstractFileByPath(path);
+            if (!(f instanceof TFile)) {
+              return Promise.reject(new Error(`not a TFile: ${path}`));
+            }
+            return this.app.vault.read(f);
+          } },
+          { syncFileToMemfs: (relPath, content) =>
+            host.syncUserVaultFile(relPath, content) },
+        );
+      }
+    } catch (e) {
+      console.warn('Forge: post-write MEMFS sync failed before retry', e);
+      // Don't fail the writeback — the retry surfaces the staleness
+      // explicitly via the defensive abort if MEMFS doesn't catch up.
     }
 
     console.log('Forge: slot cache write succeeded', { snippetId, count: responses.length });
