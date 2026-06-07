@@ -308,7 +308,8 @@ export async function computeSnippet(
   vaultPath: string,
   snippetId: string,
   args: unknown[] = [],
-  inputs: Record<string, unknown> = {}
+  inputs: Record<string, unknown> = {},
+  slotResolutions?: Record<string, string>,
 ): Promise<ComputeResponse> {
   // V1: every compute routes through Pyodide. The mounted user-vault
   // contains the user's authoring snippets + bundled libraries as
@@ -318,19 +319,12 @@ export async function computeSnippet(
   if (_pyodideHost) {
     try {
       const host = await _pyodideHost.getInstance();
-      // vault_name is vestigial under the single-user-vault model
-      // but kept on the API surface for the iframe's engine-request
-      // dispatch shape. Any value works; the Python side ignores it.
-      // v0.2.9: vault_name third arg dropped — single-user-vault model
-      // makes it vestigial. Python side still accepts vault_name=None;
-      // the JS↔Python boundary call inside computeViaEngine feeds it
-      // an empty-string sentinel.
-      // v0.2.22: pass modal-supplied kwargs through to Python. The
-      // pre-v0.2.22 call dropped them silently — JS-side signature
-      // didn't accept inputs. Forge-click on a snippet whose Python
-      // signature has params crashed with TypeError missing required
-      // positional. Latent since v0.2.6.
-      const out = await host.computeViaEngine(snippetId, args, inputs);
+      // v0.2.72 — slotResolutions: second-pass argument supplied by
+      // the plugin's handleSlotCacheMiss after /resolve-slot returns.
+      // Engine uses the dict to satisfy every slot lookup; misses
+      // still raise SlotCacheMissError per B7.3.
+      const out = await host.computeViaEngine(
+        snippetId, args, inputs, slotResolutions);
       // Shape the response to match the existing /compute return
       // contract (status + json envelope, json carries result + stdout).
       return {

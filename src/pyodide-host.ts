@@ -692,16 +692,15 @@ def _forge_get_resolver(vault_name=None):
     _ = vault_name
     return _forge_registry, _forge_resolver
 
-def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None):
+def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None, slot_resolutions=None):
     """Run a snippet and return (stdout, result). Action and data
     snippets dispatch via the same path the engine's /compute endpoint
     uses internally.
 
-    v0.2.23: 'inputs' parameter added. Pre-v0.2.23 hardcoded '{}'
-    into exec_python, silently dropping any kwargs threaded from the
-    JS-side modal. The 'inputs=None' default keeps the moda-fast-path
-    and iframe-protocol callers (which pass only positional args)
-    compatible — they still get the empty-kwargs behavior."""
+    v0.2.23: 'inputs' parameter added.
+    v0.2.72: 'slot_resolutions' parameter added — passed through to
+    resolve_action_code so the engine can satisfy {{ }} slot lookups
+    on the plugin's second pass after /resolve-slot."""
     if inputs is None:
         inputs = {}
     reg, resolver = _forge_get_resolver(vault_name)
@@ -710,10 +709,9 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None):
     if snippet_type == "action":
         # v0.2.55: resolve_action_code returns either the cached
         # Python facet OR transpiles via E-- for facet_form: canonical
-        # snippets. Free-English snippets continue to require a
-        # pre-generated Python facet (populated by the plugin's
-        # /generate call before this runs).
-        code = resolve_action_code(snip)
+        # snippets. v0.2.72: also accepts slot_resolutions for the
+        # second-pass cache populate.
+        code = resolve_action_code(snip, slot_resolutions=slot_resolutions)
         # v0.2.16: diagnostic. The greet-snippet investigation in
         # prompt 2026-05-31-2345 couldn't reproduce the user's empty-
         # stdout bug at suite-time (the engine extracts + executes the
@@ -734,32 +732,53 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None):
             vault_path=_forge_user_vault,
             registry=reg, snippet_id=snip["snippet_id"],
         )
+        # v0.2.72 — return the transpiled Python alongside result so
+        # the plugin can write the Python heading + english_hash back
+        # to disk. For legacy free-English snippets that just used
+        # the cached Python heading, code is the same value the
+        # engine returned; the plugin writes it back idempotently.
+        return stdout, result, code
     elif snippet_type in ("data", "snapshot"):
         from forge.core.executor import read_data_snippet
         result = read_data_snippet(snip)
         stdout = ""
+        return stdout, result, None
     else:
         raise ValueError(f"unknown snippet type '{snippet_type}' for {snippet_id!r}")
-    return stdout, result
 
-def _forge_compute(snippet_id: str, args, inputs, vault_name: str):
-    """Phase 1 entry point — kept for backward compat. inputs is the
-    third positional; v0.2.23 threads it through to _forge_run_snippet
-    (pre-v0.2.23 silently discarded via '_ = inputs', which was the
-    root cause of the Greet TypeError that v0.2.17-v0.2.22 chased).
+def _forge_compute(snippet_id: str, args, inputs, vault_name: str, slot_resolutions=None):
+    """v0.2.72 — Phase 1 entry point. inputs threads modal kwargs.
+    slot_resolutions threads the v0.2.72 cache-miss second-pass
+    resolutions back into resolve_action_code.
 
-    Mirrors the HTTP /compute endpoint's serialize_result step:
-    raw Python return values (ParticleState dataclasses, music21
-    Streams, etc.) become wire-shape dicts like
-    {type: "moda_sim_state", content: {tick, particles: [...]}}.
-    Without this, raw dataclasses leak through Pyodide's toJs as
-    non-cloneable PyProxies, breaking the iframe's postMessage
-    relay AND the structured rendering in Forge Output."""
+    Returns (result, stdout). The transpiled Python is captured
+    transparently inside _forge_run_snippet's return tuple but is
+    not surfaced through the JS boundary on this code path —
+    the plugin reads it via a separate helper after a cache-miss
+    round-trip (see _forge_compute_with_python below)."""
     reg, resolver = _forge_get_resolver(vault_name)
     snip = resolver.resolve(snippet_id)
-    stdout, raw_result = _forge_run_snippet(snippet_id, args, inputs, vault_name)
+    stdout, raw_result, _code = _forge_run_snippet(
+        snippet_id, args, inputs, vault_name,
+        slot_resolutions=slot_resolutions,
+    )
     result = serialize_result(raw_result, snip)
     return result, stdout
+
+def _forge_compute_with_python(snippet_id: str, args, inputs, vault_name: str, slot_resolutions=None):
+    """v0.2.72 — variant of _forge_compute used by the plugin's
+    handleSlotCacheMiss after /resolve-slot returns. Identical to
+    _forge_compute except the transpiled Python source is returned
+    as a third tuple element so the plugin can write it to the
+    Python heading on disk."""
+    reg, resolver = _forge_get_resolver(vault_name)
+    snip = resolver.resolve(snippet_id)
+    stdout, raw_result, code = _forge_run_snippet(
+        snippet_id, args, inputs, vault_name,
+        slot_resolutions=slot_resolutions,
+    )
+    result = serialize_result(raw_result, snip)
+    return result, stdout, code
 
 # ---- Moda live-loop helpers (Phase 2) ---------------------------
 # State lives in Python globals between engine-request calls. The
@@ -899,7 +918,21 @@ export interface PyodideHostInstance {
   // the JS↔Python boundary. Pre-v0.2.22 dropped them silently — the
   // latent Greet TypeError. Existing callers that don't pass kwargs
   // (the moda fast-path, iframe protocol) still work via the default.
-  computeViaEngine(snippet_id: string, args: unknown[], inputs?: Record<string, unknown>): Promise<ComputeResult>;
+  computeViaEngine(
+    snippet_id: string,
+    args: unknown[],
+    inputs?: Record<string, unknown>,
+    slotResolutions?: Record<string, string>,
+  ): Promise<ComputeResult>;
+  /** v0.2.72 — variant that also returns the transpiled Python
+   *  source so the plugin can write `# Python` back to disk after
+   *  a /resolve-slot round-trip. */
+  computeViaEngineWithPython(
+    snippet_id: string,
+    args: unknown[],
+    inputs?: Record<string, unknown>,
+    slotResolutions?: Record<string, string>,
+  ): Promise<ComputeResult & { python?: string }>;
   modaInit(): Promise<ModaInitResult>;
   modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
   modaClick(x: number, y: number): Promise<ModaClickResult>;
@@ -970,29 +1003,29 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
     snippet_id: string,
     args: unknown[],
     inputs: Record<string, unknown> = {},
+    slotResolutions?: Record<string, string>,
   ): Promise<ComputeResult> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set("_forge_args_in", args as any);
     this.pyodide.globals.set("_forge_snippet_id", snippet_id);
-    // v0.2.22: thread modal-supplied kwargs to the Python side. The
-    // .to_py() cast is canonical Pyodide for JS object → Python dict;
-    // a bare `dict(_forge_inputs_in)` fails because JsProxy isn't
-    // dict-iterable. The latent bug fixed here goes back to v0.2.6
-    // — the JS-side signature never accepted `inputs`, so modal
-    // kwargs were silently dropped at this boundary.
+    // v0.2.22: thread modal-supplied kwargs to the Python side.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set("_forge_inputs_in", inputs as any);
-    // v0.2.9: vault_name dropped from the JS surface. Python's
-    // _forge_compute still has the parameter (engine-side cleanup is
-    // a separate prompt); feed it the empty-string sentinel the
-    // single-user-vault model already ignored.
     this.pyodide.globals.set("_forge_vault_name", "");
+    // v0.2.72 — slotResolutions: dict of cache_key → python_expr
+    // supplied by the plugin on second pass after /resolve-slot
+    // round-trip. None on first pass.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.pyodide.globals.set(
+      "_forge_slot_resolutions",
+      (slotResolutions ?? null) as any);
     const tuple = this.pyodide.runPython(`
 _forge_compute(
     _forge_snippet_id,
     list(_forge_args_in or []),
     _forge_inputs_in.to_py() if _forge_inputs_in else {},
     _forge_vault_name,
+    (_forge_slot_resolutions.to_py() if _forge_slot_resolutions else None),
 )
 `);
     const result = tuple.get(0);
@@ -1001,6 +1034,46 @@ _forge_compute(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tuple.destroy?.();
     return { result: resultJs, stdout: String(stdout ?? "") };
+  }
+
+  /** v0.2.72 — variant that runs _forge_compute_with_python and
+   *  surfaces the transpiled Python source as part of the result. */
+  async computeViaEngineWithPython(
+    snippet_id: string,
+    args: unknown[],
+    inputs: Record<string, unknown> = {},
+    slotResolutions?: Record<string, string>,
+  ): Promise<ComputeResult & { python?: string }> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.pyodide.globals.set("_forge_args_in", args as any);
+    this.pyodide.globals.set("_forge_snippet_id", snippet_id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.pyodide.globals.set("_forge_inputs_in", inputs as any);
+    this.pyodide.globals.set("_forge_vault_name", "");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.pyodide.globals.set(
+      "_forge_slot_resolutions",
+      (slotResolutions ?? null) as any);
+    const tuple = this.pyodide.runPython(`
+_forge_compute_with_python(
+    _forge_snippet_id,
+    list(_forge_args_in or []),
+    _forge_inputs_in.to_py() if _forge_inputs_in else {},
+    _forge_vault_name,
+    (_forge_slot_resolutions.to_py() if _forge_slot_resolutions else None),
+)
+`);
+    const result = tuple.get(0);
+    const stdout = tuple.get(1);
+    const python = tuple.get(2);
+    const resultJs = this._unwrap(result);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tuple.destroy?.();
+    return {
+      result: resultJs,
+      stdout: String(stdout ?? ""),
+      python: python === null || python === undefined ? undefined : String(python),
+    };
   }
 
   /** Moda fast-path: setup → ParticleState stored in Python globals;

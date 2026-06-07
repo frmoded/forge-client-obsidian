@@ -26,7 +26,8 @@ import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
 import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server';
 import type { AlphaGenerateRequest, SlotRequestPayload } from './server';
-import { mergeSlotCacheUpdates } from './slot-cache-writer-core';
+import { writePythonAndEnglishHash } from './python-cache-writer-core';
+import { computeEnglishHash } from './english-hash-core';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
@@ -1983,40 +1984,25 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
-    // v0.2.70 Phase 2 §1.3 — slot cache miss path. Engine surfaces
-    // SlotCacheMissError when a canonical snippet's { { } } slot is
-    // not in the # Slots heading. Plugin batches the missing slots
-    // into one /resolve-slot call, writes the resolved entries back
-    // to the snippet's # Slots heading, and re-fires compute (which
-    // should now hit a populated cache).
+    // v0.2.72 — B7.3 unified cache. Engine surfaces SlotCacheMissError
+    // when a canonical snippet's {{ }} slot can't be resolved. Plugin
+    // batches missing slots into one /resolve-slot call, makes a
+    // SECOND computeSnippet call with the resolutions inline (engine
+    // splices them into the transpile output), writes the resulting
+    // `# Python` + `english_hash` to disk, and returns the compute
+    // result directly to the caller — no retry needed.
     if (res.status === 409 && Array.isArray(res.json?.slot_cache_miss)) {
-      const handled = await this.handleSlotCacheMiss(
+      const result = await this.handleSlotCacheMiss(
         snippetId, res.json.slot_cache_miss as SlotRequestPayload[],
-        errorPrefix);
-      if (handled) {
-        // Retry compute. Second pass should be a clean cache hit; if
-        // it surfaces ANOTHER cache miss, abort (defensive — bounds
-        // the loop).
-        try {
-          res = await computeSnippet(this.settings.serverUrl, vaultPath, snippetId, args, inputs);
-        } catch (e) {
-          console.error('Forge Compute (retry after slot resolution) Error:', e);
-          const detail = e instanceof Error ? e.message : String(e);
-          new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: Compute failed — check console.');
-          return;
-        }
-        if (res.status === 409) {
-          console.error('Forge: slot resolution retry STILL surfaces cache miss; aborting');
-          new Notice(errorPrefix
-            ? `${errorPrefix}: slot resolution did not populate the cache; check console`
-            : 'Forge: slot resolution failed; check console.');
-          return;
-        }
-      } else {
-        // handleSlotCacheMiss already surfaced a Notice on failure;
-        // just abort.
+        vaultPath, args, inputs, errorPrefix);
+      if (result === null) {
+        // handleSlotCacheMiss surfaced a Notice on failure; abort.
         return;
       }
+      // Repackage result to match the standard res envelope shape so
+      // downstream code (Output panel rendering, install metadata
+      // refresh) consumes it uniformly.
+      res = { status: 200, json: result };
     }
 
     const outputView = await this.getOutputView();
@@ -2061,48 +2047,54 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
-  /** v0.2.70 Phase 2 §1.3 — handle a slot-cache miss surfaced from
-   *  compute. Batches the missing slots into one `/resolve-slot`
-   *  call, writes the resolved entries back to the snippet's
-   *  `# Slots` heading via vault.process, and returns true on
-   *  success so the caller retries compute. On any failure,
-   *  surfaces a Notice and returns false. */
+  /** v0.2.72 — handle a slot-cache miss via the B7.3 unified-cache
+   *  contract:
+   *
+   *  1. Batch missing slots into one `/resolve-slot` call.
+   *  2. Make a SECOND `computeViaEngineWithPython` call with the
+   *     resolutions inline. Engine returns transpiled Python + the
+   *     compute result.
+   *  3. Write the Python to the snippet's `# Python` heading and
+   *     `english_hash` to frontmatter via vault.process (strips any
+   *     stale `# Slots` heading from v0.2.70/v0.2.71 in the same
+   *     write).
+   *  4. Sync the new file content into Pyodide MEMFS so future
+   *     compute calls see the populated cache.
+   *  5. Return the compute result to the caller.
+   *
+   *  Returns the compute result envelope on success; null on
+   *  failure (after surfacing a Notice).
+   */
   private async handleSlotCacheMiss(
     snippetId: string,
     missing: SlotRequestPayload[],
+    _vaultPath: string,
+    args: unknown[],
+    inputs: Record<string, unknown>,
     errorPrefix?: string,
-  ): Promise<boolean> {
+  ): Promise<any | null> {
     console.log('Forge: slot cache miss', { snippetId, missingCount: missing.length });
 
-    // Locate the snippet's file in the vault. Snippet IDs may include
-    // a vault prefix (e.g. "forge-moda/slot_demo") — try the literal
-    // path with .md suffix; the resolver already canonicalized it.
     const snippetPath = `${snippetId}.md`;
     let file = this.app.vault.getAbstractFileByPath(snippetPath);
     if (!(file instanceof TFile)) {
-      // Try without a vault prefix (bare-name snippet).
       const bare = snippetId.split('/').pop() ?? snippetId;
       file = this.app.vault.getAbstractFileByPath(`${bare}.md`);
     }
     if (!(file instanceof TFile)) {
-      const msg = `slot cache write failed — could not locate ${snippetId}.md in vault`;
+      const msg = `slot cache write skipped — could not locate ${snippetId}.md in vault`;
       console.error('Forge:', msg);
       new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
-      return false;
+      return null;
     }
 
-    // Build the batched request for /resolve-slot. Per Phase 2 design
-    // §A, the surrounding_context field flows in for disambiguation
-    // but does not contribute to the cache key. Per delta #1, we send
-    // an empty string for now; future work may extract the actual
-    // surrounding English line from the snippet body.
+    // 1. Batch /resolve-slot.
     const requests: SlotRequestPayload[] = missing.map((m) => ({
       slot_text: m.slot_text,
       snippet_id: m.snippet_id ?? snippetId,
       surrounding_context: m.surrounding_context ?? '',
       domain_hints: [],
     }));
-
     let resolved;
     try {
       resolved = await resolveSlotsAlpha(
@@ -2116,14 +2108,13 @@ export default class ForgePlugin extends Plugin {
       new Notice(errorPrefix
         ? `${errorPrefix}: slot resolution failed — ${detail}`
         : `Forge: slot resolution failed — ${detail}`);
-      return false;
+      return null;
     }
 
     if (resolved.status === 0) {
-      // No token configured — short-circuit message already in detail.
       const msg = resolved.json?.detail ?? 'Slot resolution requires a transpile token.';
       new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
-      return false;
+      return null;
     }
     if (resolved.status >= 400) {
       const detail = resolved.json?.detail;
@@ -2134,7 +2125,7 @@ export default class ForgePlugin extends Plugin {
       new Notice(errorPrefix
         ? `${errorPrefix}: slot resolution failed — ${errorMsg}`
         : `Forge: slot resolution failed — ${errorMsg}`);
-      return false;
+      return null;
     }
 
     const responses = resolved.json?.responses ?? [];
@@ -2142,63 +2133,128 @@ export default class ForgePlugin extends Plugin {
       const msg = `slot resolution returned ${responses?.length ?? 0} responses for ${requests.length} requests; bailing`;
       console.error('Forge:', msg);
       new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
-      return false;
+      return null;
     }
 
-    // Build the updates dict: cache_key → python_expr.
-    const updates: Record<string, string> = {};
+    // Build slot_resolutions dict for the second compute call.
+    const slotResolutions: Record<string, string> = {};
     for (const r of responses) {
-      updates[r.cache_key] = r.python_expr;
+      slotResolutions[r.cache_key] = r.python_expr;
     }
 
-    // Write back to the snippet file via vault.process for atomicity.
+    // 2. Second compute call with slot_resolutions inline. Returns
+    //    the transpiled Python + result + stdout.
+    const pyodideHost = getPyodideHost();
+    if (!pyodideHost) {
+      const msg = 'Pyodide host not ready for slot-resolution second pass';
+      console.error('Forge:', msg);
+      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      return null;
+    }
+    let host;
+    let computeOut;
     try {
-      await this.app.vault.process(file, (content) =>
-        mergeSlotCacheUpdates(content, updates));
+      host = await pyodideHost.getInstance();
+      computeOut = await host.computeViaEngineWithPython(
+        snippetId, args, inputs, slotResolutions);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      console.error('Forge slot cache write failed:', e);
+      console.error('Forge: second-pass compute failed', e);
       new Notice(errorPrefix
-        ? `${errorPrefix}: slot cache write failed — ${detail}`
-        : `Forge: slot cache write failed — ${detail}`);
-      return false;
+        ? `${errorPrefix}: slot resolution second pass failed — ${detail}`
+        : `Forge: slot resolution second pass failed — ${detail}`);
+      return null;
     }
 
-    // v0.2.71 hotfix: explicit MEMFS sync after vault.process write.
-    // Mirrors v0.2.19's preflight pattern at main.ts:~1510 — closes
-    // the vault.on('modify') race so the immediate retry sees the
-    // updated body. Without this, retry reads stale MEMFS and
-    // surfaces the same SlotCacheMissError, hitting the defensive
-    // abort at the call site in computeSnippetWithArgs.
-    //
-    // Defensive try/catch: if the Pyodide host isn't ready (init
-    // race during plugin startup) or the sync throws, log + continue.
-    // The retry's defensive abort still catches the failure mode if
-    // MEMFS truly didn't catch up via the async vault.on('modify').
+    const python = computeOut.python;
+    if (!python) {
+      const msg = 'second-pass compute returned no Python source; cache not written';
+      console.warn('Forge:', msg);
+      // The compute SUCCEEDED — return the result envelope. The cache
+      // write is best-effort; missing it means the next compute will
+      // re-hit the LLM, not a correctness bug.
+      return {
+        type: 'action',
+        result: computeOut.result,
+        stdout: computeOut.stdout,
+      };
+    }
+
+    // 3. Read the English facet to compute english_hash, then write
+    //    # Python + english_hash to the snippet body.
+    let body: string;
     try {
-      const pyodideHost = getPyodideHost();
-      if (pyodideHost) {
-        const host = await pyodideHost.getInstance();
-        await syncFileToMemfsAfterWrite(
-          file.path,
-          { readPath: (path) => {
-            const f = this.app.vault.getAbstractFileByPath(path);
-            if (!(f instanceof TFile)) {
-              return Promise.reject(new Error(`not a TFile: ${path}`));
-            }
-            return this.app.vault.read(f);
-          } },
-          { syncFileToMemfs: (relPath, content) =>
-            host.syncUserVaultFile(relPath, content) },
-        );
-      }
+      body = await this.app.vault.read(file);
     } catch (e) {
-      console.warn('Forge: post-write MEMFS sync failed before retry', e);
-      // Don't fail the writeback — the retry surfaces the staleness
-      // explicitly via the defensive abort if MEMFS doesn't catch up.
+      const detail = e instanceof Error ? e.message : String(e);
+      console.warn('Forge: failed to read snippet for cache write', e);
+      // Still return the compute result; caller renders output.
+      return {
+        type: 'action',
+        result: computeOut.result,
+        stdout: computeOut.stdout,
+      };
+    }
+    const english = _extractEnglishFromBody(body) ?? '';
+    const englishHash = await computeEnglishHash(english);
+
+    try {
+      await this.app.vault.process(file, (content) =>
+        writePythonAndEnglishHash(content, {
+          pythonCode: python,
+          englishHash,
+          stripStaleSlots: true,  // migration cleanup for v0.2.70/v0.2.71
+        }));
+    } catch (e) {
+      console.warn('Forge: # Python / english_hash write failed', e);
+      // Best-effort — the result is in hand.
+    }
+
+    // 4. Sync MEMFS so the next compute sees the populated cache.
+    try {
+      await syncFileToMemfsAfterWrite(
+        file.path,
+        { readPath: (path) => {
+          const f = this.app.vault.getAbstractFileByPath(path);
+          if (!(f instanceof TFile)) {
+            return Promise.reject(new Error(`not a TFile: ${path}`));
+          }
+          return this.app.vault.read(f);
+        } },
+        { syncFileToMemfs: (relPath, content) =>
+          host.syncUserVaultFile(relPath, content) },
+      );
+    } catch (e) {
+      console.warn('Forge: post-write MEMFS sync failed', e);
     }
 
     console.log('Forge: slot cache write succeeded', { snippetId, count: responses.length });
-    return true;
+
+    // 5. Return the compute envelope to the caller.
+    return {
+      type: 'action',
+      result: computeOut.result,
+      stdout: computeOut.stdout,
+    };
   }
+}
+
+/** v0.2.72 — extract the # English section content from a snippet
+ *  body. Used by handleSlotCacheMiss to compute english_hash on the
+ *  current English facet before writing # Python + hash. */
+function _extractEnglishFromBody(body: string): string | null {
+  const lines = body.split('\n');
+  let collecting = false;
+  const out: string[] = [];
+  for (const line of lines) {
+    if (/^#\s+english\s*$/i.test(line.trim())) {
+      collecting = true;
+      continue;
+    }
+    if (collecting) {
+      if (/^#\s+\S/.test(line) || line.trim() === '---') break;
+      out.push(line);
+    }
+  }
+  return collecting ? out.join('\n').trim() : null;
 }
