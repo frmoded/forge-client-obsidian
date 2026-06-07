@@ -14,7 +14,11 @@ export { copyDirRecursive };
 // chips.ts's KNOWN_BUNDLED_LIBRARIES (intentional duplication —
 // both glue layers consult the same set, but neither owns the
 // source of truth, so a tiny copy is cheaper than a new shared file).
-const KNOWN_BUNDLED_LIBRARIES = new Set(['forge-moda', 'forge-music']);
+// v0.2.76 — forge-tutorial added as the Tier 1 onboarding library.
+// Default-on (mirrors forge-moda), not domain-gated.
+const KNOWN_BUNDLED_LIBRARIES = new Set([
+  'forge-moda', 'forge-music', 'forge-tutorial',
+]);
 
 /** Read the vault root's `forge.toml` (if any) and return the matched
  *  bundled-library identity when the vault IS that library's source
@@ -209,6 +213,23 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // detection — second run is a no-op.
     await migrateChipsMdToV2(adapter, 'forge-moda');
 
+    // v0.2.76: extract bundled forge-tutorial content on first install
+    // + on forge.toml version drift. Mirrors ensureBundledForgeModa
+    // (forge-tutorial is the V1 default-on Tier 1 tutorial library —
+    // not domain-gated like forge-music; closed-beta cohorts get it
+    // automatically as the K&R-style onboarding walk).
+    //
+    // v0.2.66 source-vault gate also applies: a vault that IS the
+    // forge-tutorial source repo doesn't get re-extraction into itself.
+    if (shouldSkipBundledExtract(sourceVaultName)) {
+      console.log(
+        `Forge: skipping forge-tutorial extraction — vault root declares ` +
+        `itself as source repo for ${sourceVaultName}`,
+      );
+    } else {
+      await ensureBundledForgeTutorial(app);
+    }
+
     // v0.2.14: write a minimal forge.toml at the vault root if
     // missing. Pre-empts the InitializeForgeVaultWizard auto-open
     // trigger on fresh-vault first ribbon click. Same independent-
@@ -372,6 +393,29 @@ async function ensureBundledForgeModa(app: App): Promise<void> {
     // without forge-moda extracted as authoring content. Surface as
     // warn rather than throwing so plugin load doesn't abort.
     console.warn('Forge: ensureBundledForgeModa failed', e);
+  }
+}
+
+/** v0.2.76: extract bundled forge-tutorial content into the vault. The
+ *  Tier 1 onboarding library — a 9-chapter K&R-style walk from
+ *  first-Forge-click to composing your own snippets. Default-on
+ *  (mirrors forge-moda), not gated by domain. Source-vault gate at
+ *  the call site (runFirstRunCheck) skips extraction when the vault
+ *  IS the forge-tutorial source repo. */
+async function ensureBundledForgeTutorial(app: App): Promise<void> {
+  const adapter = app.vault.adapter;
+  try {
+    await ensureBundledVault(
+      adapter,
+      '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-tutorial',
+      'forge-tutorial',
+      'forge-tutorial',
+    );
+  } catch (e) {
+    // Non-fatal — first-Forge-click on welcome.md still works without
+    // the tutorial extracted. Surface as warn rather than throwing so
+    // plugin load doesn't abort.
+    console.warn('Forge: ensureBundledForgeTutorial failed', e);
   }
 }
 

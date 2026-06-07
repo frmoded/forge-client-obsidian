@@ -59,6 +59,11 @@ const REQUIRED_FILES = [
   { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle — re-sync ~/projects/forge-music/ into assets/vaults/forge-music/." },
   { path: "assets/vaults/forge-music/blues/form.md",          hint: "forge-music bundle missing blues/form.md — re-sync the blues subdir. v0.3.4 deletion: top-level form.md was removed; blues/form.md is now canonical." },
   { path: "assets/vaults/forge-music/blues/twelve_bar_blues_progression.md", hint: "forge-music bundle missing blues/twelve_bar_blues_progression.md — re-sync the blues subdir." },
+  // v0.2.76: Tier 1 tutorial bundle. Source at ~/projects/forge-tutorial/.
+  { path: "assets/vaults/forge-tutorial/forge.toml",          hint: "forge-tutorial bundle missing — run `node scripts/sync-bundled-vault.mjs forge-tutorial`." },
+  { path: "assets/vaults/forge-tutorial/README.md",           hint: "forge-tutorial bundle missing README — re-sync." },
+  { path: "assets/vaults/forge-tutorial/01-hello/Hello.md",   hint: "forge-tutorial bundle missing 01-hello/Hello.md — re-sync." },
+  { path: "assets/vaults/forge-tutorial/09-slots/Slots.md",   hint: "forge-tutorial bundle missing 09-slots/Slots.md (final chapter) — re-sync." },
   // v0.2.27: vendored music21 + minimum deps so the music domain
   // actually works in Pyodide (closed-beta has no network). Pin
   // versions in the hint so a fresh setup can re-vendor the same
@@ -106,6 +111,91 @@ function engineWalk(dir, base = "") {
     else out.push(rel.split(path.sep).join("/"));
   }
   return out;
+}
+
+// v0.2.76 — known bundled vaults that ship under assets/vaults/.
+// MUST match sync-bundled-vault.mjs's KNOWN_VAULTS and welcome.ts +
+// chips.ts's KNOWN_BUNDLED_LIBRARIES. Drift detection iterates this
+// list; each vault is checked against ../<name>/.
+const BUNDLED_VAULTS = ["forge-moda", "forge-music", "forge-tutorial"];
+
+// In-scope filter for bundled-vault drift checks — mirrors
+// sync-bundled-vault.mjs's EXCLUDED_NAMES.
+const VAULT_EXCLUDED_NAMES = new Set([
+  ".git", ".github", ".gitignore", ".DS_Store",
+  "node_modules", ".obsidian", ".forge",
+  "__pycache__", ".pytest_cache",
+  "dist", "build",
+]);
+
+function vaultIsInScope(relPath) {
+  const parts = relPath.split("/");
+  for (const p of parts) {
+    if (VAULT_EXCLUDED_NAMES.has(p)) return false;
+  }
+  if (relPath.endsWith(".pyc")) return false;
+  return true;
+}
+
+function vaultWalk(dir, base = "") {
+  const fsSync = require("node:fs");
+  const out = [];
+  if (!fsSync.existsSync(dir)) return out;
+  for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
+    if (VAULT_EXCLUDED_NAMES.has(entry.name)) continue;
+    const rel = base ? path.join(base, entry.name) : entry.name;
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...vaultWalk(abs, rel));
+    else out.push(rel.split(path.sep).join("/"));
+  }
+  return out;
+}
+
+async function assertNoBundledVaultDrift() {
+  let anyDrift = false;
+  for (const vaultName of BUNDLED_VAULTS) {
+    const sourceRoot = path.resolve(ROOT, "..", vaultName);
+    const bundleRoot = path.resolve(ROOT, "assets", "vaults", vaultName);
+
+    // Informational skip if source isn't a sibling (e.g. CI build with
+    // only the plugin checked out).
+    if (!(await exists(sourceRoot))) {
+      console.log(
+        `\nBundled-vault drift check (${vaultName}): skipped (no sibling repo).`);
+      continue;
+    }
+
+    const sourceFiles = new Set(vaultWalk(sourceRoot).filter(vaultIsInScope));
+    const bundleFiles = new Set(vaultWalk(bundleRoot).filter(vaultIsInScope));
+    const drift = [];
+    for (const rel of [...sourceFiles].sort()) {
+      if (!bundleFiles.has(rel)) {
+        drift.push({ relPath: rel, status: "missing-in-bundle" });
+        continue;
+      }
+      const a = await fs.readFile(path.join(sourceRoot, rel));
+      const b = await fs.readFile(path.join(bundleRoot, rel));
+      if (!a.equals(b)) drift.push({ relPath: rel, status: "content-mismatch" });
+    }
+    for (const rel of [...bundleFiles].sort()) {
+      if (!sourceFiles.has(rel)) drift.push({ relPath: rel, status: "orphaned-in-bundle" });
+    }
+    drift.sort((a, b) => a.relPath.localeCompare(b.relPath));
+
+    if (drift.length === 0) {
+      console.log(`\nBundled-vault drift check (${vaultName}): clean.`);
+      continue;
+    }
+
+    anyDrift = true;
+    console.error(`\nBUNDLED-VAULT DRIFT DETECTED (${vaultName}):`);
+    for (const { relPath, status } of drift) {
+      console.error(`  ✗ ${vaultName}/${relPath}  [${status}]`);
+    }
+    console.error(
+      `\nRun 'node scripts/sync-bundled-vault.mjs ${vaultName}' to resolve.`);
+  }
+  if (anyDrift) process.exit(1);
 }
 
 async function assertNoEngineBundleDrift() {
@@ -193,6 +283,15 @@ async function main() {
   //     here via a filesystem-backed adapter that matches the
   //     in-scope predicate.
   await assertNoEngineBundleDrift();
+
+  // 2c. Bundled-vault drift preflight (v0.2.76). Same rationale as the
+  //     engine-bundle check but for assets/vaults/<name>/ — the bundled
+  //     forge-moda, forge-music, and forge-tutorial directories must
+  //     match their sibling source repos. Drift = shipping different
+  //     content than the source authors maintain. Resolved by
+  //     `node scripts/sync-bundled-vault.mjs <name>` per vault, or
+  //     `--all` to sync everything at once.
+  await assertNoBundledVaultDrift();
 
   // 3. Ensure dist/ exists. Clean any prior zip for this version
   //    so the run is reproducible (no leftover archiver state).

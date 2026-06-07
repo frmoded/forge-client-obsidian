@@ -26,13 +26,9 @@ def compute(context, bars=4):
     bar_ql = ts.barDuration.quarterLength
 
     PROFILE = 'human'
+    # v0.3.11: active parts only. companions plays kick + closed hi-hat.
     KICK   = [[(0.0, 0.25), (2.0, 0.25)]] * 4
-    SNARE  = [[]] * 4
     CHIHAT = [[(0.0, 0.25), (1.0, 0.25), (2.0, 0.25), (3.0, 0.25)]] * 4
-    OPENHH = [[]] * 4
-    LOWTOM = [[]] * 4
-    MIDTOM = [[]] * 4
-    CRASH  = [[]] * 4
 
     def _cycle(p4, n):
         if n <= 0:
@@ -74,21 +70,15 @@ def compute(context, bars=4):
     if bars <= 0:
         return stream.Score()
 
-    kp,  kn  = _build_part(kick,         KICK)
-    sp,  sn  = _build_part(snare,        SNARE)
+    kp, kn = _build_part(kick, KICK)
     chp, chn = _build_part(closed_hihat, CHIHAT)
-    ohp, ohn = _build_part(open_hihat,   OPENHH)
-    ltp, ltn = _build_part(low_tom,      LOWTOM)
-    mtp, mtn = _build_part(mid_tom,      MIDTOM)
-    crp, crn = _build_part(crash_cymbal, CRASH)
 
     if kn:
         with_velocity(kn[:1], PROFILE, mark_dynamics=True)
         if len(kn) > 1:
             with_velocity(kn[1:], PROFILE)
-    for ns in (sn, chn, ohn, ltn, mtn, crn):
-        if ns:
-            with_velocity(ns, PROFILE)
+    if chn:
+        with_velocity(chn, PROFILE)
 
-    return voices(kp, sp, chp, ohp, ltp, mtp, crp)
+    return voices_canonical(kp, chp=chp)
 ```

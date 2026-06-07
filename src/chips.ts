@@ -62,7 +62,10 @@ import type { ChipsV2Config } from './chips-core';
 // forge.toml `name` equals one of these, the vault IS that library's
 // source repo (Path A workflow), and chip discovery walks vault-root
 // subdirs as the library's content.
-const KNOWN_BUNDLED_LIBRARIES = new Set(['forge-moda', 'forge-music']);
+// v0.2.76 — forge-tutorial added as Tier 1 default-on onboarding library.
+const KNOWN_BUNDLED_LIBRARIES = new Set([
+  'forge-moda', 'forge-music', 'forge-tutorial',
+]);
 
 // Re-export so existing import sites in the codebase keep working
 // without churn.

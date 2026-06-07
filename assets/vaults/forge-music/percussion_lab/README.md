@@ -6,7 +6,7 @@ This subdirectory holds the **percussion vocabulary** that Forge pieces compose 
 
 Each section snippet:
 
-- Is an `action` snippet whose `compute(context, bars=4)` returns a `music21.stream.Score` with **only the instrument parts that actually play in this section** (no all-rest staves — `voices()` and `sequence()` handle inactive-section padding when sections are concatenated).
+- Is an `action` snippet whose `compute(context, bars=4)` returns a `music21.stream.Score` via `voices_canonical(kp, sp=..., chp=..., ohp=..., ltp=..., mtp=..., crp=...)`. Pass only the parts that actually play; the helper rest-pads silent instruments to the canonical 7-part layout (kick, snare, closed_hihat, open_hihat, low_tom, mid_tom, crash) so `sequence()` merges same-instrument staves correctly across sections. Authors no longer hand-write all-rest part declarations — that workaround lives in `voices_canonical()` (forge/forge/music/lib.py) in one place (v0.3.11).
 - Has an **opinionated musical identity** (the "what does this section EVOKE" line in its English facet's first paragraph).
 - Uses the v0.2.35 percussion factories (`kick()`, `snare()`, `closed_hihat()`, `open_hihat()`, `low_tom()`, `mid_tom()`, `crash_cymbal()`) — never raw `instrument.BassDrum()` / `instrument.SnareDrum()` — so MuseScore renders multi-percussion-part scores correctly.
 - Carries `snapshot_capture: false` in frontmatter (Scores hold music21 Instrument instances with bound `_force_perc_channel` lambdas; the wire-format snapshot can't serialize them).

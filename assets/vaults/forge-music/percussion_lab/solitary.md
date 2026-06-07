@@ -27,21 +27,11 @@ def compute(context, bars=4):
 
     PROFILE = 70  # int → mp band per v0.3.8 velocity boundaries
 
-    # Canonical 7-instrument layout (kick, snare, closed_hh, open_hh,
-    # low_tom, mid_tom, crash). Silent instruments use [[]]*4 so the
-    # part exists at the canonical voice position even when it doesn't
-    # play. `sequence()` in lib.py groups by type(inst).__name__ only
-    # (not by percMapPitch), so we MUST keep distinct same-class
-    # instruments (closed vs open hi-hat; low vs mid tom) at distinct
-    # voice positions across all sections to avoid pitch-collapse on
-    # rendering. See the feedback file §5 for the full analysis.
-    KICK   = [[(0.0, 0.25), (2.0, 0.25)]] * 4
-    SNARE  = [[]] * 4
-    CHIHAT = [[]] * 4
-    OPENHH = [[]] * 4
-    LOWTOM = [[]] * 4
-    MIDTOM = [[]] * 4
-    CRASH  = [[]] * 4
+    # v0.3.11: active parts only. voices_canonical() rest-pads the 6
+    # silent instruments to the canonical 7-part layout that
+    # sequence() needs to merge same-instrument staves correctly.
+    # solitary plays kick only.
+    KICK = [[(0.0, 0.25), (2.0, 0.25)]] * 4
 
     def _cycle(p4, n):
         if n <= 0:
@@ -83,24 +73,13 @@ def compute(context, bars=4):
     if bars <= 0:
         return stream.Score()
 
-    kp,  kn  = _build_part(kick,         KICK)
-    sp,  sn  = _build_part(snare,        SNARE)
-    chp, chn = _build_part(closed_hihat, CHIHAT)
-    ohp, ohn = _build_part(open_hihat,   OPENHH)
-    ltp, ltn = _build_part(low_tom,      LOWTOM)
-    mtp, mtn = _build_part(mid_tom,      MIDTOM)
-    crp, crn = _build_part(crash_cymbal, CRASH)
+    kp, kn = _build_part(kick, KICK)
 
-    # Dynamic mark anchored on kick's first note; other instruments
-    # with notes get profile-only velocity (no mark). Silent parts
-    # (empty `notes` list) skip velocity entirely.
+    # Dynamic mark anchored on kick's first note.
     if kn:
         with_velocity(kn[:1], PROFILE, mark_dynamics=True)
         if len(kn) > 1:
             with_velocity(kn[1:], PROFILE)
-    for ns in (sn, chn, ohn, ltn, mtn, crn):
-        if ns:
-            with_velocity(ns, PROFILE)
 
-    return voices(kp, sp, chp, ohp, ltp, mtp, crp)
+    return voices_canonical(kp)
 ```

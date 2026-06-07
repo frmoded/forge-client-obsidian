@@ -26,9 +26,10 @@ def compute(context, bars=4):
     bar_ql = ts.barDuration.quarterLength
 
     PROFILE = 'accent'
+    # v0.3.11: active parts only. peak plays kick + snare + open hi-hat
+    # + low/mid tom + crash (closed hi-hat silent — open takes over).
     KICK   = [[(0.0, 0.25), (1.0, 0.25), (2.0, 0.25), (3.0, 0.25)]] * 4
     SNARE  = [[(i * 0.25, 0.25) for i in range(16)]] * 4
-    CHIHAT = [[]] * 4
     OPENHH = [[(0.0, 0.25), (1.0, 0.25), (2.0, 0.25), (3.0, 0.25)]] * 4
     LOWTOM = [[(0.0, 0.25), (1.0, 0.25), (2.0, 0.25), (3.0, 0.25)]] * 4
     MIDTOM = [[(0.5, 0.25), (1.5, 0.25), (2.5, 0.25), (3.5, 0.25)]] * 4
@@ -74,21 +75,20 @@ def compute(context, bars=4):
     if bars <= 0:
         return stream.Score()
 
-    kp,  kn  = _build_part(kick,         KICK)
-    sp,  sn  = _build_part(snare,        SNARE)
-    chp, chn = _build_part(closed_hihat, CHIHAT)
-    ohp, ohn = _build_part(open_hihat,   OPENHH)
-    ltp, ltn = _build_part(low_tom,      LOWTOM)
-    mtp, mtn = _build_part(mid_tom,      MIDTOM)
+    kp, kn = _build_part(kick, KICK)
+    sp, sn = _build_part(snare, SNARE)
+    ohp, ohn = _build_part(open_hihat, OPENHH)
+    ltp, ltn = _build_part(low_tom, LOWTOM)
+    mtp, mtn = _build_part(mid_tom, MIDTOM)
     crp, crn = _build_part(crash_cymbal, CRASH)
 
     if kn:
         with_velocity(kn[:1], PROFILE, mark_dynamics=True)
         if len(kn) > 1:
             with_velocity(kn[1:], PROFILE)
-    for ns in (sn, chn, ohn, ltn, mtn, crn):
+    for ns in (sn, ohn, ltn, mtn, crn):
         if ns:
             with_velocity(ns, PROFILE)
 
-    return voices(kp, sp, chp, ohp, ltp, mtp, crp)
+    return voices_canonical(kp, sp=sp, ohp=ohp, ltp=ltp, mtp=mtp, crp=crp)
 ```
