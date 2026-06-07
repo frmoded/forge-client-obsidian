@@ -33,23 +33,20 @@ Renders as multiple stacked staves in Verovio (one per instrument); for high-fid
 
 ```python
 def compute(context):
-    # Bare references — match the existing forge-music compose pattern
-    # (e.g., blues/song.md calls bare "chorus" / "drum_chorus"). In the
-    # test fixture forge-music is scanned as the authoring vault so
-    # basenames index flat. In production with forge-music as a
-    # library vault, cross-subdir bare lookups have a known limitation
-    # (caller-scoped probe checks the caller's own subdir only); see
-    # the feedback file §4 for the full resolution-behavior analysis.
-    return sequence(
-        context.compute("solitary"),
-        context.compute("companions"),
-        context.compute("gathering"),
-        context.compute("swarming"),
-        context.compute("peak"),
-        context.compute("dispersing"),
-        context.compute("threading"),
-        context.compute("resting"),
-    )
+    import copy
+
+    sections = [
+        context.compute("solitary", bars=4),
+        context.compute("companions", bars=4),
+        context.compute("gathering", bars=4),
+        context.compute("swarming", bars=4),
+        context.compute("peak", bars=4),
+        context.compute("dispersing", bars=4),
+        context.compute("threading", bars=4),
+        context.compute("resting", bars=4),
+    ]
+
+    return sequence(*sections)
 ```
 
 # Dependencies

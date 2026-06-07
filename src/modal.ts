@@ -158,27 +158,15 @@ const SEED: Record<string, string> = {
   jpeg: '',
 };
 
-function actionTemplate(name: string): string {
-  return [
-    '---',
-    'type: action',
-    `description: ${name}`,
-    'inputs: []',
-    '---',
-    '',
-    '# English',
-    '',
-    '',
-    '',
-    '---',
-    '',
-    '# Python',
-    '',
-    'def compute(context):',
-    '  pass',
-    '',
-  ].join('\n');
-}
+// v0.2.77 — action templates extracted to a pure-core module so they
+// can be tested directly. modal.ts re-exports them for any external
+// importers that already point at this file.
+import {
+  actionTemplate as actionTemplateCore,
+  canonicalActionTemplate as canonicalActionTemplateCore,
+} from './modal-templates-core';
+export const actionTemplate = actionTemplateCore;
+export const canonicalActionTemplate = canonicalActionTemplateCore;
 
 // When `content` is provided (e.g., from "Save as data snippet"), it replaces
 // the per-content_type seed payload and lands inside the same fenced block.
@@ -234,9 +222,17 @@ function extensionFor(contentType: string, originalName: string): string {
   return i > 0 ? originalName.slice(i) : '';
 }
 
+// v0.2.77 — action template shape. 'free-english' is the legacy default
+// (frontmatter type: action + # English + # Python stub). 'canonical'
+// adds facet_form: canonical, drops the # Python stub. Only applies
+// when snippetType === 'action'; data snippets ignore.
+type ActionShape = 'free-english' | 'canonical';
+
 export class ForgeSnippetModal extends Modal {
   private snippetName = '';
   private snippetType: SnippetType = 'action';
+  private actionShape: ActionShape = 'free-english';
+  private actionShapeSetting?: Setting;
   private contentType: string;
   private contentTypes: string[];
   private contentTypeSetting?: Setting;
@@ -278,6 +274,24 @@ export class ForgeSnippetModal extends Modal {
           .onChange(v => {
             this.snippetType = v as SnippetType;
             this.updateContentTypeVisibility();
+          })
+      );
+
+    // v0.2.77 — action shape selector. Free-English (default) keeps
+    // the legacy template. Canonical emits facet_form: canonical
+    // (no /generate hit; no # Python stub) — the recommended path
+    // for short, declarative snippets.
+    this.actionShapeSetting = new Setting(contentEl)
+      .setName('Action Shape')
+      .setDesc('Free-English authors via English + LLM-generated Python. ' +
+               'Canonical compiles directly via [[name]](k=v) syntax — no LLM call.')
+      .addDropdown(drop =>
+        drop
+          .addOption('free-english', 'Free-English (with # Python)')
+          .addOption('canonical', 'Canonical (declarative, no LLM)')
+          .setValue(this.actionShape)
+          .onChange(v => {
+            this.actionShape = v as ActionShape;
           })
       );
 
@@ -352,6 +366,10 @@ export class ForgeSnippetModal extends Modal {
     const isBinary = isData && isBinaryContentType(this.contentType);
     this.contentTypeSetting.settingEl.style.display = isData ? '' : 'none';
     this.dropSetting.settingEl.style.display = isBinary ? '' : 'none';
+    // v0.2.77 — hide action-shape selector when type=data.
+    if (this.actionShapeSetting) {
+      this.actionShapeSetting.settingEl.style.display = isData ? 'none' : '';
+    }
   }
 
   private async submit() {
@@ -366,9 +384,13 @@ export class ForgeSnippetModal extends Modal {
     }
 
     const path = `${this.snippetName}.md`;
+    // v0.2.77 — action template selection now respects actionShape.
+    const actionTmpl = this.actionShape === 'canonical'
+      ? canonicalActionTemplate
+      : actionTemplate;
     const content = this.snippetType === 'data'
       ? dataTemplate(this.snippetName, this.contentType)
-      : actionTemplate(this.snippetName);
+      : actionTmpl(this.snippetName);
 
     let file;
     try {

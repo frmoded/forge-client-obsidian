@@ -551,6 +551,9 @@ async function loadPersonalChips(
       ? fm.inputs.filter((x: unknown): x is string => typeof x === 'string')
       : undefined;
     const chip = typeof fm.chip === 'boolean' ? fm.chip : undefined;
+    // v0.2.77 — thread facet_form (see buildSnippetInventory note).
+    const facet_form = typeof fm.facet_form === 'string'
+      ? fm.facet_form : undefined;
     inventory.push({
       id,
       basename,
@@ -558,6 +561,7 @@ async function loadPersonalChips(
       inputs,
       chip,
       parentDir: PERSONAL_GROUP_NAME,
+      facet_form,
     });
   }
   const autoChips = autoDeriveChips(inventory);
@@ -617,6 +621,11 @@ async function buildSnippetInventory(
       ? fm.inputs.filter((x: unknown): x is string => typeof x === 'string')
       : undefined;
     const chip = typeof fm.chip === 'boolean' ? fm.chip : undefined;
+    // v0.2.77 — thread facet_form so deriveChip can emit keyword-form
+    // insertions for canonical input-takers (avoids the v0.2.77
+    // positional foot-gun by steering authoring to the keyword form).
+    const facet_form = typeof fm.facet_form === 'string'
+      ? fm.facet_form : undefined;
     out.push({
       id: bareId,
       basename,
@@ -624,6 +633,7 @@ async function buildSnippetInventory(
       inputs,
       chip,
       parentDir,
+      facet_form,
     });
   }
   return out;

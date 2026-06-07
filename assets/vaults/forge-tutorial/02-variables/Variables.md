@@ -11,33 +11,32 @@ Hello, Ada
 
 ## What's new
 
-Look at the English:
+Open the snippet and look — it does three small things, each on its own line:
 
-```
-Set name to "Ada".
-Set greeting to "Hello, " plus name.
-Do [[print]](greeting).
-```
+- it names a value: `Set name to "Ada"` makes a box called `name` holding the
+  text `"Ada"`;
+- it builds a greeting: `Set greeting to "Hello, " plus name` — and **plus**
+  joins two pieces of text, so this becomes `"Hello, Ada"`;
+- it prints the result with [[print]].
 
 Two new ideas, both small:
 
-- **`Set … to …`** gives a value a name. `Set name to "Ada"` makes a box called
-  `name` holding the text `"Ada"`. Now you can use `name` instead of typing
-  `"Ada"` again.
-- **`plus`** joins two pieces of text. `"Hello, " plus name` becomes
-  `"Hello, Ada"`. (You'll meet `plus` again with numbers, where it adds.)
+- **Set … to …** gives a value a name. Now you can use the name instead of
+  typing the value again.
+- **plus** joins two pieces of text. (You'll meet it again with numbers, where
+  it adds.)
 
-Notice the last line prints `greeting` with **no quotes** — because `greeting`
-is a name standing for a value, not the literal word "greeting". Quotes mean
-"the exact text"; no quotes means "the value with this name".
+Notice [[print]] is handed `greeting` with **no quotes** — because `greeting` is
+a *name* standing for a value, not the literal word "greeting". Quotes mean "the
+exact text"; no quotes means "the value with this name".
 
-> The **Set** chip is now in your 🔥 palette. Click it to drop a fresh
+> The **Set** chip is now in your 🔥 palette — click it to drop a fresh
 > `Set … to …` line into any snippet.
 
 ## Exercise
 
-Change `"Ada"` to your own name and Forge again — the greeting follows.
-Then try changing `"Hello, "` to `"Hi there, "`. Two boxes, one result: that's
-what variables buy you.
+Open the **greeting** snippet, change `"Ada"` to your own name, and Forge again —
+the greeting follows. Then try changing `"Hello, "` to `"Hi there, "`. Two boxes,
+one result: that's what variables buy you.
 
 When you're ready, go to [[Functions]] — where you make your own reusable steps.

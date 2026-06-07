@@ -45,6 +45,7 @@ import {
 } from './wikilink-freeze-menu-core';
 import { replacePythonSection } from './replace-python-section-core';
 import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
+import { forgeButtonShouldShow } from './forge-button-gate-core';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -814,8 +815,13 @@ export default class ForgePlugin extends Plugin {
         () => { this.openChipsView(); });
       chipsBtn.addClass(CHIPS_BTN_CLASS);
     }
-    const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
-    edgesBtn.addClass(EDGES_BTN_CLASS);
+    // v0.2.77 — gate the edges panel toggle on snippet-ness. Edges
+    // are inherently per-snippet (caller→callee dependency graph);
+    // toggling the edges panel from a plain note is meaningless.
+    if (forgeButtonShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
+      const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
+      edgesBtn.addClass(EDGES_BTN_CLASS);
+    }
 
     // Edit-mode toggle for action snippets. English mode = LLM-driven,
     // Forge regenerates Python from English. Python mode = hand-tuned,
@@ -843,9 +849,16 @@ export default class ForgePlugin extends Plugin {
     const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
-    // Added last → prepended first → leftmost.
-    const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
-    forgeBtn.addClass(FORGE_BTN_CLASS);
+    // v0.2.77 — Forge button only on snippet files (type: action|data).
+    // Pre-v0.2.77 the button appeared on every markdown file; clicking
+    // on a non-snippet (e.g. forge-tutorial/01-hello/Hello.md lesson
+    // note) errored with no helpful feedback. Gate via the pure-core
+    // predicate so non-snippet notes show no Forge button at all.
+    // Added last → prepended first → leftmost (when shown).
+    if (forgeButtonShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
+      const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
+      forgeBtn.addClass(FORGE_BTN_CLASS);
+    }
   }
 
   private async markDriftAsync(file: TFile, btn: HTMLElement, storedHash: unknown) {

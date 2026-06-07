@@ -315,6 +315,51 @@ test('deriveChip: action snippet with multiple inputs → comma-separated placeh
   assert.equal(chip?.insertion, 'Do [[render]](<x>, <y>, <color>).');
 });
 
+// v0.2.77 — canonical input-takers emit keyword form.
+test('deriveChip: canonical action with inputs → keyword form insertion', () => {
+  const chip = deriveChip({
+    id: 'double', basename: 'double', type: 'action',
+    inputs: ['n'], facet_form: 'canonical',
+  });
+  assert.equal(chip?.insertion, 'Do [[double]](n=<n>).');
+});
+
+test('deriveChip: canonical action with multiple inputs → keyword-form list', () => {
+  const chip = deriveChip({
+    id: 'add', basename: 'add', type: 'action',
+    inputs: ['a', 'b'], facet_form: 'canonical',
+  });
+  assert.equal(chip?.insertion, 'Do [[add]](a=<a>, b=<b>).');
+});
+
+test('deriveChip: canonical action with NO inputs → empty parens (no kw=)', () => {
+  // No declared inputs → empty parens like the legacy shape; the
+  // keyword form only applies when there's something to bind.
+  const chip = deriveChip({
+    id: 'banner', basename: 'banner', type: 'action',
+    facet_form: 'canonical',
+  });
+  assert.equal(chip?.insertion, 'Do [[banner]]().');
+});
+
+test('deriveChip: free-English action keeps positional form (regression)', () => {
+  // No facet_form → free-English shape → positional placeholders.
+  const chip = deriveChip({
+    id: 'greet', basename: 'greet', type: 'action',
+    inputs: ['name'],
+  });
+  assert.equal(chip?.insertion, 'Do [[greet]](<name>).');
+});
+
+test('deriveChip: facet_form="free" treated as non-canonical (positional)', () => {
+  // Explicit free-English form behaves identically to undefined.
+  const chip = deriveChip({
+    id: 'greet', basename: 'greet', type: 'action',
+    inputs: ['name'], facet_form: 'free',
+  });
+  assert.equal(chip?.insertion, 'Do [[greet]](<name>).');
+});
+
 test('deriveChip: action snippet with `chip: false` → null', () => {
   const chip = deriveChip({
     id: 'helper', basename: 'helper', type: 'action', chip: false,

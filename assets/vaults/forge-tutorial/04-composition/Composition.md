@@ -5,7 +5,8 @@ snippet, `greet`, to do part of its work. That's **composition**: snippets
 calling snippets. It's the heart of how Forge scales from tiny pieces to big
 things.
 
-This chapter has two snippets. Open the **describe_forge** snippet and **Forge** (🔥) it:
+This chapter has two snippets. Open the **describe_forge** snippet and **Forge**
+(🔥) it:
 
 ```
 Forge is wonderful.
@@ -13,39 +14,35 @@ Forge is wonderful.
 
 ## What's new
 
-`describe_forge.md` is short:
+Open **describe_forge** and look — it's short. It calls another snippet,
+[[excited_word]], stores what comes back in `word`, and then prints
+`"Forge is " plus word plus "."`. The new idea is that one line:
 
-```
-Set word to [[excited_word]]().
-Do [[print]]("Forge is " plus word plus ".").
-```
+> Set word to [[excited_word]]().
 
-The new part is `[[excited_word]]()` — that's a **call to another snippet**. When
-`describe_forge` runs, it asks `excited_word` to do its job and hands back the
-result, which we store in `word`.
+That [[excited_word]] is a **call to another snippet**. When **describe_forge**
+runs, it asks [[excited_word]] to do its job and hands back the result.
 
 Now open the **excited_word** snippet in this same folder. It's tiny:
 
-```
-Give back "wonderful".
-```
+> Give back "wonderful".
 
-That's a whole snippet whose only job is to give back a word. `describe_forge`
-doesn't care *how* `excited_word` decides — it just uses what comes back. Small
-pieces, combined.
+That's a whole snippet whose only job is to give back a word. **describe_forge**
+doesn't care *how* it decides — it just uses what comes back. Small pieces,
+combined.
 
-> `excited_word` shows up as a chip in your 🔥 palette — because it's a building
-> block you can call from anywhere, just like `print`.
+> The **excited_word** chip is in your 🔥 palette — a building block you can call
+> from anywhere, just like [[print]].
 
 ## Exercise
 
-Open the **excited_word** snippet and change `"wonderful"` to `"powerful"` (or
-anything you like). Save it, then **Forge** 🔥 the **describe_forge** snippet
+Open the **excited_word** snippet, change `"wonderful"` to `"powerful"` (or
+anything you like), save it, then **Forge** 🔥 the **describe_forge** snippet
 again. You changed one small snippet, and the bigger one followed. That's
 composition working for you.
 
-Want to go further? In the file list, right-click `excited_word.md` → **Make a
-copy**, rename it (say `another_word.md`), give back a different word, and point
-`describe_forge` at your new snippet instead of `excited_word`.
+Want to go further? Right-click `excited_word.md` → **Make a copy**, rename it
+(say `another_word.md`), give back a different word, and point **describe_forge**
+at your new snippet instead.
 
 When you're ready, go to [[Conditionals]] — where snippets start making choices.

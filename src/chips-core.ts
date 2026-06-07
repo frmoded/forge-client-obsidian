@@ -206,6 +206,15 @@ export interface SnippetMetaForChips {
   inputs?: string[];                           // action snippet's declared inputs
   chip?: boolean;                              // per-snippet opt-out (false = exclude)
   parentDir?: string;                          // parent subdir relative to library root (e.g. "blues")
+  /** v0.2.77 — canonical snippets (facet_form: canonical) emit
+   *  keyword-form insertions (`Do [[id]](k=<k>).`) so positional
+   *  call-site editing doesn't run into the canonical positional
+   *  foot-gun (`[[double]](5)` against `inputs: [n]` used to drop
+   *  the 5 silently and NameError; v0.2.77 engine binds positional →
+   *  declared inputs, but the chip palette steers users toward the
+   *  keyword form anyway so the call-site reads as documentation).
+   *  Undefined = free-English shape (keeps positional form). */
+  facet_form?: 'canonical' | string;
 }
 
 /** Schema v2 override entry — replaces specified fields on an
@@ -284,7 +293,14 @@ export function deriveChip(snippet: SnippetMetaForChips): Chip | null {
 
   if (snippet.type === 'action') {
     const inputs = snippet.inputs ?? [];
-    const argList = inputs.map(n => `<${n}>`).join(', ');
+    // v0.2.77 — canonical input-takers emit keyword form so the
+    // call-site reads as self-documenting input bindings. Free-English
+    // snippets keep positional form (their `def compute(context, n):`
+    // signature accepts positional naturally).
+    const isCanonical = snippet.facet_form === 'canonical';
+    const argList = (isCanonical && inputs.length > 0)
+      ? inputs.map(n => `${n}=<${n}>`).join(', ')
+      : inputs.map(n => `<${n}>`).join(', ');
     const insertion = `Do [[${snippet.id}]](${argList}).`;
     return { label, insertion, group };
   }
