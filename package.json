@@ -4,7 +4,7 @@
   "description": "Obsidian client for Forge.",
   "main": "main.js",
   "scripts": {
-    "build": "node scripts/lint-backtick-trap.mjs && npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --format=cjs --outfile=main.js && node scripts/copy-assets.mjs",
+    "build": "node scripts/lint-backtick-trap.mjs && npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --external:@codemirror/language --format=cjs --outfile=main.js && node scripts/copy-assets.mjs",
     "lint": "node scripts/lint-backtick-trap.mjs",
     "dev": "npm run build -- --watch",
     "test": "node --test src/*.test.ts",
@@ -18,6 +18,7 @@
   "author": "Oded Fuhrmann",
   "license": "MIT",
   "devDependencies": {
+    "@codemirror/language": "^6.12.3",
     "@types/node": "^16.11.6",
     "archiver": "^8.0.0",
     "builtin-modules": "3.3.0",

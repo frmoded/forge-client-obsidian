@@ -47,6 +47,14 @@ import { replacePythonSection } from './replace-python-section-core';
 import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
 import { forgeButtonShouldShow } from './forge-button-gate-core';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
+import {
+  decideInitialState,
+  decideOnFoldChange,
+  type SnippetHeadings,
+  type FoldState,
+} from './facet-mutex-core';
+import { foldEffect, unfoldEffect, foldedRanges } from '@codemirror/language';
+import type { EditorView } from '@codemirror/view';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -199,6 +207,222 @@ const MODE_BTN_CLASS = 'forge-mode-btn';
 // without `_chips.md` don't see a dead icon.
 const CHIPS_BTN_CLASS = 'forge-chips-btn';
 
+// v0.2.83 (per the v0.2.80 prompt §3.2) — controller for the
+// facet-mutex gesture. Subscribes to CodeMirror 6 fold-effect
+// transactions on the active editor; when the user expands a
+// previously-folded heading, applies the mutex flip (fold the other,
+// flip edit_mode in frontmatter via the drift-aware
+// setEditModeForFile).
+//
+// Per the spike (prompt §-1): `view.editor.cm` returns the underlying
+// EditorView. We read fold state from `foldedRanges(view.state)` and
+// dispatch fold/unfold via `foldEffect.of({from, to})` /
+// `unfoldEffect.of({from, to})`.
+//
+// Window-debounce per §2.2: `ignoreFoldEventsUntil` suppresses fold
+// events for 300ms after onFileOpen to filter system-restore folds
+// from workspace.json.
+const FOLD_EVENT_IGNORE_WINDOW_MS = 300;
+
+class FacetMutexController {
+  private plugin: ForgePlugin;
+  private currentFile: TFile | null = null;
+  private currentView: MarkdownView | null = null;
+  private cm: EditorView | null = null;
+  private cmObserver: { destroy: () => void } | null = null;
+  private prevFold: FoldState = { englishFolded: false, pythonFolded: false };
+  private ignoreFoldEventsUntil = 0;
+
+  constructor(plugin: ForgePlugin) { this.plugin = plugin; }
+
+  /** Called on every active-leaf-change. Attaches to MarkdownView
+   *  leaves backing a snippet file (type: action | data); detaches
+   *  otherwise. Idempotent if leaf hasn't changed. */
+  async onActiveLeafChange(view: MarkdownView | null): Promise<void> {
+    if (this.currentView === view) return;
+    this.detach();
+    if (!view || !view.file) return;
+    const fm = this.plugin.app.metadataCache.getFileCache(view.file)?.frontmatter;
+    const t = typeof fm?.type === 'string' ? fm.type : undefined;
+    if (t !== 'action' && t !== 'data') return;
+    await this.attach(view);
+  }
+
+  private async attach(view: MarkdownView): Promise<void> {
+    // `view.editor.cm` is undocumented but verified by the spike.
+    const cm = (view.editor as { cm?: EditorView }).cm ?? null;
+    if (!cm) return;  // graceful no-op if the editor surface isn't CM6
+    this.currentView = view;
+    this.currentFile = view.file ?? null;
+    this.cm = cm;
+    // Apply initial state per frontmatter edit_mode + heading
+    // positions. Set the ignore window so the application doesn't
+    // re-trigger the gesture handler.
+    this.ignoreFoldEventsUntil = Date.now() + FOLD_EVENT_IGNORE_WINDOW_MS;
+    await this.applyInitialState();
+    this.prevFold = this.readFoldState();
+    // Subscribe via a CodeMirror update-listener: `cm.state.update`
+    // notifications. CM6 doesn't expose a "fold-only" event, but we
+    // diff fold state on every editor update and react to deltas.
+    // Cost is tiny (a few set comparisons per keystroke).
+    const handler = () => { void this.onCmUpdate(); };
+    const wrapped = { destroy: () => {} };
+    // Attach by patching dispatchTransactions — CM6 supports this
+    // via the `dispatch` override pattern, but the safest cross-
+    // version approach is the `updateListener` extension. Since we
+    // don't have a clean way to add an extension post-init from a
+    // plugin without forking the editor, we use a polling-via-
+    // interval fallback: check fold state every 200ms while the
+    // view is active. Worst-case latency 200ms for the gesture
+    // flip — well within cohort UX tolerance.
+    const intervalId = window.setInterval(handler, 200);
+    wrapped.destroy = () => window.clearInterval(intervalId);
+    this.cmObserver = wrapped;
+  }
+
+  detach(): void {
+    if (this.cmObserver) {
+      this.cmObserver.destroy();
+      this.cmObserver = null;
+    }
+    this.currentView = null;
+    this.currentFile = null;
+    this.cm = null;
+    this.prevFold = { englishFolded: false, pythonFolded: false };
+  }
+
+  /** Read the snippet's # English / # Python heading line numbers
+   *  from the current view's editor content. 0-indexed CM line
+   *  positions; null if absent. */
+  private readHeadings(): SnippetHeadings {
+    if (!this.cm) return { englishLine: null, pythonLine: null };
+    const doc = this.cm.state.doc;
+    let englishLine: number | null = null;
+    let pythonLine: number | null = null;
+    for (let i = 1; i <= doc.lines; i++) {
+      const text = doc.line(i).text.trim();
+      if (/^#{1,6}\s+english\s*$/i.test(text) && englishLine === null) {
+        englishLine = i;
+      } else if (/^#{1,6}\s+python\s*$/i.test(text) && pythonLine === null) {
+        pythonLine = i;
+      }
+    }
+    return { englishLine, pythonLine };
+  }
+
+  /** Read whether each heading's section is currently folded.
+   *  CM6's foldedRanges is an IntervalSet keyed on document
+   *  positions. A heading is "folded" when its line's end-of-line
+   *  position falls inside a folded range. */
+  private readFoldState(): FoldState {
+    const out: FoldState = { englishFolded: false, pythonFolded: false };
+    if (!this.cm) return out;
+    const headings = this.readHeadings();
+    const folded = foldedRanges(this.cm.state);
+    if (headings.englishLine !== null) {
+      const ln = this.cm.state.doc.line(headings.englishLine);
+      out.englishFolded = this.posInFoldedSet(folded, ln.to);
+    }
+    if (headings.pythonLine !== null) {
+      const ln = this.cm.state.doc.line(headings.pythonLine);
+      out.pythonFolded = this.posInFoldedSet(folded, ln.to);
+    }
+    return out;
+  }
+
+  private posInFoldedSet(
+    folded: { iter(): { value: unknown; from: number; to: number; next(): void } },
+    pos: number,
+  ): boolean {
+    const it = folded.iter();
+    while (it.value !== null) {
+      if (pos >= it.from && pos <= it.to) return true;
+      if (it.from > pos) return false;
+      it.next();
+    }
+    return false;
+  }
+
+  /** Apply the desired initial fold state for the active view. Sets
+   *  `prevFold` to the post-application state. */
+  private async applyInitialState(): Promise<void> {
+    if (!this.cm || !this.currentFile) return;
+    const fm = this.plugin.app.metadataCache.getFileCache(this.currentFile)
+      ?.frontmatter;
+    const mode = getEditMode(fm) ?? 'english';
+    const headings = this.readHeadings();
+    const desired = decideInitialState(mode as 'english' | 'python', headings);
+    this.applyFoldDelta(headings, this.readFoldState(), desired);
+  }
+
+  private applyFoldDelta(
+    headings: SnippetHeadings,
+    current: FoldState,
+    desired: { englishFolded: boolean; pythonFolded: boolean },
+  ): void {
+    if (!this.cm) return;
+    const effects: ReturnType<typeof foldEffect.of>[] = [];
+    if (headings.englishLine !== null
+        && current.englishFolded !== desired.englishFolded) {
+      const ln = this.cm.state.doc.line(headings.englishLine);
+      const range = { from: ln.to, to: this.sectionEnd(headings.englishLine) };
+      effects.push(
+        desired.englishFolded ? foldEffect.of(range) : unfoldEffect.of(range));
+    }
+    if (headings.pythonLine !== null
+        && current.pythonFolded !== desired.pythonFolded) {
+      const ln = this.cm.state.doc.line(headings.pythonLine);
+      const range = { from: ln.to, to: this.sectionEnd(headings.pythonLine) };
+      effects.push(
+        desired.pythonFolded ? foldEffect.of(range) : unfoldEffect.of(range));
+    }
+    if (effects.length > 0) {
+      this.cm.dispatch({ effects });
+    }
+  }
+
+  /** End-of-section position for the heading at `headingLine`:
+   *  the offset just before the NEXT heading, or end-of-document. */
+  private sectionEnd(headingLine: number): number {
+    if (!this.cm) return 0;
+    const doc = this.cm.state.doc;
+    for (let i = headingLine + 1; i <= doc.lines; i++) {
+      const text = doc.line(i).text.trim();
+      if (/^#{1,6}\s+\S/.test(text)) {
+        return doc.line(i - 1).to;
+      }
+    }
+    return doc.length;
+  }
+
+  /** Polling-driven update tick. Compares fold state vs prevFold;
+   *  routes deltas through decideOnFoldChange + setEditModeForFile. */
+  private async onCmUpdate(): Promise<void> {
+    if (!this.cm || !this.currentFile) return;
+    if (Date.now() < this.ignoreFoldEventsUntil) return;
+    const headings = this.readHeadings();
+    const current = this.readFoldState();
+    // No change vs prevFold → nothing to do.
+    if (current.englishFolded === this.prevFold.englishFolded
+        && current.pythonFolded === this.prevFold.pythonFolded) {
+      return;
+    }
+    const fm = this.plugin.app.metadataCache.getFileCache(this.currentFile)
+      ?.frontmatter;
+    const mode = (getEditMode(fm) ?? 'english') as 'english' | 'python';
+    const desired = decideOnFoldChange(this.prevFold, current, mode, headings);
+    if (desired.newEditMode !== null) {
+      // Suppress re-entry while we apply our own fold deltas + write
+      // frontmatter.
+      this.ignoreFoldEventsUntil = Date.now() + FOLD_EVENT_IGNORE_WINDOW_MS;
+      this.applyFoldDelta(headings, current, desired);
+      await this.plugin.setEditModeForFile(
+        this.currentFile, desired.newEditMode);
+    }
+    this.prevFold = this.readFoldState();
+  }
+}
+
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
   private inputCache: Record<string, Record<string, string>> = {};
@@ -246,6 +470,11 @@ export default class ForgePlugin extends Plugin {
   // events before the user right-clicks). The synchronous index walk
   // is cheap and always fresh.
 
+  // v0.2.83 — facet-mutex gesture controller. Tracks the active
+  // MarkdownView, subscribes to its CM6 fold state, and runs the
+  // expand-gesture mutex flip.
+  private facetMutex: FacetMutexController | null = null;
+
   async onload() {
     await this.loadSettings();
 
@@ -258,6 +487,17 @@ export default class ForgePlugin extends Plugin {
     const pyodideHost = new PyodideHost(this.app, this.manifest.id);
     setPyodideHost(pyodideHost);
     setPyodideHostSingleton(pyodideHost);
+
+    // v0.2.83 — instantiate the facet-mutex controller; wire to
+    // active-leaf-change via registerEvent so it tears down on
+    // plugin unload.
+    this.facetMutex = new FacetMutexController(this);
+    this.registerEvent(
+      this.app.workspace.on('active-leaf-change', (leaf) => {
+        const view = leaf?.view instanceof MarkdownView ? leaf.view : null;
+        void this.facetMutex?.onActiveLeafChange(view);
+      })
+    );
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
@@ -905,41 +1145,84 @@ export default class ForgePlugin extends Plugin {
       return;
     }
     const current = getEditMode(fm);
+    const target: 'english' | 'python' = current === 'python' ? 'english' : 'python';
+    await this.setEditModeForFile(file, target);
+  }
 
-    if (current === 'python') {
+  /** v0.2.83 (from v0.2.80 prompt §3.3 + §3.5) — drift-aware
+   *  edit_mode writer shared between the command-palette toggle path
+   *  AND the new facet-mutex gesture path. Maintains B8 contract
+   *  (`locked_english_hash` drift baseline).
+   *
+   *  §3.5 palette guard: when the caller wants `python` mode but the
+   *  snippet has no `# Python` heading on disk (slot-free canonical
+   *  that hasn't been transpiled yet), no-op + show an explanatory
+   *  Notice instead of promising editability of nothing. Preferred
+   *  path (a) per the prompt — does NOT auto-create a Python stub
+   *  (that would risk stale-cache on user edits).
+   */
+  public async setEditModeForFile(
+    file: TFile, newMode: 'english' | 'python',
+  ): Promise<void> {
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (fm?.type !== 'action') {
+      new Notice('Edit mode is only meaningful for action snippets.');
+      return;
+    }
+
+    if (newMode === 'english') {
       await this.app.fileManager.processFrontMatter(file, (fm: any) => {
         delete fm.edit_mode;
         delete fm.locked;             // legacy alias — clean up while we're here
         delete fm.locked_english_hash;
       });
       new Notice(`Forge: ${file.basename} → English mode`);
-    } else {
-      // Snapshot the current English so we can detect drift later. The hash
-      // field name stays `locked_english_hash` for one cycle so Phase-5
-      // vaults don't lose their drift baseline; new writes use the same key.
-      const content = await this.app.vault.read(file);
-      const english = extractSection(content, 'english');
-      const hash = await sha256Hex(english);
-      await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-        fm.edit_mode = 'python';
-        fm.locked_english_hash = hash;
-        delete fm.locked;             // migrate off the legacy field
-      });
-      new Notice(`Forge: ${file.basename} → Python mode`);
-      // v0.2.9: discoverability nudge. The unlock affordances (toolbar
-      // pencil, Cmd+P entry, right-click) were too easy to miss in
-      // closed-beta smoke. Fire a longer explainer Notice the first
-      // time the user enters Python mode this session.
-      if (!this.pythonModeNoticeShown) {
-        new Notice(
-          'Python facet is now editable. To switch back, click the '
-          + 'pencil icon in the toolbar, use Cmd+P → '
-          + '"Forge: Toggle Python/English editing mode", or right-click '
-          + 'the file.',
-          12000,
-        );
-        this.pythonModeNoticeShown = true;
-      }
+      this.syncButtons();
+      return;
+    }
+
+    // newMode === 'python'
+    // §3.5 guard: refuse to flip to python mode when there's no
+    // # Python heading at all. The palette toggle USED to promise
+    // "Python is now editable" even on slot-free canonical snippets
+    // where no Python facet existed (v0.2.79 smoke Step 5 UX bug).
+    // We check heading PRESENCE (not just content) — a heading with
+    // empty body is still editable; a missing heading isn't.
+    const content = await this.app.vault.read(file);
+    if (!/^#{1,6}\s+python\s*$/im.test(content)) {
+      new Notice(
+        `Forge: '${file.basename}' has no Python facet (slot-free ` +
+        `canonical). Add slots and Forge-run to generate one, or ` +
+        `stay in English mode.`,
+        8000,
+      );
+      return;
+    }
+
+    // Snapshot the current English so we can detect drift later. The hash
+    // field name stays `locked_english_hash` for one cycle so Phase-5
+    // vaults don't lose their drift baseline; new writes use the same key.
+    const english = extractSection(content, 'english');
+    const hash = await sha256Hex(english);
+    await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+      fm.edit_mode = 'python';
+      fm.locked_english_hash = hash;
+      delete fm.locked;             // migrate off the legacy field
+    });
+    new Notice(`Forge: ${file.basename} → Python mode`);
+    // v0.2.9: discoverability nudge. The unlock affordances (toolbar
+    // pencil, Cmd+P entry, right-click) were too easy to miss in
+    // closed-beta smoke. Fire a longer explainer Notice the first
+    // time the user enters Python mode this session.
+    if (!this.pythonModeNoticeShown) {
+      new Notice(
+        'Python facet is now editable. To switch back, click the '
+        + 'pencil icon in the toolbar, use Cmd+P → '
+        + '"Forge: Toggle Python/English editing mode", or right-click '
+        + 'the file.',
+        12000,
+      );
+      this.pythonModeNoticeShown = true;
     }
     this.syncButtons();
   }
