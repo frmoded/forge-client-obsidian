@@ -459,12 +459,11 @@
   margin: 4px 0 12px 0;
 }
 
-/* Edit-mode toggle button — drift state when the English section has
-   changed since the snippet entered Python mode. The icon picks up a warm
-   yellow to flag "you switched to Python, but the English moved
-   underneath you". The legacy `.forge-lock-btn` selector is kept for one
-   release so Phase-5 vaults that still render the old button stay tinted. */
-.forge-mode-btn.is-drifted svg,
+/* v0.2.79 retired the edit-mode toggle ribbon button; v0.2.83's
+   gestural mutex permanently replaced the surface. v0.2.84 drops the
+   `.forge-mode-btn` selector. The `.forge-lock-btn.is-drifted` rule
+   stays — pre-v0.2.79 vaults whose snippets still carry the legacy
+   `locked` field can render the drift tint via that older class. */
 .forge-lock-btn.is-drifted svg {
   color: #cc9a00;
 }

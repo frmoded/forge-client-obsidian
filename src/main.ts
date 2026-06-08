@@ -40,21 +40,16 @@ import { reconcileInputs } from './frontmatter-inputs-reconcile';
 import { snippetIdFromPath } from './snippet-id-from-path';
 import {
   decideWikilinkFreezeMenu,
+  decideWikilinkFreezeMenuMulti,
   findWikilinkAtCursor,
   type SnippetRegistryLike,
+  type SnippetRegistryLikeMulti,
 } from './wikilink-freeze-menu-core';
 import { replacePythonSection } from './replace-python-section-core';
 import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
 import { forgeButtonShouldShow } from './forge-button-gate-core';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
-import {
-  decideInitialState,
-  decideOnFoldChange,
-  type SnippetHeadings,
-  type FoldState,
-} from './facet-mutex-core';
-import { foldEffect, unfoldEffect, foldedRanges } from '@codemirror/language';
-import type { EditorView } from '@codemirror/view';
+import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -198,7 +193,6 @@ const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 const EDGES_BTN_CLASS = 'forge-edges-btn';
 const FORGE_BTN_CLASS = 'forge-forge-btn';
 const LOCK_BTN_CLASS = 'forge-lock-btn';
-const MODE_BTN_CLASS = 'forge-mode-btn';
 // Per-snippet chip toolbar icon. Retired in the chips-v2 follow-up
 // (e4ed813) and restored in chips v2-full per the user's choice —
 // some redundancy with the Forge-ribbon-menu "Open chips palette"
@@ -207,221 +201,13 @@ const MODE_BTN_CLASS = 'forge-mode-btn';
 // without `_chips.md` don't see a dead icon.
 const CHIPS_BTN_CLASS = 'forge-chips-btn';
 
-// v0.2.83 (per the v0.2.80 prompt §3.2) — controller for the
-// facet-mutex gesture. Subscribes to CodeMirror 6 fold-effect
-// transactions on the active editor; when the user expands a
-// previously-folded heading, applies the mutex flip (fold the other,
-// flip edit_mode in frontmatter via the drift-aware
-// setEditModeForFile).
-//
-// Per the spike (prompt §-1): `view.editor.cm` returns the underlying
-// EditorView. We read fold state from `foldedRanges(view.state)` and
-// dispatch fold/unfold via `foldEffect.of({from, to})` /
-// `unfoldEffect.of({from, to})`.
-//
-// Window-debounce per §2.2: `ignoreFoldEventsUntil` suppresses fold
-// events for 300ms after onFileOpen to filter system-restore folds
-// from workspace.json.
-const FOLD_EVENT_IGNORE_WINDOW_MS = 300;
+// v0.2.83 → v0.2.84 — gestural-mutex controller migrated to a CM6
+// ViewPlugin. v0.2.83 used 200ms setInterval polling on a per-leaf
+// FacetMutexController instance; v0.2.84 hooks into ViewUpdate via
+// registerEditorExtension so gestures flip on the next CM frame
+// (~16ms). The pure-core decision logic in facet-mutex-core.ts is
+// unchanged; the integration lives in facet-mutex-view-plugin.ts.
 
-class FacetMutexController {
-  private plugin: ForgePlugin;
-  private currentFile: TFile | null = null;
-  private currentView: MarkdownView | null = null;
-  private cm: EditorView | null = null;
-  private cmObserver: { destroy: () => void } | null = null;
-  private prevFold: FoldState = { englishFolded: false, pythonFolded: false };
-  private ignoreFoldEventsUntil = 0;
-
-  constructor(plugin: ForgePlugin) { this.plugin = plugin; }
-
-  /** Called on every active-leaf-change. Attaches to MarkdownView
-   *  leaves backing a snippet file (type: action | data); detaches
-   *  otherwise. Idempotent if leaf hasn't changed. */
-  async onActiveLeafChange(view: MarkdownView | null): Promise<void> {
-    if (this.currentView === view) return;
-    this.detach();
-    if (!view || !view.file) return;
-    const fm = this.plugin.app.metadataCache.getFileCache(view.file)?.frontmatter;
-    const t = typeof fm?.type === 'string' ? fm.type : undefined;
-    if (t !== 'action' && t !== 'data') return;
-    await this.attach(view);
-  }
-
-  private async attach(view: MarkdownView): Promise<void> {
-    // `view.editor.cm` is undocumented but verified by the spike.
-    const cm = (view.editor as { cm?: EditorView }).cm ?? null;
-    if (!cm) return;  // graceful no-op if the editor surface isn't CM6
-    this.currentView = view;
-    this.currentFile = view.file ?? null;
-    this.cm = cm;
-    // Apply initial state per frontmatter edit_mode + heading
-    // positions. Set the ignore window so the application doesn't
-    // re-trigger the gesture handler.
-    this.ignoreFoldEventsUntil = Date.now() + FOLD_EVENT_IGNORE_WINDOW_MS;
-    await this.applyInitialState();
-    this.prevFold = this.readFoldState();
-    // Subscribe via a CodeMirror update-listener: `cm.state.update`
-    // notifications. CM6 doesn't expose a "fold-only" event, but we
-    // diff fold state on every editor update and react to deltas.
-    // Cost is tiny (a few set comparisons per keystroke).
-    const handler = () => { void this.onCmUpdate(); };
-    const wrapped = { destroy: () => {} };
-    // Attach by patching dispatchTransactions — CM6 supports this
-    // via the `dispatch` override pattern, but the safest cross-
-    // version approach is the `updateListener` extension. Since we
-    // don't have a clean way to add an extension post-init from a
-    // plugin without forking the editor, we use a polling-via-
-    // interval fallback: check fold state every 200ms while the
-    // view is active. Worst-case latency 200ms for the gesture
-    // flip — well within cohort UX tolerance.
-    const intervalId = window.setInterval(handler, 200);
-    wrapped.destroy = () => window.clearInterval(intervalId);
-    this.cmObserver = wrapped;
-  }
-
-  detach(): void {
-    if (this.cmObserver) {
-      this.cmObserver.destroy();
-      this.cmObserver = null;
-    }
-    this.currentView = null;
-    this.currentFile = null;
-    this.cm = null;
-    this.prevFold = { englishFolded: false, pythonFolded: false };
-  }
-
-  /** Read the snippet's # English / # Python heading line numbers
-   *  from the current view's editor content. 0-indexed CM line
-   *  positions; null if absent. */
-  private readHeadings(): SnippetHeadings {
-    if (!this.cm) return { englishLine: null, pythonLine: null };
-    const doc = this.cm.state.doc;
-    let englishLine: number | null = null;
-    let pythonLine: number | null = null;
-    for (let i = 1; i <= doc.lines; i++) {
-      const text = doc.line(i).text.trim();
-      if (/^#{1,6}\s+english\s*$/i.test(text) && englishLine === null) {
-        englishLine = i;
-      } else if (/^#{1,6}\s+python\s*$/i.test(text) && pythonLine === null) {
-        pythonLine = i;
-      }
-    }
-    return { englishLine, pythonLine };
-  }
-
-  /** Read whether each heading's section is currently folded.
-   *  CM6's foldedRanges is an IntervalSet keyed on document
-   *  positions. A heading is "folded" when its line's end-of-line
-   *  position falls inside a folded range. */
-  private readFoldState(): FoldState {
-    const out: FoldState = { englishFolded: false, pythonFolded: false };
-    if (!this.cm) return out;
-    const headings = this.readHeadings();
-    const folded = foldedRanges(this.cm.state);
-    if (headings.englishLine !== null) {
-      const ln = this.cm.state.doc.line(headings.englishLine);
-      out.englishFolded = this.posInFoldedSet(folded, ln.to);
-    }
-    if (headings.pythonLine !== null) {
-      const ln = this.cm.state.doc.line(headings.pythonLine);
-      out.pythonFolded = this.posInFoldedSet(folded, ln.to);
-    }
-    return out;
-  }
-
-  private posInFoldedSet(
-    folded: { iter(): { value: unknown; from: number; to: number; next(): void } },
-    pos: number,
-  ): boolean {
-    const it = folded.iter();
-    while (it.value !== null) {
-      if (pos >= it.from && pos <= it.to) return true;
-      if (it.from > pos) return false;
-      it.next();
-    }
-    return false;
-  }
-
-  /** Apply the desired initial fold state for the active view. Sets
-   *  `prevFold` to the post-application state. */
-  private async applyInitialState(): Promise<void> {
-    if (!this.cm || !this.currentFile) return;
-    const fm = this.plugin.app.metadataCache.getFileCache(this.currentFile)
-      ?.frontmatter;
-    const mode = getEditMode(fm) ?? 'english';
-    const headings = this.readHeadings();
-    const desired = decideInitialState(mode as 'english' | 'python', headings);
-    this.applyFoldDelta(headings, this.readFoldState(), desired);
-  }
-
-  private applyFoldDelta(
-    headings: SnippetHeadings,
-    current: FoldState,
-    desired: { englishFolded: boolean; pythonFolded: boolean },
-  ): void {
-    if (!this.cm) return;
-    const effects: ReturnType<typeof foldEffect.of>[] = [];
-    if (headings.englishLine !== null
-        && current.englishFolded !== desired.englishFolded) {
-      const ln = this.cm.state.doc.line(headings.englishLine);
-      const range = { from: ln.to, to: this.sectionEnd(headings.englishLine) };
-      effects.push(
-        desired.englishFolded ? foldEffect.of(range) : unfoldEffect.of(range));
-    }
-    if (headings.pythonLine !== null
-        && current.pythonFolded !== desired.pythonFolded) {
-      const ln = this.cm.state.doc.line(headings.pythonLine);
-      const range = { from: ln.to, to: this.sectionEnd(headings.pythonLine) };
-      effects.push(
-        desired.pythonFolded ? foldEffect.of(range) : unfoldEffect.of(range));
-    }
-    if (effects.length > 0) {
-      this.cm.dispatch({ effects });
-    }
-  }
-
-  /** End-of-section position for the heading at `headingLine`:
-   *  the offset just before the NEXT heading, or end-of-document. */
-  private sectionEnd(headingLine: number): number {
-    if (!this.cm) return 0;
-    const doc = this.cm.state.doc;
-    for (let i = headingLine + 1; i <= doc.lines; i++) {
-      const text = doc.line(i).text.trim();
-      if (/^#{1,6}\s+\S/.test(text)) {
-        return doc.line(i - 1).to;
-      }
-    }
-    return doc.length;
-  }
-
-  /** Polling-driven update tick. Compares fold state vs prevFold;
-   *  routes deltas through decideOnFoldChange + setEditModeForFile. */
-  private async onCmUpdate(): Promise<void> {
-    if (!this.cm || !this.currentFile) return;
-    if (Date.now() < this.ignoreFoldEventsUntil) return;
-    const headings = this.readHeadings();
-    const current = this.readFoldState();
-    // No change vs prevFold → nothing to do.
-    if (current.englishFolded === this.prevFold.englishFolded
-        && current.pythonFolded === this.prevFold.pythonFolded) {
-      return;
-    }
-    const fm = this.plugin.app.metadataCache.getFileCache(this.currentFile)
-      ?.frontmatter;
-    const mode = (getEditMode(fm) ?? 'english') as 'english' | 'python';
-    const desired = decideOnFoldChange(this.prevFold, current, mode, headings);
-    if (desired.newEditMode !== null) {
-      // Suppress re-entry while we apply our own fold deltas + write
-      // frontmatter.
-      this.ignoreFoldEventsUntil = Date.now() + FOLD_EVENT_IGNORE_WINDOW_MS;
-      this.applyFoldDelta(headings, current, desired);
-      await this.plugin.setEditModeForFile(
-        this.currentFile, desired.newEditMode);
-    }
-    this.prevFold = this.readFoldState();
-  }
-}
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
@@ -470,11 +256,6 @@ export default class ForgePlugin extends Plugin {
   // events before the user right-clicks). The synchronous index walk
   // is cheap and always fresh.
 
-  // v0.2.83 — facet-mutex gesture controller. Tracks the active
-  // MarkdownView, subscribes to its CM6 fold state, and runs the
-  // expand-gesture mutex flip.
-  private facetMutex: FacetMutexController | null = null;
-
   async onload() {
     await this.loadSettings();
 
@@ -488,16 +269,13 @@ export default class ForgePlugin extends Plugin {
     setPyodideHost(pyodideHost);
     setPyodideHostSingleton(pyodideHost);
 
-    // v0.2.83 — instantiate the facet-mutex controller; wire to
-    // active-leaf-change via registerEvent so it tears down on
-    // plugin unload.
-    this.facetMutex = new FacetMutexController(this);
-    this.registerEvent(
-      this.app.workspace.on('active-leaf-change', (leaf) => {
-        const view = leaf?.view instanceof MarkdownView ? leaf.view : null;
-        void this.facetMutex?.onActiveLeafChange(view);
-      })
-    );
+    // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
+    // ViewPlugin once at onload. CM6 instantiates the plugin per
+    // EditorView; per-view state lives on the plugin instance, the
+    // ForgePlugin singleton only serves callbacks via FacetMutexHost.
+    this.registerEditorExtension([
+      makeFacetMutexViewPlugin(() => this.facetMutexHost()),
+    ]);
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
@@ -848,7 +626,7 @@ export default class ForgePlugin extends Plugin {
         // _forge_set_edge_state (v0.2.40) translates basenames to
         // qualified IDs Python-side, so we don't need to construct
         // qualified strings here.
-        const registry: SnippetRegistryLike = {
+        const registry: SnippetRegistryLikeMulti = {
           qualifyBareId: (bareId: string): string | null => {
             const resolved = this.app.metadataCache.getFirstLinkpathDest(
               bareId, file.path,
@@ -860,26 +638,51 @@ export default class ForgePlugin extends Plugin {
             if (t !== 'action' && t !== 'data' && t !== 'snapshot') return null;
             return resolved.basename;
           },
+          // v0.2.84 Item B — walk every markdown file with matching
+          // basename. Filter to snippet types. Returns ALL qualified
+          // candidates (basenames) — engine-side _forge_qualify_snippet_id
+          // does the further bare→qualified routing per file.
+          qualifyBareIdAll: (bareId: string): string[] => {
+            const out: string[] = [];
+            for (const f of this.app.vault.getMarkdownFiles()) {
+              if (f.basename !== bareId) continue;
+              const fmm = this.app.metadataCache.getFileCache(f)?.frontmatter;
+              if (!fmm) continue;
+              const t = (fmm as any).type;
+              if (t !== 'action' && t !== 'data' && t !== 'snapshot') continue;
+              out.push(f.basename);
+            }
+            return out;
+          },
         };
 
-        const decision = decideWikilinkFreezeMenu(file.basename, target, registry);
-        if (!decision.showMenu) return;
+        // v0.2.84 — try the multi-match decision first. If single
+        // match, falls through to the legacy single-callee path so
+        // the existing menu copy stays identical for the dominant
+        // case. Only multi-match adds per-candidate menu items.
+        const multi = decideWikilinkFreezeMenuMulti(
+          file.basename, target, registry);
+        if (!multi.showMenu) return;
+        const caller = multi.caller as string;
+        const callees = multi.callees as string[];
+        // Single-match: render one item exactly as v0.2.83 did.
+        // Multi-match: render N items, each labeled with its qualified
+        // target (e.g. "Forge: Freeze edge song → forge-music/blues/chorus").
 
-        const caller = decision.caller as string;
-        const callee = decision.callee as string;
-
-        const fireFreeze = async (state: 'frozen' | 'live') => {
+        const fireFreezeForCallee = async (
+          state: 'frozen' | 'live', targetCallee: string,
+        ) => {
           const vaultPath = (this.app.vault.adapter as any).basePath as string;
           const verb = state === 'frozen' ? 'freeze' : 'unfreeze';
           try {
             const res = await freezeEdge(
-              this.settings.serverUrl, vaultPath, caller, callee, state,
+              this.settings.serverUrl, vaultPath, caller, targetCallee, state,
             );
             if (res.status === 200) {
-              new Notice(`Forge: ${verb}d ${caller} → ${callee}`);
+              new Notice(`Forge: ${verb}d ${caller} → ${targetCallee}`);
             } else if (res.status === 404) {
               new Notice(
-                `Forge: no snapshot for ${caller} → ${callee}. ` +
+                `Forge: no snapshot for ${caller} → ${targetCallee}. ` +
                 `Forge-click ${caller} once to capture it.`,
               );
             } else {
@@ -892,31 +695,29 @@ export default class ForgePlugin extends Plugin {
           }
         };
 
-        // v0.2.44: state-aware items. Query the current snapshot
-        // state via Pyodide's sync MEMFS read so the inapplicable
-        // action is grayed out at menu-build time. Disable Freeze if
-        // already frozen; disable Unfreeze if not frozen (live or
-        // no-snapshot). The null-host fallback (Pyodide not loaded
-        // yet) leaves both enabled — matches pre-v0.2.44 behavior.
+        // v0.2.44: state-aware items. v0.2.84 — for multi-match, query
+        // state per candidate so each item's enabled-state is accurate.
         const hostManager = getPyodideHost();
         const host = hostManager?.tryGetInstance();
-        const state: 'frozen' | 'live' | 'no-snapshot' | null =
-          host ? host.readSnapshotStateSync(caller, callee) : null;
-        const freezeDisabled = state === 'frozen';
-        const unfreezeDisabled = state !== 'frozen';
 
-        menu.addItem((item) => {
-          item.setTitle(`Forge: Freeze edge ${caller} → ${callee}`)
-            .setIcon('snowflake')
-            .setDisabled(freezeDisabled)
-            .onClick(() => { void fireFreeze('frozen'); });
-        });
-        menu.addItem((item) => {
-          item.setTitle(`Forge: Unfreeze edge ${caller} → ${callee}`)
-            .setIcon('flame')
-            .setDisabled(unfreezeDisabled)
-            .onClick(() => { void fireFreeze('live'); });
-        });
+        for (const targetCallee of callees) {
+          const state: 'frozen' | 'live' | 'no-snapshot' | null =
+            host ? host.readSnapshotStateSync(caller, targetCallee) : null;
+          const freezeDisabled = state === 'frozen';
+          const unfreezeDisabled = state !== 'frozen';
+          menu.addItem((item) => {
+            item.setTitle(`Forge: Freeze edge ${caller} → ${targetCallee}`)
+              .setIcon('snowflake')
+              .setDisabled(freezeDisabled)
+              .onClick(() => { void fireFreezeForCallee('frozen', targetCallee); });
+          });
+          menu.addItem((item) => {
+            item.setTitle(`Forge: Unfreeze edge ${caller} → ${targetCallee}`)
+              .setIcon('flame')
+              .setDisabled(unfreezeDisabled)
+              .onClick(() => { void fireFreezeForCallee('live', targetCallee); });
+          });
+        }
       }),
     );
 
@@ -1028,7 +829,7 @@ export default class ForgePlugin extends Plugin {
     // their predecessors swept after the Run+Generate→Forge and lock→edit-mode
     // refactors.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .${MODE_BTN_CLASS}, .forge-chips-btn, .forge-dag-btn`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .forge-chips-btn, .forge-dag-btn`
     ).forEach(el => el.remove());
 
     // v0.2.46: hoist the frontmatter lookup so the chip-toolbar
@@ -1080,8 +881,9 @@ export default class ForgePlugin extends Plugin {
     // unchanged. Power users retain access via the command palette
     // (Cmd-P → "Toggle Python/English editing mode" — registered at
     // line 685-688) which preserves the toggleEditMode + drift-aware
-    // markDriftAsync path. The MODE_BTN_CLASS class declaration stays
-    // in case the ribbon button is restored in a future iteration.
+    // markDriftAsync path. v0.2.84 — MODE_BTN_CLASS class declaration
+    // removed; v0.2.83's gestural mutex permanently replaced the
+    // ribbon-button surface, so the restoration option is off the table.
 
     const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
@@ -1161,6 +963,26 @@ export default class ForgePlugin extends Plugin {
    *  path (a) per the prompt — does NOT auto-create a Python stub
    *  (that would risk stale-cache on user edits).
    */
+  /** v0.2.84 — host adapter the facet-mutex ViewPlugin calls back
+   *  into. Returns null when no active markdown snippet is in focus,
+   *  in which case the ViewPlugin no-ops cleanly. */
+  private facetMutexHost(): FacetMutexHost {
+    return {
+      app: this.app,
+      getActiveSnippet: () => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!view?.file) return null;
+        const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+        const t = typeof fm?.type === 'string' ? fm.type : undefined;
+        if (t !== 'action' && t !== 'data') return null;
+        const mode = getEditMode(fm) ?? 'english';
+        return { file: view.file, mode: mode as 'english' | 'python' };
+      },
+      setEditModeForFile: (file, newMode) =>
+        this.setEditModeForFile(file, newMode),
+    };
+  }
+
   public async setEditModeForFile(
     file: TFile, newMode: 'english' | 'python',
   ): Promise<void> {

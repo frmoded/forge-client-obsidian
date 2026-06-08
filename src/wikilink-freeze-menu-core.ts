@@ -39,6 +39,53 @@ export interface WikilinkFreezeMenuDecision {
   callee?: string;
 }
 
+/** v0.2.84 — multi-match decision shape. When a bare wikilink matches
+ *  more than one qualified target, the editor-menu handler surfaces
+ *  one freeze item per candidate rather than silently picking the
+ *  first (the v0.2.78 first-match-wins behavior). */
+export interface WikilinkFreezeMenuMultiDecision {
+  /** True when at least one valid (caller, callee) pair was found.
+   *  False when caller doesn't resolve, all callees self-reference,
+   *  or no callee candidates resolve. */
+  showMenu: boolean;
+  /** Always populated when `showMenu` is true. One entry per
+   *  qualified callee candidate; each is ready to pass to
+   *  `freezeEdge(caller, callee, ...)`. Always >= 1 length when
+   *  showMenu=true. */
+  caller?: string;
+  callees?: string[];
+}
+
+/** Minimal registry shape for the multi-match decision. Adds an
+ *  `_all`-style method returning every qualified match for a bare
+ *  basename. Plugin-side implementation walks
+ *  `app.vault.getMarkdownFiles()` filtered by basename. */
+export interface SnippetRegistryLikeMulti extends SnippetRegistryLike {
+  qualifyBareIdAll(bareId: string): string[];
+}
+
+/** v0.2.84 — Decide whether to surface the freeze menu, considering
+ *  multi-match candidates. Returns the FULL list of valid (caller,
+ *  callee) pairings; menu handler renders one item per callee.
+ *
+ *  Suppression cases (mirror the single-match helper):
+ *  - Caller (current file's basename) doesn't resolve.
+ *  - No callee candidates resolve at all.
+ *  - All candidates resolve to the caller (self-reference). */
+export function decideWikilinkFreezeMenuMulti(
+  currentFileBasename: string,
+  wikilinkTarget: string,
+  registry: SnippetRegistryLikeMulti,
+): WikilinkFreezeMenuMultiDecision {
+  const caller = registry.qualifyBareId(currentFileBasename);
+  if (caller === null) return { showMenu: false };
+  const allCallees = registry.qualifyBareIdAll(wikilinkTarget);
+  // Filter out self-references + nulls.
+  const validCallees = allCallees.filter(c => c !== null && c !== caller);
+  if (validCallees.length === 0) return { showMenu: false };
+  return { showMenu: true, caller, callees: validCallees };
+}
+
 /** Decide whether to surface the freeze menu for a (currentFile,
  *  wikilinkTarget) pair.
  *

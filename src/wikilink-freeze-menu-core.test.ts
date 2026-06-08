@@ -147,3 +147,101 @@ test('decideWikilinkFreezeMenu: ambiguous bare match → first-match-wins per re
     callee: 'forge-music/random_name',  // registry's first-match
   });
 });
+
+
+// --- v0.2.84 multi-match decision tests ----------------------------
+
+import {
+  decideWikilinkFreezeMenuMulti,
+  type SnippetRegistryLikeMulti,
+} from './wikilink-freeze-menu-core.ts';
+
+function makeMultiRegistry(
+  entries: Array<[string, string]>,
+): SnippetRegistryLikeMulti {
+  // qualifyBareId returns first match (same as single-match helper).
+  // qualifyBareIdAll returns all matches in declaration order.
+  return {
+    qualifyBareId(bareId: string): string | null {
+      for (const [bare, qualified] of entries) {
+        if (bare === bareId) return qualified;
+      }
+      return null;
+    },
+    qualifyBareIdAll(bareId: string): string[] {
+      const out: string[] = [];
+      for (const [bare, qualified] of entries) {
+        if (bare === bareId) out.push(qualified);
+      }
+      return out;
+    },
+  };
+}
+
+test('decideWikilinkFreezeMenuMulti: single match → showMenu with 1 callee', () => {
+  const r = makeMultiRegistry([
+    ['song', 'forge-music/song'],
+    ['chorus', 'forge-music/blues/chorus'],
+  ]);
+  const decision = decideWikilinkFreezeMenuMulti('song', 'chorus', r);
+  assert.deepEqual(decision, {
+    showMenu: true,
+    caller: 'forge-music/song',
+    callees: ['forge-music/blues/chorus'],
+  });
+});
+
+test('decideWikilinkFreezeMenuMulti: multi-match → showMenu with N callees', () => {
+  const r = makeMultiRegistry([
+    ['song', 'forge-music/song'],
+    ['chorus', 'forge-music/blues/chorus'],
+    ['chorus', 'forge-music/jazz/chorus'],
+  ]);
+  const decision = decideWikilinkFreezeMenuMulti('song', 'chorus', r);
+  assert.deepEqual(decision, {
+    showMenu: true,
+    caller: 'forge-music/song',
+    callees: ['forge-music/blues/chorus', 'forge-music/jazz/chorus'],
+  });
+});
+
+test('decideWikilinkFreezeMenuMulti: caller unresolved → no menu', () => {
+  const r = makeMultiRegistry([
+    ['chorus', 'forge-music/blues/chorus'],
+  ]);
+  const decision = decideWikilinkFreezeMenuMulti('unknown', 'chorus', r);
+  assert.equal(decision.showMenu, false);
+});
+
+test('decideWikilinkFreezeMenuMulti: no callee candidates → no menu', () => {
+  const r = makeMultiRegistry([
+    ['song', 'forge-music/song'],
+    // 'chorus' intentionally absent
+  ]);
+  const decision = decideWikilinkFreezeMenuMulti('song', 'chorus', r);
+  assert.equal(decision.showMenu, false);
+});
+
+test('decideWikilinkFreezeMenuMulti: candidate self-reference filtered out', () => {
+  // `song` wikilinks itself (self-edge); the only candidate matches
+  // the caller. Filtered → no menu.
+  const r = makeMultiRegistry([
+    ['song', 'forge-music/song'],
+  ]);
+  const decision = decideWikilinkFreezeMenuMulti('song', 'song', r);
+  assert.equal(decision.showMenu, false);
+});
+
+test('decideWikilinkFreezeMenuMulti: mixed self-ref + valid → valid kept', () => {
+  // 2 candidates; one is the caller (self-ref, drop), one is distinct.
+  const r = makeMultiRegistry([
+    ['song', 'forge-music/song'],
+    ['song', 'forge-music/jazz/song'],  // distinct match
+  ]);
+  const decision = decideWikilinkFreezeMenuMulti('song', 'song', r);
+  assert.deepEqual(decision, {
+    showMenu: true,
+    caller: 'forge-music/song',
+    callees: ['forge-music/jazz/song'],
+  });
+});
