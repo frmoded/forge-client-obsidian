@@ -46,6 +46,7 @@ import {
 import { replacePythonSection } from './replace-python-section-core';
 import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
 import { forgeButtonShouldShow } from './forge-button-gate-core';
+import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -318,6 +319,14 @@ export default class ForgePlugin extends Plugin {
     // semantics: the panel reflects the file currently being viewed.
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => { this.maybePreviewDataSnippet(file); })
+    );
+
+    // v0.2.82 Item B — `.bak.<version>/` directory cohort cue. v0.2.78
+    // excluded these from snippet discovery, but Obsidian's file tree
+    // still surfaces them; users clicking files there get confused. Fire
+    // a one-shot Notice per `.bak.*` dir per session.
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => { this.maybeNotifyBakOpen(file); })
     );
 
     // Single context-aware Forge entry point (constitution B9 / ribbon
@@ -1861,6 +1870,29 @@ export default class ForgePlugin extends Plugin {
   // work when the file is a hand-authored data snippet with a known
   // content_type. Binary data (content_ref present) goes to the asset-based
   // renderer; text data renders the body inline.
+  // v0.2.82 Item B — per-session dedup of `.bak.*` open Notices. Keyed
+  // by the bak dir's path (per bakDedupKey); opening multiple files
+  // inside the same backup dir fires the Notice once.
+  private _bakNoticeSeenSet = new Set<string>();
+
+  private maybeNotifyBakOpen(file: TFile | null) {
+    if (!file) return;
+    const path = file.path;
+    if (!isBakPath(path)) return;
+    const key = bakDedupKey(path);
+    if (!key || this._bakNoticeSeenSet.has(key)) return;
+    this._bakNoticeSeenSet.add(key);
+    // The bak dir's basename is the last segment of the dedup key.
+    const bakDirName = key.split('/').pop() ?? key;
+    const liveName = baseLibraryName(bakDirName);
+    new Notice(
+      `Forge: '${bakDirName}' is a backup of an older library version. ` +
+      `The live version is at '${liveName}/'. Backups are read-only ` +
+      `by convention; running Forge on them is not recommended.`,
+      8000,
+    );
+  }
+
   private async maybePreviewDataSnippet(file: TFile | null) {
     if (!file) return;
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;

@@ -654,3 +654,25 @@
   font-weight: 500;
   color: var(--text-normal);
 }
+
+/* v0.2.82 Item B — visually de-emphasize `.bak.<version>/` library
+   backups that v0.2.38's auto-re-extract leaves behind. v0.2.78
+   excluded them from snippet discovery; this rule signals to the
+   user that the directory is inert. data-path selector targets
+   Obsidian's file-explorer DOM (.nav-folder-title + .nav-file-title
+   carry data-path attributes for the path they represent). The
+   `.bak.` substring match catches both `<name>.bak.<ver>` and
+   `<name>.bak.<ver>.<n>` (collision suffix). */
+.nav-folder-title[data-path*=".bak."],
+.nav-file-title[data-path*=".bak."] {
+  opacity: 0.55;
+}
+.nav-folder-title[data-path*=".bak."]::after {
+  content: " (backup)";
+  font-size: 0.8em;
+  opacity: 0.7;
+  font-style: italic;
+}
+.nav-file-title[data-path*=".bak."] {
+  text-decoration: line-through;
+}

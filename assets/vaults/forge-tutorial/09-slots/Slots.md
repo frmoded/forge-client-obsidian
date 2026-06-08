@@ -49,6 +49,12 @@ step that costs effort, and only slots need it.)
 Change the English, though — including the words inside the slot — and Forge sees
 the request is different, asks the LLM again, and fills it in anew.
 
+> **If a slot snippet ever feels slow** after you edit it, peek at its
+> frontmatter (the block between the `---` lines at the top) and check that the
+> line `facet_form: canonical` is still there. Obsidian sometimes drops it when
+> you edit a snippet, which makes Forge re-translate on every click instead of
+> using the remembered answer. Add the line back and it's quick again.
+
 ## Exercise
 
 Change `octopuses` to something you're curious about — volcanoes, the moon, your
