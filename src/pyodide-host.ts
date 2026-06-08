@@ -636,12 +636,20 @@ def _forge_qualify_snippet_id(snippet_id: str) -> str:
     Bare IDs that don't resolve in the registry pass through unchanged
     too — downstream raises the appropriate FileNotFoundError per F5.
 
-    Match semantics follow registry resolution order — bare matches
-    pick the first vault that has the snippet, same as
-    context.compute('bare_id') from a top-level call site."""
+    v0.2.78 — switched from get_bare (resolution-order direct-key
+    only) to find_qualified_by_bare (also scans sub-path keys + non-
+    resolution-order vaults). Pre-v0.2.78, freeze on a library
+    wikilink like [[chorus]] from inside forge-music/blues/song.md
+    would call get_bare('chorus') which missed the sub-path entry
+    _vaults['forge-music']['blues/chorus'], returned None, and the
+    qualifier fell through to bare. set_snapshot_state then looked
+    at .forge/edges/chorus/song.md (doesn't exist) instead of
+    .forge/edges/forge-music/blues/song/forge-music/blues/chorus.md
+    where compute had captured it. FileNotFoundError on freeze.
+    """
     if '/' in snippet_id:
         return snippet_id
-    snip = _forge_registry.get_bare(snippet_id)
+    snip = _forge_registry.find_qualified_by_bare(snippet_id)
     if snip:
         return snip['snippet_id']
     return snippet_id
