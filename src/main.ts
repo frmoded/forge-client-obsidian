@@ -823,28 +823,16 @@ export default class ForgePlugin extends Plugin {
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
 
-    // Edit-mode toggle for action snippets. English mode = LLM-driven,
-    // Forge regenerates Python from English. Python mode = hand-tuned,
-    // Forge skips generation and runs whatever's in the body.
-    // Replaces the binary lock toggle from Phase 5 with the explicit
-    // direction the user is editing. Data snippets stay on the lock
-    // mechanism (different shape, different rename — see Phase 6.5 spec).
-    if (fm?.type === 'action') {
-      const mode = getEditMode(fm);
-      const modeBtn = view.addAction(
-        mode === 'python' ? 'code' : 'pencil-line',
-        mode === 'python'
-          ? 'Editing: Python (click to switch to English mode — Forge will regenerate)'
-          : 'Editing: English (click to switch to Python mode — Forge will skip regenerate)',
-        () => { this.toggleEditMode(); },
-      );
-      modeBtn.addClass(MODE_BTN_CLASS);
-      // Drift indicator: in Python mode, the English facet might have moved
-      // since we switched. Hash and compare; yellow tint if it drifted.
-      if (mode === 'python' && view.file) {
-        this.markDriftAsync(view.file, modeBtn, fm.locked_english_hash);
-      }
-    }
+    // v0.2.79 — edit-mode ribbon button REMOVED. Moves V1 toward V2's
+    // gestural model: the primary cohort rarely flips between English
+    // and Python mode, and the ribbon button was adding UI noise for a
+    // power-user feature. The B8 edit_mode frontmatter contract,
+    // locked_english_hash drift detection, and engine behavior are all
+    // unchanged. Power users retain access via the command palette
+    // (Cmd-P → "Toggle Python/English editing mode" — registered at
+    // line 685-688) which preserves the toggleEditMode + drift-aware
+    // markDriftAsync path. The MODE_BTN_CLASS class declaration stays
+    // in case the ribbon button is restored in a future iteration.
 
     const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
