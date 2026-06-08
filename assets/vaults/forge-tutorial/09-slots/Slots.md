@@ -30,18 +30,24 @@ make it real.
 ## Where the answer goes
 
 Forge the **octopus_fact** snippet once, then **look at it again**. Something
-changed: a new `# Python` section appeared at the bottom, holding the answer
-Forge filled in.
+changed: a new `# Python` section appeared at the bottom.
 
-That's on purpose. Filling a slot takes a real moment of thinking, so Forge does
-it **once**, writes the answer into `# Python`, and remembers it. Forge it again
-and it's instant — it reads the saved answer instead of working it out afresh.
-(Your earlier snippets never grew a `# Python` section because they had nothing
-to remember — they're worked out fresh every time, which is quick and free.)
+Here's what happened. To run your snippet, Forge first **translates** your
+English into code it can run. The first time, it reaches your `{{ … }}` slot and
+asks the LLM to fill it in — and *that's the only moment the LLM is involved, and
+it happens before the snippet runs, not while it runs.* Forge splices the answer
+into the translated code, saves that code in the `# Python` section, and
+remembers it.
 
-So a slot is asked *once* and then frozen: re-running gives the same fact. Change
-the English, though — including the words inside the slot — and Forge knows the
-request is different and fills it in anew.
+After that, clicking Forge is **instant**: Forge reads the remembered code and
+just runs it — no LLM, no re-translating. So a filled slot is asked once and then
+settled: re-running gives the same fact, for free, every time. (Your earlier
+snippets never grew a `# Python` section because they had nothing to remember —
+they're translated fresh on every click, which is fast and free. It's the LLM
+step that costs effort, and only slots need it.)
+
+Change the English, though — including the words inside the slot — and Forge sees
+the request is different, asks the LLM again, and fills it in anew.
 
 ## Exercise
 
