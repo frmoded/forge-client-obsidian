@@ -669,3 +669,25 @@
 .nav-file-title[data-path*=".bak."] {
   text-decoration: line-through;
 }
+
+/* v0.2.109 — frontmatter-fold placeholder widget. Renders as a
+   subtle "⋯" inline at the position where the YAML block used to
+   be. Clickable: the ViewPlugin's WidgetType binds a mousedown
+   handler that expands the file's frontmatter in-session. */
+.forge-frontmatter-placeholder {
+  display: inline-block;
+  padding: 0 4px;
+  margin: 0;
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  color: var(--text-muted);
+  background: var(--background-modifier-hover);
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: baseline;
+}
+.forge-frontmatter-placeholder:hover {
+  background: var(--background-modifier-active-hover);
+  color: var(--text-normal);
+}

@@ -1,26 +1,36 @@
-// v0.2.102 Item A — auto-fold the YAML frontmatter block on snippet
-// file-open. Tamar's cohort smoke surfaced "overwhelm" signals: the
-// frontmatter block (type/inputs/edit_mode/...) was the first thing
-// students saw, gating actual snippet content (`# English`).
+// v0.2.102 Item A — auto-collapse the YAML frontmatter on snippet
+// file-open so students see `# English` first.
 //
-// Behavior:
-//  - On file-open for a snippet (frontmatter has `type: action` or
-//    `type: data`), fold the `---`-delimited frontmatter region.
-//  - Plain notes (no `type: action|data`): no change.
-//  - User can expand by clicking the fold-triangle on the opening
-//    `---` line. Subsequent ViewUpdates DO NOT re-fold (same shape
-//    as facet-mutex's initial-state-apply: once per file-open).
+// v0.2.109 — switched from foldEffect-based dispatch to a
+// Decoration.replace-based ViewPlugin. v0.2.108's cohort smoke
+// (Tamar) confirmed:
+//   - The ViewPlugin fires on file-open (constructor + update logs).
+//   - The fold range computes correctly (from=3, to=~150 for a
+//     typical snippet).
+//   - `foldEffect.of(range)` dispatch lands in `foldedRanges` state
+//     (post-dispatch probe showed 2 ranges including ours).
+//   - But Obsidian's fold-decoration renderer DOES NOT visually
+//     collapse the range. Hypothesis: Obsidian's renderer only
+//     honors fold ranges aligned with markdown headings (the
+//     facet-mutex's # English / # Python folds DO render); arbitrary
+//     YAML byte-ranges are silently discarded at the render layer.
 //
-// Per the v0.2.85-89 retrospective: NEVER dispatch from inside a
-// ViewUpdate. We use queueMicrotask in the constructor (initial
-// view mount) + setTimeout(0) on file-change for the dispatch.
-//
-// Scope: source mode only. Live preview / reading mode handle
-// frontmatter visibility via Obsidian's Properties view natively.
+// Workaround: own the decoration. Replace the frontmatter range with
+// a click-to-expand placeholder widget directly. Bypasses Obsidian's
+// fold renderer entirely. Per-file expanded state lives on the
+// plugin instance so re-opening a snippet folds again by default but
+// in-session expand survives.
 
 import type { App, TFile } from 'obsidian';
-import { ViewPlugin, type ViewUpdate, type EditorView } from '@codemirror/view';
-import { foldEffect } from '@codemirror/language';
+import {
+  ViewPlugin,
+  type ViewUpdate,
+  type EditorView,
+  Decoration,
+  type DecorationSet,
+  WidgetType,
+} from '@codemirror/view';
+import { RangeSetBuilder } from '@codemirror/state';
 
 /** Minimal callback interface back to the ForgePlugin singleton. */
 export interface FrontmatterFoldHost {
@@ -30,10 +40,12 @@ export interface FrontmatterFoldHost {
   getActiveSnippetForFold(): { file: TFile } | null;
 }
 
-/** Locate the YAML frontmatter range in the document — start of the
- *  opening `---` line through the END of the closing `---` line.
- *  Returns null when the document doesn't start with a frontmatter
- *  delimiter or has no closing delimiter (malformed).
+/** Locate the YAML frontmatter range in the document — end of the
+ *  opening `---` line (so the `---` stays visible) through the end
+ *  of the closing `---` line (newline excluded so the body below
+ *  starts cleanly). Returns null when the document doesn't start
+ *  with a frontmatter delimiter or has no closing delimiter
+ *  (malformed).
  *
  *  Pure-core extraction: pulled out for unit testing without a
  *  live EditorView. */
@@ -43,7 +55,6 @@ export function computeFrontmatterFoldRange(
   const lines = doc.split('\n');
   if (lines.length < 2) return null;
   if (lines[0].trim() !== '---') return null;
-  // Find the closing `---` after line 0.
   let closeLine = -1;
   for (let i = 1; i < lines.length; i++) {
     if (lines[i].trim() === '---') {
@@ -52,139 +63,115 @@ export function computeFrontmatterFoldRange(
     }
   }
   if (closeLine === -1) return null;
-  // CM6 fold ranges are character positions in the doc text.
-  //   `from` = end of line 0 (the opening `---`, length 3) so the
-  //   first line stays visible with a fold-triangle attached.
-  //   `to`   = end of the closing `---` line so everything from the
-  //   newline-after-line-0 through the closing `---` is folded.
-  // Pure arithmetic on line lengths + (closeLine) newlines between
-  // them. Don't include the newline after `to` (would fold the
-  // first blank line of the body).
   const from = lines[0].length;
   let to = 0;
   for (let i = 0; i <= closeLine; i++) {
     to += lines[i].length;
-    if (i < closeLine) to += 1;  // newline between this line and the next
+    if (i < closeLine) to += 1;
   }
   return { from, to };
+}
+
+// Per-EditorView in-session expanded set. Keyed by file path so
+// re-opening a different snippet still defaults to folded.
+type ExpandedSet = Set<string>;
+
+class FrontmatterPlaceholderWidget extends WidgetType {
+  private readonly filePath: string;
+  private readonly onExpand: () => void;
+  constructor(filePath: string, onExpand: () => void) {
+    super();
+    this.filePath = filePath;
+    this.onExpand = onExpand;
+  }
+  toDOM(): HTMLElement {
+    const span = document.createElement('span');
+    span.className = 'forge-frontmatter-placeholder';
+    span.textContent = '⋯';
+    span.title = 'Click to expand properties';
+    span.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.onExpand();
+    });
+    return span;
+  }
+  // Identity is per file-path: re-using widget across files would be
+  // wrong (different expand state); within a file it's reusable.
+  eq(other: FrontmatterPlaceholderWidget): boolean {
+    return other.filePath === this.filePath;
+  }
+  ignoreEvent(): boolean { return false; }
 }
 
 export function makeFrontmatterFoldViewPlugin(
   getHost: () => FrontmatterFoldHost | null,
 ) {
   return ViewPlugin.fromClass(class {
+    decorations: DecorationSet = Decoration.none;
+    private currentFilePath: string | null = null;
+    private expanded: ExpandedSet = new Set();
     private view: EditorView;
-    private foldedForFilePath: string | null = null;
-    private destroyed = false;
 
     constructor(view: EditorView) {
       this.view = view;
-      // v0.2.108 DEBUG — frontmatter-fold reported NOT firing on
-      // cohort install (post-v0.2.106). ViewPlugin IS registered in
-      // main.ts; the trace below pins which hypothesis is true:
-      //   H2 stale main.js: never see any [ff-debug] lines.
-      //   H3 range null: see "range computation returned null".
-      //   H4 update not firing: see "constructor fired" but no
-      //     "update fired" lines.
-      //   H5 dispatch but no visual fold: see "dispatch attempted"
-      //     followed by frontmatter still unfolded on screen.
-      //   H6 host returns null: see "host getActiveSnippetForFold:
-      //     null" repeatedly.
-      console.log('[ff-debug v0.2.108] constructor fired');
-      queueMicrotask(() => {
-        if (this.destroyed) return;
-        console.log('[ff-debug v0.2.108] queueMicrotask: maybeFold');
-        try { this.maybeFold(); }
-        catch (e) { console.warn('Forge frontmatter-fold initial failed', e); }
-      });
+      this.refresh();
     }
 
     update(u: ViewUpdate) {
-      if (this.destroyed) return;
       const host = getHost();
       if (!host) {
-        console.log('[ff-debug v0.2.108] update: host null');
-        return;
-      }
-      const active = host.getActiveSnippetForFold();
-      if (!active) {
-        if (this.foldedForFilePath !== null) {
-          console.log('[ff-debug v0.2.108] update: host getActiveSnippetForFold returned null; clearing cache');
+        if (this.decorations !== Decoration.none) {
+          this.decorations = Decoration.none;
         }
-        this.foldedForFilePath = null;
-        return;
-      }
-      if (active.file.path === this.foldedForFilePath) {
-        return;
-      }
-      console.log(`[ff-debug v0.2.108] update fired; active=${active.file.path}, foldedForFilePath=${this.foldedForFilePath}; scheduling maybeFold`);
-      void u;
-      setTimeout(() => {
-        if (this.destroyed) return;
-        try { this.maybeFold(); }
-        catch (e) { console.warn('Forge frontmatter-fold deferred failed', e); }
-      }, 0);
-    }
-
-    destroy() {
-      this.destroyed = true;
-    }
-
-    private maybeFold() {
-      const host = getHost();
-      if (!host) {
-        console.log('[ff-debug v0.2.108] maybeFold: host null');
         return;
       }
       const active = host.getActiveSnippetForFold();
-      if (!active) {
-        console.log('[ff-debug v0.2.108] maybeFold: host returned null active snippet (frontmatter not type:action|data?)');
-        return;
+      const newPath = active?.file.path ?? null;
+      if (newPath !== this.currentFilePath || u.docChanged) {
+        this.currentFilePath = newPath;
+        this.refresh();
       }
-      if (active.file.path === this.foldedForFilePath) {
-        console.log('[ff-debug v0.2.108] maybeFold: already folded this file');
-        return;
-      }
+    }
+
+    private refresh() {
+      this.decorations = this.buildDecorations();
+    }
+
+    private buildDecorations(): DecorationSet {
+      const host = getHost();
+      if (!host) return Decoration.none;
+      const active = host.getActiveSnippetForFold();
+      if (!active) return Decoration.none;
+      const path = active.file.path;
+      if (this.expanded.has(path)) return Decoration.none;
       const doc = this.view.state.doc.toString();
       const range = computeFrontmatterFoldRange(doc);
-      console.log(`[ff-debug v0.2.108] maybeFold: file=${active.file.path}, doc.length=${doc.length}, range=`, range);
-      if (!range) {
-        this.foldedForFilePath = active.file.path;
-        console.log('[ff-debug v0.2.108] maybeFold: range computation returned null (no frontmatter delimiters?); marking file done');
-        return;
-      }
+      if (!range) return Decoration.none;
       const docLen = this.view.state.doc.length;
       if (range.from < 0 || range.to > docLen || range.from >= range.to) {
-        this.foldedForFilePath = active.file.path;
-        console.warn('[ff-debug v0.2.108] maybeFold: bounds check failed', { range, docLen });
-        return;
+        return Decoration.none;
       }
-      try {
-        console.log('[ff-debug v0.2.108] maybeFold: dispatch attempted; foldEffect.of', range);
-        this.view.dispatch({
-          effects: foldEffect.of(range),
-        });
-        // Inspect the actual folded ranges in the resulting state to
-        // confirm the fold landed at the CM6 level (vs. being silently
-        // discarded by a missing fold-state extension or Obsidian's
-        // override).
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const lang = require('@codemirror/language');
-          const folded = lang.foldedRanges(this.view.state);
-          const ranges: Array<{ from: number; to: number }> = [];
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          folded.between(0, this.view.state.doc.length, (from: number, to: number) => {
-            ranges.push({ from, to });
-          });
-          console.log('[ff-debug v0.2.108] post-dispatch foldedRanges:', ranges);
-        } catch (probeErr) {
-          console.warn('[ff-debug v0.2.108] foldedRanges probe failed', probeErr);
-        }
-        this.foldedForFilePath = active.file.path;
-      } catch (e) {
-        console.warn('[ff-debug v0.2.108] dispatch failed', e);
-      }
+      const builder = new RangeSetBuilder<Decoration>();
+      builder.add(
+        range.from,
+        range.to,
+        Decoration.replace({
+          widget: new FrontmatterPlaceholderWidget(path, () => {
+            this.expanded.add(path);
+            // Re-render decorations now that the file is marked
+            // expanded. ViewPlugin's update hook expects state changes
+            // to come via dispatch transactions; for our purposes a
+            // direct refresh + view.dispatch(no-op) is enough to
+            // trigger a re-render.
+            this.refresh();
+            this.view.dispatch({});
+          }),
+        }),
+      );
+      return builder.finish();
     }
+  }, {
+    decorations: (v) => v.decorations,
   });
 }
