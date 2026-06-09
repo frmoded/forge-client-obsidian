@@ -1852,8 +1852,24 @@ export default class ForgePlugin extends Plugin {
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
 
     for (const [id, code] of Object.entries(generated)) {
-      const file = files.find(f => f.basename === id);
-      if (!file) {
+      // v0.2.104 — qualified snippet_id fix. Pre-v0.2.104 we matched
+      // by f.basename === id, which silently failed for library-
+      // subdir snippets: /generate returns snippet_id like
+      // `forge-moda/create_ink_particles` but file basename is just
+      // `create_ink_particles`. Match failed → silent skip → Python
+      // never updated on disk. Cohort smoke (Tamar) on
+      // create_ink_particles: edited English to "Create 6 ink
+      // particles..." + Forge → output unchanged (cached Python ran),
+      // Python facet on disk still showed count=50.
+      //
+      // V1 convention: snippet_id maps to `<snippet_id>.md` relative
+      // to vault root. Try path lookup first; fall back to basename
+      // for root-level snippets where id is unqualified.
+      const pathLookup = this.app.vault.getAbstractFileByPath(`${id}.md`);
+      const file = (pathLookup instanceof TFile)
+        ? pathLookup
+        : files.find(f => f.basename === id);
+      if (!(file instanceof TFile)) {
         console.warn(`Forge: no file found for snippet '${id}'`);
         continue;
       }
