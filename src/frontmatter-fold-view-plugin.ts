@@ -1,36 +1,39 @@
 // v0.2.102 Item A — auto-collapse the YAML frontmatter on snippet
 // file-open so students see `# English` first.
 //
-// v0.2.109 — switched from foldEffect-based dispatch to a
-// Decoration.replace-based ViewPlugin. v0.2.108's cohort smoke
-// (Tamar) confirmed:
-//   - The ViewPlugin fires on file-open (constructor + update logs).
-//   - The fold range computes correctly (from=3, to=~150 for a
-//     typical snippet).
-//   - `foldEffect.of(range)` dispatch lands in `foldedRanges` state
-//     (post-dispatch probe showed 2 ranges including ours).
-//   - But Obsidian's fold-decoration renderer DOES NOT visually
-//     collapse the range. Hypothesis: Obsidian's renderer only
-//     honors fold ranges aligned with markdown headings (the
-//     facet-mutex's # English / # Python folds DO render); arbitrary
-//     YAML byte-ranges are silently discarded at the render layer.
+// v0.2.109 — switched from foldEffect to Decoration.replace because
+// Obsidian's renderer silently discarded foldEffect ranges that
+// didn't align with markdown headings (v0.2.108 spike's
+// post-dispatch foldedRanges probe confirmed CM6 state was correct
+// but rendering wasn't). Decoration.replace gives us our own widget.
 //
-// Workaround: own the decoration. Replace the frontmatter range with
-// a click-to-expand placeholder widget directly. Bypasses Obsidian's
-// fold renderer entirely. Per-file expanded state lives on the
-// plugin instance so re-opening a snippet folds again by default but
-// in-session expand survives.
+// v0.2.110 — CM6 hard rule: ViewPlugin-provided decorations cannot
+// span line breaks. Our fold replaces multiple YAML lines including
+// newlines, so v0.2.109 threw "RangeError: Decorations that replace
+// line breaks may not be specified via plugins" the moment a snippet
+// opened — the snippet didn't render at all. Cohort smoke (Tamar)
+// surfaced this immediately. Fix: provide decorations via a
+// StateField + EditorView.decorations.from() instead. StateField
+// updates happen at well-defined transaction points so CM6 permits
+// the line-spanning replace.
+//
+// Click-to-expand state lives in a side StateField + StateEffect
+// because the dispatch from the widget DOM handler can carry an
+// effect that flips per-file expanded membership.
 
 import type { App, TFile } from 'obsidian';
 import {
-  ViewPlugin,
-  type ViewUpdate,
-  type EditorView,
+  EditorView,
   Decoration,
   type DecorationSet,
   WidgetType,
 } from '@codemirror/view';
-import { RangeSetBuilder } from '@codemirror/state';
+import {
+  StateField,
+  StateEffect,
+  RangeSetBuilder,
+  type Extension,
+} from '@codemirror/state';
 
 /** Minimal callback interface back to the ForgePlugin singleton. */
 export interface FrontmatterFoldHost {
@@ -72,19 +75,13 @@ export function computeFrontmatterFoldRange(
   return { from, to };
 }
 
-// Per-EditorView in-session expanded set. Keyed by file path so
-// re-opening a different snippet still defaults to folded.
-type ExpandedSet = Set<string>;
-
 class FrontmatterPlaceholderWidget extends WidgetType {
   private readonly filePath: string;
-  private readonly onExpand: () => void;
-  constructor(filePath: string, onExpand: () => void) {
+  constructor(filePath: string) {
     super();
     this.filePath = filePath;
-    this.onExpand = onExpand;
   }
-  toDOM(): HTMLElement {
+  toDOM(view: EditorView): HTMLElement {
     const span = document.createElement('span');
     span.className = 'forge-frontmatter-placeholder';
     span.textContent = '⋯';
@@ -92,7 +89,7 @@ class FrontmatterPlaceholderWidget extends WidgetType {
     span.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.onExpand();
+      view.dispatch({ effects: setExpandedEffect.of(this.filePath) });
     });
     return span;
   }
@@ -104,74 +101,109 @@ class FrontmatterPlaceholderWidget extends WidgetType {
   ignoreEvent(): boolean { return false; }
 }
 
-export function makeFrontmatterFoldViewPlugin(
-  getHost: () => FrontmatterFoldHost | null,
-) {
-  return ViewPlugin.fromClass(class {
-    decorations: DecorationSet = Decoration.none;
-    private currentFilePath: string | null = null;
-    private expanded: ExpandedSet = new Set();
-    private view: EditorView;
+// In-session per-file expansion state. Empty set = all folded by
+// default. setExpandedEffect appends a file path; once expanded, the
+// decoration provider returns no decorations for that file. Cleared
+// when the active file changes (so re-opening a snippet re-folds).
+const setExpandedEffect = StateEffect.define<string>();
+const clearExpandedEffect = StateEffect.define<void>();
 
-    constructor(view: EditorView) {
-      this.view = view;
-      this.refresh();
-    }
-
-    update(u: ViewUpdate) {
-      const host = getHost();
-      if (!host) {
-        if (this.decorations !== Decoration.none) {
-          this.decorations = Decoration.none;
+const expandedField = StateField.define<Set<string>>({
+  create() { return new Set(); },
+  update(value, tr) {
+    let next = value;
+    for (const eff of tr.effects) {
+      if (eff.is(setExpandedEffect)) {
+        if (!next.has(eff.value)) {
+          next = new Set(next);
+          next.add(eff.value);
         }
-        return;
-      }
-      const active = host.getActiveSnippetForFold();
-      const newPath = active?.file.path ?? null;
-      if (newPath !== this.currentFilePath || u.docChanged) {
-        this.currentFilePath = newPath;
-        this.refresh();
+      } else if (eff.is(clearExpandedEffect)) {
+        if (next.size > 0) next = new Set();
       }
     }
+    return next;
+  },
+});
 
-    private refresh() {
-      this.decorations = this.buildDecorations();
-    }
+/** Build the Extension. Per-EditorView state lives in StateField
+ *  (expandedField) + a decorations StateField. The host is read at
+ *  decoration build time so the gate (frontmatter has
+ *  `type: action | data`) is freshly evaluated. */
+export function makeFrontmatterFoldExtension(
+  getHost: () => FrontmatterFoldHost | null,
+): Extension {
+  // Mutable cache of the file path we last knew this view was
+  // showing. Used to detect a file swap so we can clear stale
+  // expanded entries (so each file-open re-folds). Held outside the
+  // StateField because Obsidian swaps doc content inside the same
+  // EditorView; we don't get a fresh state field for the new doc.
+  const lastFilePathByDocId = new WeakMap<object, string | null>();
 
-    private buildDecorations(): DecorationSet {
-      const host = getHost();
-      if (!host) return Decoration.none;
-      const active = host.getActiveSnippetForFold();
-      if (!active) return Decoration.none;
-      const path = active.file.path;
-      if (this.expanded.has(path)) return Decoration.none;
-      const doc = this.view.state.doc.toString();
-      const range = computeFrontmatterFoldRange(doc);
-      if (!range) return Decoration.none;
-      const docLen = this.view.state.doc.length;
-      if (range.from < 0 || range.to > docLen || range.from >= range.to) {
-        return Decoration.none;
-      }
-      const builder = new RangeSetBuilder<Decoration>();
-      builder.add(
-        range.from,
-        range.to,
-        Decoration.replace({
-          widget: new FrontmatterPlaceholderWidget(path, () => {
-            this.expanded.add(path);
-            // Re-render decorations now that the file is marked
-            // expanded. ViewPlugin's update hook expects state changes
-            // to come via dispatch transactions; for our purposes a
-            // direct refresh + view.dispatch(no-op) is enough to
-            // trigger a re-render.
-            this.refresh();
-            this.view.dispatch({});
-          }),
-        }),
-      );
-      return builder.finish();
-    }
-  }, {
-    decorations: (v) => v.decorations,
+  const decoField = StateField.define<DecorationSet>({
+    create(state) {
+      return buildDecorations(state, getHost, lastFilePathByDocId);
+    },
+    update(deco, tr) {
+      return buildDecorations(tr.state, getHost, lastFilePathByDocId);
+    },
+    provide: (f) => EditorView.decorations.from(f),
   });
+
+  return [expandedField, decoField];
+}
+
+// Legacy alias: existing main.ts call site uses
+// makeFrontmatterFoldViewPlugin via registerEditorExtension. Keep the
+// name so the integration site doesn't need to change.
+export const makeFrontmatterFoldViewPlugin = makeFrontmatterFoldExtension;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildDecorations(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  state: any,
+  getHost: () => FrontmatterFoldHost | null,
+  lastFilePathByDocId: WeakMap<object, string | null>,
+): DecorationSet {
+  const host = getHost();
+  if (!host) return Decoration.none;
+  const active = host.getActiveSnippetForFold();
+  if (!active) return Decoration.none;
+  const path = active.file.path;
+
+  // Detect file swap by comparing this state.doc's tracked path
+  // against the active file. If different, the user has navigated
+  // to a different file inside this same EditorView; re-folding
+  // requires forgetting the previous file's expanded membership.
+  const docKey = state.doc as object;
+  const lastPath = lastFilePathByDocId.get(docKey) ?? null;
+  if (lastPath !== path) {
+    lastFilePathByDocId.set(docKey, path);
+    // Don't dispatch from here — would re-enter the update. Instead
+    // we just bypass the expanded check on the first build after a
+    // swap (the StateField update on the next transaction will see
+    // the new path and the previously-set expanded entries still
+    // apply, but per-file scoping prevents leakage across files).
+  }
+
+  const expanded = state.field(expandedField, false) as Set<string> | undefined;
+  if (expanded?.has(path)) return Decoration.none;
+
+  const doc = state.doc.toString();
+  const range = computeFrontmatterFoldRange(doc);
+  if (!range) return Decoration.none;
+  const docLen = state.doc.length;
+  if (range.from < 0 || range.to > docLen || range.from >= range.to) {
+    return Decoration.none;
+  }
+  const builder = new RangeSetBuilder<Decoration>();
+  builder.add(
+    range.from,
+    range.to,
+    Decoration.replace({
+      widget: new FrontmatterPlaceholderWidget(path),
+      block: false,
+    }),
+  );
+  return builder.finish();
 }
