@@ -16,6 +16,7 @@ interface StubAdapter {
   exists(p: string): Promise<boolean>;
   mkdir(p: string): Promise<void>;
   write(p: string, content: string): Promise<void>;
+  read(p: string): Promise<string>;
 }
 
 function makeStubAdapter(): StubAdapter {
@@ -36,6 +37,13 @@ function makeStubAdapter(): StubAdapter {
     },
     async write(p: string, content: string) {
       files.set(p, content);
+    },
+    async read(p: string) {
+      // v0.2.98 — restore-inlined-assets reads the .bundle-version
+      // sentinel for the fast-path skip.
+      const v = files.get(p);
+      if (v === undefined) throw new Error(`ENOENT: ${p}`);
+      return v;
     },
   };
 }
@@ -80,22 +88,29 @@ test('restoreInlinedAssets: idempotent — second run writes nothing', async () 
     `Second run must be idempotent — all files already exist; expected 0 writes, got ${secondRun}.`);
 });
 
-test('restoreInlinedAssets: only writes missing files (dev install partial)', async () => {
+test('restoreInlinedAssets: version mismatch forces overwrite of all files (v0.2.98)', async () => {
   const adapter = makeStubAdapter();
   const app = makeApp(adapter);
-  // Simulate dev install: one specific file already present.
-  const existingPath = '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-tutorial/01-hello/Hello.md';
-  adapter.files.set(existingPath, 'pre-existing content');
+  // Simulate a prior plugin version having left files on disk +
+  // a stale sentinel. The stale iframe scenario that prompted
+  // v0.2.98: BRAT updates main.js to v0.2.97 but leaves the
+  // v0.2.96 iframe HTML untouched — version stamp catches this.
+  const stalePath = '.obsidian/plugins/forge-client-obsidian/assets/iframe/index.html';
+  adapter.files.set(stalePath, '<html>STALE v0.2.96 iframe</html>');
+  const sentinelPath = '.obsidian/plugins/forge-client-obsidian/assets/.bundle-version';
+  adapter.files.set(sentinelPath, '0.2.96');
 
   const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
-  const { BUNDLED_ASSETS } = await import('./bundled-assets.generated.ts');
+  const { BUNDLED_ASSETS, BUNDLED_ASSETS_VERSION } = await import('./bundled-assets.generated.ts');
 
   const written = await restoreInlinedAssets(app, 'forge-client-obsidian');
-  const expectedCount = Object.keys(BUNDLED_ASSETS).length - 1;
+  const expectedCount = Object.keys(BUNDLED_ASSETS).length;
   assert.equal(written, expectedCount,
-    `Should skip 1 existing file; expected ${expectedCount} writes, got ${written}.`);
-  assert.equal(adapter.files.get(existingPath), 'pre-existing content',
-    'Pre-existing file content must NOT be overwritten.');
+    `Stale sentinel must force-overwrite all ${expectedCount} files; got ${written}.`);
+  assert.notEqual(adapter.files.get(stalePath), '<html>STALE v0.2.96 iframe</html>',
+    'Stale iframe content MUST be overwritten on version mismatch.');
+  assert.equal(adapter.files.get(sentinelPath), BUNDLED_ASSETS_VERSION,
+    'Sentinel must be updated to the current bundle version after restore.');
 });
 
 test('restoreInlinedAssets: creates intermediate directories', async () => {
