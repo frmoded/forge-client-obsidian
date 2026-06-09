@@ -94,21 +94,27 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           probedFold.englishFolded !== this.prevFold.englishFolded
           || probedFold.pythonFolded !== this.prevFold.pythonFolded;
         if (allEffects.length > 0 || foldsDiffer) {
-          console.log('[forge-mutex v0.2.88]', {
-            t: Date.now(),
-            txCount: u.transactions.length,
-            allEffects,
-            docChanged: u.docChanged,
-            active: active ? { path: active.file.path, mode: active.mode } : null,
-            prevFold: this.prevFold,
-            probedFold,
-            foldsDiffer,
-            headings: probedHeadings,
-            insideIgnoreWindow: Date.now() < this.ignoreFoldEventsUntil,
-          });
+          // v0.2.89 — inline-format effects so the array contents
+          // show in the log line itself (v0.2.88 displayed "Array(1)").
+          const effectsStr = allEffects.length > 0
+            ? `[${allEffects.join('|')}]`
+            : '[]';
+          console.log(
+            `[forge-mutex v0.2.89] effects=${effectsStr}`,
+            {
+              t: Date.now(),
+              txCount: u.transactions.length,
+              docChanged: u.docChanged,
+              active: active ? { path: active.file.path, mode: active.mode } : null,
+              prevFold: this.prevFold,
+              probedFold,
+              foldsDiffer,
+              headings: probedHeadings,
+              insideIgnoreWindow: Date.now() < this.ignoreFoldEventsUntil,
+            });
         }
       } catch (e) {
-        console.warn('[forge-mutex v0.2.88] log failed', e);
+        console.warn('[forge-mutex v0.2.89] log failed', e);
       }
 
       // Three-tier defense (unchanged from v0.2.87).
@@ -153,7 +159,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
       const bothFolded = fs.englishFolded && fs.pythonFolded;
       const bothVisible = !fs.englishFolded && !fs.pythonFolded;
       if (bothFolded || bothVisible) {
-        console.warn('[forge-mutex v0.2.88] INVARIANT VIOLATED:', {
+        console.warn('[forge-mutex v0.2.89] INVARIANT VIOLATED:', {
           file: active.file.path,
           mode: active.mode,
           fs,
@@ -300,7 +306,22 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           desired.pythonFolded ? foldEffect.of(range) : unfoldEffect.of(range));
       }
       if (effects.length > 0) {
-        this.view.dispatch({ effects });
+        // v0.2.89 fix — CM6 forbids EditorView.dispatch while a
+        // ViewUpdate is in progress (the v0.2.88 cohort logs showed:
+        // "Calls to EditorView.update are not allowed while an update
+        // is in progress" thrown from inside processUpdate). Defer the
+        // dispatch to a microtask so the current update completes
+        // first. setTimeout(0) is the safe cross-version equivalent;
+        // queueMicrotask would run earlier but inside-same-tick can
+        // still hit the guard.
+        setTimeout(() => {
+          if (this.destroyed) return;
+          try {
+            this.view.dispatch({ effects });
+          } catch (e) {
+            console.warn('[forge-mutex v0.2.89] dispatch failed', e);
+          }
+        }, 0);
       }
     }
 
