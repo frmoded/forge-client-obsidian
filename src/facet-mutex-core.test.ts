@@ -69,16 +69,13 @@ test('decideOnFoldChange: python mode, user expanded english → flip to english
     { englishFolded: false, pythonFolded: true, newEditMode: 'english' });
 });
 
-test('decideOnFoldChange: english mode, user collapsed english (both now folded) → no flip', () => {
-  const headings: SnippetHeadings = { englishLine: 5, pythonLine: 12 };
-  // Initial for english mode: english unfolded, python folded.
-  // User collapses english.
-  const prev = { englishFolded: false, pythonFolded: true };
-  const next = { englishFolded: true, pythonFolded: true };
-  assert.deepEqual(
-    decideOnFoldChange(prev, next, 'english', headings),
-    { englishFolded: true, pythonFolded: true, newEditMode: null });
-});
+// v0.2.83 — original asymmetric semantics: collapse-of-active was a
+// no-op. v0.2.87 supersedes this. The test below documents the v0.2.83
+// behavior for retrospective reference; the active assertions are now
+// in the v0.2.87 symmetric-mutex tests further down.
+//
+// test('decideOnFoldChange: english mode, user collapsed english (both
+// now folded) → no flip' — REPLACED by symmetric-mutex tests below.
 
 test('decideOnFoldChange: english mode, user expanded already-unfolded english → no-op', () => {
   // Both english and python already unfolded (somehow), then a "same"
@@ -124,4 +121,64 @@ test('decideOnFoldChange: python mode, user expanded python (already unfolded) �
   assert.deepEqual(
     decideOnFoldChange(prev, next, 'python', headings),
     { englishFolded: true, pythonFolded: false, newEditMode: null });
+});
+
+// --- v0.2.87 symmetric collapse mutex --------------------------------
+//
+// Driver decision (2026-06-09-0015): the mutex invariant is "exactly
+// one facet visible at any time." Both-folded is an invalid state.
+// Collapsing the active facet must flip edit_mode AND auto-expand
+// the other facet (symmetric to the expand semantics).
+
+test('decideOnFoldChange v0.2.87: english mode, collapse english (both present) → flip to python + expand python', () => {
+  // Initial state for english mode: english unfolded, python folded.
+  // User collapses english.
+  const headings: SnippetHeadings = { englishLine: 5, pythonLine: 12 };
+  const prev = { englishFolded: false, pythonFolded: true };
+  const next = { englishFolded: true, pythonFolded: true };
+  assert.deepEqual(
+    decideOnFoldChange(prev, next, 'english', headings),
+    { englishFolded: true, pythonFolded: false, newEditMode: 'python' });
+});
+
+test('decideOnFoldChange v0.2.87: python mode, collapse python (both present) → flip to english + expand english', () => {
+  const headings: SnippetHeadings = { englishLine: 5, pythonLine: 12 };
+  const prev = { englishFolded: true, pythonFolded: false };
+  const next = { englishFolded: true, pythonFolded: true };
+  assert.deepEqual(
+    decideOnFoldChange(prev, next, 'python', headings),
+    { englishFolded: false, pythonFolded: true, newEditMode: 'english' });
+});
+
+test('decideOnFoldChange v0.2.87: english mode, collapse english but python heading absent → no-op', () => {
+  // Slot-free snippet with no # Python heading: collapse of the only-
+  // existing heading should NOT trigger the mutex (nothing to expand).
+  const headings: SnippetHeadings = { englishLine: 5, pythonLine: null };
+  const prev = { englishFolded: false, pythonFolded: false };
+  const next = { englishFolded: true, pythonFolded: false };
+  assert.deepEqual(
+    decideOnFoldChange(prev, next, 'english', headings),
+    { englishFolded: true, pythonFolded: false, newEditMode: null });
+});
+
+test('decideOnFoldChange v0.2.87: english mode, collapse english (both present) — symmetric with expand-python', () => {
+  // Same intent as "expand python in english mode → flip to python" but
+  // via the collapse gesture. Both should produce equivalent
+  // post-mutex state (python visible, english folded, mode=python).
+  const headings: SnippetHeadings = { englishLine: 5, pythonLine: 12 };
+  const collapseEnglishFromEnglish = decideOnFoldChange(
+    { englishFolded: false, pythonFolded: true },
+    { englishFolded: true, pythonFolded: true },
+    'english', headings);
+  const expandPythonFromEnglish = decideOnFoldChange(
+    { englishFolded: false, pythonFolded: true },
+    { englishFolded: false, pythonFolded: false },
+    'english', headings);
+  // Both gestures land in the same mode + same fold state.
+  assert.equal(collapseEnglishFromEnglish.newEditMode, 'python');
+  assert.equal(expandPythonFromEnglish.newEditMode, 'python');
+  assert.equal(collapseEnglishFromEnglish.englishFolded, true);
+  assert.equal(collapseEnglishFromEnglish.pythonFolded, false);
+  assert.equal(expandPythonFromEnglish.englishFolded, true);
+  assert.equal(expandPythonFromEnglish.pythonFolded, false);
 });

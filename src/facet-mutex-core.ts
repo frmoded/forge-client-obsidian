@@ -67,23 +67,35 @@ export function decideInitialState(
   return { englishFolded: true, pythonFolded: false, newEditMode: null };
 }
 
-/** On fold-change event: decide whether the user just performed an
- *  EXPAND gesture on the currently-folded heading (the gesture that
- *  signals a mode flip), and if so produce the new desired state.
+/** On fold-change event: decide whether the user just performed a
+ *  mutex-triggering gesture and, if so, produce the new desired state.
+ *
+ *  v0.2.87 symmetric mutex: the invariant is "exactly one facet
+ *  visible at any time." Two gestures trigger the flip:
+ *
+ *  1. **Expand of the inactive facet** (v0.2.83 semantics):
+ *     english mode + user expands # Python → flip to python + fold
+ *     # English. Symmetric for python mode + expand # English.
+ *
+ *  2. **Collapse of the active facet** (v0.2.87 spec extension):
+ *     english mode + user collapses # English → flip to python +
+ *     EXPAND # Python. Driver decision: both-folded is an invalid
+ *     state; the collapse gesture must take the user to the OTHER
+ *     facet rather than leave them with nothing visible.
+ *
+ *  Both gestures produce the same post-mutex state for a given mode
+ *  transition — the only difference is which heading the user
+ *  clicked. The pure-core handles both shapes uniformly.
  *
  *  Rules:
- *   - Only fires the flip when the user EXPANDED the heading that
- *     was previously folded under the current edit_mode. e.g.
- *     english mode → # Python was folded → user expands # Python →
- *     flip to python mode + fold # English.
- *   - Collapse gestures (user shrinks the active facet, leaving
- *     both folded) are no-ops. Don't flip edit_mode just because
- *     the user wants less visual noise.
- *   - If the edit_mode-implied fold state already matches the new
- *     state, no-op (idempotent — avoid re-write loops).
  *   - If a heading isn't present, no flip is possible — return the
- *     newFold unchanged + newEditMode=null.
- */
+ *     newFold unchanged + newEditMode=null. (Slot-free snippets
+ *     have only # English; the mutex needs both headings to have
+ *     anywhere to flip TO.)
+ *   - Idempotent: if newFold already matches the existing edit_mode's
+ *     expected state, no-op (avoid re-write loops).
+ *   - "Same-mode expand" (e.g. python mode + user expands # Python
+ *     that's already unfolded) is a no-op. */
 export function decideOnFoldChange(
   prevFold: FoldState,
   newFold: FoldState,
@@ -94,7 +106,7 @@ export function decideOnFoldChange(
     headings.englishLine !== null && headings.pythonLine !== null;
 
   // No flip possible without both headings — the gestural mutex
-  // requires a partner to fold.
+  // requires a partner facet to switch to.
   if (!bothHeadingsPresent) {
     return {
       englishFolded: newFold.englishFolded,
@@ -103,13 +115,14 @@ export function decideOnFoldChange(
     };
   }
 
-  // Detect the EXPAND gesture on each heading. A heading was
-  // expanded when it was folded before AND isn't folded now.
+  // Detect both shapes of gesture on each heading.
   const englishExpanded = prevFold.englishFolded && !newFold.englishFolded;
   const pythonExpanded = prevFold.pythonFolded && !newFold.pythonFolded;
+  const englishCollapsed = !prevFold.englishFolded && newFold.englishFolded;
+  const pythonCollapsed = !prevFold.pythonFolded && newFold.pythonFolded;
 
-  // Mutex flip: user expanded # Python while in english mode (the
-  // gesture that says "I want python mode now").
+  // Shape 1 — expand inactive: user expanded # Python while in
+  // english mode (the original v0.2.83 trigger).
   if (pythonExpanded && currentEditMode === 'english') {
     return {
       englishFolded: true,
@@ -117,7 +130,6 @@ export function decideOnFoldChange(
       newEditMode: 'python',
     };
   }
-  // Symmetric: user expanded # English while in python mode.
   if (englishExpanded && currentEditMode === 'python') {
     return {
       englishFolded: false,
@@ -126,10 +138,25 @@ export function decideOnFoldChange(
     };
   }
 
-  // No mutex-triggering expand. Leave the new fold state as-is,
-  // no frontmatter flip. Covers collapse gestures + same-mode
-  // expands (which can't happen if initial state matched mode, but
-  // defensive).
+  // Shape 2 — collapse active (v0.2.87 spec): user collapsed
+  // # English while in english mode → flip to python + expand it.
+  if (englishCollapsed && currentEditMode === 'english') {
+    return {
+      englishFolded: true,
+      pythonFolded: false,
+      newEditMode: 'python',
+    };
+  }
+  if (pythonCollapsed && currentEditMode === 'python') {
+    return {
+      englishFolded: false,
+      pythonFolded: true,
+      newEditMode: 'english',
+    };
+  }
+
+  // Any other transition: no mutex flip. Covers collapse of inactive
+  // (no-op; nothing visible to lose) + same-mode expands (no-op).
   return {
     englishFolded: newFold.englishFolded,
     pythonFolded: newFold.pythonFolded,

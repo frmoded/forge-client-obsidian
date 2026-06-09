@@ -44,6 +44,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
     private lastFilePath: string | null = null;
     private destroyed = false;
     private pendingRafHandle: number | null = null;
+    private pendingTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
     constructor(view: EditorView) {
       this.view = view;
@@ -59,29 +60,36 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
 
     update(u: ViewUpdate) {
       if (this.destroyed) return;
-      // v0.2.85 fix: process synchronously first (fast-path) AND
-      // schedule a one-frame-later re-check (slow-path). The
-      // foldedRanges-roundtrip spike (facet-mutex-foldedranges-spike.test.ts)
-      // confirmed the read logic is correct in isolation; the v0.2.84
-      // regression turned out to be a timing race in Obsidian — heading
-      // folds dispatched via Obsidian's gutter handler aren't fully
-      // settled into the foldState field by the time our update() runs
-      // synchronously. requestAnimationFrame defers the re-check until
-      // after the browser's next frame, by which time Obsidian's async
-      // fold processing has settled. One-frame latency (~16ms) vs the
-      // 200ms setInterval polling we shipped in v0.2.83.
+      // v0.2.87 three-tier defense for the Obsidian-async fold race:
+      //   tier 1 — synchronous (catches the no-race case);
+      //   tier 2 — requestAnimationFrame (~16ms; catches 1-frame race);
+      //   tier 3 — 100ms setTimeout (catches longer Obsidian commit
+      //            delays; matches v0.2.83's polling worst-case with
+      //            a one-shot timer instead of a recurring interval).
+      // v0.2.86 shipped tier 1 + tier 2 only and cohort smoke still
+      // reported the mutex not firing on the # English auto-fold after
+      // the user expands # Python — so the race exceeds 1 frame in
+      // practice. tier 3 closes the gap at the cost of being up to
+      // 100ms behind the gesture. v0.2.83's 200ms polling worked at
+      // cohort-acceptable latency; tier 3 at 100ms is strictly better.
+      // The cost is small: one extra processUpdate() call per CM
+      // update which bails fast when no delta detected.
       this.processUpdate();
-      // Defer a second check exactly once per CM update; cheap
-      // (foldedRanges read is O(folded-count) and bails fast when no
-      // delta detected).
       if (typeof requestAnimationFrame === 'function') {
-        const handle = requestAnimationFrame(() => {
+        this.pendingRafHandle = requestAnimationFrame(() => {
           if (this.destroyed) return;
           this.processUpdate();
         });
-        // Cache the handle so destroy() can cancel.
-        this.pendingRafHandle = handle;
       }
+      // Clear any in-flight setTimeout so we never accumulate handles.
+      if (this.pendingTimeoutHandle !== null) {
+        clearTimeout(this.pendingTimeoutHandle);
+      }
+      this.pendingTimeoutHandle = setTimeout(() => {
+        this.pendingTimeoutHandle = null;
+        if (this.destroyed) return;
+        this.processUpdate();
+      }, 100);
     }
 
     private processUpdate() {
@@ -131,6 +139,10 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           && typeof cancelAnimationFrame === 'function') {
         cancelAnimationFrame(this.pendingRafHandle);
         this.pendingRafHandle = null;
+      }
+      if (this.pendingTimeoutHandle !== null) {
+        clearTimeout(this.pendingTimeoutHandle);
+        this.pendingTimeoutHandle = null;
       }
     }
 

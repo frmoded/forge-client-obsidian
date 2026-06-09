@@ -285,6 +285,58 @@ test('flow: full sequence — open english snippet, expand python, flip mode', (
   assert.equal(sim.setEditModeForFileCalls[0].mode, 'python');
 });
 
+test('flow v0.2.87: symmetric collapse — english mode, user collapses # English → flip to python + expand # Python', () => {
+  // Driver decision (2026-06-09-0015): "exactly one facet visible"
+  // invariant means collapsing the active facet must take the user
+  // to the OTHER facet, not leave them with nothing visible.
+  nowCounter = 0;
+  const state = EditorState.create({ doc: DOC, extensions: [codeFolding()] });
+  const sim = new SimulatedFacetMutexViewPlugin(state, 'english');
+  // Initial: english unfolded, python folded.
+  assert.deepEqual(sim.readFoldStatePublic(),
+    { englishFolded: false, pythonFolded: true });
+
+  // User collapses # English. Past the debounce window.
+  const later = now() + 1000;
+  const enLn = sim.getState().doc.line(6);
+  // English fold range: heading-end → line-before-next-heading.
+  const range = { from: enLn.to, to: sim.getState().doc.line(10).to };
+  sim.dispatchAndUpdate({ effects: foldEffect.of(range) }, later);
+
+  // Verify: english folded, python EXPANDED (auto-expand by mutex),
+  // mode flipped to python.
+  assert.equal(sim.getMode(), 'python',
+    'Collapsing # English in english mode must flip to python.');
+  const fs = sim.readFoldStatePublic();
+  assert.equal(fs.englishFolded, true,
+    '# English must STAY folded (user just collapsed it).');
+  assert.equal(fs.pythonFolded, false,
+    'Mutex must AUTO-EXPAND # Python so user has a visible facet.');
+  assert.equal(sim.setEditModeForFileCalls[0]?.mode, 'python');
+});
+
+test('flow v0.2.87: symmetric collapse — python mode, user collapses # Python → flip to english + expand # English', () => {
+  nowCounter = 0;
+  const state = EditorState.create({ doc: DOC, extensions: [codeFolding()] });
+  const sim = new SimulatedFacetMutexViewPlugin(state, 'python');
+  assert.deepEqual(sim.readFoldStatePublic(),
+    { englishFolded: true, pythonFolded: false });
+
+  // User collapses # Python.
+  const later = now() + 1000;
+  const pyLn = sim.getState().doc.line(11);
+  const range = { from: pyLn.to, to: sim.getState().doc.length };
+  sim.dispatchAndUpdate({ effects: foldEffect.of(range) }, later);
+
+  assert.equal(sim.getMode(), 'english',
+    'Collapsing # Python in python mode must flip to english.');
+  const fs = sim.readFoldStatePublic();
+  assert.equal(fs.englishFolded, false,
+    'Mutex must AUTO-EXPAND # English.');
+  assert.equal(fs.pythonFolded, true,
+    '# Python must stay folded.');
+});
+
 test('flow: reverse — open python snippet, expand english, flip back', () => {
   // Symmetric path: python mode → user expands english → flip to english.
   nowCounter = 0;
