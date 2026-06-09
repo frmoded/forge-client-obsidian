@@ -316,6 +316,16 @@ export class ForgeModaView extends ItemView {
   private findFeaturedSnippet(): FeaturedSnippet | null {
     const matches: FeaturedSnippet[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
+      // v0.2.106 — skip files inside a `<lib>.bak.<version>` backup
+      // directory left over from previous re-extracts. Without this,
+      // the user's accumulated forge-moda.bak.0.4.19, .bak.0.4.20,
+      // etc. each contribute their own `simulation.md` with
+      // `featured: true`, and findFeaturedSnippet returns "multiple
+      // featured snippets found" with the same snippet_id repeated.
+      // The .bak dirs are kept on disk as a recovery affordance per
+      // welcome.ts:renameWithBackup; ignoring them at lookup time is
+      // the safe split.
+      if (/\.bak\./.test(file.path)) continue;
       const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
       if (fm?.featured !== true) continue;
       matches.push({

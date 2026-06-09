@@ -1443,13 +1443,26 @@ export default class ForgePlugin extends Plugin {
     this.app.workspace.revealLeaf(leaf);
   }
 
-  /** v0.2.92 — is the file at this path a forge-moda library snippet?
-   *  Detected by path-prefix match against the bundled-library
-   *  convention. Used by forgeSnippet to auto-open the moda
-   *  simulation tab before running, so `context.moda.draw(...)`
-   *  posts particles into a visible iframe. */
-  private isModaSnippet(filePath: string): boolean {
-    return filePath.startsWith('forge-moda/');
+  /** v0.2.92 — is the file the moda *featured* snippet, i.e. the
+   *  entry point that should auto-open the simulation tab on
+   *  Forge-click? v0.2.92 originally matched any path under
+   *  forge-moda/ which was too greedy: Forge-clicking a LEAF moda
+   *  snippet (create_ink_particles, set_ink_speed, etc.) for
+   *  authoring would dispatch the iframe-open path instead of
+   *  /generate, silently dropping every English→Python regen for
+   *  leaf snippets. Cohort smoke (Tamar) on
+   *  forge-moda/create_ink_particles after v0.2.105's diagnostic
+   *  build surfaced this: NO `[forge-gen]` logs at all because
+   *  forgeSnippet's moda branch returned before /generate.
+   *
+   *  v0.2.106 — narrow to `featured: true` in frontmatter so only
+   *  the simulation entry point triggers the auto-open behavior.
+   *  Leaf moda snippets fall through to the normal /generate path.
+   */
+  private isModaFeaturedSnippet(file: TFile): boolean {
+    if (!file.path.startsWith('forge-moda/')) return false;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    return fm?.featured === true;
   }
 
   // Chips v2. Domain-agnostic palette pane in the right sidebar. The
@@ -1621,7 +1634,7 @@ export default class ForgePlugin extends Plugin {
     // engine-request route and the canvas renders.
     // Skip the local runSnippet path entirely for moda snippets —
     // the iframe owns the compute pathway here.
-    if (this.isModaSnippet(view.file.path)) {
+    if (this.isModaFeaturedSnippet(view.file)) {
       await this.openModaView();
       const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
       if (leaf?.view instanceof ForgeModaView) {
@@ -1752,22 +1765,6 @@ export default class ForgePlugin extends Plugin {
           active_domains:
             this.activeDomains === null ? null : Array.from(this.activeDomains),
         };
-        // v0.2.105 DEBUG — log the English fed to /generate so we can
-        // tell whether the LLM is seeing the user's just-edited English
-        // ("create 6 ink particles") vs the stale pre-edit one
-        // ("create 50 ink particles"). Tamar smoke against v0.2.104
-        // showed Python facet still doesn't update after /generate.
-        // Either: (a) inventory has stale English (MEMFS / registry
-        // race), (b) LLM returns identical Python despite different
-        // English, (c) the returned Python is fine but writeGeneratedCode
-        // STILL drops it. Logs at each step let us pin which.
-        console.log('[forge-gen v0.2.105] /generate payload', {
-          snippet_id: payload.snippet_id,
-          english_first_400: payload.english?.slice(0, 400),
-          english_length: payload.english?.length,
-          inputs: payload.inputs,
-          deps: payload.deps,
-        });
       } catch (e) {
         console.error('Forge: inventory materialization failed', e);
         const detail = e instanceof Error ? e.message : String(e);
@@ -1797,13 +1794,6 @@ export default class ForgePlugin extends Plugin {
       if (response.status === 200) {
         const code: string | undefined = response.json?.code;
         const returnedId: string = response.json?.snippet_id ?? snippetId;
-        // v0.2.105 DEBUG — log what /generate returned.
-        console.log('[forge-gen v0.2.105] /generate 200 response', {
-          requested_snippet_id: snippetId,
-          returned_snippet_id: returnedId,
-          code_first_400: code?.slice(0, 400),
-          code_length: code?.length,
-        });
         if (!code) {
           const msg = 'Service returned empty code field';
           new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
@@ -1881,16 +1871,6 @@ export default class ForgePlugin extends Plugin {
       const file = (pathLookup instanceof TFile)
         ? pathLookup
         : files.find(f => f.basename === id);
-      // v0.2.105 DEBUG — log which path resolved the file (or which
-      // didn't), so we can pin whether v0.2.104's path lookup misses
-      // the user's library-subdir file.
-      console.log('[forge-gen v0.2.105] writeGeneratedCode resolved file?', {
-        id,
-        pathLookup_kind: pathLookup ? pathLookup.constructor.name : 'null',
-        pathLookup_path: pathLookup?.path,
-        fallback_basename_match: files.find(f => f.basename === id)?.path ?? null,
-        final_file_path: file instanceof TFile ? file.path : null,
-      });
       if (!(file instanceof TFile)) {
         console.warn(`Forge: no file found for snippet '${id}'`);
         continue;
@@ -1901,17 +1881,7 @@ export default class ForgePlugin extends Plugin {
       // order) instead of the legacy replacePythonSection (which
       // no-op'd on missing heading for welcome.md / greet.md).
       const newContent = replaceOrInsertPythonHeading(content, code);
-      // v0.2.105 DEBUG — was the content actually different?
-      console.log('[forge-gen v0.2.105] pre/post write', {
-        file_path: file.path,
-        pre_length: content.length,
-        post_length: newContent.length,
-        changed: newContent !== content,
-        py_section_pre: content.match(/# Python[\s\S]{0,300}/)?.[0]?.slice(0, 200),
-        py_section_post: newContent.match(/# Python[\s\S]{0,300}/)?.[0]?.slice(0, 200),
-      });
       await this.app.vault.modify(file, newContent);
-      console.log('[forge-gen v0.2.105] vault.modify completed for', file.path);
 
       // v0.2.17: keep Pyodide's MEMFS-mounted user vault in sync with
       // this disk write. The v0.2.16 diagnostic confirmed compute reads

@@ -266,49 +266,86 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // hasn't shipped a curator file yet). Wired in advance so future
     // forge-music _chips.md drains don't need to revisit welcome.ts.
     await migrateChipsMdToV2(adapter, 'forge-music');
+    // v0.2.106 — sweep accumulated `<lib>.bak.<version>` directories
+    // from pre-v0.2.106 re-extracts. One-shot per-onload pass; cheap
+    // when the user has none (just lists vault root).
+    try {
+      await sweepLegacyBakDirs(adapter);
+    } catch (e) {
+      console.warn('Forge: legacy .bak sweep failed', e);
+    }
   } catch (e) {
     console.error('Forge: runFirstRunCheck failed', e);
   }
 }
 
-/** Rename `targetDir` to `<targetDir>.bak.<oldVersion>`, appending a
- *  numeric suffix if that backup name already exists. Lets multiple
- *  drift events accumulate side-by-side rather than clobbering each
- *  other (`forge-music.bak.0.3.5`, `forge-music.bak.0.3.5.2`, …).
+/** v0.2.106 — was renameWithBackup. The v0.2.39 .bak.<version>
+ *  rename strategy was designed to preserve user edits to bundled
+ *  snippets across re-extracts; in practice it accumulated noise
+ *  (every drift event left another `<lib>.bak.<v>` directory at
+ *  vault root) AND broke findFeaturedSnippet by having every .bak
+ *  contribute another `simulation.md` with `featured: true`.
  *
- *  Tries `adapter.rename` first — atomic on POSIX. Falls back to a
- *  copy-then-recursive-delete dance if rename throws (mobile-only
- *  quirks have shown up here in earlier Obsidian releases).
+ *  Cohort smoke (Tamar) on v0.2.105 surfaced both:
+ *    "Forge: multiple featured snippets found; using first by id.
+ *     picked=simulation, all=simulation, simulation, simulation"
+ *    + "please remove the .bak directories, they are adding noise."
  *
- *  v0.2.39 — preserves user edits to bundled snippets across drift
- *  events. Even though V1 closed-beta is consumer-only, the cheap
- *  insurance matters for the "I poked at a bundled file to learn"
- *  corner case. */
-async function renameWithBackup(
+ *  Replaced with direct recursive delete. Trade-off: users who
+ *  poked at a bundled snippet to learn lose the local copy on
+ *  re-extract — but the bundled-library snippets are intended-
+ *  immutable per V1 convention; user authoring lives at vault root.
+ *
+ *  Tries `adapter.rmdir(recursive)` first; falls back to a manual
+ *  recursive walk if rmdir's recursive flag isn't honored. */
+async function deleteExtractedDir(
   adapter: DataAdapter,
   targetDir: string,
-  oldVersion: string,
 ): Promise<void> {
-  let backupName = `${targetDir}.bak.${oldVersion}`;
-  let counter = 1;
-  while (await adapter.exists(backupName)) {
-    counter += 1;
-    backupName = `${targetDir}.bak.${oldVersion}.${counter}`;
-  }
   try {
-    await adapter.rename(targetDir, backupName);
-  } catch (e) {
-    // Some Obsidian builds disallow directory rename through the
-    // adapter; fall back to copy-then-delete. copyDirRecursive +
-    // rmdir(recursive) is the same primitive pair welcome.ts has
-    // used since v0.2.13.
-    console.warn(
-      `Forge: rename ${targetDir} → ${backupName} failed; using copy fallback`,
-      e,
-    );
-    await copyDirRecursive(adapter, targetDir, backupName);
     await adapter.rmdir(targetDir, true);
+  } catch (e) {
+    console.warn(`Forge: rmdir ${targetDir} failed`, e);
   }
+}
+
+/** v0.2.106 — sweep pre-existing `<lib>.bak.<version>` directories
+ *  from past renameWithBackup calls. One-shot cleanup so users who
+ *  upgraded across the 0.2.39 → 0.2.106 span don't carry permanent
+ *  backup-dir litter at vault root. Only matches the specific
+ *  `forge-{moda,music,tutorial}.bak.*` shape to avoid touching
+ *  user-named directories that happen to contain `.bak`. */
+async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
+  const candidates = [
+    'forge-moda',
+    'forge-music',
+    'forge-tutorial',
+  ];
+  let removed = 0;
+  // adapter.list returns { folders: string[]; files: string[] } at
+  // the given path; "/" lists vault root.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const root = await (adapter as any).list?.('/');
+    if (!root?.folders) return 0;
+    for (const folder of root.folders) {
+      const name = folder.split('/').filter(Boolean).pop() ?? '';
+      const bakMatch = candidates.some(c => name.startsWith(`${c}.bak.`));
+      if (!bakMatch) continue;
+      try {
+        await adapter.rmdir(folder, true);
+        removed += 1;
+      } catch (e) {
+        console.warn(`Forge: failed to sweep ${folder}`, e);
+      }
+    }
+  } catch (e) {
+    console.warn('Forge: vault root list failed during .bak sweep', e);
+  }
+  if (removed > 0) {
+    console.log(`Forge: swept ${removed} legacy .bak directory/ies from vault root`);
+  }
+  return removed;
 }
 
 /** Shared extraction routine for bundled vaults (forge-moda + forge-
@@ -364,9 +401,11 @@ async function ensureBundledVault(
   }
   if (status.kind === 'drift') {
     console.log(
-      `Forge: ${label} drift detected (extracted ${status.extracted} → bundled ${status.bundled}); backing up + re-extracting`,
+      `Forge: ${label} drift detected (extracted ${status.extracted} → bundled ${status.bundled}); re-extracting`,
     );
-    await renameWithBackup(adapter, targetDir, status.extracted);
+    // v0.2.106 — was renameWithBackup. See deleteExtractedDir for
+    // rationale. The .bak directories were noise.
+    await deleteExtractedDir(adapter, targetDir);
   }
   // 'no-extracted' falls through to the copy below.
 
