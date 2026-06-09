@@ -9,11 +9,9 @@ description: "Block 6 — create 50 ink particles at the click position as a tig
 
 Inputs: x, y
 
-Create 50 ink particles in a tight cluster around position `(x, y)`. Each particle gets a random offset uniformly distributed within a small radius (5 units) of the click point, and zero initial speed — physics (temperature) decides where the cluster goes from there.
+Create 50 ink particles in a tight cluster at position `(x, y)`. Each particle gets a random offset uniformly distributed within a small radius (5 units) of the click, and zero initial speed.
 
-v0.2.102 — was a radial scatter (square jitter + non-zero random initial speed + random heading) which read as an "explosion" outward from the click. Cluster-at-click reads as deliberate ink injection.
-
-Ink particles are appended to the simulation state; ids continue sequentially from the current maximum id. Heading is still randomized (cosmetic — only matters once the particle starts moving). Mass is set by [[set_ink_mass]]; leave it at a 'medium' placeholder here.
+Ink particles are appended to the simulation state; ids continue sequentially from the current maximum id. Heading is randomized. Mass is set by [[set_ink_mass]]; leave it at a 'medium' placeholder here.
 
 # Python
 
