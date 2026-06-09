@@ -1601,16 +1601,10 @@ export default class ForgePlugin extends Plugin {
     // Skip the local runSnippet path entirely for moda snippets —
     // the iframe owns the compute pathway here.
     if (this.isModaSnippet(view.file.path)) {
-      console.log(`[forge-moda v0.2.94] Forge-click on moda snippet: ${view.file.path}`);
       await this.openModaView();
-      const leaves = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE);
-      console.log(`[forge-moda v0.2.94] moda leaves count: ${leaves.length}`);
-      const leaf = leaves[0];
+      const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
       if (leaf?.view instanceof ForgeModaView) {
-        console.log('[forge-moda v0.2.94] found ForgeModaView; calling requestFeaturedRun()');
         leaf.view.requestFeaturedRun();
-      } else {
-        console.warn('[forge-moda v0.2.94] ForgeModaView not found on first leaf; view type:', leaf?.view?.getViewType?.());
       }
       return;
     }

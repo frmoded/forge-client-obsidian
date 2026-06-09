@@ -916,7 +916,12 @@ def _forge_moda_init():
     bundled forge-moda copy, OR a user shadow at vault root if the
     student has authored one."""
     global _forge_moda_state, _forge_moda_session_id
-    stdout, state = _forge_run_snippet("setup", ("medium",))
+    # v0.2.95 — _forge_run_snippet returns (stdout, result, code) per
+    # v0.2.77; this and the other two moda bridges were unpacking 2-
+    # tuples and silently breaking moda startup. Cohort smoke (Tamar)
+    # surfaced as "moda init failed: too many values to unpack
+    # (expected 2)" — the chain works end-to-end up to here.
+    stdout, state, _ = _forge_run_snippet("setup", ("medium",))
     _forge_moda_state = state
     _forge_moda_session_id = uuid.uuid4().hex
     return {
@@ -935,7 +940,8 @@ def _forge_moda_compute(dt, temperature):
     global _forge_moda_state
     if _forge_moda_state is None:
         raise RuntimeError("moda-compute called before moda-init")
-    stdout, new_state = _forge_run_snippet(
+    # v0.2.95 — 3-tuple return per v0.2.77.
+    stdout, new_state, _ = _forge_run_snippet(
         "go", (_forge_moda_state, dt, temperature),
     )
     _forge_moda_state = new_state
@@ -949,7 +955,8 @@ def _forge_moda_click(x, y):
     global _forge_moda_state
     if _forge_moda_state is None:
         raise RuntimeError("moda-click called before moda-init")
-    stdout, new_state = _forge_run_snippet(
+    # v0.2.95 — 3-tuple return per v0.2.77.
+    stdout, new_state, _ = _forge_run_snippet(
         "on_mouse_click", (_forge_moda_state, x, y),
     )
     _forge_moda_state = new_state

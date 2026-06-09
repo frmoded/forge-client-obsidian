@@ -59,19 +59,7 @@ export class ForgeModaView extends ItemView {
     this.iframeReadyFired = false;
 
     const iframe = container.createEl('iframe');
-    const src = this.iframeSrc();
-    iframe.src = src;
-    // v0.2.94 DEBUG — full postMessage tracing so cohort smoke can
-    // pin where the moda simulation startup chain breaks. Remove
-    // these logs (search "[forge-moda v0.2.94]") once the cohort
-    // onboarding path is verified working.
-    console.log('[forge-moda v0.2.94] iframe src:', src);
-    iframe.addEventListener('load', () => {
-      console.log('[forge-moda v0.2.94] iframe DOM load event fired');
-    });
-    iframe.addEventListener('error', (e) => {
-      console.error('[forge-moda v0.2.94] iframe load error:', e);
-    });
+    iframe.src = this.iframeSrc();
     iframe.style.width = '100%';
     iframe.style.height = '100%';
     iframe.style.border = 'none';
@@ -96,10 +84,7 @@ export class ForgeModaView extends ItemView {
       if (e.source !== this.iframeEl?.contentWindow) return;
       const data = e.data;
       if (!data || typeof data !== 'object') return;
-      // v0.2.94 DEBUG — log every iframe→plugin postMessage.
-      console.log('[forge-moda v0.2.94] iframe→plugin postMessage:', data);
       if (data.type === 'iframe-ready') {
-        console.log('[forge-moda v0.2.94] iframe-ready received; autoRunOnReady=', this.autoRunOnReady);
         this.iframeReadyFired = true;
         void this.postFeaturedSnippet();
         return;
@@ -282,46 +267,27 @@ export class ForgeModaView extends ItemView {
    *  one-button-per-vault per the spec). */
   private async postFeaturedSnippet() {
     const win = this.iframeEl?.contentWindow;
-    if (!win) {
-      console.warn('[forge-moda v0.2.94] postFeaturedSnippet: no iframe contentWindow');
-      return;
-    }
+    if (!win) return;
     const featured = this.findFeaturedSnippet();
-    if (!featured) {
-      console.warn('[forge-moda v0.2.94] postFeaturedSnippet: no featured snippet found in vault');
-      console.warn('[forge-moda v0.2.94] hint: check that forge-moda/simulation.md was extracted into the vault + has `featured: true` in frontmatter');
-      // Log what files Obsidian's metadataCache sees so we know
-      // whether forge-moda extraction completed.
-      const mdFiles = this.app.vault.getMarkdownFiles();
-      console.log(`[forge-moda v0.2.94] metadataCache markdown files: ${mdFiles.length} total`);
-      const modaFiles = mdFiles.filter(f => f.path.startsWith('forge-moda/'));
-      console.log(`[forge-moda v0.2.94] forge-moda/ files in vault: ${modaFiles.length}`);
-      if (modaFiles.length > 0) {
-        console.log(`[forge-moda v0.2.94] sample paths:`, modaFiles.slice(0, 3).map(f => f.path));
-      }
-      return;
-    }
+    if (!featured) return;
     const vaultPath = (this.app.vault.adapter as { basePath?: string }).basePath;
     if (!vaultPath) {
-      console.warn('[forge-moda v0.2.94] cannot postMessage featured-snippet — vault adapter has no basePath');
+      console.warn('Forge: cannot postMessage featured-snippet — vault adapter has no basePath');
       return;
     }
-    const featuredMsg = {
-      type: 'featured-snippet',
-      snippet_id: featured.snippet_id,
-      label: featured.label,
-      vault_path: vaultPath,
-    };
-    console.log('[forge-moda v0.2.94] posting featured-snippet:', featuredMsg);
-    win.postMessage(featuredMsg, '*');
-
+    win.postMessage(
+      {
+        type: 'featured-snippet',
+        snippet_id: featured.snippet_id,
+        label: featured.label,
+        vault_path: vaultPath,
+      },
+      '*',
+    );
     // v0.2.93 — auto-trigger featured-run if requested.
     if (this.autoRunOnReady) {
-      console.log('[forge-moda v0.2.94] posting featured-run (autoRunOnReady was true)');
       win.postMessage({ type: 'featured-run' }, '*');
       this.autoRunOnReady = false;
-    } else {
-      console.log('[forge-moda v0.2.94] NOT posting featured-run (autoRunOnReady=false; user must click in-iframe play button)');
     }
   }
 
@@ -330,17 +296,12 @@ export class ForgeModaView extends ItemView {
    *  without a user click on the in-iframe button. Callable BEFORE
    *  iframe-ready (queues the request) or AFTER (fires immediately). */
   requestFeaturedRun(): void {
-    console.log(`[forge-moda v0.2.94] requestFeaturedRun called; iframeReadyFired=${this.iframeReadyFired}`);
     this.autoRunOnReady = true;
-    // If iframe is already ready (postFeaturedSnippet already fired
-    // for this load), post featured-run immediately.
+    // If iframe is already ready, post featured-run immediately.
     const win = this.iframeEl?.contentWindow;
     if (win && this.iframeReadyFired) {
-      console.log('[forge-moda v0.2.94] posting featured-run immediately (iframe already ready)');
       win.postMessage({ type: 'featured-run' }, '*');
       this.autoRunOnReady = false;
-    } else {
-      console.log('[forge-moda v0.2.94] queuing featured-run (iframe not ready yet)');
     }
   }
 
