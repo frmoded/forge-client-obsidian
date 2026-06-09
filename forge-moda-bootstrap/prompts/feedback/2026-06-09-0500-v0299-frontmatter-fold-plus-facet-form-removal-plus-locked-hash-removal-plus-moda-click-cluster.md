@@ -151,3 +151,103 @@ V1 polish progress per the prompt's §8:
 - Cohort onboarding (Tamar) has now triggered: BRAT install fix (v0.2.91-98), moda startup chain (v0.2.92-97), canonical Python write-back (v0.2.99-101), forge-click race + frontmatter UX (v0.2.102). The onboarding path is the dominant signal source for closed-beta.
 
 Per cc-prompt-queue.md §43, this report is the chat summary.
+
+---
+
+## §8 — Post-v0.2.102 follow-up arc (v0.2.103 → v0.2.106)
+
+Cohort smoke against v0.2.102 surfaced two follow-up bugs requiring four further releases. All from the same Tamar onboarding session.
+
+### v0.2.103 — diagnostic build (pause + ink cluster)
+
+**Cohort symptoms:**
+- "Ink still scatters radially" (v0.2.102 ostensibly fixed this).
+- "Pause button does not respond."
+
+Bundle inspection confirmed v0.2.102's `assets/vaults/forge-moda/create_ink_particles.md` shipped the cluster code AND `forge-moda/forge.toml` was at 0.4.20. So either re-extract didn't take OR something else kept old behavior visible.
+
+Shipped a pure-diagnostic iframe build (`[moda v0.2.103]` traces) covering: mode transitions, tick-loop lifecycle (setInterval/clearInterval), click-handler logging the (dx, dy) of created ink particles relative to the click point.
+
+### v0.2.104 — writeGeneratedCode path lookup (qualified snippet_id)
+
+**Cohort signal:** "Forge does nothing to Python" on `forge-moda/create_ink_particles.md`.
+
+**Root cause (latent since v0.2.26):** `writeGeneratedCode` matched files via `f.basename === id`. For library-subdir snippets, `/generate` returns the **qualified** `snippet_id` (`forge-moda/create_ink_particles`), but file basename is just `create_ink_particles`. Match failed → silent skip → Python never written to disk; `runSnippet` then read the OLD MEMFS Python and ran it.
+
+Silently broken for **every library-subdir snippet** since the v0.2.26 qualified-id introduction. Undetected because:
+- Tamar's prior smokes only exercised hello_world (canonical mode → `writeCanonicalPythonBack` path, doesn't basename-match).
+- The bug is silent (`console.warn` with no Notice).
+- Output still reflects the new English because the engine generates new code in-memory even when the disk write fails.
+
+**Fix:** path lookup first via `vault.getAbstractFileByPath('${id}.md')` (V1 convention: snippet_id maps to `<id>.md` from vault root). Basename fallback retained for root-level snippets where id is unqualified.
+
+### v0.2.105 — diagnostic build (full /generate trace)
+
+v0.2.104 didn't actually fix the symptom for Tamar — Python still didn't update. Shipped diagnostic `[forge-gen v0.2.105]` logs at every step: outgoing payload (English fed to LLM), incoming code, writeGeneratedCode file resolution, pre/post write content. Also simplified `create_ink_particles.md` English (removed v0.2.102 dev-commentary the LLM may have over-fitted to). forge-moda 0.4.20 → 0.4.21.
+
+### v0.2.106 — isModaSnippet too greedy (the actual fix)
+
+**Cohort signal:** Tamar's v0.2.105 console had **zero `[forge-gen]` lines**. `/generate` was never invoked.
+
+The smoking gun was the iframe auto-running `setup` + `simulation` instead — meaning `forgeSnippet` had taken the moda branch:
+
+```ts
+if (this.isModaSnippet(view.file.path)) {
+  await this.openModaView();
+  ...
+  return;  // before /generate
+}
+```
+
+**Root cause (latent since v0.2.92):** `isModaSnippet` was a path-prefix match: any file under `forge-moda/` triggered the simulator-auto-open branch. Correct for v0.2.92's intent (the simulation entry point) but wrong for v0.2.93+ when leaf moda snippets need to author through `/generate`. Silent for 14 releases because the simulator/iframe work happened in parallel to writeback work and the conflict wasn't exercised until Tamar tried to author a leaf moda snippet.
+
+**Fix:** narrow to `featured: true` in frontmatter via `isModaFeaturedSnippet(file)`. Only the simulation entry triggers auto-open; leaf snippets fall through to the normal `/generate` + `writeGeneratedCode` chain.
+
+### v0.2.106 — bonus: `.bak` directory sweep
+
+Same v0.2.105 cohort log surfaced:
+
+```
+Forge: multiple featured snippets found; using first by id.
+picked=simulation, all=simulation, simulation, simulation
+```
+
+Three matches because every previous re-extract left a `forge-moda.bak.0.4.X/` at vault root, each with its own `featured: true` simulation.md.
+
+Tamar's request: "please remove the .bak directories, they are adding noise."
+
+**Fix:**
+- `welcome.ts:renameWithBackup` → `deleteExtractedDir`. New re-extracts just delete the old; no .bak created.
+- `welcome.ts:sweepLegacyBakDirs`. One-shot per-onload sweep that deletes any pre-existing `forge-{moda,music,tutorial}.bak.<version>/`.
+- `moda-view.ts:findFeaturedSnippet` skips `\.bak\.` paths as defense in depth.
+
+**Trade-off accepted:** v0.2.39's rationale for `.bak` was preserving user edits to bundled snippets across drift events. V1 convention treats bundled-library snippets as intended-immutable (user authoring lives at vault root), so the loss-of-recovery cost is small relative to the clutter cost.
+
+**Cohort confirm (Tamar):** "looks good!!!"
+
+## §9 — Constitution amendment additions (cumulative session)
+
+Compounding amendments from v0.2.91→v0.2.106:
+
+1. **Inlined-asset version stamping** (v0.2.98) — already proposed.
+2. **Bridge-shape-change call-site grep** (v0.2.95) — already proposed.
+3. **Symmetric facet-mutex invariant** (v0.2.87) — already proposed.
+4. **NEW: Snippet-id resolution via path lookup, not basename.** Any code that maps `snippet_id` → file MUST use the `<id>.md` path-from-vault-root convention. Basename matching is allowed only as a fallback for root-level snippets where the id is provably unqualified. v0.2.104's `writeGeneratedCode` fix is the reference implementation.
+5. **NEW: Path-prefix gates need a positive frontmatter signal.** `isModaFeaturedSnippet`-style narrowing — gate auto-routing behaviors on a specific frontmatter field (`featured: true`, `type: simulator`, etc.) not on path-prefix alone. v0.2.92's path-prefix-only gate routed leaf moda snippets to the wrong path for 14 releases.
+6. **NEW: Library re-extract should not accumulate backup directories.** Either delete-on-extract (v0.2.106 choice) OR cap backups at one. Unbounded accumulation breaks featured discovery and pollutes vault root.
+
+## §10 — Per-protocol HARD RULE compliance (cumulative)
+
+- ✓ §76 (no speculation): each diagnostic build (v0.2.94, v0.2.100, v0.2.103, v0.2.105) earned the next targeted fix from cohort logs.
+- ⚠ Diagnostic-pattern lesson: v0.2.105 diagnostic missed the actual issue (`isModaSnippet` greediness) because the diagnostic was placed INSIDE the path that was being skipped. Next iteration: when a diagnostic produces zero output, instrument the BRANCH points upstream too. Already applied in v0.2.106's tree-cleanup.
+- ✓ §347 (version-bump sanity): every release explicit manifest bump.
+- ✓ §321 (feedback before move): this append covers v0.2.103→v0.2.106; prompt remains in `done/` since v0.2.102 already completed the original prompt.
+
+## §11 — Open follow-ups (after this session)
+
+1. **moda bridge pytest** — Carries forward from v0.2.95. Would have caught v0.2.77→v0.2.95 regression at write-time; would NOT have caught v0.2.104 / v0.2.106 (those are plugin-side concerns).
+2. **Plugin-side path-lookup audit** — `writeGeneratedCode` is fixed; check every other site that does `files.find(f => f.basename === snippet_id)` for the same bug. Candidates: `reconcileFrontmatterInputs`, `syncEnglishFromPython`, any v0.2.41 freeze-affordance lookup.
+3. **Item B (facet_form removal) design call** — still pending; see §2 above.
+4. **release.sh drift preflight for bundled-assets.generated.ts** — still pending from v0.2.91.
+5. **v0.2.19 generate-internal pre-flight sync now dead** — still pending from v0.2.102.
+
