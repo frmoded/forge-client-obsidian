@@ -4,7 +4,7 @@
   "description": "Obsidian client for Forge.",
   "main": "main.js",
   "scripts": {
-    "build": "node scripts/lint-backtick-trap.mjs && npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --external:@codemirror/language --format=cjs --outfile=main.js && node scripts/copy-assets.mjs",
+    "build": "node scripts/lint-backtick-trap.mjs && node scripts/inline-bundled-assets.mjs && npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --external:@codemirror/language --format=cjs --outfile=main.js && node scripts/copy-assets.mjs",
     "lint": "node scripts/lint-backtick-trap.mjs",
     "dev": "npm run build -- --watch",
     "test": "node --test src/*.test.ts",
@@ -12,6 +12,7 @@
     "setup-assets": "node scripts/setup-assets.mjs",
     "sync-engine-bundle": "node scripts/sync-engine-bundle.mjs",
     "sync-bundled-vaults": "node scripts/sync-bundled-vault.mjs --all",
+    "inline-assets": "node scripts/inline-bundled-assets.mjs",
     "release-zip": "node scripts/build-release-zip.mjs"
   },
   "keywords": [],

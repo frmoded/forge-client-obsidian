@@ -208,15 +208,47 @@ export class PyodideHost {
 
     let pyodide: PyodideInstance;
     try {
-      // Load Pyodide's bootstrap. The package ships `pyodide.mjs` (ESM)
-      // and `pyodide.asm.js` (UMD). We dynamic-import the ESM build
-      // from the local plugin URL.
-      const pyodideJsUrl = this.pluginAssetUrl("pyodide/pyodide.mjs");
+      // v0.2.91 — local-or-CDN fallback. The dev workflow places
+      // assets/pyodide/ on disk; BRAT installs don't (the 16 MB
+      // Pyodide bundle is too large to inline into main.js). At runtime
+      // check for the local bootstrap; fall back to jsdelivr's
+      // public Pyodide CDN when absent.
+      const adapter = this.app.vault.adapter;
+      const localPyodideMjs = `.obsidian/plugins/${this.pluginId}/assets/pyodide/pyodide.mjs`;
+      const hasLocalPyodide = await adapter.exists(localPyodideMjs);
+
+      // The CDN version must match the npm `pyodide` package version
+      // — Pyodide's runtime and its bundled stdlib are tightly coupled.
+      // If the npm dep bumps, this URL must too.
+      const PYODIDE_VERSION = '0.29.4';
+      const CDN_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+
+      let pyodideJsUrl: string;
+      let indexURL: string;
+      if (hasLocalPyodide) {
+        pyodideJsUrl = this.pluginAssetUrl("pyodide/pyodide.mjs");
+        indexURL = this.pluginAssetUrl("pyodide/");
+      } else {
+        console.log(`Forge: Pyodide local assets absent; falling back to CDN (${CDN_BASE})`);
+        // Show the user a one-time Notice — the first BRAT-install
+        // Forge-click downloads ~15 MB. Subsequent clicks are cached.
+        try {
+          // Dynamic import to avoid a hard dep on obsidian here at
+          // module-eval time during tests.
+          const obsidian: any = await import('obsidian');
+          new obsidian.Notice(
+            'Forge: downloading Pyodide runtime (one-time, ~15 MB)…',
+            15000,
+          );
+        } catch { /* test env — skip notice */ }
+        pyodideJsUrl = `${CDN_BASE}pyodide.mjs`;
+        indexURL = CDN_BASE;
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pyodideModule: any = await import(/* @vite-ignore */ pyodideJsUrl);
       const loadPyodide = pyodideModule.loadPyodide;
 
-      const indexURL = this.pluginAssetUrl("pyodide/");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       pyodide = await loadPyodide({ indexURL });
     } finally {
@@ -227,7 +259,9 @@ export class PyodideHost {
     }
     console.log(`Forge: Pyodide loaded in ${(performance.now() - t0).toFixed(0)}ms`);
 
-    // Fetch the asset manifest to know what to mount.
+    // Fetch the asset manifest to know what to mount. v0.2.91 —
+    // post-restoreInlinedAssets the manifest is on disk for both dev
+    // and BRAT installs.
     const manifestUrl = this.pluginAssetUrl("manifest.json");
     const manifestRes = await fetch(manifestUrl);
     const manifest: AssetManifest = await manifestRes.json();
@@ -274,17 +308,43 @@ export class PyodideHost {
     // /bundle/wheels/. The runPython block below extracts them into
     // /bundle/site-packages/ via stdlib zipfile. No micropip; no
     // network. See music21-bundle.test.ts for the verification harness.
+    //
+    // v0.2.91 — wheels are NOT inlined (23 MB). For BRAT installs
+    // the local wheels/ directory is absent; we probe each wheel
+    // and silently skip mounting if missing. Music-domain snippets
+    // will fail with a clear error when they try to import music21
+    // (until v0.2.92's CDN-fallback for wheels lands). forge-tutorial
+    // chapters 1-9 are pure Python — unaffected by the skipped mount.
     if (manifest.wheels && manifest.wheels.length > 0) {
+      const adapter = this.app.vault.adapter;
+      const mounted: string[] = [];
+      const skipped: string[] = [];
       pyodide.FS.mkdir("/bundle/wheels");
       pyodide.FS.mkdir("/bundle/site-packages");
       for (const relpath of manifest.wheels) {
         // relpath is e.g. "wheels/music21-8.3.0-py3-none-any.whl"
+        const localPath = `.obsidian/plugins/${this.pluginId}/assets/${relpath}`;
+        if (!(await adapter.exists(localPath))) {
+          skipped.push(relpath);
+          continue;
+        }
         const url = this.pluginAssetUrl(relpath);
         const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
         this._mkdirP(pyodide, "/bundle/" + relpath);
         pyodide.FS.writeFile("/bundle/" + relpath, bytes);
+        mounted.push(relpath);
       }
-      console.log(`Forge: ${manifest.wheels.length} wheels mounted (music21 + deps).`);
+      if (mounted.length > 0) {
+        console.log(`Forge: ${mounted.length} wheels mounted.`);
+      }
+      if (skipped.length > 0) {
+        console.warn(
+          `Forge: ${skipped.length} wheels NOT available locally; ` +
+          `music-domain snippets will not work until v0.2.92 ships ` +
+          `CDN-fallback wheels. Skipped: ${skipped.slice(0, 3).join(', ')}` +
+          (skipped.length > 3 ? `…` : '')
+        );
+      }
     }
 
     // Step 1: walk the user's active vault. Filter to Forge-shaped

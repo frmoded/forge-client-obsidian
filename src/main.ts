@@ -31,6 +31,7 @@ import { computeEnglishHash } from './english-hash-core';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host';
 import { runFirstRunCheck } from './welcome';
+import { restoreInlinedAssets } from './restore-inlined-assets';
 import { parseZapLine } from './zap';
 import { extractDataBody } from './data-snippet';
 import { openForgeAction, ForgeHost } from './forge-action';
@@ -258,6 +259,23 @@ export default class ForgePlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+
+    // v0.2.91 — restore inlined plugin assets to disk on first run.
+    // BRAT downloads only main.js + manifest + styles + data; the
+    // release.sh `assets/` directory never lands. We inline ~1 MB of
+    // vault + engine + iframe + welcome content into main.js (via
+    // scripts/inline-bundled-assets.mjs) and write any missing files
+    // here so the existing ensureBundledVault / Pyodide MEMFS /
+    // iframe loader paths work unchanged. Idempotent: dev install
+    // sees all files already present and skips.
+    try {
+      const written = await restoreInlinedAssets(this.app, this.manifest.id);
+      if (written > 0) {
+        console.log(`Forge: restored ${written} inlined assets to plugin directory (BRAT-install support)`);
+      }
+    } catch (e) {
+      console.error('Forge: restoreInlinedAssets failed', e);
+    }
 
     // V1 Phase 1: wire the Pyodide host. Lazy init — actual Pyodide
     // load only happens on the first computeSnippet call for a
