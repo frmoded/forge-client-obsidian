@@ -79,10 +79,21 @@ export function makeFrontmatterFoldViewPlugin(
 
     constructor(view: EditorView) {
       this.view = view;
-      // Initial state after a microtask so Obsidian has associated
-      // the editor with its file by the time we read frontmatter.
+      // v0.2.108 DEBUG — frontmatter-fold reported NOT firing on
+      // cohort install (post-v0.2.106). ViewPlugin IS registered in
+      // main.ts; the trace below pins which hypothesis is true:
+      //   H2 stale main.js: never see any [ff-debug] lines.
+      //   H3 range null: see "range computation returned null".
+      //   H4 update not firing: see "constructor fired" but no
+      //     "update fired" lines.
+      //   H5 dispatch but no visual fold: see "dispatch attempted"
+      //     followed by frontmatter still unfolded on screen.
+      //   H6 host returns null: see "host getActiveSnippetForFold:
+      //     null" repeatedly.
+      console.log('[ff-debug v0.2.108] constructor fired');
       queueMicrotask(() => {
         if (this.destroyed) return;
+        console.log('[ff-debug v0.2.108] queueMicrotask: maybeFold');
         try { this.maybeFold(); }
         catch (e) { console.warn('Forge frontmatter-fold initial failed', e); }
       });
@@ -90,21 +101,23 @@ export function makeFrontmatterFoldViewPlugin(
 
     update(u: ViewUpdate) {
       if (this.destroyed) return;
-      // Cheap check: when the editor swaps documents (file open),
-      // the active file pointer changes. Refold once per file.
       const host = getHost();
-      if (!host) return;
+      if (!host) {
+        console.log('[ff-debug v0.2.108] update: host null');
+        return;
+      }
       const active = host.getActiveSnippetForFold();
       if (!active) {
+        if (this.foldedForFilePath !== null) {
+          console.log('[ff-debug v0.2.108] update: host getActiveSnippetForFold returned null; clearing cache');
+        }
         this.foldedForFilePath = null;
         return;
       }
       if (active.file.path === this.foldedForFilePath) {
-        return;  // already folded this file
+        return;
       }
-      // Defer dispatch — v0.2.85-89 lesson: NEVER dispatch from
-      // inside a ViewUpdate. setTimeout(0) schedules onto the next
-      // task tick.
+      console.log(`[ff-debug v0.2.108] update fired; active=${active.file.path}, foldedForFilePath=${this.foldedForFilePath}; scheduling maybeFold`);
       void u;
       setTimeout(() => {
         if (this.destroyed) return;
@@ -119,33 +132,58 @@ export function makeFrontmatterFoldViewPlugin(
 
     private maybeFold() {
       const host = getHost();
-      if (!host) return;
-      const active = host.getActiveSnippetForFold();
-      if (!active) return;
-      if (active.file.path === this.foldedForFilePath) return;
-
-      const doc = this.view.state.doc.toString();
-      const range = computeFrontmatterFoldRange(doc);
-      if (!range) {
-        // No frontmatter to fold — record the file so we don't keep
-        // re-scanning on every update.
-        this.foldedForFilePath = active.file.path;
+      if (!host) {
+        console.log('[ff-debug v0.2.108] maybeFold: host null');
         return;
       }
-      // Bounds check against document length (defensive — race vs.
-      // pending edits).
+      const active = host.getActiveSnippetForFold();
+      if (!active) {
+        console.log('[ff-debug v0.2.108] maybeFold: host returned null active snippet (frontmatter not type:action|data?)');
+        return;
+      }
+      if (active.file.path === this.foldedForFilePath) {
+        console.log('[ff-debug v0.2.108] maybeFold: already folded this file');
+        return;
+      }
+      const doc = this.view.state.doc.toString();
+      const range = computeFrontmatterFoldRange(doc);
+      console.log(`[ff-debug v0.2.108] maybeFold: file=${active.file.path}, doc.length=${doc.length}, range=`, range);
+      if (!range) {
+        this.foldedForFilePath = active.file.path;
+        console.log('[ff-debug v0.2.108] maybeFold: range computation returned null (no frontmatter delimiters?); marking file done');
+        return;
+      }
       const docLen = this.view.state.doc.length;
       if (range.from < 0 || range.to > docLen || range.from >= range.to) {
         this.foldedForFilePath = active.file.path;
+        console.warn('[ff-debug v0.2.108] maybeFold: bounds check failed', { range, docLen });
         return;
       }
       try {
+        console.log('[ff-debug v0.2.108] maybeFold: dispatch attempted; foldEffect.of', range);
         this.view.dispatch({
           effects: foldEffect.of(range),
         });
+        // Inspect the actual folded ranges in the resulting state to
+        // confirm the fold landed at the CM6 level (vs. being silently
+        // discarded by a missing fold-state extension or Obsidian's
+        // override).
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const lang = require('@codemirror/language');
+          const folded = lang.foldedRanges(this.view.state);
+          const ranges: Array<{ from: number; to: number }> = [];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          folded.between(0, this.view.state.doc.length, (from: number, to: number) => {
+            ranges.push({ from, to });
+          });
+          console.log('[ff-debug v0.2.108] post-dispatch foldedRanges:', ranges);
+        } catch (probeErr) {
+          console.warn('[ff-debug v0.2.108] foldedRanges probe failed', probeErr);
+        }
         this.foldedForFilePath = active.file.path;
       } catch (e) {
-        console.warn('Forge frontmatter-fold dispatch failed', e);
+        console.warn('[ff-debug v0.2.108] dispatch failed', e);
       }
     }
   });

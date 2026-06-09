@@ -124,24 +124,18 @@ function buildSectionDecorations(view: EditorView): DecorationSet {
       : 'forge-python-line',
   });
 
-  // Heading lines for the inactive facet get a `data-forge-ro-label`
-  // attribute carrying the label text. CSS uses ::after with attr(...) to
-  // render the label inline on the heading. We tried a Decoration.widget
-  // initially but Live Preview's heading-folding plugin pulled the widget
-  // into the folded markup region, sometimes displaying it on the WRONG
-  // heading line. The attribute + ::after path is rendered as part of the
-  // line's container element and isn't subject to Live Preview's fold.
+  // v0.2.108 — was a `data-forge-ro-label` attribute rendered via
+  // CSS ::after as "  read-only · switch to X mode to edit". Cohort
+  // signal (Tamar): the trailing label on a folded heading reads as
+  // visual noise — three dots + a mode-switch instruction stacked
+  // against Obsidian's own fold indicator. Removed. The
+  // .forge-facet-readonly class stays (opacity dimming + downstream
+  // readOnlyFacetFilter still enforces the actual editing block).
   const englishHeadingReadOnlyDeco = Decoration.line({
     class: 'forge-english-line forge-facet-readonly',
-    attributes: {
-      'data-forge-ro-label': '  read-only · switch to English mode to edit',
-    },
   });
   const pythonHeadingReadOnlyDeco = Decoration.line({
     class: 'forge-python-line forge-facet-readonly',
-    attributes: {
-      'data-forge-ro-label': '  read-only · switch to Python mode to edit',
-    },
   });
 
   type Section = 'none' | 'frontmatter' | 'english' | 'python';
