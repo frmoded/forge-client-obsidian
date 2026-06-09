@@ -51,6 +51,7 @@ import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
 import { forgeButtonShouldShow } from './forge-button-gate-core';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin';
+import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -78,13 +79,9 @@ function extractSection(content: string, heading: string): string {
   return out.join('\n').trim();
 }
 
-async function sha256Hex(s: string): Promise<string> {
-  const buf = new TextEncoder().encode(s);
-  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
-  return Array.from(new Uint8Array(hashBuf))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-}
+// v0.2.102 — sha256Hex retired with locked_english_hash.
+// english_hash (the v0.2.72 slot cache key) uses computeEnglishHash
+// from english-hash-core, not this helper.
 
 // Replace the body of the # English section. Keeps the heading line itself
 // in place, swaps out everything between it and the next heading or `---`
@@ -293,6 +290,14 @@ export default class ForgePlugin extends Plugin {
     // ForgePlugin singleton only serves callbacks via FacetMutexHost.
     this.registerEditorExtension([
       makeFacetMutexViewPlugin(() => this.facetMutexHost()),
+    ]);
+
+    // v0.2.102 Item A — auto-fold YAML frontmatter on snippet
+    // file-open so students see # English content first instead of
+    // type/inputs/edit_mode noise. Gated on `type: action | data`
+    // (plain notes unchanged).
+    this.registerEditorExtension([
+      makeFrontmatterFoldViewPlugin(() => this.frontmatterFoldHost()),
     ]);
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
@@ -918,28 +923,10 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
-  private async markDriftAsync(file: TFile, btn: HTMLElement, storedHash: unknown) {
-    try {
-      const content = await this.app.vault.read(file);
-      const english = extractSection(content, 'english');
-      const currentHash = await sha256Hex(english);
-      if (typeof storedHash !== 'string' || currentHash !== storedHash) {
-        btn.addClass('is-drifted');
-        const text =
-          'Drifted from English: the English facet has changed since you switched to Python mode. Sync English ← Python to canonicalize, or switch back to English mode to regenerate.';
-        // Set both aria-label (for screen readers / Obsidian's tooltip
-        // helper) and the standard HTML `title` attribute so the
-        // browser-native hover tooltip surfaces — Obsidian's tooltip
-        // helper caches its text at element-creation time and ignores
-        // later aria-label changes, so we'd otherwise see only the color
-        // change with no hover hint.
-        btn.setAttribute('aria-label', text);
-        btn.setAttribute('title', text);
-      }
-    } catch (e) {
-      console.warn('Forge: drift check failed', e);
-    }
-  }
+  // v0.2.102 — markDriftAsync removed alongside locked_english_hash.
+  // The drift indicator (toolbar button .is-drifted state) was already
+  // dead code (no callers since the v0.2.79 ribbon button removal);
+  // removing the body avoids confusion and the sha256Hex helper.
 
   // Toggle between english (LLM-driven) and python (hand-tuned) edit modes.
   // Replaces toggleLock from Phase 5; semantics are the same but the field
@@ -1001,6 +988,23 @@ export default class ForgePlugin extends Plugin {
     };
   }
 
+  /** v0.2.102 — host adapter for the frontmatter-fold ViewPlugin.
+   *  Returns the active snippet file (action/data) for fold-eligibility;
+   *  null otherwise. Plain notes pass-through. */
+  private frontmatterFoldHost(): FrontmatterFoldHost {
+    return {
+      app: this.app,
+      getActiveSnippetForFold: () => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!view?.file) return null;
+        const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+        const t = typeof fm?.type === 'string' ? fm.type : undefined;
+        if (t !== 'action' && t !== 'data') return null;
+        return { file: view.file };
+      },
+    };
+  }
+
   public async setEditModeForFile(
     file: TFile, newMode: 'english' | 'python',
   ): Promise<void> {
@@ -1025,9 +1029,9 @@ export default class ForgePlugin extends Plugin {
       // resolution cache keeps it fast.
       await this.app.fileManager.processFrontMatter(file, (fm: any) => {
         delete fm.edit_mode;
-        delete fm.locked;             // legacy alias — clean up while we're here
-        delete fm.locked_english_hash;
-        delete fm.english_hash;
+        delete fm.locked;                  // legacy alias — clean up while we're here
+        delete fm.locked_english_hash;     // v0.2.102: retired field; clean up old vaults
+        delete fm.english_hash;            // v0.2.90: invalidate cache on transition to english
       });
       new Notice(`Forge: ${file.basename} → English mode`);
       this.syncButtons();
@@ -1052,15 +1056,17 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
-    // Snapshot the current English so we can detect drift later. The hash
-    // field name stays `locked_english_hash` for one cycle so Phase-5
-    // vaults don't lose their drift baseline; new writes use the same key.
-    const english = extractSection(content, 'english');
-    const hash = await sha256Hex(english);
+    // v0.2.102 — locked_english_hash retired. v0.2.90's cache
+    // invalidation (delete english_hash on transition to english)
+    // substitutes for drift detection: next Forge-click re-transpiles
+    // and overwrites Python, so an in-place Python edit is preserved
+    // until the user toggles back to english + Forges. We previously
+    // wrote a snapshot here for a defunct drift ribbon button (v0.2.79
+    // removed); the field is dead weight now.
     await this.app.fileManager.processFrontMatter(file, (fm: any) => {
       fm.edit_mode = 'python';
-      fm.locked_english_hash = hash;
-      delete fm.locked;             // migrate off the legacy field
+      delete fm.locked;                  // migrate off the legacy field
+      delete fm.locked_english_hash;     // retired field; clean up
     });
     new Notice(`Forge: ${file.basename} → Python mode`);
     // v0.2.9: discoverability nudge. The unlock affordances (toolbar
@@ -1083,8 +1089,8 @@ export default class ForgePlugin extends Plugin {
   // Sync English ← Python: ask the backend's /canonicalize endpoint to
   // produce an English summary of the snippet's current python facet, then
   // overwrite the # English section with the result. Silent overwrite —
-  // Cmd+Z is the safety net. Also re-snapshots `locked_english_hash` if the
-  // snippet is in Python mode so the drift indicator clears immediately.
+  // Cmd+Z is the safety net. v0.2.102 — no longer re-snapshots
+  // locked_english_hash (retired field).
   private async syncEnglishFromPython(target?: TFile) {
     const file = target ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if (!file) {
@@ -1130,22 +1136,15 @@ export default class ForgePlugin extends Plugin {
     }
     const newEnglish = response.json.english as string;
 
-    // Body update + (in Python mode) re-snapshot of locked_english_hash, in
-    // a single atomic vault.process call. Splitting these into vault.modify +
-    // processFrontMatter (the previous shape) raced against the open
-    // editor's pending refresh: the second write read the editor's stale
-    // CodeMirror state and put the old English back, so the visible editor
-    // view never updated even though disk eventually settled on the new
-    // text. One write, one editor refresh.
-    const isPythonMode = getEditMode(fm) === 'python';
-    const newHash = isPythonMode ? await sha256Hex(newEnglish.trim()) : null;
+    // v0.2.102 — write the new English in a single atomic vault.process
+    // call. Previously also re-snapshotted locked_english_hash in the
+    // same write to clear the drift indicator atomically; the field is
+    // retired (drift detection via english_hash invalidation since
+    // v0.2.90), so this is just the body update now.
     let writtenContent: string | null = null;
     try {
       await this.app.vault.process(file, (content) => {
-        let updated = replaceEnglishSection(content, newEnglish);
-        if (newHash !== null) {
-          updated = setFrontmatterField(updated, 'locked_english_hash', newHash);
-        }
+        const updated = replaceEnglishSection(content, newEnglish);
         writtenContent = updated;
         return updated;
       });
@@ -1588,6 +1587,28 @@ export default class ForgePlugin extends Plugin {
     }
     const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
 
+    // v0.2.102 — pre-flight disk→MEMFS sync at the TOP of forgeSnippet,
+    // before any branch dispatch. Mirrors the v0.2.19 sync that was
+    // wrapped inside generate() for the LLM path; the canonical, python,
+    // and moda branches all bypassed it, so any Forge-click within
+    // ~100ms of an English edit raced the vault.on('modify') handler
+    // and the engine read the PRE-edit MEMFS content. Cohort smoke
+    // (Tamar) on hello_world after the v0.2.101 canonical write-back
+    // fix: "works, but only if I wait 0.5-2 seconds before clicking
+    // Forge, otherwise need to Forge twice." Pulling the sync up here
+    // makes the active file's fresh disk content visible to every
+    // downstream branch without each branch having to remember.
+    try {
+      const hostManager = getPyodideHost();
+      if (hostManager) {
+        const host = await hostManager.getInstance();
+        const freshContent = await this.app.vault.read(view.file);
+        await host.syncUserVaultFile(view.file.path, freshContent);
+      }
+    } catch (e) {
+      console.warn('Forge: pre-flight disk→MEMFS sync failed', e);
+    }
+
     // v0.2.92 → v0.2.93 — Forge-click on a forge-moda snippet auto-
     // opens the moda simulation tab AND triggers featured-run inside
     // the iframe. v0.2.92 alone (auto-open only) wasn't enough:
@@ -1626,24 +1647,16 @@ export default class ForgePlugin extends Plugin {
     // the English facet via the vendored forge.e_minus_minus
     // package at runtime. No LLM call, deterministic compile.
     if (getFacetForm(fm) === 'canonical') {
-      console.log(`[forge-write v0.2.101] canonical branch entered for ${view.file.basename}`);
+      console.log(`Forge: skipping /generate, ${view.file.basename} is in canonical E-- mode`);
       await this.runSnippet('Forge failed during execution');
       // v0.2.101 — persist the transpiled Python back to the file's
-      // # Python section so the user sees what E-- generated. Pre-
-      // v0.2.101 the canonical branch ran but never wrote the
-      // transpiled code to disk, leaving the file's Python facet
-      // permanently stale relative to its English. Cohort smoke
-      // (Tamar) on hello_world: "I changed English from hello world
-      // to hello tamar, prints correctly but the python facet does
-      // not revise." Now: post-run fetch via resolveActionCode (no
-      // re-execution), write via the same canonical write helpers
-      // the slot-cache path uses. file is captured fresh from the
-      // workspace since runSnippet may have shown a modal that
-      // changed the active view.
+      // # Python section so the user-visible facet reflects what E--
+      // generated. Best-effort: the run already succeeded; this is
+      // cosmetic persistence.
       try {
         await this.writeCanonicalPythonBack(view.file);
       } catch (e) {
-        console.warn('[forge-write v0.2.101] canonical write-back failed', e);
+        console.warn('Forge: canonical python write-back failed', e);
       }
       return;
     }
@@ -1768,16 +1781,6 @@ export default class ForgePlugin extends Plugin {
       if (response.status === 200) {
         const code: string | undefined = response.json?.code;
         const returnedId: string = response.json?.snippet_id ?? snippetId;
-        // v0.2.100 DEBUG — see what /generate returned + what id the
-        // write step will use.
-        console.log('[forge-write v0.2.100] /generate 200 response', {
-          requestedSnippetId: snippetId,
-          returnedSnippetId: returnedId,
-          codePresent: !!code,
-          codeLength: code?.length ?? 0,
-          activeFilePath: view.file.path,
-          activeFileBasename: view.file.basename,
-        });
         if (!code) {
           const msg = 'Service returned empty code field';
           new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
@@ -1848,69 +1851,20 @@ export default class ForgePlugin extends Plugin {
     const files = this.app.vault.getMarkdownFiles();
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
 
-    // v0.2.100 DEBUG — Tamar smoke against v0.2.99 still reported
-    // "Python facet does not revise" after the
-    // replaceOrInsertPythonHeading swap. Trace the entire write path
-    // so the next smoke pins which step drops the new code. Remove
-    // these logs (search "[forge-write v0.2.100]") once the cause
-    // is identified.
-    console.log('[forge-write v0.2.100] writeGeneratedCode called', {
-      generatedKeys: Object.keys(generated),
-      totalMarkdownFiles: files.length,
-    });
-
     for (const [id, code] of Object.entries(generated)) {
-      // Find by basename. Log ALL candidates so we know if there's
-      // a multi-match where we pick the wrong one (e.g., bundled
-      // welcome.md shadowing the vault-resident one).
-      const candidates = files.filter(f => f.basename === id);
-      console.log(`[forge-write v0.2.100] basename-match candidates for '${id}':`, candidates.map(f => f.path));
-      const file = candidates[0];
+      const file = files.find(f => f.basename === id);
       if (!file) {
-        console.warn(`[forge-write v0.2.100] no file found for snippet '${id}'`);
+        console.warn(`Forge: no file found for snippet '${id}'`);
         continue;
       }
-      console.log(`[forge-write v0.2.100] picked file for '${id}':`, file.path);
       const content = await this.app.vault.read(file);
-      console.log(`[forge-write v0.2.100] pre-write content (first 400 chars):`, content.slice(0, 400));
-      console.log(`[forge-write v0.2.100] generated code (first 200 chars):`, code.slice(0, 200));
-
-      // v0.2.99 — was `replacePythonSection`, which no-op'd when the
-      // file had no `# Python` heading. Bundled welcome.md / greet.md
-      // ship English-only by design (authoring-first artifacts), so
-      // every Forge-click against them silently dropped the
-      // generated Python — the user saw the correct printed output
-      // (engine generates + runs in-memory) but the Python facet
-      // never landed on disk. Cohort smoke (Tamar): "I changed
-      // English from hello world to hello tamar, prints correctly,
-      // but the Python facet does not revise." `replaceOrInsertPython
-      // Heading` is the slot-cache-write path's existing helper — it
-      // replaces an existing # Python section OR inserts one in
-      // canonical (English → Python → Dependencies) order. Same
-      // surface, no new logic needed.
+      // v0.2.99 — use replaceOrInsertPythonHeading (which inserts a
+      // # Python section when absent in canonical English→Python→
+      // Dependencies order) instead of the legacy replacePythonSection
+      // (which no-op'd on missing heading and silently dropped Python
+      // for English-only authored snippets like welcome.md / greet.md).
       const newContent = replaceOrInsertPythonHeading(content, code);
-      const changed = newContent !== content;
-      console.log(`[forge-write v0.2.100] replaceOrInsertPythonHeading produced ${changed ? 'CHANGED' : 'UNCHANGED'} content; new length ${newContent.length} vs old ${content.length}`);
-      if (changed) {
-        // Show the relevant slice: from "# Python" onward, if present.
-        const pyIdx = newContent.indexOf('# Python');
-        console.log(`[forge-write v0.2.100] new content # Python slice:`, pyIdx >= 0 ? newContent.slice(pyIdx, pyIdx + 400) : '(no # Python heading in new content!)');
-      }
-      try {
-        await this.app.vault.modify(file, newContent);
-        console.log(`[forge-write v0.2.100] vault.modify succeeded for ${file.path}`);
-      } catch (e) {
-        console.error(`[forge-write v0.2.100] vault.modify FAILED for ${file.path}`, e);
-        throw e;
-      }
-      // Read back from disk to verify the write actually landed.
-      try {
-        const readBack = await this.app.vault.read(file);
-        const readBackPyIdx = readBack.indexOf('# Python');
-        console.log(`[forge-write v0.2.100] read-back has # Python? ${readBackPyIdx >= 0 ? `YES @${readBackPyIdx}` : 'NO'}; length ${readBack.length}; matches written? ${readBack === newContent}`);
-      } catch (e) {
-        console.warn(`[forge-write v0.2.100] read-back failed`, e);
-      }
+      await this.app.vault.modify(file, newContent);
 
       // v0.2.17: keep Pyodide's MEMFS-mounted user vault in sync with
       // this disk write. The v0.2.16 diagnostic confirmed compute reads
@@ -1985,40 +1939,26 @@ export default class ForgePlugin extends Plugin {
    *  cosmetic persistence). */
   private async writeCanonicalPythonBack(file: TFile): Promise<void> {
     const hostManager = getPyodideHost();
-    if (!hostManager) {
-      console.warn('[forge-write v0.2.101] no Pyodide host; canonical write-back skipped');
-      return;
-    }
+    if (!hostManager) return;
     const host = await hostManager.getInstance();
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
-    console.log(`[forge-write v0.2.101] fetching transpiled python for snippetId=${snippetId}, file=${file.path}`);
     const python = await host.resolveActionCode(snippetId);
-    console.log(`[forge-write v0.2.101] resolveActionCode returned ${python ? `${python.length} chars` : 'EMPTY'}; preview=`, python?.slice(0, 200));
-    if (!python) {
-      console.warn('[forge-write v0.2.101] empty transpile output; skipping write');
-      return;
-    }
+    if (!python) return;
     const body = await this.app.vault.read(file);
     const english = _extractEnglishFromBody(body) ?? '';
     const englishHash = await computeEnglishHash(english);
-    console.log(`[forge-write v0.2.101] english length=${english.length}, englishHash=${englishHash.slice(0, 16)}…`);
     await this.app.vault.process(file, (content) =>
       writePythonAndEnglishHash(content, {
         pythonCode: python,
         englishHash,
         stripStaleSlots: false,
       }));
-    console.log(`[forge-write v0.2.101] vault.process succeeded for ${file.path}`);
-    // Read-back sanity check.
-    const readBack = await this.app.vault.read(file);
-    const pyIdx = readBack.indexOf('# Python');
-    console.log(`[forge-write v0.2.101] read-back has # Python? ${pyIdx >= 0 ? `YES @${pyIdx}` : 'NO'}; length ${readBack.length}`);
     // Keep MEMFS in sync for the next compute.
     try {
+      const readBack = await this.app.vault.read(file);
       await host.syncUserVaultFile(file.path, readBack);
-      console.log('[forge-write v0.2.101] MEMFS sync after write succeeded');
     } catch (e) {
-      console.warn('[forge-write v0.2.101] MEMFS sync after write failed', e);
+      console.warn('Forge: MEMFS sync after canonical write failed', e);
     }
   }
 
