@@ -61,6 +61,40 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
       const host = getHost();
       if (!host) return;
       const active = host.getActiveSnippet();
+
+      // v0.2.85 SPIKE — REMOVE AFTER INVESTIGATION. Diagnostic logging
+      // per prompt §1.7. Discharges H1-H6: timing, debounce window,
+      // file-path identity, transaction effects, prevFold/newFold
+      // delta, decideOnFoldChange result.
+      try {
+        const txEffects = u.transactions.flatMap(t =>
+          (t.effects ?? []).map((e: any) =>
+            e?.value?.constructor?.name ?? typeof e?.value ?? 'unknown'));
+        const probedHeadings = this.readHeadings();
+        const probedFold = this.readFoldState();
+        console.log('Forge mutex spike:', {
+          now: Date.now(),
+          ignoreUntil: this.ignoreFoldEventsUntil,
+          insideIgnoreWindow: Date.now() < this.ignoreFoldEventsUntil,
+          active: active
+            ? { path: active.file.path, mode: active.mode }
+            : null,
+          lastFilePath: this.lastFilePath,
+          txCount: u.transactions.length,
+          txEffects,
+          docChanged: u.docChanged,
+          prevFold: this.prevFold,
+          probedHeadings,
+          probedFold,
+          foldsDiffer:
+            probedFold.englishFolded !== this.prevFold.englishFolded
+            || probedFold.pythonFolded !== this.prevFold.pythonFolded,
+        });
+      } catch (e) {
+        console.warn('Forge mutex spike: log failed', e);
+      }
+      // END v0.2.85 SPIKE
+
       if (!active) {
         this.lastFilePath = null;
         return;
@@ -101,6 +135,17 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
       const headings = this.readHeadings();
       const desired = decideOnFoldChange(
         this.prevFold, newFold, active.mode, headings);
+
+      // v0.2.85 SPIKE — log the decision input + output.
+      console.log('Forge mutex spike: decideOnFoldChange', {
+        prevFold: this.prevFold,
+        newFold,
+        mode: active.mode,
+        headings,
+        decision: desired,
+      });
+      // END v0.2.85 SPIKE
+
       if (desired.newEditMode !== null) {
         this.ignoreFoldEventsUntil = now + FOLD_EVENT_IGNORE_WINDOW_MS;
         this.applyFoldDelta(headings, newFold, desired);
@@ -191,6 +236,11 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
         effects.push(
           desired.pythonFolded ? foldEffect.of(range) : unfoldEffect.of(range));
       }
+      // v0.2.85 SPIKE — log the fold dispatch.
+      console.log('Forge mutex spike: applyFoldDelta', {
+        headings, current, desired, effectCount: effects.length,
+      });
+      // END v0.2.85 SPIKE
       if (effects.length > 0) {
         this.view.dispatch({ effects });
       }
