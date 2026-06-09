@@ -60,20 +60,58 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
 
     update(u: ViewUpdate) {
       if (this.destroyed) return;
-      // v0.2.87 three-tier defense for the Obsidian-async fold race:
-      //   tier 1 — synchronous (catches the no-race case);
-      //   tier 2 — requestAnimationFrame (~16ms; catches 1-frame race);
-      //   tier 3 — 100ms setTimeout (catches longer Obsidian commit
-      //            delays; matches v0.2.83's polling worst-case with
-      //            a one-shot timer instead of a recurring interval).
-      // v0.2.86 shipped tier 1 + tier 2 only and cohort smoke still
-      // reported the mutex not firing on the # English auto-fold after
-      // the user expands # Python — so the race exceeds 1 frame in
-      // practice. tier 3 closes the gap at the cost of being up to
-      // 100ms behind the gesture. v0.2.83's 200ms polling worked at
-      // cohort-acceptable latency; tier 3 at 100ms is strictly better.
-      // The cost is small: one extra processUpdate() call per CM
-      // update which bails fast when no delta detected.
+
+      // v0.2.88 DEBUG — log every update's transaction effects to
+      // discover what Obsidian dispatches for heading-fold gestures.
+      // The v0.2.85-87 cycle assumed Obsidian uses
+      // @codemirror/language's foldEffect, but cohort smoke against
+      // v0.2.87's three-tier defense STILL shows the mutex not
+      // firing. Most likely Obsidian uses a custom fold mechanism
+      // that doesn't surface through foldedRanges(). Logging the
+      // raw effect class names + state reads will pin it.
+      try {
+        const allEffects: string[] = [];
+        for (const tx of u.transactions) {
+          for (const eff of (tx.effects ?? [])) {
+            // eff is a StateEffect<T>; eff.value is T. We want a
+            // discriminator. Use the StateEffectType's `map` source
+            // line (CM6 doesn't expose effect type names) — fall
+            // back to value's constructor.
+            const e = eff as any;
+            const valueName = e?.value?.constructor?.name
+              ?? (typeof e?.value === 'object' ? 'object' : typeof e?.value);
+            allEffects.push(valueName);
+          }
+        }
+        const probedFold = this.readFoldState();
+        const probedHeadings = this.readHeadings();
+        const host = getHost();
+        const active = host?.getActiveSnippet() ?? null;
+        // Only log when something interesting happened (effects fired
+        // or fold state differs from cache) — avoids spamming on every
+        // keystroke.
+        const foldsDiffer =
+          probedFold.englishFolded !== this.prevFold.englishFolded
+          || probedFold.pythonFolded !== this.prevFold.pythonFolded;
+        if (allEffects.length > 0 || foldsDiffer) {
+          console.log('[forge-mutex v0.2.88]', {
+            t: Date.now(),
+            txCount: u.transactions.length,
+            allEffects,
+            docChanged: u.docChanged,
+            active: active ? { path: active.file.path, mode: active.mode } : null,
+            prevFold: this.prevFold,
+            probedFold,
+            foldsDiffer,
+            headings: probedHeadings,
+            insideIgnoreWindow: Date.now() < this.ignoreFoldEventsUntil,
+          });
+        }
+      } catch (e) {
+        console.warn('[forge-mutex v0.2.88] log failed', e);
+      }
+
+      // Three-tier defense (unchanged from v0.2.87).
       this.processUpdate();
       if (typeof requestAnimationFrame === 'function') {
         this.pendingRafHandle = requestAnimationFrame(() => {
@@ -81,7 +119,6 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           this.processUpdate();
         });
       }
-      // Clear any in-flight setTimeout so we never accumulate handles.
       if (this.pendingTimeoutHandle !== null) {
         clearTimeout(this.pendingTimeoutHandle);
       }
@@ -89,7 +126,43 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
         this.pendingTimeoutHandle = null;
         if (this.destroyed) return;
         this.processUpdate();
+        // v0.2.88 invariant assertion — after the 100ms settle window,
+        // either exactly one facet is folded (mutex working) or both
+        // exist and one of them is the active facet (visible). Warn
+        // loudly when the invariant is violated so the user sees it
+        // in console without needing to paste anything back.
+        this.checkInvariant();
       }, 100);
+    }
+
+    /** v0.2.88 invariant: when both # English and # Python headings
+     *  exist, exactly one facet must be visible (folded=false) and
+     *  the other folded. Both-folded and both-visible are invalid
+     *  states. Logs a console.warn when violated. */
+    private checkInvariant() {
+      if (this.destroyed) return;
+      const host = getHost();
+      if (!host) return;
+      const active = host.getActiveSnippet();
+      if (!active) return;
+      const headings = this.readHeadings();
+      if (headings.englishLine === null || headings.pythonLine === null) {
+        return;  // slot-free / partial — invariant doesn't apply
+      }
+      const fs = this.readFoldState();
+      const bothFolded = fs.englishFolded && fs.pythonFolded;
+      const bothVisible = !fs.englishFolded && !fs.pythonFolded;
+      if (bothFolded || bothVisible) {
+        console.warn('[forge-mutex v0.2.88] INVARIANT VIOLATED:', {
+          file: active.file.path,
+          mode: active.mode,
+          fs,
+          state: bothFolded ? 'both-folded (no facet visible)'
+            : 'both-visible (mutex did not flip)',
+          headings,
+          prevFold: this.prevFold,
+        });
+      }
     }
 
     private processUpdate() {
