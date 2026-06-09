@@ -993,10 +993,23 @@ export default class ForgePlugin extends Plugin {
     }
 
     if (newMode === 'english') {
+      // v0.2.90 — invalidate the english_hash cache when leaving
+      // python mode. While in python mode the user may have hand-
+      // edited `# Python`; switching back to english mode means
+      // english is the source of truth again. Without this, the
+      // engine's cache contract (english_hash matches current English
+      // → return existing `# Python` verbatim) would return the user's
+      // python-mode edits as if they were the canonical transpilation
+      // — Forge-clicking from english mode wouldn't overwrite them.
+      // Deleting english_hash forces a cache miss → re-transpile on
+      // the next Forge-click. For canonical slot-bearing snippets
+      // this triggers a /resolve-slot roundtrip, but server-side
+      // resolution cache keeps it fast.
       await this.app.fileManager.processFrontMatter(file, (fm: any) => {
         delete fm.edit_mode;
         delete fm.locked;             // legacy alias — clean up while we're here
         delete fm.locked_english_hash;
+        delete fm.english_hash;
       });
       new Notice(`Forge: ${file.basename} → English mode`);
       this.syncButtons();
