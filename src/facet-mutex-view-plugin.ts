@@ -43,6 +43,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
     private ignoreFoldEventsUntil = 0;
     private lastFilePath: string | null = null;
     private destroyed = false;
+    private pendingRafHandle: number | null = null;
 
     constructor(view: EditorView) {
       this.view = view;
@@ -58,54 +59,41 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
 
     update(u: ViewUpdate) {
       if (this.destroyed) return;
+      // v0.2.85 fix: process synchronously first (fast-path) AND
+      // schedule a one-frame-later re-check (slow-path). The
+      // foldedRanges-roundtrip spike (facet-mutex-foldedranges-spike.test.ts)
+      // confirmed the read logic is correct in isolation; the v0.2.84
+      // regression turned out to be a timing race in Obsidian — heading
+      // folds dispatched via Obsidian's gutter handler aren't fully
+      // settled into the foldState field by the time our update() runs
+      // synchronously. requestAnimationFrame defers the re-check until
+      // after the browser's next frame, by which time Obsidian's async
+      // fold processing has settled. One-frame latency (~16ms) vs the
+      // 200ms setInterval polling we shipped in v0.2.83.
+      this.processUpdate();
+      // Defer a second check exactly once per CM update; cheap
+      // (foldedRanges read is O(folded-count) and bails fast when no
+      // delta detected).
+      if (typeof requestAnimationFrame === 'function') {
+        const handle = requestAnimationFrame(() => {
+          if (this.destroyed) return;
+          this.processUpdate();
+        });
+        // Cache the handle so destroy() can cancel.
+        this.pendingRafHandle = handle;
+      }
+    }
+
+    private processUpdate() {
       const host = getHost();
       if (!host) return;
       const active = host.getActiveSnippet();
-
-      // v0.2.85 SPIKE — REMOVE AFTER INVESTIGATION. Diagnostic logging
-      // per prompt §1.7. Discharges H1-H6: timing, debounce window,
-      // file-path identity, transaction effects, prevFold/newFold
-      // delta, decideOnFoldChange result.
-      try {
-        const txEffects = u.transactions.flatMap(t =>
-          (t.effects ?? []).map((e: any) =>
-            e?.value?.constructor?.name ?? typeof e?.value ?? 'unknown'));
-        const probedHeadings = this.readHeadings();
-        const probedFold = this.readFoldState();
-        console.log('Forge mutex spike:', {
-          now: Date.now(),
-          ignoreUntil: this.ignoreFoldEventsUntil,
-          insideIgnoreWindow: Date.now() < this.ignoreFoldEventsUntil,
-          active: active
-            ? { path: active.file.path, mode: active.mode }
-            : null,
-          lastFilePath: this.lastFilePath,
-          txCount: u.transactions.length,
-          txEffects,
-          docChanged: u.docChanged,
-          prevFold: this.prevFold,
-          probedHeadings,
-          probedFold,
-          foldsDiffer:
-            probedFold.englishFolded !== this.prevFold.englishFolded
-            || probedFold.pythonFolded !== this.prevFold.pythonFolded,
-        });
-      } catch (e) {
-        console.warn('Forge mutex spike: log failed', e);
-      }
-      // END v0.2.85 SPIKE
-
       if (!active) {
         this.lastFilePath = null;
         return;
       }
-      // File-change detection: if the active file's path changed since
-      // last update, treat as a fresh attach — re-apply initial state.
-      // Also resets prevFold so the new file's first delta doesn't
-      // get treated as a gesture against the previous file's state.
       if (active.file.path !== this.lastFilePath) {
         this.lastFilePath = active.file.path;
-        // Initial state apply needs the editor settled; defer.
         this.ignoreFoldEventsUntil =
           Date.now() + FOLD_EVENT_IGNORE_WINDOW_MS;
         try {
@@ -116,11 +104,6 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
         }
         return;
       }
-      // Per-update fold-state diff. CM6 fires update() on every
-      // transaction; foldedRanges read is O(folded-count) which is
-      // tiny. Document changes (typing) also fire update(); we still
-      // do the cheap fold-state read but the diff almost always
-      // matches prevFold, so no work happens.
       const now = Date.now();
       const newFold = this.readFoldState();
       if (now < this.ignoreFoldEventsUntil) {
@@ -131,21 +114,9 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           && newFold.pythonFolded === this.prevFold.pythonFolded) {
         return;
       }
-      // Fold-state delta. Route through pure-core.
       const headings = this.readHeadings();
       const desired = decideOnFoldChange(
         this.prevFold, newFold, active.mode, headings);
-
-      // v0.2.85 SPIKE — log the decision input + output.
-      console.log('Forge mutex spike: decideOnFoldChange', {
-        prevFold: this.prevFold,
-        newFold,
-        mode: active.mode,
-        headings,
-        decision: desired,
-      });
-      // END v0.2.85 SPIKE
-
       if (desired.newEditMode !== null) {
         this.ignoreFoldEventsUntil = now + FOLD_EVENT_IGNORE_WINDOW_MS;
         this.applyFoldDelta(headings, newFold, desired);
@@ -154,7 +125,14 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
       this.prevFold = this.readFoldState();
     }
 
-    destroy() { this.destroyed = true; }
+    destroy() {
+      this.destroyed = true;
+      if (this.pendingRafHandle !== null
+          && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(this.pendingRafHandle);
+        this.pendingRafHandle = null;
+      }
+    }
 
     private maybeSyncInitialState() {
       const host = getHost();
@@ -236,11 +214,6 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
         effects.push(
           desired.pythonFolded ? foldEffect.of(range) : unfoldEffect.of(range));
       }
-      // v0.2.85 SPIKE — log the fold dispatch.
-      console.log('Forge mutex spike: applyFoldDelta', {
-        headings, current, desired, effectCount: effects.length,
-      });
-      // END v0.2.85 SPIKE
       if (effects.length > 0) {
         this.view.dispatch({ effects });
       }
