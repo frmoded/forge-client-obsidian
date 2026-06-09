@@ -26,10 +26,17 @@
  *
  *  When there is no `# Python` section in the file, returns the input
  *  unchanged (callers handle the "no Python facet" case at a higher
- *  level). When the Python section's closing ``` is missing or
- *  malformed, treats the rest of the file as part of the (broken)
- *  Python section and discards it — defensive against half-written
- *  files mid-edit, but documents the boundary.
+ *  level — see `replaceOrInsertPythonHeading` in
+ *  python-cache-writer-core which inserts in canonical order). The
+ *  legacy α-generate path in main.ts:writeGeneratedCode routes
+ *  through that helper since v0.2.99 specifically so English-only
+ *  bundled snippets (welcome.md, greet.md) get their Python facet
+ *  written on first Forge.
+ *
+ *  When the Python section's closing ``` is missing or malformed,
+ *  treats the rest of the file as part of the (broken) Python
+ *  section and discards it — defensive against half-written files
+ *  mid-edit, but documents the boundary.
  *
  *  Why preservation matters: the closed-beta path doesn't reach the
  *  `syncDependencies` BE, so without trailing preservation the Forge-

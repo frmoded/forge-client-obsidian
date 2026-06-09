@@ -46,7 +46,7 @@ import {
   type SnippetRegistryLike,
   type SnippetRegistryLikeMulti,
 } from './wikilink-freeze-menu-core';
-import { replacePythonSection } from './replace-python-section-core';
+import { replaceOrInsertPythonHeading } from './python-cache-writer-core';
 import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
 import { forgeButtonShouldShow } from './forge-button-gate-core';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
@@ -1828,7 +1828,20 @@ export default class ForgePlugin extends Plugin {
         continue;
       }
       const content = await this.app.vault.read(file);
-      const newContent = replacePythonSection(content, code);
+      // v0.2.99 — was `replacePythonSection`, which no-op'd when the
+      // file had no `# Python` heading. Bundled welcome.md / greet.md
+      // ship English-only by design (authoring-first artifacts), so
+      // every Forge-click against them silently dropped the
+      // generated Python — the user saw the correct printed output
+      // (engine generates + runs in-memory) but the Python facet
+      // never landed on disk. Cohort smoke (Tamar): "I changed
+      // English from hello world to hello tamar, prints correctly,
+      // but the Python facet does not revise." `replaceOrInsertPython
+      // Heading` is the slot-cache-write path's existing helper — it
+      // replaces an existing # Python section OR inserts one in
+      // canonical (English → Python → Dependencies) order. Same
+      // surface, no new logic needed.
+      const newContent = replaceOrInsertPythonHeading(content, code);
       await this.app.vault.modify(file, newContent);
 
       // v0.2.17: keep Pyodide's MEMFS-mounted user vault in sync with

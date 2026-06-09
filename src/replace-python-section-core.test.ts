@@ -94,7 +94,7 @@ test('replacePythonSection: preserves arbitrary trailing content (user notes, cu
   assert.match(after, /private note from the author/);
 });
 
-test('replacePythonSection: returns input unchanged when no # Python heading is present', () => {
+test('replacePythonSection: returns input unchanged when no # Python heading is present (legacy contract — main.ts routes through replaceOrInsertPythonHeading instead since v0.2.99)', () => {
   const noPython = `---
 type: action
 ---
