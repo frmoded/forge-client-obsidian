@@ -111,7 +111,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
       const bothFolded = fs.englishFolded && fs.pythonFolded;
       const bothVisible = !fs.englishFolded && !fs.pythonFolded;
       if (bothFolded || bothVisible) {
-        console.warn('[forge-mutex v0.2.89] INVARIANT VIOLATED:', {
+        console.warn('Forge facet-mutex invariant violated:', {
           file: active.file.path,
           mode: active.mode,
           fs,
@@ -271,7 +271,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           try {
             this.view.dispatch({ effects });
           } catch (e) {
-            console.warn('[forge-mutex v0.2.89] dispatch failed', e);
+            console.warn('Forge facet-mutex deferred dispatch failed', e);
           }
         }, 0);
       }
