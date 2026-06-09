@@ -61,61 +61,13 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
     update(u: ViewUpdate) {
       if (this.destroyed) return;
 
-      // v0.2.88 DEBUG — log every update's transaction effects to
-      // discover what Obsidian dispatches for heading-fold gestures.
-      // The v0.2.85-87 cycle assumed Obsidian uses
-      // @codemirror/language's foldEffect, but cohort smoke against
-      // v0.2.87's three-tier defense STILL shows the mutex not
-      // firing. Most likely Obsidian uses a custom fold mechanism
-      // that doesn't surface through foldedRanges(). Logging the
-      // raw effect class names + state reads will pin it.
-      try {
-        const allEffects: string[] = [];
-        for (const tx of u.transactions) {
-          for (const eff of (tx.effects ?? [])) {
-            // eff is a StateEffect<T>; eff.value is T. We want a
-            // discriminator. Use the StateEffectType's `map` source
-            // line (CM6 doesn't expose effect type names) — fall
-            // back to value's constructor.
-            const e = eff as any;
-            const valueName = e?.value?.constructor?.name
-              ?? (typeof e?.value === 'object' ? 'object' : typeof e?.value);
-            allEffects.push(valueName);
-          }
-        }
-        const probedFold = this.readFoldState();
-        const probedHeadings = this.readHeadings();
-        const host = getHost();
-        const active = host?.getActiveSnippet() ?? null;
-        // Only log when something interesting happened (effects fired
-        // or fold state differs from cache) — avoids spamming on every
-        // keystroke.
-        const foldsDiffer =
-          probedFold.englishFolded !== this.prevFold.englishFolded
-          || probedFold.pythonFolded !== this.prevFold.pythonFolded;
-        if (allEffects.length > 0 || foldsDiffer) {
-          // v0.2.89 — inline-format effects so the array contents
-          // show in the log line itself (v0.2.88 displayed "Array(1)").
-          const effectsStr = allEffects.length > 0
-            ? `[${allEffects.join('|')}]`
-            : '[]';
-          console.log(
-            `[forge-mutex v0.2.89] effects=${effectsStr}`,
-            {
-              t: Date.now(),
-              txCount: u.transactions.length,
-              docChanged: u.docChanged,
-              active: active ? { path: active.file.path, mode: active.mode } : null,
-              prevFold: this.prevFold,
-              probedFold,
-              foldsDiffer,
-              headings: probedHeadings,
-              insideIgnoreWindow: Date.now() < this.ignoreFoldEventsUntil,
-            });
-        }
-      } catch (e) {
-        console.warn('[forge-mutex v0.2.89] log failed', e);
-      }
+      // v0.2.100 — removed v0.2.88/89 transaction-effects diagnostic
+      // logging. Mutex has been stable since the setTimeout(0)
+      // deferred-dispatch fix in v0.2.89; the logs were retained
+      // "for one cycle" and have outlived their purpose. The
+      // invariant assertion below (checkInvariant, fired after the
+      // 100ms settle window) stays — it remains silent in the happy
+      // path and only warns on actual violations.
 
       // Three-tier defense (unchanged from v0.2.87).
       this.processUpdate();

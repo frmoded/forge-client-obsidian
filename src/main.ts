@@ -1751,6 +1751,16 @@ export default class ForgePlugin extends Plugin {
       if (response.status === 200) {
         const code: string | undefined = response.json?.code;
         const returnedId: string = response.json?.snippet_id ?? snippetId;
+        // v0.2.100 DEBUG — see what /generate returned + what id the
+        // write step will use.
+        console.log('[forge-write v0.2.100] /generate 200 response', {
+          requestedSnippetId: snippetId,
+          returnedSnippetId: returnedId,
+          codePresent: !!code,
+          codeLength: code?.length ?? 0,
+          activeFilePath: view.file.path,
+          activeFileBasename: view.file.basename,
+        });
         if (!code) {
           const msg = 'Service returned empty code field';
           new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
@@ -1821,13 +1831,33 @@ export default class ForgePlugin extends Plugin {
     const files = this.app.vault.getMarkdownFiles();
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
 
+    // v0.2.100 DEBUG — Tamar smoke against v0.2.99 still reported
+    // "Python facet does not revise" after the
+    // replaceOrInsertPythonHeading swap. Trace the entire write path
+    // so the next smoke pins which step drops the new code. Remove
+    // these logs (search "[forge-write v0.2.100]") once the cause
+    // is identified.
+    console.log('[forge-write v0.2.100] writeGeneratedCode called', {
+      generatedKeys: Object.keys(generated),
+      totalMarkdownFiles: files.length,
+    });
+
     for (const [id, code] of Object.entries(generated)) {
-      const file = files.find(f => f.basename === id);
+      // Find by basename. Log ALL candidates so we know if there's
+      // a multi-match where we pick the wrong one (e.g., bundled
+      // welcome.md shadowing the vault-resident one).
+      const candidates = files.filter(f => f.basename === id);
+      console.log(`[forge-write v0.2.100] basename-match candidates for '${id}':`, candidates.map(f => f.path));
+      const file = candidates[0];
       if (!file) {
-        console.warn(`Forge: no file found for snippet '${id}'`);
+        console.warn(`[forge-write v0.2.100] no file found for snippet '${id}'`);
         continue;
       }
+      console.log(`[forge-write v0.2.100] picked file for '${id}':`, file.path);
       const content = await this.app.vault.read(file);
+      console.log(`[forge-write v0.2.100] pre-write content (first 400 chars):`, content.slice(0, 400));
+      console.log(`[forge-write v0.2.100] generated code (first 200 chars):`, code.slice(0, 200));
+
       // v0.2.99 — was `replacePythonSection`, which no-op'd when the
       // file had no `# Python` heading. Bundled welcome.md / greet.md
       // ship English-only by design (authoring-first artifacts), so
@@ -1842,7 +1872,28 @@ export default class ForgePlugin extends Plugin {
       // canonical (English → Python → Dependencies) order. Same
       // surface, no new logic needed.
       const newContent = replaceOrInsertPythonHeading(content, code);
-      await this.app.vault.modify(file, newContent);
+      const changed = newContent !== content;
+      console.log(`[forge-write v0.2.100] replaceOrInsertPythonHeading produced ${changed ? 'CHANGED' : 'UNCHANGED'} content; new length ${newContent.length} vs old ${content.length}`);
+      if (changed) {
+        // Show the relevant slice: from "# Python" onward, if present.
+        const pyIdx = newContent.indexOf('# Python');
+        console.log(`[forge-write v0.2.100] new content # Python slice:`, pyIdx >= 0 ? newContent.slice(pyIdx, pyIdx + 400) : '(no # Python heading in new content!)');
+      }
+      try {
+        await this.app.vault.modify(file, newContent);
+        console.log(`[forge-write v0.2.100] vault.modify succeeded for ${file.path}`);
+      } catch (e) {
+        console.error(`[forge-write v0.2.100] vault.modify FAILED for ${file.path}`, e);
+        throw e;
+      }
+      // Read back from disk to verify the write actually landed.
+      try {
+        const readBack = await this.app.vault.read(file);
+        const readBackPyIdx = readBack.indexOf('# Python');
+        console.log(`[forge-write v0.2.100] read-back has # Python? ${readBackPyIdx >= 0 ? `YES @${readBackPyIdx}` : 'NO'}; length ${readBack.length}; matches written? ${readBack === newContent}`);
+      } catch (e) {
+        console.warn(`[forge-write v0.2.100] read-back failed`, e);
+      }
 
       // v0.2.17: keep Pyodide's MEMFS-mounted user vault in sync with
       // this disk write. The v0.2.16 diagnostic confirmed compute reads
