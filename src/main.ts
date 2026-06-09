@@ -1588,17 +1588,25 @@ export default class ForgePlugin extends Plugin {
     }
     const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
 
-    // v0.2.92 — Forge-click on any forge-moda snippet auto-opens the
-    // moda simulation tab (idempotent if already open). Without an
-    // open iframe, the snippet's `context.moda.draw(...)` calls have
-    // nowhere to post particles — the snippet runs, prints stdout to
-    // the Forge Output panel, but the visual simulation never appears.
-    // Cohort smoke (Tamar 2026-06-09) confirmed Forge-clicking
-    // forge-moda/simulation.md was the entry point and the iframe
-    // tab had to be opened manually first. Auto-opening here removes
-    // that hidden step.
+    // v0.2.92 → v0.2.93 — Forge-click on a forge-moda snippet auto-
+    // opens the moda simulation tab AND triggers featured-run inside
+    // the iframe. v0.2.92 alone (auto-open only) wasn't enough:
+    // Tamar's smoke showed "tab opens but simulation idle" because
+    // the iframe waits for a user click on its in-iframe play button.
+    // v0.2.93 sends `featured-run` to the iframe (via
+    // ForgeModaView.requestFeaturedRun) which the iframe handles
+    // by auto-triggering the featured snippet's compute pathway.
+    // The plugin's Pyodide host receives the compute via the iframe's
+    // engine-request route and the canvas renders.
+    // Skip the local runSnippet path entirely for moda snippets —
+    // the iframe owns the compute pathway here.
     if (this.isModaSnippet(view.file.path)) {
       await this.openModaView();
+      const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
+      if (leaf?.view instanceof ForgeModaView) {
+        leaf.view.requestFeaturedRun();
+      }
+      return;
     }
 
     if (getEditMode(fm) === 'python') {

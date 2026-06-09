@@ -54,6 +54,9 @@ export class ForgeModaView extends ItemView {
     container.empty();
     container.style.padding = '0';
     container.style.overflow = 'hidden';
+    // v0.2.93 — reset the iframe-ready flag on every onOpen since
+    // detaching + reattaching the view rebuilds the iframe DOM.
+    this.iframeReadyFired = false;
 
     const iframe = container.createEl('iframe');
     iframe.src = this.iframeSrc();
@@ -82,6 +85,7 @@ export class ForgeModaView extends ItemView {
       const data = e.data;
       if (!data || typeof data !== 'object') return;
       if (data.type === 'iframe-ready') {
+        this.iframeReadyFired = true;
         void this.postFeaturedSnippet();
         return;
       }
@@ -280,7 +284,37 @@ export class ForgeModaView extends ItemView {
       },
       '*',
     );
+
+    // v0.2.93 — also trigger auto-run if the caller requested it (via
+    // requestFeaturedRun() called BEFORE the iframe-ready handshake).
+    // The iframe handles a `featured-run` message that bypasses the
+    // user-click step on the play button. Cohort smoke (Tamar):
+    // opening the moda tab via Cmd-P OR Forge-clicking a moda snippet
+    // both arrived at "iframe loaded but simulation idle." Auto-run
+    // closes that gap.
+    if (this.autoRunOnReady) {
+      win.postMessage({ type: 'featured-run' }, '*');
+      this.autoRunOnReady = false;  // one-shot
+    }
   }
+
+  /** v0.2.93 — set a one-shot flag so the next iframe-ready handshake
+   *  also posts `featured-run`, auto-triggering the simulation
+   *  without a user click on the in-iframe button. Callable BEFORE
+   *  iframe-ready (queues the request) or AFTER (fires immediately). */
+  requestFeaturedRun(): void {
+    this.autoRunOnReady = true;
+    // If iframe is already ready (postFeaturedSnippet already fired
+    // for this load), post featured-run immediately.
+    const win = this.iframeEl?.contentWindow;
+    if (win && this.iframeReadyFired) {
+      win.postMessage({ type: 'featured-run' }, '*');
+      this.autoRunOnReady = false;
+    }
+  }
+
+  private autoRunOnReady = false;
+  private iframeReadyFired = false;
 
   /** Walk every markdown file in the vault (root + library subdirs);
    *  collect any with `featured: true` in frontmatter; return the
