@@ -1626,8 +1626,25 @@ export default class ForgePlugin extends Plugin {
     // the English facet via the vendored forge.e_minus_minus
     // package at runtime. No LLM call, deterministic compile.
     if (getFacetForm(fm) === 'canonical') {
-      console.log(`Forge: skipping /generate, ${view.file.basename} is in canonical E-- mode`);
+      console.log(`[forge-write v0.2.101] canonical branch entered for ${view.file.basename}`);
       await this.runSnippet('Forge failed during execution');
+      // v0.2.101 — persist the transpiled Python back to the file's
+      // # Python section so the user sees what E-- generated. Pre-
+      // v0.2.101 the canonical branch ran but never wrote the
+      // transpiled code to disk, leaving the file's Python facet
+      // permanently stale relative to its English. Cohort smoke
+      // (Tamar) on hello_world: "I changed English from hello world
+      // to hello tamar, prints correctly but the python facet does
+      // not revise." Now: post-run fetch via resolveActionCode (no
+      // re-execution), write via the same canonical write helpers
+      // the slot-cache path uses. file is captured fresh from the
+      // workspace since runSnippet may have shown a modal that
+      // changed the active view.
+      try {
+        await this.writeCanonicalPythonBack(view.file);
+      } catch (e) {
+        console.warn('[forge-write v0.2.101] canonical write-back failed', e);
+      }
       return;
     }
     const ok = await this.generate('Forge failed during generation');
@@ -1951,6 +1968,57 @@ export default class ForgePlugin extends Plugin {
           console.warn(`Forge: sync_dependencies failed for '${id}'`, e);
         }
       }
+    }
+  }
+
+  /** v0.2.101 — persist the just-transpiled Python from a canonical-
+   *  mode runSnippet back to the file's # Python section. The
+   *  canonical (facet_form: canonical) path skips /generate and
+   *  transpiles via E-- at runtime — the engine had the code in
+   *  memory, but pre-v0.2.101 it was never written to disk, leaving
+   *  the user-visible Python facet stale relative to its English.
+   *
+   *  Uses resolveActionCode (no re-execution; deterministic), then
+   *  writePythonAndEnglishHash — same write contract as
+   *  handleSlotCacheMiss. Best-effort: a failure is logged but does
+   *  not surface to the user (the run already succeeded; this is
+   *  cosmetic persistence). */
+  private async writeCanonicalPythonBack(file: TFile): Promise<void> {
+    const hostManager = getPyodideHost();
+    if (!hostManager) {
+      console.warn('[forge-write v0.2.101] no Pyodide host; canonical write-back skipped');
+      return;
+    }
+    const host = await hostManager.getInstance();
+    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
+    console.log(`[forge-write v0.2.101] fetching transpiled python for snippetId=${snippetId}, file=${file.path}`);
+    const python = await host.resolveActionCode(snippetId);
+    console.log(`[forge-write v0.2.101] resolveActionCode returned ${python ? `${python.length} chars` : 'EMPTY'}; preview=`, python?.slice(0, 200));
+    if (!python) {
+      console.warn('[forge-write v0.2.101] empty transpile output; skipping write');
+      return;
+    }
+    const body = await this.app.vault.read(file);
+    const english = _extractEnglishFromBody(body) ?? '';
+    const englishHash = await computeEnglishHash(english);
+    console.log(`[forge-write v0.2.101] english length=${english.length}, englishHash=${englishHash.slice(0, 16)}…`);
+    await this.app.vault.process(file, (content) =>
+      writePythonAndEnglishHash(content, {
+        pythonCode: python,
+        englishHash,
+        stripStaleSlots: false,
+      }));
+    console.log(`[forge-write v0.2.101] vault.process succeeded for ${file.path}`);
+    // Read-back sanity check.
+    const readBack = await this.app.vault.read(file);
+    const pyIdx = readBack.indexOf('# Python');
+    console.log(`[forge-write v0.2.101] read-back has # Python? ${pyIdx >= 0 ? `YES @${pyIdx}` : 'NO'}; length ${readBack.length}`);
+    // Keep MEMFS in sync for the next compute.
+    try {
+      await host.syncUserVaultFile(file.path, readBack);
+      console.log('[forge-write v0.2.101] MEMFS sync after write succeeded');
+    } catch (e) {
+      console.warn('[forge-write v0.2.101] MEMFS sync after write failed', e);
     }
   }
 

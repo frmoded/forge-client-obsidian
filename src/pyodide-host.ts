@@ -661,6 +661,36 @@ def _forge_preflight_then_inventory(snippet_id: str):
         pass
     return _forge_get_generate_inventory(snippet_id)
 
+def _forge_resolve_action_code(snippet_id: str):
+    """v0.2.101 — return the action's Python source WITHOUT executing it.
+
+    For facet_form: canonical snippets, this is the freshly transpiled
+    E-- output. For legacy free-English snippets, it's the cached
+    Python facet body.
+
+    Used by the plugin's canonical-mode forgeSnippet branch to write
+    the transpiled Python back to the file Python section so the
+    user-visible facet reflects what the engine actually ran. Pre-
+    v0.2.101 the canonical branch skipped the /generate call (no LLM
+    cost) but ALSO skipped the python-write-back, leaving the file
+    Python facet permanently stale relative to its English. Cohort
+    smoke on hello_world: changed English literal, output reflected
+    the change, but the on-disk Python facet did not revise.
+
+    Refreshes the registry's cached entry from MEMFS first so the
+    just-edited English is the one transpiled (same race-fix as
+    _forge_preflight_then_inventory).
+    """
+    relpath = f"/bundle/user-vault/{snippet_id}.md"
+    try:
+        _forge_registry.refresh_file(relpath)
+    except Exception:
+        # Defer to resolve()'s canonical error.
+        pass
+    resolver = GraphResolver(_forge_registry)
+    snip = resolver.resolve(snippet_id)
+    return resolve_action_code(snip)
+
 def _forge_sync_user_file(relpath: str, new_body: str):
     """v0.2.17 — sync a single user-vault file change into MEMFS AND
     refresh the SnippetRegistry's cached entry for it. Called from JS
@@ -1039,6 +1069,12 @@ export interface PyodideHostInstance {
     inputs?: Record<string, unknown>,
     slotResolutions?: Record<string, string>,
   ): Promise<ComputeResult & { python?: string }>;
+  /** v0.2.101 — return the action's Python source WITHOUT executing.
+   *  For facet_form: canonical snippets this is the fresh E-- output;
+   *  for legacy snippets it's the cached # Python facet. Used by the
+   *  canonical-mode forgeSnippet branch to persist the transpiled
+   *  Python back to disk after a successful runSnippet. */
+  resolveActionCode(snippet_id: string): Promise<string>;
   modaInit(): Promise<ModaInitResult>;
   modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
   modaClick(x: number, y: number): Promise<ModaClickResult>;
@@ -1180,6 +1216,14 @@ _forge_compute_with_python(
       stdout: String(stdout ?? ""),
       python: python === null || python === undefined ? undefined : String(python),
     };
+  }
+
+  async resolveActionCode(snippet_id: string): Promise<string> {
+    this.pyodide.globals.set("_forge_resolve_target", snippet_id);
+    const out = this.pyodide.runPython(
+      `_forge_resolve_action_code(_forge_resolve_target)`,
+    );
+    return String(out ?? "");
   }
 
   /** Moda fast-path: setup → ParticleState stored in Python globals;
