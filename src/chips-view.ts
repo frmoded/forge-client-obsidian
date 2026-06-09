@@ -6,6 +6,7 @@ import {
   insertChipText,
   shouldRenderSubgroupHeader,
 } from './chips-core';
+import { initialExpandedLibraries } from './chip-folding-core';
 import { ChipsManifest, loadChipsForActiveVault, resolveSnippetPath } from './chips';
 import { findFallbackMarkdownView } from './find-fallback-markdown-view-core';
 import type {
@@ -30,6 +31,12 @@ export interface ChipsHost {
 export class ChipsView extends ItemView {
   private lastMarkdownView: MarkdownView | null = null;
   private groups: ChipPaletteGroup[] = [];
+  // v0.2.112 Item A — per-session library section expansion state.
+  // null = haven't computed defaults yet for this session; first
+  // render computes from active file path. After that, user manual
+  // toggles override; we don't re-compute defaults on subsequent
+  // file-opens (would clobber the user's manual choices mid-session).
+  private expandedLibraries: Set<string> | null = null;
 
   constructor(leaf: WorkspaceLeaf, private host: ChipsHost) {
     super(leaf);
@@ -227,12 +234,47 @@ export class ChipsView extends ItemView {
       }
     }
 
+    // v0.2.112 Item A — compute initial library-section expansion
+    // state. First render only; user manual toggles persist for
+    // session after that. Uses pure-core `initialExpandedLibraries`.
+    if (this.expandedLibraries === null) {
+      const activePath = targetFile?.path ?? null;
+      const allSources = this.groups.map(g => g.sourceName);
+      this.expandedLibraries = initialExpandedLibraries(
+        activePath, allSources);
+    }
+
     for (const group of this.groups) {
       const section = root.createDiv({ cls: 'forge-chips-group' });
-      section.createEl('h4', {
-        text: group.sourceName,
+      const isExpanded = this.expandedLibraries.has(group.sourceName);
+      // v0.2.112 — header is now a button so it's keyboard-focusable
+      // and screen-reader-announced. Inline arrow ▶/▼ + chip count.
+      const header = section.createEl('button', {
         cls: 'forge-chips-group-header',
       });
+      header.setAttribute('aria-expanded', String(isExpanded));
+      const arrow = header.createSpan({ cls: 'forge-chips-group-arrow' });
+      arrow.setText(isExpanded ? '▼' : '▶');
+      const label = header.createSpan({ cls: 'forge-chips-group-label' });
+      label.setText(group.sourceName);
+      const count = header.createSpan({ cls: 'forge-chips-group-count' });
+      count.setText(` (${group.chips.length})`);
+      header.addEventListener('click', () => {
+        if (!this.expandedLibraries) return;
+        if (this.expandedLibraries.has(group.sourceName)) {
+          this.expandedLibraries.delete(group.sourceName);
+        } else {
+          this.expandedLibraries.add(group.sourceName);
+        }
+        // Light re-render — we re-render via the full render() path
+        // to stay consistent with the rest of the view's lifecycle.
+        void this.render();
+      });
+
+      if (!isExpanded) {
+        // Collapsed: skip emitting the sub-group + chip-row DOM.
+        continue;
+      }
 
       // Sub-group by chip.group field. First-appearance order
       // preserves the author's intended sequence in `_chips.md`.

@@ -691,3 +691,66 @@
   background: var(--background-modifier-active-hover);
   color: var(--text-normal);
 }
+
+/* v0.2.112 Item A — chip palette library section headers.
+   The h4 became a <button> so it's focusable and screen-reader
+   announced as a toggle. Arrow indicates fold state; count shows
+   chip count per library. */
+.forge-chips-group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  margin: 8px 0 0;
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--text-normal);
+  text-align: left;
+  cursor: pointer;
+}
+.forge-chips-group-header:hover {
+  color: var(--interactive-accent);
+}
+.forge-chips-group-arrow {
+  display: inline-block;
+  width: 12px;
+  font-size: 0.8em;
+  color: var(--text-muted);
+}
+.forge-chips-group-label {
+  flex: 1;
+}
+.forge-chips-group-count {
+  font-size: 0.85em;
+  font-weight: normal;
+  color: var(--text-muted);
+}
+
+/* v0.2.112 Item C (Plan B) — frontmatter CSS de-emphasis.
+   v0.2.108→.111 attempts at programmatic fold via foldEffect /
+   Decoration.replace landed in CM6 state (verified by happy-dom
+   integration tests in v0.2.112) but Obsidian's renderer overrides
+   our decorations. Until the Obsidian-specific cause is found, we
+   ship visual de-emphasis: snippet frontmatter renders at reduced
+   opacity + smaller monospace + greyed-out so it's still readable
+   but no longer dominates the snippet's authoring content.
+
+   Target Obsidian's source-mode frontmatter line class. Live
+   Preview handles the Properties view separately so we leave it
+   alone there. */
+.markdown-source-view .cm-line.HyperMD-frontmatter,
+.markdown-source-view .cm-line.HyperMD-codeblock.HyperMD-frontmatter,
+.markdown-source-view .cm-line:has(span.cm-hmd-frontmatter) {
+  opacity: 0.45;
+  font-size: 0.85em;
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+}
+.markdown-source-view .cm-line.HyperMD-frontmatter:hover,
+.markdown-source-view .cm-line.HyperMD-codeblock.HyperMD-frontmatter:hover,
+.markdown-source-view .cm-line:has(span.cm-hmd-frontmatter):hover {
+  opacity: 1.0;
+}
