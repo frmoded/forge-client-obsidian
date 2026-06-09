@@ -1444,6 +1444,15 @@ export default class ForgePlugin extends Plugin {
     this.app.workspace.revealLeaf(leaf);
   }
 
+  /** v0.2.92 — is the file at this path a forge-moda library snippet?
+   *  Detected by path-prefix match against the bundled-library
+   *  convention. Used by forgeSnippet to auto-open the moda
+   *  simulation tab before running, so `context.moda.draw(...)`
+   *  posts particles into a visible iframe. */
+  private isModaSnippet(filePath: string): boolean {
+    return filePath.startsWith('forge-moda/');
+  }
+
   // Chips v2. Domain-agnostic palette pane in the right sidebar. The
   // view reads `_chips.md` from the vault root + each declared-domain
   // subdir on open / on refresh; renders an empty-state message if
@@ -1578,6 +1587,20 @@ export default class ForgePlugin extends Plugin {
       return;
     }
     const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+
+    // v0.2.92 — Forge-click on any forge-moda snippet auto-opens the
+    // moda simulation tab (idempotent if already open). Without an
+    // open iframe, the snippet's `context.moda.draw(...)` calls have
+    // nowhere to post particles — the snippet runs, prints stdout to
+    // the Forge Output panel, but the visual simulation never appears.
+    // Cohort smoke (Tamar 2026-06-09) confirmed Forge-clicking
+    // forge-moda/simulation.md was the entry point and the iframe
+    // tab had to be opened manually first. Auto-opening here removes
+    // that hidden step.
+    if (this.isModaSnippet(view.file.path)) {
+      await this.openModaView();
+    }
+
     if (getEditMode(fm) === 'python') {
       // The server log won't show a "skipped (edit_mode=python)" line
       // because we don't call /generate at all in this branch — the
