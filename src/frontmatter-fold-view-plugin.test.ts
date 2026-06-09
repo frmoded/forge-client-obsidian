@@ -4,7 +4,58 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeFrontmatterFoldRange } from './frontmatter-fold-view-plugin.ts';
+import {
+  computeFrontmatterFoldRange,
+  readFrontmatterType,
+} from './frontmatter-fold-view-plugin.ts';
+
+// v0.2.111 — readFrontmatterType tests. Used in place of Obsidian's
+// metadataCache so the StateField gate fires on first build without
+// waiting for workspace.getActiveViewOfType to settle.
+test('readFrontmatterType: action', () => {
+  const doc = `---
+type: action
+inputs: []
+---
+# English
+`;
+  assert.equal(readFrontmatterType(doc), 'action');
+});
+
+test('readFrontmatterType: data', () => {
+  assert.equal(readFrontmatterType(`---\ntype: data\n---\n`), 'data');
+});
+
+test('readFrontmatterType: quoted value', () => {
+  assert.equal(readFrontmatterType(`---\ntype: "action"\n---\n`), 'action');
+  assert.equal(readFrontmatterType(`---\ntype: 'data'\n---\n`), 'data');
+});
+
+test('readFrontmatterType: missing frontmatter', () => {
+  assert.equal(readFrontmatterType('# English\n\nplain note'), null);
+});
+
+test('readFrontmatterType: no type field', () => {
+  assert.equal(readFrontmatterType(`---\nfoo: bar\n---\n`), null);
+});
+
+test('readFrontmatterType: type after other keys', () => {
+  const doc = `---
+inputs: []
+type: action
+---
+`;
+  assert.equal(readFrontmatterType(doc), 'action');
+});
+
+test('readFrontmatterType: unclosed frontmatter', () => {
+  assert.equal(readFrontmatterType(`---\ntype: action\n# no closer\n`), 'action');
+  // (Tolerant: returns the value even without a closing delimiter,
+  // since the gate's purpose is "does this file claim to be a
+  // snippet" — a missing closer is malformed but the intent is
+  // clear.)
+});
+
 
 test('computeFrontmatterFoldRange: well-formed frontmatter', () => {
   const doc = `---

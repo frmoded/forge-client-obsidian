@@ -75,6 +75,36 @@ export function computeFrontmatterFoldRange(
   return { from, to };
 }
 
+/** v0.2.111 — read `type:` from the YAML frontmatter inline. Used
+ *  instead of Obsidian's metadataCache because the StateField runs
+ *  at transaction time and the cache may not yet reflect a just-
+ *  opened file. Tolerates leading whitespace, quoted values, and
+ *  scans only inside the frontmatter delimiters.
+ *
+ *  Returns the trimmed value of the FIRST `type:` line found in the
+ *  frontmatter, or null if frontmatter is missing/malformed/has no
+ *  `type:` field. */
+export function readFrontmatterType(doc: string): string | null {
+  const lines = doc.split('\n');
+  if (lines.length < 2) return null;
+  if (lines[0].trim() !== '---') return null;
+  for (let i = 1; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed === '---') return null;  // closed without type
+    const m = trimmed.match(/^type:\s*(.+?)\s*$/);
+    if (m) {
+      // Strip surrounding quotes if present.
+      let v = m[1];
+      if ((v.startsWith('"') && v.endsWith('"'))
+          || (v.startsWith("'") && v.endsWith("'"))) {
+        v = v.slice(1, -1);
+      }
+      return v;
+    }
+  }
+  return null;
+}
+
 class FrontmatterPlaceholderWidget extends WidgetType {
   private readonly filePath: string;
   constructor(filePath: string) {
@@ -126,26 +156,35 @@ const expandedField = StateField.define<Set<string>>({
   },
 });
 
-/** Build the Extension. Per-EditorView state lives in StateField
- *  (expandedField) + a decorations StateField. The host is read at
- *  decoration build time so the gate (frontmatter has
- *  `type: action | data`) is freshly evaluated. */
+/** Build the Extension. Decorations come from a StateField (CM6
+ *  hard rule: line-break-spanning Decoration.replace must come from
+ *  a StateField, not a ViewPlugin — v0.2.110 fix).
+ *
+ *  v0.2.111 — no longer depends on the workspace's active view.
+ *  Pre-v0.2.111 we read `type:` from Obsidian's metadataCache via
+ *  host.getActiveSnippetForFold(), but the StateField runs at
+ *  transaction time during initial EditorView creation, BEFORE the
+ *  workspace's active-view pointer is updated to the just-opened
+ *  file. Result: getActiveSnippetForFold returned null → no
+ *  decoration → frontmatter rendered expanded with no later
+ *  transaction to retry. Cohort smoke (Tamar): "at least I can see
+ *  the snippet, but frontmatter still expanded."
+ *
+ *  v0.2.111 reads `type:` directly from the document's YAML inline
+ *  via readFrontmatterType. No workspace dependency; works on first
+ *  build whether or not Obsidian's metadataCache has hydrated.
+ *  The host param stays in the signature for backwards-compat /
+ *  per-file expansion identity but the host gate is dropped. */
 export function makeFrontmatterFoldExtension(
-  getHost: () => FrontmatterFoldHost | null,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _getHost: () => FrontmatterFoldHost | null,
 ): Extension {
-  // Mutable cache of the file path we last knew this view was
-  // showing. Used to detect a file swap so we can clear stale
-  // expanded entries (so each file-open re-folds). Held outside the
-  // StateField because Obsidian swaps doc content inside the same
-  // EditorView; we don't get a fresh state field for the new doc.
-  const lastFilePathByDocId = new WeakMap<object, string | null>();
-
   const decoField = StateField.define<DecorationSet>({
     create(state) {
-      return buildDecorations(state, getHost, lastFilePathByDocId);
+      return buildDecorations(state);
     },
     update(deco, tr) {
-      return buildDecorations(tr.state, getHost, lastFilePathByDocId);
+      return buildDecorations(tr.state);
     },
     provide: (f) => EditorView.decorations.from(f),
   });
@@ -159,37 +198,24 @@ export function makeFrontmatterFoldExtension(
 export const makeFrontmatterFoldViewPlugin = makeFrontmatterFoldExtension;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildDecorations(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  state: any,
-  getHost: () => FrontmatterFoldHost | null,
-  lastFilePathByDocId: WeakMap<object, string | null>,
-): DecorationSet {
-  const host = getHost();
-  if (!host) return Decoration.none;
-  const active = host.getActiveSnippetForFold();
-  if (!active) return Decoration.none;
-  const path = active.file.path;
+function buildDecorations(state: any): DecorationSet {
+  // Gate: only fold when frontmatter declares type: action | data.
+  // Plain notes / non-snippet markdown pass through untouched.
+  const doc = state.doc.toString();
+  const type = readFrontmatterType(doc);
+  if (type !== 'action' && type !== 'data') return Decoration.none;
 
-  // Detect file swap by comparing this state.doc's tracked path
-  // against the active file. If different, the user has navigated
-  // to a different file inside this same EditorView; re-folding
-  // requires forgetting the previous file's expanded membership.
-  const docKey = state.doc as object;
-  const lastPath = lastFilePathByDocId.get(docKey) ?? null;
-  if (lastPath !== path) {
-    lastFilePathByDocId.set(docKey, path);
-    // Don't dispatch from here — would re-enter the update. Instead
-    // we just bypass the expanded check on the first build after a
-    // swap (the StateField update on the next transaction will see
-    // the new path and the previously-set expanded entries still
-    // apply, but per-file scoping prevents leakage across files).
-  }
+  // Use a stable per-doc identity for the expanded-set key. We
+  // don't have a TFile path from inside the StateField, so the doc
+  // length + first-32-chars-hash serves as a cheap proxy. Re-opening
+  // the same file produces the same key; editing the file invalidates
+  // it (which means the user has to click "⋯" again to re-expand —
+  // acceptable for V1).
+  const docKey = `${state.doc.length}:${doc.slice(0, 32)}`;
 
   const expanded = state.field(expandedField, false) as Set<string> | undefined;
-  if (expanded?.has(path)) return Decoration.none;
+  if (expanded?.has(docKey)) return Decoration.none;
 
-  const doc = state.doc.toString();
   const range = computeFrontmatterFoldRange(doc);
   if (!range) return Decoration.none;
   const docLen = state.doc.length;
@@ -201,7 +227,7 @@ function buildDecorations(
     range.from,
     range.to,
     Decoration.replace({
-      widget: new FrontmatterPlaceholderWidget(path),
+      widget: new FrontmatterPlaceholderWidget(docKey),
       block: false,
     }),
   );
