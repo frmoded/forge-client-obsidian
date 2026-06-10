@@ -535,6 +535,20 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.toggleEdgesView(); },
     });
 
+    // v0.2.119 — Cmd-P escape hatch for v0.2.118's frontmatter hide.
+    // The default v0.2.118 behavior hides the Properties widget +
+    // source-mode YAML lines for snippet files. This command flips
+    // a per-view `forge-expanded` class on the active markdown
+    // view's containerEl so CSS reveals the frontmatter when the
+    // user needs to read or edit it. Toggle on a per-file basis;
+    // resets on view re-open since tagSnippetViews doesn't restore
+    // the expanded state.
+    this.addCommand({
+      id: 'forge-toggle-frontmatter',
+      name: 'Toggle frontmatter visibility (active snippet)',
+      callback: () => { this.toggleFrontmatterVisibility(); },
+    });
+
     this.addCommand({
       id: 'forge-sync-edges',
       name: 'Sync edges',
@@ -2149,6 +2163,26 @@ export default class ForgePlugin extends Plugin {
   // by the bak dir's path (per bakDedupKey); opening multiple files
   // inside the same backup dir fires the Notice once.
   private _bakNoticeSeenSet = new Set<string>();
+
+  /** v0.2.119 — Toggle the `forge-expanded` class on the active
+   *  markdown view's containerEl. CSS reveals the frontmatter when
+   *  the class is present, hides it when absent. Per-file scoped;
+   *  no persistent state. */
+  private toggleFrontmatterVisibility() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
+    if (!containerEl) {
+      new Notice('Forge: no active markdown view to toggle.');
+      return;
+    }
+    if (!containerEl.classList.contains('forge-snippet')) {
+      new Notice('Forge: this file is not a snippet — frontmatter visibility is not managed here.');
+      return;
+    }
+    containerEl.classList.toggle('forge-expanded');
+    const expanded = containerEl.classList.contains('forge-expanded');
+    new Notice(`Forge: frontmatter ${expanded ? 'shown' : 'hidden'}.`);
+  }
 
   /** v0.2.118 — DOM-level frontmatter hide. Adds `forge-snippet`
    *  class to every snippet markdown view's containerEl so CSS

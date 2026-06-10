@@ -759,6 +759,28 @@
   display: none !important;
 }
 
+/* v0.2.119 — Cmd-P toggle escape hatch. When `forge-expanded`
+   class is present on the markdown view's containerEl (set by
+   `Forge: Toggle frontmatter visibility (active snippet)`), the
+   metadata-container + source-mode YAML lines become visible
+   again. Re-toggling the command (or re-opening the file) hides
+   them again. Important note: this rule's selector is stronger
+   than the `.forge-snippet ... display: none !important` above
+   because BOTH .forge-snippet AND .forge-expanded apply, giving
+   it one extra class specificity. */
+.forge-snippet.forge-expanded .metadata-container,
+.forge-snippet.forge-expanded .metadata-properties,
+.forge-snippet.forge-expanded .metadata-properties-heading {
+  display: revert !important;
+}
+.forge-snippet.forge-expanded .cm-line:has(.cm-hmd-frontmatter) {
+  display: revert;
+  height: revert;
+  line-height: revert;
+  margin: revert;
+  padding: revert;
+}
+
 /* v0.2.116 — defense-in-depth fallback: if the `.forge-snippet`
    class fails to apply for some reason (race, Obsidian
    compartment shenanigans, etc.), the v0.2.112 visual
