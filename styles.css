@@ -670,27 +670,16 @@
   text-decoration: line-through;
 }
 
-/* v0.2.109 — frontmatter-fold placeholder widget. Renders as a
-   subtle "⋯" inline at the position where the YAML block used to
-   be. Clickable: the ViewPlugin's WidgetType binds a mousedown
-   handler that expands the file's frontmatter in-session. */
-.forge-frontmatter-placeholder {
-  display: inline-block;
-  padding: 0 4px;
-  margin: 0;
-  font-family: var(--font-monospace);
-  font-size: 0.85em;
-  color: var(--text-muted);
-  background: var(--background-modifier-hover);
-  border-radius: 4px;
-  cursor: pointer;
-  user-select: none;
-  vertical-align: baseline;
-}
-.forge-frontmatter-placeholder:hover {
-  background: var(--background-modifier-active-hover);
-  color: var(--text-normal);
-}
+/* v0.2.109 — frontmatter-fold placeholder widget (REMOVED v0.2.116).
+   Was used for the click-to-expand "⋯" affordance from v0.2.109/
+   v0.2.110/v0.2.111's Decoration.replace approach. None of those
+   approaches ever rendered visibly in Obsidian (override at the
+   renderer level); v0.2.116 switched to CSS-only line-hiding which
+   doesn't use a placeholder widget. CSS preserved-but-commented in
+   case a future drain re-introduces the affordance. */
+/*
+.forge-frontmatter-placeholder { ... }
+*/
 
 /* v0.2.112 Item A — chip palette library section headers.
    The h4 became a <button> so it's focusable and screen-reader
@@ -729,18 +718,36 @@
   color: var(--text-muted);
 }
 
-/* v0.2.112 Item C (Plan B) — frontmatter CSS de-emphasis.
-   v0.2.108→.111 attempts at programmatic fold via foldEffect /
-   Decoration.replace landed in CM6 state (verified by happy-dom
-   integration tests in v0.2.112) but Obsidian's renderer overrides
-   our decorations. Until the Obsidian-specific cause is found, we
-   ship visual de-emphasis: snippet frontmatter renders at reduced
-   opacity + smaller monospace + greyed-out so it's still readable
-   but no longer dominates the snippet's authoring content.
+/* v0.2.116 — frontmatter HIDE (Tamar overwhelm fix, finally).
+   Eight prior CM6-decoration attempts (v0.2.108→v0.2.115) all
+   silently lost to Obsidian's renderer override. The community
+   gist by @Boettner-eric (referenced in
+   src/frontmatter-fold-view-plugin.ts) revealed the working
+   approach is pure CSS — Obsidian tags every YAML line in source
+   mode with `.cm-hmd-frontmatter`. We hide those lines when the
+   editor root has `.forge-snippet` class. That class is applied
+   conditionally by the EditorView.editorAttributes facet in
+   frontmatter-fold-view-plugin.ts when the document's frontmatter
+   declares `type: action | data`.
 
-   Target Obsidian's source-mode frontmatter line class. Live
-   Preview handles the Properties view separately so we leave it
-   alone there. */
+   Plain notes (no `type:`) get neither the class nor the rule —
+   their frontmatter renders normally. */
+.forge-snippet .cm-line:has(.cm-hmd-frontmatter) {
+  display: none;
+  height: 0;
+  line-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* v0.2.116 — defense-in-depth fallback: if the `.forge-snippet`
+   class fails to apply for some reason (race, Obsidian
+   compartment shenanigans, etc.), the v0.2.112 visual
+   de-emphasis still kicks in. Greys + shrinks YAML lines so
+   they're less prominent without disappearing. The line-class
+   selector matches both the v0.2.112 fallback shape and the
+   v0.2.116 primary fix; the .forge-snippet rule above overrides
+   this with `display: none` when both apply. */
 .markdown-source-view .cm-line.HyperMD-frontmatter,
 .markdown-source-view .cm-line.HyperMD-codeblock.HyperMD-frontmatter,
 .markdown-source-view .cm-line:has(span.cm-hmd-frontmatter) {

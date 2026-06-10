@@ -69,11 +69,11 @@ Print "hello".
 `;
   const r = computeFrontmatterFoldRange(doc);
   assert.ok(r, 'must return a range');
-  // v0.2.115 — `from` is 0 (start of opening `---` line) for
-  // block:true Decoration.replace. Block replacements must start
-  // at a line boundary; position 0 is the canonical line boundary
-  // for the document.
-  assert.equal(r!.from, 0);
+  // v0.2.116 — back to `from = lines[0].length = 3` (end of opening
+  // `---` line). The v0.2.115 block:true Decoration.replace path
+  // was abandoned for a CSS-only approach in v0.2.116; this helper
+  // is now purely informational.
+  assert.equal(r!.from, 3);
   // `to` should land just before the newline after the closing `---`.
   // Lines: 0 `---`, 1 `type: action`, 2 `inputs: []`, 3 `---`.
   // Char counts: 3 + 1 + 12 + 1 + 10 + 1 + 3 = 31.
@@ -107,8 +107,8 @@ test('computeFrontmatterFoldRange: empty frontmatter (open immediately closed)',
 `;
   const r = computeFrontmatterFoldRange(doc);
   assert.ok(r, 'must return a range even for empty frontmatter');
-  // v0.2.115 — `from` is 0 (start of doc) for block:true.
-  assert.equal(r!.from, 0);
+  // v0.2.116 — back to end of opening `---` line.
+  assert.equal(r!.from, 3);
 });
 
 test('computeFrontmatterFoldRange: range covers opening `---` end through closing `---` end', () => {

@@ -1,58 +1,63 @@
-// v0.2.102 Item A — auto-collapse the YAML frontmatter on snippet
-// file-open so students see `# English` first.
+// v0.2.116 — frontmatter fold via CSS targeting Obsidian's own
+// `.cm-hmd-frontmatter` line class.
 //
-// v0.2.109 — switched from foldEffect to Decoration.replace because
-// Obsidian's renderer silently discarded foldEffect ranges that
-// didn't align with markdown headings (v0.2.108 spike's
-// post-dispatch foldedRanges probe confirmed CM6 state was correct
-// but rendering wasn't). Decoration.replace gives us our own widget.
+// Eight prior releases (v0.2.108→v0.2.115) failed to fold the
+// frontmatter through CM6 decorations. The empirical table:
 //
-// v0.2.110 — CM6 hard rule: ViewPlugin-provided decorations cannot
-// span line breaks. Our fold replaces multiple YAML lines including
-// newlines, so v0.2.109 threw "RangeError: Decorations that replace
-// line breaks may not be specified via plugins" the moment a snippet
-// opened — the snippet didn't render at all. Cohort smoke (Tamar)
-// surfaced this immediately. Fix: provide decorations via a
-// StateField + EditorView.decorations.from() instead. StateField
-// updates happen at well-defined transaction points so CM6 permits
-// the line-spanning replace.
+//   foldEffect (v0.2.108)                  → CM6 state set, render filtered
+//   Decoration.replace inline (v0.2.109)  → ViewPlugin RangeError
+//   Same via StateField (v0.2.110-111)    → Mounts, but Obsidian overrides
+//   Add Prec.highest wrapper (v0.2.114)   → Still overridden
+//   Decoration.replace block (v0.2.115)   → Still overridden
 //
-// Click-to-expand state lives in a side StateField + StateEffect
-// because the dispatch from the widget DOM handler can carry an
-// effect that flips per-file expanded membership.
+// Conclusion from cohort smoke + the Obsidian community gist by
+// @Boettner-eric: Obsidian's renderer owns the frontmatter region
+// unconditionally. Decorations from external extensions targeting
+// YAML lines never enter the visible path. The community-known fix
+// is pure CSS: Obsidian tags each YAML line in source mode with the
+// `.cm-hmd-frontmatter` class. CSS targeting `.cm-line:has(.cm-hmd-
+// frontmatter)` hides those lines without competing with any
+// decoration system.
+//
+// For per-file gating (only snippet files, not plain notes), we use
+// CM6's `EditorView.editorAttributes` facet. A `.compute([], state
+// => ...)` call inspects the doc's frontmatter `type:` field on
+// every state change and emits a `class: forge-snippet` attribute
+// on the editor's root element when the file is `type: action |
+// data`. The CSS in styles.css uses `.forge-snippet` as the gate.
+//
+// Per-EditorView state (the expandedField from v0.2.110 that tracked
+// "user clicked the placeholder to expand") is removed — the
+// placeholder widget never reliably rendered, so the click-to-expand
+// affordance was already vestigial. If cohort signal asks for an
+// expand affordance, a follow-up drain re-adds it via a different
+// mechanism (e.g. Cmd-P palette command).
 
 import type { App, TFile } from 'obsidian';
-import {
-  EditorView,
-  Decoration,
-  type DecorationSet,
-  WidgetType,
-} from '@codemirror/view';
-import {
-  StateField,
-  StateEffect,
-  RangeSetBuilder,
-  Prec,
-  type Extension,
-} from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
+import type { Extension } from '@codemirror/state';
 
-/** Minimal callback interface back to the ForgePlugin singleton. */
+/** Minimal callback interface (kept for backwards compatibility of
+ *  the integration site in main.ts). */
 export interface FrontmatterFoldHost {
   app: App;
-  /** Resolve the active snippet file + whether its frontmatter
-   *  qualifies for auto-fold. Returns null if not a snippet. */
   getActiveSnippetForFold(): { file: TFile } | null;
 }
 
-/** Locate the YAML frontmatter range in the document — end of the
- *  opening `---` line (so the `---` stays visible) through the end
- *  of the closing `---` line (newline excluded so the body below
- *  starts cleanly). Returns null when the document doesn't start
- *  with a frontmatter delimiter or has no closing delimiter
- *  (malformed).
+/** Locate the YAML frontmatter range in the document. v0.2.102
+ *  utility, kept for test backwards-compat + because the helper is
+ *  cheap and may be useful for future affordances (e.g. computing
+ *  a fold widget position). Returns null when missing/malformed.
  *
- *  Pure-core extraction: pulled out for unit testing without a
- *  live EditorView. */
+ *  Returns 0-based character offsets:
+ *    from = position of the first character after the opening `---`
+ *           line's newline. Pre-v0.2.115 this was end-of-`---`-line
+ *           (position 3); v0.2.115 widened it to 0 for block:true
+ *           decorations. v0.2.116 reverts to the v0.2.111 convention
+ *           (end of opening `---` line) since the CSS-only approach
+ *           doesn't dispatch any decoration; the range is purely
+ *           informational here.
+ *    to   = end of the closing `---` line (newline excluded). */
 export function computeFrontmatterFoldRange(
   doc: string,
 ): { from: number; to: number } | null {
@@ -67,16 +72,7 @@ export function computeFrontmatterFoldRange(
     }
   }
   if (closeLine === -1) return null;
-  // v0.2.115 — for block:true Decoration.replace we widen `from` to
-  // 0 (start of the opening `---` line) instead of end-of-opening-
-  // `---` (lines[0].length). Block replacements must start at a line
-  // boundary; the start-of-line at position 0 is the canonical line
-  // boundary for the doc. The widget renders in place of the entire
-  // frontmatter block including its delimiters; the user clicks the
-  // widget to expand. Pre-v0.2.115 the convention was to keep the
-  // opening `---` line visible with a fold-triangle, but that
-  // approach is moot with block:true — the widget is the affordance.
-  const from = 0;
+  const from = lines[0].length;
   let to = 0;
   for (let i = 0; i <= closeLine; i++) {
     to += lines[i].length;
@@ -85,25 +81,19 @@ export function computeFrontmatterFoldRange(
   return { from, to };
 }
 
-/** v0.2.111 — read `type:` from the YAML frontmatter inline. Used
- *  instead of Obsidian's metadataCache because the StateField runs
- *  at transaction time and the cache may not yet reflect a just-
- *  opened file. Tolerates leading whitespace, quoted values, and
- *  scans only inside the frontmatter delimiters.
- *
- *  Returns the trimmed value of the FIRST `type:` line found in the
- *  frontmatter, or null if frontmatter is missing/malformed/has no
- *  `type:` field. */
+/** Read `type:` from a markdown document's YAML frontmatter inline,
+ *  without depending on Obsidian's metadataCache (which doesn't
+ *  hydrate in time for the initial CM6 mount). v0.2.111 introduced
+ *  this; v0.2.116 still uses it as the gate-on-snippet check. */
 export function readFrontmatterType(doc: string): string | null {
   const lines = doc.split('\n');
   if (lines.length < 2) return null;
   if (lines[0].trim() !== '---') return null;
   for (let i = 1; i < lines.length; i++) {
     const trimmed = lines[i].trim();
-    if (trimmed === '---') return null;  // closed without type
+    if (trimmed === '---') return null;
     const m = trimmed.match(/^type:\s*(.+?)\s*$/);
     if (m) {
-      // Strip surrounding quotes if present.
       let v = m[1];
       if ((v.startsWith('"') && v.endsWith('"'))
           || (v.startsWith("'") && v.endsWith("'"))) {
@@ -115,157 +105,32 @@ export function readFrontmatterType(doc: string): string | null {
   return null;
 }
 
-class FrontmatterPlaceholderWidget extends WidgetType {
-  private readonly filePath: string;
-  constructor(filePath: string) {
-    super();
-    this.filePath = filePath;
-  }
-  toDOM(view: EditorView): HTMLElement {
-    const span = document.createElement('span');
-    span.className = 'forge-frontmatter-placeholder';
-    span.textContent = '⋯';
-    span.title = 'Click to expand properties';
-    span.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      view.dispatch({ effects: setExpandedEffect.of(this.filePath) });
-    });
-    return span;
-  }
-  // Identity is per file-path: re-using widget across files would be
-  // wrong (different expand state); within a file it's reusable.
-  eq(other: FrontmatterPlaceholderWidget): boolean {
-    return other.filePath === this.filePath;
-  }
-  ignoreEvent(): boolean { return false; }
-}
-
-// In-session per-file expansion state. Empty set = all folded by
-// default. setExpandedEffect appends a file path; once expanded, the
-// decoration provider returns no decorations for that file. Cleared
-// when the active file changes (so re-opening a snippet re-folds).
-const setExpandedEffect = StateEffect.define<string>();
-const clearExpandedEffect = StateEffect.define<void>();
-
-const expandedField = StateField.define<Set<string>>({
-  create() { return new Set(); },
-  update(value, tr) {
-    let next = value;
-    for (const eff of tr.effects) {
-      if (eff.is(setExpandedEffect)) {
-        if (!next.has(eff.value)) {
-          next = new Set(next);
-          next.add(eff.value);
-        }
-      } else if (eff.is(clearExpandedEffect)) {
-        if (next.size > 0) next = new Set();
-      }
-    }
-    return next;
-  },
-});
-
-/** Build the Extension. Decorations come from a StateField (CM6
- *  hard rule: line-break-spanning Decoration.replace must come from
- *  a StateField, not a ViewPlugin — v0.2.110 fix).
+/** Build the Extension. v0.2.116: pure CSS-class gating via
+ *  EditorView.editorAttributes. When the document's frontmatter
+ *  declares `type: action | data`, the editor root element gets
+ *  class="forge-snippet"; CSS in styles.css does the actual hide.
  *
- *  v0.2.111 — no longer depends on the workspace's active view.
- *  Pre-v0.2.111 we read `type:` from Obsidian's metadataCache via
- *  host.getActiveSnippetForFold(), but the StateField runs at
- *  transaction time during initial EditorView creation, BEFORE the
- *  workspace's active-view pointer is updated to the just-opened
- *  file. Result: getActiveSnippetForFold returned null → no
- *  decoration → frontmatter rendered expanded with no later
- *  transaction to retry. Cohort smoke (Tamar): "at least I can see
- *  the snippet, but frontmatter still expanded."
+ *  No decorations. No widgets. No fold dispatch. The override
+ *  mechanism Obsidian uses doesn't intercept HTML attributes on
+ *  the editor root, so this is unaffected by the eight failed
+ *  decoration attempts cataloged in the file header.
  *
- *  v0.2.111 reads `type:` directly from the document's YAML inline
- *  via readFrontmatterType. No workspace dependency; works on first
- *  build whether or not Obsidian's metadataCache has hydrated.
- *  The host param stays in the signature for backwards-compat /
- *  per-file expansion identity but the host gate is dropped. */
+ *  The `_getHost` param is preserved for backwards-compat with the
+ *  v0.2.102 call site in main.ts (registerEditorExtension); not
+ *  used by the CSS-class approach. */
 export function makeFrontmatterFoldExtension(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _getHost: () => FrontmatterFoldHost | null,
 ): Extension {
-  const decoField = StateField.define<DecorationSet>({
-    create(state) {
-      return buildDecorations(state);
-    },
-    update(deco, tr) {
-      return buildDecorations(tr.state);
-    },
-    provide: (f) => EditorView.decorations.from(f),
+  return EditorView.editorAttributes.compute([], (state) => {
+    const type = readFrontmatterType(state.doc.toString());
+    if (type === 'action' || type === 'data') {
+      return { class: 'forge-snippet' };
+    }
+    return {};
   });
-
-  // v0.2.114 — hypothesis from v0.2.112 retrospective: pure CM6 +
-  // happy-dom verified our Decoration.replace + StateField shape
-  // produces the placeholder; cohort smoke against Obsidian still
-  // showed expanded frontmatter. Suspect: Obsidian provides its own
-  // higher-than-default-precedence decoration provider for YAML
-  // frontmatter (the Properties widget infrastructure feeds source
-  // mode too). Force our extension to highest precedence so
-  // Obsidian's competing provider loses the merge race.
-  //
-  // Prec.highest is cheap; it costs nothing if the real cause is
-  // something else (renderer pipeline override, compartment
-  // ordering, etc.). The harness Obsidian-shim work (v0.2.114
-  // prompt §2.1) remains as the canonical follow-up if cohort
-  // still sees expanded frontmatter after this ships.
-  return Prec.highest([expandedField, decoField]);
 }
 
-// Legacy alias: existing main.ts call site uses
-// makeFrontmatterFoldViewPlugin via registerEditorExtension. Keep the
-// name so the integration site doesn't need to change.
+// Legacy alias preserved so the existing main.ts call site
+// (registerEditorExtension) doesn't need to change.
 export const makeFrontmatterFoldViewPlugin = makeFrontmatterFoldExtension;
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildDecorations(state: any): DecorationSet {
-  // Gate: only fold when frontmatter declares type: action | data.
-  // Plain notes / non-snippet markdown pass through untouched.
-  const doc = state.doc.toString();
-  const type = readFrontmatterType(doc);
-  if (type !== 'action' && type !== 'data') return Decoration.none;
-
-  // Use a stable per-doc identity for the expanded-set key. We
-  // don't have a TFile path from inside the StateField, so the doc
-  // length + first-32-chars-hash serves as a cheap proxy. Re-opening
-  // the same file produces the same key; editing the file invalidates
-  // it (which means the user has to click "⋯" again to re-expand —
-  // acceptable for V1).
-  const docKey = `${state.doc.length}:${doc.slice(0, 32)}`;
-
-  const expanded = state.field(expandedField, false) as Set<string> | undefined;
-  if (expanded?.has(docKey)) return Decoration.none;
-
-  const range = computeFrontmatterFoldRange(doc);
-  if (!range) return Decoration.none;
-  const docLen = state.doc.length;
-  if (range.from < 0 || range.to > docLen || range.from >= range.to) {
-    return Decoration.none;
-  }
-  const builder = new RangeSetBuilder<Decoration>();
-  builder.add(
-    range.from,
-    range.to,
-    Decoration.replace({
-      widget: new FrontmatterPlaceholderWidget(docKey),
-      // v0.2.115 — block: true. v0.2.111-v0.2.114 used block: false
-      // (inline replace). Inline replacements get merged with
-      // Obsidian's own decoration pipeline; the override there is
-      // unconditional (Prec.highest didn't help in v0.2.114
-      // cohort smoke). Block decorations follow a separate render
-      // path — they're slotted into the line layout as standalone
-      // block widgets that replace a multi-line content range.
-      // Obsidian's interception may only target inline merges.
-      // CM6 requires block:true ranges to start AT a line boundary
-      // and end at a line boundary, so we widen the range to
-      // include the start of the opening `---` line (position 0)
-      // instead of just-after-it.
-      block: true,
-    }),
-  );
-  return builder.finish();
-}
