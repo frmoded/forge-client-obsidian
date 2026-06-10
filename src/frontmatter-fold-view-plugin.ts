@@ -32,6 +32,7 @@ import {
   StateField,
   StateEffect,
   RangeSetBuilder,
+  Prec,
   type Extension,
 } from '@codemirror/state';
 
@@ -189,7 +190,21 @@ export function makeFrontmatterFoldExtension(
     provide: (f) => EditorView.decorations.from(f),
   });
 
-  return [expandedField, decoField];
+  // v0.2.114 — hypothesis from v0.2.112 retrospective: pure CM6 +
+  // happy-dom verified our Decoration.replace + StateField shape
+  // produces the placeholder; cohort smoke against Obsidian still
+  // showed expanded frontmatter. Suspect: Obsidian provides its own
+  // higher-than-default-precedence decoration provider for YAML
+  // frontmatter (the Properties widget infrastructure feeds source
+  // mode too). Force our extension to highest precedence so
+  // Obsidian's competing provider loses the merge race.
+  //
+  // Prec.highest is cheap; it costs nothing if the real cause is
+  // something else (renderer pipeline override, compartment
+  // ordering, etc.). The harness Obsidian-shim work (v0.2.114
+  // prompt §2.1) remains as the canonical follow-up if cohort
+  // still sees expanded frontmatter after this ships.
+  return Prec.highest([expandedField, decoField]);
 }
 
 // Legacy alias: existing main.ts call site uses
