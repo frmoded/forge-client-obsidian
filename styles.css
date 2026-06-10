@@ -740,19 +740,23 @@
   padding: 0;
 }
 
-/* v0.2.117 — Live Preview / Reading mode Properties widget.
-   Obsidian renders frontmatter as a Properties widget when the
-   pane is in Live Preview or Reading mode (the user sees an
-   expandable "Properties" section instead of raw `---` lines).
-   That widget is a separate DOM element with class
-   `.metadata-container` per @Boettner-eric's gist. Our
-   `.forge-snippet` class is on the CM6 editor root which
-   contains the widget in Live Preview, and on `.markdown-
-   preview-view` for Reading mode. Hide the widget in both
-   contexts when inside a snippet. */
+/* v0.2.118 — Live Preview / Reading mode Properties widget hide.
+   v0.2.117's selector `.forge-snippet .metadata-container` only
+   matched when forge-snippet was on a CM6 ancestor. Cohort smoke
+   showed the Properties widget IS rendered outside the .cm-editor
+   in Live Preview — it's a sibling element under the markdown
+   view container. v0.2.118's main.ts:tagSnippetViews puts the
+   forge-snippet class on the markdown view's containerEl (the
+   parent of BOTH the Properties widget and the .cm-editor), so
+   this selector now resolves.
+
+   !important added to win specificity against Obsidian's built-in
+   metadata-container styles (per the Sascha Kasper wiki entry on
+   "Hide Properties on Specific Notes"). */
 .forge-snippet .metadata-container,
-.markdown-preview-view.forge-snippet-preview .metadata-container {
-  display: none;
+.forge-snippet .metadata-properties,
+.forge-snippet .metadata-properties-heading {
+  display: none !important;
 }
 
 /* v0.2.116 — defense-in-depth fallback: if the `.forge-snippet`

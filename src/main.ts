@@ -370,6 +370,25 @@ export default class ForgePlugin extends Plugin {
       this.app.workspace.on('file-open', (file) => { this.maybeNotifyBakOpen(file); })
     );
 
+    // v0.2.118 — frontmatter hide for Live Preview Properties widget.
+    // v0.2.116's EditorView.editorAttributes facet puts `forge-snippet`
+    // on `.cm-editor` (the CM6 root). But Obsidian's Properties widget
+    // in Live Preview mode renders OUTSIDE the .cm-editor — it's a
+    // sibling under the markdown view container. CSS targeting
+    // `.forge-snippet .metadata-container` doesn't match because the
+    // class is on a sibling, not an ancestor. Fix: also tag the
+    // markdown view's containerEl with `.forge-snippet` on file-open
+    // so CSS targeting `.markdown-source-view.forge-snippet .metadata-
+    // container` resolves correctly.
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => { this.tagSnippetViews(file); })
+    );
+    // Also tag on layout-change since opening a new pane or splitting
+    // a view doesn't fire file-open for the new pane's existing file.
+    this.registerEvent(
+      this.app.workspace.on('layout-change', () => { this.tagSnippetViews(null); })
+    );
+
     // Single context-aware Forge entry point (constitution B9 / ribbon
     // spec). Dispatches by forge.toml state: absent → init wizard;
     // present-without-domains → legacy menu; declared → scoped action
@@ -2130,6 +2149,39 @@ export default class ForgePlugin extends Plugin {
   // by the bak dir's path (per bakDedupKey); opening multiple files
   // inside the same backup dir fires the Notice once.
   private _bakNoticeSeenSet = new Set<string>();
+
+  /** v0.2.118 — DOM-level frontmatter hide. Adds `forge-snippet`
+   *  class to every snippet markdown view's containerEl so CSS
+   *  targeting `.forge-snippet .metadata-container` (the Live
+   *  Preview Properties widget) resolves correctly. The CM6 facet
+   *  in frontmatter-fold-view-plugin.ts still tags the `.cm-editor`
+   *  root for source-mode YAML line hiding; this is the sibling-
+   *  case fix.
+   *
+   *  Sweeps ALL markdown views (not just the active one) on each
+   *  event since layout-change can affect multiple panes. Idempotent:
+   *  re-adding a class that exists is a no-op.
+   *
+   *  Param `_file` is ignored (event signature only); we sweep all
+   *  views from the workspace API. */
+  private tagSnippetViews(_file: TFile | null) {
+    void _file;
+    const leaves = this.app.workspace.getLeavesOfType('markdown');
+    for (const leaf of leaves) {
+      const view = leaf.view as MarkdownView;
+      const f = view?.file;
+      const containerEl = (view as unknown as { containerEl?: HTMLElement }).containerEl;
+      if (!containerEl) continue;
+      const fm = f ? this.app.metadataCache.getFileCache(f)?.frontmatter : null;
+      const t = typeof fm?.type === 'string' ? fm.type : undefined;
+      const isSnippet = t === 'action' || t === 'data';
+      if (isSnippet) {
+        containerEl.classList.add('forge-snippet');
+      } else {
+        containerEl.classList.remove('forge-snippet');
+      }
+    }
+  }
 
   private maybeNotifyBakOpen(file: TFile | null) {
     if (!file) return;
