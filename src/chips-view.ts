@@ -4,6 +4,7 @@ import {
   ChipPaletteGroup,
   CHIPS_NO_ENGLISH_SECTION,
   insertChipText,
+  insertChipTextAtLine,
   shouldRenderSubgroupHeader,
 } from './chips-core';
 import { initialExpandedLibraries } from './chip-folding-core';
@@ -374,18 +375,41 @@ export class ChipsView extends ItemView {
       return;
     }
 
-    await this.insertViaVault(file, insertion);
+    // v0.2.113 — cursor-aware insertion. When the resolved view has
+    // an editor with an active cursor inside the `# English` body,
+    // insert at cursor+1; otherwise fall back to end-of-English (the
+    // pre-v0.2.113 behavior). Reading the cursor from the resolved
+    // view (which may be `lastMarkdownView` if no markdown view is
+    // currently active) keeps the affordance working even after a
+    // chip-pane focus dance.
+    const resolvedAsAny = resolved as unknown as {
+      editor?: { getCursor?: (which?: string) => { line: number; ch: number } };
+    } | null;
+    const cursor = resolvedAsAny?.editor?.getCursor
+      ? resolvedAsAny.editor.getCursor('head')
+      : null;
+    const cursorLine = cursor?.line ?? -1;
+    await this.insertViaVault(file, insertion, cursorLine);
   }
 
   /** Write the insertion through vault.process so the change is
    *  atomic and reading-mode-safe. The editor refreshes via
    *  Obsidian's modify event handler — no editor.replaceRange
    *  dispatch, so the readOnlyFacetFilter never gets a chance to
-   *  silently drop the edit. */
-  private async insertViaVault(file: TFile, insertion: string) {
+   *  silently drop the edit.
+   *
+   *  v0.2.113 — `cursorLine` (0-based, matching Obsidian's
+   *  editor.getCursor().line) drives cursor-aware insertion when it
+   *  sits inside the # English body. Pass -1 to force the legacy
+   *  end-of-section append. */
+  private async insertViaVault(
+    file: TFile,
+    insertion: string,
+    cursorLine: number,
+  ) {
     let outcome: 'ok' | 'no-english' | 'unchanged' = 'unchanged';
     await this.app.vault.process(file, (content) => {
-      const result = insertChipText(content, insertion);
+      const result = insertChipTextAtLine(content, insertion, cursorLine);
       if (result.ok) {
         outcome = 'ok';
         return result.body;
@@ -402,6 +426,12 @@ export class ChipsView extends ItemView {
     }
   }
 }
+
+// Keep `insertChipText` re-exported through this module's import to
+// stop tree-shake-vs-lint warnings: it's part of the cursor-aware
+// helper's contract (fallback when cursor not in body).
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _legacyInsert = insertChipText;
 
 // ------ Pure helpers for V3 tooltip extraction ------
 

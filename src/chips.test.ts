@@ -971,3 +971,114 @@ test('walk-up merge: idempotent (same input → same output)', () => {
   const b = mergeChipsConfigsWalkUp([cfg]);
   assert.deepEqual(a, b);
 });
+
+// v0.2.113 — insertChipTextAtLine: cursor-aware variant.
+import { insertChipTextAtLine } from './chips-core.ts';
+
+test('insertChipTextAtLine: cursor in English body inserts at cursor+1', () => {
+  const body = `---
+type: action
+---
+
+# English
+
+Body line A.
+Body line B.
+
+# Python
+
+pass
+`;
+  // # English is at line 4. Body lines at 6, 7. # Python at 9.
+  // Cursor on line 6 ("Body line A") should insert at line 7.
+  const r = insertChipTextAtLine(body, 'CHIP', 6);
+  assert.ok(r.ok);
+  const lines = (r as { ok: true; body: string }).body.split('\n');
+  assert.equal(lines[6], 'Body line A.');
+  assert.equal(lines[7], 'CHIP');
+  assert.equal(lines[8], 'Body line B.');
+});
+
+test('insertChipTextAtLine: cursor on # English heading → falls back to end-of-section', () => {
+  const body = `# English
+
+Body.
+
+# Python
+pass
+`;
+  // Cursor on line 0 (# English heading) — falls back to legacy append.
+  const r = insertChipTextAtLine(body, 'CHIP', 0);
+  assert.ok(r.ok);
+  // Legacy behavior: append after last non-blank in English body.
+  // Body = ["", "Body.", "", "# Python", "pass", ""] indexed from #
+  // English line 0. Last non-blank in section is "Body." at line 2.
+  // CHIP lands at line 3.
+  const out = (r as { ok: true; body: string }).body;
+  assert.ok(out.includes('Body.\nCHIP\n'),
+    `expected CHIP appended after Body.; got:\n${out}`);
+});
+
+test('insertChipTextAtLine: cursor in Python facet → falls back to end-of-English', () => {
+  const body = `# English
+
+Body.
+
+# Python
+
+pass
+`;
+  // # Python at line 4, body at 6. Cursor on line 6 (Python body).
+  const r = insertChipTextAtLine(body, 'CHIP', 6);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body;
+  // CHIP should land in English body, not Python.
+  const pythonIdx = out.indexOf('# Python');
+  const chipIdx = out.indexOf('CHIP');
+  assert.ok(chipIdx >= 0);
+  assert.ok(chipIdx < pythonIdx,
+    `CHIP must land before # Python; got CHIP@${chipIdx}, Python@${pythonIdx}`);
+});
+
+test('insertChipTextAtLine: cursor in frontmatter → falls back to end-of-English', () => {
+  const body = `---
+type: action
+---
+
+# English
+
+Body.
+`;
+  // Frontmatter is lines 0-2; # English at 4; cursor on line 1.
+  const r = insertChipTextAtLine(body, 'CHIP', 1);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body;
+  // CHIP should land in the English section, not in frontmatter.
+  assert.ok(out.includes('Body.\nCHIP'),
+    `expected CHIP after Body. (English-body append); got:\n${out}`);
+  // Frontmatter must be unchanged.
+  assert.ok(out.startsWith('---\ntype: action\n---\n'));
+});
+
+test('insertChipTextAtLine: cursor at last body line inserts at end of body', () => {
+  const body = `# English
+
+A
+B
+
+# Python
+`;
+  // English at 0; body at 2 (A), 3 (B); # Python at 5.
+  // Cursor on B (line 3) → insert at line 4.
+  const r = insertChipTextAtLine(body, 'CHIP', 3);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  assert.equal(out[3], 'B');
+  assert.equal(out[4], 'CHIP');
+});
+
+test('insertChipTextAtLine: no English heading returns NO_ENGLISH error', () => {
+  const body = `# Python\npass\n`;
+  const r = insertChipTextAtLine(body, 'CHIP', 0);
+  assert.equal(r.ok, false);
+});

@@ -716,3 +716,46 @@ export function insertChipText(
   const after = lines.slice(lastContent + 1);
   return { ok: true, body: [...before, chipInsertion, ...after].join('\n') };
 }
+
+/** v0.2.113 — cursor-aware variant of insertChipText.
+ *
+ *  When `cursorLine` is INSIDE the `# English` facet body (strictly
+ *  between the heading line and the next section boundary), insert
+ *  the chip on the line BELOW the cursor. Otherwise fall back to the
+ *  v0.2.69 `insertChipText` behavior (append to end of English body).
+ *
+ *  `cursorLine` is 0-based, matching Obsidian's
+ *  `editor.getCursor().line`. Pass `-1` (or any line outside the
+ *  body) to force the legacy append-at-end behavior.
+ *
+ *  Cohort UX: authors mid-`# English` editing get chips inserted
+ *  where they're working rather than always at end-of-section. */
+export function insertChipTextAtLine(
+  noteBody: string,
+  chipInsertion: string,
+  cursorLine: number,
+): InsertResult {
+  const lines = noteBody.split('\n');
+  const englishStart = lines.findIndex(
+    l => /^#{1,6}\s+english\s*$/i.test(l.trim()));
+  if (englishStart === -1) {
+    return { ok: false, reason: CHIPS_NO_ENGLISH_SECTION };
+  }
+  let endIdx = lines.length;
+  for (let i = englishStart + 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t.startsWith('#') || t === '---') { endIdx = i; break; }
+  }
+  // Inside-body check: cursor strictly inside (englishStart, endIdx).
+  // Heading line itself + endIdx (next section heading) both fall to
+  // the legacy append path so the chip lands in a sane spot.
+  const cursorInsideBody =
+    cursorLine > englishStart && cursorLine < endIdx;
+  if (!cursorInsideBody) {
+    return insertChipText(noteBody, chipInsertion);
+  }
+  // Insert immediately AFTER the cursor's line.
+  const before = lines.slice(0, cursorLine + 1);
+  const after = lines.slice(cursorLine + 1);
+  return { ok: true, body: [...before, chipInsertion, ...after].join('\n') };
+}
