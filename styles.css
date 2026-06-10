@@ -740,6 +740,21 @@
   padding: 0;
 }
 
+/* v0.2.117 — Live Preview / Reading mode Properties widget.
+   Obsidian renders frontmatter as a Properties widget when the
+   pane is in Live Preview or Reading mode (the user sees an
+   expandable "Properties" section instead of raw `---` lines).
+   That widget is a separate DOM element with class
+   `.metadata-container` per @Boettner-eric's gist. Our
+   `.forge-snippet` class is on the CM6 editor root which
+   contains the widget in Live Preview, and on `.markdown-
+   preview-view` for Reading mode. Hide the widget in both
+   contexts when inside a snippet. */
+.forge-snippet .metadata-container,
+.markdown-preview-view.forge-snippet-preview .metadata-container {
+  display: none;
+}
+
 /* v0.2.116 — defense-in-depth fallback: if the `.forge-snippet`
    class fails to apply for some reason (race, Obsidian
    compartment shenanigans, etc.), the v0.2.112 visual
