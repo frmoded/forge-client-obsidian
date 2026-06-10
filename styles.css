@@ -781,6 +781,32 @@
   padding: revert;
 }
 
+/* v0.2.122 — Dependencies section hide.
+
+   Source mode: makeDependenciesFoldExtension applies Decoration.line
+   with class `forge-deps-line` to every CM6 line inside the
+   `# Dependencies` heading + body. The class lands on the
+   `.cm-line` element directly.
+
+   Live Preview / Reading mode: registerMarkdownPostProcessor walks
+   the rendered HTML and tags the `# Dependencies` heading + each
+   following sibling (until next heading) with `forge-deps-section`.
+
+   Both classes are gated on the parent `.forge-snippet` so plain
+   notes pass through. The `forge-expanded` escape hatch (per
+   v0.2.119) reveals both frontmatter AND Dependencies together
+   when the user runs `Forge: Toggle frontmatter visibility`.
+*/
+.forge-snippet .forge-deps-line,
+.forge-snippet .forge-deps-section {
+  display: none !important;
+}
+
+.forge-snippet.forge-expanded .forge-deps-line,
+.forge-snippet.forge-expanded .forge-deps-section {
+  display: revert !important;
+}
+
 /* v0.2.116 — defense-in-depth fallback: if the `.forge-snippet`
    class fails to apply for some reason (race, Obsidian
    compartment shenanigans, etc.), the v0.2.112 visual

@@ -54,6 +54,8 @@ import { forgeButtonShouldShow } from './forge-button-gate-core';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin';
 import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin';
+import { makeDependenciesFoldExtension } from './dependencies-fold-view-plugin';
+import { findDependenciesRange } from './dependencies-section-core';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -302,6 +304,50 @@ export default class ForgePlugin extends Plugin {
       makeFrontmatterFoldViewPlugin(() => this.frontmatterFoldHost()),
     ]);
 
+    // v0.2.122 — source-mode hide of the `# Dependencies` section in
+    // snippet files. CM6 line-decoration extension tags every line
+    // inside the Dependencies section with `forge-deps-line`; CSS
+    // in styles.css hides those lines when the editor's containerEl
+    // has `.forge-snippet` (per v0.2.118 DOM-level tagging). The
+    // existing v0.2.119 `forge-toggle-frontmatter` Cmd-P command
+    // toggles `forge-expanded` which now reveals BOTH frontmatter
+    // AND dependencies (single mental model per v0.2.122 §2.2 (a)).
+    this.registerEditorExtension([
+      makeDependenciesFoldExtension(),
+    ]);
+
+    // v0.2.122 — Live Preview / Reading mode hide. Markdown post-
+    // processor scans the rendered HTML for an `# Dependencies`
+    // heading and wraps the heading + subsequent siblings (until
+    // the next heading or container end) in a `<span class="forge-
+    // deps-section">` so CSS can hide them.
+    this.registerMarkdownPostProcessor((el) => {
+      // Find the FIRST # Dependencies heading at any heading level.
+      const headings = el.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      let depsHeading: Element | null = null;
+      for (const h of Array.from(headings)) {
+        if (h.textContent?.trim().toLowerCase() === 'dependencies') {
+          depsHeading = h;
+          break;
+        }
+      }
+      if (!depsHeading) return;
+      // Tag the heading itself.
+      depsHeading.classList.add('forge-deps-section');
+      // Walk forward through siblings, tagging each until the next
+      // heading element (or end of container).
+      let sibling: Element | null = depsHeading.nextElementSibling;
+      while (sibling) {
+        if (/^H[1-6]$/.test(sibling.tagName)) break;
+        sibling.classList.add('forge-deps-section');
+        sibling = sibling.nextElementSibling;
+      }
+    });
+    // Touch findDependenciesRange so unused-import lint doesn't fire
+    // when we depend on the pure-core export for tests but not
+    // directly inside main.ts after this hookup.
+    void findDependenciesRange;
+
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
     this.registerView(EDGES_VIEW_TYPE, leaf => new ForgeEdgesView(leaf, () => this.settings.serverUrl));
@@ -538,16 +584,13 @@ export default class ForgePlugin extends Plugin {
     });
 
     // v0.2.119 — Cmd-P escape hatch for v0.2.118's frontmatter hide.
-    // The default v0.2.118 behavior hides the Properties widget +
-    // source-mode YAML lines for snippet files. This command flips
-    // a per-view `forge-expanded` class on the active markdown
-    // view's containerEl so CSS reveals the frontmatter when the
-    // user needs to read or edit it. Toggle on a per-file basis;
-    // resets on view re-open since tagSnippetViews doesn't restore
-    // the expanded state.
+    // v0.2.122 — same toggle now ALSO reveals/hides the
+    // `# Dependencies` section per §2.2 option (a) (single mental
+    // model). The class flipped (`forge-expanded`) is shared by
+    // both CSS rule groups in styles.css.
     this.addCommand({
       id: 'forge-toggle-frontmatter',
-      name: 'Toggle frontmatter visibility (active snippet)',
+      name: 'Toggle frontmatter + dependencies visibility (active snippet)',
       callback: () => { this.toggleFrontmatterVisibility(); },
     });
 
