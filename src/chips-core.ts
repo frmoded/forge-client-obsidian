@@ -754,6 +754,17 @@ export function insertChipTextAtLine(
   if (!cursorInsideBody) {
     return insertChipText(noteBody, chipInsertion);
   }
+  // v0.2.120 — empty-line polish. When the cursor sits on a
+  // whitespace-only line inside # English, replace that line's
+  // content with the chip rather than appending below it. Authors
+  // who navigate to an empty line expect the chip to land THERE
+  // (not on a new line below — double-spacing). Non-empty cursor
+  // lines keep the v0.2.113 "insert below cursor" behavior.
+  if ((lines[cursorLine] ?? '').trim() === '') {
+    const before = lines.slice(0, cursorLine);
+    const after = lines.slice(cursorLine + 1);
+    return { ok: true, body: [...before, chipInsertion, ...after].join('\n') };
+  }
   // Insert immediately AFTER the cursor's line.
   const before = lines.slice(0, cursorLine + 1);
   const after = lines.slice(cursorLine + 1);
