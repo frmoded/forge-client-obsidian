@@ -67,7 +67,16 @@ export function computeFrontmatterFoldRange(
     }
   }
   if (closeLine === -1) return null;
-  const from = lines[0].length;
+  // v0.2.115 — for block:true Decoration.replace we widen `from` to
+  // 0 (start of the opening `---` line) instead of end-of-opening-
+  // `---` (lines[0].length). Block replacements must start at a line
+  // boundary; the start-of-line at position 0 is the canonical line
+  // boundary for the doc. The widget renders in place of the entire
+  // frontmatter block including its delimiters; the user clicks the
+  // widget to expand. Pre-v0.2.115 the convention was to keep the
+  // opening `---` line visible with a fold-triangle, but that
+  // approach is moot with block:true — the widget is the affordance.
+  const from = 0;
   let to = 0;
   for (let i = 0; i <= closeLine; i++) {
     to += lines[i].length;
@@ -243,7 +252,19 @@ function buildDecorations(state: any): DecorationSet {
     range.to,
     Decoration.replace({
       widget: new FrontmatterPlaceholderWidget(docKey),
-      block: false,
+      // v0.2.115 — block: true. v0.2.111-v0.2.114 used block: false
+      // (inline replace). Inline replacements get merged with
+      // Obsidian's own decoration pipeline; the override there is
+      // unconditional (Prec.highest didn't help in v0.2.114
+      // cohort smoke). Block decorations follow a separate render
+      // path — they're slotted into the line layout as standalone
+      // block widgets that replace a multi-line content range.
+      // Obsidian's interception may only target inline merges.
+      // CM6 requires block:true ranges to start AT a line boundary
+      // and end at a line boundary, so we widen the range to
+      // include the start of the opening `---` line (position 0)
+      // instead of just-after-it.
+      block: true,
     }),
   );
   return builder.finish();

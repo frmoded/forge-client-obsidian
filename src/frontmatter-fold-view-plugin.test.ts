@@ -69,12 +69,14 @@ Print "hello".
 `;
   const r = computeFrontmatterFoldRange(doc);
   assert.ok(r, 'must return a range');
-  // `from` should be at end of line 0 (length of `---` = 3).
-  assert.equal(r!.from, 3);
+  // v0.2.115 — `from` is 0 (start of opening `---` line) for
+  // block:true Decoration.replace. Block replacements must start
+  // at a line boundary; position 0 is the canonical line boundary
+  // for the document.
+  assert.equal(r!.from, 0);
   // `to` should land just before the newline after the closing `---`.
   // Lines: 0 `---`, 1 `type: action`, 2 `inputs: []`, 3 `---`.
-  // Char counts: 3 + 1 + 12 + 1 + 10 + 1 + 3 = 31, then strip the
-  // trailing newline → 31.
+  // Char counts: 3 + 1 + 12 + 1 + 10 + 1 + 3 = 31.
   const closeLineEnd = doc.indexOf('---', 4) + 3;
   assert.equal(r!.to, closeLineEnd);
 });
@@ -105,7 +107,8 @@ test('computeFrontmatterFoldRange: empty frontmatter (open immediately closed)',
 `;
   const r = computeFrontmatterFoldRange(doc);
   assert.ok(r, 'must return a range even for empty frontmatter');
-  assert.equal(r!.from, 3);  // end of opening `---`
+  // v0.2.115 — `from` is 0 (start of doc) for block:true.
+  assert.equal(r!.from, 0);
 });
 
 test('computeFrontmatterFoldRange: range covers opening `---` end through closing `---` end', () => {
