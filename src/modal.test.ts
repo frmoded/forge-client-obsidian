@@ -30,9 +30,11 @@ test('actionTemplate does NOT declare facet_form: canonical', () => {
   assert.doesNotMatch(body, /^facet_form:\s*canonical$/m);
 });
 
-test('canonicalActionTemplate declares facet_form: canonical', () => {
+test('canonicalActionTemplate does NOT declare facet_form (v0.2.121 — field retired)', () => {
+  // v0.2.121 — facet_form removed (Option C plugin-side routing).
+  // The engine no longer reads the field; templates no longer emit it.
   const body = canonicalActionTemplate('my_snippet');
-  assert.match(body, /^facet_form:\s*canonical$/m);
+  assert.doesNotMatch(body, /^facet_form:/m);
 });
 
 test('canonicalActionTemplate emits # English heading', () => {

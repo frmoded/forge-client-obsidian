@@ -6,7 +6,9 @@ import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view';
 import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips';
 import { ChipPaletteGroup } from './chips-core';
-import { getFacetForm } from './facet-form-core';
+// v0.2.121 — getFacetForm import removed; facet_form gate is gone.
+// import { getFacetForm } from './facet-form-core';
+import { routeActionCodeRegen } from './route-action-code-regen-core';
 import { isPythonBuiltin, bareWikilinkTarget } from './python-builtins-core';
 import { invalidateLibraryVaultCache } from './edges';
 // v0.2.44: attachEdgeHover removed — the hover popover read snapshot
@@ -1687,27 +1689,52 @@ export default class ForgePlugin extends Plugin {
       await this.runSnippet('Forge failed during execution');
       return;
     }
-    // v0.2.55: Stage 2 — opt-in canonical E-- compile path.
-    // `facet_form: canonical` snippets skip /generate entirely; the
-    // engine's resolve_action_code (forge.core.executor) transpiles
-    // the English facet via the vendored forge.e_minus_minus
-    // package at runtime. No LLM call, deterministic compile.
-    if (getFacetForm(fm) === 'canonical') {
-      console.log(`Forge: skipping /generate, ${view.file.basename} is in canonical E-- mode`);
-      await this.runSnippet('Forge failed during execution');
-      // v0.2.101 — persist the transpiled Python back to the file's
-      // # Python section so the user-visible facet reflects what E--
-      // generated. Best-effort: the run already succeeded; this is
-      // cosmetic persistence.
+    // v0.2.121 — Option C plugin-side routing. facet_form gate
+    // removed; the engine's resolve_action_code always attempts E--
+    // transpile and returns null on failure (free-text English).
+    // Use routeActionCodeRegen to orchestrate: try E-- via the engine,
+    // fall back to /generate (LLM) when E-- can't compile. Pre-
+    // v0.2.121 this branch checked getFacetForm(fm) === 'canonical'
+    // and skipped /generate for that case; the new flow handles both
+    // cases uniformly.
+    void fm;
+    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    const routing = await routeActionCodeRegen(snippetId, {
+      resolveActionCode: async (id) => {
+        const hostManager = getPyodideHost();
+        if (!hostManager) return null;
+        const host = await hostManager.getInstance();
+        try {
+          const code = await host.resolveActionCode(id);
+          return code && code.trim().length > 0 ? code : null;
+        } catch {
+          return null;  // E-- couldn't compile; route to /generate
+        }
+      },
+      hasToken: !!this.settings.transpileServiceToken,
+      generate: async (_id) => {
+        const ok = await this.generate('Forge failed during generation');
+        if (!ok) throw new Error('generate failed');
+        // generate() writes the new Python to disk + MEMFS via
+        // writeGeneratedCode; subsequent runSnippet picks it up.
+        // Return a sentinel; routing result.code is unused for the
+        // /generate branch since the write already happened.
+        return '<generate-write-completed>';
+      },
+    });
+    if (!routing.ok) {
+      new Notice(`Forge: ${routing.message}`);
+      return;
+    }
+    if (routing.via === 'e--') {
+      // E-- succeeded → write back to # Python facet (matches the
+      // v0.2.101 canonical write-back UX).
       try {
         await this.writeCanonicalPythonBack(view.file);
       } catch (e) {
         console.warn('Forge: canonical python write-back failed', e);
       }
-      return;
     }
-    const ok = await this.generate('Forge failed during generation');
-    if (!ok) return;
     await this.runSnippet('Forge failed during execution');
   }
 

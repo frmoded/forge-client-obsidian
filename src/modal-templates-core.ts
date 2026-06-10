@@ -35,11 +35,11 @@ export function actionTemplate(name: string): string {
   ].join('\n');
 }
 
-/** v0.2.77 — canonical action template. Frontmatter declares
- *  `facet_form: canonical` so the engine routes through the B7.1
- *  transpile path and skips the /generate LLM call. The body has
- *  no `# Python` stub (canonical compiles fresh on demand via
- *  resolve_action_code per B7.3); the user authors only the English
+/** v0.2.77 — canonical action template. v0.2.121 — facet_form
+ *  field removed from emitted frontmatter (Option C plugin-side
+ *  routing; engine always attempts E-- transpile). The body has
+ *  no `# Python` stub — E-- transpile produces it on demand via
+ *  resolve_action_code per B7.3. The user authors only the English
  *  facet. The seed `Do [[print]]("hello, world").` introduces the
  *  canonical call syntax + a builtin sibling reference in one line. */
 export function canonicalActionTemplate(name: string): string {
@@ -48,7 +48,6 @@ export function canonicalActionTemplate(name: string): string {
     'type: action',
     `description: ${name}`,
     'inputs: []',
-    'facet_form: canonical',
     '---',
     '',
     '# English',

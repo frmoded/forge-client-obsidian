@@ -790,7 +790,10 @@ def _forge_get_resolver(vault_name=None):
     _ = vault_name
     return _forge_registry, _forge_resolver
 
-_forge_facet_form_warning_set = set()
+# v0.2.121 — _forge_facet_form_warning_set + the v0.2.81 strip-trap
+# emit-side-effect block were removed. With facet_form retired
+# engine-side (Option C plugin-side routing), the trap no longer
+# exists and the warning is dead.
 
 def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None, slot_resolutions=None):
     """Run a snippet and return (stdout, result). Action and data
@@ -801,40 +804,12 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None, slot
     v0.2.72: 'slot_resolutions' parameter added — passed through to
     resolve_action_code so the engine can satisfy {{ }} slot lookups
     on the plugin's second pass after /resolve-slot.
-    v0.2.81: defensive warning when snippet has slot_resolutions in
-    frontmatter but facet_form is absent or != 'canonical' — almost
-    always an Obsidian YAML-strip artifact that silently disables
-    the cache. Warning dedup'd per snippet_id per Pyodide-instance
-    lifetime (browser reload resets)."""
+    v0.2.121: facet_form strip-trap warning removed."""
     if inputs is None:
         inputs = {}
     reg, resolver = _forge_get_resolver(vault_name)
     snip = resolver.resolve(snippet_id)
     snippet_type = snip.get("meta", {}).get("type")
-
-    # v0.2.81 Item A — defensive warning for the Obsidian YAML-strip trap.
-    # Pure-decision helper lives in forge.core.executor (testable); the
-    # emit side-effect (js.console.warn) stays at this Pyodide boundary.
-    from forge.core.executor import detect_facet_form_strip_trap
-    if (detect_facet_form_strip_trap(snip.get("meta")) and
-        snippet_id not in _forge_facet_form_warning_set):
-        _forge_facet_form_warning_set.add(snippet_id)
-        try:
-            import js
-            js.console.warn(
-                f"Forge: snippet '{snippet_id}' has slot_resolutions but "
-                f"facet_form is absent (or != canonical). This is likely "
-                f"an Obsidian YAML-strip issue. Snippet will re-transpile "
-                f"on every click. Add 'facet_form: canonical' to "
-                f"frontmatter to restore caching."
-            )
-        except Exception:
-            # Defensive — Pyodide js module unavailable (test envs).
-            print(
-                f"Forge: snippet '{snippet_id}' has slot_resolutions but "
-                f"facet_form is absent (or != canonical). Re-transpile "
-                f"every click. Add 'facet_form: canonical' to fix."
-            )
     if snippet_type == "action":
         # v0.2.55: resolve_action_code returns either the cached
         # Python facet OR transpiles via E-- for facet_form: canonical
