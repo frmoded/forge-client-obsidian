@@ -1082,3 +1082,57 @@ test('insertChipTextAtLine: no English heading returns NO_ENGLISH error', () => 
   const r = insertChipTextAtLine(body, 'CHIP', 0);
   assert.equal(r.ok, false);
 });
+
+// v0.2.120 — empty-line polish.
+test('insertChipTextAtLine: cursor on empty line in English body replaces the empty line', () => {
+  const body = `# English
+
+Foo
+
+Bar
+
+# Python
+`;
+  // # English at 0. Body: empty(1), Foo(2), empty(3), Bar(4), empty(5).
+  // Cursor on line 3 (the empty line between Foo and Bar).
+  const r = insertChipTextAtLine(body, 'CHIP', 3);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  // The empty line at index 3 should be replaced (not appended after).
+  assert.equal(out[2], 'Foo');
+  assert.equal(out[3], 'CHIP');
+  assert.equal(out[4], 'Bar');
+  // Total line count must not increase (replace, not insert).
+  assert.equal(out.length, body.split('\n').length,
+    `line count unchanged when replacing empty; got ${out.length} from ${body.split('\n').length}`);
+});
+
+test('insertChipTextAtLine: empty-line polish only triggers for whitespace-only lines (non-empty lines keep v0.2.113 below-cursor behavior)', () => {
+  const body = `# English
+
+Foo bar
+
+# Python
+`;
+  // Cursor on "Foo bar" line (line 2). v0.2.113 behavior: insert at line 3.
+  const r = insertChipTextAtLine(body, 'CHIP', 2);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  assert.equal(out[2], 'Foo bar');
+  assert.equal(out[3], 'CHIP');
+  // Line count grew by 1 (insert, not replace).
+  assert.equal(out.length, body.split('\n').length + 1);
+});
+
+test('insertChipTextAtLine: cursor on whitespace-only (spaces/tabs) line also triggers replace', () => {
+  // The English body has a line containing just spaces — should be
+  // treated as empty for the polish purpose.
+  const body = '# English\n\n  \t  \n\n# Python\n';
+  // Body lines (0-indexed): [0] # English, [1] '', [2] '  \t  ', [3] '', [4] # Python.
+  const r = insertChipTextAtLine(body, 'CHIP', 2);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  assert.equal(out[2], 'CHIP');
+  // Line count unchanged.
+  assert.equal(out.length, body.split('\n').length);
+});
