@@ -160,3 +160,57 @@ V1 cohort UX completion attempt (hypothesis-driven). The harness extension remai
 The session's bigger pattern continues: every CM6/Obsidian integration touch has been a different layer of surprise (3-layer dispatch race v0.2.85-89, line-break-spanning rule v0.2.108-110, workspace-pointer race v0.2.110-111, now Obsidian-renderer override v0.2.112+). The harness investment, if/when built, pays for itself by surfacing these classes locally instead of via cohort smoke.
 
 Per cc-prompt-queue.md §43, the feedback file IS the chat summary.
+
+---
+
+## §10 — Post-v0.2.114 resolution: prior-art search cracked it (v0.2.115 → v0.2.119)
+
+After this feedback was written, the cohort smoke on v0.2.114 confirmed `Prec.highest` did NOT crack the override. That triggered a full commitment to the harness drain — but the actual fix came from a different angle. Documenting here for forge-core's institutional record.
+
+### §10.1 The arc
+
+| Release | Mechanism | Outcome |
+|---|---|---|
+| **v0.2.115** | Decoration.replace with `block: true` | ❌ Still overridden — eliminates "block-vs-inline" as the cause |
+| **v0.2.116** | DROP all decorations; switch to `EditorView.editorAttributes` + CSS targeting Obsidian's own `.cm-hmd-frontmatter` line class | ✅ Source mode hides; ❌ Live Preview Properties widget still visible |
+| **v0.2.117** | Extend selector to `.metadata-container` (Properties widget) | ❌ Selector didn't reach — widget renders outside `.cm-editor` |
+| **v0.2.118** | Add DOM-level tagging via `workspace.on('file-open')` event; class on markdown view's containerEl (ancestor of BOTH `.cm-editor` and the Properties widget) | ✅ Frontmatter hidden in both source mode and Live Preview |
+| **v0.2.119** | Cmd-P "Forge: Toggle frontmatter visibility" escape hatch via `.forge-expanded` class | ✅ User can re-show frontmatter on demand |
+
+### §10.2 The breakthrough — prior-art search
+
+Eight CM6 mechanism attempts (foldEffect → ViewPlugin Decoration.replace → StateField Decoration.replace → workspace gate dropped → Prec.highest → block:true) were all engineering-by-experiment against an opaque Obsidian internal. The actual fix took ~5 minutes of web research:
+
+> [@Boettner-eric's gist](https://gist.github.com/Boettner-eric/e15deae15ccae8605c5fcfc953e55de2):
+> `.markdown-source-view .cm-line:has(.cm-hmd-frontmatter) { display: none; }`
+
+The community had already discovered the right CSS hooks: `.cm-hmd-frontmatter` for source-mode YAML lines and `.metadata-container` / `.metadata-properties` for Live Preview's Properties widget. No CM6 decoration mechanism is needed — pure CSS targeting Obsidian's own classes wins, because the rendering pipeline can't override CSS the way it overrides plugin decorations.
+
+### §10.3 What the harness build would have caught — and what it wouldn't
+
+The pure-CM6 + happy-dom integration harness (v0.2.112) verified our extensions produced correct output in isolation. It correctly **discriminated** the cohort failure as Obsidian-specific. But it could never have **identified the fix** — the fix doesn't involve CM6 at all. CSS targeting Obsidian's runtime classes operates above the CM6 layer.
+
+So the full Playwright + Electron OR custom Obsidian-CM6 shim work proposed in this prompt remains **deferred but de-prioritized**. The cost-benefit shifted: a harness that runs against real Obsidian would catch THIS issue, but the cheaper "search community prior art first" discipline gets us there for ~99% of cases without the infrastructure.
+
+### §10.4 Smoke pass (Tamar, post-v0.2.119)
+
+> "works like a charm!"
+
+After 27 releases (v0.2.91 → v0.2.119), the cohort UX arc closes. Frontmatter hidden by default for snippet files in both source mode and Live Preview; Cmd-P toggle re-shows on demand.
+
+### §10.5 New constitution amendments (cumulative)
+
+Beyond §5 of this feedback, the v0.2.115 → v0.2.119 arc surfaces three more amendment candidates:
+
+7. **Prior-art search before novel CM6 experiments.** When the third mechanism attempt fails against the same surface, STOP iterating and grep the community: GitHub plugin source, Obsidian forum, public gists. ~5 minutes of search cracks 90% of Obsidian-specific surprises.
+
+8. **CSS targeting Obsidian's runtime classes beats CM6 decoration overrides.** When Obsidian intercepts plugin decorations, sidestep the decoration system entirely with CSS rules on Obsidian's own class hooks (`.cm-hmd-frontmatter`, `.metadata-container`, `.metadata-properties`, etc.).
+
+9. **Live Preview's Properties widget renders OUTSIDE `.cm-editor`.** CM6 facets (e.g. `EditorView.editorAttributes`) only tag CM6's view.dom. For broader DOM reach, tag the markdown view's containerEl via Obsidian's workspace events.
+
+### §10.6 Final follow-ups
+
+1. **Harness Obsidian-shim build**: deferred indefinitely. The cohort UX gap that motivated it is closed. If a future CM6-specific surprise resists prior-art search, revisit.
+2. **CSS de-emphasis (Plan B from v0.2.112)**: superseded by the v0.2.118 hide rules. Can be removed in a cleanup drain but harmless.
+3. **Expand UI variants** (B = persistent pill, C = settings flag): deferred. v0.2.119's Cmd-P toggle is V1-acceptable per cohort confirmation.
+
