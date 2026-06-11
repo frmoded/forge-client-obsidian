@@ -43,6 +43,70 @@ export type ForgeRouting =
  *  metadataCache may return undefined frontmatter for files whose
  *  cache hasn't populated yet) — in that case we fall through to
  *  english-mode. */
+
+/** v0.2.125 — does this frontmatter object carry at least one
+ *  routing-relevant key (`featured` or `edit_mode`)?
+ *
+ *  Used by `main.ts:readFrontmatterForRouting` to decide whether
+ *  the cached frontmatter from metadataCache is fresh enough to
+ *  drive the routing decision, OR whether the cache is stale-
+ *  non-null and we need to fall through to the disk read.
+ *
+ *  v0.2.124 shipped the disk-fallback with `if (cachedFm)` —
+ *  too permissive: a stale cache returning `{ type: 'action' }`
+ *  (missing `featured`) would short-circuit the disk read and
+ *  silently misroute the snippet. Per the forge-core v0124
+ *  review, the gap is the prime suspect for any post-v0.2.124
+ *  simulation regression. v0.2.125 closes it by requiring at
+ *  least one routing key to be present before trusting the
+ *  cache. */
+export function hasRoutingKeys(
+  frontmatter: Record<string, unknown> | null | undefined,
+): boolean {
+  if (!frontmatter) return false;
+  return 'featured' in frontmatter || 'edit_mode' in frontmatter;
+}
+
+/** v0.2.125 — minimal inline YAML head parser for the routing
+ *  decision. Reads `key: value` lines between two `---`
+ *  delimiters at the top of `body` and returns them as an
+ *  object.
+ *
+ *  Limitations (deliberate):
+ *  - Only top-level scalar `key: value`. No nested mappings,
+ *    no sequences, no multi-line strings.
+ *  - Strips surrounding `"` / `'` quotes.
+ *  - Coerces `featured: true|false` to boolean. All other
+ *    values stay as strings.
+ *
+ *  Returns `null` when the body has no `---` frontmatter
+ *  delimiter at line 1. Returns `{}` when the delimiter exists
+ *  but contains no parseable keys. */
+export function parseRoutingFrontmatter(
+  body: string,
+): Record<string, unknown> | null {
+  const lines = body.split('\n');
+  if (lines[0]?.trim() !== '---') return null;
+  const fm: Record<string, unknown> = {};
+  for (let i = 1; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t === '---') break;
+    const fmMatch = t.match(/^(\w+):\s*(.+?)\s*$/);
+    if (!fmMatch) continue;
+    const key = fmMatch[1];
+    let v: unknown = fmMatch[2];
+    if (typeof v === 'string'
+        && ((v.startsWith('"') && v.endsWith('"'))
+            || (v.startsWith("'") && v.endsWith("'")))) {
+      v = v.slice(1, -1);
+    }
+    if (key === 'featured' && v === 'true') v = true;
+    else if (key === 'featured' && v === 'false') v = false;
+    fm[key] = v;
+  }
+  return fm;
+}
+
 export function decideForgeRouting(
   filePath: string,
   frontmatter: Record<string, unknown> | null | undefined,

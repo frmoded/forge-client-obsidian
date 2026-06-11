@@ -9,7 +9,11 @@ import { ChipPaletteGroup } from './chips-core';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core';
 import { routeActionCodeRegen } from './route-action-code-regen-core';
-import { decideForgeRouting } from './forge-snippet-routing-core';
+import {
+  decideForgeRouting,
+  hasRoutingKeys,
+  parseRoutingFrontmatter,
+} from './forge-snippet-routing-core';
 import { isPythonBuiltin, bareWikilinkTarget } from './python-builtins-core';
 import { invalidateLibraryVaultCache } from './edges';
 // v0.2.44: attachEdgeHover removed — the hover popover read snapshot
@@ -1568,38 +1572,40 @@ export default class ForgePlugin extends Plugin {
     file: TFile,
     cachedFm: Record<string, unknown> | undefined,
   ): Promise<Record<string, unknown> | null> {
-    // Fast path: cache has both fields (or neither is set in
-    // frontmatter). Use cachedFm as-is.
-    if (cachedFm) {
+    // Fast path: cache has at least one routing-relevant key
+    // (`featured` or `edit_mode`). Use cachedFm as-is.
+    //
+    // v0.2.125: the v0.2.124 fast-path check (`if (cachedFm)`) was
+    // too permissive — a stale-but-non-null cache missing both
+    // routing keys would short-circuit the disk fallback and the
+    // routing decision would silently use the stale data. Closing
+    // that gap per the forge-core v0124 review (the simulation
+    // regression's prime suspect if the v0.2.124 null-cache
+    // fallback wasn't sufficient).
+    //
+    // The genuinely-no-routing-keys case (an authoring snippet
+    // with neither `featured` nor `edit_mode` in frontmatter)
+    // falls through to the disk read. Cost: one vault.read per
+    // such Forge-click — negligible — and the result is the same
+    // routing decision (`english-mode`) the cache would have
+    // produced. Correctness wins.
+    //
+    // Fast-path guard + inline YAML parse extracted to pure-core
+    // (`forge-snippet-routing-core.ts`) so the structural logic
+    // is testable without an Obsidian-shim build of the CM6
+    // integration harness.
+    if (hasRoutingKeys(cachedFm)) {
       return cachedFm as Record<string, unknown>;
     }
     // Slow path: read disk + inline-parse routing fields.
     try {
       const body = await this.app.vault.read(file);
-      const lines = body.split('\n');
-      if (lines[0]?.trim() !== '---') return null;
-      const fm: Record<string, unknown> = {};
-      for (let i = 1; i < lines.length; i++) {
-        const t = lines[i].trim();
-        if (t === '---') break;
-        const fmMatch = t.match(/^(\w+):\s*(.+?)\s*$/);
-        if (!fmMatch) continue;
-        const key = fmMatch[1];
-        let v: unknown = fmMatch[2];
-        // Strip surrounding quotes.
-        if (typeof v === 'string'
-            && ((v.startsWith('"') && v.endsWith('"'))
-                || (v.startsWith("'") && v.endsWith("'")))) {
-          v = v.slice(1, -1);
-        }
-        // Coerce booleans only for the routing-critical keys.
-        if (key === 'featured' && v === 'true') v = true;
-        else if (key === 'featured' && v === 'false') v = false;
-        fm[key] = v;
-      }
-      return fm;
+      return parseRoutingFrontmatter(body);
     } catch (e) {
-      console.warn('Forge: routing-frontmatter direct read failed', e);
+      // v0.2.125: per cc-prompt-queue.md HARD RULE #1 (v0.2.120),
+      // caught runtime errors MUST use console.error with the
+      // originating method name. Was console.warn pre-v0.2.125.
+      console.error('readFrontmatterForRouting: vault.read failed', e);
       return null;
     }
   }
