@@ -576,7 +576,7 @@ export default class ForgePlugin extends Plugin {
           const content = await this.app.vault.read(file);
           await host.syncUserVaultFile(file.path, content);
         } catch (e) {
-          console.warn(`Forge: MEMFS sync on modify failed for '${file.path}'`, e);
+          console.error(`Forge: MEMFS sync on modify failed for '${file.path}'`, e);
         }
       }),
     );
@@ -1268,7 +1268,7 @@ export default class ForgePlugin extends Plugin {
         return sanitized;
       });
     } catch (e) {
-      console.warn('Forge sanitize: write failed', e);
+      console.error('Forge sanitize: write failed', e);
       return;
     }
     if (writtenContent === null) return;
@@ -1293,7 +1293,7 @@ export default class ForgePlugin extends Plugin {
       this.snippetInventory = connectRes?.snippets ?? {};
       contentTypes = connectRes?.content_types;
     } catch (e) {
-      console.warn('Forge: connect failed before opening New Snippet modal; falling back to default content_types', e);
+      console.error('Forge: connect failed before opening New Snippet modal; falling back to default content_types', e);
     }
     new ForgeSnippetModal(this.app, contentTypes).open();
   }
@@ -1344,7 +1344,7 @@ export default class ForgePlugin extends Plugin {
       this.activeDomains = new Set(names); // possibly empty = core-only
     } catch (e) {
       // forge.toml present but read/parse failed → real error.
-      console.warn('Forge: could not read forge.toml domains; registering all commands', e);
+      console.error('Forge: could not read forge.toml domains; registering all commands', e);
       this.activeDomains = null;
     }
   }
@@ -1765,7 +1765,7 @@ export default class ForgePlugin extends Plugin {
         await host.syncUserVaultFile(view.file.path, freshContent);
       }
     } catch (e) {
-      console.warn('Forge: pre-flight disk→MEMFS sync failed', e);
+      console.error('Forge: pre-flight disk→MEMFS sync failed', e);
     }
 
     // v0.2.123 — routing dispatch via pure-core decideForgeRouting.
@@ -1984,7 +1984,7 @@ export default class ForgePlugin extends Plugin {
             await host.syncUserVaultFile(file.path, freshContent);
           }
         } catch (e) {
-          console.warn('Forge: pre-flight sync failed before /generate', e);
+          console.error('Forge: pre-flight sync failed before /generate', e);
         }
 
         const inv = await host.preflightThenInventory(snippetId);
@@ -2134,7 +2134,7 @@ export default class ForgePlugin extends Plugin {
           await host.syncUserVaultFile(file.path, newContent);
         }
       } catch (e) {
-        console.warn(`Forge: MEMFS sync after write failed for '${id}'`, e);
+        console.error(`Forge: MEMFS sync after write failed for '${id}'`, e);
       }
 
       // v0.2.24: reconcile frontmatter `inputs:` with the Python
@@ -2150,7 +2150,7 @@ export default class ForgePlugin extends Plugin {
       try {
         await this.reconcileFrontmatterInputs(file, id);
       } catch (e) {
-        console.warn(`Forge: frontmatter reconciliation failed for '${id}'`, e);
+        console.error(`Forge: frontmatter reconciliation failed for '${id}'`, e);
       }
 
       // After writing the new Python, ask the BE to sync the # Dependencies
@@ -2173,7 +2173,7 @@ export default class ForgePlugin extends Plugin {
           }
         } else {
           // Non-network failure — keep the warn so real bugs surface.
-          console.warn(`Forge: sync_dependencies failed for '${id}'`, e);
+          console.error(`Forge: sync_dependencies failed for '${id}'`, e);
         }
       }
     }
@@ -2222,7 +2222,7 @@ export default class ForgePlugin extends Plugin {
       const readBack = await this.app.vault.read(file);
       await host.syncUserVaultFile(file.path, readBack);
     } catch (e) {
-      console.warn('Forge: MEMFS sync after canonical write failed', e);
+      console.error('Forge: MEMFS sync after canonical write failed', e);
     }
   }
 
@@ -2471,7 +2471,7 @@ export default class ForgePlugin extends Plugin {
     try {
       content = await this.app.vault.read(file);
     } catch (e) {
-      console.warn('Forge: could not read data snippet for preview', e);
+      console.error('Forge: could not read data snippet for preview', e);
       return;
     }
     const body = extractDataBody(content);
@@ -2631,7 +2631,7 @@ export default class ForgePlugin extends Plugin {
         invalidateLibraryVaultCache();
         console.log('Forge inventory after install:', this.snippetInventory);
       } catch (e) {
-        console.warn('Forge: post-install refresh failed', e);
+        console.error('Forge: post-install refresh failed', e);
       }
     }
   }
@@ -2776,7 +2776,7 @@ export default class ForgePlugin extends Plugin {
       body = await this.app.vault.read(file);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      console.warn('Forge: failed to read snippet for cache write', e);
+      console.error('Forge: failed to read snippet for cache write', e);
       // Still return the compute result; caller renders output.
       return {
         type: 'action',
@@ -2795,7 +2795,7 @@ export default class ForgePlugin extends Plugin {
           stripStaleSlots: true,  // migration cleanup for v0.2.70/v0.2.71
         }));
     } catch (e) {
-      console.warn('Forge: # Python / english_hash write failed', e);
+      console.error('Forge: # Python / english_hash write failed', e);
       // Best-effort — the result is in hand.
     }
 
@@ -2814,7 +2814,7 @@ export default class ForgePlugin extends Plugin {
           host.syncUserVaultFile(relPath, content) },
       );
     } catch (e) {
-      console.warn('Forge: post-write MEMFS sync failed', e);
+      console.error('Forge: post-write MEMFS sync failed', e);
     }
 
     console.log('Forge: slot cache write succeeded', { snippetId, count: responses.length });
