@@ -1817,7 +1817,10 @@ export default class ForgePlugin extends Plugin {
       try {
         await this.writeCanonicalPythonBack(view.file);
       } catch (e) {
-        console.warn('Forge: canonical python write-back failed', e);
+        // v0.2.129 — per cc-prompt-queue.md HARD RULE #1 (v0.2.120),
+        // caught runtime errors → console.error with originating
+        // method name. Was console.warn pre-v0.2.129.
+        console.error('forgeSnippet (english-mode): writeCanonicalPythonBack failed', e);
       }
     }
     await this.runSnippet('Forge failed during execution');
