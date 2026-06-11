@@ -9,6 +9,7 @@ import { ChipPaletteGroup } from './chips-core';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core';
 import { routeActionCodeRegen } from './route-action-code-regen-core';
+import { decideForgeRouting } from './forge-snippet-routing-core';
 import { isPythonBuiltin, bareWikilinkTarget } from './python-builtins-core';
 import { invalidateLibraryVaultCache } from './edges';
 // v0.2.44: attachEdgeHover removed — the hover popover read snapshot
@@ -1543,6 +1544,66 @@ export default class ForgePlugin extends Plugin {
     return fm?.featured === true;
   }
 
+  /** v0.2.123 — defensive frontmatter read for the forgeSnippet
+   *  routing decision. If `cachedFm` (from metadataCache) already
+   *  has the routing-critical fields (`featured` / `edit_mode`),
+   *  use it as-is. Otherwise read the file from disk and parse
+   *  the YAML inline.
+   *
+   *  Driver smoke against v0.2.122 surfaced the demotion: Forge-
+   *  click on forge-moda/simulation.md fell to the english-mode
+   *  branch because `app.metadataCache.getFileCache(file)?.
+   *  frontmatter` returned undefined OR had `featured` absent at
+   *  click-time. Likely cause: the just-opened file's
+   *  metadataCache hadn't populated yet, OR a recent BRAT reload
+   *  wiped the in-memory cache. Either way, this fallback reads
+   *  the file directly so the routing always has authoritative
+   *  data. Performance cost: one vault.read() per Forge-click —
+   *  negligible vs. the user-facing routing correctness.
+   *
+   *  Parses only the routing-critical fields. Doesn't try to be a
+   *  full YAML parser; we only need `featured: true|false` and
+   *  `edit_mode: english|python`. */
+  private async readFrontmatterForRouting(
+    file: TFile,
+    cachedFm: Record<string, unknown> | undefined,
+  ): Promise<Record<string, unknown> | null> {
+    // Fast path: cache has both fields (or neither is set in
+    // frontmatter). Use cachedFm as-is.
+    if (cachedFm) {
+      return cachedFm as Record<string, unknown>;
+    }
+    // Slow path: read disk + inline-parse routing fields.
+    try {
+      const body = await this.app.vault.read(file);
+      const lines = body.split('\n');
+      if (lines[0]?.trim() !== '---') return null;
+      const fm: Record<string, unknown> = {};
+      for (let i = 1; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (t === '---') break;
+        const fmMatch = t.match(/^(\w+):\s*(.+?)\s*$/);
+        if (!fmMatch) continue;
+        const key = fmMatch[1];
+        let v: unknown = fmMatch[2];
+        // Strip surrounding quotes.
+        if (typeof v === 'string'
+            && ((v.startsWith('"') && v.endsWith('"'))
+                || (v.startsWith("'") && v.endsWith("'")))) {
+          v = v.slice(1, -1);
+        }
+        // Coerce booleans only for the routing-critical keys.
+        if (key === 'featured' && v === 'true') v = true;
+        else if (key === 'featured' && v === 'false') v = false;
+        fm[key] = v;
+      }
+      return fm;
+    } catch (e) {
+      console.warn('Forge: routing-frontmatter direct read failed', e);
+      return null;
+    }
+  }
+
   // Chips v2. Domain-agnostic palette pane in the right sidebar. The
   // view reads `_chips.md` from the vault root + each declared-domain
   // subdir on open / on refresh; renders an empty-state message if
@@ -1700,19 +1761,22 @@ export default class ForgePlugin extends Plugin {
       console.warn('Forge: pre-flight disk→MEMFS sync failed', e);
     }
 
-    // v0.2.92 → v0.2.93 — Forge-click on a forge-moda snippet auto-
-    // opens the moda simulation tab AND triggers featured-run inside
-    // the iframe. v0.2.92 alone (auto-open only) wasn't enough:
-    // Tamar's smoke showed "tab opens but simulation idle" because
-    // the iframe waits for a user click on its in-iframe play button.
-    // v0.2.93 sends `featured-run` to the iframe (via
-    // ForgeModaView.requestFeaturedRun) which the iframe handles
-    // by auto-triggering the featured snippet's compute pathway.
-    // The plugin's Pyodide host receives the compute via the iframe's
-    // engine-request route and the canvas renders.
-    // Skip the local runSnippet path entirely for moda snippets —
-    // the iframe owns the compute pathway here.
-    if (this.isModaFeaturedSnippet(view.file)) {
+    // v0.2.123 — routing dispatch via pure-core decideForgeRouting.
+    // Precedence: python-mode > moda > english-mode. metadataCache
+    // may return null frontmatter when the file was just opened or
+    // BRAT just reloaded the plugin; fall back to a direct disk
+    // read + inline YAML parse so the routing doesn't silently
+    // demote a moda featured snippet to the english-mode branch.
+    // Cohort smoke (driver, 2026-06-10) on v0.2.122 surfaced the
+    // demote: Forge-click on forge-moda/simulation.md fired
+    // run_snippet('simulation') instead of opening the moda
+    // simulator tab — symptom of metadataCache.featured being
+    // undefined at click time.
+    const fmForRouting = await this.readFrontmatterForRouting(
+      view.file, fm,
+    );
+    const routing = decideForgeRouting(view.file.path, fmForRouting);
+    if (routing.kind === 'moda') {
       await this.openModaView();
       const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
       if (leaf?.view instanceof ForgeModaView) {
@@ -1721,7 +1785,7 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
-    if (getEditMode(fm) === 'python') {
+    if (routing.kind === 'python-mode') {
       // The server log won't show a "skipped (edit_mode=python)" line
       // because we don't call /generate at all in this branch — the
       // server-side guard is defense-in-depth, not the primary signal.
@@ -1736,13 +1800,10 @@ export default class ForgePlugin extends Plugin {
     // removed; the engine's resolve_action_code always attempts E--
     // transpile and returns null on failure (free-text English).
     // Use routeActionCodeRegen to orchestrate: try E-- via the engine,
-    // fall back to /generate (LLM) when E-- can't compile. Pre-
-    // v0.2.121 this branch checked getFacetForm(fm) === 'canonical'
-    // and skipped /generate for that case; the new flow handles both
-    // cases uniformly.
+    // fall back to /generate (LLM) when E-- can't compile.
     void fm;
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
-    const routing = await routeActionCodeRegen(snippetId, {
+    const regenResult = await routeActionCodeRegen(snippetId, {
       resolveActionCode: async (id) => {
         const hostManager = getPyodideHost();
         if (!hostManager) return null;
@@ -1765,11 +1826,11 @@ export default class ForgePlugin extends Plugin {
         return '<generate-write-completed>';
       },
     });
-    if (!routing.ok) {
-      new Notice(`Forge: ${routing.message}`);
+    if (!regenResult.ok) {
+      new Notice(`Forge: ${regenResult.message}`);
       return;
     }
-    if (routing.via === 'e--') {
+    if (regenResult.via === 'e--') {
       // E-- succeeded → write back to # Python facet (matches the
       // v0.2.101 canonical write-back UX).
       try {
