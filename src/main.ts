@@ -8,7 +8,8 @@ import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips
 import { ChipPaletteGroup } from './chips-core';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core';
-import { routeActionCodeRegen } from './route-action-code-regen-core';
+import { routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core';
+import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core';
 import {
   decideForgeRouting,
   hasRoutingKeys,
@@ -1783,11 +1784,7 @@ export default class ForgePlugin extends Plugin {
     );
     const routing = decideForgeRouting(view.file.path, fmForRouting);
     if (routing.kind === 'moda') {
-      await this.openModaView();
-      const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
-      if (leaf?.view instanceof ForgeModaView) {
-        leaf.view.requestFeaturedRun();
-      }
+      await this.dispatchModaBranch(view);
       return;
     }
 
@@ -1809,7 +1806,29 @@ export default class ForgePlugin extends Plugin {
     // fall back to /generate (LLM) when E-- can't compile.
     void fm;
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
-    const regenResult = await routeActionCodeRegen(snippetId, {
+    const regenResult = await routeActionCodeRegen(snippetId, this.routingDeps());
+    if (!regenResult.ok) {
+      new Notice(`Forge: ${regenResult.message}`);
+      return;
+    }
+    if (regenResult.via === 'e--') {
+      // E-- succeeded → write back to # Python facet (matches the
+      // v0.2.101 canonical write-back UX).
+      try {
+        await this.writeCanonicalPythonBack(view.file);
+      } catch (e) {
+        console.warn('Forge: canonical python write-back failed', e);
+      }
+    }
+    await this.runSnippet('Forge failed during execution');
+  }
+
+  /** v0.2.126 — shared dependencies for routeActionCodeRegen. Both
+   *  the english-mode branch (forgeSnippet) and the moda branch
+   *  (dispatchModaBranch) regen English → Python via the same
+   *  routing — DRY the deps construction. */
+  private routingDeps(): RoutingDeps {
+    return {
       resolveActionCode: async (id) => {
         const hostManager = getPyodideHost();
         if (!hostManager) return null;
@@ -1831,21 +1850,45 @@ export default class ForgePlugin extends Plugin {
         // /generate branch since the write already happened.
         return '<generate-write-completed>';
       },
-    });
-    if (!regenResult.ok) {
-      new Notice(`Forge: ${regenResult.message}`);
-      return;
-    }
-    if (regenResult.via === 'e--') {
-      // E-- succeeded → write back to # Python facet (matches the
-      // v0.2.101 canonical write-back UX).
+    };
+  }
+
+  /** v0.2.126 — moda branch dispatch. Re-transpile English → Python
+   *  BEFORE opening the iframe so the iframe's compute reads fresh
+   *  Python. Fixes the v0.2.124 cohort regression where editing
+   *  # English on a featured moda snippet (e.g. simulation.md) and
+   *  Forge-clicking opened the simulator but ran the OLD cached
+   *  Python — engine's resolve_action_code returned cached Python
+   *  because canonical moda snippets have no english_hash in
+   *  frontmatter (legacy preservation per B7.3).
+   *
+   *  Decision shape extracted to pure-core
+   *  (`moda-dispatch-outcome-core.ts`). Ordering: regen FIRST
+   *  (option (a) per v0326 §2.3) — correctness over perceived
+   *  responsiveness. ~100-500ms additional wall-clock vs. the
+   *  v0.2.124 immediate-open. */
+  private async dispatchModaBranch(view: MarkdownView): Promise<void> {
+    if (!view.file) return;
+    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    const regenResult = await routeActionCodeRegen(snippetId, this.routingDeps());
+    const outcome = decideModaDispatchOutcome(regenResult);
+    if (outcome.kind === 'write-and-open') {
       try {
         await this.writeCanonicalPythonBack(view.file);
       } catch (e) {
-        console.warn('Forge: canonical python write-back failed', e);
+        // Per cc-prompt-queue.md HARD RULE #1 (v0.2.120): caught
+        // runtime errors → console.error with method name.
+        console.error('dispatchModaBranch: writeCanonicalPythonBack failed', e);
       }
+    } else if (outcome.kind === 'notice-and-open') {
+      new Notice(outcome.notice);
     }
-    await this.runSnippet('Forge failed during execution');
+    // 'open' kind: /generate already wrote Python; nothing to do here.
+    await this.openModaView();
+    const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
+    if (leaf?.view instanceof ForgeModaView) {
+      leaf.view.requestFeaturedRun();
+    }
   }
 
   // v0.2.4 α swap: /generate now POSTs to the hosted transpile
