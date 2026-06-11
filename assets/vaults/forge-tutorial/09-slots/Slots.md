@@ -29,31 +29,24 @@ make it real.
 
 ## Where the answer goes
 
-Forge the **octopus_fact** snippet once, then **look at it again**. Something
-changed: a new `# Python` section appeared at the bottom.
+You've seen a `# Python` section in every snippet so far — it's the code Forge
+runs, translated from your English. In the earlier chapters that translation is
+**automatic and exact**: the same English always becomes the same Python, with no
+thinking required, so Forge could re-make it any time for free.
 
-Here's what happened. To run your snippet, Forge first **translates** your
-English into code it can run. The first time, it reaches your `{{ … }}` slot and
-asks the LLM to fill it in — and *that's the only moment the LLM is involved, and
-it happens before the snippet runs, not while it runs.* Forge splices the answer
-into the translated code, saves that code in the `# Python` section, and
-remembers it.
+A slot snippet's `# Python` is different — open **octopus_fact** and look at it.
+Where your `{{ … }}` was, there's now an actual fact, written right into the code.
+That fact wasn't a mechanical translation: the **LLM had to think it up** to fill
+the slot. And because thinking it up takes a real moment, Forge asks **once** —
+when it first translates your English — and **saves the answer** there, so it
+never has to ask again. (That's the only time the LLM is involved, and it happens
+before the snippet runs, not while it runs.)
 
-After that, clicking Forge is **instant**: Forge reads the remembered code and
-just runs it — no LLM, no re-translating. So a filled slot is asked once and then
-settled: re-running gives the same fact, for free, every time. (Your earlier
-snippets never grew a `# Python` section because they had nothing to remember —
-they're translated fresh on every click, which is fast and free. It's the LLM
-step that costs effort, and only slots need it.)
-
-Change the English, though — including the words inside the slot — and Forge sees
-the request is different, asks the LLM again, and fills it in anew.
-
-> **If a slot snippet ever feels slow** after you edit it, peek at its
-> frontmatter (the block between the `---` lines at the top) and check that the
-> line `facet_form: canonical` is still there. Obsidian sometimes drops it when
-> you edit a snippet, which makes Forge re-translate on every click instead of
-> using the remembered answer. Add the line back and it's quick again.
+That's the whole point: a slot snippet's `# Python` is a *remembered answer*, not
+just a translation. Run it again and it's instant — Forge reads the saved fact,
+no LLM, for free, the same every time. Change the English, though — including the
+words inside the slot — and Forge sees a new request, asks the LLM again, and
+saves the new answer.
 
 ## Exercise
 
