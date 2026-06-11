@@ -154,7 +154,7 @@ async function detectSourceVault(app: App): Promise<string | null> {
     const body = await adapter.read('forge.toml');
     return isSourceVault(body, KNOWN_BUNDLED_LIBRARIES);
   } catch (e) {
-    console.warn('Forge chips: detectSourceVault read failed', e);
+    console.error('Forge chips: detectSourceVault read failed', e);
     return null;
   }
 }
@@ -235,7 +235,7 @@ async function loadVaultRootV1Chips(
       }
       return mergeChipSources([{ sourceName: vaultName, chips: parsed.chips }]);
     } catch (e) {
-      console.warn(`Forge chips: read failed for ${rel}`, e);
+      console.error(`loadSourceVaultChips: read failed for ${rel}`, e);
     }
   }
   return [];
@@ -283,7 +283,7 @@ async function loadLibraryChips(
         const cfg = await readChipsConfigAt(adapter, path);
         if (cfg) levelConfigs.push(cfg);
       } catch (e) {
-        console.warn(`Forge chips: read failed for ${path}`, e);
+        console.error(`loadLibraryChips: read failed for ${path}`, e);
       }
     }
     if (levelConfigs.length > 0) {
@@ -307,7 +307,7 @@ async function loadLibraryChips(
         break;
       }
     } catch (e) {
-      console.warn(`Forge chips: read failed for ${candidate}`, e);
+      console.error(`loadLibraryChips: read failed for ${candidate}`, e);
     }
   }
 

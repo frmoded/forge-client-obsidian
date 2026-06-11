@@ -384,7 +384,7 @@ export class PyodideHost {
         pyodide.FS.writeFile("/bundle/user-vault/forge.toml", toml);
       }
     } catch (e) {
-      console.warn("Forge: could not read forge.toml from user vault", e);
+      console.error("Forge: could not read forge.toml from user vault", e);
     }
 
     // Step 3: mount bundled libraries (forge-moda for V1) as

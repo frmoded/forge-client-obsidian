@@ -93,7 +93,7 @@ async function walkSnapshots(app: App, dir: string): Promise<SnapshotMeta[]> {
         const meta = parseSnapshotMeta(content);
         if (meta) out.push(meta);
       } catch (e) {
-        console.warn(`Forge: failed to read snapshot ${file}`, e);
+        console.error(`Forge: failed to read snapshot ${file}`, e);
       }
     }
     for (const folder of list.folders) {

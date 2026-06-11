@@ -31,7 +31,7 @@ async function detectSourceVault(adapter: DataAdapter): Promise<string | null> {
     const body = await adapter.read('forge.toml');
     return isSourceVault(body, KNOWN_BUNDLED_LIBRARIES);
   } catch (e) {
-    console.warn('Forge: detectSourceVault read failed', e);
+    console.error('Forge: detectSourceVault read failed', e);
     return null;
   }
 }
@@ -181,7 +181,7 @@ export async function runFirstRunCheck(app: App): Promise<void> {
         }
         // 'skip-existing' is the steady-state expected path; silent.
       } catch (e) {
-        console.warn('Forge: ensureWelcomeFiles threw unexpectedly', e);
+        console.error('Forge: ensureWelcomeFiles threw unexpectedly', e);
       }
     }
 
@@ -238,7 +238,7 @@ export async function runFirstRunCheck(app: App): Promise<void> {
       const wrote = await ensureForgeTomlStub(adapter);
       if (wrote) console.log('Forge: wrote V1 stub forge.toml');
     } catch (e) {
-      console.warn('Forge: ensureForgeTomlStub failed', e);
+      console.error('Forge: ensureForgeTomlStub failed', e);
     }
 
     // v0.2.15: extract bundled forge-music IFF the user's forge.toml
@@ -272,7 +272,7 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     try {
       await sweepLegacyBakDirs(adapter);
     } catch (e) {
-      console.warn('Forge: legacy .bak sweep failed', e);
+      console.error('Forge: legacy .bak sweep failed', e);
     }
   } catch (e) {
     console.error('Forge: runFirstRunCheck failed', e);
@@ -305,7 +305,7 @@ async function deleteExtractedDir(
   try {
     await adapter.rmdir(targetDir, true);
   } catch (e) {
-    console.warn(`Forge: rmdir ${targetDir} failed`, e);
+    console.error(`Forge: rmdir ${targetDir} failed`, e);
   }
 }
 
@@ -336,11 +336,11 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
         await adapter.rmdir(folder, true);
         removed += 1;
       } catch (e) {
-        console.warn(`Forge: failed to sweep ${folder}`, e);
+        console.error(`Forge: failed to sweep ${folder}`, e);
       }
     }
   } catch (e) {
-    console.warn('Forge: vault root list failed during .bak sweep', e);
+    console.error('Forge: vault root list failed during .bak sweep', e);
   }
   if (removed > 0) {
     console.log(`Forge: swept ${removed} legacy .bak directory/ies from vault root`);
@@ -431,7 +431,7 @@ async function ensureBundledForgeModa(app: App): Promise<void> {
     // Non-fatal — the simulator and own-snippet authoring still work
     // without forge-moda extracted as authoring content. Surface as
     // warn rather than throwing so plugin load doesn't abort.
-    console.warn('Forge: ensureBundledForgeModa failed', e);
+    console.error('Forge: ensureBundledForgeModa failed', e);
   }
 }
 
@@ -454,7 +454,7 @@ async function ensureBundledForgeTutorial(app: App): Promise<void> {
     // Non-fatal — first-Forge-click on welcome.md still works without
     // the tutorial extracted. Surface as warn rather than throwing so
     // plugin load doesn't abort.
-    console.warn('Forge: ensureBundledForgeTutorial failed', e);
+    console.error('Forge: ensureBundledForgeTutorial failed', e);
   }
 }
 
@@ -487,7 +487,7 @@ async function ensureBundledForgeMusic(app: App): Promise<void> {
       'forge-music',
     );
   } catch (e) {
-    console.warn('Forge: ensureBundledForgeMusic failed', e);
+    console.error('Forge: ensureBundledForgeMusic failed', e);
   }
 }
 
@@ -590,7 +590,7 @@ async function migrateChipsMdToV2(
       `backed up as ${backupName}`,
     );
   } catch (e) {
-    console.warn(`Forge: migrateChipsMdToV2(${libraryDirName}) failed`, e);
+    console.error(`Forge: migrateChipsMdToV2(${libraryDirName}) failed`, e);
   }
 }
 
