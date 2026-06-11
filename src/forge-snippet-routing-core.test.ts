@@ -174,6 +174,22 @@ test('parseRoutingFrontmatter: lines without colon are skipped', () => {
   assert.deepEqual(result, { featured: true });
 });
 
+test('decideForgeRouting: hand-authored # Python without english_hash + featured:true → moda (v0.2.128 force regression guard)', () => {
+  // v0.2.128 institutional regression guard: the routing decision
+  // MUST still dispatch this snippet to moda even though it lacks
+  // english_hash in frontmatter (the cohort-state shape). The
+  // engine-side force flag handles cache invalidation; the routing
+  // decision continues to treat the snippet as moda regardless.
+  // Catches any future regression where someone adds an
+  // english_hash precondition to the moda gate.
+  const r = decideForgeRouting('forge-moda/simulation.md', {
+    type: 'action',
+    featured: true,
+    // NO english_hash — cohort state.
+  });
+  assert.equal(r.kind, 'moda');
+});
+
 test('parseRoutingFrontmatter: featured: "true" (quoted) coerces to boolean after quote-strip', () => {
   // The parser strips surrounding quotes BEFORE the bareword
   // coercion fires. So `featured: "true"` strips to `true` which

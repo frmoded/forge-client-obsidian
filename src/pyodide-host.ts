@@ -661,7 +661,7 @@ def _forge_preflight_then_inventory(snippet_id: str):
         pass
     return _forge_get_generate_inventory(snippet_id)
 
-def _forge_resolve_action_code(snippet_id: str):
+def _forge_resolve_action_code(snippet_id: str, force: bool = False):
     """v0.2.101 — return the action's Python source WITHOUT executing it.
 
     For facet_form: canonical snippets, this is the freshly transpiled
@@ -689,7 +689,7 @@ def _forge_resolve_action_code(snippet_id: str):
         pass
     resolver = GraphResolver(_forge_registry)
     snip = resolver.resolve(snippet_id)
-    return resolve_action_code(snip)
+    return resolve_action_code(snip, force=force)
 
 def _forge_sync_user_file(relpath: str, new_body: str):
     """v0.2.17 — sync a single user-vault file change into MEMFS AND
@@ -1049,7 +1049,7 @@ export interface PyodideHostInstance {
    *  for legacy snippets it's the cached # Python facet. Used by the
    *  canonical-mode forgeSnippet branch to persist the transpiled
    *  Python back to disk after a successful runSnippet. */
-  resolveActionCode(snippet_id: string): Promise<string>;
+  resolveActionCode(snippet_id: string, opts?: { force?: boolean }): Promise<string>;
   modaInit(): Promise<ModaInitResult>;
   modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
   modaClick(x: number, y: number): Promise<ModaClickResult>;
@@ -1193,10 +1193,19 @@ _forge_compute_with_python(
     };
   }
 
-  async resolveActionCode(snippet_id: string): Promise<string> {
+  async resolveActionCode(snippet_id: string, opts?: { force?: boolean }): Promise<string> {
+    // v0.2.128 — `force` opt bypasses the engine's legacy
+    // `stored_hash is None → return cached` rule and the
+    // `english_hash` cache-hit rule, always re-transpiling via E--.
+    // Moda branch passes force=true on every Forge-click to ensure
+    // English edits propagate on canonical moda snippets that lack
+    // english_hash in cohort state. Other call sites omit the opt
+    // (force defaults to false) and the existing behavior is
+    // preserved.
     this.pyodide.globals.set("_forge_resolve_target", snippet_id);
+    this.pyodide.globals.set("_forge_resolve_force", !!opts?.force);
     const out = this.pyodide.runPython(
-      `_forge_resolve_action_code(_forge_resolve_target)`,
+      `_forge_resolve_action_code(_forge_resolve_target, force=_forge_resolve_force)`,
     );
     return String(out ?? "");
   }
