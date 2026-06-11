@@ -502,6 +502,23 @@ def resolve_action_code(snippet, slot_resolutions=None):
   meta = snippet["meta"]
   edit_mode = meta.get("edit_mode", "english")
 
+  # [v0.2.127 engine] diagnostic spike — emit logs to JS console
+  # via Pyodide's js bridge. Remove in v0.2.128 alongside plugin-
+  # side spike removal. Wrapped in try/except because resolve_action_code
+  # also runs under pytest (no js module available there).
+  try:
+    import js  # type: ignore
+    snippet_id_for_log = snippet.get("snippet_id", "<unknown>")
+    js.console.log(f'[v0.2.127 engine] resolve_action_code entered for snippet_id={snippet_id_for_log}')
+    js.console.log(f'[v0.2.127 engine] edit_mode={edit_mode}')
+    js.console.log(f'[v0.2.127 engine] cached # Python present: {code is not None}; length={len(code) if code else 0}')
+    js.console.log(f'[v0.2.127 engine] cached # Python preview: {(code or "")[:120]!r}')
+    js.console.log(f'[v0.2.127 engine] slot_resolutions is None: {slot_resolutions is None}')
+    js.console.log(f'[v0.2.127 engine] meta keys: {list(meta.keys())}')
+    js.console.log(f'[v0.2.127 engine] english_hash in frontmatter: {meta.get("english_hash")!r}')
+  except ImportError:
+    pass
+
   if code is not None and slot_resolutions is None:
     # v0.2.73: when slot_resolutions is explicitly provided, the
     # plugin is in the second-pass of a cache-miss round-trip.

@@ -1762,7 +1762,19 @@ export default class ForgePlugin extends Plugin {
       if (hostManager) {
         const host = await hostManager.getInstance();
         const freshContent = await this.app.vault.read(view.file);
+        // [v0.2.127 spike] — diagnostic for v0327 moda re-transpile
+        // failure. Remove in v0.2.128.
+        console.log('[v0.2.127 spike] pre-flight sync path:', view.file.path);
+        console.log('[v0.2.127 spike] pre-flight sync content length:', freshContent.length);
+        const englishMatch = freshContent.match(/^# English\s*\n([\s\S]*?)(?=\n# |\n$|$)/m);
+        const englishPreview = englishMatch
+          ? englishMatch[1].slice(0, 200)
+          : '<no # English heading found>';
+        console.log('[v0.2.127 spike] pre-flight sync English preview:', englishPreview);
         await host.syncUserVaultFile(view.file.path, freshContent);
+        console.log('[v0.2.127 spike] pre-flight sync to MEMFS COMPLETED');
+      } else {
+        console.log('[v0.2.127 spike] pre-flight sync SKIPPED: no host manager');
       }
     } catch (e) {
       console.warn('Forge: pre-flight disk→MEMFS sync failed', e);
@@ -1868,27 +1880,56 @@ export default class ForgePlugin extends Plugin {
    *  responsiveness. ~100-500ms additional wall-clock vs. the
    *  v0.2.124 immediate-open. */
   private async dispatchModaBranch(view: MarkdownView): Promise<void> {
-    if (!view.file) return;
+    // [v0.2.127 spike] — diagnostic for v0327 moda re-transpile
+    // failure investigation. Remove in v0.2.128.
+    console.log('[v0.2.127 spike] dispatchModaBranch ENTERED for', view.file?.path);
+    if (!view.file) {
+      console.log('[v0.2.127 spike] dispatchModaBranch: view.file null, returning early');
+      return;
+    }
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
-    const regenResult = await routeActionCodeRegen(snippetId, this.routingDeps());
+    console.log('[v0.2.127 spike] snippetId resolved:', snippetId);
+    const deps = this.routingDeps();
+    console.log('[v0.2.127 spike] routingDeps hasToken:', deps.hasToken);
+    const regenResult = await routeActionCodeRegen(snippetId, deps);
+    console.log('[v0.2.127 spike] regenResult shape:', {
+      ok: regenResult.ok,
+      via: regenResult.ok ? regenResult.via : undefined,
+      reason: !regenResult.ok ? regenResult.reason : undefined,
+      codeLength: regenResult.ok ? regenResult.code.length : 0,
+      codePreview: regenResult.ok ? regenResult.code.slice(0, 120) : null,
+      message: !regenResult.ok ? regenResult.message : undefined,
+    });
     const outcome = decideModaDispatchOutcome(regenResult);
+    console.log('[v0.2.127 spike] outcome kind:', outcome.kind);
     if (outcome.kind === 'write-and-open') {
+      console.log('[v0.2.127 spike] CALLING writeCanonicalPythonBack — note: this internally re-invokes host.resolveActionCode, so the engine result may DIFFER from the routeActionCodeRegen result above');
       try {
         await this.writeCanonicalPythonBack(view.file);
+        console.log('[v0.2.127 spike] writeCanonicalPythonBack COMPLETED');
+        // Read back from disk to confirm what landed.
+        const after = await this.app.vault.read(view.file);
+        const pythonMatch = after.match(/^# Python\s*\n([\s\S]*?)(?=\n# |\n$|$)/m);
+        const pythonPreview = pythonMatch
+          ? pythonMatch[1].slice(0, 200)
+          : '<no # Python heading found post-write>';
+        console.log('[v0.2.127 spike] # Python on disk AFTER write-back preview:', pythonPreview);
       } catch (e) {
-        // Per cc-prompt-queue.md HARD RULE #1 (v0.2.120): caught
-        // runtime errors → console.error with method name.
         console.error('dispatchModaBranch: writeCanonicalPythonBack failed', e);
       }
     } else if (outcome.kind === 'notice-and-open') {
-      new Notice(outcome.notice);
+      console.log('[v0.2.127 spike] showing Notice:', outcome.notice);
+      new Notice(outcome.notice, 5000);
+    } else {
+      console.log('[v0.2.127 spike] outcome.kind === "open" — /generate already wrote Python; nothing else to do');
     }
-    // 'open' kind: /generate already wrote Python; nothing to do here.
+    console.log('[v0.2.127 spike] opening moda view + requesting featured run');
     await this.openModaView();
     const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
     if (leaf?.view instanceof ForgeModaView) {
       leaf.view.requestFeaturedRun();
     }
+    console.log('[v0.2.127 spike] dispatchModaBranch COMPLETED');
   }
 
   // v0.2.4 α swap: /generate now POSTs to the hosted transpile
@@ -2169,11 +2210,26 @@ export default class ForgePlugin extends Plugin {
    *  cosmetic persistence). */
   private async writeCanonicalPythonBack(file: TFile): Promise<void> {
     const hostManager = getPyodideHost();
-    if (!hostManager) return;
+    if (!hostManager) {
+      console.log('[v0.2.127 spike] writeCanonicalPythonBack: no host manager, returning');
+      return;
+    }
     const host = await hostManager.getInstance();
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
+    // [v0.2.127 spike] — this is the SECOND resolveActionCode call
+    // for the moda branch (the first happens in routeActionCodeRegen).
+    // For canonical snippets without english_hash, the engine returns
+    // CACHED # Python — which is the existing stale facet content.
+    // Net effect: writeCanonicalPythonBack writes the same stale
+    // content back. Capturing the python length + preview to confirm
+    // this hypothesis.
+    console.log('[v0.2.127 spike] writeCanonicalPythonBack: 2ND resolveActionCode call for', snippetId);
     const python = await host.resolveActionCode(snippetId);
-    if (!python) return;
+    console.log('[v0.2.127 spike] writeCanonicalPythonBack: 2ND call returned length:', python?.length, 'preview:', python?.slice(0, 120) ?? '<null>');
+    if (!python) {
+      console.log('[v0.2.127 spike] writeCanonicalPythonBack: python null/empty, returning WITHOUT writing');
+      return;
+    }
     const body = await this.app.vault.read(file);
     const english = _extractEnglishFromBody(body) ?? '';
     const englishHash = await computeEnglishHash(english);
