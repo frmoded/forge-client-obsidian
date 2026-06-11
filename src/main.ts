@@ -10,6 +10,8 @@ import { ChipPaletteGroup } from './chips-core';
 // import { getFacetForm } from './facet-form-core';
 import { routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core';
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core';
+import { decideStaleMainJsCheck } from './stale-main-js-check-core';
+import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
 import {
   decideForgeRouting,
   hasRoutingKeys,
@@ -266,6 +268,39 @@ export default class ForgePlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+
+    // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
+    // manifest.json but fails to replace main.js, leaving cohort
+    // users running old code that silently mismatches the version
+    // they think they installed. Driver hit this exact mode on
+    // v0.2.127 (manifest.json said 0.2.127 but main.js was pre-
+    // v0.2.108 per the lingering "Action Shape" string). Compare
+    // PLUGIN_VERSION_AT_BUILD (baked into main.js by
+    // scripts/inline-plugin-version.mjs at build time) vs. the
+    // on-disk manifest.json read here. Mismatch → Notice +
+    // console.error with reinstall instructions. Plugin still
+    // proceeds with onload — partial functionality is better
+    // than nothing.
+    try {
+      const manifestJsonRaw = await this.app.vault.adapter.read(
+        `${this.manifest.dir}/manifest.json`,
+      );
+      const manifestJson = JSON.parse(manifestJsonRaw);
+      const check = decideStaleMainJsCheck(
+        manifestJson?.version,
+        PLUGIN_VERSION_AT_BUILD,
+      );
+      if (check.stale) {
+        // 30-second Notice so the user can read the reinstall path.
+        new Notice(check.noticeMessage, 30000);
+        console.error(
+          `Forge onload: stale main.js. manifestVersion=${check.manifestVersion}, mainJsVersion=${check.buildVersion}`,
+        );
+      }
+    } catch (e) {
+      // Per cc-prompt-queue.md HARD RULE #1 (v0.2.120).
+      console.error('onload: stale-main-js self-check failed', e);
+    }
 
     // v0.2.91 — restore inlined plugin assets to disk on first run.
     // BRAT downloads only main.js + manifest + styles + data; the
