@@ -56,7 +56,11 @@ import {
   type SnippetRegistryLike,
   type SnippetRegistryLikeMulti,
 } from './wikilink-freeze-menu-core';
-import { replaceOrInsertPythonHeading } from './python-cache-writer-core';
+// v0.2.132: replaceOrInsertPythonHeading direct import retired —
+// writeGeneratedCode now uses writePythonAndEnglishHash for unified
+// english_hash stamping. replaceOrInsertPythonHeading still lives
+// in python-cache-writer-core as an internal helper consumed by
+// writePythonAndEnglishHash.
 import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
 import { forgeButtonShouldShow } from './forge-button-gate-core';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
@@ -2152,7 +2156,28 @@ export default class ForgePlugin extends Plugin {
       // # Python OR inserts in canonical English→Python→Dependencies
       // order) instead of the legacy replacePythonSection (which
       // no-op'd on missing heading for welcome.md / greet.md).
-      const newContent = replaceOrInsertPythonHeading(content, code);
+      //
+      // v0.2.132 — switched to writePythonAndEnglishHash so the
+      // /generate (LLM) write path ALSO stamps english_hash into
+      // frontmatter. Pre-v0.2.132, only the E-- branch wrote
+      // english_hash (via writeCanonicalPythonBack); the /generate
+      // path called replaceOrInsertPythonHeading directly, leaving
+      // the hash absent. Driver smoke against v0.2.131 caught the
+      // gap: moda branch's /generate fallback updated # Python but
+      // simulation.md frontmatter still had no english_hash after
+      // Forge-click. This unifies the write contract: every Python
+      // write — whether from E-- transpile or /generate LLM —
+      // stamps english_hash, satisfying the v0.2.128 self-heal
+      // promise that "after one successful Forge-click, the snippet
+      // has english_hash and the cache contract works going
+      // forward."
+      const english = _extractEnglishFromBody(content) ?? '';
+      const englishHash = await computeEnglishHash(english);
+      const newContent = writePythonAndEnglishHash(content, {
+        pythonCode: code,
+        englishHash,
+        stripStaleSlots: false,
+      });
       await this.app.vault.modify(file, newContent);
 
       // v0.2.17: keep Pyodide's MEMFS-mounted user vault in sync with
