@@ -11,6 +11,11 @@ import { ChipPaletteGroup } from './chips-core';
 import { routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core';
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core';
+import {
+  readExpandedState,
+  writeExpandedState,
+  type ExpandedStateStorage,
+} from './expanded-state-core';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
 import {
   decideForgeRouting,
@@ -2464,10 +2469,30 @@ export default class ForgePlugin extends Plugin {
   // inside the same backup dir fires the Notice once.
   private _bakNoticeSeenSet = new Set<string>();
 
+  /** v0.2.138 — get the host's localStorage (or null in headless
+   *  tests). Wrapped so a future migration to vault-local config
+   *  (V2 cross-device sync) swaps the backend at one site. */
+  private expandedStateStorage(): ExpandedStateStorage | null {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ls = (globalThis as any).localStorage;
+      if (ls && typeof ls.getItem === 'function'
+          && typeof ls.setItem === 'function') {
+        return ls as ExpandedStateStorage;
+      }
+    } catch {
+      // SecurityError in some Obsidian sandboxing configurations.
+    }
+    return null;
+  }
+
   /** v0.2.119 — Toggle the `forge-expanded` class on the active
    *  markdown view's containerEl. CSS reveals the frontmatter when
-   *  the class is present, hides it when absent. Per-file scoped;
-   *  no persistent state. */
+   *  the class is present, hides it when absent.
+   *
+   *  v0.2.138 — state now persists per snippet path via
+   *  expanded-state-core (localStorage backend). Switching files and
+   *  reopening Obsidian preserves whatever the user toggled. */
   private toggleFrontmatterVisibility() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
@@ -2481,6 +2506,11 @@ export default class ForgePlugin extends Plugin {
     }
     containerEl.classList.toggle('forge-expanded');
     const expanded = containerEl.classList.contains('forge-expanded');
+    // Persist so the next file-open of this snippet honors the choice.
+    const file = view?.file;
+    if (file) {
+      writeExpandedState(this.expandedStateStorage(), file.path, { expanded });
+    }
     new Notice(`Forge: frontmatter ${expanded ? 'shown' : 'hidden'}.`);
   }
 
@@ -2511,8 +2541,17 @@ export default class ForgePlugin extends Plugin {
       const isSnippet = t === 'action' || t === 'data';
       if (isSnippet) {
         containerEl.classList.add('forge-snippet');
+        // v0.2.138 — apply persisted expanded state per snippet path.
+        // localStorage-backed; defaults to collapsed for snippets
+        // the user hasn't toggled. View-switches + Obsidian restarts
+        // honor the user's previous choice per file.
+        if (f) {
+          const st = readExpandedState(this.expandedStateStorage(), f.path);
+          containerEl.classList.toggle('forge-expanded', st.expanded);
+        }
       } else {
         containerEl.classList.remove('forge-snippet');
+        containerEl.classList.remove('forge-expanded');
       }
     }
   }
