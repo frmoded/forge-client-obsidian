@@ -730,6 +730,47 @@ export function insertChipText(
  *
  *  Cohort UX: authors mid-`# English` editing get chips inserted
  *  where they're working rather than always at end-of-section. */
+/** v0.2.135 — pure helper: prefix lines 2..N of a multi-line chip
+ *  body with the cursor-line's leading whitespace so each line of
+ *  the inserted body shares the cursor's indent.
+ *
+ *  Single-line chips return unchanged. Cursor at column 0 (empty
+ *  indent) also returns unchanged. Trailing blank lines preserve
+ *  their column-0 state so we don't accidentally synthesize
+ *  whitespace-only lines past the chip body.
+ *
+ *  Driver-flagged bug per v0334 §2: inserting a multi-line chip
+ *  (e.g. an `If:`-block) into an already-indented context (e.g.
+ *  inside a list item or a nested fence) produced lines 2..N
+ *  starting at column 0, visibly broken. */
+export function applyIndentToChipBody(
+  chipBody: string,
+  leadingWhitespace: string,
+): string {
+  if (leadingWhitespace.length === 0) return chipBody;
+  const parts = chipBody.split('\n');
+  if (parts.length <= 1) return chipBody;
+  return parts
+    .map((line, i) => {
+      if (i === 0) return line;
+      if (line === '') return ''; // preserve true-blank lines
+      return leadingWhitespace + line;
+    })
+    .join('\n');
+}
+
+/** v0.2.135 — extract the leading whitespace (spaces or tabs) of
+ *  a line. Returns the empty string for lines with no leading
+ *  indent. Treats `null` / `undefined` line as empty (defensive
+ *  against out-of-bounds cursor lines). */
+export function extractLeadingWhitespace(
+  line: string | null | undefined,
+): string {
+  if (!line) return '';
+  const m = line.match(/^[\t ]*/);
+  return m ? m[0] : '';
+}
+
 export function insertChipTextAtLine(
   noteBody: string,
   chipInsertion: string,
@@ -754,19 +795,25 @@ export function insertChipTextAtLine(
   if (!cursorInsideBody) {
     return insertChipText(noteBody, chipInsertion);
   }
+  // v0.2.135 — match cursor-line indent for multi-line chip bodies.
+  // Detected indent BEFORE the empty-line replacement decision so
+  // both branches benefit.
+  const cursorLineContent = lines[cursorLine] ?? '';
+  const leadingWs = extractLeadingWhitespace(cursorLineContent);
+  const indentedChip = applyIndentToChipBody(chipInsertion, leadingWs);
   // v0.2.120 — empty-line polish. When the cursor sits on a
   // whitespace-only line inside # English, replace that line's
   // content with the chip rather than appending below it. Authors
   // who navigate to an empty line expect the chip to land THERE
   // (not on a new line below — double-spacing). Non-empty cursor
   // lines keep the v0.2.113 "insert below cursor" behavior.
-  if ((lines[cursorLine] ?? '').trim() === '') {
+  if (cursorLineContent.trim() === '') {
     const before = lines.slice(0, cursorLine);
     const after = lines.slice(cursorLine + 1);
-    return { ok: true, body: [...before, chipInsertion, ...after].join('\n') };
+    return { ok: true, body: [...before, indentedChip, ...after].join('\n') };
   }
   // Insert immediately AFTER the cursor's line.
   const before = lines.slice(0, cursorLine + 1);
   const after = lines.slice(cursorLine + 1);
-  return { ok: true, body: [...before, chipInsertion, ...after].join('\n') };
+  return { ok: true, body: [...before, indentedChip, ...after].join('\n') };
 }

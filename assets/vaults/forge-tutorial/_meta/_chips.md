@@ -9,6 +9,14 @@ description: forge-tutorial chip palette — library floor (schema v3). Declares
 # Body
 
 ```yaml
+# schema_version inside the body (in addition to frontmatter) because
+# parseChipsV2Config reads it from the parsed YAML body, not from
+# frontmatter. Mirrors the forge-moda _chips.md shape. (v0.2.135 fix
+# per v0334 §3: pre-v0.2.135 the body was missing this line and the
+# parser fell through with "schema_version must be 2 or 3, got
+# undefined", silently dropping the tutorial's synthetic-chip palette.)
+schema_version: 3
+
 synthetic_chips:
   - label: "print"
     insertion: 'Do [[print]]("<message>").'
