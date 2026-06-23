@@ -1,7 +1,8 @@
 ---
 type: action
 description: threading
-inputs: [bars]
+inputs:
+  - bars
 snapshot_capture: false
 ---
 

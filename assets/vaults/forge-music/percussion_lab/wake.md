@@ -3,6 +3,7 @@ type: action
 description: wake
 inputs: []
 snapshot_capture: false
+edit_mode: python
 ---
 
 # English
