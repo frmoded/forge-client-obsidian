@@ -126,3 +126,13 @@ Per cc-prompt-queue.md §43, the feedback file IS the chat summary.
 ## §10 — Hand-off
 
 v0.2.142 shipped. Queue empty after this drain. The v0.2.135 + v0.2.137 + v0.2.142 chip-authoring polish arc is complete.
+
+## §11 — Tangential note: v0.2.140 multi-page Verovio score rendering — driver-confirmed working
+
+Out-of-band ad-hoc fix shipped between v0339 and v0340:
+
+**v0.2.140**: `verovio.ts:renderMusicXMLAndMIDI` was calling `toolkit.renderToSVG(1)` — page 1 only. Long scores (driver's `forge-music/murmuration` with ~30 bars) silently truncated at the first page break (~9 bars). Fix queries `toolkit.getPageCount()` and renders ALL pages, concatenated in a `.forge-verovio-pages` flex-column wrapper. `styles.css` adds `.forge-output-score { max-height: 70vh; overflow-y: auto; overflow-x: auto }` so multi-page scores fit the output panel with vertical scrolling.
+
+**Driver smoke confirmation (2026-06-25)**: Forge-clicked `forge-music/murmuration`, all bars visible, scrollable. MIDI playback + click-to-play + score-follower all kept working because the wrapper-div pattern preserves Verovio's SVG note `id` attributes for the time-map.
+
+Recording here for traceability since v0.2.140 was an ad-hoc fix without its own prompt-drain feedback file.
