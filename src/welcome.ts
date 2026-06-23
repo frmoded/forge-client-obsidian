@@ -272,7 +272,7 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     try {
       await sweepLegacyBakDirs(adapter);
     } catch (e) {
-      console.error('Forge: legacy .bak sweep failed', e);
+      console.error('runFirstRunCheck: legacy .bak sweep failed', e);
     }
   } catch (e) {
     console.error('Forge: runFirstRunCheck failed', e);
@@ -305,7 +305,7 @@ async function deleteExtractedDir(
   try {
     await adapter.rmdir(targetDir, true);
   } catch (e) {
-    console.error(`Forge: rmdir ${targetDir} failed`, e);
+    console.error(`deleteExtractedDir: rmdir ${targetDir} failed`, e);
   }
 }
 
@@ -336,11 +336,11 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
         await adapter.rmdir(folder, true);
         removed += 1;
       } catch (e) {
-        console.error(`Forge: failed to sweep ${folder}`, e);
+        console.error(`sweepLegacyBakDirs: failed to sweep ${folder}`, e);
       }
     }
   } catch (e) {
-    console.error('Forge: vault root list failed during .bak sweep', e);
+    console.error('sweepLegacyBakDirs: vault root list failed', e);
   }
   if (removed > 0) {
     console.log(`Forge: swept ${removed} legacy .bak directory/ies from vault root`);

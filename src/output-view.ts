@@ -208,7 +208,7 @@ export class ForgeOutputView extends ItemView {
       try {
         await this.app.workspace.getLeaf(false).openFile(file);
       } catch (e) {
-        console.error('Forge: could not open new data snippet', e);
+        console.error('openSaveAsDataModal: could not open new data snippet', e);
       }
       return true;
     };
@@ -381,7 +381,7 @@ export class ForgeOutputView extends ItemView {
           player.classList.add('forge-midi-player');
           host.appendChild(player);
         } catch (e) {
-          console.error('Forge: MIDI player init failed; score will render without playback.', e);
+          console.error('renderMusicXML: MIDI player init failed; score will render without playback.', e);
         }
 
         const scoreWrap = host.createDiv({ cls: 'forge-output-score' });

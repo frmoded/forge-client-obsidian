@@ -6,7 +6,7 @@
 // the plugin directory on first onload (or whenever a file is
 // missing). See src/restore-inlined-assets.ts.
 
-export const BUNDLED_ASSETS_VERSION = "0.2.134";
+export const BUNDLED_ASSETS_VERSION = "0.2.135";
 
 export const BUNDLED_ASSETS: Record<string, string> = {
   "engine/forge/__init__.py": "# Makes the inner directory a package\n",

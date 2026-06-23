@@ -384,7 +384,7 @@ export class ForgeSnippetModal extends Modal {
     try {
       await this.app.workspace.getLeaf(false).openFile(file);
     } catch (e) {
-      console.error('Forge: could not open newly created snippet', e);
+      console.error('ForgeSnippetModal.submit: could not open newly created snippet', e);
     }
   }
 
@@ -440,7 +440,7 @@ export class ForgeSnippetModal extends Modal {
     try {
       await this.app.workspace.getLeaf(false).openFile(mdFile);
     } catch (e) {
-      console.error('Forge: could not open newly created snippet', e);
+      console.error('ForgeSnippetModal.submitBinary: could not open newly created snippet', e);
     }
   }
 }

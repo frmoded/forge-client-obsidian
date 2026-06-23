@@ -54,7 +54,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
       queueMicrotask(() => {
         if (this.destroyed) return;
         try { this.maybeSyncInitialState(); }
-        catch (e) { console.error('Forge facet-mutex initial state failed', e); }
+        catch (e) { console.error('facet-mutex view-plugin: initial state failed', e); }
       });
     }
 
@@ -139,7 +139,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           this.applyInitialStateFor(active.mode);
           this.prevFold = this.readFoldState();
         } catch (e) {
-          console.error('Forge facet-mutex file-change reattach failed', e);
+          console.error('facet-mutex view-plugin: file-change reattach failed', e);
         }
         return;
       }
@@ -271,7 +271,7 @@ export function makeFacetMutexViewPlugin(getHost: () => FacetMutexHost | null) {
           try {
             this.view.dispatch({ effects });
           } catch (e) {
-            console.error('Forge facet-mutex deferred dispatch failed', e);
+            console.error('facet-mutex view-plugin: deferred dispatch failed', e);
           }
         }, 0);
       }
