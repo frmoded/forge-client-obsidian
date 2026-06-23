@@ -770,16 +770,27 @@
    it one extra class specificity. */
 .forge-snippet.forge-expanded .metadata-container,
 .forge-snippet.forge-expanded .metadata-properties,
-.forge-snippet.forge-expanded .metadata-properties-heading {
+.forge-snippet.forge-expanded .metadata-properties-heading,
+.forge-snippet.forge-fm-expanded .metadata-container,
+.forge-snippet.forge-fm-expanded .metadata-properties,
+.forge-snippet.forge-fm-expanded .metadata-properties-heading {
   display: revert !important;
 }
-.forge-snippet.forge-expanded .cm-line:has(.cm-hmd-frontmatter) {
+.forge-snippet.forge-expanded .cm-line:has(.cm-hmd-frontmatter),
+.forge-snippet.forge-fm-expanded .cm-line:has(.cm-hmd-frontmatter) {
   display: revert;
   height: revert;
   line-height: revert;
   margin: revert;
   padding: revert;
 }
+
+/* v0.2.139 — granular per-section classes. `forge-fm-expanded`
+   shows only frontmatter; `forge-deps-expanded` shows only
+   Dependencies; `forge-expanded` (legacy from v0.2.119) still works
+   as a "show both" shorthand. tagSnippetViews applies the two
+   granular classes based on the persisted per-snippet state
+   (v0.2.138 expanded-state-core). */
 
 /* v0.2.122 — Dependencies section hide.
 
@@ -803,7 +814,9 @@
 }
 
 .forge-snippet.forge-expanded .forge-deps-line,
-.forge-snippet.forge-expanded .forge-deps-section {
+.forge-snippet.forge-expanded .forge-deps-section,
+.forge-snippet.forge-deps-expanded .forge-deps-line,
+.forge-snippet.forge-deps-expanded .forge-deps-section {
   display: revert !important;
 }
 
