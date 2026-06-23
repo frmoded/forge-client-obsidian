@@ -161,12 +161,11 @@ const SEED: Record<string, string> = {
 // v0.2.77 — action templates extracted to a pure-core module so they
 // can be tested directly. modal.ts re-exports them for any external
 // importers that already point at this file.
-import {
-  actionTemplate as actionTemplateCore,
-  canonicalActionTemplate as canonicalActionTemplateCore,
-} from './modal-templates-core';
-export const actionTemplate = actionTemplateCore;
-export const canonicalActionTemplate = canonicalActionTemplateCore;
+//
+// v0.2.133 — re-exports retired per v0.2.129 §2.2 audit + v0.2.133 §2
+// re-audit. Zero internal consumers; tests import directly from
+// modal-templates-core. External consumers (if any) should switch to
+// the same import path.
 
 // When `content` is provided (e.g., from "Save as data snippet"), it replaces
 // the per-content_type seed payload and lands inside the same fenced block.

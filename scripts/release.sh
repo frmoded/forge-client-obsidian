@@ -153,6 +153,32 @@ for f in main.js manifest.json; do
     exit 1
   fi
 done
+
+# --- v0.2.133 — inlined-version drift preflight (per v0.2.131 §4 #1) ---
+# scripts/inline-plugin-version.mjs bakes manifest.json's version
+# into main.js at build time as PLUGIN_VERSION_AT_BUILD. The v0.2.131
+# onload self-check compares this against the on-disk manifest.json
+# and surfaces a Notice on mismatch — defending the cohort against
+# BRAT update-without-main.js failures.
+#
+# Belt-and-suspenders: catch a build-script ordering regression
+# BEFORE publishing a release where the two values would silently
+# drift. If inline-plugin-version.mjs didn't run (or ran with stale
+# data), this guard fires and the release stops.
+INLINED_VERSION="$(grep -o 'PLUGIN_VERSION_AT_BUILD[[:space:]]*=[[:space:]]*"[^"]*"' main.js | head -1 | sed 's/.*"\(.*\)"/\1/')"
+if [ -z "$INLINED_VERSION" ]; then
+  echo "ERROR: PLUGIN_VERSION_AT_BUILD not found in compiled main.js."
+  echo "Likely cause: scripts/inline-plugin-version.mjs didn't run before"
+  echo "esbuild, or the constant was renamed without updating this check."
+  exit 1
+fi
+if [ "$INLINED_VERSION" != "$NEW_VERSION" ]; then
+  echo "ERROR: main.js inlined version ($INLINED_VERSION) != manifest version ($NEW_VERSION)"
+  echo "Likely cause: inline-plugin-version.mjs ran against an older manifest,"
+  echo "or build step ordering was broken (must run AFTER manifest bump)."
+  exit 1
+fi
+echo "✓ Inlined version $INLINED_VERSION matches manifest"
 STYLES_PRESENT="no"
 [ -f styles.css ] && STYLES_PRESENT="yes"
 

@@ -2004,6 +2004,19 @@ export default class ForgePlugin extends Plugin {
       // timing local to the Forge-click handler instead of dependent
       // on hook completion. v0.2.18's hook remains as belt-and-
       // suspenders for the between-clicks case.
+      //
+      // v0.2.133 — dual-path note (per v0.2.129 §2.3 audit + v0.2.133
+      // §3 re-audit). `generate()` is called by TWO paths:
+      //   1. forgeSnippet → routingDeps.generate (english-mode regen).
+      //      forgeSnippet's v0.2.102 top-level pre-flight ALREADY
+      //      syncs disk → MEMFS before this point, so for this path
+      //      the sync below is redundant (idempotent — harmless).
+      //   2. The 'forge-generate' command-palette callback (line ~680).
+      //      No upstream sync; relies entirely on THIS pre-flight.
+      // Decision: keep the in-generate() sync as defense-in-depth so
+      // path 2 doesn't silently regress if forgeSnippet's pre-flight
+      // ever moves or path 2 expands. By design, not duplication to
+      // refactor away.
       let payload: AlphaGenerateRequest;
       try {
         const pyodideHost = getPyodideHost();
@@ -2662,7 +2675,10 @@ export default class ForgePlugin extends Plugin {
         ? detail.error
         : (typeof detail === 'string' ? detail : `HTTP ${res.status}`);
       const stdout = (detail && typeof detail === 'object' && detail.stdout) ? detail.stdout : '';
-      console.warn('Forge Compute non-2xx:', res.status, detail);
+      // v0.2.133 — log-level + method-name prefix fix (v0.2.130
+      // Bundle B missed this site; driver flagged in 2026-06-11-1900
+      // smoke Step 9 as a yellow icon next to a red engine stack).
+      console.error('runSnippet: Forge Compute non-2xx:', res.status, detail);
       // Always show the detailed error in the output view. When invoked from
       // the forge flow, also pop a notice so the user sees "during execution"
       // attribution without scanning the output panel.
