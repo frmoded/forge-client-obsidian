@@ -3,6 +3,7 @@ import {
   Chip,
   ChipPaletteGroup,
   CHIPS_NO_ENGLISH_SECTION,
+  applySelectionToChip,
   insertChipText,
   insertChipTextAtLine,
   shouldRenderSubgroupHeader,
@@ -383,13 +384,26 @@ export class ChipsView extends ItemView {
     // currently active) keeps the affordance working even after a
     // chip-pane focus dance.
     const resolvedAsAny = resolved as unknown as {
-      editor?: { getCursor?: (which?: string) => { line: number; ch: number } };
+      editor?: {
+        getCursor?: (which?: string) => { line: number; ch: number };
+        getSelection?: () => string;
+        replaceSelection?: (text: string) => void;
+      };
     } | null;
     const cursor = resolvedAsAny?.editor?.getCursor
       ? resolvedAsAny.editor.getCursor('head')
       : null;
     const cursorLine = cursor?.line ?? -1;
-    await this.insertViaVault(file, insertion, cursorLine);
+    // v0.2.137 — selection-aware chip insertion. When the editor has
+    // a non-empty selection, replace the FIRST <...> placeholder in
+    // the chip body with the selection text BEFORE handing off to
+    // insertChipTextAtLine. Chip bodies without a placeholder are
+    // passed through unchanged (no silent wrap surprise).
+    const selection = resolvedAsAny?.editor?.getSelection
+      ? resolvedAsAny.editor.getSelection()
+      : '';
+    const finalInsertion = applySelectionToChip(insertion, selection);
+    await this.insertViaVault(file, finalInsertion, cursorLine);
   }
 
   /** Write the insertion through vault.process so the change is

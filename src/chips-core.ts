@@ -730,6 +730,41 @@ export function insertChipText(
  *
  *  Cohort UX: authors mid-`# English` editing get chips inserted
  *  where they're working rather than always at end-of-section. */
+/** v0.2.137 — apply the editor's current selection to a chip body
+ *  so the chip uses the selection as input. Two behaviors:
+ *
+ *  - **Placeholder replacement**: if the chip body contains a
+ *    `<...>` angle-bracket placeholder, the FIRST placeholder is
+ *    replaced by the selection. This is the dominant pattern across
+ *    the forge-tutorial chips (`Do [[print]]("<message>").`,
+ *    `Set <name> to <value>.`, `If <condition>:`, etc.).
+ *
+ *  - **No-op passthrough**: if the chip body has no `<...>`
+ *    placeholder, return the chip body unchanged. Future work could
+ *    add a "wrap" semantic but v1 prefers no-op over silent surprise.
+ *
+ *  Empty selection always returns chip body unchanged (current
+ *  v0.2.135 behavior preserved). Empty chip body + non-empty
+ *  selection returns the chip body (caller-side defensive: an
+ *  empty chip body that "replaces" something via this path would
+ *  surprise the user — the placeholder-replace contract requires a
+ *  placeholder TO replace). */
+export function applySelectionToChip(
+  chipBody: string,
+  selection: string | null | undefined,
+): string {
+  if (!selection || selection.length === 0) return chipBody;
+  if (chipBody.length === 0) return chipBody;
+  // Match the FIRST angle-bracket placeholder. The pattern allows
+  // any non-`>` content inside (so multi-word placeholders like
+  // `<some thing>` work) but the body has to be non-empty + cannot
+  // contain `<` itself (so we don't accidentally match nested
+  // angle-brackets in code-like contexts).
+  const placeholderRe = /<([^<>]+)>/;
+  if (!placeholderRe.test(chipBody)) return chipBody;
+  return chipBody.replace(placeholderRe, selection);
+}
+
 /** v0.2.135 — pure helper: prefix lines 2..N of a multi-line chip
  *  body with the cursor-line's leading whitespace so each line of
  *  the inserted body shares the cursor's indent.

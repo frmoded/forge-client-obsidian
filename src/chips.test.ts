@@ -1236,3 +1236,91 @@ test('insertChipTextAtLine: multi-line chip on empty indented line gets matched 
   assert.equal(out[2], 'For each <x>:');
   assert.equal(out[3], '      <body>');
 });
+
+// =================================================================
+// v0.2.137 — applySelectionToChip
+// =================================================================
+// Selection-aware chip insertion per v0337. When the editor has a
+// non-empty selection at chip-palette-invocation time, the FIRST
+// <...> placeholder in the chip body is replaced by the selection
+// text. Chip bodies without a placeholder pass through unchanged.
+
+import { applySelectionToChip } from './chips-core.ts';
+
+test('applySelectionToChip: empty selection → chip unchanged', () => {
+  const result = applySelectionToChip('Set <name> to <value>.', '');
+  assert.equal(result, 'Set <name> to <value>.');
+});
+
+test('applySelectionToChip: null selection → chip unchanged', () => {
+  const result = applySelectionToChip('Do [[print]]("<message>").', null);
+  assert.equal(result, 'Do [[print]]("<message>").');
+});
+
+test('applySelectionToChip: undefined selection → chip unchanged', () => {
+  const result = applySelectionToChip('Give back <value>.', undefined);
+  assert.equal(result, 'Give back <value>.');
+});
+
+test('applySelectionToChip: placeholder + selection → first placeholder replaced', () => {
+  const result = applySelectionToChip('Set <name> to <value>.', 'state');
+  assert.equal(result, 'Set state to <value>.');
+});
+
+test('applySelectionToChip: print-chip + selection → message placeholder replaced', () => {
+  const result = applySelectionToChip('Do [[print]]("<message>").', 'hello');
+  assert.equal(result, 'Do [[print]]("hello").');
+});
+
+test('applySelectionToChip: multi-line chip (If) → condition placeholder replaced', () => {
+  const result = applySelectionToChip(
+    'If <condition>:\n    <body>',
+    'particle hits wall',
+  );
+  assert.equal(result, 'If particle hits wall:\n    <body>');
+});
+
+test('applySelectionToChip: no placeholder + selection → chip unchanged (no-op passthrough)', () => {
+  const result = applySelectionToChip('Hello, world!', 'state');
+  assert.equal(result, 'Hello, world!');
+});
+
+test('applySelectionToChip: empty chip body + selection → chip unchanged', () => {
+  const result = applySelectionToChip('', 'state');
+  assert.equal(result, '');
+});
+
+test('applySelectionToChip: selection with special chars (quotes/newlines) → handled cleanly', () => {
+  // Replacement is verbatim; if the user selected a string with a
+  // newline, it's spliced in as-is. The chip post-processing pipeline
+  // (insertChipTextAtLine + applyIndentToChipBody) handles indent.
+  const result = applySelectionToChip('Set <name> to <value>.', 'foo\nbar');
+  assert.equal(result, 'Set foo\nbar to <value>.');
+});
+
+test('applySelectionToChip: For each chip → item placeholder replaced (first of two)', () => {
+  // The For each chip has TWO placeholders on the heading line.
+  // Convention: first match wins. The second placeholder + body
+  // placeholders stay so the author can fill them in.
+  const result = applySelectionToChip(
+    'For each <item> in <collection>:\n    <body>',
+    'particle',
+  );
+  assert.equal(
+    result,
+    'For each particle in <collection>:\n    <body>',
+  );
+});
+
+test('applySelectionToChip: nested angle brackets in chip body do NOT confuse the regex', () => {
+  // The regex requires no `<` inside the placeholder. Code-like chips
+  // with `<<` or `>` in their body shouldn't accidentally match.
+  // Defensive: a chip body like `Do <<foo>>` shouldn't replace the
+  // outer angle-brackets.
+  const result = applySelectionToChip('Do <<foo>> things', 'state');
+  // First match is `<foo>` (since `<<` precedes a bracket without
+  // any `<` inside foo). Replaced with 'state'. Outer `<` and `>`
+  // remain. Acceptable behavior — `<<...>>` is not a chip convention
+  // we ship.
+  assert.equal(result, 'Do <state> things');
+});
