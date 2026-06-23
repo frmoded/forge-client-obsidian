@@ -14,6 +14,10 @@ import { decideStaleMainJsCheck } from './stale-main-js-check-core';
 import {
   readExpandedState,
   writeExpandedState,
+  toggleExpanded as togglePersistedBoth,
+  toggleFrontmatter as togglePersistedFrontmatter,
+  toggleDependencies as togglePersistedDependencies,
+  type ExpandedState,
   type ExpandedStateStorage,
 } from './expanded-state-core';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
@@ -642,6 +646,21 @@ export default class ForgePlugin extends Plugin {
       id: 'forge-toggle-frontmatter',
       name: 'Toggle frontmatter + dependencies visibility (active snippet)',
       callback: () => { this.toggleFrontmatterVisibility(); },
+    });
+
+    // v0.2.139 — granular per-section toggles per v0339 §2.2. Each
+    // is independent + persistent. State persisted via the same
+    // expanded-state-core (v0.2.138) the "both" toggle uses.
+    this.addCommand({
+      id: 'forge-toggle-frontmatter-only',
+      name: 'Toggle frontmatter only (active snippet)',
+      callback: () => { this.toggleFrontmatterOnly(); },
+    });
+
+    this.addCommand({
+      id: 'forge-toggle-dependencies-only',
+      name: 'Toggle dependencies only (active snippet)',
+      callback: () => { this.toggleDependenciesOnly(); },
     });
 
     this.addCommand({
@@ -2486,13 +2505,28 @@ export default class ForgePlugin extends Plugin {
     return null;
   }
 
-  /** v0.2.119 — Toggle the `forge-expanded` class on the active
-   *  markdown view's containerEl. CSS reveals the frontmatter when
-   *  the class is present, hides it when absent.
-   *
-   *  v0.2.138 — state now persists per snippet path via
-   *  expanded-state-core (localStorage backend). Switching files and
-   *  reopening Obsidian preserves whatever the user toggled. */
+  /** v0.2.139 — apply a fully-computed ExpandedState to the active
+   *  markdown view's containerEl. Sets the granular `forge-fm-
+   *  expanded` / `forge-deps-expanded` classes; clears the legacy
+   *  `forge-expanded` shorthand (CSS still honors it as "both
+   *  visible" for any third-party styling that might key off it,
+   *  but tagSnippetViews emits only granular classes). */
+  private applyExpandedStateToView(
+    containerEl: HTMLElement, state: ExpandedState,
+  ): void {
+    containerEl.classList.toggle('forge-fm-expanded', state.frontmatter);
+    containerEl.classList.toggle('forge-deps-expanded', state.dependencies);
+    // Legacy shorthand: keep mirroring both-true → forge-expanded so
+    // any external CSS targeting `.forge-expanded` keeps working.
+    containerEl.classList.toggle(
+      'forge-expanded', state.frontmatter && state.dependencies,
+    );
+  }
+
+  /** v0.2.119 → v0.2.138 → v0.2.139 — "Toggle both" command. Flips
+   *  BOTH sections together per the v0339 §2.2 OR-of-current-states
+   *  semantic: if EITHER section is currently hidden, show BOTH; if
+   *  both are visible, hide BOTH. State persists per snippet path. */
   private toggleFrontmatterVisibility() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
@@ -2501,17 +2535,48 @@ export default class ForgePlugin extends Plugin {
       return;
     }
     if (!containerEl.classList.contains('forge-snippet')) {
+      new Notice('Forge: this file is not a snippet — visibility is not managed here.');
+      return;
+    }
+    const file = view?.file;
+    if (!file) return;
+    const next = togglePersistedBoth(this.expandedStateStorage(), file.path);
+    this.applyExpandedStateToView(containerEl, next);
+    const summary =
+      next.frontmatter && next.dependencies ? 'shown' : 'hidden';
+    new Notice(`Forge: frontmatter + dependencies ${summary}.`);
+  }
+
+  /** v0.2.139 — Toggle ONLY frontmatter visibility. Dependencies
+   *  state preserved. */
+  private toggleFrontmatterOnly() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
+    if (!containerEl?.classList.contains('forge-snippet')) {
       new Notice('Forge: this file is not a snippet — frontmatter visibility is not managed here.');
       return;
     }
-    containerEl.classList.toggle('forge-expanded');
-    const expanded = containerEl.classList.contains('forge-expanded');
-    // Persist so the next file-open of this snippet honors the choice.
     const file = view?.file;
-    if (file) {
-      writeExpandedState(this.expandedStateStorage(), file.path, { expanded });
+    if (!file) return;
+    const next = togglePersistedFrontmatter(this.expandedStateStorage(), file.path);
+    this.applyExpandedStateToView(containerEl, next);
+    new Notice(`Forge: frontmatter ${next.frontmatter ? 'shown' : 'hidden'}.`);
+  }
+
+  /** v0.2.139 — Toggle ONLY dependencies visibility. Frontmatter
+   *  state preserved. */
+  private toggleDependenciesOnly() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
+    if (!containerEl?.classList.contains('forge-snippet')) {
+      new Notice('Forge: this file is not a snippet — dependencies visibility is not managed here.');
+      return;
     }
-    new Notice(`Forge: frontmatter ${expanded ? 'shown' : 'hidden'}.`);
+    const file = view?.file;
+    if (!file) return;
+    const next = togglePersistedDependencies(this.expandedStateStorage(), file.path);
+    this.applyExpandedStateToView(containerEl, next);
+    new Notice(`Forge: dependencies ${next.dependencies ? 'shown' : 'hidden'}.`);
   }
 
   /** v0.2.118 — DOM-level frontmatter hide. Adds `forge-snippet`
@@ -2541,17 +2606,20 @@ export default class ForgePlugin extends Plugin {
       const isSnippet = t === 'action' || t === 'data';
       if (isSnippet) {
         containerEl.classList.add('forge-snippet');
-        // v0.2.138 — apply persisted expanded state per snippet path.
-        // localStorage-backed; defaults to collapsed for snippets
-        // the user hasn't toggled. View-switches + Obsidian restarts
-        // honor the user's previous choice per file.
+        // v0.2.138 → v0.2.139 — apply persisted expanded state per
+        // snippet path. localStorage-backed; defaults to collapsed
+        // for snippets the user hasn't toggled. View-switches +
+        // Obsidian restarts honor the user's previous per-section
+        // choices.
         if (f) {
           const st = readExpandedState(this.expandedStateStorage(), f.path);
-          containerEl.classList.toggle('forge-expanded', st.expanded);
+          this.applyExpandedStateToView(containerEl, st);
         }
       } else {
         containerEl.classList.remove('forge-snippet');
         containerEl.classList.remove('forge-expanded');
+        containerEl.classList.remove('forge-fm-expanded');
+        containerEl.classList.remove('forge-deps-expanded');
       }
     }
   }
