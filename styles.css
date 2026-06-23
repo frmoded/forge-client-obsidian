@@ -72,9 +72,34 @@
   overflow-x: auto;
 }
 
-.forge-output-musicxml svg {
+/* v0.2.140 — score-area scroll container. Long scores (e.g.
+   forge-music/murmuration with multi-page output) overflow the
+   output panel's natural height. Cap the score area at a
+   reasonable viewport-fraction and let the user scroll the rest
+   into view. The Verovio multi-page wrapper (.forge-verovio-pages)
+   stacks pages vertically as block elements. */
+.forge-output-score {
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: auto;
+}
+
+/* v0.2.140 — Verovio multi-page wrapper. Each `<svg>` inside is a
+   standalone page from Verovio's auto-pagination. Stacked vertically
+   with a small gap so page boundaries are visible without being
+   intrusive. */
+.forge-verovio-pages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.forge-output-musicxml svg,
+.forge-output-score svg,
+.forge-verovio-pages svg {
   max-width: 100%;
   height: auto;
+  display: block;
 }
 
 .forge-midi-player {

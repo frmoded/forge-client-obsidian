@@ -51,7 +51,26 @@ export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: numb
   const toolkit = await getToolkit();
   applyOptions(toolkit, hostWidthPx);
   toolkit.loadData(musicxml);
-  const svg = toolkit.renderToSVG(1);
+  // v0.2.140 — multi-page rendering. Pre-v0.2.140 only rendered
+  // page 1; longer scores (e.g. forge-music/murmuration with ~30
+  // bars) appeared truncated at the first page break (~9 bars
+  // depending on width). Verovio's auto-pagination breaks the
+  // score into discrete pages; we render every page and concatenate
+  // the SVGs vertically. Each page's `<svg>` carries its own
+  // viewBox so they stack cleanly when laid out as block elements.
+  const pageCount: number =
+    typeof toolkit.getPageCount === 'function' ? toolkit.getPageCount() : 1;
+  const pages: string[] = [];
+  for (let p = 1; p <= pageCount; p++) {
+    pages.push(toolkit.renderToSVG(p));
+  }
+  // Wrap in a host div so the time-map querySelector still sees all
+  // notes regardless of which page they live on (querySelectorAll on
+  // an HTML/SVG fragment requires a parent — wrapping keeps
+  // buildTimeMap's existing DOMParser pattern working).
+  const svg = pages.length === 1
+    ? pages[0]
+    : `<div class="forge-verovio-pages">${pages.join('')}</div>`;
   const midiBase64 = toolkit.renderToMIDI();
   // Capture the time map BEFORE any other render mutates toolkit state.
   // Verovio assigns fresh IDs on every loadData, so we can never re-query
