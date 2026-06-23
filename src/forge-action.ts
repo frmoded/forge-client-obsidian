@@ -527,7 +527,7 @@ class EditVaultDomainsModal extends Modal {
           this.host.registerDomainCommands(action.domain);
         }
       } catch (e) {
-        console.error(`Forge: domain-activation action ${action.type}/${action.domain} failed`, e);
+        console.error(`applyDiff: domain-activation action ${action.type}/${action.domain} failed`, e);
         if (action.type === 'extract') extractFailures += 1;
       }
     }
@@ -674,7 +674,7 @@ class CreateNewForgeVaultModal extends Modal {
           try {
             commands.executeCommandById('app:open-vault');
           } catch (e) {
-            console.error('Forge: app:open-vault failed', e);
+            console.error('openForgeAction (open-vault button): app:open-vault failed', e);
           }
         }));
     }
@@ -709,7 +709,7 @@ async function copyLibraryRoots(
   try {
     listing = await adapter.list(libraryDirName);
   } catch (e) {
-    console.error(`Forge: could not list library dir ${libraryDirName}`, e);
+    console.error(`copyLibraryRoots: could not list library dir ${libraryDirName}`, e);
     return out;
   }
   for (const filePath of listing.files) {
