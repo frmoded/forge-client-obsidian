@@ -812,22 +812,29 @@ export function insertChipTextAtLine(
   cursorLine: number,
 ): InsertResult {
   const lines = noteBody.split('\n');
-  const englishStart = lines.findIndex(
-    l => /^#{1,6}\s+english\s*$/i.test(l.trim()));
-  if (englishStart === -1) {
-    return { ok: false, reason: CHIPS_NO_ENGLISH_SECTION };
-  }
-  let endIdx = lines.length;
-  for (let i = englishStart + 1; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (t.startsWith('#') || t === '---') { endIdx = i; break; }
-  }
-  // Inside-body check: cursor strictly inside (englishStart, endIdx).
-  // Heading line itself + endIdx (next section heading) both fall to
-  // the legacy append path so the chip lands in a sane spot.
-  const cursorInsideBody =
-    cursorLine > englishStart && cursorLine < endIdx;
-  if (!cursorInsideBody) {
+  // v0.2.142 — cursor-anywhere insertion (driver-flagged via v0341).
+  // Pre-v0.2.142 the helper required cursor to be strictly inside
+  // `# English` body; any cursor outside that range fell back to
+  // append-at-end-of-English, ignoring the user's actual cursor
+  // position. Driver smoke against v0.2.141 reproduced: cursor in
+  // a custom # Sandbox section landed the chip at end of # English,
+  // not at the cursor. Bug was in this pure-core's fallback
+  // decision, not in the chips-view cursor-capture (chips-view
+  // correctly resolves cursor from the active editor).
+  //
+  // v0.2.142 spec: when cursorLine >= 0 AND in-range for the doc,
+  // insert AT the cursor with v0.2.135 indent matching, regardless
+  // of section boundaries. The `# English` heading is no longer the
+  // canonical chip target; chips honor the user's cursor anywhere.
+  //
+  // Cursor-less case (cursorLine < 0) keeps the legacy end-of-
+  // English append for backward compat: chip-clicks without a
+  // resolved editor (workspace boot, plugin-just-enabled, etc.)
+  // still need a sane fallback. The CHIPS_NO_ENGLISH_SECTION error
+  // also still fires for the cursor-less + no-English case so the
+  // user gets a clear Notice.
+  if (cursorLine < 0 || cursorLine >= lines.length) {
+    // No cursor (or cursor out-of-range) → legacy end-of-English append.
     return insertChipText(noteBody, chipInsertion);
   }
   // v0.2.135 — match cursor-line indent for multi-line chip bodies.

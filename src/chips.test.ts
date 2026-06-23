@@ -999,7 +999,13 @@ pass
   assert.equal(lines[8], 'Body line B.');
 });
 
-test('insertChipTextAtLine: cursor on # English heading → falls back to end-of-section', () => {
+// v0.2.142 — cursor-anywhere spec change (driver-flagged via v0341).
+// Pre-v0.2.142 the helper required cursor inside `# English` body;
+// cursor in heading lines / frontmatter / # Python / custom sections
+// all fell back to end-of-English append. v0.2.142 honors cursor
+// position anywhere in the doc per user smoke: "If cursor is in
+// # Sandbox at column 5, chip inserts at column 5 of that line."
+test('insertChipTextAtLine: v0.2.142 — cursor on # English heading line inserts after the heading line', () => {
   const body = `# English
 
 Body.
@@ -1007,19 +1013,19 @@ Body.
 # Python
 pass
 `;
-  // Cursor on line 0 (# English heading) — falls back to legacy append.
+  // Cursor on line 0 (# English heading). v0.2.142: insert at cursor+1
+  // (line 1 is the empty line right after the heading).
   const r = insertChipTextAtLine(body, 'CHIP', 0);
   assert.ok(r.ok);
-  // Legacy behavior: append after last non-blank in English body.
-  // Body = ["", "Body.", "", "# Python", "pass", ""] indexed from #
-  // English line 0. Last non-blank in section is "Body." at line 2.
-  // CHIP lands at line 3.
-  const out = (r as { ok: true; body: string }).body;
-  assert.ok(out.includes('Body.\nCHIP\n'),
-    `expected CHIP appended after Body.; got:\n${out}`);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  // line 0 is # English heading; cursor non-empty (the heading text).
+  // Per v0.2.135 "insert after non-empty cursor line", CHIP lands at
+  // line 1.
+  assert.equal(out[0], '# English');
+  assert.equal(out[1], 'CHIP');
 });
 
-test('insertChipTextAtLine: cursor in Python facet → falls back to end-of-English', () => {
+test('insertChipTextAtLine: v0.2.142 — cursor in # Python facet inserts AT that cursor line (no English fallback)', () => {
   const body = `# English
 
 Body.
@@ -1029,18 +1035,19 @@ Body.
 pass
 `;
   // # Python at line 4, body at 6. Cursor on line 6 (Python body).
+  // v0.2.142: cursor honored anywhere; chip lands in # Python.
   const r = insertChipTextAtLine(body, 'CHIP', 6);
   assert.ok(r.ok);
   const out = (r as { ok: true; body: string }).body;
-  // CHIP should land in English body, not Python.
   const pythonIdx = out.indexOf('# Python');
   const chipIdx = out.indexOf('CHIP');
   assert.ok(chipIdx >= 0);
-  assert.ok(chipIdx < pythonIdx,
-    `CHIP must land before # Python; got CHIP@${chipIdx}, Python@${pythonIdx}`);
+  // v0.2.142 spec: CHIP lands at cursor (in # Python) — NOT before # Python.
+  assert.ok(chipIdx > pythonIdx,
+    `v0.2.142: CHIP at cursor in # Python; got CHIP@${chipIdx}, Python@${pythonIdx}`);
 });
 
-test('insertChipTextAtLine: cursor in frontmatter → falls back to end-of-English', () => {
+test('insertChipTextAtLine: v0.2.142 — cursor in frontmatter inserts at cursor (frontmatter preserved up to that line)', () => {
   const body = `---
 type: action
 ---
@@ -1049,15 +1056,42 @@ type: action
 
 Body.
 `;
-  // Frontmatter is lines 0-2; # English at 4; cursor on line 1.
+  // Frontmatter is lines 0-2; cursor on line 1 (`type: action`).
+  // v0.2.142: cursor honored even in frontmatter.
   const r = insertChipTextAtLine(body, 'CHIP', 1);
   assert.ok(r.ok);
-  const out = (r as { ok: true; body: string }).body;
-  // CHIP should land in the English section, not in frontmatter.
-  assert.ok(out.includes('Body.\nCHIP'),
-    `expected CHIP after Body. (English-body append); got:\n${out}`);
-  // Frontmatter must be unchanged.
-  assert.ok(out.startsWith('---\ntype: action\n---\n'));
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  // Cursor on `type: action` (non-empty line). CHIP inserts on line 2.
+  assert.equal(out[1], 'type: action');
+  assert.equal(out[2], 'CHIP');
+});
+
+test('insertChipTextAtLine: v0.2.142 — cursor in custom # Sandbox section inserts at cursor (the driver-smoke reproducer)', () => {
+  // The exact reproducer from v0341 §0:
+  // 1. File ends with `# Sandbox` + a 4-space-indented blank line.
+  // 2. Cursor placed on the indented line.
+  // 3. Chip inserts AT that cursor with leading-whitespace match.
+  const body = `# English
+
+Hello.
+
+# Python
+
+pass
+
+# Sandbox
+
+    `;
+  // Lines: [0] # English, [1] '', [2] Hello., [3] '', [4] # Python,
+  // [5] '', [6] pass, [7] '', [8] # Sandbox, [9] '', [10] '    '.
+  const r = insertChipTextAtLine(body, 'If <condition>:\n    <body>', 10);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  // The indented blank at line 10 is whitespace-only → empty-line polish:
+  // CHIP replaces it. Per v0.2.135, indent matching applies the 4-space
+  // leading whitespace to subsequent chip body lines.
+  assert.equal(out[10], 'If <condition>:');
+  assert.equal(out[11], '        <body>');  // 4 + 4 = 8 spaces.
 });
 
 test('insertChipTextAtLine: cursor at last body line inserts at end of body', () => {
@@ -1077,10 +1111,26 @@ B
   assert.equal(out[4], 'CHIP');
 });
 
-test('insertChipTextAtLine: no English heading returns NO_ENGLISH error', () => {
+test('insertChipTextAtLine: no English heading + cursorLine=-1 returns NO_ENGLISH error (cursor-less fallback)', () => {
+  // v0.2.142 — the NO_ENGLISH error path now requires the cursor-less
+  // case (cursorLine < 0). With a valid cursor, insertion succeeds at
+  // the cursor regardless of section. This test verifies the legacy
+  // failure mode for the "no editor resolved, no English" doubly-degraded
+  // case.
   const body = `# Python\npass\n`;
-  const r = insertChipTextAtLine(body, 'CHIP', 0);
+  const r = insertChipTextAtLine(body, 'CHIP', -1);
   assert.equal(r.ok, false);
+});
+
+test('insertChipTextAtLine: v0.2.142 — no English + valid cursor inserts at cursor (no NO_ENGLISH error)', () => {
+  // Cursor-anywhere: even without # English, if the cursor is set,
+  // honor it.
+  const body = `# Python\npass\n`;
+  const r = insertChipTextAtLine(body, 'CHIP', 1);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  assert.equal(out[1], 'pass');
+  assert.equal(out[2], 'CHIP');
 });
 
 // v0.2.120 — empty-line polish.
