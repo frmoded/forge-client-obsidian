@@ -789,6 +789,11 @@ export default class ForgePlugin extends Plugin {
           // candidates (basenames) — engine-side _forge_qualify_snippet_id
           // does the further bare→qualified routing per file.
           qualifyBareIdAll: (bareId: string): string[] => {
+            // v0.2.135 — basename audit (v0334 §1.2): safe-by-design.
+            // This loop's PURPOSE is to find cross-domain basename
+            // collisions so the multi-match menu can offer all
+            // candidates. The engine handles disambiguation downstream.
+            // The v0.2.104 unsafe-basename pattern doesn't apply here.
             const out: string[] = [];
             for (const f of this.app.vault.getMarkdownFiles()) {
               if (f.basename !== bareId) continue;
@@ -2156,6 +2161,14 @@ export default class ForgePlugin extends Plugin {
     for (const [id, code] of Object.entries(generated)) {
       // v0.2.104 — qualified snippet_id fix. Path lookup first;
       // fall back to basename for root-level snippets.
+      // v0.2.135 — basename audit (v0334 §1.2): the find-by-basename
+      // fallback is reachable ONLY when `id` is a bare snippet name
+      // (path lookup for `${id}.md` failed). Bare-id callers in the
+      // current code paths are legacy root-level snippets (welcome.md,
+      // greet.md) that don't collide cross-domain. If a future caller
+      // passes a bare id that DOES collide, the first-match-wins
+      // behavior may surface — at that point migrate the caller to
+      // pass a qualified id (the v0.2.104 pattern).
       const pathLookup = this.app.vault.getAbstractFileByPath(`${id}.md`);
       const file = (pathLookup instanceof TFile)
         ? pathLookup

@@ -1136,3 +1136,103 @@ test('insertChipTextAtLine: cursor on whitespace-only (spaces/tabs) line also tr
   // Line count unchanged.
   assert.equal(out.length, body.split('\n').length);
 });
+
+// =================================================================
+// v0.2.135 — applyIndentToChipBody + extractLeadingWhitespace
+// =================================================================
+// Per v0334 §2 driver-flagged bug: multi-line chip insertions into
+// indented contexts (e.g., inside a list item or fenced block)
+// produced lines 2..N at column 0 instead of matching the cursor-
+// line's leading whitespace. Pure-core helpers added in v0.2.135
+// (chips-core.ts) close the gap; integration tests for the wiring
+// live in the existing insertChipTextAtLine test block above.
+
+import {
+  applyIndentToChipBody,
+  extractLeadingWhitespace,
+} from './chips-core.ts';
+
+test('applyIndentToChipBody: single-line chip returns unchanged', () => {
+  const result = applyIndentToChipBody('Do [[print]]("hello").', '    ');
+  assert.equal(result, 'Do [[print]]("hello").');
+});
+
+test('applyIndentToChipBody: cursor at column 0 returns chip unchanged', () => {
+  const result = applyIndentToChipBody('def f():\n  return 1', '');
+  assert.equal(result, 'def f():\n  return 1');
+});
+
+test('applyIndentToChipBody: multi-line chip with 4-space indent indents lines 2..N', () => {
+  const result = applyIndentToChipBody('If <c>:\n    <body>', '    ');
+  assert.equal(result, 'If <c>:\n        <body>');
+});
+
+test('applyIndentToChipBody: tab indent matches tabs', () => {
+  const result = applyIndentToChipBody('For each <x>:\n  <body>', '\t');
+  assert.equal(result, 'For each <x>:\n\t  <body>');
+});
+
+test('applyIndentToChipBody: preserves true-blank lines at column 0', () => {
+  // Blank lines in chip body shouldn't get whitespace prepended —
+  // that would create whitespace-only lines that look messy + may
+  // trigger linters.
+  const result = applyIndentToChipBody('line1\n\nline3', '  ');
+  assert.equal(result, 'line1\n\n  line3');
+});
+
+test('applyIndentToChipBody: 3-line chip indents both subsequent lines', () => {
+  const result = applyIndentToChipBody('a\nb\nc', '  ');
+  assert.equal(result, 'a\n  b\n  c');
+});
+
+test('extractLeadingWhitespace: empty string returns ""', () => {
+  assert.equal(extractLeadingWhitespace(''), '');
+});
+
+test('extractLeadingWhitespace: null returns ""', () => {
+  assert.equal(extractLeadingWhitespace(null), '');
+});
+
+test('extractLeadingWhitespace: 4 spaces returns "    "', () => {
+  assert.equal(extractLeadingWhitespace('    foo'), '    ');
+});
+
+test('extractLeadingWhitespace: tab + space mix returns the mix verbatim', () => {
+  assert.equal(extractLeadingWhitespace('\t  \tx'), '\t  \t');
+});
+
+test('extractLeadingWhitespace: no leading whitespace returns ""', () => {
+  assert.equal(extractLeadingWhitespace('foo bar'), '');
+});
+
+test('insertChipTextAtLine: multi-line chip into indented cursor line gets matched indent', () => {
+  // Cursor is on an indented non-empty line; multi-line chip should
+  // get lines 2..N prefixed with the same indent. Verifies the
+  // wiring + the v0.2.135 helper integration.
+  const body = '# English\n\n    First line indented\n\n# Python\n';
+  // Lines: [0] # English, [1] '', [2] '    First line indented', [3] '', [4] # Python.
+  const r = insertChipTextAtLine(body, 'If <c>:\n    <body>', 2);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  // Chip inserted at line 3 (after cursor line 2). First line of
+  // chip lands at out[3]; the cursor-line indent is "    " so the
+  // chip body's second line should be "    " + "    <body>" =
+  // "        <body>".
+  assert.equal(out[3], 'If <c>:');
+  assert.equal(out[4], '        <body>');
+});
+
+test('insertChipTextAtLine: multi-line chip on empty indented line gets matched indent (replace polish)', () => {
+  // Cursor on empty line that has trailing whitespace from manual
+  // indent — the v0.2.120 polish replaces the line with the chip,
+  // and the v0.2.135 wiring should still apply the indent.
+  const body = '# English\n\n    \n\n# Python\n';
+  // Lines: [0] # English, [1] '', [2] '    ' (whitespace-only), [3] '', [4] # Python.
+  const r = insertChipTextAtLine(body, 'For each <x>:\n  <body>', 2);
+  assert.ok(r.ok);
+  const out = (r as { ok: true; body: string }).body.split('\n');
+  // Empty-line replaced AT cursor line 2 (not after). Chip's first
+  // line lands there; second line gets the leading whitespace prefix.
+  assert.equal(out[2], 'For each <x>:');
+  assert.equal(out[3], '      <body>');
+});
