@@ -431,15 +431,46 @@ export class ForgeOutputView extends ItemView {
     updateLabel(mode);
 
     const scoreHost = entry.createDiv({ cls: 'forge-output-musicxml-host' });
-    const renderInto = (m: ScoreViewMode) => {
+
+    // v0.2.155 — share multi-staff MIDI bytes across both display modes.
+    // Pre-v0.2.155 each mode re-rendered MIDI via Verovio's singleton
+    // toolkit: kit view called renderMusicXMLAndMIDI(kitXml) for display
+    // then renderMusicXMLAndMIDI(multiStaffXml) for MIDI. Driver smoke
+    // against v0.2.154 surfaced "kit bar 5 and throughout not all notes
+    // audible vs. multi-staff plays all". The split-render path SHOULD
+    // produce bit-identical MIDI bytes (both end up calling
+    // toolkit.loadData(multiStaffXml) → toolkit.renderToMIDI()) but
+    // Verovio's loadData may carry residual state from the prior
+    // kit-XML load that subtly alters MIDI output. Eliminating the
+    // ambiguity: render multi-staff MIDI ONCE here, share the bytes
+    // across both renderInto calls. Audio is now bit-identical between
+    // modes by construction.
+    let sharedMultiStaffMidi: { midiBase64: string; totalMs: number } | null = null;
+    const ensureSharedMidi = async (): Promise<{ midiBase64: string; totalMs: number } | null> => {
+      if (sharedMultiStaffMidi) return sharedMultiStaffMidi;
+      try {
+        const r = await renderMusicXMLAndMIDI(multiStaffXml, scoreHost.clientWidth);
+        const totalMs = r.timeMap.length ? r.timeMap[r.timeMap.length - 1].ms : 0;
+        sharedMultiStaffMidi = { midiBase64: r.midiBase64, totalMs };
+      } catch (e) {
+        console.error('Forge: shared multi-staff MIDI pre-render failed', e);
+      }
+      return sharedMultiStaffMidi;
+    };
+
+    const renderInto = async (m: ScoreViewMode) => {
       scoreHost.empty();
-      // v0.2.151 — kit view: display from kit_xml; MIDI + click-to-play
-      // from multi_staff_xml (canonical). Multi-staff view: both from
-      // multi_staff_xml (single-render fast path inside renderMusicXML).
+      const shared = await ensureSharedMidi();
+      // v0.2.155 — both modes use shared multi-staff MIDI bytes. Kit
+      // mode displays kit_xml but plays multi-staff audio (canonical
+      // routing). Multi-staff mode displays multi-staff XML and plays
+      // the SAME bytes (cache hit). If the pre-render failed, fall
+      // back to per-mode render (legacy v0.2.151+ behaviour) so the
+      // user still gets audio.
       if (m === 'kit') {
-        this.renderMusicXML(scoreHost, kitXml, snippetId, multiStaffXml);
+        this.renderMusicXML(scoreHost, kitXml, snippetId, multiStaffXml, shared ?? undefined);
       } else {
-        this.renderMusicXML(scoreHost, multiStaffXml, snippetId);
+        this.renderMusicXML(scoreHost, multiStaffXml, snippetId, undefined, shared ?? undefined);
       }
     };
     renderInto(mode);
@@ -456,6 +487,7 @@ export class ForgeOutputView extends ItemView {
     musicxml: string,
     snippetId: string,
     midiSourceXml?: string,
+    sharedMidi?: { midiBase64: string; totalMs: number },
   ) {
     const host = entry.createDiv({ cls: 'forge-output-musicxml' });
     host.setText('Rendering score…');
@@ -474,25 +506,36 @@ export class ForgeOutputView extends ItemView {
         // scale is approximate for pieces with mid-piece tempo changes;
         // good enough for steady-tempo percussion charts which is the
         // current cohort use case.
+        // v0.2.155 — when `sharedMidi` is provided (by toggle wrapper),
+        // skip the second Verovio MIDI render and use the precomputed
+        // multi-staff bytes. Guarantees mode-toggle audio identity by
+        // construction.
         const sameXml = midiSourceXml === undefined || midiSourceXml === musicxml;
         const midiXml = midiSourceXml ?? musicxml;
         const displayRender = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
         const svg = displayRender.svg;
-        const midiRender = sameXml
-          ? displayRender
-          : await renderMusicXMLAndMIDI(midiXml, host.clientWidth);
-        const midiBase64 = midiRender.midiBase64;
+        let midiBase64: string;
+        let midiTotalMs: number;
+        if (sharedMidi) {
+          midiBase64 = sharedMidi.midiBase64;
+          midiTotalMs = sharedMidi.totalMs;
+        } else {
+          const midiRender = sameXml
+            ? displayRender
+            : await renderMusicXMLAndMIDI(midiXml, host.clientWidth);
+          midiBase64 = midiRender.midiBase64;
+          midiTotalMs = midiRender.timeMap.length
+            ? midiRender.timeMap[midiRender.timeMap.length - 1].ms
+            : 0;
+        }
         // For single-XML renders timeMap comes from displayRender directly.
         // For split renders use the display timeMap (matches the rendered
         // SVG's note IDs) but scale times to the MIDI XML's duration so
         // score-follower highlights track the audible playback.
-        let timeMap = midiRender.timeMap;
+        let timeMap = displayRender.timeMap;
         if (!sameXml) {
           const displayTotalMs = displayRender.timeMap.length
             ? displayRender.timeMap[displayRender.timeMap.length - 1].ms
-            : 0;
-          const midiTotalMs = midiRender.timeMap.length
-            ? midiRender.timeMap[midiRender.timeMap.length - 1].ms
             : 0;
           const scale = (displayTotalMs > 0 && midiTotalMs > 0)
             ? midiTotalMs / displayTotalMs
