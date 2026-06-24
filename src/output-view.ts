@@ -1,5 +1,11 @@
 import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from 'obsidian';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio';
+import {
+  readScoreViewMode,
+  toggleScoreViewMode,
+  type ScoreViewMode,
+  type ScoreViewModeStorage,
+} from './view-mode-core';
 import { ForgeSaveDataModal, dataTemplate } from './modal';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
@@ -336,9 +342,28 @@ export class ForgeOutputView extends ItemView {
     // Tagged payloads from the backend (musicxml, future: svg, ifc, ...)
     if (isTagged(result)) {
       switch (result.type) {
-        case 'musicxml':
-          this.renderMusicXML(entry, (result as any).content as string, snippetId);
+        case 'musicxml': {
+          // v0.2.150 — dual-XML opt-in. When the engine emits both
+          // multi-staff + kit MusicXML (percussion piece), render with
+          // the toggle toolbar. Otherwise fall back to the single-XML
+          // path (legacy snippets + non-percussion music).
+          const r = result as Record<string, unknown>;
+          if (
+            r.has_percussion === true
+            && typeof r.kit_content === 'string'
+            && typeof r.multi_staff_content === 'string'
+          ) {
+            this.renderMusicXMLWithToggle(
+              entry,
+              r.multi_staff_content,
+              r.kit_content,
+              snippetId,
+            );
+          } else {
+            this.renderMusicXML(entry, (result as any).content as string, snippetId);
+          }
           return;
+        }
         // case 'svg':  case 'ifc':  // when those land
       }
     }
@@ -353,6 +378,70 @@ export class ForgeOutputView extends ItemView {
     entry.createEl('pre', {
       text: `→ ${JSON.stringify(result)}`,
       cls: 'forge-output-result',
+    });
+  }
+
+  /** v0.2.150 — wrap localStorage access for view-mode-core. Mirrors
+   *  the v0.2.138 expandedStateStorage pattern in main.ts: try/catch
+   *  the global, return null on SecurityError or sandbox absence so
+   *  the pure-core's defensive default kicks in. */
+  private scoreViewModeStorage(): ScoreViewModeStorage | null {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ls = (globalThis as any).localStorage;
+      if (ls && typeof ls.getItem === 'function'
+          && typeof ls.setItem === 'function') {
+        return ls as ScoreViewModeStorage;
+      }
+    } catch {
+      // SecurityError under some sandboxing configurations.
+    }
+    return null;
+  }
+
+  /** v0.2.150 — render a percussion score with a multi-staff ↔ kit
+   *  toggle. Initial view comes from the persisted v0.2.143
+   *  view-mode-core state (default 'multi_staff'); toggling re-renders
+   *  the score area using the other XML and persists the choice. The
+   *  MIDI export + click-to-play continue to work per view since
+   *  v0.2.146/149 preserved note.id + storedInstrument through the
+   *  kit fold. */
+  private renderMusicXMLWithToggle(
+    entry: HTMLElement,
+    multiStaffXml: string,
+    kitXml: string,
+    snippetId: string,
+  ) {
+    const storage = this.scoreViewModeStorage();
+    let mode: ScoreViewMode = readScoreViewMode(storage, snippetId, 'multi_staff');
+
+    // Toolbar above the score-host so toggling doesn't tear down the
+    // chrome along with the score.
+    const toolbar = entry.createDiv({ cls: 'forge-output-toolbar' });
+    const button = toolbar.createEl('button', {
+      cls: 'forge-kit-toggle',
+      attr: { 'aria-label': 'Toggle drum notation view' },
+    });
+    const updateLabel = (m: ScoreViewMode) => {
+      button.setText(m === 'kit' ? '🎼 Multi-staff' : '🥁 Kit');
+      button.title = m === 'kit'
+        ? 'Switch to multi-staff orchestral percussion view'
+        : 'Switch to drum-kit single-staff view';
+    };
+    updateLabel(mode);
+
+    const scoreHost = entry.createDiv({ cls: 'forge-output-musicxml-host' });
+    const renderInto = (m: ScoreViewMode) => {
+      scoreHost.empty();
+      const xml = m === 'kit' ? kitXml : multiStaffXml;
+      this.renderMusicXML(scoreHost, xml, snippetId);
+    };
+    renderInto(mode);
+
+    button.addEventListener('click', () => {
+      mode = toggleScoreViewMode(storage, snippetId);
+      updateLabel(mode);
+      renderInto(mode);
     });
   }
 
