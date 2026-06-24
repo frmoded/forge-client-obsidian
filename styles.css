@@ -196,11 +196,24 @@
 
 .forge-output-downloads {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 6px;
 }
 
 .forge-output-download {
+  /* v0.2.163 — render <a> + <button> identically. Without inline-flex
+     + the neutralizing properties below, the <button>'s native UA
+     metrics (line-height, padding, background, font-family) differ
+     from the anchor links, so the Garage Band control rendered
+     taller / out of vertical alignment with MusicXML + MIDI. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  font-family: inherit;
+  line-height: 1.4;
+  cursor: pointer;
   font-size: 0.78em;
   padding: 2px 8px;
   border: 1px solid var(--background-modifier-border);
