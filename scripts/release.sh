@@ -179,6 +179,19 @@ if [ "$INLINED_VERSION" != "$NEW_VERSION" ]; then
   exit 1
 fi
 echo "✓ Inlined version $INLINED_VERSION matches manifest"
+
+# --- v0.2.144 — bundled-vault bump preflight (per v0.2.141 §5.1) ---
+# Enforces cc-prompt-queue.md HARD RULE (line 356): any bundled-vault
+# content change MUST be accompanied by a forge.toml version bump in
+# the same vault. Catches the v0.2.135 §C class of violation BEFORE
+# it ships (that drain modified bundled forge-tutorial _meta/_chips.md
+# without bumping its forge.toml; cohort users never received the
+# fix until v0.2.141 corrected the omission).
+if ! node scripts/check-bundled-vault-bump.mjs; then
+  echo "ERROR: bundled-vault bump check failed. See output above."
+  exit 1
+fi
+
 STYLES_PRESENT="no"
 [ -f styles.css ] && STYLES_PRESENT="yes"
 
