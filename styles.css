@@ -99,6 +99,35 @@
   display: block;
 }
 
+/* v0.2.152 — zoom controls above the rendered score. */
+.forge-zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 6px 0 4px 0;
+  font-size: 0.85em;
+}
+
+.forge-zoom-bar .forge-zoom-button {
+  padding: 2px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-family: inherit;
+  min-width: 28px;
+}
+
+.forge-zoom-bar .forge-zoom-button:hover {
+  background: var(--background-modifier-hover);
+}
+
+.forge-zoom-bar .forge-zoom-reset {
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* v0.2.140 — score-area scroll container. Long scores (e.g.
    forge-music/murmuration with multi-page output) overflow the
    output panel's natural height. Cap the score area at a

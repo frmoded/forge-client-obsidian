@@ -462,22 +462,18 @@ export class ForgeOutputView extends ItemView {
     // Defer one frame so clientWidth reflects the actual layout width.
     requestAnimationFrame(async () => {
       try {
-        // v0.2.151 — when `midiSourceXml` is provided, split rendering:
-        // SVG comes from `musicxml` (the visible view); MIDI + timeMap
-        // + click-to-play come from `midiSourceXml` (the canonical
-        // multi-staff XML with reliable percussion routing). v0.2.150
-        // shipped kit MIDI sourced from kit_xml; music21's MusicXML
-        // serialization of Unpitched notes doesn't reliably encode per-
-        // note percussion routing, so Verovio's renderToMIDI on the
-        // kit XML produced silent drums (pitch 0) and a wrong-length
-        // file (driver smoke against v0.2.150).
-        //
-        // Per v0342 §1.4 driver decision, MIDI is ALWAYS canonical
-        // multi-instrument. The kit view is visual-only; click-to-play
-        // still works because v0.2.146 to_kit_notation preserves
-        // note.id from the source canonical Score — same IDs exist in
-        // both XMLs, so the click handler can map from the kit-SVG
-        // note id back to the multi-staff time map.
+        // v0.2.151 — split rendering when `midiSourceXml` is provided.
+        // v0.2.152 — kit-mode highlight fix: the multi-staff timeMap
+        // carries Verovio-internal SVG IDs from the multi-staff render
+        // which DON'T match the kit SVG's IDs (Verovio assigns fresh
+        // internal IDs per render even when the input MusicXML carries
+        // the same xml:id). So for kit mode we build the timeMap from
+        // the DISPLAY render (kit XML → kit timeMap with kit SVG IDs)
+        // and SCALE the times by (multi_total / kit_total) to roughly
+        // align with the multi-staff MIDI player's wall-clock. Linear
+        // scale is approximate for pieces with mid-piece tempo changes;
+        // good enough for steady-tempo percussion charts which is the
+        // current cohort use case.
         const sameXml = midiSourceXml === undefined || midiSourceXml === musicxml;
         const midiXml = midiSourceXml ?? musicxml;
         const displayRender = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
@@ -486,7 +482,26 @@ export class ForgeOutputView extends ItemView {
           ? displayRender
           : await renderMusicXMLAndMIDI(midiXml, host.clientWidth);
         const midiBase64 = midiRender.midiBase64;
-        const timeMap = midiRender.timeMap;
+        // For single-XML renders timeMap comes from displayRender directly.
+        // For split renders use the display timeMap (matches the rendered
+        // SVG's note IDs) but scale times to the MIDI XML's duration so
+        // score-follower highlights track the audible playback.
+        let timeMap = midiRender.timeMap;
+        if (!sameXml) {
+          const displayTotalMs = displayRender.timeMap.length
+            ? displayRender.timeMap[displayRender.timeMap.length - 1].ms
+            : 0;
+          const midiTotalMs = midiRender.timeMap.length
+            ? midiRender.timeMap[midiRender.timeMap.length - 1].ms
+            : 0;
+          const scale = (displayTotalMs > 0 && midiTotalMs > 0)
+            ? midiTotalMs / displayTotalMs
+            : 1;
+          timeMap = displayRender.timeMap.map(b => ({
+            ms: b.ms * scale,
+            ids: b.ids,
+          }));
+        }
         host.empty();
 
         // Download links — always available, even if playback init fails.
@@ -509,8 +524,51 @@ export class ForgeOutputView extends ItemView {
           console.error('renderMusicXML: MIDI player init failed; score will render without playback.', e);
         }
 
+        // v0.2.152 — zoom controls. Sit above the score so the user
+        // can scale the SVG without recomputing. CSS transform on the
+        // .forge-output-score wrap; transform-origin top-left so
+        // scrolling works naturally with overflow: auto.
+        const zoomBar = host.createDiv({ cls: 'forge-zoom-bar' });
+        const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+        let zoomIdx = ZOOM_LEVELS.indexOf(1.0);
+        const zoomOutBtn = zoomBar.createEl('button', {
+          text: '−',
+          cls: 'forge-zoom-button',
+          attr: { 'aria-label': 'Zoom out' },
+        });
+        const zoomLabel = zoomBar.createEl('button', {
+          text: '100%',
+          cls: 'forge-zoom-button forge-zoom-reset',
+          attr: { 'aria-label': 'Reset zoom to 100%' },
+        });
+        const zoomInBtn = zoomBar.createEl('button', {
+          text: '+',
+          cls: 'forge-zoom-button',
+          attr: { 'aria-label': 'Zoom in' },
+        });
         const scoreWrap = host.createDiv({ cls: 'forge-output-score' });
         scoreWrap.innerHTML = svg;
+        const applyZoom = () => {
+          const z = ZOOM_LEVELS[zoomIdx];
+          scoreWrap.style.transform = `scale(${z})`;
+          scoreWrap.style.transformOrigin = 'top left';
+          // Expand intrinsic width so the scaled box fills the scroll
+          // container — otherwise scaled-up content overflows visually
+          // but the scrollbar doesn't appear.
+          scoreWrap.style.width = `${100 / z}%`;
+          zoomLabel.setText(`${Math.round(z * 100)}%`);
+        };
+        applyZoom();
+        zoomOutBtn.addEventListener('click', () => {
+          if (zoomIdx > 0) { zoomIdx -= 1; applyZoom(); }
+        });
+        zoomInBtn.addEventListener('click', () => {
+          if (zoomIdx < ZOOM_LEVELS.length - 1) { zoomIdx += 1; applyZoom(); }
+        });
+        zoomLabel.addEventListener('click', () => {
+          zoomIdx = ZOOM_LEVELS.indexOf(1.0);
+          applyZoom();
+        });
 
         if (player) {
           scoreWrap.addEventListener('click', async (ev) => {
@@ -518,12 +576,21 @@ export class ForgeOutputView extends ItemView {
             const noteEl = target?.closest('.note') as Element | null;
             if (!noteEl?.id) return;
             try {
-              // Click-to-play uses the MIDI-source XML so the time map
-              // lines up with the player. note.id was preserved across
-              // to_kit_notation, so the kit SVG's note IDs match the
-              // multi-staff XML's IDs.
-              const ms = await getTimeForElement(midiXml, noteEl.id);
-              player.currentTime = ms / 1000;
+              // v0.2.152 — click-to-play in split-render mode: the
+              // click target lives in the DISPLAY SVG (kit) but the
+              // player is on the MIDI XML (multi-staff) timeline.
+              // Query the display XML for the clicked note's time,
+              // then scale to MIDI-XML wall clock.
+              const queryXml = sameXml ? midiXml : musicxml;
+              const ms = await getTimeForElement(queryXml, noteEl.id);
+              const scaledMs = sameXml
+                ? ms
+                : ms * (
+                    midiRender.timeMap.length && displayRender.timeMap.length
+                      ? (midiRender.timeMap[midiRender.timeMap.length - 1].ms
+                         / Math.max(1, displayRender.timeMap[displayRender.timeMap.length - 1].ms))
+                      : 1);
+              player.currentTime = scaledMs / 1000;
               player.start();
             } catch (e) {
               console.error('Forge: click-to-play failed', e);
