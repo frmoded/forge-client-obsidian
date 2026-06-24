@@ -780,6 +780,51 @@ function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string
   midiLink.href = URL.createObjectURL(midiBlob);
   midiLink.download = `${snippetId}.mid`;
 
+  // v0.2.161 — "Open in GarageBand" button (macOS desktop only).
+  // Obsidian on macOS Electron has full Node.js access; we write
+  // the MIDI bytes to a temp file and `open -a GarageBand` it.
+  // Hidden on iOS/Android (no node), Windows/Linux (no GarageBand).
+  // If GarageBand isn't installed, the macOS `open` command surfaces
+  // the system error in a notice.
+  try {
+    const isMacDesktop = (typeof process !== 'undefined')
+      && process.platform === 'darwin';
+    if (isMacDesktop) {
+      const gbBtn = bar.createEl('button', {
+        text: '🎹 Open in GarageBand',
+        cls: 'forge-output-download',
+      });
+      gbBtn.addEventListener('click', async () => {
+        try {
+          const fs = require('fs');
+          const os = require('os');
+          const path = require('path');
+          const { exec } = require('child_process');
+          // Sanitize snippetId for filesystem — keep only alnum + dash + underscore.
+          const safeId = snippetId.replace(/[^a-zA-Z0-9_-]/g, '_');
+          const tmpDir = os.tmpdir();
+          const filePath = path.join(tmpDir, `forge-${safeId}.mid`);
+          fs.writeFileSync(filePath, Buffer.from(midiBase64, 'base64'));
+          exec(`open -a "GarageBand" "${filePath}"`, (err: any) => {
+            if (err) {
+              // Fall back to default app (Logic, MainStage, QuickTime, etc.)
+              // so the user gets *some* app to open in even without GB.
+              exec(`open "${filePath}"`, (err2: any) => {
+                if (err2) {
+                  console.error('Forge: failed to open MIDI in any app', err2);
+                }
+              });
+            }
+          });
+        } catch (e) {
+          console.error('Forge: GarageBand open failed', e);
+        }
+      });
+    }
+  } catch (_e) {
+    // process global unavailable (e.g., Obsidian mobile) — no button.
+  }
+
   return bar;
 }
 
