@@ -548,14 +548,33 @@ export class ForgeOutputView extends ItemView {
         });
         const scoreWrap = host.createDiv({ cls: 'forge-output-score' });
         scoreWrap.innerHTML = svg;
+        // v0.2.153 — zoom scales the SVG elements' width/height
+        // attributes directly. Pre-v0.2.153 used CSS transform: scale
+        // on .forge-output-score, but I also set width: 100/z% which
+        // INVERTED the scale (z=1.5 → width=66.67% → effective
+        // 66.67% * 1.5 = 100% original size, no visual change). Driver
+        // smoke against v0.2.152 surfaced that the buttons present but
+        // notes didn't grow. Modifying SVG width directly preserves
+        // viewBox-based proportional scaling + lets the .forge-output-
+        // score's overflow: auto show scrollbars naturally.
+        const svgEls = Array.from(scoreWrap.querySelectorAll('svg'));
+        const naturalWidths = svgEls.map(svg => {
+          const w = svg.getAttribute('width');
+          // Verovio sets width="2100" (raw pixels). Strip trailing
+          // 'px' if present. Fallback to bounding rect.
+          if (w) {
+            const n = parseFloat(w);
+            if (!isNaN(n) && n > 0) return n;
+          }
+          return svg.getBoundingClientRect().width;
+        });
         const applyZoom = () => {
           const z = ZOOM_LEVELS[zoomIdx];
-          scoreWrap.style.transform = `scale(${z})`;
-          scoreWrap.style.transformOrigin = 'top left';
-          // Expand intrinsic width so the scaled box fills the scroll
-          // container — otherwise scaled-up content overflows visually
-          // but the scrollbar doesn't appear.
-          scoreWrap.style.width = `${100 / z}%`;
+          svgEls.forEach((svgEl, i) => {
+            const w = naturalWidths[i] * z;
+            svgEl.style.width = `${w}px`;
+            svgEl.style.height = 'auto';
+          });
           zoomLabel.setText(`${Math.round(z * 100)}%`);
         };
         applyZoom();
