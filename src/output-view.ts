@@ -558,6 +558,32 @@ export class ForgeOutputView extends ItemView {
           await ensureMidiPlayerLoaded();
           const noteSequence = await midiBase64ToNoteSequence(midiBase64);
           applyPlaybackLeadIn(noteSequence, PLAYBACK_LEAD_IN_SECS);
+          // v0.2.156 — diagnostic. Driver reported v0.2.155 still drops
+          // kit-mode notes despite both modes sharing identical MIDI
+          // bytes from cache. Logging noteSequence summary so the driver
+          // can capture mode-A vs mode-B state from console + share for
+          // triage. Slim payload — 1 log per render — temporary until we
+          // root-cause and revert.
+          try {
+            const notes = noteSequence?.notes ?? [];
+            const drumNoteCount = notes.filter((n: any) => n.isDrum).length;
+            console.log('[Forge audio diag]', {
+              mode: midiSourceXml === undefined ? 'multi-staff' : 'kit (shared MIDI from multi-staff)',
+              sharedMidiInUse: !!sharedMidi,
+              midiBase64Length: midiBase64.length,
+              noteSequenceNoteCount: notes.length,
+              drumNoteCount,
+              totalTime: noteSequence?.totalTime,
+              firstNotes: notes.slice(0, 12).map((n: any) => ({
+                pitch: n.pitch,
+                startTime: n.startTime?.toFixed(3),
+                endTime: n.endTime?.toFixed(3),
+                program: n.program,
+                isDrum: n.isDrum,
+                instrument: n.instrument,
+              })),
+            });
+          } catch (_e) { /* diagnostic only */ }
           player = document.createElement('midi-player');
           player.soundFont = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
           player.noteSequence = noteSequence;
