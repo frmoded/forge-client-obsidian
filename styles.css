@@ -75,8 +75,17 @@
 /* v0.2.150 — kit/multi-staff toggle toolbar above a percussion score. */
 .forge-output-toolbar {
   display: flex;
-  justify-content: flex-end;
+  /* v0.2.162 — zoom bar lives left, kit toggle right, in the same row. */
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 4px;
+}
+
+/* When zoom-bar nests inside the toolbar (toggle mode), kill the
+   stand-alone margin the inline path uses. */
+.forge-output-toolbar .forge-zoom-bar {
+  margin: 0;
 }
 
 .forge-output-toolbar .forge-kit-toggle {

@@ -426,7 +426,9 @@ export class ForgeOutputView extends ItemView {
     let mode: ScoreViewMode = readScoreViewMode(storage, snippetId, 'multi_staff');
 
     // Toolbar above the score-host so toggling doesn't tear down the
-    // chrome along with the score.
+    // chrome along with the score. v0.2.162 — zoom-bar slot lives in
+    // the same toolbar as the kit toggle so the controls are
+    // co-located at the top of the score area.
     const toolbar = entry.createDiv({ cls: 'forge-output-toolbar' });
     const button = toolbar.createEl('button', {
       cls: 'forge-kit-toggle',
@@ -439,6 +441,10 @@ export class ForgeOutputView extends ItemView {
         : 'Switch to drum-kit single-staff view';
     };
     updateLabel(mode);
+    // Zoom-bar slot — renderMusicXML populates it per render.
+    // Same .forge-zoom-bar class as the inline (non-toggle) path so
+    // child buttons inherit the existing zoom-button styles.
+    const zoomBarHost = toolbar.createDiv({ cls: 'forge-zoom-bar' });
 
     const scoreHost = entry.createDiv({ cls: 'forge-output-musicxml-host' });
 
@@ -489,9 +495,9 @@ export class ForgeOutputView extends ItemView {
       // back to per-mode render (legacy v0.2.151+ behaviour) so the
       // user still gets audio.
       if (m === 'kit') {
-        this.renderMusicXML(scoreHost, kitXml, snippetId, multiStaffXml, shared ?? undefined);
+        this.renderMusicXML(scoreHost, kitXml, snippetId, multiStaffXml, shared ?? undefined, zoomBarHost);
       } else {
-        this.renderMusicXML(scoreHost, multiStaffXml, snippetId, undefined, shared ?? undefined);
+        this.renderMusicXML(scoreHost, multiStaffXml, snippetId, undefined, shared ?? undefined, zoomBarHost);
       }
     };
     renderInto(mode);
@@ -509,6 +515,7 @@ export class ForgeOutputView extends ItemView {
     snippetId: string,
     midiSourceXml?: string,
     sharedMidi?: { midiBase64: string; totalMs: number; source?: string },
+    externalZoomBar?: HTMLElement,
   ) {
     const host = entry.createDiv({ cls: 'forge-output-musicxml' });
     host.setText('Rendering score…');
@@ -589,10 +596,19 @@ export class ForgeOutputView extends ItemView {
         }
 
         // v0.2.152 — zoom controls. Sit above the score so the user
-        // can scale the SVG without recomputing. CSS transform on the
-        // .forge-output-score wrap; transform-origin top-left so
-        // scrolling works naturally with overflow: auto.
-        const zoomBar = host.createDiv({ cls: 'forge-zoom-bar' });
+        // can scale the SVG without recomputing.
+        // v0.2.162 — when `externalZoomBar` is provided (by the
+        // kit-toggle wrapper), mount the zoom controls into the
+        // shared top toolbar instead of inline above the score.
+        // Empty the slot first so toggling modes doesn't stack
+        // duplicate button sets.
+        let zoomBar: HTMLElement;
+        if (externalZoomBar) {
+          externalZoomBar.empty();
+          zoomBar = externalZoomBar;
+        } else {
+          zoomBar = host.createDiv({ cls: 'forge-zoom-bar' });
+        }
         const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
         let zoomIdx = ZOOM_LEVELS.indexOf(1.0);
         const zoomOutBtn = zoomBar.createEl('button', {
@@ -791,7 +807,7 @@ function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string
       && process.platform === 'darwin';
     if (isMacDesktop) {
       const gbBtn = bar.createEl('button', {
-        text: '🎹 Open in GarageBand',
+        text: 'Open in Garage Band',
         cls: 'forge-output-download',
       });
       gbBtn.addEventListener('click', async () => {
