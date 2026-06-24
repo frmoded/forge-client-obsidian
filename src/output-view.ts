@@ -433,8 +433,14 @@ export class ForgeOutputView extends ItemView {
     const scoreHost = entry.createDiv({ cls: 'forge-output-musicxml-host' });
     const renderInto = (m: ScoreViewMode) => {
       scoreHost.empty();
-      const xml = m === 'kit' ? kitXml : multiStaffXml;
-      this.renderMusicXML(scoreHost, xml, snippetId);
+      // v0.2.151 — kit view: display from kit_xml; MIDI + click-to-play
+      // from multi_staff_xml (canonical). Multi-staff view: both from
+      // multi_staff_xml (single-render fast path inside renderMusicXML).
+      if (m === 'kit') {
+        this.renderMusicXML(scoreHost, kitXml, snippetId, multiStaffXml);
+      } else {
+        this.renderMusicXML(scoreHost, multiStaffXml, snippetId);
+      }
     };
     renderInto(mode);
 
@@ -445,16 +451,46 @@ export class ForgeOutputView extends ItemView {
     });
   }
 
-  private renderMusicXML(entry: HTMLElement, musicxml: string, snippetId: string) {
+  private renderMusicXML(
+    entry: HTMLElement,
+    musicxml: string,
+    snippetId: string,
+    midiSourceXml?: string,
+  ) {
     const host = entry.createDiv({ cls: 'forge-output-musicxml' });
     host.setText('Rendering score…');
     // Defer one frame so clientWidth reflects the actual layout width.
     requestAnimationFrame(async () => {
       try {
-        const { svg, midiBase64, timeMap } = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
+        // v0.2.151 — when `midiSourceXml` is provided, split rendering:
+        // SVG comes from `musicxml` (the visible view); MIDI + timeMap
+        // + click-to-play come from `midiSourceXml` (the canonical
+        // multi-staff XML with reliable percussion routing). v0.2.150
+        // shipped kit MIDI sourced from kit_xml; music21's MusicXML
+        // serialization of Unpitched notes doesn't reliably encode per-
+        // note percussion routing, so Verovio's renderToMIDI on the
+        // kit XML produced silent drums (pitch 0) and a wrong-length
+        // file (driver smoke against v0.2.150).
+        //
+        // Per v0342 §1.4 driver decision, MIDI is ALWAYS canonical
+        // multi-instrument. The kit view is visual-only; click-to-play
+        // still works because v0.2.146 to_kit_notation preserves
+        // note.id from the source canonical Score — same IDs exist in
+        // both XMLs, so the click handler can map from the kit-SVG
+        // note id back to the multi-staff time map.
+        const sameXml = midiSourceXml === undefined || midiSourceXml === musicxml;
+        const midiXml = midiSourceXml ?? musicxml;
+        const displayRender = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
+        const svg = displayRender.svg;
+        const midiRender = sameXml
+          ? displayRender
+          : await renderMusicXMLAndMIDI(midiXml, host.clientWidth);
+        const midiBase64 = midiRender.midiBase64;
+        const timeMap = midiRender.timeMap;
         host.empty();
 
         // Download links — always available, even if playback init fails.
+        // Downloads the displayed XML + its corresponding MIDI (canonical).
         host.appendChild(makeDownloadBar(snippetId, musicxml, midiBase64));
 
         // Try to mount the player; if it fails, render the SVG without
@@ -482,7 +518,11 @@ export class ForgeOutputView extends ItemView {
             const noteEl = target?.closest('.note') as Element | null;
             if (!noteEl?.id) return;
             try {
-              const ms = await getTimeForElement(musicxml, noteEl.id);
+              // Click-to-play uses the MIDI-source XML so the time map
+              // lines up with the player. note.id was preserved across
+              // to_kit_notation, so the kit SVG's note IDs match the
+              // multi-staff XML's IDs.
+              const ms = await getTimeForElement(midiXml, noteEl.id);
               player.currentTime = ms / 1000;
               player.start();
             } catch (e) {
