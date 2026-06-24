@@ -62,6 +62,16 @@ const EXCLUDED_NAMES = new Set([
 function isExcludedName(name) {
   if (EXCLUDED_NAMES.has(name)) return true;
   if (name.endsWith(".pyc")) return true;
+  // v0.2.147 — driver spike files (e.g. `_spike2.md`, `_P.md`) live
+  // in source vault repos as local-only scratch for cohort smoke
+  // validation against unreleased plugin builds. They shouldn't ship
+  // to cohort users via the bundle. The convention: filenames
+  // starting with `_spike` (any extension) OR matching `_P*.md` are
+  // local-only and excluded from the bundle. Driver keeps them
+  // untracked in the source repo; sync skips them; the v0.2.144
+  // bundled-vault bump preflight doesn't false-positive on them.
+  if (name.startsWith("_spike")) return true;
+  if (/^_P[^/]*\.md$/i.test(name)) return true;
   return false;
 }
 
