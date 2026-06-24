@@ -572,6 +572,15 @@ export class ForgeOutputView extends ItemView {
           const z = ZOOM_LEVELS[zoomIdx];
           svgEls.forEach((svgEl, i) => {
             const w = naturalWidths[i] * z;
+            // v0.2.154 — styles.css ships `.forge-output-score svg
+            // { max-width: 100% }` which clamps any width above the
+            // container's width back to 100%. v0.2.153 set
+            // style.width = "Xpx" but the inline width was capped by
+            // max-width, so the SVG never grew. Setting maxWidth =
+            // 'none' here lets the explicit width win, and the
+            // .forge-output-score wrapper's overflow-x: auto
+            // surfaces a horizontal scrollbar.
+            svgEl.style.maxWidth = 'none';
             svgEl.style.width = `${w}px`;
             svgEl.style.height = 'auto';
           });
