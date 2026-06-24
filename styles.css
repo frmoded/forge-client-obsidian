@@ -72,6 +72,33 @@
   overflow-x: auto;
 }
 
+/* v0.2.150 — kit/multi-staff toggle toolbar above a percussion score. */
+.forge-output-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.forge-output-toolbar .forge-kit-toggle {
+  padding: 2px 10px;
+  font-size: 0.85em;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+}
+
+.forge-output-toolbar .forge-kit-toggle:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* v0.2.150 — host for view-mode-toggled score; gives renderMusicXML
+   a clean slot to mount into and tear down on each toggle. */
+.forge-output-musicxml-host {
+  display: block;
+}
+
 /* v0.2.140 — score-area scroll container. Long scores (e.g.
    forge-music/murmuration with multi-page output) overflow the
    output panel's natural height. Cap the score area at a
