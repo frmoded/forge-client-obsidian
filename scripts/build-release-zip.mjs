@@ -128,10 +128,23 @@ const VAULT_EXCLUDED_NAMES = new Set([
   "dist", "build",
 ]);
 
+// v0.2.147 — driver spike-file exclusion. Mirrors sync-bundled-vault's
+// isExcludedName. `_spike*.md` (any extension) and `_P*.md` are
+// local-only scratch for cohort smoke validation; they live in source
+// vault repos but don't ship to cohort users via the bundle. The drift
+// check + sync both honor the exclusion so the v0.2.144 bundled-vault
+// bump preflight doesn't false-positive on them either.
+function isSpikeName(name) {
+  if (name.startsWith("_spike")) return true;
+  if (/^_P[^/]*\.md$/i.test(name)) return true;
+  return false;
+}
+
 function vaultIsInScope(relPath) {
   const parts = relPath.split("/");
   for (const p of parts) {
     if (VAULT_EXCLUDED_NAMES.has(p)) return false;
+    if (isSpikeName(p)) return false;
   }
   if (relPath.endsWith(".pyc")) return false;
   return true;
@@ -143,6 +156,7 @@ function vaultWalk(dir, base = "") {
   if (!fsSync.existsSync(dir)) return out;
   for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
     if (VAULT_EXCLUDED_NAMES.has(entry.name)) continue;
+    if (isSpikeName(entry.name)) continue;
     const rel = base ? path.join(base, entry.name) : entry.name;
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...vaultWalk(abs, rel));
