@@ -353,11 +353,20 @@ export class ForgeOutputView extends ItemView {
             && typeof r.kit_content === 'string'
             && typeof r.multi_staff_content === 'string'
           ) {
+            // v0.2.157 — engine ships music21-direct MIDI bytes alongside
+            // the dual XMLs when a percussion score is detected. The
+            // plugin uses these for audio (correct per-instrument percMap
+            // pitches on channel 10) instead of Verovio's renderToMIDI
+            // (which defaults all percussion to MIDI pitch 60 = bongo).
+            const engineMidi = typeof r.multi_staff_midi_base64 === 'string'
+              ? r.multi_staff_midi_base64
+              : null;
             this.renderMusicXMLWithToggle(
               entry,
               r.multi_staff_content,
               r.kit_content,
               snippetId,
+              engineMidi,
             );
           } else {
             this.renderMusicXML(entry, (result as any).content as string, snippetId);
@@ -411,6 +420,7 @@ export class ForgeOutputView extends ItemView {
     multiStaffXml: string,
     kitXml: string,
     snippetId: string,
+    engineMidiBase64: string | null = null,
   ) {
     const storage = this.scoreViewModeStorage();
     let mode: ScoreViewMode = readScoreViewMode(storage, snippetId, 'multi_staff');
@@ -432,22 +442,36 @@ export class ForgeOutputView extends ItemView {
 
     const scoreHost = entry.createDiv({ cls: 'forge-output-musicxml-host' });
 
-    // v0.2.155 — share multi-staff MIDI bytes across both display modes.
-    // Pre-v0.2.155 each mode re-rendered MIDI via Verovio's singleton
-    // toolkit: kit view called renderMusicXMLAndMIDI(kitXml) for display
-    // then renderMusicXMLAndMIDI(multiStaffXml) for MIDI. Driver smoke
-    // against v0.2.154 surfaced "kit bar 5 and throughout not all notes
-    // audible vs. multi-staff plays all". The split-render path SHOULD
-    // produce bit-identical MIDI bytes (both end up calling
-    // toolkit.loadData(multiStaffXml) → toolkit.renderToMIDI()) but
-    // Verovio's loadData may carry residual state from the prior
-    // kit-XML load that subtly alters MIDI output. Eliminating the
-    // ambiguity: render multi-staff MIDI ONCE here, share the bytes
-    // across both renderInto calls. Audio is now bit-identical between
-    // modes by construction.
+    // v0.2.155 — share multi-staff MIDI bytes across both display modes
+    // so audio is bit-identical regardless of which mode the user
+    // toggles to.
+    //
+    // v0.2.157 — prefer the engine-provided MIDI bytes (from music21's
+    // direct streamToMidiFile export) when the payload carries them.
+    // Verovio's renderToMIDI emits every Unpitched percussion note at
+    // pitch 60 (High Bongo on channel 10) because it falls back to the
+    // default display position instead of honoring per-Part <midi-
+    // unpitched>NN</midi-unpitched> from the MusicXML's <midi-
+    // instrument> blocks. music21's MIDI export uses each Instrument's
+    // percMapPitch directly (kick=35, snare=38, hi-hat=42/44/46, etc.)
+    // so SoundFont drums fire the right samples. Falls back to Verovio
+    // MIDI when the engine bytes aren't available (older engine).
     let sharedMultiStaffMidi: { midiBase64: string; totalMs: number } | null = null;
     const ensureSharedMidi = async (): Promise<{ midiBase64: string; totalMs: number } | null> => {
       if (sharedMultiStaffMidi) return sharedMultiStaffMidi;
+      if (engineMidiBase64) {
+        try {
+          // Parse engine bytes through magenta to extract totalTime for
+          // kit-mode highlight scaling. The bytes themselves go directly
+          // to the player.
+          const ns = await midiBase64ToNoteSequence(engineMidiBase64);
+          const totalMs = (ns?.totalTime ?? 0) * 1000;
+          sharedMultiStaffMidi = { midiBase64: engineMidiBase64, totalMs };
+          return sharedMultiStaffMidi;
+        } catch (e) {
+          console.error('Forge: engine MIDI parse failed; falling back to Verovio render', e);
+        }
+      }
       try {
         const r = await renderMusicXMLAndMIDI(multiStaffXml, scoreHost.clientWidth);
         const totalMs = r.timeMap.length ? r.timeMap[r.timeMap.length - 1].ms : 0;
@@ -558,32 +582,6 @@ export class ForgeOutputView extends ItemView {
           await ensureMidiPlayerLoaded();
           const noteSequence = await midiBase64ToNoteSequence(midiBase64);
           applyPlaybackLeadIn(noteSequence, PLAYBACK_LEAD_IN_SECS);
-          // v0.2.156 — diagnostic. Driver reported v0.2.155 still drops
-          // kit-mode notes despite both modes sharing identical MIDI
-          // bytes from cache. Logging noteSequence summary so the driver
-          // can capture mode-A vs mode-B state from console + share for
-          // triage. Slim payload — 1 log per render — temporary until we
-          // root-cause and revert.
-          try {
-            const notes = noteSequence?.notes ?? [];
-            const drumNoteCount = notes.filter((n: any) => n.isDrum).length;
-            console.log('[Forge audio diag]', {
-              mode: midiSourceXml === undefined ? 'multi-staff' : 'kit (shared MIDI from multi-staff)',
-              sharedMidiInUse: !!sharedMidi,
-              midiBase64Length: midiBase64.length,
-              noteSequenceNoteCount: notes.length,
-              drumNoteCount,
-              totalTime: noteSequence?.totalTime,
-              firstNotes: notes.slice(0, 12).map((n: any) => ({
-                pitch: n.pitch,
-                startTime: n.startTime?.toFixed(3),
-                endTime: n.endTime?.toFixed(3),
-                program: n.program,
-                isDrum: n.isDrum,
-                instrument: n.instrument,
-              })),
-            });
-          } catch (_e) { /* diagnostic only */ }
           player = document.createElement('midi-player');
           player.soundFont = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
           player.noteSequence = noteSequence;
