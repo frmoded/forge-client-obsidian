@@ -117,3 +117,48 @@ Per cc-prompt-queue.md §43, the feedback file IS the chat summary.
 ## §9 — Hand-off
 
 v0.2.148 shipped. Driver smoke validates the misc fix; if clean, Phase B integration becomes the next queue priority. Queue empty after this drain.
+
+## §10 — Tangential note: v0.2.149 MIDI playback follow-up (driver-flagged, ad-hoc)
+
+Out-of-band fix shipped after v0.2.148. Captured here for traceability since v0.2.149 was a direct driver-flag without its own prompt-drain feedback file.
+
+### §10.1 — Driver report
+
+Driver smoke against v0.2.148:
+> "The drumming is not audible with a single stave. SoundFont Pitch 0 is outside the valid range for percussion (35-81)"
+
+Kit-notation score rendered correctly (the v0.2.146 Unpitched migration + v0.2.148 editorial.misc fix both held). But MIDI playback was silent. SoundFont rejected the percussion notes because they came through with MIDI pitch 0.
+
+### §10.2 — Root cause
+
+The v0.2.146 Unpitched migration left a MIDI export gap. Unpitched notes carry display position but no MIDI pitch; music21's MIDI exporter walks each note's active Instrument context to find `percMapPitch`. Pre-v0.2.149 the kit Part's instrument was a generic `UnpitchedPercussion` (no `percMapPitch`), so every Unpitched note defaulted to pitch 0.
+
+Fourth runtime-evidence-beats-source-audit case in this Unpitched migration arc: v0345 (Unpitched display), v0346 (editorial.misc init), v0345 spike originator, plus this one. Each pytest run passed against engine venv music21; each surfaced different pyodide-runtime behavior. Engine-pytest-vs-pyodide environment audit (carry-forward from v0346 §7) keeps gaining evidence.
+
+### §10.3 — What shipped (v0.2.149)
+
+Single-line addition in `forge/forge/music/lib.py` at the Unpitched construction site:
+
+```python
+new_note = note.Unpitched(displayName=display_pos)
+new_note.storedInstrument = src_inst  # NEW
+```
+
+music21's MIDI exporter checks `storedInstrument` BEFORE falling back to the Part-level instrument. With it set per-note, each Unpitched note carries its source instrument's `percMapPitch` (kick=35, snare=38, HH-closed=42, etc.) so MIDI export emits valid percussion notes on channel 10. The kit visual layout is unchanged — `displayName` continues to drive staff positioning.
+
+### §10.4 — Regression test
+
+New `test_to_kit_notation_sets_storedInstrument_for_midi_routing` in `tests/music/test_kit_notation.py`. Builds a kit fold from kick + snare + closed-hihat; asserts every kit-staff note has its respective source `Instrument` class via `storedInstrument` + `midiChannel=9` (GM channel 10). HH-closed-specific check on `percMapPitch=42`.
+
+### §10.5 — Tests + release
+
+- 786 plugin tests still passing.
+- 16 engine pytests (15 baseline + 1 new regression).
+- Tag `v0.2.149` + GH release + INSTALL.md synced.
+- Engine commit pushed.
+
+### §10.6 — Architectural note
+
+The Unpitched migration arc is now four releases deep (v0.2.146 display → v0.2.148 editorial.misc → v0.2.149 MIDI routing). Each iteration was driver-runtime-evidence-gated; CC couldn't have run any of them without the driver's smoke. The pattern reinforces both v0.2.132 (runtime-evidence-beats-source-audit) AND the engine-pytest-environment audit follow-up.
+
+After v0.2.149, the kit notation feature should be functionally complete at the engine layer (renders correctly + plays correctly + click-to-play works via preserved note.id). Phase B integration (toolbar, dual MusicXML production, view-mode-aware rendering) unlocks once driver confirms v0.2.149's MIDI fix lands cleanly.
