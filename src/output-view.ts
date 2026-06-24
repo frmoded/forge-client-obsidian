@@ -456,17 +456,34 @@ export class ForgeOutputView extends ItemView {
     // percMapPitch directly (kick=35, snare=38, hi-hat=42/44/46, etc.)
     // so SoundFont drums fire the right samples. Falls back to Verovio
     // MIDI when the engine bytes aren't available (older engine).
-    let sharedMultiStaffMidi: { midiBase64: string; totalMs: number } | null = null;
-    const ensureSharedMidi = async (): Promise<{ midiBase64: string; totalMs: number } | null> => {
+    let sharedMultiStaffMidi: { midiBase64: string; totalMs: number; source: string } | null = null;
+    const ensureSharedMidi = async (): Promise<{ midiBase64: string; totalMs: number; source: string } | null> => {
       if (sharedMultiStaffMidi) return sharedMultiStaffMidi;
+      // v0.2.158 diag — log which MIDI source is taken + sample the first
+      // few notes' pitches so we can confirm engine MIDI is actually being
+      // used (and that music21's pitches are landing correctly).
+      console.log('[Forge MIDI source]', {
+        engineMidiPresent: !!engineMidiBase64,
+        engineMidiLength: engineMidiBase64?.length ?? 0,
+      });
       if (engineMidiBase64) {
         try {
-          // Parse engine bytes through magenta to extract totalTime for
-          // kit-mode highlight scaling. The bytes themselves go directly
-          // to the player.
           const ns = await midiBase64ToNoteSequence(engineMidiBase64);
           const totalMs = (ns?.totalTime ?? 0) * 1000;
-          sharedMultiStaffMidi = { midiBase64: engineMidiBase64, totalMs };
+          const notes = ns?.notes ?? [];
+          const drumNotes = notes.filter((n: any) => n.isDrum).length;
+          // Unique pitches across first 50 notes — kit should show
+          // 35/36 (kick), 38 (snare), 42/44/46 (hi-hats), etc.
+          const pitches = new Set<number>();
+          for (const n of notes.slice(0, 100)) pitches.add(n.pitch);
+          console.log('[Forge engine MIDI used]', {
+            bytes: engineMidiBase64.length,
+            totalMs,
+            noteCount: notes.length,
+            drumNotes,
+            uniquePitchesFirst100: [...pitches].sort((a, b) => a - b),
+          });
+          sharedMultiStaffMidi = { midiBase64: engineMidiBase64, totalMs, source: 'engine-music21' };
           return sharedMultiStaffMidi;
         } catch (e) {
           console.error('Forge: engine MIDI parse failed; falling back to Verovio render', e);
@@ -475,7 +492,8 @@ export class ForgeOutputView extends ItemView {
       try {
         const r = await renderMusicXMLAndMIDI(multiStaffXml, scoreHost.clientWidth);
         const totalMs = r.timeMap.length ? r.timeMap[r.timeMap.length - 1].ms : 0;
-        sharedMultiStaffMidi = { midiBase64: r.midiBase64, totalMs };
+        console.log('[Forge Verovio MIDI fallback]', { bytes: r.midiBase64.length, totalMs });
+        sharedMultiStaffMidi = { midiBase64: r.midiBase64, totalMs, source: 'verovio-fallback' };
       } catch (e) {
         console.error('Forge: shared multi-staff MIDI pre-render failed', e);
       }
@@ -511,7 +529,7 @@ export class ForgeOutputView extends ItemView {
     musicxml: string,
     snippetId: string,
     midiSourceXml?: string,
-    sharedMidi?: { midiBase64: string; totalMs: number },
+    sharedMidi?: { midiBase64: string; totalMs: number; source?: string },
   ) {
     const host = entry.createDiv({ cls: 'forge-output-musicxml' });
     host.setText('Rendering score…');
