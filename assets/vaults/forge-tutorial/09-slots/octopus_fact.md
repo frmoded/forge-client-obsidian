@@ -1,26 +1,17 @@
 ---
 type: action
-inputs: []
-facet_form: canonical
-description: Chapter 9 — Forge fills in a value from your plain-English request.
-english_hash: 8002397c045b8b1f02f9b28aa9c858bf6274d1533df00f2684357a3a479b3d73
-edit_mode: python
-locked_english_hash: 8002397c045b8b1f02f9b28aa9c858bf6274d1533df00f2684357a3a479b3d73
 ---
 
-# English
+# Description
 
-Set fact to {{a very interesting fact about octopuses}}.
-Do [[print]](fact).
+Chapter 9 — Forge fills in a value from your plain-English request.
 
-# Python
+(V2.1 will let you write `{{a very interesting fact about octopuses}}` in
+E-- and Forge will route to an LLM at compile time. For V2.0 the value is
+cached inline; the lesson is the same — separating intent (Description)
+from value (E--).)
 
-```python
-def compute(context):
-    fact = "Octopuses have three hearts and blue blood"
-    print(fact)
-```
+# E--
 
-# Dependencies
-
-[[print]]
+Let fact = "Octopuses have three hearts and blue blood".
+[[print]] fact.

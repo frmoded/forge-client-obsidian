@@ -1,5 +1,6 @@
 ---
 type: action
+english_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ---
 
 # Description
@@ -47,3 +48,19 @@ Let s6 = Call [[dispersing]] with bars=4.
 Let s7 = Call [[threading]] with bars=4.
 Let s8 = Call [[resting]] with bars=4.
 Return Call [[sequence_list]] with sections=[s1, s2, s3, s4, s5, s6, s7, s8].
+
+# Python
+
+```python
+def compute(context):
+  s1 = solitary(bars=4)
+  s2 = companions(bars=4)
+  s3 = gathering(bars=4)
+  s4 = swarming(bars=4)
+  s5 = peak(bars=4)
+  s6 = dispersing(bars=4)
+  s7 = threading(bars=4)
+  s8 = resting(bars=4)
+  return sequence_list(sections=[s1, s2, s3, s4, s5, s6, s7, s8])
+
+```
