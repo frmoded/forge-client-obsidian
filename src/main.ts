@@ -342,6 +342,16 @@ export default class ForgePlugin extends Plugin {
     setPyodideHost(pyodideHost);
     setPyodideHostSingleton(pyodideHost);
 
+    // v0.2.181 — Loud onload banner. Lets driver confirm at a glance
+    // that BRAT's update actually took effect; cleanly separable from
+    // any pyodide bootstrap state. Use console.warn so it shows up
+    // yellow/highlighted in DevTools instead of mixing in with the
+    // ~1000 routine console.log lines an Obsidian session generates.
+    console.warn(
+      `%c FORGE CLIENT v${this.manifest.version} LOADED `,
+      'background: #4caf50; color: white; padding: 6px 10px; font-weight: bold; font-size: 13px;',
+    );
+
     // v0.2.178 — surface the running plugin version in Obsidian's
     // bottom status bar. Cohort + driver shouldn't have to dig through
     // Settings → Community plugins to confirm which build is loaded
