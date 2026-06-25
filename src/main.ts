@@ -1,4 +1,14 @@
 import { Plugin, Notice, MarkdownView, TFile, TFolder, WorkspaceLeaf } from 'obsidian';
+import {
+  isV2Shape,
+  extractDescription,
+  extractInputs,
+  replaceEmmSection,
+  setFrontmatterField as setFmFieldV2,
+  getFrontmatterField as getFmFieldV2,
+  removeFrontmatterField as removeFmFieldV2,
+} from './v2-note-core';
+import { computeDescriptionHash } from './description-hash-core';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
@@ -44,7 +54,7 @@ import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
 import { sectionPlugin, readOnlyFacetFilter } from './facet';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
 import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server';
-import type { AlphaGenerateRequest, SlotRequestPayload } from './server';
+import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server';
 import { writePythonAndEnglishHash } from './python-cache-writer-core';
 import { computeEnglishHash } from './english-hash-core';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core';
@@ -729,6 +739,31 @@ export default class ForgePlugin extends Plugin {
         }
         this.generate();
       },
+    });
+
+    // v0.2.182 — V2 /generate Phase 2. New Cmd-P command that takes
+    // the active V2 note's # Description, POSTs to the hosted service
+    // with dialect="emm", and writes the returned E-- recipe into the
+    // # E-- section (creating it if absent). On success, computes +
+    // stores `description_hash` in frontmatter so the editor's stale-
+    // indicator check (deferred to Phase 3 per the prompt's SPLIT
+    // GUIDANCE on §3.4) can detect Description edits later.
+    this.addCommand({
+      id: 'forge-generate-emm-from-description',
+      name: 'Forge: Generate E-- from Description',
+      callback: () => { this.generateEmmFromDescription(); },
+    });
+
+    this.addCommand({
+      id: 'forge-lock-emm',
+      name: 'Forge: Lock E-- (disable /generate)',
+      callback: () => { this.toggleEmmLock(true); },
+    });
+
+    this.addCommand({
+      id: 'forge-unlock-emm',
+      name: 'Forge: Unlock E-- (enable /generate)',
+      callback: () => { this.toggleEmmLock(false); },
     });
 
     this.addCommand({
@@ -2019,6 +2054,166 @@ export default class ForgePlugin extends Plugin {
   // Returns true on success. errorPrefix is set by the Forge-button
   // flow (so notices read "Forge failed during generation: …" rather
   // than the standalone "check console" voice).
+  /** v0.2.182 — V2 /generate handler.
+   *  - Reads active V2-shape note's body.
+   *  - Validates V2 shape + lock state.
+   *  - Extracts Description + Inputs.
+   *  - Walks vault for action-note descriptions → deps payload.
+   *  - POSTs to hosted service with dialect="emm".
+   *  - Writes returned E-- recipe into the # E-- section.
+   *  - Computes + stores description_hash in frontmatter.
+   *
+   *  Stale-indicator UI is a Phase 3 follow-up per the prompt's
+   *  §8 SPLIT GUIDANCE. */
+  private async generateEmmFromDescription(): Promise<void> {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('Forge: no active note to generate E-- for.');
+      return;
+    }
+    const file = view.file;
+    const body = await this.app.vault.read(file);
+
+    if (!isV2Shape(body)) {
+      new Notice(
+        'Forge: this note is not V2-shape (needs # Description + # E--). '
+        + 'Use "Generate only" for V1 notes.');
+      return;
+    }
+
+    const lock = getFmFieldV2(body, 'lock');
+    if (lock === 'e--canonical') {
+      new Notice(
+        'Forge: note is e--canonical (E-- locked). '
+        + 'Run "Forge: Unlock E--" to enable /generate.');
+      return;
+    }
+
+    const settings = this.settings;
+    if (!settings.transpileServiceToken) {
+      new Notice(
+        'Forge: set your transpile token in Settings → Forge → Transpile token '
+        + 'before using /generate.');
+      return;
+    }
+
+    const description = extractDescription(body);
+    if (!description.trim()) {
+      new Notice('Forge: # Description is empty — nothing to generate from.');
+      return;
+    }
+    const inputs = extractInputs(body).map((d) => d.name);
+    const deps = await this.gatherVaultActionNoteDescriptions();
+    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
+
+    const payload: AlphaGenerateRequest = {
+      snippet_id: snippetId,
+      description,
+      english: '',
+      inputs,
+      generation_notes: '',
+      deps,
+      active_domains:
+        this.activeDomains === null ? null : Array.from(this.activeDomains),
+      dialect: 'emm',
+    };
+
+    let response;
+    try {
+      response = await generateSnippetAlpha(
+        settings.transpileServiceUrl,
+        settings.transpileServiceToken,
+        payload,
+      );
+    } catch (e) {
+      console.error('Forge generateEmmFromDescription transport error:', e);
+      const detail = e instanceof Error ? e.message : String(e);
+      new Notice(`Forge: could not reach transpile service — ${detail}`);
+      return;
+    }
+
+    if (response.status !== 200) {
+      console.error('Forge generateEmmFromDescription non-200:', response.status, response.json);
+      const detail = response.json?.detail;
+      const noticeText = this.formatAlphaErrorNotice(
+        response.status, detail, settings.transpileServiceUrl,
+        'Forge: V2 /generate failed');
+      new Notice(noticeText);
+      return;
+    }
+
+    const code: string | undefined = response.json?.code;
+    if (!code) {
+      console.error('Forge generateEmmFromDescription: empty code', response.json);
+      new Notice('Forge: service returned empty code field — check console.');
+      return;
+    }
+
+    // Write the E-- into the note + stamp description_hash.
+    const withEmm = replaceEmmSection(body, code);
+    const descHash = await computeDescriptionHash(description);
+    const withHash = setFmFieldV2(withEmm, 'description_hash', descHash);
+
+    await this.app.vault.modify(file, withHash);
+    new Notice(`Forge: E-- generated for ${file.basename}. Review + Forge-click to test.`);
+  }
+
+  /** v0.2.182 — Walk the vault for `type: action` notes; extract each
+   *  one's Description + Inputs for the /generate deps payload. The
+   *  hosted service uses this to populate the few-shot Available-chips
+   *  list in the system prompt so the LLM picks correct `[[name]]`
+   *  references in its output.
+   *
+   *  v2.0 includes every action note in the vault. v2.1 will add
+   *  RAG-style relevance filtering per spec §12.6 — defer.
+   *
+   *  Notes without a # Description (V1 vault notes) contribute an
+   *  empty description string but their snippet_id + Inputs still
+   *  reach the prompt, giving the LLM the callable surface.
+   */
+  private async gatherVaultActionNoteDescriptions(): Promise<AlphaDependencyInfo[]> {
+    const out: AlphaDependencyInfo[] = [];
+    const libraryDirs = this.libraryDirNames();
+    const files = this.app.vault.getMarkdownFiles();
+    for (const f of files) {
+      const fm = this.app.metadataCache.getFileCache(f)?.frontmatter;
+      if (fm?.type !== 'action') continue;
+      let body: string;
+      try {
+        body = await this.app.vault.read(f);
+      } catch {
+        continue;
+      }
+      const desc = extractDescription(body).trim();
+      const inputs = extractInputs(body).map((d) => d.name);
+      const id = snippetIdFromPath(f.path, libraryDirs);
+      out.push({ snippet_id: id, description: desc, inputs });
+    }
+    return out;
+  }
+
+  /** v0.2.182 — Lock or unlock the active note's E-- via the
+   *  `lock: e--canonical` frontmatter field. Lock = /generate refuses
+   *  (cohort intentionally hand-wrote E-- and doesn't want the LLM
+   *  overwriting it). Unlock = remove the field. */
+  private async toggleEmmLock(locking: boolean): Promise<void> {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      new Notice('Forge: no active note to toggle E-- lock on.');
+      return;
+    }
+    const body = await this.app.vault.read(view.file);
+    if (locking) {
+      const out = setFmFieldV2(body, 'lock', 'e--canonical');
+      await this.app.vault.modify(view.file, out);
+      new Notice(`Forge: ${view.file.basename} → E-- locked (/generate disabled).`);
+    } else {
+      const out = removeFmFieldV2(body, 'lock');
+      await this.app.vault.modify(view.file, out);
+      new Notice(`Forge: ${view.file.basename} → E-- unlocked (/generate enabled).`);
+    }
+  }
+
   private async generate(errorPrefix?: string): Promise<boolean> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {

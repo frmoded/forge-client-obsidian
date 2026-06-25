@@ -169,6 +169,10 @@ export interface AlphaGenerateRequest {
   generation_notes: string;
   deps: AlphaDependencyInfo[];
   active_domains: string[] | null;
+  // v0.2.182 — V2 /generate Phase 2. Optional; service defaults to
+  // "python" when absent (back-compat with all V1 callers). Set
+  // "emm" to ask for V2 E-- recipe output instead of Python source.
+  dialect?: 'python' | 'emm';
 }
 
 export interface GenerateResponse {
