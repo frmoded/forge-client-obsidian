@@ -136,6 +136,8 @@ const VAULT_EXCLUDED_NAMES = new Set([
 // bump preflight doesn't false-positive on them either.
 function isSpikeName(name) {
   if (name.startsWith("_spike")) return true;
+  // v0.2.164 — also `_v2_spike*` for the V2 spike note convention.
+  if (name.startsWith("_v2_spike")) return true;
   if (/^_P[^/]*\.md$/i.test(name)) return true;
   return false;
 }

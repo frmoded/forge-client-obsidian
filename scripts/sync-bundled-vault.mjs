@@ -71,6 +71,10 @@ function isExcludedName(name) {
   // untracked in the source repo; sync skips them; the v0.2.144
   // bundled-vault bump preflight doesn't false-positive on them.
   if (name.startsWith("_spike")) return true;
+  // v0.2.164 — also exclude `_v2_spike*.md` for the V2 spike note
+  // (forge-music/_v2_spike_solitary.md). Same convention as `_spike*`
+  // — driver-local, excluded from the bundle.
+  if (name.startsWith("_v2_spike")) return true;
   if (/^_P[^/]*\.md$/i.test(name)) return true;
   return false;
 }
