@@ -33,6 +33,7 @@
 // which is a significant follow-up.
 
 import type { App } from "obsidian";
+import { requestUrl } from "obsidian";
 import { parseSnapshotState } from "./snapshot-state-core";
 
 // V1 user-vault mount: bundled-library subdirectory names. Files
@@ -118,10 +119,12 @@ export class PyodideHost {
   private loading: Promise<PyodideHostInstance> | null = null;
   private app: App;
   private pluginId: string;
+  private pluginVersion: string;
 
-  constructor(app: App, pluginId: string) {
+  constructor(app: App, pluginId: string, pluginVersion: string) {
     this.app = app;
     this.pluginId = pluginId;
+    this.pluginVersion = pluginVersion;
   }
 
   /** v0.2.44: sync accessor for the loaded Pyodide handle, returning
@@ -328,9 +331,17 @@ export class PyodideHost {
       // BRAT doesn't extract. Local wheel files are therefore missing
       // for ~100% of cohort users. Falling back to fetching each wheel
       // from the GitHub release URL at runtime resolves music-domain
-      // snippet failures. v0.2.92 had this as a TODO; v0.2.173 ships it.
+      // snippet failures.
+      // v0.2.174 — two bugs from v0.2.173 fixed here:
+      //   (a) `manifest.version` was the BUNDLE manifest (no version
+      //       field) — produced `vundefined` URLs. Now uses
+      //       this.pluginVersion (passed in via constructor from the
+      //       plugin manifest).
+      //   (b) browser `fetch` from `app://obsidian.md` to github.com
+      //       was blocked by CORS. Obsidian's `requestUrl` API bypasses
+      //       CORS (it's a native HTTP call, not a browser fetch).
       const wheelCdnBase =
-        `https://github.com/frmoded/forge-client-obsidian/releases/download/v${manifest.version}`;
+        `https://github.com/frmoded/forge-client-obsidian/releases/download/v${this.pluginVersion}`;
       for (const relpath of manifest.wheels) {
         // relpath is e.g. "wheels/music21-8.3.0-py3-none-any.whl"
         const localPath = `.obsidian/plugins/${this.pluginId}/assets/${relpath}`;
@@ -344,18 +355,18 @@ export class PyodideHost {
           }
         }
         if (!bytes) {
-          // Fallback: fetch from GitHub release asset. The wheel filename
-          // is the last segment of relpath (e.g. music21-8.3.0...whl).
+          // Fallback: fetch from GitHub release asset via Obsidian's
+          // requestUrl (bypasses CORS).
           const wheelFname = relpath.split("/").pop();
           const cdnUrl = `${wheelCdnBase}/${wheelFname}`;
           try {
-            const resp = await fetch(cdnUrl);
-            if (resp.ok) {
-              bytes = new Uint8Array(await resp.arrayBuffer());
+            const resp = await requestUrl({ url: cdnUrl, method: "GET" });
+            if (resp.status >= 200 && resp.status < 300) {
+              bytes = new Uint8Array(resp.arrayBuffer);
               fellBackToCdn.push(relpath);
             }
           } catch (e) {
-            // Network failure — leave bytes null; treated as skipped below.
+            // Network / 404 — leave bytes null; treated as skipped below.
           }
         }
         if (!bytes) {

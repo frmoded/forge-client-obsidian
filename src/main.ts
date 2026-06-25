@@ -338,7 +338,7 @@ export default class ForgePlugin extends Plugin {
     // iframe) is the Pyodide host. Phase 2 also routes the iframe's
     // /moda/* and /compute requests through here via engine-request
     // postMessages (see moda-view.ts).
-    const pyodideHost = new PyodideHost(this.app, this.manifest.id);
+    const pyodideHost = new PyodideHost(this.app, this.manifest.id, this.manifest.version);
     setPyodideHost(pyodideHost);
     setPyodideHostSingleton(pyodideHost);
 
