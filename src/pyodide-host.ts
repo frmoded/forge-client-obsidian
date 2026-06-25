@@ -318,30 +318,66 @@ export class PyodideHost {
     if (manifest.wheels && manifest.wheels.length > 0) {
       const adapter = this.app.vault.adapter;
       const mounted: string[] = [];
+      const fellBackToCdn: string[] = [];
       const skipped: string[] = [];
       pyodide.FS.mkdir("/bundle/wheels");
       pyodide.FS.mkdir("/bundle/site-packages");
+      // v0.2.173 — wheel CDN fallback. BRAT-installed users only get
+      // main.js + manifest.json + styles.css from the release; assets/
+      // (including wheels/) is shipped only via the release zip, which
+      // BRAT doesn't extract. Local wheel files are therefore missing
+      // for ~100% of cohort users. Falling back to fetching each wheel
+      // from the GitHub release URL at runtime resolves music-domain
+      // snippet failures. v0.2.92 had this as a TODO; v0.2.173 ships it.
+      const wheelCdnBase =
+        `https://github.com/frmoded/forge-client-obsidian/releases/download/v${manifest.version}`;
       for (const relpath of manifest.wheels) {
         // relpath is e.g. "wheels/music21-8.3.0-py3-none-any.whl"
         const localPath = `.obsidian/plugins/${this.pluginId}/assets/${relpath}`;
-        if (!(await adapter.exists(localPath))) {
+        let bytes: Uint8Array | null = null;
+        if (await adapter.exists(localPath)) {
+          try {
+            const url = this.pluginAssetUrl(relpath);
+            bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+          } catch (e) {
+            console.warn(`Forge: local wheel ${relpath} read failed`, e);
+          }
+        }
+        if (!bytes) {
+          // Fallback: fetch from GitHub release asset. The wheel filename
+          // is the last segment of relpath (e.g. music21-8.3.0...whl).
+          const wheelFname = relpath.split("/").pop();
+          const cdnUrl = `${wheelCdnBase}/${wheelFname}`;
+          try {
+            const resp = await fetch(cdnUrl);
+            if (resp.ok) {
+              bytes = new Uint8Array(await resp.arrayBuffer());
+              fellBackToCdn.push(relpath);
+            }
+          } catch (e) {
+            // Network failure — leave bytes null; treated as skipped below.
+          }
+        }
+        if (!bytes) {
           skipped.push(relpath);
           continue;
         }
-        const url = this.pluginAssetUrl(relpath);
-        const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
         this._mkdirP(pyodide, "/bundle/" + relpath);
         pyodide.FS.writeFile("/bundle/" + relpath, bytes);
         mounted.push(relpath);
       }
       if (mounted.length > 0) {
-        console.log(`Forge: ${mounted.length} wheels mounted.`);
+        console.log(
+          `Forge: ${mounted.length} wheels mounted` +
+          (fellBackToCdn.length > 0
+            ? ` (${fellBackToCdn.length} from CDN fallback).`
+            : `.`)
+        );
       }
       if (skipped.length > 0) {
         console.warn(
-          `Forge: ${skipped.length} wheels NOT available locally; ` +
-          `music-domain snippets will not work until v0.2.92 ships ` +
-          `CDN-fallback wheels. Skipped: ${skipped.slice(0, 3).join(', ')}` +
+          `Forge: ${skipped.length} wheels could not be loaded (neither local nor CDN). ` +
+          `Music-domain snippets will fail. Missing: ${skipped.slice(0, 3).join(', ')}` +
           (skipped.length > 3 ? `…` : '')
         );
       }
