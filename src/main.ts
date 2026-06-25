@@ -342,6 +342,30 @@ export default class ForgePlugin extends Plugin {
     setPyodideHost(pyodideHost);
     setPyodideHostSingleton(pyodideHost);
 
+    // v0.2.178 — surface the running plugin version in Obsidian's
+    // bottom status bar. Cohort + driver shouldn't have to dig through
+    // Settings → Community plugins to confirm which build is loaded
+    // (especially after BRAT updates that don't show the version
+    // anywhere else). Single status bar item; click for full Forge
+    // info via Notice.
+    const statusBarItem = this.addStatusBarItem();
+    statusBarItem.setText(`Forge v${this.manifest.version}`);
+    statusBarItem.style.cursor = 'pointer';
+    statusBarItem.title =
+      `Forge Client v${this.manifest.version}\nClick for plugin info.`;
+    statusBarItem.addEventListener('click', () => {
+      // Import Notice lazily — same pattern other UI bits use to avoid
+      // a hard test-time dep on obsidian.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const obsidian = require('obsidian');
+      new obsidian.Notice(
+        `Forge Client v${this.manifest.version}\n`
+        + `Plugin ID: ${this.manifest.id}\n`
+        + `Min app version: ${this.manifest.minAppVersion}`,
+        8000,
+      );
+    });
+
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
     // EditorView; per-view state lives on the plugin instance, the

@@ -46,11 +46,20 @@
   background: var(--background-secondary);
   padding: 4px 6px;
   border-radius: 4px;
+  /* v0.2.178 — Obsidian's WorkspaceLeaf container inherits user-select:
+     none from the side-pane chrome, which makes the Output panel's
+     text unselectable (Cmd-C is a no-op). Explicitly opt in to text
+     selection on the output bodies so cohort can copy errors + results
+     out of the panel. */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .forge-output-message {
   margin: 2px 0;
   white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .forge-output-entry.is-error {
@@ -60,6 +69,8 @@
 .forge-output-error {
   margin: 2px 0;
   color: var(--text-error, #d33);
+  user-select: text;
+  -webkit-user-select: text;
   font-weight: 500;
   white-space: pre-wrap;
 }
