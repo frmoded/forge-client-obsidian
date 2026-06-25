@@ -1,23 +1,12 @@
 ---
 type: action
-inputs: []
-facet_form: canonical
-description: Chapter 8 — calls the factorial snippet and prints the result.
-english_hash: 3c82a058b0dd72244951feaaaeab252fbc44a973acf68d1621d9023625962fae
 ---
 
-# English
+# Description
 
-Do [[print]]([[factorial]](n=5)).
+Chapter 8 — calls the factorial snippet and prints the result.
 
-# Python
+# E--
 
-```python
-def compute(context):
-    print(factorial(n=5))
-```
-
-# Dependencies
-
-[[factorial]]
-[[print]]
+Let r = Call [[factorial]] with n=5.
+[[print]] r.
