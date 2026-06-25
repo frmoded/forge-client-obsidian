@@ -1,30 +1,26 @@
 ---
 type: action
 role: root
-inputs: [x, y]
 description: "Block 5 — mouse-click event. Create ink at the cursor and set its speed + mass."
 ---
 
-# English
+# Description
 
-Inputs: x, y
+Drop a tight cluster of ink particles at the cursor position:
 
-Call [[create_ink_particles]] with x and y.
-Call [[set_ink_speed]].
-Call [[set_ink_mass]].
+1. [[create_ink_particles]] at `(x, y)`.
+2. [[set_ink_speed]] to the medium constant.
+3. [[set_ink_mass]] to medium.
 
-# Python
+## Inputs
 
-```python
-def compute(context, state, x, y):
-    state = context.compute("create_ink_particles", state=state, x=x, y=y)
-    state = context.compute("set_ink_speed", state=state)
-    state = context.compute("set_ink_mass", state=state)
-    return state
-```
+- state — current ParticleState
+- x — click x-position (chamber coordinates)
+- y — click y-position (chamber coordinates)
 
-# Dependencies
+# E--
 
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[create_ink_particles]] [[set_ink_speed]] [[set_ink_mass]]
+Let state = Call [[create_ink_particles]] with state=state, x=x, y=y.
+Let state = Call [[set_ink_speed]] with state=state.
+Let state = Call [[set_ink_mass]] with state=state.
+Return state.

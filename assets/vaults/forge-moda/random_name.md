@@ -1,18 +1,18 @@
 ---
 type: action
-inputs: [n]
 description: Build a random N-character lowercase name. Used by both the freeze-via-wikilink demos AND canonical_demo_compose (Stage 2.5).
 ---
 
-# English
+# Description
 
-Make a string of `n` random lowercase letters and return it.
+Build a string of `n` random lowercase letters and return it. Used
+by the freeze-via-wikilink demos and `canonical_demo_compose`.
 
-# Python
+## Inputs
 
-```python
-def compute(context, n):
-    import random
-    import string
-    return ''.join(random.choices(string.ascii_lowercase, k=n))
-```
+- n — number of letters (e.g. 5)
+
+# E--
+
+Let name = Call [[random_name]] with n=n.
+Return name.

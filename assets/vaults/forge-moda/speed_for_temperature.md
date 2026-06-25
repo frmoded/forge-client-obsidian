@@ -1,23 +1,21 @@
 ---
 type: action
 role: leaf
-inputs: [temperature]
 description: Returns a speed value (simulation units per second) for a given temperature level.
 ---
 
-# English
+# Description
 
-Return a speed value for the given temperature level. Mapping: 'zero' -> 0.0, 'low' -> 20.0, 'medium' -> 50.0, 'high' -> 100.0. Units are simulation units per second.
+Return a speed value for the given temperature level.
+Mapping: `'zero' → 0.0`, `'low' → 20.0`, `'medium' → 50.0`,
+`'high' → 100.0`. Unknown labels fall back to medium (50.0).
+Units are simulation units per second.
 
-# Python
+## Inputs
 
-```python
-def compute(context, temperature):
-    mapping = {
-        'zero': 0.0,
-        'low': 20.0,
-        'medium': 50.0,
-        'high': 100.0,
-    }
-    return mapping.get(temperature, 50.0)
-```
+- temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
+
+# E--
+
+Let speed = Call [[temperature_to_speed]] with temperature=temperature.
+Return speed.

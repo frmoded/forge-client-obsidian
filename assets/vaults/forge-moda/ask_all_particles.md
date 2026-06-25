@@ -1,31 +1,25 @@
 ---
 type: action
 role: leaf
-inputs: [dt]
 description: "Block 10 — control: tell every particle to move, wall-bounce, and interact."
 ---
 
-# English
+# Description
 
-Inputs: dt
+Tell every particle to do its per-tick work in order:
 
-For each particle in state:
-  Call [[move]] with dt.
-  Call [[if_wall_then_bounce]].
-  Call [[interact]].
+1. [[move]] forward one tick along its heading.
+2. [[if_wall_then_bounce]] — reflect off any wall it crossed.
+3. [[interact]] — collide with any particle within range.
 
-# Python
+## Inputs
 
-```python
-def compute(context, state, dt):
-    state = context.compute("move", state=state, dt=dt)
-    state = context.compute("if_wall_then_bounce", state=state)
-    state = context.compute("interact", state=state)
-    return state
-```
+- state — current ParticleState
+- dt — time step in seconds
 
-# Dependencies
+# E--
 
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[move]] [[if_wall_then_bounce]] [[interact]]
+Let state = Call [[move]] with state=state, dt=dt.
+Let state = Call [[if_wall_then_bounce]] with state=state.
+Let state = Call [[interact]] with state=state.
+Return state.

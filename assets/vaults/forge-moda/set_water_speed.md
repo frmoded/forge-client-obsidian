@@ -1,42 +1,22 @@
 ---
 type: action
 role: leaf
-inputs: [temperature]
 description: "Block 3 — set every water particle's speed from the temperature."
 ---
 
-# English
+# Description
 
-Inputs: temperature
+Set the speed of every water particle to the value returned by
+[[speed_for_temperature]] for the given `temperature`. Ink
+particles are untouched.
 
-Set the speed of all water particles to `speed_for_temperature(temperature)` via speed_for_temperature.
+## Inputs
 
-Ink particles are untouched.
+- state — current ParticleState
+- temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-# Python
+# E--
 
-```python
-def compute(context, state, temperature):
-    speed = context.compute("speed_for_temperature", temperature=temperature)
-    is_water = state.types == 'water'
-    speeds = state.speeds.copy()
-    speeds[is_water] = speed
-    return ParticleState(
-        tick=state.tick,
-        ids=state.ids,
-        types=state.types,
-        xs=state.xs,
-        ys=state.ys,
-        headings=state.headings,
-        speeds=speeds,
-        masses=state.masses,
-        width=state.width,
-        height=state.height,
-    )
-```
-
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[speed_for_temperature]]
+Let speed = Call [[speed_for_temperature]] with temperature=temperature.
+Let new_state = Call [[set_speed_for_type]] with state=state, particle_type="water", speed=speed.
+Return new_state.

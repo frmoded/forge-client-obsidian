@@ -1,28 +1,23 @@
 ---
 type: action
 role: leaf
-inputs: [temperature]
 description: "Block 22 — control: if temperature is low, set water speed low."
 ---
 
-# English
+# Description
 
-Inputs: temperature
+If `temperature == "low"`, call [[set_speed_low]] to set every
+water particle's speed to the low constant. Otherwise pass state
+through unchanged.
 
-If `temperature == "low"`:
-  Call [[set_speed_low]].
+## Inputs
 
-# Python
+- state — current ParticleState
+- temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-```python
-def compute(context, state, temperature):
-    if temperature == "low":
-        return context.compute("set_speed_low", state=state)
-    return state
-```
+# E--
 
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[set_speed_low]]
+If temperature == "low":
+  Let new_state = Call [[set_speed_low]] with state=state.
+  Return new_state.
+Return state.

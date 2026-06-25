@@ -1,28 +1,23 @@
 ---
 type: action
 role: leaf
-inputs: [temperature]
 description: "Block 18 — control: if temperature is high, set water speed high."
 ---
 
-# English
+# Description
 
-Inputs: temperature
+If `temperature == "high"`, call [[set_speed_high]] to set every
+water particle's speed to the high constant. Otherwise pass state
+through unchanged.
 
-If `temperature == "high"`:
-  Call [[set_speed_high]].
+## Inputs
 
-# Python
+- state — current ParticleState
+- temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-```python
-def compute(context, state, temperature):
-    if temperature == "high":
-        return context.compute("set_speed_high", state=state)
-    return state
-```
+# E--
 
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[set_speed_high]]
+If temperature == "high":
+  Let new_state = Call [[set_speed_high]] with state=state.
+  Return new_state.
+Return state.

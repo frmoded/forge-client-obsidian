@@ -1,27 +1,20 @@
 ---
 type: action
 role: leaf
-inputs: []
 description: "Block 13 — control: if a particle touches a wall, bounce it."
 ---
 
-# English
+# Description
 
-Inputs: None
+If the current particle is touching a wall (its position is at or
+past any chamber bound): bounce it off the wall via [[bounce_off_wall]].
+Particles inside the chamber pass through unchanged.
 
-If the current particle is touching a wall (its position is at or past any chamber bound):
-  Call [[bounce_off_wall]].
+## Inputs
 
-# Python
+- state — current ParticleState
 
-```python
-def compute(context, state):
-    state = context.compute("bounce_off_wall", state=state)
-    return state
-```
+# E--
 
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[bounce_off_wall]]
+Let new_state = Call [[bounce_off_wall]] with state=state.
+Return new_state.

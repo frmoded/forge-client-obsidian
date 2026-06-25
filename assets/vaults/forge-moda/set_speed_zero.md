@@ -1,35 +1,21 @@
 ---
 type: action
 role: leaf
-inputs: []
 description: "Block 25 — action: set water particle speed to zero."
 ---
 
-# English
+# Description
 
-Inputs: None
+Set the speed of every water particle to the zero speed constant
+(via [[speed_for_temperature]] with `temperature="zero"`). Other
+particle types untouched.
 
-Set the current water particle's speed to the zero speed constant, obtained via speed_for_temperature with `temperature='zero'`.
+## Inputs
 
-Applies to water particles only. Ink untouched. Other fields unchanged.
+- state — current ParticleState
 
-# Python
+# E--
 
-```python
-def compute(context, state):
-    zero_speed = context.compute("speed_for_temperature", temperature='zero')
-    is_water = state.types == 'water'
-    speeds = state.speeds.copy()
-    speeds[is_water] = zero_speed
-    return ParticleState(
-        tick=state.tick, ids=state.ids, types=state.types,
-        xs=state.xs, ys=state.ys, headings=state.headings,
-        speeds=speeds, masses=state.masses,
-        width=state.width, height=state.height)
-```
-
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[speed_for_temperature]]
+Let zero_speed = Call [[speed_for_temperature]] with temperature="zero".
+Let new_state = Call [[set_speed_for_type]] with state=state, particle_type="water", speed=zero_speed.
+Return new_state.

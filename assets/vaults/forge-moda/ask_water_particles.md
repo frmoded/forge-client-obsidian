@@ -1,33 +1,25 @@
 ---
 type: action
 role: leaf
-inputs: [temperature]
 description: "Block 17 — control: tell water particles to update speed for the temperature."
 ---
 
-# English
+# Description
 
-Inputs: temperature
+Update every water particle's speed to match the current
+temperature. Each of the four `[[if_temp_*_set_speed]]` blocks
+fires when the temperature label matches; the others pass through
+unchanged.
 
-For each water particle in state:
-  Call [[if_temp_high_set_speed]] with temperature.
-  Call [[if_temp_medium_set_speed]] with temperature.
-  Call [[if_temp_low_set_speed]] with temperature.
-  Call [[if_temp_zero_set_speed]] with temperature.
+## Inputs
 
-# Python
+- state — current ParticleState
+- temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-```python
-def compute(context, state, temperature):
-    state = context.compute("if_temp_high_set_speed", state=state, temperature=temperature)
-    state = context.compute("if_temp_medium_set_speed", state=state, temperature=temperature)
-    state = context.compute("if_temp_low_set_speed", state=state, temperature=temperature)
-    state = context.compute("if_temp_zero_set_speed", state=state, temperature=temperature)
-    return state
-```
+# E--
 
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[if_temp_high_set_speed]] [[if_temp_medium_set_speed]] [[if_temp_low_set_speed]] [[if_temp_zero_set_speed]]
+Let state = Call [[if_temp_high_set_speed]] with state=state, temperature=temperature.
+Let state = Call [[if_temp_medium_set_speed]] with state=state, temperature=temperature.
+Let state = Call [[if_temp_low_set_speed]] with state=state, temperature=temperature.
+Let state = Call [[if_temp_zero_set_speed]] with state=state, temperature=temperature.
+Return state.

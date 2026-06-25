@@ -1,28 +1,23 @@
 ---
 type: action
 role: leaf
-inputs: [temperature]
 description: "Block 24 — control: if temperature is zero, set water speed zero."
 ---
 
-# English
+# Description
 
-Inputs: temperature
+If `temperature == "zero"`, call [[set_speed_zero]] to set every
+water particle's speed to the zero constant. Otherwise pass state
+through unchanged.
 
-If `temperature == "zero"`:
-  Call [[set_speed_zero]].
+## Inputs
 
-# Python
+- state — current ParticleState
+- temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-```python
-def compute(context, state, temperature):
-    if temperature == "zero":
-        return context.compute("set_speed_zero", state=state)
-    return state
-```
+# E--
 
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[set_speed_zero]]
+If temperature == "zero":
+  Let new_state = Call [[set_speed_zero]] with state=state.
+  Return new_state.
+Return state.

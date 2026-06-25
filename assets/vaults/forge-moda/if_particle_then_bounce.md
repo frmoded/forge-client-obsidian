@@ -1,34 +1,22 @@
 ---
 type: action
 role: leaf
-inputs: [pairs]
 description: "Block 15 — control: for colliding pairs, bounce them off each other."
-generation_notes: |
-  Pure dispatch. `pairs` is an (M, 2) int64 array already computed by
-  interact — treat as black-box input, never recompute the collision
-  predicate, never fetch it via context.compute. If pairs.shape[0] == 0
-  return state unchanged; otherwise return
-  context.compute("bounce_off_particle", state=state, pairs=pairs).
 ---
 
-# English
+# Description
 
-Inputs: None
+For each colliding pair (i, j) in `pairs`: swap their headings via
+[[bounce_off_particle]]. If `pairs` is empty, state passes through
+unchanged. The pair list comes from [[interact]]'s
+[[detect_collisions]] step — never recompute it here.
 
-If the current particle is colliding with the other particle:
-  Call [[bounce_off_particle]].
+## Inputs
 
-# Python
+- state — current ParticleState
+- pairs — (M, 2) int64 array of colliding row indices (from [[interact]])
 
-```python
-def compute(context, state, pairs):
-    if pairs.shape[0] == 0:
-        return state
-    return context.compute("bounce_off_particle", state=state, pairs=pairs)
-```
+# E--
 
-# Dependencies
-
-*Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
-
-[[bounce_off_particle]]
+Let new_state = Call [[bounce_off_particle]] with state=state, pairs=pairs.
+Return new_state.

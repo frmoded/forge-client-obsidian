@@ -1,35 +1,19 @@
 ---
 type: action
 role: leaf
-inputs: []
 description: "Block 8 — set every ink particle's mass to medium."
 ---
 
-# English
+# Description
 
-Inputs: None
+Set the mass of every ink particle to `"medium"`. Water particles
+are untouched.
 
-Set the mass of all ink particles to `'medium'`.
+## Inputs
 
-Water particles are untouched.
+- state — current ParticleState
 
-# Python
+# E--
 
-```python
-def compute(context, state):
-    is_ink = state.types == 'ink'
-    masses = state.masses.copy()
-    masses[is_ink] = 'medium'
-    return ParticleState(
-        tick=state.tick,
-        ids=state.ids,
-        types=state.types,
-        xs=state.xs,
-        ys=state.ys,
-        headings=state.headings,
-        speeds=state.speeds,
-        masses=masses,
-        width=state.width,
-        height=state.height,
-    )
-```
+Let new_state = Call [[set_mass_for_type]] with state=state, particle_type="ink", mass="medium".
+Return new_state.
