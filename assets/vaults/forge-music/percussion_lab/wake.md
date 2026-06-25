@@ -1,52 +1,40 @@
 ---
 type: action
-description: wake
-inputs: []
-snapshot_capture: false
-edit_mode: python
 ---
 
-# English
+# Description
 
+What's left after the murmuration. The flock has passed — texture lingers,
+voices return briefly to recall the climax, then a long fade through dispersing
+motion to silence. Where [[murmuration]] is symmetric around a central peak,
+Wake is asymmetric — weighted toward the slow fade.
 
-What's left after the murmuration. The flock has passed — texture lingers, voices return briefly to recall the climax, then a long fade through dispersing motion to silence. Where Murmuration is symmetric around a central peak, Wake is asymmetric — weighted toward the slow fade.
+Six sections at 96 BPM in 4/4, 28 bars total, structured as a quiet opening +
+brief recall + long fade:
 
-Six sections at 96 BPM in 4/4, 28 bars total, structured as a quiet opening + brief recall + long fade:
+1. [[companions]](bars=8) — bars 1-8. Closed hi-hat texture remains, no kick yet.
+2. [[gathering]](bars=4) — bars 9-12. Snare ghosts and hi-hat eighths gather.
+3. [[peak]](bars=2) — bars 13-14. Brief recall of the murmuration's peak.
+4. [[dispersing]](bars=8) — bars 15-22. Long decrescendo fade.
+5. [[threading]](bars=4) — bars 23-26. Soft snare over kick + hi-hat.
+6. [[resting]](bars=2) — bars 27-28. Kick alone, then silence.
 
-1. [[companions]](bars=8) — bars 1-8. Closed hi-hat texture remains, no kick yet. The whisper of presence after the flock has flown.
-2. [[gathering]](bars=4) — bars 9-12. Snare ghosts and hi-hat eighths gather — voices stirring without committing to motion.
-3. [[peak]](bars=2) — bars 13-14. A brief recall of the murmuration's peak — full kit + crash for two bars only, like a memory of climax. The shortest section.
-4. [[dispersing]](bars=8) — bars 15-22. The long decrescendo fade. Decrescendo hairpin spans these 8 bars, instruments thinning across them.
-5. [[threading]](bars=4) — bars 23-26. Soft snare returns over kick + hi-hat — the faint echo continuing past the dispersion.
-6. [[resting]](bars=2) — bars 27-28. Kick alone for two bars, then silence.
+## Inputs
 
-The arc is asymmetric. The peak is brief and in the first third of the piece (bars 13-14 out of 28). The fade dominates the remainder. Same percussion vocabulary as Murmuration; different proportions; different feel.
+(none)
 
-Renders as multiple stacked staves in Verovio (one per instrument that plays anywhere across the piece); for high-fidelity rendering, download the MusicXML and open in MuseScore.
+## Mechanics
 
----
+Concatenate six sub-section calls with different bar counts to produce the
+asymmetric arc. The peak (sections of climax) sits in the first third; the
+fade dominates the remainder.
 
-# Python
+# E--
 
-```python
-def compute(context):
-    companions_score = context.compute("companions", bars=8)
-    gathering_score = context.compute("gathering", bars=4)
-    peak_score = context.compute("peak", bars=2)
-    dispersing_score = context.compute("dispersing", bars=8)
-    threading_score = context.compute("threading", bars=4)
-    resting_score = context.compute("resting", bars=2)
-
-    return sequence(
-        companions_score,
-        gathering_score,
-        peak_score,
-        dispersing_score,
-        threading_score,
-        resting_score,
-    )
-```
-
-# Dependencies
-
-[[companions]] [[gathering]] [[peak]] [[dispersing]] [[threading]] [[resting]]
+Let s1 = Call [[companions]] with bars=8.
+Let s2 = Call [[gathering]] with bars=4.
+Let s3 = Call [[peak]] with bars=2.
+Let s4 = Call [[dispersing]] with bars=8.
+Let s5 = Call [[threading]] with bars=4.
+Let s6 = Call [[resting]] with bars=2.
+Return Call [[sequence_list]] with sections=[s1, s2, s3, s4, s5, s6].

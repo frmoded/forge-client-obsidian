@@ -1,99 +1,32 @@
 ---
 type: action
-description: dispersing
-inputs: [bars]
-snapshot_capture: false
 ---
 
-# English
+# Description
 
+The flock thinning. Crash is gone; toms drop to single hits per bar; snare
+retreats to backbeats. Kick thins bar-by-bar (bar 1 still has a syncopated
+pickup; bar 4 only the downbeat). The defining feature: the `decrescendo`
+profile inserts a hairpin spanner — visible in MuseScore, audible in MIDI —
+that slopes the section from `mf` down toward `mp`.
 
-The flock thinning. Crash is gone; toms drop to single hits per bar; snare retreats to backbeats. Kick thins bar-by-bar (bar 1 still has a syncopated pickup; bar 4 only the downbeat). The defining feature: the `decrescendo` profile inserts a hairpin spanner — visible in MuseScore, audible in MIDI — that slopes the section from `mf` down toward `mp`.
+## Inputs
 
-Mechanically: kick varies (bar 1 adds `3.5`; bar 4 has only `0.0`); closed hi-hat eighths; open hi-hat on beat 1 only; snare on backbeats; low tom on beat 2; mid tom on and-of-2. Six voices active. `decrescendo` velocity profile.
+- bars (default 4) — section length; cycles the asymmetric 4-bar kick
 
-The `bars` parameter cycles the asymmetric kick pattern; the hairpin still anchors on the kick's first note regardless of length.
+## Mechanics
 
----
+Kick varies per bar (bar 1 adds beat 3.5; bar 4 has only beat 1); closed
+hi-hat eighths; open hi-hat on beat 1 only; snare on backbeats; low tom on
+beat 2; mid tom on and-of-2. Six voices active. `decrescendo` velocity
+profile; hairpin anchors on the first kick.
 
-# Python
+# E--
 
-```python
-def compute(context, bars=4):
-    import copy as _copy
-    ts = meter.TimeSignature('4/4')
-    mm = tempo.MetronomeMark(number=96)
-    bar_ql = ts.barDuration.quarterLength
-
-    PROFILE = 'decrescendo'
-    KICK = [
-        [(0.0, 0.25), (2.0, 0.25), (3.5, 0.25)],
-        [(0.0, 0.25), (2.0, 0.25)],
-        [(0.0, 0.25), (2.0, 0.25)],
-        [(0.0, 0.25)],
-    ]
-    # v0.3.11: active parts only. dispersing plays kick + snare +
-    # closed/open hi-hat + low/mid tom (crash silent).
-    SNARE  = [[(1.0, 0.25), (3.0, 0.25)]] * 4
-    CHIHAT = [[(i * 0.5, 0.25) for i in range(8)]] * 4
-    OPENHH = [[(0.0, 0.25)]] * 4
-    LOWTOM = [[(1.0, 0.25)]] * 4
-    MIDTOM = [[(1.5, 0.25)]] * 4
-
-    def _cycle(p4, n):
-        if n <= 0:
-            return []
-        return [p4[i % len(p4)] for i in range(n)]
-
-    def _build_bar(hits):
-        items = []
-        cursor = 0.0
-        for off, dur in hits:
-            if off > cursor:
-                items.append(note.Rest(quarterLength=off - cursor))
-                cursor = off
-            items.append(note.Note('C4', quarterLength=dur))
-            cursor += dur
-        if cursor < bar_ql:
-            items.append(note.Rest(quarterLength=bar_ql - cursor))
-        return items
-
-    def _build_part(inst_factory, p4):
-        cycled = _cycle(p4, bars)
-        part = stream.Part()
-        part.append(inst_factory())
-        notes = []
-        for bar_idx, hits in enumerate(cycled):
-            items = _build_bar(hits) if hits else [note.Rest(quarterLength=bar_ql)]
-            for it in items:
-                if isinstance(it, note.Note):
-                    notes.append(it)
-            m = stream.Measure(number=bar_idx + 1)
-            if bar_idx == 0:
-                m.append(_copy.deepcopy(ts))
-                m.append(_copy.deepcopy(mm))
-            for it in items:
-                m.append(it)
-            part.append(m)
-        return part, notes
-
-    if bars <= 0:
-        return stream.Score()
-
-    kp, kn = _build_part(kick, KICK)
-    sp, sn = _build_part(snare, SNARE)
-    chp, chn = _build_part(closed_hihat, CHIHAT)
-    ohp, ohn = _build_part(open_hihat, OPENHH)
-    ltp, ltn = _build_part(low_tom, LOWTOM)
-    mtp, mtn = _build_part(mid_tom, MIDTOM)
-
-    # Decrescendo: single call across the WHOLE kick span so the
-    # Diminuendo spanner anchors first→last kick note.
-    if kn:
-        with_velocity(kn, PROFILE, mark_dynamics=True)
-    for ns in (sn, chn, ohn, ltn, mtn):
-        if ns:
-            with_velocity(ns, PROFILE)
-
-    return voices_canonical(kp, sp=sp, chp=chp, ohp=ohp, ltp=ltp, mtp=mtp)
-```
+Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[[0, 2, 3.5], [0, 2], [0, 2], [0]], duration=0.25, bars=bars, velocity="decrescendo", mark_dynamics=True.
+Let sp = Call [[play_at_offsets]] with instrument=[[snare]], offsets=[1, 3], duration=0.25, bars=bars, velocity="decrescendo".
+Let chp = Call [[play_at_offsets]] with instrument=[[closed_hihat]], offsets=[0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], duration=0.25, bars=bars, velocity="decrescendo".
+Let ohp = Call [[play_at_offsets]] with instrument=[[open_hihat]], offsets=[0], duration=0.25, bars=bars, velocity="decrescendo".
+Let ltp = Call [[play_at_offsets]] with instrument=[[low_tom]], offsets=[1], duration=0.25, bars=bars, velocity="decrescendo".
+Let mtp = Call [[play_at_offsets]] with instrument=[[mid_tom]], offsets=[1.5], duration=0.25, bars=bars, velocity="decrescendo".
+Return Call [[voices_canonical]] with kp=kp, sp=sp, chp=chp, ohp=ohp, ltp=ltp, mtp=mtp.

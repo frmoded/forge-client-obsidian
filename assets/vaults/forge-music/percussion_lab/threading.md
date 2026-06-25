@@ -1,86 +1,25 @@
 ---
 type: action
-description: threading
-inputs:
-  - bars
-snapshot_capture: false
 ---
 
-# English
+# Description
 
+Threads weaving back together. Kick + closed hi-hat carry the heartbeat;
+snare returns lightly on off-beats `1.5` and `3.5`. Three voices — kick on
+1+3, snare on 1.5+3.5, closed hi-hat on quarters. `human` velocity profile.
 
-The quiet return. Kick on the heartbeat (1 and 3); closed hi-hat back to quarter notes; snare's soft ghost notes on the "and of 2" and "and of 4" — a small offbeat shimmer beneath the steady pulse. Three voices play; the rest fill rest staves at canonical positions.
+## Inputs
 
-Mechanically: kick on 1 and 3; closed hi-hat on every beat (quarters); snare on offsets 1.5 and 3.5. `human` profile (`mf`). One dynamic mark (`mf`) on the kick's first note.
+- bars (default 4) — section length
 
----
+## Mechanics
 
-# Python
+Kick on beats 1 and 3 (steady); snare on the 16th-late off-beats `1.5` /
+`3.5`; closed hi-hat on quarters. One `mf` mark on the kick's first note.
 
-```python
-def compute(context, bars=4):
-    import copy as _copy
-    ts = meter.TimeSignature('4/4')
-    mm = tempo.MetronomeMark(number=96)
-    bar_ql = ts.barDuration.quarterLength
+# E--
 
-    PROFILE = 'human'
-    # v0.3.11: active parts only. threading plays kick + snare + closed hi-hat.
-    KICK   = [[(0.0, 0.25), (2.0, 0.25)]] * 4
-    SNARE  = [[(1.5, 0.25), (3.5, 0.25)]] * 4
-    CHIHAT = [[(0.0, 0.25), (1.0, 0.25), (2.0, 0.25), (3.0, 0.25)]] * 4
-
-    def _cycle(p4, n):
-        if n <= 0:
-            return []
-        return [p4[i % len(p4)] for i in range(n)]
-
-    def _build_bar(hits):
-        items = []
-        cursor = 0.0
-        for off, dur in hits:
-            if off > cursor:
-                items.append(note.Rest(quarterLength=off - cursor))
-                cursor = off
-            items.append(note.Note('C4', quarterLength=dur))
-            cursor += dur
-        if cursor < bar_ql:
-            items.append(note.Rest(quarterLength=bar_ql - cursor))
-        return items
-
-    def _build_part(inst_factory, p4):
-        cycled = _cycle(p4, bars)
-        part = stream.Part()
-        part.append(inst_factory())
-        notes = []
-        for bar_idx, hits in enumerate(cycled):
-            items = _build_bar(hits) if hits else [note.Rest(quarterLength=bar_ql)]
-            for it in items:
-                if isinstance(it, note.Note):
-                    notes.append(it)
-            m = stream.Measure(number=bar_idx + 1)
-            if bar_idx == 0:
-                m.append(_copy.deepcopy(ts))
-                m.append(_copy.deepcopy(mm))
-            for it in items:
-                m.append(it)
-            part.append(m)
-        return part, notes
-
-    if bars <= 0:
-        return stream.Score()
-
-    kp, kn = _build_part(kick, KICK)
-    sp, sn = _build_part(snare, SNARE)
-    chp, chn = _build_part(closed_hihat, CHIHAT)
-
-    if kn:
-        with_velocity(kn[:1], PROFILE, mark_dynamics=True)
-        if len(kn) > 1:
-            with_velocity(kn[1:], PROFILE)
-    for ns in (sn, chn):
-        if ns:
-            with_velocity(ns, PROFILE)
-
-    return voices_canonical(kp, sp=sp, chp=chp)
-```
+Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[0, 2], duration=0.25, bars=bars, velocity="human", mark_dynamics=True.
+Let sp = Call [[play_at_offsets]] with instrument=[[snare]], offsets=[1.5, 3.5], duration=0.25, bars=bars, velocity="human".
+Let chp = Call [[play_at_offsets]] with instrument=[[closed_hihat]], offsets=[0, 1, 2, 3], duration=0.25, bars=bars, velocity="human".
+Return Call [[voices_canonical]] with kp=kp, sp=sp, chp=chp.
