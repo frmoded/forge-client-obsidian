@@ -256,6 +256,21 @@ ASSETS=(main.js manifest.json)
 [ "$STYLES_PRESENT" = "yes" ] && ASSETS+=(styles.css)
 ASSETS+=("$ZIP_PATH")
 
+# v0.2.179 — also upload every vendored wheel as an individual asset.
+# pyodide-host.ts's wheel CDN fallback (v0.2.174) fetches each wheel
+# by name from the release URL when local assets/ is absent (the
+# 100% case for BRAT users — BRAT only ships main.js + manifest.json
+# + styles.css). Pre-v0.2.179, wheels were uploaded manually for
+# v0.2.174 and never re-uploaded; v0.2.175–178 releases had no wheels
+# attached, so the CDN fallback 404'd and music-domain snippets
+# (murmuration) failed with `name 'play_at_offsets' is not defined`.
+# This loop auto-adds every assets/wheels/*.whl to the release.
+if [ -d "assets/wheels" ]; then
+  for whl in assets/wheels/*.whl; do
+    [ -f "$whl" ] && ASSETS+=("$whl")
+  done
+fi
+
 gh release create "v${NEW_VERSION}" \
   --title "v${NEW_VERSION} — ${TAG_MSG}" \
   --notes "Release v${NEW_VERSION}. BRAT users: run 'Check for updates' to pull main.js. Fresh installs: use install-latest.sh against the attached zip." \
