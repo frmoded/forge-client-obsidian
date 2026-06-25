@@ -232,18 +232,9 @@ export class PyodideHost {
         pyodideJsUrl = this.pluginAssetUrl("pyodide/pyodide.mjs");
         indexURL = this.pluginAssetUrl("pyodide/");
       } else {
-        console.log(`Forge: Pyodide local assets absent; falling back to CDN (${CDN_BASE})`);
-        // Show the user a one-time Notice — the first BRAT-install
-        // Forge-click downloads ~15 MB. Subsequent clicks are cached.
-        try {
-          // Dynamic import to avoid a hard dep on obsidian here at
-          // module-eval time during tests.
-          const obsidian: any = await import('obsidian');
-          new obsidian.Notice(
-            'Forge: downloading Pyodide runtime (one-time, ~15 MB)…',
-            15000,
-          );
-        } catch { /* test env — skip notice */ }
+        // v0.2.180 — log only; no more downloading-Pyodide Notice per
+        // driver. The console.log records the same fact for support.
+        console.log(`Forge: Pyodide local assets absent; falling back to CDN (${CDN_BASE}) — first download ~15 MB`);
         pyodideJsUrl = `${CDN_BASE}pyodide.mjs`;
         indexURL = CDN_BASE;
       }
@@ -318,6 +309,10 @@ export class PyodideHost {
     // will fail with a clear error when they try to import music21
     // (until v0.2.92's CDN-fallback for wheels lands). forge-tutorial
     // chapters 1-9 are pure Python — unaffected by the skipped mount.
+    console.log(
+      `Forge wheel-mount: manifest has ${manifest.wheels?.length ?? 0} wheels; `
+      + `pluginVersion=${this.pluginVersion}; will fall back to CDN per-wheel if local missing.`
+    );
     if (manifest.wheels && manifest.wheels.length > 0) {
       const adapter = this.app.vault.adapter;
       const mounted: string[] = [];
@@ -364,9 +359,20 @@ export class PyodideHost {
             if (resp.status >= 200 && resp.status < 300) {
               bytes = new Uint8Array(resp.arrayBuffer);
               fellBackToCdn.push(relpath);
+              console.log(
+                `Forge wheel-mount: ${wheelFname} ← CDN ok (${bytes.length} bytes)`
+              );
+            } else {
+              console.warn(
+                `Forge wheel-mount: ${wheelFname} ← CDN HTTP ${resp.status} (url=${cdnUrl})`
+              );
             }
           } catch (e) {
-            // Network / 404 — leave bytes null; treated as skipped below.
+            console.warn(
+              `Forge wheel-mount: ${wheelFname} ← CDN fetch threw`,
+              e,
+              `(url=${cdnUrl})`,
+            );
           }
         }
         if (!bytes) {
@@ -377,6 +383,9 @@ export class PyodideHost {
         pyodide.FS.writeFile("/bundle/" + relpath, bytes);
         mounted.push(relpath);
       }
+      console.log(
+        `Forge wheel-mount summary: mounted=${mounted.length} cdn=${fellBackToCdn.length} skipped=${skipped.length}`,
+      );
       if (mounted.length > 0) {
         console.log(
           `Forge: ${mounted.length} wheels mounted` +
@@ -479,10 +488,26 @@ if os.path.isdir("/bundle/wheels"):
     SITE = "/bundle/site-packages"
     if SITE not in sys.path:
         sys.path.insert(0, SITE)
-    for fname in sorted(os.listdir("/bundle/wheels")):
+    _wheel_files = sorted(os.listdir("/bundle/wheels"))
+    print(f"Forge wheel-extract: /bundle/wheels has {len(_wheel_files)} entries: {_wheel_files[:3]}{'...' if len(_wheel_files) > 3 else ''}")
+    _extracted = 0
+    for fname in _wheel_files:
         if fname.endswith(".whl"):
-            with zipfile.ZipFile(os.path.join("/bundle/wheels", fname)) as zf:
-                zf.extractall(SITE)
+            try:
+                with zipfile.ZipFile(os.path.join("/bundle/wheels", fname)) as zf:
+                    zf.extractall(SITE)
+                _extracted += 1
+            except Exception as _e:
+                print(f"Forge wheel-extract FAILED {fname}: {type(_e).__name__}: {_e}")
+    print(f"Forge wheel-extract: extracted {_extracted} wheels into {SITE}")
+    # Quick probe of music21 importability post-extract — informational only.
+    try:
+        import music21 as _m21_probe
+        print(f"Forge wheel-extract: music21 import OK (version={getattr(_m21_probe, 'VERSION_STR', '?')})")
+    except Exception as _e:
+        print(f"Forge wheel-extract: music21 import FAILED — {type(_e).__name__}: {_e}")
+else:
+    print("Forge wheel-extract: /bundle/wheels does not exist — wheels skipped")
 
 import io
 import uuid
@@ -491,6 +516,12 @@ from forge.core.snippet_registry import SnippetRegistry
 from forge.core.graph_resolver import GraphResolver
 from forge.core.executor import extract_python, exec_python, extract_section, resolve_action_code
 from forge.core.serialization import serialize_result
+
+# Forge import-status probe — surfaces whether the eager music + moda
+# chip dicts populated at executor module-load time. If music chips
+# are empty here, lazy hydration on first chip call will retry.
+from forge.core.executor import _FORGE_MUSIC_LIB_NAMES, _FORGE_MODA_LIB_NAMES
+print(f"Forge executor-load: music chips={len(_FORGE_MUSIC_LIB_NAMES)} moda chips={len(_FORGE_MODA_LIB_NAMES)}")
 
 # V1 user-vault model: single registry against /bundle/user-vault/.
 # That directory holds the user's authoring snippets at the root +
