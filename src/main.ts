@@ -2074,10 +2074,16 @@ export default class ForgePlugin extends Plugin {
     const file = view.file;
     const body = await this.app.vault.read(file);
 
-    if (!isV2Shape(body)) {
+    // v0.2.183 — fix smoke-1 bug: /generate's whole job is to ADD a
+    // # E-- section to a note that has # Description but no E-- yet,
+    // so requiring isV2Shape() (which needs BOTH) silently rejected
+    // every legitimate candidate. Drop to requiring just # Description;
+    // replaceEmmSection() handles "section absent → append" already.
+    if (!/^# Description\s*$/m.test(body)) {
       new Notice(
-        'Forge: this note is not V2-shape (needs # Description + # E--). '
-        + 'Use "Generate only" for V1 notes.');
+        'Forge: this note has no # Description heading. '
+        + 'Add `# Description` with prose, then re-run /generate. '
+        + 'For V1 notes, use "Generate only".');
       return;
     }
 
@@ -2983,7 +2989,19 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       console.error('Forge Compute Error:', e);
       const detail = e instanceof Error ? e.message : String(e);
-      new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: Compute failed — check console.');
+      // v0.2.183 — route long tracebacks to the output panel instead
+      // of the toast.
+      const shortMsg = detail.length < 120 && !detail.includes('\n')
+        ? detail
+        : 'see Forge output panel for details';
+      // Best-effort show the detail in the output view (the view may not
+      // have materialized yet if the failure was very early — fall back
+      // silently to the toast if so).
+      try {
+        const outputView = await this.getOutputView();
+        outputView.appendError(snippetId, detail, '');
+      } catch { /* output panel unavailable; toast carries the brief msg */ }
+      new Notice(errorPrefix ? `${errorPrefix}: ${shortMsg}` : `Forge: Compute failed — ${shortMsg}`);
       return;
     }
 
@@ -3020,11 +3038,19 @@ export default class ForgePlugin extends Plugin {
       // Bundle B missed this site; driver flagged in 2026-06-11-1900
       // smoke Step 9 as a yellow icon next to a red engine stack).
       console.error('runSnippet: Forge Compute non-2xx:', res.status, detail);
-      // Always show the detailed error in the output view. When invoked from
-      // the forge flow, also pop a notice so the user sees "during execution"
-      // attribution without scanning the output panel.
+      // v0.2.183 — driver feedback: don't dump the full Python traceback
+      // into a toast. Long multi-line tracebacks in Notice were unreadable
+      // and pushed other UI off-screen. Keep the brief attribution toast
+      // (so the user sees a failure happened) but route the actual error
+      // text to the output panel where it can be selected/copied (Cmd-C
+      // works there post v0.2.178). For very short error messages we
+      // still pop the message in the toast — it's only the multi-line
+      // tracebacks that hurt.
+      const shortMsg = errorMsg.length < 120 && !errorMsg.includes('\n')
+        ? errorMsg
+        : 'see Forge output panel for details';
       if (errorPrefix) {
-        new Notice(`${errorPrefix}: ${errorMsg}`);
+        new Notice(`${errorPrefix}: ${shortMsg}`);
       }
       outputView.appendError(snippetId, errorMsg, stdout);
       return;
