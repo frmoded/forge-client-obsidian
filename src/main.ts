@@ -9,6 +9,7 @@ import {
   removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core';
 import { computeDescriptionHash } from './description-hash-core';
+import { engineChipsForDomains } from './v2-engine-chips';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
@@ -2123,8 +2124,21 @@ export default class ForgePlugin extends Plugin {
     }
     const inputs = extractInputs(body).map((d) => d.name);
     console.warn('[Forge V2 /generate] inputs:', inputs);
-    const deps = await this.gatherVaultActionNoteDescriptions();
-    console.warn('[Forge V2 /generate] deps count:', deps.length);
+    const vaultDeps = await this.gatherVaultActionNoteDescriptions();
+    const activeDomainsList =
+      this.activeDomains === null ? null : Array.from(this.activeDomains);
+    // v0.2.188 — engine chips aren't vault notes (they're Python
+    // functions in forge.{music,moda,...}.lib); without them in the
+    // deps payload the LLM defaults to `# missing chip: ...` for
+    // anything the few-shot examples don't already showcase. Prepend
+    // the catalog filtered to active domains. Driver smoke v0.2.187:
+    // "Play a kick drum on beat 2" produced `# missing chip:
+    // play_at_offsets` despite play_at_offsets existing in music.lib.
+    const engineDeps = engineChipsForDomains(activeDomainsList);
+    const deps = [...engineDeps, ...vaultDeps];
+    console.warn(
+      `[Forge V2 /generate] deps count: ${deps.length} (engine: ${engineDeps.length}, vault: ${vaultDeps.length})`
+    );
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     console.warn('[Forge V2 /generate] snippetId:', snippetId);
 
@@ -2135,8 +2149,7 @@ export default class ForgePlugin extends Plugin {
       inputs,
       generation_notes: '',
       deps,
-      active_domains:
-        this.activeDomains === null ? null : Array.from(this.activeDomains),
+      active_domains: activeDomainsList,
       dialect: 'emm',
     };
 
