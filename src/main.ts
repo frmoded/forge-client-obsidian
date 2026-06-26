@@ -315,7 +315,7 @@ export default class ForgePlugin extends Plugin {
       );
       if (check.stale) {
         // 30-second Notice so the user can read the reinstall path.
-        new Notice(check.noticeMessage, 30000);
+        this.notice(check.noticeMessage, 30000);
         console.error(
           `Forge onload: stale main.js. manifestVersion=${check.manifestVersion}, mainJsVersion=${check.buildVersion}`,
         );
@@ -627,7 +627,7 @@ export default class ForgePlugin extends Plugin {
       if (!isPythonBuiltin(bareTarget)) return;
       evt.preventDefault();
       evt.stopPropagation();
-      new Notice(`'${bareTarget}' is a Python builtin — no Forge snippet to navigate to.`);
+      this.notice(`'${bareTarget}' is a Python builtin — no Forge snippet to navigate to.`);
     }, { capture: true });
 
     // v0.2.18: keep the Pyodide-mounted user vault in sync with
@@ -733,7 +733,7 @@ export default class ForgePlugin extends Plugin {
         if (view?.file) {
           const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
           if (getEditMode(fm) === 'python') {
-            new Notice(`Forge: ${view.file.basename} is in Python mode — switch to English mode to regenerate.`);
+            this.notice(`Forge: ${view.file.basename} is in Python mode — switch to English mode to regenerate.`);
             return;
           }
         }
@@ -915,19 +915,19 @@ export default class ForgePlugin extends Plugin {
               this.settings.serverUrl, vaultPath, caller, targetCallee, state,
             );
             if (res.status === 200) {
-              new Notice(`Forge: ${verb}d ${caller} → ${targetCallee}`);
+              this.notice(`Forge: ${verb}d ${caller} → ${targetCallee}`);
             } else if (res.status === 404) {
-              new Notice(
+              this.notice(
                 `Forge: no snapshot for ${caller} → ${targetCallee}. ` +
                 `Forge-click ${caller} once to capture it.`,
               );
             } else {
               const detail = res.json?.detail ?? `HTTP ${res.status}`;
-              new Notice(`Forge: ${verb} failed — ${detail}`);
+              this.notice(`Forge: ${verb} failed — ${detail}`);
             }
           } catch (e) {
             console.error(`Forge ${verb} error:`, e);
-            new Notice(`Forge: ${verb} failed — check console.`);
+            this.notice(`Forge: ${verb} failed — check console.`);
           }
         };
 
@@ -1028,7 +1028,7 @@ export default class ForgePlugin extends Plugin {
       // 10-second timeout (vs Obsidian's 5s default) because closed-
       // beta students may be mid-other-task when Obsidian finishes
       // loading; 5s is too easy to miss.
-      new Notice(welcomeMessage(hasToken), 10000);
+      this.notice(welcomeMessage(hasToken), 10000);
       this.settings.seenWelcome = true;
       await this.saveSettings();
     }
@@ -1152,7 +1152,7 @@ export default class ForgePlugin extends Plugin {
   private async toggleEditMode() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('No active note.');
+      this.notice('No active note.');
       return;
     }
     await this.toggleEditModeForFile(view.file);
@@ -1161,7 +1161,7 @@ export default class ForgePlugin extends Plugin {
   private async toggleEditModeForFile(file: TFile) {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (fm?.type !== 'action') {
-      new Notice('Edit mode is only meaningful for action snippets.');
+      this.notice('Edit mode is only meaningful for action snippets.');
       return;
     }
     const current = getEditMode(fm);
@@ -1223,7 +1223,7 @@ export default class ForgePlugin extends Plugin {
   ): Promise<void> {
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (fm?.type !== 'action') {
-      new Notice('Edit mode is only meaningful for action snippets.');
+      this.notice('Edit mode is only meaningful for action snippets.');
       return;
     }
 
@@ -1246,7 +1246,7 @@ export default class ForgePlugin extends Plugin {
         delete fm.locked_english_hash;     // v0.2.102: retired field; clean up old vaults
         delete fm.english_hash;            // v0.2.90: invalidate cache on transition to english
       });
-      new Notice(`Forge: ${file.basename} → English mode`);
+      this.notice(`Forge: ${file.basename} → English mode`);
       this.syncButtons();
       return;
     }
@@ -1260,7 +1260,7 @@ export default class ForgePlugin extends Plugin {
     // empty body is still editable; a missing heading isn't.
     const content = await this.app.vault.read(file);
     if (!/^#{1,6}\s+python\s*$/im.test(content)) {
-      new Notice(
+      this.notice(
         `Forge: '${file.basename}' has no Python facet (slot-free ` +
         `canonical). Add slots and Forge-run to generate one, or ` +
         `stay in English mode.`,
@@ -1281,13 +1281,13 @@ export default class ForgePlugin extends Plugin {
       delete fm.locked;                  // migrate off the legacy field
       delete fm.locked_english_hash;     // retired field; clean up
     });
-    new Notice(`Forge: ${file.basename} → Python mode`);
+    this.notice(`Forge: ${file.basename} → Python mode`);
     // v0.2.9: discoverability nudge. The unlock affordances (toolbar
     // pencil, Cmd+P entry, right-click) were too easy to miss in
     // closed-beta smoke. Fire a longer explainer Notice the first
     // time the user enters Python mode this session.
     if (!this.pythonModeNoticeShown) {
-      new Notice(
+      this.notice(
         'Python facet is now editable. To switch back, click the '
         + 'pencil icon in the toolbar, use Cmd+P → '
         + '"Forge: Toggle Python/English editing mode", or right-click '
@@ -1307,12 +1307,12 @@ export default class ForgePlugin extends Plugin {
   private async syncEnglishFromPython(target?: TFile) {
     const file = target ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if (!file) {
-      new Notice('No active note for sync.');
+      this.notice('No active note for sync.');
       return;
     }
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (fm?.type !== 'action') {
-      new Notice('Sync English ← Python is only for action snippets.');
+      this.notice('Sync English ← Python is only for action snippets.');
       return;
     }
 
@@ -1334,7 +1334,7 @@ export default class ForgePlugin extends Plugin {
       response = await canonicalizeSnippet(this.settings.serverUrl, vaultPath, snippetId);
     } catch (e) {
       console.error('Forge canonicalize: network error', e);
-      new Notice('Forge: canonicalize failed — check console.');
+      this.notice('Forge: canonicalize failed — check console.');
       modal.finish();
       return;
     } finally {
@@ -1343,7 +1343,7 @@ export default class ForgePlugin extends Plugin {
 
     if (response.status !== 200 || typeof response.json?.english !== 'string') {
       const detail = response.json?.detail ?? `HTTP ${response.status}`;
-      new Notice(`Forge: canonicalize failed — ${detail}`);
+      this.notice(`Forge: canonicalize failed — ${detail}`);
       console.error('Forge canonicalize:', response);
       return;
     }
@@ -1363,7 +1363,7 @@ export default class ForgePlugin extends Plugin {
       });
     } catch (e) {
       console.error('Forge canonicalize: write failed', e);
-      new Notice('Forge: canonicalize wrote the model output but the file write failed — check console.');
+      this.notice('Forge: canonicalize wrote the model output but the file write failed — check console.');
       return;
     }
 
@@ -1378,7 +1378,7 @@ export default class ForgePlugin extends Plugin {
       activeView.setViewData(writtenContent, false);
     }
 
-    new Notice(`Forge: synced English ← Python on ${snippetId}`);
+    this.notice(`Forge: synced English ← Python on ${snippetId}`);
     this.syncButtons();
   }
 
@@ -1618,30 +1618,30 @@ export default class ForgePlugin extends Plugin {
     if (!ok) return;
     try {
       await this.app.vault.delete(file);
-      new Notice(`Forge: ${file.basename} reset — library version now active.`);
+      this.notice(`Forge: ${file.basename} reset — library version now active.`);
     } catch (e) {
       console.error('Forge: reset failed', e);
-      new Notice(`Forge: reset of ${file.basename} failed — check console.`);
+      this.notice(`Forge: reset of ${file.basename} failed — check console.`);
     }
   }
 
   private async customizeFromLibrary(file: TFile) {
     const targetPath = file.name;  // basename → vault root
     if (this.app.vault.getAbstractFileByPath(targetPath)) {
-      new Notice(`Forge: ${targetPath} already exists at vault root.`);
+      this.notice(`Forge: ${targetPath} already exists at vault root.`);
       return;
     }
     try {
       const body = await this.app.vault.read(file);
       const created = await this.app.vault.create(targetPath, body);
-      new Notice(`Forge: customized ${targetPath} — edit at vault root; ` +
+      this.notice(`Forge: customized ${targetPath} — edit at vault root; ` +
         `your copy shadows the library version.`);
       // Open the new file so the user immediately lands on their copy.
       const leaf = this.app.workspace.getLeaf(false);
       await leaf.openFile(created as TFile);
     } catch (e) {
       console.error('Forge: customize failed', e);
-      new Notice(`Forge: customize of ${file.basename} failed — check console.`);
+      this.notice(`Forge: customize of ${file.basename} failed — check console.`);
     }
   }
 
@@ -1827,7 +1827,7 @@ export default class ForgePlugin extends Plugin {
       if (view instanceof ForgeModaView && view.step()) stepped++;
     }
     if (stepped === 0) {
-      new Notice('No MoDa view open — open one first (Forge: Open MoDa simulation).');
+      this.notice('No MoDa view open — open one first (Forge: Open MoDa simulation).');
     }
   }
 
@@ -1850,16 +1850,16 @@ export default class ForgePlugin extends Plugin {
       try {
         const res = await freezeEdge(this.settings.serverUrl, vaultPath, caller, callee, state);
         if (res.status === 200) {
-          new Notice(`Forge: ${verb}d ${caller} → ${callee}`);
+          this.notice(`Forge: ${verb}d ${caller} → ${callee}`);
         } else if (res.status === 404) {
-          new Notice(`Forge: no snapshot for ${caller} → ${callee}. Run the edge first.`);
+          this.notice(`Forge: no snapshot for ${caller} → ${callee}. Run the edge first.`);
         } else {
           const detail = res.json?.detail ?? `HTTP ${res.status}`;
-          new Notice(`Forge: ${verb} failed — ${detail}`);
+          this.notice(`Forge: ${verb} failed — ${detail}`);
         }
       } catch (e) {
         console.error(`Forge ${verb} error:`, e);
-        new Notice(`Forge: ${verb} failed — check console.`);
+        this.notice(`Forge: ${verb} failed — check console.`);
       }
     }).open();
   }
@@ -1870,7 +1870,7 @@ export default class ForgePlugin extends Plugin {
   private async forgeSnippet() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('No active note to forge.');
+      this.notice('No active note to forge.');
       return;
     }
     const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
@@ -1924,7 +1924,7 @@ export default class ForgePlugin extends Plugin {
       // Log here so devs have explicit confirmation in the browser
       // console alongside the existing Notice.
       console.log(`Forge: skipping /generate, ${view.file.basename} is in Python mode`);
-      new Notice(`Forge: ${view.file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
+      this.notice(`Forge: ${view.file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
       await this.runSnippet('Forge failed during execution');
       return;
     }
@@ -1937,7 +1937,7 @@ export default class ForgePlugin extends Plugin {
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
     const regenResult = await routeActionCodeRegen(snippetId, this.routingDeps());
     if (!regenResult.ok) {
-      new Notice(`Forge: ${regenResult.message}`);
+      this.notice(`Forge: ${regenResult.message}`);
       return;
     }
     if (regenResult.via === 'e--') {
@@ -2034,7 +2034,7 @@ export default class ForgePlugin extends Plugin {
         console.error('dispatchModaBranch: writeCanonicalPythonBack failed', e);
       }
     } else if (outcome.kind === 'notice-and-open') {
-      new Notice(outcome.notice, 5000);
+      this.notice(outcome.notice, 5000);
     }
     // 'open' kind: /generate already wrote Python; nothing to do here.
     await this.openModaView();
@@ -2066,51 +2066,67 @@ export default class ForgePlugin extends Plugin {
    *  Stale-indicator UI is a Phase 3 follow-up per the prompt's
    *  §8 SPLIT GUIDANCE. */
   private async generateEmmFromDescription(): Promise<void> {
+    // v0.2.184 — instrument every step with console.warn so the next
+    // smoke can pinpoint exactly which step is silently failing.
+    console.warn('[Forge V2 /generate] command invoked');
+
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('Forge: no active note to generate E-- for.');
+      console.warn('[Forge V2 /generate] no active markdown view → bailing');
+      await this.forgeOutput('Forge V2 /generate: no active note. Open a markdown file first.', 'error');
       return;
     }
     const file = view.file;
-    const body = await this.app.vault.read(file);
+    console.warn('[Forge V2 /generate] active file:', file.path);
 
-    // v0.2.183 — fix smoke-1 bug: /generate's whole job is to ADD a
-    // # E-- section to a note that has # Description but no E-- yet,
-    // so requiring isV2Shape() (which needs BOTH) silently rejected
-    // every legitimate candidate. Drop to requiring just # Description;
-    // replaceEmmSection() handles "section absent → append" already.
+    const body = await this.app.vault.read(file);
+    console.warn('[Forge V2 /generate] body length:', body.length);
+
     if (!/^# Description\s*$/m.test(body)) {
-      new Notice(
-        'Forge: this note has no # Description heading. '
+      console.warn('[Forge V2 /generate] no # Description heading → bailing');
+      await this.forgeOutput(
+        'Forge V2 /generate: this note has no # Description heading. '
         + 'Add `# Description` with prose, then re-run /generate. '
-        + 'For V1 notes, use "Generate only".');
+        + 'For V1 notes, use "Generate only".',
+        'error',
+      );
       return;
     }
 
     const lock = getFmFieldV2(body, 'lock');
+    console.warn('[Forge V2 /generate] lock field:', lock);
     if (lock === 'e--canonical') {
-      new Notice(
-        'Forge: note is e--canonical (E-- locked). '
-        + 'Run "Forge: Unlock E--" to enable /generate.');
+      await this.forgeOutput(
+        'Forge V2 /generate: note is e--canonical (E-- locked). '
+        + 'Run "Forge: Unlock E--" to enable /generate.',
+        'error',
+      );
       return;
     }
 
     const settings = this.settings;
     if (!settings.transpileServiceToken) {
-      new Notice(
-        'Forge: set your transpile token in Settings → Forge → Transpile token '
-        + 'before using /generate.');
+      console.warn('[Forge V2 /generate] no transpile token configured');
+      await this.forgeOutput(
+        'Forge V2 /generate: set your transpile token in Settings → Forge → Transpile token '
+        + 'before using /generate.',
+        'error',
+      );
       return;
     }
 
     const description = extractDescription(body);
+    console.warn('[Forge V2 /generate] description length:', description.length, '; first 80 chars:', description.slice(0, 80));
     if (!description.trim()) {
-      new Notice('Forge: # Description is empty — nothing to generate from.');
+      await this.forgeOutput('Forge V2 /generate: # Description is empty — nothing to generate from.', 'error');
       return;
     }
     const inputs = extractInputs(body).map((d) => d.name);
+    console.warn('[Forge V2 /generate] inputs:', inputs);
     const deps = await this.gatherVaultActionNoteDescriptions();
+    console.warn('[Forge V2 /generate] deps count:', deps.length);
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
+    console.warn('[Forge V2 /generate] snippetId:', snippetId);
 
     const payload: AlphaGenerateRequest = {
       snippet_id: snippetId,
@@ -2124,6 +2140,9 @@ export default class ForgePlugin extends Plugin {
       dialect: 'emm',
     };
 
+    await this.forgeOutput(`Forge V2 /generate: invoking service for "${file.basename}"…`, 'info', snippetId);
+    console.warn('[Forge V2 /generate] POST to', settings.transpileServiceUrl + '/generate');
+
     let response;
     try {
       response = await generateSnippetAlpha(
@@ -2132,28 +2151,34 @@ export default class ForgePlugin extends Plugin {
         payload,
       );
     } catch (e) {
-      console.error('Forge generateEmmFromDescription transport error:', e);
+      console.error('[Forge V2 /generate] transport error:', e);
       const detail = e instanceof Error ? e.message : String(e);
-      new Notice(`Forge: could not reach transpile service — ${detail}`);
+      await this.forgeOutput(`Forge V2 /generate: could not reach transpile service — ${detail}`, 'error', snippetId);
       return;
     }
 
+    console.warn('[Forge V2 /generate] response status:', response.status);
     if (response.status !== 200) {
-      console.error('Forge generateEmmFromDescription non-200:', response.status, response.json);
+      console.error('[Forge V2 /generate] non-200:', response.status, response.json);
       const detail = response.json?.detail;
-      const noticeText = this.formatAlphaErrorNotice(
-        response.status, detail, settings.transpileServiceUrl,
-        'Forge: V2 /generate failed');
-      new Notice(noticeText);
+      const detailText = typeof detail === 'string'
+        ? detail
+        : JSON.stringify(detail);
+      await this.forgeOutput(
+        `Forge V2 /generate failed (HTTP ${response.status}): ${detailText}`,
+        'error',
+        snippetId,
+      );
       return;
     }
 
     const code: string | undefined = response.json?.code;
     if (!code) {
-      console.error('Forge generateEmmFromDescription: empty code', response.json);
-      new Notice('Forge: service returned empty code field — check console.');
+      console.error('[Forge V2 /generate] empty code field:', response.json);
+      await this.forgeOutput('Forge V2 /generate: service returned empty code field.', 'error', snippetId);
       return;
     }
+    console.warn('[Forge V2 /generate] received code length:', code.length, '; first 120 chars:', code.slice(0, 120));
 
     // Write the E-- into the note + stamp description_hash.
     const withEmm = replaceEmmSection(body, code);
@@ -2161,7 +2186,12 @@ export default class ForgePlugin extends Plugin {
     const withHash = setFmFieldV2(withEmm, 'description_hash', descHash);
 
     await this.app.vault.modify(file, withHash);
-    new Notice(`Forge: E-- generated for ${file.basename}. Review + Forge-click to test.`);
+    console.warn('[Forge V2 /generate] file written; description_hash:', descHash);
+    await this.forgeOutput(
+      `Forge V2 /generate: E-- generated for ${file.basename}. Review + Forge-click to test.`,
+      'success',
+      snippetId,
+    );
   }
 
   /** v0.2.182 — Walk the vault for `type: action` notes; extract each
@@ -2205,25 +2235,25 @@ export default class ForgePlugin extends Plugin {
   private async toggleEmmLock(locking: boolean): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('Forge: no active note to toggle E-- lock on.');
+      this.notice('Forge: no active note to toggle E-- lock on.');
       return;
     }
     const body = await this.app.vault.read(view.file);
     if (locking) {
       const out = setFmFieldV2(body, 'lock', 'e--canonical');
       await this.app.vault.modify(view.file, out);
-      new Notice(`Forge: ${view.file.basename} → E-- locked (/generate disabled).`);
+      this.notice(`Forge: ${view.file.basename} → E-- locked (/generate disabled).`);
     } else {
       const out = removeFmFieldV2(body, 'lock');
       await this.app.vault.modify(view.file, out);
-      new Notice(`Forge: ${view.file.basename} → E-- unlocked (/generate enabled).`);
+      this.notice(`Forge: ${view.file.basename} → E-- unlocked (/generate enabled).`);
     }
   }
 
   private async generate(errorPrefix?: string): Promise<boolean> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('No active note to generate.');
+      this.notice('No active note to generate.');
       return false;
     }
 
@@ -2235,7 +2265,7 @@ export default class ForgePlugin extends Plugin {
     // network round-trip discovering a 401.
     if (!settings.transpileServiceToken) {
       const msg = 'Set your transpile token in Settings → Forge → Transpile token before using /generate.';
-      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
       return false;
     }
 
@@ -2313,7 +2343,7 @@ export default class ForgePlugin extends Plugin {
       } catch (e) {
         console.error('Forge: inventory materialization failed', e);
         const detail = e instanceof Error ? e.message : String(e);
-        new Notice(errorPrefix ? `${errorPrefix}: inventory failed — ${detail}` : `Forge: inventory failed — ${detail}`);
+        this.notice(errorPrefix ? `${errorPrefix}: inventory failed — ${detail}` : `Forge: inventory failed — ${detail}`);
         return false;
       }
 
@@ -2332,7 +2362,7 @@ export default class ForgePlugin extends Plugin {
         console.error('Forge Generate Error (transport):', e);
         const detail = e instanceof Error ? e.message : String(e);
         const msg = `Could not reach transpile service at ${settings.transpileServiceUrl}. Check your internet connection + Settings → Forge → Transpile service URL. (${detail})`;
-        new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+        this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
         return false;
       }
 
@@ -2341,13 +2371,13 @@ export default class ForgePlugin extends Plugin {
         const returnedId: string = response.json?.snippet_id ?? snippetId;
         if (!code) {
           const msg = 'Service returned empty code field';
-          new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
+          this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
           console.error('Forge: empty α response', response.json);
           return false;
         }
         await this.writeGeneratedCode({ [returnedId]: code });
         if (!errorPrefix) {
-          new Notice(`Forge: ${returnedId} written.`);
+          this.notice(`Forge: ${returnedId} written.`);
         }
         return true;
       }
@@ -2362,12 +2392,12 @@ export default class ForgePlugin extends Plugin {
       console.error('Forge α Generate Error:', { status, detail });
       const noticeText = this.formatAlphaErrorNotice(
         status, detail, settings.transpileServiceUrl, errorPrefix);
-      new Notice(noticeText);
+      this.notice(noticeText);
       return false;
     } catch (outer) {
       console.error('Forge: unexpected error in generate', outer);
       const detail = outer instanceof Error ? outer.message : String(outer);
-      new Notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: unexpected error — check console.');
+      this.notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: unexpected error — check console.');
       return false;
     } finally {
       modal.finish();
@@ -2594,7 +2624,7 @@ export default class ForgePlugin extends Plugin {
   private async syncEdgesForActive() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('No active snippet to sync.');
+      this.notice('No active snippet to sync.');
       return;
     }
     // v0.2.26: qualified snippet_id for library subdir files.
@@ -2603,10 +2633,10 @@ export default class ForgePlugin extends Plugin {
     const res = await syncDependencies(this.settings.serverUrl, vaultPath, snippetId);
     if (res.status === 200) {
       const deps: string[] = res.json?.dependencies ?? [];
-      new Notice(`Forge: synced ${deps.length} dependenc${deps.length === 1 ? 'y' : 'ies'}.`);
+      this.notice(`Forge: synced ${deps.length} dependenc${deps.length === 1 ? 'y' : 'ies'}.`);
     } else {
       const detail = res.json?.detail ?? `HTTP ${res.status}`;
-      new Notice(`Forge: sync failed — ${detail}`);
+      this.notice(`Forge: sync failed — ${detail}`);
       console.error('Forge sync_dependencies failed', res);
     }
   }
@@ -2616,7 +2646,7 @@ export default class ForgePlugin extends Plugin {
   private async runZapLine() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('No active note to zap.');
+      this.notice('No active note to zap.');
       return;
     }
 
@@ -2640,7 +2670,7 @@ export default class ForgePlugin extends Plugin {
   private async runSnippet(errorPrefix?: string) {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      new Notice('No active note to run.');
+      this.notice('No active note to run.');
       return;
     }
 
@@ -2758,11 +2788,11 @@ export default class ForgePlugin extends Plugin {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
     if (!containerEl) {
-      new Notice('Forge: no active markdown view to toggle.');
+      this.notice('Forge: no active markdown view to toggle.');
       return;
     }
     if (!containerEl.classList.contains('forge-snippet')) {
-      new Notice('Forge: this file is not a snippet — visibility is not managed here.');
+      this.notice('Forge: this file is not a snippet — visibility is not managed here.');
       return;
     }
     const file = view?.file;
@@ -2771,7 +2801,7 @@ export default class ForgePlugin extends Plugin {
     this.applyExpandedStateToView(containerEl, next);
     const summary =
       next.frontmatter && next.dependencies ? 'shown' : 'hidden';
-    new Notice(`Forge: frontmatter + dependencies ${summary}.`);
+    this.notice(`Forge: frontmatter + dependencies ${summary}.`);
   }
 
   /** v0.2.139 — Toggle ONLY frontmatter visibility. Dependencies
@@ -2780,14 +2810,14 @@ export default class ForgePlugin extends Plugin {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
     if (!containerEl?.classList.contains('forge-snippet')) {
-      new Notice('Forge: this file is not a snippet — frontmatter visibility is not managed here.');
+      this.notice('Forge: this file is not a snippet — frontmatter visibility is not managed here.');
       return;
     }
     const file = view?.file;
     if (!file) return;
     const next = togglePersistedFrontmatter(this.expandedStateStorage(), file.path);
     this.applyExpandedStateToView(containerEl, next);
-    new Notice(`Forge: frontmatter ${next.frontmatter ? 'shown' : 'hidden'}.`);
+    this.notice(`Forge: frontmatter ${next.frontmatter ? 'shown' : 'hidden'}.`);
   }
 
   /** v0.2.139 — Toggle ONLY dependencies visibility. Frontmatter
@@ -2796,14 +2826,14 @@ export default class ForgePlugin extends Plugin {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const containerEl = (view as unknown as { containerEl?: HTMLElement })?.containerEl;
     if (!containerEl?.classList.contains('forge-snippet')) {
-      new Notice('Forge: this file is not a snippet — dependencies visibility is not managed here.');
+      this.notice('Forge: this file is not a snippet — dependencies visibility is not managed here.');
       return;
     }
     const file = view?.file;
     if (!file) return;
     const next = togglePersistedDependencies(this.expandedStateStorage(), file.path);
     this.applyExpandedStateToView(containerEl, next);
-    new Notice(`Forge: dependencies ${next.dependencies ? 'shown' : 'hidden'}.`);
+    this.notice(`Forge: dependencies ${next.dependencies ? 'shown' : 'hidden'}.`);
   }
 
   /** v0.2.118 — DOM-level frontmatter hide. Adds `forge-snippet`
@@ -2861,7 +2891,7 @@ export default class ForgePlugin extends Plugin {
     // The bak dir's basename is the last segment of the dedup key.
     const bakDirName = key.split('/').pop() ?? key;
     const liveName = baseLibraryName(bakDirName);
-    new Notice(
+    this.notice(
       `Forge: '${bakDirName}' is a backup of an older library version. ` +
       `The live version is at '${liveName}/'. Backups are read-only ` +
       `by convention; running Forge on them is not recommended.`,
@@ -2902,6 +2932,52 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       console.error('maybePreviewDataSnippet: data snippet preview failed', e);
     }
+  }
+
+  /** v0.2.184 — primary "user feedback" channel. Replaces `this.notice(...)`
+   *  per driver preference: open (or reveal) the Forge output panel
+   *  and write the message there. Failures fall back to console only
+   *  (no toast) so a missing output panel can't suppress the message
+   *  permanently — but the in-panel write is the expected path.
+   *
+   *  `kind`: 'info' (default) | 'error' | 'success'. 'error' styles
+   *  the line red in the panel.
+   *
+   *  Use as: `await this.forgeOutput('Forge: token missing.', 'error');`
+   *  No Notice; user sees the message in the dedicated panel.
+   */
+  public async forgeOutput(
+    text: string,
+    kind: 'info' | 'error' | 'success' = 'info',
+    snippetId: string = 'Forge',
+  ): Promise<void> {
+    try {
+      const view = await this.getOutputView();
+      view.appendMessage(snippetId, text, kind);
+    } catch (e) {
+      // Output panel unavailable — log + bail silently per driver:
+      // no toasts even when the panel is missing.
+      console.error('Forge.forgeOutput: output panel unavailable; message dropped:', text, e);
+    }
+  }
+
+  /** v0.2.184 — Notice-replacement shim used by bulk-rewritten call
+   *  sites across this file. Single-arg + optional-timeout shape that
+   *  matches `this.notice(text, timeout?)` so a regex rewrite is
+   *  mechanical; the timeout is ignored (output-panel messages
+   *  persist until cleared, which is fine — no more autodismissing
+   *  toasts that the user might miss).
+   *
+   *  Kind defaults to 'info'. If the message text contains "failed",
+   *  "error", or starts with "Forge:" + a verb that implies failure,
+   *  the kind shifts to 'error' so red styling fires. Cheap heuristic;
+   *  for finer control, callers should use forgeOutput() directly.
+   */
+  public notice(text: string, _timeout?: number): void {
+    const lower = text.toLowerCase();
+    const isError =
+      lower.includes('failed') || lower.includes('error') || lower.includes('could not');
+    void this.forgeOutput(text, isError ? 'error' : 'info');
   }
 
   private async getOutputView(): Promise<ForgeOutputView> {
@@ -2979,7 +3055,7 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       console.error('Forge Connect Error:', e);
       const detail = e instanceof Error ? e.message : String(e);
-      new Notice(errorPrefix ? `${errorPrefix}: connect failed — ${detail}` : 'Forge: Connect failed — check console.');
+      this.notice(errorPrefix ? `${errorPrefix}: connect failed — ${detail}` : 'Forge: Connect failed — check console.');
       return;
     }
 
@@ -3001,7 +3077,7 @@ export default class ForgePlugin extends Plugin {
         const outputView = await this.getOutputView();
         outputView.appendError(snippetId, detail, '');
       } catch { /* output panel unavailable; toast carries the brief msg */ }
-      new Notice(errorPrefix ? `${errorPrefix}: ${shortMsg}` : `Forge: Compute failed — ${shortMsg}`);
+      this.notice(errorPrefix ? `${errorPrefix}: ${shortMsg}` : `Forge: Compute failed — ${shortMsg}`);
       return;
     }
 
@@ -3050,7 +3126,7 @@ export default class ForgePlugin extends Plugin {
         ? errorMsg
         : 'see Forge output panel for details';
       if (errorPrefix) {
-        new Notice(`${errorPrefix}: ${shortMsg}`);
+        this.notice(`${errorPrefix}: ${shortMsg}`);
       }
       outputView.appendError(snippetId, errorMsg, stdout);
       return;
@@ -3116,7 +3192,7 @@ export default class ForgePlugin extends Plugin {
     if (!(file instanceof TFile)) {
       const msg = `slot cache write skipped — could not locate ${snippetId}.md in vault`;
       console.error('Forge:', msg);
-      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
       return null;
     }
 
@@ -3137,7 +3213,7 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       console.error('Forge slot resolution call failed:', e);
-      new Notice(errorPrefix
+      this.notice(errorPrefix
         ? `${errorPrefix}: slot resolution failed — ${detail}`
         : `Forge: slot resolution failed — ${detail}`);
       return null;
@@ -3145,7 +3221,7 @@ export default class ForgePlugin extends Plugin {
 
     if (resolved.status === 0) {
       const msg = resolved.json?.detail ?? 'Slot resolution requires a transpile token.';
-      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
       return null;
     }
     if (resolved.status >= 400) {
@@ -3154,7 +3230,7 @@ export default class ForgePlugin extends Plugin {
         ? detail.error
         : (typeof detail === 'string' ? detail : `HTTP ${resolved.status}`);
       console.error('Forge slot resolution non-2xx:', resolved.status, detail);
-      new Notice(errorPrefix
+      this.notice(errorPrefix
         ? `${errorPrefix}: slot resolution failed — ${errorMsg}`
         : `Forge: slot resolution failed — ${errorMsg}`);
       return null;
@@ -3164,7 +3240,7 @@ export default class ForgePlugin extends Plugin {
     if (!Array.isArray(responses) || responses.length !== requests.length) {
       const msg = `slot resolution returned ${responses?.length ?? 0} responses for ${requests.length} requests; bailing`;
       console.error('Forge:', msg);
-      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
       return null;
     }
 
@@ -3180,7 +3256,7 @@ export default class ForgePlugin extends Plugin {
     if (!pyodideHost) {
       const msg = 'Pyodide host not ready for slot-resolution second pass';
       console.error('Forge:', msg);
-      new Notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
       return null;
     }
     let host;
@@ -3192,7 +3268,7 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       console.error('Forge: second-pass compute failed', e);
-      new Notice(errorPrefix
+      this.notice(errorPrefix
         ? `${errorPrefix}: slot resolution second pass failed — ${detail}`
         : `Forge: slot resolution second pass failed — ${detail}`);
       return null;

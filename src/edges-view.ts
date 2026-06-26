@@ -9,6 +9,7 @@ import {
 } from './edges';
 import { detectDrift } from './dependencies';
 import { freezeEdge, syncDependencies } from './server';
+import { forgeNotice } from './forge-notice';
 
 export const EDGES_VIEW_TYPE = 'forge-edges-view';
 
@@ -133,10 +134,10 @@ export class ForgeEdgesView extends ItemView {
       const vaultPath = (this.app.vault.adapter as any).basePath as string;
       const res = await syncDependencies(this.serverUrl(), vaultPath, this.currentSnippetId);
       if (res.status === 200) {
-        new Notice('Forge: edges synced.');
+        void forgeNotice(this.app, 'Forge: edges synced.');
         await this.refresh();
       } else {
-        new Notice(`Forge: sync failed (${res.status})`);
+        void forgeNotice(this.app, `Forge: sync failed (${res.status})`);
       }
     };
   }
@@ -214,10 +215,10 @@ export class ForgeEdgesView extends ItemView {
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const res = await freezeEdge(this.serverUrl(), vaultPath, edge.caller, edge.callee, next);
     if (res.status === 200) {
-      new Notice(`Forge: ${edge.caller} → ${edge.callee} now ${next}`);
+      void forgeNotice(this.app, `Forge: ${edge.caller} → ${edge.callee} now ${next}`);
       await this.refresh();
     } else {
-      new Notice(`Forge: toggle failed (${res.status}) — ${res.json?.detail ?? 'see console'}`);
+      void forgeNotice(this.app, `Forge: toggle failed (${res.status}) — ${res.json?.detail ?? 'see console'}`);
       console.error('Forge edge toggle failed', res);
     }
   }
@@ -231,7 +232,7 @@ export class ForgeEdgesView extends ItemView {
       const res = await freezeEdge(url, vaultPath, e.caller, e.callee, state);
       if (res.status === 200) ok++; else fail++;
     }
-    new Notice(`Forge: bulk ${state} → ${ok} ok, ${fail} failed`);
+    void forgeNotice(this.app, `Forge: bulk ${state} → ${ok} ok, ${fail} failed`);
     await this.refresh();
   }
 }

@@ -8,6 +8,7 @@ import {
   snapshotPath,
 } from './edges';
 import { freezeEdge } from './server';
+import { forgeNotice } from './forge-notice';
 
 const HOVER_DELAY_MS = 600;
 
@@ -184,11 +185,11 @@ class EdgePopover {
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const res = await freezeEdge(this.getServerUrl(), vaultPath, callerId, calleeId, state);
     if (res.status !== 200) {
-      new Notice(`Forge: toggle failed (${res.status})`);
+      void forgeNotice(this.app, `Forge: toggle failed (${res.status})`);
       console.error('Forge edge toggle failed', res);
       return;
     }
-    new Notice(`Forge: ${callerId} → ${calleeId} now ${state}`);
+    void forgeNotice(this.app, `Forge: ${callerId} → ${calleeId} now ${state}`);
     // Re-fetch and re-render in place so the user can toggle again immediately.
     const fresh = await readSnapshot(this.app, callerId, calleeId);
     this.render(callerId, calleeId, fresh);

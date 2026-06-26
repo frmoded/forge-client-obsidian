@@ -17,6 +17,7 @@ import {
   DOMAIN_INVENTORY,
 } from './domain-activation-core';
 import { ensureBundledFor } from './welcome';
+import { forgeNotice } from './forge-notice';
 
 // Pure dispatcher logic lives in forge-action-core.ts so it can be
 // unit-tested under `node --test` without an obsidian shim. Re-export it
@@ -175,7 +176,7 @@ async function updateDeclaredVaults(host: ForgeHost, declared: string[]) {
     d => declared.includes(d.id) && d.vault,
   );
   if (targets.length === 0) {
-    new Notice('Forge: no registry-installable domain vaults to update.');
+    void forgeNotice(this.app, 'Forge: no registry-installable domain vaults to update.');
     return;
   }
   for (const d of targets) {
@@ -192,15 +193,15 @@ async function updateDeclaredVaults(host: ForgeHost, declared: string[]) {
     // a per-conflict Notice via copyLibraryRoots).
     const { copied, skipped } = await copyLibraryRoots(host, d.vault as string);
     if (copied.length > 0) {
-      new Notice(`Forge: ${d.vault}: copied ${copied.length} new ` +
+      void forgeNotice(this.app, `Forge: ${d.vault}: copied ${copied.length} new ` +
         `role:root snippet(s) to vault root (${copied.join(', ')}).`);
     }
     if (skipped.length > 0) {
-      new Notice(`Forge: ${d.vault}: ${skipped.length} role:root ` +
+      void forgeNotice(this.app, `Forge: ${d.vault}: ${skipped.length} role:root ` +
         `snippet(s) already at vault root — preserved (${skipped.join(', ')}).`);
     }
   }
-  new Notice('Forge: domain vaults updated to latest.');
+  void forgeNotice(this.app, 'Forge: domain vaults updated to latest.');
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +280,7 @@ async function installVault(_host: ForgeHost, vaultName: string): Promise<boolea
     `Forge: install requested for "${vaultName}" — V1 closed beta `
     + 'does not support remote vault install.',
   );
-  new Notice(
+  void forgeNotice(this.app, 
     `Forge: install of "${vaultName}" skipped — V1 closed beta has `
     + 'no remote vault registry. Only bundled vaults (forge-moda, '
     + 'forge-music) are available; additional vaults are deferred to v1.1+.',
@@ -325,14 +326,14 @@ class DeclareDomainsModal extends Modal {
     try {
       toml = await adapter.read('forge.toml');
     } catch {
-      new Notice('Forge: forge.toml unreadable.');
+      void forgeNotice(this.app, 'Forge: forge.toml unreadable.');
       return;
     }
     const next = replaceForgeTomlDomains(toml, Array.from(this.picked));
     await adapter.write('forge.toml', next);
     await this.host.reloadActiveDomains();
     this.close();
-    new Notice('Forge: domains declared. Reopen the Forge menu for scoped actions.');
+    void forgeNotice(this.app, 'Forge: domains declared. Reopen the Forge menu for scoped actions.');
   }
 
   onClose() {
@@ -381,7 +382,7 @@ class EditVaultDomainsModal extends Modal {
     const registry = await fetchRegistryVaults();
     loading.remove();
     if (registry === null) {
-      new Notice('Forge: could not reach the registry — try again later.');
+      void forgeNotice(this.app, 'Forge: could not reach the registry — try again later.');
       this.close();
       return;
     }
@@ -494,7 +495,7 @@ class EditVaultDomainsModal extends Modal {
     try {
       toml = await adapter.read('forge.toml');
     } catch {
-      new Notice('Forge: forge.toml unreadable — installs done but ' +
+      void forgeNotice(this.app, 'Forge: forge.toml unreadable — installs done but ' +
         'manifest not updated.');
       return;
     }
@@ -538,15 +539,15 @@ class EditVaultDomainsModal extends Modal {
     // Cmd-Q + reopen did. Now activation is in-band; the Notice just
     // confirms the update.
     if (extractFailures > 0) {
-      new Notice(
+      void forgeNotice(this.app, 
         `Forge: vault updated, but ${extractFailures} bundled-vault ` +
         `extraction(s) failed. Check DevTools console; you may need ` +
         `to fully quit Obsidian (Cmd-Q) and reopen.`,
       );
     } else if (actions.length > 0) {
-      new Notice('Forge: vault updated. New domain actions are now available.');
+      void forgeNotice(this.app, 'Forge: vault updated. New domain actions are now available.');
     } else {
-      new Notice('Forge: vault updated.');
+      void forgeNotice(this.app, 'Forge: vault updated.');
     }
   }
 
@@ -654,9 +655,9 @@ class CreateNewForgeVaultModal extends Modal {
       b.setButtonText('Copy BRAT URL').setCta().onClick(async () => {
         try {
           await navigator.clipboard.writeText(BRAT_REPO_URL);
-          new Notice('Copied!');
+          void forgeNotice(this.app, 'Copied!');
         } catch {
-          new Notice('Copy failed — select the URL in step 5 manually.');
+          void forgeNotice(this.app, 'Copy failed — select the URL in step 5 manually.');
         }
       }));
 
@@ -850,14 +851,14 @@ class InitializeForgeVaultWizard extends Modal {
 
   private async initialize() {
     if (!isValidVaultName(this.vaultName)) {
-      new Notice(
+      void forgeNotice(this.app, 
         'Forge: vault name must be lowercase letters/digits/dashes, ' +
         '3–64 chars (e.g. "my-forge-vault").');
       return;
     }
     const adapter = this.host.app.vault.adapter;
     if (await adapter.exists('forge.toml')) {
-      new Notice('Forge: forge.toml already exists — not overwriting.');
+      void forgeNotice(this.app, 'Forge: forge.toml already exists — not overwriting.');
       this.close();
       return;
     }
@@ -892,11 +893,11 @@ class InitializeForgeVaultWizard extends Modal {
     if (this.flavor === 'moda-learning') {
       const { copied, skipped } = await copyLibraryRoots(this.host, 'forge-moda');
       if (copied.length > 0) {
-        new Notice(`Forge: copied ${copied.length} role:root snippet(s) ` +
+        void forgeNotice(this.app, `Forge: copied ${copied.length} role:root snippet(s) ` +
           `to vault root (${copied.join(', ')}).`);
       }
       if (skipped.length > 0) {
-        new Notice(`Forge: skipped ${skipped.length} role:root copy ` +
+        void forgeNotice(this.app, `Forge: skipped ${skipped.length} role:root copy ` +
           `(conflict — same name already at vault root): ${skipped.join(', ')}`);
       }
     }
@@ -920,7 +921,7 @@ class InitializeForgeVaultWizard extends Modal {
 
     await this.host.reloadActiveDomains();
     this.close();
-    new Notice(
+    void forgeNotice(this.app, 
       'Forge vault initialized. Click the Forge ribbon icon for actions.');
   }
 

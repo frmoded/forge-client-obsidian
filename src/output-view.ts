@@ -7,6 +7,7 @@ import {
   type ScoreViewModeStorage,
 } from './view-mode-core';
 import { ForgeSaveDataModal, dataTemplate } from './modal';
+import { forgeNotice } from './forge-notice';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -207,10 +208,10 @@ export class ForgeOutputView extends ItemView {
       try {
         file = await this.app.vault.create(path, md);
       } catch {
-        new Notice(`Forge: could not create ${path} — does it already exist?`);
+        void forgeNotice(this.app, `Forge: could not create ${path} — does it already exist?`);
         return false;
       }
-      new Notice(`Forge: Created ${path}`);
+      void forgeNotice(this.app, `Forge: Created ${path}`);
       try {
         await this.app.workspace.getLeaf(false).openFile(file);
       } catch (e) {
@@ -722,6 +723,23 @@ export class ForgeOutputView extends ItemView {
     entry.createEl('p', { text: errorMsg, cls: 'forge-output-error' });
     if (stdout) {
       entry.createEl('pre', { text: stdout, cls: 'forge-output-stdout' });
+    }
+    entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /** v0.2.184 — generic-message append. Replaces Notice toasts per
+   *  driver preference. `kind="error"` styles the line in red (same
+   *  class as appendError uses); other kinds render as plain prose.
+   *  `snippetId` is the attribution label; pass "Forge" when the
+   *  message isn't tied to a specific snippet.
+   */
+  appendMessage(snippetId: string, text: string, kind: 'info' | 'error' | 'success' = 'info') {
+    const entry = this.makeEntry(snippetId);
+    if (kind === 'error') {
+      entry.addClass('is-error');
+      entry.createEl('p', { text, cls: 'forge-output-error' });
+    } else {
+      entry.createEl('p', { text, cls: 'forge-output-message' });
     }
     entry.scrollIntoView({ behavior: 'smooth' });
   }

@@ -15,6 +15,7 @@ import type {
   MarkdownLeafLike,
   MarkdownViewLike,
 } from './find-fallback-markdown-view-core';
+import { forgeNotice } from './forge-notice';
 
 export const CHIPS_VIEW_TYPE = 'forge-chips';
 
@@ -359,7 +360,7 @@ export class ChipsView extends ItemView {
     );
     const file = resolved?.file as TFile | undefined;
     if (!file) {
-      new Notice('Forge chips: click into an action snippet first, ' +
+      void forgeNotice(this.app, 'Forge chips: click into an action snippet first, ' +
         'then click the chip.');
       return;
     }
@@ -372,7 +373,7 @@ export class ChipsView extends ItemView {
     // read instead of trapping a real action snippet.
     const type = await this.fileType(file);
     if (type !== 'action') {
-      new Notice('Chips only insert into action snippets.');
+      void forgeNotice(this.app, 'Chips only insert into action snippets.');
       return;
     }
 
@@ -434,9 +435,9 @@ export class ChipsView extends ItemView {
       return content;
     });
     if (outcome === 'ok') {
-      new Notice(`Forge chips: inserted "${insertion}".`);
+      void forgeNotice(this.app, `Forge chips: inserted "${insertion}".`);
     } else if (outcome === 'no-english') {
-      new Notice('Snippet has no # English section to insert into.');
+      void forgeNotice(this.app, 'Snippet has no # English section to insert into.');
     }
   }
 }

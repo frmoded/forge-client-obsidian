@@ -1,4 +1,5 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
+import { forgeNotice } from './forge-notice';
 
 // Blocking modal shown during generation. Clicking outside, the X button, and
 // pressing Escape all funnel through close(); we no-op those until the caller
@@ -74,7 +75,7 @@ export class ForgeFreezeModal extends Modal {
 
   private submit() {
     if (!this.caller || !this.callee) {
-      new Notice('Forge: caller and callee are required.');
+      void forgeNotice(this.app, 'Forge: caller and callee are required.');
       return;
     }
     this.close();
@@ -350,7 +351,7 @@ export class ForgeSnippetModal extends Modal {
 
   private async submit() {
     if (!this.snippetName) {
-      new Notice('Forge: Snippet name is required.');
+      void forgeNotice(this.app, 'Forge: Snippet name is required.');
       return;
     }
 
@@ -371,11 +372,11 @@ export class ForgeSnippetModal extends Modal {
     try {
       file = await this.app.vault.create(path, content);
     } catch {
-      new Notice(`Forge: Could not create file — does it already exist?`);
+      void forgeNotice(this.app, `Forge: Could not create file — does it already exist?`);
       return;
     }
 
-    new Notice(`Forge: Created ${path}`);
+    void forgeNotice(this.app, `Forge: Created ${path}`);
     this.close();
 
     // Open the new file so the user can immediately start authoring — the
@@ -392,7 +393,7 @@ export class ForgeSnippetModal extends Modal {
   // then write the wrapper .md with content_ref pointing at the asset.
   private async submitBinary() {
     if (!this.droppedFile) {
-      new Notice('Forge: drop a file first — binary data snippets need an asset.');
+      void forgeNotice(this.app, 'Forge: drop a file first — binary data snippets need an asset.');
       return;
     }
 
@@ -413,7 +414,7 @@ export class ForgeSnippetModal extends Modal {
       buf = await this.droppedFile.arrayBuffer();
     } catch (e) {
       console.error('Forge: failed to read dropped file bytes', e);
-      new Notice('Forge: could not read dropped file — check console.');
+      void forgeNotice(this.app, 'Forge: could not read dropped file — check console.');
       return;
     }
 
@@ -421,7 +422,7 @@ export class ForgeSnippetModal extends Modal {
       await this.app.vault.createBinary(assetRel, buf);
     } catch (e) {
       console.error('Forge: createBinary failed', e);
-      new Notice(`Forge: could not write ${assetRel} — does it already exist?`);
+      void forgeNotice(this.app, `Forge: could not write ${assetRel} — does it already exist?`);
       return;
     }
 
@@ -431,11 +432,11 @@ export class ForgeSnippetModal extends Modal {
       mdFile = await this.app.vault.create(mdRel, md);
     } catch (e) {
       console.error('Forge: create wrapper .md failed', e);
-      new Notice(`Forge: wrote ${assetRel} but could not create ${mdRel} — does it already exist?`);
+      void forgeNotice(this.app, `Forge: wrote ${assetRel} but could not create ${mdRel} — does it already exist?`);
       return;
     }
 
-    new Notice(`Forge: Created ${mdRel} + ${assetRel}`);
+    void forgeNotice(this.app, `Forge: Created ${mdRel} + ${assetRel}`);
     this.close();
     try {
       await this.app.workspace.getLeaf(false).openFile(mdFile);
@@ -481,7 +482,7 @@ export class ForgeSaveDataModal extends Modal {
     new Setting(contentEl).addButton(btn =>
       btn.setButtonText('Save').setCta().onClick(async () => {
         if (!this.name) {
-          new Notice('Forge: name is required.');
+          void forgeNotice(this.app, 'Forge: name is required.');
           return;
         }
         const ok = await this.onCreate(this.name);
