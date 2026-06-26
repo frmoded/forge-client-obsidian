@@ -6,12 +6,15 @@ type: action
 
 Chapter 9 — Forge fills in a value from your plain-English request.
 
-(V2.1 will let you write `{{a very interesting fact about octopuses}}` in
-E-- and Forge will route to an LLM at compile time. For V2.0 the value is
-cached inline; the lesson is the same — separating intent (Description)
-from value (E--).)
+The `{{...}}` syntax is the V2.1 "expressiveness escape valve": when
+you can't (or don't want to) deterministically specify a value in
+E--, write a free-English description between double-braces. Forge
+routes that description to an LLM at compile time; the resolved
+expression is cached in this note's frontmatter so subsequent
+Forge-clicks are instant. Edit the description text → cache key
+changes → re-resolves on the next click.
 
 # E--
 
-Let fact = "Octopuses have three hearts and blue blood".
+Let fact = {{a random fun fact about octopuses}}.
 [[print]] fact.
