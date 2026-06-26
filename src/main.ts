@@ -9,7 +9,11 @@ import {
   removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core';
 import { computeDescriptionHash } from './description-hash-core';
-import { engineChipsForDomains } from './v2-engine-chips';
+// v0.2.194 Path A — engineChipsForDomains import retired. The
+// forge-transpile service introspects forge.<domain>.lib at /generate
+// time via AST-walking vendored `engine_libs/*_lib.py` source files.
+// Plugin sends ONLY vault notes; the service merges in engine chips.
+// See forge-transpile/engine_chip_introspector.py.
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
@@ -2127,17 +2131,16 @@ export default class ForgePlugin extends Plugin {
     const vaultDeps = await this.gatherVaultActionNoteDescriptions();
     const activeDomainsList =
       this.activeDomains === null ? null : Array.from(this.activeDomains);
-    // v0.2.188 — engine chips aren't vault notes (they're Python
-    // functions in forge.{music,moda,...}.lib); without them in the
-    // deps payload the LLM defaults to `# missing chip: ...` for
-    // anything the few-shot examples don't already showcase. Prepend
-    // the catalog filtered to active domains. Driver smoke v0.2.187:
-    // "Play a kick drum on beat 2" produced `# missing chip:
-    // play_at_offsets` despite play_at_offsets existing in music.lib.
-    const engineDeps = engineChipsForDomains(activeDomainsList);
-    const deps = [...engineDeps, ...vaultDeps];
+    // v0.2.194 Path A — engine chips no longer merged plugin-side.
+    // The forge-transpile service introspects forge.<domain>.lib at
+    // /generate time and augments the deps payload server-side. This
+    // unifies the catalog to a single source of truth (vendored
+    // engine_libs/<domain>_lib.py source files in the service) and
+    // retires src/v2-engine-chips.ts. Adding a new engine chip = engine
+    // release + service redeploy; no plugin update needed.
+    const deps = vaultDeps;
     console.warn(
-      `[Forge V2 /generate] deps count: ${deps.length} (engine: ${engineDeps.length}, vault: ${vaultDeps.length})`
+      `[Forge V2 /generate] deps count: ${deps.length} (vault only — engine chips added server-side)`
     );
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     console.warn('[Forge V2 /generate] snippetId:', snippetId);
