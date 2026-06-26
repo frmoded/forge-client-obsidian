@@ -3,7 +3,7 @@ type: data
 content_type: yaml
 read_only: true
 schema_version: 2
-description: MoDa chip palette — schema v2. Auto-discovery surfaces every action/data snippet in this library; this file's `overrides[]` curate labels + groups for the 16 teaching chips, and `hide[]` removes internal helpers + top-level compositions from the palette. The insertion text is signature-derived (B7.1-canonical `Do [[X]](<inputs>).`) from each snippet's frontmatter `inputs:` field — no insertion strings hand-authored here.
+description: MoDa chip palette — schema v2. Auto-discovery surfaces every action/data snippet in this library; this file's `overrides[]` curate labels + groups for the 16 teaching chips, and `hide[]` removes internal helpers + top-level compositions from the palette. The insertion text is signature-derived from each snippet's frontmatter `inputs:` field — no insertion strings hand-authored here. (Auto-derived insertions in chips-core.ts still emit V1 `Do [[X]](...)` syntax pending a separate engine-side migration; V2-authoring cohort rewrites to `Call [[X]] with k=v.` after insertion.)
 ---
 
 # Body
@@ -61,11 +61,13 @@ hide:
 
 # ---------------------------------------------------------------------------
 # Per-chip curation. `target` matches the snippet_id (basename).
-# `insertion` is intentionally NOT overridden — auto-derive produces the
-# B7.1-canonical `Do [[X]](<inputs>).` form from the snippet's `inputs:`
-# frontmatter, which is correct for every chip below. Labels are
-# overridden only where the v1 hand-curated label differs from the
-# humanized auto-derived label.
+# `insertion` is intentionally NOT overridden — auto-derive produces a
+# signature-sourced form from the snippet's `inputs:` frontmatter,
+# which is correct for every chip below. Labels are overridden only
+# where the v1 hand-curated label differs from the humanized auto-
+# derived label. (Auto-derive still produces V1 `Do [[X]](...)` syntax;
+# cohort manually rewrites to V2 `Call [[X]] with ...` after insertion.
+# A separate engine-side drain will V2-ify the auto-derive output.)
 # ---------------------------------------------------------------------------
 overrides:
   # Setup chain — what setup.md composes.

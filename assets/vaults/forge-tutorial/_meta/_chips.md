@@ -19,15 +19,15 @@ schema_version: 3
 
 synthetic_chips:
   - label: "print"
-    insertion: 'Do [[print]]("<message>").'
+    insertion: 'Call [[print]] with text="<message>".'
     group: "Builtins"
     order: 1
-  - label: "Set"
-    insertion: 'Set <name> to <value>.'
+  - label: "Let"
+    insertion: 'Let <name> = <value>.'
     group: "Statements"
     order: 1
-  - label: "Give back"
-    insertion: 'Give back <value>.'
+  - label: "Return"
+    insertion: 'Return <value>.'
     group: "Statements"
     order: 2
   - label: "If"

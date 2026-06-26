@@ -10,8 +10,8 @@ description: Chapter 1 (Hello) — palette pacing. Only `print` is visible; the 
 
 ```yaml
 hide:
-  - "Set"
-  - "Give back"
+  - "Let"
+  - "Return"
   - "If"
   - "Otherwise"
   - "For each"
