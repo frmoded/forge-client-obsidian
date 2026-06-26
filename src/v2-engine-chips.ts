@@ -43,14 +43,18 @@ const MUSIC_CHIPS: AlphaDependencyInfo[] = [
   { snippet_id: 'ride_cymbal', description: 'Ride cymbal instrument (no args).', inputs: [] },
 
   // Scheduling — build a Part with hits at the given times.
+  // NOTE: `play_at_beats` and `play_at_offsets` use DIFFERENT conventions.
+  // The descriptions below spell out the indexing because cohort prompts
+  // routinely use ordinal phrases like "beat 1 and 3" — the LLM must
+  // know which chip to pick AND what numbers to pass.
   {
     snippet_id: 'play_at_beats',
-    description: 'Build a Part with quarter-note hits at the given beat positions. `beats` is a list of integer beat indices (0-indexed quarter-note offsets within a bar).',
+    description: 'Build a Part with quarter-note hits at the given beat positions. `beats` is **1-indexed** — beat 1 is the first beat of the bar. "Beat 1 and 3" of a 4/4 bar = `beats=[1, 3]`. Floats supported for sub-beats: `[1, 1.5, 2, 2.5]` is straight eighths. Pass an empty list `[]` for an instrument-only Part with no hits.',
     inputs: ['instrument', 'beats'],
   },
   {
     snippet_id: 'play_at_offsets',
-    description: 'Build a Part with hits at the given offsets (quarter-note units) within each bar; supports multi-bar patterns. Default duration 0.25, bars=4, time_signature="4/4", tempo_bpm=96.',
+    description: 'Build a Part with hits at the given offsets (quarter-note units within each bar). Offsets are **0-indexed** — offset 0 is the first beat. "Beat 1 and 3" = `offsets=[0, 2]`. Default duration=0.25, bars=4, time_signature="4/4", tempo_bpm=96. Use this (not play_at_beats) when you need a multi-bar pattern or non-quarter-note durations.',
     inputs: [
       'instrument', 'offsets', 'duration', 'bars',
       'time_signature', 'tempo_bpm', 'velocity', 'mark_dynamics',
