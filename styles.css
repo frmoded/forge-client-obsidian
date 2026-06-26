@@ -976,3 +976,29 @@
 .forge-slot-unresolved:hover {
   background-color: rgba(255, 235, 59, 0.6);
 }
+
+/* v0.2.205 — Implicit locking Phase 2.5 §2.1: stale-facet visual
+ * indicator. Applied via Decoration.mark by stale-facet-view-plugin
+ * to the content range of each H1 facet (Description / Recipe /
+ * Python) whose stored hash doesn't match its current content. */
+.forge-stale-facet {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.forge-stale-facet:hover {
+  opacity: 0.75;
+}
+
+/* v0.2.205 — Phase 2.5 §2.2 + §2.3 niceties: status bar entry +
+ * confirm modal button row. */
+.forge-canonical-layer-status {
+  cursor: pointer;
+}
+
+.forge-confirm-modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}

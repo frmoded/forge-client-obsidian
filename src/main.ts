@@ -97,6 +97,12 @@ import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin';
 import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin';
 import { slotHighlightViewPlugin } from './slot-highlight-view-plugin';
+import { staleFacetViewPlugin } from './stale-facet-view-plugin';
+import { ConfirmModal } from './confirm-modal';
+import {
+  canonicalLayerStatusLabel,
+  canonicalLayerStatusTooltip,
+} from './canonical-layer-status-bar-core';
 import { makeDependenciesFoldExtension } from './dependencies-fold-view-plugin';
 import { findDependenciesRange } from './dependencies-section-core';
 
@@ -293,6 +299,11 @@ export default class ForgePlugin extends Plugin {
   // declared `domains = [...]`; a command/ribbon for domain D registers
   // only if the set has D. Empty set = core-only (no domain commands).
   private activeDomains: Set<string> | null = null;
+  /** v0.2.205 — Implicit locking Phase 2.5 §2.3 canonical-layer
+   *  status bar item. Refreshed on active-leaf-change + file-open +
+   *  vault.modify (active file only). Shows empty string when there's
+   *  nothing meaningful to surface (non-V2 / synced). */
+  private canonicalLayerStatusBarItem: HTMLElement | null = null;
   // Two-vault refactor (constitution A5.1): library-subdir discovery
   // resolves synchronously from Obsidian's in-memory file index on
   // every call — no cache. The earlier cached-set + vault.on('create')
@@ -390,6 +401,40 @@ export default class ForgePlugin extends Plugin {
       + `Plugin ID: ${this.manifest.id}\n`
       + `Min app version: ${this.manifest.minAppVersion}`;
 
+    // v0.2.205 — Implicit locking Phase 2.5 §2.3: canonical-layer
+    // status bar entry. Shows the active V2 note's canonical layer
+    // ("Recipe canonical" / "Python canonical" / ...). Empty when:
+    //   - no active markdown view
+    //   - active file is V1 (not V2-shape)
+    //   - active V2 file is `synced` (no hand-edits anywhere)
+    // Click handler invokes the `forge-show-canonical-layer` command
+    // for the verbose forgeOutput report.
+    this.canonicalLayerStatusBarItem = this.addStatusBarItem();
+    this.canonicalLayerStatusBarItem.setText('');
+    this.canonicalLayerStatusBarItem.addClass('forge-canonical-layer-status');
+    this.canonicalLayerStatusBarItem.addEventListener('click', () => {
+      void this.showCanonicalLayer();
+    });
+    // Update on file-open + file-modify so the badge tracks the
+    // active note's live state.
+    this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+      void this.refreshCanonicalLayerStatusBar();
+    }));
+    this.registerEvent(this.app.workspace.on('file-open', () => {
+      void this.refreshCanonicalLayerStatusBar();
+    }));
+    this.registerEvent(this.app.vault.on('modify', (file) => {
+      // Debounce against active-file modifications only — saves on
+      // unrelated files (autosave on another tab) shouldn't churn
+      // the status bar.
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (view?.file?.path === file.path) {
+        void this.refreshCanonicalLayerStatusBar();
+      }
+    }));
+    // Initial paint (file may already be open at plugin load).
+    void this.refreshCanonicalLayerStatusBar();
+
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
     // EditorView; per-view state lives on the plugin instance, the
@@ -427,6 +472,15 @@ export default class ForgePlugin extends Plugin {
     // class-application invariant.
     this.registerEditorExtension([
       slotHighlightViewPlugin,
+    ]);
+
+    // v0.2.205 — Implicit locking Phase 2.5 §2.1: CM6 stale-facet
+    // visual indicator. Marks `# Description / # Recipe / # Python`
+    // facet content with .forge-stale-facet (opacity 0.5 + italic)
+    // when the facet's content doesn't match its stored hash. Cohort
+    // sees at-a-glance which facets are out of sync.
+    this.registerEditorExtension([
+      staleFacetViewPlugin,
     ]);
 
     // v0.2.122 — Live Preview / Reading mode hide. Markdown post-
@@ -2191,11 +2245,11 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
-    // v0.2.196 — explicit `lock: recipe-canonical` field retired in
-    // favor of the implicit 3-layer state machine. Hand-edited Recipe
-    // surfaces as `whichLayerIsCanonical === 'recipe'` via recipe_hash
-    // mismatch. /generate could refuse-or-warn here; for Phase 1 we
-    // log and proceed (the next drain wires a confirmation modal).
+    // v0.2.205 — Implicit locking Phase 2.5 §2.2: confirmation modal.
+    // The pre-Phase-2.5 forgeOutput notice was easy to miss; a modal
+    // blocks the destructive overwrite until cohort explicitly opts
+    // in. Skipped when canonical is `synced` or `description` (no
+    // hand-edits to overwrite) — the no-op case shouldn't pester.
     try {
       const canonical = await whichLayerIsCanonical(body, {
         extractDescription,
@@ -2205,11 +2259,26 @@ export default class ForgePlugin extends Plugin {
       });
       console.warn('[Forge V2 /generate] canonical layer:', canonical);
       if (canonical === 'recipe' || canonical === 'python') {
-        await this.forgeOutput(
-          `Forge V2 /generate: ${canonical} facet was hand-edited; running /generate will overwrite the Recipe. `
-          + `(Phase 1 of the implicit-locking drain warns only; Phase 2 will surface a confirmation modal.)`,
-          'info',
-        );
+        const facetLabel = canonical === 'recipe' ? 'Recipe' : 'Python';
+        const pythonNote = canonical === 'python'
+          ? 'Your Python edits will ALSO be regenerated on the next Forge-click.'
+          : '';
+        const ok = await new ConfirmModal(this.app, {
+          title: `${facetLabel} was hand-edited`,
+          message:
+            `Running /generate will overwrite the # Recipe section with a fresh `
+            + `LLM transpile of the current # Description. ${pythonNote} `
+            + `\n\nContinue and overwrite, or cancel and keep the hand-edits?`,
+          confirmText: 'Overwrite',
+          cancelText: 'Keep edits',
+        }).openAndWait();
+        if (!ok) {
+          await this.forgeOutput(
+            `Forge V2 /generate: cancelled — ${facetLabel} hand-edits preserved.`,
+            'info',
+          );
+          return;
+        }
       }
     } catch (e) {
       console.error('forge-generate: canonical-layer probe failed', e);
@@ -2429,10 +2498,54 @@ export default class ForgePlugin extends Plugin {
       `Forge: ${view.file.basename} → Python facet shown. Hand-edits will mark Description + Recipe stale.`);
   }
 
+  /** v0.2.205 — Implicit locking Phase 2.5 §2.3: refresh the status
+   *  bar's canonical-layer badge for the currently active note.
+   *  Called on active-leaf-change, file-open, and vault.modify of the
+   *  active file. Resilient to: no active markdown view, V1 notes
+   *  (cleared label), and probe failures (label says "probe failed"
+   *  for discoverability).
+   */
+  private async refreshCanonicalLayerStatusBar(): Promise<void> {
+    if (!this.canonicalLayerStatusBarItem) return;
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      this.canonicalLayerStatusBarItem.setText('');
+      this.canonicalLayerStatusBarItem.title = '';
+      return;
+    }
+    try {
+      const body = await this.app.vault.read(view.file);
+      const isV2 = isV2Shape(body);
+      let canonical: 'description' | 'recipe' | 'python' | 'synced' | null = null;
+      if (isV2) {
+        try {
+          canonical = await whichLayerIsCanonical(body, {
+            extractDescription,
+            extractRecipeSection,
+            extractPythonSection,
+            getFrontmatterField: getFmFieldV2,
+          });
+        } catch (e) {
+          console.error('refreshCanonicalLayerStatusBar: probe failed', e);
+          canonical = null;
+        }
+      }
+      this.canonicalLayerStatusBarItem.setText(
+        canonicalLayerStatusLabel(isV2, canonical),
+      );
+      this.canonicalLayerStatusBarItem.title =
+        canonicalLayerStatusTooltip(canonical);
+    } catch (e) {
+      console.error('refreshCanonicalLayerStatusBar: vault.read failed', e);
+      this.canonicalLayerStatusBarItem.setText('');
+      this.canonicalLayerStatusBarItem.title = '';
+    }
+  }
+
   /** v0.2.196 — Report the current canonical layer for the active
    *  note via forgeOutput. Diagnostic command for the implicit-locking
-   *  state machine; Phase 2 will surface this in a status bar entry
-   *  with live updates. */
+   *  state machine; Phase 2.5 also surfaces this in a status bar
+   *  entry with live updates (see refreshCanonicalLayerStatusBar). */
   private async showCanonicalLayer(): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
