@@ -115,6 +115,16 @@ describe('extractRecipeSection', () => {
     const body = '# Description\n\nFoo\n\n# Recipe\n';
     assert.equal(extractRecipeSection(body), '');
   });
+
+  // v0.2.200 regression guard: extractRecipeSection MUST be exported
+  // (driver smoke against v0.2.199 hit ReferenceError: extractRecipeSection
+  // is not defined — main.ts called whichLayerIsCanonical with the symbol
+  // as a helper but never imported it). The test_main_imports_test below
+  // is the actual scope test; this one pins the export contract from
+  // v2-note-core itself.
+  test('is exported from v2-note-core (load-bearing for facet-hash-core helpers)', () => {
+    assert.equal(typeof extractRecipeSection, 'function');
+  });
 });
 
 describe('extractInputs', () => {

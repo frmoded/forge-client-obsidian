@@ -10,7 +10,11 @@ import {
 } from './v2-note-core';
 import { computeDescriptionHash } from './description-hash-core';
 import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core';
-import { extractPythonSection, replacePythonSection } from './v2-note-core';
+import {
+  extractPythonSection,
+  replacePythonSection,
+  extractRecipeSection,
+} from './v2-note-core';
 // v0.2.194 Path A — engineChipsForDomains import retired. The
 // forge-transpile service introspects forge.<domain>.lib at /generate
 // time via AST-walking vendored `engine_libs/*_lib.py` source files.
