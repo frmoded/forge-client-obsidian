@@ -21,77 +21,81 @@
 
 import type { AlphaDependencyInfo } from './server';
 
-/** Music-domain chips — `forge.music.lib`. */
+/** Music-domain chips — `forge.music.lib`. Only signatures that are
+ *  callable from V2's kwarg-only `Call [[name]] with k=v` syntax.
+ *  Variadic-positional functions (`bar(*items)`, `voices(*streams)`,
+ *  `sequence(*streams)`) are intentionally OMITTED because V2 chip
+ *  call expressions can't pass positional args. Cohort-direct cases
+ *  that need variadic should use the `_list` wrappers (`sequence_list`
+ *  exists for this reason; future `bar_list` / `voices_list` would
+ *  parallel). */
 const MUSIC_CHIPS: AlphaDependencyInfo[] = [
-  { snippet_id: 'kick', description: 'Kick drum instrument token (percussion).', inputs: [] },
-  { snippet_id: 'snare', description: 'Snare drum instrument token (percussion).', inputs: [] },
-  { snippet_id: 'closed_hihat', description: 'Closed hi-hat instrument token.', inputs: [] },
-  { snippet_id: 'open_hihat', description: 'Open hi-hat instrument token.', inputs: [] },
-  { snippet_id: 'pedal_hihat', description: 'Pedal hi-hat instrument token.', inputs: [] },
-  { snippet_id: 'low_tom', description: 'Low tom instrument token.', inputs: [] },
-  { snippet_id: 'mid_tom', description: 'Mid tom instrument token.', inputs: [] },
-  { snippet_id: 'high_tom', description: 'High tom instrument token.', inputs: [] },
-  { snippet_id: 'crash_cymbal', description: 'Crash cymbal instrument token.', inputs: [] },
-  { snippet_id: 'ride_cymbal', description: 'Ride cymbal instrument token.', inputs: [] },
+  // Percussion instrument tokens — zero-arg factories.
+  { snippet_id: 'kick', description: 'Kick drum instrument (call with no args to get the token).', inputs: [] },
+  { snippet_id: 'snare', description: 'Snare drum instrument (no args).', inputs: [] },
+  { snippet_id: 'closed_hihat', description: 'Closed hi-hat instrument (no args).', inputs: [] },
+  { snippet_id: 'open_hihat', description: 'Open hi-hat instrument (no args).', inputs: [] },
+  { snippet_id: 'pedal_hihat', description: 'Pedal hi-hat instrument (no args).', inputs: [] },
+  { snippet_id: 'low_tom', description: 'Low tom instrument (no args).', inputs: [] },
+  { snippet_id: 'mid_tom', description: 'Mid tom instrument (no args).', inputs: [] },
+  { snippet_id: 'high_tom', description: 'High tom instrument (no args).', inputs: [] },
+  { snippet_id: 'crash_cymbal', description: 'Crash cymbal instrument (no args).', inputs: [] },
+  { snippet_id: 'ride_cymbal', description: 'Ride cymbal instrument (no args).', inputs: [] },
+
+  // Scheduling — build a Part with hits at the given times.
   {
     snippet_id: 'play_at_beats',
-    description: 'Schedule an instrument to play at the given beat positions (1-indexed beats within a bar).',
+    description: 'Build a Part with quarter-note hits at the given beat positions. `beats` is a list of integer beat indices (0-indexed quarter-note offsets within a bar).',
     inputs: ['instrument', 'beats'],
   },
   {
     snippet_id: 'play_at_offsets',
-    description: 'Schedule an instrument hit at the given offsets (in quarter-note units) within each bar; supports duration, bars, velocity, mark_dynamics.',
-    inputs: ['instrument', 'offsets', 'duration', 'bars', 'velocity', 'mark_dynamics'],
+    description: 'Build a Part with hits at the given offsets (quarter-note units) within each bar; supports multi-bar patterns. Default duration 0.25, bars=4, time_signature="4/4", tempo_bpm=96.',
+    inputs: [
+      'instrument', 'offsets', 'duration', 'bars',
+      'time_signature', 'tempo_bpm', 'velocity', 'mark_dynamics',
+    ],
   },
+
+  // Composition + arrangement (kwarg-callable subset).
   {
-    snippet_id: 'show_score',
-    description: 'Render a score in the Forge output panel.',
-    inputs: ['score'],
-  },
-  {
-    snippet_id: 'sequence',
-    description: 'Sequence multiple sections (variadic) into a single score.',
-    inputs: [],
+    snippet_id: 'voices_canonical',
+    description: 'Compose percussion Parts into the canonical 7-voice layout (kp=kick, sp=snare, chp=closed-hihat, ohp=open-hihat, ltp=low-tom, mtp=mid-tom, crp=crash-cymbal). Any kwarg may be omitted; missing voices become rests.',
+    inputs: ['kp', 'sp', 'chp', 'ohp', 'ltp', 'mtp', 'crp'],
   },
   {
     snippet_id: 'sequence_list',
-    description: 'Sequence a list of sections into a single score.',
+    description: 'Concatenate a list of sections into one Score, end-to-end. Use this when you have N sections (variadic `sequence(*streams)` is NOT V2-callable; this list wrapper is).',
     inputs: ['sections'],
   },
   {
     snippet_id: 'repeat',
-    description: 'Repeat a section n times.',
-    inputs: ['section', 'n'],
-  },
-  {
-    snippet_id: 'bar',
-    description: 'Build a single bar of music.',
-    inputs: ['voices'],
-  },
-  {
-    snippet_id: 'voices',
-    description: 'Compose multiple voices into a Stream.',
-    inputs: [],
-  },
-  {
-    snippet_id: 'voices_canonical',
-    description: 'Compose percussion voices into the canonical 7-part layout (kp, sp, hp, lp, mp, hp_high, crashp).',
-    inputs: ['kp', 'sp', 'hp', 'lp', 'mp', 'hp_high', 'crashp'],
+    description: 'Repeat the section `s` `n` times. Returns a Score with the section concatenated n times end-to-end.',
+    inputs: ['s', 'n'],
   },
   {
     snippet_id: 'with_velocity',
-    description: 'Apply a velocity (0-127) to every note in a part.',
-    inputs: ['part', 'velocity'],
+    description: 'Apply velocity values to a Note sequence per a `pattern`. Patterns: "human" (random ±8 around 75), or an integer (uniform). Mutates in place; returns the list.',
+    inputs: ['notes', 'pattern', 'mark_dynamics'],
   },
+
+  // Output (terminal — call as the Return value).
+  {
+    snippet_id: 'show_score',
+    description: 'Render `score` in the Forge output panel as a music-XML score plus MIDI playback. Typically the last call in a music note.',
+    inputs: ['score'],
+  },
+
+  // Scale / pitch helpers.
   {
     snippet_id: 'minor_pentatonic',
-    description: 'Build a minor pentatonic scale starting at the given root.',
-    inputs: ['root'],
+    description: 'Return a list of minor-pentatonic pitches across an octave range. `key_or_tonic` is a music21 Key or a string like "A". `octave_range` defaults to (4, 5). Set `include_blue=True` for the blue-note variant.',
+    inputs: ['key_or_tonic', 'octave_range', 'include_blue'],
   },
   {
     snippet_id: 'major_pentatonic',
-    description: 'Build a major pentatonic scale starting at the given root.',
-    inputs: ['root'],
+    description: 'Return a list of major-pentatonic pitches across an octave range. Args mirror `minor_pentatonic` minus `include_blue`.',
+    inputs: ['key_or_tonic', 'octave_range'],
   },
 ];
 
