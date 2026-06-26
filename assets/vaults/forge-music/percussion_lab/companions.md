@@ -13,12 +13,6 @@ fill rest staves at their canonical voice positions so [[murmuration]] can
 
 - bars (default 4) — section length
 
-## Mechanics
-
-Kick on 1 and 3; closed hi-hat on every beat (quarters). `human` velocity
-profile (`mf` band). One dynamic mark (`mf`) on the kick's first note via
-`mark_dynamics`.
-
 # Recipe
 
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[0, 2], duration=0.25, bars=bars, velocity="human", mark_dynamics=True.

@@ -14,13 +14,6 @@ loudest, fullest moment of the piece.
 
 - bars (default 4) — section length; cycles the 4-bar pattern
 
-## Mechanics
-
-Kick / open hi-hat / low tom on every quarter; mid tom on every off-beat
-eighth; snare on every 16th; crash on bar 1 + bar 3 downbeats only. Six
-voices active. `accent` velocity profile (`ff` band); one `ff` mark on
-the kick's first note.
-
 # Recipe
 
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[0, 1, 2, 3], duration=0.25, bars=bars, velocity="accent", mark_dynamics=True.

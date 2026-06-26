@@ -14,13 +14,6 @@ that slopes the section from `mf` down toward `mp`.
 
 - bars (default 4) — section length; cycles the asymmetric 4-bar kick
 
-## Mechanics
-
-Kick varies per bar (bar 1 adds beat 3.5; bar 4 has only beat 1); closed
-hi-hat eighths; open hi-hat on beat 1 only; snare on backbeats; low tom on
-beat 2; mid tom on and-of-2. Six voices active. `decrescendo` velocity
-profile; hairpin anchors on the first kick.
-
 # Recipe
 
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[[0, 2, 3.5], [0, 2], [0, 2], [0]], duration=0.25, bars=bars, velocity="decrescendo", mark_dynamics=True.

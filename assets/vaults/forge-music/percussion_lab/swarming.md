@@ -13,12 +13,6 @@ two-note phrase. Six voices active. `human` velocity profile (`mf` band).
 
 - bars (default 4) — section length
 
-## Mechanics
-
-Kick alternates per bar between a denser (4-hit) and sparser (2-hit) pattern.
-Snare on beats 1.5 / 2 / 3.5 / 4. Closed hi-hat on straight eighths. Open
-hi-hat on 4-and. Low tom on beats 2 and 4-and. Mid tom on and-of-2.
-
 # Recipe
 
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[[0, 1.5, 2, 3.5], [0, 2], [0, 1.5, 2, 3.5], [0, 2]], duration=0.25, bars=bars, velocity="human", mark_dynamics=True.
