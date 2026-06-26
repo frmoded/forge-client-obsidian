@@ -16,6 +16,7 @@ import type {
   MarkdownViewLike,
 } from './find-fallback-markdown-view-core';
 import { forgeNotice } from './forge-notice';
+import { isV2Shape } from './v2-note-core';
 
 export const CHIPS_VIEW_TYPE = 'forge-chips';
 
@@ -321,7 +322,12 @@ export class ChipsView extends ItemView {
           });
           btn.setAttribute('aria-label', chip.insertion);
           btn.addEventListener('click', () => {
-            void this.onChipClick(chip.insertion);
+            // v0.2.203 — V2 syntax migration: pass the whole chip so
+            // onChipClick can pick insertion vs insertionV2 based on
+            // the target note's V2-shape. Pre-v0.2.203 the chip
+            // palette always inserted V1 `Do [[X]](...)` even into
+            // V2 # Recipe sections — cohort had to manually rewrite.
+            void this.onChipClick(chip);
           });
           // V3: right-click → "Go to <ref>" context menu. Hover →
           // tooltip with referenced snippets' descriptions.
@@ -335,7 +341,7 @@ export class ChipsView extends ItemView {
     }
   }
 
-  private async onChipClick(insertion: string) {
+  private async onChipClick(chip: Chip) {
     // v0.2.69 — re-resolve via the pure-core fallback chain so chip
     // clicks land even when the plugin enabled with a file already
     // open (Path A install) AND the user hasn't switched files since.
@@ -403,7 +409,26 @@ export class ChipsView extends ItemView {
     const selection = resolvedAsAny?.editor?.getSelection
       ? resolvedAsAny.editor.getSelection()
       : '';
-    const finalInsertion = applySelectionToChip(insertion, selection);
+    // v0.2.203 — V2 syntax migration. Pick the V2 insertion form when
+    // the target note is V2-shape (has `# Description` + `# Recipe`
+    // H1 headings) AND the chip carries a `insertionV2` template
+    // (auto-derived for action + data; absent when an explicit
+    // _chips.md override pinned a literal V1 string). Otherwise fall
+    // through to the V1 `chip.insertion` — preserves back-compat for
+    // V1 notes (` # English`) and for chips authored with a hard-
+    // coded V1 insertion in _chips.md.
+    let chosenInsertion = chip.insertion;
+    if (chip.insertionV2) {
+      try {
+        const body = await this.app.vault.read(file);
+        if (isV2Shape(body)) {
+          chosenInsertion = chip.insertionV2;
+        }
+      } catch (e) {
+        console.error('chips-view: V2-shape detection failed; falling back to V1 insertion', e);
+      }
+    }
+    const finalInsertion = applySelectionToChip(chosenInsertion, selection);
     await this.insertViaVault(file, finalInsertion, cursorLine);
   }
 

@@ -10,6 +10,7 @@ import {
   chipSourcesFor,
   humanizeSnippetId,
   deriveChip,
+  deriveV2InsertionForAction,
   autoDeriveChips,
   parseChipsV2Config,
   mergeChipsWithOverrides,
@@ -292,6 +293,7 @@ test('deriveChip: action snippet with inputs → B7.1-canonical insertion with <
   assert.deepEqual(chip, {
     label: 'Greet',
     insertion: 'Do [[greet]](<name>).',
+    insertionV2: 'Let <result> = Call [[greet]] with name=<name>.',
     group: 'greetings',
   });
 });
@@ -303,6 +305,7 @@ test('deriveChip: action snippet with no inputs → empty parens', () => {
   assert.deepEqual(chip, {
     label: 'Banner',
     insertion: 'Do [[banner]]().',
+    insertionV2: '[[banner]].',
     group: 'common',
   });
 });
@@ -376,6 +379,98 @@ test('deriveChip: basename starting with underscore → null (S7)', () => {
 
 // --- deriveChip: data + snapshot ---
 
+// ---------------------------------------------------------------------------
+// v0.2.203 — V2 syntax migration tests for deriveV2InsertionForAction +
+// the Chip.insertionV2 field populated by deriveChip.
+// ---------------------------------------------------------------------------
+
+test('deriveV2InsertionForAction: zero inputs → [[id]]. shorthand', () => {
+  // Path A engine chips like [[kick]] have zero inputs. The V2
+  // shorthand-call statement form is the canonical V2 way to invoke
+  // them: `[[kick]].` — NOT `Call [[kick]] with .`.
+  const out = deriveV2InsertionForAction({
+    id: 'kick', basename: 'kick', type: 'action',
+  });
+  assert.equal(out, '[[kick]].');
+});
+
+test('deriveV2InsertionForAction: single input → Let + Call + with kw', () => {
+  // Single-input chips wrap in `Let <result> =` so cohort gets the
+  // common case (bind return value) without an edit. Bare side-effect
+  // form is the minority case.
+  const out = deriveV2InsertionForAction({
+    id: 'excited', basename: 'excited', type: 'action',
+    inputs: ['word'],
+  });
+  assert.equal(out, 'Let <result> = Call [[excited]] with word=<word>.');
+});
+
+test('deriveV2InsertionForAction: multiple inputs → comma-separated kwargs', () => {
+  // play_at_beats(instrument, beats) — V2 cohort sees the chip palette
+  // suggest the kwarg form so they fill in placeholders directly.
+  const out = deriveV2InsertionForAction({
+    id: 'play_at_beats', basename: 'play_at_beats', type: 'action',
+    inputs: ['instrument', 'beats'],
+  });
+  assert.equal(
+    out,
+    'Let <result> = Call [[play_at_beats]] with instrument=<instrument>, beats=<beats>.',
+  );
+});
+
+test('deriveV2InsertionForAction: qualified id keeps slash in wikilink', () => {
+  // Path-shaped wikilinks like `[[forge-music/percussion_lab/solitary]]`
+  // are V2-callable directly. The shorthand form preserves them.
+  const out = deriveV2InsertionForAction({
+    id: 'forge-music/percussion_lab/solitary',
+    basename: 'solitary',
+    type: 'action',
+    inputs: ['bars'],
+  });
+  assert.equal(
+    out,
+    'Let <result> = Call [[forge-music/percussion_lab/solitary]] with bars=<bars>.',
+  );
+});
+
+test('deriveChip: action chip carries both V1 and V2 insertions', () => {
+  // The chip object MUST carry both forms post-v0.2.203. chips-view
+  // picks one or the other based on the target note's V2-shape; if
+  // insertionV2 went missing, V2 notes would silently keep getting
+  // V1 insertions (the regression this drain fixes).
+  const chip = deriveChip({
+    id: 'greet', basename: 'greet', type: 'action',
+    inputs: ['name'], parentDir: 'greetings',
+  });
+  assert.ok(chip);
+  assert.equal(chip.insertion, 'Do [[greet]](<name>).');
+  assert.equal(
+    chip.insertionV2,
+    'Let <result> = Call [[greet]] with name=<name>.',
+  );
+});
+
+test('deriveChip: parameterless action chip carries [[name]]. as insertionV2', () => {
+  const chip = deriveChip({
+    id: 'banner', basename: 'banner', type: 'action', parentDir: 'common',
+  });
+  assert.ok(chip);
+  assert.equal(chip.insertionV2, '[[banner]].');
+});
+
+test('deriveChip: data chip carries Let <name> = [[id]]. as insertionV2', () => {
+  // V2 cohort reads a data note via `Let palette = [[colors]].`
+  // (matches the tutorial vault's show_colors recipe). The legacy
+  // V1 insertion `Set <name> to [[id]]().` stays for V1 notes.
+  const chip = deriveChip({
+    id: 'colors', basename: 'colors', type: 'data',
+    parentDir: 'palette',
+  });
+  assert.ok(chip);
+  assert.equal(chip.insertion, 'Set <name> to [[colors]]().');
+  assert.equal(chip.insertionV2, 'Let <name> = [[colors]].');
+});
+
 test('deriveChip: data snippet → Set <name> to [[id]]() form', () => {
   const chip = deriveChip({
     id: 'water_color', basename: 'water_color', type: 'data',
@@ -384,6 +479,7 @@ test('deriveChip: data snippet → Set <name> to [[id]]() form', () => {
   assert.deepEqual(chip, {
     label: 'Water color',
     insertion: 'Set <name> to [[water_color]]().',
+    insertionV2: 'Let <name> = [[water_color]].',
     group: 'palette',
   });
 });

@@ -6,7 +6,21 @@ import { parseSyntheticChips, mergeSyntheticChipsHigherWins, type SyntheticChip 
 
 export interface Chip {
   label: string;
+  /** The V1 (`# English`) insertion form. `Do [[name]](args).` for
+   *  action snippets; `Set <name> to [[id]]().` for data snippets. */
   insertion: string;
+  /** v0.2.203 — V2 (`# Recipe`) insertion form. Optional for back-
+   *  compat with chip configs that don't pre-compute it.
+   *  - Zero-input action → `[[name]].` (shorthand-call statement).
+   *  - Input-bearing action → `Let <name> = Call [[name]] with
+   *    arg1=<arg1>, ....`.
+   *  - Data → `Let <name> = [[id]].`.
+   *  Consumers (chip click handler) pick based on the target note's
+   *  V2-shape + cursor section. When `insertionV2` is undefined, the
+   *  caller falls back to `insertion` — preserves V1 back-compat for
+   *  any chip path that doesn't yet flow through deriveChip's V2
+   *  emitter (e.g. _chips.md `insertion:` overrides). */
+  insertionV2?: string;
   // Optional secondary grouping within a source vault. The view
   // renders one sub-header per distinct `group` value, in
   // first-appearance order. Chips with no `group` field cluster
@@ -278,6 +292,34 @@ export function humanizeSnippetId(id: string): string {
  *  user replaces `<name>` with a binding name.
  *
  *  Snapshots are always excluded (per S6 they're system-managed). */
+/** v0.2.203 — V2 (`# Recipe`) insertion form for an action snippet.
+ *  Emits the canonical V2 statement shape:
+ *
+ *  - 0 inputs    → `[[id]].`            (shorthand-call statement)
+ *  - 1+ inputs   → `Let <result> = Call [[id]] with k1=<k1>, ....`
+ *
+ *  The `Let <result> =` prefix is included because V2 Recipe almost
+ *  always wants to BIND the call's return; bare `Call [[name]] with...`
+ *  is a side-effect form most often used for `print`. Cohort can drop
+ *  the prefix manually for the rare side-effect case; including it
+ *  makes the common case correct without an edit.
+ *
+ *  Why a helper: keeps the V2 emission rule in one place. Chip
+ *  insertions appear in three contexts (auto-derive, _chips.md
+ *  insertion override interpretation, click-time substitution); this
+ *  helper is the source of truth so they can't drift.
+ */
+export function deriveV2InsertionForAction(
+  snippet: SnippetMetaForChips,
+): string {
+  const inputs = snippet.inputs ?? [];
+  if (inputs.length === 0) {
+    return `[[${snippet.id}]].`;
+  }
+  const kwargs = inputs.map(n => `${n}=<${n}>`).join(', ');
+  return `Let <result> = Call [[${snippet.id}]] with ${kwargs}.`;
+}
+
 export function deriveChip(snippet: SnippetMetaForChips): Chip | null {
   // S7: skip _*.md basenames.
   if (snippet.basename.startsWith('_')) return null;
@@ -302,12 +344,18 @@ export function deriveChip(snippet: SnippetMetaForChips): Chip | null {
       ? inputs.map(n => `${n}=<${n}>`).join(', ')
       : inputs.map(n => `<${n}>`).join(', ');
     const insertion = `Do [[${snippet.id}]](${argList}).`;
-    return { label, insertion, group };
+    const insertionV2 = deriveV2InsertionForAction(snippet);
+    return { label, insertion, insertionV2, group };
   }
 
   if (snippet.type === 'data') {
     const insertion = `Set <name> to [[${snippet.id}]]().`;
-    return { label, insertion, group };
+    // V2 data-note read: `Let <name> = [[id]].`. The cohort binds the
+    // returned value to a let, then references it. Matches the
+    // tutorial vault's data-note recipes (e.g. show_colors:
+    // `Let palette = [[colors]].`).
+    const insertionV2 = `Let <name> = [[${snippet.id}]].`;
+    return { label, insertion, insertionV2, group };
   }
 
   return null;
