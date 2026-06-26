@@ -10,8 +10,10 @@ import {
   isV2Shape,
   extractDescription,
   extractRecipeSection,
+  extractPythonSection,
   extractInputs,
   replaceRecipeSection,
+  replacePythonSection,
   setFrontmatterField,
   getFrontmatterField,
   removeFrontmatterField,
@@ -236,5 +238,91 @@ describe('getFrontmatterField + removeFrontmatterField', () => {
     const out = removeFrontmatterField(body, 'lock');
     assert.equal(getFrontmatterField(out, 'lock'), null);
     assert.equal(getFrontmatterField(out, 'type'), 'action');
+  });
+});
+
+// ---------- Python facet helpers (v0.2.196 — 3-layer state machine) ---
+
+const SAMPLE_WITH_PYTHON = [
+  '---',
+  'type: action',
+  '---',
+  '',
+  '# Description',
+  '',
+  'Prints hello.',
+  '',
+  '# Recipe',
+  '',
+  'Print "hello".',
+  '',
+  '# Python',
+  '',
+  '```python',
+  'def compute(context):',
+  '    print("hello")',
+  '```',
+  '',
+].join('\n');
+
+describe('extractPythonSection', () => {
+  test('returns null when # Python heading absent', () => {
+    const body = SAMPLE_V2;
+    assert.equal(extractPythonSection(body), null);
+  });
+
+  test('extracts and unwraps ```python fence', () => {
+    const out = extractPythonSection(SAMPLE_WITH_PYTHON);
+    assert.equal(out, 'def compute(context):\n    print("hello")');
+  });
+
+  test('returns raw body when no fence present', () => {
+    const body = SAMPLE_WITH_PYTHON.replace(/```python\n/, '').replace(/```\n/, '');
+    const out = extractPythonSection(body);
+    assert.ok(out && out.includes('def compute(context):'));
+  });
+
+  test('stops at next H1', () => {
+    const body = SAMPLE_WITH_PYTHON + '\n# Notes\n\nSome notes.\n';
+    const out = extractPythonSection(body);
+    assert.ok(out !== null);
+    assert.ok(!out!.includes('Notes'));
+  });
+});
+
+describe('replacePythonSection', () => {
+  test('appends a new # Python section when absent', () => {
+    const out = replacePythonSection(SAMPLE_V2, 'def compute(c): pass');
+    const py = extractPythonSection(out);
+    assert.equal(py, 'def compute(c): pass');
+  });
+
+  test('replaces an existing Python body', () => {
+    const out = replacePythonSection(
+      SAMPLE_WITH_PYTHON,
+      'def compute(context):\n    print("EDITED")',
+    );
+    const py = extractPythonSection(out);
+    assert.equal(py, 'def compute(context):\n    print("EDITED")');
+  });
+
+  test('excise (pythonSrc=null) removes the whole # Python section', () => {
+    const out = replacePythonSection(SAMPLE_WITH_PYTHON, null);
+    assert.equal(extractPythonSection(out), null);
+    // Description + Recipe untouched.
+    assert.ok(out.includes('# Description'));
+    assert.ok(out.includes('# Recipe'));
+    // No `# Python` heading.
+    assert.ok(!out.includes('# Python'));
+  });
+
+  test('excise no-op when section absent', () => {
+    const out = replacePythonSection(SAMPLE_V2, null);
+    assert.equal(out, SAMPLE_V2);
+  });
+
+  test('replaceRecipeSection unaffected by replacePythonSection', () => {
+    const out = replacePythonSection(SAMPLE_WITH_PYTHON, 'NEW PYTHON');
+    assert.equal(extractRecipeSection(out), 'Print "hello".');
   });
 });

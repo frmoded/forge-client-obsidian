@@ -9,6 +9,8 @@ import {
   removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core';
 import { computeDescriptionHash } from './description-hash-core';
+import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core';
+import { extractPythonSection, replacePythonSection } from './v2-note-core';
 // v0.2.194 Path A — engineChipsForDomains import retired. The
 // forge-transpile service introspects forge.<domain>.lib at /generate
 // time via AST-walking vendored `engine_libs/*_lib.py` source files.
@@ -759,16 +761,23 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.generateEmmFromDescription(); },
     });
 
+    // v0.2.196 — explicit lock commands retired. The implicit
+    // 3-layer state machine (description / recipe / python +
+    // facet-hash-core.whichLayerIsCanonical) supersedes them: a
+    // hand-edited Recipe surfaces as "recipe canonical" via
+    // recipe_hash mismatch, and /generate detects that via the same
+    // mechanism. No frontmatter `lock:` field needed.
+
     this.addCommand({
-      id: 'forge-lock-recipe',
-      name: 'Forge: Lock Recipe (disable /generate)',
-      callback: () => { this.toggleEmmLock(true); },
+      id: 'forge-toggle-python-visibility',
+      name: 'Forge: Toggle Python visibility',
+      callback: () => { this.togglePythonVisibility(); },
     });
 
     this.addCommand({
-      id: 'forge-unlock-recipe',
-      name: 'Forge: Unlock Recipe (enable /generate)',
-      callback: () => { this.toggleEmmLock(false); },
+      id: 'forge-show-canonical-layer',
+      name: 'Forge: Show canonical layer (which facet was last edited)',
+      callback: () => { this.showCanonicalLayer(); },
     });
 
     this.addCommand({
@@ -2098,15 +2107,28 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
-    const lock = getFmFieldV2(body, 'lock');
-    console.warn('[Forge V2 /generate] lock field:', lock);
-    if (lock === 'recipe-canonical') {
-      await this.forgeOutput(
-        'Forge V2 /generate: note is recipe-canonical (E-- locked). '
-        + 'Run "Forge: Unlock Recipe" to enable /generate.',
-        'error',
-      );
-      return;
+    // v0.2.196 — explicit `lock: recipe-canonical` field retired in
+    // favor of the implicit 3-layer state machine. Hand-edited Recipe
+    // surfaces as `whichLayerIsCanonical === 'recipe'` via recipe_hash
+    // mismatch. /generate could refuse-or-warn here; for Phase 1 we
+    // log and proceed (the next drain wires a confirmation modal).
+    try {
+      const canonical = await whichLayerIsCanonical(body, {
+        extractDescription,
+        extractRecipeSection,
+        extractPythonSection,
+        getFrontmatterField: getFmFieldV2,
+      });
+      console.warn('[Forge V2 /generate] canonical layer:', canonical);
+      if (canonical === 'recipe' || canonical === 'python') {
+        await this.forgeOutput(
+          `Forge V2 /generate: ${canonical} facet was hand-edited; running /generate will overwrite the Recipe. `
+          + `(Phase 1 of the implicit-locking drain warns only; Phase 2 will surface a confirmation modal.)`,
+          'info',
+        );
+      }
+    } catch (e) {
+      console.error('forge-generate: canonical-layer probe failed', e);
     }
 
     const settings = this.settings;
@@ -2196,13 +2218,22 @@ export default class ForgePlugin extends Plugin {
     }
     console.warn('[Forge V2 /generate] received code length:', code.length, '; first 120 chars:', code.slice(0, 120));
 
-    // Write the E-- into the note + stamp description_hash.
+    // Write the E-- into the note + stamp description_hash AND
+    // recipe_hash. v0.2.196 (implicit-locking 3-layer state machine):
+    // recipe_hash captures the freshly-generated Recipe so subsequent
+    // hand-edits to the Recipe facet surface as "recipe canonical" via
+    // hash mismatch. Without stamping here, every newly /generated
+    // note would read as recipe-canonical on the next click. Python
+    // facet hash is stamped separately by writeCanonicalPythonBack
+    // after Forge-click compiles it.
     const withEmm = replaceRecipeSection(body, code);
     const descHash = await computeDescriptionHash(description);
-    const withHash = setFmFieldV2(withEmm, 'description_hash', descHash);
+    const recipeHash = await computeFacetHash(code);
+    const withDesc = setFmFieldV2(withEmm, 'description_hash', descHash);
+    const withHash = setFmFieldV2(withDesc, 'recipe_hash', recipeHash);
 
     await this.app.vault.modify(file, withHash);
-    console.warn('[Forge V2 /generate] file written; description_hash:', descHash);
+    console.warn('[Forge V2 /generate] file written; description_hash:', descHash, 'recipe_hash:', recipeHash);
     await this.forgeOutput(
       `Forge V2 /generate: E-- generated for ${file.basename}. Review + Forge-click to test.`,
       'success',
@@ -2244,25 +2275,104 @@ export default class ForgePlugin extends Plugin {
     return out;
   }
 
-  /** v0.2.182 — Lock or unlock the active note's E-- via the
-   *  `lock: recipe-canonical` frontmatter field. Lock = /generate refuses
-   *  (cohort intentionally hand-wrote E-- and doesn't want the LLM
-   *  overwriting it). Unlock = remove the field. */
-  private async toggleEmmLock(locking: boolean): Promise<void> {
+  /** v0.2.196 — Toggle the visibility of a V2 note's `# Python` facet.
+   *
+   *  This drain ships a body-level toggle (materialize/strip the
+   *  section) rather than CSS-class gating (deferred to Phase 2 because
+   *  it requires a CM6 ViewPlugin per HARD RULE). When the toggle is
+   *  ON, transpile the current Recipe → Python and append a fenced
+   *  `# Python` section; when OFF, excise the section entirely.
+   *
+   *  Editing the Python section while visible triggers a python_hash
+   *  mismatch → `whichLayerIsCanonical === 'python'` → /generate +
+   *  Forge-click surface that the Description + Recipe are stale.
+   */
+  private async togglePythonVisibility(): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      this.notice('Forge: no active note to toggle E-- lock on.');
+      this.notice('Forge: no active note to toggle Python visibility on.');
       return;
     }
     const body = await this.app.vault.read(view.file);
-    if (locking) {
-      const out = setFmFieldV2(body, 'lock', 'recipe-canonical');
+    const existingPython = extractPythonSection(body);
+    if (existingPython !== null) {
+      // Currently visible → excise. Don't lose the python_hash stamp
+      // (the user may toggle back on later and expect the canonical
+      // state machine to recognize the previously stamped baseline).
+      const out = replacePythonSection(body, null);
       await this.app.vault.modify(view.file, out);
-      this.notice(`Forge: ${view.file.basename} → E-- locked (/generate disabled).`);
-    } else {
-      const out = removeFmFieldV2(body, 'lock');
-      await this.app.vault.modify(view.file, out);
-      this.notice(`Forge: ${view.file.basename} → E-- unlocked (/generate enabled).`);
+      this.notice(
+        `Forge: ${view.file.basename} → Python facet hidden. Toggle again to show.`);
+      return;
+    }
+    // Currently hidden → materialize. Compile from the current Recipe
+    // via the same resolveActionCode the Forge-click path uses; if
+    // it fails (e.g. Recipe syntax error), surface the error in the
+    // output panel.
+    const hostManager = getPyodideHost();
+    if (!hostManager) {
+      await this.forgeOutput(
+        'Forge: Pyodide host unavailable — open the engine view first to initialize the runtime.',
+        'error',
+      );
+      return;
+    }
+    const host = await hostManager.getInstance();
+    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    let python: string | null = null;
+    try {
+      python = await host.resolveActionCode(snippetId, { force: true });
+    } catch (e) {
+      console.error('togglePythonVisibility: resolveActionCode failed', e);
+      await this.forgeOutput(
+        `Forge: cannot show Python — Recipe failed to transpile: ${e}`,
+        'error',
+      );
+      return;
+    }
+    if (!python) {
+      await this.forgeOutput(
+        'Forge: cannot show Python — Recipe is empty or transpile produced no code.',
+        'error',
+      );
+      return;
+    }
+    const withPython = replacePythonSection(body, python);
+    const pythonHash = await computeFacetHash(python);
+    const withHash = setFmFieldV2(withPython, 'python_hash', pythonHash);
+    await this.app.vault.modify(view.file, withHash);
+    this.notice(
+      `Forge: ${view.file.basename} → Python facet shown. Hand-edits will mark Description + Recipe stale.`);
+  }
+
+  /** v0.2.196 — Report the current canonical layer for the active
+   *  note via forgeOutput. Diagnostic command for the implicit-locking
+   *  state machine; Phase 2 will surface this in a status bar entry
+   *  with live updates. */
+  private async showCanonicalLayer(): Promise<void> {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      this.notice('Forge: no active note to probe.');
+      return;
+    }
+    const body = await this.app.vault.read(view.file);
+    try {
+      const canonical = await whichLayerIsCanonical(body, {
+        extractDescription,
+        extractRecipeSection,
+        extractPythonSection,
+        getFrontmatterField: getFmFieldV2,
+      });
+      const msg = canonical === 'synced'
+        ? `Forge: ${view.file.basename} → synced (all facets match their hashes).`
+        : `Forge: ${view.file.basename} → ${canonical} canonical (last hand-edited).`;
+      await this.forgeOutput(msg, 'info');
+    } catch (e) {
+      console.error('showCanonicalLayer: probe failed', e);
+      await this.forgeOutput(
+        `Forge: canonical-layer probe failed — ${e}`,
+        'error',
+      );
     }
   }
 
@@ -2594,12 +2704,28 @@ export default class ForgePlugin extends Plugin {
     const body = await this.app.vault.read(file);
     const english = _extractEnglishFromBody(body) ?? '';
     const englishHash = await computeEnglishHash(english);
-    await this.app.vault.process(file, (content) =>
-      writePythonAndEnglishHash(content, {
+    // v0.2.196 — stamp python_hash on the V2 path so the implicit
+    // 3-layer state machine has a baseline. Hand-edits to the Python
+    // facet after this point surface as `python` canonical. Only stamp
+    // if the body has a `# Python` section visible (toggle on) — when
+    // hidden, the python_hash from the prior visibility cycle is left
+    // in place (and a body-level toggle-on will refresh it).
+    const pythonHash = await computeFacetHash(python);
+    await this.app.vault.process(file, (content) => {
+      let next = writePythonAndEnglishHash(content, {
         pythonCode: python,
         englishHash,
         stripStaleSlots: false,
-      }));
+      });
+      // Only stamp python_hash if the resulting body actually has a
+      // # Python section (V2 visible-mode). Avoids a stale baseline
+      // for V1 notes whose # Python facet is written by the V1 cache
+      // path but doesn't participate in the 3-layer state machine.
+      if (extractPythonSection(next) !== null) {
+        next = setFmFieldV2(next, 'python_hash', pythonHash);
+      }
+      return next;
+    });
     // Keep MEMFS in sync for the next compute.
     try {
       const readBack = await this.app.vault.read(file);

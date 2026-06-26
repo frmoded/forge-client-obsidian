@@ -56,6 +56,31 @@ export function extractRecipeSection(body: string): string | null {
   return _extractH1Section(body, 'Recipe');
 }
 
+/** Extract the body of `# Python` (until the next H1 or EOF). Returns
+ *  null when the heading is absent — distinguishes "no Python facet
+ *  authored yet" from "Python facet authored but empty". v0.2.196 added
+ *  for the implicit-locking state machine; the V2 3-layer model needs
+ *  to read the Python facet alongside Description + Recipe to compute
+ *  python_hash and detect canonical-layer state.
+ *
+ *  Strips fenced code-block delimiters (```python ... ```) if present;
+ *  the Recipe → Python transpile emits raw Python, but cohort-edited
+ *  Python may use fences for editor syntax highlighting. Returning the
+ *  unfenced body keeps `computeFacetHash` stable across that prose
+ *  difference. */
+export function extractPythonSection(body: string): string | null {
+  if (!/^# Python\s*$/m.test(body)) return null;
+  const raw = _extractH1Section(body, 'Python');
+  return _unwrapPythonFence(raw);
+}
+
+function _unwrapPythonFence(text: string): string {
+  // Match the canonical ```python ... ``` shape but tolerate ```py or
+  // a leading-blank-line wrapper. Single-pass, no recursion.
+  const fenced = /^```(?:python|py)?\s*\n([\s\S]*?)\n```\s*$/.exec(text.trim());
+  return fenced ? fenced[1] : text;
+}
+
 function _extractH1Section(body: string, name: string): string {
   // Find the heading line.
   const re = new RegExp(`^# ${_escapeRegex(name)}\\s*$`, 'm');
@@ -136,6 +161,59 @@ function _parseInputDeclLine(rest: string): InputDecl | null {
     };
   }
   return null;
+}
+
+/** Replace the body of `# Python` with `pythonSrc`. If the section
+ *  doesn't exist, appends `# Python` at the end of the body, wrapped
+ *  in a ```python fence so the editor's markdown view highlights it.
+ *  Removing the section: pass `null` instead of a string — the
+ *  Python facet is excised entirely (used by the toggle command to
+ *  hide Python until the cohort opts in).
+ *
+ *  Inserted block shape:
+ *
+ *    # Python
+ *
+ *    ```python
+ *    <pythonSrc>
+ *    ```
+ *
+ *  with a single trailing newline so subsequent edits start cleanly.
+ *  v0.2.196 for the implicit-locking 3-layer state machine. */
+export function replacePythonSection(
+  body: string,
+  pythonSrc: string | null,
+): string {
+  const re = /^# Python\s*$/m;
+  const m = re.exec(body);
+  if (pythonSrc === null) {
+    // Excise: drop heading + all body up to next H1 (or EOF).
+    if (!m) return body;
+    const headingStart = m.index;
+    const headingEnd = m.index + m[0].length;
+    const tail = body.slice(headingEnd);
+    const nextH1 = /^# [^#\n]/m.exec(tail);
+    const sectionEnd = nextH1 ? headingEnd + nextH1.index : body.length;
+    const before = body.slice(0, headingStart).replace(/\s+$/, '');
+    const after = body.slice(sectionEnd).replace(/^\s+/, '\n');
+    return before + (after.startsWith('\n') ? after : '\n' + after);
+  }
+  const trimmed = pythonSrc.replace(/^\s+/, '').replace(/\s+$/, '');
+  const block = '# Python\n\n```python\n' + trimmed + '\n```\n';
+  if (!m) {
+    const sep = body.endsWith('\n') ? '\n' : '\n\n';
+    return body + sep + block;
+  }
+  const headingStart = m.index;
+  const headingEnd = m.index + m[0].length;
+  const tail = body.slice(headingEnd);
+  const nextH1 = /^# [^#\n]/m.exec(tail);
+  const sectionEnd = nextH1 ? headingEnd + nextH1.index : body.length;
+  const before = body.slice(0, headingStart);
+  const after = body.slice(sectionEnd);
+  let glue = '';
+  if (after.length > 0 && !after.startsWith('\n')) glue = '\n';
+  return before + block + glue + after;
 }
 
 /** Replace the body of `# Recipe` with `newEmm`. If the section doesn't
