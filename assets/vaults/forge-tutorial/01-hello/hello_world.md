@@ -6,6 +6,6 @@ type: action
 
 Your very first Forge snippet. Forge-click it to make the computer say hello.
 
-# E--
+# Recipe
 
 [[print]] "hello, world".

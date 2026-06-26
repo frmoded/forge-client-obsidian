@@ -20,7 +20,7 @@ stay silent (rest-filled in `voices_canonical`'s 7-part layout so
 percussion_lab/README.md). One `mp` dynamic mark anchored on the kick's
 first note via `mark_dynamics`.
 
-# E--
+# Recipe
 
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[0, 2], duration=0.25, bars=bars, velocity=70, mark_dynamics=True.
 Return Call [[voices_canonical]] with kp=kp.

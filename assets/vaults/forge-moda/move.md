@@ -15,7 +15,7 @@ Position `(x, y)` updates by `speed * cos(heading) * dt` and
 - state — current ParticleState
 - dt — time step in seconds (e.g. `1/30` for 30 FPS)
 
-# E--
+# Recipe
 
 Let new_state = Call [[advance_positions]] with state=state, dt=dt.
 Return new_state.

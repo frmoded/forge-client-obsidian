@@ -6,7 +6,7 @@ type: action
 
 Chapter 2 — Variables. Names two values and joins them into a greeting.
 
-# E--
+# Recipe
 
 Let name = "Ada".
 Let greeting = "Hello, " + name.

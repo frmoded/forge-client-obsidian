@@ -13,7 +13,7 @@ are untouched.
 
 - state — current ParticleState
 
-# E--
+# Recipe
 
 Let new_state = Call [[set_mass_for_type]] with state=state, particle_type="ink", mass="medium".
 Return new_state.

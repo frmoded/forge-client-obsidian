@@ -14,7 +14,7 @@ Particles inside the chamber pass through unchanged.
 
 - state — current ParticleState
 
-# E--
+# Recipe
 
 Let new_state = Call [[bounce_off_wall]] with state=state.
 Return new_state.

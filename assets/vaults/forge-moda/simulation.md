@@ -35,7 +35,7 @@ click scenario by shadowing [[sample_clicks]].
 
 (none — constants live as literals inside the body)
 
-# E--
+# Recipe
 
 Let state = Call [[setup]].
 Let clicks = Call [[sample_clicks]].

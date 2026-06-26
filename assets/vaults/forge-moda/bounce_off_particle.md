@@ -17,7 +17,7 @@ through unchanged. Pair list typically comes from [[detect_collisions]]
 - state — current ParticleState
 - pairs — (M, 2) int64 array of colliding row indices
 
-# E--
+# Recipe
 
 Let new_state = Call [[bounce_off_pairs]] with state=state, pairs=pairs.
 Return new_state.

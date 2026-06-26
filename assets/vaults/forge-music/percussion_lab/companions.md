@@ -19,7 +19,7 @@ Kick on 1 and 3; closed hi-hat on every beat (quarters). `human` velocity
 profile (`mf` band). One dynamic mark (`mf`) on the kick's first note via
 `mark_dynamics`.
 
-# E--
+# Recipe
 
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[0, 2], duration=0.25, bars=bars, velocity="human", mark_dynamics=True.
 Let chp = Call [[play_at_offsets]] with instrument=[[closed_hihat]], offsets=[0, 1, 2, 3], duration=0.25, bars=bars, velocity="human".

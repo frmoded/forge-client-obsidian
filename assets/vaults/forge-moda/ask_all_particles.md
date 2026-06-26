@@ -17,7 +17,7 @@ Tell every particle to do its per-tick work in order:
 - state — current ParticleState
 - dt — time step in seconds
 
-# E--
+# Recipe
 
 Let state = Call [[move]] with state=state, dt=dt.
 Let state = Call [[if_wall_then_bounce]] with state=state.

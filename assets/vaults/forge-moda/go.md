@@ -20,7 +20,7 @@ canned [[sample_state]] starting state.
 - dt (default `0.0333`) — time step (30 FPS default)
 - temperature (default `"medium"`) — current temperature setting
 
-# E--
+# Recipe
 
 If state == None:
   Let state = Call [[sample_state]].

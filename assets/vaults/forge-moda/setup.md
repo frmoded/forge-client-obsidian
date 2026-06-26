@@ -20,7 +20,7 @@ simulation state — it takes no incoming state.
 
 - temperature (default `"medium"`) — runtime-injected by `/moda/init`
 
-# E--
+# Recipe
 
 Let state = Call [[create_chamber]] with width=800, height=600.
 Let state = Call [[create_water_particles]] with state=state.

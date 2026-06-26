@@ -6,7 +6,7 @@ type: action
 
 Chapter 7 — Data. Reads a list from a data snippet and walks through it.
 
-# E--
+# Recipe
 
 Let palette = [[colors]].
 For each color in palette:

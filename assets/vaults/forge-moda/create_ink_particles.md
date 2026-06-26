@@ -20,7 +20,7 @@ Mass is set by [[set_ink_mass]]; it starts at a 'medium' placeholder.
 - x — click x-position (chamber coordinates)
 - y — click y-position (chamber coordinates)
 
-# E--
+# Recipe
 
 Let new_state = Call [[create_ink_particles]] with state=state, x=x, y=y.
 Return new_state.

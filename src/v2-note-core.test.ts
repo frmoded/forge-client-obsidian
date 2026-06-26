@@ -9,9 +9,9 @@ import * as assert from 'node:assert/strict';
 import {
   isV2Shape,
   extractDescription,
-  extractEmmSection,
+  extractRecipeSection,
   extractInputs,
-  replaceEmmSection,
+  replaceRecipeSection,
   setFrontmatterField,
   getFrontmatterField,
   removeFrontmatterField,
@@ -35,7 +35,7 @@ const SAMPLE_V2 = [
   '',
   'Built-in `print`.',
   '',
-  '# E--',
+  '# Recipe',
   '',
   'Call [[print]] with text="Hello, " + name + "!".',
   'Return.',
@@ -43,16 +43,16 @@ const SAMPLE_V2 = [
 ].join('\n');
 
 describe('isV2Shape', () => {
-  test('returns true for body with # Description and # E--', () => {
+  test('returns true for body with # Description and # Recipe', () => {
     assert.equal(isV2Shape(SAMPLE_V2), true);
   });
 
   test('returns false when # Description is missing', () => {
-    const body = '---\ntype: action\n---\n\n# E--\n\nReturn.\n';
+    const body = '---\ntype: action\n---\n\n# Recipe\n\nReturn.\n';
     assert.equal(isV2Shape(body), false);
   });
 
-  test('returns false when # E-- is missing', () => {
+  test('returns false when # Recipe is missing', () => {
     const body = '---\ntype: action\n---\n\n# Description\n\nFoo\n';
     assert.equal(isV2Shape(body), false);
   });
@@ -63,7 +63,7 @@ describe('isV2Shape', () => {
   });
 
   test('does not match # Descriptionoid (heading must be exact)', () => {
-    const body = '---\ntype: action\n---\n\n# Description Of Things\n\nFoo\n\n# E--\n\nReturn.\n';
+    const body = '---\ntype: action\n---\n\n# Description Of Things\n\nFoo\n\n# Recipe\n\nReturn.\n';
     assert.equal(isV2Shape(body), false);
   });
 
@@ -82,11 +82,11 @@ describe('extractDescription', () => {
       'Prints "Hello, world!".\n\n## Inputs\n\n- name (default "world") — who to greet\n- excited\n\n## Mechanics\n\nBuilt-in `print`.',
     );
     // NOTE: the # Description body intentionally stops at the next H1
-    // (# E--), so ## subheadings inside Description are retained.
+    // (# Recipe), so ## subheadings inside Description are retained.
   });
 
   test('returns empty string when # Description absent', () => {
-    const body = '---\ntype: action\n---\n\n# E--\n\nReturn.\n';
+    const body = '---\ntype: action\n---\n\n# Recipe\n\nReturn.\n';
     assert.equal(extractDescription(body), '');
   });
 
@@ -96,22 +96,22 @@ describe('extractDescription', () => {
   });
 });
 
-describe('extractEmmSection', () => {
-  test('extracts the E-- recipe body', () => {
+describe('extractRecipeSection', () => {
+  test('extracts the Recipe body', () => {
     assert.equal(
-      extractEmmSection(SAMPLE_V2),
+      extractRecipeSection(SAMPLE_V2),
       'Call [[print]] with text="Hello, " + name + "!".\nReturn.',
     );
   });
 
-  test('returns null when # E-- absent', () => {
+  test('returns null when # Recipe absent', () => {
     const body = '# Description\n\nFoo\n';
-    assert.equal(extractEmmSection(body), null);
+    assert.equal(extractRecipeSection(body), null);
   });
 
-  test('returns empty string for an empty # E-- section', () => {
-    const body = '# Description\n\nFoo\n\n# E--\n';
-    assert.equal(extractEmmSection(body), '');
+  test('returns empty string for an empty # Recipe section', () => {
+    const body = '# Description\n\nFoo\n\n# Recipe\n';
+    assert.equal(extractRecipeSection(body), '');
   });
 });
 
@@ -134,7 +134,7 @@ describe('extractInputs', () => {
   });
 
   test('returns [] when ## Inputs absent', () => {
-    const body = '# Description\n\nFoo\n\n# E--\n\nReturn.\n';
+    const body = '# Description\n\nFoo\n\n# Recipe\n\nReturn.\n';
     assert.deepEqual(extractInputs(body), []);
   });
 
@@ -153,37 +153,37 @@ describe('extractInputs', () => {
   });
 
   test('stops at the next H1', () => {
-    const body = '## Inputs\n\n- a\n- b\n\n# E--\n\n- not_an_input\n';
+    const body = '## Inputs\n\n- a\n- b\n\n# Recipe\n\n- not_an_input\n';
     const decls = extractInputs(body);
     assert.equal(decls.length, 2);
     assert.deepEqual(decls.map((d) => d.name), ['a', 'b']);
   });
 });
 
-describe('replaceEmmSection', () => {
-  test('replaces an existing # E-- body', () => {
-    const out = replaceEmmSection(SAMPLE_V2, 'Return.');
-    const emm = extractEmmSection(out);
+describe('replaceRecipeSection', () => {
+  test('replaces an existing # Recipe body', () => {
+    const out = replaceRecipeSection(SAMPLE_V2, 'Return.');
+    const emm = extractRecipeSection(out);
     assert.equal(emm, 'Return.');
     // Description preserved.
     assert.ok(extractDescription(out).startsWith('Prints "Hello, world!".'));
   });
 
-  test('appends a # E-- section when absent', () => {
+  test('appends a # Recipe section when absent', () => {
     const body = '---\ntype: action\n---\n\n# Description\n\nFoo\n';
-    const out = replaceEmmSection(body, 'Return.');
-    assert.match(out, /^# E--\s*$/m);
-    assert.equal(extractEmmSection(out), 'Return.');
+    const out = replaceRecipeSection(body, 'Return.');
+    assert.match(out, /^# Recipe\s*$/m);
+    assert.equal(extractRecipeSection(out), 'Return.');
   });
 
   test('preserves frontmatter exactly', () => {
-    const out = replaceEmmSection(SAMPLE_V2, 'Return None.');
+    const out = replaceRecipeSection(SAMPLE_V2, 'Return None.');
     assert.match(out, /^---\ntype: action\n---/);
   });
 
   test('trims leading + trailing blank lines in the new E-- body', () => {
-    const out = replaceEmmSection(SAMPLE_V2, '\n\nReturn.\n\n');
-    assert.equal(extractEmmSection(out), 'Return.');
+    const out = replaceRecipeSection(SAMPLE_V2, '\n\nReturn.\n\n');
+    assert.equal(extractRecipeSection(out), 'Return.');
   });
 });
 
@@ -232,7 +232,7 @@ describe('getFrontmatterField + removeFrontmatterField', () => {
   });
 
   test('removeFrontmatterField deletes the key + line', () => {
-    const body = '---\ntype: action\nlock: e--canonical\n---\n\n# Description\n\nFoo\n';
+    const body = '---\ntype: action\nlock: recipe-canonical\n---\n\n# Description\n\nFoo\n';
     const out = removeFrontmatterField(body, 'lock');
     assert.equal(getFrontmatterField(out, 'lock'), null);
     assert.equal(getFrontmatterField(out, 'type'), 'action');

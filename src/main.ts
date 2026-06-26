@@ -3,7 +3,7 @@ import {
   isV2Shape,
   extractDescription,
   extractInputs,
-  replaceEmmSection,
+  replaceRecipeSection,
   setFrontmatterField as setFmFieldV2,
   getFrontmatterField as getFmFieldV2,
   removeFrontmatterField as removeFmFieldV2,
@@ -744,26 +744,26 @@ export default class ForgePlugin extends Plugin {
 
     // v0.2.182 — V2 /generate Phase 2. New Cmd-P command that takes
     // the active V2 note's # Description, POSTs to the hosted service
-    // with dialect="emm", and writes the returned E-- recipe into the
-    // # E-- section (creating it if absent). On success, computes +
+    // with dialect="emm", and writes the returned Recipe into the
+    // # Recipe section (creating it if absent). On success, computes +
     // stores `description_hash` in frontmatter so the editor's stale-
     // indicator check (deferred to Phase 3 per the prompt's SPLIT
     // GUIDANCE on §3.4) can detect Description edits later.
     this.addCommand({
-      id: 'forge-generate-emm-from-description',
-      name: 'Forge: Generate E-- from Description',
+      id: 'forge-generate-recipe-from-description',
+      name: 'Forge: Generate Recipe from Description',
       callback: () => { this.generateEmmFromDescription(); },
     });
 
     this.addCommand({
-      id: 'forge-lock-emm',
-      name: 'Forge: Lock E-- (disable /generate)',
+      id: 'forge-lock-recipe',
+      name: 'Forge: Lock Recipe (disable /generate)',
       callback: () => { this.toggleEmmLock(true); },
     });
 
     this.addCommand({
-      id: 'forge-unlock-emm',
-      name: 'Forge: Unlock E-- (enable /generate)',
+      id: 'forge-unlock-recipe',
+      name: 'Forge: Unlock Recipe (enable /generate)',
       callback: () => { this.toggleEmmLock(false); },
     });
 
@@ -2061,7 +2061,7 @@ export default class ForgePlugin extends Plugin {
    *  - Extracts Description + Inputs.
    *  - Walks vault for action-note descriptions → deps payload.
    *  - POSTs to hosted service with dialect="emm".
-   *  - Writes returned E-- recipe into the # E-- section.
+   *  - Writes returned Recipe into the # Recipe section.
    *  - Computes + stores description_hash in frontmatter.
    *
    *  Stale-indicator UI is a Phase 3 follow-up per the prompt's
@@ -2096,10 +2096,10 @@ export default class ForgePlugin extends Plugin {
 
     const lock = getFmFieldV2(body, 'lock');
     console.warn('[Forge V2 /generate] lock field:', lock);
-    if (lock === 'e--canonical') {
+    if (lock === 'recipe-canonical') {
       await this.forgeOutput(
-        'Forge V2 /generate: note is e--canonical (E-- locked). '
-        + 'Run "Forge: Unlock E--" to enable /generate.',
+        'Forge V2 /generate: note is recipe-canonical (E-- locked). '
+        + 'Run "Forge: Unlock Recipe" to enable /generate.',
         'error',
       );
       return;
@@ -2150,7 +2150,7 @@ export default class ForgePlugin extends Plugin {
       generation_notes: '',
       deps,
       active_domains: activeDomainsList,
-      dialect: 'emm',
+      dialect: 'recipe',
     };
 
     await this.forgeOutput(`Forge V2 /generate: invoking service for "${file.basename}"…`, 'info', snippetId);
@@ -2194,7 +2194,7 @@ export default class ForgePlugin extends Plugin {
     console.warn('[Forge V2 /generate] received code length:', code.length, '; first 120 chars:', code.slice(0, 120));
 
     // Write the E-- into the note + stamp description_hash.
-    const withEmm = replaceEmmSection(body, code);
+    const withEmm = replaceRecipeSection(body, code);
     const descHash = await computeDescriptionHash(description);
     const withHash = setFmFieldV2(withEmm, 'description_hash', descHash);
 
@@ -2242,7 +2242,7 @@ export default class ForgePlugin extends Plugin {
   }
 
   /** v0.2.182 — Lock or unlock the active note's E-- via the
-   *  `lock: e--canonical` frontmatter field. Lock = /generate refuses
+   *  `lock: recipe-canonical` frontmatter field. Lock = /generate refuses
    *  (cohort intentionally hand-wrote E-- and doesn't want the LLM
    *  overwriting it). Unlock = remove the field. */
   private async toggleEmmLock(locking: boolean): Promise<void> {
@@ -2253,7 +2253,7 @@ export default class ForgePlugin extends Plugin {
     }
     const body = await this.app.vault.read(view.file);
     if (locking) {
-      const out = setFmFieldV2(body, 'lock', 'e--canonical');
+      const out = setFmFieldV2(body, 'lock', 'recipe-canonical');
       await this.app.vault.modify(view.file, out);
       this.notice(`Forge: ${view.file.basename} → E-- locked (/generate disabled).`);
     } else {

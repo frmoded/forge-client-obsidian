@@ -37,7 +37,7 @@ Compose 8 fixed 4-bar sections via `sequence_list`. The arc — quiet → climax
 fade → silence — is what the listener hears. Each section is its own snippet;
 this file just orchestrates them.
 
-# E--
+# Recipe
 
 Let s1 = Call [[solitary]] with bars=4.
 Let s2 = Call [[companions]] with bars=4.

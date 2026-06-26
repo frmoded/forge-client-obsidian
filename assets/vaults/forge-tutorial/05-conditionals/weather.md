@@ -6,7 +6,7 @@ type: action
 
 Chapter 5 — Conditionals. Chooses what to say based on a value.
 
-# E--
+# Recipe
 
 Let temperature = 72.
 If temperature > 80:

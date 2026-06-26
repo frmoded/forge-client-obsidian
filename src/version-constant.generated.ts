@@ -4,4 +4,4 @@
 // v0.2.131 — baked into main.js so onload can self-check against the
 // on-disk manifest.json. Stale-install detection per v0331.
 
-export const PLUGIN_VERSION_AT_BUILD = "0.2.173";
+export const PLUGIN_VERSION_AT_BUILD = "0.2.192";

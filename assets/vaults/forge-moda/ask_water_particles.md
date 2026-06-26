@@ -16,7 +16,7 @@ unchanged.
 - state — current ParticleState
 - temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-# E--
+# Recipe
 
 Let state = Call [[if_temp_high_set_speed]] with state=state, temperature=temperature.
 Let state = Call [[if_temp_medium_set_speed]] with state=state, temperature=temperature.

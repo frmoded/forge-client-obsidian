@@ -15,7 +15,7 @@ Units are simulation units per second.
 
 - temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-# E--
+# Recipe
 
 Let speed = Call [[temperature_to_speed]] with temperature=temperature.
 Return speed.

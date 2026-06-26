@@ -29,7 +29,7 @@ Concatenate six sub-section calls with different bar counts to produce the
 asymmetric arc. The peak (sections of climax) sits in the first third; the
 fade dominates the remainder.
 
-# E--
+# Recipe
 
 Let s1 = Call [[companions]] with bars=8.
 Let s2 = Call [[gathering]] with bars=4.

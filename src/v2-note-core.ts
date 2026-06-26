@@ -20,9 +20,9 @@
 //   - name1 (default v1) — doc
 //   - name2 — doc
 //
-//   # E--
+//   # Recipe
 //
-//   <E-- recipe>
+//   <Recipe>
 //
 // `## Mechanics` and other H2s may interleave. The helpers below
 // locate sections by exact H1/H2 heading match and tolerate
@@ -35,12 +35,12 @@ export interface InputDecl {
   doc: string;
 }
 
-/** True iff the body has both `# Description` and `# E--` H1 headings.
+/** True iff the body has both `# Description` and `# Recipe` H1 headings.
  *  Doesn't require `# Python` to be absent — V2 notes can coexist with
  *  legacy V1 Python facets during the migration. */
 export function isV2Shape(body: string): boolean {
   if (typeof body !== 'string') return false;
-  return /^# Description\s*$/m.test(body) && /^# E--\s*$/m.test(body);
+  return /^# Description\s*$/m.test(body) && /^# Recipe\s*$/m.test(body);
 }
 
 /** Extract the body of `# Description` (until the next H1 or EOF).
@@ -50,10 +50,10 @@ export function extractDescription(body: string): string {
   return _extractH1Section(body, 'Description');
 }
 
-/** Extract the body of `# E--` (until the next H1 or EOF). */
-export function extractEmmSection(body: string): string | null {
-  if (!/^# E--\s*$/m.test(body)) return null;
-  return _extractH1Section(body, 'E--');
+/** Extract the body of `# Recipe` (until the next H1 or EOF). */
+export function extractRecipeSection(body: string): string | null {
+  if (!/^# Recipe\s*$/m.test(body)) return null;
+  return _extractH1Section(body, 'Recipe');
 }
 
 function _extractH1Section(body: string, name: string): string {
@@ -138,18 +138,18 @@ function _parseInputDeclLine(rest: string): InputDecl | null {
   return null;
 }
 
-/** Replace the body of `# E--` with `newEmm`. If the section doesn't
- *  exist, appends a new `# E--` section at the end of the body. The
- *  inserted block is `# E--\n\n<newEmm>\n` with a single trailing
+/** Replace the body of `# Recipe` with `newEmm`. If the section doesn't
+ *  exist, appends a new `# Recipe` section at the end of the body. The
+ *  inserted block is `# Recipe\n\n<newEmm>\n` with a single trailing
  *  newline so subsequent edits start cleanly. */
-export function replaceEmmSection(body: string, newEmm: string): string {
+export function replaceRecipeSection(body: string, newEmm: string): string {
   const trimmedEmm = newEmm.replace(/^\s+/, '').replace(/\s+$/, '');
-  const re = /^# E--\s*$/m;
+  const re = /^# Recipe\s*$/m;
   const m = re.exec(body);
   if (!m) {
     // Append.
     const sep = body.endsWith('\n') ? '\n' : '\n\n';
-    return body + sep + '# E--\n\n' + trimmedEmm + '\n';
+    return body + sep + '# Recipe\n\n' + trimmedEmm + '\n';
   }
   const headingStart = m.index;
   const headingEnd = m.index + m[0].length;
@@ -163,7 +163,7 @@ export function replaceEmmSection(body: string, newEmm: string): string {
   const after = body.slice(sectionEnd);
   // Reassemble with the trimmed E-- body. Preserve a blank line before
   // a following H1 if there is one.
-  const replacement = '# E--\n\n' + trimmedEmm + '\n';
+  const replacement = '# Recipe\n\n' + trimmedEmm + '\n';
   // If there's content after AND it doesn't already start with a blank
   // line, add one.
   let glue = '';

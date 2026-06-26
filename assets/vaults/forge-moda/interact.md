@@ -18,7 +18,7 @@ range, re-collide every tick, and freeze into stuck clusters
 
 - state — current ParticleState
 
-# E--
+# Recipe
 
 Let pairs = Call [[detect_collisions]] with state=state.
 Let new_state = Call [[bounce_off_pairs]] with state=state, pairs=pairs.

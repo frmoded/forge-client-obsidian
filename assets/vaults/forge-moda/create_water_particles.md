@@ -19,7 +19,7 @@ empty). Speed and mass are set by later blocks ([[set_water_speed]],
 
 - state — current ParticleState (empty chamber on first call)
 
-# E--
+# Recipe
 
 Let new_state = Call [[create_water_particles]] with state=state.
 Return new_state.

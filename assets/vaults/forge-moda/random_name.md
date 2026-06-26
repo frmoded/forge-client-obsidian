@@ -12,7 +12,7 @@ by the freeze-via-wikilink demos and `canonical_demo_compose`.
 
 - n — number of letters (e.g. 5)
 
-# E--
+# Recipe
 
 Let name = Call [[random_name]] with n=n.
 Return name.

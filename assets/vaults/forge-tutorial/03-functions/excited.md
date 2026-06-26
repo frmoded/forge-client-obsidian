@@ -10,6 +10,6 @@ Chapter 3 — a reusable snippet that takes a word and gives it back with excite
 
 - word — the word to make excited
 
-# E--
+# Recipe
 
 Return word + "!".

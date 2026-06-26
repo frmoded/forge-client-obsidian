@@ -15,7 +15,7 @@ particles are untouched.
 - state — current ParticleState
 - temperature — one of `"zero"` | `"low"` | `"medium"` | `"high"`
 
-# E--
+# Recipe
 
 Let speed = Call [[speed_for_temperature]] with temperature=temperature.
 Let new_state = Call [[set_speed_for_type]] with state=state, particle_type="water", speed=speed.

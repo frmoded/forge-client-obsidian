@@ -6,6 +6,6 @@ type: action
 
 Chapter 4 — a small snippet that just gives back a word. Meant to be called by another snippet.
 
-# E--
+# Recipe
 
 Return "wonderful".

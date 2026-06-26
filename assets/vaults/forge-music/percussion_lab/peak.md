@@ -21,7 +21,7 @@ eighth; snare on every 16th; crash on bar 1 + bar 3 downbeats only. Six
 voices active. `accent` velocity profile (`ff` band); one `ff` mark on
 the kick's first note.
 
-# E--
+# Recipe
 
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[0, 1, 2, 3], duration=0.25, bars=bars, velocity="accent", mark_dynamics=True.
 Let sp = Call [[play_at_offsets]] with instrument=[[snare]], offsets=[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75], duration=0.25, bars=bars, velocity="accent".

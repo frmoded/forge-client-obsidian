@@ -10,7 +10,7 @@ Chapter 8 — a snippet that calls itself to multiply n by every number below it
 
 - n — non-negative integer
 
-# E--
+# Recipe
 
 If n <= 1:
   Return 1.

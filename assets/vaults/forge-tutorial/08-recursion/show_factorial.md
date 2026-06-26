@@ -6,7 +6,7 @@ type: action
 
 Chapter 8 — calls the factorial snippet and prints the result.
 
-# E--
+# Recipe
 
 Let r = Call [[factorial]] with n=5.
 [[print]] r.

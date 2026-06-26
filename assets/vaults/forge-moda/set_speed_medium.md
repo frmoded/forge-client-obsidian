@@ -14,7 +14,7 @@ particle types untouched.
 
 - state — current ParticleState
 
-# E--
+# Recipe
 
 Let medium = Call [[speed_for_temperature]] with temperature="medium".
 Let new_state = Call [[set_speed_for_type]] with state=state, particle_type="water", speed=medium.

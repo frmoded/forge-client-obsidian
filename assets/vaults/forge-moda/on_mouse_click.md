@@ -18,7 +18,7 @@ Drop a tight cluster of ink particles at the cursor position:
 - x — click x-position (chamber coordinates)
 - y — click y-position (chamber coordinates)
 
-# E--
+# Recipe
 
 Let state = Call [[create_ink_particles]] with state=state, x=x, y=y.
 Let state = Call [[set_ink_speed]] with state=state.
