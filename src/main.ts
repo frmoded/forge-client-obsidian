@@ -1946,6 +1946,74 @@ export default class ForgePlugin extends Plugin {
       await this.runSnippet('Forge failed during execution');
       return;
     }
+
+    // v0.2.201 — Phase 2 implicit locking §3.1: canonical-aware
+    // routing for V2 notes. Pre-flight: if the note is V2-shape, probe
+    // the canonical layer via the 3-layer hash state machine and
+    // branch:
+    //
+    //   - 'python'      → hand-edited Python facet; run it DIRECTLY
+    //                     without re-transpile. This is Path Y closure
+    //                     for V2 — replaces the V1 `edit_mode: python`
+    //                     workaround. Pre-Phase-2 the standard
+    //                     transpile path always overwrote # Python on
+    //                     Forge-click, silently destroying cohort
+    //                     hand-edits. Driver acknowledged this gap in
+    //                     the Phase 1 drain and chose Path Y.
+    //   - 'description' → Description was hand-edited; Recipe is stale.
+    //                     Abort with a notice pointing at /generate.
+    //                     Re-transpiling stale Recipe would produce
+    //                     stale Python — worse than failing fast.
+    //   - 'recipe' or 'synced' → fall through to standard transpile
+    //     path (Recipe → Python via routeActionCodeRegen).
+    //
+    // V1 notes (not V2-shape) skip this branch and inherit the legacy
+    // transpile behavior — Path Y for V1 already exists via the
+    // `edit_mode: python` frontmatter (python-mode routing above).
+    const v2Body = await this.app.vault.read(view.file);
+    if (isV2Shape(v2Body)) {
+      let canonicalLayer: 'description' | 'recipe' | 'python' | 'synced' | null = null;
+      try {
+        canonicalLayer = await whichLayerIsCanonical(v2Body, {
+          extractDescription,
+          extractRecipeSection,
+          extractPythonSection,
+          getFrontmatterField: getFmFieldV2,
+        });
+      } catch (e) {
+        console.error('forgeSnippet: canonical-layer probe failed', e);
+        // Fall through to standard transpile path if the probe itself
+        // throws — preserves pre-Phase-2 behavior on hash-helper bugs.
+      }
+      if (canonicalLayer === 'python') {
+        console.log(
+          `Forge: ${view.file.basename} is Python-canonical (V2 implicit lock) — running # Python directly without re-transpile`,
+        );
+        this.notice(
+          `Forge: ${view.file.basename} → Python-canonical (hand-edited). Running as-is; no /generate, no transpile.`,
+        );
+        await this.runSnippet('Forge failed during execution');
+        return;
+      }
+      if (canonicalLayer === 'description') {
+        console.log(
+          `Forge: ${view.file.basename} is Description-canonical (V2 implicit lock) — Recipe is stale; aborting Forge-click`,
+        );
+        await this.forgeOutput(
+          `Forge: ${view.file.basename} → Description-canonical (hand-edited since last /generate). `
+          + `Re-running Forge would transpile stale Recipe. Run "Forge: Generate Recipe from Description" first.`,
+          'error',
+        );
+        return;
+      }
+      // 'recipe', 'synced', or null (probe failed): standard transpile
+      // path. Logged so devs can correlate browser console with which
+      // branch fired.
+      console.log(
+        `Forge: ${view.file.basename} V2 canonical = ${canonicalLayer ?? 'unknown'} → standard transpile path`,
+      );
+    }
+
     // v0.2.121 — Option C plugin-side routing. facet_form gate
     // removed; the engine's resolve_action_code always attempts E--
     // transpile and returns null on failure (free-text English).
