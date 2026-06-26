@@ -31,12 +31,6 @@ proportions.
 
 (none)
 
-## Mechanics
-
-Compose 8 fixed 4-bar sections via `sequence_list`. The arc — quiet → climax →
-fade → silence — is what the listener hears. Each section is its own snippet;
-this file just orchestrates them.
-
 # Recipe
 
 Let s1 = Call [[solitary]] with bars=4.
