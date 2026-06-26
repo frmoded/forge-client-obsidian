@@ -96,6 +96,7 @@ import { forgeButtonShouldShow } from './forge-button-gate-core';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin';
 import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin';
+import { slotHighlightViewPlugin } from './slot-highlight-view-plugin';
 import { makeDependenciesFoldExtension } from './dependencies-fold-view-plugin';
 import { findDependenciesRange } from './dependencies-section-core';
 
@@ -415,6 +416,17 @@ export default class ForgePlugin extends Plugin {
     // AND dependencies (single mental model per v0.2.122 §2.2 (a)).
     this.registerEditorExtension([
       makeDependenciesFoldExtension(),
+    ]);
+
+    // v0.2.202 — V2.1 Slot Phase 3: yellow-highlight unresolved
+    // `{{...}}` slots inside the # Recipe section. Visual feedback
+    // for LLM blanks — cohort sees what will resolve on the next
+    // Forge-click. CSS lives in styles.css under
+    // .forge-slot-unresolved. Per the prompt's CM6 HARD RULE, an
+    // integration test against createIntegrationHarness covers the
+    // class-application invariant.
+    this.registerEditorExtension([
+      slotHighlightViewPlugin,
     ]);
 
     // v0.2.122 — Live Preview / Reading mode hide. Markdown post-

@@ -961,3 +961,18 @@
 .markdown-source-view .cm-line:has(span.cm-hmd-frontmatter):hover {
   opacity: 1.0;
 }
+
+/* v0.2.202 — V2.1 Slot Phase 3: yellow-highlight unresolved {{...}}
+ * slots inside the # Recipe section. The class is applied by
+ * slot-highlight-view-plugin via Decoration.mark. The `title`
+ * attribute (set by the Decoration) renders as a native browser
+ * tooltip on hover. */
+.forge-slot-unresolved {
+  background-color: rgba(255, 235, 59, 0.4);
+  border-radius: 2px;
+  cursor: help;
+}
+
+.forge-slot-unresolved:hover {
+  background-color: rgba(255, 235, 59, 0.6);
+}
