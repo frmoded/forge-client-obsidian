@@ -7,16 +7,16 @@ import {
   insertChipText,
   insertChipTextAtLine,
   shouldRenderSubgroupHeader,
-} from './chips-core';
-import { initialExpandedLibraries } from './chip-folding-core';
-import { ChipsManifest, loadChipsForActiveVault, resolveSnippetPath } from './chips';
-import { findFallbackMarkdownView } from './find-fallback-markdown-view-core';
+} from './chips-core.ts';
+import { initialExpandedLibraries } from './chip-folding-core.ts';
+import { ChipsManifest, loadChipsForActiveVault, resolveSnippetPath } from './chips.ts';
+import { findFallbackMarkdownView } from './find-fallback-markdown-view-core.ts';
 import type {
   MarkdownLeafLike,
   MarkdownViewLike,
-} from './find-fallback-markdown-view-core';
-import { forgeNotice } from './forge-notice';
-import { isV2Shape } from './v2-note-core';
+} from './find-fallback-markdown-view-core.ts';
+import { forgeNotice } from './forge-notice.ts';
+import { isV2Shape } from './v2-note-core.ts';
 
 export const CHIPS_VIEW_TYPE = 'forge-chips';
 

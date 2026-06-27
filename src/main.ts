@@ -7,31 +7,31 @@ import {
   setFrontmatterField as setFmFieldV2,
   getFrontmatterField as getFmFieldV2,
   removeFrontmatterField as removeFmFieldV2,
-} from './v2-note-core';
-import { computeDescriptionHash } from './description-hash-core';
-import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core';
+} from './v2-note-core.ts';
+import { computeDescriptionHash } from './description-hash-core.ts';
+import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core.ts';
 import {
   extractPythonSection,
   replacePythonSection,
   extractRecipeSection,
-} from './v2-note-core';
+} from './v2-note-core.ts';
 // v0.2.194 Path A — engineChipsForDomains import retired. The
 // forge-transpile service introspects forge.<domain>.lib at /generate
 // time via AST-walking vendored `engine_libs/*_lib.py` source files.
 // Plugin sends ONLY vault notes; the service merges in engine chips.
 // See forge-transpile/engine_chip_introspector.py.
-import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
-import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view';
-import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view';
-import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view';
-import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view';
-import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips';
-import { ChipPaletteGroup } from './chips-core';
+import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
+import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
+import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
+import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
+import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view.ts';
+import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips.ts';
+import { ChipPaletteGroup } from './chips-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
-// import { getFacetForm } from './facet-form-core';
-import { routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core';
-import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core';
-import { decideStaleMainJsCheck } from './stale-main-js-check-core';
+// import { getFacetForm } from './facet-form-core.ts';
+import { routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core.ts';
+import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
+import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import {
   readExpandedState,
   writeExpandedState,
@@ -40,15 +40,15 @@ import {
   toggleDependencies as togglePersistedDependencies,
   type ExpandedState,
   type ExpandedStateStorage,
-} from './expanded-state-core';
+} from './expanded-state-core.ts';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
 import {
   decideForgeRouting,
   hasRoutingKeys,
   parseRoutingFrontmatter,
-} from './forge-snippet-routing-core';
-import { isPythonBuiltin, bareWikilinkTarget } from './python-builtins-core';
-import { invalidateLibraryVaultCache } from './edges';
+} from './forge-snippet-routing-core.ts';
+import { isPythonBuiltin, bareWikilinkTarget } from './python-builtins-core.ts';
+import { invalidateLibraryVaultCache } from './edges.ts';
 // v0.2.44: attachEdgeHover removed — the hover popover read snapshot
 // state from host disk via the vault adapter, but capture writes go to
 // Pyodide's MEMFS (the documented persistence gap), so the popover
@@ -60,58 +60,58 @@ import { invalidateLibraryVaultCache } from './edges';
 // either the MEMFS-to-host-disk writeback drain (separately flagged)
 // or routing the popover's snapshot read through Pyodide — both are
 // out of scope for v0.2.44.
-// import { attachEdgeHover } from './edges-hover';
-import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings';
-import { sectionPlugin, readOnlyFacetFilter } from './facet';
-import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal';
-import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server';
-import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server';
-import { writePythonAndEnglishHash } from './python-cache-writer-core';
-import { computeEnglishHash } from './english-hash-core';
-import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core';
-import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host';
-import { runFirstRunCheck } from './welcome';
-import { restoreInlinedAssets } from './restore-inlined-assets';
-import { parseZapLine } from './zap';
-import { extractDataBody } from './data-snippet';
-import { openForgeAction, ForgeHost } from './forge-action';
-import { isNetRefusalError, welcomeMessage } from './closed-beta-ux';
-import { shouldSkipForMemfsSync } from './memfs-sync-paths';
-import { reconcileInputs } from './frontmatter-inputs-reconcile';
-import { snippetIdFromPath } from './snippet-id-from-path';
+// import { attachEdgeHover } from './edges-hover.ts';
+import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings.ts';
+import { sectionPlugin, readOnlyFacetFilter } from './facet.ts';
+import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
+import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server.ts';
+import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
+import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
+import { computeEnglishHash } from './english-hash-core.ts';
+import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
+import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
+import { runFirstRunCheck } from './welcome.ts';
+import { restoreInlinedAssets } from './restore-inlined-assets.ts';
+import { parseZapLine } from './zap.ts';
+import { extractDataBody } from './data-snippet.ts';
+import { openForgeAction, ForgeHost } from './forge-action.ts';
+import { isNetRefusalError, welcomeMessage } from './closed-beta-ux.ts';
+import { shouldSkipForMemfsSync } from './memfs-sync-paths.ts';
+import { reconcileInputs } from './frontmatter-inputs-reconcile.ts';
+import { snippetIdFromPath } from './snippet-id-from-path.ts';
 import {
   decideWikilinkFreezeMenu,
   decideWikilinkFreezeMenuMulti,
   findWikilinkAtCursor,
   type SnippetRegistryLike,
   type SnippetRegistryLikeMulti,
-} from './wikilink-freeze-menu-core';
+} from './wikilink-freeze-menu-core.ts';
 // v0.2.132: replaceOrInsertPythonHeading direct import retired —
 // writeGeneratedCode now uses writePythonAndEnglishHash for unified
 // english_hash stamping. replaceOrInsertPythonHeading still lives
 // in python-cache-writer-core as an internal helper consumed by
 // writePythonAndEnglishHash.
-import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core';
-import { forgeButtonShouldShow } from './forge-button-gate-core';
-import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core';
-import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin';
-import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin';
-import { slotHighlightViewPlugin } from './slot-highlight-view-plugin';
-import { staleFacetViewPlugin } from './stale-facet-view-plugin';
-import { ConfirmModal } from './confirm-modal';
+import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core.ts';
+import { forgeButtonShouldShow } from './forge-button-gate-core.ts';
+import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core.ts';
+import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin.ts';
+import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin.ts';
+import { slotHighlightViewPlugin } from './slot-highlight-view-plugin.ts';
+import { staleFacetViewPlugin } from './stale-facet-view-plugin.ts';
+import { ConfirmModal } from './confirm-modal.ts';
 import {
   parseEngineLib,
   buildEngineChipIndex,
   type EngineChip,
-} from './engine-chip-catalog-core';
-import { EngineChipView, ENGINE_CHIP_VIEW_TYPE } from './engine-chip-view';
-import { decideEngineChipClick } from './engine-chip-click-decide-core';
+} from './engine-chip-catalog-core.ts';
+import { EngineChipView, ENGINE_CHIP_VIEW_TYPE } from './engine-chip-view.ts';
+import { decideEngineChipClick } from './engine-chip-click-decide-core.ts';
 import {
   canonicalLayerStatusLabel,
   canonicalLayerStatusTooltip,
-} from './canonical-layer-status-bar-core';
-import { makeDependenciesFoldExtension } from './dependencies-fold-view-plugin';
-import { findDependenciesRange } from './dependencies-section-core';
+} from './canonical-layer-status-bar-core.ts';
+import { makeDependenciesFoldExtension } from './dependencies-fold-view-plugin.ts';
+import { findDependenciesRange } from './dependencies-section-core.ts';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content

@@ -1,5 +1,5 @@
 import { requestUrl } from 'obsidian';
-import type { PyodideHost } from './pyodide-host';
+import type { PyodideHost } from './pyodide-host.ts';
 
 // V1: plugin-side Pyodide host for engine-compute paths.
 // Set once at plugin init (main.ts wires it). When non-null, the

@@ -4,7 +4,9 @@
   "description": "Obsidian client for Forge.",
   "main": "main.js",
   "scripts": {
-    "build": "node scripts/lint-backtick-trap.mjs && node scripts/inline-plugin-version.mjs && node scripts/build-manifest.mjs && node scripts/inline-bundled-assets.mjs && npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --external:@codemirror/language --format=cjs --outfile=main.js && node scripts/copy-assets.mjs",
+    "build": "node scripts/lint-backtick-trap.mjs && npm run typecheck && node scripts/inline-plugin-version.mjs && node scripts/build-manifest.mjs && node scripts/inline-bundled-assets.mjs && npx esbuild src/main.ts --bundle --platform=node --external:obsidian --external:@codemirror/view --external:@codemirror/state --external:@codemirror/language --format=cjs --outfile=main.js && node scripts/copy-assets.mjs",
+    "typecheck": "node scripts/typecheck-warn.mjs",
+    "typecheck:strict": "tsc --noEmit",
     "lint": "node scripts/lint-backtick-trap.mjs",
     "dev": "npm run build -- --watch",
     "test": "node --test src/*.test.ts scripts/*.test.mjs",
@@ -26,7 +28,7 @@
     "esbuild": "0.17.3",
     "happy-dom": "^20.10.2",
     "obsidian": "latest",
-    "typescript": "4.7.4"
+    "typescript": "^5.9.3"
   },
   "dependencies": {
     "html-midi-player": "^1.6.0",

@@ -112,7 +112,7 @@ test('integration: main.ts runSnippet wires snippetIdFromPath', () => {
   // Belt-and-suspenders: confirm the import lands too.
   assert.match(
     mainTs,
-    /import\s*\{\s*snippetIdFromPath\s*\}\s*from\s*['"]\.\/snippet-id-from-path['"]/,
+    /import\s*\{\s*snippetIdFromPath\s*\}\s*from\s*['"]\.\/snippet-id-from-path(?:\.ts)?['"]/,
     'main.ts should import snippetIdFromPath from ./snippet-id-from-path',
   );
 });

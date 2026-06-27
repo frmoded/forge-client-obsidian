@@ -6,10 +6,10 @@ import {
   pathToSnippetId,
   relativeTime,
   snapshotPath,
-} from './edges';
-import { detectDrift } from './dependencies';
-import { freezeEdge, syncDependencies } from './server';
-import { forgeNotice } from './forge-notice';
+} from './edges.ts';
+import { detectDrift } from './dependencies.ts';
+import { freezeEdge, syncDependencies } from './server.ts';
+import { forgeNotice } from './forge-notice.ts';
 
 export const EDGES_VIEW_TYPE = 'forge-edges-view';
 

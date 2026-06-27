@@ -6,9 +6,9 @@ import {
   relativeTime,
   resolveLinkTarget,
   snapshotPath,
-} from './edges';
-import { freezeEdge } from './server';
-import { forgeNotice } from './forge-notice';
+} from './edges.ts';
+import { freezeEdge } from './server.ts';
+import { forgeNotice } from './forge-notice.ts';
 
 const HOVER_DELAY_MS = 600;
 

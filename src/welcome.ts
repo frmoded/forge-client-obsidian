@@ -1,12 +1,12 @@
 import { App, DataAdapter } from 'obsidian';
-import { copyDirRecursive } from './copy-dir-core';
-import { ensureForgeTomlStub } from './forge-toml-stub';
-import { vaultDeclaresMusic } from './forge-music-gate';
-import { compareBundledVaultVersion } from './bundled-vault-version-core';
-import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core';
-import { ensureWelcomeFiles } from './welcome-files-core';
-import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core';
-import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core';
+import { copyDirRecursive } from './copy-dir-core.ts';
+import { ensureForgeTomlStub } from './forge-toml-stub.ts';
+import { vaultDeclaresMusic } from './forge-music-gate.ts';
+import { compareBundledVaultVersion } from './bundled-vault-version-core.ts';
+import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core.ts';
+import { ensureWelcomeFiles } from './welcome-files-core.ts';
+import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
+import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
 export { copyDirRecursive };
 
 // v0.2.64 — names of bundled libraries the auto-extract path may

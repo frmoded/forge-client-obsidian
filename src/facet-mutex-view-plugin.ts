@@ -21,7 +21,7 @@ import {
   decideOnFoldChange,
   type SnippetHeadings,
   type FoldState,
-} from './facet-mutex-core';
+} from './facet-mutex-core.ts';
 
 /** Minimal callback interface back to the ForgePlugin singleton.
  *  Decoupled so this module doesn't pull the full main.ts type. */

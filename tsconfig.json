@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "isolatedModules": true,
+    // v0.2.207 — Test files use `.ts` extensions in imports because
+    // node --test (experimental TS support) requires them. We use
+    // them in PRODUCTION imports too so the source compiles cleanly
+    // under both tsc and node-test. TS 5.0+ accepts these when
+    // allowImportingTsExtensions is on (paired with noEmit, which is
+    // already on per the noEmit-only build flow).
+    "allowImportingTsExtensions": true,
+
+    // v0.2.207 — build-step hardening. Strict mode would surface
+    // hundreds of pre-existing implicit-any errors throughout the
+    // 60+ source files (the codebase was authored without TS strict
+    // and has accumulated since v0.2.0). The minimum viable guard
+    // that catches the v0.2.197 bug class — missing imports leaving
+    // a symbol undefined at runtime — needs only:
+    //   - default `noImplicitAny: false`           (so existing code compiles)
+    //   - `noFallthroughCasesInSwitch: true`       (cheap correctness)
+    // The reference resolution that catches missing imports works at
+    // the basic type-check level without strict mode, because an
+    // undefined identifier IS a type error at any strictness.
+    //
+    // Gradual strictness can be flipped on file-by-file via
+    // `// @ts-check` headers or per-file overrides later.
+    "strict": false,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "vendor",
+    "scripts",
+    // Test files use `.ts` extensions in imports because they're run
+    // via `node --test` with experimental TS support, which REQUIRES
+    // the extension. tsc rejects those imports (TS2691). Production
+    // bundling via esbuild doesn't care. Excluding the tests from
+    // `tsc --noEmit` keeps both runners working — the goal here is
+    // to catch the v0.2.197 missing-import bug class in PRODUCTION
+    // code, which is exactly where it bit.
+    "src/**/*.test.ts",
+    "src/**/*.integration.test.ts",
+    "src/test-helpers/**"
+  ]
+}

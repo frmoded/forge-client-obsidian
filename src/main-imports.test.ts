@@ -30,7 +30,7 @@ describe('main.ts top-level imports', () => {
     // Match either single-line or multi-line import group; the symbol
     // must appear inside an import block that targets v2-note-core.
     const importBlocks = MAIN_TS.match(
-      /import\s*{[^}]*}\s*from\s*['"]\.\/v2-note-core['"]/g,
+      /import\s*{[^}]*}\s*from\s*['"]\.\/v2-note-core(?:\.ts)?['"]/g,
     );
     assert.ok(
       importBlocks && importBlocks.length > 0,
@@ -52,7 +52,7 @@ describe('main.ts top-level imports', () => {
     // extractPythonSection alongside extractRecipeSection. If one is
     // missing the bug pattern recurs symmetrically.
     const importBlocks = MAIN_TS.match(
-      /import\s*{[^}]*}\s*from\s*['"]\.\/v2-note-core['"]/g,
+      /import\s*{[^}]*}\s*from\s*['"]\.\/v2-note-core(?:\.ts)?['"]/g,
     );
     const joined = (importBlocks ?? []).join('\n');
     assert.match(joined, /\bextractPythonSection\b/);

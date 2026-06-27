@@ -6,7 +6,7 @@
 // Separated from main.ts so the label rendering logic can be
 // `node --test`'d without an App / WorkspaceLeaf fixture.
 
-import type { CanonicalLayer } from './canonical-aware-forge-click-core';
+import type { CanonicalLayer } from './canonical-aware-forge-click-core.ts';
 
 /** Compute the status-bar label for a given canonical layer + V2-shape
  *  state. Returns empty string when there's nothing meaningful to

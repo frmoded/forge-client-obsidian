@@ -32,7 +32,7 @@
 // All three outcomes open the iframe at the end. The split is
 // purely about what happens BEFORE the iframe opens.
 
-import type { RoutingResult } from './route-action-code-regen-core';
+import type { RoutingResult } from './route-action-code-regen-core.ts';
 
 export type ModaDispatchOutcome =
   | { kind: 'write-and-open'; code: string }

@@ -18,7 +18,7 @@
 //   toast, per driver: no more toasts anywhere.
 
 import type { App } from 'obsidian';
-import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
+import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
 
 export async function forgeNotice(
   app: App,

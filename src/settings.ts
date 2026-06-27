@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import type ForgePlugin from './main';
+import type ForgePlugin from './main.ts';
 
 export interface ForgeSettings {
   serverUrl: string;

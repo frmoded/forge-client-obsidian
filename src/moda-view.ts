@@ -1,7 +1,7 @@
 import { ItemView, TFile, WorkspaceLeaf } from 'obsidian';
-import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view';
-import { getPyodideHost } from './pyodide-host';
-import type { ForgeSettings } from './settings';
+import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
+import { getPyodideHost } from './pyodide-host.ts';
+import type { ForgeSettings } from './settings.ts';
 
 export const MODA_VIEW_TYPE = 'forge-moda';
 

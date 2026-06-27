@@ -1,13 +1,13 @@
 import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from 'obsidian';
-import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio';
+import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio.ts';
 import {
   readScoreViewMode,
   toggleScoreViewMode,
   type ScoreViewMode,
   type ScoreViewModeStorage,
-} from './view-mode-core';
-import { ForgeSaveDataModal, dataTemplate } from './modal';
-import { forgeNotice } from './forge-notice';
+} from './view-mode-core.ts';
+import { ForgeSaveDataModal, dataTemplate } from './modal.ts';
+import { forgeNotice } from './forge-notice.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -545,11 +545,23 @@ export class ForgeOutputView extends ItemView {
         const svg = displayRender.svg;
         let midiBase64: string;
         let midiTotalMs: number;
+        // v0.2.207 — Build-step hardening: tsc caught `midiRender`
+        // referenced at line ~698 in the click-to-play handler but
+        // its `const midiRender = ...` declaration was inside the
+        // `else` block below — out of scope by the time the handler
+        // ran. Hoist the binding to function scope so the handler's
+        // scaledMs calculation (split-render mode) actually has the
+        // MIDI render available. Pre-v0.2.207, click-to-play in
+        // split-render mode would have thrown a ReferenceError at
+        // every click. The path may have been unreachable for cohort
+        // (single-XML mode is the default), but the dead path was
+        // a landmine.
+        let midiRender: Awaited<ReturnType<typeof renderMusicXMLAndMIDI>> | null = null;
         if (sharedMidi) {
           midiBase64 = sharedMidi.midiBase64;
           midiTotalMs = sharedMidi.totalMs;
         } else {
-          const midiRender = sameXml
+          midiRender = sameXml
             ? displayRender
             : await renderMusicXMLAndMIDI(midiXml, host.clientWidth);
           midiBase64 = midiRender.midiBase64;
@@ -695,7 +707,7 @@ export class ForgeOutputView extends ItemView {
               const scaledMs = sameXml
                 ? ms
                 : ms * (
-                    midiRender.timeMap.length && displayRender.timeMap.length
+                    midiRender && midiRender.timeMap.length && displayRender.timeMap.length
                       ? (midiRender.timeMap[midiRender.timeMap.length - 1].ms
                          / Math.max(1, displayRender.timeMap[displayRender.timeMap.length - 1].ms))
                       : 1);

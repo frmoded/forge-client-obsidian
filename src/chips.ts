@@ -28,8 +28,8 @@
 // now production-quiet again.
 
 import { App, parseYaml, TFile } from 'obsidian';
-import { extractDataBody } from './data-snippet';
-import { snippetIdFromPath } from './snippet-id-from-path';
+import { extractDataBody } from './data-snippet.ts';
+import { snippetIdFromPath } from './snippet-id-from-path.ts';
 import {
   Chip,
   ChipPaletteGroup,
@@ -47,14 +47,14 @@ import {
   PERSONAL_GROUP_NAME,
   type ChipsManifest,
   type SnippetMetaForChips,
-} from './chips-core';
-import { isSourceVault } from './source-vault-core';
+} from './chips-core.ts';
+import { isSourceVault } from './source-vault-core.ts';
 import {
   applyHideToSyntheticChips,
   type SyntheticChip,
-} from './synthetic-chips-core';
-import { walkUpChipsConfigs } from './chips-walk-up-core';
-import type { ChipsV2Config } from './chips-core';
+} from './synthetic-chips-core.ts';
+import { walkUpChipsConfigs } from './chips-walk-up-core.ts';
+import type { ChipsV2Config } from './chips-core.ts';
 
 // v0.2.62 — names of bundled libraries the plugin knows how to extract
 // (matches welcome.ts's ensureBundledForgeModa + ensureBundledForgeMusic

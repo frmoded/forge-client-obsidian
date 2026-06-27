@@ -15,7 +15,7 @@ import { ItemView, MarkdownRenderer, WorkspaceLeaf, Component } from 'obsidian';
 import {
   type EngineChip,
   synthesizeRecipeSignature,
-} from './engine-chip-catalog-core';
+} from './engine-chip-catalog-core.ts';
 
 export const ENGINE_CHIP_VIEW_TYPE = 'forge-engine-chip-view';
 
@@ -52,15 +52,16 @@ export class EngineChipView extends ItemView {
     return 'cpu';
   }
 
-  async setState(state: EngineChipViewState, result: unknown): Promise<void> {
-    this.chipName = state?.chipName ?? '';
-    this.domain = state?.domain ?? '';
+  async setState(state: unknown, result: unknown): Promise<void> {
+    const s = (state ?? {}) as EngineChipViewState;
+    this.chipName = s.chipName ?? '';
+    this.domain = s.domain ?? '';
     this.chip = EngineChipView.lookup(this.chipName);
     await this.render();
     return super.setState(state, result as any);
   }
 
-  getState(): EngineChipViewState {
+  getState(): Record<string, unknown> {
     return { chipName: this.chipName, domain: this.domain };
   }
 

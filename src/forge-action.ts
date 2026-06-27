@@ -1,6 +1,6 @@
 import { App, Menu, Modal, Notice, Setting, requestUrl } from 'obsidian';
-import { ForgeGenerationModal } from './modal';
-import { connectVault, computeSnippet } from './server';
+import { ForgeGenerationModal } from './modal.ts';
+import { connectVault, computeSnippet } from './server.ts';
 import {
   KNOWN_DOMAINS,
   ForgeActionContext,
@@ -11,13 +11,13 @@ import {
   replaceForgeTomlDomains,
   unionDomains,
   diffDomains,
-} from './forge-action-core';
+} from './forge-action-core.ts';
 import {
   computeDomainActivationActions,
   DOMAIN_INVENTORY,
-} from './domain-activation-core';
-import { ensureBundledFor } from './welcome';
-import { forgeNotice } from './forge-notice';
+} from './domain-activation-core.ts';
+import { ensureBundledFor } from './welcome.ts';
+import { forgeNotice } from './forge-notice.ts';
 
 // Pure dispatcher logic lives in forge-action-core.ts so it can be
 // unit-tested under `node --test` without an obsidian shim. Re-export it

@@ -1,5 +1,14 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
-import { forgeNotice } from './forge-notice';
+import { forgeNotice } from './forge-notice.ts';
+// v0.2.207 — Build-step hardening drain caught a missing import:
+// `actionTemplate` was referenced at line 369 without being imported.
+// This is exactly the bug class v0.2.197 hit with extractRecipeSection.
+// Pre-tsc, this would have manifested at runtime as a ReferenceError
+// when cohort created a non-data snippet via the modal. The branch
+// may have been unreachable in practice (only the data path is
+// exercised by current cohort flows), but the dead code path was
+// still a landmine waiting for refactor.
+import { actionTemplate } from './modal-templates-core.ts';
 
 // Blocking modal shown during generation. Clicking outside, the X button, and
 // pressing Escape all funnel through close(); we no-op those until the caller
