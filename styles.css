@@ -1002,3 +1002,38 @@
   gap: 8px;
   margin-top: 16px;
 }
+
+/* v0.2.206 — Engine-chip-as-note view. Renders Description +
+ * Recipe-signature + Python facets when cohort Cmd-clicks an engine
+ * chip wikilink in a Recipe. */
+.forge-engine-chip-view {
+  padding: 16px 24px;
+  max-width: 880px;
+}
+
+.forge-engine-chip-readonly-badge {
+  padding: 8px 12px;
+  background: var(--background-modifier-warning);
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+
+.forge-engine-chip-description {
+  margin-bottom: 24px;
+}
+
+.forge-engine-chip-recipe,
+.forge-engine-chip-python {
+  background: var(--background-secondary);
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: var(--font-monospace);
+}
+
+.forge-engine-chip-missing {
+  padding: 16px;
+  background: var(--background-modifier-error);
+  border-radius: 4px;
+}

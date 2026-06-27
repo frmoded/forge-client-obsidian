@@ -100,6 +100,13 @@ import { slotHighlightViewPlugin } from './slot-highlight-view-plugin';
 import { staleFacetViewPlugin } from './stale-facet-view-plugin';
 import { ConfirmModal } from './confirm-modal';
 import {
+  parseEngineLib,
+  buildEngineChipIndex,
+  type EngineChip,
+} from './engine-chip-catalog-core';
+import { EngineChipView, ENGINE_CHIP_VIEW_TYPE } from './engine-chip-view';
+import { decideEngineChipClick } from './engine-chip-click-decide-core';
+import {
   canonicalLayerStatusLabel,
   canonicalLayerStatusTooltip,
 } from './canonical-layer-status-bar-core';
@@ -304,6 +311,13 @@ export default class ForgePlugin extends Plugin {
    *  vault.modify (active file only). Shows empty string when there's
    *  nothing meaningful to surface (non-V2 / synced). */
   private canonicalLayerStatusBarItem: HTMLElement | null = null;
+  /** v0.2.206 — Engine-chip catalog. Built at plugin load from the
+   *  bundled `assets/engine/forge/<domain>/lib.py` source files via
+   *  parseEngineLib (regex-based). Used by the wikilink click
+   *  interceptor to route [[engine_chip]] Cmd-clicks to
+   *  EngineChipView instead of letting Obsidian create an empty
+   *  note. Empty when bundled engine source is unreadable. */
+  private engineChipIndex: Map<string, EngineChip> = new Map();
   // Two-vault refactor (constitution A5.1): library-subdir discovery
   // resolves synchronously from Obsidian's in-memory file index on
   // every call — no cache. The earlier cached-set + vault.on('create')
@@ -524,6 +538,22 @@ export default class ForgePlugin extends Plugin {
     }));
     this.registerView(CHIPS_VIEW_TYPE, leaf =>
       new ChipsView(leaf, this.chipsHost()));
+
+    // v0.2.206 — Engine-chip-as-note: register the EngineChipView
+    // type so Cmd-click on [[chip]] can open it. The view looks up
+    // its chip via a static `lookup` callable so deserialization
+    // (Obsidian restores the view from workspace.json on relaunch)
+    // can resolve the chip from saved state. Wire that lookup before
+    // the registerView call so a layout-restore during onload
+    // doesn't see a null lookup.
+    EngineChipView.lookup = (name: string) =>
+      this.engineChipIndex.get(name) ?? null;
+    this.registerView(ENGINE_CHIP_VIEW_TYPE, leaf => new EngineChipView(leaf));
+    void this.loadEngineChipCatalog();
+    this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+      this.maybeInterceptEngineChipClick(evt);
+    });
+
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
 
     this.registerEvent(
@@ -2496,6 +2526,93 @@ export default class ForgePlugin extends Plugin {
     await this.app.vault.modify(view.file, withHash);
     this.notice(
       `Forge: ${view.file.basename} → Python facet shown. Hand-edits will mark Description + Recipe stale.`);
+  }
+
+  /** v0.2.206 — Build the engine-chip catalog at plugin load by
+   *  reading the bundled `assets/engine/forge/<domain>/lib.py` source
+   *  files and regex-parsing each. Stored as `engineChipIndex` for
+   *  fast click-time lookup. Failures (missing file, parse error)
+   *  log + leave the index empty — Cmd-click falls through to
+   *  Obsidian's default behavior, no crash.
+   *
+   *  Doesn't include forge.tutorial (no lib.py; tutorial chips are
+   *  Python builtins like `print` — handled by the existing
+   *  python-builtins-core path, which already intercepts Cmd-click
+   *  to prevent stray `print.md` notes).
+   */
+  private async loadEngineChipCatalog(): Promise<void> {
+    const domains = ['music', 'moda'];
+    const perDomain: Record<string, EngineChip[]> = {};
+    for (const domain of domains) {
+      const path = `${this.manifest.dir}/assets/engine/forge/${domain}/lib.py`;
+      try {
+        const src = await this.app.vault.adapter.read(path);
+        perDomain[domain] = parseEngineLib(src);
+      } catch (e) {
+        console.error(
+          `loadEngineChipCatalog: failed to read ${path}`, e,
+        );
+        perDomain[domain] = [];
+      }
+    }
+    this.engineChipIndex = buildEngineChipIndex(perDomain);
+    console.warn(
+      `[Forge engine-chip catalog] loaded ${this.engineChipIndex.size} chips `
+      + `(${domains.map(d => `${d}: ${perDomain[d]?.length ?? 0}`).join(', ')})`,
+    );
+  }
+
+  /** v0.2.206 — Wikilink click interceptor. Hooks document-level
+   *  click events; when the target is an unresolved internal-link
+   *  matching an engine chip name, opens EngineChipView in a new
+   *  leaf instead of letting Obsidian create an empty note.
+   *  Cohort can shadow with a vault note (vault wins) for explicit
+   *  override — see decideEngineChipClick.
+   */
+  private maybeInterceptEngineChipClick(evt: MouseEvent): void {
+    const target = evt.target as HTMLElement | null;
+    if (!target) return;
+    const link = target.closest('a.internal-link') as HTMLAnchorElement | null;
+    if (!link) return;
+    const href = link.getAttribute('data-href')
+      ?? link.getAttribute('href')
+      ?? '';
+    if (!href) return;
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const sourcePath = view?.file?.path ?? '';
+    const resolved = this.app.metadataCache.getFirstLinkpathDest(
+      href, sourcePath,
+    );
+    const decision = decideEngineChipClick(
+      href,
+      resolved !== null,
+      this.engineChipIndex.has(href.split(/[#|]/)[0].trim()),
+    );
+    if (decision.action !== 'open-engine-chip') return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    // Open the EngineChipView in a new leaf so the original Recipe
+    // stays visible alongside.
+    void this.openEngineChipView(decision.chipName);
+  }
+
+  /** Open EngineChipView for the named chip, splitting the active
+   *  leaf so the Recipe stays open. No-op if the chip is unknown
+   *  (defensive — interceptor shouldn't call this in that case). */
+  private async openEngineChipView(chipName: string): Promise<void> {
+    if (!this.engineChipIndex.has(chipName)) {
+      await this.forgeOutput(
+        `Engine chip "${chipName}" not found in catalog.`, 'error',
+      );
+      return;
+    }
+    const leaf = this.app.workspace.getLeaf('tab');
+    await leaf.setViewState({
+      type: ENGINE_CHIP_VIEW_TYPE,
+      active: true,
+      state: { chipName },
+    } as any);
+    this.app.workspace.revealLeaf(leaf);
   }
 
   /** v0.2.205 — Implicit locking Phase 2.5 §2.3: refresh the status
