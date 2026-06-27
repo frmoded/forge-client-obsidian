@@ -106,6 +106,7 @@ import {
 } from './engine-chip-catalog-core.ts';
 import { EngineChipView, ENGINE_CHIP_VIEW_TYPE } from './engine-chip-view.ts';
 import { decideEngineChipClick } from './engine-chip-click-decide-core.ts';
+import { classifyVaultShadow } from './vault-shadow-classifier-core.ts';
 import {
   canonicalLayerStatusLabel,
   canonicalLayerStatusTooltip,
@@ -2560,14 +2561,84 @@ export default class ForgePlugin extends Plugin {
       `[Forge engine-chip catalog] loaded ${this.engineChipIndex.size} chips `
       + `(${domains.map(d => `${d}: ${perDomain[d]?.length ?? 0}`).join(', ')})`,
     );
+    // v0.2.212 — one-shot vault cleanup of forensic engine-chip
+    // shadows (auto-created empty notes from pre-v0.2.206 Cmd-clicks
+    // that didn't get intercepted). Runs async; surfaces via
+    // forgeNotice when shadows are removed.
+    void this.cleanupForensicEngineChipShadows();
   }
 
-  /** v0.2.206 — Wikilink click interceptor. Hooks document-level
-   *  click events; when the target is an unresolved internal-link
-   *  matching an engine chip name, opens EngineChipView in a new
-   *  leaf instead of letting Obsidian create an empty note.
-   *  Cohort can shadow with a vault note (vault wins) for explicit
-   *  override — see decideEngineChipClick.
+  /** v0.2.212 — Scan vault for files whose basename matches an engine
+   *  chip and trash the ones that classify as forensic (empty Obsidian
+   *  auto-creations). Preserves intentional shadows (cohort wrote real
+   *  content). Uses system trash (recoverable) — never `vault.delete`.
+   *
+   *  Bug fixed: the v0.2.211 driver smoke surfaced empty `kick.md`,
+   *  `play_at_offsets.md`, `play_at_beats.md` at vault root from
+   *  pre-v0.2.206 Cmd-clicks. With those present, the v0.2.206
+   *  "vault wins" rule kept opening them — cohort never discovered
+   *  EngineChipView. This sweep + the click-time forensic branch in
+   *  decideEngineChipClick close the trap.
+   */
+  private async cleanupForensicEngineChipShadows(): Promise<void> {
+    if (this.engineChipIndex.size === 0) return;
+    const cleaned: string[] = [];
+    const preserved: string[] = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const bare = file.basename;
+      if (!this.engineChipIndex.has(bare)) continue;
+      // Plugin-internal paths can never be cohort shadows.
+      if (file.path.includes('.obsidian/')) continue;
+      if (file.path.includes('assets/vaults/')) continue;
+      if (file.path.includes('assets/engine/')) continue;
+      let raw: string;
+      try {
+        raw = await this.app.vault.cachedRead(file);
+      } catch (e) {
+        console.error(
+          `cleanupForensicEngineChipShadows: read failed for ${file.path}`, e,
+        );
+        continue;
+      }
+      const classification = classifyVaultShadow(raw, bare);
+      if (classification === 'forensic') {
+        try {
+          await this.app.vault.trash(file, true);
+          cleaned.push(file.path);
+        } catch (e) {
+          console.error(
+            `cleanupForensicEngineChipShadows: trash failed for ${file.path}`, e,
+          );
+        }
+      } else {
+        preserved.push(file.path);
+      }
+    }
+    if (cleaned.length > 0) {
+      await this.forgeOutput(
+        `Forge: removed ${cleaned.length} forensic engine-chip shadow note(s): `
+          + cleaned.join(', '),
+        'info',
+      );
+      console.warn(
+        `[Forge engine-chip shadow cleanup] removed ${cleaned.length}; `
+          + `preserved ${preserved.length}.`,
+      );
+    } else if (preserved.length > 0) {
+      console.warn(
+        `[Forge engine-chip shadow cleanup] no forensic shadows; `
+          + `preserved ${preserved.length} intentional shadow(s): `
+          + preserved.join(', '),
+      );
+    }
+  }
+
+  /** v0.2.206 — Wikilink click interceptor. v0.2.212 — extended with
+   *  the forensic-shadow heuristic. Fast-rejects non-chip wikilinks
+   *  so 95%+ of cohort clicks (snippet → snippet) skip the async
+   *  path entirely. When the bare target matches a chip, defers the
+   *  decision to handleEngineChipClickAsync because the classifier
+   *  needs the resolved file's raw content (async vault read).
    */
   private maybeInterceptEngineChipClick(evt: MouseEvent): void {
     const target = evt.target as HTMLElement | null;
@@ -2578,22 +2649,72 @@ export default class ForgePlugin extends Plugin {
       ?? link.getAttribute('href')
       ?? '';
     if (!href) return;
+    const bare = href.split(/[#|]/)[0].trim();
+    // Fast reject: not a chip → let Obsidian handle (snippet → snippet
+    // wikilinks etc. take zero-latency default path).
+    if (!this.engineChipIndex.has(bare)) return;
+    // Defer for async classification + dispatch.
+    evt.preventDefault();
+    evt.stopPropagation();
+    void this.handleEngineChipClickAsync(href, bare);
+  }
+
+  /** v0.2.212 — async dispatch for engine-chip wikilink clicks.
+   *  Reads the resolved file's content (if any), runs the forensic-
+   *  shadow classifier via decideEngineChipClick, then either:
+   *    - opens EngineChipView (and trashes the shadow if forensic)
+   *    - opens the resolved vault note (intentional shadow)
+   *    - falls through to Obsidian's default link-create behavior
+   */
+  private async handleEngineChipClickAsync(
+    href: string, bare: string,
+  ): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     const sourcePath = view?.file?.path ?? '';
     const resolved = this.app.metadataCache.getFirstLinkpathDest(
       href, sourcePath,
     );
+    let rawContent: string | null = null;
+    if (resolved) {
+      try {
+        rawContent = await this.app.vault.cachedRead(resolved);
+      } catch (e) {
+        console.error(
+          'handleEngineChipClickAsync: vault.cachedRead failed', e,
+        );
+      }
+    }
     const decision = decideEngineChipClick(
       href,
       resolved !== null,
-      this.engineChipIndex.has(href.split(/[#|]/)[0].trim()),
+      this.engineChipIndex.has(bare),
+      rawContent,
     );
-    if (decision.action !== 'open-engine-chip') return;
-    evt.preventDefault();
-    evt.stopPropagation();
-    // Open the EngineChipView in a new leaf so the original Recipe
-    // stays visible alongside.
-    void this.openEngineChipView(decision.chipName);
+    if (decision.action === 'open-engine-chip') {
+      if (decision.shadowToCleanup && resolved) {
+        try {
+          await this.app.vault.trash(resolved, true);
+          await this.forgeOutput(
+            `Forge: removed forensic shadow note: ${resolved.path}`, 'info',
+          );
+        } catch (e) {
+          console.error(
+            'handleEngineChipClickAsync: failed to trash shadow', e,
+          );
+        }
+      }
+      await this.openEngineChipView(decision.chipName);
+      return;
+    }
+    // open-vault-note path.
+    if (resolved) {
+      // Existing intentional shadow — open it in the current leaf.
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(resolved);
+      return;
+    }
+    // No resolved file: let Obsidian create one (default behavior).
+    await this.app.workspace.openLinkText(href, sourcePath, false);
   }
 
   /** Open EngineChipView for the named chip, splitting the active
