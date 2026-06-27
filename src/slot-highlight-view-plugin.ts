@@ -31,6 +31,8 @@
 
 import { ViewPlugin, type ViewUpdate, type EditorView, Decoration, type DecorationSet } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
+import { extractSlotCacheKeys } from './slot-resolved-state-core.ts';
+import { computeSlotCacheKey } from './slot-resolver-factory-core.ts';
 
 /** Single-line `{{...}}` matcher. Mirrors the Phase 1 parser regex so
  *  highlight + parse agree on what's a slot. Non-greedy so adjacent
@@ -44,6 +46,17 @@ const UNRESOLVED_SLOT_MARK = Decoration.mark({
   class: 'forge-slot-unresolved',
   attributes: {
     title: 'LLM blank — resolved on Forge-click',
+  },
+});
+
+/** v0.2.210 Phase 3.5: Decoration.mark for resolved slots. The hash
+ *  matches the slot triple against the frontmatter slot_cache; if it's
+ *  in cache, cohort already paid the LLM call and the slot has a known
+ *  expression. Different visual: muted green + italic. */
+const RESOLVED_SLOT_MARK = Decoration.mark({
+  class: 'forge-slot-resolved',
+  attributes: {
+    title: 'LLM blank — already resolved (cached). Forge-click reads from cache.',
   },
 });
 
@@ -81,48 +94,134 @@ export function recipeSectionRange(body: string): { from: number; to: number } |
   return { from: contentStart, to: nextH1 };
 }
 
-/** Compute the DecorationSet for the given doc text. Pure-ish helper
- *  (returns a CM RangeSet but reads only the doc string) so the
- *  integration test can call `view.state.facet(... ranges ...)` or
- *  inspect the DOM after a mount.
- *
- *  Marks every `{{...}}` match inside the # Recipe section. Matches
- *  outside the section (e.g. inside # Description prose) are ignored;
- *  free-English `{{...}}` mentions in cohort-authored Description
- *  shouldn't get the LLM-blank styling. */
-export function buildSlotHighlightDecorations(body: string): DecorationSet {
+/** Find every `{{...}}` match inside the # Recipe section and return
+ *  their offset ranges + the slot-text. Pure helper exported for
+ *  testing + reuse by the Phase 3.5 async pass.
+ */
+export function findRecipeSlots(body: string): Array<{from: number; to: number; slotText: string}> {
   const range = recipeSectionRange(body);
-  if (range === null) return Decoration.none;
-  const builder = new RangeSetBuilder<Decoration>();
+  const out: Array<{from: number; to: number; slotText: string}> = [];
+  if (range === null) return out;
   SLOT_PATTERN.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = SLOT_PATTERN.exec(body)) !== null) {
     const from = match.index;
     const to = from + match[0].length;
     if (from < range.from || to > range.to) continue;
-    builder.add(from, to, UNRESOLVED_SLOT_MARK);
+    // Strip `{{` and `}}` for the slot text.
+    const slotText = match[0].slice(2, -2).trim();
+    out.push({from, to, slotText});
+  }
+  return out;
+}
+
+/** Compute the unresolved-only DecorationSet for the given doc text.
+ *  Phase 3 behavior preserved: all `{{...}}` matches inside # Recipe
+ *  get the unresolved class. Phase 3.5's async pass overlays a
+ *  resolved-classed range when the slot's hash is in the cache;
+ *  the overlay is applied via dispatch in the ViewPlugin below. */
+export function buildSlotHighlightDecorations(body: string): DecorationSet {
+  const slots = findRecipeSlots(body);
+  if (slots.length === 0) return Decoration.none;
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const s of slots) builder.add(s.from, s.to, UNRESOLVED_SLOT_MARK);
+  return builder.finish();
+}
+
+/** Build the Phase 3.5 differentiated DecorationSet given the doc and
+ *  the resolved-key set. Each slot's hex hash is keyed against the
+ *  set; in-cache → RESOLVED_SLOT_MARK, otherwise → UNRESOLVED_SLOT_MARK.
+ *
+ *  The snippet_id parameter must match the runtime snippet_id used to
+ *  hash slots at resolve time — otherwise the keys won't match the
+ *  ones in slot_cache. Empty snippet_id (no active file or rename
+ *  in-flight) falls back to all-unresolved.
+ */
+export async function buildDifferentiatedDecorations(
+  body: string,
+  snippetId: string,
+  cacheKeys: ReadonlySet<string>,
+): Promise<DecorationSet> {
+  const slots = findRecipeSlots(body);
+  if (slots.length === 0) return Decoration.none;
+  if (!snippetId || cacheKeys.size === 0) {
+    return buildSlotHighlightDecorations(body);
+  }
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const s of slots) {
+    const key = await computeSlotCacheKey(s.slotText, snippetId, '');
+    const mark = cacheKeys.has(key) ? RESOLVED_SLOT_MARK : UNRESOLVED_SLOT_MARK;
+    builder.add(s.from, s.to, mark);
   }
   return builder.finish();
 }
 
 /** The CM6 ViewPlugin: rebuilds decorations on every doc change. The
- *  per-update cost is one regex scan + one bounds check per match;
- *  negligible for typical Recipe sizes. */
+ *  per-update sync pass paints all slots as unresolved (cheap); the
+ *  async Phase 3.5 pass overlays resolved-classed marks once the
+ *  hash + cache lookup settles. The async work runs in the
+ *  background; dispatch is empty-noop to nudge re-paint.
+ *
+ *  snippetId + cacheKeys are read from the doc body. snippetId comes
+ *  from a `snippet_id:` frontmatter field if present (engine stamps
+ *  this; not present on fresh-from-template notes). When absent, the
+ *  ViewPlugin can't compute hash keys and falls back to all-unresolved
+ *  (no regression from Phase 3 behavior). */
 export const slotHighlightViewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    private view: EditorView;
+    private pendingDoc: string | null = null;
+
     constructor(view: EditorView) {
+      this.view = view;
       this.decorations = buildSlotHighlightDecorations(
         view.state.doc.toString(),
       );
+      void this.refreshAsync(view.state.doc.toString());
     }
+
     update(update: ViewUpdate) {
       if (update.docChanged || update.viewportChanged) {
-        this.decorations = buildSlotHighlightDecorations(
-          update.view.state.doc.toString(),
-        );
+        const body = update.view.state.doc.toString();
+        this.decorations = buildSlotHighlightDecorations(body);
+        void this.refreshAsync(body);
+      }
+    }
+
+    private async refreshAsync(body: string): Promise<void> {
+      // Coalesce concurrent updates; only the latest body matters.
+      this.pendingDoc = body;
+      const snippetId = extractSnippetIdFromFrontmatter(body);
+      if (!snippetId) return;  // can't hash without a stable id
+      const cacheKeys = extractSlotCacheKeys(body);
+      let decos: DecorationSet;
+      try {
+        decos = await buildDifferentiatedDecorations(
+          body, snippetId, cacheKeys);
+      } catch (e) {
+        console.error('slotHighlightViewPlugin: differentiated decorate failed', e);
+        return;
+      }
+      if (this.pendingDoc !== body) return;
+      this.decorations = decos;
+      try {
+        this.view.dispatch({});
+      } catch (e) {
+        console.error('slotHighlightViewPlugin: dispatch failed', e);
       }
     }
   },
   { decorations: v => v.decorations },
 );
+
+/** Read `snippet_id:` from a YAML frontmatter block. Engine stamps
+ *  this on resolved notes; absent on fresh-from-template. */
+export function extractSnippetIdFromFrontmatter(body: string): string {
+  if (!body.startsWith('---')) return '';
+  const close = body.indexOf('\n---', 4);
+  if (close === -1) return '';
+  const fm = body.slice(4, close);
+  const m = fm.match(/^snippet_id:\s*['"]?([^'"\n]+)['"]?\s*$/m);
+  return m ? m[1].trim() : '';
+}

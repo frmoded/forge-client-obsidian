@@ -1037,3 +1037,15 @@
   background: var(--background-modifier-error);
   border-radius: 4px;
 }
+
+/* v0.2.210 — V2.1 Slot Phase 3.5: resolved vs unresolved
+ * differentiation. Phase 3 (v0.2.202) painted all {{...}} in # Recipe
+ * with .forge-slot-unresolved (bright yellow). Phase 3.5 hashes each
+ * slot against the slot_cache frontmatter; in-cache slots get the
+ * muted .forge-slot-resolved class so cohort sees at-a-glance which
+ * slots are LLM-pending vs already resolved. */
+.forge-slot-resolved {
+  background-color: rgba(120, 200, 120, 0.18);
+  border-bottom: 1px dashed rgba(60, 140, 60, 0.5);
+  font-style: italic;
+}
