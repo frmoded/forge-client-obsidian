@@ -167,6 +167,15 @@ export function validateChipsList(
       const refs = r.refs.filter((x): x is string => typeof x === 'string');
       if (refs.length > 0) chip.refs = refs;
     }
+    // v0.2.211 (_chips.md schema v4) — accept author-specified V2
+    // insertion override. Lets cohort pin a V2-specific form when
+    // auto-derive doesn't fit their authoring intent. When absent,
+    // chip click handler falls back to `deriveV2InsertionForAction`.
+    // No required type version — back-compat with schema v3 files is
+    // automatic since this field is optional.
+    if (typeof r.insertionV2 === 'string' && r.insertionV2.length > 0) {
+      chip.insertionV2 = r.insertionV2;
+    }
     chips.push(chip);
   }
   return { chips };

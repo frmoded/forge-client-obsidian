@@ -71,6 +71,57 @@ test('parseChipsBody: refs preserved, other unknown fields stripped', () => {
   assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Call a.', refs: ['x'] }]);
 });
 
+test('parseChipsBody: insertionV2 preserved (schema v4)', () => {
+  // v0.2.211 — _chips.md schema v4: cohort authors can pin a V2-
+  // specific insertion form alongside `insertion:`. Chip-click
+  // resolver in chips-view.ts picks `insertionV2` when cursor is in
+  // # Recipe + the field is present.
+  const r = parseChipsBody(JSON.stringify([
+    {
+      label: 'kick on 1',
+      insertion: 'Do [[kick]]().',
+      insertionV2: '[[kick]].',
+    },
+  ]));
+  assert.ok('chips' in r);
+  assert.deepEqual(r.chips, [{
+    label: 'kick on 1',
+    insertion: 'Do [[kick]]().',
+    insertionV2: '[[kick]].',
+  }]);
+});
+
+test('parseChipsBody: empty insertionV2 string dropped (defensive)', () => {
+  // Empty strings on the optional field shouldn't leak — chip-click
+  // resolver treats truthy/falsy as the gate. Drop on empty so it
+  // doesn't trick the resolver into "I have a V2 override" with no
+  // actual content.
+  const r = parseChipsBody(JSON.stringify([
+    { label: 'a', insertion: 'Do a.', insertionV2: '' },
+  ]));
+  assert.ok('chips' in r);
+  assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Do a.' }]);
+});
+
+test('parseChipsBody: non-string insertionV2 ignored', () => {
+  const r = parseChipsBody(JSON.stringify([
+    { label: 'a', insertion: 'Do a.', insertionV2: 42 },
+  ]));
+  assert.ok('chips' in r);
+  assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Do a.' }]);
+});
+
+test('parseChipsBody: schema v3 (no insertionV2) still parses', () => {
+  // Back-compat: bundled vault files at schema v3 lack `insertionV2:`
+  // and must keep working. The chip-click resolver falls back to
+  // `deriveV2InsertionForAction` derivation (per v0.2.203).
+  const r = parseChipsBody(JSON.stringify([
+    { label: 'a', insertion: 'Do a.' },
+  ]));
+  assert.ok('chips' in r);
+  assert.deepEqual(r.chips, [{ label: 'a', insertion: 'Do a.' }]);
+});
+
 test('mergeChipSources: empty input → empty groups', () => {
   assert.deepEqual(mergeChipSources([]), []);
 });
