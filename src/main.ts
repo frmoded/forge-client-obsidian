@@ -107,6 +107,7 @@ import {
 import { EngineChipView, ENGINE_CHIP_VIEW_TYPE } from './engine-chip-view.ts';
 import { decideEngineChipClick } from './engine-chip-click-decide-core.ts';
 import { classifyVaultShadow } from './vault-shadow-classifier-core.ts';
+import { resolveEngineChipClickTarget } from './engine-chip-click-target-core.ts';
 import {
   canonicalLayerStatusLabel,
   canonicalLayerStatusTooltip,
@@ -2641,22 +2642,28 @@ export default class ForgePlugin extends Plugin {
    *  needs the resolved file's raw content (async vault read).
    */
   private maybeInterceptEngineChipClick(evt: MouseEvent): void {
-    const target = evt.target as HTMLElement | null;
-    if (!target) return;
-    const link = target.closest('a.internal-link') as HTMLAnchorElement | null;
-    if (!link) return;
-    const href = link.getAttribute('data-href')
-      ?? link.getAttribute('href')
-      ?? '';
-    if (!href) return;
-    const bare = href.split(/[#|]/)[0].trim();
-    // Fast reject: not a chip → let Obsidian handle (snippet → snippet
-    // wikilinks etc. take zero-latency default path).
-    if (!this.engineChipIndex.has(bare)) return;
+    // v0.2.213 — CM6 fallback. v0.2.206-v0.2.212 used only
+    // `closest('a.internal-link')`, which is the reading-mode-only
+    // shape. Source mode + many live-preview shapes use CM6
+    // decorated spans with class `.cm-hmd-internal-link` /
+    // `.cm-link` and NO surrounding <a>. resolveEngineChipClickTarget
+    // walks the full selector chain + data-href / href / textContent
+    // fallback. Per v0.2.211 + v0.2.212 driver smokes: without this,
+    // the interceptor never fired in source mode → Obsidian default
+    // link-create reopened forensic shadows even after the v0.2.212
+    // cleanup ran. Mirrors the working pattern at main.ts:721-726 +
+    // edges-hover.ts:65-67.
+    const resolved = resolveEngineChipClickTarget(
+      evt.target as Element | null,
+    );
+    if (!resolved) return;
+    // Fast reject: not a chip → let Obsidian handle (snippet →
+    // snippet wikilinks etc. take zero-latency default path).
+    if (!this.engineChipIndex.has(resolved.bare)) return;
     // Defer for async classification + dispatch.
     evt.preventDefault();
     evt.stopPropagation();
-    void this.handleEngineChipClickAsync(href, bare);
+    void this.handleEngineChipClickAsync(resolved.href, resolved.bare);
   }
 
   /** v0.2.212 — async dispatch for engine-chip wikilink clicks.
