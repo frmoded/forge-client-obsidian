@@ -2569,6 +2569,72 @@ export default class ForgePlugin extends Plugin {
     void this.cleanupForensicEngineChipShadows();
   }
 
+  /** v0.2.214 — Properly trash a forensic shadow file. v0.2.212/213
+   *  used `vault.trash(file, true)` directly but Obsidian silently
+   *  skips trash when there's an open WorkspaceLeaf displaying the
+   *  file (no exception thrown — the file just stays on disk and a
+   *  stale tab keeps showing it). Driver hit this on the v0.2.213
+   *  smoke: the click-time cleanup notice fired ("removed forensic
+   *  shadow note: play_at_offsets.md") but `find` showed the file
+   *  still present at 0 bytes. The previous session had
+   *  play_at_offsets.md open as a tab → vault.trash skipped.
+   *
+   *  Fix: detach every leaf that's showing the file before trashing.
+   *  Then verify via `vault.adapter.exists`. If trash still left the
+   *  file (e.g., system trash unavailable on this OS), fall back to
+   *  `vault.adapter.remove` so the cleanup is reliable. Returns true
+   *  iff the file is gone post-call.
+   */
+  private async trashForensicShadow(file: TFile): Promise<boolean> {
+    // 1. Detach every leaf displaying this file. Obsidian's trash
+    //    silently no-ops when leaves are still attached.
+    const leavesToDetach: WorkspaceLeaf[] = [];
+    this.app.workspace.iterateAllLeaves(leaf => {
+      const v = leaf.view;
+      if (v instanceof MarkdownView && v.file?.path === file.path) {
+        leavesToDetach.push(leaf);
+      }
+    });
+    for (const leaf of leavesToDetach) {
+      try {
+        leaf.detach();
+      } catch (e) {
+        console.error(
+          `trashForensicShadow: leaf.detach failed for ${file.path}`, e,
+        );
+      }
+    }
+    // 2. Try system trash (recoverable).
+    try {
+      await this.app.vault.trash(file, true);
+    } catch (e) {
+      console.error(
+        `trashForensicShadow: vault.trash failed for ${file.path}`, e,
+      );
+    }
+    // 3. Verify. If trash silently skipped, fall back to adapter.remove
+    //    (no system-trash fallback; the file goes straight away).
+    let stillExists = false;
+    try {
+      stillExists = await this.app.vault.adapter.exists(file.path);
+    } catch (e) {
+      console.error(
+        `trashForensicShadow: adapter.exists failed for ${file.path}`, e,
+      );
+    }
+    if (stillExists) {
+      try {
+        await this.app.vault.adapter.remove(file.path);
+      } catch (e) {
+        console.error(
+          `trashForensicShadow: adapter.remove fallback failed for ${file.path}`, e,
+        );
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** v0.2.212 — Scan vault for files whose basename matches an engine
    *  chip and trash the ones that classify as forensic (empty Obsidian
    *  auto-creations). Preserves intentional shadows (cohort wrote real
@@ -2603,13 +2669,8 @@ export default class ForgePlugin extends Plugin {
       }
       const classification = classifyVaultShadow(raw, bare);
       if (classification === 'forensic') {
-        try {
-          await this.app.vault.trash(file, true);
+        if (await this.trashForensicShadow(file)) {
           cleaned.push(file.path);
-        } catch (e) {
-          console.error(
-            `cleanupForensicEngineChipShadows: trash failed for ${file.path}`, e,
-          );
         }
       } else {
         preserved.push(file.path);
@@ -2699,14 +2760,9 @@ export default class ForgePlugin extends Plugin {
     );
     if (decision.action === 'open-engine-chip') {
       if (decision.shadowToCleanup && resolved) {
-        try {
-          await this.app.vault.trash(resolved, true);
+        if (await this.trashForensicShadow(resolved)) {
           await this.forgeOutput(
             `Forge: removed forensic shadow note: ${resolved.path}`, 'info',
-          );
-        } catch (e) {
-          console.error(
-            'handleEngineChipClickAsync: failed to trash shadow', e,
           );
         }
       }
