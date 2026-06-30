@@ -881,7 +881,15 @@ export default class ForgePlugin extends Plugin {
             return;
           }
         }
-        this.generate();
+        // v0.2.225 — wrap with spinner per audit (driver 2026-07-01).
+        // /generate is LLM-bound, multi-second; cohort needs working-
+        // state cue regardless of which command path invokes it.
+        const op = () => this.generate();
+        if (this.spinner) {
+          void this.spinner.wrap('Forge: 🔥 generating…', op);
+        } else {
+          void op();
+        }
       },
     });
 
@@ -1120,7 +1128,18 @@ export default class ForgePlugin extends Plugin {
     this.addCommand({
       id: 'forge-run-only',
       name: 'Run only (active snippet)',
-      callback: () => { this.runSnippet(); },
+      callback: () => {
+        // v0.2.225 — wrap with spinner per audit (driver 2026-07-01
+        // murmuration smoke). v0.2.218 wrapped the Forge button +
+        // /generate but missed forge-run-only + forge-generate-only.
+        // First-click on a music snippet via Cmd-P went silent.
+        const op = () => this.runSnippet();
+        if (this.spinner) {
+          void this.spinner.wrap('Forge: 🔥 running …', op);
+        } else {
+          void op();
+        }
+      },
     });
 
     // v0.2.9: surface the edit-mode toggle in Cmd+P. Single command
