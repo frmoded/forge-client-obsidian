@@ -109,6 +109,7 @@ import { decideEngineChipClick } from './engine-chip-click-decide-core.ts';
 import { classifyVaultShadow } from './vault-shadow-classifier-core.ts';
 import { resolveEngineChipClickTarget } from './engine-chip-click-target-core.ts';
 import { readActiveNoteFresh } from './read-active-note-fresh-core.ts';
+import { ForgeSpinner } from './forge-spinner-core.ts';
 import {
   canonicalLayerStatusLabel,
   canonicalLayerStatusTooltip,
@@ -321,6 +322,11 @@ export default class ForgePlugin extends Plugin {
    *  EngineChipView instead of letting Obsidian create an empty
    *  note. Empty when bundled engine source is unreadable. */
   private engineChipIndex: Map<string, EngineChip> = new Map();
+  /** v0.2.218 — Status-bar spinner for Forge-click + /generate +
+   *  /resolve-slot operations. 200ms grace period so fast snippets
+   *  don't flash; LLM-bound operations (multi-second) get a visible
+   *  "Forge is doing something" cue. */
+  private spinner: ForgeSpinner | null = null;
   // Two-vault refactor (constitution A5.1): library-subdir discovery
   // resolves synchronously from Obsidian's in-memory file index on
   // every call — no cache. The earlier cached-set + vault.on('create')
@@ -426,6 +432,17 @@ export default class ForgePlugin extends Plugin {
     //   - active V2 file is `synced` (no hand-edits anywhere)
     // Click handler invokes the `forge-show-canonical-layer` command
     // for the verbose forgeOutput report.
+    // v0.2.218 — Forge-click + LLM operation spinner. 200ms grace
+    // period so fast snippets don't flash; multi-second LLM calls
+    // (/generate, /resolve-slot) and long computes (moda 300-tick
+    // sims, percussion-lab transpiles) get a visible "Forge working"
+    // cue. Status bar item is separate from the canonical-layer item.
+    const spinnerStatusBarItem = this.addStatusBarItem();
+    spinnerStatusBarItem.addClass('forge-spinner-status');
+    this.spinner = new ForgeSpinner({
+      setText: (s) => spinnerStatusBarItem.setText(s),
+    });
+
     this.canonicalLayerStatusBarItem = this.addStatusBarItem();
     this.canonicalLayerStatusBarItem.setText('');
     this.canonicalLayerStatusBarItem.addClass('forge-canonical-layer-status');
@@ -871,7 +888,16 @@ export default class ForgePlugin extends Plugin {
     this.addCommand({
       id: 'forge-generate-recipe-from-description',
       name: 'Forge: Generate Recipe from Description',
-      callback: () => { this.generateEmmFromDescription(); },
+      callback: () => {
+        // v0.2.218 — wrap with spinner. /generate is LLM-bound
+        // (multi-second); cohort needs a working-state cue.
+        const op = () => this.generateEmmFromDescription();
+        if (this.spinner) {
+          void this.spinner.wrap('Forge: 🔥 generating…', op);
+        } else {
+          void op();
+        }
+      },
     });
 
     // v0.2.196 — explicit lock commands retired. The implicit
@@ -1258,7 +1284,16 @@ export default class ForgePlugin extends Plugin {
     // predicate so non-snippet notes show no Forge button at all.
     // Added last → prepended first → leftmost (when shown).
     if (forgeButtonShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
-      const forgeBtn = view.addAction('flame', 'Forge', () => { this.forgeSnippet(); });
+      const forgeBtn = view.addAction('flame', 'Forge', () => {
+        // v0.2.218 — wrap with status-bar spinner. 200ms grace so
+        // fast snippets don't flash.
+        const op = () => this.forgeSnippet();
+        if (this.spinner) {
+          void this.spinner.wrap('Forge: 🔥 running …', op);
+        } else {
+          void op();
+        }
+      });
       forgeBtn.addClass(FORGE_BTN_CLASS);
     }
   }
