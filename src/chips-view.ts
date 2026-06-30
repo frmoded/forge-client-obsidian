@@ -447,21 +447,29 @@ export class ChipsView extends ItemView {
     insertion: string,
     cursorLine: number,
   ) {
-    let outcome: 'ok' | 'no-english' | 'unchanged' = 'unchanged';
+    // v0.2.230 — wrap mutable outcome in an object to break TS's
+    // closure-narrowing inference. Without the wrapper, TS narrows
+    // `outcome` to its initial literal `'unchanged'` and the
+    // subsequent `=== 'ok'` / `=== 'no-english'` comparisons get
+    // flagged as no-overlap.
+    type Outcome = 'ok' | 'no-english' | 'unchanged';
+    const outcomeBox: { v: Outcome } = { v: 'unchanged' };
     await this.app.vault.process(file, (content) => {
       const result = insertChipTextAtLine(content, insertion, cursorLine);
-      if (result.ok) {
-        outcome = 'ok';
+      if (result.ok === true) {
+        outcomeBox.v = 'ok';
         return result.body;
       }
+      // v0.2.230 — explicit `=== true` above + standalone if (vs else if)
+      // below to give TS a clean discriminator narrowing on `result.ok`.
       if (result.reason === CHIPS_NO_ENGLISH_SECTION) {
-        outcome = 'no-english';
+        outcomeBox.v = 'no-english';
       }
       return content;
     });
-    if (outcome === 'ok') {
+    if (outcomeBox.v === 'ok') {
       void forgeNotice(this.app, `Forge chips: inserted "${insertion}".`);
-    } else if (outcome === 'no-english') {
+    } else if (outcomeBox.v === 'no-english') {
       void forgeNotice(this.app, 'Snippet has no # English section to insert into.');
     }
   }

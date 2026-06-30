@@ -280,11 +280,14 @@ async function installVault(_host: ForgeHost, vaultName: string): Promise<boolea
     `Forge: install requested for "${vaultName}" — V1 closed beta `
     + 'does not support remote vault install.',
   );
-  void forgeNotice(this.app, 
+  // v0.2.230 — forgeNotice's 3rd arg is `kind` ('info'|'error'|'success'),
+  // not a duration. Pre-fix the 10000 was a leftover from the legacy
+  // toast API (Notice takes ms). forgeNotice renders into the output
+  // panel and has no per-call duration. Dropped the bad arg.
+  void forgeNotice(this.app,
     `Forge: install of "${vaultName}" skipped — V1 closed beta has `
     + 'no remote vault registry. Only bundled vaults (forge-moda, '
     + 'forge-music) are available; additional vaults are deferred to v1.1+.',
-    10000,
   );
   return false;
 }

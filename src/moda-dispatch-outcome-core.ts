@@ -45,7 +45,7 @@ export type ModaDispatchOutcome =
 export function decideModaDispatchOutcome(
   regenResult: RoutingResult,
 ): ModaDispatchOutcome {
-  if (regenResult.ok) {
+  if (regenResult.ok === true) {
     if (regenResult.via === 'e--') {
       return { kind: 'write-and-open', code: regenResult.code };
     }
@@ -53,6 +53,10 @@ export function decideModaDispatchOutcome(
     // nothing for the moda branch to write.
     return { kind: 'open' };
   }
+  // v0.2.230 — explicit `=== true` (vs truthy `regenResult.ok`) helps
+  // TS narrow `regenResult` to the RoutingFailure union here, exposing
+  // `.reason` and `.message` (both present on every failure variant).
+  //
   // All failure shapes (no-token / http-error / engine-error) map
   // to notice-and-open. The notice text comes from the routing
   // failure's `message` (already user-formatted by the router) so

@@ -41,19 +41,15 @@ const SENTINEL_DIR = '.forge';
 const SENTINEL_PATH = '.forge/initialized';
 const WELCOME_PATH = 'Welcome.md';
 
-// v0.2.13: V1-accurate welcome text. The pre-V1 version walked the
-// reader through `[[install]] "forge-core"` + `[[forge-core/hello_registry]]`,
-// neither of which work in V1 — `install` isn't bundled in the engine
-// assets and there's no hosted registry to fetch from. Students who
-// followed those instructions hit SnippetResolutionError on the first
-// click. The new text references only flows the V1 closed-beta
-// actually supports: open the simulator (no setup), author a
-// snippet against the hosted /generate, read the bundled forge-moda
-// content as files.
+// v0.2.230 — refreshed for V2 vocabulary (drain 2026-07-02-1330).
+// Snippets → notes (library + vault). English/Python facet talk
+// replaced with Description → Recipe → Python flow. Cohort writes
+// Description; /generate produces a Recipe; Forge-click compiles
+// the Recipe to Python and runs it.
 const WELCOME_NOTE = `# Welcome to Forge
 
-Forge runs Python diffusion simulations and snippet authoring entirely
-inside Obsidian — no terminal, no server, no Python install.
+Forge runs Python simulations and code authoring entirely inside
+Obsidian — no terminal, no server, no Python install.
 
 ## Try the simulator (no setup needed)
 
@@ -65,7 +61,11 @@ inside Obsidian — no terminal, no server, no Python install.
 
 If you see the ink, the full Forge stack is working.
 
-## Write your own snippet
+## Write your own note
+
+A Forge **note** has three facets — Description (what you mean),
+Recipe (the structured plan, generated for you), and Python (compiled
+from the Recipe and run by the engine).
 
 1. Make a new note in this vault — e.g. **\`hello.md\`**.
 2. Paste this as the file's contents:
@@ -73,12 +73,11 @@ If you see the ink, the full Forge stack is working.
    \`\`\`
    ---
    type: action
-   description: print hello with a name
    inputs:
      - name
    ---
 
-   # English
+   # Description
 
    Print "hello " followed by the name.
    \`\`\`
@@ -86,15 +85,29 @@ If you see the ink, the full Forge stack is working.
 3. Click the **Forge** button at the top of the editor. Paste your
    transpile token if prompted (Settings → Forge → Transpile service
    → Transpile service token).
-4. Forge calls the hosted transpile service, generates Python from
-   your English, writes it back into the note, and runs it. The
-   result renders in the **Forge Output** panel on the right.
+4. Forge calls the hosted transpile service, generates a Recipe from
+   your Description, compiles it to Python, writes it back into the
+   note, and runs it. The result renders in the **Forge Output** panel.
+
+## Library notes vs vault notes
+
+Notes come in two flavors:
+- **Library notes** ship with Forge in \`forge.<domain>.lib\` (the
+  engine-provided primitives — \`print\`, \`bar\`, \`voices\`, etc.).
+  Cmd-click a wikilink like \`[[print]]\` in a Recipe to read its
+  Description + Python source (read-only).
+- **Vault notes** are notes you author in this vault. Forge-click
+  them to run; edit them freely.
+
+In a Recipe, \`Call [[name]]\` resolves to a library note OR a vault
+note of the same basename. The plugin's chip palette surfaces all
+the library notes available in the active domains.
 
 ## What you'll find in this vault
 
 The bundled **forge-moda** library has been copied into a
-\`forge-moda/\` folder above (each .md is one snippet). Read them
-to see how the simulation is built; edit them to experiment.
+\`forge-moda/\` folder above. Read those notes to see how the
+simulation is built; edit them to experiment.
 
 Edit or delete this Welcome note anytime — Forge won't recreate it.
 `;

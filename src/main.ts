@@ -106,6 +106,7 @@ import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './front
 import { slotHighlightViewPlugin } from './slot-highlight-view-plugin.ts';
 import { staleFacetViewPlugin } from './stale-facet-view-plugin.ts';
 import { ConfirmModal } from './confirm-modal.ts';
+import { RewriteSuggestionModal } from './rewrite-suggestion-modal.ts';
 import {
   parseEngineLib,
   buildLibraryNoteIndex,
@@ -2246,7 +2247,10 @@ export default class ForgePlugin extends Plugin {
     void fm;
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
     const regenResult = await routeActionCodeRegen(snippetId, this.routingDeps());
-    if (!regenResult.ok) {
+    if (regenResult.ok === false) {
+      // v0.2.230 — use explicit `=== false` so TS narrows to the
+      // RoutingFailure variants (each carries `.message`). The `!result.ok`
+      // shorthand wasn't being recognized for some reason.
       this.notice(`Forge: ${regenResult.message}`);
       return;
     }
@@ -2529,7 +2533,35 @@ export default class ForgePlugin extends Plugin {
     }
     console.warn('[Forge V2 /generate] received code length:', code.length, '; first 120 chars:', code.slice(0, 120));
 
-    // Write the E-- into the note + stamp description_hash AND
+    // v0.2.230 — Description-quality pushback (drain 2026-07-02-1400).
+    // Service flags Descriptions that score above the proceduralness
+    // threshold. Show a modal pointing it out + asking cohort to
+    // confirm before writing the Recipe. Non-blocking: cohort can
+    // "Use as-is" and proceed with the generated Recipe.
+    const pushback = response.json?.pushback as
+      | { proceduralness: number; original: string }
+      | undefined;
+    if (pushback) {
+      console.warn('[Forge V2 /generate] pushback received:', pushback.proceduralness);
+      const proceed = await new Promise<boolean>((resolve) => {
+        new RewriteSuggestionModal(this.app, {
+          proceduralness: pushback.proceduralness,
+          original: pushback.original,
+          onUseAsIs: () => resolve(true),
+          onCancel: () => resolve(false),
+        }).open();
+      });
+      if (!proceed) {
+        await this.forgeOutput(
+          `Forge V2 /generate: cancelled by cohort — Description reads like a Recipe; consider an intent-level rewrite + retry.`,
+          'info',
+          snippetId,
+        );
+        return;
+      }
+    }
+
+    // Write the Recipe into the note + stamp description_hash AND
     // recipe_hash. v0.2.196 (implicit-locking 3-layer state machine):
     // recipe_hash captures the freshly-generated Recipe so subsequent
     // hand-edits to the Recipe facet surface as "recipe canonical" via
@@ -2546,7 +2578,7 @@ export default class ForgePlugin extends Plugin {
     await this.app.vault.modify(file, withHash);
     console.warn('[Forge V2 /generate] file written; description_hash:', descHash, 'recipe_hash:', recipeHash);
     await this.forgeOutput(
-      `Forge V2 /generate: E-- generated for ${file.basename}. Review + Forge-click to test.`,
+      `Forge V2 /generate: Recipe generated for ${file.basename}. Review + Forge-click to test.`,
       'success',
       snippetId,
     );
@@ -2812,7 +2844,11 @@ export default class ForgePlugin extends Plugin {
    *     identical bytes — cheap, keeps the implementation simple.
    *  5. forgeNotice + forgeOutput summarizing the counts. */
   private async reExtractBundledVault(vaultName: string): Promise<void> {
-    if (!BUNDLED_VAULT_NAMES.includes(vaultName as never)) {
+    // v0.2.230 — widen BUNDLED_VAULT_NAMES to readonly string[] for the
+    // includes check so a string arg satisfies it. The literal tuple
+    // type gives us the BundledVaultName union elsewhere; here we
+    // only need a runtime membership check.
+    if (!(BUNDLED_VAULT_NAMES as readonly string[]).includes(vaultName)) {
       this.notice(`Forge: '${vaultName}' is not a bundled library vault.`);
       return;
     }
@@ -4279,6 +4315,16 @@ function _extractEnglishFromBody(body: string): string | null {
  *  to detect which files drifted between bundled-canonical and the
  *  user's extracted copy. Recursive — handles arbitrary subdir depth
  *  (forge-music/blues/song.md, forge-moda/_meta/_chips.md, etc.). */
+async function sha256OfBuffer(data: ArrayBuffer): Promise<string> {
+  const digestBuf = await crypto.subtle.digest('SHA-256', data);
+  const bytes = new Uint8Array(digestBuf);
+  let hex = '';
+  for (const byte of bytes) {
+    hex += byte.toString(16).padStart(2, '0');
+  }
+  return hex;
+}
+
 async function listAllFilesWithHash(
   adapter: { list: (p: string) => Promise<{ files: string[]; folders: string[] }>;
              readBinary: (p: string) => Promise<ArrayBuffer> },
@@ -4290,13 +4336,7 @@ async function listAllFilesWithHash(
     for (const filePath of listing.files) {
       const rel = filePath.slice(root.length + 1);
       const data = await adapter.readBinary(filePath);
-      const digestBuf = await crypto.subtle.digest('SHA-256', data);
-      const bytes = new Uint8Array(digestBuf);
-      let hex = '';
-      for (const byte of bytes) {
-        hex += byte.toString(16).padStart(2, '0');
-      }
-      out.set(rel, hex);
+      out.set(rel, await sha256OfBuffer(data));
     }
     for (const dirPath of listing.folders) {
       await walk(dirPath);
@@ -4315,6 +4355,7 @@ async function listAllFilesWithHash(
  *  versions; that's exactly the case we want to tolerate). */
 async function copyBundledOverlay(
   adapter: { mkdir: (p: string) => Promise<void>;
+             exists: (p: string) => Promise<boolean>;
              list: (p: string) => Promise<{ files: string[]; folders: string[] }>;
              readBinary: (p: string) => Promise<ArrayBuffer>;
              writeBinary: (p: string, data: ArrayBuffer) => Promise<void> },
@@ -4325,8 +4366,28 @@ async function copyBundledOverlay(
   const listing = await adapter.list(src);
   for (const filePath of listing.files) {
     const name = filePath.slice(src.length + 1);
-    const data = await adapter.readBinary(filePath);
-    await adapter.writeBinary(`${dst}/${name}`, data);
+    const dstPath = `${dst}/${name}`;
+    const srcData = await adapter.readBinary(filePath);
+    // v0.2.230 — skip no-op writes when dst exists with identical bytes.
+    // 100s-of-files vaults (forge-tutorial's chapters) re-extract
+    // measurably faster when we don't churn the disk on every file.
+    // Compared by sha256 because byte-comparison + arraybuffer-equals
+    // would have to allocate twice; sha256 is fast in WebCrypto and
+    // already a primitive elsewhere in the plugin.
+    if (await adapter.exists(dstPath)) {
+      try {
+        const dstData = await adapter.readBinary(dstPath);
+        const [srcHash, dstHash] = await Promise.all([
+          sha256OfBuffer(srcData),
+          sha256OfBuffer(dstData),
+        ]);
+        if (srcHash === dstHash) continue;
+      } catch (e) {
+        // Hash failure → fall through to a regular write; safer than skipping.
+        console.error(`copyBundledOverlay: hash compare failed for ${dstPath}`, e);
+      }
+    }
+    await adapter.writeBinary(dstPath, srcData);
   }
   for (const dirPath of listing.folders) {
     const name = dirPath.slice(src.length + 1);
