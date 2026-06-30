@@ -77,6 +77,7 @@ import {
   BUNDLED_VAULT_NAMES,
 } from './re-extract-bundled-vault-modal.ts';
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
+import { discardThenDetach } from './leaf-discard-before-detach-core.ts';
 import { restoreInlinedAssets } from './restore-inlined-assets.ts';
 import { parseZapLine } from './zap.ts';
 import { extractDataBody } from './data-snippet.ts';
@@ -2681,7 +2682,7 @@ export default class ForgePlugin extends Plugin {
    *  iff the file is gone post-call.
    */
   private async trashForensicShadow(file: TFile): Promise<boolean> {
-    // 1. Detach every leaf displaying this file. Obsidian's trash
+    // 1. Find every leaf displaying this file. Obsidian's trash
     //    silently no-ops when leaves are still attached.
     const leavesToDetach: WorkspaceLeaf[] = [];
     this.app.workspace.iterateAllLeaves(leaf => {
@@ -2690,15 +2691,32 @@ export default class ForgePlugin extends Plugin {
         leavesToDetach.push(leaf);
       }
     });
-    for (const leaf of leavesToDetach) {
-      try {
-        leaf.detach();
-      } catch (e) {
-        console.error(
-          `trashForensicShadow: leaf.detach failed for ${file.path}`, e,
-        );
-      }
-    }
+    // v0.2.223 — discard the editor buffer BEFORE detach. Obsidian's
+    // leaf.detach() is async; if the buffer was dirty (or even
+    // marked dirty mid-detach by an autosave debouncer), the view's
+    // teardown may flush it back to disk AFTER we've trashed +
+    // overwritten with bundle content. Driver smoke on v0.2.221
+    // Step 4.1 (re-extract command): edited simulation.md survived
+    // the re-extract verbatim because the open editor's buffer
+    // re-landed on disk after the bundle overlay copy.
+    //
+    // setViewData('', true) sets buffer to empty + clears the dirty
+    // flag (the `clear=true` arg means "this content is now the
+    // baseline; no unsaved changes"). After this, detach completes
+    // without writing anything back. Forensic-shadow callers
+    // (v0.2.212 cleanup) are unaffected: empty shadows are already
+    // empty; setting them empty again is a no-op.
+    //
+    // Sequence enforced via the pure-core discardThenDetach helper —
+    // all discards fire BEFORE any detach, so a mid-sequence flush
+    // can't race a not-yet-discarded sibling buffer.
+    discardThenDetach(
+      leavesToDetach.map(leaf => ({
+        leaf,
+        view: leaf.view as MarkdownView,
+      })),
+      (msg, err) => console.error(`trashForensicShadow: ${msg} for ${file.path}`, err),
+    );
     // 2. Try system trash (recoverable).
     try {
       await this.app.vault.trash(file, true);
