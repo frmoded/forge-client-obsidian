@@ -8,6 +8,7 @@ import {
 } from './view-mode-core.ts';
 import { ForgeSaveDataModal, dataTemplate } from './modal.ts';
 import { forgeNotice } from './forge-notice.ts';
+import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -156,7 +157,17 @@ export class ForgeOutputView extends ItemView {
 
     const header = contentEl.createDiv({ cls: 'forge-output-header' });
     header.createEl('span', { text: 'Forge Output' });
+    // v0.2.224 — Stop button: silence any active <midi-player> without
+    // tearing down the visual output. Useful when cohort wants to mute
+    // playback but keep the score on screen.
+    header.createEl('button', { text: '⏹ Stop' }).onclick = () => {
+      stopMidiPlayersIn(this.outputEl, (m, e) => console.error(m, e));
+    };
     header.createEl('button', { text: 'Clear' }).onclick = () => {
+      // v0.2.224 — silence audio before tearing down DOM. Removing a
+      // <midi-player> from the DOM doesn't dispose its audio context;
+      // the music kept playing post-Clear pre-fix (driver 2026-07-01).
+      stopMidiPlayersIn(this.outputEl, (m, e) => console.error(m, e));
       this.outputEl.empty();
     };
 
@@ -164,6 +175,8 @@ export class ForgeOutputView extends ItemView {
   }
 
   async onClose() {
+    // v0.2.224 — silence audio before tearing down DOM (per Clear).
+    stopMidiPlayersIn(this.contentEl, (m, e) => console.error(m, e));
     this.contentEl.empty();
   }
 
@@ -227,6 +240,8 @@ export class ForgeOutputView extends ItemView {
   // type:data snippet. Replace semantics match the user mental model — the
   // panel reflects what they're looking at, not a log of every preview.
   async previewDataSnippet(snippetId: string, contentType: string, body: string, sourcePath: string) {
+    // v0.2.224 — silence any active midi-player before swapping content.
+    stopMidiPlayersIn(this.outputEl, (m, e) => console.error(m, e));
     this.outputEl.empty();
     const entry = this.makeEntry(snippetId);
     entry.addClass('is-data-preview');
@@ -238,6 +253,8 @@ export class ForgeOutputView extends ItemView {
   // URL to a native HTML element and let the browser do the work. Image/audio/
   // video each get their format-appropriate element.
   async previewBinarySnippet(snippetId: string, contentType: string, contentRef: string) {
+    // v0.2.224 — silence any active midi-player before swapping content.
+    stopMidiPlayersIn(this.outputEl, (m, e) => console.error(m, e));
     this.outputEl.empty();
     const entry = this.makeEntry(snippetId);
     entry.addClass('is-data-preview');
@@ -487,6 +504,12 @@ export class ForgeOutputView extends ItemView {
     };
 
     const renderInto = async (m: ScoreViewMode) => {
+      // v0.2.224 — silence any active midi-player on display-mode switch.
+      // The kit ↔ multi-staff toggle re-renders into scoreHost; without
+      // stopping the prior render's player first, two audio streams
+      // would play simultaneously (or the prior one keeps running with
+      // no UI to stop it).
+      stopMidiPlayersIn(scoreHost, (m, e) => console.error(m, e));
       scoreHost.empty();
       const shared = await ensureSharedMidi();
       // v0.2.155 — both modes use shared multi-staff MIDI bytes. Kit
