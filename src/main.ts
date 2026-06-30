@@ -108,6 +108,7 @@ import { EngineChipView, ENGINE_CHIP_VIEW_TYPE } from './engine-chip-view.ts';
 import { decideEngineChipClick } from './engine-chip-click-decide-core.ts';
 import { classifyVaultShadow } from './vault-shadow-classifier-core.ts';
 import { resolveEngineChipClickTarget } from './engine-chip-click-target-core.ts';
+import { readActiveNoteFresh } from './read-active-note-fresh-core.ts';
 import {
   canonicalLayerStatusLabel,
   canonicalLayerStatusTooltip,
@@ -2016,7 +2017,14 @@ export default class ForgePlugin extends Plugin {
       const hostManager = getPyodideHost();
       if (hostManager) {
         const host = await hostManager.getInstance();
-        const freshContent = await this.app.vault.read(view.file);
+        // v0.2.217 — read from the EDITOR BUFFER, not vault.read.
+        // vault.read returns DISK content; when the user edits Recipe
+        // and Forge-clicks within autosave delay (~1s), disk still
+        // has the pre-edit content → engine transpiles + runs STALE
+        // Python → output is wrong. The editor buffer reflects the
+        // user's keystrokes immediately. Driver smoke on v0.2.215
+        // ("Hello, world 3!" required two clicks) confirmed this race.
+        const freshContent = await readActiveNoteFresh(view, this.app.vault);
         await host.syncUserVaultFile(view.file.path, freshContent);
       }
     } catch (e) {
@@ -2078,7 +2086,12 @@ export default class ForgePlugin extends Plugin {
     // V1 notes (not V2-shape) skip this branch and inherit the legacy
     // transpile behavior — Path Y for V1 already exists via the
     // `edit_mode: python` frontmatter (python-mode routing above).
-    const v2Body = await this.app.vault.read(view.file);
+    // v0.2.217 — editor buffer, NOT vault.read. See pre-flight comment
+    // above; same race applies to the canonical-layer probe. If we
+    // read stale disk content here we'd compute hash mismatch from
+    // the wrong baseline and possibly mis-route (e.g. think it's
+    // 'synced' when the user just edited Recipe).
+    const v2Body = await readActiveNoteFresh(view, this.app.vault);
     if (isV2Shape(v2Body)) {
       let canonicalLayer: 'description' | 'recipe' | 'python' | 'synced' | null = null;
       try {
