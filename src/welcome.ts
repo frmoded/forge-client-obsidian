@@ -7,6 +7,7 @@ import { classifyChipsMd, chooseBackupName } from './chips-md-migration-core.ts'
 import { ensureWelcomeFiles } from './welcome-files-core.ts';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
+import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-classifier-core.ts';
 export { copyDirRecursive };
 
 // v0.2.64 — names of bundled libraries the auto-extract path may
@@ -195,6 +196,18 @@ export async function runFirstRunCheck(app: App): Promise<void> {
         // 'skip-existing' is the steady-state expected path; silent.
       } catch (e) {
         console.error('Forge: ensureWelcomeFiles threw unexpectedly', e);
+      }
+
+      // v0.2.233 — refresh outdated welcome notes (drain
+      // 2026-07-02-1630). Existing cohort users have .forge-sentinel
+      // from their first install, so ensureWelcomeFiles above is a
+      // no-op for them. They never see the v0.2.230 V2 vocabulary
+      // refresh of welcome.md/greet.md. Sweep + refresh any V1-shape
+      // or Obsidian-default welcome files left behind.
+      try {
+        await refreshOutdatedWelcomes(app, adapter);
+      } catch (e) {
+        console.error('Forge: refreshOutdatedWelcomes failed', e);
       }
     }
 
@@ -759,6 +772,97 @@ export async function sweepBundleDroppedFiles(
 
   trashed.sort();
   return trashed;
+}
+
+/** v0.2.233 — refresh outdated welcome notes (drain 2026-07-02-1630).
+ *  Per-file pass: detect V1 shape or Obsidian default boilerplate in
+ *  Welcome.md / welcome.md / greet.md, trash to system trash, and
+ *  re-write fresh bundled content. Skips files that are already V2
+ *  shape or look hand-customized. Idempotent on subsequent launches.
+ *
+ *  Trash uses `vault.trash(file, true)` per L8 (recoverable). The
+ *  capital-W Welcome.md path uses the in-source WELCOME_NOTE constant
+ *  as its refresh source — pre-v0.2.56 Welcome.md was never bundled.
+ *  The lowercase welcome.md/greet.md paths use the bundled assets. */
+async function refreshOutdatedWelcomes(
+  app: App,
+  adapter: DataAdapter,
+): Promise<void> {
+  const candidates: Array<{
+    path: string;
+    bundlePath: string | null;  // null → use WELCOME_NOTE constant
+    label: string;
+  }> = [
+    { path: WELCOME_PATH, bundlePath: null, label: 'Welcome.md' },
+    {
+      path: 'welcome.md',
+      bundlePath: '.obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md',
+      label: 'welcome.md',
+    },
+    {
+      path: 'greet.md',
+      bundlePath: '.obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md',
+      label: 'greet.md',
+    },
+  ];
+
+  const refreshed: string[] = [];
+
+  for (const { path, bundlePath, label } of candidates) {
+    try {
+      if (!(await adapter.exists(path))) continue;
+      const body = await adapter.read(path);
+      const shape = classifyWelcomeShape(body);
+      if (!shouldRefreshWelcome(shape)) {
+        console.log(`Forge: ${label} shape=${shape}; no refresh needed`);
+        continue;
+      }
+
+      // Resolve fresh content BEFORE trashing the old file — if the
+      // bundled asset is missing (dev mode / corrupt install), keep
+      // the V1 file rather than leave the cohort with nothing.
+      let freshContent: string;
+      if (bundlePath === null) {
+        freshContent = WELCOME_NOTE;
+      } else {
+        if (!(await adapter.exists(bundlePath))) {
+          console.warn(`Forge: refresh of ${label} skipped — bundle missing at ${bundlePath}`);
+          continue;
+        }
+        freshContent = await adapter.read(bundlePath);
+      }
+
+      // Move existing to system trash (recoverable per L8). Prefer
+      // vault.trash(TFile, true) so Obsidian's index sees the removal;
+      // fall back to adapter.remove if we can't resolve to a TFile
+      // (e.g. file is outside the vault index).
+      const file = app.vault.getAbstractFileByPath(path);
+      if (file instanceof TFile) {
+        try {
+          await app.vault.trash(file, true);
+        } catch (e) {
+          console.error(`Forge: vault.trash failed for ${label}; falling back to adapter.remove`, e);
+          await adapter.remove(path);
+        }
+      } else {
+        await adapter.remove(path);
+      }
+
+      // Write fresh content at the same path.
+      await adapter.write(path, freshContent);
+      refreshed.push(`${label} (was ${shape})`);
+      console.log(`Forge: refreshed ${label} from ${shape} → V2`);
+    } catch (e) {
+      console.error(`Forge: refresh of ${label} failed`, e);
+    }
+  }
+
+  if (refreshed.length > 0) {
+    new Notice(
+      `Forge: welcome notes refreshed to V2 — ${refreshed.join(', ')}. Previous versions moved to system trash; recover from Trash if you customized them.`,
+      12000,
+    );
+  }
 }
 
 /** Walk a directory recursively and collect every file path RELATIVE
