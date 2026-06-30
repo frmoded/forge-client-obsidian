@@ -1,14 +1,17 @@
 ---
 type: action
-description: form
-inputs: []
+edit_mode: python
 ---
 
-# English
+# Description
 
 The harmonic skeleton of standard 12-bar blues in E. Twelve bars in 12/8, slow (around 70 BPM, eighth-note triplet feel). The chord progression itself comes from [[twelve_bar_blues_progression]] as a list of roman numerals — we resolve them to concrete chords in E major via music21.roman, so swapping the key here doesn't require touching the progression data. Returns the chord progression as a Score with chord symbols, no melodic content — meant to be combined with vocal and instrumental parts that overlay on top of it. The tonal frame everything else hangs from. Use Piano for this.
 
----
+# Recipe
+
+<!-- engineer-mode: this snippet's logic lives in # Python. The
+frontmatter carries `edit_mode: python` so Forge-click runs the
+Python directly instead of transpiling Recipe → Python. -->
 
 # Python
 

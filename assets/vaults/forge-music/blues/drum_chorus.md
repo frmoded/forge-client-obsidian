@@ -1,12 +1,10 @@
 ---
 type: action
-description: drum_chorus
-inputs: []
+edit_mode: python
 snapshot_capture: false
 ---
 
-# English
-
+# Description
 
 One 12-bar drum chorus parameterized by a profile name. The profile picks instrumentation, articulation, and dynamic level so the same call site can produce three different feels by changing one string. Used by [[song]] to give the 4-chorus arc audible/visible variety.
 
@@ -20,7 +18,11 @@ Velocity arc is marked in the score (`with_velocity(..., mark_dynamics=True)`) �
 
 `snapshot_capture: false` because the returned Score holds music21 Instrument instances with bound method references (the `_force_perc_channel` lambda) that the wire-format snapshot can't serialize — same opt-out pattern as `percussion/phase_cell.md`.
 
----
+# Recipe
+
+<!-- engineer-mode: this snippet's logic lives in # Python. The
+frontmatter carries `edit_mode: python` so Forge-click runs the
+Python directly instead of transpiling Recipe → Python. -->
 
 # Python
 

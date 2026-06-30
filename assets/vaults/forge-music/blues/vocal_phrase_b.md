@@ -1,11 +1,9 @@
 ---
 type: action
-description: action
-inputs: []
+edit_mode: python
 ---
 
-# English
-
+# Description
 
 The B line of the AAB lyric — the answer, the punchline, the resolution. Four bars in 12/8, sitting in the same key as [[form]]. The pentatonic and blue notes are derived from that key, not hardcoded, so transposing [[form]] propagates here.
 
@@ -15,7 +13,11 @@ Uses `minor_pentatonic(...)` — same blues convention as [[vocal_phrase_a]]: mi
 
 Reads the key from [[form]]. Inherits time signature (12/8) and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] as well, so the whole song stays coherent if any of those change at the source.
 
----
+# Recipe
+
+<!-- engineer-mode: this snippet's logic lives in # Python. The
+frontmatter carries `edit_mode: python` so Forge-click runs the
+Python directly instead of transpiling Recipe → Python. -->
 
 # Python
 

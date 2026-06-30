@@ -1,11 +1,9 @@
 ---
 type: action
-description: phase_shifter
-inputs: []
+edit_mode: python
 ---
 
-# English
-
+# Description
 
 A parameterized phase-canon engine. Takes a rhythmic cell (from [[phase_cell]] or any compatible dict) plus shape parameters, returns a `music21.stream.Score` with N stacked Parts playing the cell repeatedly, each voice K (1-indexed) accumulating an integer eighth-note phase shift per section.
 
@@ -15,7 +13,11 @@ For the default `voices=4`, `shift_per_section_eighths=1`, and `length_eighths=1
 
 Default shape: 12/8 at 96 BPM, 8 sections × 4 bars/section = 32 bars; one cell per bar; eighth-note hits with 'human' velocity profile.
 
----
+# Recipe
+
+<!-- engineer-mode: this snippet's logic lives in # Python. The
+frontmatter carries `edit_mode: python` so Forge-click runs the
+Python directly instead of transpiling Recipe → Python. -->
 
 # Python
 

@@ -1,11 +1,9 @@
 ---
 type: action
-description: action
-inputs: []
+edit_mode: python
 ---
 
-±±±
-# English
+# Description
 
 A 12-bar instrumental solo chorus over the song's harmonic frame. Played on electric guitar. Twelve bars in 12/8, sitting in the same key as [[form]] — the minor pentatonic and blue notes are derived from that key, not hardcoded, so transposing [[form]] propagates here.
 
@@ -17,7 +15,11 @@ Uses `minor_pentatonic(...)` — blues instrumental-solo convention: minor-penta
 
 Reads the key and structure from [[form]]. Inherits time signature (12/8) and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] as well, so the whole song stays coherent if any of those change at the source.
 
----
+# Recipe
+
+<!-- engineer-mode: this snippet's logic lives in # Python. The
+frontmatter carries `edit_mode: python` so Forge-click runs the
+Python directly instead of transpiling Recipe → Python. -->
 
 # Python
 

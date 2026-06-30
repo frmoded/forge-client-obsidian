@@ -1,17 +1,19 @@
 ---
 type: action
-description: drums_shuffle
-inputs: []
+edit_mode: python
 ---
 
-# English
-
+# Description
 
 A 12-bar shuffle drum pattern in 12/8, the rhythmic backbone of a slow blues. Kick on beats 1 and 3 (the downbeats); snare on beats 2 and 4 (the backbeats); hi-hat on every dotted-quarter beat (the four-count that anchors the swing feel). No melodic content — pure percussion.
 
 Returns a Score with one or more Parts containing the three percussion voices: kick (`instrument.BassDrum`), snare (`instrument.SnareDrum`), and hi-hat (`instrument.HiHatCymbal`). Whether music21 emits these as one drum-kit stave with three voices, or three separate staves, is a v0.3.5 spike outcome — the snippet uses the natural music21 API and accepts whatever shape comes out.
 
----
+# Recipe
+
+<!-- engineer-mode: this snippet's logic lives in # Python. The
+frontmatter carries `edit_mode: python` so Forge-click runs the
+Python directly instead of transpiling Recipe → Python. -->
 
 # Python
 

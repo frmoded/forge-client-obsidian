@@ -1,19 +1,32 @@
 ---
 type: action
-description: action
-inputs: []
 ---
 
-# English
+# Description
 
+The instrumental chorus — 12 bars, no vocal. The guitar takes the
+lead via [[guitar_solo_chorus]]; the harmonic frame from [[form]]
+continues underneath. Sits between vocal choruses 2 and 3 in the
+song.
 
-The instrumental chorus — 12 bars, no vocal. The guitar takes the lead via [[guitar_solo_chorus]]; the harmonic frame from [[form]] continues underneath. Sits between vocal choruses 2 and 3 in the song.
+Composes [[form]]'s harmonic progression with [[guitar_solo_chorus]]'s
+improvisational solo line, played simultaneously. No new musical
+material introduced at this level — pure structural composition of
+the two leaves.
 
-Composes [[form]]'s harmonic progression with [[guitar_solo_chorus]]'s improvisational solo line, played simultaneously. No new musical material introduced at this level — pure structural composition of the two leaves.
+Inherits key, time signature (12/8), and tempo (around 70 BPM,
+eighth-note triplet feel) from [[form]] so the chorus stays coherent
+with the rest of the song under any of those changing.
 
-Inherits key, time signature (12/8), and tempo (around 70 BPM, eighth-note triplet feel) from [[form]] so the chorus stays coherent with the rest of the song under any of those changing.
+## Inputs
 
----
+(none)
+
+# Recipe
+
+Let harmonic_frame = Call [[form]].
+Let solo_line = Call [[guitar_solo_chorus]].
+Return Call [[voices_list]] with sections=[harmonic_frame, solo_line].
 
 # Python
 
@@ -28,4 +41,4 @@ def compute(context):
 
 *Synced from Python. Edit the Python and regenerate, or run "Forge: Sync edges" to refresh.*
 
-[[form]] [[guitar_solo_chorus]]
+[[form]] [[guitar_solo_chorus]] [[voices_list]]
