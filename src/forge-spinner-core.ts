@@ -48,14 +48,6 @@ export class ForgeSpinner {
    *  the pending label without resetting the grace timer (we want to
    *  show SOMETHING by grace + start_time, not push it out). */
   start(label: string): void {
-    // v0.2.228 diagnostic round 2: driver reports v0.2.225 spinner fix
-    // didn't close the murmuration-first-click gap. Inline console.warn
-    // so console output shows whether wrap fires, when grace expires,
-    // and whether setText is reached. Remove after root cause is
-    // observed at runtime (drain 2026-07-01-2200).
-    try {
-      console.warn(`[spinner-diag] start("${label}") at ${performance.now().toFixed(1)}ms`);
-    } catch { /* perf API edge case */ }
     if (this.isShown) {
       this.setText(label);
       return;
@@ -70,9 +62,6 @@ export class ForgeSpinner {
     this.pendingTimer = this._setTimeout(() => {
       this.pendingTimer = null;
       this.isShown = true;
-      try {
-        console.warn(`[spinner-diag] setText("${label}") after grace at ${performance.now().toFixed(1)}ms`);
-      } catch { /* perf API edge case */ }
       this.setText(label);
     }, this.gracePeriodMs);
   }
@@ -81,10 +70,6 @@ export class ForgeSpinner {
    *  visible text if shown. Idempotent: stop() with nothing pending +
    *  nothing shown is a no-op. */
   stop(): void {
-    // v0.2.228 diagnostic round 2 — see start() comment.
-    try {
-      console.warn(`[spinner-diag] stop() at ${performance.now().toFixed(1)}ms (pending=${this.pendingTimer !== null}, shown=${this.isShown})`);
-    } catch { /* perf API edge case */ }
     if (this.pendingTimer !== null) {
       this._clearTimeout(this.pendingTimer);
       this.pendingTimer = null;

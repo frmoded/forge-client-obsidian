@@ -447,16 +447,7 @@ export default class ForgePlugin extends Plugin {
     const spinnerStatusBarItem = this.addStatusBarItem();
     spinnerStatusBarItem.addClass('forge-spinner-status');
     this.spinner = new ForgeSpinner({
-      setText: (s) => {
-        // v0.2.228 diagnostic round 2 — surface the DOM-update step so
-        // driver console output identifies whether `start` fires →
-        // `setText` reaches the DOM update → status bar visually changes
-        // (drain 2026-07-01-2200).
-        try {
-          console.warn(`[spinner-diag] setText DOM update: "${s}"`);
-        } catch { /* console edge case */ }
-        spinnerStatusBarItem.setText(s);
-      },
+      setText: (s) => spinnerStatusBarItem.setText(s),
     });
 
     this.canonicalLayerStatusBarItem = this.addStatusBarItem();
@@ -2863,18 +2854,48 @@ export default class ForgePlugin extends Plugin {
         }
       }
 
+      // v0.2.229 — trash bundle-dropped files too (closes Pebble 1).
+      // The bundle is authoritative for the library subdir; files in
+      // extracted-not-in-bundle were either dropped by a newer bundle
+      // version (the common case: forge-music v0.7.0 dropped 8 files)
+      // or manually authored. Either way, trash via system trash so
+      // cohort can recover via macOS Trash if needed. Surface the
+      // names so cohort knows what was moved.
+      let bundleDroppedTrashed = 0;
+      for (const relPath of decision.filesBundleDropped) {
+        const fullPath = `${extractedRoot}/${relPath}`;
+        const af = this.app.vault.getAbstractFileByPath(fullPath);
+        if (af instanceof TFile) {
+          if (await this.trashForensicShadow(af)) bundleDroppedTrashed += 1;
+        } else {
+          try {
+            await adapter.remove(fullPath);
+            bundleDroppedTrashed += 1;
+          } catch (e) {
+            console.error(`reExtractBundledVault: adapter.remove ${fullPath} failed`, e);
+          }
+        }
+      }
+
       // Re-copy bundled-canonical content. Walks bundled tree, mirrors
       // each file into the extracted location. mkdir-tolerant of pre-
       // existing parent dirs (the user-authored / filesUntouched cases).
       await copyBundledOverlay(adapter, bundledRoot, extractedRoot);
 
-      const summary =
+      let summary =
         `Re-extracted '${vaultName}': ${trashed} edited file(s) trashed, ` +
         `${decision.filesUntouched.length} already-canonical, ` +
-        `${decision.filesToCreate.length} restored, ` +
-        `${decision.filesPreserved.length} user-authored preserved.`;
+        `${decision.filesToCreate.length} restored`;
+      if (bundleDroppedTrashed > 0) {
+        const sample = decision.filesBundleDropped.slice(0, 3).join(', ');
+        const more = decision.filesBundleDropped.length > 3
+          ? `, +${decision.filesBundleDropped.length - 3} more` : '';
+        summary += `, ${bundleDroppedTrashed} bundle-dropped file(s) moved to system trash (${sample}${more}). Recover from macOS Trash if you authored them yourself.`;
+      } else {
+        summary += '.';
+      }
       console.log(`Forge: ${summary}`);
-      this.notice(`Forge: ${summary}`, 8000);
+      this.notice(`Forge: ${summary}`, bundleDroppedTrashed > 0 ? 12000 : 8000);
     } catch (e) {
       console.error(`reExtractBundledVault('${vaultName}') failed`, e);
       this.notice(`Forge: re-extract '${vaultName}' failed — see console.`);

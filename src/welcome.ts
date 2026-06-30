@@ -1,4 +1,4 @@
-import { App, DataAdapter } from 'obsidian';
+import { App, DataAdapter, TFile, WorkspaceLeaf, MarkdownView, Notice } from 'obsidian';
 import { copyDirRecursive } from './copy-dir-core.ts';
 import { ensureForgeTomlStub } from './forge-toml-stub.ts';
 import { vaultDeclaresMusic } from './forge-music-gate.ts';
@@ -266,6 +266,48 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // hasn't shipped a curator file yet). Wired in advance so future
     // forge-music _chips.md drains don't need to revisit welcome.ts.
     await migrateChipsMdToV2(adapter, 'forge-music');
+
+    // v0.2.229 — sweep bundle-dropped files (closes Pebble 1, drain
+    // 2026-07-02-0930). When a bundled-vault version drops files
+    // (forge-music v0.7.0 → 8 engineer-mode notes promoted to library
+    // functions), the version-aware ensureBundledVault above handles
+    // the case if drift is detected. But cohort vaults that hit the
+    // 'match' path (e.g. forge.toml was bumped via the v0.2.221
+    // re-extract command without the drop sync) keep stragglers. This
+    // per-file diff sweep catches the gap regardless of how the
+    // version compared. Source-vault gate respected — if vault IS a
+    // bundled library's repo, we don't sweep INTO the repo.
+    if (!shouldSkipBundledExtract(sourceVaultName)) {
+      try {
+        const allTrashed: { lib: string; files: string[] }[] = [];
+        for (const lib of ['forge-moda', 'forge-music', 'forge-tutorial']) {
+          const trashed = await sweepBundleDroppedFiles(
+            app,
+            `.obsidian/plugins/forge-client-obsidian/assets/vaults/${lib}`,
+            lib,
+          );
+          if (trashed.length > 0) {
+            console.log(
+              `Forge: ${lib} bundle-dropped sweep moved ${trashed.length} file(s) to trash: ${trashed.join(', ')}`,
+            );
+            allTrashed.push({ lib, files: trashed });
+          }
+        }
+        if (allTrashed.length > 0) {
+          // Surface via Notice so cohort knows what was moved (and can
+          // recover from system trash if anything was locally authored).
+          const summary = allTrashed
+            .map(({ lib, files }) => `${lib}: ${files.length} (${files.slice(0, 3).join(', ')}${files.length > 3 ? `, +${files.length - 3} more` : ''})`)
+            .join('; ');
+          new Notice(
+            `Forge: bundle-dropped files moved to system trash — ${summary}. Recover from macOS Trash if you authored them yourself.`,
+            12000,
+          );
+        }
+      } catch (e) {
+        console.error('runFirstRunCheck: bundle-dropped sweep failed', e);
+      }
+    }
     // v0.2.106 — sweep accumulated `<lib>.bak.<version>` directories
     // from pre-v0.2.106 re-extracts. One-shot per-onload pass; cheap
     // when the user has none (just lists vault root).
@@ -618,3 +660,111 @@ export async function ensureBundledFor(domain: string, app: App): Promise<void> 
   );
 }
 
+
+/** v0.2.229 — sweep bundle-dropped files (closes Pebble 1).
+ *
+ *  Walks the extracted library subdir + the bundled-asset subdir.
+ *  Any file in extracted-not-in-bundle gets trashed via system trash
+ *  (recoverable via macOS Trash if cohort had local content there).
+ *
+ *  Runs AFTER each `ensureBundledVault` call. The version-aware
+ *  re-extract there handles the drift case by recursively deleting +
+ *  re-copying — but on the 'match' path it skips entirely, leaving
+ *  stragglers from any prior in-place re-extract (e.g. the v0.2.221
+ *  command). This per-file diff sync catches that gap.
+ *
+ *  Driver smoke 2026-07-02: forge-music v0.7.0 dropped 8 engineer-mode
+ *  notes. Driver BRAT-updated; runFirstRunCheck's match path skipped;
+ *  re-extract didn't re-fire; stragglers persisted. With this sweep,
+ *  the 8 files move to system trash regardless of how the bundle
+ *  version compared.
+ *
+ *  Returns the list of trashed relative paths (sorted) so the caller
+ *  can surface a notice.
+ *
+ *  Logs + swallows per-file failures; one broken trash shouldn't
+ *  strand the whole startup. */
+export async function sweepBundleDroppedFiles(
+  app: App,
+  bundledRoot: string,
+  extractedRoot: string,
+): Promise<string[]> {
+  const adapter = app.vault.adapter;
+  const trashed: string[] = [];
+  if (!(await adapter.exists(extractedRoot))) return trashed;
+  if (!(await adapter.exists(bundledRoot))) return trashed;
+
+  const bundledFiles = await listAllFilesRecursive(adapter, bundledRoot);
+  const extractedFiles = await listAllFilesRecursive(adapter, extractedRoot);
+
+  for (const relPath of extractedFiles) {
+    if (bundledFiles.has(relPath)) continue;
+    const fullPath = `${extractedRoot}/${relPath}`;
+    const af = app.vault.getAbstractFileByPath(fullPath);
+    if (af instanceof TFile) {
+      // Detach any leaves displaying the file before trash, mirroring
+      // the trashForensicShadow leaf-detach contract from v0.2.214.
+      const leavesToDetach: WorkspaceLeaf[] = [];
+      app.workspace.iterateAllLeaves((leaf) => {
+        const v = leaf.view;
+        if (v instanceof MarkdownView && v.file?.path === fullPath) {
+          leavesToDetach.push(leaf);
+        }
+      });
+      for (const leaf of leavesToDetach) {
+        try { leaf.detach(); } catch (e) {
+          console.error(`sweepBundleDroppedFiles: detach failed for ${fullPath}`, e);
+        }
+      }
+      try {
+        await app.vault.trash(af, true);
+      } catch (e) {
+        console.error(`sweepBundleDroppedFiles: vault.trash failed for ${fullPath}`, e);
+      }
+      // Verify + fall back to adapter.remove if trash silently no-op'd.
+      let stillExists = false;
+      try { stillExists = await adapter.exists(fullPath); } catch {/* noop */}
+      if (stillExists) {
+        try {
+          await adapter.remove(fullPath);
+        } catch (e) {
+          console.error(`sweepBundleDroppedFiles: adapter.remove fallback failed for ${fullPath}`, e);
+          continue;
+        }
+      }
+      trashed.push(relPath);
+    } else {
+      // Not modeled as a TFile — direct adapter.remove.
+      try {
+        await adapter.remove(fullPath);
+        trashed.push(relPath);
+      } catch (e) {
+        console.error(`sweepBundleDroppedFiles: adapter.remove failed for ${fullPath}`, e);
+      }
+    }
+  }
+
+  trashed.sort();
+  return trashed;
+}
+
+/** Walk a directory recursively and collect every file path RELATIVE
+ *  to the root (no leading slash). Used by sweepBundleDroppedFiles to
+ *  compute the extracted vs bundled set diff. */
+async function listAllFilesRecursive(
+  adapter: DataAdapter,
+  root: string,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  async function walk(dir: string): Promise<void> {
+    const listing = await adapter.list(dir);
+    for (const filePath of listing.files) {
+      out.add(filePath.slice(root.length + 1));
+    }
+    for (const dirPath of listing.folders) {
+      await walk(dirPath);
+    }
+  }
+  await walk(root);
+  return out;
+}

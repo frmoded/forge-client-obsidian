@@ -27,12 +27,21 @@ export interface ReExtractDecision {
    *  required, but is also unnecessary. Caller skips trash for these. */
   filesUntouched: string[];
 
-  /** Extracted files that DON'T exist in the bundle at all. These are
-   *  user-authored notes the cohort dropped into the library subdir.
-   *  Preserved — re-extract won't touch them (copyDirRecursive only
-   *  walks the bundled-side tree). Surfaced here so the caller can
-   *  report them in the success Notice. */
-  filesPreserved: string[];
+  /** Extracted files that DON'T exist in the bundle at all. The bundle
+   *  is authoritative for the library subdir, so these are treated as
+   *  bundle-dropped (the bundle had them in a prior version and a
+   *  newer version dropped them, OR cohort manually authored them
+   *  inside the library subdir).
+   *
+   *  v0.2.229 contract change (closes Pebble 1, drain 2026-07-02-0930):
+   *  prior name was `filesPreserved` — caller left them untouched.
+   *  Result: stragglers persisted across vault version bumps.
+   *  forge-music v0.7.0 dropped 8 engineer-mode files; cohort vaults
+   *  kept the old copies, breaking the v0.2.228 smoke. New contract:
+   *  caller TRASHES these via system trash (recoverable). If cohort
+   *  had local content, recovery from system trash. Notice surfaces
+   *  the names so cohort knows what was moved. */
+  filesBundleDropped: string[];
 
   /** Bundled files not present in the extracted side. These will be
    *  created by the re-extract. Surfaced for counts. */
@@ -50,7 +59,7 @@ export interface ReExtractDecision {
  *  Decision matrix per path:
  *  - In both, fingerprints match  → filesUntouched
  *  - In both, fingerprints differ → filesToTrash (= edited locally)
- *  - In extracted only            → filesPreserved (= user-authored)
+ *  - In extracted only            → filesBundleDropped (= bundle no longer ships)
  *  - In bundled only              → filesToCreate (= new in bundle)
  *
  *  Paths are returned in sorted order in each list so the modal's
@@ -61,13 +70,13 @@ export function decideReExtractActions(
 ): ReExtractDecision {
   const filesToTrash: string[] = [];
   const filesUntouched: string[] = [];
-  const filesPreserved: string[] = [];
+  const filesBundleDropped: string[] = [];
   const filesToCreate: string[] = [];
 
   for (const [path, extractedHash] of extractedFiles) {
     const bundledHash = bundledFiles.get(path);
     if (bundledHash === undefined) {
-      filesPreserved.push(path);
+      filesBundleDropped.push(path);
     } else if (bundledHash === extractedHash) {
       filesUntouched.push(path);
     } else {
@@ -83,8 +92,8 @@ export function decideReExtractActions(
 
   filesToTrash.sort();
   filesUntouched.sort();
-  filesPreserved.sort();
+  filesBundleDropped.sort();
   filesToCreate.sort();
 
-  return { filesToTrash, filesUntouched, filesPreserved, filesToCreate };
+  return { filesToTrash, filesUntouched, filesBundleDropped, filesToCreate };
 }

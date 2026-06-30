@@ -1050,22 +1050,61 @@
   font-style: italic;
 }
 
-/* v0.2.225 — Status-bar spinner prominence. The status bar bottom-
- * right corner is easy to miss on large screens, especially in
- * focused-editor mode. Bolder font + accent color + a subtle pulse
- * make the in-flight cue catch the eye. Driver smoke 2026-07-01
- * surfaced "no spinner" on murmuration first-click — turned out
- * (after wrap-audit) the status item DID fire, but visually too
- * faint. The pulse + accent here closes the perceived gap. */
+/* v0.2.229 — Status-bar spinner: force-visible with high-contrast
+ * background. Driver smoke 2026-07-01-2200 confirmed the full
+ * pipeline fires (wrap → grace → setText → DOM-update logs all
+ * appear in console) but the visible status bar shows nothing
+ * (Scenario A). Theory: Obsidian's status-bar container may
+ * collapse the item when its computed color is too close to the
+ * background, OR the cascade hides it via display/visibility.
+ *
+ * Strengthened: explicit !important on display + padding + min-
+ * width to ensure measurable space; high-contrast background
+ * (warning color) + black text so even if `--text-accent` resolves
+ * to a near-background color in the active theme, the box is still
+ * visible. Pulse animation preserved but the visibility baseline no
+ * longer depends on opacity alone. */
 .forge-spinner-status:not(:empty) {
-  font-weight: 600;
-  color: var(--text-accent);
+  display: inline-block !important;
+  padding: 0 8px !important;
+  min-width: 8em !important;
+  background-color: var(--background-modifier-warning, #ffb86c) !important;
+  color: var(--text-on-accent, #000) !important;
+  font-weight: 700 !important;
+  border-radius: 4px;
   animation: forge-spinner-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes forge-spinner-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  50% { opacity: 0.72; }
+}
+
+/* v0.2.229 — LibraryNoteView section foldability + h1-replacement
+ * styling. <details>/<summary> get default browser styling which
+ * looks plain next to Obsidian's heading hierarchy. Make summary
+ * look like a heading + show a fold indicator. */
+.forge-library-note-section {
+  margin: 16px 0;
+}
+.forge-library-note-section > summary {
+  cursor: pointer;
+  font-size: var(--h1-size, 2em);
+  font-weight: var(--h1-weight, 800);
+  margin-bottom: 8px;
+  list-style: none;
+  user-select: none;
+}
+.forge-library-note-section > summary::-webkit-details-marker {
+  display: none;
+}
+.forge-library-note-section > summary::before {
+  content: "▼ ";
+  font-size: 0.7em;
+  color: var(--text-muted);
+}
+.forge-library-note-section:not([open]) > summary::before {
+  content: "▶ ";
 }
 
 /* v0.2.221 — "Forge: Re-extract bundled library vault" modal. The
