@@ -12,6 +12,7 @@ import {
   writeScoreViewMode,
   toggleScoreViewMode,
   scoreViewModeKey,
+  pickDefaultScoreViewMode,
   type ScoreViewMode,
   type ScoreViewModeStorage,
 } from './view-mode-core.ts';
@@ -171,4 +172,49 @@ test('per-path isolation: writing path A does not affect path B', () => {
   writeScoreViewMode(storage, 'forge-music/murmuration.md', 'kit');
   assert.equal(readScoreViewMode(storage, 'forge-music/murmuration.md'), 'kit');
   assert.equal(readScoreViewMode(storage, 'forge-music/percussion_lab.md'), 'multi_staff');
+});
+
+// v0.2.226 — pickDefaultScoreViewMode path-based heuristic.
+
+test('pickDefaultScoreViewMode: /percussion/ path → kit', () => {
+  assert.equal(pickDefaultScoreViewMode('forge-music/percussion/murmuration.md'), 'kit');
+  assert.equal(pickDefaultScoreViewMode('forge-music/percussion/loom.md'), 'kit');
+});
+
+test('pickDefaultScoreViewMode: /percussion_lab/ path → kit', () => {
+  assert.equal(pickDefaultScoreViewMode('forge-music/percussion_lab/section_a.md'), 'kit');
+});
+
+test('pickDefaultScoreViewMode: drum_* filename → kit', () => {
+  assert.equal(pickDefaultScoreViewMode('forge-music/blues/drum_chorus.md'), 'kit');
+  assert.equal(pickDefaultScoreViewMode('forge-music/blues/drums_shuffle.md'), 'kit');
+});
+
+test('pickDefaultScoreViewMode: non-percussion music → multi_staff', () => {
+  assert.equal(pickDefaultScoreViewMode('forge-music/blues/guitar_solo_chorus.md'), 'multi_staff');
+  assert.equal(pickDefaultScoreViewMode('forge-music/blues/vocal_phrase_a.md'), 'multi_staff');
+});
+
+test('pickDefaultScoreViewMode: mixed (song.md aggregates vocal + drum) → multi_staff', () => {
+  // Driver §9 decision: vocal is the primary surface; drums are
+  // accompaniment. Stay on multi-staff so the vocal line gets the
+  // standard notation cohort expects.
+  assert.equal(pickDefaultScoreViewMode('forge-music/blues/song.md'), 'multi_staff');
+  assert.equal(pickDefaultScoreViewMode('forge-music/blues/chorus.md'), 'multi_staff');
+});
+
+test('pickDefaultScoreViewMode: case-insensitive', () => {
+  assert.equal(pickDefaultScoreViewMode('forge-music/Percussion/foo.md'), 'kit');
+  assert.equal(pickDefaultScoreViewMode('forge-music/blues/DRUM_chorus.md'), 'kit');
+});
+
+test('pickDefaultScoreViewMode: no path separator → just filename check', () => {
+  assert.equal(pickDefaultScoreViewMode('drum_chorus.md'), 'kit');
+  assert.equal(pickDefaultScoreViewMode('something_else.md'), 'multi_staff');
+});
+
+test('pickDefaultScoreViewMode: percussion_notes.md at root does NOT match (path-segment guard)', () => {
+  // Filename including "percussion" but NOT in a /percussion/ dir
+  // should NOT trigger kit (avoids false positives on sibling names).
+  assert.equal(pickDefaultScoreViewMode('percussion_notes.md'), 'multi_staff');
 });

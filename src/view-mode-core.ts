@@ -90,6 +90,34 @@ export function writeScoreViewMode(
   }
 }
 
+/** v0.2.226 — path-based heuristic for the initial render mode.
+ *  Percussion-domain snippets (path includes `/percussion/`,
+ *  `/percussion_lab/`, or a filename starting with `drum_`) default
+ *  to `'kit'` notation — drum-kit is more legible for percussion than
+ *  a treble-staff with non-standard noteheads. Everything else
+ *  defaults to `'multi_staff'`, preserving the v0.2.143 zero-regression
+ *  baseline for non-percussion music (vocal, instrumental solo).
+ *
+ *  Mixed snippets (vocal + drum staves, like song.md) stay on
+ *  multi-staff — the vocal line is the primary surface and drums are
+ *  the accompaniment. Driver chose this in the §9 ambiguity callout. */
+export function pickDefaultScoreViewMode(snippetPath: string): ScoreViewMode {
+  const p = snippetPath.toLowerCase();
+  // Path-segment match avoids matching `percussion` inside a sibling
+  // filename like `percussion_notes.md` at vault root.
+  if (p.includes('/percussion/') || p.includes('/percussion_lab/')) {
+    return 'kit';
+  }
+  // Filename match for blues drum-* files (drum_chorus.md, etc.) +
+  // forward-compat for any other domain that names drum-* snippets.
+  const lastSlash = p.lastIndexOf('/');
+  const basename = lastSlash === -1 ? p : p.slice(lastSlash + 1);
+  if (basename.startsWith('drum_') || basename.startsWith('drums_')) {
+    return 'kit';
+  }
+  return 'multi_staff';
+}
+
 /** Flip the score view mode between 'multi_staff' and 'kit'. Reads
  *  the current value, computes the toggle, writes back, returns the
  *  new mode. Used by the toolbar button's click handler. */

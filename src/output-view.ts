@@ -3,6 +3,7 @@ import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio.
 import {
   readScoreViewMode,
   toggleScoreViewMode,
+  pickDefaultScoreViewMode,
   type ScoreViewMode,
   type ScoreViewModeStorage,
 } from './view-mode-core.ts';
@@ -441,7 +442,13 @@ export class ForgeOutputView extends ItemView {
     engineMidiBase64: string | null = null,
   ) {
     const storage = this.scoreViewModeStorage();
-    let mode: ScoreViewMode = readScoreViewMode(storage, snippetId, 'multi_staff');
+    // v0.2.226 — default to drum-kit for percussion-domain snippets
+    // (path includes /percussion/, /percussion_lab/, or filename
+    // starts with drum_/drums_). Per-snippet persisted preference
+    // (writeScoreViewMode via the toggle button) still wins over
+    // the path heuristic; this only sets the FIRST-render default.
+    const initialDefault = pickDefaultScoreViewMode(snippetId);
+    let mode: ScoreViewMode = readScoreViewMode(storage, snippetId, initialDefault);
 
     // Toolbar above the score-host so toggling doesn't tear down the
     // chrome along with the score. v0.2.162 — zoom-bar slot lives in
