@@ -2051,14 +2051,28 @@ export default class ForgePlugin extends Plugin {
     try {
       const hostManager = getPyodideHost();
       if (hostManager) {
+        // v0.2.219 — force-save BEFORE reading. v0.2.217's editor-
+        // buffer fix wasn't enough on its own: writeCanonicalPythonBack
+        // later in this same Forge-click does `vault.process(file, …)`
+        // and `vault.read(file)` which both go through DISK. If the
+        // disk still has stale Recipe (pre-autosave) when the V2
+        // transpile runs, the canonical-write step persists STALE
+        // Recipe + FRESH-Python — but the run-snippet step that follows
+        // also reads MEMFS through the engine, and the engine's
+        // registry was refreshed from disk too. Driver smoke against
+        // v0.2.217 confirmed first-click still produced stale output.
+        // Forcing view.save() flushes the editor → disk SYNCHRONOUSLY
+        // before any sync, so every downstream read (disk, MEMFS,
+        // editor) sees the same fresh body.
+        try {
+          await (view as MarkdownView).save();
+        } catch (e) {
+          console.error('forgeSnippet: view.save() failed', e);
+        }
         const host = await hostManager.getInstance();
-        // v0.2.217 — read from the EDITOR BUFFER, not vault.read.
-        // vault.read returns DISK content; when the user edits Recipe
-        // and Forge-clicks within autosave delay (~1s), disk still
-        // has the pre-edit content → engine transpiles + runs STALE
-        // Python → output is wrong. The editor buffer reflects the
-        // user's keystrokes immediately. Driver smoke on v0.2.215
-        // ("Hello, world 3!" required two clicks) confirmed this race.
+        // v0.2.217 — read from the EDITOR BUFFER. After v0.2.219's
+        // view.save() above, disk + editor are in sync; this still
+        // prefers editor for resilience if save() failed.
         const freshContent = await readActiveNoteFresh(view, this.app.vault);
         await host.syncUserVaultFile(view.file.path, freshContent);
       }
