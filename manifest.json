@@ -1,7 +1,7 @@
 {
   "id": "forge-client-obsidian",
   "name": "Forge Client",
-  "version": "0.2.233",
+  "version": "0.2.234",
   "minAppVersion": "1.5.0",
   "description": "Obsidian client for Forge.",
   "author": "Oded Fuhrmann",
