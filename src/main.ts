@@ -71,6 +71,12 @@ import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
 import { runFirstRunCheck } from './welcome.ts';
+import {
+  ReExtractBundledVaultModal,
+  loadBundledVaultOptions,
+  BUNDLED_VAULT_NAMES,
+} from './re-extract-bundled-vault-modal.ts';
+import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
 import { restoreInlinedAssets } from './restore-inlined-assets.ts';
 import { parseZapLine } from './zap.ts';
 import { extractDataBody } from './data-snippet.ts';
@@ -1157,6 +1163,23 @@ export default class ForgePlugin extends Plugin {
       id: 'forge-unfreeze-edge',
       name: 'Unfreeze edge',
       callback: () => { this.openFreezeModal('live'); },
+    });
+
+    // v0.2.221 — manual reset path for bundled library notes.
+    // runFirstRunCheck only re-extracts on first install or on
+    // forge.toml version drift. Cohort who hand-edited a library note
+    // and wants to discard their edits had no clean UX path; the
+    // workaround was `rm -rf ~/<vault>/<library>` + relaunch
+    // (destructive, no confirmation). This command opens a modal
+    // picker with a destructive-action warning; on confirm, edited-
+    // locally files go to system trash (recoverable via
+    // trashForensicShadow) and the bundled-canonical content is
+    // re-copied. User-authored notes inside the library subdir are
+    // preserved.
+    this.addCommand({
+      id: 'forge-re-extract-bundled-vault',
+      name: 'Re-extract bundled library vault (overwrites local edits)',
+      callback: () => { void this.openReExtractBundledVaultModal(); },
     });
 
     // v0.2.44: hover popover removed — see import-site comment.
@@ -2707,6 +2730,100 @@ export default class ForgePlugin extends Plugin {
     return true;
   }
 
+  /** v0.2.221 — "Forge: Re-extract bundled library vault" command
+   *  callback. Reads each bundled vault's bundled + extracted
+   *  forge.toml version, hands them to the modal, and on confirm
+   *  delegates to reExtractBundledVault for the file-system actions.
+   *
+   *  Caller: command palette entry registered in onload(). */
+  private async openReExtractBundledVaultModal(): Promise<void> {
+    try {
+      const options = await loadBundledVaultOptions(this.app.vault.adapter);
+      new ReExtractBundledVaultModal(this.app, {
+        options,
+        onConfirm: (vaultName) => this.reExtractBundledVault(vaultName),
+      }).open();
+    } catch (e) {
+      console.error('openReExtractBundledVaultModal failed', e);
+      this.notice('Forge: re-extract command failed — see console.');
+    }
+  }
+
+  /** v0.2.221 — actually perform the re-extract for one bundled vault.
+   *
+   *  Flow:
+   *  1. Walk the bundled-asset side (`plugin-assets/vaults/<name>/`)
+   *     + the extracted side (`<vault-root>/<name>/`) and build path →
+   *     sha256 maps.
+   *  2. Hand both maps to decideReExtractActions (pure-core).
+   *  3. For each filesToTrash: look up TFile + trashForensicShadow
+   *     (leaf-detach + verify + adapter.remove fallback).
+   *  4. Copy each bundled file to the extracted location via
+   *     writeBinary (tolerates pre-existing files; mkdir's parent
+   *     dirs as needed). filesUntouched get overwritten with
+   *     identical bytes — cheap, keeps the implementation simple.
+   *  5. forgeNotice + forgeOutput summarizing the counts. */
+  private async reExtractBundledVault(vaultName: string): Promise<void> {
+    if (!BUNDLED_VAULT_NAMES.includes(vaultName as never)) {
+      this.notice(`Forge: '${vaultName}' is not a bundled library vault.`);
+      return;
+    }
+    const adapter = this.app.vault.adapter;
+    const bundledRoot =
+      `.obsidian/plugins/forge-client-obsidian/assets/vaults/${vaultName}`;
+    const extractedRoot = vaultName;
+
+    if (!(await adapter.exists(bundledRoot))) {
+      this.notice(`Forge: bundled '${vaultName}' missing from plugin assets; cannot re-extract.`);
+      return;
+    }
+
+    try {
+      const bundledFiles = await listAllFilesWithHash(adapter, bundledRoot);
+      const extractedFiles = (await adapter.exists(extractedRoot))
+        ? await listAllFilesWithHash(adapter, extractedRoot)
+        : new Map<string, string>();
+      const decision = decideReExtractActions(extractedFiles, bundledFiles);
+
+      // Trash edited-locally files. Look up TFile via getAbstractFileByPath;
+      // skip silently if it's not a TFile (race: file vanished, or the
+      // walker picked up something Obsidian doesn't model as a TFile).
+      let trashed = 0;
+      for (const relPath of decision.filesToTrash) {
+        const fullPath = `${extractedRoot}/${relPath}`;
+        const af = this.app.vault.getAbstractFileByPath(fullPath);
+        if (af instanceof TFile) {
+          if (await this.trashForensicShadow(af)) trashed += 1;
+        } else {
+          // Not modeled as a TFile — fall back to adapter.remove so the
+          // overwrite-from-bundle step doesn't write into stale bytes.
+          try {
+            await adapter.remove(fullPath);
+            trashed += 1;
+          } catch (e) {
+            console.error(`reExtractBundledVault: adapter.remove ${fullPath} failed`, e);
+          }
+        }
+      }
+
+      // Re-copy bundled-canonical content. Walks bundled tree, mirrors
+      // each file into the extracted location. mkdir-tolerant of pre-
+      // existing parent dirs (the user-authored / filesUntouched cases).
+      await copyBundledOverlay(adapter, bundledRoot, extractedRoot);
+
+      const summary =
+        `Re-extracted '${vaultName}': ${trashed} edited file(s) trashed, ` +
+        `${decision.filesUntouched.length} already-canonical, ` +
+        `${decision.filesToCreate.length} restored, ` +
+        `${decision.filesPreserved.length} user-authored preserved.`;
+      console.log(`Forge: ${summary}`);
+      this.notice(`Forge: ${summary}`, 8000);
+    } catch (e) {
+      console.error(`reExtractBundledVault('${vaultName}') failed`, e);
+      this.notice(`Forge: re-extract '${vaultName}' failed — see console.`);
+    }
+  }
+
   /** v0.2.212 — Scan vault for files whose basename matches an engine
    *  chip and trash the ones that classify as forensic (empty Obsidian
    *  auto-creations). Preserves intentional shadows (cohort wrote real
@@ -4077,4 +4194,64 @@ function _extractEnglishFromBody(body: string): string | null {
     }
   }
   return collecting ? out.join('\n').trim() : null;
+}
+
+/** v0.2.221 — Walk every file under `root` and return a map of
+ *  root-relative path → sha256(content). Used by reExtractBundledVault
+ *  to detect which files drifted between bundled-canonical and the
+ *  user's extracted copy. Recursive — handles arbitrary subdir depth
+ *  (forge-music/blues/song.md, forge-moda/_meta/_chips.md, etc.). */
+async function listAllFilesWithHash(
+  adapter: { list: (p: string) => Promise<{ files: string[]; folders: string[] }>;
+             readBinary: (p: string) => Promise<ArrayBuffer> },
+  root: string,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  async function walk(dir: string): Promise<void> {
+    const listing = await adapter.list(dir);
+    for (const filePath of listing.files) {
+      const rel = filePath.slice(root.length + 1);
+      const data = await adapter.readBinary(filePath);
+      const digestBuf = await crypto.subtle.digest('SHA-256', data);
+      const bytes = new Uint8Array(digestBuf);
+      let hex = '';
+      for (const byte of bytes) {
+        hex += byte.toString(16).padStart(2, '0');
+      }
+      out.set(rel, hex);
+    }
+    for (const dirPath of listing.folders) {
+      await walk(dirPath);
+    }
+  }
+  await walk(root);
+  return out;
+}
+
+/** v0.2.221 — copyBundledOverlay: like copyDirRecursive but tolerant of
+ *  pre-existing destination dirs (the re-extract case: user-authored
+ *  files still live in the target tree, so we can't blow it away and
+ *  rebuild). Walks `src`, mirrors each file via writeBinary, mkdir's
+ *  any missing parent dir along the way. mkdir failures are swallowed
+ *  silently (Obsidian's adapter throws on existing dirs in some
+ *  versions; that's exactly the case we want to tolerate). */
+async function copyBundledOverlay(
+  adapter: { mkdir: (p: string) => Promise<void>;
+             list: (p: string) => Promise<{ files: string[]; folders: string[] }>;
+             readBinary: (p: string) => Promise<ArrayBuffer>;
+             writeBinary: (p: string, data: ArrayBuffer) => Promise<void> },
+  src: string,
+  dst: string,
+): Promise<void> {
+  try { await adapter.mkdir(dst); } catch { /* may already exist */ }
+  const listing = await adapter.list(src);
+  for (const filePath of listing.files) {
+    const name = filePath.slice(src.length + 1);
+    const data = await adapter.readBinary(filePath);
+    await adapter.writeBinary(`${dst}/${name}`, data);
+  }
+  for (const dirPath of listing.folders) {
+    const name = dirPath.slice(src.length + 1);
+    await copyBundledOverlay(adapter, dirPath, `${dst}/${name}`);
+  }
 }

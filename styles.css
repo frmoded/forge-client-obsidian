@@ -1049,3 +1049,33 @@
   border-bottom: 1px dashed rgba(60, 140, 60, 0.5);
   font-style: italic;
 }
+
+/* v0.2.221 — "Forge: Re-extract bundled library vault" modal. The
+ * warning banner sits above the picker; red border so cohort can't
+ * miss the destructive-action notice. Picker + button row use the
+ * usual modal spacing — no surprises. */
+.forge-re-extract-warning {
+  border: 1px solid var(--background-modifier-error);
+  background: var(--background-modifier-error-rgb, rgba(200, 60, 60, 0.08));
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.forge-re-extract-picker {
+  margin: 12px 0 18px 0;
+}
+
+.forge-re-extract-row {
+  margin: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.forge-re-extract-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
