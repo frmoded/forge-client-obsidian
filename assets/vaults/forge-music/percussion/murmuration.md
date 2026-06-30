@@ -10,22 +10,16 @@ as a single mind, then disperse back into the trees. This piece traces that
 arc through pure percussion — no melodic content, no harmony, just rhythm
 gathering and dispersing across ~80 seconds.
 
-Eight 4-bar sections at 96 BPM in 4/4, structured symmetrically around a peak:
+Eight 4-bar sections at 96 BPM in 4/4, symmetric around a peak: solitary kick
+alone, companions joining on hi-hat, gathering snare with ghost notes,
+swarming toms and open hi-hat, the peak with crash and full kit, dispersing as
+the cymbals fade and toms drop, threading back to kick and soft snare, resting
+with kick alone again. The arc is the piece.
 
-1. [[solitary]](bars=4) — bars 1-4. Just the kick — one bird, slow turns.
-2. [[companions]](bars=4) — bars 5-8. Add closed hi-hat — a few birds joining.
-3. [[gathering]](bars=4) — bars 9-12. Add snare with ghost notes — dozens.
-4. [[swarming]](bars=4) — bars 13-16. Add toms + open hi-hat punches.
-5. [[peak]](bars=4) — bars 17-20. The murmuration peak — crash + full kit.
-6. [[dispersing]](bars=4) — bars 21-24. Cymbal fades, toms drop, settling.
-7. [[threading]](bars=4) — bars 25-28. Back to kick + hi-hat + soft snare.
-8. [[resting]](bars=4) — bars 29-32. Kick alone again; last hit, then silence.
-
-The arc is the piece. Velocity carries the dynamic story: quiet at the edges,
-loud at the peak. Articulation distinguishes closed-hi-hat calm from open-hi-hat
-punch. Decomposed into 8 callable section snippets in `percussion_lab/` so
-other pieces (like [[wake]]) can use the same vocabulary with different
-proportions.
+Velocity carries the dynamic story: quiet at the edges, loud at the peak.
+Articulation distinguishes closed-hi-hat calm from open-hi-hat punch. The 8
+callable section snippets live in `percussion_lab/` so other pieces (like
+[[wake]]) can use the same vocabulary with different proportions.
 
 ## Inputs
 

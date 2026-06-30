@@ -4,7 +4,7 @@ type: action
 
 # Description
 
-A slow E blues, four 12-bar choruses, vocal lead with drums underneath.
+Slow Burn — a slow E blues, four 12-bar choruses, vocal lead with drums underneath.
 The first chorus introduces the lyric; the second repeats with more
 weight; the third opens to an instrumental solo on guitar; the fourth
 comes back changed. Around 70 BPM, eighth-note triplet feel.

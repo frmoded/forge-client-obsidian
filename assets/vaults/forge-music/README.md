@@ -4,7 +4,7 @@ A Forge vault for composing music with music21 in your Obsidian-based snippet wo
 
 ## What's inside
 
-Music-domain action and data snippets — currently centered on a fully-worked **12-bar blues** in `blues/`. Each snippet is a Forge action that returns a `music21.stream.Score` (or a list of pitches, for the scale helpers); the plugin renders the result via Verovio in the Forge Output panel.
+Music-domain action and data snippets — currently centered on **Slow Burn**, a fully-worked 12-bar blues in `slow_burn/`, plus a percussion section in `percussion/` and `percussion_lab/`. Each snippet is a Forge action that returns a `music21.stream.Score` (or a list of pitches, for the scale helpers); the plugin renders the result via Verovio in the Forge Output panel.
 
 Layout:
 
@@ -14,18 +14,14 @@ forge-music/
 ├── LICENSE
 ├── NOTICE
 ├── forge.toml          # declares domains = ["music"]
-└── blues/
-    ├── form.md                          # 12-bar harmonic frame in E major
+└── slow_burn/
     ├── twelve_bar_blues_progression.md  # I IV I I IV IV I I V IV I V (data)
     ├── chorus.md                        # 1 chorus = harmonic frame + AAB vocal
-    ├── vocal_phrase_a.md                # the A vocal phrase (descending)
-    ├── vocal_phrase_b.md                # the B vocal phrase (answer)
     ├── solo_chorus.md                   # instrumental chorus = form + solo
-    ├── guitar_solo_chorus.md            # the 12-bar electric guitar solo
-    └── song.md                          # the whole song: chorus × 3 + solo
+    └── slow_burn.md                     # the whole song: chorus × 3 + solo
 ```
 
-No top-level snippet files post-v0.3.4 — every snippet lives under `blues/` and is reachable as both a qualified ID (`forge-music/blues/song`) and as a bare sibling reference (`[[chorus]]` from inside `blues/song.md`) per v0.2.26 caller-scoped resolution.
+Every snippet is reachable as both a qualified ID (`forge-music/slow_burn/slow_burn`) and as a bare sibling reference (`[[chorus]]` from inside `slow_burn/slow_burn.md`) per v0.2.26 caller-scoped resolution.
 
 ## How to use
 
@@ -34,21 +30,20 @@ The forge-music vault is **bundled** with the forge-client-obsidian plugin start
 1. Edit your vault's `forge.toml` and set `domains = ["music"]` (or add `"music"` to an existing list).
 2. Cmd-Q out of Obsidian and re-open it (a plain "Reload app without saving" may not refresh the bundle short-circuit).
 3. The plugin extracts `forge-music/` into your vault root automatically.
-4. Forge-click any blues snippet — e.g. `forge-music/blues/song.md` — to compute and render it.
+4. Forge-click any Slow Burn snippet — e.g. `forge-music/slow_burn/slow_burn.md` — to compute and render it.
 
 Top-level forge-clickable entry points:
-- `blues/song.md` → the whole 4-section piece.
-- `blues/form.md` → just the harmonic frame.
-- `blues/chorus.md` → one vocal chorus.
-- `blues/solo_chorus.md` → the instrumental chorus.
+- `slow_burn/slow_burn.md` → the whole 4-section piece.
+- `slow_burn/chorus.md` → one vocal chorus.
+- `slow_burn/solo_chorus.md` → the instrumental chorus.
 
 ## Authoring new snippets
 
-Write new `.md` files in your vault root (vault-root files override bundled-library snippets via A4 shadow resolution), or in `<vault>/forge-music/blues/` to extend the blues set directly. Follow the snippet conventions:
+Write new `.md` files in your vault root (vault-root files override bundled-library snippets via A4 shadow resolution), or in `<vault>/forge-music/slow_burn/` to extend the Slow Burn set directly. Follow the V2 note conventions:
 
-- Frontmatter: `type: action` (or `data`), `description: ...`, `inputs: [...]`.
-- One `# English` section, one `# Python` section with a fenced `python` block defining `def compute(context): ...`.
-- Use `[[snippet_name]]` in English to mark forward dependencies — bare names resolve to siblings in your current subdir first, then walk the resolution order.
+- Frontmatter: `type: action` (or `data`).
+- One `# Description` section (intent-level prose), one `# Recipe` section (`Let X = Call [[name]] with k=v.` chains; implicit-locking generates `# Python` on first Forge-click).
+- Use `[[note_name]]` in Recipe to compose other notes — bare names resolve to siblings in your current subdir first, then walk the resolution order.
 
 ## Music-domain globals (pre-injected; do NOT import)
 

@@ -870,7 +870,7 @@ export default class ForgePlugin extends Plugin {
         // zap target itself is a multi-second pyodide compute.
         const op = () => this.runZapLine();
         if (this.spinner) {
-          void this.spinner.wrap('Forge: 🔥 running …', op);
+          void this.spinner.wrapImmediate('Forge: 🔥 running …', op);
         } else {
           void op();
         }
@@ -898,7 +898,7 @@ export default class ForgePlugin extends Plugin {
         // state cue regardless of which command path invokes it.
         const op = () => this.generate();
         if (this.spinner) {
-          void this.spinner.wrap('Forge: 🔥 generating…', op);
+          void this.spinner.wrapImmediate('Forge: 🔥 generating…', op);
         } else {
           void op();
         }
@@ -920,7 +920,7 @@ export default class ForgePlugin extends Plugin {
         // (multi-second); cohort needs a working-state cue.
         const op = () => this.generateEmmFromDescription();
         if (this.spinner) {
-          void this.spinner.wrap('Forge: 🔥 generating…', op);
+          void this.spinner.wrapImmediate('Forge: 🔥 generating…', op);
         } else {
           void op();
         }
@@ -1147,7 +1147,7 @@ export default class ForgePlugin extends Plugin {
         // First-click on a music snippet via Cmd-P went silent.
         const op = () => this.runSnippet();
         if (this.spinner) {
-          void this.spinner.wrap('Forge: 🔥 running …', op);
+          void this.spinner.wrapImmediate('Forge: 🔥 running …', op);
         } else {
           void op();
         }
@@ -1344,7 +1344,7 @@ export default class ForgePlugin extends Plugin {
         // fast snippets don't flash.
         const op = () => this.forgeSnippet();
         if (this.spinner) {
-          void this.spinner.wrap('Forge: 🔥 running …', op);
+          void this.spinner.wrapImmediate('Forge: 🔥 running …', op);
         } else {
           void op();
         }

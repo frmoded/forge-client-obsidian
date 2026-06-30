@@ -57,11 +57,9 @@ const REQUIRED_FILES = [
   { path: "assets/engine/forge/core/executor.py",             hint: "Repo is missing the engine bundle — unexpected." },
   { path: "assets/vaults/forge-moda/forge.toml",              hint: "Repo is missing the forge-moda vault bundle — unexpected." },
   { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle — re-sync ~/projects/forge-music/ into assets/vaults/forge-music/." },
-  // v0.7.0 — `blues/form.md` removed (promoted from vault note to
-  // library note in forge.music.lib via drain 2026-07-01-1800). The
-  // preflight no longer asserts its presence; we keep the progression
-  // data note check since it stays in the vault.
-  { path: "assets/vaults/forge-music/blues/twelve_bar_blues_progression.md", hint: "forge-music bundle missing blues/twelve_bar_blues_progression.md — re-sync the blues subdir." },
+  // v0.8.0 — `blues/` renamed to `slow_burn/` (drain 2026-07-02-1800).
+  // Progression data note now lives at slow_burn/twelve_bar_blues_progression.md.
+  { path: "assets/vaults/forge-music/slow_burn/twelve_bar_blues_progression.md", hint: "forge-music bundle missing slow_burn/twelve_bar_blues_progression.md — re-sync the slow_burn subdir." },
   // v0.2.76: Tier 1 tutorial bundle. Source at ~/projects/forge-tutorial/.
   { path: "assets/vaults/forge-tutorial/forge.toml",          hint: "forge-tutorial bundle missing — run `node scripts/sync-bundled-vault.mjs forge-tutorial`." },
   { path: "assets/vaults/forge-tutorial/README.md",           hint: "forge-tutorial bundle missing README — re-sync." },

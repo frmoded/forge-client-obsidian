@@ -127,4 +127,50 @@ describe('ForgeSpinner', () => {
     // setText calls at all.
     assert.deepEqual(calls, []);
   });
+
+  // v0.2.234 — startImmediate / wrapImmediate (drain 2026-07-02-1700).
+  // Explicit user actions (Forge button, Cmd-P) want "click registered"
+  // feedback even for sub-grace compute, so they bypass the grace timer.
+
+  test('startImmediate then stop → setText called twice (label, empty) even on sub-grace stop', () => {
+    const { spinner, calls } = makeSpinner();
+    spinner.startImmediate('Forge: 🔥 running …');
+    spinner.stop();
+    // Unlike start() under grace which would emit nothing, immediate
+    // emits the label synchronously then the empty stop.
+    assert.deepEqual(calls, ['Forge: 🔥 running …', '']);
+  });
+
+  test('wrapImmediate short-run → spinner ALWAYS flashes (no grace skip)', async () => {
+    const { spinner, calls } = makeSpinner();
+    const result = await spinner.wrapImmediate('Forge: 🔥 running …', async () => 7);
+    assert.equal(result, 7);
+    // Cohort UX guarantee: click registers a visible flash even when
+    // compute is faster than the grace period (warm pyodide path).
+    assert.deepEqual(calls, ['Forge: 🔥 running …', '']);
+  });
+
+  test('wrapImmediate cancels a pending grace timer from a prior start()', () => {
+    const { spinner, calls, timers } = makeSpinner();
+    spinner.start('Forge: 🔥 background');
+    // A click-triggered action arrives while a background grace timer
+    // is still pending. wrapImmediate's startImmediate should cancel
+    // the background timer and show the new label immediately.
+    spinner.startImmediate('Forge: 🔥 explicit');
+    timers.fireAll();  // any leftover timer should be a no-op
+    assert.deepEqual(calls, ['Forge: 🔥 explicit']);
+    spinner.stop();
+    assert.deepEqual(calls, ['Forge: 🔥 explicit', '']);
+  });
+
+  test('wrapImmediate still stops on error', async () => {
+    const { spinner, calls } = makeSpinner();
+    await assert.rejects(
+      async () => spinner.wrapImmediate('Forge: 🔥 generating…', async () => {
+        throw new Error('LLM failed');
+      }),
+      /LLM failed/,
+    );
+    assert.deepEqual(calls, ['Forge: 🔥 generating…', '']);
+  });
 });

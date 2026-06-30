@@ -80,6 +80,22 @@ export class ForgeSpinner {
     }
   }
 
+  /** v0.2.234 — Show the spinner IMMEDIATELY, bypassing the grace
+   *  period. For explicit user actions (Forge button clicks, Cmd-P
+   *  commands) where cohort wants "click registered" feedback even
+   *  on sub-200ms compute. Drain 2026-07-02-1700: warm-pyodide
+   *  murmuration computed faster than grace, so spinner correctly
+   *  but unhelpfully skipped the flash. Use start() (grace-aware)
+   *  for background paths; startImmediate() for click triggers. */
+  startImmediate(label: string): void {
+    if (this.pendingTimer !== null) {
+      this._clearTimeout(this.pendingTimer);
+      this.pendingTimer = null;
+    }
+    this.isShown = true;
+    this.setText(label);
+  }
+
   /** Convenience: wrap an async operation with a spinner. The
    *  spinner starts before the promise awaits and stops in finally —
    *  so errors clean up the bar correctly. Returns the operation's
@@ -91,6 +107,18 @@ export class ForgeSpinner {
    */
   async wrap<T>(label: string, op: () => Promise<T>): Promise<T> {
     this.start(label);
+    try {
+      return await op();
+    } finally {
+      this.stop();
+    }
+  }
+
+  /** v0.2.234 — Same as wrap() but uses startImmediate() — spinner
+   *  shows the moment the call is made, no grace period. For explicit
+   *  user actions. */
+  async wrapImmediate<T>(label: string, op: () => Promise<T>): Promise<T> {
+    this.startImmediate(label);
     try {
       return await op();
     } finally {
