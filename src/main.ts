@@ -552,9 +552,19 @@ export default class ForgePlugin extends Plugin {
       this.engineChipIndex.get(name) ?? null;
     this.registerView(ENGINE_CHIP_VIEW_TYPE, leaf => new EngineChipView(leaf));
     void this.loadEngineChipCatalog();
+    // v0.2.215 — capture-phase registration. v0.2.213 +v0.2.214 used
+    // bubble-phase (default) so Obsidian's own wikilink click handler
+    // (attached to closer elements) fired FIRST and created the empty
+    // shadow note before our interceptor saw the event. Catalog +
+    // selector chain were correct; Obsidian just beat us to it. The
+    // sibling python-builtins handler at main.ts:740 already uses
+    // capture: true for exactly this reason. Driver smoke surfaced
+    // this on v0.2.214: catalog had play_at_offsets, CM6 wikilink
+    // matched .cm-hmd-internal-link, but Cmd-click still created
+    // a shadow. capture: true fixes it.
     this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
       this.maybeInterceptEngineChipClick(evt);
-    });
+    }, { capture: true });
 
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
 
