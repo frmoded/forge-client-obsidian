@@ -436,7 +436,7 @@ test('deriveChip: basename starting with underscore → null (S7)', () => {
 // ---------------------------------------------------------------------------
 
 test('deriveV2InsertionForAction: zero inputs → [[id]]. shorthand', () => {
-  // Path A engine chips like [[kick]] have zero inputs. The V2
+  // Path A library notes like [[kick]] have zero inputs. The V2
   // shorthand-call statement form is the canonical V2 way to invoke
   // them: `[[kick]].` — NOT `Call [[kick]] with .`.
   const out = deriveV2InsertionForAction({

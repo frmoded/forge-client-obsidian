@@ -5,20 +5,15 @@ type: action
 # Description
 
 One 12-bar vocal chorus of the blues — the basic repeating unit of
-the song. Composes the AAB vocal lyric over the harmonic frame:
-[[vocal_phrase_a]] twice (bars 1-4 and 5-8, the AA) and
-[[vocal_phrase_b]] once (bars 9-12, the B), played simultaneously
-with the harmonic accompaniment from [[form]].
+the song. AAB lyric arc: a four-bar phrase that sets up the line,
+the same phrase repeated for weight, then the four-bar answer that
+resolves it. Sung over the harmonic frame from [[form]]. Twelve
+bars in 12/8, slow blues feel, around 70 BPM with an eighth-note
+triplet swing.
 
-Twelve bars in 12/8, slow blues feel. Inherits key, time signature
-(12/8), and tempo (around 70 BPM, eighth-note triplet feel) from
-[[form]] so the chorus stays coherent with the rest of the song
-under any of those changing.
-
-No new musical material introduced at this level — pure structural
-composition of the three leaves: the harmonic frame from [[form]]
-underneath, the AAB vocal arc on top via two calls to
-[[vocal_phrase_a]] and one to [[vocal_phrase_b]].
+The phrases lean weary and sparse — lots of rest space, sighing
+through the line — with the answer landing more firmly on the
+tonic at the end.
 
 ## Inputs
 
@@ -37,9 +32,12 @@ Return Call [[voices_list]] with sections=[form_score, vocal_line].
 
 ```python
 def compute(context):
-    form_score = context.compute("form")
-    phrase_a = context.compute("vocal_phrase_a")
-    phrase_b = context.compute("vocal_phrase_b")
+    # v0.7.0: form / vocal_phrase_a / vocal_phrase_b are now library
+    # notes in forge.music.lib; called directly instead of via
+    # context.compute.
+    form_score = form()
+    phrase_a = vocal_phrase_a()
+    phrase_b = vocal_phrase_b()
 
     vocal_line = sequence(repeat(phrase_a, 2), phrase_b)
     return voices(form_score, vocal_line)

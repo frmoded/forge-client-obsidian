@@ -57,7 +57,10 @@ const REQUIRED_FILES = [
   { path: "assets/engine/forge/core/executor.py",             hint: "Repo is missing the engine bundle — unexpected." },
   { path: "assets/vaults/forge-moda/forge.toml",              hint: "Repo is missing the forge-moda vault bundle — unexpected." },
   { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle — re-sync ~/projects/forge-music/ into assets/vaults/forge-music/." },
-  { path: "assets/vaults/forge-music/blues/form.md",          hint: "forge-music bundle missing blues/form.md — re-sync the blues subdir. v0.3.4 deletion: top-level form.md was removed; blues/form.md is now canonical." },
+  // v0.7.0 — `blues/form.md` removed (promoted from vault note to
+  // library note in forge.music.lib via drain 2026-07-01-1800). The
+  // preflight no longer asserts its presence; we keep the progression
+  // data note check since it stays in the vault.
   { path: "assets/vaults/forge-music/blues/twelve_bar_blues_progression.md", hint: "forge-music bundle missing blues/twelve_bar_blues_progression.md — re-sync the blues subdir." },
   // v0.2.76: Tier 1 tutorial bundle. Source at ~/projects/forge-tutorial/.
   { path: "assets/vaults/forge-tutorial/forge.toml",          hint: "forge-tutorial bundle missing — run `node scripts/sync-bundled-vault.mjs forge-tutorial`." },

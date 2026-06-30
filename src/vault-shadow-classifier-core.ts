@@ -7,12 +7,12 @@
 // the vault root. v0.2.206's wikilink interceptor treated their
 // presence as "cohort intentionally shadowed this chip" and deferred
 // to Obsidian — so cohort opened the empty shadow forever and never
-// discovered EngineChipView.
+// discovered LibraryNoteView.
 //
 // This classifier distinguishes:
 //
 //   - 'forensic' — auto-created garbage; the chip-click interceptor
-//     should open EngineChipView instead AND trash the shadow.
+//     should open LibraryNoteView instead AND trash the shadow.
 //   - 'intentional' — cohort wrote something; the chip-click
 //     interceptor preserves the v0.2.206 "vault wins" rule.
 //
@@ -23,7 +23,7 @@
 
 export type VaultShadowClassification = 'forensic' | 'intentional';
 
-/** Classify a vault note that shadows an engine chip name. */
+/** Classify a vault note that shadows an library note name. */
 export function classifyVaultShadow(
   rawMarkdown: string,
   chipName: string,

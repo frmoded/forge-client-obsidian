@@ -14,7 +14,7 @@
 // Fix: read from the EDITOR BUFFER instead of from disk. The buffer
 // reflects the user's just-typed keystrokes immediately, no autosave
 // delay. Falls back to vault.read when the view doesn't have an editor
-// (e.g., custom ItemView subclasses like the engine-chip view).
+// (e.g., custom ItemView subclasses like the library-note view).
 
 /** Minimal view shape we need — duck-typed against Obsidian's
  *  MarkdownView. Decoupled so the pure-core is testable without an

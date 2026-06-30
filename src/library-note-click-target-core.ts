@@ -1,7 +1,7 @@
 // v0.2.213 — pure-core: extract the click-target's wikilink href, with
 // the CM6 fallback selector chain.
 //
-// Background: v0.2.206 introduced maybeInterceptEngineChipClick using
+// Background: v0.2.206 introduced maybeInterceptLibraryNoteClick using
 // only `closest('a.internal-link')`. In reading mode this works — the
 // rendered note is a static HTML tree with anchor tags. In source mode
 // and many live-preview shapes, Obsidian uses a CM6 ViewPlugin that
@@ -18,9 +18,9 @@
 // click handler) and edges-hover.ts:65-67 which both already use
 // the `??` fallback and work correctly across all render modes.
 
-/** Result of resolving a click target to an engine-chip wikilink.
+/** Result of resolving a click target to an library-note wikilink.
  *  `null` means the click wasn't on a wikilink we recognize. */
-export interface ResolvedChipClickTarget {
+export interface ResolvedLibraryNoteClickTarget {
   /** Bare wikilink target with `[[ ]]` stripped + alias/heading
    *  trimmed. Caller uses this for catalog lookup. */
   bare: string;
@@ -30,7 +30,7 @@ export interface ResolvedChipClickTarget {
   href: string;
 }
 
-/** Resolve a click target to an engine-chip wikilink, with CM6
+/** Resolve a click target to an library-note wikilink, with CM6
  *  fallback for source mode + live-preview decorated links.
  *
  *  Selector chain (in order):
@@ -45,9 +45,9 @@ export interface ResolvedChipClickTarget {
  *  Returns `null` when no wikilink is found or the resolved href is
  *  empty.
  */
-export function resolveEngineChipClickTarget(
+export function resolveLibraryNoteClickTarget(
   target: Element | null,
-): ResolvedChipClickTarget | null {
+): ResolvedLibraryNoteClickTarget | null {
   if (!target) return null;
   const link = (target.closest('a.internal-link') as Element | null)
     ?? (target.closest('.cm-hmd-internal-link') as Element | null)

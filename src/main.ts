@@ -15,10 +15,10 @@ import {
   replacePythonSection,
   extractRecipeSection,
 } from './v2-note-core.ts';
-// v0.2.194 Path A — engineChipsForDomains import retired. The
+// v0.2.194 Path A — libraryNotesForDomains import retired. The
 // forge-transpile service introspects forge.<domain>.lib at /generate
 // time via AST-walking vendored `engine_libs/*_lib.py` source files.
-// Plugin sends ONLY vault notes; the service merges in engine chips.
+// Plugin sends ONLY vault notes; the service merges in library notes.
 // See forge-transpile/engine_chip_introspector.py.
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
@@ -108,13 +108,13 @@ import { staleFacetViewPlugin } from './stale-facet-view-plugin.ts';
 import { ConfirmModal } from './confirm-modal.ts';
 import {
   parseEngineLib,
-  buildEngineChipIndex,
-  type EngineChip,
-} from './engine-chip-catalog-core.ts';
-import { EngineChipView, ENGINE_CHIP_VIEW_TYPE } from './engine-chip-view.ts';
-import { decideEngineChipClick } from './engine-chip-click-decide-core.ts';
+  buildLibraryNoteIndex,
+  type LibraryNote,
+} from './library-note-catalog-core.ts';
+import { LibraryNoteView, LIBRARY_NOTE_VIEW_TYPE } from './library-note-view.ts';
+import { decideLibraryNoteClick } from './library-note-click-decide-core.ts';
 import { classifyVaultShadow } from './vault-shadow-classifier-core.ts';
-import { resolveEngineChipClickTarget } from './engine-chip-click-target-core.ts';
+import { resolveLibraryNoteClickTarget } from './library-note-click-target-core.ts';
 import { readActiveNoteFresh } from './read-active-note-fresh-core.ts';
 import { ForgeSpinner } from './forge-spinner-core.ts';
 import {
@@ -326,9 +326,9 @@ export default class ForgePlugin extends Plugin {
    *  bundled `assets/engine/forge/<domain>/lib.py` source files via
    *  parseEngineLib (regex-based). Used by the wikilink click
    *  interceptor to route [[engine_chip]] Cmd-clicks to
-   *  EngineChipView instead of letting Obsidian create an empty
+   *  LibraryNoteView instead of letting Obsidian create an empty
    *  note. Empty when bundled engine source is unreadable. */
-  private engineChipIndex: Map<string, EngineChip> = new Map();
+  private libraryNoteIndex: Map<string, LibraryNote> = new Map();
   /** v0.2.218 — Status-bar spinner for Forge-click + /generate +
    *  /resolve-slot operations. 200ms grace period so fast snippets
    *  don't flash; LLM-bound operations (multi-second) get a visible
@@ -566,17 +566,17 @@ export default class ForgePlugin extends Plugin {
     this.registerView(CHIPS_VIEW_TYPE, leaf =>
       new ChipsView(leaf, this.chipsHost()));
 
-    // v0.2.206 — Engine-chip-as-note: register the EngineChipView
+    // v0.2.206 — Engine-chip-as-note: register the LibraryNoteView
     // type so Cmd-click on [[chip]] can open it. The view looks up
     // its chip via a static `lookup` callable so deserialization
     // (Obsidian restores the view from workspace.json on relaunch)
     // can resolve the chip from saved state. Wire that lookup before
     // the registerView call so a layout-restore during onload
     // doesn't see a null lookup.
-    EngineChipView.lookup = (name: string) =>
-      this.engineChipIndex.get(name) ?? null;
-    this.registerView(ENGINE_CHIP_VIEW_TYPE, leaf => new EngineChipView(leaf));
-    void this.loadEngineChipCatalog();
+    LibraryNoteView.lookup = (name: string) =>
+      this.libraryNoteIndex.get(name) ?? null;
+    this.registerView(LIBRARY_NOTE_VIEW_TYPE, leaf => new LibraryNoteView(leaf));
+    void this.loadLibraryNoteCatalog();
     // v0.2.215 — capture-phase registration. v0.2.213 +v0.2.214 used
     // bubble-phase (default) so Obsidian's own wikilink click handler
     // (attached to closer elements) fired FIRST and created the empty
@@ -588,7 +588,7 @@ export default class ForgePlugin extends Plugin {
     // matched .cm-hmd-internal-link, but Cmd-click still created
     // a shadow. capture: true fixes it.
     this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-      this.maybeInterceptEngineChipClick(evt);
+      this.maybeInterceptLibraryNoteClick(evt);
     }, { capture: true });
 
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
@@ -2453,16 +2453,16 @@ export default class ForgePlugin extends Plugin {
     const vaultDeps = await this.gatherVaultActionNoteDescriptions();
     const activeDomainsList =
       this.activeDomains === null ? null : Array.from(this.activeDomains);
-    // v0.2.194 Path A — engine chips no longer merged plugin-side.
+    // v0.2.194 Path A — library notes no longer merged plugin-side.
     // The forge-transpile service introspects forge.<domain>.lib at
     // /generate time and augments the deps payload server-side. This
     // unifies the catalog to a single source of truth (vendored
     // engine_libs/<domain>_lib.py source files in the service) and
-    // retires src/v2-engine-chips.ts. Adding a new engine chip = engine
+    // retires src/v2-library-notes.ts. Adding a new library note = engine
     // release + service redeploy; no plugin update needed.
     const deps = vaultDeps;
     console.warn(
-      `[Forge V2 /generate] deps count: ${deps.length} (vault only — engine chips added server-side)`
+      `[Forge V2 /generate] deps count: ${deps.length} (vault only — library notes added server-side)`
     );
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     console.warn('[Forge V2 /generate] snippetId:', snippetId);
@@ -2645,9 +2645,9 @@ export default class ForgePlugin extends Plugin {
       `Forge: ${view.file.basename} → Python facet shown. Hand-edits will mark Description + Recipe stale.`);
   }
 
-  /** v0.2.206 — Build the engine-chip catalog at plugin load by
+  /** v0.2.206 — Build the library-note catalog at plugin load by
    *  reading the bundled `assets/engine/forge/<domain>/lib.py` source
-   *  files and regex-parsing each. Stored as `engineChipIndex` for
+   *  files and regex-parsing each. Stored as `libraryNoteIndex` for
    *  fast click-time lookup. Failures (missing file, parse error)
    *  log + leave the index empty — Cmd-click falls through to
    *  Obsidian's default behavior, no crash.
@@ -2657,9 +2657,9 @@ export default class ForgePlugin extends Plugin {
    *  python-builtins-core path, which already intercepts Cmd-click
    *  to prevent stray `print.md` notes).
    */
-  private async loadEngineChipCatalog(): Promise<void> {
+  private async loadLibraryNoteCatalog(): Promise<void> {
     const domains = ['music', 'moda'];
-    const perDomain: Record<string, EngineChip[]> = {};
+    const perDomain: Record<string, LibraryNote[]> = {};
     for (const domain of domains) {
       const path = `${this.manifest.dir}/assets/engine/forge/${domain}/lib.py`;
       try {
@@ -2667,21 +2667,21 @@ export default class ForgePlugin extends Plugin {
         perDomain[domain] = parseEngineLib(src);
       } catch (e) {
         console.error(
-          `loadEngineChipCatalog: failed to read ${path}`, e,
+          `loadLibraryNoteCatalog: failed to read ${path}`, e,
         );
         perDomain[domain] = [];
       }
     }
-    this.engineChipIndex = buildEngineChipIndex(perDomain);
+    this.libraryNoteIndex = buildLibraryNoteIndex(perDomain);
     console.warn(
-      `[Forge engine-chip catalog] loaded ${this.engineChipIndex.size} chips `
+      `[Forge library-note catalog] loaded ${this.libraryNoteIndex.size} chips `
       + `(${domains.map(d => `${d}: ${perDomain[d]?.length ?? 0}`).join(', ')})`,
     );
-    // v0.2.212 — one-shot vault cleanup of forensic engine-chip
+    // v0.2.212 — one-shot vault cleanup of forensic library-note
     // shadows (auto-created empty notes from pre-v0.2.206 Cmd-clicks
     // that didn't get intercepted). Runs async; surfaces via
     // forgeNotice when shadows are removed.
-    void this.cleanupForensicEngineChipShadows();
+    void this.cleanupForensicLibraryNoteShadows();
   }
 
   /** v0.2.214 — Properly trash a forensic shadow file. v0.2.212/213
@@ -2870,16 +2870,16 @@ export default class ForgePlugin extends Plugin {
    *  `play_at_offsets.md`, `play_at_beats.md` at vault root from
    *  pre-v0.2.206 Cmd-clicks. With those present, the v0.2.206
    *  "vault wins" rule kept opening them — cohort never discovered
-   *  EngineChipView. This sweep + the click-time forensic branch in
-   *  decideEngineChipClick close the trap.
+   *  LibraryNoteView. This sweep + the click-time forensic branch in
+   *  decideLibraryNoteClick close the trap.
    */
-  private async cleanupForensicEngineChipShadows(): Promise<void> {
-    if (this.engineChipIndex.size === 0) return;
+  private async cleanupForensicLibraryNoteShadows(): Promise<void> {
+    if (this.libraryNoteIndex.size === 0) return;
     const cleaned: string[] = [];
     const preserved: string[] = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const bare = file.basename;
-      if (!this.engineChipIndex.has(bare)) continue;
+      if (!this.libraryNoteIndex.has(bare)) continue;
       // Plugin-internal paths can never be cohort shadows.
       if (file.path.includes('.obsidian/')) continue;
       if (file.path.includes('assets/vaults/')) continue;
@@ -2889,7 +2889,7 @@ export default class ForgePlugin extends Plugin {
         raw = await this.app.vault.cachedRead(file);
       } catch (e) {
         console.error(
-          `cleanupForensicEngineChipShadows: read failed for ${file.path}`, e,
+          `cleanupForensicLibraryNoteShadows: read failed for ${file.path}`, e,
         );
         continue;
       }
@@ -2904,17 +2904,17 @@ export default class ForgePlugin extends Plugin {
     }
     if (cleaned.length > 0) {
       await this.forgeOutput(
-        `Forge: removed ${cleaned.length} forensic engine-chip shadow note(s): `
+        `Forge: removed ${cleaned.length} forensic library-note shadow note(s): `
           + cleaned.join(', '),
         'info',
       );
       console.warn(
-        `[Forge engine-chip shadow cleanup] removed ${cleaned.length}; `
+        `[Forge library-note shadow cleanup] removed ${cleaned.length}; `
           + `preserved ${preserved.length}.`,
       );
     } else if (preserved.length > 0) {
       console.warn(
-        `[Forge engine-chip shadow cleanup] no forensic shadows; `
+        `[Forge library-note shadow cleanup] no forensic shadows; `
           + `preserved ${preserved.length} intentional shadow(s): `
           + preserved.join(', '),
       );
@@ -2925,42 +2925,42 @@ export default class ForgePlugin extends Plugin {
    *  the forensic-shadow heuristic. Fast-rejects non-chip wikilinks
    *  so 95%+ of cohort clicks (snippet → snippet) skip the async
    *  path entirely. When the bare target matches a chip, defers the
-   *  decision to handleEngineChipClickAsync because the classifier
+   *  decision to handleLibraryNoteClickAsync because the classifier
    *  needs the resolved file's raw content (async vault read).
    */
-  private maybeInterceptEngineChipClick(evt: MouseEvent): void {
+  private maybeInterceptLibraryNoteClick(evt: MouseEvent): void {
     // v0.2.213 — CM6 fallback. v0.2.206-v0.2.212 used only
     // `closest('a.internal-link')`, which is the reading-mode-only
     // shape. Source mode + many live-preview shapes use CM6
     // decorated spans with class `.cm-hmd-internal-link` /
-    // `.cm-link` and NO surrounding <a>. resolveEngineChipClickTarget
+    // `.cm-link` and NO surrounding <a>. resolveLibraryNoteClickTarget
     // walks the full selector chain + data-href / href / textContent
     // fallback. Per v0.2.211 + v0.2.212 driver smokes: without this,
     // the interceptor never fired in source mode → Obsidian default
     // link-create reopened forensic shadows even after the v0.2.212
     // cleanup ran. Mirrors the working pattern at main.ts:721-726 +
     // edges-hover.ts:65-67.
-    const resolved = resolveEngineChipClickTarget(
+    const resolved = resolveLibraryNoteClickTarget(
       evt.target as Element | null,
     );
     if (!resolved) return;
     // Fast reject: not a chip → let Obsidian handle (snippet →
     // snippet wikilinks etc. take zero-latency default path).
-    if (!this.engineChipIndex.has(resolved.bare)) return;
+    if (!this.libraryNoteIndex.has(resolved.bare)) return;
     // Defer for async classification + dispatch.
     evt.preventDefault();
     evt.stopPropagation();
-    void this.handleEngineChipClickAsync(resolved.href, resolved.bare);
+    void this.handleLibraryNoteClickAsync(resolved.href, resolved.bare);
   }
 
-  /** v0.2.212 — async dispatch for engine-chip wikilink clicks.
+  /** v0.2.212 — async dispatch for library-note wikilink clicks.
    *  Reads the resolved file's content (if any), runs the forensic-
-   *  shadow classifier via decideEngineChipClick, then either:
-   *    - opens EngineChipView (and trashes the shadow if forensic)
+   *  shadow classifier via decideLibraryNoteClick, then either:
+   *    - opens LibraryNoteView (and trashes the shadow if forensic)
    *    - opens the resolved vault note (intentional shadow)
    *    - falls through to Obsidian's default link-create behavior
    */
-  private async handleEngineChipClickAsync(
+  private async handleLibraryNoteClickAsync(
     href: string, bare: string,
   ): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -2974,17 +2974,17 @@ export default class ForgePlugin extends Plugin {
         rawContent = await this.app.vault.cachedRead(resolved);
       } catch (e) {
         console.error(
-          'handleEngineChipClickAsync: vault.cachedRead failed', e,
+          'handleLibraryNoteClickAsync: vault.cachedRead failed', e,
         );
       }
     }
-    const decision = decideEngineChipClick(
+    const decision = decideLibraryNoteClick(
       href,
       resolved !== null,
-      this.engineChipIndex.has(bare),
+      this.libraryNoteIndex.has(bare),
       rawContent,
     );
-    if (decision.action === 'open-engine-chip') {
+    if (decision.action === 'open-library-note') {
       if (decision.shadowToCleanup && resolved) {
         if (await this.trashForensicShadow(resolved)) {
           await this.forgeOutput(
@@ -2992,7 +2992,7 @@ export default class ForgePlugin extends Plugin {
           );
         }
       }
-      await this.openEngineChipView(decision.chipName);
+      await this.openLibraryNoteView(decision.chipName);
       return;
     }
     // open-vault-note path.
@@ -3006,11 +3006,11 @@ export default class ForgePlugin extends Plugin {
     await this.app.workspace.openLinkText(href, sourcePath, false);
   }
 
-  /** Open EngineChipView for the named chip, splitting the active
+  /** Open LibraryNoteView for the named chip, splitting the active
    *  leaf so the Recipe stays open. No-op if the chip is unknown
    *  (defensive — interceptor shouldn't call this in that case). */
-  private async openEngineChipView(chipName: string): Promise<void> {
-    if (!this.engineChipIndex.has(chipName)) {
+  private async openLibraryNoteView(chipName: string): Promise<void> {
+    if (!this.libraryNoteIndex.has(chipName)) {
       await this.forgeOutput(
         `Engine chip "${chipName}" not found in catalog.`, 'error',
       );
@@ -3018,7 +3018,7 @@ export default class ForgePlugin extends Plugin {
     }
     const leaf = this.app.workspace.getLeaf('tab');
     await leaf.setViewState({
-      type: ENGINE_CHIP_VIEW_TYPE,
+      type: LIBRARY_NOTE_VIEW_TYPE,
       active: true,
       state: { chipName },
     } as any);

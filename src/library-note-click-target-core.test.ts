@@ -5,7 +5,7 @@
 
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { resolveEngineChipClickTarget } from './engine-chip-click-target-core.ts';
+import { resolveLibraryNoteClickTarget } from './library-note-click-target-core.ts';
 
 /** Minimal Element-like fixture; covers the methods our pure-core uses. */
 function makeEl(
@@ -57,11 +57,11 @@ function selectorIsAnchorClass(cls: string): boolean {
   return false;
 }
 
-describe('resolveEngineChipClickTarget', () => {
+describe('resolveLibraryNoteClickTarget', () => {
   test('reading-mode anchor with data-href → resolved', () => {
     const el = makeEl('internal-link', { 'data-href': 'play_at_offsets' });
     el.tagName = 'A';
-    const out = resolveEngineChipClickTarget(el);
+    const out = resolveLibraryNoteClickTarget(el);
     assert.ok(out);
     assert.equal(out!.bare, 'play_at_offsets');
     assert.equal(out!.href, 'play_at_offsets');
@@ -69,21 +69,21 @@ describe('resolveEngineChipClickTarget', () => {
 
   test('CM6 source-mode .cm-hmd-internal-link with data-href → resolved', () => {
     const el = makeEl('cm-hmd-internal-link', { 'data-href': 'kick' });
-    const out = resolveEngineChipClickTarget(el);
+    const out = resolveLibraryNoteClickTarget(el);
     assert.ok(out);
     assert.equal(out!.bare, 'kick');
   });
 
   test('CM6 .cm-link without data-href but with textContent → resolved via text', () => {
     const el = makeEl('cm-link', {}, 'play_at_beats');
-    const out = resolveEngineChipClickTarget(el);
+    const out = resolveLibraryNoteClickTarget(el);
     assert.ok(out);
     assert.equal(out!.bare, 'play_at_beats');
   });
 
   test('CM6 textContent with surrounding [[ ]] → stripped', () => {
     const el = makeEl('cm-link', {}, '[[snare]]');
-    const out = resolveEngineChipClickTarget(el);
+    const out = resolveLibraryNoteClickTarget(el);
     assert.ok(out);
     assert.equal(out!.bare, 'snare');
   });
@@ -96,30 +96,30 @@ describe('resolveEngineChipClickTarget', () => {
     // the fixture matches Obsidian where the inner text doesn't carry
     // the parent's class.
     text.classList = new Set(['cm-hmd-internal-link-text']);
-    const out = resolveEngineChipClickTarget(text);
+    const out = resolveLibraryNoteClickTarget(text);
     assert.ok(out);
     assert.equal(out!.bare, 'kick');
   });
 
   test('wikilink with alias/heading → bare strips them', () => {
     const el = makeEl('cm-hmd-internal-link', { 'data-href': 'kick#args|the chip' });
-    const out = resolveEngineChipClickTarget(el);
+    const out = resolveLibraryNoteClickTarget(el);
     assert.ok(out);
     assert.equal(out!.bare, 'kick');
     assert.equal(out!.href, 'kick#args|the chip');
   });
 
   test('null target → null', () => {
-    assert.equal(resolveEngineChipClickTarget(null), null);
+    assert.equal(resolveLibraryNoteClickTarget(null), null);
   });
 
   test('non-link element → null', () => {
     const el = makeEl('paragraph', {}, 'just text');
-    assert.equal(resolveEngineChipClickTarget(el), null);
+    assert.equal(resolveLibraryNoteClickTarget(el), null);
   });
 
   test('link element with empty data-href + empty text → null', () => {
     const el = makeEl('cm-link', { 'data-href': '' }, '');
-    assert.equal(resolveEngineChipClickTarget(el), null);
+    assert.equal(resolveLibraryNoteClickTarget(el), null);
   });
 });

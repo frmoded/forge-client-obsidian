@@ -2,7 +2,7 @@
 // `assets/engine/forge/<domain>/lib.py` source text via regex to
 // extract chip metadata: name, first-paragraph docstring, parameter
 // names, and the full def-block source. Output drives the
-// EngineChipView (Cmd-click on [[chip]] in a Recipe shows the
+// LibraryNoteView (Cmd-click on [[chip]] in a Recipe shows the
 // Description + Recipe-signature + Python facets).
 //
 // Why TS-side and not the service introspector: Cmd-click needs an
@@ -19,7 +19,7 @@
 // sufficient for catalog display.
 
 /** One chip's metadata extracted from a lib.py source file. */
-export interface EngineChip {
+export interface LibraryNote {
   name: string;
   /** First paragraph of the docstring, internal whitespace collapsed.
    *  Empty string if no docstring. */
@@ -33,7 +33,7 @@ export interface EngineChip {
   pythonSource: string;
 }
 
-/** Parse a Python lib.py source file and return one EngineChip per
+/** Parse a Python lib.py source file and return one LibraryNote per
  *  top-level public function (no underscore prefix, no *args-only).
  *
  *  Limitations vs the service's ast.unparse:
@@ -44,9 +44,9 @@ export interface EngineChip {
  *    indent is `> 0` (or blank) belongs to the def block; the next
  *    line at indent 0 ends it.
  */
-export function parseEngineLib(source: string): EngineChip[] {
+export function parseEngineLib(source: string): LibraryNote[] {
   const lines = source.split('\n');
-  const chips: EngineChip[] = [];
+  const chips: LibraryNote[] = [];
 
   let i = 0;
   while (i < lines.length) {
@@ -123,11 +123,11 @@ export function parseEngineLib(source: string): EngineChip[] {
   return chips;
 }
 
-/** Synthesize the Recipe-facet signature line for an engine chip.
+/** Synthesize the Recipe-facet signature line for an library note.
  *  Per Phase 1 §3.4 pick A: kwarg form for positional chips,
  *  shorthand for zero-arg, special-case the print statement form.
  */
-export function synthesizeRecipeSignature(chip: EngineChip): string {
+export function synthesizeRecipeSignature(chip: LibraryNote): string {
   if (chip.name === 'print') {
     return `# Statement shorthand — pass the value as a positional arg:\n[[print]] <expr>.`;
   }
@@ -139,20 +139,20 @@ export function synthesizeRecipeSignature(chip: EngineChip): string {
 }
 
 /** Index lookup: returns the chip whose name matches, or null. */
-export function findEngineChip(
-  catalog: ReadonlyMap<string, EngineChip>,
+export function findLibraryNote(
+  catalog: ReadonlyMap<string, LibraryNote>,
   name: string,
-): EngineChip | null {
+): LibraryNote | null {
   return catalog.get(name) ?? null;
 }
 
 /** Build a name → chip map for fast lookup at click time.
  *  Combines chips across all domains; on name collision the latest
  *  domain wins (mirrors the engine's last-vault-wins resolution). */
-export function buildEngineChipIndex(
-  perDomain: Record<string, EngineChip[]>,
-): Map<string, EngineChip> {
-  const out = new Map<string, EngineChip>();
+export function buildLibraryNoteIndex(
+  perDomain: Record<string, LibraryNote[]>,
+): Map<string, LibraryNote> {
+  const out = new Map<string, LibraryNote>();
   for (const chips of Object.values(perDomain)) {
     for (const c of chips) out.set(c.name, c);
   }

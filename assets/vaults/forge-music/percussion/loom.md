@@ -26,17 +26,20 @@ a parameter and the architecture stays whole.
 # Recipe
 
 Let cell = Call [[phase_cell]].
-Return Call [[phase_shifter]] with cell=cell, voices=4, bars_per_section=4, total_sections=8, shift_per_section_eighths=1, ts_str="12/8", bpm=96, velocity_profile="human".
+Return Call [[phase_shifter]] with cell=cell, num_voices=4, bars_per_section=4, total_sections=8, shift_per_section_eighths=1, ts_str="12/8", bpm=96, velocity_profile="human".
 
 # Python
 
 ```python
 def compute(context):
-    cell = context.compute("phase_cell")
-    score = context.compute(
-        "phase_shifter",
-        cell,
-        voices=4,
+    # v0.7.0: phase_cell / phase_shifter are now library notes in
+    # forge.music.lib; called directly. phase_shifter's `voices` kwarg
+    # was renamed to `num_voices` to avoid shadowing the lib's voices()
+    # composition chip.
+    cell = phase_cell()
+    return phase_shifter(
+        cell=cell,
+        num_voices=4,
         bars_per_section=4,
         total_sections=8,
         shift_per_section_eighths=1,
@@ -44,7 +47,6 @@ def compute(context):
         bpm=96,
         velocity_profile='human',
     )
-    return score
 ```
 
 # Dependencies

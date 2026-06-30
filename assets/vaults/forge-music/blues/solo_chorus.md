@@ -4,19 +4,13 @@ type: action
 
 # Description
 
-The instrumental chorus — 12 bars, no vocal. The guitar takes the
-lead via [[guitar_solo_chorus]]; the harmonic frame from [[form]]
-continues underneath. Sits between vocal choruses 2 and 3 in the
-song.
-
-Composes [[form]]'s harmonic progression with [[guitar_solo_chorus]]'s
-improvisational solo line, played simultaneously. No new musical
-material introduced at this level — pure structural composition of
-the two leaves.
-
-Inherits key, time signature (12/8), and tempo (around 70 BPM,
-eighth-note triplet feel) from [[form]] so the chorus stays coherent
-with the rest of the song under any of those changing.
+The instrumental chorus — 12 bars, no vocal. The electric guitar
+takes the lead in minor pentatonic with blue notes; the harmonic
+frame from [[form]] continues underneath. The moment the song
+stops singing about the feeling and just shows it, sitting between
+the second and third vocal choruses. 12/8, eighth-note triplet
+feel, around 70 BPM. Denser than the vocal choruses — the
+emotional arc going up rather than across.
 
 ## Inputs
 
@@ -32,8 +26,10 @@ Return Call [[voices_list]] with sections=[harmonic_frame, solo_line].
 
 ```python
 def compute(context):
-    harmonic_frame = context.compute("form")
-    solo_line = context.compute("guitar_solo_chorus")
+    # v0.7.0: form / guitar_solo_chorus are now library notes in
+    # forge.music.lib; called directly instead of via context.compute.
+    harmonic_frame = form()
+    solo_line = guitar_solo_chorus()
     return voices(harmonic_frame, solo_line)
 ```
 

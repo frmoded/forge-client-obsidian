@@ -1,4 +1,4 @@
-// v0.2.206 — pure-core tests for the engine-chip catalog parser.
+// v0.2.206 — pure-core tests for the library-note catalog parser.
 
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert/strict';
@@ -7,9 +7,9 @@ import * as fs from 'node:fs';
 import {
   parseEngineLib,
   synthesizeRecipeSignature,
-  buildEngineChipIndex,
-  findEngineChip,
-} from './engine-chip-catalog-core.ts';
+  buildLibraryNoteIndex,
+  findLibraryNote,
+} from './library-note-catalog-core.ts';
 
 const SAMPLE_LIB = `from music21 import note
 
@@ -143,20 +143,20 @@ describe('synthesizeRecipeSignature', () => {
   });
 });
 
-describe('buildEngineChipIndex + findEngineChip', () => {
+describe('buildLibraryNoteIndex + findLibraryNote', () => {
   test('builds name → chip map across domains', () => {
     const music = parseEngineLib(SAMPLE_LIB);
-    const index = buildEngineChipIndex({ music });
-    assert.ok(findEngineChip(index, 'kick'));
-    assert.ok(findEngineChip(index, 'play_at_beats'));
-    assert.equal(findEngineChip(index, 'nonexistent'), null);
+    const index = buildLibraryNoteIndex({ music });
+    assert.ok(findLibraryNote(index, 'kick'));
+    assert.ok(findLibraryNote(index, 'play_at_beats'));
+    assert.equal(findLibraryNote(index, 'nonexistent'), null);
   });
 
   test('collision: later domain wins', () => {
     const a: any = { name: 'foo', description: 'A', inputs: [], pythonSource: '' };
     const b: any = { name: 'foo', description: 'B', inputs: [], pythonSource: '' };
-    const index = buildEngineChipIndex({ first: [a], second: [b] });
-    assert.equal(findEngineChip(index, 'foo')?.description, 'B');
+    const index = buildLibraryNoteIndex({ first: [a], second: [b] });
+    assert.equal(findLibraryNote(index, 'foo')?.description, 'B');
   });
 });
 
