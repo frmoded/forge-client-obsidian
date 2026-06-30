@@ -907,10 +907,13 @@ class InitializeForgeVaultWizard extends Modal {
 
     // 4. starter content
     if (this.flavor === 'quick') {
+      // v0.2.231 — V2 shape. Description is intent-level prose; Recipe
+      // is empty so cohort can Forge-click and watch implicit-locking
+      // generate Python from a [[print]] call they author themselves.
       await this.createIfAbsent('forge-hello.md',
-        '---\ntype: action\ninputs: []\ndescription: hello forge\n---\n\n' +
-        "# English\n\nReturn the string 'hello forge'.\n\n# Python\n\n" +
-        '```python\n```\n');
+        '---\ntype: action\ndescription: hello forge\n---\n\n' +
+        '# Description\n\nReturn the string "hello forge".\n\n' +
+        '# Recipe\n\nCall [[print]] with text="hello forge".\n');
     } else if (this.flavor === 'moda' || this.flavor === 'moda-learning' ||
                this.flavor === 'music' ||
                (this.flavor === 'multi' && domains.length > 0)) {

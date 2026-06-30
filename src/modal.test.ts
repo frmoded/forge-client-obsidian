@@ -2,68 +2,48 @@
 // modal.ts. The modal UI itself depends on the obsidian runtime; we
 // test only the body-emission functions, which are static + pure.
 //
-// Covers #6 from the v0.2.77 bundle prompt — modal canonical option.
+// v0.2.231 — actionTemplate now emits V2 shape (Description + Recipe).
+// canonicalActionTemplate retired in favor of the unified V2 template.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { actionTemplate, canonicalActionTemplate } from './modal-templates-core.ts';
+import { actionTemplate } from './modal-templates-core.ts';
 
-test('actionTemplate (legacy free-English) declares type: action', () => {
+test('actionTemplate declares type: action', () => {
   const body = actionTemplate('my_snippet');
   assert.match(body, /^type:\s*action$/m);
 });
 
-test('actionTemplate emits # English heading', () => {
+test('actionTemplate emits # Description heading (V2 shape)', () => {
   const body = actionTemplate('my_snippet');
-  assert.match(body, /^# English$/m);
+  assert.match(body, /^# Description$/m);
 });
 
-test('actionTemplate emits # Python stub (legacy shape)', () => {
+test('actionTemplate emits # Recipe heading (V2 shape)', () => {
   const body = actionTemplate('my_snippet');
-  assert.match(body, /^# Python$/m);
-  assert.match(body, /def compute\(context\):/);
+  assert.match(body, /^# Recipe$/m);
 });
 
-test('actionTemplate does NOT declare facet_form: canonical', () => {
+test('actionTemplate does NOT emit # English heading (V1 retired)', () => {
   const body = actionTemplate('my_snippet');
-  assert.doesNotMatch(body, /^facet_form:\s*canonical$/m);
+  assert.doesNotMatch(body, /^# English$/m);
 });
 
-test('canonicalActionTemplate does NOT declare facet_form (v0.2.121 — field retired)', () => {
-  // v0.2.121 — facet_form removed (Option C plugin-side routing).
-  // The engine no longer reads the field; templates no longer emit it.
-  const body = canonicalActionTemplate('my_snippet');
-  assert.doesNotMatch(body, /^facet_form:/m);
-});
-
-test('canonicalActionTemplate emits # English heading', () => {
-  const body = canonicalActionTemplate('my_snippet');
-  assert.match(body, /^# English$/m);
-});
-
-test('canonicalActionTemplate does NOT emit # Python stub', () => {
-  // Canonical compiles fresh via resolve_action_code per B7.3 — the
-  // # Python heading appears only after the first Forge-click writes
-  // the cache. Authoring template MUST NOT pre-seed it.
-  const body = canonicalActionTemplate('my_snippet');
+test('actionTemplate does NOT emit # Python stub (implicit-locking generates it)', () => {
+  const body = actionTemplate('my_snippet');
   assert.doesNotMatch(body, /^# Python$/m);
+  assert.doesNotMatch(body, /def compute\(context\):/);
 });
 
-test('canonicalActionTemplate declares type: action', () => {
-  const body = canonicalActionTemplate('my_snippet');
-  assert.match(body, /^type:\s*action$/m);
+test('actionTemplate does NOT declare inputs: [] (V1 frontmatter retired)', () => {
+  const body = actionTemplate('my_snippet');
+  assert.doesNotMatch(body, /^inputs:\s*\[\]$/m);
 });
 
-test('canonicalActionTemplate seed body uses canonical [[print]] call', () => {
-  // Demonstrates the call syntax + a builtin sibling reference.
-  const body = canonicalActionTemplate('my_snippet');
-  assert.match(body, /Do \[\[print\]\]\("hello, world"\)\./);
-});
-
-test('canonicalActionTemplate description echoes the snippet name', () => {
-  const body = canonicalActionTemplate('greeter');
-  assert.match(body, /^description:\s*greeter$/m);
+test('actionTemplate does NOT declare facet_form (v0.2.121 — field retired)', () => {
+  const body = actionTemplate('my_snippet');
+  assert.doesNotMatch(body, /^facet_form:/m);
 });
 
 test('actionTemplate description echoes the snippet name', () => {

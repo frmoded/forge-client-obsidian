@@ -1,58 +1,37 @@
-// v0.2.77 — pure-core for the snippet-template emitters used by the
-// New Snippet modal. Lives separately from modal.ts because modal.ts
-// imports from 'obsidian' and uses TypeScript parameter properties,
-// neither of which work in node's strip-only-mode TS runner. The
-// templates themselves are static, string-only, and have no runtime
-// dependencies — extracting them keeps them under test coverage.
+// v0.2.231 — pure-core for the snippet-template emitters used by the
+// New Snippet modal. The V1 free-English template + the canonical
+// `# English` template are retired; the V2 unified shape is the only
+// option: `# Description` + `# Recipe`, with no `# Python` (let
+// implicit-locking generate it on first Forge-click) and no
+// `inputs: []` (V2 frontmatter is type-only).
 //
-// modal.ts re-exports these via `export { actionTemplate, ... } from
-// './modal-templates-core'` for backward-compat with existing call
-// sites that import from modal.ts.
+// Driver smoke 2026-07-02 Step 5 surfaced that the cohort-facing
+// "create new note" template was still V1 after 30+ V2 releases.
+// Critical regression-by-omission; undermined the V2 paradigm for
+// every new note authored after BRAT update.
+//
+// modal.ts re-exports `actionTemplate` via the existing import path
+// for backward-compat with call sites.
 
-/** Legacy free-English action template. Frontmatter `type: action`
- *  + empty `inputs` + a # English heading + a `# Python` stub with
- *  `def compute(context): pass`. The user authors the English; the
- *  /generate LLM call fills the Python on first Forge-click. */
+/** V2 action template. Frontmatter `type: action` only; body has
+ *  `# Description` (intent-level prose) + `# Recipe` (chip-call
+ *  composition, filled by /generate or hand-authored). No `# Python` —
+ *  S9 implicit-locking generates it from Recipe on first Forge-click.
+ *  No `inputs: []` — V2 frontmatter is type-only. */
 export function actionTemplate(name: string): string {
   return [
     '---',
     'type: action',
     `description: ${name}`,
-    'inputs: []',
     '---',
     '',
-    '# English',
+    '# Description',
     '',
     '',
     '',
-    '---',
+    '# Recipe',
     '',
-    '# Python',
     '',
-    'def compute(context):',
-    '  pass',
-    '',
-  ].join('\n');
-}
-
-/** v0.2.77 — canonical action template. v0.2.121 — facet_form
- *  field removed from emitted frontmatter (Option C plugin-side
- *  routing; engine always attempts E-- transpile). The body has
- *  no `# Python` stub — E-- transpile produces it on demand via
- *  resolve_action_code per B7.3. The user authors only the English
- *  facet. The seed `Do [[print]]("hello, world").` introduces the
- *  canonical call syntax + a builtin sibling reference in one line. */
-export function canonicalActionTemplate(name: string): string {
-  return [
-    '---',
-    'type: action',
-    `description: ${name}`,
-    'inputs: []',
-    '---',
-    '',
-    '# English',
-    '',
-    'Do [[print]]("hello, world").',
     '',
   ].join('\n');
 }
