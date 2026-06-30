@@ -447,7 +447,16 @@ export default class ForgePlugin extends Plugin {
     const spinnerStatusBarItem = this.addStatusBarItem();
     spinnerStatusBarItem.addClass('forge-spinner-status');
     this.spinner = new ForgeSpinner({
-      setText: (s) => spinnerStatusBarItem.setText(s),
+      setText: (s) => {
+        // v0.2.228 diagnostic round 2 — surface the DOM-update step so
+        // driver console output identifies whether `start` fires →
+        // `setText` reaches the DOM update → status bar visually changes
+        // (drain 2026-07-01-2200).
+        try {
+          console.warn(`[spinner-diag] setText DOM update: "${s}"`);
+        } catch { /* console edge case */ }
+        spinnerStatusBarItem.setText(s);
+      },
     });
 
     this.canonicalLayerStatusBarItem = this.addStatusBarItem();
@@ -862,7 +871,18 @@ export default class ForgePlugin extends Plugin {
     this.addCommand({
       id: 'forge-zap-line',
       name: 'Zap line',
-      callback: () => { this.runZapLine(); },
+      callback: () => {
+        // v0.2.228 — wrap with spinner per round-2 audit. Zap-line can
+        // hit the full snippet-run path when there's no zap target on
+        // the line (fallback to runSnippet), and the runSnippet on the
+        // zap target itself is a multi-second pyodide compute.
+        const op = () => this.runZapLine();
+        if (this.spinner) {
+          void this.spinner.wrap('Forge: 🔥 running …', op);
+        } else {
+          void op();
+        }
+      },
     });
 
     // Direct backend access for debugging. The Forge button calls /generate

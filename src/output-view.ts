@@ -158,12 +158,11 @@ export class ForgeOutputView extends ItemView {
 
     const header = contentEl.createDiv({ cls: 'forge-output-header' });
     header.createEl('span', { text: 'Forge Output' });
-    // v0.2.224 — Stop button: silence any active <midi-player> without
-    // tearing down the visual output. Useful when cohort wants to mute
-    // playback but keep the score on screen.
-    header.createEl('button', { text: '⏹ Stop' }).onclick = () => {
-      stopMidiPlayersIn(this.outputEl, (m, e) => console.error(m, e));
-    };
+    // v0.2.228 — Stop button removed per user direction 2026-07-01.
+    // Stop/Clear distinction added marginal UI complexity; cohort can
+    // silence-and-re-render via Clear. The teardown machinery
+    // (stopMidiPlayersIn at every empty point) stays — only the
+    // standalone button DOM goes.
     header.createEl('button', { text: 'Clear' }).onclick = () => {
       // v0.2.224 — silence audio before tearing down DOM. Removing a
       // <midi-player> from the DOM doesn't dispose its audio context;
