@@ -8,6 +8,7 @@ import { ensureWelcomeFiles } from './welcome-files-core.ts';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
 import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-classifier-core.ts';
+import { computeSweepTrashList } from './sweep-bundle-dropped-core.ts';
 export { copyDirRecursive };
 
 // v0.2.64 — names of bundled libraries the auto-extract path may
@@ -717,15 +718,39 @@ export async function sweepBundleDroppedFiles(
 ): Promise<string[]> {
   const adapter = app.vault.adapter;
   const trashed: string[] = [];
-  if (!(await adapter.exists(extractedRoot))) return trashed;
-  if (!(await adapter.exists(bundledRoot))) return trashed;
+  if (!(await adapter.exists(extractedRoot))) {
+    console.log(`[sweep] ${extractedRoot}: extracted root missing; skip`);
+    return trashed;
+  }
+  if (!(await adapter.exists(bundledRoot))) {
+    console.log(`[sweep] ${extractedRoot}: bundled root missing (${bundledRoot}); skip`);
+    return trashed;
+  }
 
   const bundledFiles = await listAllFilesRecursive(adapter, bundledRoot);
   const extractedFiles = await listAllFilesRecursive(adapter, extractedRoot);
+  console.log(
+    `[sweep] ${extractedRoot}: bundled=${bundledFiles.size}, extracted=${extractedFiles.size}`,
+  );
 
-  for (const relPath of extractedFiles) {
-    if (bundledFiles.has(relPath)) continue;
+  const decision = computeSweepTrashList(bundledFiles, extractedFiles);
+  if (decision.bailUnsafeEmptyBundle) {
+    // Safety net: bundled walk returned an empty set. If we proceeded,
+    // every extracted file would be classified as "not in bundle" and
+    // trashed — catastrophic wipe. Refuse.
+    console.error(
+      `[sweep] ${extractedRoot}: bundle walk returned 0 files but extracted has ${extractedFiles.size}. ` +
+      `Refusing to sweep (would wipe the extracted library). Bundle path: ${bundledRoot}`,
+    );
+    return trashed;
+  }
+  console.log(
+    `[sweep] ${extractedRoot}: classification toTrash=${decision.toTrash.length}`,
+  );
+
+  for (const relPath of decision.toTrash) {
     const fullPath = `${extractedRoot}/${relPath}`;
+    console.log(`[sweep] ${extractedRoot}: trashing ${relPath}`);
     const af = app.vault.getAbstractFileByPath(fullPath);
     if (af instanceof TFile) {
       // Detach any leaves displaying the file before trash, mirroring
@@ -760,7 +785,14 @@ export async function sweepBundleDroppedFiles(
       }
       trashed.push(relPath);
     } else {
-      // Not modeled as a TFile — direct adapter.remove.
+      // Not modeled as a TFile — direct adapter.remove. Happens when
+      // the file exists on disk but Obsidian's index doesn't see it
+      // (e.g. plugin extracted the file via adapter.write bypassing
+      // the vault API). Diagnostic log helps drain 2026-07-02-2000
+      // investigation identify this path.
+      console.log(
+        `[sweep] ${extractedRoot}: ${relPath} not in vault index; falling back to adapter.remove`,
+      );
       try {
         await adapter.remove(fullPath);
         trashed.push(relPath);
@@ -770,8 +802,71 @@ export async function sweepBundleDroppedFiles(
     }
   }
 
+  // v0.2.236 — after per-file trash, sweep now-empty directories
+  // that shipped in a prior bundle version but were fully dropped
+  // in the current one. Drain 2026-07-02-2000: driver wants `blues/`
+  // gone as a directory once its 10 files are trashed. Idempotent:
+  // dirs already gone → no-op. Failures log + continue.
+  try {
+    const bundledDirs = await collectExtractedDirsAbsentFromBundle(
+      adapter, bundledRoot, extractedRoot,
+    );
+    for (const dirRel of bundledDirs) {
+      const fullDir = `${extractedRoot}/${dirRel}`;
+      try {
+        const listing = await adapter.list(fullDir);
+        if (listing.files.length === 0 && listing.folders.length === 0) {
+          await adapter.rmdir(fullDir, false);
+          console.log(`[sweep] ${extractedRoot}: removed empty dir ${dirRel}`);
+        }
+      } catch (e) {
+        console.error(`sweepBundleDroppedFiles: empty-dir cleanup failed for ${fullDir}`, e);
+      }
+    }
+  } catch (e) {
+    console.error(`sweepBundleDroppedFiles: empty-dir enumeration failed`, e);
+  }
+
   trashed.sort();
   return trashed;
+}
+
+/** Enumerate every extracted directory (relative path) whose name is
+ *  NOT present as a directory in the bundle. Used to sweep now-empty
+ *  dirs like `blues/` after v0.8.0 rename dropped it. Directories that
+ *  still exist in the bundle stay — even if temporarily empty during
+ *  a transition. */
+async function collectExtractedDirsAbsentFromBundle(
+  adapter: DataAdapter,
+  bundledRoot: string,
+  extractedRoot: string,
+): Promise<string[]> {
+  const bundledDirs = await listAllDirsRecursive(adapter, bundledRoot);
+  const extractedDirs = await listAllDirsRecursive(adapter, extractedRoot);
+  const out: string[] = [];
+  for (const dirRel of extractedDirs) {
+    if (!bundledDirs.has(dirRel)) out.push(dirRel);
+  }
+  // Sort deepest-first so nested empty dirs cleanup before their
+  // parents; simple length-descending sort suffices.
+  out.sort((a, b) => b.length - a.length);
+  return out;
+}
+
+async function listAllDirsRecursive(
+  adapter: DataAdapter,
+  root: string,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  async function walk(dir: string): Promise<void> {
+    const listing = await adapter.list(dir);
+    for (const dirPath of listing.folders) {
+      out.add(dirPath.slice(root.length + 1));
+      await walk(dirPath);
+    }
+  }
+  await walk(root);
+  return out;
 }
 
 /** v0.2.233 — refresh outdated welcome notes (drain 2026-07-02-1630).

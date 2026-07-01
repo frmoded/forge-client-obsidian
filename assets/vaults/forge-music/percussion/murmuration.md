@@ -1,6 +1,5 @@
 ---
 type: action
-english_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ---
 
 # Description
@@ -18,8 +17,8 @@ with kick alone again. The arc is the piece.
 
 Velocity carries the dynamic story: quiet at the edges, loud at the peak.
 Articulation distinguishes closed-hi-hat calm from open-hi-hat punch. The 8
-callable section snippets live in `percussion_lab/` so other pieces (like
-[[wake]]) can use the same vocabulary with different proportions.
+section notes live in `percussion_lab/`; other pieces reuse them with
+different proportions.
 
 ## Inputs
 

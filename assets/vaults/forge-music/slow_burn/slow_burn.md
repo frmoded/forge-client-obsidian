@@ -11,8 +11,7 @@ comes back changed. Around 70 BPM, eighth-note triplet feel.
 
 The drum arc shapes the dynamics: sparse for the intro, building
 through standard for the second vocal, driving under the solo, then
-back to standard for the closing chorus. The choruses are vocal
-([[chorus]]) except the third, which is the instrumental [[solo_chorus]].
+back to standard for the closing chorus.
 
 ## Inputs
 

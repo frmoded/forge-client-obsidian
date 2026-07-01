@@ -245,6 +245,10 @@ export class ForgeSnippetModal extends Modal {
   private contentTypeSetting?: Setting;
   private dropSetting?: Setting;
   private dropZoneEl?: HTMLElement;
+  // v0.2.236 drain 2026-07-02-2130 — inline validation error el.
+  // Shown when Create hits a duplicate path or other pre-flight
+  // failure; dialog stays open so cohort can change the name.
+  private validationEl?: HTMLElement;
   // For binary content_types: the file the user dropped (or picked). Held in
   // memory until submit; on submit we write it to <vault>/_assets/<name><ext>
   // and emit a wrapper .md with content_ref pointing there.
@@ -305,6 +309,18 @@ export class ForgeSnippetModal extends Modal {
 
     this.updateContentTypeVisibility();
 
+    // v0.2.236 drain 2026-07-02-2130 — inline validation area.
+    // Rendered ABOVE the Create button so the error is visible right
+    // where cohort will click next. Hidden by default; populated on
+    // duplicate-name or other pre-flight failure.
+    this.validationEl = contentEl.createEl('div', {
+      cls: 'forge-modal-validation',
+    });
+    this.validationEl.style.display = 'none';
+    this.validationEl.style.color = 'var(--text-error)';
+    this.validationEl.style.marginTop = '8px';
+    this.validationEl.style.marginBottom = '8px';
+
     new Setting(contentEl)
       .addButton(btn =>
         btn
@@ -316,6 +332,20 @@ export class ForgeSnippetModal extends Modal {
 
   onClose() {
     this.contentEl.empty();
+  }
+
+  /** v0.2.236 drain 2026-07-02-2130 — show an inline validation error.
+   *  Keeps the dialog open so cohort can change the name and retry. */
+  private showValidationError(message: string): void {
+    if (!this.validationEl) return;
+    this.validationEl.setText(message);
+    this.validationEl.style.display = 'block';
+  }
+
+  private clearValidationError(): void {
+    if (!this.validationEl) return;
+    this.validationEl.setText('');
+    this.validationEl.style.display = 'none';
   }
 
   private attachDropHandlers(el: HTMLElement) {
@@ -359,8 +389,10 @@ export class ForgeSnippetModal extends Modal {
   }
 
   private async submit() {
+    this.clearValidationError();
     if (!this.snippetName) {
-      void forgeNotice(this.app, 'Forge: Snippet name is required.');
+      this.showValidationError('Snippet name is required.');
+      void forgeNotice(this.app, 'Note creation failed: name is required.', 'error');
       return;
     }
 
@@ -370,9 +402,25 @@ export class ForgeSnippetModal extends Modal {
     }
 
     const path = `${this.snippetName}.md`;
-    // v0.2.108 — single default action template (free-English). The
-    // v0.2.77 canonical-vs-free-english selector was retired per
-    // cohort UX cleanup.
+
+    // v0.2.236 drain 2026-07-02-2130 — pre-flight duplicate check.
+    // Path-scoped only (per §1.3 pushback): naming a note the same as
+    // one in another subdirectory is fine — Forge resolves by path.
+    // Only the EXACT PATH the new note would land at gets checked.
+    const existing = this.app.vault.getAbstractFileByPath(path);
+    if (existing) {
+      this.showValidationError(
+        `A note named "${this.snippetName}" already exists at ${path}. ` +
+        `Choose a different name or open the existing note.`,
+      );
+      void forgeNotice(
+        this.app,
+        `Note creation failed: "${path}" already exists.`,
+        'error',
+      );
+      return;
+    }
+
     const content = this.snippetType === 'data'
       ? dataTemplate(this.snippetName, this.contentType)
       : actionTemplate(this.snippetName);
@@ -380,12 +428,24 @@ export class ForgeSnippetModal extends Modal {
     let file;
     try {
       file = await this.app.vault.create(path, content);
-    } catch {
-      void forgeNotice(this.app, `Forge: Could not create file — does it already exist?`);
+    } catch (e) {
+      const cause = e instanceof Error ? e.message : String(e);
+      this.showValidationError(
+        `Could not create "${path}" — ${cause}. Check the name and retry.`,
+      );
+      void forgeNotice(
+        this.app,
+        `Note creation failed: vault.create raised — ${cause}`,
+        'error',
+      );
       return;
     }
 
-    void forgeNotice(this.app, `Forge: Created ${path}`);
+    void forgeNotice(
+      this.app,
+      `Created ${this.snippetType} note: ${path}`,
+      'success',
+    );
     this.close();
 
     // Open the new file so the user can immediately start authoring — the
@@ -401,14 +461,51 @@ export class ForgeSnippetModal extends Modal {
   // Binary submit: copy the dropped bytes into <vault>/_assets/<name><ext>,
   // then write the wrapper .md with content_ref pointing at the asset.
   private async submitBinary() {
+    this.clearValidationError();
     if (!this.droppedFile) {
-      void forgeNotice(this.app, 'Forge: drop a file first — binary data snippets need an asset.');
+      this.showValidationError(
+        'Drop a file first — binary data snippets need an asset.',
+      );
+      void forgeNotice(
+        this.app,
+        'Note creation failed: binary data snippet needs an asset (no file dropped).',
+        'error',
+      );
       return;
     }
 
     const ext = extensionFor(this.contentType, this.droppedFile.name);
     const assetRel = `_assets/${this.snippetName}${ext}`;
     const mdRel = `${this.snippetName}.md`;
+
+    // v0.2.236 drain 2026-07-02-2130 — pre-flight duplicate check
+    // on both the wrapper .md AND the asset file. Either conflict
+    // aborts + keeps dialog open.
+    const existingMd = this.app.vault.getAbstractFileByPath(mdRel);
+    if (existingMd) {
+      this.showValidationError(
+        `A note named "${this.snippetName}" already exists at ${mdRel}. ` +
+        `Choose a different name.`,
+      );
+      void forgeNotice(
+        this.app,
+        `Note creation failed: "${mdRel}" already exists.`,
+        'error',
+      );
+      return;
+    }
+    const existingAsset = this.app.vault.getAbstractFileByPath(assetRel);
+    if (existingAsset) {
+      this.showValidationError(
+        `An asset already exists at ${assetRel}. Choose a different name.`,
+      );
+      void forgeNotice(
+        this.app,
+        `Note creation failed: asset "${assetRel}" already exists.`,
+        'error',
+      );
+      return;
+    }
 
     // Ensure the assets dir exists. createFolder throws if it already does;
     // we swallow that and continue.
@@ -423,7 +520,13 @@ export class ForgeSnippetModal extends Modal {
       buf = await this.droppedFile.arrayBuffer();
     } catch (e) {
       console.error('Forge: failed to read dropped file bytes', e);
-      void forgeNotice(this.app, 'Forge: could not read dropped file — check console.');
+      const cause = e instanceof Error ? e.message : String(e);
+      this.showValidationError(`Could not read dropped file — ${cause}.`);
+      void forgeNotice(
+        this.app,
+        `Note creation failed: could not read dropped file — ${cause}`,
+        'error',
+      );
       return;
     }
 
@@ -431,7 +534,15 @@ export class ForgeSnippetModal extends Modal {
       await this.app.vault.createBinary(assetRel, buf);
     } catch (e) {
       console.error('Forge: createBinary failed', e);
-      void forgeNotice(this.app, `Forge: could not write ${assetRel} — does it already exist?`);
+      const cause = e instanceof Error ? e.message : String(e);
+      this.showValidationError(
+        `Could not write asset ${assetRel} — ${cause}.`,
+      );
+      void forgeNotice(
+        this.app,
+        `Note creation failed: createBinary raised — ${cause}`,
+        'error',
+      );
       return;
     }
 
@@ -441,11 +552,23 @@ export class ForgeSnippetModal extends Modal {
       mdFile = await this.app.vault.create(mdRel, md);
     } catch (e) {
       console.error('Forge: create wrapper .md failed', e);
-      void forgeNotice(this.app, `Forge: wrote ${assetRel} but could not create ${mdRel} — does it already exist?`);
+      const cause = e instanceof Error ? e.message : String(e);
+      this.showValidationError(
+        `Wrote ${assetRel} but could not create wrapper .md — ${cause}.`,
+      );
+      void forgeNotice(
+        this.app,
+        `Note creation failed: wrote ${assetRel} but wrapper .md — ${cause}`,
+        'error',
+      );
       return;
     }
 
-    void forgeNotice(this.app, `Forge: Created ${mdRel} + ${assetRel}`);
+    void forgeNotice(
+      this.app,
+      `Created data note: ${mdRel} + ${assetRel}`,
+      'success',
+    );
     this.close();
     try {
       await this.app.workspace.getLeaf(false).openFile(mdFile);

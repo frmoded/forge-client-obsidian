@@ -713,11 +713,10 @@ export default class ForgePlugin extends Plugin {
     // palette is empty — the view itself renders an explanatory
     // empty-state message.
     await this.reloadChipPalette();
-    this.addCommand({
-      id: 'forge-open-chips',
-      name: 'Open chips palette',
-      callback: () => { this.openChipsView(); },
-    });
+    // v0.2.236 drain 2026-07-02-2030: `forge-open-chips` retired. UI
+    // alt: puzzle icon in the editor action row (context-gated on
+    // chip-showing notes) + "Open chips palette" in the Forge
+    // ribbon menu.
     this.addCommand({
       id: 'forge-refresh-chips',
       name: 'Refresh chip palette',
@@ -1715,11 +1714,16 @@ export default class ForgePlugin extends Plugin {
   // wins), so re-firing for an already-registered domain is safe.
   public registerDomainCommands(domain: string): void {
     if (domain === 'moda') {
-      this.addCommand({
-        id: 'forge-open-moda',
-        name: 'Open MoDa simulation',
-        callback: () => { this.openModaView(); },
-      });
+      // v0.2.236 drain 2026-07-02-2030: `forge-open-moda` retired.
+      // UI alts: "Open MoDa simulation" in the Forge ribbon menu +
+      // Forge-click on a moda action note (openModaView is invoked
+      // via decideModaDispatchOutcome).
+      //
+      // `forge-step-moda` KEPT — no UI alt exists today. The Forge
+      // menu previously carried it but it was removed intentionally
+      // (per the comment in forge-action.ts:150). Adding a Step
+      // button to the moda iframe control bar is out of scope; the
+      // command stays as the sole invocation path.
       this.addCommand({
         id: 'forge-step-moda',
         name: 'Step MoDa simulation',
