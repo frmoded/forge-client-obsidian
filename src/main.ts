@@ -2662,6 +2662,20 @@ export default class ForgePlugin extends Plugin {
     }
     const host = await hostManager.getInstance();
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    // v0.2.235 — sync file body into MEMFS before resolveActionCode.
+    // Newly-created notes (Cmd-P → New Snippet) exist on Obsidian's
+    // disk but not in pyodide's MEMFS or SnippetRegistry until the
+    // first sync. Without this, resolveActionCode's registry.resolve
+    // throws SnippetResolutionError trying to look up the note itself.
+    // Drain 2026-07-02-1900. Mirrors forgeSnippet's pre-flight sync at
+    // line 2132.
+    try {
+      await host.syncUserVaultFile(view.file.path, body);
+    } catch (e) {
+      console.error('togglePythonVisibility: MEMFS sync failed', e);
+      // Continue — resolveActionCode may still work if the registry
+      // already has a stale entry.
+    }
     let python: string | null = null;
     try {
       python = await host.resolveActionCode(snippetId, { force: true });
