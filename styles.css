@@ -990,6 +990,17 @@
   opacity: 0.75;
 }
 
+/* v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
+ * `— reference` widget rendered after non-canonical facet headings.
+ * Inherits the heading's font weight but dims to match the stale
+ * body's opacity so the whole facet reads as documentation-only. */
+.forge-facet-reference-suffix {
+  opacity: 0.5;
+  font-style: italic;
+  font-weight: normal;
+  color: var(--text-muted);
+}
+
 /* v0.2.205 — Phase 2.5 §2.2 + §2.3 niceties: status bar entry +
  * confirm modal button row. */
 .forge-canonical-layer-status {

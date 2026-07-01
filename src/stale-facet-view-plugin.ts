@@ -16,7 +16,7 @@
 // re-paints on every doc change so a stale flash during the async gap
 // is acceptable.
 
-import { ViewPlugin, type ViewUpdate, type EditorView, Decoration, type DecorationSet } from '@codemirror/view';
+import { ViewPlugin, type ViewUpdate, type EditorView, Decoration, type DecorationSet, WidgetType } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
 
 import {
@@ -37,6 +37,35 @@ const STALE_MARK = Decoration.mark({
       'Stale facet — content has drifted from its stored hash. '
       + 'Forge-click or /generate to refresh.',
   },
+});
+
+/** v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
+ *  Widget appended after non-canonical H1 headings to render
+ *  " — reference" so cohort sees at-a-glance which facet(s) are
+ *  documentation only (not driving compute). The widget is a view-
+ *  only decoration — it does NOT appear in the on-disk markdown.
+ *  Grayscale dimming on the body stays for defense-in-depth. */
+class ReferenceSuffixWidget extends WidgetType {
+  toDOM(): HTMLElement {
+    const el = document.createElement('span');
+    el.textContent = ' — reference';
+    el.className = 'forge-facet-reference-suffix';
+    el.title =
+      'This facet is stale — the canonical facet (most recently edited) '
+      + 'is what drives compute. Edit this one to make it canonical.';
+    return el;
+  }
+  eq(other: WidgetType): boolean {
+    return other instanceof ReferenceSuffixWidget;
+  }
+  ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+const REFERENCE_SUFFIX_DECO = Decoration.widget({
+  widget: new ReferenceSuffixWidget(),
+  side: 1,
 });
 
 /** Find the byte offset of the H1 heading line for `name` (e.g.
@@ -73,31 +102,60 @@ export function h1SectionRange(
   return { from: contentStart, to: nextH1 };
 }
 
+/** v0.2.239 — Byte offset at the END of the H1 heading line for
+ *  `name` (position just BEFORE the newline). This is where the
+ *  `— reference` widget is mounted so it renders inline with the
+ *  heading text. Returns -1 when the heading is absent. */
+export function findH1HeadingEndOffset(body: string, name: string): number {
+  const headingOffset = findH1HeadingOffset(body, name);
+  if (headingOffset === -1) return -1;
+  const lineEnd = body.indexOf('\n', headingOffset);
+  return lineEnd === -1 ? body.length : lineEnd;
+}
+
 /** Build the DecorationSet for a given doc + stale-facet set. Pure
- *  helper exported for testing. */
+ *  helper exported for testing.
+ *
+ *  v0.2.239 — Emits TWO decorations per stale facet: the body mark
+ *  (grayscale dimming) and a widget after the heading with
+ *  " — reference" (S9 v11.3 title suffix contract). Decorations are
+ *  ordered by (from, side) since RangeSetBuilder demands sorted input.
+ *
+ *  The widget is a view-only decoration. It does NOT get persisted to
+ *  the on-disk markdown; opening the note in a raw text editor still
+ *  shows plain `# Description` / `# Recipe` / `# Python`. */
 export function buildStaleFacetDecorations(
   body: string,
   stale: Set<'description' | 'recipe' | 'python'>,
 ): DecorationSet {
   if (stale.size === 0) return Decoration.none;
-  const ranges: Array<[number, number]> = [];
-  if (stale.has('description')) {
-    const r = h1SectionRange(body, 'Description');
-    if (r && r.to > r.from) ranges.push([r.from, r.to]);
-  }
-  if (stale.has('recipe')) {
-    const r = h1SectionRange(body, 'Recipe');
-    if (r && r.to > r.from) ranges.push([r.from, r.to]);
-  }
-  if (stale.has('python')) {
-    const r = h1SectionRange(body, 'Python');
-    if (r && r.to > r.from) ranges.push([r.from, r.to]);
-  }
-  // RangeSetBuilder demands sorted, non-overlapping ranges.
-  ranges.sort((a, b) => a[0] - b[0]);
+  // Collect (from, side, deco) triples; sort; feed to builder.
+  const items: Array<{ from: number; to: number; side: number; deco: Decoration }> = [];
+  const collectFacet = (
+    key: 'description' | 'recipe' | 'python',
+    heading: 'Description' | 'Recipe' | 'Python',
+  ): void => {
+    if (!stale.has(key)) return;
+    // Suffix widget at end of heading line.
+    const headingEnd = findH1HeadingEndOffset(body, heading);
+    if (headingEnd !== -1) {
+      items.push({ from: headingEnd, to: headingEnd, side: 1, deco: REFERENCE_SUFFIX_DECO });
+    }
+    // Grayscale mark on the body range.
+    const r = h1SectionRange(body, heading);
+    if (r && r.to > r.from) {
+      items.push({ from: r.from, to: r.to, side: 0, deco: STALE_MARK });
+    }
+  };
+  collectFacet('description', 'Description');
+  collectFacet('recipe', 'Recipe');
+  collectFacet('python', 'Python');
+  // RangeSetBuilder demands sorted; widgets at same position ordered
+  // by their `side` attribute already, but tie-break in the sort too.
+  items.sort((a, b) => (a.from - b.from) || (a.side - b.side));
   const builder = new RangeSetBuilder<Decoration>();
-  for (const [from, to] of ranges) {
-    builder.add(from, to, STALE_MARK);
+  for (const { from, to, deco } of items) {
+    builder.add(from, to, deco);
   }
   return builder.finish();
 }

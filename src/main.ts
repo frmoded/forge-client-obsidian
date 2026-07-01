@@ -933,11 +933,12 @@ export default class ForgePlugin extends Plugin {
     // recipe_hash mismatch, and /generate detects that via the same
     // mechanism. No frontmatter `lock:` field needed.
 
-    this.addCommand({
-      id: 'forge-toggle-python-visibility',
-      name: 'Forge: Toggle Python visibility',
-      callback: () => { this.togglePythonVisibility(); },
-    });
+    // v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
+    // `forge-toggle-python-visibility` retired: Python is now always
+    // visible + editable, seeded with `def compute(context): return None`
+    // by the new-note template. Stale facets communicate via title
+    // suffix + grayscale dimming (stale-facet-view-plugin). Canonical
+    // determination via S9 hash-drift is unchanged.
 
     this.addCommand({
       id: 'forge-show-canonical-layer',
@@ -2622,89 +2623,11 @@ export default class ForgePlugin extends Plugin {
     return out;
   }
 
-  /** v0.2.196 — Toggle the visibility of a V2 note's `# Python` facet.
-   *
-   *  This drain ships a body-level toggle (materialize/strip the
-   *  section) rather than CSS-class gating (deferred to Phase 2 because
-   *  it requires a CM6 ViewPlugin per HARD RULE). When the toggle is
-   *  ON, transpile the current Recipe → Python and append a fenced
-   *  `# Python` section; when OFF, excise the section entirely.
-   *
-   *  Editing the Python section while visible triggers a python_hash
-   *  mismatch → `whichLayerIsCanonical === 'python'` → /generate +
-   *  Forge-click surface that the Description + Recipe are stale.
-   */
-  private async togglePythonVisibility(): Promise<void> {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
-      this.notice('Forge: no active note to toggle Python visibility on.');
-      return;
-    }
-    const body = await this.app.vault.read(view.file);
-    const existingPython = extractPythonSection(body);
-    if (existingPython !== null) {
-      // Currently visible → excise. Don't lose the python_hash stamp
-      // (the user may toggle back on later and expect the canonical
-      // state machine to recognize the previously stamped baseline).
-      const out = replacePythonSection(body, null);
-      await this.app.vault.modify(view.file, out);
-      this.notice(
-        `Forge: ${view.file.basename} → Python facet hidden. Toggle again to show.`);
-      return;
-    }
-    // Currently hidden → materialize. Compile from the current Recipe
-    // via the same resolveActionCode the Forge-click path uses; if
-    // it fails (e.g. Recipe syntax error), surface the error in the
-    // output panel.
-    const hostManager = getPyodideHost();
-    if (!hostManager) {
-      await this.forgeOutput(
-        'Forge: Pyodide host unavailable — open the engine view first to initialize the runtime.',
-        'error',
-      );
-      return;
-    }
-    const host = await hostManager.getInstance();
-    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
-    // v0.2.235 — sync file body into MEMFS before resolveActionCode.
-    // Newly-created notes (Cmd-P → New Snippet) exist on Obsidian's
-    // disk but not in pyodide's MEMFS or SnippetRegistry until the
-    // first sync. Without this, resolveActionCode's registry.resolve
-    // throws SnippetResolutionError trying to look up the note itself.
-    // Drain 2026-07-02-1900. Mirrors forgeSnippet's pre-flight sync at
-    // line 2132.
-    try {
-      await host.syncUserVaultFile(view.file.path, body);
-    } catch (e) {
-      console.error('togglePythonVisibility: MEMFS sync failed', e);
-      // Continue — resolveActionCode may still work if the registry
-      // already has a stale entry.
-    }
-    let python: string | null = null;
-    try {
-      python = await host.resolveActionCode(snippetId, { force: true });
-    } catch (e) {
-      console.error('togglePythonVisibility: resolveActionCode failed', e);
-      await this.forgeOutput(
-        `Forge: cannot show Python — Recipe failed to transpile: ${e}`,
-        'error',
-      );
-      return;
-    }
-    if (!python) {
-      await this.forgeOutput(
-        'Forge: cannot show Python — Recipe is empty or transpile produced no code.',
-        'error',
-      );
-      return;
-    }
-    const withPython = replacePythonSection(body, python);
-    const pythonHash = await computeFacetHash(python);
-    const withHash = setFmFieldV2(withPython, 'python_hash', pythonHash);
-    await this.app.vault.modify(view.file, withHash);
-    this.notice(
-      `Forge: ${view.file.basename} → Python facet shown. Hand-edits will mark Description + Recipe stale.`);
-  }
+  // v0.2.239 — togglePythonVisibility retired per Constitution V2a
+  // v11.3 S9 uniform-visibility contract. Python is always visible
+  // + editable (seeded by the new-note template with
+  // `def compute(context): return None`). Stale facets communicate
+  // via title suffix + grayscale dimming (stale-facet-view-plugin).
 
   /** v0.2.206 — Build the library-note catalog at plugin load by
    *  reading the bundled `assets/engine/forge/<domain>/lib.py` source

@@ -4,6 +4,10 @@
 //
 // v0.2.231 — actionTemplate now emits V2 shape (Description + Recipe).
 // canonicalActionTemplate retired in favor of the unified V2 template.
+//
+// v0.2.239 — S9 v11.3 uniform-visibility contract: template now also
+// seeds a `# Python` section with `def compute(context): return None`.
+// All three facets always visible + editable.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -30,10 +34,15 @@ test('actionTemplate does NOT emit # English heading (V1 retired)', () => {
   assert.doesNotMatch(body, /^# English$/m);
 });
 
-test('actionTemplate does NOT emit # Python stub (implicit-locking generates it)', () => {
+test('actionTemplate emits # Python heading (v0.2.239 S9 v11.3 uniform visibility)', () => {
   const body = actionTemplate('my_snippet');
-  assert.doesNotMatch(body, /^# Python$/m);
-  assert.doesNotMatch(body, /def compute\(context\):/);
+  assert.match(body, /^# Python$/m);
+});
+
+test('actionTemplate seeds Python with def compute(context): return None', () => {
+  const body = actionTemplate('my_snippet');
+  assert.match(body, /def compute\(context\):/);
+  assert.match(body, /return None/);
 });
 
 test('actionTemplate does NOT declare inputs: [] (V1 frontmatter retired)', () => {

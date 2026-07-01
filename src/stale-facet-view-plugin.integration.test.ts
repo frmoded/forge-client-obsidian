@@ -85,6 +85,26 @@ test('CM6 integration: stale facets render with forge-stale-facet class', async 
   }
 });
 
+test('CM6 integration: stale facets also render " — reference" widget after heading', async () => {
+  // v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
+  const harness = createIntegrationHarness();
+  try {
+    const view = harness.mount(STALE_RECIPE_NOTE, [staleFacetViewPlugin]);
+    await waitForDecorations(harness);
+    const html = view.contentDOM.innerHTML;
+    assert.ok(
+      html.includes('forge-facet-reference-suffix'),
+      `expected forge-facet-reference-suffix widget in DOM; got: ${html.slice(0, 600)}`,
+    );
+    assert.ok(
+      html.includes('— reference'),
+      `expected literal "— reference" text in DOM; got: ${html.slice(0, 600)}`,
+    );
+  } finally {
+    harness.destroy();
+  }
+});
+
 test('CM6 integration: no hashes → no stale facets painted', async () => {
   const harness = createIntegrationHarness();
   try {

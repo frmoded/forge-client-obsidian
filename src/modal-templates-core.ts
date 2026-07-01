@@ -1,23 +1,26 @@
-// v0.2.231 — pure-core for the snippet-template emitters used by the
-// New Snippet modal. The V1 free-English template + the canonical
-// `# English` template are retired; the V2 unified shape is the only
-// option: `# Description` + `# Recipe`, with no `# Python` (let
-// implicit-locking generate it on first Forge-click) and no
-// `inputs: []` (V2 frontmatter is type-only).
+// v0.2.239 — pure-core for the snippet-template emitters used by the
+// New Snippet modal. Constitution V2a v11.3 S9 uniform-visibility
+// contract: all three facets (Description + Recipe + Python) always
+// visible + editable. Template seeds Python with a no-op body so
+// cohort can Forge-click immediately (the note runs and returns
+// None; editing Recipe makes Recipe canonical; editing Python makes
+// Python canonical — the canonical-facet state machine at engine
+// side handles which drives compute).
 //
-// Driver smoke 2026-07-02 Step 5 surfaced that the cohort-facing
-// "create new note" template was still V1 after 30+ V2 releases.
-// Critical regression-by-omission; undermined the V2 paradigm for
-// every new note authored after BRAT update.
+// Prior versions:
+//   v0.2.231 — V2 unified shape: Description + Recipe, no Python
+//     (implicit-locking generated Python on Forge-click).
+//   v0.2.77 — canonical vs free-English split; both retired in v0.2.231.
 //
 // modal.ts re-exports `actionTemplate` via the existing import path
 // for backward-compat with call sites.
 
 /** V2 action template. Frontmatter `type: action` only; body has
- *  `# Description` (intent-level prose) + `# Recipe` (chip-call
- *  composition, filled by /generate or hand-authored). No `# Python` —
- *  S9 implicit-locking generates it from Recipe on first Forge-click.
- *  No `inputs: []` — V2 frontmatter is type-only. */
+ *  `# Description`, `# Recipe`, and `# Python` (S9 v11.3 uniform-
+ *  visibility contract: all three facets always visible + editable).
+ *  Python body is `def compute(context): return None` so the note is
+ *  Forge-clickable from the moment it's created. Cohort authoring
+ *  Recipe makes Recipe canonical on next Forge-click. */
 export function actionTemplate(name: string): string {
   return [
     '---',
@@ -32,6 +35,11 @@ export function actionTemplate(name: string): string {
     '# Recipe',
     '',
     '',
+    '',
+    '# Python',
+    '',
+    'def compute(context):',
+    '    return None',
     '',
   ].join('\n');
 }
