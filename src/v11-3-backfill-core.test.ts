@@ -183,3 +183,50 @@ def compute(context):
 test('DEFAULT_PYTHON_STUB is stable for regression pins', () => {
   assert.equal(DEFAULT_PYTHON_STUB, 'def compute(context):\n    return None');
 });
+
+// Drain 2026-07-03-0000 — driver's greeting.md exact scenario.
+// 2 of 3 hashes already present in frontmatter (description_hash +
+// recipe_hash from an earlier code path), python_hash missing. Python
+// section IS on disk with real cohort content. Backfill must stamp
+// python_hash — nothing else.
+
+const GREETING_MD_LIKE = `---
+type: action
+description: greeting
+description_hash: DESC_STAMP
+recipe_hash: RECIPE_STAMP
+---
+
+# Description
+
+Print a greeting.
+
+# Recipe
+
+Call [[print]] with text="hello".
+
+# Python
+
+\`\`\`python
+def compute(context):
+    name = 'Ada2'
+    greeting = ('Hello, ' + name)
+    print(greeting)
+\`\`\`
+`;
+
+test('drain 2026-07-03-0000: greeting.md scenario (2/3 hashes → stamp python_hash only)', async () => {
+  const result = await backfillV113Shape(GREETING_MD_LIKE, HELPERS);
+  assert.equal(result.changed, true);
+  assert.equal(result.actions.pythonSection, false);
+  assert.deepEqual(result.actions.hashes, ['python_hash']);
+  // description_hash + recipe_hash preserved verbatim
+  assert.equal(getFrontmatterField(result.newBody, 'description_hash'), 'DESC_STAMP');
+  assert.equal(getFrontmatterField(result.newBody, 'recipe_hash'), 'RECIPE_STAMP');
+  // python_hash stamped and matches the actual Python facet content
+  const pyHash = getFrontmatterField(result.newBody, 'python_hash');
+  assert.notEqual(pyHash, null);
+  const currentPython = extractPythonSection(result.newBody) ?? '';
+  const expectedPyHash = await computeFacetHash(currentPython);
+  assert.equal(pyHash, expectedPyHash);
+});

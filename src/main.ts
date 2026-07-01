@@ -3769,12 +3769,21 @@ export default class ForgePlugin extends Plugin {
   private _v113BackfillSeen: Set<string> = new Set();
   private async maybeBackfillV113Shape(file: TFile | null) {
     if (!file) return;
-    if (this._v113BackfillSeen.has(file.path)) return;
+    if (this._v113BackfillSeen.has(file.path)) {
+      console.log(`[v113-backfill] ${file.path}: alreadySeen; skip`);
+      return;
+    }
     this._v113BackfillSeen.add(file.path);
     try {
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      if (fm?.type !== 'action') return;
+      // v0.2.241 drain 2026-07-03-0000: parse type from body directly,
+      // not metadataCache. Cache may be stale at file-open time (parse
+      // race). Body is the source of truth for the field we care about.
       const body = await this.app.vault.read(file);
+      const typeField = getFmFieldV2(body, 'type');
+      console.log(
+        `[v113-backfill] ${file.path}: type=${typeField} isV2=${isV2Shape(body)}`,
+      );
+      if (typeField !== 'action') return;
       if (!isV2Shape(body)) return;
       const result = await backfillV113Shape(body, {
         extractDescription,
@@ -3788,12 +3797,17 @@ export default class ForgePlugin extends Plugin {
         replacePythonSection,
         computeFacetHash,
       });
+      console.log(
+        `[v113-backfill] ${file.path}: changed=${result.changed} ` +
+        `pythonSection=${result.actions.pythonSection} ` +
+        `hashesStamped=${JSON.stringify(result.actions.hashes)}`,
+      );
       if (!result.changed) return;
       await this.app.vault.modify(file, result.newBody);
       const parts: string[] = [];
       if (result.actions.pythonSection) parts.push('# Python section');
       if (result.actions.hashes.length > 0) {
-        parts.push(`${result.actions.hashes.length} hash(es)`);
+        parts.push(`${result.actions.hashes.length} hash(es): ${result.actions.hashes.join(', ')}`);
       }
       void this.forgeOutput(
         `Backfilled ${file.basename} to V2a v11.3 shape (${parts.join(', ')}).`,

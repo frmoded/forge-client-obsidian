@@ -25,6 +25,12 @@ interface DocAnalysis {
   englishBodyEndLine: number | null;  // last line included in the English body
   pythonHeadingLine: number | null;
   pythonBodyEndLine: number | null;
+  // v0.2.241 drain 2026-07-03-0000 — Constitution V2a v11.3 S9
+  // uniform-visibility contract: V2 notes (identified by `# Recipe`
+  // heading) allow ALL facets to be edited regardless of edit_mode.
+  // The legacy read-only rule (edit_mode: english → Python read-only,
+  // edit_mode: python → English read-only) applies to V1 notes only.
+  hasRecipeHeading: boolean;
 }
 
 // Walk the doc once to discover (a) whether this is an action snippet,
@@ -38,6 +44,7 @@ function analyzeDoc(doc: Text): DocAnalysis {
   let englishBodyEndLine: number | null = null;
   let pythonHeadingLine: number | null = null;
   let pythonBodyEndLine: number | null = null;
+  let hasRecipeHeading = false;
 
   type Section = 'none' | 'frontmatter' | 'english' | 'python';
   let section: Section = 'none';
@@ -84,6 +91,13 @@ function analyzeDoc(doc: Text): DocAnalysis {
       closeCurrent(n);
       section = 'python';
       pythonHeadingLine = n;
+    } else if (trimmed === '# Recipe') {
+      // v0.2.241 — V2 shape marker. Section-tracking otherwise the
+      // same as the else-if branch below (any # heading terminates
+      // the current section).
+      closeCurrent(n);
+      section = 'none';
+      hasRecipeHeading = true;
     } else if (trimmed === '---' || /^#+\s/.test(trimmed)) {
       // Any other heading or `---` separator terminates the current
       // section. Subsequent lines are considered out-of-section until the
@@ -102,6 +116,7 @@ function analyzeDoc(doc: Text): DocAnalysis {
     englishBodyEndLine,
     pythonHeadingLine,
     pythonBodyEndLine,
+    hasRecipeHeading,
   };
 }
 
@@ -110,8 +125,11 @@ function buildSectionDecorations(view: EditorView): DecorationSet {
   const doc = view.state.doc;
   const info = analyzeDoc(doc);
 
-  const englishReadOnly = info.isActionSnippet && info.editMode === 'python';
-  const pythonReadOnly = info.isActionSnippet && info.editMode === 'english';
+  // v0.2.241 drain 2026-07-03-0000 — V2 notes (# Recipe heading) are
+  // never read-only per S9 v11.3 uniform-visibility contract.
+  const legacyV1 = info.isActionSnippet && !info.hasRecipeHeading;
+  const englishReadOnly = legacyV1 && info.editMode === 'python';
+  const pythonReadOnly = legacyV1 && info.editMode === 'english';
 
   const englishLineDeco = Decoration.line({
     class: englishReadOnly
@@ -208,6 +226,13 @@ export const readOnlyFacetFilter = EditorState.transactionFilter.of((tr) => {
   const doc = tr.startState.doc;
   const info = analyzeDoc(doc);
   if (!info.isActionSnippet) return tr;
+
+  // v0.2.241 drain 2026-07-03-0000 — Constitution V2a v11.3 S9
+  // uniform-visibility contract. V2 notes (identified by `# Recipe`
+  // heading) allow ALL facets editable regardless of edit_mode. The
+  // legacy "inactive facet is read-only" rule below applies to V1
+  // notes only.
+  if (info.hasRecipeHeading) return tr;
 
   let roFrom: number | null = null;
   let roTo: number | null = null;
