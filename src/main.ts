@@ -10,6 +10,7 @@ import {
 } from './v2-note-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core.ts';
+import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import {
   extractPythonSection,
   replacePythonSection,
@@ -651,6 +652,17 @@ export default class ForgePlugin extends Plugin {
     // a one-shot Notice per `.bak.*` dir per session.
     this.registerEvent(
       this.app.workspace.on('file-open', (file) => { this.maybeNotifyBakOpen(file); })
+    );
+
+    // v0.2.240 drain 2026-07-02-2300 — v11.3 backfill on file-open.
+    // Pre-v0.2.239 V2 notes lack frontmatter hashes + may lack a
+    // `# Python` section. Without backfill, cohort edits don't trigger
+    // the "— reference" suffix (state machine sees hashes as absent,
+    // defaults to synced) AND Python isn't editable (no section on
+    // disk). Backfill on first open per session; idempotent
+    // afterwards.
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => { void this.maybeBackfillV113Shape(file); })
     );
 
     // v0.2.118 — frontmatter hide for Live Preview Properties widget.
@@ -1646,7 +1658,7 @@ export default class ForgePlugin extends Plugin {
 
   // Adapter handed to the Forge ribbon action module so it never has to
   // import this class (avoids a cycle). Closes over `this`, so the
-  // private openModaView / stepModaSimulation / loadActiveDomains stay
+  // private openModaView / loadActiveDomains stay
   // private to the plugin while still reachable from the action UI.
   private forgeHost(): ForgeHost {
     return {
@@ -1655,7 +1667,6 @@ export default class ForgePlugin extends Plugin {
       vaultPathOf: () => (this.app.vault.adapter as any).basePath as string,
       reloadActiveDomains: () => this.loadActiveDomains(),
       openModaView: () => { this.openModaView(); },
-      stepModaSimulation: () => { this.stepModaSimulation(); },
       openChipsView: () => { this.openChipsView(); },
       // v0.2.45: domain-activation plumbing for EditVaultDomainsModal.
       currentActiveDomains: () => this.currentActiveDomains(),
@@ -1713,24 +1724,14 @@ export default class ForgePlugin extends Plugin {
   // EditVaultDomainsModal.applyDiff (for each newly-added domain).
   // Obsidian's addCommand is idempotent on duplicate id (latest call
   // wins), so re-firing for an already-registered domain is safe.
-  public registerDomainCommands(domain: string): void {
-    if (domain === 'moda') {
-      // v0.2.236 drain 2026-07-02-2030: `forge-open-moda` retired.
-      // UI alts: "Open MoDa simulation" in the Forge ribbon menu +
-      // Forge-click on a moda action note (openModaView is invoked
-      // via decideModaDispatchOutcome).
-      //
-      // `forge-step-moda` KEPT — no UI alt exists today. The Forge
-      // menu previously carried it but it was removed intentionally
-      // (per the comment in forge-action.ts:150). Adding a Step
-      // button to the moda iframe control bar is out of scope; the
-      // command stays as the sole invocation path.
-      this.addCommand({
-        id: 'forge-step-moda',
-        name: 'Step MoDa simulation',
-        callback: () => { this.stepModaSimulation(); },
-      });
-    }
+  public registerDomainCommands(_domain: string): void {
+    // v0.2.240 drain 2026-07-02-2330: `forge-step-moda` retired per
+    // driver override of the 2030 push-back. `forge-open-moda`
+    // previously retired in v0.2.236 (drain 2030). No moda commands
+    // remain. Cohort loses the Step capability entirely; if that
+    // becomes friction, add a Step button in the moda iframe control
+    // bar as a separate drain.
+    //
     // music has no commands today; flag DOMAIN_INVENTORY in
     // src/domain-activation-core.ts when music commands ship and add
     // the branch here.
@@ -2037,21 +2038,11 @@ export default class ForgePlugin extends Plugin {
     };
   }
 
-  // Advance every open MoDa view one tick by postMessage'ing the
-  // embedded simulator. No backend involvement here — the React app's
-  // handleStep does the single /moda/compute round-trip. Notice if
-  // there's no MoDa view (or the iframe hasn't loaded yet).
-  private stepModaSimulation() {
-    const leaves = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE);
-    let stepped = 0;
-    for (const leaf of leaves) {
-      const view = leaf.view;
-      if (view instanceof ForgeModaView && view.step()) stepped++;
-    }
-    if (stepped === 0) {
-      this.notice('No MoDa view open — open one first (Forge: Open MoDa simulation).');
-    }
-  }
+  // v0.2.240 drain 2026-07-02-2330: stepModaSimulation retired per
+  // driver override. Its sole caller (forge-step-moda Cmd-P command)
+  // is gone. Cohort loses the Step capability; add a Step button to
+  // the moda iframe control bar as a separate drain if the loss
+  // becomes friction.
 
   private async toggleEdgesView() {
     const existing = this.app.workspace.getLeavesOfType(EDGES_VIEW_TYPE)[0];
@@ -3762,6 +3753,54 @@ export default class ForgePlugin extends Plugin {
         containerEl.classList.remove('forge-fm-expanded');
         containerEl.classList.remove('forge-deps-expanded');
       }
+    }
+  }
+
+  /** v0.2.240 drain 2026-07-02-2300 — Constitution V2a v11.3 backfill.
+   *  Pre-v0.2.239 V2 notes lack frontmatter hashes + may lack the
+   *  `# Python` section. Cohort opening one sees Python "not editable"
+   *  (no section on disk) and Recipe edits don't trigger the stale
+   *  suffix (state machine returns 'synced' when hashes are absent).
+   *  Backfill on first open per session; idempotent thereafter.
+   *
+   *  Gated: only V2 action notes (isV2Shape + type: action). Data
+   *  notes, non-Forge markdown, and V1 notes pass through untouched.
+   *  In-session dedup via a Set so re-opening a tab doesn't re-run. */
+  private _v113BackfillSeen: Set<string> = new Set();
+  private async maybeBackfillV113Shape(file: TFile | null) {
+    if (!file) return;
+    if (this._v113BackfillSeen.has(file.path)) return;
+    this._v113BackfillSeen.add(file.path);
+    try {
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      if (fm?.type !== 'action') return;
+      const body = await this.app.vault.read(file);
+      if (!isV2Shape(body)) return;
+      const result = await backfillV113Shape(body, {
+        extractDescription,
+        extractRecipeSection,
+        extractPythonSection,
+        getFrontmatterField: (b, k) => {
+          const v = getFmFieldV2(b, k);
+          return typeof v === 'string' ? v : null;
+        },
+        setFrontmatterField: setFmFieldV2,
+        replacePythonSection,
+        computeFacetHash,
+      });
+      if (!result.changed) return;
+      await this.app.vault.modify(file, result.newBody);
+      const parts: string[] = [];
+      if (result.actions.pythonSection) parts.push('# Python section');
+      if (result.actions.hashes.length > 0) {
+        parts.push(`${result.actions.hashes.length} hash(es)`);
+      }
+      void this.forgeOutput(
+        `Backfilled ${file.basename} to V2a v11.3 shape (${parts.join(', ')}).`,
+        'info',
+      );
+    } catch (e) {
+      console.error('maybeBackfillV113Shape failed', e);
     }
   }
 

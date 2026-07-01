@@ -57,7 +57,6 @@ export interface ForgeHost {
   vaultPathOf(): string;
   reloadActiveDomains(): Promise<void>;
   openModaView(): void;
-  stepModaSimulation(): void;
   // Open the chip palette view (same path as the `forge-open-chips`
   // command). The menu entry is always visible — the view itself
   // renders an empty-state message when no `_chips.md` is present
@@ -147,8 +146,10 @@ function showActionMenu(
     menu.addItem(i =>
       i.setTitle('Open MoDa simulation').setIcon('atom')
         .onClick(() => host.openModaView()));
-    // "Step MoDa simulation" removed from the menu — still reachable
-    // via Cmd+P (forge-step-moda command stays registered in main.ts).
+    // v0.2.240: "Step MoDa simulation" fully retired (driver override
+    // of 2030 push-back). Followup drain if the capability loss
+    // becomes cohort friction: add a Step button in the moda iframe
+    // control bar.
   }
   // (music actions land here when they exist)
 
