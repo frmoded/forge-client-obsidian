@@ -2806,10 +2806,15 @@ export default class ForgePlugin extends Plugin {
       }
     }
     if (cleaned.length > 0) {
-      await this.forgeOutput(
+      // v0.2.246 drain 2026-07-03-0400 — was forgeOutput (panel-
+      // persistent). Forensic-shadow cleanup fires rarely + is
+      // event-driven; a transient toast matches the semantic weight.
+      // Panel is reserved for compute results + tracebacks cohort
+      // needs to keep visible while debugging.
+      new Notice(
         `Forge: removed ${cleaned.length} forensic library-note shadow note(s): `
           + cleaned.join(', '),
-        'info',
+        6000,
       );
       console.warn(
         `[Forge library-note shadow cleanup] removed ${cleaned.length}; `
@@ -2890,8 +2895,11 @@ export default class ForgePlugin extends Plugin {
     if (decision.action === 'open-library-note') {
       if (decision.shadowToCleanup && resolved) {
         if (await this.trashForensicShadow(resolved)) {
-          await this.forgeOutput(
-            `Forge: removed forensic shadow note: ${resolved.path}`, 'info',
+          // v0.2.246 drain 2026-07-03-0400 — was forgeOutput
+          // (panel-persistent). See sweep-time twin at line ~2810
+          // for rationale.
+          new Notice(
+            `Forge: removed forensic shadow note: ${resolved.path}`, 5000,
           );
         }
       }
@@ -3456,6 +3464,29 @@ export default class ForgePlugin extends Plugin {
     if (!view?.file) {
       this.notice('No active note to run.');
       return;
+    }
+
+    // v0.2.246 drain 2026-07-03-0400 — HARD RULE L29 pre-sync.
+    // forgeSnippet (Forge-button click, line ~2016) saves editor +
+    // syncs MEMFS before running. Cmd-P "Run only" reaches this
+    // method WITHOUT going through that path; sibling-handler
+    // consistency required the same pre-sync here or Pyodide reads
+    // stale MEMFS when cohort edited but didn't save. Same shape as
+    // forgeSnippet's pre-flight.
+    try {
+      const hostManager = getPyodideHost();
+      if (hostManager) {
+        try {
+          await (view as MarkdownView).save();
+        } catch (e) {
+          console.error('runSnippet: view.save() failed', e);
+        }
+        const host = await hostManager.getInstance();
+        const freshContent = await readActiveNoteFresh(view, this.app.vault);
+        await host.syncUserVaultFile(view.file.path, freshContent);
+      }
+    } catch (e) {
+      console.error('runSnippet: pre-flight disk→MEMFS sync failed', e);
     }
 
     // v0.2.26: derive a qualified snippet_id when the file lives
