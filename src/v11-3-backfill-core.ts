@@ -34,10 +34,17 @@ export interface V113BackfillResult {
   newBody: string;
   /** What was backfilled — surfaced so callers can log/notify.
    *  `pythonSection` true → we inserted the missing `# Python` block.
-   *  `hashes` lists the frontmatter keys we stamped. */
+   *  `hashes` lists the frontmatter keys we stamped.
+   *  `derivedFromFields` (v0.2.243 V2a v11.4) lists the
+   *  derived_from_source_hash keys we stamped on downstream facets
+   *  during migration. */
   actions: {
     pythonSection: boolean;
     hashes: Array<'description_hash' | 'recipe_hash' | 'python_hash'>;
+    derivedFromFields: Array<
+      | 'recipe_derived_from_source_hash'
+      | 'python_derived_from_source_hash'
+    >;
   };
 }
 
@@ -68,6 +75,7 @@ export async function backfillV113Shape(
   const actions: V113BackfillResult['actions'] = {
     pythonSection: false,
     hashes: [],
+    derivedFromFields: [],
   };
 
   // Step 1: ensure # Python section exists on disk.
@@ -104,7 +112,37 @@ export async function backfillV113Shape(
     }
   }
 
-  const changed = actions.pythonSection || actions.hashes.length > 0;
+  // v0.2.243 (V2a v11.4) — stamp derived_from_source_hash on
+  // downstream facets so cohort sees "— derived" instead of
+  // "— stale" post-migration. Assumes freshly-forged (option a per
+  // drain 2026-07-03-0200 §4.3): downstream facets are treated as
+  // if their content was auto-produced from the CURRENT description.
+  // Rare stale-in-reality notes present as "— derived" incorrectly
+  // until next real edit — acceptable UX cost.
+  //
+  // Skip when the field is already present (idempotent + respects
+  // prior forge state that may have stamped a different lineage).
+  const currentDescStamp = helpers.getFrontmatterField(workingBody, 'description_hash');
+  if (currentDescStamp !== null) {
+    const recipeStamp = helpers.getFrontmatterField(workingBody, 'recipe_derived_from_source_hash');
+    if (recipeStamp === null) {
+      workingBody = helpers.setFrontmatterField(
+        workingBody, 'recipe_derived_from_source_hash', currentDescStamp,
+      );
+      actions.derivedFromFields.push('recipe_derived_from_source_hash');
+    }
+    const pythonStamp = helpers.getFrontmatterField(workingBody, 'python_derived_from_source_hash');
+    if (pythonStamp === null) {
+      workingBody = helpers.setFrontmatterField(
+        workingBody, 'python_derived_from_source_hash', currentDescStamp,
+      );
+      actions.derivedFromFields.push('python_derived_from_source_hash');
+    }
+  }
+
+  const changed = actions.pythonSection
+    || actions.hashes.length > 0
+    || actions.derivedFromFields.length > 0;
   return {
     changed,
     newBody: changed ? workingBody : body,

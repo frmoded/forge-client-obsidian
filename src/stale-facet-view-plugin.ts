@@ -20,8 +20,14 @@ import { ViewPlugin, type ViewUpdate, type EditorView, Decoration, type Decorati
 import { RangeSetBuilder } from '@codemirror/state';
 
 import {
-  detectStaleFacets,
+  whichLayerIsCanonical,
 } from './facet-hash-core.ts';
+import {
+  computeFacetStates,
+  FacetState,
+  ALL_FACETS,
+  type FacetName,
+} from './facet-state-core.ts';
 import {
   extractDescription,
   extractRecipeSection,
@@ -29,44 +35,76 @@ import {
   getFrontmatterField,
 } from './v2-note-core.ts';
 
-/** The Decoration.mark applied to each stale facet's content range. */
-const STALE_MARK = Decoration.mark({
-  class: 'forge-stale-facet',
+/** v0.2.243 — Constitution V2a v11.4 tri-state visibility. Body marks
+ *  for derived + stale (source facets get NO body decoration — they
+ *  render at full color). */
+const DERIVED_MARK = Decoration.mark({
+  class: 'forge-facet-derived',
   attributes: {
     title:
-      'Stale facet — content has drifted from its stored hash. '
+      'Derived facet — auto-produced from the current source. '
+      + 'Reflects the source at time of forge.',
+  },
+});
+
+const STALE_MARK = Decoration.mark({
+  class: 'forge-facet-stale',
+  attributes: {
+    title:
+      'Stale facet — content does not reflect current source. '
       + 'Forge-click or /generate to refresh.',
   },
 });
 
-/** v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
- *  Widget appended after non-canonical H1 headings to render
- *  " — reference" so cohort sees at-a-glance which facet(s) are
- *  documentation only (not driving compute). The widget is a view-
- *  only decoration — it does NOT appear in the on-disk markdown.
- *  Grayscale dimming on the body stays for defense-in-depth. */
-class ReferenceSuffixWidget extends WidgetType {
+/** v0.2.243 — Constitution V2a v11.4 tri-state visibility. Widget
+ *  appended after each H1 heading with " — source", " — derived",
+ *  or " — stale" reflecting FacetState. Supersedes v11.3's binary
+ *  " — reference" suffix. View-only decoration; does NOT persist to
+ *  the on-disk markdown. */
+class FacetStateSuffixWidget extends WidgetType {
+  readonly state: FacetState;
+  constructor(state: FacetState) {
+    super();
+    this.state = state;
+  }
   toDOM(): HTMLElement {
     const el = document.createElement('span');
-    el.textContent = ' — reference';
-    el.className = 'forge-facet-reference-suffix';
-    el.title =
-      'This facet is stale — the canonical facet (most recently edited) '
-      + 'is what drives compute. Edit this one to make it canonical.';
+    el.textContent = ` — ${this.state}`;
+    el.className = `forge-facet-suffix forge-facet-suffix-${this.state}`;
+    el.title = TITLE_BY_STATE[this.state];
     return el;
   }
   eq(other: WidgetType): boolean {
-    return other instanceof ReferenceSuffixWidget;
+    return other instanceof FacetStateSuffixWidget && other.state === this.state;
   }
   ignoreEvent(): boolean {
     return true;
   }
 }
 
-const REFERENCE_SUFFIX_DECO = Decoration.widget({
-  widget: new ReferenceSuffixWidget(),
-  side: 1,
-});
+const TITLE_BY_STATE: Record<FacetState, string> = {
+  [FacetState.Source]:
+    'Source facet — this content drives runtime; edit to change behavior.',
+  [FacetState.Derived]:
+    'Derived facet — auto-produced from the current source at time of forge.',
+  [FacetState.Stale]:
+    'Stale facet — does not reflect current source. Forge-click or /generate to refresh.',
+};
+
+const SUFFIX_DECOS: Record<FacetState, Decoration> = {
+  [FacetState.Source]: Decoration.widget({
+    widget: new FacetStateSuffixWidget(FacetState.Source),
+    side: 1,
+  }),
+  [FacetState.Derived]: Decoration.widget({
+    widget: new FacetStateSuffixWidget(FacetState.Derived),
+    side: 1,
+  }),
+  [FacetState.Stale]: Decoration.widget({
+    widget: new FacetStateSuffixWidget(FacetState.Stale),
+    side: 1,
+  }),
+};
 
 /** Find the byte offset of the H1 heading line for `name` (e.g.
  *  "Description"). Returns -1 when absent. */
@@ -124,34 +162,35 @@ export function findH1HeadingEndOffset(body: string, name: string): number {
  *  The widget is a view-only decoration. It does NOT get persisted to
  *  the on-disk markdown; opening the note in a raw text editor still
  *  shows plain `# Description` / `# Recipe` / `# Python`. */
-export function buildStaleFacetDecorations(
+export function buildFacetStateDecorations(
   body: string,
-  stale: Set<'description' | 'recipe' | 'python'>,
+  states: Record<FacetName, FacetState>,
 ): DecorationSet {
-  if (stale.size === 0) return Decoration.none;
-  // Collect (from, side, deco) triples; sort; feed to builder.
+  // v0.2.243 — Constitution V2a v11.4 tri-state. Emits suffix widget
+  // for every facet + body mark for derived/stale (source facets get
+  // no body decoration; they're full color). Ordered by (from, side)
+  // per RangeSetBuilder invariant.
+  const HEADING_BY_FACET: Record<FacetName, 'Description' | 'Recipe' | 'Python'> = {
+    description: 'Description',
+    recipe: 'Recipe',
+    python: 'Python',
+  };
   const items: Array<{ from: number; to: number; side: number; deco: Decoration }> = [];
-  const collectFacet = (
-    key: 'description' | 'recipe' | 'python',
-    heading: 'Description' | 'Recipe' | 'Python',
-  ): void => {
-    if (!stale.has(key)) return;
-    // Suffix widget at end of heading line.
+  for (const facet of ALL_FACETS) {
+    const state = states[facet];
+    const heading = HEADING_BY_FACET[facet];
     const headingEnd = findH1HeadingEndOffset(body, heading);
     if (headingEnd !== -1) {
-      items.push({ from: headingEnd, to: headingEnd, side: 1, deco: REFERENCE_SUFFIX_DECO });
+      items.push({ from: headingEnd, to: headingEnd, side: 1, deco: SUFFIX_DECOS[state] });
     }
-    // Grayscale mark on the body range.
-    const r = h1SectionRange(body, heading);
-    if (r && r.to > r.from) {
-      items.push({ from: r.from, to: r.to, side: 0, deco: STALE_MARK });
+    if (state === FacetState.Derived || state === FacetState.Stale) {
+      const r = h1SectionRange(body, heading);
+      if (r && r.to > r.from) {
+        const mark = state === FacetState.Derived ? DERIVED_MARK : STALE_MARK;
+        items.push({ from: r.from, to: r.to, side: 0, deco: mark });
+      }
     }
-  };
-  collectFacet('description', 'Description');
-  collectFacet('recipe', 'Recipe');
-  collectFacet('python', 'Python');
-  // RangeSetBuilder demands sorted; widgets at same position ordered
-  // by their `side` attribute already, but tie-break in the sort too.
+  }
   items.sort((a, b) => (a.from - b.from) || (a.side - b.side));
   const builder = new RangeSetBuilder<Decoration>();
   for (const { from, to, deco } of items) {
@@ -185,26 +224,39 @@ export const staleFacetViewPlugin = ViewPlugin.fromClass(
       // only the most recent body matters. Store it; check on
       // completion that we're still computing for it.
       this.pendingDoc = body;
-      let stale: Set<'description' | 'recipe' | 'python'>;
+      // whichLayerIsCanonical's helper signature is
+      // (body: string, key: string) → string | null. The tri-state
+      // fmReader has (key: string) → string | null (body is captured).
+      // Keep them as two distinct adapters so we don't accidentally
+      // pass a body-string as a key.
+      const twoArgReader = (b: string, k: string): string | null => {
+        const v = getFrontmatterField(b, k);
+        return typeof v === 'string' ? v : null;
+      };
+      const oneArgReader = {
+        getFrontmatterField: (k: string): string | null => {
+          const v = getFrontmatterField(body, k);
+          return typeof v === 'string' ? v : null;
+        },
+      };
+      let canonical: Awaited<ReturnType<typeof whichLayerIsCanonical>>;
       try {
-        stale = await detectStaleFacets(body, {
+        canonical = await whichLayerIsCanonical(body, {
           extractDescription,
           extractRecipeSection,
           extractPythonSection,
-          getFrontmatterField: (b, k) => {
-            const v = getFrontmatterField(b, k);
-            return typeof v === 'string' ? v : null;
-          },
+          getFrontmatterField: twoArgReader,
         });
       } catch (e) {
-        console.error('staleFacetViewPlugin: detectStaleFacets failed', e);
+        console.error('facetStateViewPlugin: whichLayerIsCanonical failed', e);
         return;
       }
       if (this.pendingDoc !== body) {
         // A newer update has superseded this run; drop.
         return;
       }
-      this.decorations = buildStaleFacetDecorations(body, stale);
+      const states = computeFacetStates(canonical, oneArgReader);
+      this.decorations = buildFacetStateDecorations(body, states);
       // Dispatch a no-op effect to nudge CodeMirror into re-painting
       // with the new decorations. The decorations facet reads from
       // `v.decorations` on the next paint; a doc change triggers

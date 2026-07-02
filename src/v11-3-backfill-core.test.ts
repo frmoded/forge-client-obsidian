@@ -67,12 +67,17 @@ def compute(context):
 \`\`\`
 `;
 
+// v0.2.243 — "fully populated" now includes v11.4 derived_from_source_hash
+// fields on downstream facets. Notes populated by pre-v11.4 code paths
+// will get those stamped on next backfill run.
 const FULL_V113_NOTE = `---
 type: action
 description: foo
 description_hash: aaa
 recipe_hash: bbb
 python_hash: ccc
+recipe_derived_from_source_hash: aaa
+python_derived_from_source_hash: aaa
 ---
 
 # Description
@@ -94,15 +99,31 @@ test('backfills missing # Python section AND all three hashes on pre-v113 note w
   assert.deepEqual(result.actions.hashes, [
     'description_hash', 'recipe_hash', 'python_hash',
   ]);
+  // v0.2.243 (v11.4) — downstream derived_from_source_hash stamped
+  // from current description hash (assume-freshly-forged option a).
+  assert.deepEqual(result.actions.derivedFromFields, [
+    'recipe_derived_from_source_hash',
+    'python_derived_from_source_hash',
+  ]);
   // Python section now present
   assert.match(result.newBody, /^# Python$/m);
   // Python stub inserted
   assert.match(result.newBody, /def compute\(context\):/);
   assert.match(result.newBody, /return None/);
   // Frontmatter now has all three hashes
-  assert.notEqual(getFrontmatterField(result.newBody, 'description_hash'), null);
+  const descHash = getFrontmatterField(result.newBody, 'description_hash');
+  assert.notEqual(descHash, null);
   assert.notEqual(getFrontmatterField(result.newBody, 'recipe_hash'), null);
   assert.notEqual(getFrontmatterField(result.newBody, 'python_hash'), null);
+  // v0.2.243 (v11.4) — derived_from stamps === description_hash
+  assert.equal(
+    getFrontmatterField(result.newBody, 'recipe_derived_from_source_hash'),
+    descHash,
+  );
+  assert.equal(
+    getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
+    descHash,
+  );
 });
 
 test('preserves existing Python section content; only stamps missing hashes', async () => {
@@ -111,6 +132,11 @@ test('preserves existing Python section content; only stamps missing hashes', as
   assert.equal(result.actions.pythonSection, false);
   assert.deepEqual(result.actions.hashes, [
     'description_hash', 'recipe_hash', 'python_hash',
+  ]);
+  // v0.2.243 (v11.4) — derived_from also stamped for downstream.
+  assert.deepEqual(result.actions.derivedFromFields, [
+    'recipe_derived_from_source_hash',
+    'python_derived_from_source_hash',
   ]);
   // Original Python body preserved
   assert.match(result.newBody, /print\("hello"\)/);

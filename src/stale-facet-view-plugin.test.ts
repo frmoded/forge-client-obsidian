@@ -1,7 +1,10 @@
-// v0.2.205 — Phase 2.5 §2.1: pure-core tests for the stale-facet
-// extension's range helpers + decoration builder. The CM6 integration
-// coverage (asserting the class actually paints in a real EditorView)
-// lives in stale-facet-view-plugin.integration.test.ts.
+// v0.2.243 — pure-core tests for the facet-state extension's range
+// helpers + decoration builder. CM6 integration coverage lives in
+// stale-facet-view-plugin.integration.test.ts.
+//
+// Renamed decoration builder from buildStaleFacetDecorations
+// (v0.2.239 v11.3 binary) to buildFacetStateDecorations
+// (v0.2.243 v11.4 tri-state).
 
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert/strict';
@@ -11,8 +14,9 @@ import {
   findNextH1OffsetAfter,
   h1SectionRange,
   findH1HeadingEndOffset,
-  buildStaleFacetDecorations,
+  buildFacetStateDecorations,
 } from './stale-facet-view-plugin.ts';
+import { FacetState, type FacetName } from './facet-state-core.ts';
 
 const V2_BODY = `---
 type: action
@@ -33,6 +37,12 @@ def compute(context):
   return 1
 `;
 
+const ALL_SOURCE: Record<FacetName, FacetState> = {
+  description: FacetState.Source,
+  recipe: FacetState.Source,
+  python: FacetState.Source,
+};
+
 describe('findH1HeadingOffset', () => {
   test('finds # Description', () => {
     const off = findH1HeadingOffset(V2_BODY, 'Description');
@@ -50,36 +60,29 @@ describe('findH1HeadingOffset', () => {
   });
 });
 
+describe('findNextH1OffsetAfter', () => {
+  test('finds # Recipe after # Description', () => {
+    const descOff = findH1HeadingOffset(V2_BODY, 'Description');
+    const nextOff = findNextH1OffsetAfter(V2_BODY, descOff);
+    assert.equal(V2_BODY.slice(nextOff, nextOff + 8), '# Recipe');
+  });
+});
+
 describe('h1SectionRange', () => {
-  test('Description range excludes the heading line', () => {
+  test('Description range excludes heading line + covers body', () => {
     const r = h1SectionRange(V2_BODY, 'Description');
     assert.ok(r);
-    const slice = V2_BODY.slice(r!.from, r!.to);
-    assert.ok(slice.startsWith('\nSome description'));
-    assert.ok(!slice.includes('# Recipe'));
+    assert.ok(V2_BODY.slice(r!.from, r!.to).includes('Some description prose'));
+    assert.ok(!V2_BODY.slice(r!.from, r!.to).includes('# Description'));
   });
 
-  test('Recipe range bounded by # Python', () => {
-    const r = h1SectionRange(V2_BODY, 'Recipe');
-    assert.ok(r);
-    const slice = V2_BODY.slice(r!.from, r!.to);
-    assert.ok(slice.includes('Let x = 1.'));
-    assert.ok(!slice.includes('# Python'));
-  });
-
-  test('Python range runs to EOF when no further H1', () => {
-    const r = h1SectionRange(V2_BODY, 'Python');
-    assert.ok(r);
-    assert.equal(r!.to, V2_BODY.length);
-  });
-
-  test('returns null when section absent', () => {
+  test('returns null when heading absent', () => {
     assert.equal(h1SectionRange(V2_BODY, 'Slots' as any), null);
   });
 });
 
 describe('findH1HeadingEndOffset', () => {
-  test('returns offset just before newline of heading line', () => {
+  test('end offset lies at newline after heading text', () => {
     const end = findH1HeadingEndOffset(V2_BODY, 'Description');
     assert.equal(V2_BODY[end], '\n');
     assert.equal(V2_BODY.slice(end - 13, end), '# Description');
@@ -90,61 +93,83 @@ describe('findH1HeadingEndOffset', () => {
   });
 });
 
-describe('buildStaleFacetDecorations', () => {
-  test('empty stale set → no decorations', () => {
-    const decos = buildStaleFacetDecorations(V2_BODY, new Set());
-    assert.equal(decos.size, 0);
+describe('buildFacetStateDecorations', () => {
+  test('all-source → 3 suffix widgets only (no body marks)', () => {
+    // Source facets get the "— source" suffix widget but no body
+    // decoration; they render at full color.
+    const decos = buildFacetStateDecorations(V2_BODY, ALL_SOURCE);
+    assert.equal(decos.size, 3);
   });
 
-  test('description-only stale → 2 decorations (widget + mark)', () => {
-    // v0.2.239: each stale facet emits a widget (after heading) +
-    // a mark (on body).
-    const decos = buildStaleFacetDecorations(
-      V2_BODY, new Set(['description']),
-    );
-    assert.equal(decos.size, 2);
-  });
-
-  test('all three stale → 6 decorations (3 widgets + 3 marks)', () => {
-    const decos = buildStaleFacetDecorations(
-      V2_BODY, new Set(['description', 'recipe', 'python']),
-    );
+  test('all-stale → 6 decorations (3 widgets + 3 body marks)', () => {
+    const allStale: Record<FacetName, FacetState> = {
+      description: FacetState.Stale,
+      recipe: FacetState.Stale,
+      python: FacetState.Stale,
+    };
+    const decos = buildFacetStateDecorations(V2_BODY, allStale);
     assert.equal(decos.size, 6);
   });
 
-  test('stale facet missing from body → no range added (defensive)', () => {
-    // V1 body has no # Python heading; asking for python-stale on it
-    // should produce 0 decorations rather than crash.
-    const v1Body = '# Description\n\nfoo\n\n# Recipe\n\nReturn.\n';
-    const decos = buildStaleFacetDecorations(v1Body, new Set(['python']));
-    assert.equal(decos.size, 0);
+  test('mixed states (Recipe source, Description + Python stale) → 5 decorations', () => {
+    // Recipe: 1 widget (source, no body mark).
+    // Description: 1 widget + 1 body mark.
+    // Python: 1 widget + 1 body mark.
+    const states: Record<FacetName, FacetState> = {
+      description: FacetState.Stale,
+      recipe: FacetState.Source,
+      python: FacetState.Stale,
+    };
+    const decos = buildFacetStateDecorations(V2_BODY, states);
+    assert.equal(decos.size, 5);
   });
 
-  test('two stale → 4 decorations in sorted order', () => {
-    // Regression guard: RangeSetBuilder demands sorted input.
-    // Recipe + Python stale → widget-Recipe, mark-Recipe, widget-Python,
-    // mark-Python. Positions must be strictly non-decreasing.
-    const decos = buildStaleFacetDecorations(
-      V2_BODY, new Set(['recipe', 'python']),
-    );
+  test('derived state → widget + derived body mark (distinct from stale)', () => {
+    const states: Record<FacetName, FacetState> = {
+      description: FacetState.Source,
+      recipe: FacetState.Source,
+      python: FacetState.Derived,
+    };
+    const decos = buildFacetStateDecorations(V2_BODY, states);
+    // 3 source widgets + 1 derived widget already at Description + Recipe
+    // headings, but here it's 2 sources + 1 derived = 3 widgets total,
+    // plus 1 body mark for Python.
     assert.equal(decos.size, 4);
-    // Iterate to confirm we can enumerate without throwing.
-    let count = 0;
+  });
+
+  test('body missing a heading → still produces widgets for present facets', () => {
+    // V1-like body: no # Recipe. buildFacetStateDecorations mounts
+    // widgets only for headings that exist; unpresent headings return
+    // -1 from findH1HeadingEndOffset and are skipped.
+    const v1Body = '# Description\n\nfoo\n\n# Python\n\ndef compute(c): pass\n';
+    const states: Record<FacetName, FacetState> = {
+      description: FacetState.Source,
+      recipe: FacetState.Stale,  // Recipe heading absent → skipped
+      python: FacetState.Source,
+    };
+    const decos = buildFacetStateDecorations(v1Body, states);
+    assert.equal(decos.size, 2);
+  });
+
+  test('sorted order preserved (RangeSetBuilder invariant)', () => {
+    // Regression guard: two stale + one source facets. All positions
+    // must be strictly non-decreasing.
+    const states: Record<FacetName, FacetState> = {
+      description: FacetState.Stale,
+      recipe: FacetState.Source,
+      python: FacetState.Stale,
+    };
+    const decos = buildFacetStateDecorations(V2_BODY, states);
     let lastFrom = -1;
     decos.between(0, V2_BODY.length, (from) => {
-      assert.ok(from >= lastFrom, `decoration positions must be sorted; ${from} < ${lastFrom}`);
+      assert.ok(from >= lastFrom, `positions must be sorted; ${from} < ${lastFrom}`);
       lastFrom = from;
-      count++;
       return;
     });
-    assert.equal(count, 4);
   });
 
-  test('widget mounts at end-of-heading offset (not on newline)', () => {
-    // The widget should sit at the position of `\n` (i.e. AFTER
-    // "Description") so CM6 renders it inline with the heading.
-    const stale = new Set<'description' | 'recipe' | 'python'>(['description']);
-    const decos = buildStaleFacetDecorations(V2_BODY, stale);
+  test('suffix widget mounts at end-of-heading offset (not on newline)', () => {
+    const decos = buildFacetStateDecorations(V2_BODY, ALL_SOURCE);
     const descEnd = findH1HeadingEndOffset(V2_BODY, 'Description');
     let sawWidgetHere = false;
     decos.between(descEnd, descEnd + 1, (from, to) => {

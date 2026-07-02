@@ -70,53 +70,67 @@ test('CM6 integration: stale-facet plugin mounts without throwing', async () => 
   }
 });
 
-test('CM6 integration: stale facets render with forge-stale-facet class', async () => {
+test('CM6 integration: stale facets render with forge-facet-stale class (v11.4)', async () => {
+  // v0.2.243 — Constitution V2a v11.4 tri-state. Recipe canonical
+  // in STALE_RECIPE_NOTE → Description + Python both stale → body
+  // marks with forge-facet-stale class.
   const harness = createIntegrationHarness();
   try {
     const view = harness.mount(STALE_RECIPE_NOTE, [staleFacetViewPlugin]);
     await waitForDecorations(harness);
     const html = view.contentDOM.innerHTML;
     assert.ok(
-      html.includes('forge-stale-facet'),
-      `expected forge-stale-facet in DOM after async stale-detect; got: ${html.slice(0, 600)}`,
+      html.includes('forge-facet-stale'),
+      `expected forge-facet-stale in DOM after async state-compute; got: ${html.slice(0, 600)}`,
     );
   } finally {
     harness.destroy();
   }
 });
 
-test('CM6 integration: stale facets also render " — reference" widget after heading', async () => {
-  // v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
+test('CM6 integration: tri-state suffix widgets render (source/derived/stale)', async () => {
+  // v0.2.243 — Constitution V2a v11.4 tri-state. All three facets
+  // get a suffix widget indicating their state. STALE_RECIPE_NOTE
+  // has recipe canonical → Description + Python are stale; Recipe
+  // is source.
   const harness = createIntegrationHarness();
   try {
     const view = harness.mount(STALE_RECIPE_NOTE, [staleFacetViewPlugin]);
     await waitForDecorations(harness);
     const html = view.contentDOM.innerHTML;
     assert.ok(
-      html.includes('forge-facet-reference-suffix'),
-      `expected forge-facet-reference-suffix widget in DOM; got: ${html.slice(0, 600)}`,
+      html.includes('forge-facet-suffix'),
+      `expected forge-facet-suffix widget in DOM; got: ${html.slice(0, 600)}`,
     );
     assert.ok(
-      html.includes('— reference'),
-      `expected literal "— reference" text in DOM; got: ${html.slice(0, 600)}`,
+      html.includes('— source'),
+      `expected literal "— source" text in DOM (Recipe is source); got: ${html.slice(0, 600)}`,
+    );
+    assert.ok(
+      html.includes('— stale'),
+      `expected literal "— stale" text in DOM (Description/Python stale); got: ${html.slice(0, 600)}`,
     );
   } finally {
     harness.destroy();
   }
 });
 
-test('CM6 integration: no hashes → no stale facets painted', async () => {
+test('CM6 integration: no hashes → synced canonical → all source, no body marks', async () => {
+  // v0.2.243 — When no hashes are stored, whichLayerIsCanonical
+  // returns 'synced' → all facets are source. Source facets get NO
+  // body decoration (full color). Suffix widgets still render.
   const harness = createIntegrationHarness();
   try {
     const view = harness.mount(SYNCED_NOTE_NO_HASHES, [staleFacetViewPlugin]);
     await waitForDecorations(harness);
     const html = view.contentDOM.innerHTML;
     assert.ok(
-      !html.includes('forge-stale-facet'),
-      'V2 note with no stored hashes should NOT paint stale-facet '
-        + 'decorations (canonical layer is `description` by default '
-        + '→ all downstream facets stale → but there are no facets '
-        + 'past Description, so 0 decorations)',
+      !html.includes('forge-facet-stale'),
+      'V2 note with no stored hashes → synced → no stale body marks',
+    );
+    assert.ok(
+      !html.includes('forge-facet-derived'),
+      'V2 note with no stored hashes → synced → no derived body marks',
     );
   } finally {
     harness.destroy();

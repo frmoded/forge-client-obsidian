@@ -2562,14 +2562,20 @@ export default class ForgePlugin extends Plugin {
     // recipe_hash captures the freshly-generated Recipe so subsequent
     // hand-edits to the Recipe facet surface as "recipe canonical" via
     // hash mismatch. Without stamping here, every newly /generated
-    // note would read as recipe-canonical on the next click. Python
-    // facet hash is stamped separately by writeCanonicalPythonBack
-    // after Forge-click compiles it.
+    // note would read as recipe-canonical on the next click.
+    //
+    // v0.2.243 (V2a v11.4 tri-state): also stamp
+    // `recipe_derived_from_source_hash = description_hash` so cohort
+    // sees Recipe as "— derived" from current Description. Python
+    // stamp is separate — writeCanonicalPythonBack handles it.
     const withEmm = replaceRecipeSection(body, code);
     const descHash = await computeDescriptionHash(description);
     const recipeHash = await computeFacetHash(code);
     const withDesc = setFmFieldV2(withEmm, 'description_hash', descHash);
-    const withHash = setFmFieldV2(withDesc, 'recipe_hash', recipeHash);
+    const withRecipe = setFmFieldV2(withDesc, 'recipe_hash', recipeHash);
+    const withHash = setFmFieldV2(
+      withRecipe, 'recipe_derived_from_source_hash', descHash,
+    );
 
     await this.app.vault.modify(file, withHash);
     console.warn('[Forge V2 /generate] file written; description_hash:', descHash, 'recipe_hash:', recipeHash);
@@ -3456,6 +3462,21 @@ export default class ForgePlugin extends Plugin {
       // path but doesn't participate in the 3-layer state machine.
       if (extractPythonSection(next) !== null) {
         next = setFmFieldV2(next, 'python_hash', pythonHash);
+        // v0.2.243 (V2a v11.4 tri-state): stamp
+        // python_derived_from_source_hash so cohort sees Python
+        // as "— derived" from whichever facet drove this compile.
+        // Rule per v11.4 §4.2: derived-from = current canonical's
+        // hash. Look up whichever of description_hash / recipe_hash
+        // is present (the canonical drove the recompile); default
+        // to recipe_hash then description_hash. Absent both is a
+        // rare edge case (no upstream stamped yet) — skip.
+        const rh = getFmFieldV2(next, 'recipe_hash');
+        const dh = getFmFieldV2(next, 'description_hash');
+        const sourceHash = typeof rh === 'string' ? rh
+          : typeof dh === 'string' ? dh : null;
+        if (sourceHash !== null) {
+          next = setFmFieldV2(next, 'python_derived_from_source_hash', sourceHash);
+        }
       }
       return next;
     });
@@ -3800,7 +3821,8 @@ export default class ForgePlugin extends Plugin {
       console.log(
         `[v113-backfill] ${file.path}: changed=${result.changed} ` +
         `pythonSection=${result.actions.pythonSection} ` +
-        `hashesStamped=${JSON.stringify(result.actions.hashes)}`,
+        `hashesStamped=${JSON.stringify(result.actions.hashes)} ` +
+        `derivedFromStamped=${JSON.stringify(result.actions.derivedFromFields)}`,
       );
       if (!result.changed) return;
       await this.app.vault.modify(file, result.newBody);
@@ -3809,8 +3831,14 @@ export default class ForgePlugin extends Plugin {
       if (result.actions.hashes.length > 0) {
         parts.push(`${result.actions.hashes.length} hash(es): ${result.actions.hashes.join(', ')}`);
       }
+      if (result.actions.derivedFromFields.length > 0) {
+        parts.push(
+          `${result.actions.derivedFromFields.length} v11.4 derived-from field(s): `
+          + result.actions.derivedFromFields.join(', '),
+        );
+      }
       void this.forgeOutput(
-        `Backfilled ${file.basename} to V2a v11.3 shape (${parts.join(', ')}).`,
+        `Backfilled ${file.basename} to V2a v11.4 shape (${parts.join(', ')}).`,
         'info',
       );
     } catch (e) {
