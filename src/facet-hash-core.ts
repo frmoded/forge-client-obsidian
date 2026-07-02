@@ -100,20 +100,31 @@ export async function whichLayerIsCanonical(
 }
 
 
-/** Detect each facet that is currently stale (downstream of canonical).
+/** Detect each facet that is currently stale (non-canonical).
  *
- *  Returns a set of facet names that should be visually grayed.
- *  The canonical facet itself is NEVER in the returned set; it's the
- *  authoritative source. Facets without a stored hash are not stale
- *  (they're considered "absent / fresh" rather than out-of-sync).
+ *  Returns a set of facet names that should be marked "reference /
+ *  documentation only" (per S9 v11.3). The canonical facet itself
+ *  is NEVER in the returned set; it's the authoritative source.
+ *  Facets without a stored hash are not stale (they're considered
+ *  "absent / fresh" rather than out-of-sync).
  *
- *  Stale-set rules per canonical:
+ *  v0.2.242 drain 2026-07-03-0100 — Constitution V2a v11.3 S9 spec
+ *  reads "non-canonical facets" (plural). All facets except the
+ *  canonical one are stale, regardless of upstream/downstream:
  *  - description canonical → recipe + python stale
- *  - recipe canonical      → python stale (description is upstream;
- *                            unaffected by Recipe edits)
- *  - python canonical      → description + recipe both stale
- *                            (Python is downstream of both)
+ *  - recipe canonical      → description + python stale
+ *  - python canonical      → description + recipe stale
  *  - synced                → empty set
+ *
+ *  Rationale: the suffix communicates SOURCE-OF-TRUTH, not
+ *  auto-regeneration. Cohort scanning the note sees "no suffix
+ *  = currently driving runtime." Upstream Description under a
+ *  Recipe-canonical state may or may not still be accurate; the
+ *  hint tells cohort to VERIFY.
+ *
+ *  Prior implementation (v0.2.239-v0.2.241) marked only downstream
+ *  facets — Recipe-canonical marked Python only, missing Description.
+ *  Driver 2026-07-03 flagged the asymmetric UX.
  */
 export async function detectStaleFacets(
   body: string,
@@ -126,8 +137,8 @@ export async function detectStaleFacets(
 ): Promise<Set<'description' | 'recipe' | 'python'>> {
   const canonical = await whichLayerIsCanonical(body, helpers);
   if (canonical === 'synced') return new Set();
-  if (canonical === 'description') return new Set(['recipe', 'python']);
-  if (canonical === 'recipe') return new Set(['python']);
-  // python canonical
-  return new Set(['description', 'recipe']);
+  const all: Array<'description' | 'recipe' | 'python'> = [
+    'description', 'recipe', 'python',
+  ];
+  return new Set(all.filter(f => f !== canonical));
 }

@@ -218,7 +218,11 @@ describe('detectStaleFacets', () => {
     assert.equal(stale.has('description'), false);
   });
 
-  it('recipe canonical → python stale; description NOT stale', async () => {
+  it('recipe canonical → description + python both stale (symmetric per S9 v11.3)', async () => {
+    // Drain 2026-07-03-0100: constitution S9 v11.3 spec — "non-canonical
+    // facets" plural. Recipe-canonical implies BOTH Description AND
+    // Python are stale (documentation only, not driving runtime).
+    // Prior implementation only marked Python stale, missing Description.
     const dh = await computeFacetHash('d');
     const rhStored = await computeFacetHash('orig');
     const ph = await computeFacetHash('p');
@@ -226,8 +230,8 @@ describe('detectStaleFacets', () => {
       'body',
       _helpers('d', 'edited', 'p', dh, rhStored, ph),
     );
+    assert.equal(stale.has('description'), true);
     assert.equal(stale.has('python'), true);
-    assert.equal(stale.has('description'), false);
     assert.equal(stale.has('recipe'), false);
   });
 
