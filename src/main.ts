@@ -871,130 +871,41 @@ export default class ForgePlugin extends Plugin {
       },
     });
 
-    this.addCommand({
-      id: 'forge-zap-line',
-      name: 'Zap line',
-      callback: () => {
-        // v0.2.228 — wrap with spinner per round-2 audit. Zap-line can
-        // hit the full snippet-run path when there's no zap target on
-        // the line (fallback to runSnippet), and the runSnippet on the
-        // zap target itself is a multi-second pyodide compute.
-        const op = () => this.runZapLine();
-        if (this.spinner) {
-          void this.spinner.wrapImmediate('Forge: 🔥 running …', op);
-        } else {
-          void op();
-        }
-      },
-    });
+    // v0.2.244 drain 2026-07-03-0300 — palette cleanup:
+    //   `forge-zap-line`, `forge-generate-only`,
+    //   `forge-generate-recipe-from-description`,
+    //   `forge-show-canonical-layer`, `forge-sync-english-from-python`,
+    //   `forge-toggle-edit-mode` all retired.
+    //
+    // Rationale:
+    // - zap-line: V1-era, no V2 use case.
+    // - generate-only: superseded by canonical-forge (one pass).
+    // - generate-recipe-from-description: same as generate-only under
+    //   the Recipe dialect; canonical-forge covers it.
+    // - show-canonical-layer: v11.4 tri-state visibility surfaces
+    //   the "— source" suffix directly in the note.
+    // - sync-english-from-python: V1 vocabulary (English facet retired).
+    // - toggle-edit-mode: engineer-mode retired for vault notes per
+    //   S10 v11.2; toggle is a no-op or state-corruption risk.
+    //
+    // showCanonicalLayer() method retained (status-bar consumer).
+    // generate() method retained (used internally by forge-click).
+    // Handlers with no other callers deleted below.
 
-    // Direct backend access for debugging. The Forge button calls /generate
-    // then /run; these expose each leg on its own. Generate-only respects
-    // edit mode — a Python-mode snippet shows a notice and bails rather
-    // than burning LLM tokens that the server would skip anyway.
-    this.addCommand({
-      id: 'forge-generate-only',
-      name: 'Generate only',
-      callback: () => {
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (view?.file) {
-          const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
-          if (getEditMode(fm) === 'python') {
-            this.notice(`Forge: ${view.file.basename} is in Python mode — switch to English mode to regenerate.`);
-            return;
-          }
-        }
-        // v0.2.225 — wrap with spinner per audit (driver 2026-07-01).
-        // /generate is LLM-bound, multi-second; cohort needs working-
-        // state cue regardless of which command path invokes it.
-        const op = () => this.generate();
-        if (this.spinner) {
-          void this.spinner.wrapImmediate('Forge: 🔥 generating…', op);
-        } else {
-          void op();
-        }
-      },
-    });
-
-    // v0.2.182 — V2 /generate Phase 2. New Cmd-P command that takes
-    // the active V2 note's # Description, POSTs to the hosted service
-    // with dialect="emm", and writes the returned Recipe into the
-    // # Recipe section (creating it if absent). On success, computes +
-    // stores `description_hash` in frontmatter so the editor's stale-
-    // indicator check (deferred to Phase 3 per the prompt's SPLIT
-    // GUIDANCE on §3.4) can detect Description edits later.
-    this.addCommand({
-      id: 'forge-generate-recipe-from-description',
-      name: 'Forge: Generate Recipe from Description',
-      callback: () => {
-        // v0.2.218 — wrap with spinner. /generate is LLM-bound
-        // (multi-second); cohort needs a working-state cue.
-        const op = () => this.generateEmmFromDescription();
-        if (this.spinner) {
-          void this.spinner.wrapImmediate('Forge: 🔥 generating…', op);
-        } else {
-          void op();
-        }
-      },
-    });
-
-    // v0.2.196 — explicit lock commands retired. The implicit
-    // 3-layer state machine (description / recipe / python +
-    // facet-hash-core.whichLayerIsCanonical) supersedes them: a
-    // hand-edited Recipe surfaces as "recipe canonical" via
-    // recipe_hash mismatch, and /generate detects that via the same
-    // mechanism. No frontmatter `lock:` field needed.
+    // v0.2.196 — explicit lock commands retired. Implicit 3-layer
+    // state machine (description / recipe / python +
+    // facet-hash-core.whichLayerIsCanonical) supersedes them.
 
     // v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
     // `forge-toggle-python-visibility` retired: Python is now always
-    // visible + editable, seeded with `def compute(context): return None`
-    // by the new-note template. Stale facets communicate via title
-    // suffix + grayscale dimming (stale-facet-view-plugin). Canonical
-    // determination via S9 hash-drift is unchanged.
+    // visible + editable. Stale facets communicate via title suffix +
+    // grayscale dimming (facet-state-view-plugin, v0.2.243 → v11.4
+    // tri-state).
 
-    this.addCommand({
-      id: 'forge-show-canonical-layer',
-      name: 'Forge: Show canonical layer (which facet was last edited)',
-      callback: () => { this.showCanonicalLayer(); },
-    });
-
-    this.addCommand({
-      id: 'forge-sync-english-from-python',
-      name: 'Sync English ← Python',
-      callback: () => { this.syncEnglishFromPython(); },
-    });
-
-    // The same action via the file/editor context menus — the spec wants
-    // this off the toolbar because it's deliberate and infrequent. Two
-    // event registrations cover the two right-click surfaces:
-    //  - file-menu fires for right-click on a file tab or in the file
-    //    explorer pane.
-    //  - editor-menu fires for right-click inside the open editor body,
-    //    which is where users naturally right-click while reading the
-    //    snippet.
-    const addSyncMenuItem = (menu: any, file: TFile) => {
-      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      if (fm?.type !== 'action') return;
-      menu.addItem((item: any) =>
-        item.setTitle('Forge: Sync English ← Python')
-          .setIcon('file-text')
-          .onClick(() => { this.syncEnglishFromPython(file); }),
-      );
-    };
-
-    this.registerEvent(
-      this.app.workspace.on('file-menu', (menu, file) => {
-        if (!(file instanceof TFile) || file.extension !== 'md') return;
-        addSyncMenuItem(menu, file);
-      }),
-    );
-    this.registerEvent(
-      this.app.workspace.on('editor-menu', (menu, _editor, info: any) => {
-        const file = info?.file;
-        if (!(file instanceof TFile) || file.extension !== 'md') return;
-        addSyncMenuItem(menu, file);
-      }),
-    );
+    // v0.2.244 drain 2026-07-03-0300 — "Sync English ← Python" file
+    // and editor menu items retired alongside the Cmd-P command
+    // (V1 vocabulary: English facet is gone). syncEnglishFromPython
+    // method retained as dead-code candidate for a followup audit.
 
     // v0.2.41: right-click a wikilink in a snippet body → freeze /
     // unfreeze the edge directly, no modal. Bypasses the modal-typing
@@ -1166,36 +1077,13 @@ export default class ForgePlugin extends Plugin {
       },
     });
 
-    // v0.2.9: surface the edit-mode toggle in Cmd+P. Single command
-    // (not two switch-to-X variants) because (a) it mirrors the
-    // toolbar button's semantics exactly and (b) the Notice fired
-    // inside toggleEditModeForFile already announces the new mode,
-    // so "which direction" is never ambiguous post-invocation.
-    this.addCommand({
-      id: 'forge-toggle-edit-mode',
-      name: 'Toggle Python/English editing mode',
-      callback: () => { this.toggleEditMode(); },
-    });
-
-    // v0.2.9: right-click discoverability. Edit-mode entry on the
-    // file-menu for any `forge` action snippet — target IS the
-    // clicked file (toggleEditModeForFile), not the active view.
-    this.registerEvent(
-      this.app.workspace.on('file-menu', (menu, file) => {
-        if (!(file instanceof TFile) || file.extension !== 'md') return;
-        const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-        if (fm?.type !== 'action') return;
-        const current = getEditMode(fm);
-        const target = current === 'python' ? 'English' : 'Python';
-        menu.addItem((item) => {
-          item.setTitle(`Forge: Switch to ${target} editing mode`)
-            .setIcon(current === 'python' ? 'pencil-line' : 'code')
-            .onClick(async () => {
-              await this.toggleEditModeForFile(file);
-            });
-        });
-      }),
-    );
+    // v0.2.244 drain 2026-07-03-0300 — `forge-toggle-edit-mode`
+    // retired per S10 v11.2 (engineer-mode retired for vault notes)
+    // + S9 v11.3+ (all facets always editable). Both the Cmd-P
+    // command and the file-menu right-click item are removed.
+    // toggleEditMode / toggleEditModeForFile methods retained (dead
+    // code candidates — audit + delete in a followup drain if no
+    // callers surface).
 
     this.addCommand({
       id: 'forge-freeze-edge',
