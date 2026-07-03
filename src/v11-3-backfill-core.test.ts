@@ -210,6 +210,122 @@ test('DEFAULT_PYTHON_STUB is stable for regression pins', () => {
   assert.equal(DEFAULT_PYTHON_STUB, 'def compute(context):\n    return None');
 });
 
+test('v114-canonical-hash-repair: rewrites python_derived_from = recipe_hash → description_hash', async () => {
+  // Drain 2026-07-03-0600 §3.4b: v0.2.243 shortcut stamped
+  // python_derived_from_source_hash with recipe_hash on
+  // Description-canonical forge. Detect the residue and repair.
+  const bugResidue = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: DDD
+python_derived_from_source_hash: RRR
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(bugResidue, HELPERS);
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.actions.canonicalHashRepairs, [
+    'python_derived_from_source_hash',
+  ]);
+  // Repair rewrites python's field to description_hash
+  assert.equal(
+    getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
+    'DDD',
+  );
+  // Recipe's derived-from preserved verbatim
+  assert.equal(
+    getFrontmatterField(result.newBody, 'recipe_derived_from_source_hash'),
+    'DDD',
+  );
+});
+
+test('v114-canonical-hash-repair: does NOT fire on correctly-stamped notes (idempotent)', async () => {
+  // Post-fix note with python_derived_from = description_hash: no
+  // repair action. Idempotent + doesn't touch correctly-stamped
+  // notes.
+  const correctlyStamped = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: DDD
+python_derived_from_source_hash: DDD
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(correctlyStamped, HELPERS);
+  assert.equal(result.changed, false);
+  assert.deepEqual(result.actions.canonicalHashRepairs, []);
+});
+
+test('v114-canonical-hash-repair: does NOT fire on Recipe-canonical forge (recipe derived-from ≠ description_hash)', async () => {
+  // If python_derived_from = recipe_hash but recipe_derived_from is
+  // ALSO recipe_hash (not description_hash), this is a Recipe-canonical
+  // forge where Python correctly derives from Recipe. Don't repair.
+  const recipeCanonicalForge = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: RRR
+python_derived_from_source_hash: RRR
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(recipeCanonicalForge, HELPERS);
+  // No repair fires; but derivedFromFields may still be empty since
+  // all fields present. changed remains false.
+  assert.deepEqual(result.actions.canonicalHashRepairs, []);
+  assert.equal(
+    getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
+    'RRR',
+  );
+});
+
 // Drain 2026-07-03-0000 — driver's greeting.md exact scenario.
 // 2 of 3 hashes already present in frontmatter (description_hash +
 // recipe_hash from an earlier code path), python_hash missing. Python

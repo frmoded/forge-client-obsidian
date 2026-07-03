@@ -3346,6 +3346,24 @@ export default class ForgePlugin extends Plugin {
     // hidden, the python_hash from the prior visibility cycle is left
     // in place (and a body-level toggle-on will refresh it).
     const pythonHash = await computeFacetHash(python);
+    // v0.2.248 drain 2026-07-03-0600 §3.2 — determine the CANONICAL
+    // that drove this compile so we can stamp
+    // python_derived_from_source_hash with its ROOT-source hash. The
+    // v0.2.243 shortcut ("prefer recipe_hash, fall back to
+    // description_hash") was wrong for two-hop Description-canonical
+    // forge: Python would show `— stale` immediately after forge
+    // because its stored derived-from = recipe_hash didn't match
+    // description_hash when Description was source. Compute canonical
+    // pre-write and use its hash below.
+    const canonicalForStamp = await whichLayerIsCanonical(body, {
+      extractDescription,
+      extractRecipeSection,
+      extractPythonSection,
+      getFrontmatterField: (b, k) => {
+        const v = getFmFieldV2(b, k);
+        return typeof v === 'string' ? v : null;
+      },
+    });
     await this.app.vault.process(file, (content) => {
       let next = writePythonAndEnglishHash(content, {
         pythonCode: python,
@@ -3358,18 +3376,27 @@ export default class ForgePlugin extends Plugin {
       // path but doesn't participate in the 3-layer state machine.
       if (extractPythonSection(next) !== null) {
         next = setFmFieldV2(next, 'python_hash', pythonHash);
-        // v0.2.243 (V2a v11.4 tri-state): stamp
-        // python_derived_from_source_hash so cohort sees Python
-        // as "— derived" from whichever facet drove this compile.
-        // Rule per v11.4 §4.2: derived-from = current canonical's
-        // hash. Look up whichever of description_hash / recipe_hash
-        // is present (the canonical drove the recompile); default
-        // to recipe_hash then description_hash. Absent both is a
-        // rare edge case (no upstream stamped yet) — skip.
+        // v0.2.248 drain 2026-07-03-0600 §3.2 — stamp
+        // python_derived_from_source_hash at the CANONICAL's hash
+        // (its root source), not a prefer-recipe shortcut. When
+        // canonical is 'synced', treat as Description per §3.1
+        // convention (Description canonical when nothing drifted).
+        // 'python' canonical is terminal — Python driving itself
+        // is a rare case (cohort hand-edited Python); no derived-
+        // from stamp applies. Skip in that case; leave the field
+        // as-is (or absent if never stamped).
         const rh = getFmFieldV2(next, 'recipe_hash');
         const dh = getFmFieldV2(next, 'description_hash');
-        const sourceHash = typeof rh === 'string' ? rh
-          : typeof dh === 'string' ? dh : null;
+        let sourceHash: string | null = null;
+        if (canonicalForStamp === 'description') {
+          sourceHash = typeof dh === 'string' ? dh : null;
+        } else if (canonicalForStamp === 'recipe') {
+          sourceHash = typeof rh === 'string' ? rh : null;
+        } else if (canonicalForStamp === 'synced') {
+          // §3.1 convention.
+          sourceHash = typeof dh === 'string' ? dh : null;
+        }
+        // canonical === 'python' → no stamp (skip).
         if (sourceHash !== null) {
           next = setFmFieldV2(next, 'python_derived_from_source_hash', sourceHash);
         }
@@ -3743,6 +3770,15 @@ export default class ForgePlugin extends Plugin {
         `hashesStamped=${JSON.stringify(result.actions.hashes)} ` +
         `derivedFromStamped=${JSON.stringify(result.actions.derivedFromFields)}`,
       );
+      if (result.actions.canonicalHashRepairs.length > 0) {
+        // v0.2.248 drain 2026-07-03-0600 §3.4b — distinct log prefix
+        // for forensic clarity per prompt guidance.
+        console.log(
+          `[v114-canonical-hash-repair] ${file.path}: rewrote `
+          + `${result.actions.canonicalHashRepairs.join(', ')} `
+          + `(v0.2.243 recipe_hash shortcut → description_hash root source).`,
+        );
+      }
       if (!result.changed) return;
       await this.app.vault.modify(file, result.newBody);
       const parts: string[] = [];
@@ -3754,6 +3790,12 @@ export default class ForgePlugin extends Plugin {
         parts.push(
           `${result.actions.derivedFromFields.length} v11.4 derived-from field(s): `
           + result.actions.derivedFromFields.join(', '),
+        );
+      }
+      if (result.actions.canonicalHashRepairs.length > 0) {
+        parts.push(
+          `${result.actions.canonicalHashRepairs.length} v11.4.1 canonical-hash repair(s): `
+          + result.actions.canonicalHashRepairs.join(', '),
         );
       }
       void this.forgeOutput(

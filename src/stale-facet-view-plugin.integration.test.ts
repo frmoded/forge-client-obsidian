@@ -115,22 +115,29 @@ test('CM6 integration: tri-state suffix widgets render (source/derived/stale)', 
   }
 });
 
-test('CM6 integration: no hashes → synced canonical → all source, no body marks', async () => {
-  // v0.2.243 — When no hashes are stored, whichLayerIsCanonical
-  // returns 'synced' → all facets are source. Source facets get NO
-  // body decoration (full color). Suffix widgets still render.
+test('CM6 integration: no hashes → synced delegates to Description canonical (v11.4.1)', async () => {
+  // v0.2.248 (v11.4.1 drain 2026-07-03-0600 §3.1): synced state
+  // delegates to Description canonical. SYNCED_NOTE_NO_HASHES has
+  // no derived_from fields → Recipe + Python render as `— stale`
+  // (their derived-from is absent, treated same as mismatch).
+  // Description renders as `— source`.
   const harness = createIntegrationHarness();
   try {
     const view = harness.mount(SYNCED_NOTE_NO_HASHES, [staleFacetViewPlugin]);
     await waitForDecorations(harness);
     const html = view.contentDOM.innerHTML;
     assert.ok(
-      !html.includes('forge-facet-stale'),
-      'V2 note with no stored hashes → synced → no stale body marks',
+      html.includes('— source'),
+      `expected "— source" on Description; got: ${html.slice(0, 600)}`,
     );
     assert.ok(
-      !html.includes('forge-facet-derived'),
-      'V2 note with no stored hashes → synced → no derived body marks',
+      html.includes('— stale'),
+      `expected "— stale" on downstream facets (no derived_from stamps); got: ${html.slice(0, 600)}`,
+    );
+    // No "derived" state without derived_from stamps.
+    assert.ok(
+      !html.includes('— derived'),
+      'V2 note with no derived_from fields → no derived body marks',
     );
   } finally {
     harness.destroy();

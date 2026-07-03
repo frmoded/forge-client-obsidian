@@ -78,14 +78,19 @@ export function computeFacetStates(
   fm: FacetStateFrontmatterReader,
 ): Record<FacetName, FacetState> {
   if (canonical === 'synced') {
-    // No drift → nothing is stale/derived. Treat all as source
-    // (v11.4 §3.3 default — cohort sees no `— reference` cruft on
-    // freshly-forged aligned notes).
-    return {
-      description: FacetState.Source,
-      recipe: FacetState.Source,
-      python: FacetState.Source,
-    };
+    // v11.4.1 (drain 2026-07-03-0600 §3.1): synced state delegates
+    // to Description canonical. V2 authorial convention: Description
+    // is the natural entry point for cohort work; treating it as
+    // source reinforces "hand-edit here" while Recipe + Python read
+    // as "auto-produced" from Description.
+    //
+    // Recursion terminates because 'description' isn't 'synced'.
+    // Result for a well-formed post-forge V2 note (both
+    // derived_from stamps point at description_hash) is
+    // {Source, Derived, Derived}. Notes with mismatched or absent
+    // derived_from surface as {Source, Stale, Stale} — flagging
+    // that downstream derivation-lineage doesn't trace to Description.
+    return computeFacetStates('description', fm);
   }
   const canonicalPos = CHAIN_POSITION[canonical];
   const canonicalHash = fm.getFrontmatterField(`${canonical}_hash`);

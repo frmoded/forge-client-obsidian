@@ -114,16 +114,59 @@ test('upstream is inherently stale even if some derived_from field is set', () =
   assert.equal(states.description, FacetState.Stale);
 });
 
-test('synced canonical → all three facets source (post-backfill / freshly aligned)', () => {
+test('synced state → Description canonical convention (v11.4.1)', () => {
+  // Drain 2026-07-03-0600 §3.1: synced state delegates to
+  // Description canonical. Description is source; Recipe + Python
+  // are downstream and check derived_from_source_hash against
+  // description_hash. Well-formed post-backfill note (both
+  // derived-from stamps point at description_hash) renders as
+  // {Source, Derived, Derived}.
   const fm = fakeFm({
     description_hash: 'D1',
     recipe_hash: 'R1',
     python_hash: 'P1',
+    recipe_derived_from_source_hash: 'D1',
+    python_derived_from_source_hash: 'D1',
   });
   const states = computeFacetStates('synced', fm);
   assert.equal(states.description, FacetState.Source);
-  assert.equal(states.recipe, FacetState.Source);
-  assert.equal(states.python, FacetState.Source);
+  assert.equal(states.recipe, FacetState.Derived);
+  assert.equal(states.python, FacetState.Derived);
+});
+
+test('synced state + python_derived_from_source_hash = recipe_hash (pre-fix bug residue)', () => {
+  // Drain 2026-07-03-0600 §4.2 test 2: pin the exact frontmatter
+  // shape that v0.2.243's shortcut left behind. Post-fix, this
+  // renders {Source, Derived, Stale} — surfaces the residue as
+  // stale until repair fires (§3.4b) or cohort re-forges.
+  const fm = fakeFm({
+    description_hash: 'D1',
+    recipe_hash: 'R1',
+    python_hash: 'P1',
+    recipe_derived_from_source_hash: 'D1',
+    python_derived_from_source_hash: 'R1',  // ← bug residue
+  });
+  const states = computeFacetStates('synced', fm);
+  assert.equal(states.description, FacetState.Source);
+  assert.equal(states.recipe, FacetState.Derived);
+  assert.equal(states.python, FacetState.Stale);
+});
+
+test('synced state + missing derived_from fields → downstream stale', () => {
+  // Drain 2026-07-03-0600 §4.2 test 3: absent derived-from is
+  // treated same as mismatch. Documents the pre-backfill shape
+  // for existing notes touched only by v113 (which did stamp
+  // derived-from) or the pre-v0.2.243 vintage (which didn't).
+  const fm = fakeFm({
+    description_hash: 'D1',
+    recipe_hash: 'R1',
+    python_hash: 'P1',
+    // no *_derived_from_source_hash fields
+  });
+  const states = computeFacetStates('synced', fm);
+  assert.equal(states.description, FacetState.Source);
+  assert.equal(states.recipe, FacetState.Stale);
+  assert.equal(states.python, FacetState.Stale);
 });
 
 test('chain position constants match D→R→P generation direction', () => {

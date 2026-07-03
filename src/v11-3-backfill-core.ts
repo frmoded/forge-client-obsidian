@@ -45,6 +45,16 @@ export interface V113BackfillResult {
       | 'recipe_derived_from_source_hash'
       | 'python_derived_from_source_hash'
     >;
+    /** v0.2.248 drain 2026-07-03-0600 §3.4b — repair action for the
+     *  v0.2.243 bug residue: `python_derived_from_source_hash` was
+     *  stamped with recipe_hash instead of description_hash on
+     *  Description-canonical forge. Detect the pattern
+     *  (python_derived_from = recipe_hash && recipe_derived_from =
+     *  description_hash) and rewrite python's field to description_hash.
+     *  Empty when no repair fired.
+     *  Distinct from `derivedFromFields` (which stamps ABSENT fields);
+     *  this rewrites already-populated ones. */
+    canonicalHashRepairs: Array<'python_derived_from_source_hash'>;
   };
 }
 
@@ -76,6 +86,7 @@ export async function backfillV113Shape(
     pythonSection: false,
     hashes: [],
     derivedFromFields: [],
+    canonicalHashRepairs: [],
   };
 
   // Step 1: ensure # Python section exists on disk.
@@ -137,12 +148,38 @@ export async function backfillV113Shape(
         workingBody, 'python_derived_from_source_hash', currentDescStamp,
       );
       actions.derivedFromFields.push('python_derived_from_source_hash');
+    } else {
+      // v0.2.248 drain 2026-07-03-0600 §3.4b — canonical-hash repair.
+      // v0.2.243 shipped a shortcut that stamped
+      // python_derived_from_source_hash with recipe_hash on
+      // Description-canonical forge. Detect that bug residue and
+      // rewrite to description_hash so cohort doesn't see Python
+      // render "— stale" on notes they just forged. Signature:
+      //   python_derived_from_source_hash === recipe_hash
+      //   AND recipe_derived_from_source_hash === description_hash
+      // Under these conditions, the two-hop derivation trace
+      // indicates the forge went Description → Recipe → Python and
+      // Python's derived-from should point at Description's hash.
+      const recipeHash = helpers.getFrontmatterField(workingBody, 'recipe_hash');
+      const recipeDerivedFrom = helpers.getFrontmatterField(
+        workingBody, 'recipe_derived_from_source_hash');
+      const looksLikeBugResidue =
+        recipeHash !== null &&
+        pythonStamp === recipeHash &&
+        recipeDerivedFrom === currentDescStamp;
+      if (looksLikeBugResidue) {
+        workingBody = helpers.setFrontmatterField(
+          workingBody, 'python_derived_from_source_hash', currentDescStamp,
+        );
+        actions.canonicalHashRepairs.push('python_derived_from_source_hash');
+      }
     }
   }
 
   const changed = actions.pythonSection
     || actions.hashes.length > 0
-    || actions.derivedFromFields.length > 0;
+    || actions.derivedFromFields.length > 0
+    || actions.canonicalHashRepairs.length > 0;
   return {
     changed,
     newBody: changed ? workingBody : body,
