@@ -739,7 +739,8 @@ def _forge_preflight_then_inventory(snippet_id: str):
         pass
     return _forge_get_generate_inventory(snippet_id)
 
-def _forge_resolve_action_code(snippet_id: str, force: bool = False):
+def _forge_resolve_action_code(snippet_id: str, force: bool = False,
+                               canonical_layer=None):
     """v0.2.101 — return the action's Python source WITHOUT executing it.
 
     For facet_form: canonical snippets, this is the freshly transpiled
@@ -758,6 +759,10 @@ def _forge_resolve_action_code(snippet_id: str, force: bool = False):
     Refreshes the registry's cached entry from MEMFS first so the
     just-edited English is the one transpiled (same race-fix as
     _forge_preflight_then_inventory).
+
+    v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — canonical_layer
+    threads through to resolve_action_code for its short-circuit
+    handling of python-canonical + description-canonical notes.
     """
     relpath = f"/bundle/user-vault/{snippet_id}.md"
     try:
@@ -767,7 +772,8 @@ def _forge_resolve_action_code(snippet_id: str, force: bool = False):
         pass
     resolver = GraphResolver(_forge_registry)
     snip = resolver.resolve(snippet_id)
-    return resolve_action_code(snip, force=force)
+    return resolve_action_code(snip, force=force,
+                               canonical_layer=canonical_layer)
 
 def _forge_sync_user_file(relpath: str, new_body: str):
     """v0.2.17 — sync a single user-vault file change into MEMFS AND
@@ -873,7 +879,8 @@ def _forge_get_resolver(vault_name=None):
 # engine-side (Option C plugin-side routing), the trap no longer
 # exists and the warning is dead.
 
-def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None, slot_resolutions=None):
+def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None,
+                       slot_resolutions=None, canonical_layer=None):
     """Run a snippet and return (stdout, result). Action and data
     snippets dispatch via the same path the engine's /compute endpoint
     uses internally.
@@ -882,7 +889,11 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None, slot
     v0.2.72: 'slot_resolutions' parameter added — passed through to
     resolve_action_code so the engine can satisfy {{ }} slot lookups
     on the plugin's second pass after /resolve-slot.
-    v0.2.121: facet_form strip-trap warning removed."""
+    v0.2.121: facet_form strip-trap warning removed.
+    v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — 'canonical_layer'
+    parameter added; threads through to resolve_action_code so the
+    engine short-circuits Recipe parse when the plugin has already
+    declared Python canonical (or Description-canonical → None)."""
     if inputs is None:
         inputs = {}
     reg, resolver = _forge_get_resolver(vault_name)
@@ -893,7 +904,10 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None, slot
         # Python facet OR transpiles via E-- for facet_form: canonical
         # snippets. v0.2.72: also accepts slot_resolutions for the
         # second-pass cache populate.
-        code = resolve_action_code(snip, slot_resolutions=slot_resolutions)
+        code = resolve_action_code(
+            snip, slot_resolutions=slot_resolutions,
+            canonical_layer=canonical_layer,
+        )
         # v0.2.178: removed v0.2.16 per-call debug print (was useful
         # during the May-2026 greet-empty-stdout investigation but is
         # now permanent console noise for normal Forge-clicks).
@@ -916,10 +930,15 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None, slot
     else:
         raise ValueError(f"unknown snippet type '{snippet_type}' for {snippet_id!r}")
 
-def _forge_compute(snippet_id: str, args, inputs, vault_name: str, slot_resolutions=None):
+def _forge_compute(snippet_id: str, args, inputs, vault_name: str,
+                   slot_resolutions=None, canonical_layer=None):
     """v0.2.72 — Phase 1 entry point. inputs threads modal kwargs.
     slot_resolutions threads the v0.2.72 cache-miss second-pass
     resolutions back into resolve_action_code.
+
+    v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — canonical_layer
+    threads plugin's routing decision into engine's short-circuit
+    handling of python-canonical + description-canonical notes.
 
     Returns (result, stdout). The transpiled Python is captured
     transparently inside _forge_run_snippet's return tuple but is
@@ -931,6 +950,7 @@ def _forge_compute(snippet_id: str, args, inputs, vault_name: str, slot_resoluti
     stdout, raw_result, _code = _forge_run_snippet(
         snippet_id, args, inputs, vault_name,
         slot_resolutions=slot_resolutions,
+        canonical_layer=canonical_layer,
     )
     result = serialize_result(raw_result, snip)
     return result, stdout
@@ -1100,6 +1120,13 @@ export interface PyodideHostInstance {
     args: unknown[],
     inputs?: Record<string, unknown>,
     slotResolutions?: Record<string, string>,
+    /** v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
+     *  canonical-layer decision from `whichLayerIsCanonical`. Threads
+     *  to engine.resolve_action_code so it short-circuits Recipe
+     *  parse on python-canonical (or returns None on
+     *  description-canonical). Undefined preserves pre-v0.2.252
+     *  behavior. */
+    canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
   ): Promise<ComputeResult>;
   /** v0.2.72 — variant that also returns the transpiled Python
    *  source so the plugin can write `# Python` back to disk after
@@ -1115,7 +1142,19 @@ export interface PyodideHostInstance {
    *  for legacy snippets it's the cached # Python facet. Used by the
    *  canonical-mode forgeSnippet branch to persist the transpiled
    *  Python back to disk after a successful runSnippet. */
-  resolveActionCode(snippet_id: string, opts?: { force?: boolean }): Promise<string>;
+  resolveActionCode(
+    snippet_id: string,
+    opts?: {
+      force?: boolean;
+      /** v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
+       *  routing signal. When 'python' the engine skips the V2 parse
+       *  and returns extracted Python directly; when 'description'
+       *  the engine returns null so the caller routes to /generate.
+       *  Undefined preserves pre-v0.2.252 behavior for callers that
+       *  haven't been updated. */
+      canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced';
+    },
+  ): Promise<string>;
   modaInit(): Promise<ModaInitResult>;
   modaCompute(dt: number, temperature: string): Promise<ModaComputeResult>;
   modaClick(x: number, y: number): Promise<ModaClickResult>;
@@ -1187,6 +1226,7 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
     args: unknown[],
     inputs: Record<string, unknown> = {},
     slotResolutions?: Record<string, string>,
+    canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
   ): Promise<ComputeResult> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set("_forge_args_in", args as any);
@@ -1202,6 +1242,14 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
     this.pyodide.globals.set(
       "_forge_slot_resolutions",
       (slotResolutions ?? null) as any);
+    // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
+    // canonical-layer decision threaded to engine; short-circuits
+    // Recipe parse on python-canonical, routes to None on
+    // description-canonical.
+    this.pyodide.globals.set(
+      "_forge_canonical_layer",
+      canonicalLayer ?? null,
+    );
     const tuple = this.pyodide.runPython(`
 _forge_compute(
     _forge_snippet_id,
@@ -1209,6 +1257,7 @@ _forge_compute(
     _forge_inputs_in.to_py() if _forge_inputs_in else {},
     _forge_vault_name,
     (_forge_slot_resolutions.to_py() if _forge_slot_resolutions else None),
+    canonical_layer=_forge_canonical_layer,
 )
 `);
     const result = tuple.get(0);
@@ -1259,7 +1308,13 @@ _forge_compute_with_python(
     };
   }
 
-  async resolveActionCode(snippet_id: string, opts?: { force?: boolean }): Promise<string> {
+  async resolveActionCode(
+    snippet_id: string,
+    opts?: {
+      force?: boolean;
+      canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced';
+    },
+  ): Promise<string> {
     // v0.2.128 — `force` opt bypasses the engine's legacy
     // `stored_hash is None → return cached` rule and the
     // `english_hash` cache-hit rule, always re-transpiling via E--.
@@ -1268,10 +1323,18 @@ _forge_compute_with_python(
     // english_hash in cohort state. Other call sites omit the opt
     // (force defaults to false) and the existing behavior is
     // preserved.
+    // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — canonicalLayer
+    // routes to engine.resolve_action_code's new short-circuit paths.
+    // Python-canonical → extract_python + return (no V2 parse).
+    // Description-canonical → return None (caller routes /generate).
     this.pyodide.globals.set("_forge_resolve_target", snippet_id);
     this.pyodide.globals.set("_forge_resolve_force", !!opts?.force);
+    this.pyodide.globals.set(
+      "_forge_resolve_canonical_layer",
+      opts?.canonicalLayer ?? null,
+    );
     const out = this.pyodide.runPython(
-      `_forge_resolve_action_code(_forge_resolve_target, force=_forge_resolve_force)`,
+      `_forge_resolve_action_code(_forge_resolve_target, force=_forge_resolve_force, canonical_layer=_forge_resolve_canonical_layer)`,
     );
     return String(out ?? "");
   }

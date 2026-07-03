@@ -317,6 +317,11 @@ export async function computeSnippet(
   args: unknown[] = [],
   inputs: Record<string, unknown> = {},
   slotResolutions?: Record<string, string>,
+  // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
+  // canonical-layer decision passed through to engine so
+  // resolve_action_code short-circuits the V2 parse chain when the
+  // plugin has already declared Python canonical.
+  canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
 ): Promise<ComputeResponse> {
   // V1: every compute routes through Pyodide. The mounted user-vault
   // contains the user's authoring snippets + bundled libraries as
@@ -331,7 +336,7 @@ export async function computeSnippet(
       // Engine uses the dict to satisfy every slot lookup; misses
       // still raise SlotCacheMissError per B7.3.
       const out = await host.computeViaEngine(
-        snippetId, args, inputs, slotResolutions);
+        snippetId, args, inputs, slotResolutions, canonicalLayer);
       // Shape the response to match the existing /compute return
       // contract (status + json envelope, json carries result + stdout).
       return {

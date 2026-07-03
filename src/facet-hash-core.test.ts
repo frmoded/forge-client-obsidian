@@ -136,8 +136,12 @@ describe('whichLayerIsCanonical', () => {
     assert.equal(result, 'python');
   });
 
-  it('python wins over recipe when BOTH mismatch (downstream priority)',
+  it('recipe wins over python when BOTH mismatch (upstream priority, v0.2.252)',
     async () => {
+      // v0.2.252 drain 1000 §3.2 — flipped from downstream-wins.
+      // Rationale: source-most edit is the intent driving next forge;
+      // downstream residue from prior smoke iterations must not hide
+      // the upstream edit.
       const d = 'hello';
       const r = 'edited recipe';
       const p = 'edited python';
@@ -148,10 +152,10 @@ describe('whichLayerIsCanonical', () => {
         'body',
         _helpers(d, r, p, dh, rhStored, phStored),
       );
-      assert.equal(result, 'python');
+      assert.equal(result, 'recipe');
     });
 
-  it('recipe wins over description when those two mismatch (downstream)',
+  it('description wins over recipe when those two mismatch (upstream, v0.2.252)',
     async () => {
       const d = 'edited desc';
       const r = 'edited recipe';
@@ -163,7 +167,27 @@ describe('whichLayerIsCanonical', () => {
         'body',
         _helpers(d, r, p, dhStored, rhStored, ph),
       );
-      assert.equal(result, 'recipe');
+      assert.equal(result, 'description');
+    });
+
+  it('description wins when Description + Recipe + Python all mismatch (v0.2.252 driver scenario)',
+    async () => {
+      // Driver 2026-07-03 slow_burn scenario reproduced: Description
+      // edited in-session; Recipe body carries "a " kwarg drift from
+      // prior smoke; Python has post-fix hand-edit. Pre-v0.2.252
+      // routed 'python' (downstream-wins); v0.2.252 routes 'description'
+      // (upstream-wins) so the cohort's Description edit is honored.
+      const d = 'edited in session';
+      const r = 'Let x = a foo=1.';           // buggy kwarg
+      const p = 'def compute(c): return 42';   // hand-tuned
+      const dhStored = await computeFacetHash('original description');
+      const rhStored = await computeFacetHash('Let x = foo=1.');
+      const phStored = await computeFacetHash('def compute(c): return 0');
+      const result = await whichLayerIsCanonical(
+        'body',
+        _helpers(d, r, p, dhStored, rhStored, phStored),
+      );
+      assert.equal(result, 'description');
     });
 
   it('returns "synced" when stored hashes are absent (fresh note)',

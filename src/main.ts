@@ -6,7 +6,6 @@ import {
   replaceRecipeSection,
   setFrontmatterField as setFmFieldV2,
   getFrontmatterField as getFmFieldV2,
-  removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core.ts';
@@ -1967,7 +1966,11 @@ export default class ForgePlugin extends Plugin {
         this.notice(
           `Forge: ${view.file.basename} → Python-canonical (hand-edited). Running as-is; no /generate, no transpile.`,
         );
-        await this.runSnippet('Forge failed during execution');
+        // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — pass the
+        // canonical decision so the engine skips Recipe parse. Pre-
+        // v0.2.252 the engine parsed Recipe anyway, exploding
+        // ParseError on residual "a" bugs even when Python was fine.
+        await this.runSnippet('Forge failed during execution', 'python');
         return;
       }
       if (canonicalLayer === 'description') {
@@ -3107,7 +3110,10 @@ export default class ForgePlugin extends Plugin {
 
   // errorPrefix forwards into computeSnippetWithArgs so the forge flow can
   // tag execution-side errors with "Forge failed during execution".
-  private async runSnippet(errorPrefix?: string) {
+  private async runSnippet(
+    errorPrefix?: string,
+    canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
+  ) {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       this.notice('No active note to run.');
@@ -3176,10 +3182,10 @@ export default class ForgePlugin extends Plugin {
       const cached = this.inputCache[snippetId] ?? {};
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
-        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix);
+        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer);
       }).open();
     } else {
-      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix);
+      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, canonicalLayer);
     }
   }
 
@@ -3382,7 +3388,6 @@ export default class ForgePlugin extends Plugin {
           return typeof v === 'string' ? v : null;
         },
         setFrontmatterField: setFmFieldV2,
-        removeFrontmatterField: removeFmFieldV2,
         replacePythonSection,
         computeFacetHash,
       });
@@ -3390,8 +3395,7 @@ export default class ForgePlugin extends Plugin {
         `[v113-backfill] ${file.path}: changed=${result.changed} ` +
         `pythonSection=${result.actions.pythonSection} ` +
         `hashesStamped=${JSON.stringify(result.actions.hashes)} ` +
-        `derivedFromStamped=${JSON.stringify(result.actions.derivedFromFields)} ` +
-        `strippedVestigial=${JSON.stringify(result.actions.strippedVestigialFields)}`,
+        `derivedFromStamped=${JSON.stringify(result.actions.derivedFromFields)}`,
       );
       if (result.actions.canonicalHashRepairs.length > 0) {
         // v0.2.248 drain 2026-07-03-0600 §3.4b — distinct log prefix
@@ -3419,12 +3423,6 @@ export default class ForgePlugin extends Plugin {
         parts.push(
           `${result.actions.canonicalHashRepairs.length} v11.4.1 canonical-hash repair(s): `
           + result.actions.canonicalHashRepairs.join(', '),
-        );
-      }
-      if (result.actions.strippedVestigialFields.length > 0) {
-        parts.push(
-          `stripped ${result.actions.strippedVestigialFields.length} vestigial field(s): `
-          + result.actions.strippedVestigialFields.join(', '),
         );
       }
       void this.forgeOutput(
@@ -3601,8 +3599,14 @@ export default class ForgePlugin extends Plugin {
     args: unknown[],
     inputs: Record<string, unknown>,
     errorPrefix?: string,
+    // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
+    // canonical-layer decision from `whichLayerIsCanonical`, threaded
+    // to the engine so resolve_action_code short-circuits Recipe
+    // parse on python-canonical. Undefined preserves pre-v0.2.252
+    // behavior when caller hasn't been updated.
+    canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
   ) {
-    console.log('Forge Compute →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs });
+    console.log('Forge Compute →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs, canonicalLayer });
 
     try {
       const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
@@ -3616,7 +3620,10 @@ export default class ForgePlugin extends Plugin {
 
     let res;
     try {
-      res = await computeSnippet(this.settings.serverUrl, vaultPath, snippetId, args, inputs);
+      res = await computeSnippet(
+        this.settings.serverUrl, vaultPath, snippetId, args, inputs,
+        undefined, canonicalLayer,
+      );
     } catch (e) {
       console.error('Forge Compute Error:', e);
       const detail = e instanceof Error ? e.message : String(e);

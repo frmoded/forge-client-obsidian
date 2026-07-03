@@ -17,11 +17,24 @@
 //   steady-state — Forge-click runs from the cached Python; /generate
 //   refreshes Recipe + Python from Description; etc.
 //
-// Canonical priority (downstream-wins): Python > Recipe > Description.
-//   - python edit  → python canonical → Recipe + Description stale
-//   - recipe edit  → recipe canonical → Python stale; Description fine
-//                    (Description doesn't propagate down from Recipe)
+// Canonical priority (upstream-wins, v0.2.252): Description > Recipe > Python.
 //   - desc edit    → description canonical → Recipe + Python stale
+//   - recipe edit  → recipe canonical → Python stale
+//   - python edit  → python canonical → Description + Recipe stale
+//
+// When multiple facets have drifted from their stored hashes, the
+// upstream-most drift wins. Semantically, Description is the root
+// source-of-truth in the D → R → P forge chain; a Description edit
+// is an intent change that supersedes any downstream residue. This
+// replaces the pre-v0.2.252 downstream-wins (Python > Recipe >
+// Description) precedence — that biased notes toward "run the last
+// Python we compiled" and hid Description edits when Recipe (or
+// Python) had residual drift from prior smoke iterations.
+//
+// See drain 2026-07-03-1000 §3.2 for the observed miss: driver
+// edited Description; Recipe + Python still had drift from earlier
+// smoke; plugin routed Python-canonical and cohort's Description
+// edit never registered.
 //
 // Pure-core (no `obsidian` import). All helpers operate on the full
 // note body markdown string.
@@ -56,9 +69,16 @@ export async function computeFacetHash(
  *
  *  Resolves to:
  *  - `synced`     — all stored hashes present and match
- *  - `python`     — python_hash mismatch (highest priority — downstream)
+ *  - `description`— description_hash mismatch (highest priority — upstream)
  *  - `recipe`     — recipe_hash mismatch
- *  - `description`— description_hash mismatch
+ *  - `python`     — python_hash mismatch (lowest priority — downstream)
+ *
+ *  Priority is UPSTREAM-WINS as of v0.2.252 (drain 2026-07-03-1000).
+ *  When multiple facets have drifted, the source-most edit wins —
+ *  Description is the root source-of-truth in D → R → P chain, and
+ *  a Description edit represents intent that supersedes downstream
+ *  residue from prior smokes. Pre-v0.2.252 was downstream-wins, which
+ *  hid Description edits when Recipe/Python still had drift.
  *
  *  An absent stored hash counts as "matches" (no mismatch surfaced) so
  *  freshly minted notes without hashes yet aren't reported as canonical
@@ -90,12 +110,12 @@ export async function whichLayerIsCanonical(
   const recipeMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
   const descMismatch = storedDesc !== null && storedDesc !== currentDesc;
 
-  // Downstream priority — closer to execution wins. A user editing
-  // Python on top of a stale Recipe is in "Python canonical" mode;
-  // Recipe-canonical only applies when Python matches its hash.
-  if (pythonMismatch) return 'python';
-  if (recipeMismatch) return 'recipe';
+  // Upstream priority (v0.2.252) — the earliest facet in the D → R → P
+  // chain wins. When a cohort edits Description, that intent supersedes
+  // any Recipe/Python drift left over from prior smoke iterations.
   if (descMismatch) return 'description';
+  if (recipeMismatch) return 'recipe';
+  if (pythonMismatch) return 'python';
   return 'synced';
 }
 

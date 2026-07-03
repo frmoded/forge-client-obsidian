@@ -1,3 +1,12 @@
+// v0.2.252 (drain 2026-07-03-1000) — english_hash is NOT stripped
+// from V2 notes. v0.2.72 slot-cache-key wire contract uses
+// english_hash as the hosted-endpoint cache key; stripping it
+// (introduced v0.2.249 drain 0800) caused strip → write → strip churn
+// on every slot-resolution path (v0.2.251 drain 0900 confirmed
+// writePythonAndEnglishHash is still the live writer). Rename to
+// description_hash_cache_key (or dedupe with description_hash) is a
+// separate future slot-cache-key refactor drain.
+//
 // v0.2.240 — Constitution V2a v11.3 backfill helper. Drain
 // 2026-07-02-2300: pre-v0.2.239 V2 notes lack the frontmatter hashes
 // (description_hash / recipe_hash / python_hash) that S9's state
@@ -24,10 +33,6 @@ export interface V113BackfillHelpers {
   extractPythonSection: (body: string) => string | null;
   getFrontmatterField: (body: string, key: string) => string | null;
   setFrontmatterField: (body: string, key: string, value: string) => string;
-  /** v0.2.249 drain 2026-07-03-0800 — delete a vestigial V1
-   *  frontmatter field from V2 notes (currently `english_hash`).
-   *  Idempotent: absent key is a no-op. */
-  removeFrontmatterField: (body: string, key: string) => string;
   replacePythonSection: (body: string, pythonSrc: string | null) => string;
   computeFacetHash: (content: string) => Promise<string>;
 }
@@ -59,11 +64,6 @@ export interface V113BackfillResult {
      *  Distinct from `derivedFromFields` (which stamps ABSENT fields);
      *  this rewrites already-populated ones. */
     canonicalHashRepairs: Array<'python_derived_from_source_hash'>;
-    /** v0.2.249 drain 2026-07-03-0800 — V1 vestigial fields stripped
-     *  from V2 notes on backfill. Currently just `english_hash`
-     *  (SHA-256-of-empty-string residue from V2 migration). Extend
-     *  this array as new vestigial fields surface. */
-    strippedVestigialFields: Array<'english_hash'>;
   };
 }
 
@@ -96,7 +96,6 @@ export async function backfillV113Shape(
     hashes: [],
     derivedFromFields: [],
     canonicalHashRepairs: [],
-    strippedVestigialFields: [],
   };
 
   // Step 1: ensure # Python section exists on disk.
@@ -186,24 +185,10 @@ export async function backfillV113Shape(
     }
   }
 
-  // v0.2.249 drain 2026-07-03-0800 — strip vestigial V1 fields from
-  // V2 notes. `english_hash` (SHA-256-of-empty-string residue from
-  // the V1→V2 migration path) is never read by V2 code, adds
-  // Obsidian-Properties-view noise, and confuses first-time engineer
-  // readers. Extend `vestigial` as new fields surface.
-  const vestigial: Array<'english_hash'> = ['english_hash'];
-  for (const key of vestigial) {
-    if (helpers.getFrontmatterField(workingBody, key) !== null) {
-      workingBody = helpers.removeFrontmatterField(workingBody, key);
-      actions.strippedVestigialFields.push(key);
-    }
-  }
-
   const changed = actions.pythonSection
     || actions.hashes.length > 0
     || actions.derivedFromFields.length > 0
-    || actions.canonicalHashRepairs.length > 0
-    || actions.strippedVestigialFields.length > 0;
+    || actions.canonicalHashRepairs.length > 0;
   return {
     changed,
     newBody: changed ? workingBody : body,

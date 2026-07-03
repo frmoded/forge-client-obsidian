@@ -14,7 +14,6 @@ import {
   extractPythonSection,
   getFrontmatterField,
   setFrontmatterField,
-  removeFrontmatterField,
   replacePythonSection,
 } from './v2-note-core.ts';
 import { computeFacetHash } from './facet-hash-core.ts';
@@ -28,7 +27,6 @@ const HELPERS = {
     return typeof v === 'string' ? v : null;
   },
   setFrontmatterField,
-  removeFrontmatterField,
   replacePythonSection,
   computeFacetHash,
 };
@@ -290,8 +288,12 @@ def compute(context):
   assert.deepEqual(result.actions.canonicalHashRepairs, []);
 });
 
-test('strips vestigial english_hash from V2 note (drain 0800)', async () => {
-  const withVestige = `---
+test('v0.2.252 drain 1000: english_hash present on V2 note is PRESERVED (not stripped)', async () => {
+  // Reverts drain 0800. english_hash is the v0.2.72 slot-cache-key
+  // wire-contract identifier; still written by writePythonAndEnglishHash
+  // (v0.2.251 drain 0900 audit). Stripping caused strip → write → strip
+  // churn on slot-resolution paths.
+  const withEnglishHash = `---
 type: action
 description_hash: DDD
 recipe_hash: RRR
@@ -316,46 +318,12 @@ def compute(context):
     return None
 \`\`\`
 `;
-  const result = await backfillV113Shape(withVestige, HELPERS);
-  assert.equal(result.changed, true);
-  assert.deepEqual(result.actions.strippedVestigialFields, ['english_hash']);
-  assert.equal(getFrontmatterField(result.newBody, 'english_hash'), null);
-  // Neighboring fields preserved
-  assert.equal(getFrontmatterField(result.newBody, 'description_hash'), 'DDD');
-  assert.equal(getFrontmatterField(result.newBody, 'python_hash'), 'PPP');
-});
-
-test('strip is idempotent: second call after strip is no-op', async () => {
-  const withVestige = `---
-type: action
-description_hash: DDD
-recipe_hash: RRR
-python_hash: PPP
-recipe_derived_from_source_hash: DDD
-python_derived_from_source_hash: DDD
-english_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
----
-
-# Description
-
-x
-
-# Recipe
-
-y
-
-# Python
-
-\`\`\`python
-def compute(context):
-    return None
-\`\`\`
-`;
-  const first = await backfillV113Shape(withVestige, HELPERS);
-  assert.equal(first.changed, true);
-  const second = await backfillV113Shape(first.newBody, HELPERS);
-  assert.equal(second.changed, false);
-  assert.deepEqual(second.actions.strippedVestigialFields, []);
+  const result = await backfillV113Shape(withEnglishHash, HELPERS);
+  assert.equal(result.changed, false);
+  assert.equal(
+    getFrontmatterField(result.newBody, 'english_hash'),
+    'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  );
 });
 
 test('v114-canonical-hash-repair: does NOT fire on Recipe-canonical forge (recipe derived-from ≠ description_hash)', async () => {
