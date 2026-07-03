@@ -63,6 +63,7 @@ const _helpers = (
   storedDesc: string | null,
   storedRecipe: string | null,
   storedPython: string | null,
+  storedCanonical: string | null = null,
 ) => ({
   extractDescription: () => desc,
   extractRecipeSection: () => recipe,
@@ -71,6 +72,7 @@ const _helpers = (
     if (key === 'description_hash') return storedDesc;
     if (key === 'recipe_hash') return storedRecipe;
     if (key === 'python_hash') return storedPython;
+    if (key === 'canonical_facet') return storedCanonical;
     return null;
   },
 });
@@ -208,6 +210,106 @@ describe('whichLayerIsCanonical', () => {
       'body',
       _helpers(d, 'unstamped_recipe', 'unstamped_python', dh, null, null),
     );
+    assert.equal(result, 'synced');
+  });
+
+  // ---------- v0.2.256 drain 1200: stored canonical_facet -------------
+
+  it('stored canonical_facet: "recipe" is returned even when Description also drifts', async () => {
+    // Driver's cohort intuition: whatever was hand-edited most recently
+    // is the canonical layer. Under stored-not-inferred, that decision
+    // is recorded in the frontmatter field. Hash inference no longer
+    // overrides it.
+    const d = 'both edited';
+    const r = 'recipe edited later';
+    const p = 'python matches';
+    const dhStored = await computeFacetHash('old desc');
+    const rhStored = await computeFacetHash('old recipe');
+    const ph = await computeFacetHash(p);
+    const result = await whichLayerIsCanonical(
+      'body',
+      _helpers(d, r, p, dhStored, rhStored, ph, 'recipe'),
+    );
+    assert.equal(result, 'recipe');
+  });
+
+  it('stored canonical_facet: "python" with Python-drift honored', async () => {
+    // Python was hand-edited (pythonMismatch = true); stored field
+    // agrees. Detection returns 'python'.
+    const d = 'anything';
+    const r = 'anything';
+    const p = 'edited python';
+    const dh = await computeFacetHash(d);
+    const rh = await computeFacetHash(r);
+    const phStored = await computeFacetHash('old python');
+    const result = await whichLayerIsCanonical(
+      'body',
+      _helpers(d, r, p, dh, rh, phStored, 'python'),
+    );
+    assert.equal(result, 'python');
+  });
+
+  it('stored canonical_facet: "synced" honored', async () => {
+    const d = 'anything';
+    const r = 'anything';
+    const p = 'anything';
+    const dh = await computeFacetHash(d);
+    const rh = await computeFacetHash(r);
+    const ph = await computeFacetHash(p);
+    const result = await whichLayerIsCanonical(
+      'body',
+      _helpers(d, r, p, dh, rh, ph, 'synced'),
+    );
+    assert.equal(result, 'synced');
+  });
+
+  it('external multi-facet edit: stored canonical_facet points at facet with no drift; another facet drifted → flip via upstream-wins fallback', async () => {
+    // Sample scenario: canonical_facet: "description" is stored, but
+    // Description's body matches its stored hash while Recipe drifted
+    // (external edit via git / sed). Detection flips to 'recipe'.
+    const d = 'desc unchanged';
+    const r = 'recipe externally edited';
+    const p = 'python matches';
+    const dh = await computeFacetHash(d);
+    const rhStored = await computeFacetHash('old recipe');
+    const ph = await computeFacetHash(p);
+    const result = await whichLayerIsCanonical(
+      'body',
+      _helpers(d, r, p, dh, rhStored, ph, 'description'),
+    );
+    assert.equal(result, 'recipe');
+  });
+
+  it('invalid canonical_facet value falls through to hash inference', async () => {
+    const d = 'edited';
+    const dhStored = await computeFacetHash('original');
+    const rh = await computeFacetHash('r');
+    const ph = await computeFacetHash('p');
+    const result = await whichLayerIsCanonical(
+      'body',
+      _helpers(d, 'r', 'p', dhStored, rh, ph, 'bogus_value'),
+    );
+    assert.equal(result, 'description');
+  });
+
+  it('external multi-facet edit: stored "description" + no drift anywhere → return synced', async () => {
+    // Edge case: stored says description, but bodies all match hashes.
+    // Note is genuinely synced. Honor that.
+    const d = 'x';
+    const r = 'y';
+    const p = 'z';
+    const dh = await computeFacetHash(d);
+    const rh = await computeFacetHash(r);
+    const ph = await computeFacetHash(p);
+    const result = await whichLayerIsCanonical(
+      'body',
+      _helpers(d, r, p, dh, rh, ph, 'description'),
+    );
+    // Description matches storedDesc → no drift on it.
+    // Same for recipe, python.
+    // Stored canonical says description → not synced. But detection
+    // finds no actual drift → returns synced per the external-edit
+    // fallback path.
     assert.equal(result, 'synced');
   });
 });

@@ -820,6 +820,20 @@ export default class ForgePlugin extends Plugin {
       }),
     );
 
+    // v0.2.256 drain 2026-07-03-1200 — canonical_facet on hand-edit.
+    // Fires on every modify; gated internally by
+    // _programmaticWriteInFlight (skips plugin-owned writes) and
+    // isV2Shape + type=action (skips non-Forge / V1 notes). Writes
+    // canonical_facet via processFrontMatter when the drifted facet
+    // differs from the stored value.
+    this.registerEvent(
+      this.app.vault.on('modify', (file) => {
+        if (!(file instanceof TFile)) return;
+        if (shouldSkipForMemfsSync(file.path)) return;
+        void this.maybeUpdateCanonicalFacet(file);
+      }),
+    );
+
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
     this.addCommand({
@@ -2921,7 +2935,12 @@ export default class ForgePlugin extends Plugin {
         englishHash,
         stripStaleSlots: false,
       });
-      await this.app.vault.modify(file, newContent);
+      // v0.2.256 drain 1200 — programmatic write flag prevents this
+      // /generate write-back from triggering the canonical_facet
+      // hand-edit path.
+      await this.withProgrammaticWrite(file.path, async () => {
+        await this.app.vault.modify(file, newContent);
+      });
 
       // v0.2.17: keep Pyodide's MEMFS-mounted user vault in sync with
       // this disk write. The v0.2.16 diagnostic confirmed compute reads
@@ -3039,7 +3058,8 @@ export default class ForgePlugin extends Plugin {
         return typeof v === 'string' ? v : null;
       },
     });
-    await this.app.vault.process(file, (content) => {
+    await this.withProgrammaticWrite(file.path, () =>
+      this.app.vault.process(file, (content) => {
       let next = writePythonAndEnglishHash(content, {
         pythonCode: python,
         englishHash,
@@ -3077,7 +3097,7 @@ export default class ForgePlugin extends Plugin {
         }
       }
       return next;
-    });
+    }));
     // Keep MEMFS in sync for the next compute.
     try {
       const readBack = await this.app.vault.read(file);
@@ -3388,6 +3408,125 @@ export default class ForgePlugin extends Plugin {
    *  notes, non-Forge markdown, and V1 notes pass through untouched.
    *  In-session dedup via a Set so re-opening a tab doesn't re-run. */
   private _v113BackfillSeen: Set<string> = new Set();
+
+  /** v0.2.256 drain 2026-07-03-1200 — programmatic write guard for the
+   *  `canonical_facet` write path. Set of file paths currently being
+   *  written to by plugin code (forge-click transpile output,
+   *  /generate write-back, backfill, etc.). The vault.on('modify')
+   *  handler that updates canonical_facet on hand-edits skips paths
+   *  in this set — programmatic writes should NOT overwrite the
+   *  cohort's canonical hint.
+   *
+   *  Cleanup timing: paths are added before the programmatic write
+   *  and removed via setTimeout(500) after the write completes. The
+   *  500ms window covers Obsidian's async modify-event dispatch.
+   *  If a real hand-edit happens inside the window it's mis-classified
+   *  as programmatic — a rare edge case worth trading for simplicity. */
+  private _programmaticWriteInFlight: Set<string> = new Set();
+
+  private async withProgrammaticWrite<T>(
+    filePath: string,
+    op: () => Promise<T>,
+  ): Promise<T> {
+    this._programmaticWriteInFlight.add(filePath);
+    try {
+      return await op();
+    } finally {
+      // Delay cleanup so the async modify-event dispatch after the
+      // write still sees the flag.
+      setTimeout(() => {
+        this._programmaticWriteInFlight.delete(filePath);
+      }, 500);
+    }
+  }
+
+  /** v0.2.256 drain 1200 — canonical_facet write path on hand-edits.
+   *  Fires from vault.on('modify'). Reads current body, computes
+   *  which facet drifted, writes canonical_facet if the stored value
+   *  differs. Gated by:
+   *    (a) programmatic-write flag (skip if plugin just wrote the file)
+   *    (b) V2 action shape
+   *    (c) modify-event dedup within a short window
+   *
+   *  Uses hash-mismatch inference (upstream-wins) to determine which
+   *  facet was hand-edited. Note this fires on ANY modify — including
+   *  benign whitespace edits — so idempotency (only write when
+   *  stored differs from computed) prevents frontmatter churn. */
+  private _canonicalUpdateInFlight: Set<string> = new Set();
+
+  private async maybeUpdateCanonicalFacet(file: TFile | null) {
+    if (!file) return;
+    if (this._programmaticWriteInFlight.has(file.path)) {
+      return;
+    }
+    if (this._canonicalUpdateInFlight.has(file.path)) {
+      // Modify events can fire multiple times per keystroke sequence;
+      // this in-flight flag prevents re-entrant frontmatter churn.
+      return;
+    }
+    this._canonicalUpdateInFlight.add(file.path);
+    try {
+      const body = await this.app.vault.read(file);
+      if (!isV2Shape(body)) return;
+      const typeField = getFmFieldV2(body, 'type');
+      if (typeField !== 'action') return;
+
+      const descText = extractDescription(body);
+      const recipeText = extractRecipeSection(body) ?? '';
+      const pythonText = extractPythonSection(body) ?? '';
+      const storedDesc = (() => {
+        const v = getFmFieldV2(body, 'description_hash');
+        return typeof v === 'string' ? v : null;
+      })();
+      const storedRecipe = (() => {
+        const v = getFmFieldV2(body, 'recipe_hash');
+        return typeof v === 'string' ? v : null;
+      })();
+      const storedPython = (() => {
+        const v = getFmFieldV2(body, 'python_hash');
+        return typeof v === 'string' ? v : null;
+      })();
+      const currentDesc = await computeFacetHash(descText);
+      const currentRecipe = await computeFacetHash(recipeText);
+      const currentPython = await computeFacetHash(pythonText);
+      const dMismatch = storedDesc !== null && storedDesc !== currentDesc;
+      const rMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
+      const pMismatch = storedPython !== null && storedPython !== currentPython;
+
+      // Upstream-wins per driver Choice 3.
+      let target: 'description' | 'recipe' | 'python' | 'synced';
+      if (dMismatch) target = 'description';
+      else if (rMismatch) target = 'recipe';
+      else if (pMismatch) target = 'python';
+      else target = 'synced';
+
+      const storedCanonical = (() => {
+        const v = getFmFieldV2(body, 'canonical_facet');
+        return typeof v === 'string' ? v : null;
+      })();
+      if (storedCanonical === target) return; // idempotent no-op
+
+      // Write via processFrontMatter so we don't churn body text.
+      await this.withProgrammaticWrite(file.path, async () => {
+        await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+          fm.canonical_facet = target;
+        });
+      });
+      console.log(
+        `[canonical-facet] ${file.path}: `
+        + `${storedCanonical ?? '(absent)'} → ${target}`,
+      );
+    } catch (e) {
+      console.error('maybeUpdateCanonicalFacet failed', e);
+    } finally {
+      // Small delay before re-arming: covers the write's own modify
+      // event.
+      setTimeout(() => {
+        this._canonicalUpdateInFlight.delete(file.path);
+      }, 250);
+    }
+  }
+
   private async maybeBackfillV113Shape(file: TFile | null) {
     if (!file) return;
     if (this._v113BackfillSeen.has(file.path)) {
@@ -3434,7 +3573,12 @@ export default class ForgePlugin extends Plugin {
         );
       }
       if (!result.changed) return;
-      await this.app.vault.modify(file, result.newBody);
+      // v0.2.256 drain 1200 — programmatic write flag prevents
+      // backfill (including canonical_facet seeding) from triggering
+      // the hand-edit canonical_facet write path.
+      await this.withProgrammaticWrite(file.path, async () => {
+        await this.app.vault.modify(file, result.newBody);
+      });
       const parts: string[] = [];
       if (result.actions.pythonSection) parts.push('# Python section');
       if (result.actions.hashes.length > 0) {

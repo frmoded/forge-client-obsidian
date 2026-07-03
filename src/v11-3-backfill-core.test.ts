@@ -70,6 +70,7 @@ def compute(context):
 // v0.2.243 — "fully populated" now includes v11.4 derived_from_source_hash
 // fields on downstream facets. Notes populated by pre-v11.4 code paths
 // will get those stamped on next backfill run.
+// v0.2.256 drain 1200 — also includes canonical_facet (seed field).
 const FULL_V113_NOTE = `---
 type: action
 description: foo
@@ -78,6 +79,7 @@ recipe_hash: bbb
 python_hash: ccc
 recipe_derived_from_source_hash: aaa
 python_derived_from_source_hash: aaa
+canonical_facet: description
 ---
 
 # Description
@@ -158,6 +160,68 @@ test('idempotent: second call after backfill is a no-op', async () => {
   const second = await backfillV113Shape(first.newBody, HELPERS);
   assert.equal(second.changed, false);
   assert.equal(second.newBody, first.newBody);
+});
+
+test('v0.2.256 drain 1200: seeds canonical_facet on first backfill; freshly-stamped note gets synced seed', async () => {
+  const result = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
+  // All hashes stamped fresh in this call → no drift → synced seed.
+  assert.equal(result.actions.canonicalFacetSeeded, 'synced');
+  assert.equal(getFrontmatterField(result.newBody, 'canonical_facet'), 'synced');
+});
+
+test('v0.2.256 drain 1200: seeds canonical_facet: description when Description drifts against pre-stamped hashes', async () => {
+  // Fixture with all hashes stamped but Description body edited so
+  // description_hash mismatches. Backfill seeds canonical_facet:
+  // description (upstream-wins).
+  const preStampedButDescDrifted = `---
+type: action
+description_hash: bogus_old_hash
+recipe_hash: bogus_recipe_hash
+python_hash: bogus_python_hash
+recipe_derived_from_source_hash: bogus_old_hash
+python_derived_from_source_hash: bogus_old_hash
+---
+
+# Description
+
+edited description body
+
+# Recipe
+
+recipe body
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  // Compute what the actual hashes would be for the bodies:
+  const dHash = await computeFacetHash('edited description body');
+  const rHash = await computeFacetHash('recipe body');
+  const pHash = await computeFacetHash(
+    '```python\ndef compute(context):\n    return None\n```',
+  );
+  // Since fixture stored hashes are bogus, ALL three facets drift.
+  // Upstream-wins → 'description'.
+  const result = await backfillV113Shape(preStampedButDescDrifted, HELPERS);
+  assert.equal(result.actions.canonicalFacetSeeded, 'description');
+  assert.equal(getFrontmatterField(result.newBody, 'canonical_facet'), 'description');
+  // Sanity: existing hash values were not overwritten by the backfill
+  // (backfill only stamps ABSENT hashes; drift correction happens in
+  // separate paths). Verify the bogus hashes remain.
+  assert.notEqual(getFrontmatterField(result.newBody, 'description_hash'), dHash);
+  assert.notEqual(getFrontmatterField(result.newBody, 'recipe_hash'), rHash);
+  assert.notEqual(getFrontmatterField(result.newBody, 'python_hash'), pHash);
+});
+
+test('v0.2.256 drain 1200: canonical_facet seed is idempotent — second call is no-op', async () => {
+  const first = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
+  assert.equal(first.actions.canonicalFacetSeeded, 'synced');
+  const second = await backfillV113Shape(first.newBody, HELPERS);
+  assert.equal(second.actions.canonicalFacetSeeded, null);
+  assert.equal(second.changed, false);
 });
 
 test('stamped hashes match current facet contents (drift detection wakes up)', async () => {
@@ -266,6 +330,7 @@ recipe_hash: RRR
 python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
+canonical_facet: description
 ---
 
 # Description
@@ -301,6 +366,7 @@ python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
 english_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+canonical_facet: description
 ---
 
 # Description

@@ -64,6 +64,13 @@ export interface V113BackfillResult {
      *  Distinct from `derivedFromFields` (which stamps ABSENT fields);
      *  this rewrites already-populated ones. */
     canonicalHashRepairs: Array<'python_derived_from_source_hash'>;
+    /** v0.2.256 drain 2026-07-03-1200 — canonical_facet seed. When
+     *  present, this drain's backfill inferred the canonical layer
+     *  via upstream-wins hash comparison and wrote it to the frontmatter
+     *  `canonical_facet` field so the plugin no longer has to re-infer
+     *  on every read. Empty when the field was already present (idempotent)
+     *  or when the note doesn't yet have hashes (fresh V2). */
+    canonicalFacetSeeded: 'description' | 'recipe' | 'python' | 'synced' | null;
   };
 }
 
@@ -96,6 +103,7 @@ export async function backfillV113Shape(
     hashes: [],
     derivedFromFields: [],
     canonicalHashRepairs: [],
+    canonicalFacetSeeded: null,
   };
 
   // Step 1: ensure # Python section exists on disk.
@@ -185,10 +193,41 @@ export async function backfillV113Shape(
     }
   }
 
+  // v0.2.256 drain 2026-07-03-1200 — seed canonical_facet if absent.
+  // Uses upstream-wins hash-mismatch inference against the WORKING
+  // body (post any prior stamping this pipeline did). For freshly-
+  // stamped notes, this settles on 'synced' since all hashes match.
+  // Pre-1200 V2 notes with drift get their canonical hint recorded
+  // once; the plugin's write path takes over on subsequent hand-edits.
+  const storedCanonical = helpers.getFrontmatterField(workingBody, 'canonical_facet');
+  if (storedCanonical === null) {
+    const finalDescText = helpers.extractDescription(workingBody);
+    const finalRecipeText = helpers.extractRecipeSection(workingBody) ?? '';
+    const finalPythonText = helpers.extractPythonSection(workingBody) ?? '';
+    const finalDescHash = await helpers.computeFacetHash(finalDescText);
+    const finalRecipeHash = await helpers.computeFacetHash(finalRecipeText);
+    const finalPythonHash = await helpers.computeFacetHash(finalPythonText);
+    const finalStoredDesc = helpers.getFrontmatterField(workingBody, 'description_hash');
+    const finalStoredRecipe = helpers.getFrontmatterField(workingBody, 'recipe_hash');
+    const finalStoredPython = helpers.getFrontmatterField(workingBody, 'python_hash');
+    const dMismatch = finalStoredDesc !== null && finalStoredDesc !== finalDescHash;
+    const rMismatch = finalStoredRecipe !== null && finalStoredRecipe !== finalRecipeHash;
+    const pMismatch = finalStoredPython !== null && finalStoredPython !== finalPythonHash;
+    let seed: 'description' | 'recipe' | 'python' | 'synced';
+    // Upstream-wins tiebreak per driver Choice 3.
+    if (dMismatch) seed = 'description';
+    else if (rMismatch) seed = 'recipe';
+    else if (pMismatch) seed = 'python';
+    else seed = 'synced';
+    workingBody = helpers.setFrontmatterField(workingBody, 'canonical_facet', seed);
+    actions.canonicalFacetSeeded = seed;
+  }
+
   const changed = actions.pythonSection
     || actions.hashes.length > 0
     || actions.derivedFromFields.length > 0
-    || actions.canonicalHashRepairs.length > 0;
+    || actions.canonicalHashRepairs.length > 0
+    || actions.canonicalFacetSeeded !== null;
   return {
     changed,
     newBody: changed ? workingBody : body,

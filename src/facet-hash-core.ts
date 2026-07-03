@@ -17,24 +17,16 @@
 //   steady-state — Forge-click runs from the cached Python; /generate
 //   refreshes Recipe + Python from Description; etc.
 //
-// Canonical priority (upstream-wins, v0.2.252): Description > Recipe > Python.
-//   - desc edit    → description canonical → Recipe + Python stale
-//   - recipe edit  → recipe canonical → Python stale
-//   - python edit  → python canonical → Description + Recipe stale
+// Canonical is STORED as a frontmatter field `canonical_facet` as of
+// v0.2.256 (drain 2026-07-03-1200). Hash-mismatch inference remains
+// as a fallback for pre-1200 notes not yet backfilled + as an
+// external-edit escape hatch. Upstream-wins tiebreak is retained for
+// those fallback paths per driver Choice 3.
 //
-// When multiple facets have drifted from their stored hashes, the
-// upstream-most drift wins. Semantically, Description is the root
-// source-of-truth in the D → R → P forge chain; a Description edit
-// is an intent change that supersedes any downstream residue. This
-// replaces the pre-v0.2.252 downstream-wins (Python > Recipe >
-// Description) precedence — that biased notes toward "run the last
-// Python we compiled" and hid Description edits when Recipe (or
-// Python) had residual drift from prior smoke iterations.
-//
-// See drain 2026-07-03-1000 §3.2 for the observed miss: driver
-// edited Description; Recipe + Python still had drift from earlier
-// smoke; plugin routed Python-canonical and cohort's Description
-// edit never registered.
+// Prior versions used hash-mismatch inference as the primary path.
+// v0.2.252 (drain 1000) flipped from downstream-wins to upstream-wins
+// tiebreak; v0.2.256 makes the whole thing driver-controlled via
+// stored field.
 //
 // Pure-core (no `obsidian` import). All helpers operate on the full
 // note body markdown string.
@@ -64,24 +56,33 @@ export async function computeFacetHash(
 }
 
 
-/** Read the canonical-layer label by comparing each facet's current
- *  content hash to its stored frontmatter hash.
+/** Set of valid canonical-facet frontmatter values. Used for validation
+ *  when reading the stored field. */
+const VALID_CANONICAL_VALUES = new Set<CanonicalLayer>([
+  'description', 'recipe', 'python', 'synced',
+]);
+
+/** Read the canonical-layer label.
  *
- *  Resolves to:
- *  - `synced`     — all stored hashes present and match
- *  - `description`— description_hash mismatch (highest priority — upstream)
- *  - `recipe`     — recipe_hash mismatch
- *  - `python`     — python_hash mismatch (lowest priority — downstream)
+ *  v0.2.256 (drain 2026-07-03-1200) — canonical is now STORED as a
+ *  frontmatter field `canonical_facet: description | recipe | python |
+ *  synced`, not inferred from hash-mismatch comparison. The plugin
+ *  writes the field on hand-edit events; programmatic writes don't
+ *  touch it. Constitution V2a v11.5 §S9 amendment codifies the shift.
  *
- *  Priority is UPSTREAM-WINS as of v0.2.252 (drain 2026-07-03-1000).
- *  When multiple facets have drifted, the source-most edit wins —
- *  Description is the root source-of-truth in D → R → P chain, and
- *  a Description edit represents intent that supersedes downstream
- *  residue from prior smokes. Pre-v0.2.252 was downstream-wins, which
- *  hid Description edits when Recipe/Python still had drift.
+ *  Resolution order:
+ *   1. Stored `canonical_facet` present + valid → return it.
+ *      Exception: external multi-facet edit (stored value points at a
+ *      facet with no drift, but ANOTHER facet has drift) — flip to the
+ *      drifted facet. This catches external tools (git, sed) that
+ *      bypassed the plugin's write path.
+ *   2. Stored field absent OR invalid → fall back to hash-mismatch
+ *      inference (upstream-wins, drain 1000 semantics). Used for
+ *      pre-1200 notes not yet backfilled. Once the backfill runs on
+ *      first open per session, this path is dormant.
  *
  *  An absent stored hash counts as "matches" (no mismatch surfaced) so
- *  freshly minted notes without hashes yet aren't reported as canonical
+ *  freshly minted notes without hashes aren't reported as canonical
  *  in any one facet. The /generate flow stamps all three at synced
  *  baseline; from then on edits drive the state machine.
  */
@@ -110,9 +111,38 @@ export async function whichLayerIsCanonical(
   const recipeMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
   const descMismatch = storedDesc !== null && storedDesc !== currentDesc;
 
-  // Upstream priority (v0.2.252) — the earliest facet in the D → R → P
-  // chain wins. When a cohort edits Description, that intent supersedes
-  // any Recipe/Python drift left over from prior smoke iterations.
+  // v0.2.256 drain 1200 primary path — read stored canonical_facet.
+  const storedCanonical = helpers.getFrontmatterField(body, 'canonical_facet');
+  if (storedCanonical !== null && VALID_CANONICAL_VALUES.has(storedCanonical as CanonicalLayer)) {
+    const stored = storedCanonical as CanonicalLayer;
+    // External multi-facet edit detection: if the stored value points
+    // at a facet with no drift, but ANOTHER facet has drift, flip to
+    // the drifted facet. Preserves the observable "editing a facet
+    // body makes that facet canonical" invariant even when the edit
+    // came from outside the plugin's write path.
+    const storedIsSynced = stored === 'synced';
+    const storedFacetHasDrift =
+      (stored === 'description' && descMismatch) ||
+      (stored === 'recipe' && recipeMismatch) ||
+      (stored === 'python' && pythonMismatch);
+    if (!storedIsSynced && !storedFacetHasDrift) {
+      // Stored value stale relative to actual body drift. Fall through
+      // to hash inference to find the actual drifted facet.
+      if (descMismatch || recipeMismatch || pythonMismatch) {
+        // Upstream-wins fallback per driver Choice 3 confirmation.
+        if (descMismatch) return 'description';
+        if (recipeMismatch) return 'recipe';
+        if (pythonMismatch) return 'python';
+      }
+      // No drift anywhere → note is actually synced; honor that.
+      return 'synced';
+    }
+    return stored;
+  }
+
+  // Fallback path — canonical_facet absent or invalid. Applies to
+  // pre-1200 notes not yet backfilled. Upstream-wins tiebreak (drain
+  // 1000). Backfill will seed the field on first open per session.
   if (descMismatch) return 'description';
   if (recipeMismatch) return 'recipe';
   if (pythonMismatch) return 'python';
