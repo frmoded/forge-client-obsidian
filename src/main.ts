@@ -81,7 +81,6 @@ import {
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
 import { discardThenDetach } from './leaf-discard-before-detach-core.ts';
 import { restoreInlinedAssets } from './restore-inlined-assets.ts';
-import { parseZapLine } from './zap.ts';
 import { extractDataBody } from './data-snippet.ts';
 import { openForgeAction, ForgeHost } from './forge-action.ts';
 import { isNetRefusalError, welcomeMessage } from './closed-beta-ux.ts';
@@ -440,8 +439,8 @@ export default class ForgePlugin extends Plugin {
     //   - no active markdown view
     //   - active file is V1 (not V2-shape)
     //   - active V2 file is `synced` (no hand-edits anywhere)
-    // Click handler invokes the `forge-show-canonical-layer` command
-    // for the verbose forgeOutput report.
+    // Click handler invokes showCanonicalLayer() directly for the
+    // verbose forgeOutput report (Cmd-P command retired in v0.2.244).
     // v0.2.218 — Forge-click + LLM operation spinner. 200ms grace
     // period so fast snippets don't flash; multi-second LLM calls
     // (/generate, /resolve-slot) and long computes (moda 300-tick
@@ -903,11 +902,6 @@ export default class ForgePlugin extends Plugin {
     // grayscale dimming (facet-state-view-plugin, v0.2.243 → v11.4
     // tri-state).
 
-    // v0.2.244 drain 2026-07-03-0300 — "Sync English ← Python" file
-    // and editor menu items retired alongside the Cmd-P command
-    // (V1 vocabulary: English facet is gone). syncEnglishFromPython
-    // method retained as dead-code candidate for a followup audit.
-
     // v0.2.41: right-click a wikilink in a snippet body → freeze /
     // unfreeze the edge directly, no modal. Bypasses the modal-typing
     // UX that surfaced its first real failure as the URGENT
@@ -1078,14 +1072,6 @@ export default class ForgePlugin extends Plugin {
       },
     });
 
-    // v0.2.244 drain 2026-07-03-0300 — `forge-toggle-edit-mode`
-    // retired per S10 v11.2 (engineer-mode retired for vault notes)
-    // + S9 v11.3+ (all facets always editable). Both the Cmd-P
-    // command and the file-menu right-click item are removed.
-    // toggleEditMode / toggleEditModeForFile methods retained (dead
-    // code candidates — audit + delete in a followup drain if no
-    // callers surface).
-
     this.addCommand({
       id: 'forge-freeze-edge',
       name: 'Freeze edge',
@@ -1218,18 +1204,6 @@ export default class ForgePlugin extends Plugin {
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
 
-    // v0.2.79 — edit-mode ribbon button REMOVED. Moves V1 toward V2's
-    // gestural model: the primary cohort rarely flips between English
-    // and Python mode, and the ribbon button was adding UI noise for a
-    // power-user feature. The B8 edit_mode frontmatter contract,
-    // locked_english_hash drift detection, and engine behavior are all
-    // unchanged. Power users retain access via the command palette
-    // (Cmd-P → "Toggle Python/English editing mode" — registered at
-    // line 685-688) which preserves the toggleEditMode + drift-aware
-    // markDriftAsync path. v0.2.84 — MODE_BTN_CLASS class declaration
-    // removed; v0.2.83's gestural mutex permanently replaced the
-    // ribbon-button surface, so the restoration option is off the table.
-
     const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
@@ -1258,34 +1232,6 @@ export default class ForgePlugin extends Plugin {
   // The drift indicator (toolbar button .is-drifted state) was already
   // dead code (no callers since the v0.2.79 ribbon button removal);
   // removing the body avoids confusion and the sha256Hex helper.
-
-  // Toggle between english (LLM-driven) and python (hand-tuned) edit modes.
-  // Replaces toggleLock from Phase 5; semantics are the same but the field
-  // name moves from `locked: true` to `edit_mode: python`. Reads either
-  // form when computing current state, only writes the new form.
-  //
-  // v0.2.9: split into a TFile-taking helper so the right-click file-menu
-  // entry can target a non-active file. toggleEditMode() preserves the
-  // active-view semantics for the toolbar button + command palette callers.
-  private async toggleEditMode() {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
-      this.notice('No active note.');
-      return;
-    }
-    await this.toggleEditModeForFile(view.file);
-  }
-
-  private async toggleEditModeForFile(file: TFile) {
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (fm?.type !== 'action') {
-      this.notice('Edit mode is only meaningful for action snippets.');
-      return;
-    }
-    const current = getEditMode(fm);
-    const target: 'english' | 'python' = current === 'python' ? 'english' : 'python';
-    await this.setEditModeForFile(file, target);
-  }
 
   /** v0.2.83 (from v0.2.80 prompt §3.3 + §3.5) — drift-aware
    *  edit_mode writer shared between the command-palette toggle path
@@ -1417,88 +1363,6 @@ export default class ForgePlugin extends Plugin {
     this.syncButtons();
   }
 
-  // Sync English ← Python: ask the backend's /canonicalize endpoint to
-  // produce an English summary of the snippet's current python facet, then
-  // overwrite the # English section with the result. Silent overwrite —
-  // Cmd+Z is the safety net. v0.2.102 — no longer re-snapshots
-  // locked_english_hash (retired field).
-  private async syncEnglishFromPython(target?: TFile) {
-    const file = target ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
-    if (!file) {
-      this.notice('No active note for sync.');
-      return;
-    }
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (fm?.type !== 'action') {
-      this.notice('Sync English ← Python is only for action snippets.');
-      return;
-    }
-
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
-    // v0.2.26: qualified snippet_id for library subdir files.
-    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
-    const modal = new ForgeGenerationModal(this.app, `Canonicalizing ${snippetId}…`);
-    modal.open();
-
-    let response;
-    try {
-      // Force-refresh the server's registry first. /canonicalize otherwise
-      // 404s on freshly-authored snippets that the cached registry doesn't
-      // know about yet (we saw this on a newly-created hello.md in
-      // Phase-6.5 testing — server registry was loaded before the file
-      // existed). connectVault sets force=true unconditionally; this is
-      // just making sure we re-scan before resolving snippet_id.
-      await connectVault(this.settings.serverUrl, vaultPath);
-      response = await canonicalizeSnippet(this.settings.serverUrl, vaultPath, snippetId);
-    } catch (e) {
-      console.error('Forge canonicalize: network error', e);
-      this.notice('Forge: canonicalize failed — check console.');
-      modal.finish();
-      return;
-    } finally {
-      modal.finish();
-    }
-
-    if (response.status !== 200 || typeof response.json?.english !== 'string') {
-      const detail = response.json?.detail ?? `HTTP ${response.status}`;
-      this.notice(`Forge: canonicalize failed — ${detail}`);
-      console.error('Forge canonicalize:', response);
-      return;
-    }
-    const newEnglish = response.json.english as string;
-
-    // v0.2.102 — write the new English in a single atomic vault.process
-    // call. Previously also re-snapshotted locked_english_hash in the
-    // same write to clear the drift indicator atomically; the field is
-    // retired (drift detection via english_hash invalidation since
-    // v0.2.90), so this is just the body update now.
-    let writtenContent: string | null = null;
-    try {
-      await this.app.vault.process(file, (content) => {
-        const updated = replaceEnglishSection(content, newEnglish);
-        writtenContent = updated;
-        return updated;
-      });
-    } catch (e) {
-      console.error('Forge canonicalize: write failed', e);
-      this.notice('Forge: canonicalize wrote the model output but the file write failed — check console.');
-      return;
-    }
-
-    // Obsidian's MarkdownView reload-on-modify handler is gated on
-    // `!file.saving`. vault.process flips that flag to true for the duration
-    // of the write, so the modify event fires while the gate is closed and
-    // the editor view never picks up the new content. After the write the
-    // flag is cleared but no second refresh is queued. Force the active
-    // view to absorb the new content here.
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (writtenContent !== null && activeView?.file?.path === file.path) {
-      activeView.setViewData(writtenContent, false);
-    }
-
-    this.notice(`Forge: synced English ← Python on ${snippetId}`);
-    this.syncButtons();
-  }
 
   // Rewrite leading-tab indentation in the snippet's Python facet to 4-
   // space indentation. Triggered from the modify-event hook on a long
@@ -1519,9 +1383,10 @@ export default class ForgePlugin extends Plugin {
       return;
     }
     if (writtenContent === null) return;
-    // Same setViewData dance as syncEnglishFromPython — vault.process's
-    // saving=true gate keeps the open editor from auto-reloading, so push
-    // the rewritten content into the active view explicitly.
+    // Same setViewData dance as the pre-v0.2.250 english-sync path:
+    // vault.process's saving=true gate keeps the open editor from
+    // auto-reloading, so push the rewritten content into the active
+    // view explicitly.
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (view?.file?.path === file.path) {
       view.setViewData(writtenContent, false);
@@ -2253,227 +2118,6 @@ export default class ForgePlugin extends Plugin {
   // Returns true on success. errorPrefix is set by the Forge-button
   // flow (so notices read "Forge failed during generation: …" rather
   // than the standalone "check console" voice).
-  /** v0.2.182 — V2 /generate handler.
-   *  - Reads active V2-shape note's body.
-   *  - Validates V2 shape + lock state.
-   *  - Extracts Description + Inputs.
-   *  - Walks vault for action-note descriptions → deps payload.
-   *  - POSTs to hosted service with dialect="emm".
-   *  - Writes returned Recipe into the # Recipe section.
-   *  - Computes + stores description_hash in frontmatter.
-   *
-   *  Stale-indicator UI is a Phase 3 follow-up per the prompt's
-   *  §8 SPLIT GUIDANCE. */
-  private async generateEmmFromDescription(): Promise<void> {
-    // v0.2.184 — instrument every step with console.warn so the next
-    // smoke can pinpoint exactly which step is silently failing.
-    console.warn('[Forge V2 /generate] command invoked');
-
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
-      console.warn('[Forge V2 /generate] no active markdown view → bailing');
-      await this.forgeOutput('Forge V2 /generate: no active note. Open a markdown file first.', 'error');
-      return;
-    }
-    const file = view.file;
-    console.warn('[Forge V2 /generate] active file:', file.path);
-
-    const body = await this.app.vault.read(file);
-    console.warn('[Forge V2 /generate] body length:', body.length);
-
-    if (!/^# Description\s*$/m.test(body)) {
-      console.warn('[Forge V2 /generate] no # Description heading → bailing');
-      await this.forgeOutput(
-        'Forge V2 /generate: this note has no # Description heading. '
-        + 'Add `# Description` with prose, then re-run /generate. '
-        + 'For V1 notes, use "Generate only".',
-        'error',
-      );
-      return;
-    }
-
-    // v0.2.205 — Implicit locking Phase 2.5 §2.2: confirmation modal.
-    // The pre-Phase-2.5 forgeOutput notice was easy to miss; a modal
-    // blocks the destructive overwrite until cohort explicitly opts
-    // in. Skipped when canonical is `synced` or `description` (no
-    // hand-edits to overwrite) — the no-op case shouldn't pester.
-    try {
-      const canonical = await whichLayerIsCanonical(body, {
-        extractDescription,
-        extractRecipeSection,
-        extractPythonSection,
-        getFrontmatterField: getFmFieldV2,
-      });
-      console.warn('[Forge V2 /generate] canonical layer:', canonical);
-      if (canonical === 'recipe' || canonical === 'python') {
-        const facetLabel = canonical === 'recipe' ? 'Recipe' : 'Python';
-        const pythonNote = canonical === 'python'
-          ? 'Your Python edits will ALSO be regenerated on the next Forge-click.'
-          : '';
-        const ok = await new ConfirmModal(this.app, {
-          title: `${facetLabel} was hand-edited`,
-          message:
-            `Running /generate will overwrite the # Recipe section with a fresh `
-            + `LLM transpile of the current # Description. ${pythonNote} `
-            + `\n\nContinue and overwrite, or cancel and keep the hand-edits?`,
-          confirmText: 'Overwrite',
-          cancelText: 'Keep edits',
-        }).openAndWait();
-        if (!ok) {
-          await this.forgeOutput(
-            `Forge V2 /generate: cancelled — ${facetLabel} hand-edits preserved.`,
-            'info',
-          );
-          return;
-        }
-      }
-    } catch (e) {
-      console.error('forge-generate: canonical-layer probe failed', e);
-    }
-
-    const settings = this.settings;
-    if (!settings.transpileServiceToken) {
-      console.warn('[Forge V2 /generate] no transpile token configured');
-      await this.forgeOutput(
-        'Forge V2 /generate: set your transpile token in Settings → Forge → Transpile token '
-        + 'before using /generate.',
-        'error',
-      );
-      return;
-    }
-
-    const description = extractDescription(body);
-    console.warn('[Forge V2 /generate] description length:', description.length, '; first 80 chars:', description.slice(0, 80));
-    if (!description.trim()) {
-      await this.forgeOutput('Forge V2 /generate: # Description is empty — nothing to generate from.', 'error');
-      return;
-    }
-    const inputs = extractInputs(body).map((d) => d.name);
-    console.warn('[Forge V2 /generate] inputs:', inputs);
-    const vaultDeps = await this.gatherVaultActionNoteDescriptions();
-    const activeDomainsList =
-      this.activeDomains === null ? null : Array.from(this.activeDomains);
-    // v0.2.194 Path A — library notes no longer merged plugin-side.
-    // The forge-transpile service introspects forge.<domain>.lib at
-    // /generate time and augments the deps payload server-side. This
-    // unifies the catalog to a single source of truth (vendored
-    // engine_libs/<domain>_lib.py source files in the service) and
-    // retires src/v2-library-notes.ts. Adding a new library note = engine
-    // release + service redeploy; no plugin update needed.
-    const deps = vaultDeps;
-    console.warn(
-      `[Forge V2 /generate] deps count: ${deps.length} (vault only — library notes added server-side)`
-    );
-    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
-    console.warn('[Forge V2 /generate] snippetId:', snippetId);
-
-    const payload: AlphaGenerateRequest = {
-      snippet_id: snippetId,
-      description,
-      english: '',
-      inputs,
-      generation_notes: '',
-      deps,
-      active_domains: activeDomainsList,
-      dialect: 'recipe',
-    };
-
-    await this.forgeOutput(`Forge V2 /generate: invoking service for "${file.basename}"…`, 'info', snippetId);
-    console.warn('[Forge V2 /generate] POST to', settings.transpileServiceUrl + '/generate');
-
-    let response;
-    try {
-      response = await generateSnippetAlpha(
-        settings.transpileServiceUrl,
-        settings.transpileServiceToken,
-        payload,
-      );
-    } catch (e) {
-      console.error('[Forge V2 /generate] transport error:', e);
-      const detail = e instanceof Error ? e.message : String(e);
-      await this.forgeOutput(`Forge V2 /generate: could not reach transpile service — ${detail}`, 'error', snippetId);
-      return;
-    }
-
-    console.warn('[Forge V2 /generate] response status:', response.status);
-    if (response.status !== 200) {
-      console.error('[Forge V2 /generate] non-200:', response.status, response.json);
-      const detail = response.json?.detail;
-      const detailText = typeof detail === 'string'
-        ? detail
-        : JSON.stringify(detail);
-      await this.forgeOutput(
-        `Forge V2 /generate failed (HTTP ${response.status}): ${detailText}`,
-        'error',
-        snippetId,
-      );
-      return;
-    }
-
-    const code: string | undefined = response.json?.code;
-    if (!code) {
-      console.error('[Forge V2 /generate] empty code field:', response.json);
-      await this.forgeOutput('Forge V2 /generate: service returned empty code field.', 'error', snippetId);
-      return;
-    }
-    console.warn('[Forge V2 /generate] received code length:', code.length, '; first 120 chars:', code.slice(0, 120));
-
-    // v0.2.230 — Description-quality pushback (drain 2026-07-02-1400).
-    // Service flags Descriptions that score above the proceduralness
-    // threshold. Show a modal pointing it out + asking cohort to
-    // confirm before writing the Recipe. Non-blocking: cohort can
-    // "Use as-is" and proceed with the generated Recipe.
-    const pushback = response.json?.pushback as
-      | { proceduralness: number; original: string }
-      | undefined;
-    if (pushback) {
-      console.warn('[Forge V2 /generate] pushback received:', pushback.proceduralness);
-      const proceed = await new Promise<boolean>((resolve) => {
-        new RewriteSuggestionModal(this.app, {
-          proceduralness: pushback.proceduralness,
-          original: pushback.original,
-          onUseAsIs: () => resolve(true),
-          onCancel: () => resolve(false),
-        }).open();
-      });
-      if (!proceed) {
-        await this.forgeOutput(
-          `Forge V2 /generate: cancelled by cohort — Description reads like a Recipe; consider an intent-level rewrite + retry.`,
-          'info',
-          snippetId,
-        );
-        return;
-      }
-    }
-
-    // Write the Recipe into the note + stamp description_hash AND
-    // recipe_hash. v0.2.196 (implicit-locking 3-layer state machine):
-    // recipe_hash captures the freshly-generated Recipe so subsequent
-    // hand-edits to the Recipe facet surface as "recipe canonical" via
-    // hash mismatch. Without stamping here, every newly /generated
-    // note would read as recipe-canonical on the next click.
-    //
-    // v0.2.243 (V2a v11.4 tri-state): also stamp
-    // `recipe_derived_from_source_hash = description_hash` so cohort
-    // sees Recipe as "— derived" from current Description. Python
-    // stamp is separate — writeCanonicalPythonBack handles it.
-    const withEmm = replaceRecipeSection(body, code);
-    const descHash = await computeDescriptionHash(description);
-    const recipeHash = await computeFacetHash(code);
-    const withDesc = setFmFieldV2(withEmm, 'description_hash', descHash);
-    const withRecipe = setFmFieldV2(withDesc, 'recipe_hash', recipeHash);
-    const withHash = setFmFieldV2(
-      withRecipe, 'recipe_derived_from_source_hash', descHash,
-    );
-
-    await this.app.vault.modify(file, withHash);
-    console.warn('[Forge V2 /generate] file written; description_hash:', descHash, 'recipe_hash:', recipeHash);
-    await this.forgeOutput(
-      `Forge V2 /generate: Recipe generated for ${file.basename}. Review + Forge-click to test.`,
-      'success',
-      snippetId,
-    );
-  }
 
   /** v0.2.182 — Walk the vault for `type: action` notes; extract each
    *  one's Description + Inputs for the /generate deps payload. The
@@ -3459,30 +3103,6 @@ export default class ForgePlugin extends Plugin {
       this.notice(`Forge: sync failed — ${detail}`);
       console.error('Forge sync_dependencies failed', res);
     }
-  }
-
-  // Line-first Zap: if the cursor's line contains [[id]] (with optional args),
-  // run that. Otherwise fall back to the legacy whole-note behavior.
-  private async runZapLine() {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
-      this.notice('No active note to zap.');
-      return;
-    }
-
-    const editor = view.editor;
-    const lineNum = editor.getCursor().line;
-    const line = editor.getLine(lineNum);
-    const parsed = parseZapLine(line);
-
-    if (parsed) {
-      const vaultPath = (this.app.vault.adapter as any).basePath as string;
-      await this.computeSnippetWithArgs(vaultPath, parsed.snippetId, parsed.args, parsed.inputs);
-      return;
-    }
-
-    // Fallback: run the whole note as a snippet (basename = snippet_id).
-    await this.runSnippet();
   }
 
   // errorPrefix forwards into computeSnippetWithArgs so the forge flow can
