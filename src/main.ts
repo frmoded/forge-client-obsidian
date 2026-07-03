@@ -11,6 +11,7 @@ import {
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core.ts';
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
+import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
 import {
   extractPythonSection,
   replacePythonSection,
@@ -3761,6 +3762,7 @@ export default class ForgePlugin extends Plugin {
           return typeof v === 'string' ? v : null;
         },
         setFrontmatterField: setFmFieldV2,
+        removeFrontmatterField: removeFmFieldV2,
         replacePythonSection,
         computeFacetHash,
       });
@@ -3768,7 +3770,8 @@ export default class ForgePlugin extends Plugin {
         `[v113-backfill] ${file.path}: changed=${result.changed} ` +
         `pythonSection=${result.actions.pythonSection} ` +
         `hashesStamped=${JSON.stringify(result.actions.hashes)} ` +
-        `derivedFromStamped=${JSON.stringify(result.actions.derivedFromFields)}`,
+        `derivedFromStamped=${JSON.stringify(result.actions.derivedFromFields)} ` +
+        `strippedVestigial=${JSON.stringify(result.actions.strippedVestigialFields)}`,
       );
       if (result.actions.canonicalHashRepairs.length > 0) {
         // v0.2.248 drain 2026-07-03-0600 §3.4b — distinct log prefix
@@ -3796,6 +3799,12 @@ export default class ForgePlugin extends Plugin {
         parts.push(
           `${result.actions.canonicalHashRepairs.length} v11.4.1 canonical-hash repair(s): `
           + result.actions.canonicalHashRepairs.join(', '),
+        );
+      }
+      if (result.actions.strippedVestigialFields.length > 0) {
+        parts.push(
+          `stripped ${result.actions.strippedVestigialFields.length} vestigial field(s): `
+          + result.actions.strippedVestigialFields.join(', '),
         );
       }
       void this.forgeOutput(
@@ -4036,25 +4045,28 @@ export default class ForgePlugin extends Plugin {
         ? detail.error
         : (typeof detail === 'string' ? detail : `HTTP ${res.status}`);
       const stdout = (detail && typeof detail === 'object' && detail.stdout) ? detail.stdout : '';
-      // v0.2.133 — log-level + method-name prefix fix (v0.2.130
-      // Bundle B missed this site; driver flagged in 2026-06-11-1900
-      // smoke Step 9 as a yellow icon next to a red engine stack).
       console.error('runSnippet: Forge Compute non-2xx:', res.status, detail);
-      // v0.2.183 — driver feedback: don't dump the full Python traceback
-      // into a toast. Long multi-line tracebacks in Notice were unreadable
-      // and pushed other UI off-screen. Keep the brief attribution toast
-      // (so the user sees a failure happened) but route the actual error
-      // text to the output panel where it can be selected/copied (Cmd-C
-      // works there post v0.2.178). For very short error messages we
-      // still pop the message in the toast — it's only the multi-line
-      // tracebacks that hurt.
-      const shortMsg = errorMsg.length < 120 && !errorMsg.includes('\n')
-        ? errorMsg
-        : 'see Forge output panel for details';
+      // v0.2.249 drain 2026-07-03-0700 — cohort-friendly Recipe
+      // ParseError surfacing. Intercept the raw traceback + rewrite
+      // to cohort-facing language for known engine error classes.
+      // Raw traceback still surfaces in the panel under the friendly
+      // wrap so engineers can inspect the internal detail.
+      const friendly = friendlyRecipeParseError(errorMsg);
+      const panelBody = friendly.matched
+        ? `${friendly.userMessage}\n\n--- Engineer detail ---\n${friendly.rawTraceback}`
+        : friendly.userMessage.length > 0 && friendly.userMessage !== errorMsg
+          ? `${friendly.userMessage}\n\n--- Engineer detail ---\n${friendly.rawTraceback}`
+          : errorMsg;
+      // Toast still avoids multi-line dumps.
+      const noticeMsg = friendly.matched
+        ? friendly.userMessage
+        : (errorMsg.length < 120 && !errorMsg.includes('\n')
+            ? errorMsg
+            : 'see Forge output panel for details');
       if (errorPrefix) {
-        this.notice(`${errorPrefix}: ${shortMsg}`);
+        this.notice(`${errorPrefix}: ${noticeMsg}`);
       }
-      outputView.appendError(snippetId, errorMsg, stdout);
+      outputView.appendError(snippetId, panelBody, stdout);
       return;
     }
 
