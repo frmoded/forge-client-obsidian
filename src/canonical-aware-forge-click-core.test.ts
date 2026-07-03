@@ -16,13 +16,15 @@ describe('decideForgeClickAction (v0.2.201 Phase 2 §3.1)', () => {
     );
   });
 
-  test('description-canonical → abort_recipe_stale', () => {
-    // Description hand-edited since last /generate. Recipe is now
-    // stale; running Forge would transpile stale Recipe → stale
-    // Python. Fail fast with a notice pointing at /generate.
+  test('description-canonical → auto_generate_then_run (v0.2.254)', () => {
+    // Description hand-edited since last /generate. Recipe + Python
+    // are stale. Pre-v0.2.254 this aborted with a notice pointing
+    // cohort at a retired command. Post-v0.2.254 Forge-click auto-
+    // runs the full pipeline: /generate (Description → Recipe +
+    // Python) → execute the fresh Python.
     assert.equal(
       decideForgeClickAction('description'),
-      'abort_recipe_stale',
+      'auto_generate_then_run',
     );
   });
 
@@ -63,7 +65,7 @@ describe('decideForgeClickAction (v0.2.201 Phase 2 §3.1)', () => {
     const actions = new Set(layers.map(decideForgeClickAction));
     assert.deepEqual(
       [...actions].sort(),
-      ['abort_recipe_stale', 'run_python_directly', 'standard_transpile'].sort(),
+      ['auto_generate_then_run', 'run_python_directly', 'standard_transpile'].sort(),
     );
   });
 });

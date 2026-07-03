@@ -43,10 +43,13 @@ describe('canonicalLayerStatusLabel', () => {
 });
 
 describe('canonicalLayerStatusTooltip', () => {
-  test('description tooltip points at /generate', () => {
+  test('description tooltip describes the v0.2.254 auto-forge pipeline', () => {
     const t = canonicalLayerStatusTooltip('description');
     assert.match(t, /Description was hand-edited/);
-    assert.match(t, /Forge: Generate Recipe from Description/);
+    assert.match(t, /auto-run the full pipeline/);
+    assert.match(t, /regenerate Recipe \+ Python from Description, then execute/);
+    // Regression guard: the retired command name must NEVER surface.
+    assert.doesNotMatch(t, /Forge: Generate Recipe from Description/);
   });
 
   test('recipe tooltip describes the transpile-on-click flow', () => {

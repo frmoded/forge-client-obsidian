@@ -59,9 +59,9 @@ export function canonicalLayerStatusTooltip(
   }
   if (canonical === 'description') {
     return (
-      'Description was hand-edited since the last /generate. The '
-      + 'Recipe is stale. Forge-click will abort and ask you to run '
-      + '"Forge: Generate Recipe from Description" first.'
+      'Description was hand-edited since the last /generate. Forge-'
+      + 'click will auto-run the full pipeline: regenerate Recipe + '
+      + 'Python from Description, then execute.'
     );
   }
   if (canonical === 'recipe') {

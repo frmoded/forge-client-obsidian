@@ -44,10 +44,14 @@ export type ForgeClickAction =
    *  Path Y delivery: V2 cohort hand-edits to Python are preserved.
    *  Caller emits a notice indicating Python-canonical mode. */
   | 'run_python_directly'
-  /** Recipe is stale (Description was hand-edited). Re-transpiling
-   *  would emit stale Python. Caller surfaces an error notice pointing
-   *  at "Forge: Generate Recipe from Description". */
-  | 'abort_recipe_stale'
+  /** v0.2.254 drain 2026-07-03-1100 — Description was hand-edited so
+   *  Recipe + Python are stale. Auto-run the full pipeline:
+   *  /generate (Description → Recipe + Python via the hosted service)
+   *  → execute the fresh Python. Cohort no longer has to invoke a
+   *  separate command. Replaces the pre-v0.2.254 `abort_recipe_stale`
+   *  action that told cohort to run the (long-retired)
+   *  "Forge: Generate Recipe from Description" command. */
+  | 'auto_generate_then_run'
   /** Standard V2 transpile path: Recipe → Python via the engine. The
    *  default for synced / recipe-canonical / probe-failed states. */
   | 'standard_transpile';
@@ -64,7 +68,7 @@ export function decideForgeClickAction(
   canonicalLayer: CanonicalLayer | null,
 ): ForgeClickAction {
   if (canonicalLayer === 'python') return 'run_python_directly';
-  if (canonicalLayer === 'description') return 'abort_recipe_stale';
+  if (canonicalLayer === 'description') return 'auto_generate_then_run';
   // 'recipe', 'synced', null → standard transpile.
   return 'standard_transpile';
 }

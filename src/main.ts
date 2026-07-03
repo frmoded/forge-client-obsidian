@@ -1974,14 +1974,41 @@ export default class ForgePlugin extends Plugin {
         return;
       }
       if (canonicalLayer === 'description') {
+        // v0.2.254 drain 2026-07-03-1100 — auto-forge full pipeline
+        // on Description-canonical. Pre-v0.2.254 aborted here and
+        // told cohort to run "Forge: Generate Recipe from Description"
+        // (a command that was retired in v0.2.244 — the notice was
+        // referencing a phantom command). Now: generate → run,
+        // matching the "forge = run this note" semantic.
         console.log(
-          `Forge: ${view.file.basename} is Description-canonical (V2 implicit lock) — Recipe is stale; aborting Forge-click`,
+          `Forge: ${view.file.basename} is Description-canonical (V2 implicit lock) — auto-forging: generate → execute`,
         );
-        await this.forgeOutput(
-          `Forge: ${view.file.basename} → Description-canonical (hand-edited since last /generate). `
-          + `Re-running Forge would transpile stale Recipe. Run "Forge: Generate Recipe from Description" first.`,
-          'error',
+        this.notice(
+          `Forge: ${view.file.basename} → Description-canonical. Regenerating Recipe + Python from Description, then executing.`,
         );
+        if (this.spinner) {
+          this.spinner.startImmediate('Forge: 🔥 generating Recipe from Description …');
+        }
+        try {
+          const generated = await this.generate('Forge failed during generation');
+          if (!generated) {
+            // generate() already surfaced the specific failure via
+            // notice + console.error. Stop here — don't run stale
+            // Python when generate failed.
+            return;
+          }
+          if (this.spinner) {
+            this.spinner.startImmediate('Forge: 🔥 executing …');
+          }
+          // Post-generate the note is aligned (all three facets fresh);
+          // runSnippet has nothing special to signal, so it takes the
+          // default path.
+          await this.runSnippet('Forge failed during execution');
+        } finally {
+          if (this.spinner) {
+            this.spinner.stop();
+          }
+        }
         return;
       }
       // 'recipe', 'synced', or null (probe failed): standard transpile
