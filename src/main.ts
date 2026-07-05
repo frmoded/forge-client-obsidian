@@ -26,7 +26,7 @@ import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view.ts';
-import { ChipsManifest, loadChipsForActiveVault, isChipsFilePath } from './chips.ts';
+import { ChipsManifest, loadPaletteForActiveVault, isChipsFilePath } from './chips.ts';
 import { ChipPaletteGroup } from './chips-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core.ts';
@@ -1759,7 +1759,7 @@ export default class ForgePlugin extends Plugin {
 
   private async reloadChipPalette(refreshOpenView = false) {
     try {
-      this.chipPalette = await loadChipsForActiveVault(
+      this.chipPalette = await loadPaletteForActiveVault(
         this.app, this.chipsManifest());
     } catch (e) {
       console.error('Forge chips: load failed', e);

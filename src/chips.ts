@@ -741,3 +741,155 @@ export function resolveSnippetPath(
   }
   return null;
 }
+
+// v0.2.258 drain 2026-07-03-1300 — auto-discovery palette loader
+// replacing the `_chips.md`-schema `loadChipsForActiveVault` above.
+// Data source model:
+//   1. LANGUAGE_PRIMITIVES (hardcoded in palette-discovery-core.ts).
+//   2. Every action/data snippet in every installed library subdir.
+//   3. Every action/data snippet at vault root (personal group).
+//   4. Source-vault content (when the vault IS a bundled library repo).
+// Order: libraries first (so library wins on A4-shadow dedup per
+// driver Choice 4), then personal, then source-vault.
+
+import {
+  computePalette,
+  type SnippetMetaForPalette,
+} from './palette-discovery-core.ts';
+
+export async function loadPaletteForActiveVault(
+  app: App,
+  manifest: ChipsManifest,
+): Promise<ChipPaletteGroup[]> {
+  const inventory: SnippetMetaForPalette[] = [];
+
+  // Libraries first: A4 shadowing means library-note chips win when a
+  // library and a vault note share a basename (driver Choice 4).
+  for (const libDir of manifest.libraryDirNames) {
+    try {
+      const libSnippets = await buildSnippetInventory(app, libDir);
+      // Read chip_insertion frontmatter for library notes (per driver
+      // Choice 3 option a). Reuse readSnippetFrontmatter to get the
+      // extra field without a second file read.
+      for (const snippet of libSnippets) {
+        const libRelPath = `${libDir}/${snippet.id.replace(/^[^/]+\//, '')}.md`;
+        // Actually simpler: build the path from libDir + snippet.id
+        // directly (snippet.id is the bare id relative to libDir).
+        const filePath = `${libDir}/${snippet.id}.md`;
+        const file = app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile) {
+          const fm = await readSnippetFrontmatter(app, file);
+          if (fm && typeof fm.chip_insertion === 'string') {
+            (snippet as SnippetMetaForPalette).chip_insertion =
+              fm.chip_insertion;
+          }
+        }
+        inventory.push(snippet as SnippetMetaForPalette);
+        void libRelPath;
+      }
+    } catch (e) {
+      console.error(`Forge palette: library '${libDir}' inventory failed`, e);
+    }
+  }
+
+  // Personal (vault-root snippets) — skip when source-vault detected
+  // (avoids double-count of the source repo's own content).
+  const sourceVaultName = await detectSourceVault(app);
+  if (sourceVaultName === null) {
+    try {
+      const personalSnippets = await buildPersonalInventory(
+        app, new Set(manifest.libraryDirNames));
+      inventory.push(...(personalSnippets as SnippetMetaForPalette[]));
+    } catch (e) {
+      console.error('Forge palette: personal inventory failed', e);
+    }
+  } else {
+    // Source-vault: walk the vault root as if it IS the library.
+    try {
+      const sourceSnippets = await buildSourceVaultInventory(
+        app, sourceVaultName, new Set(manifest.libraryDirNames));
+      inventory.push(...(sourceSnippets as SnippetMetaForPalette[]));
+    } catch (e) {
+      console.error('Forge palette: source-vault inventory failed', e);
+    }
+  }
+
+  return computePalette(inventory);
+}
+
+/** Vault-root snippet inventory (personal group). Mirrors the shape
+ *  of `buildSnippetInventory` but reads from vault root without a
+ *  libDir prefix. */
+async function buildPersonalInventory(
+  app: App,
+  excludeTopDirs: Set<string>,
+): Promise<SnippetMetaForChips[]> {
+  const out: SnippetMetaForChips[] = [];
+  for (const file of app.vault.getMarkdownFiles()) {
+    // Only vault-root files (no `/` in path).
+    if (file.path.includes('/')) continue;
+    // Skip files whose top-level is an excluded library.
+    void excludeTopDirs;
+    const fm = await readSnippetFrontmatter(app, file);
+    if (!fm) continue;
+    const type = typeof fm.type === 'string' ? fm.type : undefined;
+    if (type !== 'action' && type !== 'data') continue;
+    const basename = file.basename;
+    const inputs = Array.isArray(fm.inputs)
+      ? fm.inputs.filter((x: unknown): x is string => typeof x === 'string')
+      : undefined;
+    const chip = typeof fm.chip === 'boolean' ? fm.chip : undefined;
+    const facet_form = typeof fm.facet_form === 'string'
+      ? fm.facet_form : undefined;
+    out.push({
+      id: basename,
+      basename,
+      type,
+      inputs,
+      chip,
+      parentDir: '',
+      facet_form,
+    });
+  }
+  return out;
+}
+
+/** Source-vault snippet inventory (vault root IS the library). */
+async function buildSourceVaultInventory(
+  app: App,
+  libraryName: string,
+  excludeTopDirs: Set<string>,
+): Promise<SnippetMetaForChips[]> {
+  void libraryName;
+  const out: SnippetMetaForChips[] = [];
+  for (const file of app.vault.getMarkdownFiles()) {
+    const firstSlash = file.path.indexOf('/');
+    const topDir = firstSlash === -1 ? '' : file.path.slice(0, firstSlash);
+    if (topDir.startsWith('.')) continue;
+    if (topDir !== '' && excludeTopDirs.has(topDir)) continue;
+    const fm = await readSnippetFrontmatter(app, file);
+    if (!fm) continue;
+    const type = typeof fm.type === 'string' ? fm.type : undefined;
+    if (type !== 'action' && type !== 'data') continue;
+    const basename = file.basename;
+    const relPath = file.path;
+    const lastSlash = relPath.lastIndexOf('/');
+    const parentDir = lastSlash === -1 ? '' : relPath.slice(0, lastSlash);
+    const inputs = Array.isArray(fm.inputs)
+      ? fm.inputs.filter((x: unknown): x is string => typeof x === 'string')
+      : undefined;
+    const chip = typeof fm.chip === 'boolean' ? fm.chip : undefined;
+    const facet_form = typeof fm.facet_form === 'string'
+      ? fm.facet_form : undefined;
+    out.push({
+      id: file.path.replace(/\.md$/, ''),
+      basename,
+      type,
+      inputs,
+      chip,
+      parentDir,
+      facet_form,
+    });
+  }
+  return out;
+}

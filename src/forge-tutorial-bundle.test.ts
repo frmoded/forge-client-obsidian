@@ -25,10 +25,12 @@ test('forge-tutorial bundle: required files present', () => {
   // Smoke check that sync-bundled-vault has been run for tutorial.
   // Without these, ensureBundledForgeTutorial silently no-ops with a
   // warning (per ensureBundledVault's "no source" path).
+  // v0.2.258 drain 1300 — _meta/_chips.md removed from required set;
+  // palette auto-populates from action-note discovery (no `_chips.md`
+  // schema anywhere in the tutorial bundle).
   const required = [
     'forge.toml',
     'README.md',
-    '_meta/_chips.md',
     '01-hello/Hello.md',
     '01-hello/hello_world.md',
     '09-slots/Slots.md',
