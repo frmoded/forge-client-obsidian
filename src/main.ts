@@ -9,6 +9,8 @@ import {
 } from './v2-note-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core.ts';
+import { computeCanonicalFacetAfterEdit } from './facet-edit-canonical-flip-core.ts';
+import { identifyEditedFacet, decideCanonicalWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
 import {
@@ -664,6 +666,18 @@ export default class ForgePlugin extends Plugin {
       this.app.workspace.on('file-open', (file) => { void this.maybeBackfillV113Shape(file); })
     );
 
+    // v0.2.260 drain 1400 Option A — populate the facet-hash cache on
+    // file-open so the modify handler has a reliable baseline for
+    // identifying which facet was just edited. Without this, the FIRST
+    // edit after opening a file gets no canonical_facet write (the
+    // handler populates cache on that modify but has nothing to
+    // compare against).
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => {
+        void this.captureFacetHashCacheForFile(file);
+      })
+    );
+
     // v0.2.118 — frontmatter hide for Live Preview Properties widget.
     // v0.2.116's EditorView.editorAttributes facet puts `forge-snippet`
     // on `.cm-editor` (the CM6 root). But Obsidian's Properties widget
@@ -833,6 +847,16 @@ export default class ForgePlugin extends Plugin {
         void this.maybeUpdateCanonicalFacet(file);
       }),
     );
+
+    // v0.2.260 drain 2026-07-03-1400 §3.1 — seed canonical_facet for
+    // workspace-restored tabs. Obsidian fires file-open events for
+    // restored tabs BEFORE plugin onload completes, so the modify /
+    // file-open handlers miss them. onLayoutReady fires AFTER workspace
+    // restoration completes, giving a reliable moment to sweep all
+    // currently-open MarkdownViews.
+    this.app.workspace.onLayoutReady(() => {
+      void this.seedCanonicalFacetForOpenFiles();
+    });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
 
@@ -3454,6 +3478,33 @@ export default class ForgePlugin extends Plugin {
    *  stored differs from computed) prevents frontmatter churn. */
   private _canonicalUpdateInFlight: Set<string> = new Set();
 
+  /** v0.2.260 drain 1400 Option A — per-file body-hash cache.
+   *  Records the last observed body hashes for each facet. The modify
+   *  handler compares CURRENT hashes to CACHED (not stored_hash) to
+   *  identify which facet was just edited. Populated on file-open,
+   *  onLayoutReady, and inside the modify handler itself. */
+  private _facetHashCache: Map<string, FacetHashes> = new Map();
+
+  private async captureFacetHashCacheForFile(file: TFile | null) {
+    if (!file) return;
+    try {
+      const body = await this.app.vault.read(file);
+      if (!isV2Shape(body)) return;
+      const typeField = getFmFieldV2(body, 'type');
+      if (typeField !== 'action') return;
+      const descText = extractDescription(body);
+      const recipeText = extractRecipeSection(body) ?? '';
+      const pythonText = extractPythonSection(body) ?? '';
+      this._facetHashCache.set(file.path, {
+        desc: await computeFacetHash(descText),
+        recipe: await computeFacetHash(recipeText),
+        python: await computeFacetHash(pythonText),
+      });
+    } catch (e) {
+      console.error(`captureFacetHashCacheForFile: failed for '${file.path}'`, e);
+    }
+  }
+
   private async maybeUpdateCanonicalFacet(file: TFile | null) {
     if (!file) return;
     if (this._programmaticWriteInFlight.has(file.path)) {
@@ -3474,37 +3525,34 @@ export default class ForgePlugin extends Plugin {
       const descText = extractDescription(body);
       const recipeText = extractRecipeSection(body) ?? '';
       const pythonText = extractPythonSection(body) ?? '';
-      const storedDesc = (() => {
-        const v = getFmFieldV2(body, 'description_hash');
-        return typeof v === 'string' ? v : null;
-      })();
-      const storedRecipe = (() => {
-        const v = getFmFieldV2(body, 'recipe_hash');
-        return typeof v === 'string' ? v : null;
-      })();
-      const storedPython = (() => {
-        const v = getFmFieldV2(body, 'python_hash');
-        return typeof v === 'string' ? v : null;
-      })();
-      const currentDesc = await computeFacetHash(descText);
-      const currentRecipe = await computeFacetHash(recipeText);
-      const currentPython = await computeFacetHash(pythonText);
-      const dMismatch = storedDesc !== null && storedDesc !== currentDesc;
-      const rMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
-      const pMismatch = storedPython !== null && storedPython !== currentPython;
+      const currentHashes: FacetHashes = {
+        desc: await computeFacetHash(descText),
+        recipe: await computeFacetHash(recipeText),
+        python: await computeFacetHash(pythonText),
+      };
 
-      // Upstream-wins per driver Choice 3.
-      let target: 'description' | 'recipe' | 'python' | 'synced';
-      if (dMismatch) target = 'description';
-      else if (rMismatch) target = 'recipe';
-      else if (pMismatch) target = 'python';
-      else target = 'synced';
+      const cached = this._facetHashCache.get(file.path) ?? null;
+      const editedFacet = identifyEditedFacet(currentHashes, cached);
 
-      const storedCanonical = (() => {
+      // Always update the cache to the current snapshot — even if we
+      // don't write canonical (bootstrap case) or the edit was on
+      // a non-facet body region.
+      this._facetHashCache.set(file.path, currentHashes);
+
+      const storedCanonicalRaw = (() => {
         const v = getFmFieldV2(body, 'canonical_facet');
         return typeof v === 'string' ? v : null;
       })();
-      if (storedCanonical === target) return; // idempotent no-op
+      const VALID: Array<'description' | 'recipe' | 'python' | 'synced'> = [
+        'description', 'recipe', 'python', 'synced',
+      ];
+      const storedCanonical = storedCanonicalRaw !== null
+        && VALID.includes(storedCanonicalRaw as any)
+        ? (storedCanonicalRaw as 'description' | 'recipe' | 'python' | 'synced')
+        : null;
+
+      const target = decideCanonicalWrite(editedFacet, storedCanonical);
+      if (target === null) return; // no write needed
 
       // Write via processFrontMatter so we don't churn body text.
       await this.withProgrammaticWrite(file.path, async () => {
@@ -3524,6 +3572,81 @@ export default class ForgePlugin extends Plugin {
       setTimeout(() => {
         this._canonicalUpdateInFlight.delete(file.path);
       }, 250);
+    }
+  }
+
+  /** v0.2.260 drain 2026-07-03-1400 §3.1 — seed canonical_facet for
+   *  every currently-open V2 action note. Fires once on workspace
+   *  layout-ready. Bypasses the session-Set dedup that the modify /
+   *  file-open backfill uses (those Sets are meant for user-initiated
+   *  events; the layout-ready pass is the one-time seed opportunity
+   *  for restored tabs).
+   *
+   *  For each open MarkdownView:
+   *    - Skip if not V2 action.
+   *    - Skip if `canonical_facet` already present.
+   *    - Otherwise: run the same seed logic as the backfill (infer via
+   *      hash inference, write to frontmatter).
+   *
+   *  Non-fatal: any per-file failure is logged and the pass continues. */
+  private async seedCanonicalFacetForOpenFiles() {
+    const leaves = this.app.workspace.getLeavesOfType('markdown');
+    for (const leaf of leaves) {
+      const view = leaf.view as MarkdownView | undefined;
+      const file = view?.file;
+      if (!file) continue;
+      try {
+        const body = await this.app.vault.read(file);
+        if (!isV2Shape(body)) continue;
+        const typeField = getFmFieldV2(body, 'type');
+        if (typeField !== 'action') continue;
+
+        // v0.2.260 drain 1400 Option A — populate the hash cache for
+        // this file so the modify handler can identify "just edited"
+        // facets by comparing to a reliable baseline. Always fires
+        // regardless of canonical_facet presence.
+        const descText = extractDescription(body);
+        const recipeText = extractRecipeSection(body) ?? '';
+        const pythonText = extractPythonSection(body) ?? '';
+        const currentDesc = await computeFacetHash(descText);
+        const currentRecipe = await computeFacetHash(recipeText);
+        const currentPython = await computeFacetHash(pythonText);
+        this._facetHashCache.set(file.path, {
+          desc: currentDesc,
+          recipe: currentRecipe,
+          python: currentPython,
+        });
+
+        const existing = getFmFieldV2(body, 'canonical_facet');
+        if (typeof existing === 'string' && existing.length > 0) continue;
+
+        // Compute seed via same upstream-wins inference as backfill.
+        const storedDesc = getFmFieldV2(body, 'description_hash');
+        const storedRecipe = getFmFieldV2(body, 'recipe_hash');
+        const storedPython = getFmFieldV2(body, 'python_hash');
+        const dMismatch = typeof storedDesc === 'string' && storedDesc !== currentDesc;
+        const rMismatch = typeof storedRecipe === 'string' && storedRecipe !== currentRecipe;
+        const pMismatch = typeof storedPython === 'string' && storedPython !== currentPython;
+        let seed: 'description' | 'recipe' | 'python' | 'synced';
+        if (dMismatch) seed = 'description';
+        else if (rMismatch) seed = 'recipe';
+        else if (pMismatch) seed = 'python';
+        else seed = 'synced';
+
+        await this.withProgrammaticWrite(file.path, async () => {
+          await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+            fm.canonical_facet = seed;
+          });
+        });
+        console.log(
+          `[v113-backfill] ${file.path}: canonicalFacetSeed=${seed} (onLayoutReady pass)`,
+        );
+      } catch (e) {
+        console.error(
+          `seedCanonicalFacetForOpenFiles: failed for '${file.path}'`,
+          e,
+        );
+      }
     }
   }
 
