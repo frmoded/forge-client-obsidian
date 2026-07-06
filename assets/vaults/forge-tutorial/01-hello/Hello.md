@@ -50,4 +50,12 @@ The output changes to match.
 That's the loop you'll use for the whole tutorial: **change one thing, Forge it,
 see what happened.**
 
+## Palette focus
+
+The chip palette on the right shows every construct available. In this chapter
+you only need **Call [[print]]** — the one construct in `hello_world`. You'll
+see other palette entries like `Let`, `If`, `For each`, `Return` — ignore them
+for now. We'll cover each one in later chapters (`Let` in [[Variables]],
+`Return` in [[Functions]], `If` in [[Conditionals]], `For each` in [[Loops]]).
+
 When you're ready, go to [[Variables]] — where we start giving names to things.

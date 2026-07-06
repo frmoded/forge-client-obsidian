@@ -33,4 +33,10 @@ Open the **weather** snippet, change `72` to `95`, and Forge again. Now the
 condition is true, so you'll see "It's hot." Try a few values right around `80`
 to find the dividing line.
 
+## Palette focus
+
+Focus on **If** and **Otherwise** for this chapter. The `If ... , ... Otherwise
+...` construct is Forge's branching. Ignore `For each` for now — that's
+[[Loops]].
+
 When you're ready, go to [[Loops]] — where snippets repeat themselves.

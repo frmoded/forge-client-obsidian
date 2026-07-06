@@ -3699,12 +3699,6 @@ export default class ForgePlugin extends Plugin {
             }
           });
         });
-        console.log(
-          `[v113-backfill] ${file.path}: `
-          + `canonicalFacetSeed=${canonicalAlreadyPresent ? 'skip(exists)' : seed} `
-          + `recipeParentSeed=${seedRecipeParent ? 'yes' : 'no'} `
-          + `pythonParentSeed=${seedPythonParent ? 'yes' : 'no'} (onLayoutReady pass)`,
-        );
       } catch (e) {
         console.error(
           `seedCanonicalFacetForOpenFiles: failed for '${file.path}'`,
@@ -3717,7 +3711,6 @@ export default class ForgePlugin extends Plugin {
   private async maybeBackfillV113Shape(file: TFile | null) {
     if (!file) return;
     if (this._v113BackfillSeen.has(file.path)) {
-      console.log(`[v113-backfill] ${file.path}: alreadySeen; skip`);
       return;
     }
     this._v113BackfillSeen.add(file.path);
@@ -3727,9 +3720,6 @@ export default class ForgePlugin extends Plugin {
       // race). Body is the source of truth for the field we care about.
       const body = await this.app.vault.read(file);
       const typeField = getFmFieldV2(body, 'type');
-      console.log(
-        `[v113-backfill] ${file.path}: type=${typeField} isV2=${isV2Shape(body)}`,
-      );
       if (typeField !== 'action') return;
       if (!isV2Shape(body)) return;
       const result = await backfillV113Shape(body, {
@@ -3744,21 +3734,6 @@ export default class ForgePlugin extends Plugin {
         replacePythonSection,
         computeFacetHash,
       });
-      console.log(
-        `[v113-backfill] ${file.path}: changed=${result.changed} ` +
-        `pythonSection=${result.actions.pythonSection} ` +
-        `hashesStamped=${JSON.stringify(result.actions.hashes)} ` +
-        `derivedFromStamped=${JSON.stringify(result.actions.derivedFromFields)}`,
-      );
-      if (result.actions.canonicalHashRepairs.length > 0) {
-        // v0.2.248 drain 2026-07-03-0600 §3.4b — distinct log prefix
-        // for forensic clarity per prompt guidance.
-        console.log(
-          `[v114-canonical-hash-repair] ${file.path}: rewrote `
-          + `${result.actions.canonicalHashRepairs.join(', ')} `
-          + `(v0.2.243 recipe_hash shortcut → description_hash root source).`,
-        );
-      }
       if (!result.changed) return;
       // v0.2.256 drain 1200 — programmatic write flag prevents
       // backfill (including canonical_facet seeding) from triggering

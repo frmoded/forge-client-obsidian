@@ -51,5 +51,12 @@ Let's write a function of your own.
 You just created a snippet, named it, and called it — the same loop you'll use
 to build anything in Forge.
 
+## Palette focus
+
+Focus on **Return**, **Let**, and **Call [[...]]** for this chapter. The
+`Return ...` construct is how a snippet hands a result back to its caller.
+Ignore `If`, `Otherwise`, `For each` for now — those come in later chapters
+([[Conditionals]], [[Loops]]).
+
 When you're ready, go to [[Composition]] — where snippets call each other in
 chains.

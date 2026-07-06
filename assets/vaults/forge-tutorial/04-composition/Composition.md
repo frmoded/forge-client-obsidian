@@ -45,4 +45,11 @@ Want to go further? Right-click `excited_word.md` → **Make a copy**, rename it
 (say `another_word.md`), give back a different word, and point **describe_forge**
 at your new snippet instead.
 
+## Palette focus
+
+Focus on chained **Call [[...]]** patterns and **Let ... = Call ...** in this
+chapter. You've already met all the Recipe constructs the sample uses; the new
+skill is nesting them. Ignore `If`, `Otherwise`, `For each` for now —
+[[Conditionals]] and [[Loops]] cover those.
+
 When you're ready, go to [[Conditionals]] — where snippets start making choices.

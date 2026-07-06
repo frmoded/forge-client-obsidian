@@ -38,5 +38,12 @@ pointed at the same snippet that contains it. That's all recursion is.
 Open the **show_factorial** snippet and change `n=5` to `n=6`. **Forge** 🔥 it —
 the answer jumps to `720`. Then try `n=3` and check it by hand: `3 × 2 × 1 = 6`.
 
+## Palette focus
+
+No new palette constructs in this chapter — recursion re-uses `Let`, `Call`,
+`If`, and `Return`. The new mental idea is a snippet calling **itself** by
+name via `Call [[factorial]]` from inside `factorial`. Watch the base-case
+guard (the `If n < 2` branch) — recursion without a base case runs forever.
+
 That's the core tour. One more idea — letting Forge fill in a value for you with
 `{{ … }}` — is next in [[Slots]].

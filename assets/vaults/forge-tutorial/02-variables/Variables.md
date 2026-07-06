@@ -39,4 +39,11 @@ Open the **greeting** snippet, change `"Ada"` to your own name, and Forge again 
 the greeting follows. Then try changing `"Hello, "` to `"Hi there, "`. Two boxes,
 one result: that's what variables buy you.
 
+## Palette focus
+
+Focus on **Let** and **Call [[print]]** for this chapter. The `Let ... = ...`
+construct binds a name to a value — you'll see it twice in `greeting`. Ignore
+`Return`, `If`, `Otherwise`, `For each` for now — those come in later chapters
+([[Functions]], [[Conditionals]], [[Loops]]).
+
 When you're ready, go to [[Functions]] — where you make your own reusable steps.

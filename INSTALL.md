@@ -7,14 +7,10 @@ needed on your machine — everything is bundled into a single zip.
 
 ### 1. Download the release zip
 
-Open the [v0.2.199 release page](https://github.com/frmoded/forge-client-obsidian/releases/tag/v0.2.199)
-and download `forge-client-obsidian-v0.2.199.zip` from the **Assets**
-section. Save it somewhere convenient (e.g. your Downloads folder).
-
-> **Closed-beta note:** this guide pins to **v0.2.199** specifically.
-> Newer releases may exist on the [Releases page](https://github.com/frmoded/forge-client-obsidian/releases)
-> but haven't been verified for this cohort — use v0.2.199 unless the
-> link in this doc has been updated.
+Open the [Releases page](https://github.com/frmoded/forge-client-obsidian/releases)
+and download the most recent `forge-client-obsidian-vX.Y.Z.zip` from
+its **Assets** section. Save it somewhere convenient (e.g. your
+Downloads folder).
 
 ### 2. Find your Obsidian vault's plugin directory
 
@@ -27,8 +23,8 @@ section. Save it somewhere convenient (e.g. your Downloads folder).
 
 ### 3. Unzip into the plugins directory
 
-- Unzip `forge-client-obsidian-v0.2.199.zip`. You'll get a folder
-  called `forge-client-obsidian`.
+- Unzip the release zip. You'll get a folder called
+  `forge-client-obsidian`.
 - Move (or extract directly to) that folder so it lives at
   `<your-vault>/.obsidian/plugins/forge-client-obsidian/`.
 - After this step you should have files like:
@@ -47,9 +43,9 @@ section. Save it somewhere convenient (e.g. your Downloads folder).
 
 ## Token setup (one-time)
 
-The plugin uses a hosted service to transpile English snippet
-descriptions into Python via an LLM. You should have received a
-token by email.
+The plugin uses a hosted service to transpile note Descriptions into
+Recipes (and Recipes into Python) via an LLM. You should have received
+a token by email.
 
 1. Open Obsidian → **Settings** → scroll the left sidebar to
    **Forge Client** (under Community plugins).
@@ -66,20 +62,18 @@ leaves your machine except as the `Authorization` header on
 `/generate` requests to the service URL above.
 
 > **No token yet?** The moda simulator works without one — the
-> simulation runs locally via bundled snippets. Only English →
-> Python authoring (the **Forge** button on a snippet's English
-> facet) needs the token. Contact the service operator if you
-> need one.
+> simulation runs locally via bundled notes. Only Description → Recipe
+> → Python authoring (the **Forge** button on an action note) needs
+> the token. Contact the service operator if you need one.
 
 ## First Forge-click
 
 When you open a fresh vault for the first time after install, the
-plugin extracts two starter snippets to vault root: `welcome.md`
-and `greet.md`. Try them as your first Forge interaction.
+plugin extracts two starter notes to vault root: `welcome.md` and
+`greet.md`. Try them as your first Forge interaction.
 
 1. In Obsidian's file tree, click `welcome.md`.
-2. Click the **Forge** button at the top of the editor (or
-   **Cmd-P** → "Forge: Forge active snippet").
+2. Click the **Forge** button at the top of the editor.
 3. The Forge Output panel on the right shows two lines:
 
    ```
@@ -100,11 +94,10 @@ restore. Delete both and reload Obsidian to get them back.
 ## Verifying it works
 
 1. Open the command palette: **Cmd-P** (Mac) or **Ctrl-P** (Windows/Linux).
-2. Type **Forge** — you should see commands like "Forge: Open MoDa
-   simulation".
-3. Run **Forge: Open MoDa simulation**. A panel opens with a
-   simulation canvas (~500 small pale-blue water particles in a
-   rectangle).
+2. Type **Forge** — you should see commands like "Forge: Run only
+   (active snippet)" and "Forge: Open 3D View".
+3. Run **Forge: Open 3D View**. A panel opens with a simulation
+   canvas (~500 small pale-blue water particles in a rectangle).
 4. Click the **Run simulation** button in the panel header. Wait a
    few seconds — first run initializes Python (one-time, takes 1-2
    seconds), then runs a 300-tick simulation in ~8 seconds. The
@@ -112,6 +105,63 @@ restore. Delete both and reload Obsidian to get them back.
    the water.
 
 If you see the ink dispersions, the install is healthy.
+
+## State suffix legend
+
+Every V2 action note has three facets — **Description** (prose intent),
+**Recipe** (structured grammar that compiles to Python), **Python**
+(the compiled or hand-authored code). All three are always visible in
+the editor. Each facet renders a state suffix after its `#` heading
+that tells you TWO things at once: which facet this one derives from
+(its parent in the D → R → P chain), and whether that derivation
+reflects current source content.
+
+The six suffixes:
+
+- **`— source`** (full color) — this facet drives runtime; content is
+  authoritative.
+- **`— derived from Description`** (60% opacity, Recipe only) — Recipe
+  reflects current Description; regeneration was successful.
+- **`— derived from Recipe`** (60% opacity, Python only) — Python
+  reflects current Recipe.
+- **`— derived from Description, out of date`** (50% opacity, Recipe
+  only) — Recipe was derived from Description at some prior point;
+  Description has since been edited. Forge to refresh.
+- **`— derived from Recipe, out of date`** (50% opacity, Python only)
+  — Python was derived from Recipe at some prior point; either Recipe
+  was edited OR Recipe is transitively out of date from Description.
+  Forge to refresh.
+- **`— ignored`** (40% opacity) — this facet is upstream of the
+  current canonical in the D → R → P chain and has no derivation
+  relationship to it. Content preserved on disk but not participating
+  in runtime.
+
+### Worked example
+
+You open an aligned action note:
+- Description: `— source`
+- Recipe: `— derived from Description`
+- Python: `— derived from Recipe`
+
+You edit Description. Save:
+- Description: `— source`
+- Recipe: `— derived from Description, out of date` (Recipe's lineage
+  points at the old Description)
+- Python: `— derived from Recipe, out of date` (Python is transitively
+  out of date — the whole chain needs regeneration)
+
+Click Forge. The pipeline re-runs: Description → Recipe → Python.
+All three settle back to sync state.
+
+If instead you edit Recipe:
+- Description: `— ignored` (upstream of Recipe-canonical, no lineage)
+- Recipe: `— source`
+- Python: `— derived from Recipe, out of date`
+
+Same rule for Python: edit Python and both Description + Recipe render
+`— ignored`. Whichever facet you last hand-edit becomes the source.
+Upstream facets go `— ignored`; downstream facets go `— out of date`
+until you re-forge.
 
 ## Network requirements
 
@@ -123,25 +173,24 @@ fetches SoundFont samples from `storage.googleapis.com/magentadata/`
 on first play. The samples are browser-cached, so subsequent plays
 work offline. If you're behind a strict firewall or air-gapped, audio
 playback won't initialize — visual score rendering, all computation,
-and freezing snippets still work without network access.
+and freezing notes still work without network access.
 
-## Authoring notes — hand-authored snippets
+## Authoring notes — hand-authored notes
 
 **`# Dependencies` is engine-emitted, not author-emitted.** When you
-write a snippet by hand (creating `.md` files in your vault without
-going through `/generate`), the snippet won't have a `# Dependencies`
-block at the bottom of its body. That's expected — per constitution
-B7, the block is generated by static analysis on the Python facet at
+write a note by hand (creating `.md` files in your vault without going
+through `/generate`), the note won't have a `# Dependencies` block at
+the bottom of its body. That's expected — per constitution B7, the
+block is generated by static analysis on the Python facet at
 `/generate` time, not authored manually.
 
 **What you lose without it.** The wikilink right-click freeze
-affordance (v0.2.41+) needs wikilinks in the snippet body to operate
-on. If your hand-authored snippet's body has no `[[snippet_name]]`
-references — only backticked code like
-`context.compute('snippet_name', ...)` — the right-click menu has
-nothing to target, so the freeze / unfreeze items won't appear.
-**Workaround**: append a `# Dependencies` block manually with the
-wikilinks your Python calls. For example:
+affordance needs wikilinks in the note body to operate on. If your
+hand-authored note's body has no `[[note_name]]` references — only
+backticked code like `context.compute('note_name', ...)` — the
+right-click menu has nothing to target, so the freeze / unfreeze items
+won't appear. **Workaround**: append a `# Dependencies` block manually
+with the wikilinks your Python calls. For example:
 
 ```
 # Dependencies
@@ -149,7 +198,7 @@ wikilinks your Python calls. For example:
 [[callee_one]] [[callee_two]]
 ```
 
-The block doesn't change snippet behavior; it only enables the
+The block doesn't change note behavior; it only enables the
 right-click affordance. The `Cmd+P` → "Forge: Freeze edge"
 command-palette path works regardless of whether `# Dependencies` is
 present.
@@ -189,21 +238,23 @@ Repeat steps 1-3: download the new zip, unzip, and replace the
 existing `forge-client-obsidian/` folder. Obsidian picks up the
 changes on next reload.
 
-## What this plugin does (V1 closed beta)
+## What this plugin does
 
-Forge is an Obsidian plugin for **moda** — a particle-simulation
-sandbox. After install you can:
+Forge is an Obsidian plugin for authoring **action notes** — small
+executable notes with three facets (Description, Recipe, Python).
+After install you can:
 
-- Open the moda simulator and watch the live particle loop.
-- Click the canvas to inject ink droplets.
-- Adjust temperature with the slider.
-- Click **Run simulation** to play a canned 300-tick scenario and
-  see the final state.
-- Forge-click any snippet under `<vault>/forge-moda/` to run it
-  directly; the result shows in the Forge Output panel.
+- Author notes in three linked facets and see the D → R → P lineage
+  in real-time via the state suffix legend.
+- Open the moda simulator (Cmd-P → "Forge: Open 3D View") and watch a
+  live particle loop.
+- Click the canvas to inject ink droplets; adjust temperature with
+  the slider.
+- Forge-click any action note in the vault to run it directly; the
+  result shows in the Forge Output panel.
+- Compose notes across the bundled `forge-moda`, `forge-music`, and
+  `forge-tutorial` libraries plus your own vault notes.
 
 All compute happens locally inside your Obsidian (via Pyodide).
-No data leaves your machine.
-
-V1 is the moda-only release. Music (`forge-music`) bundling lands
-in a later release.
+No data leaves your machine except LLM-mediated `/generate` calls
+authenticated with your transpile-service token.
