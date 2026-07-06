@@ -98,7 +98,39 @@ v0.2.208 – v0.2.209 synced engine bundles including `.obsidian` prune and forg
 
 v0.2.210 landed slot resolution Phase 3.5: resolved vs unresolved `{{...}}` slots differentiate visually (unresolved slots are yellow-highlighted; resolved ones inline the value).
 
-## Migration cheat sheet
+## The v0.2.244 – v0.2.246 arc — palette trim + hygiene
+
+v0.2.244 retired six V1-era commands from Cmd-P: Zap line, Generate Only, Generate recipe from description, Show canonical layer, Sync English from Python, Toggle Python/English editing mode. The V2 paradigm makes them redundant: canonical-forge handles what Generate/Zap did, tri-state visibility surfaces canonical directly, engineer-mode was retired for vault notes back in v11.2. Palette count 17 → 11.
+
+v0.2.246 shipped two hygiene fixes. Forensic-shadow cleanup summary now surfaces as a transient Notice toast (5-6s) instead of a persistent output-panel entry. Also added Pyodide MEMFS pre-sync to `runSnippet` handler (Cmd-P "Run only"), matching the pattern from v0.2.235's `togglePythonVisibility` fix. Editing a note's Python body and running Cmd-P "Run only" before Obsidian auto-saves now compiles the fresh edit.
+
+## The v0.2.247 – v0.2.251 arc — V11.4 synced-state + Recipe error UX + dead-code sweep
+
+v0.2.247 added a Step button to the moda simulator iframe's transport controls, with correct disabled-state gating when the sim is running. The Cmd-P command retired in v0.2.240; iframe UI now surfaces the functionality.
+
+v0.2.248 landed V11.4.1: synced-state canonical delegation to Description as authorial default (Recipe + Python render as `— derived` from Description). Same drain fixed `writeCanonicalPythonBack`'s canonical-hash routing (was using recipe_hash shortcut). Silent backfill (`[v114-canonical-hash-repair]`) opportunistically fixes existing V2 notes on first-open.
+
+v0.2.249 gave Recipe parser errors a cohort-friendly rewrite via pattern-match table. "Recipe kwarg near 'a' — the grammar is 'Call [[chip]] with name=value'" instead of raw Pyodide traceback. Same version attempted to strip vestigial `english_hash` field from V2 notes — later reverted in v0.2.252 (turned out to be a slot-cache-key wire contract, not vestigial).
+
+v0.2.251 completed the dead-code sweep for retired command handlers from v0.2.244. ~471 lines removed across four handler methods (`runZapLine`, `generateEmmFromDescription`, `syncEnglishFromPython`, `toggleEditMode`) and `src/zap.ts`.
+
+## The v0.2.252 – v0.2.255 arc — canonical routing + auto-forge on Description-canonical
+
+v0.2.252 fixed the canonical-tiebreak semantic that had been shipping: was downstream-wins (Python wins if any drift), flipped to upstream-wins so Description edits register as canonical. Introduced the L45 routing signal — plugin's declared canonical layer is honored by the engine's execution path. When plugin routes Python-canonical, engine short-circuits Recipe parse. Also reverted v0.2.249's `english_hash` strip: it was a slot-cache-key wire contract, not vestigial.
+
+v0.2.254 changed forge-click behavior on Description-canonical notes. Was: abort with an error pointing at a retired command. Now: automatic pipeline — /generate produces Recipe, transpile produces Python, execute Python. No cohort intervention. Matches the "forge = run this note" mental model.
+
+## The v0.2.256 – v0.2.263 arc — V11.5 canonical-as-stored + `_chips.md` retirement + hash-cache
+
+v0.2.256 moved canonical detection from hash-mismatch inference to explicit storage. New `canonical_facet` frontmatter field (values: `description`, `recipe`, `python`, `synced`). Plugin writes it on hand-edit events; programmatic writes (transpile, /generate, backfill) preserve existing values. Hash-inference retained for backfill seed + external-edit fallback.
+
+v0.2.258 retired the `_chips.md` schema entirely. Palette now auto-populates from `type: action` note discovery + hardcoded language primitives + library-note frontmatter (`chip_insertion:` field for custom shapes). Removed 10 tutorial `_chips.md` files + 1 forge-moda file. Cohort's existing `_chips.md` files become unread (harmless); cohort can delete when convenient. Bundled vault re-extract fires normally.
+
+v0.2.260 fixed a subtle bug in canonical detection. When a note had residual hash drift from prior editing (like slow_burn.md in the driver's bluh vault), editing another facet wouldn't flip canonical to the edited facet — both facets showed as drifted, and the tiebreak preserved the prior canonical. Fix: per-file hash cache tracks last-known body hashes; on modify, the facet whose CURRENT hash differs from CACHED hash is the freshly-edited one. Same drain added an `onLayoutReady` seed pass that populates `canonical_facet` on workspace-restored tabs (previously missed because file-open events preceded plugin onload).
+
+v0.2.262 completed the dead-code sweep for the retired `_chips.md` reader stack. ~1852 lines removed across `chips-md-migration-core.ts`, `chips-walk-up-core.ts`, `synthetic-chips-core.ts` (all deleted), `chips.ts` (509 lines shed), `welcome.ts` (102 lines shed). Docs sweep across constitution and forge-doc-briefing to describe the post-retirement auto-discovery model.
+
+## Migration cheat sheet — v0.2.263 and earlier
 
 If you're upgrading a vault from before v0.2.205 to v0.2.243:
 
@@ -112,8 +144,9 @@ If your vault still has "snippet" language in prose or comments, that's fine —
 
 ## What's next (planned but not yet shipped)
 
-- `[v113-backfill]` and `[v114-backfill]` diagnostic logs removal once v11.4 backfill is confirmed on cohort vaults.
-- Cohort-facing "which command should I use?" palette cleanup (Zap line, Generate Only, Toggle Python/English, Show canonical layer — slated for removal in the drain following v0.2.243).
-- Publishing-arc polish (release-notes automation, INSTALL.md refresh, cohort onboarding path).
+- **v0.2.264 (in flight)** — V11.6 hexa-state visibility. Suffixes gain lineage detail (`— derived from Description`, `— derived from Recipe`) and a distinct "out of date" state (`— derived from Description, out of date` when the source was edited after the derivation). Upstream-of-source facets render `— ignored` (renamed from `— stale` — semantically more precise). Two frontmatter renames: `recipe_derived_from_description_hash` (was `recipe_derived_from_source_hash`), `python_derived_from_recipe_hash` (was `python_derived_from_source_hash`). Backfill migrates on file-open. **CSS class rename**: `.forge-facet-stale` → `.forge-facet-ignored`; cohort with custom themes should update.
+- **Followup drain 1320** — remaining ~800 lines of dead code in `chips-core.ts` (`parseChipsV2Config`, `mergeChipsWithOverrides`, `autoDeriveChips`, related types). Non-blocking cleanup after v11.6 lands.
+- **Followup** — `[v113-backfill]` and `[v114-backfill]` diagnostic logs removal once v11.6 backfill is cohort-confirmed.
+- **Publishing-arc polish** — INSTALL.md refresh, cohort onboarding path.
 
-For paradigm changes, see `~/projects/forge/docs/specs/constitution.md` (currently V2a v12).
+For paradigm changes, see `~/projects/forge/docs/specs/constitution.md` (currently V2a v12; S9 sub-clause at v11.6).
