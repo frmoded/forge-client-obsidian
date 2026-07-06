@@ -300,14 +300,11 @@ export class ChipsView extends ItemView {
 
       for (const sub of subGroups) {
         // v0.2.54 — gate the h5 sub-header on shouldRenderSubgroupHeader.
-        // v2 per-library groups have sub.label === group.sourceName
-        // (e.g. both "Setup") because mergeChipsWithOverrides sets
-        // chip.group to the group id and the source name to its
-        // display label; the h4 already conveys the identity. The
-        // helper suppresses the redundant h5 in that case while
-        // preserving sub-headers for v1 vault-root _chips.md files
-        // (where chips inside one source can declare distinct group
-        // values).
+        // Historically the h4 + h5 could both carry the same label
+        // when chip.group and the source name matched; the helper
+        // suppresses the redundant h5 in that case while preserving
+        // sub-headers when chips inside one source declare distinct
+        // group values.
         if (shouldRenderSubgroupHeader(sub.label, group.sourceName)) {
           section.createEl('h5', {
             text: sub.label as string,

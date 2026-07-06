@@ -31,7 +31,6 @@ import { App, parseYaml, TFile } from 'obsidian';
 import { snippetIdFromPath } from './snippet-id-from-path.ts';
 import {
   ChipPaletteGroup,
-  chipSourcesFor,
   type ChipsManifest,
   type SnippetMetaForChips,
 } from './chips-core.ts';
@@ -39,8 +38,11 @@ import { isSourceVault } from './source-vault-core.ts';
 // v0.2.262 drain 1310 — `_chips.md` reader stack retired.
 // chips-walk-up-core.ts, synthetic-chips-core.ts, and portions of
 // chips-core.ts (parseChipsV2Config / mergeChipsWithOverrides /
-// autoDeriveChips / etc.) deleted in this drain. Live palette
-// discovery lives in palette-discovery-core.ts.
+// autoDeriveChips / etc.) deleted then.
+// v0.2.272 drain 1320 — remaining `_chips.md` schema deleted from
+// chips-core.ts (ChipsV2Config, ChipOverride, ChipGroup,
+// CHIPS_RELATIVE_PATHS, chipSourcesFor, mergeChipsConfigsWalkUp).
+// Live palette discovery lives in palette-discovery-core.ts.
 
 // v0.2.62 — names of bundled libraries the plugin knows how to extract
 // (matches welcome.ts's ensureBundledForgeModa + ensureBundledForgeMusic
@@ -55,7 +57,6 @@ const KNOWN_BUNDLED_LIBRARIES = new Set([
 
 // Re-export so existing import sites in the codebase keep working
 // without churn.
-export { chipSourcesFor };
 export type { ChipsManifest };
 
 async function buildSnippetInventory(
