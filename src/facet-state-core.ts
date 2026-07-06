@@ -1,31 +1,27 @@
-// v0.2.264 — Constitution V2a v11.6 hexa-state visibility. Drain
-// 2026-07-03-1500 supersedes v11.4 tri-state (source/derived/stale)
-// with six suffix states + immediate-parent lineage semantics.
+// v0.2.270 (drain 2026-07-06-1700) — CW-1700 fix: computeFacetStates
+// accepts computed current-body hashes for the freshness comparison
+// instead of reading stored `<facet>_hash` frontmatter fields.
 //
-// State semantics (v11.6 S9):
-// - Source: this facet drives runtime; content is authoritative.
-// - DerivedFromDescription: Recipe reflects current Description
-//   (recipe_derived_from_description_hash === description_hash).
-// - DerivedFromRecipe: Python reflects current Recipe AND Recipe is
-//   itself in sync with Description (transitive freshness).
-// - DerivedFromDescriptionOutOfDate: Recipe's lineage points at a
-//   prior Description state.
-// - DerivedFromRecipeOutOfDate: Python's lineage points at a prior
-//   Recipe state OR Recipe is transitively out of date from
-//   Description (transitive; drives Python out-of-date regardless of
-//   local hash match).
-// - Ignored: this facet is upstream of the current canonical in the
-//   D → R → P chain — no derivation relationship to the canonical.
+// Root cause of CW-1700 (found in drain 1500 re-rehearsal): stored
+// hashes only rewrite at forge/backfill time (drain 1200 "stored =
+// last-forged snapshot" invariant, load-bearing for I5's hash cache).
+// Hand-edits do NOT update stored hashes. So comparing
+// `recipe_derived_from_description_hash === fm.description_hash`
+// always passed post-hand-edit (both point at last-forged snapshot),
+// rendering "in sync" even though the actual Description body drifted.
 //
-// Description has no `— derived from X` variants (top of chain).
-// Python's parent is Recipe (immediate parent — Q1 hexa-state).
+// Option B fix: ViewPlugin computes current-body SHA-256 hashes at
+// render time and passes them to computeFacetStates. Stored
+// frontmatter hashes still drive canonical detection + I5 hash cache
+// + backfill; ONLY the freshness comparison uses current-body hashes.
+//
+// v0.2.264 (drain 2026-07-03-1500) — original v11.6 hexa-state impl.
+// v11.6 S9 semantics unchanged; only the implementation surface changes.
 
 import type { CanonicalLayer } from './facet-hash-core.ts';
 
 export type FacetName = 'description' | 'recipe' | 'python';
 
-// `enum` syntax isn't supported in strip-only TS runners (node --test),
-// so use a const object + literal-union type instead.
 export const FacetState = {
   Source: 'source',
   DerivedFromDescription: 'derived_from_description',
@@ -36,21 +32,29 @@ export const FacetState = {
 } as const;
 export type FacetState = typeof FacetState[keyof typeof FacetState];
 
-/** Facet chain position — Description upstream, Python downstream. */
 export const CHAIN_POSITION: Record<FacetName, number> = {
   description: 0,
   recipe: 1,
   python: 2,
 };
 
-/** Every FacetName in chain order. */
 export const ALL_FACETS: readonly FacetName[] = ['description', 'recipe', 'python'];
 
-/** Frontmatter reader shape — hexa-state reads stored hashes +
- *  parent-hash fields (v11.6) with fallback to legacy source-hash
- *  fields (v11.4/v11.5 transition period). */
 export interface FacetStateFrontmatterReader {
   getFrontmatterField(key: string): string | null;
+}
+
+/** CW-1700 (drain 1700) — computed current-body SHA-256 hashes for each
+ *  facet. ViewPlugin computes these at render time from the actual
+ *  body content on disk. Passed to computeFacetStates for freshness
+ *  comparison. Stored `<facet>_hash` frontmatter fields are NOT used
+ *  for freshness after this drain — they remain "last-forged snapshot"
+ *  per the drain 1200 invariant.
+ */
+export interface CurrentBodyHashes {
+  description: string;
+  recipe: string;
+  python: string;
 }
 
 /** Read the parent-hash field for a facet with fallback to legacy
@@ -67,36 +71,33 @@ function readParentHash(
   }
   const v11_6 = fm.getFrontmatterField('python_derived_from_recipe_hash');
   if (v11_6 !== null) return v11_6;
-  // Legacy `python_derived_from_source_hash` semantics ambiguous:
-  // could be Description hash (two-hop Description-canonical) or
-  // Recipe hash (one-hop Recipe-canonical). Caller resolves by
-  // comparing against current recipe_hash — done inline in
-  // computeFacetStates.
   return fm.getFrontmatterField('python_derived_from_source_hash');
 }
 
 /** Compute per-facet lineage state given the canonical + a
- *  frontmatter reader. Pure; deterministic; no I/O.
+ *  frontmatter reader + computed current-body hashes.
+ *
+ *  CW-1700 semantic (drain 1700): freshness comparison uses
+ *  `currentBodyHashes.description` / `.recipe` (computed from actual
+ *  disk content) rather than stored `<facet>_hash` frontmatter fields.
+ *  Fires correctly immediately after hand-edit.
  *
  *  Rules (v11.6 §S9):
  *  - `facet === canonical` → Source.
  *  - `facet` upstream of canonical → Ignored.
  *  - `facet` downstream of canonical:
- *    - Recipe: check `recipe_derived_from_description_hash === current description_hash`.
+ *    - Recipe: check `recipe_derived_from_description_hash === currentBodyHashes.description`.
  *      Match → DerivedFromDescription; mismatch or absent → out-of-date.
- *    - Python: check both Recipe's state (transitive) and Python's local match.
- *      Truth table per §2.1 of drain 1500 prompt.
+ *    - Python: check both Recipe's state (transitive) and Python's local match against currentBodyHashes.recipe.
  *  - `canonical === 'synced'` → delegate to 'description' (v11.4.1 preserved).
  */
 export function computeFacetStates(
   canonical: CanonicalLayer,
   fm: FacetStateFrontmatterReader,
+  currentBodyHashes: CurrentBodyHashes,
 ): Record<FacetName, FacetState> {
   if (canonical === 'synced') {
-    // v11.4.1 convention preserved under v11.6: synced renders same
-    // as description-canonical (Description is source, Recipe and
-    // Python are downstream).
-    return computeFacetStates('description', fm);
+    return computeFacetStates('description', fm, currentBodyHashes);
   }
 
   const out: Record<FacetName, FacetState> = {
@@ -105,14 +106,9 @@ export function computeFacetStates(
     python: FacetState.Ignored,
   };
 
-  const currentDescHash = fm.getFrontmatterField('description_hash');
-  const currentRecipeHash = fm.getFrontmatterField('recipe_hash');
-
   // Description
   if (canonical === 'description') {
     out.description = FacetState.Source;
-  } else {
-    // Upstream of Recipe or Python canonical → Ignored (initial value stands).
   }
 
   // Recipe
@@ -122,8 +118,9 @@ export function computeFacetStates(
     out.recipe = FacetState.Ignored;
   } else {
     // canonical === 'description' — Recipe is downstream.
+    // CW-1700: compare parent-hash stamp against CURRENT-body description hash.
     const recipeParent = readParentHash(fm, 'recipe');
-    if (recipeParent !== null && currentDescHash !== null && recipeParent === currentDescHash) {
+    if (recipeParent !== null && recipeParent === currentBodyHashes.description) {
       out.recipe = FacetState.DerivedFromDescription;
     } else {
       out.recipe = FacetState.DerivedFromDescriptionOutOfDate;
@@ -134,9 +131,10 @@ export function computeFacetStates(
   if (canonical === 'python') {
     out.python = FacetState.Source;
   } else if (canonical === 'recipe') {
-    // One-hop downstream — check python_derived_from_recipe_hash === current recipe_hash.
+    // One-hop downstream — check python_derived_from_recipe_hash === current recipe body hash.
+    // CW-1700: compare against CURRENT-body recipe hash.
     const pythonParent = readParentHash(fm, 'python');
-    if (pythonParent !== null && currentRecipeHash !== null && pythonParent === currentRecipeHash) {
+    if (pythonParent !== null && pythonParent === currentBodyHashes.recipe) {
       out.python = FacetState.DerivedFromRecipe;
     } else {
       out.python = FacetState.DerivedFromRecipeOutOfDate;
@@ -150,23 +148,21 @@ export function computeFacetStates(
       out.python = FacetState.DerivedFromRecipeOutOfDate;
     } else {
       // Recipe in sync with Description. Check Python's local match
-      // against current recipe_hash.
+      // against CURRENT-body recipe hash (CW-1700).
       const pythonParentField = fm.getFrontmatterField('python_derived_from_recipe_hash');
       if (pythonParentField !== null) {
-        if (currentRecipeHash !== null && pythonParentField === currentRecipeHash) {
+        if (pythonParentField === currentBodyHashes.recipe) {
           out.python = FacetState.DerivedFromRecipe;
         } else {
           out.python = FacetState.DerivedFromRecipeOutOfDate;
         }
       } else {
         // v11.6 parent hash absent — fall back to legacy
-        // python_derived_from_source_hash. In two-hop Description-canonical,
-        // legacy field could point at Description hash (v11.4.1+ backfill
-        // shape). Per CW-1500-B, treat absent v11.6 field as out of date;
-        // the safe default renders `— derived from Recipe, out of date`
-        // until cohort re-forges.
+        // python_derived_from_source_hash. CW-1500-B safe default:
+        // treat absent v11.6 field as out of date; the safe default
+        // renders `— derived from Recipe, out of date` until cohort re-forges.
         const legacy = fm.getFrontmatterField('python_derived_from_source_hash');
-        if (legacy !== null && currentRecipeHash !== null && legacy === currentRecipeHash) {
+        if (legacy !== null && legacy === currentBodyHashes.recipe) {
           out.python = FacetState.DerivedFromRecipe;
         } else {
           out.python = FacetState.DerivedFromRecipeOutOfDate;

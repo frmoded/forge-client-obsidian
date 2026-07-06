@@ -16,6 +16,7 @@ import { RangeSetBuilder } from '@codemirror/state';
 
 import {
   whichLayerIsCanonical,
+  computeFacetHash,
 } from './facet-hash-core.ts';
 import {
   computeFacetStates,
@@ -23,6 +24,7 @@ import {
   FacetState,
   ALL_FACETS,
   type FacetName,
+  type CurrentBodyHashes,
 } from './facet-state-core.ts';
 import {
   extractDescription,
@@ -265,7 +267,29 @@ export const staleFacetViewPlugin = ViewPlugin.fromClass(
       if (this.pendingDoc !== body) {
         return;
       }
-      const states = computeFacetStates(canonical, oneArgReader);
+      // CW-1700 (drain 2026-07-06-1700): compute current-body hashes for
+      // freshness comparison. Stored `<facet>_hash` frontmatter fields
+      // remain "last-forged snapshot" per drain 1200 invariant; freshness
+      // check needs the actual current-body content hash to detect
+      // hand-edit drift immediately (before the next forge rewrites stored).
+      let currentBodyHashes: CurrentBodyHashes;
+      try {
+        const descText = extractDescription(body);
+        const recipeText = extractRecipeSection(body) ?? '';
+        const pythonText = extractPythonSection(body) ?? '';
+        currentBodyHashes = {
+          description: await computeFacetHash(descText),
+          recipe: await computeFacetHash(recipeText),
+          python: await computeFacetHash(pythonText),
+        };
+      } catch (e) {
+        console.error('facetStateViewPlugin: currentBodyHashes computation failed', e);
+        return;
+      }
+      if (this.pendingDoc !== body) {
+        return;
+      }
+      const states = computeFacetStates(canonical, oneArgReader, currentBodyHashes);
       this.decorations = buildFacetStateDecorations(body, states);
       try {
         this.view.dispatch({});

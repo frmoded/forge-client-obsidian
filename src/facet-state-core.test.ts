@@ -1,5 +1,5 @@
-// v0.2.264 — tests for the hexa-state visibility pure-core (drain
-// 2026-07-03-1500 V2a v11.6).
+// v0.2.270 — tests for the hexa-state visibility pure-core with CW-1700
+// current-body-hash freshness comparison (drain 2026-07-06-1700).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -10,6 +10,7 @@ import {
   suffixTextForState,
   CHAIN_POSITION,
   ALL_FACETS,
+  type CurrentBodyHashes,
 } from './facet-state-core.ts';
 
 function fakeFm(map: Record<string, string>) {
@@ -20,8 +21,18 @@ function fakeFm(map: Record<string, string>) {
   };
 }
 
+/** Helper: aligned CurrentBodyHashes — current body matches stored `<facet>_hash`
+ *  values in the fm map. Used where no drift is being tested. */
+function alignedBodyHashes(descHash: string, recipeHash: string, pythonHash: string): CurrentBodyHashes {
+  return {
+    description: descHash,
+    recipe: recipeHash,
+    python: pythonHash,
+  };
+}
+
 // -----------------------------------------------------------------------
-// canonical=description matrix (§4.1)
+// canonical=description matrix (§4.1 v11.6 hexa-state)
 // -----------------------------------------------------------------------
 
 test('canonical=description + Recipe in sync + Python in sync → source/derived/derived', () => {
@@ -32,7 +43,7 @@ test('canonical=description + Recipe in sync + Python in sync → source/derived
     recipe_derived_from_description_hash: 'D1',
     python_derived_from_recipe_hash: 'R1',
   });
-  const states = computeFacetStates('description', fm);
+  const states = computeFacetStates('description', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.description, FacetState.Source);
   assert.equal(states.recipe, FacetState.DerivedFromDescription);
   assert.equal(states.python, FacetState.DerivedFromRecipe);
@@ -46,7 +57,7 @@ test('canonical=description + Recipe out of date → recipe out-of-date + python
     recipe_derived_from_description_hash: 'D1', // stale: points at old D
     python_derived_from_recipe_hash: 'R1',
   });
-  const states = computeFacetStates('description', fm);
+  const states = computeFacetStates('description', fm, alignedBodyHashes('D2', 'R1', 'P1'));
   assert.equal(states.description, FacetState.Source);
   assert.equal(states.recipe, FacetState.DerivedFromDescriptionOutOfDate);
   // TRANSITIVE per Q3: Python out-of-date even though its local
@@ -62,7 +73,7 @@ test('canonical=description + Recipe in sync + Python local mismatch → python 
     recipe_derived_from_description_hash: 'D1',
     python_derived_from_recipe_hash: 'R1', // Python's parent points at old R
   });
-  const states = computeFacetStates('description', fm);
+  const states = computeFacetStates('description', fm, alignedBodyHashes('D1', 'R2', 'P1'));
   assert.equal(states.description, FacetState.Source);
   assert.equal(states.recipe, FacetState.DerivedFromDescription);
   assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
@@ -75,14 +86,14 @@ test('canonical=description + parent-hash fields absent → both out-of-date', (
     python_hash: 'P1',
     // no v11.6 parent hashes, no v11.5 source hashes
   });
-  const states = computeFacetStates('description', fm);
+  const states = computeFacetStates('description', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.description, FacetState.Source);
   assert.equal(states.recipe, FacetState.DerivedFromDescriptionOutOfDate);
   assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
 });
 
 // -----------------------------------------------------------------------
-// canonical=recipe matrix (§4.1)
+// canonical=recipe matrix
 // -----------------------------------------------------------------------
 
 test('canonical=recipe → Description ignored, Recipe source, Python check', () => {
@@ -92,7 +103,7 @@ test('canonical=recipe → Description ignored, Recipe source, Python check', ()
     python_hash: 'P1',
     python_derived_from_recipe_hash: 'R1',
   });
-  const states = computeFacetStates('recipe', fm);
+  const states = computeFacetStates('recipe', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.description, FacetState.Ignored);
   assert.equal(states.recipe, FacetState.Source);
   assert.equal(states.python, FacetState.DerivedFromRecipe);
@@ -105,7 +116,7 @@ test('canonical=recipe + python_derived mismatch → python out-of-date', () => 
     python_hash: 'P1',
     python_derived_from_recipe_hash: 'R1', // stale: points at old R
   });
-  const states = computeFacetStates('recipe', fm);
+  const states = computeFacetStates('recipe', fm, alignedBodyHashes('D1', 'R2', 'P1'));
   assert.equal(states.description, FacetState.Ignored);
   assert.equal(states.recipe, FacetState.Source);
   assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
@@ -117,12 +128,12 @@ test('canonical=recipe + python_derived absent → python out-of-date', () => {
     recipe_hash: 'R1',
     python_hash: 'P1',
   });
-  const states = computeFacetStates('recipe', fm);
+  const states = computeFacetStates('recipe', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
 });
 
 // -----------------------------------------------------------------------
-// canonical=python matrix (§4.1)
+// canonical=python matrix
 // -----------------------------------------------------------------------
 
 test('canonical=python → Description + Recipe ignored, Python source', () => {
@@ -131,14 +142,14 @@ test('canonical=python → Description + Recipe ignored, Python source', () => {
     recipe_hash: 'R1',
     python_hash: 'P1',
   });
-  const states = computeFacetStates('python', fm);
+  const states = computeFacetStates('python', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.description, FacetState.Ignored);
   assert.equal(states.recipe, FacetState.Ignored);
   assert.equal(states.python, FacetState.Source);
 });
 
 // -----------------------------------------------------------------------
-// canonical=synced matrix (§4.1) — v11.4.1 convention preserved
+// canonical=synced matrix — v11.4.1 convention preserved
 // -----------------------------------------------------------------------
 
 test('canonical=synced → same as description (v11.4.1 preserved)', () => {
@@ -149,22 +160,19 @@ test('canonical=synced → same as description (v11.4.1 preserved)', () => {
     recipe_derived_from_description_hash: 'D1',
     python_derived_from_recipe_hash: 'R1',
   });
-  const states = computeFacetStates('synced', fm);
+  const states = computeFacetStates('synced', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.description, FacetState.Source);
   assert.equal(states.recipe, FacetState.DerivedFromDescription);
   assert.equal(states.python, FacetState.DerivedFromRecipe);
 });
 
 test('canonical=synced + all parent hashes absent → recipe + python out-of-date', () => {
-  // Fresh V2 note post-v113 backfill: hashes stamped but no v11.6
-  // parent-hash fields. Under CW-1500-B safe default, Python renders
-  // out-of-date until cohort re-forges.
   const fm = fakeFm({
     description_hash: 'D1',
     recipe_hash: 'R1',
     python_hash: 'P1',
   });
-  const states = computeFacetStates('synced', fm);
+  const states = computeFacetStates('synced', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.description, FacetState.Source);
   assert.equal(states.recipe, FacetState.DerivedFromDescriptionOutOfDate);
   assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
@@ -175,36 +183,129 @@ test('canonical=synced + all parent hashes absent → recipe + python out-of-dat
 // -----------------------------------------------------------------------
 
 test('legacy recipe_derived_from_source_hash used when v11.6 field absent', () => {
-  // v11.5 vintage: only `_source_hash` field present. Fallback path
-  // in readParentHash reads the legacy field.
   const fm = fakeFm({
     description_hash: 'D1',
     recipe_hash: 'R1',
     python_hash: 'P1',
-    recipe_derived_from_source_hash: 'D1', // legacy field
+    recipe_derived_from_source_hash: 'D1',
     python_derived_from_recipe_hash: 'R1',
   });
-  const states = computeFacetStates('description', fm);
+  const states = computeFacetStates('description', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.recipe, FacetState.DerivedFromDescription);
 });
 
 test('CW-1500-B: legacy python_derived_from_source_hash === description_hash → still out-of-date', () => {
-  // Two-hop Description-canonical case. Legacy field points at
-  // Description hash (v11.4.1+ backfill shape). CW-1500-B safe
-  // default: without v11.6 python_derived_from_recipe_hash, render
-  // out-of-date until cohort re-forges. Prevents false-positive
-  // "in sync" when Recipe body may have drifted.
   const fm = fakeFm({
     description_hash: 'D1',
     recipe_hash: 'R1',
     python_hash: 'P1',
     recipe_derived_from_description_hash: 'D1',
     python_derived_from_source_hash: 'D1', // legacy two-hop: points at D not R
-    // NO python_derived_from_recipe_hash → CW-1500-B applies
   });
-  const states = computeFacetStates('description', fm);
+  const states = computeFacetStates('description', fm, alignedBodyHashes('D1', 'R1', 'P1'));
   assert.equal(states.recipe, FacetState.DerivedFromDescription);
-  // Python: legacy fallback fires, but 'D1' !== current recipe_hash 'R1' → out of date.
+  assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
+});
+
+// -----------------------------------------------------------------------
+// CW-1700 (drain 1700) — current-body-hash freshness comparison
+// -----------------------------------------------------------------------
+
+test('CW-1700 primary: hand-edited Description drifts from stored → Recipe out-of-date immediately', () => {
+  // Simulate hand-edit: stored description_hash still points at last
+  // forged snapshot ('D1'), but current-body computed hash is 'D_HAND_EDITED'.
+  // Under drain 1500 impl (pre-CW-1700): compared stored fields, would render
+  // Recipe as `derived from Description` (equal because both stored fields
+  // point at D1). Post-CW-1700: compares recipe_derived_from_description_hash
+  // ('D1') against currentBodyHashes.description ('D_HAND_EDITED') → mismatch
+  // → out-of-date. Cohort sees freshness signal immediately.
+  const fm = fakeFm({
+    description_hash: 'D1', // STORED — last forged snapshot (unchanged by hand-edit)
+    recipe_hash: 'R1',
+    python_hash: 'P1',
+    recipe_derived_from_description_hash: 'D1', // points at last forged D
+    python_derived_from_recipe_hash: 'R1',
+  });
+  const currentBody: CurrentBodyHashes = {
+    description: 'D_HAND_EDITED', // ← Description body drifted post-hand-edit
+    recipe: 'R1',
+    python: 'P1',
+  };
+  const states = computeFacetStates('description', fm, currentBody);
+  assert.equal(states.description, FacetState.Source);
+  // The FIX: Recipe renders out-of-date because parent-hash ('D1') !==
+  // current body hash ('D_HAND_EDITED').
+  assert.equal(states.recipe, FacetState.DerivedFromDescriptionOutOfDate);
+  // Python transitively out-of-date per Q3.
+  assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
+});
+
+test('CW-1700 Recipe-canonical variant: Recipe hand-edit → Python out-of-date immediately', () => {
+  // Analogous scenario: Recipe-canonical note, cohort edits Recipe body.
+  // Stored recipe_hash stays at last-forged 'R1'; python_derived_from_recipe_hash
+  // also 'R1'. Under pre-fix impl: Python renders in sync. Post-fix: Python
+  // parent-hash ('R1') vs currentBodyHashes.recipe ('R_HAND_EDITED') → mismatch.
+  const fm = fakeFm({
+    description_hash: 'D1',
+    recipe_hash: 'R1', // STORED — last forged
+    python_hash: 'P1',
+    python_derived_from_recipe_hash: 'R1',
+  });
+  const currentBody: CurrentBodyHashes = {
+    description: 'D1',
+    recipe: 'R_HAND_EDITED', // ← Recipe body drifted
+    python: 'P1',
+  };
+  const states = computeFacetStates('recipe', fm, currentBody);
+  assert.equal(states.description, FacetState.Ignored);
+  assert.equal(states.recipe, FacetState.Source);
+  assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
+});
+
+test('CW-1700 negative: no drift → freshness holds (regression guard)', () => {
+  // Ensures the fix does not break the aligned case: when current-body
+  // hashes match stored, freshness comparison behaves same as before.
+  const fm = fakeFm({
+    description_hash: 'D1',
+    recipe_hash: 'R1',
+    python_hash: 'P1',
+    recipe_derived_from_description_hash: 'D1',
+    python_derived_from_recipe_hash: 'R1',
+  });
+  const currentBody: CurrentBodyHashes = {
+    description: 'D1',
+    recipe: 'R1',
+    python: 'P1',
+  };
+  const states = computeFacetStates('description', fm, currentBody);
+  assert.equal(states.description, FacetState.Source);
+  assert.equal(states.recipe, FacetState.DerivedFromDescription);
+  assert.equal(states.python, FacetState.DerivedFromRecipe);
+});
+
+test('CW-1700: currentBodyHashes.recipe drives Python freshness on description-canonical (not stored recipe_hash)', () => {
+  // Composite: Description stays aligned. Recipe body hand-edited (drift).
+  // Recipe would show out-of-date; Python transitively also.
+  const fm = fakeFm({
+    description_hash: 'D1',
+    recipe_hash: 'R1', // stored — last forged
+    python_hash: 'P1',
+    recipe_derived_from_description_hash: 'D1',
+    python_derived_from_recipe_hash: 'R1',
+  });
+  const currentBody: CurrentBodyHashes = {
+    description: 'D1',
+    recipe: 'R_DRIFTED', // hand-edited but note stays description-canonical (I5 window)
+    python: 'P1',
+  };
+  const states = computeFacetStates('description', fm, currentBody);
+  // Recipe compared against currentBodyHashes.description ('D1'): recipe_derived === 'D1' → in-sync.
+  // But this is a semantic edge: Recipe body drifted from last-forged Recipe;
+  // however Recipe's parent-hash relation is with Description, not with itself.
+  // So Recipe renders in-sync from Description perspective.
+  assert.equal(states.recipe, FacetState.DerivedFromDescription);
+  // Python's parent-hash ('R1') vs currentBodyHashes.recipe ('R_DRIFTED') → mismatch
+  // → Python out-of-date.
   assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate);
 });
 
