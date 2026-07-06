@@ -596,21 +596,6 @@ test('parseChipsV2Config: schema_version 4+ → error (forward-compat hook)', ()
   assert.ok('error' in result);
 });
 
-test('parseChipsV2Config: schema_version: 3 + synthetic_chips[] → parsed and integrated', () => {
-  // v3 file with synthetic_chips emits them through chips-core into
-  // the config (lazy-loaded from synthetic-chips-core).
-  const cfg = parseChipsV2Config({
-    schema_version: 3,
-    synthetic_chips: [
-      { label: 'print', insertion: 'Do [[print]]("<msg>").', group: 'Builtins' },
-    ],
-  });
-  assert.ok(!('error' in cfg));
-  if (!('error' in cfg)) {
-    assert.equal(cfg.synthetic_chips?.length, 1);
-    assert.equal(cfg.synthetic_chips?.[0].label, 'print');
-  }
-});
 
 test('parseChipsV2Config: overrides + groups + hide all preserved when well-formed', () => {
   const cfg = parseChipsV2Config({
@@ -1060,27 +1045,6 @@ test('walk-up merge: same-id groups[] — higher-specificity wins', () => {
   assert.equal(merged.groups?.[0].order, 1);
 });
 
-test('walk-up merge: same-label synthetic_chips[] — higher-specificity wins', () => {
-  const chapter: ChipsV2Config = {
-    schema_version: 3,
-    synthetic_chips: [
-      { label: 'print', insertion: 'Chapter print', group: 'Builtins' },
-    ],
-  };
-  const library: ChipsV2Config = {
-    schema_version: 3,
-    synthetic_chips: [
-      { label: 'print', insertion: 'Library print', group: 'Builtins' },
-      { label: 'Set', insertion: 'Library Set', group: 'Statements' },
-    ],
-  };
-  const merged = mergeChipsConfigsWalkUp([chapter, library]);
-  assert.equal(merged.synthetic_chips?.length, 2);
-  // Chapter's `print` insertion wins; library's `Set` survives.
-  const byLabel = new Map(merged.synthetic_chips!.map(c => [c.label, c.insertion]));
-  assert.equal(byLabel.get('print'), 'Chapter print');
-  assert.equal(byLabel.get('Set'), 'Library Set');
-});
 
 test('walk-up merge: schema_version promotes to 3 when any input is v3', () => {
   const v2: ChipsV2Config = { schema_version: 2 };

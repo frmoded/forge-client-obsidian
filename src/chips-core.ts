@@ -2,7 +2,13 @@
 // chips.test.ts under `node --test`; the obsidian-coupled reader +
 // view re-export from here for runtime use.
 
-import { parseSyntheticChips, mergeSyntheticChipsHigherWins, type SyntheticChip } from './synthetic-chips-core.ts';
+// v0.2.262 drain 1310 — synthetic-chips-core.ts deleted (dead post-1300).
+// Local stubs preserve dead-but-compiling schema code below. Full
+// retirement of the schema (parseChipsV2Config, mergeChipsConfigsWalkUp,
+// mergeChipsWithOverrides, autoDeriveChips) is a followup drain.
+type SyntheticChip = { label: string; insertion: string; group?: string; order?: number };
+const parseSyntheticChips = (_r: unknown): SyntheticChip[] => [];
+const mergeSyntheticChipsHigherWins = (_perLevel: SyntheticChip[][]): SyntheticChip[] => [];
 
 export interface Chip {
   label: string;
@@ -272,7 +278,7 @@ export interface ChipsV2Config {
    *  no backing snippet file). Each entry is fully owned by this
    *  config; merge-across-levels happens in synthetic-chips-core's
    *  `mergeSyntheticChipsHigherWins`. */
-  synthetic_chips?: import('./synthetic-chips-core').SyntheticChip[];
+  synthetic_chips?: SyntheticChip[]; // dead — kept for schema-shape compat
 }
 
 /** Humanize a snippet id for the chip palette's `label` field.

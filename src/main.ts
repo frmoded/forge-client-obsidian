@@ -28,7 +28,7 @@ import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view.ts';
-import { ChipsManifest, loadPaletteForActiveVault, isChipsFilePath } from './chips.ts';
+import { ChipsManifest, loadPaletteForActiveVault } from './chips.ts';
 import { ChipPaletteGroup } from './chips-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core.ts';
@@ -748,24 +748,9 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.reloadChipPalette(/*refreshOpenView=*/ true); },
     });
 
-    // V3: auto-reload chip palette when any `_chips.md` is modified
-    // on disk. The refresh button stays as an escape hatch (manual
-    // reload when the watcher misses an edit or when the parser
-    // cache needs a kick). Debounced to coalesce rapid saves and to
-    // give Obsidian's metadata pipeline a moment to settle.
-    this.registerEvent(
-      this.app.vault.on('modify', (file) => {
-        if (file instanceof TFile && isChipsFilePath(file.path)) {
-          if (this.chipsReloadTimer !== null) {
-            window.clearTimeout(this.chipsReloadTimer);
-          }
-          this.chipsReloadTimer = window.setTimeout(() => {
-            this.chipsReloadTimer = null;
-            void this.reloadChipPalette(/*refreshOpenView=*/ true);
-          }, 300);
-        }
-      }),
-    );
+    // v0.2.262 drain 1310 — `_chips.md` file-watch retired. Palette
+    // now auto-discovered from `type: action` notes; there's no
+    // curator file to watch. Refresh command remains as escape hatch.
 
     // v0.2.58: B7.2 — intercept wikilink-clicks whose target is a
     // recognized Python builtin. Without this, canonical snippets

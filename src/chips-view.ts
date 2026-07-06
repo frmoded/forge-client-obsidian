@@ -9,7 +9,7 @@ import {
   shouldRenderSubgroupHeader,
 } from './chips-core.ts';
 import { initialExpandedLibraries } from './chip-folding-core.ts';
-import { ChipsManifest, loadChipsForActiveVault, resolveSnippetPath } from './chips.ts';
+import { ChipsManifest, loadPaletteForActiveVault, resolveSnippetPath } from './chips.ts';
 import { findFallbackMarkdownView } from './find-fallback-markdown-view-core.ts';
 import type {
   MarkdownLeafLike,
@@ -24,7 +24,7 @@ export const CHIPS_VIEW_TYPE = 'forge-chips';
  *  module doesn't import main.ts and create a cycle. */
 export interface ChipsHost {
   // Current vault manifest snapshot (vault name + declared domains).
-  // Fresh-read per loadChipsForActiveVault call.
+  // Fresh-read per loadPaletteForActiveVault call.
   getManifest(): ChipsManifest;
   // Hook for reload events (e.g. "Refresh chip palette" command can
   // reach into the view via this).
@@ -94,7 +94,7 @@ export class ChipsView extends ItemView {
    *  the "Forge: Refresh chip palette" command. */
   async refresh() {
     try {
-      this.groups = await loadChipsForActiveVault(
+      this.groups = await loadPaletteForActiveVault(
         this.app, this.host.getManifest());
     } catch (e) {
       console.error('Forge chips: load failed', e);
