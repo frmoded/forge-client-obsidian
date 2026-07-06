@@ -1,7 +1,7 @@
-// v0.2.205 — CM6 integration test for the Phase 2.5 §2.1 stale-facet
+// v0.2.264 — CM6 integration tests for the hexa-state visibility
 // ViewPlugin. Per CM6 HARD RULE: mount in a real CM6 EditorView and
-// verify the decoration class appears in the rendered cm-content
-// after the async stale-detection settles.
+// verify decoration classes + suffix text appear in the rendered
+// cm-content after the async state-detection settles.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -9,15 +9,14 @@ import { createIntegrationHarness } from './test-helpers/cm6-harness.ts';
 import { staleFacetViewPlugin } from './stale-facet-view-plugin.ts';
 
 // A V2 note WITH stored hashes that don't match the body (recipe was
-// hand-edited). description_hash + recipe_hash + python_hash are
-// pinned to known-bad values so detectStaleFacets returns a non-empty
-// set. The actual stored values were captured from a real
-// /generate run and then mutated to force "recipe stale".
-const STALE_RECIPE_NOTE = `---
+// hand-edited). Under v11.6, whichLayerIsCanonical will infer Recipe
+// canonical from hash mismatches → Description + Python render `— ignored`.
+const RECIPE_CANONICAL_MISMATCH_NOTE = `---
 type: action
 description_hash: 0000000000000000000000000000000000000000000000000000000000000000
 recipe_hash: 1111111111111111111111111111111111111111111111111111111111111111
 python_hash: 2222222222222222222222222222222222222222222222222222222222222222
+canonical_facet: recipe
 ---
 
 # Description
@@ -49,9 +48,6 @@ Return.
 `;
 
 async function waitForDecorations(harness: any, timeoutMs = 200): Promise<void> {
-  // detectStaleFacets is async (sha256 via SubtleCrypto). The
-  // ViewPlugin dispatches a no-op transaction when the result lands.
-  // Poll a few times to let microtasks settle.
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     await harness.flush();
@@ -59,10 +55,10 @@ async function waitForDecorations(harness: any, timeoutMs = 200): Promise<void> 
   }
 }
 
-test('CM6 integration: stale-facet plugin mounts without throwing', async () => {
+test('CM6 integration: hexa-state plugin mounts without throwing', async () => {
   const harness = createIntegrationHarness();
   try {
-    const view = harness.mount(STALE_RECIPE_NOTE, [staleFacetViewPlugin]);
+    const view = harness.mount(RECIPE_CANONICAL_MISMATCH_NOTE, [staleFacetViewPlugin]);
     await harness.flush();
     assert.ok(view, 'view must be created');
   } finally {
@@ -70,57 +66,41 @@ test('CM6 integration: stale-facet plugin mounts without throwing', async () => 
   }
 });
 
-test('CM6 integration: stale facets render with forge-facet-stale class (v11.4)', async () => {
-  // v0.2.243 — Constitution V2a v11.4 tri-state. Recipe canonical
-  // in STALE_RECIPE_NOTE → Description + Python both stale → body
-  // marks with forge-facet-stale class.
+test('CM6 integration: canonical=recipe → Description + Python render as `— ignored`', async () => {
+  // v0.2.264 — v11.6 hexa-state. canonical_facet=recipe → Description
+  // is upstream of canonical → `— ignored`. Python's parent-hash
+  // absent → `— derived from Recipe, out of date`.
   const harness = createIntegrationHarness();
   try {
-    const view = harness.mount(STALE_RECIPE_NOTE, [staleFacetViewPlugin]);
+    const view = harness.mount(RECIPE_CANONICAL_MISMATCH_NOTE, [staleFacetViewPlugin]);
     await waitForDecorations(harness);
     const html = view.contentDOM.innerHTML;
     assert.ok(
-      html.includes('forge-facet-stale'),
-      `expected forge-facet-stale in DOM after async state-compute; got: ${html.slice(0, 600)}`,
+      html.includes('forge-facet-ignored'),
+      `expected forge-facet-ignored body class; got: ${html.slice(0, 600)}`,
     );
-  } finally {
-    harness.destroy();
-  }
-});
-
-test('CM6 integration: tri-state suffix widgets render (source/derived/stale)', async () => {
-  // v0.2.243 — Constitution V2a v11.4 tri-state. All three facets
-  // get a suffix widget indicating their state. STALE_RECIPE_NOTE
-  // has recipe canonical → Description + Python are stale; Recipe
-  // is source.
-  const harness = createIntegrationHarness();
-  try {
-    const view = harness.mount(STALE_RECIPE_NOTE, [staleFacetViewPlugin]);
-    await waitForDecorations(harness);
-    const html = view.contentDOM.innerHTML;
     assert.ok(
-      html.includes('forge-facet-suffix'),
-      `expected forge-facet-suffix widget in DOM; got: ${html.slice(0, 600)}`,
+      html.includes('— ignored'),
+      `expected literal "— ignored" text in DOM (Description); got: ${html.slice(0, 600)}`,
     );
     assert.ok(
       html.includes('— source'),
-      `expected literal "— source" text in DOM (Recipe is source); got: ${html.slice(0, 600)}`,
+      `expected literal "— source" text (Recipe is canonical); got: ${html.slice(0, 600)}`,
     );
     assert.ok(
-      html.includes('— stale'),
-      `expected literal "— stale" text in DOM (Description/Python stale); got: ${html.slice(0, 600)}`,
+      html.includes('— derived from Recipe, out of date'),
+      `expected Python "— derived from Recipe, out of date"; got: ${html.slice(0, 600)}`,
     );
   } finally {
     harness.destroy();
   }
 });
 
-test('CM6 integration: no hashes → synced delegates to Description canonical (v11.4.1)', async () => {
-  // v0.2.248 (v11.4.1 drain 2026-07-03-0600 §3.1): synced state
-  // delegates to Description canonical. SYNCED_NOTE_NO_HASHES has
-  // no derived_from fields → Recipe + Python render as `— stale`
-  // (their derived-from is absent, treated same as mismatch).
-  // Description renders as `— source`.
+test('CM6 integration: synced/description-canonical → downstream `— derived from X, out of date`', async () => {
+  // v0.2.264 — synced state delegates to Description canonical
+  // (v11.4.1 preserved). SYNCED_NOTE_NO_HASHES has no parent-hash
+  // fields → Recipe renders `— derived from Description, out of date`
+  // and Python renders `— derived from Recipe, out of date`.
   const harness = createIntegrationHarness();
   try {
     const view = harness.mount(SYNCED_NOTE_NO_HASHES, [staleFacetViewPlugin]);
@@ -131,13 +111,12 @@ test('CM6 integration: no hashes → synced delegates to Description canonical (
       `expected "— source" on Description; got: ${html.slice(0, 600)}`,
     );
     assert.ok(
-      html.includes('— stale'),
-      `expected "— stale" on downstream facets (no derived_from stamps); got: ${html.slice(0, 600)}`,
+      html.includes('— derived from Description, out of date'),
+      `expected Recipe "— derived from Description, out of date"; got: ${html.slice(0, 600)}`,
     );
-    // No "derived" state without derived_from stamps.
     assert.ok(
-      !html.includes('— derived'),
-      'V2 note with no derived_from fields → no derived body marks',
+      html.includes('forge-facet-out-of-date'),
+      `expected forge-facet-out-of-date body class; got: ${html.slice(0, 600)}`,
     );
   } finally {
     harness.destroy();

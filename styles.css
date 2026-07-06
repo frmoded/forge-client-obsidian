@@ -977,10 +977,16 @@
   background-color: rgba(255, 235, 59, 0.6);
 }
 
-/* v0.2.243 — Constitution V2a v11.4 tri-state visibility.
- * `— source` / `— derived` / `— stale` widgets after facet headings,
- * plus body marks for derived + stale (source facets are full color).
- * Superseded v11.3's binary source/reference distinction. */
+/* v0.2.264 — Constitution V2a v11.6 hexa-state visibility.
+ * Six suffix states: source / derived from Description /
+ * derived from Recipe / derived from Description, out of date /
+ * derived from Recipe, out of date / ignored. Body opacity:
+ *   source: 100% (no body decoration)
+ *   derived: 60% (.forge-facet-derived)
+ *   out of date: 50% (.forge-facet-out-of-date)
+ *   ignored: 40% (.forge-facet-ignored — renamed from .forge-facet-stale)
+ * COHORT CSS BREAKAGE NOTE: any custom theme referencing
+ * .forge-facet-stale should update to .forge-facet-ignored. */
 
 .forge-facet-derived {
   opacity: 0.6;
@@ -991,17 +997,25 @@
   opacity: 0.8;
 }
 
-.forge-facet-stale {
+.forge-facet-out-of-date {
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.forge-facet-out-of-date:hover {
+  opacity: 0.75;
+}
+
+.forge-facet-ignored {
   opacity: 0.4;
   font-style: italic;
 }
 
-.forge-facet-stale:hover {
+.forge-facet-ignored:hover {
   opacity: 0.65;
 }
 
-/* Suffix widgets. Base style shared; per-state color signals level
- * without relying on opacity distinction alone (dark-mode safe). */
+/* Suffix widgets. Base style shared; per-state color signals level. */
 .forge-facet-suffix {
   font-style: italic;
   font-weight: normal;
@@ -1013,11 +1027,17 @@
   opacity: 0.85;
 }
 
-.forge-facet-suffix-derived {
+.forge-facet-suffix-derived_from_description,
+.forge-facet-suffix-derived_from_recipe {
   opacity: 0.6;
 }
 
-.forge-facet-suffix-stale {
+.forge-facet-suffix-derived_from_description_out_of_date,
+.forge-facet-suffix-derived_from_recipe_out_of_date {
+  opacity: 0.5;
+}
+
+.forge-facet-suffix-ignored {
   opacity: 0.4;
 }
 

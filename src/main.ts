@@ -2939,11 +2939,34 @@ export default class ForgePlugin extends Plugin {
       // forward."
       const english = _extractEnglishFromBody(content) ?? '';
       const englishHash = await computeEnglishHash(english);
-      const newContent = writePythonAndEnglishHash(content, {
+      let newContent = writePythonAndEnglishHash(content, {
         pythonCode: code,
         englishHash,
         stripStaleSlots: false,
       });
+      // v0.2.264 drain 2026-07-03-1500 — v11.6 hexa-state parent-hash
+      // stamps. /generate is Description → LLM → Python; the LLM saw
+      // current Description and produced Python that reflects it.
+      // Semantic: mark Recipe as consistent with current Description
+      // (recipe_derived_from_description_hash = description_hash) and
+      // Python as consistent with current Recipe
+      // (python_derived_from_recipe_hash = recipe_hash).
+      const descHashForStamp = getFmFieldV2(newContent, 'description_hash');
+      const recipeHashForStamp = getFmFieldV2(newContent, 'recipe_hash');
+      if (typeof descHashForStamp === 'string') {
+        newContent = setFmFieldV2(
+          newContent, 'recipe_derived_from_description_hash', descHashForStamp,
+        );
+        // Legacy field also stamped for transition period.
+        newContent = setFmFieldV2(
+          newContent, 'recipe_derived_from_source_hash', descHashForStamp,
+        );
+      }
+      if (typeof recipeHashForStamp === 'string') {
+        newContent = setFmFieldV2(
+          newContent, 'python_derived_from_recipe_hash', recipeHashForStamp,
+        );
+      }
       // v0.2.256 drain 1200 — programmatic write flag prevents this
       // /generate write-back from triggering the canonical_facet
       // hand-edit path.
@@ -3103,6 +3126,14 @@ export default class ForgePlugin extends Plugin {
         // canonical === 'python' → no stamp (skip).
         if (sourceHash !== null) {
           next = setFmFieldV2(next, 'python_derived_from_source_hash', sourceHash);
+        }
+        // v0.2.264 drain 2026-07-03-1500 — v11.6 hexa-state. Python's
+        // parent-hash is Recipe (immediate parent). Stamp at current
+        // recipe_hash whenever we're writing Python back — the compile
+        // path guarantees Python was just derived from current Recipe.
+        // Skip on 'python' canonical (no derivation happened).
+        if (canonicalForStamp !== 'python' && typeof rh === 'string') {
+          next = setFmFieldV2(next, 'python_derived_from_recipe_hash', rh);
         }
       }
       return next;
@@ -3602,13 +3633,45 @@ export default class ForgePlugin extends Plugin {
           python: currentPython,
         });
 
-        const existing = getFmFieldV2(body, 'canonical_facet');
-        if (typeof existing === 'string' && existing.length > 0) continue;
-
-        // Compute seed via same upstream-wins inference as backfill.
+        // Read stored hashes once — used by both canonical-seed +
+        // parent-hash-seed branches below.
         const storedDesc = getFmFieldV2(body, 'description_hash');
         const storedRecipe = getFmFieldV2(body, 'recipe_hash');
         const storedPython = getFmFieldV2(body, 'python_hash');
+
+        // CW-1500-A (drain 2026-07-03-1500) — v11.6 parent-hash seed.
+        // Fires INDEPENDENTLY of canonical_facet presence: a note may
+        // already have canonical_facet (drain 1200 seed) but be missing
+        // the v11.6 parent-hash fields.
+        //
+        // Migration rules (§2.3 of drain 1500 prompt):
+        // - recipe_derived_from_description_hash seeded when legacy
+        //   recipe_derived_from_source_hash === description_hash.
+        // - python_derived_from_recipe_hash seeded when legacy
+        //   python_derived_from_source_hash === recipe_hash (direct).
+        // - Two-hop Description-canonical (legacy === description_hash)
+        //   → LEAVE ABSENT per CW-1500-B safe default.
+        const legacyRecipeParent = getFmFieldV2(body, 'recipe_derived_from_source_hash');
+        const legacyPythonParent = getFmFieldV2(body, 'python_derived_from_source_hash');
+        const existingRecipeV116 = getFmFieldV2(body, 'recipe_derived_from_description_hash');
+        const existingPythonV116 = getFmFieldV2(body, 'python_derived_from_recipe_hash');
+        const seedRecipeParent =
+          typeof existingRecipeV116 !== 'string'
+          && typeof legacyRecipeParent === 'string'
+          && typeof storedDesc === 'string'
+          && legacyRecipeParent === storedDesc;
+        const seedPythonParent =
+          typeof existingPythonV116 !== 'string'
+          && typeof legacyPythonParent === 'string'
+          && typeof storedRecipe === 'string'
+          && legacyPythonParent === storedRecipe;
+
+        const existing = getFmFieldV2(body, 'canonical_facet');
+        const canonicalAlreadyPresent =
+          typeof existing === 'string' && existing.length > 0;
+
+        // Compute canonical_facet seed via upstream-wins inference —
+        // only used when canonical_facet is absent.
         const dMismatch = typeof storedDesc === 'string' && storedDesc !== currentDesc;
         const rMismatch = typeof storedRecipe === 'string' && storedRecipe !== currentRecipe;
         const pMismatch = typeof storedPython === 'string' && storedPython !== currentPython;
@@ -3618,13 +3681,29 @@ export default class ForgePlugin extends Plugin {
         else if (pMismatch) seed = 'python';
         else seed = 'synced';
 
+        // Skip write entirely when there is nothing to change.
+        if (canonicalAlreadyPresent && !seedRecipeParent && !seedPythonParent) {
+          continue;
+        }
+
         await this.withProgrammaticWrite(file.path, async () => {
           await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-            fm.canonical_facet = seed;
+            if (!canonicalAlreadyPresent) {
+              fm.canonical_facet = seed;
+            }
+            if (seedRecipeParent) {
+              fm.recipe_derived_from_description_hash = legacyRecipeParent;
+            }
+            if (seedPythonParent) {
+              fm.python_derived_from_recipe_hash = legacyPythonParent;
+            }
           });
         });
         console.log(
-          `[v113-backfill] ${file.path}: canonicalFacetSeed=${seed} (onLayoutReady pass)`,
+          `[v113-backfill] ${file.path}: `
+          + `canonicalFacetSeed=${canonicalAlreadyPresent ? 'skip(exists)' : seed} `
+          + `recipeParentSeed=${seedRecipeParent ? 'yes' : 'no'} `
+          + `pythonParentSeed=${seedPythonParent ? 'yes' : 'no'} (onLayoutReady pass)`,
         );
       } catch (e) {
         console.error(

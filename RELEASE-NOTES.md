@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.243)
+# Forge — Release Notes (v0.2.205 → v0.2.264)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.243 (V2a v11.4 tri-state visibility), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.264 (V2a v11.6 hexa-state visibility), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -8,15 +8,29 @@ Terminology in these notes uses the V2a v12 vocabulary: **note** (any `.md` file
 
 ## Current state — what to know if you're just picking this up
 
-If you're on v0.2.243 with a fresh vault, here's how Forge behaves today:
+If you're on v0.2.264 with a fresh vault, here's how Forge behaves today:
 
 Every V2 action note has three facets — **Description** (prose intent), **Recipe** (structured grammar that compiles to Python), **Python** (the compiled or hand-authored code). All three are always visible in the editor. All three are always editable. You cannot lose one by accident.
 
-Whichever facet you last hand-edit becomes the **source** (labeled `— source` in the heading, full color body). The other two facets show one of two states: `— derived` (they were auto-produced from the current source, in the 60%-gray body) or `— stale` (they don't reflect current source, in the 40%-gray body). Forging normalizes downstream facets from stale back to derived. Direct edits promote any facet to source.
+Whichever facet you last hand-edit becomes the **source** (labeled `— source` in the heading, full color body). The other two facets render one of five non-source states in a hexa-state suffix: `— derived from Description`, `— derived from Recipe`, `— derived from Description, out of date`, `— derived from Recipe, out of date`, or `— ignored`. The suffix names the parent (immediate upstream) AND the freshness. Forging normalizes downstream facets from out-of-date back to derived. Direct edits promote any facet to source; upstream facets become `— ignored`.
 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## The v0.2.264 arc — hexa-state visibility (V2a v11.6)
+
+The tri-state visibility from v0.2.243 (source / derived / stale) is superseded by hexa-state visibility. The six suffix variants are `— source`, `— derived from Description`, `— derived from Recipe`, `— derived from Description, out of date`, `— derived from Recipe, out of date`, and `— ignored`. Two things get surfaced that were hidden before: (1) which facet is the immediate parent in the D → R → P chain (Recipe's parent is Description; Python's parent is Recipe), and (2) the difference between "no lineage relationship" (`— ignored`, upstream of canonical) and "was derived, source moved" (`— out of date`, downstream with stale parent hash).
+
+Transitive out-of-date: when Recipe is out of date, Python renders `— derived from Recipe, out of date` regardless of local Python-vs-Recipe hash match. Cohort will regenerate the whole chain from source; reporting Python as fresh when Recipe is upstream-broken would mislead about the pipeline's actual freshness.
+
+New frontmatter fields carry the immediate-parent lineage: `recipe_derived_from_description_hash` (stamped at `/generate`) and `python_derived_from_recipe_hash` (stamped at transpile). Legacy `_source_hash` fields retained for the transition period; a followup drain retires them after cohort validation.
+
+**Cohort CSS breakage note**: `.forge-facet-stale` is renamed to `.forge-facet-ignored`. Custom themes referencing `.forge-facet-stale` should update to `.forge-facet-ignored`. A new `.forge-facet-out-of-date` class covers the `— derived from X, out of date` variants (50% opacity, between derived at 60% and ignored at 40%).
+
+Backfill on this update seeds the new parent-hash fields idempotently from the legacy `_source_hash` fields when the semantic is unambiguous (Recipe's legacy field points at description_hash; Python's legacy field points at recipe_hash directly). Two-hop Description-canonical case leaves `python_derived_from_recipe_hash` absent (safe default: Python renders `— derived from Recipe, out of date` until cohort re-forges); this prevents false-positive "in sync" reads when Recipe body may have drifted since Python's actual forge.
+
+Constitution §S9 now reads V2a v11.6.
 
 ## The v0.2.243 arc — tri-state visibility (V2a v11.4)
 

@@ -1,10 +1,12 @@
-// v0.2.243 — pure-core tests for the facet-state extension's range
+// v0.2.264 — pure-core tests for the facet-state extension's range
 // helpers + decoration builder. CM6 integration coverage lives in
 // stale-facet-view-plugin.integration.test.ts.
 //
-// Renamed decoration builder from buildStaleFacetDecorations
-// (v0.2.239 v11.3 binary) to buildFacetStateDecorations
-// (v0.2.243 v11.4 tri-state).
+// v0.2.264 (drain 1500) — hexa-state visibility. Body marks:
+//   source → no body decoration
+//   derived_from_* → forge-facet-derived (60%)
+//   derived_from_*_out_of_date → forge-facet-out-of-date (50%)
+//   ignored → forge-facet-ignored (40%)
 
 import { test, describe } from 'node:test';
 import * as assert from 'node:assert/strict';
@@ -95,69 +97,82 @@ describe('findH1HeadingEndOffset', () => {
 
 describe('buildFacetStateDecorations', () => {
   test('all-source → 3 suffix widgets only (no body marks)', () => {
-    // Source facets get the "— source" suffix widget but no body
-    // decoration; they render at full color.
     const decos = buildFacetStateDecorations(V2_BODY, ALL_SOURCE);
     assert.equal(decos.size, 3);
   });
 
-  test('all-stale → 6 decorations (3 widgets + 3 body marks)', () => {
-    const allStale: Record<FacetName, FacetState> = {
-      description: FacetState.Stale,
-      recipe: FacetState.Stale,
-      python: FacetState.Stale,
+  test('all-ignored → 6 decorations (3 widgets + 3 body marks)', () => {
+    const allIgnored: Record<FacetName, FacetState> = {
+      description: FacetState.Ignored,
+      recipe: FacetState.Ignored,
+      python: FacetState.Ignored,
     };
-    const decos = buildFacetStateDecorations(V2_BODY, allStale);
+    const decos = buildFacetStateDecorations(V2_BODY, allIgnored);
     assert.equal(decos.size, 6);
   });
 
-  test('mixed states (Recipe source, Description + Python stale) → 5 decorations', () => {
-    // Recipe: 1 widget (source, no body mark).
-    // Description: 1 widget + 1 body mark.
-    // Python: 1 widget + 1 body mark.
+  test('mixed states (Recipe source, Description + Python ignored) → 5 decorations', () => {
     const states: Record<FacetName, FacetState> = {
-      description: FacetState.Stale,
+      description: FacetState.Ignored,
       recipe: FacetState.Source,
-      python: FacetState.Stale,
+      python: FacetState.Ignored,
     };
     const decos = buildFacetStateDecorations(V2_BODY, states);
     assert.equal(decos.size, 5);
   });
 
-  test('derived state → widget + derived body mark (distinct from stale)', () => {
+  test('derived state → widget + derived body mark', () => {
     const states: Record<FacetName, FacetState> = {
       description: FacetState.Source,
-      recipe: FacetState.Source,
-      python: FacetState.Derived,
+      recipe: FacetState.DerivedFromDescription,
+      python: FacetState.DerivedFromRecipe,
     };
     const decos = buildFacetStateDecorations(V2_BODY, states);
-    // 3 source widgets + 1 derived widget already at Description + Recipe
-    // headings, but here it's 2 sources + 1 derived = 3 widgets total,
-    // plus 1 body mark for Python.
-    assert.equal(decos.size, 4);
+    // Description: 1 widget (source, no body mark).
+    // Recipe: 1 widget + 1 body mark.
+    // Python: 1 widget + 1 body mark.
+    assert.equal(decos.size, 5);
+  });
+
+  test('out-of-date state → widget + out-of-date body mark', () => {
+    const states: Record<FacetName, FacetState> = {
+      description: FacetState.Source,
+      recipe: FacetState.DerivedFromDescriptionOutOfDate,
+      python: FacetState.DerivedFromRecipeOutOfDate,
+    };
+    const decos = buildFacetStateDecorations(V2_BODY, states);
+    // 3 widgets + 2 body marks (Recipe + Python out-of-date).
+    assert.equal(decos.size, 5);
+  });
+
+  test('canonical=python → Description + Recipe ignored, Python source', () => {
+    // Verifies upstream-of-canonical facets get body decoration.
+    const states: Record<FacetName, FacetState> = {
+      description: FacetState.Ignored,
+      recipe: FacetState.Ignored,
+      python: FacetState.Source,
+    };
+    const decos = buildFacetStateDecorations(V2_BODY, states);
+    // 3 widgets + 2 body marks (Description + Recipe ignored).
+    assert.equal(decos.size, 5);
   });
 
   test('body missing a heading → still produces widgets for present facets', () => {
-    // V1-like body: no # Recipe. buildFacetStateDecorations mounts
-    // widgets only for headings that exist; unpresent headings return
-    // -1 from findH1HeadingEndOffset and are skipped.
     const v1Body = '# Description\n\nfoo\n\n# Python\n\ndef compute(c): pass\n';
     const states: Record<FacetName, FacetState> = {
       description: FacetState.Source,
-      recipe: FacetState.Stale,  // Recipe heading absent → skipped
+      recipe: FacetState.Ignored,  // Recipe heading absent → skipped
       python: FacetState.Source,
     };
     const decos = buildFacetStateDecorations(v1Body, states);
     assert.equal(decos.size, 2);
   });
 
-  test('sorted order preserved (RangeSetBuilder invariant)', () => {
-    // Regression guard: two stale + one source facets. All positions
-    // must be strictly non-decreasing.
+  test('sorted order preserved (RangeSetBuilder invariant, L33)', () => {
     const states: Record<FacetName, FacetState> = {
-      description: FacetState.Stale,
+      description: FacetState.Ignored,
       recipe: FacetState.Source,
-      python: FacetState.Stale,
+      python: FacetState.DerivedFromRecipeOutOfDate,
     };
     const decos = buildFacetStateDecorations(V2_BODY, states);
     let lastFrom = -1;

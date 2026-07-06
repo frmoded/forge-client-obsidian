@@ -71,6 +71,22 @@ export interface V113BackfillResult {
      *  on every read. Empty when the field was already present (idempotent)
      *  or when the note doesn't yet have hashes (fresh V2). */
     canonicalFacetSeeded: 'description' | 'recipe' | 'python' | 'synced' | null;
+    /** v0.2.264 drain 2026-07-03-1500 — v11.6 parent-hash seed. When
+     *  present, this drain's backfill migrated from v11.5's ambiguous
+     *  `_source_hash` fields to v11.6's explicit immediate-parent-hash
+     *  fields. Rules per §2.3 of drain 1500:
+     *  - recipe_derived_from_description_hash seeded when
+     *    recipe_derived_from_source_hash === description_hash.
+     *  - python_derived_from_recipe_hash seeded when
+     *    python_derived_from_source_hash === recipe_hash (direct match).
+     *  - Two-hop Description-canonical case (python_derived_from_source_hash
+     *    === description_hash): LEAVE ABSENT per CW-1500-B safe default;
+     *    Python renders `— derived from Recipe, out of date` until cohort
+     *    re-forges. */
+    derivedFromParentSeeded: Array<
+      | 'recipe_derived_from_description_hash'
+      | 'python_derived_from_recipe_hash'
+    >;
   };
 }
 
@@ -104,6 +120,7 @@ export async function backfillV113Shape(
     derivedFromFields: [],
     canonicalHashRepairs: [],
     canonicalFacetSeeded: null,
+    derivedFromParentSeeded: [],
   };
 
   // Step 1: ensure # Python section exists on disk.
@@ -223,11 +240,59 @@ export async function backfillV113Shape(
     actions.canonicalFacetSeeded = seed;
   }
 
+  // v0.2.264 drain 2026-07-03-1500 — v11.6 parent-hash migration.
+  // §2.3: seed the new immediate-parent-hash fields from v11.5's
+  // legacy `_source_hash` fields where the semantic is unambiguous.
+  //
+  // CW-1500-B: for the two-hop Description-canonical case
+  // (python_derived_from_source_hash === description_hash), LEAVE
+  // python_derived_from_recipe_hash ABSENT. Best-effort seed would
+  // create false positives where Python renders `— derived from Recipe`
+  // (in sync) when Recipe body has drifted since Python's actual forge.
+  // Safe default: Python renders `— derived from Recipe, out of date`
+  // until real re-derivation stamps the field.
+  const descHashField = helpers.getFrontmatterField(workingBody, 'description_hash');
+  const recipeHashField = helpers.getFrontmatterField(workingBody, 'recipe_hash');
+
+  // Recipe parent-hash seed: unambiguous — Recipe's only parent is Description.
+  const existingRecipeParent = helpers.getFrontmatterField(
+    workingBody, 'recipe_derived_from_description_hash');
+  if (existingRecipeParent === null) {
+    const legacyRecipeSource = helpers.getFrontmatterField(
+      workingBody, 'recipe_derived_from_source_hash');
+    if (legacyRecipeSource !== null && descHashField !== null
+        && legacyRecipeSource === descHashField) {
+      workingBody = helpers.setFrontmatterField(
+        workingBody, 'recipe_derived_from_description_hash', legacyRecipeSource,
+      );
+      actions.derivedFromParentSeeded.push('recipe_derived_from_description_hash');
+    }
+  }
+
+  // Python parent-hash seed: only direct-match case (legacy field
+  // points at current recipe_hash). Two-hop case (legacy points at
+  // description_hash) LEFT ABSENT per CW-1500-B.
+  const existingPythonParent = helpers.getFrontmatterField(
+    workingBody, 'python_derived_from_recipe_hash');
+  if (existingPythonParent === null) {
+    const legacyPythonSource = helpers.getFrontmatterField(
+      workingBody, 'python_derived_from_source_hash');
+    if (legacyPythonSource !== null && recipeHashField !== null
+        && legacyPythonSource === recipeHashField) {
+      workingBody = helpers.setFrontmatterField(
+        workingBody, 'python_derived_from_recipe_hash', legacyPythonSource,
+      );
+      actions.derivedFromParentSeeded.push('python_derived_from_recipe_hash');
+    }
+    // CW-1500-B: else if legacyPythonSource === descHashField → LEAVE ABSENT.
+  }
+
   const changed = actions.pythonSection
     || actions.hashes.length > 0
     || actions.derivedFromFields.length > 0
     || actions.canonicalHashRepairs.length > 0
-    || actions.canonicalFacetSeeded !== null;
+    || actions.canonicalFacetSeeded !== null
+    || actions.derivedFromParentSeeded.length > 0;
   return {
     changed,
     newBody: changed ? workingBody : body,

@@ -71,6 +71,8 @@ def compute(context):
 // fields on downstream facets. Notes populated by pre-v11.4 code paths
 // will get those stamped on next backfill run.
 // v0.2.256 drain 1200 — also includes canonical_facet (seed field).
+// v0.2.264 drain 1500 — also includes v11.6 parent-hash fields
+// (recipe_derived_from_description_hash, python_derived_from_recipe_hash).
 const FULL_V113_NOTE = `---
 type: action
 description: foo
@@ -79,6 +81,8 @@ recipe_hash: bbb
 python_hash: ccc
 recipe_derived_from_source_hash: aaa
 python_derived_from_source_hash: aaa
+recipe_derived_from_description_hash: aaa
+python_derived_from_recipe_hash: bbb
 canonical_facet: description
 ---
 
@@ -330,6 +334,7 @@ recipe_hash: RRR
 python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
+recipe_derived_from_description_hash: DDD
 canonical_facet: description
 ---
 
@@ -349,8 +354,12 @@ def compute(context):
 \`\`\`
 `;
   const result = await backfillV113Shape(correctlyStamped, HELPERS);
+  // v0.2.264 drain 1500: NOT changed for canonical_hash_repair or v11.6
+  // parent-hash seed (Python's legacy points at description_hash, which
+  // is the CW-1500-B leave-absent case; Recipe's v11.6 field pre-stamped).
   assert.equal(result.changed, false);
   assert.deepEqual(result.actions.canonicalHashRepairs, []);
+  assert.deepEqual(result.actions.derivedFromParentSeeded, []);
 });
 
 test('v0.2.252 drain 1000: english_hash present on V2 note is PRESERVED (not stripped)', async () => {
@@ -365,6 +374,7 @@ recipe_hash: RRR
 python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
+recipe_derived_from_description_hash: DDD
 english_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 canonical_facet: description
 ---
@@ -475,4 +485,164 @@ test('drain 2026-07-03-0000: greeting.md scenario (2/3 hashes → stamp python_h
   const currentPython = extractPythonSection(result.newBody) ?? '';
   const expectedPyHash = await computeFacetHash(currentPython);
   assert.equal(pyHash, expectedPyHash);
+});
+
+// -----------------------------------------------------------------------
+// v0.2.264 drain 1500 — v11.6 parent-hash migration tests (§4.2 of prompt)
+// -----------------------------------------------------------------------
+
+test('v11.6 §4.2 case 1: recipe_derived_from_source === description_hash → seeds v11.6 field with same value', async () => {
+  const v11_5_note = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: DDD
+python_derived_from_source_hash: DDD
+canonical_facet: description
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(v11_5_note, HELPERS);
+  assert.equal(
+    getFrontmatterField(result.newBody, 'recipe_derived_from_description_hash'),
+    'DDD',
+  );
+  assert.ok(
+    result.actions.derivedFromParentSeeded.includes('recipe_derived_from_description_hash'),
+    `expected seed action; got: ${result.actions.derivedFromParentSeeded.join(', ')}`,
+  );
+});
+
+test('v11.6 §4.2 CW-1500-B: python_derived_from_source === description_hash → DOES NOT seed python_derived_from_recipe_hash', async () => {
+  // Two-hop Description-canonical case. Safe default per CW-1500-B:
+  // leave the v11.6 python field ABSENT. Python renders `— derived
+  // from Recipe, out of date` until cohort re-forges.
+  const v11_5_note = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: DDD
+python_derived_from_source_hash: DDD
+canonical_facet: description
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(v11_5_note, HELPERS);
+  // Recipe: seeded (unambiguous parent = Description).
+  assert.equal(
+    getFrontmatterField(result.newBody, 'recipe_derived_from_description_hash'),
+    'DDD',
+  );
+  // Python: NOT seeded (CW-1500-B safe default).
+  assert.equal(
+    getFrontmatterField(result.newBody, 'python_derived_from_recipe_hash'),
+    null,
+  );
+  assert.ok(
+    !result.actions.derivedFromParentSeeded.includes('python_derived_from_recipe_hash'),
+    'CW-1500-B: python_derived_from_recipe_hash must NOT be seeded in two-hop case',
+  );
+});
+
+test('v11.6 §4.2 case 3: python_derived_from_source === recipe_hash → seeds v11.6 field with same value', async () => {
+  // Recipe-canonical forge case. python_derived_from_source_hash points
+  // at recipe_hash directly (one-hop). Unambiguous → seed.
+  const v11_5_recipe_canonical = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: RRR
+python_derived_from_source_hash: RRR
+canonical_facet: recipe
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(v11_5_recipe_canonical, HELPERS);
+  assert.equal(
+    getFrontmatterField(result.newBody, 'python_derived_from_recipe_hash'),
+    'RRR',
+  );
+  assert.ok(
+    result.actions.derivedFromParentSeeded.includes('python_derived_from_recipe_hash'),
+    `expected python seed action; got: ${result.actions.derivedFromParentSeeded.join(', ')}`,
+  );
+});
+
+test('v11.6 §4.2 case 4: idempotent — running backfill twice yields no additional writes', async () => {
+  const v11_5_note = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: DDD
+python_derived_from_source_hash: DDD
+canonical_facet: description
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const first = await backfillV113Shape(v11_5_note, HELPERS);
+  assert.equal(first.changed, true);
+  const second = await backfillV113Shape(first.newBody, HELPERS);
+  assert.equal(second.changed, false);
+  assert.deepEqual(second.actions.derivedFromParentSeeded, []);
+  assert.equal(second.newBody, first.newBody);
 });
