@@ -4,7 +4,7 @@ type: action
 
 # Description
 
-Chapter 3 — a reusable snippet that takes a word and gives it back with excitement.
+Chapter 3 — a reusable note that takes a word and returns it with excitement.
 
 ## Inputs
 

@@ -4,7 +4,7 @@ type: action
 
 # Description
 
-Your very first Forge snippet. Forge-click it to make the computer say hello.
+Your very first Forge note. Forge-click it to make the computer say hello.
 
 # Recipe
 

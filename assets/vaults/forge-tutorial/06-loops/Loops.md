@@ -2,7 +2,7 @@
 
 When you want to do the same thing several times, you use a **loop**.
 
-Open the **countdown** snippet and **Forge** (🔥) it:
+Open the **countdown** note and **Forge** (🔥) it:
 
 ```
 3
@@ -13,7 +13,7 @@ Liftoff!
 
 ## What's new
 
-Open the snippet and look. The heart of it is a **For each** line:
+Open the note and look. The heart of it is a **For each** line:
 
 > For each number in `<3, 2, 1>`:
 
@@ -30,7 +30,7 @@ Forge writes a list of values.
 
 ## Exercise
 
-Open the **countdown** snippet, add more numbers to the list — try
+Open the **countdown** note, add more numbers to the list — try
 `<5, 4, 3, 2, 1>` — and Forge again. The countdown grows on its own, no extra
 lines needed. Then change `"Liftoff!"` to your own send-off.
 
@@ -40,4 +40,4 @@ Focus on **For each** in this chapter. Loops let you repeat a block once per
 item in a list. You've already met `Let`, `Call`, and `If` — this is the last
 of the primitive control constructs in the palette. Data notes come next.
 
-When you're ready, go to [[Data]] — where snippets start holding values for you.
+When you're ready, go to [[Data]] — where notes start holding values for you.

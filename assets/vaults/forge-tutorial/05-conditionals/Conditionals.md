@@ -3,7 +3,7 @@
 Programs get interesting when they make choices. Forge does that with **If** and
 **Otherwise**.
 
-Open the **weather** snippet and **Forge** (🔥) it:
+Open the **weather** note and **Forge** (🔥) it:
 
 ```
 It's pleasant.
@@ -11,7 +11,7 @@ It's pleasant.
 
 ## What's new
 
-Open the snippet and look. It sets a value, `temperature`, to `72`, and then
+Open the note and look. It sets a value, `temperature`, to `72`, and then
 makes a choice:
 
 - **If** `temperature is greater than 80`, it prints "It's hot."
@@ -29,7 +29,7 @@ you get "It's pleasant."
 
 ## Exercise
 
-Open the **weather** snippet, change `72` to `95`, and Forge again. Now the
+Open the **weather** note, change `72` to `95`, and Forge again. Now the
 condition is true, so you'll see "It's hot." Try a few values right around `80`
 to find the dividing line.
 
@@ -39,4 +39,4 @@ Focus on **If** and **Otherwise** for this chapter. The `If ... , ... Otherwise
 ...` construct is Forge's branching. Ignore `For each` for now — that's
 [[Loops]].
 
-When you're ready, go to [[Loops]] — where snippets repeat themselves.
+When you're ready, go to [[Loops]] — where notes repeat themselves.

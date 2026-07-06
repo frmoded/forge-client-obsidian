@@ -4,7 +4,7 @@ type: action
 
 # Description
 
-Chapter 8 — a snippet that calls itself to multiply n by every number below it.
+Chapter 8 — a note that calls itself to multiply n by every number below it.
 
 ## Inputs
 

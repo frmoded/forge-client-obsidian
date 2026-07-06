@@ -10,6 +10,6 @@ Chapter 5 — Conditionals. Chooses what to say based on a value.
 
 Let temperature = 72.
 If temperature > 80:
-  [[print]] "It's hot.".
+  Call [[print]] with text="It's hot.".
 Otherwise:
-  [[print]] "It's pleasant.".
+  Call [[print]] with text="It's pleasant.".

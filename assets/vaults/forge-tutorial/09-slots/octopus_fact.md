@@ -17,4 +17,4 @@ changes → re-resolves on the next click.
 # Recipe
 
 Let fact = {{a random fun fact about octopuses}}.
-[[print]] fact.
+Call [[print]] with text=fact.

@@ -10,4 +10,4 @@ Chapter 2 — Variables. Names two values and joins them into a greeting.
 
 Let name = "Ada".
 Let greeting = "Hello, " + name.
-[[print]] greeting.
+Call [[print]] with text=greeting.

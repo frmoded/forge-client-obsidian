@@ -4,7 +4,7 @@ type: action
 
 # Description
 
-Chapter 4 — a small snippet that just gives back a word. Meant to be called by another snippet.
+Chapter 4 — a small note that just returns a word. Meant to be called by another note.
 
 # Recipe
 
