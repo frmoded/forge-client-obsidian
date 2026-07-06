@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.264)
+# Forge — Release Notes (v0.2.205 → v0.2.273)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.264 (V2a v11.6 hexa-state visibility), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.273 (cohort-ready polish + chip dead-code close-out), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -8,7 +8,7 @@ Terminology in these notes uses the V2a v12 vocabulary: **note** (any `.md` file
 
 ## Current state — what to know if you're just picking this up
 
-If you're on v0.2.264 with a fresh vault, here's how Forge behaves today:
+If you're on v0.2.273 with a fresh vault, here's how Forge behaves today:
 
 Every V2 action note has three facets — **Description** (prose intent), **Recipe** (structured grammar that compiles to Python), **Python** (the compiled or hand-authored code). All three are always visible in the editor. All three are always editable. You cannot lose one by accident.
 
@@ -17,6 +17,42 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## The v0.2.273 arc — chip subsystem close-out
+
+Second round of dead-code deletion in the chip subsystem. `chips-core.ts` shrinks from 924 lines to 340; test file shrinks from 1487 to 1043. Combined removal: **-1028 lines net**. Retired functions: `parseChipsV2Config` (legacy `_chips.md` schema parser), `mergeChipsWithOverrides` (override merger), `autoDeriveChips` (synthetic chip generator), `mergeChipsConfigsWalkUp` (walk-up-vault discovery), `chipSourcesFor`. Retired types: `ChipsV2Config`, `ChipOverride`, `ChipGroup`, `ChipSource`. Constant `CHIPS_RELATIVE_PATHS` retired.
+
+Cohort-invisible cleanup — the auto-discovery palette shipped in v0.2.259 was already the live path; this drain closes the deferred deletion from v0.2.262's followup section. Chip subsystem is now cleanly stripped to its post-v0.2.259 auto-discovery essentials.
+
+## The v0.2.271 arc — hexa-state freshness fix (CW-1700)
+
+Fixed a post-ship semantic bug caught during driver-requested re-rehearsal of v0.2.265's edit-cycle smoke steps. Before: after hand-editing Description on a Description-canonical note, Recipe would render `— derived from Description` (in sync) instead of `— derived from Description, out of date`. Cohort got no "regenerate?" freshness cue between hand-edit and forge — the visual signal was silent at exactly the moment they needed it.
+
+Root cause: `computeFacetStates` compared derived-from-parent hashes against the STORED `<facet>_hash` frontmatter fields. Those fields only update at forge/backfill time, not on hand-edit (drain 1200 preserved this "stored = last-forged snapshot" invariant to keep the hash cache clean). After hand-edit, stored equals derived-from-parent, so equality passes, so Recipe renders in-sync — but the actual body content has drifted.
+
+Fix: `computeFacetStates` signature changed to accept computed current-body hashes. The view plugin now computes SHA-256 of current body content at render time (~1ms overhead on typical notes) and passes those hashes for freshness comparison. Stored `<facet>_hash` write semantics preserved — only the view plugin's read path changed.
+
+Cohort-visible effect: freshness signal fires immediately on hand-edit. Recipe transitions to `— derived from Description, out of date` (50% opacity) the moment cohort edits Description. Same for Python's `— derived from Recipe, out of date` when Recipe is edited.
+
+## The v0.2.269 arc — full V1 → V2 tutorial vocabulary sweep
+
+Full sweep across all 22 tutorial files. **87 instances of "snippet"** as a noun replaced with "note." V1 Recipe grammar shorthand rewritten to current V2 form: "Set … to …" → "Let … = …" (8 occurrences), "Give back" → "Return" (6), "Do [[…]]" → "Call [[…]] with …" (3). All 8 leaf action-note Recipe examples updated to V2 kwargs-only form (`Call [[name]] with kwarg=value.`).
+
+Chapter 9's "override Forge" section (which described the retired `edit_mode: python` mechanism) rewritten to describe the current hexa-state edit-flips-canonical (I5) semantic. Chapter 8's recursion example rewrote from V1 nested-Do syntax (`Do [[print]]([[factorial]](n=5))`) to V2 two-line form (`Let result = Call [[factorial]] with n=5. Call [[print]] with text=result.`) — necessary because V2 grammar can't nest Call as an argument.
+
+forge-tutorial version bumped 0.3.4 → 0.3.5. Bundled installer mirror re-synced. Post-sweep grep verification: all 4 retired-vocab patterns return 0 matches across tutorial files.
+
+## The v0.2.267 arc — cohort-ready polish (INSTALL.md + hexa-state legend + tutorial pacing + backfill log strip)
+
+Four cohort-facing polish items landed in one bundle.
+
+**INSTALL.md refresh**. All references to retired Cmd-P commands (Zap line, Generate Only, Generate recipe from description, Show canonical layer, Sync English from Python, Toggle Python/English editing mode) removed. Pre-v11.4 tri-state prose rewritten to describe the current hexa-state model. Pinned version references (`v0.2.199`) replaced with "current release." "V1 closed beta" framing removed. "MoDa simulation" command name (retired) replaced with "Open 3D View." Palette command inventory verified against `grep addCommand` — 11 commands remain.
+
+**Hexa-state legend section added to INSTALL.md**. Cohort-facing prose explaining all six suffix variants (source, derived from X, derived from X out of date, ignored) with a worked example showing Description edit propagating through the D → R → P chain. Suffix strings match `suffixTextForState()` output verbatim.
+
+**Tutorial `## Palette focus` per chapter**. All 9 tutorial chapters got an explicit "focus on X; ignore Y for now" prose block. Chapter 1 focuses on `Call [[print]]`, chapter 2 adds Let, chapter 3 adds Return, chapter 4 focuses on chained calls, chapter 5 adds If/Otherwise, chapter 6 adds For each. Chapters 7-9 handled specially (data notes, recursion, slot syntax). Replaces the pre-v0.2.259 `_chips.md` pacing mechanism with prose-based guidance.
+
+**Backfill diagnostic log strip**. `[v113-backfill]`, `[v114-backfill]`, and `[v114-canonical-hash-repair]` `console.log` sites removed from cohort-visible paths. Backfill still fires; console noise drops.
 
 ## The v0.2.264 arc — hexa-state visibility (V2a v11.6)
 
