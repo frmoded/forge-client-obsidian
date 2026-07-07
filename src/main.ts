@@ -2040,10 +2040,23 @@ export default class ForgePlugin extends Plugin {
             // NOT overwrite prior Recipe — cohort's manual work is
             // preserved and Sub-1 stamps stay stale (Recipe renders
             // `— out of date` per CW-1700).
+            //
+            // v0.2.278 CW-2100 empty-catalog guardrail (Q1a): if the
+            // engine chip catalog hasn't loaded yet (plugin still
+            // initializing loadLibraryNoteCatalog), any Recipe that
+            // references engine chips would false-positive reject.
+            // Err toward accepting LLM output; log warning; skip
+            // closure check. Load race is transient + rare.
             const knownIds = await this._collectKnownSnippetIds();
-            const closure = checkRecipeClosure(llmRecipe, (id) =>
-              knownIds.has(id),
-            );
+            const catalogReady = this.libraryNoteIndex.size > 0;
+            const closure = catalogReady
+              ? checkRecipeClosure(llmRecipe, (id) => knownIds.has(id))
+              : { ok: true as const, wikilinks: [] };
+            if (!catalogReady) {
+              console.warn(
+                'CW-2100: engine chip catalog not loaded (libraryNoteIndex.size === 0); skipping closure check and accepting LLM Recipe.',
+              );
+            }
             if (closure.ok === true) {
               const currentBody = await this.app.vault.read(view.file);
               const currentDesc = extractDescription(currentBody) ?? '';
@@ -3067,33 +3080,49 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
-  /** v0.2.277 CW-2000 — collect the flat set of known snippet IDs from
-   *  the Pyodide-hosted registry. Used by chip-palette closure check
-   *  after LLM Recipe generation. Includes both bare IDs (e.g. `chorus`)
-   *  AND qualified IDs (`forge-music/chorus`) so LLM output matches
-   *  regardless of which form it uses. Empty Set on Pyodide failure —
-   *  closure check will conservatively reject unresolved wikilinks. */
+  /** v0.2.277 CW-2000 / v0.2.278 CW-2100 — collect the flat set of
+   *  known snippet IDs for chip-palette closure check after LLM Recipe
+   *  generation. Two sources merged:
+   *
+   *  1. Pyodide-hosted vault registry (getConnectInventory) — vault
+   *     notes. Bare IDs + qualified `vault/id` + sub-path basename
+   *     (mirrors the vault registry's find_qualified_by_bare semantic).
+   *  2. Engine library chip catalog (this.libraryNoteIndex) — chips
+   *     from `forge/<domain>/lib.py` known to the plugin via
+   *     parseEngineLib. CW-2100 fix: pre-fix these were omitted, so
+   *     LLM Recipes referencing legitimate engine chips (kick, snare,
+   *     show_score, voices_canonical, play_at_offsets, etc.) were
+   *     false-positive rejected by closure check. Symmetric with
+   *     server-side engine_chip_introspector.py catalog.
+   *
+   *  Empty Set on Pyodide failure — caller handles via empty-catalog
+   *  guardrail (see forgeSnippet Description-canonical branch). */
   private async _collectKnownSnippetIds(): Promise<Set<string>> {
     const known = new Set<string>();
     try {
       const pyodideHost = getPyodideHost();
-      if (!pyodideHost) return known;
-      const host = await pyodideHost.getInstance();
-      const vaultPath = ((this.app.vault.adapter as any).basePath as string) ?? '';
-      const inv = await host.getConnectInventory(vaultPath);
-      for (const [vaultName, snippets] of Object.entries(inv.snippets)) {
-        for (const s of snippets) {
-          known.add(s.id);
-          known.add(`${vaultName}/${s.id}`);
-          // Also add basename of sub-path-keyed library entries
-          // (e.g. `blues/chorus` → also `chorus`). This mirrors the
-          // vault registry's find_qualified_by_bare basename scan.
-          const base = s.id.includes('/') ? s.id.split('/').pop() ?? s.id : s.id;
-          known.add(base);
+      if (pyodideHost) {
+        const host = await pyodideHost.getInstance();
+        const vaultPath = ((this.app.vault.adapter as any).basePath as string) ?? '';
+        const inv = await host.getConnectInventory(vaultPath);
+        for (const [vaultName, snippets] of Object.entries(inv.snippets)) {
+          for (const s of snippets) {
+            known.add(s.id);
+            known.add(`${vaultName}/${s.id}`);
+            const base = s.id.includes('/') ? s.id.split('/').pop() ?? s.id : s.id;
+            known.add(base);
+          }
         }
       }
     } catch (e) {
-      console.error('CW-2000 _collectKnownSnippetIds failed — closure check will be conservative', e);
+      console.error('CW-2000 _collectKnownSnippetIds vault-notes step failed', e);
+    }
+    // CW-2100: engine library chips are callable from V2 Recipes and
+    // MUST be in the closure check set. Catalog is loaded on plugin
+    // init (loadLibraryNoteCatalog); if it hasn't run yet, .size will
+    // be 0 and the caller's guardrail skips the closure check.
+    for (const name of this.libraryNoteIndex.keys()) {
+      known.add(name);
     }
     return known;
   }
