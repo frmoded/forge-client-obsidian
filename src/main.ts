@@ -70,6 +70,7 @@ import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModa
 import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server.ts';
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
+import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
@@ -2944,29 +2945,47 @@ export default class ForgePlugin extends Plugin {
         englishHash,
         stripStaleSlots: false,
       });
-      // v0.2.264 drain 2026-07-03-1500 — v11.6 hexa-state parent-hash
-      // stamps. /generate is Description → LLM → Python; the LLM saw
-      // current Description and produced Python that reflects it.
-      // Semantic: mark Recipe as consistent with current Description
-      // (recipe_derived_from_description_hash = description_hash) and
-      // Python as consistent with current Recipe
-      // (python_derived_from_recipe_hash = recipe_hash).
-      const descHashForStamp = getFmFieldV2(newContent, 'description_hash');
-      const recipeHashForStamp = getFmFieldV2(newContent, 'recipe_hash');
-      if (typeof descHashForStamp === 'string') {
-        newContent = setFmFieldV2(
-          newContent, 'recipe_derived_from_description_hash', descHashForStamp,
-        );
-        // Legacy field also stamped for transition period.
-        newContent = setFmFieldV2(
-          newContent, 'recipe_derived_from_source_hash', descHashForStamp,
-        );
-      }
-      if (typeof recipeHashForStamp === 'string') {
-        newContent = setFmFieldV2(
-          newContent, 'python_derived_from_recipe_hash', recipeHashForStamp,
-        );
-      }
+      // v0.2.275 CW-1900 Option B — auto-forge re-baselines all three
+      // stored `<facet>_hash` fields to current body SHAs. Pre-CW-1900
+      // this block read STORED description_hash / recipe_hash for the
+      // derived-from stamps, which were stale when cohort edited
+      // Description body after a prior forge → CW-1700 freshness
+      // rendered "— derived from Description, out of date" even though
+      // /generate had just run. Post-CW-1900: compute current body
+      // SHAs for all 3 facets; write to stored + derived-from fields.
+      // Matches drain 1200 invariant intent ("stored = last-forged
+      // snapshot" applies to /generate too since it IS a forge event).
+      const descText = extractDescription(newContent);
+      const recipeText = extractRecipeSection(newContent) ?? '';
+      const pythonText = extractPythonSection(newContent) ?? '';
+      const currentDescHash = await computeFacetHash(descText);
+      const currentRecipeHash = await computeFacetHash(recipeText);
+      const currentPythonHash = await computeFacetHash(pythonText);
+      const stamps = computeAutoForgeStamps({
+        currentDescriptionHash: currentDescHash,
+        currentRecipeHash,
+        currentPythonHash,
+      });
+      newContent = setFmFieldV2(newContent, 'description_hash', stamps.description_hash);
+      newContent = setFmFieldV2(newContent, 'recipe_hash', stamps.recipe_hash);
+      newContent = setFmFieldV2(newContent, 'python_hash', stamps.python_hash);
+      newContent = setFmFieldV2(
+        newContent, 'recipe_derived_from_description_hash',
+        stamps.recipe_derived_from_description_hash,
+      );
+      newContent = setFmFieldV2(
+        newContent, 'python_derived_from_recipe_hash',
+        stamps.python_derived_from_recipe_hash,
+      );
+      // Legacy fields kept aligned during v11.5 → v11.6 transition.
+      newContent = setFmFieldV2(
+        newContent, 'recipe_derived_from_source_hash',
+        stamps.recipe_derived_from_source_hash,
+      );
+      newContent = setFmFieldV2(
+        newContent, 'python_derived_from_source_hash',
+        stamps.python_derived_from_source_hash,
+      );
       // v0.2.256 drain 1200 — programmatic write flag prevents this
       // /generate write-back from triggering the canonical_facet
       // hand-edit path.
