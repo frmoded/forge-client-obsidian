@@ -75,6 +75,7 @@ import {
   checkRecipeClosure,
   computeDescriptionDerivedRecipeStamps,
 } from './write-generated-recipe-core.ts';
+import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
@@ -2057,26 +2058,28 @@ export default class ForgePlugin extends Plugin {
                 'CW-2100: engine chip catalog not loaded (libraryNoteIndex.size === 0); skipping closure check and accepting LLM Recipe.',
               );
             }
-            // v0.2.279 CW-2200 valid-Recipe syntax gate: LLM sometimes
-            // returns prose analysis + `# missing chip:` comment when it
-            // can't fulfill the Description with available chips. That's
-            // not a valid E-- Recipe — writing it would cause parse
-            // errors on the next transpile. Detect via presence of at
-            // least one `Let ` or `Return ` statement (V2 mandates
-            // these). If missing → Sub-1 preserve prior + Notice.
-            const hasValidStmt = /^(Let |Return )/m.test(llmRecipe);
+            // v0.2.280 CW-2200 — sanitize LLM output down to valid V2 E--
+            // syntax: strip prose paragraphs + `#` comments that would
+            // cause the parser to choke (em-dashes, unquoted words,
+            // etc). Returns null when NO valid statements remain →
+            // Sub-1 fallback. Replaces the v0.2.279 hasValidStmt gate
+            // which passed mixed prose+Let content through.
+            const sanitized = sanitizeLlmRecipe(llmRecipe);
+            const hasValidStmt = sanitized !== null;
             if (closure.ok === true && hasValidStmt) {
               const currentBody = await this.app.vault.read(view.file);
               const currentDesc = extractDescription(currentBody) ?? '';
               const currentDescHash = await computeFacetHash(currentDesc);
-              const newRecipeHash = await computeFacetHash(llmRecipe);
+              const newRecipeHash = await computeFacetHash(sanitized!);
               const stamps = computeDescriptionDerivedRecipeStamps(
                 currentDescHash,
                 newRecipeHash,
               );
               await this.withProgrammaticWrite(view.file.path, () =>
                 this.app.vault.process(view.file!, (content) => {
-                  let next = replaceRecipeSection(content, llmRecipe);
+                  // v0.2.280 CW-2200: write the SANITIZED recipe body,
+                  // not the raw LLM output.
+                  let next = replaceRecipeSection(content, sanitized!);
                   next = setFmFieldV2(next, 'description_hash', stamps.description_hash);
                   next = setFmFieldV2(next, 'recipe_hash', stamps.recipe_hash);
                   next = setFmFieldV2(
