@@ -53,8 +53,18 @@ export function identifyEditedFacet(
   if (current.recipe !== cached.recipe) changed.push('recipe');
   if (current.python !== cached.python) changed.push('python');
   if (changed.length === 0) return null;
-  // Downstream-wins tiebreak (upstream → downstream = D → R → P).
-  return changed[changed.length - 1];
+  // CW-1800 (2026-07-06 driver call) — upstream-wins tiebreak on
+  // multi-facet change. External file rewrites (cp / git checkout /
+  // sync tools) change all three facets simultaneously; pre-CW-1800
+  // downstream-wins wrongly attributed them to a Python edit and
+  // flipped canonical_facet: python. Description + Recipe subsequently
+  // rendered `— ignored` and L45 short-circuited through the Python
+  // facet even when cohort didn't Python-edit. Upstream-wins
+  // ('description') is the safer default: Description-authored intent
+  // survives external rewrites unless single-facet evidence proves
+  // otherwise. Single-facet cases unaffected — `changed[0]` equals
+  // `changed[length-1]` when only one facet moved.
+  return changed[0];
 }
 
 /** Compute the canonical_facet to write given the edit-tracker's

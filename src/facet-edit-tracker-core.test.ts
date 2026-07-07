@@ -31,16 +31,32 @@ describe('identifyEditedFacet', () => {
     assert.equal(identifyEditedFacet(H('a', 'b', 'Z'), H('a', 'b', 'c')), 'python');
   });
 
-  it('Description + Python changed → python (downstream-wins)', () => {
-    assert.equal(identifyEditedFacet(H('X', 'b', 'Z'), H('a', 'b', 'c')), 'python');
+  // CW-1800 (2026-07-06 driver call) — multi-facet tiebreak flipped
+  // from downstream-wins to upstream-wins. External file rewrites
+  // (cp / git checkout / sync tools) change all three facets
+  // simultaneously; downstream-wins wrongly attributed them to Python
+  // → canonical_facet: python → L45 short-circuit → Description +
+  // Recipe rendered `— ignored` even though cohort didn't Python-edit.
+  // Upstream-wins picks Description in the ambiguous case (matches
+  // driver's cohort intuition: "external rewrites are Description-
+  // authored until proven otherwise").
+
+  it('Description + Python changed → description (upstream-wins, CW-1800)', () => {
+    assert.equal(identifyEditedFacet(H('X', 'b', 'Z'), H('a', 'b', 'c')), 'description');
   });
 
-  it('Description + Recipe changed → recipe (downstream-wins)', () => {
-    assert.equal(identifyEditedFacet(H('X', 'Y', 'c'), H('a', 'b', 'c')), 'recipe');
+  it('Description + Recipe changed → description (upstream-wins, CW-1800)', () => {
+    assert.equal(identifyEditedFacet(H('X', 'Y', 'c'), H('a', 'b', 'c')), 'description');
   });
 
-  it('all three changed → python (downstream-most)', () => {
-    assert.equal(identifyEditedFacet(H('X', 'Y', 'Z'), H('a', 'b', 'c')), 'python');
+  it('Recipe + Python changed → recipe (upstream-wins, CW-1800)', () => {
+    assert.equal(identifyEditedFacet(H('a', 'Y', 'Z'), H('a', 'b', 'c')), 'recipe');
+  });
+
+  it('all three changed → description (upstream-most, CW-1800)', () => {
+    // Simulates external multi-facet rewrite (cp / git checkout / sync).
+    // Pre-CW-1800 this returned 'python' via downstream-wins.
+    assert.equal(identifyEditedFacet(H('X', 'Y', 'Z'), H('a', 'b', 'c')), 'description');
   });
 
   it('driver case: fresh Description edit on note with residual multi-facet drift → description', () => {
