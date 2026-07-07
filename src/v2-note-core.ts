@@ -50,10 +50,13 @@ export function extractDescription(body: string): string {
   return _extractH1Section(body, 'Description');
 }
 
-/** Extract the body of `# Recipe` (until the next H1 or EOF). */
+/** Extract the body of `# Recipe`. v0.2.279 CW-2200: hard-terminate at
+ *  `# Python` (or EOF), not "any H1". LLM Recipe output may include
+ *  markdown-style annotation lines starting with `# ` that pre-fix were
+ *  treated as section boundaries. */
 export function extractRecipeSection(body: string): string | null {
   if (!/^# Recipe\s*$/m.test(body)) return null;
-  return _extractH1Section(body, 'Recipe');
+  return _extractSectionUntil(body, 'Recipe', /^# Python\s*$/m);
 }
 
 /** Extract the body of `# Python` (until the next H1 or EOF). Returns
@@ -79,6 +82,26 @@ function _unwrapPythonFence(text: string): string {
   // a leading-blank-line wrapper. Single-pass, no recursion.
   const fenced = /^```(?:python|py)?\s*\n([\s\S]*?)\n```\s*$/.exec(text.trim());
   return fenced ? fenced[1] : text;
+}
+
+/** v0.2.279 CW-2200 helper — extract a named section terminating at a
+ *  specific downstream heading rather than "any H1". Used for Recipe
+ *  (terminates at `# Python`) so that LLM output containing markdown-
+ *  style annotation lines (e.g. `# missing chip: ...`) doesn't get
+ *  treated as a section boundary. */
+function _extractSectionUntil(
+  body: string,
+  name: string,
+  terminator: RegExp,
+): string {
+  const re = new RegExp(`^# ${_escapeRegex(name)}\\s*$`, 'm');
+  const m = re.exec(body);
+  if (!m) return '';
+  const start = m.index + m[0].length;
+  const tail = body.slice(start);
+  const t = terminator.exec(tail);
+  const sectionRaw = t ? tail.slice(0, t.index) : tail;
+  return sectionRaw.replace(/^\s*\n/, '').replace(/\s+$/, '');
 }
 
 function _extractH1Section(body: string, name: string): string {
@@ -231,19 +254,19 @@ export function replaceRecipeSection(body: string, newEmm: string): string {
   }
   const headingStart = m.index;
   const headingEnd = m.index + m[0].length;
-  // Find next H1 to know where this section ends.
+  // v0.2.279 CW-2200 — terminate at the KNOWN downstream heading
+  // (# Python), not "any H1". LLM output may include markdown-style
+  // notes prefixed with `# ` (e.g. `# missing chip: ...`) which the
+  // pre-fix regex treated as a section boundary — those leaked into the
+  // note as pseudo-sections and polluted subsequent forge cycles.
   const tail = body.slice(headingEnd);
-  const nextH1 = /^# [^#\n]/m.exec(tail);
-  const sectionEnd = nextH1
-    ? headingEnd + nextH1.index
+  const nextPython = /^# Python\s*$/m.exec(tail);
+  const sectionEnd = nextPython
+    ? headingEnd + nextPython.index
     : body.length;
   const before = body.slice(0, headingStart);
   const after = body.slice(sectionEnd);
-  // Reassemble with the trimmed E-- body. Preserve a blank line before
-  // a following H1 if there is one.
   const replacement = '# Recipe\n\n' + trimmedEmm + '\n';
-  // If there's content after AND it doesn't already start with a blank
-  // line, add one.
   let glue = '';
   if (after.length > 0 && !after.startsWith('\n')) glue = '\n';
   return before + replacement + glue + after;
