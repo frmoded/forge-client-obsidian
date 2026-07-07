@@ -71,6 +71,10 @@ import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDep
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
 import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
+import {
+  checkRecipeClosure,
+  computeDescriptionDerivedRecipeStamps,
+} from './write-generated-recipe-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
@@ -1998,35 +2002,116 @@ export default class ForgePlugin extends Plugin {
         return;
       }
       if (canonicalLayer === 'description') {
-        // v0.2.254 drain 2026-07-03-1100 — auto-forge full pipeline
-        // on Description-canonical. Pre-v0.2.254 aborted here and
-        // told cohort to run "Forge: Generate Recipe from Description"
-        // (a command that was retired in v0.2.244 — the notice was
-        // referencing a phantom command). Now: generate → run,
-        // matching the "forge = run this note" semantic.
+        // v0.2.277 CW-2000 Option A — TWO-HOP auto-forge on Description-
+        // canonical: LLM Description → Recipe (dialect='recipe'), then
+        // E-- transpile Recipe → Python via writeCanonicalPythonBack
+        // (the existing Recipe-canonical write path).
+        //
+        // Pre-CW-2000 (drain 1100 via v0.2.254): this branch called
+        // generate() with default dialect='python', which sent Recipe
+        // (as `english`) as authoritative Behavior to the LLM;
+        // Description was decorative prose. Recipe was NEVER regenerated
+        // — driver A/B confirmed byte-for-byte identical Recipe body
+        // across two Description edits. Under CW-2000, /generate is
+        // called with dialect='recipe' so the LLM actually produces a
+        // Recipe from Description; closure-check validates chip
+        // references before overwriting the Recipe body; then existing
+        // E-- transpile handles Recipe → Python. Sub-1 stamp policy:
+        // on closure failure, NO Description-derived stamps re-baseline
+        // — hexa-state shows Recipe + Python `— out of date` until a
+        // successful re-forge, signaling to cohort that the Description
+        // edit didn't reach the pipeline.
         console.log(
-          `Forge: ${view.file.basename} is Description-canonical (V2 implicit lock) — auto-forging: generate → execute`,
+          `Forge: ${view.file.basename} is Description-canonical (V2 implicit lock) — auto-forging: Description → Recipe (LLM) → Python (transpile) → run`,
         );
         this.notice(
-          `Forge: ${view.file.basename} → Description-canonical. Regenerating Recipe + Python from Description, then executing.`,
+          `Forge: ${view.file.basename} → Description-canonical. Description → Recipe (LLM), then Python (transpile), then run.`,
         );
         if (this.spinner) {
           this.spinner.startImmediate('Forge: 🔥 generating Recipe from Description …');
         }
         try {
-          const generated = await this.generate('Forge failed during generation');
-          if (!generated) {
-            // generate() already surfaced the specific failure via
-            // notice + console.error. Stop here — don't run stale
-            // Python when generate failed.
-            return;
+          const llmRecipe = await this._llmGenerateRecipe(
+            'Forge failed during Recipe generation',
+          );
+          if (llmRecipe !== null) {
+            // Chip-palette closure check: every [[wikilink]] in the LLM
+            // Recipe must resolve to a known snippet. On failure, DO
+            // NOT overwrite prior Recipe — cohort's manual work is
+            // preserved and Sub-1 stamps stay stale (Recipe renders
+            // `— out of date` per CW-1700).
+            const knownIds = await this._collectKnownSnippetIds();
+            const closure = checkRecipeClosure(llmRecipe, (id) =>
+              knownIds.has(id),
+            );
+            if (closure.ok === true) {
+              const currentBody = await this.app.vault.read(view.file);
+              const currentDesc = extractDescription(currentBody) ?? '';
+              const currentDescHash = await computeFacetHash(currentDesc);
+              const newRecipeHash = await computeFacetHash(llmRecipe);
+              const stamps = computeDescriptionDerivedRecipeStamps(
+                currentDescHash,
+                newRecipeHash,
+              );
+              await this.withProgrammaticWrite(view.file.path, () =>
+                this.app.vault.process(view.file!, (content) => {
+                  let next = replaceRecipeSection(content, llmRecipe);
+                  next = setFmFieldV2(next, 'description_hash', stamps.description_hash);
+                  next = setFmFieldV2(next, 'recipe_hash', stamps.recipe_hash);
+                  next = setFmFieldV2(
+                    next,
+                    'recipe_derived_from_description_hash',
+                    stamps.recipe_derived_from_description_hash,
+                  );
+                  next = setFmFieldV2(
+                    next,
+                    'recipe_derived_from_source_hash',
+                    stamps.recipe_derived_from_source_hash,
+                  );
+                  return next;
+                }),
+              );
+              // MEMFS sync so the transpile step sees the fresh Recipe.
+              try {
+                const readBack = await this.app.vault.read(view.file);
+                const pyodideHost = getPyodideHost();
+                if (pyodideHost) {
+                  const host = await pyodideHost.getInstance();
+                  await host.syncUserVaultFile(view.file.path, readBack);
+                }
+              } catch (e) {
+                console.error('CW-2000: MEMFS sync after Recipe write failed', e);
+              }
+            } else {
+              // Sub-1: closure failed. Surface actionable Notice, keep
+              // prior Recipe body untouched, run existing Recipe.
+              const unresolvedList = closure.unresolved
+                .map((id) => `[[${id}]]`)
+                .join(', ');
+              const detailNotice = `Forge: /generate produced a Recipe referencing ${unresolvedList} — not in your vault. Description edit not applied to Recipe; running prior Recipe.`;
+              console.warn(
+                `CW-2000 closure fail: unresolved wikilinks in LLM Recipe: ${closure.unresolved.join(', ')}`,
+              );
+              this.notice(detailNotice);
+            }
+          }
+          // Always continue: transpile current Recipe → Python + run.
+          // Preserves runSnippet UX even when LLM Recipe failed (cohort
+          // still hears output from prior Recipe → prior Python path).
+          if (this.spinner) {
+            this.spinner.startImmediate('Forge: 🔥 transpiling Recipe → Python …');
+          }
+          try {
+            await this.writeCanonicalPythonBack(view.file);
+          } catch (e) {
+            console.error(
+              'CW-2000: writeCanonicalPythonBack failed after Description-canonical Recipe write',
+              e,
+            );
           }
           if (this.spinner) {
             this.spinner.startImmediate('Forge: 🔥 executing …');
           }
-          // Post-generate the note is aligned (all three facets fresh);
-          // runSnippet has nothing special to signal, so it takes the
-          // default path.
           await this.runSnippet('Forge failed during execution');
         } finally {
           if (this.spinner) {
@@ -2862,6 +2947,155 @@ export default class ForgePlugin extends Plugin {
     } finally {
       modal.finish();
     }
+  }
+
+  /** v0.2.277 CW-2000 Option A — LLM call for Description → Recipe.
+   *  Mirrors generate()'s inventory-materialization + POST logic but
+   *  sends dialect='recipe' and returns the raw Recipe text on success
+   *  (or null on any failure — Notice is surfaced here). Caller
+   *  (forgeSnippet's Description-canonical branch) does the closure
+   *  check + replaceRecipeSection write on success. Intentional
+   *  duplication with generate() — separate paths avoid re-entering
+   *  generate()'s writeGeneratedCode side effect. Followup drain to
+   *  factor a shared _postToGenerate helper if maintenance cost surfaces.
+   */
+  private async _llmGenerateRecipe(errorPrefix?: string): Promise<string | null> {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!view?.file) {
+      this.notice('No active note to generate Recipe from.');
+      return null;
+    }
+    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    const settings = this.settings;
+    if (!settings.transpileServiceToken) {
+      const msg = 'Set your transpile token in Settings → Forge → Transpile token before using /generate.';
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      return null;
+    }
+    console.log('Forge: _llmGenerateRecipe (α, dialect=recipe)', {
+      snippetId,
+      serviceUrl: settings.transpileServiceUrl,
+    });
+    const modal = new ForgeGenerationModal(this.app, `Forging Recipe for ${snippetId}…`);
+    modal.open();
+    try {
+      let payload: AlphaGenerateRequest;
+      try {
+        const pyodideHost = getPyodideHost();
+        if (!pyodideHost) throw new Error('Pyodide host not initialized');
+        const host = await pyodideHost.getInstance();
+        try {
+          const file = this.app.vault.getAbstractFileByPath(`${snippetId}.md`);
+          if (file instanceof TFile) {
+            const freshContent = await this.app.vault.read(file);
+            await host.syncUserVaultFile(file.path, freshContent);
+          }
+        } catch (e) {
+          console.error('_llmGenerateRecipe: pre-flight sync failed', e);
+        }
+        const inv = await host.preflightThenInventory(snippetId);
+        payload = {
+          snippet_id: inv.snippet_id,
+          description: inv.description,
+          english: inv.english,
+          inputs: inv.inputs,
+          generation_notes: inv.generation_notes,
+          deps: inv.deps,
+          active_domains:
+            this.activeDomains === null ? null : Array.from(this.activeDomains),
+          // CW-2000 core: request Recipe (V2 dialect), NOT Python (V1 default).
+          dialect: 'recipe',
+        };
+      } catch (e) {
+        console.error('Forge: inventory materialization failed (recipe dialect)', e);
+        const detail = e instanceof Error ? e.message : String(e);
+        this.notice(
+          errorPrefix
+            ? `${errorPrefix}: inventory failed — ${detail}`
+            : `Forge: inventory failed — ${detail}`,
+        );
+        return null;
+      }
+      let response;
+      try {
+        response = await generateSnippetAlpha(
+          settings.transpileServiceUrl,
+          settings.transpileServiceToken,
+          payload,
+        );
+      } catch (e) {
+        console.error('Forge Generate Error (transport, recipe dialect):', e);
+        const detail = e instanceof Error ? e.message : String(e);
+        const msg = `Could not reach transpile service at ${settings.transpileServiceUrl}. Check your internet connection + Settings → Forge → Transpile service URL. (${detail})`;
+        this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+        return null;
+      }
+      if (response.status === 200) {
+        const code: string | undefined = response.json?.code;
+        if (!code) {
+          const msg = 'Service returned empty code field';
+          this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
+          console.error('Forge: empty α response (recipe dialect)', response.json);
+          return null;
+        }
+        // Q4: log proceduralness pushback (if returned) but do NOT open
+        // modal in auto-forge path. Cohort clicked Forge; they expect
+        // it to run. Followup drain wires the modal for an explicit
+        // "Rewrite Description" command if UX surfaces the need.
+        const pushback = response.json?.pushback;
+        if (pushback && typeof pushback === 'object') {
+          console.log(
+            `Forge: proceduralness pushback (score=${pushback.proceduralness}) — auto-forge proceeds without modal (Q4).`,
+          );
+        }
+        return code;
+      }
+      const detail = response.json?.detail;
+      const status = response.status;
+      console.error('Forge α Generate Error (recipe dialect):', { status, detail });
+      const noticeText = this.formatAlphaErrorNotice(
+        status, detail, settings.transpileServiceUrl, errorPrefix);
+      this.notice(noticeText);
+      return null;
+    } catch (outer) {
+      console.error('Forge: unexpected error in _llmGenerateRecipe', outer);
+      const detail = outer instanceof Error ? outer.message : String(outer);
+      this.notice(errorPrefix ? `${errorPrefix}: ${detail}` : 'Forge: unexpected error — check console.');
+      return null;
+    } finally {
+      modal.finish();
+    }
+  }
+
+  /** v0.2.277 CW-2000 — collect the flat set of known snippet IDs from
+   *  the Pyodide-hosted registry. Used by chip-palette closure check
+   *  after LLM Recipe generation. Includes both bare IDs (e.g. `chorus`)
+   *  AND qualified IDs (`forge-music/chorus`) so LLM output matches
+   *  regardless of which form it uses. Empty Set on Pyodide failure —
+   *  closure check will conservatively reject unresolved wikilinks. */
+  private async _collectKnownSnippetIds(): Promise<Set<string>> {
+    const known = new Set<string>();
+    try {
+      const pyodideHost = getPyodideHost();
+      if (!pyodideHost) return known;
+      const host = await pyodideHost.getInstance();
+      const vaultPath = ((this.app.vault.adapter as any).basePath as string) ?? '';
+      const inv = await host.getConnectInventory(vaultPath);
+      for (const [vaultName, snippets] of Object.entries(inv.snippets)) {
+        for (const s of snippets) {
+          known.add(s.id);
+          known.add(`${vaultName}/${s.id}`);
+          // Also add basename of sub-path-keyed library entries
+          // (e.g. `blues/chorus` → also `chorus`). This mirrors the
+          // vault registry's find_qualified_by_bare basename scan.
+          const base = s.id.includes('/') ? s.id.split('/').pop() ?? s.id : s.id;
+          known.add(base);
+        }
+      }
+    } catch (e) {
+      console.error('CW-2000 _collectKnownSnippetIds failed — closure check will be conservative', e);
+    }
+    return known;
   }
 
   // Format the user-facing Notice for a non-2xx α /generate response.
