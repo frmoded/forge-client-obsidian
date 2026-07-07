@@ -2057,7 +2057,15 @@ export default class ForgePlugin extends Plugin {
                 'CW-2100: engine chip catalog not loaded (libraryNoteIndex.size === 0); skipping closure check and accepting LLM Recipe.',
               );
             }
-            if (closure.ok === true) {
+            // v0.2.279 CW-2200 valid-Recipe syntax gate: LLM sometimes
+            // returns prose analysis + `# missing chip:` comment when it
+            // can't fulfill the Description with available chips. That's
+            // not a valid E-- Recipe — writing it would cause parse
+            // errors on the next transpile. Detect via presence of at
+            // least one `Let ` or `Return ` statement (V2 mandates
+            // these). If missing → Sub-1 preserve prior + Notice.
+            const hasValidStmt = /^(Let |Return )/m.test(llmRecipe);
+            if (closure.ok === true && hasValidStmt) {
               const currentBody = await this.app.vault.read(view.file);
               const currentDesc = extractDescription(currentBody) ?? '';
               const currentDescHash = await computeFacetHash(currentDesc);
@@ -2095,15 +2103,25 @@ export default class ForgePlugin extends Plugin {
               } catch (e) {
                 console.error('CW-2000: MEMFS sync after Recipe write failed', e);
               }
+            } else if (!hasValidStmt) {
+              // CW-2200: LLM returned prose / missing-chip explanation,
+              // not a Recipe. Preserve prior Recipe + surface guidance.
+              console.warn(
+                'CW-2200 non-Recipe LLM output (no Let/Return statement); preserving prior Recipe. Body:',
+                llmRecipe.slice(0, 500),
+              );
+              this.notice(
+                `Forge: /generate couldn't produce a valid Recipe for this Description (LLM likely lacks the needed chips). Description edit not applied to Recipe; running prior Recipe.`,
+              );
             } else {
               // Sub-1: closure failed. Surface actionable Notice, keep
               // prior Recipe body untouched, run existing Recipe.
-              const unresolvedList = closure.unresolved
-                .map((id) => `[[${id}]]`)
-                .join(', ');
+              const unresolvedList = closure.ok === false
+                ? closure.unresolved.map((id) => `[[${id}]]`).join(', ')
+                : '';
               const detailNotice = `Forge: /generate produced a Recipe referencing ${unresolvedList} — not in your vault. Description edit not applied to Recipe; running prior Recipe.`;
               console.warn(
-                `CW-2000 closure fail: unresolved wikilinks in LLM Recipe: ${closure.unresolved.join(', ')}`,
+                `CW-2000 closure fail: unresolved wikilinks in LLM Recipe: ${closure.ok === false ? closure.unresolved.join(', ') : '(closure ok)'}`,
               );
               this.notice(detailNotice);
             }

@@ -626,9 +626,19 @@ def _forge_get_generate_inventory(snippet_id: str):
             "description": (dep_meta.get("description") or "").strip(),
             "inputs": [str(i) for i in (dep_meta.get("inputs") or [])],
         })
+    # v0.2.279 CW-2200 — V2 notes carry cohort intent in the H1
+    # Description body section, NOT the YAML description frontmatter
+    # field (which was V1 convention). Pre-fix: /generate received
+    # empty description for V2 notes so the LLM had zero cohort intent
+    # and produced drum-kit boilerplate regardless of what cohort
+    # typed. Fix: fall back to body extract when meta description is
+    # absent. Preserves V1 behavior for notes that DO set the YAML.
+    description = (meta.get("description") or "").strip()
+    if not description:
+        description = extract_section(body, "description") or ""
     return {
         "snippet_id": snippet_id,
-        "description": (meta.get("description") or "").strip(),
+        "description": description,
         "english": extract_section(body, "english") or "",
         "inputs": [str(i) for i in (meta.get("inputs") or [])],
         "generation_notes": (meta.get("generation_notes") or "").strip(),
