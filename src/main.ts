@@ -338,6 +338,12 @@ export default class ForgePlugin extends Plugin {
    *  LibraryNoteView instead of letting Obsidian create an empty
    *  note. Empty when bundled engine source is unreadable. */
   private libraryNoteIndex: Map<string, LibraryNote> = new Map();
+  /** v0.2.281 — explicit catalog-readiness signal. Flips true exactly
+   *  once per session after `loadLibraryNoteCatalog()` returns. CW-2100
+   *  guardrail (Description-canonical closure check) reads this rather
+   *  than probing `libraryNoteIndex.size` — that heuristic would false-
+   *  trigger for a hypothetical zero-note library domain. */
+  private _libraryCatalogLoaded: boolean = false;
   /** v0.2.218 — Status-bar spinner for Forge-click + /generate +
    *  /resolve-slot operations. 200ms grace period so fast snippets
    *  don't flash; LLM-bound operations (multi-second) get a visible
@@ -2042,20 +2048,21 @@ export default class ForgePlugin extends Plugin {
             // preserved and Sub-1 stamps stay stale (Recipe renders
             // `— out of date` per CW-1700).
             //
-            // v0.2.278 CW-2100 empty-catalog guardrail (Q1a): if the
-            // engine chip catalog hasn't loaded yet (plugin still
-            // initializing loadLibraryNoteCatalog), any Recipe that
-            // references engine chips would false-positive reject.
-            // Err toward accepting LLM output; log warning; skip
-            // closure check. Load race is transient + rare.
+            // v0.2.281 — CW-2100 empty-catalog guardrail. Refactored
+            // from v0.2.278's `.size === 0` heuristic to an explicit
+            // `_libraryCatalogLoaded` boolean field, so a hypothetical
+            // zero-note library domain doesn't false-trigger the skip.
+            // Load-race case: catalog not loaded yet → skip closure
+            // check (any Recipe referencing engine chips would false-
+            // positive reject). Err toward accepting LLM output.
             const knownIds = await this._collectKnownSnippetIds();
-            const catalogReady = this.libraryNoteIndex.size > 0;
+            const catalogReady = this._libraryCatalogLoaded;
             const closure = catalogReady
               ? checkRecipeClosure(llmRecipe, (id) => knownIds.has(id))
               : { ok: true as const, wikilinks: [] };
             if (!catalogReady) {
               console.warn(
-                'CW-2100: engine chip catalog not loaded (libraryNoteIndex.size === 0); skipping closure check and accepting LLM Recipe.',
+                'Library note catalog not yet loaded; skipping closure check on Description-canonical Recipe. This should be rare — if it repeats, file a bug.',
               );
             }
             // v0.2.280 CW-2200 — sanitize LLM output down to valid V2 E--
@@ -2360,6 +2367,10 @@ export default class ForgePlugin extends Plugin {
       }
     }
     this.libraryNoteIndex = buildLibraryNoteIndex(perDomain);
+    // v0.2.281 — flip the explicit readiness signal AFTER the index is
+    // populated so any concurrent forgeSnippet flow reads a consistent
+    // state (index populated → signal true, not the reverse).
+    this._libraryCatalogLoaded = true;
     console.warn(
       `[Forge library-note catalog] loaded ${this.libraryNoteIndex.size} chips `
       + `(${domains.map(d => `${d}: ${perDomain[d]?.length ?? 0}`).join(', ')})`,
@@ -3140,8 +3151,10 @@ export default class ForgePlugin extends Plugin {
     }
     // CW-2100: engine library chips are callable from V2 Recipes and
     // MUST be in the closure check set. Catalog is loaded on plugin
-    // init (loadLibraryNoteCatalog); if it hasn't run yet, .size will
-    // be 0 and the caller's guardrail skips the closure check.
+    // init (loadLibraryNoteCatalog); v0.2.281 uses the explicit
+    // `_libraryCatalogLoaded` field at the caller as the readiness
+    // signal, so this helper unconditionally emits whatever's in
+    // `libraryNoteIndex` (empty if unloaded).
     for (const name of this.libraryNoteIndex.keys()) {
       known.add(name);
     }
