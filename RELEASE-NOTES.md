@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.273)
+# Forge — Release Notes (v0.2.205 → v0.2.285)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.273 (cohort-ready polish + chip dead-code close-out), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.285 (auto-forge Description-canonical restored end-to-end + fresh-note gap fix), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,31 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## The v0.2.274 → v0.2.285 arc — CW arc: auto-forge Description-canonical restored end-to-end
+
+Twelve releases restore what CW-2000 architecturally built and CW-2200 finally delivered end-to-end: editing a Description and clicking Forge now produces a *distinct* Recipe (via LLM) that transpiles to distinct Python. This closes a semantic gap that had been silently violated since drain 1100.
+
+Highlights across the arc:
+
+- **CW-1800 (v0.2.274)** — Upstream-wins tiebreak in `identifyEditedFacet`. When external file rewrites cause multi-facet body-hash drift, canonical goes to the upstream facet (Description > Recipe > Python), matching cohort intuition.
+- **CW-1900 (v0.2.276)** — `writeGeneratedCode` re-baselines stored `<facet>_hash` from current body SHAs. Fixes auto-forge silent-skip.
+- **CW-2000 (v0.2.277)** — Description → Recipe two-hop LLM via new `write-generated-recipe-core.ts`. Sub-1 fallback preserves prior Recipe on LLM failure.
+- **CW-2100 (v0.2.278 + v0.2.281)** — Closure check merges engine library chip names from `libraryNoteIndex`; `_libraryCatalogLoaded: boolean` field replaces `.size === 0` heuristic.
+- **CW-2200 (v0.2.279 + v0.2.280)** — Pyodide `_forge_get_generate_inventory` falls back to `# Description` body when YAML meta.description is empty (the **root fix** — LLM was seeing empty description on every V2 forge for weeks). Hard-terminator at `# Python` prevents LLM `# missing chip:` annotations from breaking Recipe section boundaries. New `sanitizeLlmRecipe` pure-core strips prose + `#` comments from LLM output.
+- **Rhythm precision (v0.2.283)** — forge-music v0.8.2. Common subdivisions reference table added to `play_at_offsets` docstring (quarters, 8ths, 16ths, dotted 8ths, triplets, downbeats, backbeats). Improves LLM output for rhythm-terminology-heavy Descriptions.
+- **Fresh-note rehearsal (v0.2.284)** — Headless integration test harness for fresh-note first-forge lifecycle. Surfaced a real gap: Sub-1 fallback on fresh notes leaves Recipe body empty; `writeCanonicalPythonBack` then transpiles empty Recipe with undefined behavior.
+- **Fresh-note gap fix (v0.2.285)** — `writeCanonicalPythonBack` now detects empty Recipe body, skips transpile, surfaces cohort-facing notice: `"Fresh note: no valid Recipe to transpile. Try refining the Description or check the previous notice from Recipe generation."` Defensive backstop for any path producing empty Recipe.
+
+Test suite grew from 1085 → ~1120 across the arc. New test categories accumulated per L44: fresh-note first-forge lifecycle, empty-Recipe transpile-boundary protection, rhythm subdivisions doc-driven precision, catalog readiness signal, cross-cycle Recipe body replacement, Recipe section boundary tolerates `#` comments, sanitizer strips prose without dropping valid statements, Description reaches LLM payload, engine-chip-inclusive closure check, empty-catalog guardrail.
+
+Meta: headless test harness pattern (CW-2200's harness) formalized as L56 protocol rule. Substitutes for in-Obsidian L43 rehearsal for state-transition + pipeline-artifact invariants. Unblocks drains from SCContentFilter / computer-use infrastructure issues.
+
+Load-bearing for the MCP arc, where every agent-created sub-note is fresh and the pipeline needs to degrade gracefully with an informative message when the LLM fails to produce valid E--.
+
+Known followups (deferred): CW-2300-B service-side prompt tuning (pitched-instrument catalog gaps: piano/violin/walking_bass/vocals absent; rhythm precision beyond docstring tuning); `canonical_facet` rename; S9 state-machine migration from `forge-client-obsidian` to `forge-service` per Components architecture.
+
+(v0.2.275, v0.2.282 consumed by release.sh drift-detect; no shipping changes.)
 
 ## The v0.2.273 arc — chip subsystem close-out
 
