@@ -1043,7 +1043,7 @@
 
 /* v0.2.205 — Phase 2.5 §2.2 + §2.3 niceties: status bar entry +
  * confirm modal button row. */
-.forge-canonical-layer-status {
+.forge-source-layer-status {
   cursor: pointer;
 }
 

@@ -7,7 +7,7 @@
 // residual drift across multiple facets (stale hashes accumulated
 // across sessions), the mismatches don't tell us WHICH facet was
 // just edited. The driver's slow_burn.md rehearsal surfaced this:
-// 3-way drift + Description edit produced canonical=recipe because
+// 3-way drift + Description edit produced source=recipe because
 // downstream-wins picked the wrong "fresh" candidate.
 //
 // Fix: track last-known body hashes per file in an in-memory cache.
@@ -17,10 +17,10 @@
 //
 // Bootstrap: cache is populated on plugin load (onLayoutReady iterates
 // open files) and on file-open events. First modify on a fresh entry
-// updates cache without writing canonical (no baseline to compare
+// updates cache without writing source (no baseline to compare
 // against).
 
-import type { CanonicalLayer } from './facet-hash-core.ts';
+import type { SourceLayer } from './facet-hash-core.ts';
 
 /** Snapshot of the three facet body hashes for a single file. */
 export interface FacetHashes {
@@ -34,11 +34,10 @@ export interface FacetHashes {
  *  Returns:
  *    - `null` when cached is null (no baseline) or nothing changed.
  *    - The facet name when exactly one facet's hash differs.
- *    - Downstream-most changed facet when multiple differ (rare —
+ *    - Upstream-most changed facet when multiple differ (rare —
  *      multi-facet edits between two modify events, e.g., a paste
- *      that spans facets). Downstream matches the "typical user
- *      just hand-tuned Python after propagating from Description"
- *      intent.
+ *      that spans facets). Upstream matches the "external rewrite
+ *      preserved authored intent" default.
  *
  *  This function does NOT read stored_hash. It only considers what
  *  changed since we last observed the file body.
@@ -57,7 +56,7 @@ export function identifyEditedFacet(
   // multi-facet change. External file rewrites (cp / git checkout /
   // sync tools) change all three facets simultaneously; pre-CW-1800
   // downstream-wins wrongly attributed them to a Python edit and
-  // flipped canonical_facet: python. Description + Recipe subsequently
+  // flipped source_facet: python. Description + Recipe subsequently
   // rendered `— ignored` and L45 short-circuited through the Python
   // facet even when cohort didn't Python-edit. Upstream-wins
   // ('description') is the safer default: Description-authored intent
@@ -67,23 +66,30 @@ export function identifyEditedFacet(
   return changed[0];
 }
 
-/** Compute the canonical_facet to write given the edit-tracker's
- *  determination + the currently-stored canonical value.
+/** Compute the source_facet value to write given the edit-tracker's
+ *  determination + the currently-stored source value.
  *
  *  When editedFacet is null (no cached baseline OR no change), keep
- *  storedCanonical as-is. Return null to signal "no write needed."
+ *  storedSource as-is. Return null to signal "no write needed."
  *
- *  When editedFacet matches storedCanonical, no write is needed
+ *  When editedFacet matches storedSource, no write is needed
  *  (idempotent).
  *
- *  When editedFacet differs from storedCanonical, return the new
+ *  When editedFacet differs from storedSource, return the new
  *  value.
  */
-export function decideCanonicalWrite(
+export function decideSourceWrite(
   editedFacet: 'description' | 'recipe' | 'python' | null,
-  storedCanonical: CanonicalLayer | null,
-): CanonicalLayer | null {
+  storedSource: SourceLayer | null,
+): SourceLayer | null {
   if (editedFacet === null) return null;
-  if (editedFacet === storedCanonical) return null;
+  if (editedFacet === storedSource) return null;
   return editedFacet;
 }
+
+/** v0.2.286 back-compat alias — `decideSourceWrite` was named
+ *  `decideCanonicalWrite` before the S9 field rename (drain
+ *  2026-07-09-1600). External callers can continue to import the old
+ *  name for one release cycle.
+ *  TODO: delete in v0.2.290. */
+export const decideCanonicalWrite = decideSourceWrite;

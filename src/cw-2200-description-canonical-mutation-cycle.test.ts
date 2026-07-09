@@ -154,7 +154,7 @@ async function runDescriptionCanonicalForge(deps: {
 function makeBaselineNote(desc: string, recipe: string, python: string): string {
   return `---
 type: action
-canonical_facet: description
+source_facet: description
 ---
 
 # Description

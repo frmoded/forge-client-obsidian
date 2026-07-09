@@ -9,14 +9,14 @@ import { createIntegrationHarness } from './test-helpers/cm6-harness.ts';
 import { staleFacetViewPlugin } from './stale-facet-view-plugin.ts';
 
 // A V2 note WITH stored hashes that don't match the body (recipe was
-// hand-edited). Under v11.6, whichLayerIsCanonical will infer Recipe
+// hand-edited). Under v11.6, whichLayerIsSource will infer Recipe
 // canonical from hash mismatches → Description + Python render `— ignored`.
 const RECIPE_CANONICAL_MISMATCH_NOTE = `---
 type: action
 description_hash: 0000000000000000000000000000000000000000000000000000000000000000
 recipe_hash: 1111111111111111111111111111111111111111111111111111111111111111
 python_hash: 2222222222222222222222222222222222222222222222222222222222222222
-canonical_facet: recipe
+source_facet: recipe
 ---
 
 # Description
@@ -67,7 +67,7 @@ test('CM6 integration: hexa-state plugin mounts without throwing', async () => {
 });
 
 test('CM6 integration: canonical=recipe → Description + Python render as `— ignored`', async () => {
-  // v0.2.264 — v11.6 hexa-state. canonical_facet=recipe → Description
+  // v0.2.264 — v11.6 hexa-state. source_facet=recipe → Description
   // is upstream of canonical → `— ignored`. Python's parent-hash
   // absent → `— derived from Recipe, out of date`.
   const harness = createIntegrationHarness();

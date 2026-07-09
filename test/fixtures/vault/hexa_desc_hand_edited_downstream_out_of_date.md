@@ -5,7 +5,7 @@ recipe_hash: rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
 python_hash: pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
 recipe_derived_from_description_hash: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 python_derived_from_recipe_hash: rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr
-canonical_facet: description
+source_facet: description
 ---
 
 # Description

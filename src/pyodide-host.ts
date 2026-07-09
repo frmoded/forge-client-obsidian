@@ -1131,12 +1131,12 @@ export interface PyodideHostInstance {
     inputs?: Record<string, unknown>,
     slotResolutions?: Record<string, string>,
     /** v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
-     *  canonical-layer decision from `whichLayerIsCanonical`. Threads
+     *  canonical-layer decision from `whichLayerIsSource`. Threads
      *  to engine.resolve_action_code so it short-circuits Recipe
      *  parse on python-canonical (or returns None on
      *  description-canonical). Undefined preserves pre-v0.2.252
      *  behavior. */
-    canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
+    sourceLayer?: 'description' | 'recipe' | 'python' | 'synced',
   ): Promise<ComputeResult>;
   /** v0.2.72 — variant that also returns the transpiled Python
    *  source so the plugin can write `# Python` back to disk after
@@ -1162,7 +1162,7 @@ export interface PyodideHostInstance {
        *  the engine returns null so the caller routes to /generate.
        *  Undefined preserves pre-v0.2.252 behavior for callers that
        *  haven't been updated. */
-      canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced';
+      sourceLayer?: 'description' | 'recipe' | 'python' | 'synced';
     },
   ): Promise<string>;
   modaInit(): Promise<ModaInitResult>;
@@ -1236,7 +1236,7 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
     args: unknown[],
     inputs: Record<string, unknown> = {},
     slotResolutions?: Record<string, string>,
-    canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
+    sourceLayer?: 'description' | 'recipe' | 'python' | 'synced',
   ): Promise<ComputeResult> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set("_forge_args_in", args as any);
@@ -1258,7 +1258,7 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
     // description-canonical.
     this.pyodide.globals.set(
       "_forge_canonical_layer",
-      canonicalLayer ?? null,
+      sourceLayer ?? null,
     );
     const tuple = this.pyodide.runPython(`
 _forge_compute(
@@ -1322,7 +1322,7 @@ _forge_compute_with_python(
     snippet_id: string,
     opts?: {
       force?: boolean;
-      canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced';
+      sourceLayer?: 'description' | 'recipe' | 'python' | 'synced';
     },
   ): Promise<string> {
     // v0.2.128 — `force` opt bypasses the engine's legacy
@@ -1333,7 +1333,7 @@ _forge_compute_with_python(
     // english_hash in cohort state. Other call sites omit the opt
     // (force defaults to false) and the existing behavior is
     // preserved.
-    // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — canonicalLayer
+    // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — sourceLayer
     // routes to engine.resolve_action_code's new short-circuit paths.
     // Python-canonical → extract_python + return (no V2 parse).
     // Description-canonical → return None (caller routes /generate).
@@ -1341,7 +1341,7 @@ _forge_compute_with_python(
     this.pyodide.globals.set("_forge_resolve_force", !!opts?.force);
     this.pyodide.globals.set(
       "_forge_resolve_canonical_layer",
-      opts?.canonicalLayer ?? null,
+      opts?.sourceLayer ?? null,
     );
     const out = this.pyodide.runPython(
       `_forge_resolve_action_code(_forge_resolve_target, force=_forge_resolve_force, canonical_layer=_forge_resolve_canonical_layer)`,

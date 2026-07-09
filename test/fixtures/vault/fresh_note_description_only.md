@@ -1,6 +1,6 @@
 ---
 type: action
-canonical_facet: description
+source_facet: description
 ---
 # Description
 Return the answer to life, the universe, and everything.

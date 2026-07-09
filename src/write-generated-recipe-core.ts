@@ -86,7 +86,7 @@ export function checkRecipeClosure(
  *  successfully lands (closure-check passed). All four fields re-baseline
  *  to CURRENT body SHAs, asserting "Recipe IS derived from Description at
  *  this snapshot." Under Q3 stamp policy, Python's derived-from stamps
- *  are NOT set here — writeCanonicalPythonBack handles them once the
+ *  are NOT set here — writeSourcePythonBack handles them once the
  *  transpile completes. */
 export interface DescriptionDerivedRecipeStamps {
   description_hash: string;

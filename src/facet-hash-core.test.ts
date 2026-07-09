@@ -4,7 +4,7 @@
 // Coverage:
 // - computeFacetHash: same shape as computeDescriptionHash; stable
 //   across whitespace-only edits.
-// - whichLayerIsCanonical: synced / description / recipe / python
+// - whichLayerIsSource: synced / description / recipe / python
 //   with downstream priority.
 // - detectStaleFacets: stale-set per canonical layer.
 
@@ -25,9 +25,10 @@ if (typeof (globalThis as any).TextEncoder === 'undefined') {
 import { computeDescriptionHash } from './description-hash-core.ts';
 import {
   computeFacetHash,
-  whichLayerIsCanonical,
+  whichLayerIsSource,
   detectStaleFacets,
-  type CanonicalLayer,
+  getSourceFacet,
+  type SourceLayer,
 } from './facet-hash-core.ts';
 
 
@@ -54,7 +55,7 @@ describe('computeFacetHash', () => {
 });
 
 
-// ---------- whichLayerIsCanonical -----------------------------------
+// ---------- whichLayerIsSource -----------------------------------
 
 const _helpers = (
   desc: string,
@@ -63,7 +64,7 @@ const _helpers = (
   storedDesc: string | null,
   storedRecipe: string | null,
   storedPython: string | null,
-  storedCanonical: string | null = null,
+  storedSource: string | null = null,
 ) => ({
   extractDescription: () => desc,
   extractRecipeSection: () => recipe,
@@ -72,13 +73,43 @@ const _helpers = (
     if (key === 'description_hash') return storedDesc;
     if (key === 'recipe_hash') return storedRecipe;
     if (key === 'python_hash') return storedPython;
-    if (key === 'canonical_facet') return storedCanonical;
+    // v0.2.286 — primary field is `source_facet`; `getSourceFacet`
+    // reads either name so legacy tests keep working via the
+    // fallback. Tests exercising the fallback path pass their
+    // stored value via `_legacyHelpers` below.
+    if (key === 'source_facet') return storedSource;
+    if (key === 'canonical_facet') return null;
+    return null;
+  },
+});
+
+// v0.2.286 back-compat helper: returns the stored value under the
+// LEGACY `canonical_facet` key (with `source_facet` absent). Exercises
+// the read-tolerance path for pre-migration notes.
+const _legacyHelpers = (
+  desc: string,
+  recipe: string | null,
+  python: string | null,
+  storedDesc: string | null,
+  storedRecipe: string | null,
+  storedPython: string | null,
+  storedLegacySource: string | null = null,
+) => ({
+  extractDescription: () => desc,
+  extractRecipeSection: () => recipe,
+  extractPythonSection: () => python,
+  getFrontmatterField: (_body: string, key: string) => {
+    if (key === 'description_hash') return storedDesc;
+    if (key === 'recipe_hash') return storedRecipe;
+    if (key === 'python_hash') return storedPython;
+    if (key === 'source_facet') return null;
+    if (key === 'canonical_facet') return storedLegacySource;
     return null;
   },
 });
 
 
-describe('whichLayerIsCanonical', () => {
+describe('whichLayerIsSource', () => {
   it('returns "synced" when all stored hashes match current content',
     async () => {
       const d = 'hello';
@@ -87,7 +118,7 @@ describe('whichLayerIsCanonical', () => {
       const dh = await computeFacetHash(d);
       const rh = await computeFacetHash(r);
       const ph = await computeFacetHash(p);
-      const result = await whichLayerIsCanonical(
+      const result = await whichLayerIsSource(
         'irrelevant_body',
         _helpers(d, r, p, dh, rh, ph),
       );
@@ -103,7 +134,7 @@ describe('whichLayerIsCanonical', () => {
       const dhStored = await computeFacetHash('hello');
       const rh = await computeFacetHash(r);
       const ph = await computeFacetHash(p);
-      const result = await whichLayerIsCanonical(
+      const result = await whichLayerIsSource(
         'body',
         _helpers(d, r, p, dhStored, rh, ph),
       );
@@ -117,7 +148,7 @@ describe('whichLayerIsCanonical', () => {
     const dh = await computeFacetHash(d);
     const rhStored = await computeFacetHash('Print "hi".');
     const ph = await computeFacetHash(p);
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, r, p, dh, rhStored, ph),
     );
@@ -131,7 +162,7 @@ describe('whichLayerIsCanonical', () => {
     const dh = await computeFacetHash(d);
     const rh = await computeFacetHash(r);
     const phStored = await computeFacetHash('def compute(c): pass');
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, r, p, dh, rh, phStored),
     );
@@ -150,7 +181,7 @@ describe('whichLayerIsCanonical', () => {
       const dh = await computeFacetHash(d);
       const rhStored = await computeFacetHash('old recipe');
       const phStored = await computeFacetHash('old python');
-      const result = await whichLayerIsCanonical(
+      const result = await whichLayerIsSource(
         'body',
         _helpers(d, r, p, dh, rhStored, phStored),
       );
@@ -165,7 +196,7 @@ describe('whichLayerIsCanonical', () => {
       const dhStored = await computeFacetHash('old desc');
       const rhStored = await computeFacetHash('old recipe');
       const ph = await computeFacetHash(p);
-      const result = await whichLayerIsCanonical(
+      const result = await whichLayerIsSource(
         'body',
         _helpers(d, r, p, dhStored, rhStored, ph),
       );
@@ -185,7 +216,7 @@ describe('whichLayerIsCanonical', () => {
       const dhStored = await computeFacetHash('original description');
       const rhStored = await computeFacetHash('Let x = foo=1.');
       const phStored = await computeFacetHash('def compute(c): return 0');
-      const result = await whichLayerIsCanonical(
+      const result = await whichLayerIsSource(
         'body',
         _helpers(d, r, p, dhStored, rhStored, phStored),
       );
@@ -194,7 +225,7 @@ describe('whichLayerIsCanonical', () => {
 
   it('returns "synced" when stored hashes are absent (fresh note)',
     async () => {
-      const result = await whichLayerIsCanonical(
+      const result = await whichLayerIsSource(
         'body',
         _helpers('anything', 'anything', 'anything', null, null, null),
       );
@@ -206,16 +237,16 @@ describe('whichLayerIsCanonical', () => {
     // surface canonical (their hashes are absent).
     const d = 'desc';
     const dh = await computeFacetHash(d);
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, 'unstamped_recipe', 'unstamped_python', dh, null, null),
     );
     assert.equal(result, 'synced');
   });
 
-  // ---------- v0.2.256 drain 1200: stored canonical_facet -------------
+  // ---------- v0.2.256 drain 1200: stored source_facet (v0.2.286 rename) -------------
 
-  it('stored canonical_facet: "recipe" is returned even when Description also drifts', async () => {
+  it('stored source_facet: "recipe" is returned even when Description also drifts', async () => {
     // Driver's cohort intuition: whatever was hand-edited most recently
     // is the canonical layer. Under stored-not-inferred, that decision
     // is recorded in the frontmatter field. Hash inference no longer
@@ -226,14 +257,14 @@ describe('whichLayerIsCanonical', () => {
     const dhStored = await computeFacetHash('old desc');
     const rhStored = await computeFacetHash('old recipe');
     const ph = await computeFacetHash(p);
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, r, p, dhStored, rhStored, ph, 'recipe'),
     );
     assert.equal(result, 'recipe');
   });
 
-  it('stored canonical_facet: "python" with Python-drift honored', async () => {
+  it('stored source_facet: "python" with Python-drift honored', async () => {
     // Python was hand-edited (pythonMismatch = true); stored field
     // agrees. Detection returns 'python'.
     const d = 'anything';
@@ -242,29 +273,29 @@ describe('whichLayerIsCanonical', () => {
     const dh = await computeFacetHash(d);
     const rh = await computeFacetHash(r);
     const phStored = await computeFacetHash('old python');
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, r, p, dh, rh, phStored, 'python'),
     );
     assert.equal(result, 'python');
   });
 
-  it('stored canonical_facet: "synced" honored', async () => {
+  it('stored source_facet: "synced" honored', async () => {
     const d = 'anything';
     const r = 'anything';
     const p = 'anything';
     const dh = await computeFacetHash(d);
     const rh = await computeFacetHash(r);
     const ph = await computeFacetHash(p);
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, r, p, dh, rh, ph, 'synced'),
     );
     assert.equal(result, 'synced');
   });
 
-  it('external multi-facet edit: stored canonical_facet points at facet with no drift; another facet drifted → flip via upstream-wins fallback', async () => {
-    // Sample scenario: canonical_facet: "description" is stored, but
+  it('external multi-facet edit: stored source_facet points at facet with no drift; another facet drifted → flip via upstream-wins fallback', async () => {
+    // Sample scenario: source_facet: "description" is stored, but
     // Description's body matches its stored hash while Recipe drifted
     // (external edit via git / sed). Detection flips to 'recipe'.
     const d = 'desc unchanged';
@@ -273,19 +304,19 @@ describe('whichLayerIsCanonical', () => {
     const dh = await computeFacetHash(d);
     const rhStored = await computeFacetHash('old recipe');
     const ph = await computeFacetHash(p);
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, r, p, dh, rhStored, ph, 'description'),
     );
     assert.equal(result, 'recipe');
   });
 
-  it('invalid canonical_facet value falls through to hash inference', async () => {
+  it('invalid source_facet value falls through to hash inference', async () => {
     const d = 'edited';
     const dhStored = await computeFacetHash('original');
     const rh = await computeFacetHash('r');
     const ph = await computeFacetHash('p');
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, 'r', 'p', dhStored, rh, ph, 'bogus_value'),
     );
@@ -301,7 +332,7 @@ describe('whichLayerIsCanonical', () => {
     const dh = await computeFacetHash(d);
     const rh = await computeFacetHash(r);
     const ph = await computeFacetHash(p);
-    const result = await whichLayerIsCanonical(
+    const result = await whichLayerIsSource(
       'body',
       _helpers(d, r, p, dh, rh, ph, 'description'),
     );
@@ -372,5 +403,100 @@ describe('detectStaleFacets', () => {
     assert.equal(stale.has('description'), true);
     assert.equal(stale.has('recipe'), true);
     assert.equal(stale.has('python'), false);
+  });
+});
+
+
+// ---------- v0.2.286 drain 1600: source_facet migration ---------------
+
+describe('getSourceFacet', () => {
+  const makeFmReader = (fields: Record<string, string | null>) =>
+    (_b: string, k: string) => fields[k] ?? null;
+
+  it('reads `source_facet` when only that field is present', () => {
+    const r = makeFmReader({ source_facet: 'recipe' });
+    assert.equal(getSourceFacet('body', r), 'recipe');
+  });
+
+  it('reads legacy `canonical_facet` when `source_facet` is absent', () => {
+    // Migration read-tolerance: pre-v0.2.286 notes must still be
+    // interpretable until the plugin flushes their frontmatter.
+    const r = makeFmReader({ canonical_facet: 'description' });
+    assert.equal(getSourceFacet('body', r), 'description');
+  });
+
+  it('prefers `source_facet` when both fields are present (transitional)',
+    () => {
+      // If both fields somehow linger (e.g., an external editor wrote
+      // canonical_facet AFTER the plugin migrated to source_facet),
+      // trust the new name. The write path deletes canonical_facet on
+      // any facet write, so this transitional state resolves lazily.
+      const r = makeFmReader({
+        source_facet: 'python',
+        canonical_facet: 'description',
+      });
+      assert.equal(getSourceFacet('body', r), 'python');
+    });
+
+  it('returns null when neither field is present (fresh note)', () => {
+    const r = makeFmReader({});
+    assert.equal(getSourceFacet('body', r), null);
+  });
+
+  it('returns null for invalid values', () => {
+    const r = makeFmReader({ source_facet: 'bogus' });
+    assert.equal(getSourceFacet('body', r), null);
+  });
+
+  it('accepts a legacy value under the legacy key', () => {
+    const r = makeFmReader({ canonical_facet: 'synced' });
+    assert.equal(getSourceFacet('body', r), 'synced');
+  });
+});
+
+
+// v0.2.286 back-compat: whichLayerIsSource reads legacy notes via
+// getSourceFacet's fallback path — the primary tests above exercise
+// the new `source_facet` key; these confirm the legacy `canonical_facet`
+// key still routes correctly through the same detection state machine.
+
+describe('whichLayerIsSource — v0.2.286 legacy canonical_facet fallback', () => {
+  it('legacy note with only canonical_facet: recipe reads as recipe',
+    async () => {
+      const d = 'both edited';
+      const r = 'recipe edited later';
+      const p = 'python matches';
+      const dhStored = await computeFacetHash('old desc');
+      const rhStored = await computeFacetHash('old recipe');
+      const ph = await computeFacetHash(p);
+      const result = await whichLayerIsSource(
+        'body',
+        _legacyHelpers(d, r, p, dhStored, rhStored, ph, 'recipe'),
+      );
+      assert.equal(result, 'recipe');
+    });
+
+  it('legacy note with only canonical_facet: description reads as description',
+    async () => {
+      const d = 'edited';
+      const dhStored = await computeFacetHash('orig');
+      const rh = await computeFacetHash('r');
+      const ph = await computeFacetHash('p');
+      const result = await whichLayerIsSource(
+        'body',
+        _legacyHelpers(d, 'r', 'p', dhStored, rh, ph, 'description'),
+      );
+      assert.equal(result, 'description');
+    });
+
+  it('legacy note with only canonical_facet: synced honored', async () => {
+    const dh = await computeFacetHash('d');
+    const rh = await computeFacetHash('r');
+    const ph = await computeFacetHash('p');
+    const result = await whichLayerIsSource(
+      'body',
+      _legacyHelpers('d', 'r', 'p', dh, rh, ph, 'synced'),
+    );
+    assert.equal(result, 'synced');
   });
 });

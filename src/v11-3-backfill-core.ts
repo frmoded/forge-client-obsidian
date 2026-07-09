@@ -14,7 +14,7 @@
 // (S8 v11.3 clause 3 mandates it). Result: cohort opening an existing
 // V2 note sees Python "not editable" (no section on disk) and Recipe
 // edits don't trigger the "— reference" suffix (no stored hash to
-// compare against; whichLayerIsCanonical returns 'synced' by
+// compare against; whichLayerIsSource returns 'synced' by
 // default when hashes are absent).
 //
 // This pure-core backfills BOTH:
@@ -33,6 +33,12 @@ export interface V113BackfillHelpers {
   extractPythonSection: (body: string) => string | null;
   getFrontmatterField: (body: string, key: string) => string | null;
   setFrontmatterField: (body: string, key: string, value: string) => string;
+  /** v0.2.286 — remove a frontmatter field. Used to migrate legacy
+   *  `canonical_facet` → `source_facet`: after copying the value into
+   *  `source_facet`, the caller deletes `canonical_facet`. Optional so
+   *  callers on older helper harnesses still typecheck; when absent the
+   *  legacy field survives until the runtime plugin flushes it. */
+  removeFrontmatterField?: (body: string, key: string) => string;
   replacePythonSection: (body: string, pythonSrc: string | null) => string;
   computeFacetHash: (content: string) => Promise<string>;
 }
@@ -210,14 +216,30 @@ export async function backfillV113Shape(
     }
   }
 
-  // v0.2.256 drain 2026-07-03-1200 — seed canonical_facet if absent.
+  // v0.2.256 drain 2026-07-03-1200 — seed source_facet if absent.
   // Uses upstream-wins hash-mismatch inference against the WORKING
   // body (post any prior stamping this pipeline did). For freshly-
   // stamped notes, this settles on 'synced' since all hashes match.
-  // Pre-1200 V2 notes with drift get their canonical hint recorded
+  // Pre-1200 V2 notes with drift get their source hint recorded
   // once; the plugin's write path takes over on subsequent hand-edits.
-  const storedCanonical = helpers.getFrontmatterField(workingBody, 'canonical_facet');
-  if (storedCanonical === null) {
+  //
+  // v0.2.286 drain 2026-07-09-1600 — field renamed from
+  // `canonical_facet` → `source_facet`. Legacy notes carrying only the
+  // old name migrate here: we detect it, keep its value, and write the
+  // new field name (deleting the old one via processFrontMatter's set).
+  const existingSource = helpers.getFrontmatterField(workingBody, 'source_facet');
+  const existingCanonical = helpers.getFrontmatterField(workingBody, 'canonical_facet');
+  // If ONLY the legacy name is present, migrate it: write source_facet
+  // with the same value + delete canonical_facet. Counts as a seed
+  // action so the caller sees the note as "changed."
+  if (existingSource === null && existingCanonical !== null) {
+    workingBody = helpers.setFrontmatterField(workingBody, 'source_facet', existingCanonical);
+    if (helpers.removeFrontmatterField) {
+      workingBody = helpers.removeFrontmatterField(workingBody, 'canonical_facet');
+    }
+    actions.canonicalFacetSeeded = existingCanonical as
+      'description' | 'recipe' | 'python' | 'synced';
+  } else if (existingSource === null && existingCanonical === null) {
     const finalDescText = helpers.extractDescription(workingBody);
     const finalRecipeText = helpers.extractRecipeSection(workingBody) ?? '';
     const finalPythonText = helpers.extractPythonSection(workingBody) ?? '';
@@ -236,8 +258,15 @@ export async function backfillV113Shape(
     else if (rMismatch) seed = 'recipe';
     else if (pMismatch) seed = 'python';
     else seed = 'synced';
-    workingBody = helpers.setFrontmatterField(workingBody, 'canonical_facet', seed);
+    workingBody = helpers.setFrontmatterField(workingBody, 'source_facet', seed);
     actions.canonicalFacetSeeded = seed;
+  } else {
+    // Both present, or only new field present. Idempotent branch —
+    // still flush the legacy `canonical_facet` field so notes don't
+    // carry both across drains.
+    if (existingCanonical !== null && helpers.removeFrontmatterField) {
+      workingBody = helpers.removeFrontmatterField(workingBody, 'canonical_facet');
+    }
   }
 
   // v0.2.264 drain 2026-07-03-1500 — v11.6 parent-hash migration.

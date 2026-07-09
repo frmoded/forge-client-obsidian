@@ -12,7 +12,7 @@
 //   - Python body hash MATCHES stored python_hash → no drift on Python
 //
 // Expected (post-v0.2.252 upstream-wins + L45):
-//   - whichLayerIsCanonical → 'python' (Python is the only NOT-drifted
+//   - whichLayerIsSource → 'python' (Python is the only NOT-drifted
 //     facet; both description matches AND recipe mismatches would
 //     under upstream-wins return 'recipe' actually... let me re-think)
 //
@@ -49,7 +49,7 @@ import {
 } from './v2-note-core.ts';
 import {
   computeFacetHash,
-  whichLayerIsCanonical,
+  whichLayerIsSource,
   detectStaleFacets,
 } from './facet-hash-core.ts';
 import { routingSignalFor } from './routing-signal-core.ts';
@@ -97,7 +97,7 @@ describe('L41 sample-vault fixture: slow_burn_broken_recipe_valid_python', () =>
     // Python body. Under upstream-wins: description_hash mismatches
     // first, so canonical='description'. Fixture proves the routing
     // graph is entered.
-    const canonical = await whichLayerIsCanonical(body, {
+    const canonical = await whichLayerIsSource(body, {
       extractDescription,
       extractRecipeSection,
       extractPythonSection,
@@ -124,14 +124,14 @@ describe('L41 sample-vault fixture: slow_burn_broken_recipe_valid_python', () =>
 
   it('routingSignalFor(description canonical): both transpile + generate allowed', async () => {
     const body = await readFile(FIXTURE_PATH, 'utf-8');
-    const canonical = await whichLayerIsCanonical(body, {
+    const canonical = await whichLayerIsSource(body, {
       extractDescription,
       extractRecipeSection,
       extractPythonSection,
       getFrontmatterField: fmReader,
     });
     const signal = routingSignalFor(canonical);
-    assert.equal(signal.canonical_layer, 'description');
+    assert.equal(signal.source_layer, 'description');
     assert.equal(signal.skip_transpile, false);
     assert.equal(signal.skip_generate, false);
   });

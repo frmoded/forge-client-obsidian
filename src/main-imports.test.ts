@@ -3,7 +3,7 @@
 // against v0.2.199 hit it via the "Forge: Show canonical layer" command).
 //
 // main.ts uses extractRecipeSection as a helper passed into
-// `whichLayerIsCanonical` from facet-hash-core but pre-v0.2.200 didn't
+// `whichLayerIsSource` from facet-hash-core but pre-v0.2.200 didn't
 // import it. esbuild bundled `main.ts` without that symbol; at runtime
 // the helper closure resolved against the global scope and threw.
 //
@@ -48,7 +48,7 @@ describe('main.ts top-level imports', () => {
   });
 
   test('extractPythonSection imported from v2-note-core (sibling helper)', () => {
-    // Pair guard: showCanonicalLayer + forgeSnippet both pass
+    // Pair guard: showSourceLayer + forgeSnippet both pass
     // extractPythonSection alongside extractRecipeSection. If one is
     // missing the bug pattern recurs symmetrically.
     const importBlocks = MAIN_TS.match(

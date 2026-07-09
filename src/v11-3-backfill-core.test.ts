@@ -14,6 +14,7 @@ import {
   extractPythonSection,
   getFrontmatterField,
   setFrontmatterField,
+  removeFrontmatterField,
   replacePythonSection,
 } from './v2-note-core.ts';
 import { computeFacetHash } from './facet-hash-core.ts';
@@ -27,6 +28,7 @@ const HELPERS = {
     return typeof v === 'string' ? v : null;
   },
   setFrontmatterField,
+  removeFrontmatterField,
   replacePythonSection,
   computeFacetHash,
 };
@@ -70,7 +72,7 @@ def compute(context):
 // v0.2.243 — "fully populated" now includes v11.4 derived_from_source_hash
 // fields on downstream facets. Notes populated by pre-v11.4 code paths
 // will get those stamped on next backfill run.
-// v0.2.256 drain 1200 — also includes canonical_facet (seed field).
+// v0.2.256 drain 1200 — also includes source_facet (seed field).
 // v0.2.264 drain 1500 — also includes v11.6 parent-hash fields
 // (recipe_derived_from_description_hash, python_derived_from_recipe_hash).
 const FULL_V113_NOTE = `---
@@ -83,7 +85,7 @@ recipe_derived_from_source_hash: aaa
 python_derived_from_source_hash: aaa
 recipe_derived_from_description_hash: aaa
 python_derived_from_recipe_hash: bbb
-canonical_facet: description
+source_facet: description
 ---
 
 # Description
@@ -166,16 +168,16 @@ test('idempotent: second call after backfill is a no-op', async () => {
   assert.equal(second.newBody, first.newBody);
 });
 
-test('v0.2.256 drain 1200: seeds canonical_facet on first backfill; freshly-stamped note gets synced seed', async () => {
+test('v0.2.256 drain 1200: seeds source_facet on first backfill; freshly-stamped note gets synced seed', async () => {
   const result = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
   // All hashes stamped fresh in this call → no drift → synced seed.
   assert.equal(result.actions.canonicalFacetSeeded, 'synced');
-  assert.equal(getFrontmatterField(result.newBody, 'canonical_facet'), 'synced');
+  assert.equal(getFrontmatterField(result.newBody, 'source_facet'), 'synced');
 });
 
-test('v0.2.256 drain 1200: seeds canonical_facet: description when Description drifts against pre-stamped hashes', async () => {
+test('v0.2.256 drain 1200: seeds source_facet: description when Description drifts against pre-stamped hashes', async () => {
   // Fixture with all hashes stamped but Description body edited so
-  // description_hash mismatches. Backfill seeds canonical_facet:
+  // description_hash mismatches. Backfill seeds source_facet:
   // description (upstream-wins).
   const preStampedButDescDrifted = `---
 type: action
@@ -211,7 +213,7 @@ def compute(context):
   // Upstream-wins → 'description'.
   const result = await backfillV113Shape(preStampedButDescDrifted, HELPERS);
   assert.equal(result.actions.canonicalFacetSeeded, 'description');
-  assert.equal(getFrontmatterField(result.newBody, 'canonical_facet'), 'description');
+  assert.equal(getFrontmatterField(result.newBody, 'source_facet'), 'description');
   // Sanity: existing hash values were not overwritten by the backfill
   // (backfill only stamps ABSENT hashes; drift correction happens in
   // separate paths). Verify the bogus hashes remain.
@@ -220,7 +222,7 @@ def compute(context):
   assert.notEqual(getFrontmatterField(result.newBody, 'python_hash'), pHash);
 });
 
-test('v0.2.256 drain 1200: canonical_facet seed is idempotent — second call is no-op', async () => {
+test('v0.2.256 drain 1200: source_facet seed is idempotent — second call is no-op', async () => {
   const first = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
   assert.equal(first.actions.canonicalFacetSeeded, 'synced');
   const second = await backfillV113Shape(first.newBody, HELPERS);
@@ -229,7 +231,7 @@ test('v0.2.256 drain 1200: canonical_facet seed is idempotent — second call is
 });
 
 test('stamped hashes match current facet contents (drift detection wakes up)', async () => {
-  // After backfill, whichLayerIsCanonical should return 'synced'
+  // After backfill, whichLayerIsSource should return 'synced'
   // (all hashes present and matching). Verify by directly checking
   // stored vs current-content hash.
   const result = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
@@ -335,7 +337,7 @@ python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
 recipe_derived_from_description_hash: DDD
-canonical_facet: description
+source_facet: description
 ---
 
 # Description
@@ -376,7 +378,7 @@ recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
 recipe_derived_from_description_hash: DDD
 english_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-canonical_facet: description
+source_facet: description
 ---
 
 # Description
@@ -499,7 +501,7 @@ recipe_hash: RRR
 python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
-canonical_facet: description
+source_facet: description
 ---
 
 # Description
@@ -539,7 +541,7 @@ recipe_hash: RRR
 python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
-canonical_facet: description
+source_facet: description
 ---
 
 # Description
@@ -584,7 +586,7 @@ recipe_hash: RRR
 python_hash: PPP
 recipe_derived_from_source_hash: RRR
 python_derived_from_source_hash: RRR
-canonical_facet: recipe
+source_facet: recipe
 ---
 
 # Description
@@ -621,7 +623,7 @@ recipe_hash: RRR
 python_hash: PPP
 recipe_derived_from_source_hash: DDD
 python_derived_from_source_hash: DDD
-canonical_facet: description
+source_facet: description
 ---
 
 # Description
@@ -645,4 +647,129 @@ def compute(context):
   assert.equal(second.changed, false);
   assert.deepEqual(second.actions.derivedFromParentSeeded, []);
   assert.equal(second.newBody, first.newBody);
+});
+
+
+// ---------- v0.2.286 drain 2026-07-09-1600: source_facet rename ------
+
+test('v0.2.286: legacy canonical_facet is migrated to source_facet on backfill', async () => {
+  // Legacy note carrying only `canonical_facet` (pre-v0.2.286 shape).
+  // Backfill should: keep the value, write it under `source_facet`,
+  // and delete the legacy field.
+  const legacy = `---
+type: action
+description_hash: aaa
+recipe_hash: bbb
+python_hash: ccc
+recipe_derived_from_description_hash: aaa
+python_derived_from_recipe_hash: bbb
+canonical_facet: recipe
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(legacy, HELPERS);
+  assert.equal(result.changed, true);
+  assert.equal(
+    getFrontmatterField(result.newBody, 'source_facet'),
+    'recipe',
+    'source_facet must carry the migrated value',
+  );
+  assert.equal(
+    getFrontmatterField(result.newBody, 'canonical_facet'),
+    null,
+    'canonical_facet must be gone after migration',
+  );
+});
+
+test('v0.2.286: notes with only source_facet are untouched (idempotent)', async () => {
+  // A note already on v0.2.286 shape backfills to no-op.
+  const modern = `---
+type: action
+description_hash: aaa
+recipe_hash: bbb
+python_hash: ccc
+recipe_derived_from_description_hash: aaa
+python_derived_from_recipe_hash: bbb
+source_facet: description
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(modern, HELPERS);
+  // Migration branch is a no-op on modern shape: source_facet survives
+  // and canonical_facet is not introduced. Other pipeline steps may
+  // still touch the note for unrelated reasons (hash re-baselining,
+  // etc.); this test asserts only the source_facet invariants.
+  assert.equal(
+    getFrontmatterField(result.newBody, 'source_facet'),
+    'description',
+    'source_facet must be preserved across backfill',
+  );
+  assert.equal(
+    getFrontmatterField(result.newBody, 'canonical_facet'),
+    null,
+    'canonical_facet must NOT be reintroduced by backfill',
+  );
+});
+
+test('v0.2.286: notes carrying BOTH fields have canonical_facet flushed', async () => {
+  // Transitional shape: two writes racing across a version boundary
+  // could leave both. Backfill drops the legacy one; new one wins.
+  const both = `---
+type: action
+description_hash: aaa
+recipe_hash: bbb
+python_hash: ccc
+recipe_derived_from_description_hash: aaa
+python_derived_from_recipe_hash: bbb
+source_facet: description
+canonical_facet: python
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+  const result = await backfillV113Shape(both, HELPERS);
+  assert.equal(result.changed, true);
+  assert.equal(getFrontmatterField(result.newBody, 'source_facet'), 'description');
+  assert.equal(getFrontmatterField(result.newBody, 'canonical_facet'), null);
 });

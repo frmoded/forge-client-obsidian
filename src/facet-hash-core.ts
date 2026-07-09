@@ -6,26 +6,32 @@
 //   - # Python         compiled Python; hash `python_hash`
 //
 // The IMPLICIT locking model (replaces v0.2.182's explicit
-// `lock: recipe-canonical` toggle):
+// `lock: recipe-source` toggle):
 //
 //   Whichever facet's content hash does NOT match its stored hash is
-//   the CANONICAL layer (it was most recently hand-edited). All facets
-//   downstream of canonical are "stale" (will be overwritten on the
-//   next regenerate from canonical).
+//   the SOURCE layer (it was most recently hand-edited). All facets
+//   downstream of source are "stale" (will be overwritten on the
+//   next regenerate from source).
 //
-//   When canonical == "synced" (all hashes match), the note is in
+//   When source == "synced" (all hashes match), the note is in
 //   steady-state — Forge-click runs from the cached Python; /generate
 //   refreshes Recipe + Python from Description; etc.
 //
-// Canonical is STORED as a frontmatter field `canonical_facet` as of
-// v0.2.256 (drain 2026-07-03-1200). Hash-mismatch inference remains
-// as a fallback for pre-1200 notes not yet backfilled + as an
+// Source is STORED as a frontmatter field `source_facet` as of
+// v0.2.286 (previously `canonical_facet`, v0.2.256 through v0.2.285;
+// see drain 2026-07-09-1600 for the rename). Hash-mismatch inference
+// remains as a fallback for pre-1200 notes not yet backfilled + as an
 // external-edit escape hatch. Upstream-wins tiebreak is retained for
 // those fallback paths per driver Choice 3.
 //
+// Legacy notes with only `canonical_facet` still work: `getSourceFacet`
+// reads either field (new name preferred). The write path always writes
+// `source_facet` and deletes `canonical_facet` — so legacy notes migrate
+// lazily on their next facet-write.
+//
 // Prior versions used hash-mismatch inference as the primary path.
 // v0.2.252 (drain 1000) flipped from downstream-wins to upstream-wins
-// tiebreak; v0.2.256 makes the whole thing driver-controlled via
+// tiebreak; v0.2.256 made the whole thing driver-controlled via
 // stored field.
 //
 // Pure-core (no `obsidian` import). All helpers operate on the full
@@ -33,7 +39,7 @@
 
 import { computeDescriptionHash } from './description-hash-core.ts';
 
-/** The canonical-layer label produced by `whichLayerIsCanonical`.
+/** The source-layer label produced by `whichLayerIsSource`.
  *
  *  `synced` means all three facets' content hashes match the stored
  *  frontmatter hashes — steady-state, post-/generate or post-Forge.
@@ -41,7 +47,13 @@ import { computeDescriptionHash } from './description-hash-core.ts';
  *  `description` / `recipe` / `python` mean that facet was last
  *  hand-edited and its downstream facets are stale.
  */
-export type CanonicalLayer = 'description' | 'recipe' | 'python' | 'synced';
+export type SourceLayer = 'description' | 'recipe' | 'python' | 'synced';
+
+/** v0.2.286 back-compat alias — `SourceLayer` was named `CanonicalLayer`
+ *  before the S9 field rename (drain 2026-07-09-1600). External callers
+ *  can continue to import the old name for one release cycle.
+ *  TODO: delete in v0.2.290. */
+export type CanonicalLayer = SourceLayer;
 
 
 /** Compute the stable hash for a single facet body. Same normalization
@@ -56,22 +68,47 @@ export async function computeFacetHash(
 }
 
 
-/** Set of valid canonical-facet frontmatter values. Used for validation
+/** Set of valid source-facet frontmatter values. Used for validation
  *  when reading the stored field. */
-const VALID_CANONICAL_VALUES = new Set<CanonicalLayer>([
+const VALID_SOURCE_VALUES = new Set<SourceLayer>([
   'description', 'recipe', 'python', 'synced',
 ]);
 
-/** Read the canonical-layer label.
+
+/** Read the stored source-facet frontmatter value. Prefers `source_facet`
+ *  (v0.2.286+); falls back to legacy `canonical_facet` if only that is
+ *  present. Returns null if neither is set or the value is invalid.
  *
- *  v0.2.256 (drain 2026-07-03-1200) — canonical is now STORED as a
- *  frontmatter field `canonical_facet: description | recipe | python |
- *  synced`, not inferred from hash-mismatch comparison. The plugin
+ *  This is the READ-side of the migration path (drain 2026-07-09-1600):
+ *  legacy notes are read-tolerant; the next write flushes the old name.
+ */
+export function getSourceFacet(
+  body: string,
+  getFrontmatterField: (body: string, key: string) => string | null,
+): SourceLayer | null {
+  const stored = getFrontmatterField(body, 'source_facet')
+    ?? getFrontmatterField(body, 'canonical_facet');
+  if (stored === null) return null;
+  return VALID_SOURCE_VALUES.has(stored as SourceLayer)
+    ? (stored as SourceLayer)
+    : null;
+}
+
+
+/** Read the source-layer label.
+ *
+ *  v0.2.286 (drain 2026-07-09-1600) — renamed from `whichLayerIsCanonical`.
+ *  The stored field was renamed `canonical_facet` → `source_facet`.
+ *  Legacy `canonical_facet` values are still honored via `getSourceFacet`.
+ *
+ *  v0.2.256 (drain 2026-07-03-1200) — source is STORED as a frontmatter
+ *  field, not inferred from hash-mismatch comparison. The plugin
  *  writes the field on hand-edit events; programmatic writes don't
  *  touch it. Constitution V2a v11.5 §S9 amendment codifies the shift.
  *
  *  Resolution order:
- *   1. Stored `canonical_facet` present + valid → return it.
+ *   1. Stored source (`source_facet` or legacy `canonical_facet`) present
+ *      and valid → return it.
  *      Exception: external multi-facet edit (stored value points at a
  *      facet with no drift, but ANOTHER facet has drift) — flip to the
  *      drifted facet. This catches external tools (git, sed) that
@@ -82,11 +119,11 @@ const VALID_CANONICAL_VALUES = new Set<CanonicalLayer>([
  *      first open per session, this path is dormant.
  *
  *  An absent stored hash counts as "matches" (no mismatch surfaced) so
- *  freshly minted notes without hashes aren't reported as canonical
+ *  freshly minted notes without hashes aren't reported as source
  *  in any one facet. The /generate flow stamps all three at synced
  *  baseline; from then on edits drive the state machine.
  */
-export async function whichLayerIsCanonical(
+export async function whichLayerIsSource(
   body: string,
   helpers: {
     extractDescription: (body: string) => string;
@@ -94,7 +131,7 @@ export async function whichLayerIsCanonical(
     extractPythonSection: (body: string) => string | null;
     getFrontmatterField: (body: string, key: string) => string | null;
   },
-): Promise<CanonicalLayer> {
+): Promise<SourceLayer> {
   const descText = helpers.extractDescription(body);
   const recipeText = helpers.extractRecipeSection(body) ?? '';
   const pythonText = helpers.extractPythonSection(body) ?? '';
@@ -111,20 +148,20 @@ export async function whichLayerIsCanonical(
   const recipeMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
   const descMismatch = storedDesc !== null && storedDesc !== currentDesc;
 
-  // v0.2.256 drain 1200 primary path — read stored canonical_facet.
-  const storedCanonical = helpers.getFrontmatterField(body, 'canonical_facet');
-  if (storedCanonical !== null && VALID_CANONICAL_VALUES.has(storedCanonical as CanonicalLayer)) {
-    const stored = storedCanonical as CanonicalLayer;
+  // v0.2.256 drain 1200 primary path — read stored source facet
+  // (either `source_facet` or legacy `canonical_facet`).
+  const storedSource = getSourceFacet(body, helpers.getFrontmatterField);
+  if (storedSource !== null) {
     // External multi-facet edit detection: if the stored value points
     // at a facet with no drift, but ANOTHER facet has drift, flip to
     // the drifted facet. Preserves the observable "editing a facet
-    // body makes that facet canonical" invariant even when the edit
+    // body makes that facet the source" invariant even when the edit
     // came from outside the plugin's write path.
-    const storedIsSynced = stored === 'synced';
+    const storedIsSynced = storedSource === 'synced';
     const storedFacetHasDrift =
-      (stored === 'description' && descMismatch) ||
-      (stored === 'recipe' && recipeMismatch) ||
-      (stored === 'python' && pythonMismatch);
+      (storedSource === 'description' && descMismatch) ||
+      (storedSource === 'recipe' && recipeMismatch) ||
+      (storedSource === 'python' && pythonMismatch);
     if (!storedIsSynced && !storedFacetHasDrift) {
       // Stored value stale relative to actual body drift. Fall through
       // to hash inference to find the actual drifted facet.
@@ -137,12 +174,12 @@ export async function whichLayerIsCanonical(
       // No drift anywhere → note is actually synced; honor that.
       return 'synced';
     }
-    return stored;
+    return storedSource;
   }
 
-  // Fallback path — canonical_facet absent or invalid. Applies to
-  // pre-1200 notes not yet backfilled. Upstream-wins tiebreak (drain
-  // 1000). Backfill will seed the field on first open per session.
+  // Fallback path — no stored source-facet field. Applies to pre-1200
+  // notes not yet backfilled. Upstream-wins tiebreak (drain 1000).
+  // Backfill will seed the field on first open per session.
   if (descMismatch) return 'description';
   if (recipeMismatch) return 'recipe';
   if (pythonMismatch) return 'python';
@@ -150,30 +187,38 @@ export async function whichLayerIsCanonical(
 }
 
 
-/** Detect each facet that is currently stale (non-canonical).
+/** v0.2.286 back-compat alias — `whichLayerIsSource` was named
+ *  `whichLayerIsCanonical` before the S9 field rename (drain
+ *  2026-07-09-1600). External callers can continue to import the old
+ *  name for one release cycle.
+ *  TODO: delete in v0.2.290. */
+export const whichLayerIsCanonical = whichLayerIsSource;
+
+
+/** Detect each facet that is currently stale (non-source).
  *
  *  Returns a set of facet names that should be marked "reference /
- *  documentation only" (per S9 v11.3). The canonical facet itself
+ *  documentation only" (per S9 v11.3). The source facet itself
  *  is NEVER in the returned set; it's the authoritative source.
  *  Facets without a stored hash are not stale (they're considered
  *  "absent / fresh" rather than out-of-sync).
  *
  *  v0.2.242 drain 2026-07-03-0100 — Constitution V2a v11.3 S9 spec
- *  reads "non-canonical facets" (plural). All facets except the
- *  canonical one are stale, regardless of upstream/downstream:
- *  - description canonical → recipe + python stale
- *  - recipe canonical      → description + python stale
- *  - python canonical      → description + recipe stale
- *  - synced                → empty set
+ *  reads "non-source facets" (plural). All facets except the
+ *  source one are stale, regardless of upstream/downstream:
+ *  - description source → recipe + python stale
+ *  - recipe source      → description + python stale
+ *  - python source      → description + recipe stale
+ *  - synced             → empty set
  *
  *  Rationale: the suffix communicates SOURCE-OF-TRUTH, not
  *  auto-regeneration. Cohort scanning the note sees "no suffix
  *  = currently driving runtime." Upstream Description under a
- *  Recipe-canonical state may or may not still be accurate; the
+ *  Recipe-source state may or may not still be accurate; the
  *  hint tells cohort to VERIFY.
  *
  *  Prior implementation (v0.2.239-v0.2.241) marked only downstream
- *  facets — Recipe-canonical marked Python only, missing Description.
+ *  facets — Recipe-source marked Python only, missing Description.
  *  Driver 2026-07-03 flagged the asymmetric UX.
  */
 export async function detectStaleFacets(
@@ -185,10 +230,10 @@ export async function detectStaleFacets(
     getFrontmatterField: (body: string, key: string) => string | null;
   },
 ): Promise<Set<'description' | 'recipe' | 'python'>> {
-  const canonical = await whichLayerIsCanonical(body, helpers);
-  if (canonical === 'synced') return new Set();
+  const source = await whichLayerIsSource(body, helpers);
+  if (source === 'synced') return new Set();
   const all: Array<'description' | 'recipe' | 'python'> = [
     'description', 'recipe', 'python',
   ];
-  return new Set(all.filter(f => f !== canonical));
+  return new Set(all.filter(f => f !== source));
 }

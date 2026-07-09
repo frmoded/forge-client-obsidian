@@ -20,7 +20,7 @@ import {
   suffixTextForState,
   type CurrentBodyHashes,
 } from './facet-state-core.ts';
-import { whichLayerIsCanonical, computeFacetHash } from './facet-hash-core.ts';
+import { whichLayerIsSource, computeFacetHash } from './facet-hash-core.ts';
 import {
   extractDescription,
   extractRecipeSection,
@@ -61,7 +61,7 @@ async function computeCurrentBodyHashes(body: string): Promise<CurrentBodyHashes
 test('L41 hexa fixture: all-aligned description-canonical → source / derived_from_description / derived_from_recipe', async () => {
   const body = await readFixture('hexa_all_aligned_description_canonical.md');
   const { twoArg, oneArg } = makeReaders(body);
-  const canonical = await whichLayerIsCanonical(body, {
+  const canonical = await whichLayerIsSource(body, {
     extractDescription,
     extractRecipeSection,
     extractPythonSection,
@@ -93,7 +93,7 @@ test('L41 hexa fixture: all-aligned description-canonical → source / derived_f
 test('L41 hexa fixture: python-canonical → upstream Description + Recipe both `— ignored`', async () => {
   const body = await readFixture('hexa_python_canonical_upstream_ignored.md');
   const { twoArg, oneArg } = makeReaders(body);
-  const canonical = await whichLayerIsCanonical(body, {
+  const canonical = await whichLayerIsSource(body, {
     extractDescription,
     extractRecipeSection,
     extractPythonSection,
@@ -113,7 +113,7 @@ test('L41 hexa fixture: python-canonical → upstream Description + Recipe both 
 test('L41 hexa fixture: recipe out-of-date → transitive Python out-of-date (Q3)', async () => {
   const body = await readFixture('hexa_recipe_out_of_date_transitive_python.md');
   const { twoArg, oneArg } = makeReaders(body);
-  const canonical = await whichLayerIsCanonical(body, {
+  const canonical = await whichLayerIsSource(body, {
     extractDescription,
     extractRecipeSection,
     extractPythonSection,
@@ -147,7 +147,7 @@ test('CW-1700 L41 fixture: hand-edited Description → Recipe transitions to out
   // parent-hash points at prior body state → mismatch → out-of-date.
   const body = await readFixture('hexa_desc_hand_edited_downstream_out_of_date.md');
   const { twoArg, oneArg } = makeReaders(body);
-  const canonical = await whichLayerIsCanonical(body, {
+  const canonical = await whichLayerIsSource(body, {
     extractDescription,
     extractRecipeSection,
     extractPythonSection,

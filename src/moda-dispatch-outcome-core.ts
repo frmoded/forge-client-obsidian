@@ -9,7 +9,7 @@
 //
 // Fix: re-transpile English → Python BEFORE opening the iframe.
 // This pure-core handles the decision shape; main.ts handles the
-// I/O (writeCanonicalPythonBack, Notice, openModaView).
+// I/O (writeSourcePythonBack, Notice, openModaView).
 //
 // Three outcomes:
 //

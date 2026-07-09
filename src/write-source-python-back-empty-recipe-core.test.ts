@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { checkEmptyRecipeForTranspile } from './write-canonical-python-back-empty-recipe-core.ts';
+import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
 
 const EXPECTED_NOTICE =
   'Fresh note: no valid Recipe to transpile. Try refining the Description or check the previous notice from Recipe generation.';

@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 
 import {
   decideForgeClickAction,
-} from './canonical-aware-forge-click-core.ts';
+} from './source-aware-forge-click-core.ts';
 
 describe('decideForgeClickAction (v0.2.201 Phase 2 §3.1)', () => {
   test('python-canonical → run_python_directly (Path Y closure)', () => {
@@ -47,7 +47,7 @@ describe('decideForgeClickAction (v0.2.201 Phase 2 §3.1)', () => {
   });
 
   test('null (probe failed) → standard_transpile (preserves Phase 1 behavior)', () => {
-    // If whichLayerIsCanonical threw, fall through to standard
+    // If whichLayerIsSource threw, fall through to standard
     // transpile. Without this fallback a hash-helper bug could take
     // Forge-click offline for the whole cohort.
     assert.equal(

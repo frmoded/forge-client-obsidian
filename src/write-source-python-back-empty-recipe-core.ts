@@ -1,5 +1,6 @@
 // v0.2.285 drain 1700 — defensive empty-Recipe detection for
-// writeCanonicalPythonBack.
+// writeSourcePythonBack (called writeCanonicalPythonBack pre-v0.2.286;
+// drain 2026-07-09-1600 renamed it alongside the S9 field rename).
 //
 // Rehearsal drain 1520 surfaced a gap: on fresh notes where CW-2200's
 // Sub-1 fallback fired ("preserve prior Recipe"), the "prior Recipe"

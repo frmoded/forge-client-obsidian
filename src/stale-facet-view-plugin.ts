@@ -15,7 +15,7 @@ import { ViewPlugin, type ViewUpdate, type EditorView, Decoration, type Decorati
 import { RangeSetBuilder } from '@codemirror/state';
 
 import {
-  whichLayerIsCanonical,
+  whichLayerIsSource,
   computeFacetHash,
 } from './facet-hash-core.ts';
 import {
@@ -222,7 +222,7 @@ export function buildFacetStateDecorations(
   return builder.finish();
 }
 
-/** The CM6 ViewPlugin. Async whichLayerIsCanonical → decoration set. */
+/** The CM6 ViewPlugin. Async whichLayerIsSource → decoration set. */
 export const staleFacetViewPlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet = Decoration.none;
@@ -252,16 +252,16 @@ export const staleFacetViewPlugin = ViewPlugin.fromClass(
           return typeof v === 'string' ? v : null;
         },
       };
-      let canonical: Awaited<ReturnType<typeof whichLayerIsCanonical>>;
+      let canonical: Awaited<ReturnType<typeof whichLayerIsSource>>;
       try {
-        canonical = await whichLayerIsCanonical(body, {
+        canonical = await whichLayerIsSource(body, {
           extractDescription,
           extractRecipeSection,
           extractPythonSection,
           getFrontmatterField: twoArgReader,
         });
       } catch (e) {
-        console.error('facetStateViewPlugin: whichLayerIsCanonical failed', e);
+        console.error('facetStateViewPlugin: whichLayerIsSource failed', e);
         return;
       }
       if (this.pendingDoc !== body) {

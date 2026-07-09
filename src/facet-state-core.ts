@@ -18,7 +18,7 @@
 // v0.2.264 (drain 2026-07-03-1500) — original v11.6 hexa-state impl.
 // v11.6 S9 semantics unchanged; only the implementation surface changes.
 
-import type { CanonicalLayer } from './facet-hash-core.ts';
+import type { SourceLayer } from './facet-hash-core.ts';
 
 export type FacetName = 'description' | 'recipe' | 'python';
 
@@ -92,7 +92,7 @@ function readParentHash(
  *  - `canonical === 'synced'` → delegate to 'description' (v11.4.1 preserved).
  */
 export function computeFacetStates(
-  canonical: CanonicalLayer,
+  canonical: SourceLayer,
   fm: FacetStateFrontmatterReader,
   currentBodyHashes: CurrentBodyHashes,
 ): Record<FacetName, FacetState> {

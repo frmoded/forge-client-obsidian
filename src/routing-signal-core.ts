@@ -1,41 +1,46 @@
 // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin computes a
-// routing signal from `whichLayerIsCanonical` and passes it into
+// routing signal from `whichLayerIsSource` and passes it into
 // `resolve_action_code` so the engine short-circuits work the plugin
 // has already declared irrelevant.
 //
 // Motivation: driver's 2026-07-03 slow_burn smoke saw the plugin
-// announce "Python-canonical, running as-is; no /generate, no
+// announce "Python is source, running as-is; no /generate, no
 // transpile" but the engine then still parsed the Recipe (which had
 // a pre-existing kwarg bug), threw ParseError, and blocked execution.
 // The plugin's message misled cohort about what would run. Under L45
-// the two agree: the plugin decides the canonical layer once, and
+// the two agree: the plugin decides the source layer once, and
 // engine's execution graph excludes the paths the plugin skipped.
 //
 // The signal crosses the JS ↔ pyodide boundary as a plain object:
-//   { canonical_layer, skip_transpile, skip_generate }
+//   { source_layer, skip_transpile, skip_generate }
 // Field names snake_case for direct consumption inside Python.
-// canonical_layer values match `CanonicalLayer` from facet-hash-core.
+// source_layer values match `SourceLayer` from facet-hash-core.
+//
+// v0.2.286 (drain 2026-07-09-1600) — renamed `canonical_layer` →
+// `source_layer` alongside the S9 field rename. The engine accepts
+// both kwargs during the transition. To keep the JS↔pyodide bridge
+// simple we send only the new name; engine handles both.
 
-import type { CanonicalLayer } from './facet-hash-core.ts';
+import type { SourceLayer } from './facet-hash-core.ts';
 
 /** The wire shape passed from plugin → engine. */
 export interface RoutingSignal {
-  canonical_layer: CanonicalLayer;
+  source_layer: SourceLayer;
   /** true when the engine should skip the Recipe → Python transpile
-   *  step. Applies to python-canonical (Python is the source; Recipe
+   *  step. Applies to python-source (Python is the source; Recipe
    *  is documentation). */
   skip_transpile: boolean;
   /** true when the engine (or plugin) should skip the /generate LLM
-   *  call. Applies to python-canonical AND recipe-canonical (Recipe
+   *  call. Applies to python-source AND recipe-source (Recipe
    *  is already available; no Description → Recipe synthesis needed). */
   skip_generate: boolean;
 }
 
-/** Derive a RoutingSignal from a canonical-layer label.
+/** Derive a RoutingSignal from a source-layer label.
  *
  *  Truth table:
  *
- *  | canonical    | skip_transpile | skip_generate |
+ *  | source       | skip_transpile | skip_generate |
  *  |--------------|----------------|---------------|
  *  | description  | false          | false         |
  *  | recipe       | false          | true          |
@@ -43,19 +48,19 @@ export interface RoutingSignal {
  *  | synced       | false          | true          |
  *
  *  `synced` follows the v11.4.1 constitution amendment: the note is
- *  in steady-state, so any canonical branch works; default to the
- *  Description-canonical execution graph (Recipe/Python can be
+ *  in steady-state, so any source branch works; default to the
+ *  Description-source execution graph (Recipe/Python can be
  *  regenerated from Description) but skip the /generate LLM call
  *  because Recipe already matches. */
-export function routingSignalFor(canonical: CanonicalLayer): RoutingSignal {
-  switch (canonical) {
+export function routingSignalFor(source: SourceLayer): RoutingSignal {
+  switch (source) {
     case 'description':
-      return { canonical_layer: 'description', skip_transpile: false, skip_generate: false };
+      return { source_layer: 'description', skip_transpile: false, skip_generate: false };
     case 'recipe':
-      return { canonical_layer: 'recipe', skip_transpile: false, skip_generate: true };
+      return { source_layer: 'recipe', skip_transpile: false, skip_generate: true };
     case 'python':
-      return { canonical_layer: 'python', skip_transpile: true, skip_generate: true };
+      return { source_layer: 'python', skip_transpile: true, skip_generate: true };
     case 'synced':
-      return { canonical_layer: 'synced', skip_transpile: false, skip_generate: true };
+      return { source_layer: 'synced', skip_transpile: false, skip_generate: true };
   }
 }

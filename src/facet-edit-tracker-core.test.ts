@@ -4,7 +4,7 @@ import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 import {
   identifyEditedFacet,
-  decideCanonicalWrite,
+  decideSourceWrite,
   type FacetHashes,
 } from './facet-edit-tracker-core.ts';
 
@@ -70,26 +70,26 @@ describe('identifyEditedFacet', () => {
   });
 });
 
-describe('decideCanonicalWrite', () => {
+describe('decideSourceWrite', () => {
   it('editedFacet null → return null (no write)', () => {
-    assert.equal(decideCanonicalWrite(null, 'description'), null);
-    assert.equal(decideCanonicalWrite(null, 'synced'), null);
-    assert.equal(decideCanonicalWrite(null, null), null);
+    assert.equal(decideSourceWrite(null, 'description'), null);
+    assert.equal(decideSourceWrite(null, 'synced'), null);
+    assert.equal(decideSourceWrite(null, null), null);
   });
 
   it('editedFacet matches stored → null (idempotent)', () => {
-    assert.equal(decideCanonicalWrite('description', 'description'), null);
-    assert.equal(decideCanonicalWrite('recipe', 'recipe'), null);
-    assert.equal(decideCanonicalWrite('python', 'python'), null);
+    assert.equal(decideSourceWrite('description', 'description'), null);
+    assert.equal(decideSourceWrite('recipe', 'recipe'), null);
+    assert.equal(decideSourceWrite('python', 'python'), null);
   });
 
   it('editedFacet differs from stored → return editedFacet', () => {
-    assert.equal(decideCanonicalWrite('description', 'python'), 'description');
-    assert.equal(decideCanonicalWrite('recipe', 'description'), 'recipe');
-    assert.equal(decideCanonicalWrite('python', 'synced'), 'python');
+    assert.equal(decideSourceWrite('description', 'python'), 'description');
+    assert.equal(decideSourceWrite('recipe', 'description'), 'recipe');
+    assert.equal(decideSourceWrite('python', 'synced'), 'python');
   });
 
   it('editedFacet + null stored → return editedFacet', () => {
-    assert.equal(decideCanonicalWrite('description', null), 'description');
+    assert.equal(decideSourceWrite('description', null), 'description');
   });
 });

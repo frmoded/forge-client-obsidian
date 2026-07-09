@@ -40,9 +40,9 @@ import {
   extractPythonSection,
   getFrontmatterField,
 } from './v2-note-core.ts';
-import { whichLayerIsCanonical } from './facet-hash-core.ts';
-import { decideForgeClickAction } from './canonical-aware-forge-click-core.ts';
-import { canonicalLayerStatusTooltip } from './canonical-layer-status-bar-core.ts';
+import { whichLayerIsSource } from './facet-hash-core.ts';
+import { decideForgeClickAction } from './source-aware-forge-click-core.ts';
+import { sourceLayerStatusTooltip } from './source-layer-status-bar-core.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_PATH = join(
@@ -67,7 +67,7 @@ describe('L41 description-canonical fixture (v0.2.254 auto-forge)', () => {
 
   it('canonical detection returns "description" (upstream-wins v0.2.252 + Description drifted here)', async () => {
     const body = await readFile(FIXTURE_PATH, 'utf-8');
-    const canonical = await whichLayerIsCanonical(body, {
+    const canonical = await whichLayerIsSource(body, {
       extractDescription,
       extractRecipeSection,
       extractPythonSection,
@@ -82,7 +82,7 @@ describe('L41 description-canonical fixture (v0.2.254 auto-forge)', () => {
   });
 
   it('tooltip describes the auto-forge pipeline (not the retired command)', () => {
-    const tooltip = canonicalLayerStatusTooltip('description');
+    const tooltip = sourceLayerStatusTooltip('description');
     assert.match(tooltip, /auto-run the full pipeline/);
     assert.doesNotMatch(tooltip, /Forge: Generate Recipe from Description/);
   });

@@ -5,46 +5,46 @@ import { test, describe } from 'node:test';
 import * as assert from 'node:assert/strict';
 
 import {
-  canonicalLayerStatusLabel,
-  canonicalLayerStatusTooltip,
-} from './canonical-layer-status-bar-core.ts';
+  sourceLayerStatusLabel,
+  sourceLayerStatusTooltip,
+} from './source-layer-status-bar-core.ts';
 
-describe('canonicalLayerStatusLabel', () => {
+describe('sourceLayerStatusLabel', () => {
   test('non-V2 file → empty', () => {
-    assert.equal(canonicalLayerStatusLabel(false, null), '');
-    assert.equal(canonicalLayerStatusLabel(false, 'recipe'), '');
+    assert.equal(sourceLayerStatusLabel(false, null), '');
+    assert.equal(sourceLayerStatusLabel(false, 'recipe'), '');
   });
 
   test('V2 synced → empty (suppress noise)', () => {
-    assert.equal(canonicalLayerStatusLabel(true, 'synced'), '');
+    assert.equal(sourceLayerStatusLabel(true, 'synced'), '');
   });
 
-  test('V2 description-canonical', () => {
-    assert.equal(canonicalLayerStatusLabel(true, 'description'),
-      'Forge: Description canonical');
+  test('V2 description-source', () => {
+    assert.equal(sourceLayerStatusLabel(true, 'description'),
+      'Forge: Description source');
   });
 
-  test('V2 recipe-canonical', () => {
-    assert.equal(canonicalLayerStatusLabel(true, 'recipe'),
-      'Forge: Recipe canonical');
+  test('V2 recipe-source', () => {
+    assert.equal(sourceLayerStatusLabel(true, 'recipe'),
+      'Forge: Recipe source');
   });
 
-  test('V2 python-canonical', () => {
-    assert.equal(canonicalLayerStatusLabel(true, 'python'),
-      'Forge: Python canonical');
+  test('V2 python-source', () => {
+    assert.equal(sourceLayerStatusLabel(true, 'python'),
+      'Forge: Python source');
   });
 
   test('V2 with probe failure → reveals defensive label', () => {
     // The probe failure case shouldn't be silent — surfaces a
     // discoverable signal so devs see hash-helper bugs in the bar.
-    assert.equal(canonicalLayerStatusLabel(true, null),
+    assert.equal(sourceLayerStatusLabel(true, null),
       'Forge: probe failed');
   });
 });
 
-describe('canonicalLayerStatusTooltip', () => {
+describe('sourceLayerStatusTooltip', () => {
   test('description tooltip describes the v0.2.254 auto-forge pipeline', () => {
-    const t = canonicalLayerStatusTooltip('description');
+    const t = sourceLayerStatusTooltip('description');
     assert.match(t, /Description was hand-edited/);
     assert.match(t, /auto-run the full pipeline/);
     assert.match(t, /regenerate Recipe \+ Python from Description, then execute/);
@@ -53,25 +53,25 @@ describe('canonicalLayerStatusTooltip', () => {
   });
 
   test('recipe tooltip describes the transpile-on-click flow', () => {
-    const t = canonicalLayerStatusTooltip('recipe');
+    const t = sourceLayerStatusTooltip('recipe');
     assert.match(t, /Recipe was hand-edited/);
     assert.match(t, /re-transpile/);
   });
 
   test('python tooltip describes Path Y behavior', () => {
-    const t = canonicalLayerStatusTooltip('python');
+    const t = sourceLayerStatusTooltip('python');
     assert.match(t, /Python facet was hand-edited/);
     assert.match(t, /AS-IS/);
     assert.match(t, /Path Y/);
   });
 
   test('synced tooltip confirms clean state', () => {
-    const t = canonicalLayerStatusTooltip('synced');
+    const t = sourceLayerStatusTooltip('synced');
     assert.match(t, /no hand-edits/);
   });
 
   test('null tooltip describes fallback', () => {
-    const t = canonicalLayerStatusTooltip(null);
+    const t = sourceLayerStatusTooltip(null);
     assert.match(t, /probe failed/);
     assert.match(t, /standard transpile path/);
   });

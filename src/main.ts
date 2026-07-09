@@ -6,11 +6,12 @@ import {
   replaceRecipeSection,
   setFrontmatterField as setFmFieldV2,
   getFrontmatterField as getFmFieldV2,
+  removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
-import { computeFacetHash, whichLayerIsCanonical } from './facet-hash-core.ts';
-import { computeCanonicalFacetAfterEdit } from './facet-edit-canonical-flip-core.ts';
-import { identifyEditedFacet, decideCanonicalWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
+import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
+import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
+import { identifyEditedFacet, decideSourceWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
 import {
@@ -76,7 +77,7 @@ import {
   computeDescriptionDerivedRecipeStamps,
 } from './write-generated-recipe-core.ts';
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
-import { checkEmptyRecipeForTranspile } from './write-canonical-python-back-empty-recipe-core.ts';
+import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
@@ -128,9 +129,9 @@ import { resolveLibraryNoteClickTarget } from './library-note-click-target-core.
 import { readActiveNoteFresh } from './read-active-note-fresh-core.ts';
 import { ForgeSpinner } from './forge-spinner-core.ts';
 import {
-  canonicalLayerStatusLabel,
-  canonicalLayerStatusTooltip,
-} from './canonical-layer-status-bar-core.ts';
+  sourceLayerStatusLabel,
+  sourceLayerStatusTooltip,
+} from './source-layer-status-bar-core.ts';
 import { makeDependenciesFoldExtension } from './dependencies-fold-view-plugin.ts';
 import { findDependenciesRange } from './dependencies-section-core.ts';
 
@@ -331,7 +332,7 @@ export default class ForgePlugin extends Plugin {
    *  status bar item. Refreshed on active-leaf-change + file-open +
    *  vault.modify (active file only). Shows empty string when there's
    *  nothing meaningful to surface (non-V2 / synced). */
-  private canonicalLayerStatusBarItem: HTMLElement | null = null;
+  private sourceLayerStatusBarItem: HTMLElement | null = null;
   /** v0.2.206 — Engine-chip catalog. Built at plugin load from the
    *  bundled `assets/engine/forge/<domain>/lib.py` source files via
    *  parseEngineLib (regex-based). Used by the wikilink click
@@ -453,7 +454,7 @@ export default class ForgePlugin extends Plugin {
     //   - no active markdown view
     //   - active file is V1 (not V2-shape)
     //   - active V2 file is `synced` (no hand-edits anywhere)
-    // Click handler invokes showCanonicalLayer() directly for the
+    // Click handler invokes showSourceLayer() directly for the
     // verbose forgeOutput report (Cmd-P command retired in v0.2.244).
     // v0.2.218 — Forge-click + LLM operation spinner. 200ms grace
     // period so fast snippets don't flash; multi-second LLM calls
@@ -466,19 +467,19 @@ export default class ForgePlugin extends Plugin {
       setText: (s) => spinnerStatusBarItem.setText(s),
     });
 
-    this.canonicalLayerStatusBarItem = this.addStatusBarItem();
-    this.canonicalLayerStatusBarItem.setText('');
-    this.canonicalLayerStatusBarItem.addClass('forge-canonical-layer-status');
-    this.canonicalLayerStatusBarItem.addEventListener('click', () => {
-      void this.showCanonicalLayer();
+    this.sourceLayerStatusBarItem = this.addStatusBarItem();
+    this.sourceLayerStatusBarItem.setText('');
+    this.sourceLayerStatusBarItem.addClass('forge-source-layer-status');
+    this.sourceLayerStatusBarItem.addEventListener('click', () => {
+      void this.showSourceLayer();
     });
     // Update on file-open + file-modify so the badge tracks the
     // active note's live state.
     this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
-      void this.refreshCanonicalLayerStatusBar();
+      void this.refreshSourceLayerStatusBar();
     }));
     this.registerEvent(this.app.workspace.on('file-open', () => {
-      void this.refreshCanonicalLayerStatusBar();
+      void this.refreshSourceLayerStatusBar();
     }));
     this.registerEvent(this.app.vault.on('modify', (file) => {
       // Debounce against active-file modifications only — saves on
@@ -486,11 +487,11 @@ export default class ForgePlugin extends Plugin {
       // the status bar.
       const view = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (view?.file?.path === file.path) {
-        void this.refreshCanonicalLayerStatusBar();
+        void this.refreshSourceLayerStatusBar();
       }
     }));
     // Initial paint (file may already be open at plugin load).
-    void this.refreshCanonicalLayerStatusBar();
+    void this.refreshSourceLayerStatusBar();
 
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
@@ -842,7 +843,7 @@ export default class ForgePlugin extends Plugin {
       this.app.vault.on('modify', (file) => {
         if (!(file instanceof TFile)) return;
         if (shouldSkipForMemfsSync(file.path)) return;
-        void this.maybeUpdateCanonicalFacet(file);
+        void this.maybeUpdateSourceFacet(file);
       }),
     );
 
@@ -853,7 +854,7 @@ export default class ForgePlugin extends Plugin {
     // restoration completes, giving a reliable moment to sweep all
     // currently-open MarkdownViews.
     this.app.workspace.onLayoutReady(() => {
-      void this.seedCanonicalFacetForOpenFiles();
+      void this.seedSourceFacetForOpenFiles();
     });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
@@ -923,13 +924,13 @@ export default class ForgePlugin extends Plugin {
     // - toggle-edit-mode: engineer-mode retired for vault notes per
     //   S10 v11.2; toggle is a no-op or state-corruption risk.
     //
-    // showCanonicalLayer() method retained (status-bar consumer).
+    // showSourceLayer() method retained (status-bar consumer).
     // generate() method retained (used internally by forge-click).
     // Handlers with no other callers deleted below.
 
     // v0.2.196 — explicit lock commands retired. Implicit 3-layer
     // state machine (description / recipe / python +
-    // facet-hash-core.whichLayerIsCanonical) supersedes them.
+    // facet-hash-core.whichLayerIsSource) supersedes them.
 
     // v0.2.239 — Constitution V2a v11.3 S9 uniform-visibility contract.
     // `forge-toggle-python-visibility` retired: Python is now always
@@ -1892,7 +1893,7 @@ export default class ForgePlugin extends Plugin {
       const hostManager = getPyodideHost();
       if (hostManager) {
         // v0.2.219 — force-save BEFORE reading. v0.2.217's editor-
-        // buffer fix wasn't enough on its own: writeCanonicalPythonBack
+        // buffer fix wasn't enough on its own: writeSourcePythonBack
         // later in this same Forge-click does `vault.process(file, …)`
         // and `vault.read(file)` which both go through DISK. If the
         // disk still has stale Recipe (pre-autosave) when the V2
@@ -1984,7 +1985,7 @@ export default class ForgePlugin extends Plugin {
     if (isV2Shape(v2Body)) {
       let canonicalLayer: 'description' | 'recipe' | 'python' | 'synced' | null = null;
       try {
-        canonicalLayer = await whichLayerIsCanonical(v2Body, {
+        canonicalLayer = await whichLayerIsSource(v2Body, {
           extractDescription,
           extractRecipeSection,
           extractPythonSection,
@@ -2012,7 +2013,7 @@ export default class ForgePlugin extends Plugin {
       if (canonicalLayer === 'description') {
         // v0.2.277 CW-2000 Option A — TWO-HOP auto-forge on Description-
         // canonical: LLM Description → Recipe (dialect='recipe'), then
-        // E-- transpile Recipe → Python via writeCanonicalPythonBack
+        // E-- transpile Recipe → Python via writeSourcePythonBack
         // (the existing Recipe-canonical write path).
         //
         // Pre-CW-2000 (drain 1100 via v0.2.254): this branch called
@@ -2144,10 +2145,10 @@ export default class ForgePlugin extends Plugin {
             this.spinner.startImmediate('Forge: 🔥 transpiling Recipe → Python …');
           }
           try {
-            await this.writeCanonicalPythonBack(view.file);
+            await this.writeSourcePythonBack(view.file);
           } catch (e) {
             console.error(
-              'CW-2000: writeCanonicalPythonBack failed after Description-canonical Recipe write',
+              'CW-2000: writeSourcePythonBack failed after Description-canonical Recipe write',
               e,
             );
           }
@@ -2189,12 +2190,12 @@ export default class ForgePlugin extends Plugin {
       // E-- succeeded → write back to # Python facet (matches the
       // v0.2.101 canonical write-back UX).
       try {
-        await this.writeCanonicalPythonBack(view.file);
+        await this.writeSourcePythonBack(view.file);
       } catch (e) {
         // v0.2.129 — per cc-prompt-queue.md HARD RULE #1 (v0.2.120),
         // caught runtime errors → console.error with originating
         // method name. Was console.warn pre-v0.2.129.
-        console.error('forgeSnippet (english-mode): writeCanonicalPythonBack failed', e);
+        console.error('forgeSnippet (english-mode): writeSourcePythonBack failed', e);
       }
     }
     await this.runSnippet('Forge failed during execution');
@@ -2272,11 +2273,11 @@ export default class ForgePlugin extends Plugin {
     const outcome = decideModaDispatchOutcome(regenResult);
     if (outcome.kind === 'write-and-open') {
       try {
-        await this.writeCanonicalPythonBack(view.file);
+        await this.writeSourcePythonBack(view.file);
       } catch (e) {
         // Per cc-prompt-queue.md HARD RULE #1 (v0.2.120): caught
         // runtime errors → console.error with method name.
-        console.error('dispatchModaBranch: writeCanonicalPythonBack failed', e);
+        console.error('dispatchModaBranch: writeSourcePythonBack failed', e);
       }
     } else if (outcome.kind === 'notice-and-open') {
       this.notice(outcome.notice, 5000);
@@ -2773,12 +2774,12 @@ export default class ForgePlugin extends Plugin {
    *  (cleared label), and probe failures (label says "probe failed"
    *  for discoverability).
    */
-  private async refreshCanonicalLayerStatusBar(): Promise<void> {
-    if (!this.canonicalLayerStatusBarItem) return;
+  private async refreshSourceLayerStatusBar(): Promise<void> {
+    if (!this.sourceLayerStatusBarItem) return;
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
-      this.canonicalLayerStatusBarItem.setText('');
-      this.canonicalLayerStatusBarItem.title = '';
+      this.sourceLayerStatusBarItem.setText('');
+      this.sourceLayerStatusBarItem.title = '';
       return;
     }
     try {
@@ -2787,34 +2788,34 @@ export default class ForgePlugin extends Plugin {
       let canonical: 'description' | 'recipe' | 'python' | 'synced' | null = null;
       if (isV2) {
         try {
-          canonical = await whichLayerIsCanonical(body, {
+          canonical = await whichLayerIsSource(body, {
             extractDescription,
             extractRecipeSection,
             extractPythonSection,
             getFrontmatterField: getFmFieldV2,
           });
         } catch (e) {
-          console.error('refreshCanonicalLayerStatusBar: probe failed', e);
+          console.error('refreshSourceLayerStatusBar: probe failed', e);
           canonical = null;
         }
       }
-      this.canonicalLayerStatusBarItem.setText(
-        canonicalLayerStatusLabel(isV2, canonical),
+      this.sourceLayerStatusBarItem.setText(
+        sourceLayerStatusLabel(isV2, canonical),
       );
-      this.canonicalLayerStatusBarItem.title =
-        canonicalLayerStatusTooltip(canonical);
+      this.sourceLayerStatusBarItem.title =
+        sourceLayerStatusTooltip(canonical);
     } catch (e) {
-      console.error('refreshCanonicalLayerStatusBar: vault.read failed', e);
-      this.canonicalLayerStatusBarItem.setText('');
-      this.canonicalLayerStatusBarItem.title = '';
+      console.error('refreshSourceLayerStatusBar: vault.read failed', e);
+      this.sourceLayerStatusBarItem.setText('');
+      this.sourceLayerStatusBarItem.title = '';
     }
   }
 
   /** v0.2.196 — Report the current canonical layer for the active
    *  note via forgeOutput. Diagnostic command for the implicit-locking
    *  state machine; Phase 2.5 also surfaces this in a status bar
-   *  entry with live updates (see refreshCanonicalLayerStatusBar). */
-  private async showCanonicalLayer(): Promise<void> {
+   *  entry with live updates (see refreshSourceLayerStatusBar). */
+  private async showSourceLayer(): Promise<void> {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       this.notice('Forge: no active note to probe.');
@@ -2822,7 +2823,7 @@ export default class ForgePlugin extends Plugin {
     }
     const body = await this.app.vault.read(view.file);
     try {
-      const canonical = await whichLayerIsCanonical(body, {
+      const canonical = await whichLayerIsSource(body, {
         extractDescription,
         extractRecipeSection,
         extractPythonSection,
@@ -2833,7 +2834,7 @@ export default class ForgePlugin extends Plugin {
         : `Forge: ${view.file.basename} → ${canonical} canonical (last hand-edited).`;
       await this.forgeOutput(msg, 'info');
     } catch (e) {
-      console.error('showCanonicalLayer: probe failed', e);
+      console.error('showSourceLayer: probe failed', e);
       await this.forgeOutput(
         `Forge: canonical-layer probe failed — ${e}`,
         'error',
@@ -3225,7 +3226,7 @@ export default class ForgePlugin extends Plugin {
       // v0.2.132 — switched to writePythonAndEnglishHash so the
       // /generate (LLM) write path ALSO stamps english_hash into
       // frontmatter. Pre-v0.2.132, only the E-- branch wrote
-      // english_hash (via writeCanonicalPythonBack); the /generate
+      // english_hash (via writeSourcePythonBack); the /generate
       // path called replaceOrInsertPythonHeading directly, leaving
       // the hash absent. Driver smoke against v0.2.131 caught the
       // gap: moda branch's /generate fallback updated # Python but
@@ -3362,7 +3363,7 @@ export default class ForgePlugin extends Plugin {
    *  handleSlotCacheMiss. Best-effort: a failure is logged but does
    *  not surface to the user (the run already succeeded; this is
    *  cosmetic persistence). */
-  private async writeCanonicalPythonBack(file: TFile): Promise<void> {
+  private async writeSourcePythonBack(file: TFile): Promise<void> {
     // v0.2.285 drain 1700 — defensive empty-Recipe guard. Fresh notes
     // + Sub-1 fallback (CW-2200) can leave the Recipe body empty;
     // resolveActionCode on empty Recipe has undefined behavior
@@ -3389,7 +3390,7 @@ export default class ForgePlugin extends Plugin {
       // transpile path so we don't gate the whole flow on a read
       // hiccup.
       console.error(
-        'writeCanonicalPythonBack: empty-Recipe pre-check read failed; proceeding',
+        'writeSourcePythonBack: empty-Recipe pre-check read failed; proceeding',
         e,
       );
     }
@@ -3402,7 +3403,7 @@ export default class ForgePlugin extends Plugin {
     // returns cached Python) is bypassed here too. Without it,
     // the v0.2.126 moda branch's regen call could return fresh
     // code but this 2nd resolveActionCode call would still return
-    // the stale # Python body, and writeCanonicalPythonBack would
+    // the stale # Python body, and writeSourcePythonBack would
     // write back the SAME stale content. With force, both calls
     // return fresh transpile output, and the freshly-written
     // english_hash self-heals the snippet's cache contract going
@@ -3428,7 +3429,7 @@ export default class ForgePlugin extends Plugin {
     // because its stored derived-from = recipe_hash didn't match
     // description_hash when Description was source. Compute canonical
     // pre-write and use its hash below.
-    const canonicalForStamp = await whichLayerIsCanonical(body, {
+    const canonicalForStamp = await whichLayerIsSource(body, {
       extractDescription,
       extractRecipeSection,
       extractPythonSection,
@@ -3490,7 +3491,7 @@ export default class ForgePlugin extends Plugin {
       const readBack = await this.app.vault.read(file);
       await host.syncUserVaultFile(file.path, readBack);
     } catch (e) {
-      console.error('writeCanonicalPythonBack: MEMFS sync after canonical write failed', e);
+      console.error('writeSourcePythonBack: MEMFS sync after canonical write failed', e);
     }
   }
 
@@ -3839,7 +3840,7 @@ export default class ForgePlugin extends Plugin {
    *  facet was hand-edited. Note this fires on ANY modify — including
    *  benign whitespace edits — so idempotency (only write when
    *  stored differs from computed) prevents frontmatter churn. */
-  private _canonicalUpdateInFlight: Set<string> = new Set();
+  private _sourceUpdateInFlight: Set<string> = new Set();
 
   /** v0.2.260 drain 1400 Option A — per-file body-hash cache.
    *  Records the last observed body hashes for each facet. The modify
@@ -3868,17 +3869,17 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
-  private async maybeUpdateCanonicalFacet(file: TFile | null) {
+  private async maybeUpdateSourceFacet(file: TFile | null) {
     if (!file) return;
     if (this._programmaticWriteInFlight.has(file.path)) {
       return;
     }
-    if (this._canonicalUpdateInFlight.has(file.path)) {
+    if (this._sourceUpdateInFlight.has(file.path)) {
       // Modify events can fire multiple times per keystroke sequence;
       // this in-flight flag prevents re-entrant frontmatter churn.
       return;
     }
-    this._canonicalUpdateInFlight.add(file.path);
+    this._sourceUpdateInFlight.add(file.path);
     try {
       const body = await this.app.vault.read(file);
       if (!isV2Shape(body)) return;
@@ -3902,38 +3903,40 @@ export default class ForgePlugin extends Plugin {
       // a non-facet body region.
       this._facetHashCache.set(file.path, currentHashes);
 
-      const storedCanonicalRaw = (() => {
-        const v = getFmFieldV2(body, 'canonical_facet');
+      // v0.2.286 (drain 2026-07-09-1600) — the field was renamed
+      // `canonical_facet` → `source_facet`. Read either name; the
+      // write path below only writes the new one AND deletes the
+      // legacy one, so notes migrate lazily.
+      const storedSource = getSourceFacet(body, (b, k) => {
+        const v = getFmFieldV2(b, k);
         return typeof v === 'string' ? v : null;
-      })();
-      const VALID: Array<'description' | 'recipe' | 'python' | 'synced'> = [
-        'description', 'recipe', 'python', 'synced',
-      ];
-      const storedCanonical = storedCanonicalRaw !== null
-        && VALID.includes(storedCanonicalRaw as any)
-        ? (storedCanonicalRaw as 'description' | 'recipe' | 'python' | 'synced')
-        : null;
+      });
 
-      const target = decideCanonicalWrite(editedFacet, storedCanonical);
+      const target = decideSourceWrite(editedFacet, storedSource);
       if (target === null) return; // no write needed
 
       // Write via processFrontMatter so we don't churn body text.
       await this.withProgrammaticWrite(file.path, async () => {
         await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-          fm.canonical_facet = target;
+          fm.source_facet = target;
+          // v0.2.286 migration — flush the legacy field name so notes
+          // don't carry both. Idempotent on already-migrated notes.
+          if ('canonical_facet' in fm) {
+            delete fm.canonical_facet;
+          }
         });
       });
       console.log(
-        `[canonical-facet] ${file.path}: `
-        + `${storedCanonical ?? '(absent)'} → ${target}`,
+        `[source-facet] ${file.path}: `
+        + `${storedSource ?? '(absent)'} → ${target}`,
       );
     } catch (e) {
-      console.error('maybeUpdateCanonicalFacet failed', e);
+      console.error('maybeUpdateSourceFacet failed', e);
     } finally {
       // Small delay before re-arming: covers the write's own modify
       // event.
       setTimeout(() => {
-        this._canonicalUpdateInFlight.delete(file.path);
+        this._sourceUpdateInFlight.delete(file.path);
       }, 250);
     }
   }
@@ -3952,7 +3955,7 @@ export default class ForgePlugin extends Plugin {
    *      hash inference, write to frontmatter).
    *
    *  Non-fatal: any per-file failure is logged and the pass continues. */
-  private async seedCanonicalFacetForOpenFiles() {
+  private async seedSourceFacetForOpenFiles() {
     const leaves = this.app.workspace.getLeavesOfType('markdown');
     for (const leaf of leaves) {
       const view = leaf.view as MarkdownView | undefined;
@@ -4013,12 +4016,24 @@ export default class ForgePlugin extends Plugin {
           && typeof storedRecipe === 'string'
           && legacyPythonParent === storedRecipe;
 
-        const existing = getFmFieldV2(body, 'canonical_facet');
-        const canonicalAlreadyPresent =
-          typeof existing === 'string' && existing.length > 0;
+        // v0.2.286 — prefer `source_facet`; accept legacy `canonical_facet`
+        // as a signal the note was seeded by an older plugin. Either
+        // one being present means "don't seed."
+        const existingSource = getFmFieldV2(body, 'source_facet');
+        const existingCanonical = getFmFieldV2(body, 'canonical_facet');
+        const sourceAlreadyPresent =
+          (typeof existingSource === 'string' && existingSource.length > 0)
+          || (typeof existingCanonical === 'string' && existingCanonical.length > 0);
+        // Notes carrying only the legacy name need a migration write on
+        // this pass — otherwise they'd stay on `canonical_facet` until
+        // a hand-edit triggered `maybeUpdateSourceFacet`.
+        const needsLegacyMigration =
+          (typeof existingSource !== 'string' || existingSource.length === 0)
+          && typeof existingCanonical === 'string'
+          && existingCanonical.length > 0;
 
-        // Compute canonical_facet seed via upstream-wins inference —
-        // only used when canonical_facet is absent.
+        // Compute source_facet seed via upstream-wins inference —
+        // only used when source_facet is absent.
         const dMismatch = typeof storedDesc === 'string' && storedDesc !== currentDesc;
         const rMismatch = typeof storedRecipe === 'string' && storedRecipe !== currentRecipe;
         const pMismatch = typeof storedPython === 'string' && storedPython !== currentPython;
@@ -4029,14 +4044,29 @@ export default class ForgePlugin extends Plugin {
         else seed = 'synced';
 
         // Skip write entirely when there is nothing to change.
-        if (canonicalAlreadyPresent && !seedRecipeParent && !seedPythonParent) {
+        if (
+          sourceAlreadyPresent
+          && !needsLegacyMigration
+          && !seedRecipeParent
+          && !seedPythonParent
+        ) {
           continue;
         }
 
         await this.withProgrammaticWrite(file.path, async () => {
           await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-            if (!canonicalAlreadyPresent) {
-              fm.canonical_facet = seed;
+            if (!sourceAlreadyPresent) {
+              fm.source_facet = seed;
+            } else if (needsLegacyMigration) {
+              // Note has `canonical_facet` but no `source_facet`. Copy
+              // the value across; the delete below removes the legacy
+              // field.
+              fm.source_facet = existingCanonical;
+            }
+            // v0.2.286 migration — drop the legacy field name on any
+            // note that had it. Idempotent when already absent.
+            if ('canonical_facet' in fm) {
+              delete fm.canonical_facet;
             }
             if (seedRecipeParent) {
               fm.recipe_derived_from_description_hash = legacyRecipeParent;
@@ -4048,7 +4078,7 @@ export default class ForgePlugin extends Plugin {
         });
       } catch (e) {
         console.error(
-          `seedCanonicalFacetForOpenFiles: failed for '${file.path}'`,
+          `seedSourceFacetForOpenFiles: failed for '${file.path}'`,
           e,
         );
       }
@@ -4078,6 +4108,7 @@ export default class ForgePlugin extends Plugin {
           return typeof v === 'string' ? v : null;
         },
         setFrontmatterField: setFmFieldV2,
+        removeFrontmatterField: removeFmFieldV2,
         replacePythonSection,
         computeFacetHash,
       });
@@ -4280,7 +4311,7 @@ export default class ForgePlugin extends Plugin {
     inputs: Record<string, unknown>,
     errorPrefix?: string,
     // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
-    // canonical-layer decision from `whichLayerIsCanonical`, threaded
+    // canonical-layer decision from `whichLayerIsSource`, threaded
     // to the engine so resolve_action_code short-circuits Recipe
     // parse on python-canonical. Undefined preserves pre-v0.2.252
     // behavior when caller hasn't been updated.

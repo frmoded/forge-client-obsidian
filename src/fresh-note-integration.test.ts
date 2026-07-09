@@ -220,13 +220,13 @@ test('drain-1520 S2 precondition: fresh-note fixture Recipe body IS empty', asyn
   assert.equal(rec?.trim() ?? '', '', 'fresh-note fixture Recipe body is empty');
 });
 
-test('drain-1700 S2 gap fixed: empty Recipe → writeCanonicalPythonBack detects + skips transpile', async () => {
+test('drain-1700 S2 gap fixed: empty Recipe → writeSourcePythonBack detects + skips transpile', async () => {
   // Now that drain 1700 shipped the defensive check, exercise it
   // directly. When the Recipe body is empty (Sub-1 fallback result on a
   // fresh note), `checkEmptyRecipeForTranspile` returns
   // `shouldTranspile: false` + the cohort-facing notice.
   const { checkEmptyRecipeForTranspile } = await import(
-    './write-canonical-python-back-empty-recipe-core.ts'
+    './write-source-python-back-empty-recipe-core.ts'
   );
   const fixture = loadFreshNoteFixture();
   const file = new MockVaultFile('test/fresh_note.md', fixture);
@@ -241,10 +241,10 @@ test('drain-1700 S2 gap fixed: empty Recipe → writeCanonicalPythonBack detects
 
 test('drain-1700 S1 stays intact: valid Recipe → transpile proceeds', async () => {
   const { checkEmptyRecipeForTranspile } = await import(
-    './write-canonical-python-back-empty-recipe-core.ts'
+    './write-source-python-back-empty-recipe-core.ts'
   );
   // Fresh note + valid LLM Recipe already tested in S1 above — the
-  // Recipe body is written before writeCanonicalPythonBack would fire.
+  // Recipe body is written before writeSourcePythonBack would fire.
   const emptyCheck = checkEmptyRecipeForTranspile('Return 42.');
   assert.equal(emptyCheck.shouldTranspile, true);
   assert.equal(emptyCheck.noticeText, null);

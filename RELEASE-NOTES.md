@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.285)
+# Forge — Release Notes (v0.2.205 → v0.2.286)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.285 (auto-forge Description-canonical restored end-to-end + fresh-note gap fix), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.286 (`canonical_facet` → `source_facet` field rename), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,30 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## The v0.2.286 arc — `canonical_facet` → `source_facet` rename
+
+The S9 state-machine frontmatter field renamed from `canonical_facet` to `source_facet`. The value grammar (`description | recipe | python | synced`) is unchanged; only the field name changes. Other uses of "canonical" in Forge — canonical URL, canonical form of a note's compute, E-- canonical grammar — name different concepts and are untouched.
+
+**Migration is transparent to cohort.** Existing notes carrying `canonical_facet:` keep working: the plugin's read path accepts either name (preferring `source_facet`), and the next facet-write on any note flushes `canonical_facet` in favor of `source_facet`. First-open backfill also migrates the field in place. Cohort should never see a note that fails to open because of the rename — but a Description-canonical note becomes a Description-source note in the status bar; a Recipe-canonical note becomes a Recipe-source note; etc.
+
+Related identifiers renamed alongside the field:
+
+- `whichLayerIsCanonical` → `whichLayerIsSource`
+- `decideCanonicalWrite` → `decideSourceWrite`
+- `computeCanonicalFacetAfterEdit` → `computeSourceFacetAfterEdit`
+- `canonicalLayer` (routing signal) → `sourceLayer`
+- `canonicalLayerStatusLabel/Tooltip` → `sourceLayerStatusLabel/Tooltip`
+- `maybeUpdateCanonicalFacet` → `maybeUpdateSourceFacet`
+- `seedCanonicalFacetForOpenFiles` → `seedSourceFacetForOpenFiles`
+- `writeCanonicalPythonBack` → `writeSourcePythonBack`
+- File renames: `canonical-aware-forge-click-core.ts` → `source-aware-forge-click-core.ts`; `canonical-layer-status-bar-core.ts` → `source-layer-status-bar-core.ts`; `facet-edit-canonical-flip-core.ts` → `facet-edit-source-flip-core.ts`; `write-canonical-python-back-empty-recipe-core.ts` → `write-source-python-back-empty-recipe-core.ts`
+
+Every renamed export re-exports its old name as a deprecated alias for one release cycle (marked `TODO: delete in v0.2.290`). The engine-side kwarg `canonical_layer` on `resolve_action_code` remains an accepted alias mapped into `source_layer`. Plugin ↔ engine bridge sends only the new name.
+
+Constitution bumped V2a v20 → V2a v21 with S9 rewritten around `source_facet`.
+
+Status bar labels changed: "Forge: Recipe canonical" → "Forge: Recipe source". Cohort will see the new label on any open V2 note that isn't synced.
 
 ## The v0.2.274 → v0.2.285 arc — CW arc: auto-forge Description-canonical restored end-to-end
 
