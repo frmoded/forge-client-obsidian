@@ -76,6 +76,7 @@ import {
   computeDescriptionDerivedRecipeStamps,
 } from './write-generated-recipe-core.ts';
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
+import { checkEmptyRecipeForTranspile } from './write-canonical-python-back-empty-recipe-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
@@ -3362,6 +3363,36 @@ export default class ForgePlugin extends Plugin {
    *  not surface to the user (the run already succeeded; this is
    *  cosmetic persistence). */
   private async writeCanonicalPythonBack(file: TFile): Promise<void> {
+    // v0.2.285 drain 1700 — defensive empty-Recipe guard. Fresh notes
+    // + Sub-1 fallback (CW-2200) can leave the Recipe body empty;
+    // resolveActionCode on empty Recipe has undefined behavior
+    // (parser raise, cached None, or silent stub-run). Detect empty
+    // + skip transpile with an actionable Notice. Non-empty malformed
+    // Recipes still surface as E-- parse errors downstream (per the
+    // "syntax errors are a separate concern" scope note).
+    try {
+      const bodyForEmptyCheck = await this.app.vault.read(file);
+      const recipeForEmptyCheck = extractRecipeSection(bodyForEmptyCheck);
+      const emptyCheck = checkEmptyRecipeForTranspile(recipeForEmptyCheck);
+      if (!emptyCheck.shouldTranspile) {
+        console.log(
+          '[fresh-note-empty-recipe] skipping transpile:',
+          file.path,
+        );
+        if (emptyCheck.noticeText) {
+          this.notice(emptyCheck.noticeText);
+        }
+        return;
+      }
+    } catch (e) {
+      // Defensive read failed — fall through to the existing
+      // transpile path so we don't gate the whole flow on a read
+      // hiccup.
+      console.error(
+        'writeCanonicalPythonBack: empty-Recipe pre-check read failed; proceeding',
+        e,
+      );
+    }
     const hostManager = getPyodideHost();
     if (!hostManager) return;
     const host = await hostManager.getInstance();
