@@ -11,6 +11,7 @@ import {
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
+import { resolveRunTarget } from './run-snippet-target-core.ts';
 import { identifyEditedFacet, decideSourceWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
@@ -1949,7 +1950,7 @@ export default class ForgePlugin extends Plugin {
       // console alongside the existing Notice.
       console.log(`Forge: skipping /generate, ${view.file.basename} is in Python mode`);
       this.notice(`Forge: ${view.file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
-      await this.runSnippet('Forge failed during execution');
+      await this.runSnippet('Forge failed during execution', undefined, view.file);
       return;
     }
 
@@ -2007,7 +2008,7 @@ export default class ForgePlugin extends Plugin {
         // canonical decision so the engine skips Recipe parse. Pre-
         // v0.2.252 the engine parsed Recipe anyway, exploding
         // ParseError on residual "a" bugs even when Python was fine.
-        await this.runSnippet('Forge failed during execution', 'python');
+        await this.runSnippet('Forge failed during execution', 'python', view.file);
         return;
       }
       if (canonicalLayer === 'description') {
@@ -2155,7 +2156,11 @@ export default class ForgePlugin extends Plugin {
           if (this.spinner) {
             this.spinner.startImmediate('Forge: 🔥 executing …');
           }
-          await this.runSnippet('Forge failed during execution');
+          // v0.2.288 — pass captured file so runSnippet doesn't have
+          // to re-query workspace state after the /generate LLM call.
+          // The LLM roundtrip can shift focus; pre-v0.2.288 this
+          // silently emitted "No active note to run." and lost the run.
+          await this.runSnippet('Forge failed during execution', undefined, view.file);
         } finally {
           if (this.spinner) {
             this.spinner.stop();
@@ -2198,7 +2203,7 @@ export default class ForgePlugin extends Plugin {
         console.error('forgeSnippet (english-mode): writeSourcePythonBack failed', e);
       }
     }
-    await this.runSnippet('Forge failed during execution');
+    await this.runSnippet('Forge failed during execution', undefined, view.file);
   }
 
   /** v0.2.126 — shared dependencies for routeActionCodeRegen. Both
@@ -3545,15 +3550,29 @@ export default class ForgePlugin extends Plugin {
 
   // errorPrefix forwards into computeSnippetWithArgs so the forge flow can
   // tag execution-side errors with "Forge failed during execution".
+  //
+  // v0.2.288 — `fallbackFile` param closes a real bug in the Description-
+  // canonical auto-forge flow: forgeSnippet captures `view` at the top,
+  // spends ~seconds in the /generate LLM call, and can return here with
+  // the active view no longer being what it was. Pre-v0.2.288 we
+  // silently emitted "No active note to run." even though the caller
+  // knew exactly which file to run. The fallback lets the caller pass
+  // its captured file straight through so the run stage doesn't
+  // re-derive workspace state — same fix pattern L45 codifies for
+  // plugin ↔ engine routing.
   private async runSnippet(
     errorPrefix?: string,
     canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
+    fallbackFile?: TFile,
   ) {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!view?.file) {
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const target = resolveRunTarget(activeView, fallbackFile);
+    if (!target.file) {
       this.notice('No active note to run.');
       return;
     }
+    const view: MarkdownView | null = target.view;
+    const file: TFile = target.file as TFile;
 
     // v0.2.246 drain 2026-07-03-0400 — HARD RULE L29 pre-sync.
     // forgeSnippet (Forge-button click, line ~2016) saves editor +
@@ -3562,17 +3581,27 @@ export default class ForgePlugin extends Plugin {
     // consistency required the same pre-sync here or Pyodide reads
     // stale MEMFS when cohort edited but didn't save. Same shape as
     // forgeSnippet's pre-flight.
+    //
+    // v0.2.288 — when we came in via `fallbackFile` (active view gone),
+    // there's no editor buffer to save, so skip view.save() and read
+    // straight from disk. The auto-forge callers write via
+    // writeSourcePythonBack immediately before calling us, so disk is
+    // already fresh.
     try {
       const hostManager = getPyodideHost();
       if (hostManager) {
-        try {
-          await (view as MarkdownView).save();
-        } catch (e) {
-          console.error('runSnippet: view.save() failed', e);
+        if (view) {
+          try {
+            await view.save();
+          } catch (e) {
+            console.error('runSnippet: view.save() failed', e);
+          }
         }
         const host = await hostManager.getInstance();
-        const freshContent = await readActiveNoteFresh(view, this.app.vault);
-        await host.syncUserVaultFile(view.file.path, freshContent);
+        const freshContent = view
+          ? await readActiveNoteFresh(view, this.app.vault)
+          : await this.app.vault.read(file);
+        await host.syncUserVaultFile(file.path, freshContent);
       }
     } catch (e) {
       console.error('runSnippet: pre-flight disk→MEMFS sync failed', e);
@@ -3584,9 +3613,9 @@ export default class ForgePlugin extends Plugin {
     // which produced bare "song" for any subdir file — invisible to
     // the registry, which indexes library subdir snippets under
     // qualified bare IDs like `blues/song`.
-    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
-    const frontmatter = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 
     // v0.2.20: Python signature is the source of truth for which
     // params compute() actually needs. Ask the engine for the
