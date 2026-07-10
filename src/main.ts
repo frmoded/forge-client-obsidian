@@ -2266,7 +2266,14 @@ export default class ForgePlugin extends Plugin {
    *  v0.2.124 immediate-open. */
   private async dispatchModaBranch(view: MarkdownView): Promise<void> {
     if (!view.file) return;
-    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    // v0.2.290 CW-2400-A (L59) — capture TFile pre-await. Between the
+    // routeActionCodeRegen call at line ~2291 (Pyodide + potential
+    // /generate LLM roundtrip for featured moda snippets) and
+    // writeSourcePythonBack at line ~2295, view.file's getter can
+    // return null. Threading a stable captured `file` keeps the
+    // write-back pointed at the intended note.
+    const file = view.file;
+    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     // v0.2.128 — moda branch passes `force: true` to bypass the
     // engine's legacy `stored_hash is None → return cached` rule
     // that fires on canonical moda snippets without english_hash
@@ -2292,7 +2299,7 @@ export default class ForgePlugin extends Plugin {
     const outcome = decideModaDispatchOutcome(regenResult);
     if (outcome.kind === 'write-and-open') {
       try {
-        await this.writeSourcePythonBack(view.file);
+        await this.writeSourcePythonBack(file);
       } catch (e) {
         // Per cc-prompt-queue.md HARD RULE #1 (v0.2.120): caught
         // runtime errors → console.error with method name.
@@ -2840,7 +2847,12 @@ export default class ForgePlugin extends Plugin {
       this.notice('Forge: no active note to probe.');
       return;
     }
-    const body = await this.app.vault.read(view.file);
+    // v0.2.290 CW-2400-A (L59) — capture TFile pre-await so downstream
+    // notice-text interpolations don't read `view.file` after
+    // whichLayerIsSource's multi-facet hash compute. TFile is stable;
+    // view.file getter can go null across the await.
+    const file = view.file;
+    const body = await this.app.vault.read(file);
     try {
       const canonical = await whichLayerIsSource(body, {
         extractDescription,
@@ -2849,8 +2861,8 @@ export default class ForgePlugin extends Plugin {
         getFrontmatterField: getFmFieldV2,
       });
       const msg = canonical === 'synced'
-        ? `Forge: ${view.file.basename} → synced (all facets match their hashes).`
-        : `Forge: ${view.file.basename} → ${canonical} canonical (last hand-edited).`;
+        ? `Forge: ${file.basename} → synced (all facets match their hashes).`
+        : `Forge: ${file.basename} → ${canonical} canonical (last hand-edited).`;
       await this.forgeOutput(msg, 'info');
     } catch (e) {
       console.error('showSourceLayer: probe failed', e);
@@ -3582,10 +3594,17 @@ export default class ForgePlugin extends Plugin {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     const target = resolveRunTarget(activeView, fallbackFile);
     if (!target.file) {
-      // v0.2.289 diagnostic — if this fires despite the caller passing
-      // a captured file, we've misdiagnosed and need more evidence.
-      console.error(
-        '[runSnippet] "No active note to run" fired.',
+      // v0.2.290 (CW-2400-A D2) — downgraded from console.error. This
+      // path means the fallback SUCCEEDED at nothing (both live view
+      // and caller-captured fallback were null). It's a signal-worthy
+      // event but not an internal error — no exception raised, no
+      // state corruption. `console.warn` keeps the payload in DevTools
+      // without shouting. If we ever see it in the wild post-v0.2.289,
+      // the payload names which of activeView/activeView.file/
+      // fallbackFile was null so a follow-up drain can pinpoint the
+      // missing capture site.
+      console.warn(
+        '[runSnippet] fallback fired: "No active note to run".',
         'activeView=', activeView ? 'present' : 'null',
         'activeView.file=', activeView?.file ? activeView.file.path : 'null',
         'fallbackFile=', fallbackFile ? fallbackFile.path : 'null',

@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.286)
+# Forge — Release Notes (v0.2.205 → v0.2.290)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.286 (`canonical_facet` → `source_facet` field rename), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.290 (CW-2300/2400 async-getter arc closed), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,23 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## The v0.2.287 → v0.2.290 arc — CW-2300/2400 async-getter class-of-bug
+
+Four fixes closing an Obsidian API gotcha that cost driver two live-smoke rounds. `MarkdownView.file` (and similar API properties) are **live getters**, not stable snapshots. Across an `await` — especially a multi-second /generate LLM roundtrip — Obsidian can detach the leaf's file binding, so re-reading `view.file` after the await returns `null` even though the `view` reference stays live. Reading it in a notice-text interpolation or passing it into `writeSourcePythonBack` at that moment silently ships null downstream.
+
+- **CW-2300-B (v0.2.286 forge-transpile)** — rhythmic-subdivisions + chip-composition sections added to the music-domain LLM prompt. Bug found alongside: the music fragment was registered on V1 only; V2 forges saw the base 6756-char prompt with zero music guidance. Fixed by adding `register_fragment_v2` call. **This shipped Recipe correctness** (16th-note grooves now produce `quarterLength=0.25` with 16 offsets per bar) — but the run stage dropped the score.
+- **CW-2300-C (v0.2.288)** — first attempt at the run-stage fix. Extracted `resolveRunTarget` pure-core with 6 tests, threaded `view.file` as a fallback into `runSnippet`. **The pure-core was right; the caller was wrong** — the caller expression `view.file` was evaluated post-await, shipping null. Diagnosed as "focus loss" (missed by one arrow).
+- **CW-2300-D (v0.2.289)** — actual root cause identified: getter staleness. Captured `const file = view.file` at `forgeSnippet`'s top; swept all 43 downstream `view.file` references to `file`. **Driver smoke verified: 16th-note hihat groove Description forges end-to-end, score renders.**
+- **CW-2400-A (v0.2.290)** — audit + L59 rule scribed. Swept the rest of main.ts for the same class-of-bug pattern. Two more violations fixed:
+  - `showSourceLayer` — notice text interpolation `view.file.basename` read after `whichLayerIsSource` (multi-facet hash compute). Fixed with `const file = view.file` before the await.
+  - `dispatchModaBranch` — `writeSourcePythonBack(view.file)` called after `routeActionCodeRegen` (Pyodide + potential /generate LLM for featured moda snippets). Fixed same shape.
+  
+  Also introduced **L60 caller-integration tests** — new pattern that simulates the async gap and asserts the caller's captured local (not the live getter re-read) flows into the callee. Four new tests in `l59-caller-capture-timing-core.test.ts`. Downgraded the CW-2300-C `runSnippet` diagnostic from `console.error` to `console.warn` (fallback firing is signal-worthy but not error-worthy).
+
+Test suite: 1120 → 1154 across the arc. New categories: pure-core target resolution across lost-view fallback, captured-TFile survives view.file getter going null, caller capture-timing under simulated multi-second awaits.
+
+Meta: L59 + L60 scribed as HARD RULES in `cc-prompt-queue.md` this arc. L59 — any main.ts method that reads an Obsidian API getter after an `await` must capture the concrete field into a local const before the first await, thread the local through. L60 — for each L59 fix, add a caller-integration test that simulates the async gap and asserts the captured value flows through. Motivating case for both: v0.2.288 shipped a pure-core with 6 green tests but the caller passed the wrong (post-await, re-read) value into it; the caller-integration test class catches that gap.
 
 ## The v0.2.286 arc — `canonical_facet` → `source_facet` rename
 
