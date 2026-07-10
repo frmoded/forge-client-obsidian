@@ -1877,7 +1877,21 @@ export default class ForgePlugin extends Plugin {
       this.notice('No active note to forge.');
       return;
     }
-    const fm = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+    // v0.2.289 — capture the TFile reference EARLY. `view.file` is a
+    // getter that returns null once Obsidian detaches the leaf (e.g.,
+    // during the ~seconds /generate LLM roundtrip when focus can shift
+    // or a leaf gets re-attached). TFile itself is a stable reference
+    // to the vault entry; once captured it doesn't go stale. Passing
+    // `file` (not `view.file`) into every callee — writeSourcePythonBack,
+    // runSnippet, vault.process, notice text — keeps the auto-forge
+    // pipeline pointed at the intended note regardless of workspace
+    // state changes.
+    //
+    // The v0.2.288 fix (threading `view.file` into runSnippet's
+    // fallbackFile) still shipped null when view.file had already
+    // become null by the time we reached the call site.
+    const file = view.file;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
 
     // v0.2.102 — pre-flight disk→MEMFS sync at the TOP of forgeSnippet,
     // before any branch dispatch. Mirrors the v0.2.19 sync that was
@@ -1916,7 +1930,7 @@ export default class ForgePlugin extends Plugin {
         // view.save() above, disk + editor are in sync; this still
         // prefers editor for resilience if save() failed.
         const freshContent = await readActiveNoteFresh(view, this.app.vault);
-        await host.syncUserVaultFile(view.file.path, freshContent);
+        await host.syncUserVaultFile(file.path, freshContent);
       }
     } catch (e) {
       console.error('forgeSnippet: pre-flight disk→MEMFS sync failed', e);
@@ -1934,9 +1948,9 @@ export default class ForgePlugin extends Plugin {
     // simulator tab — symptom of metadataCache.featured being
     // undefined at click time.
     const fmForRouting = await this.readFrontmatterForRouting(
-      view.file, fm,
+      file, fm,
     );
-    const routing = decideForgeRouting(view.file.path, fmForRouting);
+    const routing = decideForgeRouting(file.path, fmForRouting);
     if (routing.kind === 'moda') {
       await this.dispatchModaBranch(view);
       return;
@@ -1948,9 +1962,9 @@ export default class ForgePlugin extends Plugin {
       // server-side guard is defense-in-depth, not the primary signal.
       // Log here so devs have explicit confirmation in the browser
       // console alongside the existing Notice.
-      console.log(`Forge: skipping /generate, ${view.file.basename} is in Python mode`);
-      this.notice(`Forge: ${view.file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
-      await this.runSnippet('Forge failed during execution', undefined, view.file);
+      console.log(`Forge: skipping /generate, ${file.basename} is in Python mode`);
+      this.notice(`Forge: ${file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
+      await this.runSnippet('Forge failed during execution', undefined, file);
       return;
     }
 
@@ -1999,16 +2013,16 @@ export default class ForgePlugin extends Plugin {
       }
       if (canonicalLayer === 'python') {
         console.log(
-          `Forge: ${view.file.basename} is Python-canonical (V2 implicit lock) — running # Python directly without re-transpile`,
+          `Forge: ${file.basename} is Python-canonical (V2 implicit lock) — running # Python directly without re-transpile`,
         );
         this.notice(
-          `Forge: ${view.file.basename} → Python-canonical (hand-edited). Running as-is; no /generate, no transpile.`,
+          `Forge: ${file.basename} → Python-canonical (hand-edited). Running as-is; no /generate, no transpile.`,
         );
         // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — pass the
         // canonical decision so the engine skips Recipe parse. Pre-
         // v0.2.252 the engine parsed Recipe anyway, exploding
         // ParseError on residual "a" bugs even when Python was fine.
-        await this.runSnippet('Forge failed during execution', 'python', view.file);
+        await this.runSnippet('Forge failed during execution', 'python', file);
         return;
       }
       if (canonicalLayer === 'description') {
@@ -2032,10 +2046,10 @@ export default class ForgePlugin extends Plugin {
         // successful re-forge, signaling to cohort that the Description
         // edit didn't reach the pipeline.
         console.log(
-          `Forge: ${view.file.basename} is Description-canonical (V2 implicit lock) — auto-forging: Description → Recipe (LLM) → Python (transpile) → run`,
+          `Forge: ${file.basename} is Description-canonical (V2 implicit lock) — auto-forging: Description → Recipe (LLM) → Python (transpile) → run`,
         );
         this.notice(
-          `Forge: ${view.file.basename} → Description-canonical. Description → Recipe (LLM), then Python (transpile), then run.`,
+          `Forge: ${file.basename} → Description-canonical. Description → Recipe (LLM), then Python (transpile), then run.`,
         );
         if (this.spinner) {
           this.spinner.startImmediate('Forge: 🔥 generating Recipe from Description …');
@@ -2077,7 +2091,7 @@ export default class ForgePlugin extends Plugin {
             const sanitized = sanitizeLlmRecipe(llmRecipe);
             const hasValidStmt = sanitized !== null;
             if (closure.ok === true && hasValidStmt) {
-              const currentBody = await this.app.vault.read(view.file);
+              const currentBody = await this.app.vault.read(file);
               const currentDesc = extractDescription(currentBody) ?? '';
               const currentDescHash = await computeFacetHash(currentDesc);
               const newRecipeHash = await computeFacetHash(sanitized!);
@@ -2085,8 +2099,8 @@ export default class ForgePlugin extends Plugin {
                 currentDescHash,
                 newRecipeHash,
               );
-              await this.withProgrammaticWrite(view.file.path, () =>
-                this.app.vault.process(view.file!, (content) => {
+              await this.withProgrammaticWrite(file.path, () =>
+                this.app.vault.process(file, (content) => {
                   // v0.2.280 CW-2200: write the SANITIZED recipe body,
                   // not the raw LLM output.
                   let next = replaceRecipeSection(content, sanitized!);
@@ -2107,11 +2121,11 @@ export default class ForgePlugin extends Plugin {
               );
               // MEMFS sync so the transpile step sees the fresh Recipe.
               try {
-                const readBack = await this.app.vault.read(view.file);
+                const readBack = await this.app.vault.read(file);
                 const pyodideHost = getPyodideHost();
                 if (pyodideHost) {
                   const host = await pyodideHost.getInstance();
-                  await host.syncUserVaultFile(view.file.path, readBack);
+                  await host.syncUserVaultFile(file.path, readBack);
                 }
               } catch (e) {
                 console.error('CW-2000: MEMFS sync after Recipe write failed', e);
@@ -2146,7 +2160,7 @@ export default class ForgePlugin extends Plugin {
             this.spinner.startImmediate('Forge: 🔥 transpiling Recipe → Python …');
           }
           try {
-            await this.writeSourcePythonBack(view.file);
+            await this.writeSourcePythonBack(file);
           } catch (e) {
             console.error(
               'CW-2000: writeSourcePythonBack failed after Description-canonical Recipe write',
@@ -2160,7 +2174,7 @@ export default class ForgePlugin extends Plugin {
           // to re-query workspace state after the /generate LLM call.
           // The LLM roundtrip can shift focus; pre-v0.2.288 this
           // silently emitted "No active note to run." and lost the run.
-          await this.runSnippet('Forge failed during execution', undefined, view.file);
+          await this.runSnippet('Forge failed during execution', undefined, file);
         } finally {
           if (this.spinner) {
             this.spinner.stop();
@@ -2172,7 +2186,7 @@ export default class ForgePlugin extends Plugin {
       // path. Logged so devs can correlate browser console with which
       // branch fired.
       console.log(
-        `Forge: ${view.file.basename} V2 canonical = ${canonicalLayer ?? 'unknown'} → standard transpile path`,
+        `Forge: ${file.basename} V2 canonical = ${canonicalLayer ?? 'unknown'} → standard transpile path`,
       );
     }
 
@@ -2182,7 +2196,7 @@ export default class ForgePlugin extends Plugin {
     // Use routeActionCodeRegen to orchestrate: try E-- via the engine,
     // fall back to /generate (LLM) when E-- can't compile.
     void fm;
-    const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
+    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     const regenResult = await routeActionCodeRegen(snippetId, this.routingDeps());
     if (regenResult.ok === false) {
       // v0.2.230 — use explicit `=== false` so TS narrows to the
@@ -2195,7 +2209,7 @@ export default class ForgePlugin extends Plugin {
       // E-- succeeded → write back to # Python facet (matches the
       // v0.2.101 canonical write-back UX).
       try {
-        await this.writeSourcePythonBack(view.file);
+        await this.writeSourcePythonBack(file);
       } catch (e) {
         // v0.2.129 — per cc-prompt-queue.md HARD RULE #1 (v0.2.120),
         // caught runtime errors → console.error with originating
@@ -2203,7 +2217,7 @@ export default class ForgePlugin extends Plugin {
         console.error('forgeSnippet (english-mode): writeSourcePythonBack failed', e);
       }
     }
-    await this.runSnippet('Forge failed during execution', undefined, view.file);
+    await this.runSnippet('Forge failed during execution', undefined, file);
   }
 
   /** v0.2.126 — shared dependencies for routeActionCodeRegen. Both
@@ -3568,6 +3582,14 @@ export default class ForgePlugin extends Plugin {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     const target = resolveRunTarget(activeView, fallbackFile);
     if (!target.file) {
+      // v0.2.289 diagnostic — if this fires despite the caller passing
+      // a captured file, we've misdiagnosed and need more evidence.
+      console.error(
+        '[runSnippet] "No active note to run" fired.',
+        'activeView=', activeView ? 'present' : 'null',
+        'activeView.file=', activeView?.file ? activeView.file.path : 'null',
+        'fallbackFile=', fallbackFile ? fallbackFile.path : 'null',
+      );
       this.notice('No active note to run.');
       return;
     }

@@ -56,4 +56,24 @@ describe('resolveRunTarget', () => {
     assert.equal(t.file?.path, 'a.md');
     assert.equal(t.view, view);
   });
+
+  it('CW-2300-D: view.file getter that became null after capture', () => {
+    // v0.2.289 root cause: `view.file` is a live getter on MarkdownView.
+    // Between capture at forgeSnippet's start and the runSnippet call
+    // ~seconds later (post-LLM), Obsidian may have detached the file
+    // from the view. Reading `view.file` again returns null. The fix
+    // is to capture the TFile reference INTO A LOCAL CONST at forge-
+    // Snippet's start and thread that through — the TFile itself is
+    // stable, only the view's getter goes stale.
+    //
+    // This test simulates the scenario: the view we hand in has file
+    // null (getter went stale). The fallbackFile is the caller's
+    // early-captured TFile. Correct behavior: use the fallback.
+    const staleView = { file: null as any };
+    const capturedFile = { path: 'blues/slow_burn.md' };
+    const t = resolveRunTarget(staleView as any, capturedFile);
+    assert.equal(t.file?.path, 'blues/slow_burn.md');
+    assert.equal(t.view, null,
+      'view must be null (skip view.save, read from disk instead)');
+  });
 });
