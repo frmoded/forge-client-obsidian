@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.290)
+# Forge — Release Notes (v0.2.205 → v0.2.291)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.290 (CW-2300/2400 async-getter arc closed), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.291 (drain 2030 auto-connect on onload), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,16 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## v0.2.291 — auto-`/connect` on plugin onload (drain 2030)
+
+Fixes a longstanding regression flagged by forge-tester's 2026-07-12 run: after `Cmd-P → Reload app without saving` (or any plugin reload), the plugin held no vault-engine binding. Sync edges + every downstream flow HTTP-400'd with `vault not connected — call /connect first`, and there was no user-facing connect affordance to call it manually.
+
+**Fix (Option A per driver adjudication).** Plugin `onload()` now spawns a fire-and-forget call into the new `auto-connect-retry-core.ts` helper. The helper retries `POST /connect` up to 3× with a 1s gap (so a uvicorn that's a touch slow to come up still succeeds) and never blocks Obsidian's plugin lifecycle. On success: one `Forge: vault auto-connected to <engineUrl>` line in the Forge Output panel. On terminal failure: a red notice + full error dump routed to the panel so the user can diagnose without hunting through console.
+
+**Extracted pure-core**: `connectWithRetry(connectFn, {maxAttempts, backoffMs, sleep?})` — injected `sleep` keeps unit tests wall-clock-free; the fire-and-forget site in main.ts is a thin adapter (no logic to test past what the pure-core covers).
+
+New tests (3): first-attempt success, retry-then-success, terminal-failure. Uses a sleep recorder to assert the exact backoff schedule without wall-clock latency.
 
 ## The v0.2.287 → v0.2.290 arc — CW-2300/2400 async-getter class-of-bug
 

@@ -70,6 +70,7 @@ import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings.ts'
 import { sectionPlugin, readOnlyFacetFilter } from './facet.ts';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
 import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server.ts';
+import { connectWithRetry } from './auto-connect-retry-core.ts';
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
 import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
@@ -1163,6 +1164,54 @@ export default class ForgePlugin extends Plugin {
       this.notice(welcomeMessage(hasToken), 10000);
       this.settings.seenWelcome = true;
       await this.saveSettings();
+    }
+
+    // Drain 2030 — auto-connect on plugin onload. Before this fix, a
+    // fresh reload left the plugin with no vault-engine binding, so
+    // Sync edges + every dependent flow 400'd on `vault not connected`
+    // until the user manually triggered a compute path that happened
+    // to call connectVault. Fire-and-forget here so onload() returns
+    // fast; the helper handles retry + user-visible failure signal.
+    void this._autoConnectOnLoad().catch(e => {
+      console.error('Forge auto-connect: unexpected error in retry helper', e);
+    });
+  }
+
+  /** Drain 2030 — retry `/connect` up to 3× with a 1s gap so a slightly-
+   *  late engine (uvicorn still warming when Obsidian mounts the plugin)
+   *  still gets picked up without making the user wait > ~3s wall-clock
+   *  before the failure notice. On success: one info line to the Forge
+   *  Output panel. On terminal failure: a red notice + full error dump
+   *  in the panel. Never throws. */
+  public async _autoConnectOnLoad(): Promise<void> {
+    const serverUrl = this.settings.serverUrl;
+    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const result = await connectWithRetry(
+      () => connectVault(serverUrl, vaultPath),
+      { maxAttempts: 3, backoffMs: 1000 },
+    );
+    if (result.ok) {
+      // Cache the inventory so downstream compute paths can skip the
+      // in-line connect round-trip on first use.
+      this.snippetInventory = result.value?.snippets ?? {};
+      const attemptSuffix = result.attempts === 1 ? '' : ` (after ${result.attempts} attempts)`;
+      void this.forgeOutput(
+        `Forge: vault auto-connected to ${serverUrl}${attemptSuffix}.`,
+        'success',
+      );
+    } else {
+      const detail = result.error instanceof Error
+        ? result.error.message
+        : String(result.error);
+      // Terminal failure — surface via notice() (routes red through
+      // forgeOutput because the message contains "failed").
+      this.notice(
+        `Forge: vault auto-connect failed after ${result.attempts} attempts — check that the engine is running (see Forge Output for details).`,
+      );
+      void this.forgeOutput(
+        `Forge auto-connect: ${serverUrl} — ${detail}`,
+        'error',
+      );
     }
   }
 
