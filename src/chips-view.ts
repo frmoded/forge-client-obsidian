@@ -10,6 +10,7 @@ import {
 } from './chips-core.ts';
 import { initialExpandedLibraries } from './chip-folding-core.ts';
 import { ChipsManifest, loadPaletteForActiveVault, resolveSnippetPath } from './chips.ts';
+import type { LibraryNote } from './library-note-catalog-core.ts';
 import { findFallbackMarkdownView } from './find-fallback-markdown-view-core.ts';
 import type {
   MarkdownLeafLike,
@@ -26,6 +27,10 @@ export interface ChipsHost {
   // Current vault manifest snapshot (vault name + declared domains).
   // Fresh-read per loadPaletteForActiveVault call.
   getManifest(): ChipsManifest;
+  // Drain 2330 — per-domain library-note catalog. Returns `{}` before
+  // loadLibraryNoteCatalog completes; the palette loader treats an
+  // empty map as "no library groups" (fast-path).
+  getLibraryNotesByDomain(): Record<string, LibraryNote[]>;
   // Hook for reload events (e.g. "Refresh chip palette" command can
   // reach into the view via this).
   registerView(view: ChipsView): void;
@@ -94,8 +99,13 @@ export class ChipsView extends ItemView {
    *  the "Forge: Refresh chip palette" command. */
   async refresh() {
     try {
+      // Drain 2330 — snapshot the manifest + library catalog into
+      // consts before the await so a concurrent catalog reload can't
+      // hand us a torn view (L59 spirit).
+      const manifest = this.host.getManifest();
+      const notesByDomain = this.host.getLibraryNotesByDomain();
       this.groups = await loadPaletteForActiveVault(
-        this.app, this.host.getManifest());
+        this.app, manifest, notesByDomain);
     } catch (e) {
       console.error('Forge chips: load failed', e);
       this.groups = [];

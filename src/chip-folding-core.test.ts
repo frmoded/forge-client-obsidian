@@ -69,3 +69,39 @@ test('initialExpandedLibraries: active in moda but moda not present in loaded ch
   );
   assert.deepEqual(Array.from(r).sort(), ['forge-music', 'forge-tutorial']);
 });
+
+// Drain 2330 — library-note groups (source name ends " library") start
+// collapsed by default because they're secondary discovery surface;
+// user-authored vault content wins visual priority.
+test('initialExpandedLibraries: vault root → library-note groups excluded from default-open', () => {
+  const r = initialExpandedLibraries(
+    'hello.md',
+    ['forge-moda', 'forge-music', 'Music library', 'Moda library'],
+  );
+  // Vault groups expanded; library groups collapsed.
+  assert.deepEqual(
+    Array.from(r).sort(),
+    ['forge-moda', 'forge-music'],
+  );
+});
+
+test('initialExpandedLibraries: null active + only library groups → nothing expanded', () => {
+  // Fresh vault with no vault content, just library chips → palette
+  // opens with everything collapsed. User can expand a library group
+  // if they want to browse.
+  const r = initialExpandedLibraries(
+    null,
+    ['Music library', 'Moda library'],
+  );
+  assert.equal(r.size, 0);
+});
+
+test('initialExpandedLibraries: active in known lib still expands only that one (library groups stay closed)', () => {
+  const r = initialExpandedLibraries(
+    'forge-music/slow_burn/twelve_bar_blues_progression.md',
+    ['forge-music', 'forge-moda', 'Music library'],
+  );
+  // Music context wins → only forge-music expanded; Music library
+  // stays closed even though it's the semantically related group.
+  assert.deepEqual(Array.from(r), ['forge-music']);
+});

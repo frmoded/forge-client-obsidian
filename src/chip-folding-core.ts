@@ -30,14 +30,26 @@ export function libraryForActiveFilePath(
   return null;
 }
 
+/** Sources for library-note chip groups (drain 2330). The palette
+ *  loader synthesizes one group per domain named `<Domain> library`
+ *  (e.g. `Music library`, `Moda library`). These groups start CLOSED
+ *  by default so the palette stays quiet for users focused on their
+ *  own vault content; expand-on-click surfaces the library atoms
+ *  when wanted. Matches the driver Choice: "library is secondary
+ *  discovery surface." */
+function isLibraryGroupSource(sourceName: string): boolean {
+  return sourceName.endsWith(' library');
+}
+
 /** Compute which library category headers should be open by default
  *  on first palette open. Per the prompt §2.5:
  *
  *  - Active file is under a known library → expand ONLY that one;
  *    other categories collapsed.
  *  - Active file is not under any library (vault root, plain note)
- *    → expand ALL known categories (no preferred context, surface
- *    everything).
+ *    → expand ALL known categories EXCEPT library-note groups
+ *    (drain 2330) — library chips are secondary discovery, they
+ *    render collapsed by default even when nothing else has priority.
  *
  *  `allSources` is the set of library source names actually present
  *  in the loaded chip groups (so this function never expands a
@@ -50,5 +62,8 @@ export function initialExpandedLibraries(
   if (ctx && allSources.includes(ctx)) {
     return new Set([ctx]);
   }
-  return new Set(allSources);
+  // Drain 2330 — exclude library-note groups from the default-
+  // expanded set. They're still in `allSources` (so the view knows to
+  // render their headers), just collapsed.
+  return new Set(allSources.filter(s => !isLibraryGroupSource(s)));
 }

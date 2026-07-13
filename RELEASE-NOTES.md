@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.291)
+# Forge — Release Notes (v0.2.205 → v0.2.292)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.291 (drain 2030 auto-connect on onload), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.292 (drain 2330 surface library chips in palette), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,16 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## v0.2.292 — surface library-note chips in the palette (drain 2330)
+
+Closes the discoverability gap left open when drain 1300 (v0.2.258) retired `_chips.md`. Library-note chips defined in `forge/<domain>/lib.py` — `walking_bass_line`, `piano_voicing`, `form`, `drum_chorus`, `guitar_solo_chorus`, `voices_list`, and the rest — were fully wired for Cmd-click on wikilinks inside Recipes but completely absent from the palette. New users evaluating Forge couldn't browse to see what atoms were available.
+
+The palette now renders one `<Domain> library` group per active domain (e.g., `Music library`, `Moda library`), appended AFTER the vault groups so user-authored notes retain visual priority. Library groups start **collapsed** by default — they're a secondary discovery surface; users expand when they want to browse. When the active file is under a bundled library repo (`forge-music/`, `forge-moda/`, `forge-tutorial/`), only that vault group expands; library groups stay closed even then.
+
+Extracted pure-core: `mergeLibraryChipsIntoPalette(vaultGroups, libraryNotesByDomain)` in `src/library-chip-merge-core.ts`. Signature reuses `synthesizeRecipeSignature` from the library-note catalog, so left-click inserts the same `Call [[name]] with kwarg=<kwarg>` shape that Recipe wikilinks already use. Duplicate-name policy: if a vault chip and a library chip share a label, the vault chip wins (A4 shadowing — user authoring beats bundle).
+
+New tests: 10 pure-core tests for the merge (empty index, per-domain grouping, alphabetical ordering, zero-arg shorthand, vault-wins-on-collision, deterministic output) + 3 folding tests for the "library groups start closed" behavior. Full suite: 1170/1171 pass (sole fail is the pre-existing `forge-tutorial-bundle` drift preflight, still a symptom of the stale engine bundle — will resolve when someone runs `npm run sync-engine-bundle`).
 
 ## v0.2.291 — auto-`/connect` on plugin onload (drain 2030)
 

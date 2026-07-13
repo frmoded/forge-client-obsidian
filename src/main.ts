@@ -342,6 +342,12 @@ export default class ForgePlugin extends Plugin {
    *  LibraryNoteView instead of letting Obsidian create an empty
    *  note. Empty when bundled engine source is unreadable. */
   private libraryNoteIndex: Map<string, LibraryNote> = new Map();
+  /** Drain 2330 — per-domain library-note lists preserved so the chip
+   *  palette can render one "<Domain> library" group per domain.
+   *  Populated alongside `libraryNoteIndex` in loadLibraryNoteCatalog;
+   *  read by `chipsManifest`-adjacent surfaces that call
+   *  loadPaletteForActiveVault. Empty until the catalog loads. */
+  private libraryNotesByDomain: Record<string, LibraryNote[]> = {};
   /** v0.2.281 — explicit catalog-readiness signal. Flips true exactly
    *  once per session after `loadLibraryNoteCatalog()` returns. CW-2100
    *  guardrail (Description-canonical closure check) reads this rather
@@ -1832,8 +1838,13 @@ export default class ForgePlugin extends Plugin {
 
   private async reloadChipPalette(refreshOpenView = false) {
     try {
+      // Drain 2330 — snapshot the per-domain library catalog before
+      // the await so the palette loader sees a consistent view even
+      // if loadLibraryNoteCatalog completes concurrently. L59 spirit
+      // (capture live state to const before an await).
+      const notesByDomain = this.libraryNotesByDomain;
       this.chipPalette = await loadPaletteForActiveVault(
-        this.app, this.chipsManifest());
+        this.app, this.chipsManifest(), notesByDomain);
     } catch (e) {
       console.error('Forge chips: load failed', e);
       this.chipPalette = [];
@@ -1873,6 +1884,7 @@ export default class ForgePlugin extends Plugin {
   private chipsHost(): ChipsHost {
     return {
       getManifest: () => this.chipsManifest(),
+      getLibraryNotesByDomain: () => this.libraryNotesByDomain,
       registerView: (v) => { this.openChipsViews.add(v); },
       unregisterView: (v) => { this.openChipsViews.delete(v); },
     };
@@ -2444,10 +2456,16 @@ export default class ForgePlugin extends Plugin {
       }
     }
     this.libraryNoteIndex = buildLibraryNoteIndex(perDomain);
+    // Drain 2330 — stash the per-domain shape too, so the palette
+    // loader can render one library group per domain.
+    this.libraryNotesByDomain = perDomain;
     // v0.2.281 — flip the explicit readiness signal AFTER the index is
     // populated so any concurrent forgeSnippet flow reads a consistent
     // state (index populated → signal true, not the reverse).
     this._libraryCatalogLoaded = true;
+    // Drain 2330 — refresh any open chip palette so newly-loaded
+    // library chips surface without waiting for a manual reload.
+    void this.reloadChipPalette(true);
     console.warn(
       `[Forge library-note catalog] loaded ${this.libraryNoteIndex.size} chips `
       + `(${domains.map(d => `${d}: ${perDomain[d]?.length ?? 0}`).join(', ')})`,

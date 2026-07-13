@@ -186,6 +186,8 @@ import {
   computePalette,
   type SnippetMetaForPalette,
 } from './palette-discovery-core.ts';
+import { mergeLibraryChipsIntoPalette } from './library-chip-merge-core.ts';
+import type { LibraryNote } from './library-note-catalog-core.ts';
 
 /** Read the vault root's `forge.toml` and check whether the vault IS
  *  the source repo for a known bundled library. Returns the matched
@@ -209,6 +211,12 @@ async function detectSourceVault(app: App): Promise<string | null> {
 export async function loadPaletteForActiveVault(
   app: App,
   manifest: ChipsManifest,
+  // Drain 2330 — optional per-domain library chip index. When
+  // provided, the palette appends one "<Domain> library" group per
+  // domain AFTER the vault groups. Omitted / empty → palette shape
+  // unchanged (back-compat with call sites that don't yet thread the
+  // library catalog).
+  libraryNotesByDomain: Record<string, LibraryNote[]> = {},
 ): Promise<ChipPaletteGroup[]> {
   const inventory: SnippetMetaForPalette[] = [];
 
@@ -263,7 +271,8 @@ export async function loadPaletteForActiveVault(
     }
   }
 
-  return computePalette(inventory);
+  const vaultGroups = computePalette(inventory);
+  return mergeLibraryChipsIntoPalette(vaultGroups, libraryNotesByDomain);
 }
 
 /** Vault-root snippet inventory (personal group). Mirrors the shape
