@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.294)
+# Forge — Release Notes (v0.2.205 → v0.2.295)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.294 (drain 2510 status-bar canonical-layer indicator visible for synced notes), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.295 (drain 2530 refresh # Python section after Run only success), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,16 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## v0.2.295 — refresh # Python section after Run only success (drain 2530)
+
+Cmd-P `Forge Client: Run only (active snippet)` used to transpile + run in-memory but leave the note's `# Python` section stale (with an "out of date" indicator) even after a successful run. Cohort authors saw a mismatch between what actually ran and what the note showed — breaking the D → R → P chain visible-consistency the Medium post promises. This drain writes the freshly-transpiled Python back into the note's `# Python` section after a successful `Run only`.
+
+Threaded via a new optional `refreshPythonAfter?: TFile` param on `computeSnippetWithArgs`. When set and the compute returns 2xx, `writeSourcePythonBack(file)` fires — same helper the Forge-button flow uses. On 4xx / 5xx, the write-back is skipped so the "out of date" indicator persists as a visible signal something went wrong. The `runSnippet` path passes its captured `file` through; other callers (install refresh, forgeSnippet — which writes back pre-compute) don't opt in and behavior is unchanged.
+
+Extracted the gate logic into `refresh-python-after-run-core.ts` (a 3-line pure-core) with 8 tests covering every combination of HTTP status × file-supplied. L60 caller-integration invariant enforced structurally by the pure-core: the write-back path CANNOT fire on a failed run and CANNOT fire without a caller-supplied file.
+
+Full suite 1187/1187 pass.
 
 ## v0.2.294 — canonical-layer status-bar indicator visible for synced notes (drain 2510)
 

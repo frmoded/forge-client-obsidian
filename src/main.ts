@@ -84,6 +84,7 @@ import {
 } from './write-generated-recipe-core.ts';
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
+import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
@@ -3773,10 +3774,14 @@ export default class ForgePlugin extends Plugin {
       const cached = this.inputCache[snippetId] ?? {};
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
-        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer);
+        // Drain 2530 — pass `file` so the successful run refreshes the
+        // note's # Python section.
+        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file);
       }).open();
     } else {
-      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, canonicalLayer);
+      // Drain 2530 — pass `file` so the successful run refreshes the
+      // note's # Python section.
+      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, canonicalLayer, file);
     }
   }
 
@@ -4472,6 +4477,13 @@ export default class ForgePlugin extends Plugin {
     // parse on python-canonical. Undefined preserves pre-v0.2.252
     // behavior when caller hasn't been updated.
     canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
+    // Drain 2530 — when set, write the freshly-transpiled Python
+    // back into the note's `# Python` section AFTER a successful
+    // compute. Fires ONLY on 2xx compute; skipped on error paths.
+    // Callers pass `runSnippet`'s captured `file` here so cohort
+    // notes' Python section stays consistent with the D → R → P
+    // chain per the Medium post.
+    refreshPythonAfter?: TFile,
   ) {
     console.log('Forge Compute →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs, canonicalLayer });
 
@@ -4567,6 +4579,29 @@ export default class ForgePlugin extends Plugin {
     const result = res.json;
     console.log('Forge Compute Result:', result);
     outputView.append(snippetId, result.stdout ?? '', result.result);
+
+    // Drain 2530 — refresh the note's `# Python` section from the
+    // freshly-transpiled code so the visible facet stays consistent
+    // with what actually ran. Fires ONLY on the success path (we
+    // returned early on 4xx / 5xx above). Best-effort — a
+    // writeSourcePythonBack failure is logged but does not surface
+    // to the user (the run already succeeded and its output rendered
+    // in the panel; the Python-facet refresh is cosmetic
+    // persistence). Only fires when the caller passed a file (i.e.
+    // Cmd-P "Run only" flow); other callers (install refresh,
+    // forgeSnippet path — which does its own writeSourcePythonBack
+    // pre-compute) don't need it here. The gate is `shouldRefreshPythonAfterRun`
+    // in the pure-core so unit tests exercise the same decision logic.
+    if (shouldRefreshPythonAfterRun(res.status, refreshPythonAfter)) {
+      try {
+        await this.writeSourcePythonBack(refreshPythonAfter);
+      } catch (e) {
+        console.error(
+          'computeSnippetWithArgs: refreshPythonAfter writeSourcePythonBack failed',
+          e,
+        );
+      }
+    }
 
     // Surface install metadata to the debug log; the message is rendered to the user.
     if (snippetId === 'install' && result.result && typeof result.result === 'object') {
