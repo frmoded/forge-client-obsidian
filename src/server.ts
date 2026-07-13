@@ -29,6 +29,21 @@ export interface ConnectResponse {
   // Optional so the plugin remains compatible with older backends — callers
   // should fall back to a hardcoded default when missing.
   content_types?: string[];
+  // Drain 2450 — engine HTTP connect reachability signal. In Pyodide
+  // mode we build the inventory in-process (see below) AND fire the
+  // HTTP /connect side-effect so /sync_dependencies + /canonicalize
+  // + /freeze (which stay on HTTP) find the vault_path registered.
+  // Set to:
+  //   'ok'             — HTTP /connect returned 2xx
+  //   'unreachable'    — network error / connection refused
+  //   'error'          — non-2xx HTTP response
+  //   'not_attempted'  — HTTP-only path (already succeeded — no
+  //                      separate side-effect needed)
+  //   undefined        — back-compat pre-drain-2450 callers
+  engine_http_status?: 'ok' | 'unreachable' | 'error' | 'not_attempted';
+  // Populated with the underlying error message when
+  // engine_http_status is 'unreachable' or 'error'.
+  engine_http_error?: string;
 }
 
 export async function connectVault(serverUrl: string, vaultPath: string): Promise<ConnectResponse> {
@@ -38,13 +53,57 @@ export async function connectVault(serverUrl: string, vaultPath: string): Promis
   // beta needs this because the only HTTP endpoint reachable for those
   // users is the hosted α (which exposes /health + /generate only —
   // no /connect). Without this route the pre-compute handshake 404s.
+  //
+  // Drain 2450 — Pyodide's inventory build is the primary path (its
+  // return value drives snippet lookups + palette), but /sync_dependencies,
+  // /canonicalize, and /freeze all STAY on HTTP (see the sync_dependencies
+  // comment below). Those endpoints check the engine's own
+  // VaultSessionManager — which never sees the Pyodide-side connect. So
+  // fire an ADDITIONAL best-effort HTTP /connect against the engine to
+  // register vault_path server-side. Failure here does NOT invalidate
+  // the Pyodide inventory (compute + palette still work); the plugin
+  // signals engine reachability via `engine_http_status` for the auto-
+  // connect banner to reflect actual sync-side connectability.
   if (_pyodideHost) {
     const host = await _pyodideHost.getInstance();
     const inv = await host.getConnectInventory(vaultPath);
     if (inv.warnings?.length) {
       console.warn('Forge Connect warnings:', inv.warnings);
     }
-    return inv as ConnectResponse;
+    const result: ConnectResponse = inv as ConnectResponse;
+    // Best-effort HTTP /connect side-effect. `throw: false` so 400/500
+    // don't propagate — the Pyodide inventory is what callers actually
+    // use for the return value; HTTP is purely a side-effect to prime
+    // the engine's VaultSessionManager.
+    try {
+      const httpRes = await requestUrl({
+        url: `${serverUrl}/connect`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vault_path: vaultPath, force: true }),
+        throw: false,
+      });
+      if (httpRes.status >= 200 && httpRes.status < 300) {
+        result.engine_http_status = 'ok';
+      } else {
+        result.engine_http_status = 'error';
+        result.engine_http_error = `HTTP ${httpRes.status}`;
+        console.warn(
+          'Forge Connect: engine HTTP /connect returned non-2xx — Pyodide path OK '
+          + 'but HTTP endpoints (sync/canonicalize/freeze) will 400 until engine responds.',
+          httpRes.status,
+        );
+      }
+    } catch (e) {
+      result.engine_http_status = 'unreachable';
+      result.engine_http_error = e instanceof Error ? e.message : String(e);
+      console.warn(
+        'Forge Connect: engine HTTP /connect unreachable — Pyodide path OK '
+        + 'but HTTP endpoints (sync/canonicalize/freeze) will 400 until engine responds.',
+        e,
+      );
+    }
+    return result;
   }
 
   // HTTP fallback — pre-V1 / no-Pyodide path. Kept defensively so a
@@ -59,7 +118,13 @@ export async function connectVault(serverUrl: string, vaultPath: string): Promis
   if (res.json?.warnings?.length) {
     console.warn('Forge Connect warnings:', res.json.warnings);
   }
-  return res.json as ConnectResponse;
+  const result = res.json as ConnectResponse;
+  // On the HTTP-only path we already hit /connect successfully (the
+  // requestUrl above would have thrown on network failure or non-2xx),
+  // so the engine has the vault registered — no separate side-effect
+  // was needed.
+  result.engine_http_status = 'not_attempted';
+  return result;
 }
 
 // NOTE (v0.2.6): syncDependencies stays on HTTP. It IS called on the

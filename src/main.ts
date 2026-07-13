@@ -71,6 +71,10 @@ import { sectionPlugin, readOnlyFacetFilter } from './facet.ts';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
 import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server.ts';
 import { connectWithRetry } from './auto-connect-retry-core.ts';
+import {
+  computeAutoConnectBanner,
+  computeAutoConnectFailureBanner,
+} from './auto-connect-banner-core.ts';
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
 import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
@@ -1200,24 +1204,39 @@ export default class ForgePlugin extends Plugin {
       // Cache the inventory so downstream compute paths can skip the
       // in-line connect round-trip on first use.
       this.snippetInventory = result.value?.snippets ?? {};
-      const attemptSuffix = result.attempts === 1 ? '' : ` (after ${result.attempts} attempts)`;
-      void this.forgeOutput(
-        `Forge: vault auto-connected to ${serverUrl}${attemptSuffix}.`,
-        'success',
-      );
+      // Drain 2450 — banner reflects engine-HTTP reachability. When
+      // connectVault ran the Pyodide path AND the HTTP /connect
+      // side-effect failed, the banner degrades from green success to
+      // yellow warning that names the actual failure mode ("Sync
+      // edges will fail until the engine responds") — banner-vs-
+      // reality gap closed.
+      const banner = computeAutoConnectBanner({
+        serverUrl,
+        attempts: result.attempts,
+        engineHttpStatus: result.value?.engine_http_status,
+        engineHttpError: result.value?.engine_http_error,
+      });
+      // For the warning kind, route through notice() so it also
+      // renders red-ish (the "failed"/"error"/"could not" heuristic in
+      // notice() doesn't fire — the message text says "unreachable"
+      // and "will fail" — so use forgeOutput directly with 'error'
+      // for red styling on warnings too).
+      if (banner.kind === 'warning') {
+        void this.forgeOutput(banner.message, 'error');
+      } else {
+        void this.forgeOutput(banner.message, 'success');
+      }
     } else {
       const detail = result.error instanceof Error
         ? result.error.message
         : String(result.error);
+      const failure = computeAutoConnectFailureBanner(
+        serverUrl, result.attempts, detail,
+      );
       // Terminal failure — surface via notice() (routes red through
       // forgeOutput because the message contains "failed").
-      this.notice(
-        `Forge: vault auto-connect failed after ${result.attempts} attempts — check that the engine is running (see Forge Output for details).`,
-      );
-      void this.forgeOutput(
-        `Forge auto-connect: ${serverUrl} — ${detail}`,
-        'error',
-      );
+      this.notice(failure.notice);
+      void this.forgeOutput(failure.panel, 'error');
     }
   }
 

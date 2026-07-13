@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.292)
+# Forge — Release Notes (v0.2.205 → v0.2.293)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.292 (drain 2330 surface library chips in palette), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.293 (drain 2450 auto-connect banner reflects engine reachability), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,21 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## v0.2.293 — auto-connect banner reflects engine HTTP reachability (drain 2450)
+
+Closes the banner-vs-reality gap flagged by the 2026-07-13 10:33 regression run against v0.2.292: on plugin reload, the auto-connect banner claimed "vault auto-connected" while `/sync_dependencies` immediately returned HTTP 400 `vault not connected`. Cohort users trusted the green banner, hit Sync edges, hit a wall.
+
+**Root cause**: When Pyodide is the compute host (i.e. essentially always in a normal install), `connectVault` at [server.ts:34](src/server.ts:34) short-circuited to `_pyodideHost.getConnectInventory(vault_path)` — which builds the inventory IN-PROCESS but **never fires the engine's HTTP `POST /connect`**. Meanwhile `syncDependencies` / `canonicalize` / `freeze` stay on HTTP (see the intentional split at [server.ts:65-72](src/server.ts:65)), so the engine's `VaultSessionManager._states` never received `vault_path` from the auto-connect helper. The plugin was talking to two backends — Pyodide for the local read, uvicorn for the writes — and only briefing one.
+
+**Fix**: `connectVault`'s Pyodide branch now fires a best-effort `POST /connect` against the configured engine URL AFTER building the local inventory. Failure of the HTTP side-effect does NOT invalidate the Pyodide inventory (compute + palette still work), but the response now carries `engine_http_status: 'ok' | 'unreachable' | 'error' | 'not_attempted'` + `engine_http_error?`. A new pure-core `computeAutoConnectBanner` translates this into the user-facing banner:
+
+- `'ok'` / `'not_attempted'` → green `Forge: vault auto-connected to <url>.` (unchanged shape).
+- `'unreachable'` / `'error'` → red warning: `Forge: vault auto-connected (Pyodide only). Engine at <url> is unreachable (<detail>) — Sync edges, canonicalize, and freeze will fail until the engine responds.`
+
+Cohort users on a working engine get the same green line as before; users whose engine is down get an accurate warning that names the exact operations that will fail.
+
+New tests: 8 pure-core cases for `computeAutoConnectBanner` covering all 4 `engine_http_status` values, undefined back-compat, single vs multi-attempt banners, and error-detail interpolation. Existing 4 retry-helper tests still pass.
 
 ## v0.2.292 — surface library-note chips in the palette (drain 2330)
 
