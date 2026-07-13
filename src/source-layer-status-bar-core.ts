@@ -12,12 +12,18 @@
 import type { SourceLayer } from './source-aware-forge-click-core.ts';
 
 /** Compute the status-bar label for a given source layer + V2-shape
- *  state. Returns empty string when there's nothing meaningful to
- *  surface (synced V2 note, or non-V2 note) — the caller should clear
- *  the status-bar text in that case.
+ *  state. Returns empty string only for non-V2 notes — the caller
+ *  should clear the status-bar text in that case.
  *
  *  - source=null + isV2=false → '' (non-V2 file open; nothing to say)
- *  - source='synced'           → '' (V2 synced; suppress to reduce noise)
+ *  - source='synced'           → 'Forge: synced'    (drain 2510 — was '' pre-drain, but
+ *                                                    the empty label made the status bar
+ *                                                    invisible for synced notes and the
+ *                                                    click handler dead. Rendering a
+ *                                                    minimal label keeps the item visible +
+ *                                                    click-reachable so cohort can hover
+ *                                                    for the tooltip or click for the
+ *                                                    verbose showSourceLayer report.)
  *  - source='description'      → 'Forge: Description source'
  *  - source='recipe'           → 'Forge: Recipe source'
  *  - source='python'           → 'Forge: Python source'
@@ -29,7 +35,7 @@ export function sourceLayerStatusLabel(
 ): string {
   if (!isV2) return '';
   if (source === null) return 'Forge: probe failed';
-  if (source === 'synced') return '';
+  if (source === 'synced') return 'Forge: synced';
   if (source === 'description') return 'Forge: Description source';
   if (source === 'recipe') return 'Forge: Recipe source';
   if (source === 'python') return 'Forge: Python source';

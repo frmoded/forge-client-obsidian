@@ -15,8 +15,12 @@ describe('sourceLayerStatusLabel', () => {
     assert.equal(sourceLayerStatusLabel(false, 'recipe'), '');
   });
 
-  test('V2 synced → empty (suppress noise)', () => {
-    assert.equal(sourceLayerStatusLabel(true, 'synced'), '');
+  test('V2 synced → "Forge: synced" (drain 2510 — was empty pre-drain)', () => {
+    // Drain 2510: pre-drain the label was '' to reduce noise, but the
+    // empty label made the status bar item display:none which killed
+    // the click affordance. Now emit a minimal label so the item stays
+    // visible + click-reachable; tooltip carries the detail.
+    assert.equal(sourceLayerStatusLabel(true, 'synced'), 'Forge: synced');
   });
 
   test('V2 description-source', () => {

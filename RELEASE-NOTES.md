@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.293)
+# Forge — Release Notes (v0.2.205 → v0.2.294)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.293 (drain 2450 auto-connect banner reflects engine reachability), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.294 (drain 2510 status-bar canonical-layer indicator visible for synced notes), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,16 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## v0.2.294 — canonical-layer status-bar indicator visible for synced notes (drain 2510)
+
+Fixes the "silent no-op click" that three consecutive regression runs (v0.2.290 / v0.2.292 / v0.2.294 baseline) flagged on the `.forge-source-layer-status` status-bar element. Root cause: `sourceLayerStatusLabel(true, 'synced')` returned `''` by intentional Phase 2.5 §2.3 design — synced notes suppressed the badge to reduce noise. But an empty status-bar item collapses to `display:none` in Obsidian; a `display:none` element doesn't receive click events, so the click handler wired to `showSourceLayer` couldn't fire. Users on freshly-backfilled (synced) notes saw nothing and clicking did nothing — the entire feature looked broken.
+
+Fix: emit `'Forge: synced'` for the synced state instead of `''`. Element stays visible + click-reachable; tooltip already carries the detail ("All three facets match their stored hashes"). Non-synced states (`description` / `recipe` / `python`) already worked correctly and are unchanged.
+
+Also verifies drain 2450's auto-connect fix by running against a real engine (v0.2.293 shipped that yesterday). Two chained fixes in the same session close the two most-visible regression symptoms.
+
+1 test updated (pure-core assertion flipped from `''` → `'Forge: synced'`). Full suite still 1178/1179 pass; sole remaining fail is the pre-existing tutorial-bundle drift (drain 2035 Cause B).
 
 ## v0.2.293 — auto-connect banner reflects engine HTTP reachability (drain 2450)
 
