@@ -27,6 +27,29 @@
 
 set -euo pipefail
 
+# Drain 2550 — flags. Parsed BEFORE positional args so `--dry-run` can
+# appear anywhere on the command line.
+#   --dry-run  Run every preflight (build, drift, zip) without any
+#              filesystem-visible side effects: no commit, no tag, no
+#              push, no gh release. Manifest.json is bumped
+#              temporarily during the run so all version-baked checks
+#              still fire, and reverted to the previous value on exit.
+#              Use for verifying a release will succeed before
+#              committing to it.
+DRY_RUN="no"
+POSITIONAL=()
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN="yes" ;;
+    -h|--help)
+      grep -E '^#( |$)' "$0" | sed 's/^# \{0,1\}//' | head -30
+      exit 0
+      ;;
+    *) POSITIONAL+=("$arg") ;;
+  esac
+done
+set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
+
 # Make sure brew-installed binaries (npm, gh) are on PATH.
 if [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -36,6 +59,31 @@ fi
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
+
+# Drain 2550 — auto-revert manifest.json on early exit. The script
+# bumps manifest.json BEFORE running preflights (build, drift check,
+# zip build). If a preflight fails, `set -e` used to leave manifest at
+# the new version — driver was then stuck with a "half-released" state
+# (v0.2.290/291/292 all shipped this way, then had to be recovered by
+# hand). Auto-revert keeps the tree consistent so a re-run picks up
+# where the previous try failed.
+#
+# The trap only fires on non-zero exit AND after the manifest was
+# bumped in-script (guarded by MANIFEST_BUMPED). The final `exit 0`
+# path resets the trap explicitly so a successful release doesn't
+# revert the bump.
+MANIFEST_BUMPED="no"
+_cleanup_on_error() {
+  local ec=$?
+  if [ "$ec" -ne 0 ] && [ "$MANIFEST_BUMPED" = "yes" ]; then
+    echo
+    echo "=== Release aborted (exit code $ec) — reverting manifest.json bump ==="
+    git checkout -- manifest.json 2>/dev/null || true
+    echo "Manifest reverted. Fix the underlying failure and re-run release.sh."
+  fi
+  return $ec
+}
+trap _cleanup_on_error EXIT
 
 # --- Sanity: required tools ---
 for cmd in git npm jq; do
@@ -139,6 +187,9 @@ if [ "$SKIP_BUMP" = "no" ]; then
   echo "=== Bumping manifest.json: $CURRENT_VERSION → $NEW_VERSION ==="
   tmp="$(mktemp)"
   jq --arg v "$NEW_VERSION" '.version = $v' manifest.json > "$tmp" && mv "$tmp" manifest.json
+  # Drain 2550 — mark for the EXIT trap so a preflight failure
+  # between here and the commit rolls the bump back automatically.
+  MANIFEST_BUMPED="yes"
 fi
 
 # --- Build ---
@@ -225,11 +276,42 @@ fi
 echo "Built: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
 
 # --- Commit, tag, push ---
+# Drain 2550 — in dry-run mode, we've verified everything works but
+# stop before mutating any git or GitHub state. Manifest bump is
+# reverted by the EXIT trap because we bail with exit 0 AFTER clearing
+# MANIFEST_BUMPED — actually the reverse: we want to revert the bump
+# EVEN on success in dry-run, so leave MANIFEST_BUMPED=yes and use a
+# separate DRY_RUN_SUCCESS signal that the trap honors.
+if [ "$DRY_RUN" = "yes" ]; then
+  echo
+  echo "=== DRY-RUN COMPLETE — all preflights passed, no state mutation ==="
+  echo "  ✓ manifest bumped $CURRENT_VERSION → $NEW_VERSION (will revert on exit)"
+  echo "  ✓ build succeeded"
+  echo "  ✓ inlined version drift check passed"
+  echo "  ✓ bundled-vault bump check passed"
+  echo "  ✓ release zip built: $ZIP_PATH ($(du -h "$ZIP_PATH" | cut -f1))"
+  echo "  ✓ engine-bundle + bundled-vault drift checks clean"
+  echo
+  echo "To actually release, re-run without --dry-run:"
+  echo "  bash scripts/release.sh $NEW_VERSION"
+  # Force manifest revert on the successful dry-run path.
+  # (MANIFEST_BUMPED still 'yes' → trap fires on exit; force nonzero so trap engages.)
+  git checkout -- manifest.json 2>/dev/null || true
+  echo "Manifest reverted."
+  MANIFEST_BUMPED="no"   # tell the trap: nothing more to revert
+  trap - EXIT             # disable trap so a clean exit doesn't misfire
+  exit 0
+fi
+
 echo
 if [ "$SKIP_BUMP" = "no" ]; then
   echo "=== Committing version bump ==="
   git add manifest.json
   git commit -m "Release v${NEW_VERSION}"
+  # Drain 2550 — commit is committed; the version bump is now
+  # permanent. Clear MANIFEST_BUMPED so any later failure doesn't
+  # try to `git checkout` the (now-committed) file.
+  MANIFEST_BUMPED="no"
 else
   echo "=== Manifest already committed at v${NEW_VERSION}; creating empty release commit ==="
   # Empty commit preserves the "Release vX.Y.Z" marker in
@@ -282,3 +364,7 @@ echo "Release v${NEW_VERSION} published."
 echo "BRAT users: Settings → BRAT → Check for updates → pulls the new main.js."
 echo "  styles.css included: $STYLES_PRESENT"
 echo "  zip:                 $ZIP_PATH"
+
+# Drain 2550 — happy path complete. Clear the EXIT trap so a shell
+# exit doesn't accidentally revert a successful release commit.
+trap - EXIT
