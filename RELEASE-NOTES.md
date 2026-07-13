@@ -1,6 +1,6 @@
-# Forge — Release Notes (v0.2.205 → v0.2.295)
+# Forge — Release Notes (v0.2.205 → v0.2.296)
 
-This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.295 (drain 2530 refresh # Python section after Run only success), grouped by theme rather than version.
+This document summarizes the plugin arc from v0.2.205 (early V2 implicit-locking) through v0.2.296 (drain 2570 route moda_sim_state to simulator sidebar), grouped by theme rather than version.
 
 Audience: Forge cohort authors + engineers keeping their vaults current with the paradigm.
 
@@ -17,6 +17,18 @@ Whichever facet you last hand-edit becomes the **source** (labeled `— source` 
 The chip palette displays clickable entries; each references a note (library or vault). Chips are not model objects — the note they reference is. Library notes ship inside the engine (their Recipe, Description, and Python are served read-only from the Python source's docstring, signature, and body). Vault notes are cohort-authored `.md` files with all three facets fully editable.
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
+
+## v0.2.296 — route moda_sim_state result to simulator sidebar (drain 2570)
+
+Cmd-P `Forge Client: Run only` on a moda note used to execute the snippet and dump the raw `{"type":"moda_sim_state","content":{...}}` JSON into Forge Output — cohort users saw an inscrutable object dump instead of animated particles. The Forge-button (auto-forge) flow already routed to the simulator sidebar via `dispatchModaBranch`, but `Run only` never went through that routing decision.
+
+Fix: inspect the compute result inside `computeSnippetWithArgs`. When the shape matches `{type: 'moda_sim_state', ...}`, open the moda simulator view and trigger `requestFeaturedRun` — mirroring the tail of `dispatchModaBranch`. Stdout still renders in Forge Output (print() debug output is useful even when the primary result renders elsewhere); only the JSON dump is suppressed. Non-moda results (`music_score`, plain strings, tutorial-domain scalars) route unchanged to the panel.
+
+New pure-core `moda-dispatch-decision-core.ts` (~25 LOC) with 10 tests covering: moda_sim_state → sidebar; moda_sim_state without content → sidebar (defensive); null/undefined/string/number/array/plain-object → output; a different type marker → output; string-serialized content → sidebar.
+
+Fallback: if the sidebar dispatch throws (moda view unavailable, workspace unhealthy), the result JSON falls through to Forge Output so the user sees SOMETHING rather than nothing.
+
+Full suite 1197/1197 pass.
 
 ## v0.2.295 — refresh # Python section after Run only success (drain 2530)
 

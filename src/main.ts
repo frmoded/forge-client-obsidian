@@ -85,6 +85,7 @@ import {
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
+import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
@@ -4578,7 +4579,34 @@ export default class ForgePlugin extends Plugin {
 
     const result = res.json;
     console.log('Forge Compute Result:', result);
-    outputView.append(snippetId, result.stdout ?? '', result.result);
+
+    // Drain 2570 — route moda_sim_state results to the simulator
+    // sidebar instead of dumping raw JSON to Forge Output. The Forge-
+    // button flow already dispatches via dispatchModaBranch; this
+    // brings Cmd-P Run only into parity so cohort users see animated
+    // particles instead of `{"type":"moda_sim_state","content":{...}}`.
+    // Stdout still renders in the output panel (print() debug output
+    // is useful even when the primary result renders elsewhere).
+    const modaDispatch = decideModaDispatch(result.result);
+    if (modaDispatch === 'sidebar') {
+      // Preserve stdout visibility; skip the result JSON dump.
+      if (result.stdout) {
+        outputView.append(snippetId, result.stdout, null);
+      }
+      try {
+        await this.openModaView();
+        const leaf = this.app.workspace.getLeavesOfType(MODA_VIEW_TYPE)[0];
+        if (leaf?.view instanceof ForgeModaView) {
+          leaf.view.requestFeaturedRun();
+        }
+      } catch (e) {
+        console.error('computeSnippetWithArgs: moda sidebar dispatch failed', e);
+        // Fall back to the JSON dump so the user sees SOMETHING.
+        outputView.append(snippetId, '', result.result);
+      }
+    } else {
+      outputView.append(snippetId, result.stdout ?? '', result.result);
+    }
 
     // Drain 2530 — refresh the note's `# Python` section from the
     // freshly-transpiled code so the visible facet stays consistent
