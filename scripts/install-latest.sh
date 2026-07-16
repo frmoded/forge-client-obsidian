@@ -47,28 +47,43 @@ ZIP_NAME="forge-client-obsidian-$TAG.zip"
 ZIP_URL="https://github.com/$REPO/releases/download/$TAG/$ZIP_NAME"
 ZIP_PATH="/tmp/$ZIP_NAME"
 
-# --- 2. Download + SHA verify ---
+# --- 2. Download + SHA verify (with belt+suspenders fallback) ---
+#
+# CW-release-script-gap (2026-07-16): v0.2.296's release surfaced with
+# only main.js + manifest.json attached — the zip asset was silently
+# dropped by an unknown upload path. `install-latest.sh` hit 404 on the
+# zip URL and bailed hard, forcing a manual rsync from bluh. This block
+# now tries the zip first (fast path) and falls back to individual-file
+# fetches (main.js + manifest.json + optional styles.css) when the zip
+# 404s. Fallback works because main.js inlines BUNDLED_ASSETS at build
+# time (per scripts/inline-bundled-assets.mjs); the plugin self-restores
+# `assets/` on first Obsidian load via restoreInlinedAssets in main.ts.
 
+ZIP_OK="no"
 echo "Downloading $ZIP_URL ..."
-curl -fsSL -o "$ZIP_PATH" "$ZIP_URL"
+if curl -fsSL -o "$ZIP_PATH" "$ZIP_URL" 2>/dev/null; then
+  ZIP_OK="yes"
+  LOCAL_SHA=$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')
+  echo "  local SHA-256:  $LOCAL_SHA"
 
-LOCAL_SHA=$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')
-echo "  local SHA-256:  $LOCAL_SHA"
+  # GH publishes asset digests in the release JSON. Cross-check.
+  ASSET_DIGEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/tags/$TAG" \
+    | grep -A1 "\"name\": \"$ZIP_NAME\"" \
+    | grep '"digest"' | head -n1 | sed -E 's/.*"digest": *"sha256:([^"]+)".*/\1/' || true)
 
-# GH publishes asset digests in the release JSON. Cross-check.
-ASSET_DIGEST=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/tags/$TAG" \
-  | grep -A1 "\"name\": \"$ZIP_NAME\"" \
-  | grep '"digest"' | head -n1 | sed -E 's/.*"digest": *"sha256:([^"]+)".*/\1/' || true)
-
-if [[ -n "$ASSET_DIGEST" ]]; then
-  echo "  GH asset digest: $ASSET_DIGEST"
-  if [[ "$LOCAL_SHA" != "$ASSET_DIGEST" ]]; then
-    echo "FATAL: SHA mismatch — download may be corrupted or tampered with."
-    exit 1
+  if [[ -n "$ASSET_DIGEST" ]]; then
+    echo "  GH asset digest: $ASSET_DIGEST"
+    if [[ "$LOCAL_SHA" != "$ASSET_DIGEST" ]]; then
+      echo "FATAL: SHA mismatch — download may be corrupted or tampered with."
+      exit 1
+    fi
+    echo "  digests match"
+  else
+    echo "  (GH asset digest not exposed; skipped cross-check)"
   fi
-  echo "  digests match"
 else
-  echo "  (GH asset digest not exposed; skipped cross-check)"
+  echo "  zip download failed (404 or network) — falling back to individual-file fetches."
+  echo "  (main.js inlines assets/; the plugin self-restores them on first Obsidian load.)"
 fi
 
 # --- 3. Vault sanity ---
@@ -94,15 +109,36 @@ else
   echo "  no existing data.json to back up (fresh install)"
 fi
 
-# --- 5. Wipe + unzip ---
+# --- 5. Wipe + install (via unzip OR individual-file fallback) ---
 
 if [[ -d "$PLUGIN_DIR" ]]; then
   echo "Wiping $PLUGIN_DIR ..."
   rm -rf "$PLUGIN_DIR"
 fi
 
-echo "Unzipping $ZIP_NAME into $VAULT/.obsidian/plugins/ ..."
-unzip -q "$ZIP_PATH" -d "$VAULT/.obsidian/plugins/"
+if [[ "$ZIP_OK" == "yes" ]]; then
+  echo "Unzipping $ZIP_NAME into $VAULT/.obsidian/plugins/ ..."
+  unzip -q "$ZIP_PATH" -d "$VAULT/.obsidian/plugins/"
+else
+  # Fallback path — zip missing from release. Fetch main.js + manifest.json
+  # (+ optional styles.css) directly. The plugin's restoreInlinedAssets
+  # (main.ts) will self-restore the `assets/` tree on first Obsidian load
+  # from BUNDLED_ASSETS inlined into main.js at build time.
+  ASSET_BASE_URL="https://github.com/$REPO/releases/download/$TAG"
+  mkdir -p "$PLUGIN_DIR"
+  echo "  fetching main.js from $ASSET_BASE_URL ..."
+  curl -fsSL -o "$PLUGIN_DIR/main.js" "$ASSET_BASE_URL/main.js"
+  echo "  fetching manifest.json from $ASSET_BASE_URL ..."
+  curl -fsSL -o "$PLUGIN_DIR/manifest.json" "$ASSET_BASE_URL/manifest.json"
+  if curl -fsSL -o "$PLUGIN_DIR/styles.css" "$ASSET_BASE_URL/styles.css" 2>/dev/null; then
+    echo "  fetched styles.css"
+  else
+    echo "  (no styles.css in release; skipping — plugin will run without it)"
+    rm -f "$PLUGIN_DIR/styles.css"
+  fi
+  echo "  fallback install complete. On next Obsidian load, the plugin"
+  echo "  will self-restore assets/ from BUNDLED_ASSETS inlined in main.js."
+fi
 
 # --- 6. Restore data.json ---
 

@@ -358,6 +358,45 @@ gh release create "v${NEW_VERSION}" \
   --notes "Release v${NEW_VERSION}. BRAT users: run 'Check for updates' to pull main.js. Fresh installs: use install-latest.sh against the attached zip." \
   "${ASSETS[@]}"
 
+# CW-release-script-gap (2026-07-16): post-upload verification. `gh release
+# create` returning 0 does NOT guarantee every asset in the ASSETS array
+# was actually uploaded — v0.2.296 shipped with only main.js + manifest.json
+# despite the full ASSETS list; the zip was silently dropped. This check
+# fetches the release's remote asset list and asserts every expected file
+# is present. Fires a loud diagnostic on any missing asset so the driver
+# can re-upload with `gh release upload` before install-latest.sh users
+# start hitting 404s.
+echo
+echo "=== Verifying uploaded assets ==="
+REMOTE_ASSETS="$(gh release view "v${NEW_VERSION}" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+MISSING=()
+for f in "${ASSETS[@]}"; do
+  # Match on basename since gh strips paths on upload.
+  base="$(basename "$f")"
+  if ! grep -qFx "$base" <<< "$REMOTE_ASSETS"; then
+    MISSING+=("$base")
+  fi
+done
+if [ ${#MISSING[@]} -gt 0 ]; then
+  echo "WARNING: ${#MISSING[@]} expected asset(s) missing from the release:"
+  for m in "${MISSING[@]}"; do
+    echo "  - $m"
+  done
+  echo
+  echo "Re-upload the missing assets with:"
+  for m in "${MISSING[@]}"; do
+    local_path=""
+    for f in "${ASSETS[@]}"; do
+      if [ "$(basename "$f")" = "$m" ]; then local_path="$f"; break; fi
+    done
+    echo "  gh release upload v${NEW_VERSION} \"$local_path\" --clobber"
+  done
+  echo
+  echo "Do NOT skip this — install-latest.sh users hit 404 without them."
+else
+  echo "✓ All ${#ASSETS[@]} expected assets uploaded successfully."
+fi
+
 echo
 echo "=== Done ==="
 echo "Release v${NEW_VERSION} published."
