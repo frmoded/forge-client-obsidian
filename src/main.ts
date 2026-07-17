@@ -8,6 +8,12 @@ import {
   getFrontmatterField as getFmFieldV2,
   removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core.ts';
+import { BUNDLED_ASSETS } from './bundled-assets.generated.ts';
+import {
+  formatChipInventoryFull,
+  formatChipInventorySummary,
+  parseChipInventory,
+} from './chip-inventory-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
@@ -445,6 +451,38 @@ export default class ForgePlugin extends Plugin {
       `%c FORGE CLIENT v${this.manifest.version} LOADED `,
       'background: #4caf50; color: white; padding: 6px 10px; font-weight: bold; font-size: 13px;',
     );
+
+    // CW-chip-drift-diagnostic (2026-07-16): emit a one-line chip-
+    // inventory summary from the bundled executor. Motivated by
+    // CW-f-shuffle-runtime-namerror — a stale forge-music vault
+    // install silently lacked walking_bass_line; the failure only
+    // surfaced as a runtime NameError once a Recipe referenced it.
+    // This log makes the installed chip set eyeball-verifiable at
+    // startup, before any Recipe runs.
+    try {
+      const executorSource = BUNDLED_ASSETS['engine/forge/core/executor.py'] ?? '';
+      const inventory = parseChipInventory(executorSource);
+      console.log(
+        `Forge: engine bundle — ${formatChipInventorySummary(inventory)}`,
+      );
+      // Cmd-P: full listing for when the driver actually wants to
+      // see which specific chips ship in this build. Kept out of the
+      // startup log to prevent console noise on every reload.
+      this.addCommand({
+        id: 'forge-log-chip-inventory',
+        name: 'Forge: Log chip inventory',
+        callback: () => {
+          console.log(
+            `Forge chip inventory (from bundled executor.py):\n${formatChipInventoryFull(inventory)}`,
+          );
+          new Notice(
+            `Chip inventory logged to console (${formatChipInventorySummary(inventory)})`,
+          );
+        },
+      });
+    } catch (e) {
+      console.warn('Forge: chip inventory parse failed', e);
+    }
 
     // v0.2.178 — surface the running plugin version in Obsidian's
     // bottom status bar. Cohort + driver shouldn't have to dig through
