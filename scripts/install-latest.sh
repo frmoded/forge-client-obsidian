@@ -25,6 +25,41 @@
 set -euo pipefail
 
 REPO="${REPO:-frmoded/forge-client-obsidian}"
+
+# CW-vault-drift-audit (2026-07-16): --all-vaults mode. Discovers every
+# git-tracked Obsidian vault under $SCAN_ROOT (default $HOME) with a
+# tracked forge-client-obsidian install, then re-invokes this script
+# once per vault with VAULT=<vault> so each gets the same fast-path OR
+# fallback logic below. Excludes vaults where the plugin dir is NOT
+# git-tracked (transient per-machine installs like bluh — handled by
+# the single-vault path).
+if [[ "${1:-}" == "--all-vaults" ]]; then
+  SCAN_ROOT="${SCAN_ROOT:-$HOME}"
+  # Same default as vault-drift-audit.sh: skip ephemeral git worktrees
+  # + test-fixture sandboxes so --all-vaults doesn't clobber them.
+  EXCLUDE_PATTERN="${EXCLUDE_PATTERN:-\.claude/worktrees/|obsidian_sandbox($|/)}"
+  echo "=== install-latest.sh --all-vaults ==="
+  echo "Scanning $SCAN_ROOT for git-tracked vaults ..."
+  TOTAL=0
+  while IFS= read -r obs_dir; do
+    vault_dir="$(dirname "$obs_dir")"
+    if [ -n "$EXCLUDE_PATTERN" ] && grep -qE "$EXCLUDE_PATTERN" <<< "$vault_dir"; then
+      continue
+    fi
+    git -C "$vault_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
+    git -C "$vault_dir" ls-files ".obsidian/plugins/forge-client-obsidian/" 2>/dev/null | head -1 | grep -q . || continue
+    TOTAL=$((TOTAL + 1))
+    echo ""
+    echo "→ $vault_dir"
+    # Recurse WITHOUT --all-vaults; preserves any explicit TAG=/REPO= overrides.
+    VAULT="$vault_dir" bash "$0"
+  done < <(find -H "$SCAN_ROOT" -type d -name ".obsidian" 2>/dev/null)
+  echo ""
+  echo "=== --all-vaults done ==="
+  echo "Refreshed $TOTAL vault(s)."
+  exit 0
+fi
+
 VAULT="${VAULT:-$HOME/forge-vaults/bluh}"
 PLUGIN_DIR="$VAULT/.obsidian/plugins/forge-client-obsidian"
 
