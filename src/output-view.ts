@@ -9,6 +9,11 @@ import {
 } from './view-mode-core.ts';
 import { ForgeSaveDataModal, dataTemplate } from './modal.ts';
 import { forgeNotice } from './forge-notice.ts';
+import {
+  deriveLlmRejectionGuidance,
+  truncateLlmOutput,
+  type RejectionFailureMode,
+} from './llm-rejection-guidance-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
@@ -782,6 +787,102 @@ export class ForgeOutputView extends ItemView {
     } else {
       entry.createEl('p', { text, cls: 'forge-output-message' });
     }
+    entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /** CW-description-prose-hallucination-forge-output-visibility
+   *  (2026-07-17). First-class rejection report for LLM Recipe
+   *  generation failures (closure fail / sanitize fail).
+   *
+   *  Pre-drain the failure surface was a `console.warn` + brief
+   *  Notice toast — invisible to cohort users who don't open DevTools.
+   *  This method makes the panel the primary UX surface, matching the
+   *  existing appendError shape but with a structured layout:
+   *
+   *    - failure mode label
+   *    - unresolved wikilinks list (closure-fail only)
+   *    - LLM raw output preview (first ~500 chars)
+   *    - "Likely cause" prose (from llm-rejection-guidance-core)
+   *    - Fix options list
+   *
+   *  The guidance derivation lives in the pure-core so a refactor
+   *  can't silently drop the "prose-landmine" naming quality (§3.2
+   *  test case #5). */
+  appendLlmRecipeRejection(
+    snippetId: string,
+    input: {
+      failureMode: RejectionFailureMode;
+      unresolvedWikilinks: readonly string[];
+      llmRawOutput: string;
+      descriptionBody: string;
+    },
+  ) {
+    const guidance = deriveLlmRejectionGuidance({
+      failureMode: input.failureMode,
+      unresolvedWikilinks: input.unresolvedWikilinks,
+      descriptionBody: input.descriptionBody,
+    });
+    const entry = this.makeEntry(snippetId);
+    entry.addClass('is-error');
+    entry.addClass('forge-output-llm-rejection');
+
+    entry.createEl('p', {
+      text: '⚠  Description → Recipe generation rejected',
+      cls: 'forge-output-error',
+    });
+
+    // Compact structured block: mode + unresolved (when applicable).
+    const modeLabel = input.failureMode === 'closure-fail'
+      ? 'closure-fail (LLM referenced unknown chips)'
+      : 'sanitize-fail (LLM emitted no valid Let/Return)';
+    entry.createEl('p', {
+      text: `Failure mode: ${modeLabel}`,
+      cls: 'forge-output-message',
+    });
+    if (input.unresolvedWikilinks.length > 0) {
+      const unresolvedText = input.unresolvedWikilinks
+        .map((w) => `[[${w}]]`)
+        .join(', ');
+      entry.createEl('p', {
+        text: `Unresolved: ${unresolvedText}`,
+        cls: 'forge-output-message',
+      });
+    }
+
+    // LLM raw output preview — pre-formatted so multiline output stays
+    // legible.
+    if (input.llmRawOutput) {
+      entry.createEl('p', {
+        text: 'LLM raw output:',
+        cls: 'forge-output-message',
+      });
+      entry.createEl('pre', {
+        text: truncateLlmOutput(input.llmRawOutput),
+        cls: 'forge-output-stdout',
+      });
+    }
+
+    entry.createEl('p', {
+      text: `Likely cause: ${guidance.likelyCause}`,
+      cls: 'forge-output-message',
+    });
+
+    entry.createEl('p', {
+      text: 'Fix options:',
+      cls: 'forge-output-message',
+    });
+    const ul = entry.createEl('ul', { cls: 'forge-output-fix-options' });
+    for (const opt of guidance.fixOptions) {
+      ul.createEl('li', { text: opt });
+    }
+
+    entry.createEl('p', {
+      text:
+        'Prior Recipe preserved. Widget will show "out of date" until '
+        + 'the Description re-forges cleanly.',
+      cls: 'forge-output-message',
+    });
+
     entry.scrollIntoView({ behavior: 'smooth' });
   }
 

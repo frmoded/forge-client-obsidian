@@ -2254,24 +2254,52 @@ export default class ForgePlugin extends Plugin {
             } else if (!hasValidStmt) {
               // CW-2200: LLM returned prose / missing-chip explanation,
               // not a Recipe. Preserve prior Recipe + surface guidance.
+              // CW-description-prose-hallucination-forge-output-visibility
+              // (2026-07-17): route the load-bearing diagnostic into the
+              // Forge Output panel; console.warn stays for debug, Notice
+              // shortens to a pointer.
               console.warn(
                 'CW-2200 non-Recipe LLM output (no Let/Return statement); preserving prior Recipe. Body:',
                 llmRecipe.slice(0, 500),
               );
+              try {
+                const outputView = await this.getOutputView();
+                outputView.appendLlmRecipeRejection(file.basename, {
+                  failureMode: 'sanitize-fail',
+                  unresolvedWikilinks: [],
+                  llmRawOutput: llmRecipe,
+                  descriptionBody: extractDescription(v2Body) ?? '',
+                });
+              } catch { /* panel unavailable; toast alone still fires */ }
               this.notice(
-                `Forge: /generate couldn't produce a valid Recipe for this Description (LLM likely lacks the needed chips). Description edit not applied to Recipe; running prior Recipe.`,
+                `Forge: /generate returned prose, not a Recipe — see Forge Output panel for guidance. Running prior Recipe.`,
               );
             } else {
               // Sub-1: closure failed. Surface actionable Notice, keep
               // prior Recipe body untouched, run existing Recipe.
-              const unresolvedList = closure.ok === false
-                ? closure.unresolved.map((id) => `[[${id}]]`).join(', ')
-                : '';
-              const detailNotice = `Forge: /generate produced a Recipe referencing ${unresolvedList} — not in your vault. Description edit not applied to Recipe; running prior Recipe.`;
+              // CW-description-prose-hallucination-forge-output-visibility
+              // (2026-07-17): panel is the primary surface now.
+              const unresolvedRaw = closure.ok === false
+                ? closure.unresolved
+                : [];
               console.warn(
-                `CW-2000 closure fail: unresolved wikilinks in LLM Recipe: ${closure.ok === false ? closure.unresolved.join(', ') : '(closure ok)'}`,
+                `CW-2000 closure fail: unresolved wikilinks in LLM Recipe: ${unresolvedRaw.join(', ') || '(closure ok)'}`,
               );
-              this.notice(detailNotice);
+              try {
+                const outputView = await this.getOutputView();
+                outputView.appendLlmRecipeRejection(file.basename, {
+                  failureMode: 'closure-fail',
+                  unresolvedWikilinks: unresolvedRaw,
+                  llmRawOutput: llmRecipe,
+                  descriptionBody: extractDescription(v2Body) ?? '',
+                });
+              } catch { /* panel unavailable; toast alone still fires */ }
+              const unresolvedList = unresolvedRaw
+                .map((id) => `[[${id}]]`)
+                .join(', ');
+              this.notice(
+                `Forge: /generate produced a Recipe referencing ${unresolvedList} — see Forge Output panel for guidance. Running prior Recipe.`,
+              );
             }
           }
           // Always continue: transpile current Recipe → Python + run.
