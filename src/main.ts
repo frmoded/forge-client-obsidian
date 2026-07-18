@@ -14,6 +14,7 @@ import {
   formatChipInventorySummary,
   parseChipInventory,
 } from './chip-inventory-core.ts';
+import { locateSnippetFile } from './locate-snippet-file-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
@@ -4571,7 +4572,11 @@ export default class ForgePlugin extends Plugin {
     if (res.status === 409 && Array.isArray(res.json?.slot_cache_miss)) {
       const result = await this.handleSlotCacheMiss(
         snippetId, res.json.slot_cache_miss as SlotRequestPayload[],
-        vaultPath, args, inputs, errorPrefix);
+        vaultPath, args, inputs, errorPrefix,
+        // CW-slot-cache-writer-not-found — pass the source file so
+        // handleSlotCacheMiss can locate nested-path notes even when
+        // snippetIdFromPath returned the bare basename.
+        refreshPythonAfter);
       if (result === null) {
         // handleSlotCacheMiss surfaced a Notice on failure; abort.
         return;
@@ -4713,16 +4718,24 @@ export default class ForgePlugin extends Plugin {
     args: unknown[],
     inputs: Record<string, unknown>,
     errorPrefix?: string,
+    // CW-slot-cache-writer-not-found (2026-07-17): the callsite already
+    // has the source TFile in scope (runSnippet → computeSnippetWithArgs).
+    // Thread it through so nested-path notes whose snippetId is bare
+    // (non-library subdir → snippetIdFromPath falls back to basename)
+    // are located directly instead of relying on a vault-root path
+    // lookup that misses.
+    sourceFile?: TFile,
   ): Promise<any | null> {
     console.log('Forge: slot cache miss', { snippetId, missingCount: missing.length });
 
-    const snippetPath = `${snippetId}.md`;
-    let file = this.app.vault.getAbstractFileByPath(snippetPath);
-    if (!(file instanceof TFile)) {
-      const bare = snippetId.split('/').pop() ?? snippetId;
-      file = this.app.vault.getAbstractFileByPath(`${bare}.md`);
-    }
-    if (!(file instanceof TFile)) {
+    // Delegate to the pure-core locator: providedFile wins, then
+    // exact-path, then basename walk over the vault's markdown files.
+    const file = locateSnippetFile(
+      snippetId,
+      this.app.vault.getMarkdownFiles(),
+      sourceFile,
+    );
+    if (!file) {
       const msg = `slot cache write skipped — could not locate ${snippetId}.md in vault`;
       console.error('Forge:', msg);
       this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
