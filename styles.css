@@ -75,6 +75,98 @@
   white-space: pre-wrap;
 }
 
+/* CW-1300-forge-output-llm-rejection-css-polish (drain 2026-07-20-1725).
+ *
+ * Visual polish for the LLM Recipe-rejection panel entry (drain 1300's
+ * appendLlmRecipeRejection). Distinguishes the entry from routine
+ * error entries — same warning-hue accent + subtle background tint +
+ * tighter typography on the derived guidance block — so cohort
+ * reads it as "your next action" rather than "another error line."
+ *
+ * Uses Obsidian's --text-warning / --background-modifier-warning-hover
+ * CSS variables where available so dark-mode inherits automatically.
+ * Hardcoded amber fallbacks match the fallback style of L66 above
+ * (var(...) with hex safety net). */
+.forge-output-entry.forge-output-llm-rejection {
+  border-left-color: var(--text-warning, #d99900);
+  background: var(--background-modifier-warning-hover, rgba(255, 200, 0, 0.06));
+  padding: 8px 10px;
+  margin-top: 6px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+
+/* Slightly larger + amber for the header line so the ⚠ icon reads. */
+.forge-output-entry.forge-output-llm-rejection > .forge-output-error {
+  color: var(--text-warning, #d99900);
+  font-size: 1.02em;
+  margin-bottom: 4px;
+}
+
+/* Truncated LLM raw output in a <pre> — force horizontal scroll for
+ * long lines instead of forcing panel-wide wrapping. */
+.forge-output-entry.forge-output-llm-rejection pre {
+  margin: 4px 0;
+  padding: 4px 6px;
+  background: var(--background-secondary);
+  border-radius: 4px;
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  overflow-x: auto;
+  white-space: pre;
+  max-width: 100%;
+}
+
+/* Fix-options list — mild padding + visible bullets against the
+ * tinted background. */
+.forge-output-entry.forge-output-llm-rejection ul.forge-output-fix-options {
+  margin: 4px 0 4px 0;
+  padding-left: 22px;
+}
+.forge-output-entry.forge-output-llm-rejection ul.forge-output-fix-options li {
+  margin: 2px 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Dark mode — bump the tint alpha a touch so the amber reads against
+ * a dark background. The CSS-variable path already handles this if
+ * --background-modifier-warning-hover is defined; this rule is the
+ * safety net for themes that don't ship the variable. */
+.theme-dark .forge-output-entry.forge-output-llm-rejection {
+  background: var(--background-modifier-warning-hover, rgba(255, 200, 0, 0.10));
+}
+
+/* CW-slot-cache-panel-treatment (drain 2026-07-20-1710) — sibling
+ * class for the slot-cache-not-found panel entry. Same visual
+ * treatment as the LLM rejection since both are "actionable
+ * warning, not routine error." */
+.forge-output-entry.forge-output-slot-cache-not-found {
+  border-left-color: var(--text-warning, #d99900);
+  background: var(--background-modifier-warning-hover, rgba(255, 200, 0, 0.06));
+  padding: 8px 10px;
+  margin-top: 6px;
+  margin-bottom: 10px;
+  border-radius: 4px;
+}
+.forge-output-entry.forge-output-slot-cache-not-found > .forge-output-error {
+  color: var(--text-warning, #d99900);
+  font-size: 1.02em;
+  margin-bottom: 4px;
+}
+.forge-output-entry.forge-output-slot-cache-not-found ul {
+  margin: 4px 0 4px 0;
+  padding-left: 22px;
+}
+.forge-output-entry.forge-output-slot-cache-not-found ul li {
+  margin: 2px 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.theme-dark .forge-output-entry.forge-output-slot-cache-not-found {
+  background: var(--background-modifier-warning-hover, rgba(255, 200, 0, 0.10));
+}
+
 .forge-output-musicxml {
   margin: 6px 0;
   background: var(--background-primary);
