@@ -52,7 +52,27 @@ const LANDMINE_IDENTIFIERS: Record<string, {
       'Print "text". is the built-in verb for stdout (constitution B7.2). '
       + 'Use Print "..." in the Recipe facet directly — no `[[print]]` chip needed.',
   },
-  // Future landmines land here as the reliability suite surfaces them.
+  // CW-print-log-debug-landmine-lane-p3 (drain 2026-07-20-2000).
+  // Belt-and-suspenders for `log` / `debug` — drain 1720 measured the
+  // Lane A amendment as effective for both (20/20 each), but Lane P1
+  // removed the base-prompt canonical `[[print]]` teaching, shifting
+  // the residual risk landscape. Adding these entries so the panel
+  // guidance is ready if a future prompt tweak (or new model rev)
+  // regresses the log/debug rate.
+  log: {
+    verb: 'log',
+    builtinAdvice:
+      'There is no Recipe-level `log` chip in V2. For diagnostic output, '
+      + 'use `Print "..."` in the Recipe facet (constitution B7.2), or emit '
+      + 'the intent as Description prose and leave logging to the Python facet.',
+  },
+  debug: {
+    verb: 'debug',
+    builtinAdvice:
+      'There is no Recipe-level `debug` chip in V2. Move debug-oriented '
+      + 'behavior into the Python facet directly, or use `Print "..."` in '
+      + 'the Recipe for quick stdout inspection during development.',
+  },
 };
 
 function _landmineInDescription(

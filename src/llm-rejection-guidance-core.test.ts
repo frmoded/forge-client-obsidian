@@ -157,6 +157,60 @@ describe('deriveLlmRejectionGuidance — pattern robustness', () => {
   });
 });
 
+// CW-print-log-debug-landmine-lane-p3 (drain 2026-07-20-2000).
+describe('deriveLlmRejectionGuidance — log + debug landmines (Lane P2)', () => {
+  it('log — bare `log` in Description surfaces log-specific guidance', () => {
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['log'],
+      descriptionBody:
+        'Return a walking bass in E, and log the harmony at each bar.',
+    });
+    // Landmine detection fired: cause names the verb + the wikilink.
+    assert.match(g.likelyCause, /log/i);
+    assert.match(g.likelyCause, /\[\[log\]\]/);
+    // Advice references either `Print` (constitution B7.2) or the
+    // "no Recipe-level log chip" explanation.
+    const joined = g.fixOptions.join(' ');
+    assert.match(joined, /log/i);
+    assert.match(joined, /Print|Python facet/i);
+  });
+
+  it('debug — bare `debug` in Description surfaces debug-specific guidance', () => {
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['debug'],
+      descriptionBody: 'Return the drum groove; debug this by showing me the offsets.',
+    });
+    assert.match(g.likelyCause, /debug/i);
+    assert.match(g.likelyCause, /\[\[debug\]\]/);
+    const joined = g.fixOptions.join(' ');
+    assert.match(joined, /debug/i);
+    assert.match(joined, /Python facet|Print/i);
+  });
+
+  it('log — case-insensitive: `Log the harmony` still triggers landmine', () => {
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['log'],
+      descriptionBody: 'Return the scale. Log the harmony at each bar.',
+    });
+    assert.match(g.likelyCause, /\[\[log\]\]/);
+  });
+
+  it('debug — Description already wikilinks [[debug]] → no landmine trigger', () => {
+    // If the driver explicitly authored `[[debug]]`, that's authored
+    // intent — don't accuse them of prose invention.
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['debug'],
+      descriptionBody:
+        'Use [[debug]] to inspect state; then return the value.',
+    });
+    assert.doesNotMatch(g.likelyCause, /as prose/);
+  });
+});
+
 describe('truncateLlmOutput', () => {
   it('returns short input verbatim', () => {
     assert.equal(truncateLlmOutput('short', 100), 'short');
