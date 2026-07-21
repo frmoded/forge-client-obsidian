@@ -14,6 +14,10 @@ import {
   truncateLlmOutput,
   type RejectionFailureMode,
 } from './llm-rejection-guidance-core.ts';
+import {
+  deriveSlotCacheNotFoundGuidance,
+  type SlotCacheNotFoundInput,
+} from './slot-cache-not-found-guidance-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
@@ -882,6 +886,69 @@ export class ForgeOutputView extends ItemView {
         + 'the Description re-forges cleanly.',
       cls: 'forge-output-message',
     });
+
+    entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /** CW-slot-cache-panel-treatment (2026-07-20-1710).
+   *  Render a slot-cache-writer file-not-found miss as a persistent
+   *  entry in the Forge Output panel. Mirror of
+   *  `appendLlmRecipeRejection` for the sibling load-bearing surface.
+   *
+   *  Layout:
+   *    - Header: "⚠  Slot cache write skipped — source file not found"
+   *    - Attempts trace (one <p> per LocateAttempt, in-order): shows
+   *      exactly which lookup was tried and whether it matched.
+   *    - Vault scan size (`.md file count`) for context.
+   *    - "Likely cause" prose from the pure-core guidance derivation.
+   *    - "Fix options" list from the same. */
+  appendSlotCacheNotFound(
+    snippetId: string,
+    input: SlotCacheNotFoundInput,
+  ) {
+    const guidance = deriveSlotCacheNotFoundGuidance(input);
+    const entry = this.makeEntry(snippetId);
+    entry.addClass('is-error');
+    entry.addClass('forge-output-slot-cache-not-found');
+
+    entry.createEl('p', {
+      text: '⚠  Slot cache write skipped — source file not found',
+      cls: 'forge-output-error',
+    });
+
+    // Attempts trace — one line per step.
+    entry.createEl('p', {
+      text: 'Lookup attempts:',
+      cls: 'forge-output-message',
+    });
+    const ul = entry.createEl('ul', { cls: 'forge-output-attempts' });
+    for (const a of input.attempts) {
+      const marker = a.matched ? '✓' : '✗';
+      const label = a.step === 'provided-file'
+        ? 'caller-supplied file'
+        : (a.step === 'exact-path' ? 'exact path' : 'basename walk');
+      ul.createEl('li', {
+        text: `${marker}  ${label}: ${a.tried}`,
+      });
+    }
+    entry.createEl('p', {
+      text: `Vault scanned: ${input.markdownFileCount} .md files.`,
+      cls: 'forge-output-message',
+    });
+
+    entry.createEl('p', {
+      text: `Likely cause: ${guidance.likelyCause}`,
+      cls: 'forge-output-message',
+    });
+
+    entry.createEl('p', {
+      text: 'Fix options:',
+      cls: 'forge-output-message',
+    });
+    const fixUl = entry.createEl('ul', { cls: 'forge-output-fix-options' });
+    for (const opt of guidance.fixOptions) {
+      fixUl.createEl('li', { text: opt });
+    }
 
     entry.scrollIntoView({ behavior: 'smooth' });
   }

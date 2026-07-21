@@ -14,7 +14,7 @@ import {
   formatChipInventorySummary,
   parseChipInventory,
 } from './chip-inventory-core.ts';
-import { locateSnippetFile } from './locate-snippet-file-core.ts';
+import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
@@ -4758,15 +4758,41 @@ export default class ForgePlugin extends Plugin {
 
     // Delegate to the pure-core locator: providedFile wins, then
     // exact-path, then basename walk over the vault's markdown files.
+    // CW-slot-cache-panel-treatment (2026-07-20-1710): capture the
+    // attempt trace so we can render a persistent diagnostic in the
+    // Forge Output panel when the lookup misses.
+    const markdownFiles = this.app.vault.getMarkdownFiles();
+    const attempts: LocateAttempt[] = [];
     const file = locateSnippetFile(
       snippetId,
-      this.app.vault.getMarkdownFiles(),
+      markdownFiles,
       sourceFile,
+      attempts,
     );
     if (!file) {
       const msg = `slot cache write skipped — could not locate ${snippetId}.md in vault`;
+      // Redundancy tier — DevTools console + toast per protocol L41
+      // ("console.warn + Notice toast is redundancy, not the load-
+      // bearing signal"). Load-bearing surface is the Forge Output
+      // panel, populated below.
       console.error('Forge:', msg);
-      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg}`);
+      this.notice(
+        errorPrefix
+          ? `${errorPrefix}: ${msg} (see Forge Output panel)`
+          : `Forge: ${msg} (see Forge Output panel)`,
+      );
+      try {
+        const outputView = await this.getOutputView();
+        outputView.appendSlotCacheNotFound(snippetId, {
+          snippetId,
+          providedFilePath: sourceFile?.path ?? null,
+          attempts,
+          markdownFileCount: markdownFiles.length,
+        });
+      } catch {
+        // Panel unavailable (view not registered / vault not open) —
+        // the redundant Notice + console.error still fired above.
+      }
       return null;
     }
 
