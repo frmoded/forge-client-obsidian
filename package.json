@@ -14,6 +14,7 @@
     "setup-assets": "node scripts/setup-assets.mjs",
     "sync-engine-bundle": "node scripts/sync-engine-bundle.mjs",
     "check-engine-bundle": "node scripts/check-engine-bundle.mjs",
+    "prebuild": "npm run check-engine-bundle",
     "sync-bundled-vaults": "node scripts/sync-bundled-vault.mjs --all",
     "inline-assets": "node scripts/inline-bundled-assets.mjs",
     "release-zip": "node scripts/build-release-zip.mjs"
