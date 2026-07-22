@@ -918,6 +918,33 @@ export default class ForgePlugin extends Plugin {
       callback: () => { this.toggleEdgesView(); },
     });
 
+    // CW-facet-headings-copyable (drain 2026-07-21-1515). Cmd-A + Cmd-C
+    // in Obsidian's Live Preview strips `# Description` / `# Recipe` /
+    // `# Python` heading source lines (built-in Markdown parser
+    // decoration behavior, not a Forge view plugin). This command
+    // bypasses the editor entirely: reads the active file's raw
+    // markdown via the vault API and writes it to the clipboard.
+    // Guaranteed byte-for-byte reproduction of the on-disk file.
+    this.addCommand({
+      id: 'forge-copy-source-raw',
+      name: 'Forge: Copy source (raw)',
+      callback: async () => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file) {
+          this.notice('Forge: no active note to copy.');
+          return;
+        }
+        try {
+          const raw = await this.app.vault.read(file);
+          await navigator.clipboard.writeText(raw);
+          this.notice(`Copied raw source of ${file.basename}.md to clipboard`);
+        } catch (e) {
+          console.error('Forge: copy raw failed', e);
+          this.notice('Forge: copy failed — see console.');
+        }
+      },
+    });
+
     // v0.2.119 — Cmd-P escape hatch for v0.2.118's frontmatter hide.
     // v0.2.122 — same toggle now ALSO reveals/hides the
     // `# Dependencies` section per §2.2 option (a) (single mental
