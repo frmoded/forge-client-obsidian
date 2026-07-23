@@ -14,13 +14,14 @@ It's pleasant.
 Open the note and look. It sets a value, `temperature`, to `72`, and then
 makes a choice:
 
-- **If** `temperature is greater than 80`, it prints "It's hot."
-- **Otherwise**, it prints "It's pleasant."
+- **If** `temperature is greater than 80`, it returns "It's hot."
+- **Otherwise**, it returns "It's pleasant."
 
 Each choice's lines are **indented** underneath it — that's how Forge knows which
 lines belong to the `If` and which belong to the `Otherwise`. Since `72` is not
 greater than `80`, Forge skips the first block and runs the `Otherwise` one — so
-you get "It's pleasant."
+you get "It's pleasant." Whichever branch runs, its `Return` hands that string
+back as the note's result.
 
 `is greater than` is one of several comparisons you can use — there's also
 `is less than`, `is at least`, `is at most`, `equals`, and `does not equal`.

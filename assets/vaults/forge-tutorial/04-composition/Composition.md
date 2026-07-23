@@ -15,7 +15,7 @@ Forge is wonderful.
 ## What's new
 
 Open **describe_forge** and look — it's short. It calls another note,
-[[excited_word]], stores what comes back in `word`, and then prints
+[[excited_word]], stores what comes back in `word`, and then returns
 `"Forge is " + word + "."`. The new idea is that one line:
 
 > Let word = Call [[excited_word]].
@@ -32,7 +32,7 @@ doesn't care *how* it decides — it just uses what comes back. Small pieces,
 combined.
 
 > The **excited_word** chip is in your 🔥 palette — a building block you can call
-> from anywhere, just like [[print]].
+> from anywhere, just like [[excited]] from chapter 3.
 
 ## Exercise
 

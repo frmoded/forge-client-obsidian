@@ -22,7 +22,7 @@ Open the note and look. The key line is:
 The new piece is `{{ … }}` — a **value slot**. Inside the double curly braces you
 write a *request* in plain English instead of a value. When you Forge it, Forge
 reads your request, works out a value that fits, and drops it in — here it filled
-`fact` with a real octopus fact, and the next line printed it with [[print]].
+`fact` with a real octopus fact, and the next line returned it.
 
 This is the whole idea of Forge in one line: you say what you want; Forge helps
 make it real.

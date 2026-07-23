@@ -23,10 +23,10 @@ The star is the **factorial** note, and it calls *itself*. It takes an input
   asks for `3`, and so on down to `1`, where it stops. Then all those answers
   multiply back up to `120`.
 
-The second note, **show_factorial**, just calls it and prints the result:
+The second note, **show_factorial**, just calls it and returns the result:
 
-> Let result = Call [[factorial]] with n=5.
-> [[print]] result.
+> Let r = Call [[factorial]] with n=5.
+> Return r.
 
 (Notice `n=5` — same rule as chapter 3: a note that takes an input is called
 by name.)

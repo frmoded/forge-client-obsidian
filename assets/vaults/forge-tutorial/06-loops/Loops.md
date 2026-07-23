@@ -25,6 +25,19 @@ the current item the name `number` each time around — so it prints `3`, then
 Lists are written with **angle brackets**, like `<3, 2, 1>` — that's just how
 Forge writes a list of values.
 
+## About `Return` vs `[[print]]`
+
+You've seen `Return` in every chapter so far — it hands one value back as the
+note's whole result. Notice this Recipe uses `[[print]] number.` inside the
+loop instead. That's on purpose: `Return` **exits** the whole Recipe with a
+single value, so a `Return` inside a loop would stop after the first iteration
+and you'd never see `2` or `1`. `[[print]]` **emits** one line and lets the
+Recipe keep going — which is exactly what you need when a loop is meant to
+show multiple things.
+
+Rule of thumb: use `Return` when you have one answer to hand back, and
+`[[print]]` when you want to show many things as the note runs.
+
 > The **For each** chip is now in your 🔥 palette — the last piece of core
 > vocabulary.
 

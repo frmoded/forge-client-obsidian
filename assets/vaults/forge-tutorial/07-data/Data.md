@@ -26,8 +26,10 @@ something calls it, it simply hands back that list.
 
 Then the **show_colors** note calls [[colors]] to get the list, names it
 `palette`, and loops over it with the **For each** you learned last chapter —
-printing each color in turn. Action notes *do*; data notes *hold*;
-together they keep your values in one place.
+printing each color in turn. (Same `Return`-vs-`[[print]]` reason as the
+countdown: a loop that shows multiple things uses `[[print]]`, not `Return`.)
+Action notes *do*; data notes *hold*; together they keep your values in one
+place.
 
 > The **colors** chip is in your 🔥 palette — a value you can drop into any
 > note.
