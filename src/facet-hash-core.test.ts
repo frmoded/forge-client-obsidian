@@ -28,7 +28,9 @@ import {
   whichLayerIsSource,
   detectStaleFacets,
   getSourceFacet,
+  computeSyncState,
   type SourceLayer,
+  type SyncState,
 } from './facet-hash-core.ts';
 
 
@@ -499,4 +501,133 @@ describe('whichLayerIsSource — v0.2.286 legacy canonical_facet fallback', () =
     );
     assert.equal(result, 'synced');
   });
+});
+
+
+// ---------- computeSyncState (drain 2026-07-23-1700 Phase 1) -----------
+// Note-level rollup persisted to `sync_state` frontmatter. 5 values;
+// `authoring` is computed-only (never persisted per Proposal B shipped
+// by drain 1700). This suite exercises the 4 persisted values +
+// synthetic edge cases.
+
+describe('computeSyncState', () => {
+  it('returns "synced" when all stored hashes match current content',
+    async () => {
+      const d = 'hello';
+      const r = 'Return "hi".';
+      const p = 'def compute(c): return "hi"';
+      const dh = await computeFacetHash(d);
+      const rh = await computeFacetHash(r);
+      const ph = await computeFacetHash(p);
+      const result = await computeSyncState(
+        'body',
+        _helpers(d, r, p, dh, rh, ph),
+      );
+      assert.equal(result, 'synced');
+    });
+
+  it('returns "stale-recipe" when only Description drifted', async () => {
+    const d = 'hello edited';
+    const r = 'Return "hi".';
+    const p = 'def compute(c): return "hi"';
+    const dhStored = await computeFacetHash('hello');
+    const rh = await computeFacetHash(r);
+    const ph = await computeFacetHash(p);
+    const result = await computeSyncState(
+      'body',
+      _helpers(d, r, p, dhStored, rh, ph),
+    );
+    assert.equal(result, 'stale-recipe');
+  });
+
+  it('returns "stale-python" when only Recipe drifted', async () => {
+    const d = 'hello';
+    const r = 'Return "EDITED".';
+    const p = 'def compute(c): return "hi"';
+    const dh = await computeFacetHash(d);
+    const rhStored = await computeFacetHash('Return "hi".');
+    const ph = await computeFacetHash(p);
+    const result = await computeSyncState(
+      'body',
+      _helpers(d, r, p, dh, rhStored, ph),
+    );
+    assert.equal(result, 'stale-python');
+  });
+
+  it('returns "stale-python" when only Python drifted', async () => {
+    const d = 'hello';
+    const r = 'Return "hi".';
+    const p = 'def compute(c): return "EDITED"';
+    const dh = await computeFacetHash(d);
+    const rh = await computeFacetHash(r);
+    const phStored = await computeFacetHash('def compute(c): return "hi"');
+    const result = await computeSyncState(
+      'body',
+      _helpers(d, r, p, dh, rh, phStored),
+    );
+    assert.equal(result, 'stale-python');
+  });
+
+  it('returns "stale-both" when Description AND Recipe both drifted',
+    async () => {
+      const d = 'hello edited';
+      const r = 'Return "EDITED".';
+      const p = 'def compute(c): return "hi"';
+      const dhStored = await computeFacetHash('hello');
+      const rhStored = await computeFacetHash('Return "hi".');
+      const ph = await computeFacetHash(p);
+      const result = await computeSyncState(
+        'body',
+        _helpers(d, r, p, dhStored, rhStored, ph),
+      );
+      assert.equal(result, 'stale-both');
+    });
+
+  it('returns "stale-python" when Recipe AND Python both drifted (recipe wins over python transitively)',
+    async () => {
+      // Rule 3 in the spec: !descMismatch && recipeMismatch, regardless
+      // of pythonMismatch → stale-python. sync_state observes note-level
+      // freshness; the per-facet lineage story lives in FacetState.
+      const d = 'hello';
+      const r = 'Return "EDITED".';
+      const p = 'def compute(c): return "ALSO_EDITED"';
+      const dh = await computeFacetHash(d);
+      const rhStored = await computeFacetHash('Return "hi".');
+      const phStored = await computeFacetHash('def compute(c): return "hi"');
+      const result = await computeSyncState(
+        'body',
+        _helpers(d, r, p, dh, rhStored, phStored),
+      );
+      assert.equal(result, 'stale-python');
+    });
+
+  it('treats absent stored hashes as "no drift" (fresh unpopulated note → synced)',
+    async () => {
+      // Fresh V2 note that hasn't been forged yet — no <facet>_hash
+      // frontmatter fields set. Matches whichLayerIsSource's "absent
+      // counts as matches" pattern (facet-hash-core.ts L121-124).
+      const d = 'fresh description';
+      const r = 'Return "fresh".';
+      const p = 'def compute(c): return "fresh"';
+      const result = await computeSyncState(
+        'body',
+        _helpers(d, r, p, null, null, null),
+      );
+      assert.equal(result, 'synced');
+    });
+
+  it('is deterministic across repeated invocations on the same input',
+    async () => {
+      const d = 'hello edited';
+      const r = 'Return "hi".';
+      const p = 'def compute(c): return "hi"';
+      const dhStored = await computeFacetHash('hello');
+      const rh = await computeFacetHash(r);
+      const ph = await computeFacetHash(p);
+      const h = _helpers(d, r, p, dhStored, rh, ph);
+      const first = await computeSyncState('body', h);
+      const second = await computeSyncState('body', h);
+      assert.equal(first, second);
+      assert.equal(first, 'stale-recipe');
+    });
 });

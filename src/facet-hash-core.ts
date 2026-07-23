@@ -56,6 +56,94 @@ export type SourceLayer = 'description' | 'recipe' | 'python' | 'synced';
 export type CanonicalLayer = SourceLayer;
 
 
+/** Phase 1 of the S9 hexa-state persistence arc (drain 2026-07-23-1700).
+ *  A note-level rollup of facet-freshness relationships, persisted to
+ *  frontmatter (`sync_state`) so external consumers (forge-mcp, cross-
+ *  cowork wizard, CC drain-generated tests) can read the state machine
+ *  without loading the plugin runtime.
+ *
+ *  Distinct from `SourceLayer` (which facet is canonical) and from the
+ *  per-facet render-time `FacetState` enum in `facet-state-core.ts`
+ *  (how each facet relates to source). Co-exists with both; does NOT
+ *  replace either.
+ *
+ *  Values:
+ *   - `synced`         all three facets aligned with their stored hashes.
+ *   - `stale-recipe`   Description edited since Recipe was last derived
+ *                      (description body-hash drifted from stored, recipe
+ *                      body-hash still matches stored).
+ *   - `stale-python`   Recipe edited since Python was compiled (recipe
+ *                      drifted, python still matches) OR a downstream
+ *                      Python-only edit not yet reconciled with Recipe.
+ *   - `stale-both`     Description edited AND Recipe not re-derived
+ *                      (both description + recipe body-hashes drifted).
+ *   - `authoring`      A facet is mid-edit and hashes haven't settled
+ *                      yet. COMPUTED-ONLY per Proposal B (shipped by
+ *                      drain 1700): NEVER persisted to frontmatter.
+ *                      External observers reading mid-typing see the
+ *                      LAST settled value; the transient `authoring`
+ *                      state exists only for in-plugin diagnostics.
+ */
+export type SyncState =
+  | 'synced'
+  | 'stale-recipe'
+  | 'stale-python'
+  | 'stale-both'
+  | 'authoring';
+
+
+/** Compute the note-level sync-state rollup by comparing current facet
+ *  body hashes to stored `<facet>_hash` frontmatter values.
+ *
+ *  Rule set (from drain §4 A.2 — mechanical hash compare):
+ *   1. descMismatch && recipeMismatch          → stale-both
+ *   2. descMismatch && !recipeMismatch         → stale-recipe
+ *   3. !descMismatch && recipeMismatch         → stale-python
+ *      (regardless of pythonMismatch — sync_state observes note-level
+ *      freshness, not per-facet lineage)
+ *   4. !descMismatch && !recipeMismatch && pythonMismatch → stale-python
+ *   5. no mismatches                            → synced
+ *
+ *  An absent stored hash counts as "matches" (no mismatch surfaced) so
+ *  freshly minted notes without hashes are reported as `synced`.
+ *  Matches the `whichLayerIsSource` fallback pattern.
+ *
+ *  Does NOT return `authoring` — that state is computed at the write-
+ *  gate layer in main.ts (Proposal B: computed-only, never persisted).
+ */
+export async function computeSyncState(
+  body: string,
+  helpers: {
+    extractDescription: (body: string) => string;
+    extractRecipeSection: (body: string) => string | null;
+    extractPythonSection: (body: string) => string | null;
+    getFrontmatterField: (body: string, key: string) => string | null;
+  },
+): Promise<SyncState> {
+  const descText = helpers.extractDescription(body);
+  const recipeText = helpers.extractRecipeSection(body) ?? '';
+  const pythonText = helpers.extractPythonSection(body) ?? '';
+
+  const storedDesc = helpers.getFrontmatterField(body, 'description_hash');
+  const storedRecipe = helpers.getFrontmatterField(body, 'recipe_hash');
+  const storedPython = helpers.getFrontmatterField(body, 'python_hash');
+
+  const currentDesc = await computeFacetHash(descText);
+  const currentRecipe = await computeFacetHash(recipeText);
+  const currentPython = await computeFacetHash(pythonText);
+
+  const descMismatch = storedDesc !== null && storedDesc !== currentDesc;
+  const recipeMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
+  const pythonMismatch = storedPython !== null && storedPython !== currentPython;
+
+  if (descMismatch && recipeMismatch) return 'stale-both';
+  if (descMismatch) return 'stale-recipe';
+  if (recipeMismatch) return 'stale-python';
+  if (pythonMismatch) return 'stale-python';
+  return 'synced';
+}
+
+
 /** Compute the stable hash for a single facet body. Same normalization
  *  as `computeDescriptionHash` (trim trailing per-line whitespace,
  *  strip top/bottom blank lines). The three facets share one

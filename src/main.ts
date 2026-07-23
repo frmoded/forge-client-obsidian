@@ -16,7 +16,7 @@ import {
 } from './chip-inventory-core.ts';
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
-import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
+import { computeFacetHash, whichLayerIsSource, getSourceFacet, computeSyncState } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
 import { resolveRunTarget } from './run-snippet-target-core.ts';
 import { identifyEditedFacet, decideSourceWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
@@ -4235,12 +4235,36 @@ export default class ForgePlugin extends Plugin {
       });
 
       const target = decideSourceWrite(editedFacet, storedSource);
-      if (target === null) return; // no write needed
+
+      // Drain 2026-07-23-1700 Phase 1 — compute sync_state rollup and
+      // co-write it with source_facet in the same processFrontMatter
+      // call. Proposal B semantics: `authoring` is computed-only (never
+      // persisted); the write below always lands a settled value.
+      // Read the current stored value so we can skip a no-op write.
+      const nextSyncState = await computeSyncState(body, {
+        extractDescription,
+        extractRecipeSection,
+        extractPythonSection,
+        getFrontmatterField: (b, k) => {
+          const v = getFmFieldV2(b, k);
+          return typeof v === 'string' ? v : null;
+        },
+      });
+      const storedSyncState = getFmFieldV2(body, 'sync_state');
+      const syncStateNeedsWrite =
+        typeof storedSyncState !== 'string' || storedSyncState !== nextSyncState;
+
+      if (target === null && !syncStateNeedsWrite) return; // no write needed
 
       // Write via processFrontMatter so we don't churn body text.
       await this.withProgrammaticWrite(file.path, async () => {
         await this.app.fileManager.processFrontMatter(file, (fm: any) => {
-          fm.source_facet = target;
+          if (target !== null) {
+            fm.source_facet = target;
+          }
+          if (syncStateNeedsWrite) {
+            fm.sync_state = nextSyncState;
+          }
           // v0.2.286 migration — flush the legacy field name so notes
           // don't carry both. Idempotent on already-migrated notes.
           if ('canonical_facet' in fm) {
@@ -4248,10 +4272,18 @@ export default class ForgePlugin extends Plugin {
           }
         });
       });
-      console.log(
-        `[source-facet] ${file.path}: `
-        + `${storedSource ?? '(absent)'} → ${target}`,
-      );
+      if (target !== null) {
+        console.log(
+          `[source-facet] ${file.path}: `
+          + `${storedSource ?? '(absent)'} → ${target}`,
+        );
+      }
+      if (syncStateNeedsWrite) {
+        console.log(
+          `[sync-state] ${file.path}: `
+          + `${storedSyncState ?? '(absent)'} → ${nextSyncState}`,
+        );
+      }
     } catch (e) {
       console.error('maybeUpdateSourceFacet failed', e);
     } finally {
@@ -4365,12 +4397,31 @@ export default class ForgePlugin extends Plugin {
         else if (pMismatch) seed = 'python';
         else seed = 'synced';
 
+        // Drain 2026-07-23-1700 Phase 1 — sync_state seed for the
+        // open-file layout-ready pass. Seed only when the field is
+        // absent (migration path for pre-drain-1700 notes). Existing
+        // sync_state values are preserved — the modify handler is
+        // responsible for keeping them fresh on hand-edits.
+        const existingSyncState = getFmFieldV2(body, 'sync_state');
+        const syncStateAlreadyPresent =
+          typeof existingSyncState === 'string' && existingSyncState.length > 0;
+        const nextSyncState = await computeSyncState(body, {
+          extractDescription,
+          extractRecipeSection,
+          extractPythonSection,
+          getFrontmatterField: (b, k) => {
+            const v = getFmFieldV2(b, k);
+            return typeof v === 'string' ? v : null;
+          },
+        });
+
         // Skip write entirely when there is nothing to change.
         if (
           sourceAlreadyPresent
           && !needsLegacyMigration
           && !seedRecipeParent
           && !seedPythonParent
+          && syncStateAlreadyPresent
         ) {
           continue;
         }
@@ -4395,6 +4446,9 @@ export default class ForgePlugin extends Plugin {
             }
             if (seedPythonParent) {
               fm.python_derived_from_recipe_hash = legacyPythonParent;
+            }
+            if (!syncStateAlreadyPresent) {
+              fm.sync_state = nextSyncState;
             }
           });
         });
