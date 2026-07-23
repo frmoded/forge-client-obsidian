@@ -1,4 +1,4 @@
 name = "forge-tutorial"
-version = "0.3.6"
+version = "0.3.7"
 description = "The Forge tutorial. A K&R-style walk from your first Forge-click to composing your own notes. Every chapter runs, introduces one new idea, and ends with a tweak."
 domains = []
