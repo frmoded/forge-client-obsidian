@@ -26,7 +26,7 @@ The star is the **factorial** note, and it calls *itself*. It takes an input
 The second note, **show_factorial**, just calls it and prints the result:
 
 > Let result = Call [[factorial]] with n=5.
-> Call [[print]] with text=result.
+> [[print]] result.
 
 (Notice `n=5` — same rule as chapter 3: a note that takes an input is called
 by name.)

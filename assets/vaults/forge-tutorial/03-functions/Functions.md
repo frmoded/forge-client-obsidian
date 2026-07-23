@@ -24,7 +24,7 @@ result back to whoever called it.
 Then **cheer** uses it:
 
 > Let shout = Call [[excited]] with word="hooray".
-> Call [[print]] with text=shout.
+> [[print]] shout.
 
 - [[excited]] is called with `word="hooray"` — that hands it the input `word`
   set to `"hooray"`.

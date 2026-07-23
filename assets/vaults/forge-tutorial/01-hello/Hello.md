@@ -26,18 +26,16 @@ and `inputs: []` (it asks you for nothing). You can ignore the rest for now.
 **The Recipe** — under the *Recipe* heading — is the whole program, and it's
 one line:
 
-> Call [[print]] with text="hello, world".
+> Return "hello, world".
 
 Read it out loud — it almost reads like English, and that's the point. It says:
-*call the thing named [[print]], and hand it the text "hello, world" as its
-`text` argument.*
+*hand back the text "hello, world" as this note's result.*
 
-- **[[print]]** is a **call** — it names a piece you're using. `print` is a
-  built-in piece that shows text as output. It shows up as a link: you're
-  pointing at the `print` tool.
-- **"hello, world"** is the **text** you're handing it. Text always goes in
-  double quotes.
-- The line starts with **Call** and ends with a **.** — every instruction does.
+- **Return** is the **output verb** — the word that tells Forge what this note
+  hands back when you 🔥 it. Every note that produces a result uses `Return`.
+- **"hello, world"** is the **text** being returned. Text always goes in double
+  quotes.
+- The line starts with **Return** and ends with a **.** — every instruction does.
 
 When you Forge it (the 🔥 button), Forge reads that Recipe, works out what to
 run, and shows you the result.
@@ -54,9 +52,9 @@ see what happened.**
 ## Palette focus
 
 The chip palette on the right shows every construct available. In this chapter
-you only need **Call [[print]]** — the one construct in `hello_world`. You'll
-see other palette entries like `Let`, `If`, `For each`, `Return` — ignore them
-for now. We'll cover each one in later chapters (`Let` in [[Variables]],
-`Return` in [[Functions]], `If` in [[Conditionals]], `For each` in [[Loops]]).
+you only need **Return** — the one construct in `hello_world`. You'll see other
+palette entries like `Let`, `If`, `For each`, `Call` — ignore them for now.
+We'll cover each one in later chapters (`Let` in [[Variables]], `Call` in
+[[Functions]], `If` in [[Conditionals]], `For each` in [[Loops]]).
 
 When you're ready, go to [[Variables]] — where we start giving names to things.
