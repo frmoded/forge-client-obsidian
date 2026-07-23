@@ -2159,6 +2159,20 @@ export default class ForgePlugin extends Plugin {
         // Fall through to standard transpile path if the probe itself
         // throws — preserves pre-Phase-2 behavior on hash-helper bugs.
       }
+      // CW-description-edit-refresh-fix-with-diagnostic-logging (drain
+      // 2026-07-22-2030) Phase 1 — Fork A instrumentation. Emits the
+      // canonical-layer verdict + v2Body length so a driver DevTools
+      // repro of the Description-edit-fails-to-refresh smoke shows
+      // whether the probe fired `synced` (indicating stored hashes
+      // never got a real Description baseline) vs `description` (probe
+      // works; issue is downstream). Phase 2 (a followup drain) applies
+      // the fork-specific fix; do NOT interpret this log as a fix.
+      console.log(
+        '[Forge auto-forge] Fork A: whichLayerIsSource verdict =',
+        canonicalLayer,
+        '{ v2Body.length:', v2Body.length,
+        ', file:', file.basename, '}',
+      );
       if (canonicalLayer === 'python') {
         console.log(
           `Forge: ${file.basename} is Python-canonical (V2 implicit lock) — running # Python directly without re-transpile`,
@@ -2222,6 +2236,16 @@ export default class ForgePlugin extends Plugin {
             // positive reject). Err toward accepting LLM output.
             const knownIds = await this._collectKnownSnippetIds();
             const catalogReady = this._libraryCatalogLoaded;
+            // CW-description-edit-refresh-fix-with-diagnostic-logging
+            // (drain 2026-07-22-2030) Phase 1 — Fork C instrumentation.
+            // Log the catalog state at the point the Description branch
+            // reads it. Fork C hypothesis: auto-forge fires before
+            // catalog is loaded, closure check is bypassed via the
+            // load-race guardrail, but downstream code still no-ops.
+            console.log(
+              '[Forge auto-forge] Fork C: catalog state =',
+              { catalogReady, knownIdsSize: knownIds.size },
+            );
             const closure = catalogReady
               ? checkRecipeClosure(llmRecipe, (id) => knownIds.has(id))
               : { ok: true as const, wikilinks: [] };
@@ -2238,6 +2262,21 @@ export default class ForgePlugin extends Plugin {
             // which passed mixed prose+Let content through.
             const sanitized = sanitizeLlmRecipe(llmRecipe);
             const hasValidStmt = sanitized !== null;
+            // CW-description-edit-refresh-fix-with-diagnostic-logging
+            // (drain 2026-07-22-2030) Phase 1 — Fork B instrumentation.
+            // Emit the closure-check verdict + sanitize verdict + gate
+            // decision. Fork B hypothesis: closure passes + sanitize
+            // returns null (Sub-1 stamp preserves prior Recipe), so the
+            // re-derive silently skips. Driver DevTools smoke reveals
+            // whether closure.ok === false OR hasValidStmt === false.
+            console.log(
+              '[Forge auto-forge] Fork B: closure-check + sanitize =',
+              { closureOk: closure.ok,
+                closureWikilinks: closure.wikilinks?.length ?? 0,
+                sanitizedIsNull: sanitized === null,
+                hasValidStmt,
+                gatePasses: closure.ok === true && hasValidStmt },
+            );
             if (closure.ok === true && hasValidStmt) {
               const currentBody = await this.app.vault.read(file);
               const currentDesc = extractDescription(currentBody) ?? '';
