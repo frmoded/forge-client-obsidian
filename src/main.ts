@@ -925,9 +925,18 @@ export default class ForgePlugin extends Plugin {
     // bypasses the editor entirely: reads the active file's raw
     // markdown via the vault API and writes it to the clipboard.
     // Guaranteed byte-for-byte reproduction of the on-disk file.
+    // CW-copy-source-raw-polish (drain 2026-07-23-1300) — renamed from
+    // "Forge: Copy source (raw)" to "Forge: Copy note source with
+    // headings" for better palette fuzzy-search. Users reach for this
+    // when Cmd-C in Live Preview strips `# Description`/`# Recipe`/
+    // `# Python` heading source lines; the new name matches their
+    // mental model ("Cmd-C didn't grab my headings, I want a way to
+    // copy WITH headings"). Command id kept as `forge-copy-source-raw`
+    // so existing hotkey bindings + executeCommandById callers keep
+    // working. Ribbon icon below invokes this same command.
     this.addCommand({
       id: 'forge-copy-source-raw',
-      name: 'Forge: Copy source (raw)',
+      name: 'Forge: Copy note source with headings',
       callback: async () => {
         const file = this.app.workspace.getActiveFile();
         if (!file) {
@@ -944,6 +953,24 @@ export default class ForgePlugin extends Plugin {
         }
       },
     });
+
+    // CW-copy-source-raw-polish (drain 2026-07-23-1300) — left-ribbon
+    // affordance for the palette command above. Drain 2026-07-23-1100
+    // HELD SHIP on native-Cmd-C interception (text/html clipboard-loss
+    // + plugin-conflict risks). Ribbon icon closes the discoverability
+    // gap without incurring those risks: users see the affordance
+    // without knowing to open the palette. Icon `clipboard-copy` is
+    // Lucide default in Obsidian. Delegates to executeCommandById so
+    // command and ribbon share ONE behavior contract.
+    this.addRibbonIcon(
+      'clipboard-copy',
+      'Forge: Copy note source with headings',
+      async () => {
+        await (this.app as any).commands.executeCommandById(
+          'forge-copy-source-raw',
+        );
+      },
+    );
 
     // v0.2.119 — Cmd-P escape hatch for v0.2.118's frontmatter hide.
     // v0.2.122 — same toggle now ALSO reveals/hides the
