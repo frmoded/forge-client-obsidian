@@ -505,10 +505,11 @@ describe('whichLayerIsSource — v0.2.286 legacy canonical_facet fallback', () =
 
 
 // ---------- computeSyncState (drain 2026-07-23-1700 Phase 1) -----------
-// Note-level rollup persisted to `sync_state` frontmatter. 5 values;
-// `authoring` is computed-only (never persisted per Proposal B shipped
-// by drain 1700). This suite exercises the 4 persisted values +
-// synthetic edge cases.
+// Note-level rollup persisted to `sync_state` frontmatter. 4 values:
+// `synced` / `stale-recipe` / `stale-python` / `stale-both`. This suite
+// exercises all 4 + synthetic edge cases. (Drain 2026-07-23-1900 removed
+// the vestigial `authoring` value from the enum per YAGNI: no code path
+// ever wrote it.)
 
 describe('computeSyncState', () => {
   it('returns "synced" when all stored hashes match current content',
@@ -629,5 +630,43 @@ describe('computeSyncState', () => {
       const second = await computeSyncState('body', h);
       assert.equal(first, second);
       assert.equal(first, 'stale-recipe');
+    });
+
+  it('never returns the removed "authoring" value across the full input matrix',
+    async () => {
+      // Guard rail (drain 2026-07-23-1900): the `authoring` enum value
+      // was removed from SyncState per YAGNI. This test enforces that
+      // no branch of computeSyncState can produce it, protecting the
+      // enum's 4-value shape from silent re-introduction.
+      const d = 'desc';
+      const r = 'Return "hi".';
+      const p = 'def compute(c): return "hi"';
+      const dh = await computeFacetHash(d);
+      const rh = await computeFacetHash(r);
+      const ph = await computeFacetHash(p);
+      const stale = 'ffffffff';  // deliberately wrong hash
+
+      // Exhaustive 2^3 matrix over (descMatch, recipeMatch, pythonMatch).
+      const combos: Array<[string, string, string]> = [
+        [dh, rh, ph],       // all match
+        [stale, rh, ph],    // desc drift only
+        [dh, stale, ph],    // recipe drift only
+        [dh, rh, stale],    // python drift only
+        [stale, stale, ph], // desc + recipe
+        [stale, rh, stale], // desc + python
+        [dh, stale, stale], // recipe + python
+        [stale, stale, stale], // all three
+      ];
+      for (const [sdh, srh, sph] of combos) {
+        const result = await computeSyncState(
+          'body',
+          _helpers(d, r, p, sdh, srh, sph),
+        );
+        assert.notEqual(
+          result,
+          'authoring' as unknown as SyncState,
+          `computeSyncState returned 'authoring' for combo ${JSON.stringify([sdh, srh, sph])}`,
+        );
+      }
     });
 });

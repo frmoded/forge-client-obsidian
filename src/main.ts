@@ -4238,9 +4238,9 @@ export default class ForgePlugin extends Plugin {
 
       // Drain 2026-07-23-1700 Phase 1 — compute sync_state rollup and
       // co-write it with source_facet in the same processFrontMatter
-      // call. Proposal B semantics: `authoring` is computed-only (never
-      // persisted); the write below always lands a settled value.
-      // Read the current stored value so we can skip a no-op write.
+      // call. (Drain 2026-07-23-1900 removed the vestigial `authoring`
+      // value; the enum is 4 values now.) Read the current stored value
+      // so we can skip a no-op write.
       const nextSyncState = await computeSyncState(body, {
         extractDescription,
         extractRecipeSection,

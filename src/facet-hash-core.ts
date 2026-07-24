@@ -67,7 +67,10 @@ export type CanonicalLayer = SourceLayer;
  *  (how each facet relates to source). Co-exists with both; does NOT
  *  replace either.
  *
- *  Values:
+ *  Values (drain 2026-07-23-1900 removed the vestigial `authoring`
+ *  value per YAGNI — it had no code path that ever wrote it; if a
+ *  future in-transit consumer arises, re-add with a real writer +
+ *  reader landing together):
  *   - `synced`         all three facets aligned with their stored hashes.
  *   - `stale-recipe`   Description edited since Recipe was last derived
  *                      (description body-hash drifted from stored, recipe
@@ -77,19 +80,12 @@ export type CanonicalLayer = SourceLayer;
  *                      Python-only edit not yet reconciled with Recipe.
  *   - `stale-both`     Description edited AND Recipe not re-derived
  *                      (both description + recipe body-hashes drifted).
- *   - `authoring`      A facet is mid-edit and hashes haven't settled
- *                      yet. COMPUTED-ONLY per Proposal B (shipped by
- *                      drain 1700): NEVER persisted to frontmatter.
- *                      External observers reading mid-typing see the
- *                      LAST settled value; the transient `authoring`
- *                      state exists only for in-plugin diagnostics.
  */
 export type SyncState =
   | 'synced'
   | 'stale-recipe'
   | 'stale-python'
-  | 'stale-both'
-  | 'authoring';
+  | 'stale-both';
 
 
 /** Compute the note-level sync-state rollup by comparing current facet
@@ -107,9 +103,6 @@ export type SyncState =
  *  An absent stored hash counts as "matches" (no mismatch surfaced) so
  *  freshly minted notes without hashes are reported as `synced`.
  *  Matches the `whichLayerIsSource` fallback pattern.
- *
- *  Does NOT return `authoring` — that state is computed at the write-
- *  gate layer in main.ts (Proposal B: computed-only, never persisted).
  */
 export async function computeSyncState(
   body: string,
