@@ -65,7 +65,13 @@ PLUGIN_DIR="$VAULT/.obsidian/plugins/forge-client-obsidian"
 
 # --- 1. Resolve target release ---
 
+# Snapshot caller's TAG intent before we auto-resolve. Used by the
+# lag-warning block below to distinguish "user pinned this version"
+# (skip warning — they know what they're installing) from "we picked
+# the latest" (warning is informative).
+USER_PINNED_TAG="no"
 if [[ -n "${TAG:-}" ]]; then
+  USER_PINNED_TAG="yes"
   echo "Target: pinned to $TAG"
 else
   echo "Resolving latest release of $REPO ..."
@@ -76,6 +82,58 @@ else
     exit 1
   fi
   echo "Latest: $TAG"
+fi
+
+# --- 1b. Engine-bundle lag warning (drain 2026-07-24-1510, shape B) ---
+#
+# Guards the recurrence pattern D3 investigation surfaced (drain 1210):
+# `sync-engine-bundle` commits landing on main WITHOUT a follow-up
+# release cut, so `install-latest.sh` keeps serving a release zip whose
+# engine bundle is stale relative to main. `check-engine-bundle`
+# guards source ≠ mirror in the build, but nothing guards
+# release ≠ latest bundle-mirror commit — until this warning.
+#
+# Uses GH's /compare/<tag>...main API — a single unauthenticated request.
+# Returns the list of files changed between the release tag and main;
+# if any live under assets/engine/ or assets/vaults/, warn. Non-blocking:
+# install proceeds regardless. Best-effort: API failures / rate-limits
+# are swallowed silently rather than blocking the install path.
+#
+# Skipped when:
+#   - Caller set TAG=<explicit> (they pinned; warning would be noise).
+#   - SKIP_LAG_CHECK=1 (opt-out for CI / batch flows).
+if [[ "$USER_PINNED_TAG" == "no" && -z "${SKIP_LAG_CHECK:-}" ]]; then
+  COMPARE_RAW=$(curl -fsSL \
+    "https://api.github.com/repos/$REPO/compare/$TAG...main" 2>/dev/null || true)
+  if [[ -n "$COMPARE_RAW" ]]; then
+    # Extract filenames from the /compare response. GH returns objects
+    # like `"filename": "assets/engine/..."` under `.files[]`. Grep +
+    # sed is sufficient — no jq required (matches the rest of this
+    # script's dep footprint).
+    LAG_PATHS=$(printf '%s' "$COMPARE_RAW" \
+      | grep -Eo '"filename":[[:space:]]*"(assets/engine|assets/vaults)[^"]*"' \
+      | sed -E 's/.*"filename":[[:space:]]*"([^"]+)".*/\1/' \
+      | sort -u)
+    if [[ -n "$LAG_PATHS" ]]; then
+      LAG_COUNT=$(printf '%s\n' "$LAG_PATHS" | grep -c .)
+      echo ""
+      echo "⚠  Release $TAG is stale relative to origin/main:"
+      echo "   $LAG_COUNT engine-bundle / vault-mirror file(s) differ between"
+      echo "   the release cut and the current HEAD of $REPO."
+      echo ""
+      echo "   First few affected paths:"
+      printf '%s\n' "$LAG_PATHS" | head -5 | sed 's/^/     - /'
+      if [[ "$LAG_COUNT" -gt 5 ]]; then
+        REMAINING=$((LAG_COUNT - 5))
+        echo "     ... and $REMAINING more"
+      fi
+      echo ""
+      echo "   Consider running \`bash scripts/release.sh\` in $REPO"
+      echo "   before installing if you need the latest engine bundle."
+      echo "   Proceeding with install of the release zip anyway."
+      echo ""
+    fi
+  fi
 fi
 
 ZIP_NAME="forge-client-obsidian-$TAG.zip"
