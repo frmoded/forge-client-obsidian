@@ -325,6 +325,32 @@ If you're upgrading a vault from before v0.2.205 to v0.2.243:
 
 If your vault still has "snippet" language in prose or comments, that's fine — the engine accepts both vocabularies. The V2a v12 vocabulary sweep is a doc-side change; there's no engine-code migration attached.
 
+## The v0.2.298 arc — engine parser + music library + workflow surface catch-up
+
+v0.2.298 bundles the accumulated engine + vault-mirror changes since v0.2.297 (~22 files across `assets/engine/**` and `assets/vaults/**`). Cut in response to install-side lag warning (drain 2026-07-24-1510), which surfaces when the release zip lags the current HEAD engine bundle.
+
+**Engine additions**:
+- `diatonic_scale(tonic, mode="major", octave_range=None)` library chip — 7-note major/minor scale from a tonic (drain 2026-07-24-1345). Sidesteps needing `{{ music21.scale.… }}` slots for common scale-authoring workflows. Registered in both eager + lazy chip dicts under drift-guard invariant.
+- E-- lexer gains `#`-line-comment support (drain 2026-07-24-1735). `Let x = 1. # tail comment / Return x.` now parses (previously "unexpected char '#'"). Strings containing `#` (like `"F#"`) continue to work — the fix is scoped to `#` outside string literals.
+- music21 defer-import discipline: 37 chip functions guarded with `_require_music21()` for graceful failure when music21 unavailable (earlier arc, drain 2026-07-23-1310).
+- Executor drift-guard: enforces `_MUSIC_LAZY_CHIP_NAMES` tuple stays in sync with `_FORGE_MUSIC_LIB_NAMES` dict at import time — half-registration crashes loud at pytest collection rather than silent-failing at runtime.
+
+**Plugin additions**:
+- S9 hexa-state: `sync_state` field added to note frontmatter as a per-note rollup of the per-facet state suffix (drain 2026-07-23-1700). Values: `synced` / `stale-recipe` / `stale-python` / `stale-both`. Persist on blur; not a runtime signal, just an observer-friendly rollup.
+- Install-side lag warning: `install-latest.sh` warns when the resolved release zip lags origin/main on engine bundle or vault-mirror content (drain 2026-07-24-1510). Non-blocking; single unauthenticated GH API call. Skipped when caller pins `TAG=<explicit>` or sets `SKIP_LAG_CHECK=1`.
+- Facet headings gain copyable-source command (`Copy note source with headings`), promoted to ribbon icon.
+
+**Tutorial + vault-mirror updates**:
+- Tutorial chapters 1-9 rewritten to teach `Return` semantics (drain 2026-07-23-1400 / 1500). Every `[[print]] "foo".` snippet migrated to the canonical `Return "foo".` shape. Chapter 1 (Hello.md) fully rewritten around Return as the pedagogical entry point instead of print-as-shorthand.
+- music vault: forge.toml bump + bundle re-extract for pending fixes.
+
+**Post-cut**: the install-side lag warning from drain 1510 will fall silent for `v0.2.298 → main` on any next install-latest.sh invocation. New engine + vault-mirror commits that land after this cut will start to reaccumulate and re-trigger the warning until the next release.
+
+**Complementary sprints not shipped in the zip** (repo-cross-cutting, but not plugin-side):
+- forge-mcp: `forge_delete_note` / `forge_rename_note` auto-commit + `git_sha` return (drain 2026-07-24-1500). Requires reload of local forge-mcp process.
+- forge-mcp: `resolve_slot` wired at the FastMCP wrapper for `forge_run_recipe` (drain 2026-07-24-1200). Same reload requirement.
+- forge-transpile: `/compile` returns `slots[]` array (drain 2026-07-24-1205); `/catalog` returns per-input `inputs[{name, default}]` (drain 2026-07-24-1730). Deployed at v0.2.4.
+
 ## What's next (planned but not yet shipped)
 
 - **v0.2.264 (in flight)** — V11.6 hexa-state visibility. Suffixes gain lineage detail (`— derived from Description`, `— derived from Recipe`) and a distinct "out of date" state (`— derived from Description, out of date` when the source was edited after the derivation). Upstream-of-source facets render `— ignored` (renamed from `— stale` — semantically more precise). Two frontmatter renames: `recipe_derived_from_description_hash` (was `recipe_derived_from_source_hash`), `python_derived_from_recipe_hash` (was `python_derived_from_source_hash`). Backfill migrates on file-open. **CSS class rename**: `.forge-facet-stale` → `.forge-facet-ignored`; cohort with custom themes should update.
