@@ -110,10 +110,18 @@ if [[ "$USER_PINNED_TAG" == "no" && -z "${SKIP_LAG_CHECK:-}" ]]; then
     # like `"filename": "assets/engine/..."` under `.files[]`. Grep +
     # sed is sufficient — no jq required (matches the rest of this
     # script's dep footprint).
-    LAG_PATHS=$(printf '%s' "$COMPARE_RAW" \
+    # `|| true` because when main is at the same commit as the released
+    # tag (zero engine/vault diff), `grep` matches nothing and exits 1;
+    # with `set -euo pipefail` that would silently kill the whole script
+    # between "Latest: v0.2.X" and the download. Empty-string is the
+    # correct semantic here — the `[[ -n "$LAG_PATHS" ]]` guard below
+    # already treats empty as "no lag." Same pattern as ASSET_DIGEST
+    # below (drain 2026-07-28-1700, fix for drain 2026-07-24-1510's
+    # lag-warning block).
+    LAG_PATHS=$( { printf '%s' "$COMPARE_RAW" \
       | grep -Eo '"filename":[[:space:]]*"(assets/engine|assets/vaults)[^"]*"' \
       | sed -E 's/.*"filename":[[:space:]]*"([^"]+)".*/\1/' \
-      | sort -u)
+      | sort -u; } || true)
     if [[ -n "$LAG_PATHS" ]]; then
       LAG_COUNT=$(printf '%s\n' "$LAG_PATHS" | grep -c .)
       echo ""
