@@ -257,7 +257,7 @@ Expected: file saved. Live preview shows the YAML frontmatter,
 fenced code block.
 
 **Step 6.3 — Forge-click.** With `greet.md` active, click the
-**Forge** (flame) icon in the editor's right-side action bar.
+**Forge** button (play triangle ▶) in the editor's right-side action bar.
 Expected: a small modal appears with a `name` input field
 (because the snippet's frontmatter declares `inputs: [name]`).
 Type `world` and click **Run**.
@@ -275,7 +275,7 @@ Interpretation: see Failure mode F5 if you see `Error: transpile
 failed` or no output panel.
 
 **Step 6.5 — Re-Forge-click to confirm idempotency.** Click the
-**Forge** flame icon a second time. The same modal appears.
+**Forge** button (play triangle ▶) a second time. The same modal appears.
 Expected: type `world` again → same output (`Hello world`). The
 transpile step still happens (LLM re-generates), but the
 printed output is identical.
@@ -327,7 +327,7 @@ Subsequent restarts (no version change) show
 v0.2.38 auto-re-extract match case.
 
 **Step 7.4 — Forge-click a music snippet.** Open
-`forge-music/blues/song.md`. Click the **Forge** flame icon.
+`forge-music/blues/song.md`. Click the **Forge** button (play triangle ▶).
 Expected: after ~5-10 seconds of computation (music21 is heavy),
 the Forge Output panel shows a rendered SVG score — multiple
 staves with notation, plus an audio playback widget at the bottom.

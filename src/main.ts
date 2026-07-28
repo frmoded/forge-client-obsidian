@@ -767,7 +767,7 @@ export default class ForgePlugin extends Plugin {
     // Single context-aware Forge entry point (constitution B9 / ribbon
     // spec). Dispatches by forge.toml state: absent → init wizard;
     // present-without-domains → legacy menu; declared → scoped action
-    // menu. Distinct from the per-snippet flame button (generate+run).
+    // menu. Distinct from the per-snippet Forge button (generate+run).
     this.addRibbonIcon('package', 'Forge', (evt: MouseEvent) => {
       openForgeAction(this.forgeHost(), evt);
     });
@@ -1420,7 +1420,14 @@ export default class ForgePlugin extends Plugin {
     // predicate so non-snippet notes show no Forge button at all.
     // Added last → prepended first → leftmost (when shown).
     if (forgeButtonShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
-      const forgeBtn = view.addAction('flame', 'Forge', () => {
+      // CW-plugin-icon-forge-flame-to-play-triangle (drain 2026-07-28-0900):
+      // swap the primary Forge button icon from Lucide `flame` to `play`
+      // (triangle). Universal "execute this" affordance — matches
+      // Jupyter / VS Code / media players. Verb "Forge" is unchanged;
+      // only the glyph changes. The `flame` icon at main.ts:1193
+      // (unfreeze menu item) is a distinct meaning (fire-melts-snowflake)
+      // and stays.
+      const forgeBtn = view.addAction('play', 'Forge', () => {
         // v0.2.218 — wrap with status-bar spinner. 200ms grace so
         // fast snippets don't flash.
         const op = () => this.forgeSnippet();

@@ -18,6 +18,14 @@ The chip palette displays clickable entries; each references a note (library or 
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
 
+## v0.2.299 — Forge button icon: flame → play triangle (drain 2026-07-28-0900)
+
+The primary per-note **Forge** button (top-right of the editor action bar on `type: action`/`data` notes) swaps its Lucide `flame` glyph for Lucide `play` (a triangle ▶). Rationale: the play triangle carries a universal "execute this" affordance familiar from Jupyter, VS Code, and media players; the flame was Forge-specific and required cohort learning to associate with "execute this note." The verb "Forge" is unchanged — same label, same click handler, same behavior — only the icon glyph changes.
+
+Scope: the fix touches exactly one call site, `view.addAction('flame', 'Forge', ...)` in `main.ts:1423`. Other flame-icon uses in the plugin (specifically the "Unfreeze edge" menu item at `main.ts:1193`, which uses fire as the metaphorical opposite of the snowflake freeze icon) retain the flame — that meaning is distinct from Forge execution.
+
+Documentation sweep in the same drain updated active-doc references to "Forge flame" / "flame icon" across `forge-music-status.md`, `forge-action-ribbon-cc-prompt.md`, `smokes/regression-obsidian.md`, and this repo's `CLEAN-LAPTOP-SMOKE.md`. Historical dated smokes + `prompts/done/` + `prompts/feedback/` entries are archival and untouched.
+
 ## v0.2.296 — route moda_sim_state result to simulator sidebar (drain 2570)
 
 Cmd-P `Forge Client: Run only` on a moda note used to execute the snippet and dump the raw `{"type":"moda_sim_state","content":{...}}` JSON into Forge Output — cohort users saw an inscrutable object dump instead of animated particles. The Forge-button (auto-forge) flow already routed to the simulator sidebar via `dispatchModaBranch`, but `Run only` never went through that routing decision.
