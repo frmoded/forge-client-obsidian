@@ -264,6 +264,24 @@ export async function whichLayerIsSource(
   if (descMismatch) return 'description';
   if (recipeMismatch) return 'recipe';
   if (pythonMismatch) return 'python';
+  // CW-generate-empty-recipe-populated-python-fix-arc
+  // (drain 2026-07-28-1305). Fresh notes (`forge_create_note` output;
+  // hand-authored notes never opened) have NO stored hashes — all three
+  // *Mismatch checks are false because `storedX === null` short-circuits.
+  // Pre-fix, the fallback returned 'synced' → routing skipped the
+  // Description-canonical branch → wizard's fresh Description-only note
+  // fell into the /generate dialect='python' path (bypassing Recipe +
+  // postprocessor) → executor eventually crashed with "Empty or missing
+  // Python code" (per drain 1500 investigation). Fix: when no stored
+  // hashes exist AND at least one facet has content, use content-based
+  // inference (upstream-wins). Empty note stays 'synced'.
+  const noStoredHashes =
+    storedDesc === null && storedRecipe === null && storedPython === null;
+  if (noStoredHashes) {
+    if (descText.trim().length > 0) return 'description';
+    if (recipeText.trim().length > 0) return 'recipe';
+    if (pythonText.trim().length > 0) return 'python';
+  }
   return 'synced';
 }
 

@@ -4402,7 +4402,29 @@ export default class ForgePlugin extends Plugin {
         if (dMismatch) seed = 'description';
         else if (rMismatch) seed = 'recipe';
         else if (pMismatch) seed = 'python';
-        else seed = 'synced';
+        else {
+          // CW-generate-empty-recipe-populated-python-fix-arc
+          // (drain 2026-07-28-1305). Mirrors whichLayerIsSource's
+          // content-based fallback: fresh notes with NO stored hashes
+          // pick the populated facet as source. Pre-fix, this branch
+          // seeded 'synced' → routing bypassed the Description-canonical
+          // path → CCQA `postproc_hello` reproduction crash.
+          const noStoredHashes =
+            typeof storedDesc !== 'string'
+            && typeof storedRecipe !== 'string'
+            && typeof storedPython !== 'string';
+          if (noStoredHashes) {
+            const descText2 = descText;
+            const recipeText2 = recipeText;
+            const pythonText2 = pythonText;
+            if (descText2.trim().length > 0) seed = 'description';
+            else if (recipeText2.trim().length > 0) seed = 'recipe';
+            else if (pythonText2.trim().length > 0) seed = 'python';
+            else seed = 'synced';
+          } else {
+            seed = 'synced';
+          }
+        }
 
         // Drain 2026-07-23-1700 Phase 1 — sync_state seed for the
         // open-file layout-ready pass. Seed only when the field is

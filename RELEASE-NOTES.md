@@ -18,6 +18,18 @@ The chip palette displays clickable entries; each references a note (library or 
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
 
+## v0.2.300 — fresh-note source-facet classification: content-based inference (drain 2026-07-28-1305)
+
+Fixes the Description-only fresh-note crash surfaced in the drain 1500 investigation and CCQA's `postproc_hello` reproduction. `whichLayerIsSource` (facet-hash-core.ts) and its persisted-seed counterpart in `seedSourceFacetForOpenFiles` (main.ts) now correctly classify fresh notes — those with NO stored `description_hash` / `recipe_hash` / `python_hash` frontmatter fields — by inferring source from facet content instead of returning `'synced'`. Content-based inference is upstream-wins: if Description has content it's source; otherwise Recipe; otherwise Python; empty note stays `'synced'`.
+
+Pre-fix, fresh Description-only notes fell through to `'synced'` because all three hash-mismatch checks short-circuited (`storedX !== null && ...` returns false when stored is `null`). That routed the Forge-click to `routeActionCodeRegen`'s Phase-2 fallback (`/generate dialect='python'`) instead of the Description-canonical branch's `_llmGenerateRecipe(dialect='recipe')` path. The postprocessor never ran on fresh notes, and the executor eventually crashed with "Empty or missing Python code" when it read a stale/racy MEMFS view of the Python facet.
+
+Post-fix, fresh Description-only notes are classified as `'description'` → the Description-canonical branch fires → LLM produces a Recipe → postprocessor rewrites any `[[print]]` phantoms → Recipe written → transpile → Python written → runSnippet. The CCQA `postproc_hello` reproduction should now flip to PASS on the next regression run.
+
+MEMFS write-timing vs staleness (drain 1500 Candidate C variants a vs b): the routing fix removes the underlying trigger — the executor no longer sees an English/Recipe mismatch state — so the MEMFS variant question becomes moot for this failure mode. If a different flow surfaces MEMFS symptoms later, the Probe 1 / Probe 2 recipe from drain 1500's FEEDBACK still applies.
+
+Six new tests in `facet-hash-core.test.ts` cover: fresh-note Description-only, Recipe-only, Python-only, all-three-populated (upstream-wins), all-empty (stays `'synced'`), whitespace-only (stays `'synced'`). Full suite: 1258 pass.
+
 ## v0.2.299 — Forge button icon: flame → play triangle (drain 2026-07-28-0900)
 
 The primary per-note **Forge** button (top-right of the editor action bar on `type: action`/`data` notes) swaps its Lucide `flame` glyph for Lucide `play` (a triangle ▶). Rationale: the play triangle carries a universal "execute this" affordance familiar from Jupyter, VS Code, and media players; the flame was Forge-specific and required cohort learning to associate with "execute this note." The verb "Forge" is unchanged — same label, same click handler, same behavior — only the icon glyph changes.

@@ -225,11 +225,59 @@ describe('whichLayerIsSource', () => {
       assert.equal(result, 'description');
     });
 
-  it('returns "synced" when stored hashes are absent (fresh note)',
+  it('CW-generate-empty-recipe-populated-python-fix-arc (drain 2026-07-28-1305): fresh note with populated Description → "description" (was buggy "synced" pre-fix)',
+    async () => {
+      // Pre-fix: this returned 'synced' because all three *Mismatch checks
+      // were false (null !== null && ...). Post-fix: content-based
+      // inference falls through to 'description' because desc is populated.
+      const result = await whichLayerIsSource(
+        'body',
+        _helpers('Make the computer say hello.', '', '', null, null, null),
+      );
+      assert.equal(result, 'description');
+    });
+
+  it('CW-drain-2026-07-28-1305: fresh note with populated Recipe only → "recipe"',
     async () => {
       const result = await whichLayerIsSource(
         'body',
-        _helpers('anything', 'anything', 'anything', null, null, null),
+        _helpers('', 'Return "hi".', '', null, null, null),
+      );
+      assert.equal(result, 'recipe');
+    });
+
+  it('CW-drain-2026-07-28-1305: fresh note with populated Python only → "python"',
+    async () => {
+      const result = await whichLayerIsSource(
+        'body',
+        _helpers('', '', 'def compute(c): pass', null, null, null),
+      );
+      assert.equal(result, 'python');
+    });
+
+  it('CW-drain-2026-07-28-1305: fresh note with all THREE facets populated → "description" (upstream-wins content-based inference)',
+    async () => {
+      const result = await whichLayerIsSource(
+        'body',
+        _helpers('d', 'r', 'p', null, null, null),
+      );
+      assert.equal(result, 'description');
+    });
+
+  it('CW-drain-2026-07-28-1305: fresh note with NO content in any facet → "synced" (empty note baseline)',
+    async () => {
+      const result = await whichLayerIsSource(
+        'body',
+        _helpers('', '', '', null, null, null),
+      );
+      assert.equal(result, 'synced');
+    });
+
+  it('CW-drain-2026-07-28-1305: whitespace-only facets treated as empty (fresh note with all-whitespace content → "synced")',
+    async () => {
+      const result = await whichLayerIsSource(
+        'body',
+        _helpers('   \n\n', '\t\n', '  ', null, null, null),
       );
       assert.equal(result, 'synced');
     });
