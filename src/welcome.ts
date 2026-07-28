@@ -97,8 +97,8 @@ Notes come in two flavors:
   engine-provided primitives — \`print\`, \`bar\`, \`voices\`, etc.).
   Cmd-click a wikilink like \`[[print]]\` in a Recipe to read its
   Description + Python source (read-only).
-- **Vault notes** are notes you author in this vault. Forge-click
-  them to run; edit them freely.
+- **Vault notes** are notes you author in this vault. Click the Run
+  button (▶) to execute; edit them freely.
 
 In a Recipe, \`Call [[name]]\` resolves to a library note OR a vault
 note of the same basename. The plugin's chip palette surfaces all

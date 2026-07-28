@@ -3,8 +3,8 @@ type: action
 inputs:
   - guess
 recipe_version: 3
-source_facet: recipe
-sync_state: stale-python
+source_facet: python
+sync_state: stale-both
 description_hash: f51de77e96e1b63595cdb853b8678d56857df641dc6c3cda805fd8b543ec285f
 recipe_hash: 07b66cbad20203018bd238f9d8d275338fc8121b30868b19d99e3eadf30f4509
 python_hash: 833dd57f8fb60994f490b5b0352b79215ada1ac609607694c2664fcbf103966e
@@ -17,7 +17,7 @@ python_derived_from_recipe_hash: 07b66cbad20203018bd238f9d8d275338fc8121b30868b1
 
 # Description
 
-Below are the first 4 notes of a mystery scale: **C4, D4, E4, F4**. What are the remaining 4 notes that complete it (through the octave)? Set `guess` to a list like ["G4", "A4", "B4", "C5"]. Then click Forge for feedback.
+Below are the first 4 notes of a mystery scale: **C4, D4, E4, F4**. What are the remaining 4 notes that complete it (through the octave)? Set `guess` to a list like ["G4", "A4", "B4", "C5"]. Then click Run for feedback.
 
 # Recipe
 Let true_tonic = "C".
@@ -35,7 +35,7 @@ def compute(context, guess=None):
     correct = ["G4", "A4", "B4", "C5"]
 
     if not guess:
-        result = "No guess provided. Set `guess` to a list like [\"G4\", \"A4\", \"B4\", \"C5\"] and click Forge."
+        result = "No guess provided. Set `guess` to a list like [\"G4\", \"A4\", \"B4\", \"C5\"] and click Run."
         print(result)
         return result
 

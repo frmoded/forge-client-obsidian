@@ -18,6 +18,12 @@ The chip palette displays clickable entries; each references a note (library or 
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
 
+## v0.2.302 — Run-button tooltip + verb sweep (drain 2026-07-28-1600)
+
+Companion to v0.2.299 (icon: flame → play triangle ▶). Hovering the play-triangle button on a snippet-view header now shows tooltip `Run` instead of `Forge` — the verb matches the glyph. Same button, same click handler, same behavior; only the visible verb changes. Also swept adjacent user-facing "Forge button" / "click Forge" verb references in the Welcome note and active docs to "Run button" / "click Run". Product name "Forge" stays everywhere else — plugin name, ribbon, status bar, `Forge: X` command palette namespace prefixes, `Forge:` action-button namespace prefixes on the chips and edges buttons, plugin description.
+
+Single code site: `main.ts:1430` — `view.addAction('play', 'Forge', ...)` → `view.addAction('play', 'Run', ...)`. `welcome.ts:100` welcome-note prose adjusted to "Click the Run button (▶) to execute" instead of "Forge-click them to run".
+
 ## v0.2.300 — fresh-note source-facet classification: content-based inference (drain 2026-07-28-1305)
 
 Fixes the Description-only fresh-note crash surfaced in the drain 1500 investigation and CCQA's `postproc_hello` reproduction. `whichLayerIsSource` (facet-hash-core.ts) and its persisted-seed counterpart in `seedSourceFacetForOpenFiles` (main.ts) now correctly classify fresh notes — those with NO stored `description_hash` / `recipe_hash` / `python_hash` frontmatter fields — by inferring source from facet content instead of returning `'synced'`. Content-based inference is upstream-wins: if Description has content it's source; otherwise Recipe; otherwise Python; empty note stays `'synced'`.

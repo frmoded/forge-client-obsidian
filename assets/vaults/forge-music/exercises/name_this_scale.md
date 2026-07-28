@@ -17,7 +17,7 @@ python_derived_from_recipe_hash: 88337791d7eac7903bf3e1d61320d381dcb4f0d56208164
 
 # Description
 
-Below you'll see + hear a mystery scale. What mode is it? Set the `guess` input to one of: "major", "minor", "pentatonic". Then click the Forge button.
+Below you'll see + hear a mystery scale. What mode is it? Set the `guess` input to one of: "major", "minor", "pentatonic". Then click the Run button.
 
 # Recipe
 Let true_tonic = "C".
