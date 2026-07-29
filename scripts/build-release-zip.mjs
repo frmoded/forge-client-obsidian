@@ -120,37 +120,17 @@ function engineWalk(dir, base = "") {
 // list; each vault is checked against ../<name>/.
 const BUNDLED_VAULTS = ["forge-moda", "forge-music", "forge-tutorial"];
 
-// In-scope filter for bundled-vault drift checks — mirrors
-// sync-bundled-vault.mjs's EXCLUDED_NAMES.
-const VAULT_EXCLUDED_NAMES = new Set([
-  ".git", ".github", ".gitignore", ".DS_Store",
-  "node_modules", ".obsidian", ".forge",
-  "__pycache__", ".pytest_cache",
-  "dist", "build",
-]);
-
-// v0.2.147 — driver spike-file exclusion. Mirrors sync-bundled-vault's
-// isExcludedName. `_spike*.md` (any extension) and `_P*.md` are
-// local-only scratch for cohort smoke validation; they live in source
-// vault repos but don't ship to cohort users via the bundle. The drift
-// check + sync both honor the exclusion so the v0.2.144 bundled-vault
-// bump preflight doesn't false-positive on them either.
-function isSpikeName(name) {
-  if (name.startsWith("_spike")) return true;
-  // v0.2.164 — also `_v2_spike*` for the V2 spike note convention.
-  if (name.startsWith("_v2_spike")) return true;
-      if (name.startsWith("_scratch")) return true;
-  if (/^_P[^/]*\.md$/i.test(name)) return true;
-  return false;
-}
+// CW-plugin-shared-exclusion-module (drain 2026-07-29-1610): the
+// exclusion policy (EXCLUDED_NAMES + spike-file prefixes + .pyc)
+// lives in scripts/exclusions.mjs shared with sync-bundled-vault.mjs.
+// Extend there, not here.
+import { isExcludedName as _isExcludedName } from "./exclusions.mjs";
 
 function vaultIsInScope(relPath) {
   const parts = relPath.split("/");
   for (const p of parts) {
-    if (VAULT_EXCLUDED_NAMES.has(p)) return false;
-    if (isSpikeName(p)) return false;
+    if (_isExcludedName(p)) return false;
   }
-  if (relPath.endsWith(".pyc")) return false;
   return true;
 }
 
@@ -159,8 +139,7 @@ function vaultWalk(dir, base = "") {
   const out = [];
   if (!fsSync.existsSync(dir)) return out;
   for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
-    if (VAULT_EXCLUDED_NAMES.has(entry.name)) continue;
-    if (isSpikeName(entry.name)) continue;
+    if (_isExcludedName(entry.name)) continue;
     const rel = base ? path.join(base, entry.name) : entry.name;
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...vaultWalk(abs, rel));

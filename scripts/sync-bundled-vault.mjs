@@ -33,6 +33,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// CW-plugin-shared-exclusion-module (drain 2026-07-29-1610): shared
+// exclusion policy lives in scripts/exclusions.mjs so a new
+// underscore-prefix or excluded name is a one-file edit. Prior shape
+// duplicated the list here + in build-release-zip.mjs; the 2026-07-28
+// arc showed the two copies drifting is a real risk.
+import { isExcludedName } from "./exclusions.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
@@ -41,44 +48,6 @@ const ROOT = path.resolve(__dirname, "..");
 // fail with a clear error rather than silently mirroring arbitrary
 // sibling dirs.
 const KNOWN_VAULTS = new Set(["forge-moda", "forge-music", "forge-tutorial"]);
-
-// Directory + file names that must NEVER be mirrored into the bundle.
-// These are local-development artefacts (VCS, editor state, runtime
-// caches) that don't belong in the shipped plugin.
-const EXCLUDED_NAMES = new Set([
-  ".git",
-  ".github",
-  ".gitignore",
-  ".DS_Store",
-  "node_modules",
-  ".obsidian",
-  ".forge",
-  "__pycache__",
-  ".pytest_cache",
-  "dist",
-  "build",
-]);
-
-function isExcludedName(name) {
-  if (EXCLUDED_NAMES.has(name)) return true;
-  if (name.endsWith(".pyc")) return true;
-  // v0.2.147 — driver spike files (e.g. `_spike2.md`, `_P.md`) live
-  // in source vault repos as local-only scratch for cohort smoke
-  // validation against unreleased plugin builds. They shouldn't ship
-  // to cohort users via the bundle. The convention: filenames
-  // starting with `_spike` (any extension) OR matching `_P*.md` are
-  // local-only and excluded from the bundle. Driver keeps them
-  // untracked in the source repo; sync skips them; the v0.2.144
-  // bundled-vault bump preflight doesn't false-positive on them.
-  if (name.startsWith("_spike")) return true;
-  // v0.2.164 — also exclude `_v2_spike*.md` for the V2 spike note
-  // (forge-music/_v2_spike_solitary.md). Same convention as `_spike*`
-  // — driver-local, excluded from the bundle.
-  if (name.startsWith("_v2_spike")) return true;
-      if (name.startsWith("_scratch")) return true;
-  if (/^_P[^/]*\.md$/i.test(name)) return true;
-  return false;
-}
 
 function walk(dir, base = "") {
   const out = [];
