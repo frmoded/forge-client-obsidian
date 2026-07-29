@@ -30,11 +30,21 @@
 .forge-output-id {
   font-weight: 600;
   color: var(--interactive-accent);
+  /* Drain 2026-07-28-1800 — mirror the v0.2.178 opt-in on the output
+     body classes so panel note titles (e.g. `generate_routing_probe`)
+     are selectable + Cmd-C copyable. Obsidian's WorkspaceLeaf inherits
+     user-select:none from side-pane chrome; the v0.2.178 pass added
+     the opt-in for stdout/result/message/error bodies but missed the
+     meta row (id + timestamp). */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .forge-output-time {
   color: var(--text-muted);
   font-size: 0.85em;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .forge-output-stdout,

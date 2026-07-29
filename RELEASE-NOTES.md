@@ -18,6 +18,12 @@ The chip palette displays clickable entries; each references a note (library or 
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
 
+## v0.2.304 — Forge Output panel titles selectable + Cmd-C copyable (drain 2026-07-28-1800)
+
+Forge Output panel note titles (e.g. `generate_routing_probe` shown when that note is run) were not selectable with mouse and Cmd-C was a no-op — driver couldn't copy them into chat / prompts / drift reports without retyping. Root cause: v0.2.178 added `user-select: text` opt-in to `.forge-output-stdout` / `.forge-output-result` / `.forge-output-message` / `.forge-output-error` but missed the panel's meta row (`.forge-output-id` = note title, `.forge-output-time` = timestamp), so Obsidian's WorkspaceLeaf-inherited `user-select: none` from the side-pane chrome kept those two spans unselectable.
+
+Fix: CSS-only, `styles.css`. Add `user-select: text; -webkit-user-select: text;` to `.forge-output-id` and `.forge-output-time`. No behavior change; drag-select and double-click-word both work, Cmd-C copies plain text. No TS or DOM changes.
+
 ## v0.2.302 — Run-button tooltip + verb sweep (drain 2026-07-28-1600)
 
 Companion to v0.2.299 (icon: flame → play triangle ▶). Hovering the play-triangle button on a snippet-view header now shows tooltip `Run` instead of `Forge` — the verb matches the glyph. Same button, same click handler, same behavior; only the visible verb changes. Also swept adjacent user-facing "Forge button" / "click Forge" verb references in the Welcome note and active docs to "Run button" / "click Run". Product name "Forge" stays everywhere else — plugin name, ribbon, status bar, `Forge: X` command palette namespace prefixes, `Forge:` action-button namespace prefixes on the chips and edges buttons, plugin description.
