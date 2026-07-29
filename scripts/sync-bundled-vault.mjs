@@ -75,6 +75,7 @@ function isExcludedName(name) {
   // (forge-music/_v2_spike_solitary.md). Same convention as `_spike*`
   // — driver-local, excluded from the bundle.
   if (name.startsWith("_v2_spike")) return true;
+      if (name.startsWith("_scratch")) return true;
   if (/^_P[^/]*\.md$/i.test(name)) return true;
   return false;
 }
