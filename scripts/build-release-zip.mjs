@@ -115,10 +115,15 @@ function engineWalk(dir, base = "") {
 }
 
 // v0.2.76 — known bundled vaults that ship under assets/vaults/.
-// MUST match sync-bundled-vault.mjs's KNOWN_VAULTS and welcome.ts +
-// chips.ts's KNOWN_BUNDLED_LIBRARIES. Drift detection iterates this
-// list; each vault is checked against ../<name>/.
-const BUNDLED_VAULTS = ["forge-moda", "forge-music", "forge-tutorial"];
+// Drift detection iterates this list; each vault is checked against
+// ../<name>/.
+//
+// CW-release-prep-improvements (drain 2026-07-29-2300) Change 3: the
+// list now lives in scripts/vaults.txt, shared with release-prep.sh +
+// sync-bundled-vault.mjs. Still must be kept in sync BY HAND with
+// welcome.ts + chips.ts's KNOWN_BUNDLED_LIBRARIES (bundled into
+// main.js; can't read a build-time file).
+import { BUNDLED_VAULTS } from "./vaults.mjs";
 
 // CW-plugin-shared-exclusion-module (drain 2026-07-29-1610): the
 // exclusion policy (EXCLUDED_NAMES + spike-file prefixes + .pyc)

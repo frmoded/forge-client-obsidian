@@ -1,0 +1,29 @@
+# scripts/vaults.txt
+#
+# CW-release-prep-improvements (drain 2026-07-29-2300) Change 3.
+#
+# Canonical list of bundled vaults — the vaults that ship under
+# assets/vaults/ and mirror a sibling source-of-truth repo at
+# <plugin-repo>/../<name>/.
+#
+# Consumed by (all three previously hardcoded their own copy, and the
+# copies had already drifted — release-prep.sh's array was hand-edited
+# to drop forge-tutorial while its comment still claimed it matched
+# sync-bundled-vault.mjs):
+#   - scripts/release-prep.sh        (bash, reads this file directly)
+#   - scripts/sync-bundled-vault.mjs (via scripts/vaults.mjs)
+#   - scripts/build-release-zip.mjs  (via scripts/vaults.mjs)
+#
+# NOT consumed by src/chips.ts or src/welcome.ts. Their
+# KNOWN_BUNDLED_LIBRARIES sets are bundled into main.js and run inside
+# Obsidian, where this file does not exist — they cannot read it
+# without a build-time codegen step. welcome.ts:15 already documents
+# that duplication as intentional. Keep those two in sync by hand when
+# adding a vault.
+#
+# Format: one vault name per line. Blank lines and `#` comments
+# ignored. Order is the iteration order for release-prep.sh.
+
+forge-moda
+forge-music
+forge-tutorial

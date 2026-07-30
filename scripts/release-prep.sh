@@ -55,8 +55,38 @@ set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
 
-# Known vaults. Matches KNOWN_VAULTS in sync-bundled-vault.mjs.
-VAULTS=(forge-music forge-moda)
+# CW-release-prep-improvements (drain 2026-07-29-2300) Change 3 —
+# vault list read from scripts/vaults.txt, shared with
+# sync-bundled-vault.mjs + build-release-zip.mjs (both via
+# scripts/vaults.mjs). Pre-fix this was a hardcoded array that got
+# hand-edited to drop forge-tutorial, while its comment still claimed
+# it matched sync-bundled-vault.mjs — the drift the config file
+# eliminates. Change 1's auto-skip is what lets this hold the full
+# canonical list again: non-viable vaults are skipped at runtime
+# instead of being edited out of the source.
+#
+# NB: `readarray`/`mapfile` are bash 4+; macOS ships bash 3.2.57, so
+# this uses the portable while-read form. The `|| [ -n "$line" ]`
+# guard picks up a final line with no trailing newline.
+# VAULTS_FILE is env-overridable so the skip/error branches can be
+# exercised without editing the tracked vaults.txt (which would dirty
+# the plugin tree and trip the guard above before the vault loop runs).
+VAULTS=()
+VAULTS_FILE="${VAULTS_FILE:-$REPO_DIR/scripts/vaults.txt}"
+if [ ! -f "$VAULTS_FILE" ]; then
+  echo "ERROR: vault config not found at $VAULTS_FILE"
+  exit 1
+fi
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in
+    ''|'#'*) continue ;;
+  esac
+  VAULTS+=("$line")
+done < "$VAULTS_FILE"
+if [ ${#VAULTS[@]} -eq 0 ]; then
+  echo "ERROR: $VAULTS_FILE lists no vaults."
+  exit 1
+fi
 SIBLING_ROOT="$(cd "$REPO_DIR/.." && pwd)"
 
 echo "=== release-prep ==="
@@ -74,25 +104,56 @@ if [ -n "$PLUGIN_DIRTY" ]; then
   exit 1
 fi
 
-# --- entry guards: every source-of-truth repo clean ---
+# --- entry guards: filter to viable source-of-truth repos ---
+#
+# CW-release-prep-improvements (drain 2026-07-29-2300) Change 1 — a
+# missing or non-git vault is now a WARNING + skip, not a fatal error.
+# Pre-fix, forge-tutorial (present on disk but never git-init'd) made
+# every run abort, so the driver hand-edited the VAULTS array twice in
+# one session. Skipping is the right call: a vault with no git repo has
+# no commit to make and no version to bump, so there is nothing for
+# release-prep to do with it. Only a run where NOTHING is viable is an
+# error.
+VIABLE=()
 for VAULT in "${VAULTS[@]}"; do
   SRC_REPO="$SIBLING_ROOT/$VAULT"
-  if [ ! -d "$SRC_REPO/.git" ]; then
-    echo "ERROR: source-of-truth $VAULT is not a git repo at $SRC_REPO"
-    exit 1
+  if [ ! -d "$SRC_REPO" ]; then
+    echo "⚠ $VAULT source-of-truth not found at $SRC_REPO — skipping"
+    continue
   fi
-  SRC_DIRTY="$(cd "$SRC_REPO" && git status --porcelain || true)"
+  if ! git -C "$SRC_REPO" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "⚠ $VAULT is not a git repo — skipping"
+    continue
+  fi
+  # CW-release-prep-improvements Change 2 — `.obsidian/**` is excluded
+  # from the uncommitted-changes check. workspace.json is Obsidian's
+  # per-machine UI state and churns on every pane move; plugins/ is
+  # install output. Neither is content we'd ever package. forge-music
+  # gitignores both, forge-moda gitignores neither — the guard tripped
+  # only in the vault that hadn't gotten around to the .gitignore, i.e.
+  # for a reason that has nothing to do with release readiness.
+  SRC_DIRTY="$(cd "$SRC_REPO" && git status --porcelain 2>/dev/null \
+    | grep -v '^.\{2\} \.obsidian/' || true)"
   if [ -n "$SRC_DIRTY" ]; then
     echo "ERROR: source-of-truth $VAULT has uncommitted changes:"
     echo "$SRC_DIRTY" | sed 's/^/  /'
+    echo "(.obsidian/** is excluded from this check.)"
     echo "Commit or stash in $SRC_REPO before running release-prep."
     exit 1
   fi
+  VIABLE+=("$VAULT")
 done
+
+if [ ${#VIABLE[@]} -eq 0 ]; then
+  echo ""
+  echo "ERROR: no viable vaults — every entry in $VAULTS_FILE was skipped."
+  echo "Nothing to prep. Check the vault list + that the sibling repos exist."
+  exit 1
+fi
 
 # --- per-vault sync + conditional bump ---
 BUMPED=()
-for VAULT in "${VAULTS[@]}"; do
+for VAULT in "${VIABLE[@]}"; do
   echo "--- $VAULT ---"
   SRC_REPO="$SIBLING_ROOT/$VAULT"
   SRC_TOML="$SRC_REPO/forge.toml"

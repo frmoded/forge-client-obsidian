@@ -43,11 +43,17 @@ import { isExcludedName } from "./exclusions.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 
-// Recognised vault names — must match KNOWN_BUNDLED_LIBRARIES in
-// src/welcome.ts + src/chips.ts. Sync attempts on unknown vault names
-// fail with a clear error rather than silently mirroring arbitrary
-// sibling dirs.
-const KNOWN_VAULTS = new Set(["forge-moda", "forge-music", "forge-tutorial"]);
+// Recognised vault names — sync attempts on unknown vault names fail
+// with a clear error rather than silently mirroring arbitrary sibling
+// dirs.
+//
+// CW-release-prep-improvements (drain 2026-07-29-2300) Change 3: the
+// list now lives in scripts/vaults.txt, shared with release-prep.sh +
+// build-release-zip.mjs. Still must be kept in sync BY HAND with
+// KNOWN_BUNDLED_LIBRARIES in src/welcome.ts + src/chips.ts — those are
+// bundled into main.js and run inside Obsidian, where vaults.txt does
+// not exist.
+import { KNOWN_VAULTS } from "./vaults.mjs";
 
 function walk(dir, base = "") {
   const out = [];
