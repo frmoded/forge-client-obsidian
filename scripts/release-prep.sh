@@ -56,7 +56,7 @@ REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_DIR"
 
 # Known vaults. Matches KNOWN_VAULTS in sync-bundled-vault.mjs.
-VAULTS=(forge-music forge-moda forge-tutorial)
+VAULTS=(forge-music forge-moda)
 SIBLING_ROOT="$(cd "$REPO_DIR/.." && pwd)"
 
 echo "=== release-prep ==="
