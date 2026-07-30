@@ -232,6 +232,49 @@ export async function whichLayerIsSource(
   // v0.2.256 drain 1200 primary path — read stored source facet
   // (either `source_facet` or legacy `canonical_facet`).
   const storedSource = getSourceFacet(body, helpers.getFrontmatterField);
+
+  // CW-generate-persist-path-fix-backfill-and-write (drain
+  // 2026-07-29-2230) Option 2 — content-aware Description rescue.
+  //
+  // A note with a Description body and NO Recipe body cannot be
+  // Recipe-canonical, and cannot be genuinely 'synced' either: there
+  // is no Recipe facet for the others to be in sync with. Routing it
+  // as 'synced' sends Forge-click down the standard transpile path,
+  // where the engine tries to E-- transpile a Recipe that doesn't
+  // exist, gets nothing, and falls back to /generate with the default
+  // dialect='python' — bypassing Description → Recipe entirely and
+  // wedging the note permanently (drain 2100 investigation, hops
+  // 3-6).
+  //
+  // This rescue must run BEFORE the stored-source branch below.
+  // Seeding `source_facet: 'description'` (Option 1) is NOT
+  // sufficient on its own: the drift-flip guard downgrades any
+  // explicit stored source back to 'synced' whenever no facet has
+  // drifted ("No drift anywhere → note is actually synced"), which is
+  // exactly the state a freshly-backfilled note is in. Verified by
+  // the CW-2230 composition tests in v11-3-backfill-core.test.ts.
+  //
+  // Doubles as the self-heal for notes ALREADY wedged in cohort
+  // vaults by the pre-fix backfill (`recipe_hash` at the empty-string
+  // SHA + `source_facet: synced`): they re-route correctly on the
+  // next Forge-click with no migration pass.
+  //
+  // Scoped to absent / 'synced' / 'description' stored sources so a
+  // cohort member who deliberately took over the Python facet
+  // (`source_facet: python`) on a Recipe-less note keeps Python as
+  // source and does not get their hand-authored code re-derived.
+  const rescuableSource =
+    storedSource === null
+    || storedSource === 'synced'
+    || storedSource === 'description';
+  if (
+    rescuableSource
+    && descText.trim().length > 0
+    && recipeText.trim().length === 0
+  ) {
+    return 'description';
+  }
+
   if (storedSource !== null) {
     // External multi-facet edit detection: if the stored value points
     // at a facet with no drift, but ANOTHER facet has drift, flip to

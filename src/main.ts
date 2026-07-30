@@ -3526,8 +3526,26 @@ export default class ForgePlugin extends Plugin {
       // promise that "after one successful Forge-click, the snippet
       // has english_hash and the cache contract works going
       // forward."
-      const english = _extractEnglishFromBody(content) ?? '';
-      const englishHash = await computeEnglishHash(english);
+      //
+      // CW-generate-persist-path-fix-backfill-and-write (drain
+      // 2026-07-29-2230) Option 3 — do NOT stamp english_hash when
+      // there is no `# English` facet to hash. V2 notes carry
+      // `# Description`, never `# English`, so pre-fix every
+      // /generate write on a V2 note stamped the hash of `''`. In the
+      // engine that is strictly worse than absent: an ABSENT
+      // english_hash means "no invalidation contract → return the
+      // cached `# Python`" (executor.py:956-957, which would have
+      // worked), while a present-but-empty one fails the equality
+      // check at executor.py:961 and drops through to a doomed E--
+      // re-transpile that returns None → `SnippetExecError: Empty or
+      // missing Python code` even though the Python sits populated on
+      // disk. This was "additional bug 1" in the drain 2100
+      // investigation and is a second, independent cause of that
+      // error.
+      const english = _extractEnglishFromBody(content);
+      const hasEnglishFacet = english !== null && english.trim().length > 0;
+      const englishHash = hasEnglishFacet
+        ? await computeEnglishHash(english) : null;
       let newContent = writePythonAndEnglishHash(content, {
         pythonCode: code,
         englishHash,
@@ -3554,17 +3572,33 @@ export default class ForgePlugin extends Plugin {
         currentRecipeHash,
         currentPythonHash,
       });
+      // CW-generate-persist-path-fix-backfill-and-write (drain
+      // 2026-07-29-2230) Option 3 — when this note has no Recipe body,
+      // /generate produced Python WITHOUT a Recipe in the loop (the
+      // legacy dialect='python' path). Stamping `recipe_hash` at the
+      // empty-string SHA and pointing
+      // `python_derived_from_recipe_hash` at it asserts a Recipe →
+      // Python derivation that never happened. That fabricated
+      // provenance is what made the bug read as a persist failure and
+      // cost drain 1305 + the drain 2100 investigation real time. Omit
+      // both fields instead: absent lineage is honest, and CW-1700
+      // freshness already treats absent-parent as "no contract".
+      const hasRecipeBody = recipeText.trim().length > 0;
       newContent = setFmFieldV2(newContent, 'description_hash', stamps.description_hash);
-      newContent = setFmFieldV2(newContent, 'recipe_hash', stamps.recipe_hash);
+      if (hasRecipeBody) {
+        newContent = setFmFieldV2(newContent, 'recipe_hash', stamps.recipe_hash);
+      }
       newContent = setFmFieldV2(newContent, 'python_hash', stamps.python_hash);
       newContent = setFmFieldV2(
         newContent, 'recipe_derived_from_description_hash',
         stamps.recipe_derived_from_description_hash,
       );
-      newContent = setFmFieldV2(
-        newContent, 'python_derived_from_recipe_hash',
-        stamps.python_derived_from_recipe_hash,
-      );
+      if (hasRecipeBody) {
+        newContent = setFmFieldV2(
+          newContent, 'python_derived_from_recipe_hash',
+          stamps.python_derived_from_recipe_hash,
+        );
+      }
       // Legacy fields kept aligned during v11.5 → v11.6 transition.
       newContent = setFmFieldV2(
         newContent, 'recipe_derived_from_source_hash',

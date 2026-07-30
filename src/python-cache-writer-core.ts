@@ -18,7 +18,17 @@
 
 export interface PythonCacheUpdate {
   pythonCode: string;
-  englishHash: string;
+  /** CW-generate-persist-path-fix-backfill-and-write (drain
+   *  2026-07-29-2230) — `null` means "this note has no `# English`
+   *  facet, so write no english_hash at all". Writing the hash of an
+   *  empty string is strictly worse than writing nothing: the engine
+   *  reads an ABSENT english_hash as "no invalidation contract →
+   *  serve the cached `# Python`" (executor.py:956-957), but a
+   *  present-but-empty one fails the equality check and drops into a
+   *  doomed E-- re-transpile. Existing values are left untouched — we
+   *  skip the write, we do not strip (drain 1000.1 reverted an
+   *  english_hash strip; that decision stands). */
+  englishHash: string | null;
   stripStaleSlots?: boolean;
 }
 
@@ -32,7 +42,11 @@ export function writePythonAndEnglishHash(
   if (update.stripStaleSlots !== false) {
     out = removeSlotsSection(out);
   }
-  out = replaceOrInsertEnglishHash(out, update.englishHash);
+  // CW-2230 — null englishHash: skip the frontmatter write entirely.
+  // See PythonCacheUpdate.englishHash for why absent beats empty.
+  if (update.englishHash !== null) {
+    out = replaceOrInsertEnglishHash(out, update.englishHash);
+  }
   out = replaceOrInsertPythonHeading(out, update.pythonCode);
   return out;
 }

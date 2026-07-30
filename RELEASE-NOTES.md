@@ -18,6 +18,20 @@ The chip palette displays clickable entries; each references a note (library or 
 
 V1 action notes (`# English` + `# Python` shape) still work; the engine accepts both shapes during the ongoing V1 → V2 migration.
 
+## v0.2.307 — fresh Description-only notes reach the Recipe pipeline (drain 2026-07-29-2230)
+
+Completes what v0.2.300 (drain 1305) started. A fresh wizard-authored note — Description only, no Recipe, no Python — was supposed to route Description-canonical on Forge-click, so the pipeline runs Description → Recipe (LLM) → Python (transpile) → run. v0.2.300 made `whichLayerIsSource` infer that correctly from note content. It never took effect, because the **file-open backfill runs first** and fills in the very fields the inference used as its trigger.
+
+Concretely: opening the note ran `backfillV113Shape`, which inserted a `# Python` stub, stamped `recipe_hash` at the empty-string SHA (there is no `# Recipe` section to hash), and seeded `source_facet: synced`. Forge-click then read `synced`, took the standard transpile path, found nothing to transpile, and fell back to `/generate` with the default `dialect="python"` — asking the LLM for Python directly and skipping the Recipe facet entirely. The note ended up with a populated `# Python`, a `recipe_hash` of the empty string, and a `python_derived_from_recipe_hash` pointing at that empty hash: a recorded Recipe → Python derivation that never happened. Every later Forge-click reproduced it byte-identically.
+
+Three changes, all plugin-side:
+
+- **Backfill tells the truth.** `recipe_hash` is no longer stamped for a note with no `# Recipe` heading, and `source_facet` seeds `description` (not `synced`) when Description is the only facet with content.
+- **Routing is content-aware.** `whichLayerIsSource` now classifies a note with Description content and no Recipe body as Description-canonical before consulting the stored `source_facet`. This is what makes the backfill fix stick — the existing drift-flip guard downgrades any explicit stored source back to `synced` when no facet has drifted, which is exactly the state a freshly-backfilled note is in. It also **self-heals notes already wedged in cohort vaults** on the next Forge-click, with no migration pass. Notes carrying an explicit `source_facet: python` are left alone, so hand-authored Python is never re-derived.
+- **No fabricated provenance.** The `/generate` write path no longer stamps `recipe_hash` or `python_derived_from_recipe_hash` when there is no Recipe body, and no longer stamps `english_hash` on a note with no `# English` facet. The second one mattered more than it looks: the engine reads an *absent* `english_hash` as "no invalidation contract, serve the cached `# Python`", but a present-but-empty one fails the freshness check and drops into a doomed re-transpile — an independent second cause of `SnippetExecError: Empty or missing Python code` on a note whose Python is sitting right there on disk.
+
+Cohort-visible effect: creating a note from a description and clicking Run now produces a Recipe you can read and edit, not just Python. Notes already stuck in the broken state recover by themselves.
+
 ## v0.2.304 — Forge Output panel titles selectable + Cmd-C copyable (drain 2026-07-28-1800)
 
 Forge Output panel note titles (e.g. `generate_routing_probe` shown when that note is run) were not selectable with mouse and Cmd-C was a no-op — driver couldn't copy them into chat / prompts / drift reports without retyping. Root cause: v0.2.178 added `user-select: text` opt-in to `.forge-output-stdout` / `.forge-output-result` / `.forge-output-message` / `.forge-output-error` but missed the panel's meta row (`.forge-output-id` = note title, `.forge-output-time` = timestamp), so Obsidian's WorkspaceLeaf-inherited `user-select: none` from the side-pane chrome kept those two spans unselectable.

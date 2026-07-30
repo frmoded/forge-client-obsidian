@@ -196,3 +196,56 @@ test('removeSlotsSection: idempotent on body without # Slots', () => {
   const body = '# English\n\neng.\n\n# Python\n\n```python\nx\n```\n';
   assert.strictEqual(removeSlotsSection(body), body);
 });
+
+// ---------------------------------------------------------------------------
+// CW-generate-persist-path-fix-backfill-and-write (drain 2026-07-29-2230)
+// Option 3 — null englishHash means "no # English facet; write nothing".
+//
+// Pre-fix, writeGeneratedCode passed `computeEnglishHash('')` for every V2
+// note (V2 notes carry `# Description`, never `# English`), stamping the
+// empty-string hash. In the engine that is strictly worse than absent: an
+// ABSENT english_hash means "no invalidation contract → serve the cached
+// `# Python`" (executor.py:956-957), while present-but-empty fails the
+// equality check at executor.py:961 and drops into a doomed E--
+// re-transpile → `SnippetExecError: Empty or missing Python code` despite
+// populated Python on disk. Drain 2100 investigation, "additional bug 1".
+// ---------------------------------------------------------------------------
+
+test('CW-2230: null englishHash does not insert an english_hash field', () => {
+  const body = '---\ntype: action\n---\n\n# Description\n\nSay hello.\n';
+  const result = writePythonAndEnglishHash(body, {
+    pythonCode: 'print("hi")',
+    englishHash: null,
+    stripStaleSlots: false,
+  });
+  assert.ok(
+    !/^english_hash\s*:/m.test(result),
+    'no english_hash should be written when the note has no # English facet',
+  );
+  // The Python still lands — only the hash write is skipped.
+  assert.ok(result.includes('print("hi")'));
+});
+
+test('CW-2230: null englishHash leaves an EXISTING english_hash untouched', () => {
+  // Drain 1000.1 reverted an english_hash strip; that decision stands.
+  // CW-2230 only declines to WRITE an empty hash — it never removes one.
+  const body =
+    '---\ntype: action\nenglish_hash: preexisting\n---\n\n# Description\n\nSay hello.\n';
+  const result = writePythonAndEnglishHash(body, {
+    pythonCode: 'print("hi")',
+    englishHash: null,
+    stripStaleSlots: false,
+  });
+  assert.match(result, /^english_hash: preexisting$/m);
+});
+
+test('CW-2230: a real englishHash is still written (V1 path unchanged)', () => {
+  const body =
+    '---\ntype: action\n---\n\n# English\n\nPrint "hi".\n';
+  const result = writePythonAndEnglishHash(body, {
+    pythonCode: 'print("hi")',
+    englishHash: 'abc123',
+    stripStaleSlots: false,
+  });
+  assert.match(result, /^english_hash: abc123$/m);
+});

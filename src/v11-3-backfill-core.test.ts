@@ -17,7 +17,7 @@ import {
   removeFrontmatterField,
   replacePythonSection,
 } from './v2-note-core.ts';
-import { computeFacetHash } from './facet-hash-core.ts';
+import { computeFacetHash, whichLayerIsSource } from './facet-hash-core.ts';
 
 const HELPERS = {
   extractDescription,
@@ -772,4 +772,179 @@ def compute(context):
   assert.equal(result.changed, true);
   assert.equal(getFrontmatterField(result.newBody, 'source_facet'), 'description');
   assert.equal(getFrontmatterField(result.newBody, 'canonical_facet'), null);
+});
+
+// ---------------------------------------------------------------------------
+// CW-generate-persist-path-fix-backfill-and-write (drain 2026-07-29-2230).
+//
+// Composition tests: backfill → routing. Drain 1305 fixed fresh-note
+// routing in `whichLayerIsSource` but was tested only against the RAW
+// note shell. In a live vault the file-open backfill always runs first
+// (main.ts:maybeBackfillV113Shape on 'file-open'), and pre-2230 it
+// stamped `recipe_hash` = hash('') + seeded `source_facet: 'synced'`
+// on a Description-only note — making drain 1305's `noStoredHashes`
+// trigger unreachable. Routing then fell into the dialect='python'
+// /generate path and the executor died with "Empty or missing Python
+// code" (drain 2100 investigation, hops 2-4).
+//
+// These tests close that composition gap: they run the REAL backfill
+// and then the REAL routing, which is the interleaving production has.
+// ---------------------------------------------------------------------------
+
+// EXACT output of forge-mcp VaultFS.create_note_shell (vault_fs.py:783-793)
+// for a fresh wizard-authored Description-only note. No `# Recipe`, no
+// `# Python`, no hashes.
+const FRESH_DESCRIPTION_ONLY_SHELL = `---
+type: action
+inputs: []
+recipe_version: 0
+---
+
+# Description
+
+Make the computer say hello, world.
+`;
+
+test('CW-2230 composition: fresh Description-only note routes description AFTER backfill', async () => {
+  const routingHelpers = {
+    extractDescription,
+    extractRecipeSection,
+    extractPythonSection,
+    getFrontmatterField: HELPERS.getFrontmatterField,
+  };
+
+  // Pre-backfill: drain 1305's content-inference gate fires correctly.
+  assert.equal(
+    await whichLayerIsSource(FRESH_DESCRIPTION_ONLY_SHELL, routingHelpers),
+    'description',
+    'baseline: drain 1305 gate works on the raw shell',
+  );
+
+  // Run the backfill exactly as file-open does.
+  const result = await backfillV113Shape(
+    FRESH_DESCRIPTION_ONLY_SHELL, HELPERS);
+  assert.equal(result.changed, true);
+
+  // THE REGRESSION GUARD: post-backfill the note must STILL route
+  // Description-canonical, so Forge-click reaches the
+  // Description → Recipe (LLM) → Python pipeline instead of the
+  // dialect='python' /generate fallback.
+  assert.equal(
+    await whichLayerIsSource(result.newBody, routingHelpers),
+    'description',
+    'post-backfill routing must stay Description-canonical',
+  );
+});
+
+test('CW-2230 Option 1: backfill does not invent a Recipe lineage', async () => {
+  const emptySha = await computeFacetHash('');
+  const result = await backfillV113Shape(
+    FRESH_DESCRIPTION_ONLY_SHELL, HELPERS);
+
+  // No `# Recipe` section exists → stamping recipe_hash at the
+  // empty-string SHA asserts a Recipe facet that isn't there. Leave
+  // the field absent instead.
+  const storedRecipe = getFrontmatterField(result.newBody, 'recipe_hash');
+  assert.notEqual(
+    storedRecipe, emptySha,
+    'recipe_hash must not be stamped at the empty-string SHA '
+    + '(this is the CCQA-reported e3b0c442… value)',
+  );
+  assert.equal(
+    storedRecipe, null,
+    'recipe_hash should be absent when the note has no # Recipe section',
+  );
+
+  // And the seed must be honest: Description is the only facet with
+  // content, so Description is the source.
+  assert.equal(result.actions.canonicalFacetSeeded, 'description');
+  assert.equal(
+    getFrontmatterField(result.newBody, 'source_facet'), 'description');
+});
+
+test('CW-2230 Option 2 self-heal: pre-wedged cohort note re-routes description', async () => {
+  // Shape of a note already wedged in a cohort vault by the pre-2230
+  // backfill: source_facet: synced + recipe_hash at the empty-string
+  // SHA + a populated Description and Python but NO # Recipe body.
+  // Must self-heal on the next routing call without a migration pass.
+  const emptySha = await computeFacetHash('');
+  const descBody = 'Make the computer say hello, world.';
+  const pythonBody = 'print("Hello, world.")';
+  const wedged = `---
+type: action
+inputs: []
+recipe_version: 0
+source_facet: synced
+description_hash: ${await computeFacetHash(descBody)}
+recipe_hash: ${emptySha}
+python_hash: ${await computeFacetHash(pythonBody)}
+python_derived_from_recipe_hash: ${emptySha}
+---
+
+# Description
+
+${descBody}
+
+# Python
+
+\`\`\`python
+${pythonBody}
+\`\`\`
+`;
+  const routingHelpers = {
+    extractDescription,
+    extractRecipeSection,
+    extractPythonSection,
+    getFrontmatterField: HELPERS.getFrontmatterField,
+  };
+  assert.equal(
+    await whichLayerIsSource(wedged, routingHelpers),
+    'description',
+    'wedged note must self-heal to Description-canonical',
+  );
+});
+
+test('CW-2230 Option 2 does not hijack an explicit python source_facet', async () => {
+  // Guard against over-reach: a cohort member who took over the
+  // Python facet (source_facet: python) on a note with no Recipe must
+  // KEEP python as source. The rescue only applies when the stored
+  // source is absent / 'synced' / 'description'.
+  const descBody = 'Say hello.';
+  const pythonBody = 'print("hi")';
+  const pythonAuthored = `---
+type: action
+inputs: []
+source_facet: python
+description_hash: ${await computeFacetHash(descBody)}
+python_hash: ${await computeFacetHash(pythonBody)}
+---
+
+# Description
+
+${descBody}
+
+# Python
+
+\`\`\`python
+${pythonBody}
+\`\`\`
+`;
+  const routingHelpers = {
+    extractDescription,
+    extractRecipeSection,
+    extractPythonSection,
+    getFrontmatterField: HELPERS.getFrontmatterField,
+  };
+  // NB: pre-existing behavior returns 'synced' here, not 'python' — the
+  // drift-flip at facet-hash-core.ts:246-257 deliberately downgrades any
+  // explicit stored source to 'synced' when no facet has drifted ("No
+  // drift anywhere → note is actually synced; honor that"). CW-2230 does
+  // not change that. The invariant this test pins is narrower: the
+  // Option-2 rescue must not HIJACK such a note into 'description' and
+  // re-derive over the cohort member's hand-authored Python.
+  assert.notEqual(
+    await whichLayerIsSource(pythonAuthored, routingHelpers),
+    'description',
+    'Option-2 rescue must not hijack an explicit python source_facet',
+  );
 });

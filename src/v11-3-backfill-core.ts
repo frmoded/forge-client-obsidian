@@ -138,20 +138,41 @@ export async function backfillV113Shape(
   }
 
   // Step 2: compute current facet hashes against the working body.
+  //
+  // CW-generate-persist-path-fix-backfill-and-write (drain
+  // 2026-07-29-2230) Option 1 — `rawRecipe` keeps the null-vs-empty
+  // distinction that the `?? ''` coalesce used to throw away. A note
+  // with NO `# Recipe` heading (null) is categorically different from
+  // one with an empty Recipe body (''): the first has no Recipe facet
+  // at all, so there is no lineage to stamp.
+  const rawRecipe = helpers.extractRecipeSection(workingBody);
+  const hasRecipeFacet = rawRecipe !== null;
   const descText = helpers.extractDescription(workingBody);
-  const recipeText = helpers.extractRecipeSection(workingBody) ?? '';
+  const recipeText = rawRecipe ?? '';
   const pythonText = helpers.extractPythonSection(workingBody) ?? '';
   const currentDescHash = await helpers.computeFacetHash(descText);
   const currentRecipeHash = await helpers.computeFacetHash(recipeText);
   const currentPythonHash = await helpers.computeFacetHash(pythonText);
 
   // Step 3: stamp any missing hashes at current values.
+  //
+  // CW-2230 Option 1 — `recipe_hash` is omitted entirely when the note
+  // has no `# Recipe` heading. Pre-fix the backfill stamped it at
+  // `computeFacetHash('')` (the empty-string SHA e3b0c442…), which
+  // asserted "the Recipe facet is in sync with its stored hash" for a
+  // facet that does not exist. That lie is what made drain 1305's
+  // `noStoredHashes` routing gate unreachable and wedged fresh
+  // wizard-authored notes into the dialect='python' /generate path
+  // (drain 2100 investigation, hop 2). Absent is the honest state; the
+  // hash gets stamped for real the first time a Recipe is written.
   const hashPairs: Array<{
     key: 'description_hash' | 'recipe_hash' | 'python_hash';
     value: string;
   }> = [
     { key: 'description_hash', value: currentDescHash },
-    { key: 'recipe_hash', value: currentRecipeHash },
+    ...(hasRecipeFacet
+      ? [{ key: 'recipe_hash' as const, value: currentRecipeHash }]
+      : []),
     { key: 'python_hash', value: currentPythonHash },
   ];
 
@@ -253,8 +274,23 @@ export async function backfillV113Shape(
     const rMismatch = finalStoredRecipe !== null && finalStoredRecipe !== finalRecipeHash;
     const pMismatch = finalStoredPython !== null && finalStoredPython !== finalPythonHash;
     let seed: 'description' | 'recipe' | 'python' | 'synced';
+    // CW-generate-persist-path-fix-backfill-and-write (drain
+    // 2026-07-29-2230) Option 1 — content-based seed for the
+    // no-Recipe case, BEFORE the drift tiebreak. A note with a
+    // Description body and no Recipe body cannot honestly be
+    // 'synced': there is no Recipe facet for the other facets to be
+    // in sync with, and Python cannot have been derived from it.
+    // Description is the only facet with content, so Description is
+    // the source. Pre-fix this fell through to `seed = 'synced'`
+    // (all three mismatch checks false, because step 3 had just
+    // stamped every hash at its current value) — the seed that
+    // wedged fresh wizard notes out of the Description-canonical
+    // branch (drain 2100 investigation, hop 2).
+    const noRecipeBody = finalRecipeText.trim().length === 0;
+    const hasDescBody = finalDescText.trim().length > 0;
     // Upstream-wins tiebreak per driver Choice 3.
-    if (dMismatch) seed = 'description';
+    if (noRecipeBody && hasDescBody) seed = 'description';
+    else if (dMismatch) seed = 'description';
     else if (rMismatch) seed = 'recipe';
     else if (pMismatch) seed = 'python';
     else seed = 'synced';
