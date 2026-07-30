@@ -1,26 +1,37 @@
 # Scale
 
-A **scale** is an ordered sequence of musical pitches, arranged by pitch from low to high (or high to low), that spans an octave and defines the pool of notes a piece of music draws from.
+A **scale** is an ordered sequence of musical pitches — a ladder of notes spanning an octave that a piece of music draws its melody and harmony from.
+
+## Hear it, and see it
+
+Before any theory, meet a scale directly. Press play to hear a full **C major scale** climb from C up to the C an octave above:
+
+![[music_theory/audio/c_major_scale.mp3]]
+
+And here is that same scale written on the staff:
+
+![[music_theory/images/c_major_scale.svg]]
+
+Listen and look together: are the steps between the notes all the same size, or are some bigger than others? Hold that question — the rest of this note answers it.
 
 ## The tonic
 
-Every scale is anchored to a **tonic** — the note that feels like "home," the point of rest the other notes lean toward. The scale begins on the tonic and ascends step by step until it reaches the tonic again an octave higher. Naming a scale means naming its tonic and its type: "C major" is the major scale whose tonic is C.
+Every scale is anchored to a **tonic** — the note that feels like "home," the point of rest the other notes lean toward. A scale begins on its tonic and climbs step by step until it reaches the tonic again, an octave higher. Naming a scale means naming its tonic and its type: "C major" is the major scale whose tonic is C.
 
 ## Interval patterns
 
-What makes a scale sound the way it does is its **pattern of intervals** — the distances between consecutive notes, measured in whole steps (W) and half steps (H). The pattern, not the specific letters, defines the scale:
+Here's the answer to the question above: the steps are *not* all the same size. What defines a scale is its **pattern of intervals** — the distances between consecutive notes, measured in whole steps (W) and half steps (H). The pattern, not the specific letters, is what makes a scale that scale:
 
-- **Major** — W‑W‑H‑W‑W‑W‑H. Bright, resolved. C major: C, D, E, F, G, A, B, C.
-- **Natural minor** — W‑H‑W‑W‑H‑W‑W. Darker, more somber. A minor: A, B, C, D, E, F, G, A.
+- **Major** — W‑W‑H‑W‑W‑W‑H. Bright, resolved. Trace it on the staff above: the two half-steps are the tighter moves, between the 3rd–4th notes (E–F) and the 7th–8th (B–C).
+- **Natural minor** — W‑H‑W‑W‑H‑W‑W. Darker, more wistful. Worked out from A, that pattern gives A B C D E F G A.
 
-Because the pattern is what matters, the same scale type can start on any tonic to give that scale in a different key: shift C major up so it starts on G and you get G major — same interval pattern, different notes.
+Because the pattern is what matters, the *same* pattern started on a different tonic gives the same kind of scale in a new key — the notes change, the shape stays.
 
-## Why scales matter
+## Practice — build it yourself
 
-Scales are the raw material of melody and harmony. Melodies are drawn largely from a scale's notes, and chords are built by stacking particular scale degrees — a **major triad**, for instance, is degrees 1, 3, and 5 of the major scale.
+You've now heard and seen C major. The real skill is *generating* a scale from its pattern alone — so put it to work:
 
-## Related notes in this vault
+- [[exercises/complete_this_scale_challenge]] — press **Run** to hear the first four notes.
+- [[exercises/complete_this_scale_submit]] — apply the major pattern (W‑W‑H‑W‑W‑W‑H) to work out the four notes that finish the octave, enter them as your `guess`, and Run for note-by-note feedback.
 
-- [[major_scale]] — the seven pitch-class names of a major scale for a given tonic
-- [[diatonic_scale]] — the ascending scale (major or minor) with octave designations
-- [[major_triad]] — degrees 1, 3, and 5 picked out of the scale
+Once you've built the scale, chords are hiding inside it: a **major triad** is scale degrees 1, 3, and 5. Build the scale first — then those three notes are already there waiting.
