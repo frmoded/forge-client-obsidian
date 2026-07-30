@@ -2419,14 +2419,49 @@ export default class ForgePlugin extends Plugin {
               e,
             );
           }
-          if (this.spinner) {
-            this.spinner.startImmediate('Forge: 🔥 executing …');
+          // v0.2.310 drain 2026-07-30-1030 — the empty-Recipe guard
+          // gated only the transpile, not the run. The "always
+          // continue" rationale above assumes a PRIOR Recipe exists to
+          // fall back on; on a fresh note it doesn't, so a sanitize-fail
+          // left Compute executing against an empty snippet and
+          // returning `{result: undefined, stdout: ''}` — an empty
+          // output that reads to cohort like a broken Forge rather than
+          // a failed generation. Gate the run on the same pure-core the
+          // transpile uses, so both halves agree on what "empty" means.
+          //
+          // No second Notice here: writeSourcePythonBack has already
+          // surfaced the empty-Recipe guidance from the identical check
+          // on the identical body, and two toasts for one event is
+          // noise. A read hiccup proceeds with the run, matching the
+          // transpile guard's fail-open posture — a read error must not
+          // be able to suppress execution.
+          let shouldRun = true;
+          try {
+            const bodyForRunCheck = await this.app.vault.read(file);
+            shouldRun = checkEmptyRecipeForTranspile(
+              extractRecipeSection(bodyForRunCheck),
+            ).shouldTranspile;
+          } catch (e) {
+            console.error(
+              'empty-Recipe pre-run check read failed; running anyway',
+              e,
+            );
           }
-          // v0.2.288 — pass captured file so runSnippet doesn't have
-          // to re-query workspace state after the /generate LLM call.
-          // The LLM roundtrip can shift focus; pre-v0.2.288 this
-          // silently emitted "No active note to run." and lost the run.
-          await this.runSnippet('Forge failed during execution', undefined, file);
+          if (!shouldRun) {
+            console.log(
+              '[fresh-note-empty-recipe] skipping compute:',
+              file.path,
+            );
+          } else {
+            if (this.spinner) {
+              this.spinner.startImmediate('Forge: 🔥 executing …');
+            }
+            // v0.2.288 — pass captured file so runSnippet doesn't have
+            // to re-query workspace state after the /generate LLM call.
+            // The LLM roundtrip can shift focus; pre-v0.2.288 this
+            // silently emitted "No active note to run." and lost the run.
+            await this.runSnippet('Forge failed during execution', undefined, file);
+          }
         } finally {
           if (this.spinner) {
             this.spinner.stop();
