@@ -3419,6 +3419,25 @@ export default class ForgePlugin extends Plugin {
             `Forge: proceduralness pushback (score=${pushback.proceduralness}) — auto-forge proceeds without modal (Q4).`,
           );
         }
+        // drain 2026-07-31-1100 — completion log.
+        //
+        // The entry log above fires BEFORE the network call, so on its
+        // own it cannot distinguish "response landed" from "response in
+        // flight". Drain 1030 read the entry log's position in the
+        // console stream as evidence of a race and was wrong; drain 2330
+        // spent a cycle on the same ambiguity. One line here settles it.
+        //
+        // The preview is the load-bearing part: when /generate returns
+        // something that sanitizes to nothing, THIS is where the raw
+        // output is visible. CCQA's 2026-07-31 report describes exactly
+        // that gap — a silently-empty Recipe with no way to see what the
+        // LLM actually said. Capped so a long Recipe doesn't flood the
+        // console; `chars` carries the true length.
+        console.log('Forge: _llmGenerateRecipe (α) returned', {
+          chars: code.length,
+          lines: code.split('\n').length,
+          preview: code.length > 300 ? `${code.slice(0, 300)}…` : code,
+        });
         return code;
       }
       const detail = response.json?.detail;
