@@ -91,6 +91,7 @@ import {
 } from './write-generated-recipe-core.ts';
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
+import { parseInputEnums } from './input-enums-core.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
@@ -4031,12 +4032,18 @@ export default class ForgePlugin extends Plugin {
 
     if (inputs.length > 0) {
       const cached = this.inputCache[snippetId] ?? {};
+      // drain 2026-07-31-1120 — enumerable inputs. Read from the note's
+      // own frontmatter only: the inventory fallback above exists for
+      // stub notes that have no frontmatter to read, and those have no
+      // enums to declare either. Absent key → {} → all text boxes,
+      // i.e. byte-for-byte the previous behaviour.
+      const enums = parseInputEnums(frontmatter);
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
         // Drain 2530 — pass `file` so the successful run refreshes the
         // note's # Python section.
         this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file);
-      }).open();
+      }, enums).open();
     } else {
       // Drain 2530 — pass `file` so the successful run refreshes the
       // note's # Python section.

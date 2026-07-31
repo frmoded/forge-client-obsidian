@@ -1,5 +1,6 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
 import { forgeNotice } from './forge-notice.ts';
+import { initialEnumValue, type InputEnums } from './input-enums-core.ts';
 // v0.2.207 — Build-step hardening drain caught a missing import:
 // `actionTemplate` was referenced at line 369 without being imported.
 // This is exactly the bug class v0.2.197 hit with extractRecipeSection.
@@ -100,7 +101,11 @@ export class ForgeRunModal extends Modal {
     private snippetId: string,
     private inputs: string[],
     private cached: Record<string, string>,
-    private onRun: (kwargs: Record<string, unknown>, raw: Record<string, string>) => void
+    private onRun: (kwargs: Record<string, unknown>, raw: Record<string, string>) => void,
+    // drain 2026-07-31-1120 — optional per-input allowed values. Absent
+    // (the default) reproduces the previous all-text-boxes behaviour
+    // exactly, so every existing note is unaffected.
+    private enums: InputEnums = {},
   ) {
     super(app);
   }
@@ -110,6 +115,22 @@ export class ForgeRunModal extends Modal {
     contentEl.createEl('h2', { text: `Run: ${this.snippetId}` });
 
     for (const name of this.inputs) {
+      const allowed = this.enums[name];
+      if (allowed && allowed.length > 0) {
+        // drain 2026-07-31-1120 — enumerable input: a dropdown removes
+        // both failure modes at once. The cohort cannot mistype
+        // "Major"/"maj", and they can SEE the valid values without
+        // opening the Recipe to infer them from usage.
+        this.values[name] = initialEnumValue(this.cached[name], allowed);
+        new Setting(contentEl)
+          .setName(name)
+          .addDropdown(dd => {
+            for (const v of allowed) dd.addOption(v, v);
+            dd.setValue(this.values[name])
+              .onChange(v => { this.values[name] = v; });
+          });
+        continue;
+      }
       this.values[name] = this.cached[name] ?? '';
       new Setting(contentEl)
         .setName(name)
