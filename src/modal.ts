@@ -10,6 +10,7 @@ import { initialEnumValue, type InputEnums } from './input-enums-core.ts';
 // exercised by current cohort flows), but the dead code path was
 // still a landmine waiting for refactor.
 import { actionTemplate } from './modal-templates-core.ts';
+import { shouldSubmitOnKey } from './submit-on-key-core.ts';
 
 // Blocking modal shown during generation. Clicking outside, the X button, and
 // pressing Escape all funnel through close(); we no-op those until the caller
@@ -288,13 +289,25 @@ export class ForgeSnippetModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl('h2', { text: 'New Snippet' });
+    contentEl.createEl('h2', { text: 'New action note' });
 
     new Setting(contentEl)
-      .setName('Snippet Name')
-      .addText(text =>
-        text.setPlaceholder('my-snippet').onChange(v => { this.snippetName = v.trim(); })
-      );
+      .setName('Action note name')
+      .addText(text => {
+        text.setPlaceholder('my-action-note').onChange(v => {
+          this.snippetName = v.trim();
+        });
+        // Drain 2026-08-03-1245 — Enter submits, so naming a note never
+        // requires reaching for the mouse. `isComposing` guards IME
+        // input (a Japanese/Chinese composition commits with Enter and
+        // must not also fire create); Shift-Enter is left alone so the
+        // field can become a textarea later without a surprise.
+        text.inputEl.addEventListener('keydown', evt => {
+          if (!shouldSubmitOnKey(evt)) return;
+          evt.preventDefault();
+          void this.submit();
+        });
+      });
 
     new Setting(contentEl)
       .setName('Snippet Type')

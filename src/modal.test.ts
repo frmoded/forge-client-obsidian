@@ -1,3 +1,4 @@
+import { shouldSubmitOnKey } from './submit-on-key-core.ts';
 // v0.2.77 — pure-function tests for the snippet-template emitters in
 // modal.ts. The modal UI itself depends on the obsidian runtime; we
 // test only the body-emission functions, which are static + pure.
@@ -58,4 +59,39 @@ test('actionTemplate does NOT declare facet_form (v0.2.121 — field retired)', 
 test('actionTemplate description echoes the snippet name', () => {
   const body = actionTemplate('printer');
   assert.match(body, /^description:\s*printer$/m);
+});
+
+// --- drain 2026-08-03-1245: Enter-submits in the new-action-note dialog ---
+
+test('drain-1245: plain Enter submits', () => {
+  assert.equal(
+    shouldSubmitOnKey({ key: 'Enter', isComposing: false, shiftKey: false }),
+    true,
+  );
+});
+
+test('drain-1245: Enter during IME composition does NOT submit', () => {
+  // Committing a Japanese/Chinese candidate uses Enter. Submitting here
+  // would create a note named after a half-finished composition.
+  assert.equal(
+    shouldSubmitOnKey({ key: 'Enter', isComposing: true, shiftKey: false }),
+    false,
+  );
+});
+
+test('drain-1245: Shift-Enter does NOT submit', () => {
+  assert.equal(
+    shouldSubmitOnKey({ key: 'Enter', isComposing: false, shiftKey: true }),
+    false,
+  );
+});
+
+test('drain-1245: other keys never submit', () => {
+  for (const key of ['a', 'Escape', 'Tab', 'NumpadEnter', ' ']) {
+    assert.equal(
+      shouldSubmitOnKey({ key, isComposing: false, shiftKey: false }),
+      false,
+      `${key} must not submit`,
+    );
+  }
 });

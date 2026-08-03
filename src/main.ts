@@ -1411,7 +1411,7 @@ export default class ForgePlugin extends Plugin {
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
 
-    const snippetBtn = view.addAction('file-plus', 'New Snippet', () => { this.createNewSnippet(); });
+    const snippetBtn = view.addAction('file-plus', 'New action note', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
     // v0.2.77 — Forge button only on snippet files (type: action|data).
