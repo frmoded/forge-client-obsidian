@@ -31,7 +31,7 @@ Because the pattern is what matters, the *same* pattern started on a different t
 
 You've now heard and seen C major. The real skill is *generating* a scale from its pattern alone — so put it to work:
 
-- [[exercises/complete_this_scale_challenge]] — press **Run** to hear the first four notes.
-- [[exercises/complete_this_scale_submit]] — apply the major pattern (W‑W‑H‑W‑W‑W‑H) to work out the four notes that finish the octave, enter them as your `guess`, and Run for note-by-note feedback.
+- [[music_theory/exercises/complete_this_scale_challenge]] — press **Run** to hear the first four notes.
+- [[music_theory/exercises/complete_this_scale_submit]] — apply the major pattern (W‑W‑H‑W‑W‑W‑H) to work out the four notes that finish the octave, enter them as your `guess`, and Run for note-by-note feedback.
 
 Once you've built the scale, chords are hiding inside it: a **major triad** is scale degrees 1, 3, and 5. Build the scale first — then those three notes are already there waiting.

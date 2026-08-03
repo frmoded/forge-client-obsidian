@@ -1,0 +1,14 @@
+# Notation
+
+The **symbolic** side of a note — how we identify, name, and write it. These are *conventions* (agreed-upon labels), not physical facts about the sound; see [[physics]] for the sonic reality they point at.
+
+The fields, roughly in build order:
+
+- [[octave]] — the 2:1 interval; the period of the whole naming system (spans 12 semitones)
+- [[pitch_class]] — a note's identity independent of octave (there are 12); pitch = (pitch class, octave)
+- [[semitone]] — the smallest step, 1/12 of an octave; the grid everything is built on
+- [[note_name]] — the seven letters A–G (only 7 names for 12 pitch classes)
+- [[accidental]] — sharp / flat / natural; how 7 letters reach all 12 classes
+- [[enharmonic_equivalence]] — two names for one pitch (C♯ = D♭)
+
+See [[note]] for the overview.
