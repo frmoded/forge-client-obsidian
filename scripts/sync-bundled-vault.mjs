@@ -153,9 +153,34 @@ function syncOne(vaultName) {
   }
   pruneEmptyDirs(BUNDLE);
 
+  // Drain 2026-08-03-1330. The counters were investigated and found
+  // correct — each source file increments exactly one of added /
+  // updated / skipped, and each orphan increments deleted. This
+  // assertion pins that, so a future refactor that double-counts or
+  // misses a path fails here instead of quietly printing a wrong
+  // summary.
+  const accounted = added + updated + skipped;
+  if (accounted !== sourceFiles.length) {
+    throw new Error(
+      `sync-bundled-vault counter invariant violated for ${vaultName}: ` +
+      `${added} added + ${updated} updated + ${skipped} unchanged = ` +
+      `${accounted}, but ${sourceFiles.length} source files were processed.`,
+    );
+  }
+
   console.log(
     `  Result: ${added} added, ${updated} updated, ${skipped} unchanged, ${deleted} deleted.`,
   );
+  // The summary is PER-RUN. `git status` is cumulative since the last
+  // commit, so a second run legitimately reports all-unchanged while
+  // the tree still shows the first run's uncommitted output. That
+  // mismatch is what drain 1330 was filed about; the note is here so
+  // the next reader doesn't re-diagnose it as a miscount.
+  if (added + updated + deleted === 0) {
+    console.log(
+      `  (no changes this run — any uncommitted bundle files predate it)`,
+    );
+  }
 }
 
 function main() {
