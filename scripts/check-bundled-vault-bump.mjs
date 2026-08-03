@@ -35,6 +35,22 @@ function run(cmd) {
   }
 }
 
+// Drain 2026-08-03-1335 — `--worktree` widens the comparison from
+// `baseline..HEAD` to `baseline..working-tree`, so UNCOMMITTED (and
+// untracked) bundle changes are checked too.
+//
+// Why it exists: release.sh now auto-syncs the bundled vaults as its
+// first preflight. Without this flag the only way to check the sync's
+// output would be to commit it first — and if the check then failed,
+// the driver would be left with an auto-generated commit on main that
+// has to be reset or reverted. With it, release.sh validates the sync
+// while it is still just working-tree edits, so a failure is undone
+// with `git checkout -- assets/vaults/`.
+//
+// The default (no flag) is unchanged: `baseline..HEAD`, which is what
+// the late preflight at release.sh:241 still uses.
+const WORKTREE = process.argv.includes('--worktree');
+
 let baseline;
 try {
   baseline = run('git describe --tags --abbrev=0 --match "v*"');
@@ -44,11 +60,24 @@ try {
   process.exit(0);
 }
 
+// `git diff <baseline>` (no `..HEAD`) compares the baseline against the
+// working tree, which is the whole point of --worktree.
+const diffRange = WORKTREE ? baseline : `${baseline}..HEAD`;
+
 let changedFiles;
 try {
-  changedFiles = run(`git diff --name-only ${baseline}..HEAD`)
+  changedFiles = run(`git diff --name-only ${diffRange}`)
     .split('\n')
     .filter(Boolean);
+  if (WORKTREE) {
+    // `git diff` only sees tracked files. A sync that adds a brand-new
+    // note leaves it untracked, and that is exactly the content change
+    // the bump rule cares about — so fold untracked files in too.
+    const untracked = run('git ls-files --others --exclude-standard -- assets/vaults/')
+      .split('\n')
+      .filter(Boolean);
+    changedFiles = [...new Set([...changedFiles, ...untracked])];
+  }
 } catch (e) {
   console.error('check-bundled-vault-bump: failed to compute changed files vs', baseline);
   console.error(e.message);
@@ -57,7 +86,11 @@ try {
 
 const getTomlDiff = (tomlPath) => {
   try {
-    return run(`git diff ${baseline}..HEAD -- ${tomlPath}`);
+    // Must use the same range as changedFiles. Under --worktree a
+    // forge.toml bumped by the sync is still uncommitted, so a
+    // `..HEAD` diff would miss it and report a false
+    // TOML_NO_VERSION_BUMP against a vault that did bump correctly.
+    return run(`git diff ${diffRange} -- ${tomlPath}`);
   } catch {
     return '';
   }
@@ -83,11 +116,28 @@ if (violations.length > 0) {
     console.error('');
   }
   console.error('Resolution:');
-  console.error(`  1. Bump the affected vault's forge.toml version field`);
-  console.error(`     (e.g., assets/vaults/<vault>/forge.toml: 0.1.5 → 0.1.6)`);
-  console.error(`  2. Also bump the canonical source repo's forge.toml`);
-  console.error(`     (e.g., ~/projects/<vault>/forge.toml — same version)`);
-  console.error(`  3. Commit and retry release.`);
+  if (WORKTREE) {
+    // Drain 1335 — in --worktree mode the changes came from
+    // release.sh's auto-sync and are still UNCOMMITTED. Bumping the
+    // bundled copy by hand would be undone by the next sync, so send
+    // the driver to the source vault instead.
+    console.error(`  1. Bump the SOURCE vault's forge.toml version field`);
+    console.error(`     (e.g., ~/projects/<vault>/forge.toml: 0.1.5 → 0.1.6)`);
+    console.error(`     Do NOT edit assets/vaults/<vault>/forge.toml directly —`);
+    console.error(`     the auto-sync overwrites it from the source vault.`);
+    console.error(`  2. Commit that bump in the source vault repo.`);
+    console.error(`  3. Re-run release.sh. The auto-sync picks the bump up.`);
+    console.error('');
+    console.error('  Nothing has been committed in this repo. To discard the');
+    console.error('  auto-sync output entirely:');
+    console.error('    git checkout -- assets/vaults/ && git clean -fd assets/vaults/');
+  } else {
+    console.error(`  1. Bump the affected vault's forge.toml version field`);
+    console.error(`     (e.g., assets/vaults/<vault>/forge.toml: 0.1.5 → 0.1.6)`);
+    console.error(`  2. Also bump the canonical source repo's forge.toml`);
+    console.error(`     (e.g., ~/projects/<vault>/forge.toml — same version)`);
+    console.error(`  3. Commit and retry release.`);
+  }
   console.error('');
   console.error('Note: this check exists because v0.2.135 §C shipped a chips fix to');
   console.error('bundled forge-tutorial without bumping its forge.toml. Cohort users');

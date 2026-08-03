@@ -106,6 +106,67 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
+# --- Drain 2026-08-03-1335 — auto-sync bundled vaults ---
+#
+# Runs FIRST, before the clean-tree preflight, because the sync writes
+# into assets/vaults/ and would otherwise trip that check itself.
+#
+# Pre-drain, bundled-vault drift cost the driver a four-step round
+# trip: release.sh aborts with a drift error naming the files → run
+# sync-bundled-vault.mjs by hand → git add + commit its output → re-run
+# release.sh. The drift preflight in build-release-zip.mjs knew the fix
+# (its own message says which command to run) but wouldn't apply it.
+#
+# One `--all` call, not a per-vault loop: sync-bundled-vault.mjs
+# already iterates its own KNOWN_VAULTS. Naming the vaults here would
+# be a second copy of that list, free to drift from the real one.
+#
+# The commit is GATED on the bump check passing (see below). A release
+# script that commits and then fails its own preflight is worse than
+# the friction it removes.
+if [ "$DRY_RUN" = "yes" ]; then
+  echo
+  echo "=== Auto-sync bundled vaults (SKIPPED — dry run) ==="
+  echo "  --dry-run promises no filesystem-visible side effects, and the"
+  echo "  sync writes into assets/vaults/. If drift is present, the drift"
+  echo "  preflight below will fire; that is the dry run reporting real"
+  echo "  state, not a bug. Run without --dry-run to auto-resolve it."
+else
+  echo
+  echo "=== Auto-sync bundled vaults ==="
+  node scripts/sync-bundled-vault.mjs --all
+
+  if [ -n "$(git status --porcelain assets/vaults/ || true)" ]; then
+    echo
+    echo "  sync produced changes — validating before commit"
+
+    # The bump rule (assets/vaults content change ⇒ forge.toml version
+    # bump in the same vault) is enforced later at the
+    # check-bundled-vault-bump.mjs preflight, against baseline..HEAD.
+    # If we committed the sync output blind and it violated the rule,
+    # that preflight would abort a release whose offending commit was
+    # already on main — recoverable only by reset or revert.
+    #
+    # So run the same check now, in --worktree mode, while the sync
+    # output is still just working-tree edits. A failure here is undone
+    # with `git checkout -- assets/vaults/`.
+    if ! node scripts/check-bundled-vault-bump.mjs --worktree; then
+      echo
+      echo "ERROR: the bundled-vault sync produced content changes that"
+      echo "       violate the forge.toml bump rule (see above)."
+      echo "       Nothing was committed. Resolve in the source vault and"
+      echo "       re-run release.sh."
+      exit 1
+    fi
+
+    git add assets/vaults/
+    git commit -q -m "sync bundled vaults (release-prep)"
+    echo "  ✓ committed: $(git log -1 --pretty=%h) sync bundled vaults (release-prep)"
+  else
+    echo "  ✓ bundled vaults already in sync (nothing to commit)"
+  fi
+fi
+
 # --- Current version ---
 CURRENT_VERSION="$(jq -r '.version' manifest.json)"
 echo "Current version: $CURRENT_VERSION"

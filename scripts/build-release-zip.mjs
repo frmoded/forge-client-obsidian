@@ -194,8 +194,19 @@ async function assertNoBundledVaultDrift() {
     for (const { relPath, status } of drift) {
       console.error(`  ✗ ${vaultName}/${relPath}  [${status}]`);
     }
+    // Drain 2026-08-03-1335 — release.sh now auto-syncs the bundled
+    // vaults as its first preflight, so reaching this point during a
+    // normal release means the auto-sync did not run or did not take.
+    // The manual command is still correct for direct
+    // `npm run release-zip` invocations, which have no auto-sync.
     console.error(
-      `\nRun 'node scripts/sync-bundled-vault.mjs ${vaultName}' to resolve.`);
+      `\nIf you ran release.sh: its auto-sync step should have resolved this.`
+      + `\n  - With --dry-run, auto-sync is skipped by design; this is expected.`
+      + `\n  - Otherwise the sync ran but left drift — check for a failed`
+      + `\n    sync, a git conflict, or a source vault that moved mid-run,`
+      + `\n    then re-run 'bash scripts/release.sh' fresh.`
+      + `\n\nIf you ran this script directly, resolve it by hand:`
+      + `\n  node scripts/sync-bundled-vault.mjs ${vaultName}`);
   }
   if (anyDrift) process.exit(1);
 }
