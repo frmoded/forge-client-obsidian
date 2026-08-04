@@ -46,6 +46,32 @@ Scope filter (mirrored in `src/engine-bundle-drift-core.ts` and `scripts/sync-en
 
 Non-trivial logic lives in pure-TS files (`src/<name>.ts` or `src/<name>-core.ts`) with no `import 'obsidian'`. Obsidian-coupled glue files in `src/` re-export the helpers and wire them into the plugin lifecycle. Tests in `src/*.test.ts` import only from the pure-core files; `node --test` runs cleanly without any Obsidian shim. See `src/engine-bundle-drift-core.ts` + `src/engine-bundle-drift.test.ts` for the canonical shape.
 
+### Vault maintenance scripts
+
+Two similarly-named helpers that answer different questions:
+
+| Script | Question it answers |
+|---|---|
+| `scripts/vault-drift-audit.sh` | Which vaults on this machine are running a stale **plugin version**? |
+| `scripts/vault-drift-cleanup.sh` | What uncommitted **note content** has piled up in one vault, and what do I want to do with it? |
+
+`vault-drift-cleanup.sh` triages content drift — the local edits, new notes, and deletions that accumulate between installs as the plugin re-extracts bundled vault content and driver/wizard/CCQA edit notes in place:
+
+```bash
+bash scripts/vault-drift-cleanup.sh --report     # categorized summary (default, non-destructive)
+bash scripts/vault-drift-cleanup.sh --stash      # set everything aside; git stash pop restores
+bash scripts/vault-drift-cleanup.sh --commit     # interactive, per category
+bash scripts/vault-drift-cleanup.sh --purge      # discard everything; requires typing YES
+```
+
+Target a vault other than the `install-latest.sh` default with `VAULT=<path>`:
+
+```bash
+VAULT=~/forge-vaults/ClaudeQA bash scripts/vault-drift-cleanup.sh --report
+```
+
+Note that `install-latest.sh` never touches vault notes — it only swaps the plugin directory and preserves `data.json`. Content drift comes from the plugin's runtime bundled-vault extraction plus local editing, so run this after an install if a vault feels cluttered.
+
 ## License
 
 See [LICENSE](LICENSE) and the engine repo for upstream attribution.
