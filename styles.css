@@ -1349,3 +1349,73 @@
 }
 
 .forge-mcq-link { color: var(--link-color); }
+
+/* ------------------------------------------------------------------
+   Run-input widgets. Drain 2026-08-05-1500.
+
+   Every colour is an Obsidian theme variable, so a light theme, a dark
+   theme, and a cohort's custom theme all get a keyboard that looks like
+   it belongs — same reason drain 1300's MCQ card does it this way. No
+   hard-coded hex anywhere in here.
+   ------------------------------------------------------------------ */
+
+.forge-widget-host {
+  margin: 0 0 0.9em;
+}
+
+.forge-widget-fallback-input {
+  width: 100%;
+}
+
+/* 88 keys do not fit in a modal. The scroller is the only thing that
+   scrolls — the modal itself must not grow a horizontal bar. */
+.forge-piano-scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+}
+
+.forge-piano-svg {
+  display: block;
+}
+
+.forge-piano-key {
+  cursor: pointer;
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+}
+
+.forge-piano-key-white {
+  fill: var(--background-primary);
+}
+
+.forge-piano-key-black {
+  fill: var(--text-normal);
+}
+
+.forge-piano-key-white:hover {
+  fill: var(--background-modifier-hover);
+}
+
+.forge-piano-key-black:hover {
+  fill: var(--text-muted);
+}
+
+/* Selection reads the same on both key colours: the accent fills the
+   key. A black key selected has to be unmistakably different from a
+   black key at rest, which a subtle tint would not manage. */
+.forge-piano-key.is-selected,
+.forge-piano-key-black.is-selected {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent-hover);
+}
+
+.forge-piano-label {
+  font-size: 9px;
+  fill: var(--text-muted);
+  user-select: none;
+  pointer-events: none;
+}

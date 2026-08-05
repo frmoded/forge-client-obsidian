@@ -92,6 +92,8 @@ import {
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
 import { parseInputEnums } from './input-enums-core.ts';
+import { parseInputWidgets, registerWidget } from './input-widget-core.ts';
+import { pianoWidget } from './input-widget-piano.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
@@ -383,6 +385,13 @@ export default class ForgePlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+
+    // Drain 2026-08-05-1500 — register the run-input widgets. Piano is
+    // the only one this drain ships; `guitar_fretboard` and
+    // `chord_builder` are names the framework knows but nothing has
+    // registered yet, so a note declaring one gets the fallback text
+    // box plus a Notice saying so, until their own drains land.
+    registerWidget(pianoWidget);
 
     // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
     // manifest.json but fails to replace main.js, leaving cohort
@@ -4138,12 +4147,16 @@ export default class ForgePlugin extends Plugin {
       // enums to declare either. Absent key → {} → all text boxes,
       // i.e. byte-for-byte the previous behaviour.
       const enums = parseInputEnums(frontmatter);
+      // Drain 2026-08-05-1500 — same sidecar treatment, same reason:
+      // read the note's own frontmatter, absent key → {} → previous
+      // behaviour byte for byte.
+      const widgets = parseInputWidgets(frontmatter);
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
         // Drain 2530 — pass `file` so the successful run refreshes the
         // note's # Python section.
         this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file);
-      }, enums).open();
+      }, enums, widgets).open();
     } else {
       // Drain 2530 — pass `file` so the successful run refreshes the
       // note's # Python section.

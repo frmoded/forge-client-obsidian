@@ -1,6 +1,13 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
 import { forgeNotice } from './forge-notice.ts';
 import { initialEnumValue, type InputEnums } from './input-enums-core.ts';
+import {
+  coerceRunInputValues,
+  collectWidgetInput,
+  renderWidget,
+  resolveInputRendering,
+  type InputWidgets,
+} from './input-widget-core.ts';
 // v0.2.207 — Build-step hardening drain caught a missing import:
 // `actionTemplate` was referenced at line 369 without being imported.
 // This is exactly the bug class v0.2.197 hit with extractRecipeSection.
@@ -96,6 +103,10 @@ export class ForgeFreezeModal extends Modal {
 
 export class ForgeRunModal extends Modal {
   private values: Record<string, string> = {};
+  // drain 2026-08-05-1500 — inputs whose value lives in a widget's DOM
+  // rather than in `values`. Read back at submit, not on every click:
+  // a keyboard is a lot of click handlers to have each write through.
+  private widgetHosts: Record<string, HTMLElement> = {};
 
   constructor(
     app: App,
@@ -107,6 +118,9 @@ export class ForgeRunModal extends Modal {
     // (the default) reproduces the previous all-text-boxes behaviour
     // exactly, so every existing note is unaffected.
     private enums: InputEnums = {},
+    // drain 2026-08-05-1500 — optional per-input widget types. Same
+    // deal: absent is the previous behaviour exactly.
+    private widgets: InputWidgets = {},
   ) {
     super(app);
   }
@@ -116,12 +130,36 @@ export class ForgeRunModal extends Modal {
     contentEl.createEl('h2', { text: `Run: ${this.snippetId}` });
 
     for (const name of this.inputs) {
-      const allowed = this.enums[name];
-      if (allowed && allowed.length > 0) {
+      const rendering = resolveInputRendering(name, this.enums, this.widgets);
+
+      if (rendering.kind === 'widget') {
+        if (rendering.conflict) {
+          // Not an error — we resolved it — but the note contradicts
+          // itself and the author should be able to find out why their
+          // dropdown vanished.
+          console.warn(
+            `ForgeRunModal.onOpen: input '${name}' declares both input_enums and ` +
+            `input_widgets; using the widget ('${rendering.widget}') and ignoring the enum`,
+          );
+        }
+        new Setting(contentEl).setName(name).setDesc(`${rendering.widget} widget`);
+        const host = contentEl.createDiv({ cls: 'forge-widget-host' });
+        const outcome = renderWidget(rendering.widget, name, host, this.cached[name]);
+        if (outcome.rendered === 'fallback-text') {
+          // Diagnostics HARD RULE: an unregistered widget type is
+          // visible, never a silently plain text box.
+          void forgeNotice(this.app, `Forge: ${outcome.message}`);
+        }
+        this.widgetHosts[name] = host;
+        continue;
+      }
+
+      if (rendering.kind === 'enum') {
         // drain 2026-07-31-1120 — enumerable input: a dropdown removes
         // both failure modes at once. The cohort cannot mistype
         // "Major"/"maj", and they can SEE the valid values without
         // opening the Recipe to infer them from usage.
+        const allowed = rendering.allowed;
         this.values[name] = initialEnumValue(this.cached[name], allowed);
         new Setting(contentEl)
           .setName(name)
@@ -132,6 +170,7 @@ export class ForgeRunModal extends Modal {
           });
         continue;
       }
+
       this.values[name] = this.cached[name] ?? '';
       new Setting(contentEl)
         .setName(name)
@@ -153,10 +192,12 @@ export class ForgeRunModal extends Modal {
   }
 
   private submit() {
-    const kwargs: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(this.values)) {
-      try { kwargs[k] = JSON.parse(v); } catch { kwargs[k] = v; }
+    for (const [name, host] of Object.entries(this.widgetHosts)) {
+      this.values[name] = collectWidgetInput(name, host);
     }
+    // v0.2.324 — the JSON-first coercion moved to a pure core so the
+    // suite can exercise the real thing. Behaviour is unchanged.
+    const kwargs = coerceRunInputValues(this.values);
     this.close();
     this.onRun(kwargs, { ...this.values });
   }
