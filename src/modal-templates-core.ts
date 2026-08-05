@@ -78,7 +78,13 @@ export async function actionTemplate(name: string): Promise<string> {
     // create_note_shell. Re-adding it here would silently reverse that
     // decision on the strength of a mirror that step 1 showed is wrong.
     `description: ${name}`,
-    'recipe_version: 0',
+    // NOT `recipe_version: 0`. CW-forge-mcp-drop-recipe-version-shell-
+    // marker (2026-07-29-2305) removed it from the MCP writer
+    // deliberately: `recipe_version: 0` is indistinguishable from a
+    // missing stamp, because every reader defaults missing to 0.
+    // Drain 1610 re-added it here from a target shape that had
+    // inherited it, which left the two writers disagreeing on one
+    // redundant field. Dropped so they agree. No observable change.
     'source_facet: description',
     'sync_state: stale-recipe',
     `description_hash: ${descriptionHash}`,

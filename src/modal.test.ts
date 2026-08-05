@@ -114,7 +114,7 @@ test('drain-1245: other keys never submit', () => {
 test('drain-1610: actionTemplate stamps every hexa-state field at creation', async () => {
   const body = await actionTemplate('my_snippet');
   for (const field of [
-    'source_facet', 'sync_state', 'recipe_version',
+    'source_facet', 'sync_state',
     'description_hash', 'recipe_hash', 'python_hash',
     'recipe_derived_from_description_hash', 'recipe_derived_from_source_hash',
     'python_derived_from_recipe_hash', 'python_derived_from_source_hash',
@@ -151,5 +151,65 @@ test('drain-1610: opens Description-source, Recipe not yet derived', async () =>
   const body = await actionTemplate('my_snippet');
   assert.match(body, /^source_facet: description$/m);
   assert.match(body, /^sync_state: stale-recipe$/m);
-  assert.match(body, /^recipe_version: 0$/m);
+  // recipe_version is deliberately ABSENT — see the absence test below.
+  assert.doesNotMatch(body, /^recipe_version:/m);
+});
+
+// --- Drain 2026-08-05-1040 — recipe_version stays out ---------------------
+
+test('drain-1040: actionTemplate does NOT stamp recipe_version', async () => {
+  // CW-forge-mcp-drop-recipe-version-shell-marker (2026-07-29-2305)
+  // removed this from the MCP writer on the grounds that
+  // `recipe_version: 0` is indistinguishable from a missing stamp —
+  // every reader defaults missing to 0. Drain 1610 re-added it here
+  // from a target shape that had inherited it before that removal.
+  //
+  // Mirrors test_create_note.py's two absence pins on the MCP side.
+  const body = await actionTemplate('my_snippet');
+  assert.doesNotMatch(body, /^recipe_version:/m);
+});
+
+test('drain-1040: dropping it does not weaken the hexa-state', async () => {
+  // Part 3 — metadata cleanup, not a semantic change. All eleven
+  // stamped fields survive; only the redundant one left.
+  const body = await actionTemplate('my_snippet');
+  for (const field of [
+    'source_facet', 'sync_state', 'description_hash', 'recipe_hash',
+    'python_hash', 'recipe_derived_from_description_hash',
+    'recipe_derived_from_source_hash', 'python_derived_from_recipe_hash',
+    'python_derived_from_source_hash', 'english_hash',
+  ]) {
+    assert.match(body, new RegExp(`^${field}:`, 'm'), `lost ${field}`);
+  }
+});
+
+test('drain-1040: hexa-state field set matches the MCP writer', async () => {
+  // §Part 2 asks for a cross-writer parity test on the whole frontmatter
+  // field set. That cannot pass as specified, and saying so is the point:
+  // after this drain the two writers STILL differ on two fields.
+  //
+  //   MCP-only    : inputs        (plugin retired it as V1 frontmatter)
+  //   plugin-only : description   (MCP takes it as a call argument)
+  //
+  // Neither is hexa-state, and neither is drift — each is a deliberate
+  // decision on its own side. What must agree is the S9 set, because
+  // that is what both writers exist to stamp and what readers compare.
+  // Asserting the full set would either fail or force one writer to
+  // adopt the other's unrelated field.
+  const body = await actionTemplate('my_snippet');
+  const emitted = new Set(
+    (body.split('---')[1] ?? '').split('\n')
+      .map((l) => l.split(':')[0].trim())
+      .filter(Boolean),
+  );
+
+  // Field names as create_note_shell writes them (vault_fs.py).
+  const MCP_HEXA_STATE = [
+    'source_facet', 'sync_state', 'description_hash', 'recipe_hash',
+    'python_hash', 'recipe_derived_from_description_hash',
+    'recipe_derived_from_source_hash', 'python_derived_from_recipe_hash',
+    'python_derived_from_source_hash', 'english_hash',
+  ];
+  for (const f of MCP_HEXA_STATE) assert.ok(emitted.has(f), `plugin missing ${f}`);
+  assert.ok(!emitted.has('recipe_version'), 'neither writer stamps recipe_version');
 });
