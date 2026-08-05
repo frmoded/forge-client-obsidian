@@ -1,4 +1,10 @@
 import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from 'obsidian';
+import {
+  parseMcqOutput,
+  renderMcqCard,
+  type McqDocument,
+  type McqElement,
+} from './mcq-widget-core.ts';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio.ts';
 import {
   readScoreViewMode,
@@ -407,6 +413,21 @@ export class ForgeOutputView extends ItemView {
     // Install-style messages: render as plain text.
     if (isObjectWithMessage(result)) {
       entry.createEl('p', { text: result.message, cls: 'forge-output-message' });
+      return;
+    }
+
+    // Drain 2026-08-05-1300 — MCQ output gets a card instead of a
+    // stringified line. View-side only: `result` is untouched, so the
+    // Save-as-data button below and anything that reads the note still
+    // see the original string.
+    //
+    // Placed as the LAST check before the generic fallback on purpose.
+    // Every earlier branch is a known payload shape; this one is a
+    // guess about the contents of an arbitrary string, so it should
+    // never get the chance to shadow something more specific.
+    const mcq = parseMcqOutput(result);
+    if (mcq) {
+      renderMcqCard(mcq, entry as unknown as McqElement, document as unknown as McqDocument);
       return;
     }
 

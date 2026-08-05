@@ -1289,3 +1289,63 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+/* MCQ result card — drain 2026-08-05-1300.
+   View-side decoration for `[[mcq]]` output in the Forge Output panel.
+   Colours come from Obsidian's theme variables so the card reads
+   correctly in both light and dark themes and in community themes;
+   hardcoded greens/reds would be unreadable in half of them. */
+.forge-mcq-card {
+  border: 1px solid var(--background-modifier-border);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  margin: 0.5em 0;
+  background: var(--background-secondary);
+}
+
+.forge-mcq-card.forge-mcq-correct { border-left-color: var(--color-green); }
+.forge-mcq-card.forge-mcq-wrong   { border-left-color: var(--color-red); }
+
+.forge-mcq-verdict {
+  display: inline-block;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.1em 0.5em;
+  border-radius: 999px;
+  margin-bottom: 0.4em;
+}
+
+.forge-mcq-verdict-correct {
+  color: var(--color-green);
+  background: rgba(var(--color-green-rgb), 0.12);
+}
+
+.forge-mcq-verdict-wrong {
+  color: var(--color-red);
+  background: rgba(var(--color-red-rgb), 0.12);
+}
+
+.forge-mcq-guess {
+  font-size: 1.15em;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+/* Only rendered on the wrong branch — the correct branch's guess line
+   already is the answer. */
+.forge-mcq-answer {
+  font-size: 0.95em;
+  color: var(--text-muted);
+  margin-top: 0.15em;
+}
+
+.forge-mcq-explanation {
+  margin: 0.6em 0 0;
+  font-size: 0.92em;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.forge-mcq-link { color: var(--link-color); }
