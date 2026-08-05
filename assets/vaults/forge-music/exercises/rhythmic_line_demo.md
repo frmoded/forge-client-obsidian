@@ -1,8 +1,14 @@
 ---
 type: action
-inputs: [pattern_choice]
+inputs:
+  - pattern_choice
 input_enums:
-  pattern_choice: ["swing", "waltz", "even_eighths", "syncopated"]
+  pattern_choice:
+    - swing
+    - waltz
+    - even_eighths
+    - syncopated
+sync_state: synced
 ---
 
 # Description
@@ -16,6 +22,5 @@ thing you are listening to is the placement in time. Try `waltz` against
 
 # Recipe
 
-Let patterns = {"swing": ["q", "e", "e", "q", "e", "e"], "waltz": ["q", "q", "q"], "even_eighths": ["e", "e", "e", "e", "e", "e", "e", "e"], "syncopated": ["e", "q", "e", "q", "e", "q", "e"]}.
-Let pattern = {{ patterns[pattern_choice] }}.
+Let pattern = {{ {"swing": ["q", "e", "e", "q", "e", "e"], "waltz": ["q", "q", "q"], "even_eighths": ["e", "e", "e", "e", "e", "e", "e", "e"], "syncopated": ["e", "q", "e", "q", "e", "q", "e"]}[pattern_choice] }}.
 Return Call [[rhythmic_line]] with pattern=pattern.
