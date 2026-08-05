@@ -94,6 +94,7 @@ import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-r
 import { parseInputEnums } from './input-enums-core.ts';
 import { parseInputWidgets, registerWidget } from './input-widget-core.ts';
 import { pianoWidget } from './input-widget-piano.ts';
+import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
@@ -386,12 +387,13 @@ export default class ForgePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
-    // Drain 2026-08-05-1500 — register the run-input widgets. Piano is
-    // the only one this drain ships; `guitar_fretboard` and
-    // `chord_builder` are names the framework knows but nothing has
-    // registered yet, so a note declaring one gets the fallback text
-    // box plus a Notice saying so, until their own drains land.
+    // Drain 2026-08-05-1500 — register the run-input widgets.
+    // `chord_builder` is a name the framework knows but nothing has
+    // registered yet, so a note declaring it gets the fallback text box
+    // plus a Notice saying so, until its own drain lands.
     registerWidget(pianoWidget);
+    // Drain 2026-08-05-1530.
+    registerWidget(guitarFretboardWidget);
 
     // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
     // manifest.json but fails to replace main.js, leaving cohort

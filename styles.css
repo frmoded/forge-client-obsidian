@@ -1419,3 +1419,87 @@
   user-select: none;
   pointer-events: none;
 }
+
+/* ------------------------------------------------------------------
+   Guitar fretboard widget. Drain 2026-08-05-1530.
+
+   Reuses the widget-host + scroller shape from the piano (drain 1500)
+   and the same theme variables. Nothing hard-coded, nothing duplicated
+   from `.forge-piano-*` that could be shared instead.
+   ------------------------------------------------------------------ */
+
+.forge-guitar-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 0.4em;
+}
+
+.forge-guitar-tuning-label {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.forge-guitar-scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+}
+
+.forge-guitar-svg {
+  display: block;
+}
+
+.forge-guitar-string {
+  stroke: var(--text-muted);
+}
+
+.forge-guitar-fret {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+}
+
+/* The nut is the reference edge of the diagram — it has to read as
+   heavier than the fret wires or the board looks like it starts
+   nowhere. */
+.forge-guitar-nut {
+  stroke: var(--text-normal);
+  stroke-width: 4;
+}
+
+.forge-guitar-inlay {
+  fill: var(--background-modifier-border);
+}
+
+.forge-guitar-open-label,
+.forge-guitar-fret-number {
+  font-size: 10px;
+  fill: var(--text-muted);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* `transparent`, NOT `none`. `fill: none` is not hit-testable in SVG —
+   the cell would look identical and silently swallow every click. */
+.forge-guitar-cell {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.forge-guitar-dot {
+  fill: var(--interactive-accent);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease-in-out;
+}
+
+[data-forge-guitar-pos]:hover .forge-guitar-dot {
+  opacity: 0.3;
+}
+
+[data-forge-guitar-pos][data-selected="true"] .forge-guitar-dot {
+  opacity: 1;
+}
