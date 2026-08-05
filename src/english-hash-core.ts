@@ -58,3 +58,27 @@ export async function computeEnglishHash(
   }
   return hex;
 }
+
+/** The english_hash value a WRITER should stamp for a note whose
+ *  English facet is `english` — or null, meaning DO NOT stamp.
+ *
+ *  [runSnippet-bare-id-collision-plus-english-hash-empty] (drain
+ *  2026-08-05-2100, mechanism b). A present-but-empty english_hash is
+ *  strictly worse than an absent one: absent means "no invalidation
+ *  contract, return the cached # Python" (executor.py:956-957), while
+ *  present-but-empty fails the equality check and drops into a doomed
+ *  E-- re-transpile that ends in `SnippetExecError: Empty or missing
+ *  Python code`. Drain 2230 guarded writeGeneratedCode with exactly
+ *  this rule; writeSourcePythonBack and handleSlotCacheMiss kept
+ *  stamping sha256("") on every V2 note (no # English section) — 11
+ *  such notes in ClaudeQA at drain time. Every english_hash writer
+ *  MUST route through this helper; a suite drift-guard asserts main.ts
+ *  has no direct computeEnglishHash call sites left.
+ */
+export async function englishHashForStamp(
+  english: string | null | undefined,
+): Promise<string | null> {
+  if (english === null || english === undefined) return null;
+  if (english.trim().length === 0) return null;
+  return computeEnglishHash(english);
+}

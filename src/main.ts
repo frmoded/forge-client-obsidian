@@ -99,7 +99,7 @@ import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
 import { chordBuilderWidget } from './input-widget-chord-builder.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
-import { computeEnglishHash } from './english-hash-core.ts';
+import { englishHashForStamp } from './english-hash-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
 import { runFirstRunCheck } from './welcome.ts';
@@ -3717,10 +3717,12 @@ export default class ForgePlugin extends Plugin {
       // disk. This was "additional bug 1" in the drain 2100
       // investigation and is a second, independent cause of that
       // error.
-      const english = _extractEnglishFromBody(content);
-      const hasEnglishFacet = english !== null && english.trim().length > 0;
-      const englishHash = hasEnglishFacet
-        ? await computeEnglishHash(english) : null;
+      // Drain 2026-08-05-2100 mechanism (b) — all three english_hash
+      // writers route through englishHashForStamp (absent beats
+      // empty; see english-hash-core.ts + the suite drift-guard).
+      const englishHash = await englishHashForStamp(
+        _extractEnglishFromBody(content),
+      );
       let newContent = writePythonAndEnglishHash(content, {
         pythonCode: code,
         englishHash,
@@ -3939,8 +3941,13 @@ export default class ForgePlugin extends Plugin {
     const python = await host.resolveActionCode(snippetId, { force: true });
     if (!python) return;
     const body = await this.app.vault.read(file);
-    const english = _extractEnglishFromBody(body) ?? '';
-    const englishHash = await computeEnglishHash(english);
+    // Drain 2026-08-05-2100 mechanism (b) — this site's `?? ''` +
+    // unconditional hash stamped sha256("") on every V2 note (no
+    // # English section): the "present-but-empty english_hash" state
+    // that fails the executor's cache-equality check and ends in
+    // `SnippetExecError: Empty or missing Python code`. Route through
+    // the guarded helper: no English facet → no stamp.
+    const englishHash = await englishHashForStamp(_extractEnglishFromBody(body));
     // v0.2.196 — stamp python_hash on the V2 path so the implicit
     // 3-layer state machine has a baseline. Hand-edits to the Python
     // facet after this point surface as `python` canonical. Only stamp
@@ -5338,8 +5345,9 @@ export default class ForgePlugin extends Plugin {
         stdout: computeOut.stdout,
       };
     }
-    const english = _extractEnglishFromBody(body) ?? '';
-    const englishHash = await computeEnglishHash(english);
+    // Drain 2026-08-05-2100 mechanism (b) — same guarded stamping as
+    // the other two writers (absent beats empty).
+    const englishHash = await englishHashForStamp(_extractEnglishFromBody(body));
 
     try {
       await this.app.vault.process(file, (content) =>
