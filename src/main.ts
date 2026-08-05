@@ -92,6 +92,7 @@ import {
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
 import { parseInputEnums } from './input-enums-core.ts';
+import { makeFacetCopyExtension } from './facet-copy-view-extension.ts';
 import { parseInputWidgets, registerWidget } from './input-widget-core.ts';
 import { pianoWidget } from './input-widget-piano.ts';
 import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
@@ -566,6 +567,14 @@ export default class ForgePlugin extends Plugin {
     this.registerEditorExtension([
       makeFacetMutexViewPlugin(() => this.facetMutexHost()),
     ]);
+
+    // Drain 2026-07-23-1100 (attempt 2) — native Cmd-C in Live
+    // Preview writes the SOURCE slice of the selection (plus adjacency
+    // facet headings) instead of Obsidian's rendered copy, which
+    // strips `# Description` / `# Recipe` / `# Python` heading lines.
+    // Gated to V2a notes in Live Preview; every other context falls
+    // through to Obsidian's default copy untouched.
+    this.registerEditorExtension([makeFacetCopyExtension()]);
 
     // v0.2.102 Item A — auto-fold YAML frontmatter on snippet
     // file-open so students see # English content first instead of
