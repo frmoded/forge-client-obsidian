@@ -3666,6 +3666,36 @@ export default class ForgePlugin extends Plugin {
       // v0.2.256 drain 1200 — programmatic write flag prevents this
       // /generate write-back from triggering the canonical_facet
       // hand-edit path.
+      // Drain 2026-08-03-1400 — re-read-before-write guard.
+      //
+      // `newContent` was built from the `content` read above, and four
+      // SubtleCrypto awaits sit in between. `vault.modify` writes the
+      // whole body, so anything another actor wrote to this file in
+      // that window — an MCP commit, a second pane, the plugin's own
+      // reactive restamp — is silently overwritten by a body that
+      // predates it. The window is milliseconds rather than the
+      // seconds of the /generate round trip, but the failure is total
+      // and silent when it lands, which is a bad combination to leave
+      // to luck.
+      //
+      // Note this is NOT the site drain 1400 named. The
+      // Description-canonical branch it pointed at re-reads after its
+      // await and writes through `vault.process`, so it never held a
+      // stale body; see this drain's FEEDBACK.
+      const beforeWrite = await this.app.vault.read(file);
+      if (beforeWrite !== content) {
+        console.warn(
+          `Forge: ${file.path} changed while generated code was being `
+          + 'prepared; skipping write-back rather than overwriting the '
+          + 'newer content.',
+        );
+        this.notice(
+          `Forge: ${file.basename} was updated externally during `
+          + 'generation — kept the newer version. Re-forge to '
+          + 'regenerate against it.',
+        );
+        continue;
+      }
       await this.withProgrammaticWrite(file.path, async () => {
         await this.app.vault.modify(file, newContent);
       });
