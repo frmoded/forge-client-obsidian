@@ -95,6 +95,7 @@ import { parseInputEnums } from './input-enums-core.ts';
 import { parseInputWidgets, registerWidget } from './input-widget-core.ts';
 import { pianoWidget } from './input-widget-piano.ts';
 import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
+import { chordBuilderWidget } from './input-widget-chord-builder.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
 import { computeEnglishHash } from './english-hash-core.ts';
@@ -387,13 +388,13 @@ export default class ForgePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
-    // Drain 2026-08-05-1500 — register the run-input widgets.
-    // `chord_builder` is a name the framework knows but nothing has
-    // registered yet, so a note declaring it gets the fallback text box
-    // plus a Notice saying so, until its own drain lands.
+    // Drains 2026-08-05-1500/-1530/-1600 — register the run-input
+    // widgets. All three WidgetType names now have renderers; an
+    // unknown type in frontmatter still gets the fallback text box
+    // plus a Notice naming it.
     registerWidget(pianoWidget);
-    // Drain 2026-08-05-1530.
     registerWidget(guitarFretboardWidget);
+    registerWidget(chordBuilderWidget);
 
     // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
     // manifest.json but fails to replace main.js, leaving cohort

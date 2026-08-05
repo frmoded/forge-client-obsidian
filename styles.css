@@ -1503,3 +1503,37 @@
 [data-forge-guitar-pos][data-selected="true"] .forge-guitar-dot {
   opacity: 1;
 }
+
+/* ------------------------------------------------------------------
+   Chord builder widget. Drain 2026-08-05-1600.
+
+   Native <select> elements, so Obsidian's own dropdown theming does
+   the heavy lifting. Only layout + the preview line live here.
+   ------------------------------------------------------------------ */
+
+.forge-chord-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin-bottom: 0.35em;
+}
+
+.forge-chord-label {
+  min-width: 5.5em;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+/* The preview is the widget's feedback loop — it reads as the "result"
+   of the four dropdowns, so it gets result styling: monospace, boxed,
+   slightly emphasized. */
+.forge-chord-preview {
+  margin-top: 0.5em;
+  padding: 0.4em 0.6em;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  color: var(--text-normal);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+}
