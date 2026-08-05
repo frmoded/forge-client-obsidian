@@ -3349,6 +3349,21 @@ export default class ForgePlugin extends Plugin {
       if (response.status === 200) {
         const code: string | undefined = response.json?.code;
         const returnedId: string = response.json?.snippet_id ?? snippetId;
+        // Drain 2026-08-05-1700 — the service now validates its own
+        // output (transpile 0.2.18). parsed_ok=false means the LLM
+        // never produced a parseable Recipe within the retry budget:
+        // surface the service's actionable error (it names the
+        // Description as the fix locus) and write NOTHING.
+        if (response.json?.parsed_ok === false) {
+          const serverMsg: string = response.json?.error
+            ?? '/generate could not produce a parseable Recipe.';
+          this.notice(errorPrefix ? `${errorPrefix}: ${serverMsg}` : `Forge: ${serverMsg}`);
+          this.forgeOutput(`/generate validation failed after ${response.json?.attempts ?? '?'} attempt(s):\n${serverMsg}`);
+          return false;
+        }
+        if (typeof response.json?.attempts === 'number' && response.json.attempts > 1) {
+          this.forgeOutput(`Forge: /generate needed ${response.json.attempts} attempts to produce parseable output.`);
+        }
         if (!code) {
           const msg = 'Service returned empty code field';
           this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
@@ -3495,6 +3510,20 @@ export default class ForgePlugin extends Plugin {
       }
       if (response.status === 200) {
         const code: string | undefined = response.json?.code;
+        // Drain 2026-08-05-1700 — see the sibling check in the V1
+        // path. parsed_ok=false: surface the service's actionable
+        // error, write nothing, return null so the caller treats it
+        // as generation-failed rather than empty-code mystery.
+        if (response.json?.parsed_ok === false) {
+          const serverMsg: string = response.json?.error
+            ?? '/generate could not produce a parseable Recipe.';
+          this.notice(errorPrefix ? `${errorPrefix}: ${serverMsg}` : `Forge: ${serverMsg}`);
+          this.forgeOutput(`/generate validation failed after ${response.json?.attempts ?? '?'} attempt(s):\n${serverMsg}`);
+          return null;
+        }
+        if (typeof response.json?.attempts === 'number' && response.json.attempts > 1) {
+          this.forgeOutput(`Forge: /generate needed ${response.json.attempts} attempts to produce parseable output.`);
+        }
         if (!code) {
           const msg = 'Service returned empty code field';
           this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `Forge: ${msg} — check console.`);
