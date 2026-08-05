@@ -116,3 +116,47 @@ test('integration: main.ts runSnippet wires snippetIdFromPath', () => {
     'main.ts should import snippetIdFromPath from ./snippet-id-from-path',
   );
 });
+
+// --- Drain 2026-08-05-0810 — snippetId does NOT round-trip to a path ---
+//
+// `_llmGenerateRecipe` used to freshen Pyodide's MEMFS by looking up
+// `${snippetId}.md`. For a note in a non-library subdirectory that
+// lookup resolves to the vault ROOT and returns null, the
+// `instanceof TFile` guard skips the sync silently, and the inventory
+// is built from whatever MEMFS last held — which is how a Recipe
+// reverts to an older version byte-for-byte.
+//
+// The call site now uses the active `TFile` directly. These tests pin
+// WHY that was necessary, so nobody reintroduces the round trip on the
+// reasonable-looking assumption that it works.
+
+test('drain-1810: non-library subdir loses its directory — round trip breaks', () => {
+  const libs = new Set(['music_theory']);
+  const id = snippetIdFromPath('exercises/scale_quality_quiz.md', libs);
+  assert.equal(id, 'scale_quality_quiz');
+  // The reconstructed path is NOT the original. A vault lookup for it
+  // finds nothing, which is the silent-skip this drain removed.
+  assert.notEqual(`${id}.md`, 'exercises/scale_quality_quiz.md');
+});
+
+test('drain-1810: wizard\'s reverted note is exactly this case', () => {
+  const libs = new Set(['forge-music']);
+  const id = snippetIdFromPath(
+    'music_theory/exercises/complete_this_scale_submit.md', libs);
+  assert.equal(id, 'complete_this_scale_submit');
+  assert.notEqual(
+    `${id}.md`, 'music_theory/exercises/complete_this_scale_submit.md');
+});
+
+test('drain-1810: library-dir notes DO round trip — why it looked fine', () => {
+  // Library-dir paths keep their full qualified form, so the old code
+  // worked for every note anyone tested it on.
+  const libs = new Set(['music_theory']);
+  const id = snippetIdFromPath('music_theory/scales/scale.md', libs);
+  assert.equal(`${id}.md`, 'music_theory/scales/scale.md');
+});
+
+test('drain-1810: vault-root notes round trip too', () => {
+  const id = snippetIdFromPath('welcome.md', new Set());
+  assert.equal(`${id}.md`, 'welcome.md');
+});

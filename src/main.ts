@@ -3356,14 +3356,42 @@ export default class ForgePlugin extends Plugin {
         const pyodideHost = getPyodideHost();
         if (!pyodideHost) throw new Error('Pyodide host not initialized');
         const host = await pyodideHost.getInstance();
+        // Drain 2026-08-05-0810 — sync the ACTIVE FILE, not a path
+        // reconstructed from its snippet id.
+        //
+        // The previous shape looked up `${snippetId}.md`. For a note in
+        // a non-library subdirectory, snippetIdFromPath returns the
+        // BASENAME ONLY, so the round-trip resolves to a vault-root
+        // path that does not exist:
+        //
+        //   music_theory/exercises/complete_this_scale_submit.md
+        //     -> snippetId  'complete_this_scale_submit'
+        //     -> lookup     'complete_this_scale_submit.md'   (root) -> null
+        //
+        // `getAbstractFileByPath` returned null, `instanceof TFile` was
+        // false, and the sync was skipped in silence. preflightThenInventory
+        // then read whatever MEMFS last held — persistent stale bytes,
+        // which is precisely how a Recipe reverts to an older version
+        // byte-for-byte rather than partially.
+        //
+        // `view.file` is the file we already have. It cannot fail to
+        // round-trip because there is no round trip.
+        //
+        // Failure is now LOUD and ABORTS. Proceeding on a failed sync
+        // means generating against content nobody chose, and the
+        // resulting Recipe overwrites the real one — silently doing
+        // that is worse than not generating.
         try {
-          const file = this.app.vault.getAbstractFileByPath(`${snippetId}.md`);
-          if (file instanceof TFile) {
-            const freshContent = await this.app.vault.read(file);
-            await host.syncUserVaultFile(file.path, freshContent);
-          }
+          const freshContent = await this.app.vault.read(view.file);
+          await host.syncUserVaultFile(view.file.path, freshContent);
         } catch (e) {
-          console.error('_llmGenerateRecipe: pre-flight sync failed', e);
+          console.error('_llmGenerateRecipe: pre-flight MEMFS sync failed', e);
+          const detail = e instanceof Error ? e.message : String(e);
+          this.notice(
+            `Forge: could not sync ${view.file.basename} before generating — `
+            + `aborting rather than generating from a stale copy. (${detail})`,
+          );
+          return null;
         }
         const inv = await host.preflightThenInventory(snippetId);
         payload = {
