@@ -626,16 +626,20 @@ def _forge_get_generate_inventory(snippet_id: str):
             "description": (dep_meta.get("description") or "").strip(),
             "inputs": [str(i) for i in (dep_meta.get("inputs") or [])],
         })
-    # v0.2.279 CW-2200 — V2 notes carry cohort intent in the H1
-    # Description body section, NOT the YAML description frontmatter
-    # field (which was V1 convention). Pre-fix: /generate received
-    # empty description for V2 notes so the LLM had zero cohort intent
-    # and produced drum-kit boilerplate regardless of what cohort
-    # typed. Fix: fall back to body extract when meta description is
-    # absent. Preserves V1 behavior for notes that DO set the YAML.
-    description = (meta.get("description") or "").strip()
+    # v0.2.279 CW-2200 established that V2 notes carry cohort intent
+    # in the H1 Description body section, not the YAML description
+    # frontmatter field — but kept YAML-first precedence.
+    # v0.2.329 [test3-fresh-note-description-shadowed-by-yaml] inverts
+    # it: the note-creation dialog stamps 'description: <title>' into
+    # YAML, so on every dialog-created note the title permanently
+    # shadowed the body and /generate was asked to write a Recipe for
+    # e.g. "test3" (LLM answered 'Return None.', which parses and so
+    # passes the drain-1700 validation). Body wins when non-empty;
+    # YAML remains the fallback, which preserves V1 notes — they have
+    # no # Description section.
+    description = (extract_section(body, "description") or "").strip()
     if not description:
-        description = extract_section(body, "description") or ""
+        description = (meta.get("description") or "").strip()
     return {
         "snippet_id": snippet_id,
         "description": description,
