@@ -1600,6 +1600,15 @@ export default class ForgePlugin extends Plugin {
       return;
     }
     if (writtenContent === null) return;
+    // Drain 2026-08-05-1200 — this rewrites the PYTHON FACET on disk and
+    // must tell MEMFS, or the executor runs the pre-sanitize body.
+    //
+    // Every other body-mutating write in this file syncs; this one and
+    // the v11.3 backfill did not, which is the whole of the bug this
+    // drain chased. The failure is invisible at the write: disk is
+    // correct, the editor is correct, and only the executor — which
+    // reads MEMFS through the snippet registry — sees the old bytes.
+    await this.syncMemfsAfterBodyWrite(file, writtenContent, 'sanitizePythonTabs');
     // Same setViewData dance as the pre-v0.2.250 english-sync path:
     // vault.process's saving=true gate keeps the open editor from
     // auto-reloading, so push the rewritten content into the active
@@ -1607,6 +1616,39 @@ export default class ForgePlugin extends Plugin {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (view?.file?.path === file.path) {
       view.setViewData(writtenContent, false);
+    }
+  }
+
+  /** Push a just-written note body into Pyodide's MEMFS + snippet
+   *  registry. Drain 2026-08-05-1200.
+   *
+   *  Disk is not the executor's source of truth — the registry is, and
+   *  it is fed from MEMFS. A body write that skips this leaves the two
+   *  disagreeing, and nothing reports it: the note looks right in
+   *  Obsidian and runs as its previous self.
+   *
+   *  Non-fatal by design, matching the writeGeneratedCode sync it was
+   *  extracted to mirror. A failed sync means stale execution, which is
+   *  bad; a thrown exception here would abandon the rest of the write's
+   *  follow-up work, which is worse. Logged with the call site so a
+   *  stale-execution report can be traced to the path that caused it.
+   */
+  private async syncMemfsAfterBodyWrite(
+    file: TFile,
+    body: string,
+    site: string,
+  ): Promise<void> {
+    try {
+      const hostManager = getPyodideHost();
+      if (!hostManager) return;
+      const host = await hostManager.getInstance();
+      await host.syncUserVaultFile(file.path, body);
+    } catch (e) {
+      console.error(
+        `${site}: MEMFS sync after body write failed for '${file.path}' — `
+        + 'the executor may run a stale copy of this note',
+        e,
+      );
     }
   }
 
@@ -4680,6 +4722,13 @@ export default class ForgePlugin extends Plugin {
       await this.withProgrammaticWrite(file.path, async () => {
         await this.app.vault.modify(file, result.newBody);
       });
+      // Drain 2026-08-05-1200 — the backfill can ADD a `# Python`
+      // section (v11.3 shape). Without this sync, disk gains the
+      // section and MEMFS does not, so `extract_python` on the
+      // registry's copy returns empty and the engine raises
+      // `SnippetExecError: Empty or missing Python code` — for a note
+      // whose Python is plainly there when you open it.
+      await this.syncMemfsAfterBodyWrite(file, result.newBody, 'v11-3-backfill');
       const parts: string[] = [];
       if (result.actions.pythonSection) parts.push('# Python section');
       if (result.actions.hashes.length > 0) {
