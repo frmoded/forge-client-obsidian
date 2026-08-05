@@ -455,9 +455,12 @@ export class ForgeSnippetModal extends Modal {
       return;
     }
 
+    // Drain 2026-08-03-1610 — actionTemplate is async now: it stamps
+    // the full hexa-state at creation, and the hashes come from
+    // SubtleCrypto. submit() is already async, so this is an await.
     const content = this.snippetType === 'data'
       ? dataTemplate(this.snippetName, this.contentType)
-      : actionTemplate(this.snippetName);
+      : await actionTemplate(this.snippetName);
 
     let file;
     try {

@@ -15,19 +15,30 @@
 // modal.ts re-exports `actionTemplate` via the existing import path
 // for backward-compat with call sites.
 
+import { computeFacetHash } from './facet-hash-core.ts';
+import {
+  extractDescription,
+  extractPythonSection,
+  extractRecipeSection,
+} from './v2-note-core.ts';
+
 /** V2 action template. Frontmatter `type: action` only; body has
  *  `# Description`, `# Recipe`, and `# Python` (S9 v11.3 uniform-
  *  visibility contract: all three facets always visible + editable).
  *  Python body is `def compute(context): return None` so the note is
  *  Forge-clickable from the moment it's created. Cohort authoring
  *  Recipe makes Recipe canonical on next Forge-click. */
-export function actionTemplate(name: string): string {
-  return [
-    '---',
-    'type: action',
-    `description: ${name}`,
-    '---',
-    '',
+export async function actionTemplate(name: string): Promise<string> {
+  // Drain 2026-08-03-1610. Build the body FIRST, then hash the facets
+  // as the extractors actually return them.
+  //
+  // Hashing hand-written strings instead would mean guessing whether
+  // extractPythonSection keeps a trailing newline — and a single byte
+  // of disagreement stamps the note as hand-edited the moment it is
+  // created, which is the exact failure class this drain removes.
+  // Extracting from the real body makes the stamps agree by
+  // construction rather than by care.
+  const body = [
     '# Description',
     '',
     '',
@@ -41,5 +52,45 @@ export function actionTemplate(name: string): string {
     'def compute(context):',
     '    return None',
     '',
+  ].join('\n');
+
+  const description = extractDescription(body);
+  const recipe = extractRecipeSection(body) ?? '';
+  const python = extractPythonSection(body) ?? '';
+
+  const [descriptionHash, recipeHash, pythonHash] = await Promise.all([
+    computeFacetHash(description),
+    computeFacetHash(recipe),
+    computeFacetHash(python),
+  ]);
+
+  // Description is source at creation: it is the facet the cohort is
+  // about to write, and Recipe/Python are derived from it. Recipe is
+  // empty and therefore not yet derived from this Description, so the
+  // note opens `stale-recipe` — an honest starting state, not a
+  // placeholder.
+  return [
+    '---',
+    'type: action',
+    // NOT `inputs: []`. A prior drain retired it from this template as
+    // V1 frontmatter (modal.test.ts pins the absence), and drain 1610's
+    // target shape re-listed it only because it mirrors
+    // create_note_shell. Re-adding it here would silently reverse that
+    // decision on the strength of a mirror that step 1 showed is wrong.
+    `description: ${name}`,
+    'recipe_version: 0',
+    'source_facet: description',
+    'sync_state: stale-recipe',
+    `description_hash: ${descriptionHash}`,
+    `recipe_hash: ${recipeHash}`,
+    `python_hash: ${pythonHash}`,
+    `recipe_derived_from_description_hash: ${descriptionHash}`,
+    `recipe_derived_from_source_hash: ${descriptionHash}`,
+    `python_derived_from_recipe_hash: ${recipeHash}`,
+    `python_derived_from_source_hash: ${descriptionHash}`,
+    `english_hash: ${recipeHash}`,
+    '---',
+    '',
+    body,
   ].join('\n');
 }
