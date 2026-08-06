@@ -45,13 +45,24 @@ test('englishHashForStamp: never returns the empty-string SHA', async () => {
   }
 });
 
-test('drift guard: main.ts has no direct computeEnglishHash call sites', () => {
-  const src = fs.readFileSync(path.join(process.cwd(), 'src', 'main.ts'), 'utf8');
-  const direct = src.match(/computeEnglishHash\(/g) ?? [];
-  assert.equal(
-    direct.length,
-    0,
-    `main.ts has ${direct.length} direct computeEnglishHash call site(s); `
+test('drift guard: no src file has direct computeEnglishHash call sites', () => {
+  // [2026-08-05-2300] widened from main.ts-only: a writer landing in
+  // ANY plugin file (glue module, pure-core, pyodide bridge) must
+  // route through englishHashForStamp. Only the helper's own module
+  // may call computeEnglishHash.
+  const srcDir = path.join(process.cwd(), 'src');
+  const offenders: string[] = [];
+  for (const name of fs.readdirSync(srcDir)) {
+    if (!name.endsWith('.ts') || name.endsWith('.test.ts')) continue;
+    if (name === 'english-hash-core.ts') continue;
+    const src = fs.readFileSync(path.join(srcDir, name), 'utf8');
+    const direct = src.match(/computeEnglishHash\(/g) ?? [];
+    if (direct.length > 0) offenders.push(`${name} (${direct.length})`);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `direct computeEnglishHash call site(s) found in: ${offenders.join(', ')}; `
       + 'every english_hash writer must route through englishHashForStamp '
       + '(absent beats empty — see english-hash-core.ts).',
   );
