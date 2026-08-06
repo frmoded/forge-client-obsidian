@@ -1537,3 +1537,30 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
 }
+
+/* [2026-08-06-0000] Inline action-note play card (Tier 1). */
+.forge-inline-play-card {
+  display: inline-block;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin: 2px 0;
+  background: var(--background-secondary);
+}
+.forge-inline-title {
+  font-weight: 600;
+  margin-right: 8px;
+}
+.forge-inline-play-btn {
+  cursor: pointer;
+  padding: 0 8px;
+}
+.forge-inline-output {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+}
+.forge-inline-output:empty {
+  display: none;
+}

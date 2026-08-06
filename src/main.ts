@@ -100,6 +100,16 @@ import { chordBuilderWidget } from './input-widget-chord-builder.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
 import { englishHashForStamp } from './english-hash-core.ts';
+// [2026-08-06-0000] inline action-note execution (Tier 1).
+import {
+  classifyInlineOutput,
+  hasInputsInRawFrontmatter,
+  inlineTargetFromHref,
+  renderInlinePlayCard,
+  runInlinePlay,
+} from './inline-play-core.ts';
+import { renderMcqCard } from './mcq-widget-core.ts';
+import type { McqDocument, McqElement } from './mcq-widget-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
 import { runFirstRunCheck } from './welcome.ts';
@@ -647,6 +657,33 @@ export default class ForgePlugin extends Plugin {
     // when we depend on the pure-core export for tests but not
     // directly inside main.ts after this hookup.
     void findDependenciesRange;
+
+    // [2026-08-06-0000] Inline action-note execution, Tier 1. A
+    // rendered wikilink whose text carries the ` inline` modifier
+    // ([[quiz inline]]) becomes a play card: title + play button +
+    // in-place output. Bare [[quiz]] links are untouched. Reading
+    // mode + Live Preview's rendered blocks (MarkdownPostProcessor
+    // surface); editor-source CM6 decoration is Tier 2.
+    this.registerMarkdownPostProcessor((el) => {
+      const links = Array.from(el.querySelectorAll('a.internal-link'));
+      for (const a of links) {
+        const noteId = inlineTargetFromHref(
+          a.getAttribute('data-href') ?? a.textContent);
+        if (!noteId) continue;
+        const holder = document.createElement('span');
+        a.replaceWith(holder);
+        const refs = renderInlinePlayCard(
+          noteId,
+          holder as unknown as McqElement,
+          document as unknown as McqDocument,
+        );
+        (refs.playBtn as unknown as HTMLElement).addEventListener(
+          'click', () => {
+            void this.handleInlinePlay(
+              noteId, refs.outputEl as unknown as HTMLElement);
+          });
+      }
+    });
 
     this.registerView(OUTPUT_VIEW_TYPE, leaf => new ForgeOutputView(leaf));
     this.registerView(THREE_VIEW_TYPE, leaf => new ForgeThreeView(leaf));
@@ -1955,6 +1992,68 @@ export default class ForgePlugin extends Plugin {
    *  Parses only the routing-critical fields. Doesn't try to be a
    *  full YAML parser; we only need `featured: true|false` and
    *  `edit_mode: english|python`. */
+  // [2026-08-06-0000] Inline play card click handler. Orchestration
+  // lives in the pure-core (runInlinePlay); this glue supplies the
+  // Obsidian + pyodide adapters. Target resolution is PATH lookup
+  // (`<id>.md`, the V1 snippet-id convention) — no basename fallback.
+  private async handleInlinePlay(
+    noteId: string,
+    outputEl: HTMLElement,
+  ): Promise<void> {
+    outputEl.textContent = 'Running…';
+    const outcome = await runInlinePlay({
+      resolveNote: async (id) => {
+        const af = this.app.vault.getAbstractFileByPath(`${id}.md`);
+        if (!(af instanceof TFile)) return null;
+        const content = await this.app.vault.read(af);
+        const cachedFm = this.app.metadataCache.getFileCache(af)
+          ?.frontmatter as Record<string, unknown> | undefined;
+        // metadataCache is eventually-consistent; on a miss, gate on
+        // the raw frontmatter block (conservative: declared inputs →
+        // the safe open-note fallback).
+        const frontmatter = cachedFm
+          ?? (hasInputsInRawFrontmatter(content)
+            ? { inputs: ['declared'] } : {});
+        return { path: af.path, content, frontmatter };
+      },
+      // L29 — disk → MEMFS before any compute/resolve entry point.
+      syncToEngine: async (path, content) => {
+        const hostManager = getPyodideHost();
+        if (!hostManager) throw new Error('Pyodide host not ready');
+        const host = await hostManager.getInstance();
+        await host.syncUserVaultFile(path, content);
+      },
+      snippetIdForPath: (path) =>
+        snippetIdFromPath(path, this.libraryDirNames()),
+      compute: async (snippetId) => {
+        const hostManager = getPyodideHost();
+        if (!hostManager) throw new Error('Pyodide host not ready');
+        const host = await hostManager.getInstance();
+        const res = await host.computeViaEngine(snippetId, [], {});
+        if (typeof res.result === 'string' && res.result.trim()) {
+          return res.result;
+        }
+        if (res.result != null) {
+          try { return JSON.stringify(res.result); } catch { /* fall through */ }
+        }
+        return res.stdout;
+      },
+    }, noteId);
+
+    const mcq = outcome.kind === 'output'
+      ? classifyInlineOutput(outcome.text) : null;
+    if (mcq && mcq.kind === 'mcq') {
+      outputEl.textContent = '';
+      renderMcqCard(
+        mcq.render,
+        outputEl as unknown as McqElement,
+        document as unknown as McqDocument,
+      );
+      return;
+    }
+    outputEl.textContent = outcome.text;
+  }
+
   private async readFrontmatterForRouting(
     file: TFile,
     cachedFm: Record<string, unknown> | undefined,
