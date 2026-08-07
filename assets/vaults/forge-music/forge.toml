@@ -1,5 +1,5 @@
 name = "forge-music"
-version = "0.9.14"
+version = "0.9.15"
 description = "Forge vault for music composition and analysis."
 domains = ["music"]
 
@@ -12,3 +12,6 @@ domains = ["music"]
 #
 # [imports]
 # music-core = { git = "https://github.com/frmoded/music-core.git", sha = "abc12345", tag = "v0.3.0" }
+
+[imports]
+music-core-fixture = { local = "../music-core-fixture" }
