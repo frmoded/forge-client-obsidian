@@ -309,3 +309,34 @@ test('compatibility: chord-builder OUTPUT is piano-widget INPUT (the §Depends-o
   assert.ok(onPiano.includes('G4'));
   assert.equal(pianoWidget.serialize(onPiano), raw, 'and the piano re-emits it unchanged');
 });
+
+// --- [2026-08-06-1930] serialize ↔ preview parity pin ----------------
+//
+// CCQA v0.2.331 Smoke C saw `chord = {}` reach the Recipe while the
+// preview showed the right pitches. Investigation REFUTED the
+// serialize-returns-state-dict hypothesis: serialize() has returned
+// the computed pitch list since drain 1600. The actual cause was the
+// engine input-shadowing bug (drain 1230(d): the `chord` input
+// shadowed by the injected music21.chord MODULE, which serializes as
+// {}), fixed at forge ee71125 and first bundled in v0.2.332 — one
+// release after the smoked v0.2.331. This test pins the plugin-side
+// invariant the prompt demanded anyway: what the preview SHOWS is
+// byte-for-byte what serialize SENDS, across the selection space.
+test('test_chordBuilder_serialize_matches_preview (parity across selections)', () => {
+  const cases: ChordSelection[] = [
+    { root: 'C', quality: 'maj', inversion: 0, octave: 4 },
+    { root: 'C', quality: 'min', inversion: 0, octave: 4 },
+    { root: 'C', quality: 'maj', inversion: 1, octave: 4 },
+    { root: 'D', quality: 'maj', inversion: 0, octave: 3 },
+    { root: 'A', quality: 'min7', inversion: 2, octave: 5 },
+  ];
+  for (const sel of cases) {
+    const serialized: unknown = JSON.parse(chordBuilderWidget.serialize(sel));
+    assert.ok(Array.isArray(serialized), 'serialize returns a JSON list, never a state dict');
+    assert.equal(
+      (serialized as string[]).join(', '),
+      previewText(sel),
+      `preview and serialize disagree for ${JSON.stringify(sel)}`,
+    );
+  }
+});
