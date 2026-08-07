@@ -247,3 +247,25 @@ export function coerceRunInputValues(
   }
   return kwargs;
 }
+
+// ------------------------------------------------- pre-fill stripping
+
+/**
+ * [2026-08-06-0100 (A)] Widget-typed inputs must start FRESH on every
+ * Forge-click: the inputCache pre-fill is intentional design for TEXT
+ * inputs (re-run with the same args without retyping), but widgets
+ * inherited it incidentally and the pedagogical contract is the
+ * opposite — each attempt re-selects from scratch (driver-flagged
+ * 2026-08-05, 3/3 widget smokes). Strip cached values for any input
+ * that renders as a widget; leave text-input pre-fill untouched.
+ */
+export function stripWidgetSeededInputs(
+  cached: Record<string, string>,
+  widgets: InputWidgets,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(cached)) {
+    if (!(k in widgets)) out[k] = v;
+  }
+  return out;
+}

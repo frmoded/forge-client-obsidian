@@ -394,3 +394,54 @@ test('end-to-end: the framework needed no changes to take a second widget', () =
   renderWidget('guitar_fretboard', 'g', container, '["E2","B3"]');
   assert.equal(collectWidgetInput('g', container), '["E2","B3"]');
 });
+
+// ---- [2026-08-06-1230 (b)+(c)] dot placement + open-string ring ----
+
+test('test_guitarWidget_dot_renders_at_fret_wire', () => {
+  // Idiomatic notation: the dot sits AT the wire the finger presses —
+  // the RIGHT edge of the cell — not floating mid-box. (Driver smoke
+  // 2026-08-06 issue (b).)
+  const cells = buildFretboard().filter(c => c.fret >= 1);
+  for (const c of cells) {
+    assert.equal(c.cx, c.x + c.w, `fret ${c.fret} dot centers on its wire`);
+  }
+  // And the DOM agrees with the geometry: every fretted dot's cx is the
+  // x of a drawn fret wire.
+  const { container } = makeDom();
+  guitarFretboardWidget.render(container, EMPTY);
+  const wireXs = new Set(
+    Array.from(container.querySelectorAll('line.forge-guitar-fret'))
+      .map(w => w.getAttribute('x1')),
+  );
+  const dot = container
+    .querySelector('[data-forge-guitar-pos][data-fret="3"] circle.forge-guitar-dot')!;
+  assert.ok(wireXs.has(dot.getAttribute('cx')), 'fret-3 dot sits on a wire');
+});
+
+test('test_guitarWidget_open_string_renders_ring_above_nut', () => {
+  // Fret 0 renders the "O" convention — a stroked ring, not the solid
+  // fretted dot — in the open column before the nut. (Issue (c).)
+  const { container } = makeDom();
+  guitarFretboardWidget.render(container, EMPTY);
+  const open = container.querySelector(
+    '[data-forge-guitar-pos][data-fret="0"][data-string="0"]')!;
+  assert.ok(open.querySelector('circle.forge-guitar-open-ring'),
+    'open cell renders a ring');
+  assert.equal(open.querySelector('circle.forge-guitar-dot'), null,
+    'open cell does NOT render a fretted dot');
+});
+
+test('test_guitarWidget_open_and_fretted_distinguishable_in_dom', () => {
+  // Selecting an open string and a fretted position must yield two
+  // visually distinct affordances; the class split is the contract the
+  // CSS keys on.
+  const { container } = makeDom();
+  guitarFretboardWidget.render(container, EMPTY);
+  const openMark = container.querySelector(
+    '[data-fret="0"] circle.forge-guitar-open-ring');
+  const frettedMark = container.querySelector(
+    '[data-fret="3"] circle.forge-guitar-dot');
+  assert.ok(openMark && frettedMark);
+  assert.notEqual(openMark!.getAttribute('class'),
+    frettedMark!.getAttribute('class'));
+});

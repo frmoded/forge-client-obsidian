@@ -20,6 +20,7 @@ import {
   registeredWidgetTypes,
   resetWidgetRegistry,
   resolveInputRendering,
+  stripWidgetSeededInputs,
   type WidgetRenderer,
 } from './input-widget-core.ts';
 
@@ -216,4 +217,30 @@ test('coerceRunInputValues: a bare word stays a string (unchanged pre-widget beh
 
 test('coerceRunInputValues: empty string stays an empty string', () => {
   assert.equal(coerceRunInputValues({ x: '' }).x, '');
+});
+
+// ---- [2026-08-06-0100 (A)] widget pre-fill stripping ----------------
+
+test('stripWidgetSeededInputs: widget keys dropped, text keys kept', () => {
+  const out = stripWidgetSeededInputs(
+    { notes: '["C4","E4"]', tempo: '120' },
+    { notes: 'piano' },
+  );
+  assert.deepEqual(out, { tempo: '120' });
+});
+
+test('stripWidgetSeededInputs: no widgets → cache untouched', () => {
+  const cached = { a: '1', b: '2' };
+  assert.deepEqual(stripWidgetSeededInputs(cached, {}), cached);
+});
+
+test('stripWidgetSeededInputs: all-widget cache → empty pre-fill', () => {
+  assert.deepEqual(
+    stripWidgetSeededInputs(
+      { notes: '["C4"]' }, { notes: 'guitar_fretboard' }),
+    {});
+});
+
+test('stripWidgetSeededInputs: empty cache stays empty', () => {
+  assert.deepEqual(stripWidgetSeededInputs({}, { notes: 'piano' }), {});
 });

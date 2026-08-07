@@ -139,7 +139,11 @@ export function buildFretboard(fretCount = DEFAULT_FRET_COUNT): FretCell[] {
       cells.push({
         string: s,
         fret: f,
-        cx: x + w / 2,
+        // [2026-08-06-1230 (b)] Fretted marks center ON the wire the
+        // finger presses — the cell's RIGHT edge — per guitar-tab
+        // convention. The open column keeps its midpoint: its mark is
+        // the "O" ring in the gap before the nut, not a wire press.
+        cx: f === 0 ? x + w / 2 : x + w,
         cy,
         x,
         y: cy - STRING_GAP / 2,
@@ -305,9 +309,13 @@ export const guitarFretboardWidget: WidgetRenderer<GuitarSelection> = {
       }
     }
 
-    // Fret wires, then the nut (thicker, and it must paint over wire 0).
+    // Fret wires, then the nut (thicker). [2026-08-06-1230 (b)] Wire f
+    // is the wire fret-f's finger presses — the RIGHT edge of cell f.
+    // Pre-drain the loop drew left edges, which duplicated the nut at
+    // wire 1 and left the last cell wireless; now the dots' new
+    // on-the-wire placement always has a wire to sit on.
     for (let f = 1; f < fretCount; f++) {
-      const x = NUT_X + (f - 1) * FRET_W;
+      const x = NUT_X + f * FRET_W;
       const wire = doc.createElementNS(SVG_NS, 'line');
       wire.setAttribute('x1', String(x));
       wire.setAttribute('x2', String(x));
@@ -380,12 +388,20 @@ export const guitarFretboardWidget: WidgetRenderer<GuitarSelection> = {
       hit.setAttribute('class', 'forge-guitar-cell');
       g.appendChild(hit);
 
-      const dot = doc.createElementNS(SVG_NS, 'circle');
-      dot.setAttribute('cx', String(cell.cx));
-      dot.setAttribute('cy', String(cell.cy));
-      dot.setAttribute('r', '8');
-      dot.setAttribute('class', 'forge-guitar-dot');
-      g.appendChild(dot);
+      // [2026-08-06-1230 (c)] Open strings mark with the tab "O" — a
+      // stroked ring in the open column — never the solid fretted dot.
+      // Same selection state model; only the mark differs.
+      const mark = doc.createElementNS(SVG_NS, 'circle');
+      mark.setAttribute('cx', String(cell.cx));
+      mark.setAttribute('cy', String(cell.cy));
+      if (cell.fret === 0) {
+        mark.setAttribute('r', '6');
+        mark.setAttribute('class', 'forge-guitar-open-ring');
+      } else {
+        mark.setAttribute('r', '8');
+        mark.setAttribute('class', 'forge-guitar-dot');
+      }
+      g.appendChild(mark);
 
       g.addEventListener('click', () => { toggleFretElement(g); });
       svg.appendChild(g);

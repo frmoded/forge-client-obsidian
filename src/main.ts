@@ -1,4 +1,4 @@
-import { Plugin, Notice, MarkdownView, TFile, TFolder, WorkspaceLeaf } from 'obsidian';
+import { Plugin, Notice, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
 import {
   isV2Shape,
   extractDescription,
@@ -93,7 +93,11 @@ import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
 import { parseInputEnums } from './input-enums-core.ts';
 import { makeFacetCopyExtension } from './facet-copy-view-extension.ts';
-import { parseInputWidgets, registerWidget } from './input-widget-core.ts';
+import {
+  parseInputWidgets,
+  registerWidget,
+  stripWidgetSeededInputs,
+} from './input-widget-core.ts';
 import { pianoWidget } from './input-widget-piano.ts';
 import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
 import { chordBuilderWidget } from './input-widget-chord-builder.ts';
@@ -4287,17 +4291,37 @@ export default class ForgePlugin extends Plugin {
     }
 
     if (inputs.length > 0) {
-      const cached = this.inputCache[snippetId] ?? {};
-      // drain 2026-07-31-1120 — enumerable inputs. Read from the note's
-      // own frontmatter only: the inventory fallback above exists for
-      // stub notes that have no frontmatter to read, and those have no
-      // enums to declare either. Absent key → {} → all text boxes,
-      // i.e. byte-for-byte the previous behaviour.
-      const enums = parseInputEnums(frontmatter);
-      // Drain 2026-08-05-1500 — same sidecar treatment, same reason:
-      // read the note's own frontmatter, absent key → {} → previous
-      // behaviour byte for byte.
-      const widgets = parseInputWidgets(frontmatter);
+      // [2026-08-06-0100 (B)] The modal's widget/enum declarations must
+      // be race-free. metadataCache is eventually-consistent, and the
+      // key-ABSENCE case is indistinguishable from staleness (a plain
+      // note truly lacks input_widgets; a cold-open cached entry merely
+      // hasn't parsed it yet) — 3/3 driver cold-open smokes rendered
+      // plain text boxes on the first click for exactly this reason.
+      // The registry itself is eager (registerWidget × 3 at onload), so
+      // the fix is at the data source: read the note's frontmatter
+      // disk-fresh for this rare, user-paced event. Cache remains the
+      // fallback if the read throws.
+      let modalFm: Record<string, unknown> | null =
+        (frontmatter as Record<string, unknown> | undefined) ?? null;
+      try {
+        const rawNote = await this.app.vault.read(file);
+        const fmBlock = rawNote.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (fmBlock) {
+          const parsed = parseYaml(fmBlock[1]) as Record<string, unknown> | null;
+          if (parsed && typeof parsed === 'object') modalFm = parsed;
+        }
+      } catch (e) {
+        console.error('runSnippet: modal frontmatter disk read failed', e);
+      }
+      // drain 2026-07-31-1120 — enumerable inputs. Absent key → {} →
+      // all text boxes, byte-for-byte the previous behaviour.
+      const enums = parseInputEnums(modalFm);
+      // Drain 2026-08-05-1500 — widget sidecar, same treatment.
+      const widgets = parseInputWidgets(modalFm);
+      // [2026-08-06-0100 (A)] widgets start fresh each click; text
+      // inputs keep their intentional pre-fill.
+      const cached = stripWidgetSeededInputs(
+        this.inputCache[snippetId] ?? {}, widgets);
       new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
         this.inputCache[snippetId] = raw;
         // Drain 2530 — pass `file` so the successful run refreshes the

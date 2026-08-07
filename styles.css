@@ -1564,3 +1564,23 @@
 .forge-inline-output:empty {
   display: none;
 }
+
+/* [2026-08-06-1230 (c)] Open-string "O" ring — the tab convention for
+   fret 0. Mirrors .forge-guitar-dot's hover/selected opacity gating so
+   the two marks behave identically; only the shape differs. */
+.forge-guitar-open-ring {
+  fill: none;
+  stroke: var(--interactive-accent);
+  stroke-width: 2.5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 80ms ease-in-out;
+}
+
+[data-forge-guitar-pos]:hover .forge-guitar-open-ring {
+  opacity: 0.3;
+}
+
+[data-forge-guitar-pos][data-selected="true"] .forge-guitar-open-ring {
+  opacity: 1;
+}
