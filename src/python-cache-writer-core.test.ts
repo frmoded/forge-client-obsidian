@@ -249,3 +249,77 @@ test('CW-2230: a real englishHash is still written (V1 path unchanged)', () => {
   });
   assert.match(result, /^english_hash: abc123$/m);
 });
+
+// --- [2026-08-06-1900] empty-SHA remnant heal ------------------------
+//
+// CCQA v0.2.331 smoke: test3.md carried english_hash = sha256("")
+// stamped by pre-drain-2100 writers; the CW-2230 null-skip preserved
+// it forever ("we skip the write, we do not strip"). The heal below is
+// VALUE-scoped: stamping null over the literal empty-SHA constant
+// removes the line; any other existing value (real hash) stays
+// untouched, so drain 1000.1's revert rationale (churn against the
+// slot-cache writer's real values) does not apply.
+
+const EMPTY_SHA = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+test('null englishHash + existing EMPTY-SHA remnant → line removed (heal)', () => {
+  const body = `---\ntype: action\nsource_facet: description\nenglish_hash: ${EMPTY_SHA}\n---\n\n# Description\n\nPlay D major scale.\n`;
+  const result = writePythonAndEnglishHash(body, {
+    pythonCode: 'def compute(context):\n    return 1',
+    englishHash: null,
+  });
+  assert.ok(!result.includes('english_hash'),
+    `empty-SHA remnant should be healed to ABSENT, got:\n${result}`);
+  assert.ok(result.includes('source_facet: description'), 'other fields intact');
+});
+
+test('null englishHash + existing REAL hash → preserved (no strip of legit values)', () => {
+  const realHash = 'a'.repeat(64);
+  const body = `---\ntype: action\nenglish_hash: ${realHash}\n---\n\n# English\n\nSet x to 7.\n`;
+  const result = writePythonAndEnglishHash(body, {
+    pythonCode: 'def compute(context):\n    return 1',
+    englishHash: null,
+  });
+  assert.ok(result.includes(`english_hash: ${realHash}`),
+    'real english_hash values must never be stripped by the null path');
+});
+
+test('null englishHash + no existing field → no-op stays no-op', () => {
+  const body = '---\ntype: action\n---\n\n# Description\n\nHello.\n';
+  const result = writePythonAndEnglishHash(body, {
+    pythonCode: 'def compute(context):\n    return 1',
+    englishHash: null,
+  });
+  assert.ok(!result.includes('english_hash'));
+});
+
+test('test3.md-shaped reproducer: full V2 frontmatter heals english_hash only', () => {
+  const body = [
+    '---',
+    'type: action',
+    'description: test3',
+    'recipe_version: 0',
+    'source_facet: description',
+    'sync_state: stale-recipe',
+    'description_hash: d935a5dcf5d3fb8bbec2873d03d0be71c2633b4cb235fa014161b539e4d57f77',
+    'recipe_hash: fdc8a50cd3929d56c6f7b9e9004ef0697aa17a9b4f8592a1fe5f51f642cb561c',
+    `english_hash: ${EMPTY_SHA}`,
+    '---',
+    '',
+    '# Description',
+    '',
+    'Play D major scale. ..',
+    '',
+    '# Recipe',
+    '',
+    'Let scale = Call [[major_scale]] with tonic="D".',
+    '',
+  ].join('\n');
+  const result = writePythonAndEnglishHash(body, {
+    pythonCode: 'def compute(context):\n    return 1',
+    englishHash: null,
+  });
+  assert.ok(!result.includes('english_hash'), 'remnant healed');
+  assert.ok(result.includes('description_hash: d935a5dc'), 'sibling hashes intact');
+  assert.ok(result.includes('sync_state: stale-recipe'), 'sync_state intact');
+});

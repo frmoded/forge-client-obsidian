@@ -44,11 +44,45 @@ export function writePythonAndEnglishHash(
   }
   // CW-2230 — null englishHash: skip the frontmatter write entirely.
   // See PythonCacheUpdate.englishHash for why absent beats empty.
+  //
+  // [2026-08-06-1900] — with ONE exception: an existing value equal to
+  // sha256("") is the known-bad remnant the pre-drain-2100 writers
+  // stamped on V2 notes (CCQA v0.2.331 smoke, test3.md). Stamping null
+  // over exactly that constant HEALS it to absent. Value-scoped, so
+  // drain 1000.1's strip-revert rationale doesn't apply: real hashes
+  // (slot-cache writer output, V1 notes) are never touched.
   if (update.englishHash !== null) {
     out = replaceOrInsertEnglishHash(out, update.englishHash);
+  } else {
+    out = removeEmptyShaEnglishHash(out);
   }
   out = replaceOrInsertPythonHeading(out, update.pythonCode);
   return out;
+}
+
+/** sha256 of the empty string — the exact known-bad english_hash value
+ *  stamped by pre-drain-2100 writers on V2 notes (no # English facet).
+ *  Load-bearing constant; pinned by the heal tests. */
+export const EMPTY_ENGLISH_HASH_SHA =
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+/** Remove the frontmatter english_hash line IFF its value is the
+ *  empty-string SHA remnant. Any other value — a real hash — is left
+ *  untouched. No-op when no frontmatter or no english_hash line. */
+function removeEmptyShaEnglishHash(body: string): string {
+  const bounds = findFrontmatterBounds(body);
+  if (bounds === null) return body;
+  const lines = body.split('\n');
+  const remnantRe = new RegExp(
+    `^english_hash\\s*:\\s*['"]?${EMPTY_ENGLISH_HASH_SHA}['"]?\\s*$`);
+  const fmLines = lines
+    .slice(bounds.start + 1, bounds.end)
+    .filter((line) => !remnantRe.test(line));
+  return [
+    ...lines.slice(0, bounds.start + 1),
+    ...fmLines,
+    ...lines.slice(bounds.end),
+  ].join('\n');
 }
 
 // --- Frontmatter english_hash ---------------------------------------
