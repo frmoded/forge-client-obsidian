@@ -1,0 +1,21 @@
+name = "music-theory"
+version = "0.10.0"
+description = "Forge vault for music theory pedagogy: exercises, quizzes, and worked compositions."
+domains = ["music"]
+
+# Cross-vault imports (drain 2026-08-03-1500). Spec only — nothing reads
+# this yet; see forge/docs/specs/vault-imports.md.
+#
+# Must stay LAST in this file: in TOML every key after a [table] header
+# belongs to that table, so a [imports] section placed above `name` /
+# `version` / `domains` would silently swallow them.
+#
+# Phase 4 in-vault cross-linking SKIPPED per driver adjudication
+# 2026-08-06 [2](b) — music-theory + music-core ship as two separate
+# Obsidian vaults. The drain-1900 smoke-fixture import
+# (music-core-fixture) was removed in the Phase 5 rename drain: the
+# fixture dir no longer exists and a dangling local import fails
+# forge-mcp registry validation at startup.
+#
+# [imports]
+# music-core = { git = "https://github.com/frmoded/music-core.git", sha = "abc12345", tag = "v0.3.0" }

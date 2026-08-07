@@ -1,8 +1,8 @@
 // "Forge: Re-extract bundled library vault" command — Modal subclass.
 //
-// The user picks one of the bundled libraries (forge-moda, forge-music,
-// forge-tutorial), reads a destructive-action warning, and confirms or
-// cancels. The pure-core dispatch lives in
+// The user picks one of the bundled libraries (forge-moda,
+// music-theory, music-core, forge-tutorial), reads a
+// destructive-action warning, and confirms or cancels. The pure-core dispatch lives in
 // re-extract-bundled-vault-core.ts; the file-system actions live in
 // main.ts as a private method (so trashForensicShadow stays
 // encapsulated). This file just renders the picker + warning + buttons.
@@ -31,7 +31,8 @@ export interface BundledVaultOption {
  *  out of scope until third-party library install ships (§6). */
 export const BUNDLED_VAULT_NAMES = [
   'forge-moda',
-  'forge-music',
+  'music-theory',
+  'music-core',
   'forge-tutorial',
 ] as const;
 

@@ -8,6 +8,12 @@ import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts'
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
 import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-classifier-core.ts';
 import { computeSweepTrashList } from './sweep-bundle-dropped-core.ts';
+import {
+  LEGACY_MUSIC_DIR,
+  LEGACY_MUSIC_BACKUP_DIR,
+  decideLegacyMusicRename,
+  legacyMusicRenameNotice,
+} from './legacy-music-rename-core.ts';
 export { copyDirRecursive };
 
 // v0.2.64 — names of bundled libraries the auto-extract path may
@@ -17,8 +23,11 @@ export { copyDirRecursive };
 // source of truth, so a tiny copy is cheaper than a new shared file).
 // v0.2.76 — forge-tutorial added as the Tier 1 onboarding library.
 // Default-on (mirrors forge-moda), not domain-gated.
+// v0.2.333 Phase 5 two-vault split — forge-music renamed music-theory;
+// music-core added (composition-primitive authoring surface, also
+// music-domain-gated). Keep in sync with scripts/vaults.txt.
 const KNOWN_BUNDLED_LIBRARIES = new Set([
-  'forge-moda', 'forge-music', 'forge-tutorial',
+  'forge-moda', 'music-theory', 'music-core', 'forge-tutorial',
 ]);
 
 /** Read the vault root's `forge.toml` (if any) and return the matched
@@ -265,23 +274,26 @@ export async function runFirstRunCheck(app: App): Promise<void> {
       console.error('Forge: ensureForgeTomlStub failed', e);
     }
 
-    // v0.2.15: extract bundled forge-music IFF the user's forge.toml
-    // declares "music" in its domains array. Gated unlike forge-moda
-    // (which is V1's default-on library) because music isn't on the
-    // seminar curriculum — most students won't want forge-music/
-    // appearing in their vault.
+    // v0.2.15: extract the bundled music vaults IFF the user's
+    // forge.toml declares "music" in its domains array. Gated unlike
+    // forge-moda (which is V1's default-on library) because music
+    // isn't on the seminar curriculum — most students won't want the
+    // music libraries appearing in their vault.
     //
-    // v0.2.64 — also skipped when vault IS forge-music's source repo
+    // v0.2.64 — also skipped when vault IS the library's source repo
     // (per brief (e)).
     // v0.2.66 — symmetric gate per brief (e) followup: any source vault
-    // (not just same-name) skips forge-music extraction too.
+    // (not just same-name) skips music extraction too.
+    // v0.2.333 Phase 5 — forge-music renamed music-theory; music-core
+    // added. A pre-rename forge-music/ dir is parked as
+    // forge-music.bak.legacy/ (see ensureBundledMusicVaults).
     if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
-        `Forge: skipping forge-music extraction — vault root declares ` +
-        `itself as source repo for ${sourceVaultName}`,
+        `Forge: skipping music-theory/music-core extraction — vault root ` +
+        `declares itself as source repo for ${sourceVaultName}`,
       );
     } else {
-      await ensureBundledForgeMusic(app);
+      await ensureBundledMusicVaults(app);
     }
 
     // v0.2.262 drain 1310 — migrateChipsMdToV2 removed alongside
@@ -300,7 +312,7 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     if (!shouldSkipBundledExtract(sourceVaultName)) {
       try {
         const allTrashed: { lib: string; files: string[] }[] = [];
-        for (const lib of ['forge-moda', 'forge-music', 'forge-tutorial']) {
+        for (const lib of ['forge-moda', 'music-theory', 'forge-tutorial', 'music-core']) {
           const trashed = await sweepBundleDroppedFiles(
             app,
             `.obsidian/plugins/forge-client-obsidian/assets/vaults/${lib}`,
@@ -375,12 +387,19 @@ async function deleteExtractedDir(
  *  from past renameWithBackup calls. One-shot cleanup so users who
  *  upgraded across the 0.2.39 → 0.2.106 span don't carry permanent
  *  backup-dir litter at vault root. Only matches the specific
- *  `forge-{moda,music,tutorial}.bak.*` shape to avoid touching
- *  user-named directories that happen to contain `.bak`. */
+ *  `forge-{moda,tutorial}.bak.*` shape to avoid touching user-named
+ *  directories that happen to contain `.bak`.
+ *
+ *  v0.2.333 Phase 5 — 'forge-music' REMOVED from the candidates: the
+ *  two-vault split parks a pre-rename forge-music/ dir at
+ *  forge-music.bak.legacy/ deliberately (non-destructive, user-owned
+ *  cleanup). Sweeping forge-music.bak.* here would permanently rmdir
+ *  that parked copy on next load. Old forge-music.bak.<version>
+ *  litter (if any survives the v0.2.106 delete-on-extract era) now
+ *  stays too — acceptable trade for not destroying the legacy park. */
 async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
   const candidates = [
     'forge-moda',
-    'forge-music',
     'forge-tutorial',
   ];
   let removed = 0;
@@ -520,13 +539,21 @@ async function ensureBundledForgeTutorial(app: App): Promise<void> {
   }
 }
 
-/** v0.2.15: extract bundled forge-music if the vault declares "music"
- *  in its forge.toml domains. v0.2.39 — version-aware re-extract on
- *  drift, sharing the ensureBundledVault helper with forge-moda. The
- *  gate is per-vault opt-in because music isn't on the V1 seminar
- *  curriculum; defaulting it on would leave unwanted files in most
- *  closed-beta vaults. */
-async function ensureBundledForgeMusic(app: App): Promise<void> {
+/** v0.2.15: extract the bundled music vaults if the vault declares
+ *  "music" in its forge.toml domains. v0.2.39 — version-aware
+ *  re-extract on drift, sharing the ensureBundledVault helper with
+ *  forge-moda. The gate is per-vault opt-in because music isn't on
+ *  the V1 seminar curriculum; defaulting it on would leave unwanted
+ *  files in most closed-beta vaults.
+ *
+ *  v0.2.333 Phase 5 two-vault split — was ensureBundledForgeMusic.
+ *  Now extracts BOTH music-theory (renamed from forge-music;
+ *  pedagogy: exercises, quizzes, worked pieces) AND music-core
+ *  (composition-primitive authoring surface). Before extracting, a
+ *  pre-rename forge-music/ dir is parked at forge-music.bak.legacy/
+ *  (non-destructive; see legacy-music-rename-core.ts for why the
+ *  `.bak.` name). */
+async function ensureBundledMusicVaults(app: App): Promise<void> {
   const adapter = app.vault.adapter;
   const tomlPath = 'forge.toml';
 
@@ -542,14 +569,42 @@ async function ensureBundledForgeMusic(app: App): Promise<void> {
       return;
     }
 
+    const action = decideLegacyMusicRename({
+      oldExists: await adapter.exists(LEGACY_MUSIC_DIR),
+      backupExists: await adapter.exists(LEGACY_MUSIC_BACKUP_DIR),
+    });
+    if (action === 'rename') {
+      await adapter.rename(LEGACY_MUSIC_DIR, LEGACY_MUSIC_BACKUP_DIR);
+      console.log(
+        `Forge: parked pre-rename ${LEGACY_MUSIC_DIR}/ at ` +
+        `${LEGACY_MUSIC_BACKUP_DIR}/ (two-vault split, v0.2.333)`,
+      );
+      new Notice(legacyMusicRenameNotice(), 12000);
+    } else if (action === 'skip-backup-exists') {
+      // Both the old dir AND an earlier park exist — refuse to
+      // clobber the backup. The stale old dir is neutralized by the
+      // MEMFS mount-skip list (pyodide-host.ts) + engine .bak.-dir
+      // discovery exclusion, so this is safe to leave.
+      console.log(
+        `Forge: ${LEGACY_MUSIC_DIR}/ present but ` +
+        `${LEGACY_MUSIC_BACKUP_DIR}/ already exists; leaving both`,
+      );
+    }
+
     await ensureBundledVault(
       adapter,
-      '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-music',
-      'forge-music',
-      'forge-music',
+      '.obsidian/plugins/forge-client-obsidian/assets/vaults/music-theory',
+      'music-theory',
+      'music-theory',
+    );
+    await ensureBundledVault(
+      adapter,
+      '.obsidian/plugins/forge-client-obsidian/assets/vaults/music-core',
+      'music-core',
+      'music-core',
     );
   } catch (e) {
-    console.error('Forge: ensureBundledForgeMusic failed', e);
+    console.error('Forge: ensureBundledMusicVaults failed', e);
   }
 }
 
@@ -558,8 +613,9 @@ async function ensureBundledForgeMusic(app: App): Promise<void> {
  *  whose activation just landed via EditVaultDomainsModal.applyDiff.
  *  Mirrors the per-domain branch list inside runFirstRunCheck.
  *
- *  - 'music' → ensureBundledForgeMusic (the only domain-gated bundled
- *    vault today; moda is unconditionally extracted at onload).
+ *  - 'music' → ensureBundledMusicVaults (music-theory + music-core,
+ *    the only domain-gated bundled vaults today; moda is
+ *    unconditionally extracted at onload).
  *  - Other domain ids → no-op + warn (forward-compat against future
  *    domains added to forge.toml without a matching helper here).
  *
@@ -568,7 +624,7 @@ async function ensureBundledForgeMusic(app: App): Promise<void> {
  *  "already at version" path). */
 export async function ensureBundledFor(domain: string, app: App): Promise<void> {
   if (domain === 'music') {
-    await ensureBundledForgeMusic(app);
+    await ensureBundledMusicVaults(app);
     return;
   }
   // moda is unconditionally extracted regardless of domains; nothing

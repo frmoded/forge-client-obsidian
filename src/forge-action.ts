@@ -258,18 +258,20 @@ async function fetchRegistryVaults(): Promise<
 // existing call-site failure branches handle the "didn't install"
 // case gracefully.
 //
-// v0.2.15: bundled vaults (forge-moda, forge-music) need no install —
-// their content already ships at assets/vaults/<name>/. Return true
-// for them so the EditVaultDomainsModal proceeds with the forge.toml
-// declaration write. welcome.ts:ensureBundledForgeMusic extracts the
-// content into the vault root on next plugin load, gated on the new
-// domain declaration. v1.0 audit (task #19) consolidates the BUNDLED
-// set with pyodide-host.ts's BUNDLED_LIBRARY_NAMES — currently three
+// v0.2.15: bundled vaults need no install — their content already
+// ships at assets/vaults/<name>/. Return true for them so the
+// EditVaultDomainsModal proceeds with the forge.toml declaration
+// write. welcome.ts:ensureBundledMusicVaults extracts the content
+// into the vault root on next plugin load, gated on the new domain
+// declaration. v1.0 audit (task #19) consolidates the BUNDLED set
+// with pyodide-host.ts's BUNDLED_LIBRARY_NAMES — currently three
 // copies hand-synced.
+// v0.2.333 Phase 5 two-vault split — forge-music renamed
+// music-theory; music-core added.
 //
 // `host` is kept on the signature so the call sites don't need
 // touching; underscored to silence unused-param.
-const BUNDLED_VAULTS = new Set(['forge-moda', 'forge-music']);
+const BUNDLED_VAULTS = new Set(['forge-moda', 'music-theory', 'music-core']);
 
 async function installVault(_host: ForgeHost, vaultName: string): Promise<boolean> {
   if (BUNDLED_VAULTS.has(vaultName)) {
@@ -288,7 +290,8 @@ async function installVault(_host: ForgeHost, vaultName: string): Promise<boolea
   void forgeNotice(this.app,
     `Forge: install of "${vaultName}" skipped — V1 closed beta has `
     + 'no remote vault registry. Only bundled vaults (forge-moda, '
-    + 'forge-music) are available; additional vaults are deferred to v1.1+.',
+    + 'music-theory, music-core) are available; additional vaults are '
+    + 'deferred to v1.1+.',
   );
   return false;
 }
@@ -795,7 +798,7 @@ class InitializeForgeVaultWizard extends Modal {
       ['moda-learning', 'MoDa learning vault (recommended for new users)',
         'Same as MoDa, plus copies the library\'s role: root snippets (setup, on_mouse_click, go) to the vault root as your editable entry points. Library leaves stay in forge-moda/ and can be customized later.'],
       ['music', 'Music',
-        'domains = ["music"], installs forge-music (if registered), drops a welcome note.'],
+        'domains = ["music"], installs music-theory + music-core (bundled), drops a welcome note.'],
       ['multi', 'Multi-domain',
         'Pick any combination below; installs each chosen registry vault.'],
       ['empty', 'Empty Forge vault',

@@ -252,8 +252,10 @@ After install you can:
   the slider.
 - Forge-click any action note in the vault to run it directly; the
   result shows in the Forge Output panel.
-- Compose notes across the bundled `forge-moda`, `forge-music`, and
-  `forge-tutorial` libraries plus your own vault notes.
+- Compose notes across the bundled `forge-moda`, `music-theory`,
+  `music-core`, and `forge-tutorial` libraries plus your own vault
+  notes. (`music-theory` + `music-core` replaced the pre-v0.2.333
+  `forge-music` library in the Phase 5 two-vault split.)
 
 All compute happens locally inside your Obsidian (via Pyodide).
 No data leaves your machine except LLM-mediated `/generate` calls

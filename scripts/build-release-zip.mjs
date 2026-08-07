@@ -56,10 +56,13 @@ const REQUIRED_FILES = [
   { path: "assets/pyodide/python_stdlib.zip",                 hint: "Run `npm run setup-assets` first." },
   { path: "assets/engine/forge/core/executor.py",             hint: "Repo is missing the engine bundle — unexpected." },
   { path: "assets/vaults/forge-moda/forge.toml",              hint: "Repo is missing the forge-moda vault bundle — unexpected." },
-  { path: "assets/vaults/forge-music/forge.toml",             hint: "Repo is missing the forge-music vault bundle — re-sync ~/projects/forge-music/ into assets/vaults/forge-music/." },
+  // v0.2.333 Phase 5 two-vault split — forge-music renamed music-theory;
+  // music-core added.
+  { path: "assets/vaults/music-theory/forge.toml",            hint: "Repo is missing the music-theory vault bundle — run `node scripts/sync-bundled-vault.mjs music-theory`." },
   // v0.8.0 — `blues/` renamed to `slow_burn/` (drain 2026-07-02-1800).
   // Progression data note now lives at slow_burn/twelve_bar_blues_progression.md.
-  { path: "assets/vaults/forge-music/slow_burn/twelve_bar_blues_progression.md", hint: "forge-music bundle missing slow_burn/twelve_bar_blues_progression.md — re-sync the slow_burn subdir." },
+  { path: "assets/vaults/music-theory/slow_burn/twelve_bar_blues_progression.md", hint: "music-theory bundle missing slow_burn/twelve_bar_blues_progression.md — re-sync the slow_burn subdir." },
+  { path: "assets/vaults/music-core/forge.toml",              hint: "Repo is missing the music-core vault bundle — run `node scripts/sync-bundled-vault.mjs music-core`." },
   // v0.2.76: Tier 1 tutorial bundle. Source at ~/projects/forge-tutorial/.
   { path: "assets/vaults/forge-tutorial/forge.toml",          hint: "forge-tutorial bundle missing — run `node scripts/sync-bundled-vault.mjs forge-tutorial`." },
   { path: "assets/vaults/forge-tutorial/README.md",           hint: "forge-tutorial bundle missing README — re-sync." },

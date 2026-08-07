@@ -1,6 +1,6 @@
-# forge-music
+# music-theory
 
-A Forge vault for composing music with music21 in your Obsidian-based snippet workflow.
+A Forge vault for composing music with music21 in your Obsidian-based snippet workflow. (Renamed from `forge-music` in the Phase 5 two-vault split, 2026-08-06; sibling vault [music-core](https://github.com/frmoded/music-core) is the composition-primitive authoring surface.)
 
 ## What's inside
 
@@ -9,7 +9,7 @@ Music-domain action and data snippets — currently centered on **Slow Burn**, a
 Layout:
 
 ```
-forge-music/
+music-theory/
 ├── README.md
 ├── LICENSE
 ├── NOTICE
@@ -21,16 +21,16 @@ forge-music/
     └── slow_burn.md                     # the whole song: chorus × 3 + solo
 ```
 
-Every snippet is reachable as both a qualified ID (`forge-music/slow_burn/slow_burn`) and as a bare sibling reference (`[[chorus]]` from inside `slow_burn/slow_burn.md`) per v0.2.26 caller-scoped resolution.
+Every snippet is reachable as both a qualified ID (`music-theory/slow_burn/slow_burn`) and as a bare sibling reference (`[[chorus]]` from inside `slow_burn/slow_burn.md`) per v0.2.26 caller-scoped resolution.
 
 ## How to use
 
-The forge-music vault is **bundled** with the forge-client-obsidian plugin starting at plugin v0.2.25+ — there's no separate install step. To activate it inside an existing Obsidian vault:
+The music-theory vault is **bundled** with the forge-client-obsidian plugin (as `forge-music` from v0.2.25 to v0.2.332; as `music-theory` from v0.2.333) — there's no separate install step. To activate it inside an existing Obsidian vault:
 
 1. Edit your vault's `forge.toml` and set `domains = ["music"]` (or add `"music"` to an existing list).
 2. Cmd-Q out of Obsidian and re-open it (a plain "Reload app without saving" may not refresh the bundle short-circuit).
-3. The plugin extracts `forge-music/` into your vault root automatically.
-4. Forge-click any Slow Burn snippet — e.g. `forge-music/slow_burn/slow_burn.md` — to compute and render it.
+3. The plugin extracts `music-theory/` into your vault root automatically (a pre-rename `forge-music/` dir, if present, is parked as `forge-music.bak.legacy/`).
+4. Forge-click any Slow Burn snippet — e.g. `music-theory/slow_burn/slow_burn.md` — to compute and render it.
 
 Top-level forge-clickable entry points:
 - `slow_burn/slow_burn.md` → the whole 4-section piece.
@@ -39,7 +39,7 @@ Top-level forge-clickable entry points:
 
 ## Authoring new snippets
 
-Write new `.md` files in your vault root (vault-root files override bundled-library snippets via A4 shadow resolution), or in `<vault>/forge-music/slow_burn/` to extend the Slow Burn set directly. Follow the V2 note conventions:
+Write new `.md` files in your vault root (vault-root files override bundled-library snippets via A4 shadow resolution), or in `<vault>/music-theory/slow_burn/` to extend the Slow Burn set directly. Follow the V2 note conventions:
 
 - Frontmatter: `type: action` (or `data`).
 - One `# Description` section (intent-level prose), one `# Recipe` section (`Let X = Call [[name]] with k=v.` chains; implicit-locking generates `# Python` on first Forge-click).
@@ -77,4 +77,4 @@ Apache License 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE) for details.
 
 - Main engine: https://github.com/frmoded/forge
 - Plugin (the bundled distribution path): https://github.com/frmoded/forge-client-obsidian
-- Sibling vault: https://github.com/frmoded/forge-moda
+- Sibling vaults: https://github.com/frmoded/music-core (composition-primitive authoring), https://github.com/frmoded/forge-moda

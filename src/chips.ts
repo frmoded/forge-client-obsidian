@@ -51,8 +51,10 @@ import { isSourceVault } from './source-vault-core.ts';
 // source repo (Path A workflow), and chip discovery walks vault-root
 // subdirs as the library's content.
 // v0.2.76 — forge-tutorial added as Tier 1 default-on onboarding library.
+// v0.2.333 Phase 5 two-vault split — forge-music renamed music-theory;
+// music-core added. Keep in sync with scripts/vaults.txt + welcome.ts.
 const KNOWN_BUNDLED_LIBRARIES = new Set([
-  'forge-moda', 'forge-music', 'forge-tutorial',
+  'forge-moda', 'music-theory', 'music-core', 'forge-tutorial',
 ]);
 
 // Re-export so existing import sites in the codebase keep working

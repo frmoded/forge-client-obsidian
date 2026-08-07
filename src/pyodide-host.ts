@@ -50,7 +50,18 @@ import { parseSnapshotState } from "./snapshot-state-core";
 // forge-action.ts:installVault's BUNDLED set — three copies, all
 // load-bearing. v1.0 audit (task #19 in v1-deployment-plan) collapses
 // them into one shared constant.
-const BUNDLED_LIBRARY_NAMES = new Set<string>(["forge-moda", "forge-music"]);
+// v0.2.333 Phase 5 two-vault split — forge-music renamed music-theory;
+// music-core added. 'forge-music' and 'forge-music.bak.legacy' stay in
+// THIS set as mount-skip-only entries (they are NOT bundled vaults):
+// they keep a stale pre-rename forge-music/ dir, or the parked
+// forge-music.bak.legacy/ copy, out of the user-vault MEMFS mount so
+// its notes can't shadow or duplicate the music-theory bundle. Do NOT
+// add them to _BUNDLED_LIBRARIES_V1 (resolution order — real bundles
+// only).
+const BUNDLED_LIBRARY_NAMES = new Set<string>([
+  "forge-moda", "music-theory", "music-core",
+  "forge-music", "forge-music.bak.legacy",
+]);
 
 // Frontmatter `type:` values that mark a file as a Forge snippet
 // rather than a plain note. The resolver only registers files whose
@@ -543,11 +554,13 @@ _forge_registry.scan(_forge_user_vault)
 # unreachable for bare lookups.
 #
 # This list mirrors the JS-side BUNDLED_LIBRARY_NAMES (kept
-# hand-synced; one source of truth per language). v0.2.15: forge-music
-# joined the bundle alongside forge-moda. v1.0 audit (task #19)
-# collapses the JS-side + Python-side + forge-action.ts copies into
-# one shared constant.
-_BUNDLED_LIBRARIES_V1 = ["forge-moda", "forge-music"]
+# hand-synced; one source of truth per language — MINUS the JS side's
+# mount-skip-only legacy entries, which are not real bundles).
+# v0.2.15: forge-music joined the bundle alongside forge-moda.
+# v0.2.333: two-vault split — forge-music renamed music-theory;
+# music-core added. v1.0 audit (task #19) collapses the JS-side +
+# Python-side + forge-action.ts copies into one shared constant.
+_BUNDLED_LIBRARIES_V1 = ["forge-moda", "music-theory", "music-core"]
 _existing_order = [v for v in _forge_registry.resolution_order() if v != "forge"]
 for _lib in _BUNDLED_LIBRARIES_V1:
     if _lib not in _existing_order:

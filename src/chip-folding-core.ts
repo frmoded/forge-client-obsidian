@@ -11,20 +11,22 @@
 // acceptable. Documented per the prompt §2.5.
 
 /** Determine which library category corresponds to an active file
- *  path. Returns the source library name ("forge-moda" / "forge-
- *  music" / "forge-tutorial") for a path under that library, or
- *  null when the active file isn't inside any known library
- *  (e.g. vault root, an authoring snippet outside the libraries).
+ *  path. Returns the source library name ("forge-moda" /
+ *  "music-theory" / "music-core" / "forge-tutorial") for a path under
+ *  that library, or null when the active file isn't inside any known
+ *  library (e.g. vault root, an authoring snippet outside the
+ *  libraries).
  *
  *  Bundled libraries are matched by case-sensitive top-level
- *  directory prefix. */
+ *  directory prefix. v0.2.333 Phase 5 two-vault split — forge-music
+ *  renamed music-theory; music-core added. */
 export function libraryForActiveFilePath(
   activeFilePath: string | null,
 ): string | null {
   if (!activeFilePath) return null;
   const topDir = activeFilePath.split('/')[0];
-  if (topDir === 'forge-moda' || topDir === 'forge-music'
-      || topDir === 'forge-tutorial') {
+  if (topDir === 'forge-moda' || topDir === 'music-theory'
+      || topDir === 'music-core' || topDir === 'forge-tutorial') {
     return topDir;
   }
   return null;

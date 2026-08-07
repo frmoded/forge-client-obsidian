@@ -1,0 +1,17 @@
+name = "music-core"
+version = "0.1.0"
+description = "Composition-authoring surface for the Forge music domain."
+domains = ["music"]
+
+# Cross-vault imports (spec: forge/docs/specs/vault-imports.md).
+# Phase 4 in-vault cross-linking was SKIPPED per driver adjudication
+# 2026-08-06 [2](b) — music-core and music-theory ship as two separate
+# Obsidian vaults with no [imports] between them. The block below stays
+# commented-out spec-following scaffolding (drain 2026-08-03-1500).
+#
+# Must stay LAST in this file: in TOML every key after a [table] header
+# belongs to that table, so a [imports] section placed above `name` /
+# `version` / `domains` would silently swallow them.
+#
+# [imports]
+# music-theory = { git = "https://github.com/frmoded/music-theory.git", sha = "abc12345", tag = "v0.10.0" }

@@ -144,11 +144,14 @@ test('sync-bundled-vault: drift detection catches forced edit', () => {
 test('KNOWN_BUNDLED_LIBRARIES coherence: welcome.ts + chips.ts agree', () => {
   // Read source files and assert both sets include 'forge-tutorial'.
   // Stops the welcome/chips dual-list from drifting again silently.
+  // v0.2.333 Phase 5 two-vault split — forge-music → music-theory +
+  // music-core. (bundled-vault-names.test.ts is the stricter guard;
+  // this older check stays as a belt-and-braces regexp.)
   const welcomeSrc = fs.readFileSync(
     path.join(REPO, 'src', 'welcome.ts'), 'utf8');
   const chipsSrc = fs.readFileSync(
     path.join(REPO, 'src', 'chips.ts'), 'utf8');
-  for (const lib of ['forge-moda', 'forge-music', 'forge-tutorial']) {
+  for (const lib of ['forge-moda', 'music-theory', 'music-core', 'forge-tutorial']) {
     assert.match(
       welcomeSrc, new RegExp(`'${lib}'`),
       `welcome.ts KNOWN_BUNDLED_LIBRARIES missing ${lib}.`);

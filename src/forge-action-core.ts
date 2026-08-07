@@ -13,7 +13,11 @@ export const KNOWN_DOMAINS: Array<{
   vault: string | null;
 }> = [
   { id: 'moda', label: 'MoDa (agent-based simulation)', vault: 'forge-moda' },
-  { id: 'music', label: 'Music (composition & analysis)', vault: 'forge-music' },
+  // v0.2.333 Phase 5 two-vault split — the music domain's bundled
+  // vaults are music-theory + music-core; this mapping names the
+  // primary one (installVault treats both as bundled no-installs, and
+  // welcome.ts extracts both on the music-domain gate).
+  { id: 'music', label: 'Music (composition & analysis)', vault: 'music-theory' },
 ];
 
 export type ForgeActionContext =
