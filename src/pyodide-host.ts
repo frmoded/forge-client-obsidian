@@ -58,9 +58,16 @@ import { parseSnapshotState } from "./snapshot-state-core";
 // its notes can't shadow or duplicate the music-theory bundle. Do NOT
 // add them to _BUNDLED_LIBRARIES_V1 (resolution order — real bundles
 // only).
+// Drain 2026-08-08-1200 — 'forge-music.legacy' joins as a third
+// mount-skip-only entry: the driver's manual mid-migration rename
+// lacks the `.bak.` segment, so the engine's _BAK_DIR_PATTERN does
+// NOT exclude it and its notes collided with the music-theory bundle
+// (AmbiguousSnippetResolutionError). welcome.ts parks it to
+// forge-music.bak.legacy/ on load; this entry covers vaults where the
+// park can't fire (backup slot already taken).
 const BUNDLED_LIBRARY_NAMES = new Set<string>([
   "forge-moda", "music-theory", "music-core",
-  "forge-music", "forge-music.bak.legacy",
+  "forge-music", "forge-music.bak.legacy", "forge-music.legacy",
 ]);
 
 // Frontmatter `type:` values that mark a file as a Forge snippet

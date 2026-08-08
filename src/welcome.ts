@@ -11,8 +11,10 @@ import { computeSweepTrashList } from './sweep-bundle-dropped-core.ts';
 import {
   LEGACY_MUSIC_DIR,
   LEGACY_MUSIC_BACKUP_DIR,
+  LEGACY_MUSIC_VARIANT_DIR,
   decideLegacyMusicRename,
   legacyMusicRenameNotice,
+  legacyVariantRenameNotice,
 } from './legacy-music-rename-core.ts';
 export { copyDirRecursive };
 
@@ -558,6 +560,43 @@ async function ensureBundledMusicVaults(app: App): Promise<void> {
   const tomlPath = 'forge.toml';
 
   try {
+    // Drain 2026-08-08-1200 — the legacy park runs BEFORE the
+    // music-domain gate: a leftover forge-music/ or forge-music.legacy/
+    // collides with the music-theory bundle at snippet discovery
+    // regardless of whether the vault still declares music (driver's
+    // foo vault: domains=["moda"] but forge-music.legacy/ present).
+    const action = decideLegacyMusicRename({
+      oldExists: await adapter.exists(LEGACY_MUSIC_DIR),
+      backupExists: await adapter.exists(LEGACY_MUSIC_BACKUP_DIR),
+      legacyVariantExists: await adapter.exists(LEGACY_MUSIC_VARIANT_DIR),
+    });
+    if (action === 'rename') {
+      await adapter.rename(LEGACY_MUSIC_DIR, LEGACY_MUSIC_BACKUP_DIR);
+      console.log(
+        `Forge: parked pre-rename ${LEGACY_MUSIC_DIR}/ at ` +
+        `${LEGACY_MUSIC_BACKUP_DIR}/ (two-vault split, v0.2.333)`,
+      );
+      new Notice(legacyMusicRenameNotice(), 12000);
+    } else if (action === 'rename-legacy-variant') {
+      await adapter.rename(LEGACY_MUSIC_VARIANT_DIR, LEGACY_MUSIC_BACKUP_DIR);
+      console.log(
+        `Forge: parked ${LEGACY_MUSIC_VARIANT_DIR}/ at ` +
+        `${LEGACY_MUSIC_BACKUP_DIR}/ (no .bak. segment — it defeated ` +
+        `the engine's backup-dir exclusion; drain 2026-08-08-1200)`,
+      );
+      new Notice(legacyVariantRenameNotice(), 12000);
+    } else if (action === 'skip-backup-exists') {
+      // A legacy dir AND an earlier park both exist — refuse to
+      // clobber the backup. The leftover dir is neutralized by the
+      // MEMFS mount-skip list (pyodide-host.ts); for forge-music/ the
+      // engine's .bak.-dir discovery exclusion also applies.
+      console.log(
+        `Forge: a legacy music dir (${LEGACY_MUSIC_DIR}/ or ` +
+        `${LEGACY_MUSIC_VARIANT_DIR}/) is present but ` +
+        `${LEGACY_MUSIC_BACKUP_DIR}/ already exists; leaving both`,
+      );
+    }
+
     if (!(await adapter.exists(tomlPath))) {
       // No forge.toml means no domain declaration; nothing to extract.
       // (v0.2.14's stub usually creates one, but defensive against
@@ -567,28 +606,6 @@ async function ensureBundledMusicVaults(app: App): Promise<void> {
     const tomlBody = await adapter.read(tomlPath);
     if (!vaultDeclaresMusic(tomlBody)) {
       return;
-    }
-
-    const action = decideLegacyMusicRename({
-      oldExists: await adapter.exists(LEGACY_MUSIC_DIR),
-      backupExists: await adapter.exists(LEGACY_MUSIC_BACKUP_DIR),
-    });
-    if (action === 'rename') {
-      await adapter.rename(LEGACY_MUSIC_DIR, LEGACY_MUSIC_BACKUP_DIR);
-      console.log(
-        `Forge: parked pre-rename ${LEGACY_MUSIC_DIR}/ at ` +
-        `${LEGACY_MUSIC_BACKUP_DIR}/ (two-vault split, v0.2.333)`,
-      );
-      new Notice(legacyMusicRenameNotice(), 12000);
-    } else if (action === 'skip-backup-exists') {
-      // Both the old dir AND an earlier park exist — refuse to
-      // clobber the backup. The stale old dir is neutralized by the
-      // MEMFS mount-skip list (pyodide-host.ts) + engine .bak.-dir
-      // discovery exclusion, so this is safe to leave.
-      console.log(
-        `Forge: ${LEGACY_MUSIC_DIR}/ present but ` +
-        `${LEGACY_MUSIC_BACKUP_DIR}/ already exists; leaving both`,
-      );
     }
 
     await ensureBundledVault(

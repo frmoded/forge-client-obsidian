@@ -118,6 +118,12 @@ test('mount-skip list keeps the legacy names (stale-dir neutralization)', () => 
   // out of the user-vault MEMFS mount. See pyodide-host.ts comment.
   assert.ok(mountSkip.includes('forge-music'));
   assert.ok(mountSkip.includes('forge-music.bak.legacy'));
+  // Drain 2026-08-08-1200 — the driver's manual mid-migration rename
+  // (`forge-music.legacy/`, no `.bak.` segment) must also be skipped:
+  // it defeats the engine's `\.bak\.` exclusion and collided with the
+  // music-theory bundle. Mount-skip neutralizes it in EVERY vault,
+  // including ones the park can't fire in (backup slot already taken).
+  assert.ok(mountSkip.includes('forge-music.legacy'));
 });
 
 test('assets/vaults/ dirs match the canonical set (no orphan forge-music)', () => {
