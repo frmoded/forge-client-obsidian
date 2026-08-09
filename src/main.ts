@@ -4931,6 +4931,12 @@ export default class ForgePlugin extends Plugin {
           + result.actions.canonicalHashRepairs.join(', '),
         );
       }
+      if (result.actions.stubSyncRepairs.length > 0) {
+        parts.push(
+          'stub-sync repair (Python was a backfill stub; source_facet '
+          + 're-seeded honestly — drain 2026-08-09-0400)',
+        );
+      }
       void this.forgeOutput(
         `Backfilled ${file.basename} to V2a v11.4 shape (${parts.join(', ')}).`,
         'info',

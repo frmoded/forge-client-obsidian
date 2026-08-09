@@ -93,6 +93,15 @@ export interface V113BackfillResult {
       | 'recipe_derived_from_description_hash'
       | 'python_derived_from_recipe_hash'
     >;
+    /** Drain 2026-08-09-0400 — stub-sync repair. Detects the residue
+     *  the pre-fix backfill left on notes born without a `# Python`
+     *  section: body still EXACTLY DEFAULT_PYTHON_STUB, source_facet
+     *  'synced', and no v11.6 python parent-hash (a real forge would
+     *  have stamped it). Rewrites source_facet to the honest seed
+     *  ('recipe' when a Recipe body exists, else 'description') and
+     *  removes the fabricated python_derived_from_source_hash.
+     *  Empty when no repair fired. */
+    stubSyncRepairs: Array<'source_facet'>;
   };
 }
 
@@ -127,6 +136,7 @@ export async function backfillV113Shape(
     canonicalHashRepairs: [],
     canonicalFacetSeeded: null,
     derivedFromParentSeeded: [],
+    stubSyncRepairs: [],
   };
 
   // Step 1: ensure # Python section exists on disk.
@@ -205,10 +215,23 @@ export async function backfillV113Shape(
     }
     const pythonStamp = helpers.getFrontmatterField(workingBody, 'python_derived_from_source_hash');
     if (pythonStamp === null) {
-      workingBody = helpers.setFrontmatterField(
-        workingBody, 'python_derived_from_source_hash', currentDescStamp,
-      );
-      actions.derivedFromFields.push('python_derived_from_source_hash');
+      // Drain 2026-08-09-0400 — never record a derivation for the
+      // backfill's own stub: stamping "derived from description" for a
+      // body the backfill manufactured is the lie that produced the
+      // stub+synced pattern (wizard sweep 2026-08-09-0348). Guard on
+      // the BODY (not on actions.pythonSection) so the skip is stable
+      // across runs — an insertion-flag guard would let the SECOND
+      // file-open stamp the lie and churn the file. Same honesty
+      // principle as CW-2230's absent-recipe_hash: absent is the
+      // honest state; the field gets stamped for real on first actual
+      // forge. Migration-cohort notes whose Python EXISTED (real
+      // content) keep the v0.2.243 assume-freshly-forged stamp.
+      if (pythonText !== DEFAULT_PYTHON_STUB) {
+        workingBody = helpers.setFrontmatterField(
+          workingBody, 'python_derived_from_source_hash', currentDescStamp,
+        );
+        actions.derivedFromFields.push('python_derived_from_source_hash');
+      }
     } else {
       // v0.2.248 drain 2026-07-03-0600 §3.4b — canonical-hash repair.
       // v0.2.243 shipped a shortcut that stamped
@@ -289,10 +312,22 @@ export async function backfillV113Shape(
     const noRecipeBody = finalRecipeText.trim().length === 0;
     const hasDescBody = finalDescText.trim().length > 0;
     // Upstream-wins tiebreak per driver Choice 3.
+    //
+    // Drain 2026-08-09-0400 — second honesty branch, sibling to the
+    // CW-2230 no-Recipe seed above: a note whose Python is (still)
+    // the backfill's own stub cannot honestly be 'synced'. The Recipe
+    // (real, authored content) is the source; forge-click then
+    // transpiles it into real Python WITHOUT LLM-regenerating the
+    // authored Recipe (which is what a 'synced'→Description-canonical
+    // route would do per drain 0600 §3.1). Guarded on the BODY (not
+    // an insertion flag) so it is stable across runs, and ordered
+    // AFTER the drift branches so real hand-edits keep winning (I5)
+    // — it replaces only the 'synced' fallback.
     if (noRecipeBody && hasDescBody) seed = 'description';
     else if (dMismatch) seed = 'description';
     else if (rMismatch) seed = 'recipe';
     else if (pMismatch) seed = 'python';
+    else if (finalPythonText === DEFAULT_PYTHON_STUB && !noRecipeBody) seed = 'recipe';
     else seed = 'synced';
     workingBody = helpers.setFrontmatterField(workingBody, 'source_facet', seed);
     actions.canonicalFacetSeeded = seed;
@@ -302,6 +337,40 @@ export async function backfillV113Shape(
     // carry both across drains.
     if (existingCanonical !== null && helpers.removeFrontmatterField) {
       workingBody = helpers.removeFrontmatterField(workingBody, 'canonical_facet');
+    }
+
+    // Drain 2026-08-09-0400 — stub-sync repair for residue the
+    // pre-fix backfill already stamped (census 2026-08-09: 8 live
+    // notes). Signature is deliberately tight: Python body is STILL
+    // byte-identical to DEFAULT_PYTHON_STUB (any cohort edit defeats
+    // the match), source_facet claims 'synced', and there is NO
+    // v11.6 python parent-hash (a real forge stamps
+    // python_derived_from_recipe_hash, so a genuinely-forged
+    // return-None never matches). Heal: seed the honest source
+    // ('recipe' when a Recipe body exists — forge-click transpiles
+    // it into real Python without touching the authored Recipe;
+    // else 'description') and drop the fabricated legacy lineage.
+    // Precedent: v0.2.248 §3.4b canonicalHashRepairs (rewrite
+    // already-populated fields on a detected bug-residue signature).
+    if (existingSource === 'synced') {
+      const pythonBodyNow = helpers.extractPythonSection(workingBody) ?? '';
+      const pythonParentNow = helpers.getFrontmatterField(
+        workingBody, 'python_derived_from_recipe_hash');
+      if (pythonBodyNow === DEFAULT_PYTHON_STUB && pythonParentNow === null) {
+        const recipeBodyNow = (helpers.extractRecipeSection(workingBody) ?? '').trim();
+        const descBodyNow = helpers.extractDescription(workingBody).trim();
+        const healedSeed = recipeBodyNow.length > 0
+          ? 'recipe'
+          : descBodyNow.length > 0 ? 'description' : null;
+        if (healedSeed !== null) {
+          workingBody = helpers.setFrontmatterField(workingBody, 'source_facet', healedSeed);
+          if (helpers.removeFrontmatterField) {
+            workingBody = helpers.removeFrontmatterField(
+              workingBody, 'python_derived_from_source_hash');
+          }
+          actions.stubSyncRepairs.push('source_facet');
+        }
+      }
     }
   }
 
@@ -357,7 +426,8 @@ export async function backfillV113Shape(
     || actions.derivedFromFields.length > 0
     || actions.canonicalHashRepairs.length > 0
     || actions.canonicalFacetSeeded !== null
-    || actions.derivedFromParentSeeded.length > 0;
+    || actions.derivedFromParentSeeded.length > 0
+    || actions.stubSyncRepairs.length > 0;
   return {
     changed,
     newBody: changed ? workingBody : body,

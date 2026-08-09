@@ -107,11 +107,12 @@ test('backfills missing # Python section AND all three hashes on pre-v113 note w
   assert.deepEqual(result.actions.hashes, [
     'description_hash', 'recipe_hash', 'python_hash',
   ]);
-  // v0.2.243 (v11.4) — downstream derived_from_source_hash stamped
-  // from current description hash (assume-freshly-forged option a).
+  // v0.2.243 (v11.4) — recipe derived_from_source_hash stamped from
+  // current description hash (assume-freshly-forged option a).
+  // Drain 2026-08-09-0400 — python lineage NO LONGER stamped when the
+  // body is the backfill's own stub: there is no derivation to record.
   assert.deepEqual(result.actions.derivedFromFields, [
     'recipe_derived_from_source_hash',
-    'python_derived_from_source_hash',
   ]);
   // Python section now present
   assert.match(result.newBody, /^# Python$/m);
@@ -123,14 +124,15 @@ test('backfills missing # Python section AND all three hashes on pre-v113 note w
   assert.notEqual(descHash, null);
   assert.notEqual(getFrontmatterField(result.newBody, 'recipe_hash'), null);
   assert.notEqual(getFrontmatterField(result.newBody, 'python_hash'), null);
-  // v0.2.243 (v11.4) — derived_from stamps === description_hash
+  // v0.2.243 (v11.4) — recipe derived_from stamp === description_hash
   assert.equal(
     getFrontmatterField(result.newBody, 'recipe_derived_from_source_hash'),
     descHash,
   );
+  // Drain 2026-08-09-0400 — absent is the honest state for the stub.
   assert.equal(
     getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
-    descHash,
+    null,
   );
 });
 
@@ -168,11 +170,14 @@ test('idempotent: second call after backfill is a no-op', async () => {
   assert.equal(second.newBody, first.newBody);
 });
 
-test('v0.2.256 drain 1200: seeds source_facet on first backfill; freshly-stamped note gets synced seed', async () => {
+test('v0.2.256 drain 1200: seeds source_facet on first backfill; stub-inserted note gets recipe seed (drain 2026-08-09-0400)', async () => {
   const result = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
-  // All hashes stamped fresh in this call → no drift → synced seed.
-  assert.equal(result.actions.canonicalFacetSeeded, 'synced');
-  assert.equal(getFrontmatterField(result.newBody, 'source_facet'), 'synced');
+  // All hashes stamped fresh in this call → no drift — but the Python
+  // body is the backfill's own stub, so 'synced' would be a lie
+  // (drain 2026-08-09-0400). Recipe (the authored frontier) is the
+  // honest seed; forge-click transpiles it into real Python.
+  assert.equal(result.actions.canonicalFacetSeeded, 'recipe');
+  assert.equal(getFrontmatterField(result.newBody, 'source_facet'), 'recipe');
 });
 
 test('v0.2.256 drain 1200: seeds source_facet: description when Description drifts against pre-stamped hashes', async () => {
@@ -224,7 +229,8 @@ def compute(context):
 
 test('v0.2.256 drain 1200: source_facet seed is idempotent — second call is no-op', async () => {
   const first = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
-  assert.equal(first.actions.canonicalFacetSeeded, 'synced');
+  // 'recipe' since drain 2026-08-09-0400 (stub body cannot be synced).
+  assert.equal(first.actions.canonicalFacetSeeded, 'recipe');
   const second = await backfillV113Shape(first.newBody, HELPERS);
   assert.equal(second.actions.canonicalFacetSeeded, null);
   assert.equal(second.changed, false);
@@ -947,4 +953,104 @@ ${pythonBody}
     'description',
     'Option-2 rescue must not hijack an explicit python source_facet',
   );
+});
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-09-0400 — return-None stub with synced metadata.
+// Wizard sweep 2026-08-09-0348 found notes whose # Python the backfill
+// itself stubbed (DEFAULT_PYTHON_STUB) yet whose frontmatter claims
+// source_facet: synced + python_derived_from_source_hash =
+// description_hash — certifying a derivation that never happened.
+// Census 2026-08-09: 8 live notes across ClaudeQA / bluh /
+// music-theory. Same honesty principle as CW-2230's no-Recipe seed:
+// a Python body the backfill just manufactured cannot honestly be
+// "synced" or "derived".
+
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const FIXTURE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'test', 'fixtures', 'vault');
+
+test('stub-inserted note with a real Recipe seeds source_facet=recipe (not synced) and leaves python lineage absent', async () => {
+  const result = await backfillV113Shape(PRE_V113_NOTE_NO_PYTHON, HELPERS);
+  assert.equal(result.changed, true);
+  assert.equal(result.actions.pythonSection, true);
+  // The backfill wrote the stub itself — Python has no derivation
+  // lineage and the note cannot honestly be synced. Recipe is the
+  // most-downstream AUTHORED facet → it is the source; forge-click
+  // then transpiles the (preserved) Recipe into real Python.
+  assert.equal(HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'recipe');
+  assert.equal(
+    HELPERS.getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
+    null,
+  );
+});
+
+/** Build the observed broken artifact dynamically with production
+ *  helpers: stub + all hashes stamped + synced + python lineage =
+ *  description_hash (what the pre-fix backfill produced). */
+async function buildStubSyncedNote(python: string = DEFAULT_PYTHON_STUB): Promise<string> {
+  let body = replacePythonSection(PRE_V113_NOTE_NO_PYTHON, python);
+  const descHash = await computeFacetHash(extractDescription(body));
+  const recipeHash = await computeFacetHash(extractRecipeSection(body) ?? '');
+  const pythonHash = await computeFacetHash(extractPythonSection(body) ?? '');
+  body = setFrontmatterField(body, 'description_hash', descHash);
+  body = setFrontmatterField(body, 'recipe_hash', recipeHash);
+  body = setFrontmatterField(body, 'python_hash', pythonHash);
+  body = setFrontmatterField(body, 'recipe_derived_from_source_hash', descHash);
+  body = setFrontmatterField(body, 'python_derived_from_source_hash', descHash);
+  body = setFrontmatterField(body, 'recipe_derived_from_description_hash', descHash);
+  body = setFrontmatterField(body, 'source_facet', 'synced');
+  return body;
+}
+
+test('repair: already-stamped stub+synced note is healed on next backfill run', async () => {
+  const broken = await buildStubSyncedNote();
+  const result = await backfillV113Shape(broken, HELPERS);
+  assert.equal(result.changed, true);
+  assert.equal(HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'recipe');
+  assert.equal(
+    HELPERS.getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
+    null,
+  );
+});
+
+test('repair: the verbatim driver-observed fixture (bluh forge-moda/setup.md) is healed', async () => {
+  const fixture = readFileSync(
+    join(FIXTURE_DIR, 'stub_python_synced_metadata.md'), 'utf8');
+  const result = await backfillV113Shape(fixture, HELPERS);
+  assert.equal(result.changed, true);
+  assert.equal(HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'recipe');
+  assert.equal(
+    HELPERS.getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
+    null,
+  );
+});
+
+test('repair does NOT fire on a real (non-stub) Python that is synced', async () => {
+  const healthy = await buildStubSyncedNote('def compute(context):\n    return [1, 2, 3]');
+  const result = await backfillV113Shape(healthy, HELPERS);
+  assert.equal(HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'synced');
+});
+
+test('repair does NOT fire when python_derived_from_recipe_hash is present (genuinely forged stub)', async () => {
+  let genuine = await buildStubSyncedNote();
+  const recipeHash = HELPERS.getFrontmatterField(genuine, 'recipe_hash');
+  genuine = setFrontmatterField(genuine, 'python_derived_from_recipe_hash', recipeHash ?? '');
+  const result = await backfillV113Shape(genuine, HELPERS);
+  assert.equal(HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'synced');
+});
+
+test('stub-inserted note with NO recipe still seeds description (CW-2230 behavior preserved)', async () => {
+  const noRecipe = `---
+type: action
+---
+
+# Description
+
+Say hello to the world.
+`;
+  const result = await backfillV113Shape(noRecipe, HELPERS);
+  assert.equal(HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'description');
 });
