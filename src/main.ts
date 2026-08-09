@@ -22,6 +22,7 @@ import { resolveRunTarget } from './run-snippet-target-core.ts';
 import { identifyEditedFacet, decideSourceWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
+import { classifyForgeError } from './forge-error-core.ts';
 import {
   extractPythonSection,
   replacePythonSection,
@@ -5149,7 +5150,14 @@ export default class ForgePlugin extends Plugin {
       // silently to the toast if so).
       try {
         const outputView = await this.getOutputView();
-        outputView.appendError(snippetId, detail, '');
+        // Drain 2026-08-08-1300 — thrown compute errors can embed the
+        // engine exception text; render structured when recognized.
+        const structuredThrow = classifyForgeError({ errorMsg: detail });
+        if (structuredThrow) {
+          outputView.appendForgeError(snippetId, structuredThrow);
+        } else {
+          outputView.appendError(snippetId, detail, '');
+        }
       } catch { /* output panel unavailable; toast carries the brief msg */ }
       this.notice(errorPrefix ? `${errorPrefix}: ${shortMsg}` : `Forge: Compute failed — ${shortMsg}`);
       return;
@@ -5189,6 +5197,20 @@ export default class ForgePlugin extends Plugin {
         : (typeof detail === 'string' ? detail : `HTTP ${res.status}`);
       const stdout = (detail && typeof detail === 'object' && detail.stdout) ? detail.stdout : '';
       console.error('runSnippet: Forge Compute non-2xx:', res.status, detail);
+      // Drain 2026-08-08-1300 — structured 3-field errors for the
+      // migrated classes (Ambiguous / Resolution / Exec / 5xx). Runs
+      // BEFORE friendlyRecipeParseError: the class sets are disjoint
+      // (ParseError is not a migrated class), so precedence is safe.
+      // Unmatched errors fall through to the existing paths unchanged
+      // (backwards compat).
+      const structured = classifyForgeError({ status: res.status, errorMsg, stdout });
+      if (structured) {
+        if (errorPrefix) {
+          this.notice(`${errorPrefix}: ${structured.cause}`);
+        }
+        outputView.appendForgeError(snippetId, structured);
+        return;
+      }
       // v0.2.249 drain 2026-07-03-0700 — cohort-friendly Recipe
       // ParseError surfacing. Intercept the raw traceback + rewrite
       // to cohort-facing language for known engine error classes.

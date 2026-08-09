@@ -25,6 +25,8 @@ import {
   type SlotCacheNotFoundInput,
 } from './slot-cache-not-found-guidance-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
+import type { ForgeError } from './forge-error-core.ts';
+import { renderForgeError } from './forge-error-core.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -795,6 +797,18 @@ export class ForgeOutputView extends ItemView {
     if (stdout) {
       entry.createEl('pre', { text: stdout, cls: 'forge-output-stdout' });
     }
+    entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /** Drain 2026-08-08-1300 — structured 3-field error rendering
+   *  (cause + suggested fix always visible; traceback collapsed
+   *  behind a native <details> disclosure). Only migrated error
+   *  classes route here (classifyForgeError); everything else keeps
+   *  the plain appendError path. Layout lives in the pure-core so the
+   *  shape is headlessly test-pinned. */
+  appendForgeError(snippetId: string, err: ForgeError) {
+    const entry = this.makeEntry(snippetId);
+    renderForgeError(entry, err);
     entry.scrollIntoView({ behavior: 'smooth' });
   }
 
