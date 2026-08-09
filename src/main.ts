@@ -4722,6 +4722,25 @@ export default class ForgePlugin extends Plugin {
       const view = leaf.view as MarkdownView | undefined;
       const file = view?.file;
       if (!file) continue;
+      // Drain 2026-08-09-2130 — run the v11.3 backfill for restored
+      // tabs too. Obsidian fires file-open for workspace-restored tabs
+      // BEFORE plugin onload completes (the reason this sweep exists),
+      // so the file-open-driven backfill NEVER runs for a note that
+      // rides a restored tab — its stub-sync repair (drain 0400) and
+      // hash backfill silently skip for the whole session. Live capture
+      // on v0.2.339 showed the full chain heals on any GENUINE
+      // file-open; this closes the restored-tab delivery gap. The
+      // backfill's own _v113BackfillSeen dedup makes this idempotent
+      // with the file-open path, and awaiting it here means the seed
+      // logic below reads the post-backfill body.
+      try {
+        await this.maybeBackfillV113Shape(file);
+      } catch (e) {
+        console.error(
+          `seedSourceFacetForOpenFiles: layout-ready backfill failed for '${file.path}'`,
+          e,
+        );
+      }
       try {
         const body = await this.app.vault.read(file);
         if (!isV2Shape(body)) continue;
