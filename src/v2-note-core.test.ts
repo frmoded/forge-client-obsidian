@@ -8,6 +8,7 @@ import { test, describe } from 'node:test';
 import * as assert from 'node:assert/strict';
 import {
   isV2Shape,
+  isV2RoutableShape,
   extractDescription,
   extractRecipeSection,
   extractPythonSection,
@@ -74,6 +75,53 @@ describe('isV2Shape', () => {
     assert.equal(isV2Shape(null as any), false);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     assert.equal(isV2Shape(undefined as any), false);
+  });
+});
+
+// Drain 2026-08-09-2200 — fresh Description-only notes must reach the
+// canonical-layer routing. The forge-click gate used isV2Shape (both
+// # Description AND # Recipe required), so a fresh note with only a
+// Description deterministically skipped the Description-canonical
+// branch and fell into the legacy path → E-- transpile fail → V1
+// python-dialect /generate → Python section written, Recipe never
+// populated (the step-6 arc symptom). whichLayerIsSource has handled
+// the Description-only case since CW-2230 (returns 'description');
+// the gate was the only remaining exclusion.
+describe('isV2RoutableShape', () => {
+  test('admits a fresh Description-only note (no frontmatter, no Recipe, no Python)', () => {
+    const body = '# Description\n\nReturn the string hello routing.\n';
+    assert.equal(isV2RoutableShape(body), true);
+  });
+
+  test('admits every isV2Shape body (superset)', () => {
+    assert.equal(isV2RoutableShape(SAMPLE_V2), true);
+  });
+
+  test('admits a Description + Python note with no Recipe (V1-generate wedge shape heals via re-forge)', () => {
+    const body = '---\ntype: action\nsource_facet: description\n---\n\n# Description\n\nGreet.\n\n# Python\n\n```python\ndef compute(context):\n    return "hi"\n```\n';
+    assert.equal(isV2RoutableShape(body), true);
+  });
+
+  test('rejects a Description-only note whose Description body is empty (nothing to generate from)', () => {
+    const body = '---\ntype: action\n---\n\n# Description\n\n';
+    assert.equal(isV2RoutableShape(body), false);
+  });
+
+  test('rejects a V1 # English + # Python note (legacy path preserved)', () => {
+    const body = '---\ntype: action\n---\n\n# English\n\nFoo\n\n# Python\n\nbar\n';
+    assert.equal(isV2RoutableShape(body), false);
+  });
+
+  test('rejects a Recipe-only note (no Description — no rescue applies)', () => {
+    const body = '---\ntype: action\n---\n\n# Recipe\n\nReturn.\n';
+    assert.equal(isV2RoutableShape(body), false);
+  });
+
+  test('rejects non-string input', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.equal(isV2RoutableShape(null as any), false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.equal(isV2RoutableShape(undefined as any), false);
   });
 });
 

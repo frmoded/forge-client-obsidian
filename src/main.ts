@@ -1,6 +1,7 @@
 import { Plugin, Notice, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
 import {
   isV2Shape,
+  isV2RoutableShape,
   extractDescription,
   extractInputs,
   replaceRecipeSection,
@@ -2350,7 +2351,12 @@ export default class ForgePlugin extends Plugin {
     // the wrong baseline and possibly mis-route (e.g. think it's
     // 'synced' when the user just edited Recipe).
     const v2Body = await readActiveNoteFresh(view, this.app.vault);
-    if (isV2Shape(v2Body)) {
+    // Drain 2026-08-09-2200 — gate widened from isV2Shape to
+    // isV2RoutableShape so fresh Description-only notes reach the
+    // canonical-layer probe (whichLayerIsSource returns 'description'
+    // for them per CW-2230) instead of falling through to the legacy
+    // path, whose /generate fallback writes LLM Python with no Recipe.
+    if (isV2RoutableShape(v2Body)) {
       let canonicalLayer: 'description' | 'recipe' | 'python' | 'synced' | null = null;
       try {
         canonicalLayer = await whichLayerIsSource(v2Body, {

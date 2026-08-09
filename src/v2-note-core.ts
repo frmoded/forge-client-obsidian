@@ -43,6 +43,37 @@ export function isV2Shape(body: string): boolean {
   return /^# Description\s*$/m.test(body) && /^# Recipe\s*$/m.test(body);
 }
 
+/** Drain 2026-08-09-2200 — forge-click routing gate.
+ *
+ *  isV2Shape requires BOTH `# Description` and `# Recipe`, which is
+ *  right for the backfill / seed / modify handlers (they operate on
+ *  the full V2 facet set) but wrong as the forge-click routing gate:
+ *  a fresh Description-only note (the canonical cohort onboarding
+ *  shape — write what you want, click Forge) failed the gate,
+ *  skipped the canonical-layer probe entirely, and fell into the
+ *  legacy path → E-- transpile fail → V1 python-dialect /generate →
+ *  LLM output written to the Python section with the Recipe never
+ *  populated (the step-6 arc symptom).
+ *
+ *  Routable = full V2 shape, OR a Description-only draft: has a
+ *  `# Description` H1 with non-empty body and no `# Recipe` H1 yet.
+ *  whichLayerIsSource has returned 'description' for that draft shape
+ *  since CW-2230 (drain 2026-07-29-2230), so admitting it routes the
+ *  note to the Description-canonical branch, whose write path inserts
+ *  the `# Recipe` section (replaceRecipeSection handles the absent
+ *  heading) and transpiles downstream.
+ *
+ *  A Description + Python note with no Recipe is also admitted — that
+ *  is the wedge shape the V1 fallback used to produce, and re-forging
+ *  it through the canonical branch is the heal. V1 notes (`# English`)
+ *  and Recipe-only bodies stay on the legacy path. */
+export function isV2RoutableShape(body: string): boolean {
+  if (isV2Shape(body)) return true;
+  if (typeof body !== 'string') return false;
+  if (!/^# Description\s*$/m.test(body)) return false;
+  return extractDescription(body).trim().length > 0;
+}
+
 /** Extract the body of `# Description` (until the next H1 or EOF).
  *  Leading + trailing blank lines stripped; internal blanks preserved.
  *  Returns '' if the heading is absent. */
