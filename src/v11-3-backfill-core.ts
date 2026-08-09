@@ -356,6 +356,17 @@ export async function backfillV113Shape(
       const pythonBodyNow = helpers.extractPythonSection(workingBody) ?? '';
       const pythonParentNow = helpers.getFrontmatterField(
         workingBody, 'python_derived_from_recipe_hash');
+      // TEMPORARY drain 2026-08-09-2130 — remove after the live-repair
+      // invocation-path root cause is fixed + verified. Logs the exact
+      // precondition verdicts the repair sees on the LIVE path, so a
+      // live no-op distinguishes extractor/byte disagreement from the
+      // repair simply not being reached.
+      console.log(
+        `[REPAIR_TRACE] source=${existingSource}, `
+        + `body_matches_stub=${pythonBodyNow === DEFAULT_PYTHON_STUB}, `
+        + `parent_null=${pythonParentNow === null}, `
+        + `body_first_50=${JSON.stringify(pythonBodyNow.substring(0, 50))}`,
+      );
       if (pythonBodyNow === DEFAULT_PYTHON_STUB && pythonParentNow === null) {
         const recipeBodyNow = (helpers.extractRecipeSection(workingBody) ?? '').trim();
         const descBodyNow = helpers.extractDescription(workingBody).trim();
