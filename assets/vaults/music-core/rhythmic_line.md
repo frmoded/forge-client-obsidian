@@ -30,6 +30,8 @@ can score both with correct timing.
 
 # Recipe
 
+Let pitches: list[str] = ["C4", "D4", "E4", "F4"].
+Let rhythm_pattern: list[str] = ["Q", "Q", "E", "E"].
 Let valid_codes = ["W", "H", "Q", "E", "S"].
 Let length_ok = {{ True if len(pitches) == len(rhythm_pattern) else (_ for _ in ()).throw(ValueError("rhythmic_line: pitches has %d item(s) but rhythm_pattern has %d — one duration per pitch, same length" % (len(pitches), len(rhythm_pattern)))) }}.
 Let codes_ok = {{ True if all(d in valid_codes for d in rhythm_pattern) else (_ for _ in ()).throw(ValueError("rhythmic_line: unknown rhythm code(s) %s — use W (whole), H (half), Q (quarter), E (eighth), S (sixteenth)" % sorted(set(rhythm_pattern) - set(valid_codes)))) }}.
