@@ -2525,6 +2525,12 @@ export default class ForgePlugin extends Plugin {
                     'recipe_derived_from_source_hash',
                     stamps.recipe_derived_from_source_hash,
                   );
+                  // Drain 2026-08-10-1030 — record the source explicitly.
+                  // This branch IS the Description-sourced derivation;
+                  // pre-drain the field was left to the CW-2230 rescue's
+                  // routing-time inference (same verdict, absent from
+                  // frontmatter).
+                  next = setFmFieldV2(next, 'source_facet', stamps.source_facet);
                   return next;
                 }),
               );

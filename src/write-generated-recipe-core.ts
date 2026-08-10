@@ -96,6 +96,13 @@ export interface DescriptionDerivedRecipeStamps {
    *  contract; drops in a followup drain once cohort has fully migrated
    *  to v11.6. */
   recipe_derived_from_source_hash: string;
+  /** Drain 2026-08-10-1030 — the derivation this stamp set records is
+   *  Description-sourced by definition (the branch LLM-generates Recipe
+   *  FROM Description), so say it explicitly instead of leaving the
+   *  field to the CW-2230 routing-time rescue's inference. Routing is
+   *  unchanged; frontmatter stops reading incomplete vs the hexa-state
+   *  spec. */
+  source_facet: 'description';
 }
 
 /** Compute the Description-derived Recipe stamps for the auto-forge
@@ -127,5 +134,6 @@ export function computeDescriptionDerivedRecipeStamps(
     recipe_hash: newRecipeHash,
     recipe_derived_from_description_hash: currentDescriptionHash,
     recipe_derived_from_source_hash: currentDescriptionHash,
+    source_facet: 'description',
   };
 }

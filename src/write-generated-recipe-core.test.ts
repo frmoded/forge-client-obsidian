@@ -128,3 +128,16 @@ test('CW-2000 two-cycle stamp scenario: cycle a baseline stamps + cycle b post-e
   assert.notEqual(cycleA.description_hash, cycleB.description_hash);
   assert.notEqual(cycleA.recipe_hash, cycleB.recipe_hash);
 });
+
+// Drain 2026-08-10-1030 — the auto-forge SUCCESS stamps include an
+// explicit `source_facet: description`. Pre-drain the Description-
+// canonical branch stamped every hash but left source_facet to the
+// CW-2230 routing-time rescue (inference). The derivation the branch
+// just completed IS Description-sourced — say so in frontmatter.
+// Routing behavior is unchanged (verified in drain FEEDBACK):
+// whichLayerIsSource returns the same verdict for stored 'description'
+// as inference produced in every reachable state.
+test('drain 2026-08-10-1030: success stamps carry source_facet: description', () => {
+  const stamps = computeDescriptionDerivedRecipeStamps('D0', 'R0');
+  assert.equal(stamps.source_facet, 'description');
+});
