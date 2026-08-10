@@ -39,7 +39,7 @@ import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view.ts';
-import { ChipsManifest, loadPaletteForActiveVault } from './chips.ts';
+import { ChipsManifest, loadPaletteForActiveVault, loadImportedVaultChips } from './chips.ts';
 import { ChipPaletteGroup } from './chips-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core.ts';
@@ -2136,8 +2136,13 @@ export default class ForgePlugin extends Plugin {
       // if loadLibraryNoteCatalog completes concurrently. L59 spirit
       // (capture live state to const before an await).
       const notesByDomain = this.libraryNotesByDomain;
-      this.chipPalette = await loadPaletteForActiveVault(
+      const palette = await loadPaletteForActiveVault(
         this.app, this.chipsManifest(), notesByDomain);
+      // Drain 2026-08-10-1430 (Phase 4b) — append one group per
+      // [imports]-declared vault (e.g. "Import: music-core"). Empty
+      // on mobile / no-imports / unreadable targets.
+      const importGroups = await loadImportedVaultChips(this.app);
+      this.chipPalette = [...palette, ...importGroups];
     } catch (e) {
       console.error('Forge chips: load failed', e);
       this.chipPalette = [];

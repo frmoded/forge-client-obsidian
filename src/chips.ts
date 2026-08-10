@@ -35,6 +35,12 @@ import {
   type SnippetMetaForChips,
 } from './chips-core.ts';
 import { isSourceVault } from './source-vault-core.ts';
+import {
+  parseLocalImports,
+  resolveImportHostPath,
+  shouldMountImportFile,
+  buildImportChipGroup,
+} from './vault-imports-local-core.ts';
 // v0.2.262 drain 1310 — `_chips.md` reader stack retired.
 // chips-walk-up-core.ts, synthetic-chips-core.ts, and portions of
 // chips-core.ts (parseChipsV2Config / mergeChipsWithOverrides /
@@ -350,6 +356,78 @@ async function buildSourceVaultInventory(
       parentDir,
       facet_form,
     });
+  }
+  return out;
+}
+
+/** Drain 2026-08-10-1430 (Phase 4b) — chip groups for [imports]-
+ *  declared vaults. The palette walks OBSIDIAN vault files, but an
+ *  imported vault lives OUTSIDE the vault root, so this loader reads
+ *  its notes via node fs (desktop only — returns [] on mobile or any
+ *  failure; the palette then simply shows no Import groups, matching
+ *  the engine's log-and-skip posture one layer down). One group per
+ *  import, sourceName `Import: <name>`, appended after all existing
+ *  groups by the caller. */
+export async function loadImportedVaultChips(app: App): Promise<ChipPaletteGroup[]> {
+  const out: ChipPaletteGroup[] = [];
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const adapter = app.vault.adapter as any;
+    const basePath: string | undefined = adapter?.basePath;
+    if (!basePath || !(await adapter.exists?.('forge.toml'))) return out;
+    const decls = parseLocalImports(await adapter.read('forge.toml'));
+    if (decls.length === 0) return out;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const nodeFs = require('fs');
+    for (const decl of decls) {
+      try {
+        const hostRoot = resolveImportHostPath(basePath, decl.local);
+        if (!nodeFs.existsSync(hostRoot)) continue;
+        const metas: SnippetMetaForChips[] = [];
+        const walk = (dir: string, rel: string) => {
+          for (const entry of nodeFs.readdirSync(dir, { withFileTypes: true })) {
+            const childRel = rel === '' ? entry.name : `${rel}/${entry.name}`;
+            if (entry.isDirectory()) {
+              walk(`${dir}/${entry.name}`, childRel);
+              continue;
+            }
+            if (!childRel.endsWith('.md') || !shouldMountImportFile(childRel)) continue;
+            const content: string = nodeFs.readFileSync(`${dir}/${entry.name}`, 'utf8');
+            if (!content.startsWith('---')) continue;
+            const end = content.indexOf('\n---', 4);
+            if (end === -1) continue;
+            let fm: unknown;
+            try {
+              fm = parseYaml(content.slice(4, end));
+            } catch {
+              continue;
+            }
+            if (!fm || typeof fm !== 'object') continue;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const f = fm as any;
+            if (f.type !== 'action' && f.type !== 'data') continue;
+            const bare = childRel.slice(0, -3);
+            metas.push({
+              id: bare,
+              basename: bare.split('/').pop() ?? bare,
+              type: f.type,
+              inputs: Array.isArray(f.inputs)
+                ? f.inputs.filter((x: unknown): x is string => typeof x === 'string')
+                : undefined,
+              chip: typeof f.chip === 'boolean' ? f.chip : undefined,
+              parentDir: '',
+            });
+          }
+        };
+        walk(hostRoot, '');
+        const group = buildImportChipGroup(decl.name, metas);
+        if (group.chips.length > 0) out.push(group);
+      } catch (e) {
+        console.warn(`Forge palette: import '${decl.name}' chips failed; skipping`, e);
+      }
+    }
+  } catch (e) {
+    console.warn('Forge palette: imported-vault chips skipped', e);
   }
   return out;
 }

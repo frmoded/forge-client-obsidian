@@ -35,6 +35,7 @@
 import type { App } from "obsidian";
 import { requestUrl } from "obsidian";
 import { parseSnapshotState } from "./snapshot-state-core";
+import { parseLocalImports, resolveImportHostPath, shouldMountImportFile } from "./vault-imports-local-core.ts";
 
 // V1 user-vault mount: bundled-library subdirectory names. Files
 // under these top-level directories in the user's vault are SKIPPED
@@ -459,6 +460,69 @@ export class PyodideHost {
       }
     } catch (e) {
       console.error("PyodideHost._init: could not read forge.toml from user vault", e);
+    }
+
+    // Step 2b (drain 2026-08-10-1430, Phase 4b) — mount [imports]-
+    // declared vaults as SIBLINGS of user-vault so the engine's
+    // _scan_declared_imports (forge 0.1.6+) resolves them: the
+    // manifest's `{ local = "../music-core" }` resolves inside MEMFS
+    // as /bundle/user-vault/../music-core → /bundle/music-core, which
+    // is exactly where this block copies the imported vault's
+    // forge.toml + .md files. Copy-in (writeFile), matching every
+    // other mount here — no NODEFS. One-shot at init per the drain's
+    // option (a): edits to an IMPORTED vault need a close-and-reopen
+    // of the active vault (same contract as the "edits require iframe
+    // reload" note above, one vault over). Desktop-only: reading the
+    // import's on-disk tree needs node fs, absent on mobile —
+    // log-and-skip, engine then degrades to single-vault scan.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const adapterForImports = this.app.vault.adapter as any;
+      const vaultBasePath: string | undefined = adapterForImports?.basePath;
+      let activeToml: string | null = null;
+      if (await adapterForImports.exists?.("forge.toml")) {
+        activeToml = await adapterForImports.read("forge.toml");
+      }
+      const importDecls = activeToml ? parseLocalImports(activeToml) : [];
+      if (importDecls.length > 0 && vaultBasePath) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const nodeFs = require("fs");
+        for (const decl of importDecls) {
+          try {
+            const hostRoot = resolveImportHostPath(vaultBasePath, decl.local);
+            if (!nodeFs.existsSync(hostRoot)) {
+              console.warn(
+                `Forge: import '${decl.name}' → ${hostRoot} not found on disk; skipping mount`,
+              );
+              continue;
+            }
+            let mounted = 0;
+            const walk = (dir: string, rel: string) => {
+              for (const entry of nodeFs.readdirSync(dir, { withFileTypes: true })) {
+                const childRel = rel === "" ? entry.name : `${rel}/${entry.name}`;
+                if (entry.isDirectory()) {
+                  walk(`${dir}/${entry.name}`, childRel);
+                  continue;
+                }
+                if (!shouldMountImportFile(childRel)) continue;
+                const content = nodeFs.readFileSync(`${dir}/${entry.name}`, "utf8");
+                const target = `/bundle/${decl.name}/${childRel}`;
+                this._mkdirP(pyodide, target);
+                pyodide.FS.writeFile(target, content);
+                mounted++;
+              }
+            };
+            walk(hostRoot, "");
+            console.log(
+              `Forge: imported vault '${decl.name}' mounted (${mounted} files from ${hostRoot}; edits require vault reopen).`,
+            );
+          } catch (e) {
+            console.warn(`Forge: import '${decl.name}' mount failed; skipping`, e);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Forge: [imports] mount skipped", e);
     }
 
     // Step 3: mount bundled libraries (forge-moda for V1) as
