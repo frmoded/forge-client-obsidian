@@ -795,18 +795,7 @@ export default class ForgePlugin extends Plugin {
     // disk). Backfill on first open per session; idempotent
     // afterwards.
     this.registerEvent(
-      this.app.workspace.on('file-open', (file) => {
-        // TEMPORARY drain 2026-08-09-2130 — remove after the live-repair
-        // invocation-path root cause is fixed + verified. Logs BEFORE any
-        // gate so "no line at all" cleanly means the event never fired
-        // (drain 2200's lesson: absence-of-logs downstream of a gate is
-        // ambiguous between handler-not-firing and gate-rejection).
-        console.log(
-          `[FILE_OPEN_TRACE] file-open fired: ${file?.path ?? '<null>'}, `
-          + `active=${this.app.workspace.getActiveFile()?.path ?? '<null>'}`,
-        );
-        void this.maybeBackfillV113Shape(file);
-      })
+      this.app.workspace.on('file-open', (file) => { void this.maybeBackfillV113Shape(file); })
     );
 
     // v0.2.260 drain 1400 Option A — populate the facet-hash cache on
@@ -4917,15 +4906,6 @@ export default class ForgePlugin extends Plugin {
 
   private async maybeBackfillV113Shape(file: TFile | null) {
     if (!file) return;
-    // TEMPORARY drain 2026-08-09-2130 — remove after the live-repair
-    // invocation-path root cause is fixed + verified. Entry trace BEFORE
-    // the seen-set gate: distinguishes branch (B) "Set thought it had
-    // already backfilled" from (A) "function ran, root cause inside".
-    console.log(
-      `[BACKFILL_TRACE] entered maybeBackfillV113Shape for ${file.path}, `
-      + `_v113BackfillSeen.size=${this._v113BackfillSeen.size}, `
-      + `has=${this._v113BackfillSeen.has(file.path)}`,
-    );
     if (this._v113BackfillSeen.has(file.path)) {
       return;
     }
