@@ -6,6 +6,6 @@ This section is about how chords get written and named — the symbols performer
 - [[roman_numeral]] — the key-independent, function-based name: I ii iii IV V vi vii°.
 - [[slash_chord]] — explicit control of the bass separate from the chord: Fm/C.
 
-Press Run on [[experiments/slash_chord]] to hear a chord and its bass note controlled independently.
+Press Run on [[slash_chord]] to hear a chord and its bass note controlled independently.
 
 Back up to [[chord]].

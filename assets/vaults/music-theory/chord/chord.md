@@ -8,6 +8,6 @@ A **chord** is multiple notes sounding together, built by stacking thirds on a r
 
 New here? Start with [[triad]] — every other concept in this section builds outward from it. Already comfortable with triads? [[chord_progression]] is where the individual-chord concepts turn into music.
 
-Press Run on [[experiments/build_triad]] right now if you want to hear a chord before reading another word.
+Press Run on [[build_triad]] right now if you want to hear a chord before reading another word.
 
 Back up to [[theory]].

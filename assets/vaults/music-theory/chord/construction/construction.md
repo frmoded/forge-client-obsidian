@@ -11,6 +11,6 @@ This section is about what a chord IS made of: which notes, spaced how, and in w
 - [[inversion]] — the same chord with a different chord tone in the bass.
 - [[voicing]] — the concrete realization of an abstract chord: octaves, order, doublings.
 
-Try [[experiments/build_triad]] and [[experiments/build_seventh_chord]] to hear these stacks built from a tonic and a quality of your choosing.
+Try [[build_triad]] and [[build_seventh_chord]] to hear these stacks built from a tonic and a quality of your choosing.
 
 Back up to [[chord]].

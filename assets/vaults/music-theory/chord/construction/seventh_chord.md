@@ -8,6 +8,6 @@ Stack one more third on top of a [[triad]] and you get a **seventh chord** — f
 - **half_dim7 (ø7)** — diminished triad + a minor 7th. Tense but not fully diminished.
 - **dim7** — diminished triad + a diminished 7th. Maximally unstable, symmetric.
 
-Run [[experiments/build_seventh_chord]] with `tonic="C4"` and cycle through all five `quality` values — listen for how much the added note changes the character versus the plain triad in [[chord_quality]].
+Run [[build_seventh_chord]] with `tonic="C4"` and cycle through all five `quality` values — listen for how much the added note changes the character versus the plain triad in [[chord_quality]].
 
 Keep stacking thirds past the seventh and you're into [[extension]] territory: 9ths, 11ths, 13ths.

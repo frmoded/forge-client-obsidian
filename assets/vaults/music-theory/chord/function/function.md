@@ -7,6 +7,6 @@ This section is about how chords behave together over time — the roles they pl
 - [[chord_progression]] — an ordered sequence of chords over time.
 - [[cadence]] — how a progression punctuates: authentic, plagal, half, deceptive.
 
-Build your own progression in [[experiments/chord_progression]] and listen for the difference a cadence makes.
+Build your own progression in [[chord_progression]] and listen for the difference a cadence makes.
 
 Back up to [[chord]].
