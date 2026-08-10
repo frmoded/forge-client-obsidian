@@ -25,7 +25,7 @@ const WRONG = "✗ Not quite. You picked 'minor'; the correct answer is 'major'.
 const WRONG_WITH_EXPLANATION =
   "✗ Not quite. You picked 'minor'; the correct answer is 'major'. "
   + 'The W-W-H-W-W-W-H pattern is the definition of the major scale — '
-  + 'see [[music_theory/scales/scale]].';
+  + 'see [[scales/scale]].';
 
 // ---------------------------------------------------------------- DOM
 
@@ -93,7 +93,7 @@ describe('parseMcqOutput — accepts real engine output', () => {
     assert.equal(got?.guessText, 'minor');
     assert.equal(got?.correctText, 'major');
     assert.match(got?.explanation ?? '', /^The W-W-H-W-W-W-H pattern/);
-    assert.deepEqual(got?.wikilinks, ['music_theory/scales/scale']);
+    assert.deepEqual(got?.wikilinks, ['scales/scale']);
   });
 
   test('double-quoted values — the apostrophe case', () => {
@@ -245,8 +245,8 @@ describe('renderMcqCard', () => {
     // `internal-link` + `data-href` is what Obsidian's own click
     // handler keys on; without both the link is inert.
     assert.ok(link!.className.includes('internal-link'));
-    assert.equal(attrsOf(link!)['data-href'], 'music_theory/scales/scale');
-    assert.equal(attrsOf(link!).href, 'music_theory/scales/scale');
+    assert.equal(attrsOf(link!)['data-href'], 'scales/scale');
+    assert.equal(attrsOf(link!).href, 'scales/scale');
   });
 
   test('explanation text survives around the link', () => {
@@ -255,7 +255,7 @@ describe('renderMcqCard', () => {
     renderMcqCard(parseMcqOutput(WRONG_WITH_EXPLANATION)!, root, doc);
     const body = findByClass(root, 'forge-mcq-explanation')!;
     assert.match(allText(body), /W-W-H-W-W-W-H/);
-    assert.match(allText(body), /music_theory\/scales\/scale/);
+    assert.match(allText(body), /scales\/scale/);
   });
 
   test('no explanation → no explanation element', () => {

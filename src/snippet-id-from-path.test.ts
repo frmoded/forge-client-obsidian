@@ -142,18 +142,20 @@ test('drain-1810: non-library subdir loses its directory — round trip breaks',
 test('drain-1810: wizard\'s reverted note is exactly this case', () => {
   const libs = new Set(['forge-music']);
   const id = snippetIdFromPath(
-    'music_theory/exercises/complete_this_scale_submit.md', libs);
+    'theory_exercises/complete_this_scale_submit.md', libs);
   assert.equal(id, 'complete_this_scale_submit');
   assert.notEqual(
-    `${id}.md`, 'music_theory/exercises/complete_this_scale_submit.md');
+    `${id}.md`, 'theory_exercises/complete_this_scale_submit.md');
 });
 
 test('drain-1810: library-dir notes DO round trip — why it looked fine', () => {
   // Library-dir paths keep their full qualified form, so the old code
-  // worked for every note anyone tested it on.
-  const libs = new Set(['music_theory']);
-  const id = snippetIdFromPath('music_theory/scales/scale.md', libs);
-  assert.equal(`${id}.md`, 'music_theory/scales/scale.md');
+  // worked for every note anyone tested it on. (Example was
+  // music_theory/scales/scale.md until drain 2026-08-09-2300 flattened
+  // that vault; forge-moda is a real extracted library dir today.)
+  const libs = new Set(['forge-moda']);
+  const id = snippetIdFromPath('forge-moda/setup.md', libs);
+  assert.equal(`${id}.md`, 'forge-moda/setup.md');
 });
 
 test('drain-1810: vault-root notes round trip too', () => {

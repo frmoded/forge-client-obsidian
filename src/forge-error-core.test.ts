@@ -23,7 +23,7 @@ const AMBIGUOUS_TRACEBACK = [
   'Traceback (most recent call last):',
   '  File "/lib/python3.12/site-packages/forge/core/snippet_registry.py", line 268, in get_bare',
   '    raise AmbiguousSnippetResolutionError(',
-  "forge.core.exceptions.AmbiguousSnippetResolutionError: Two or more notes in vault 'ClaudeQA' share the basename 'construct_c_major_piano': forge-music.legacy/exercises/construct_c_major_piano.md, music-theory/music_theory/exercises/construct_c_major_piano.md. Forge cannot tell which one you mean. Rename one to disambiguate.",
+  "forge.core.exceptions.AmbiguousSnippetResolutionError: Two or more notes in vault 'ClaudeQA' share the basename 'construct_c_major_piano': forge-music.legacy/exercises/construct_c_major_piano.md, music-theory/theory_exercises/construct_c_major_piano.md. Forge cannot tell which one you mean. Rename one to disambiguate.",
 ].join('\n');
 
 test('classifier: AmbiguousSnippetResolutionError → cause is the engine message line, fix mentions rename/qualify', () => {

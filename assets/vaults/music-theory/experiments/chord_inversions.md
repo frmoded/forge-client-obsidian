@@ -10,7 +10,7 @@ sync_state: synced
 
 # Description
 
-Return the three pitch names of a `quality` triad on `tonic`, reordered for `inversion` (0 = root position, 1 = first inversion, 2 = second inversion) — the same three chord tones with a different one in the bass each time; the note(s) moved out of the bass are pushed up an octave so the list stays ascending. Concept refresher: [[music_theory/chord/construction/inversion]], [[music_theory/chord/construction/voicing]].
+Return the three pitch names of a `quality` triad on `tonic`, reordered for `inversion` (0 = root position, 1 = first inversion, 2 = second inversion) — the same three chord tones with a different one in the bass each time; the note(s) moved out of the bass are pushed up an octave so the list stays ascending. Concept refresher: [[chord/construction/inversion]], [[chord/construction/voicing]].
 
 # Recipe
 

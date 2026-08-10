@@ -3,7 +3,7 @@ type: action
 inputs:
   - guess
 source_facet: description
-sync_state: stale-python
+sync_state: stale-both
 description_hash: d6f3c2afbbcc4d738020b9996afc88049a56043ec437ac90250dfe999f597c3f
 recipe_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
@@ -17,7 +17,7 @@ recipe_version: 1
 
 # Description
 
-Construct the C major scale, tonic to tonic, one key at a time — as if pressing 8 piano keys in a row. `guess` is a list of 8 pitch names, e.g. `["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]`. Press **Run** to hear exactly what you built, with a verdict — which positions are right, which aren't, or whether you entered the wrong number of notes — printed right on the staff above your own notes. Concept refresher: [[music_theory/scales/scale]]; hear the reference scale first at [[music_theory/exercises/complete_this_scale_challenge]].
+Construct the C major scale, tonic to tonic, one key at a time — as if pressing 8 piano keys in a row. `guess` is a list of 8 pitch names, e.g. `["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]`. Press **Run** to hear exactly what you built, with a verdict — which positions are right, which aren't, or whether you entered the wrong number of notes — printed right on the staff above your own notes. Concept refresher: [[scales/scale]]; hear the reference scale first at [[theory_exercises/complete_this_scale_challenge]].
 
 # Recipe
 

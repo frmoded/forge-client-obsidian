@@ -9,7 +9,7 @@ sync_state: synced
 
 # Description
 
-Return the three pitch names of a triad built on `tonic` with the given `quality` — root, third, and fifth, each an interval above the tonic. `quality` is one of "major" (major 3rd + perfect 5th), "minor" (minor 3rd + perfect 5th), "diminished" (minor 3rd + diminished 5th), or "augmented" (major 3rd + augmented 5th). Concept refresher: [[music_theory/chord/construction/triad]], [[music_theory/chord/construction/chord_quality]], [[music_theory/chord/construction/root]].
+Return the three pitch names of a triad built on `tonic` with the given `quality` — root, third, and fifth, each an interval above the tonic. `quality` is one of "major" (major 3rd + perfect 5th), "minor" (minor 3rd + perfect 5th), "diminished" (minor 3rd + diminished 5th), or "augmented" (major 3rd + augmented 5th). Concept refresher: [[chord/construction/triad]], [[chord/construction/chord_quality]], [[chord/construction/root]].
 
 # Recipe
 

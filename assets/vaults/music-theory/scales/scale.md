@@ -6,11 +6,11 @@ A **scale** is an ordered sequence of musical pitches — a ladder of notes span
 
 Before any theory, meet a scale directly. Press play to hear a full **C major scale** climb from C up to the C an octave above:
 
-![[music_theory/audio/c_major_scale.mp3]]
+![[resources/audio/c_major_scale.mp3]]
 
 And here is that same scale written on the staff:
 
-![[music_theory/images/c_major_scale.svg]]
+![[resources/images/c_major_scale.svg]]
 
 Listen and look together: are the steps between the notes all the same size, or are some bigger than others? Hold that question — the rest of this note answers it.
 
@@ -31,7 +31,7 @@ Because the pattern is what matters, the *same* pattern started on a different t
 
 You've now heard and seen C major. The real skill is *generating* a scale from its pattern alone — so put it to work:
 
-- [[music_theory/exercises/complete_this_scale_challenge]] — press **Run** to hear the first four notes.
-- [[music_theory/exercises/complete_this_scale_submit]] — apply the major pattern (W‑W‑H‑W‑W‑W‑H) to work out the four notes that finish the octave, enter them as your `guess`, and Run for note-by-note feedback.
+- [[theory_exercises/complete_this_scale_challenge]] — press **Run** to hear the first four notes.
+- [[theory_exercises/complete_this_scale_submit]] — apply the major pattern (W‑W‑H‑W‑W‑W‑H) to work out the four notes that finish the octave, enter them as your `guess`, and Run for note-by-note feedback.
 
 Once you've built the scale, chords are hiding inside it: a **major triad** is scale degrees 1, 3, and 5. Build the scale first — then those three notes are already there waiting.

@@ -6,4 +6,4 @@ This section holds scale-family theory: how scales are built from interval patte
 
 More scale-family notes (modes, pentatonic scales, scale degrees) belong here as they're authored.
 
-Back up to [[music_theory]].
+Back up to [[theory]].

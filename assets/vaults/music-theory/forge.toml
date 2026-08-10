@@ -1,21 +1,22 @@
 name = "music-theory"
-version = "0.10.1"
+version = "0.11.0"
 description = "Forge vault for music theory pedagogy: exercises, quizzes, and worked compositions."
 domains = ["music"]
 
-# Cross-vault imports (drain 2026-08-03-1500). Spec only — nothing reads
-# this yet; see forge/docs/specs/vault-imports.md.
+# Cross-vault imports (spec: forge/docs/specs/vault-imports.md).
+# ACTIVATED by drain 2026-08-09-2100 (Phase 4 revival, driver [1/R1]
+# 2026-08-09) — reverses the 2026-08-06 [2](b) skip. The engine's
+# snippet_registry (forge 0.1.6+) indexes music-core's notes under the
+# `music-core` namespace when scanning this vault, so Recipes here can
+# `Call [[note-in-music-core]]`. Local-path form only; the target is
+# the on-disk sibling checkout. NOTE: in the Obsidian plugin runtime
+# the sibling is outside the Pyodide MEMFS mount, so the plugin
+# logs-and-skips this import until the plugin-side mount drain lands —
+# headless (engine / forge-mcp) consumers resolve it today.
 #
 # Must stay LAST in this file: in TOML every key after a [table] header
 # belongs to that table, so a [imports] section placed above `name` /
 # `version` / `domains` would silently swallow them.
-#
-# Phase 4 in-vault cross-linking SKIPPED per driver adjudication
-# 2026-08-06 [2](b) — music-theory + music-core ship as two separate
-# Obsidian vaults. The drain-1900 smoke-fixture import
-# (music-core-fixture) was removed in the Phase 5 rename drain: the
-# fixture dir no longer exists and a dangling local import fails
-# forge-mcp registry validation at startup.
-#
-# [imports]
-# music-core = { git = "https://github.com/frmoded/music-core.git", sha = "abc12345", tag = "v0.3.0" }
+
+[imports]
+music-core = { local = "../music-core" }
