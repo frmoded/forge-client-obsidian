@@ -17,9 +17,12 @@ There are two notes here. The reusable one is **excited**, and it's one line:
 
 > Return word + "!".
 
-Its frontmatter says `inputs: [word]` — it takes one input, called `word`, and
-**returns** that word with a `"!"` on the end. `Return` is how a note hands a
-result back to whoever called it.
+Its Recipe begins with `Input word: str = "hooray".` — that's how a note
+declares a parameter: a name, a type, and (optionally) a default. It takes one
+input, called `word`, and **returns** that word with a `"!"` on the end.
+`Return` is how a note hands a result back to whoever called it. (The note's
+frontmatter `inputs:` field reflects this automatically — Forge keeps it in
+sync with the Recipe, so you never edit it by hand.)
 
 Then **cheer** uses it:
 

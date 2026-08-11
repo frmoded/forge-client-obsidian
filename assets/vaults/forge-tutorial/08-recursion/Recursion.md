@@ -13,8 +13,9 @@ Open the **show_factorial** note and **Forge** (🔥) it. You'll see:
 ## What's new
 
 The star is the **factorial** note, and it calls *itself*. It takes an input
-`n` (see `inputs: [n]` in its frontmatter). `factorial` of `5` means
-`5 × 4 × 3 × 2 × 1`, which is `120`. Open it and look — two ideas are at work:
+`n`, declared right at the top of its Recipe: `Input n: int = 5.`. `factorial`
+of `5` means `5 × 4 × 3 × 2 × 1`, which is `120`. Open it and look — two ideas
+are at work:
 
 - **A stopping point.** If `n` is at most `1`, it returns `1`. Without a
   stopping point, the note would call itself forever.

@@ -20,8 +20,9 @@ Open the **hello_world** note and look at it. A note has two parts that matter
 here: the frontmatter and the Recipe.
 
 **The frontmatter** — the little block at the very top, between the `---` lines —
-is just the note's label. It says `type: action` (this note *does* something)
-and `inputs: []` (it asks you for nothing). You can ignore the rest for now.
+is just the note's label. It says `type: action` (this note *does* something).
+There's no `Input` declaration in the Recipe below, so it asks you for nothing.
+You can ignore the rest for now.
 
 **The Recipe** — under the *Recipe* heading — is the whole program, and it's
 one line:

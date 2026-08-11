@@ -12,4 +12,5 @@ Chapter 3 — a reusable note that takes a word and returns it with excitement.
 
 # Recipe
 
+Input word: str = "hooray".
 Return word + "!".
