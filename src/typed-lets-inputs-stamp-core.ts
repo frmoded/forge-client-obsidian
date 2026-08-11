@@ -15,14 +15,24 @@
 // from "typed Lets present but legitimately zero inputs".
 
 /** Cheap regex pre-filter: does this Recipe body contain at least one
- *  typed Let declaration (`Let name: Type = ...`)? Mirrors the
- *  grammar's own `Let IDENT (":" ...)? "="` shape loosely enough to
- *  never false-negative on a real typed Let, without needing the
- *  full parser. False positives (matching inside a string/slot) are
- *  harmless — the actual derivation call then legitimately returns
- *  zero typed input declarations and reconcileInputs no-ops. */
+ *  input declaration worth deriving from — either the drain-2000
+ *  `Input NAME: TYPE` keyword (canonical going forward) or a
+ *  drain-1610 typed Let (`Let name: Type = ...`, legacy-fallback
+ *  path, still recognized so old notes keep reconciling). Mirrors
+ *  the grammar loosely enough to never false-negative on a real
+ *  declaration, without needing the full parser. False positives
+ *  (matching inside a string/slot) are harmless — the actual
+ *  derivation call then legitimately returns zero declarations and
+ *  reconcileInputs no-ops.
+ *
+ *  Drain 2026-08-10-2000 note: missing the `Input` half of this
+ *  check was a real gap found in this same session — a note migrated
+ *  to the new keyword (e.g. music-core/pitched_line) would silently
+ *  stop reconciling, since the pre-filter never even reached the
+ *  Pyodide call that derive_inputs_from_recipe was ALSO separately
+ *  fixed to recognize. */
 export function hasTypedLetsInRecipe(recipeBody: string): boolean {
-  return /^\s*Let\s+[A-Za-z_]\w*\s*:/m.test(recipeBody);
+  return /^\s*(Input|Let)\s+[A-Za-z_]\w*\s*:/m.test(recipeBody);
 }
 
 /** True iff `filePath`'s top-level directory is a bundled-library

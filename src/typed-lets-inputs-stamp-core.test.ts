@@ -22,6 +22,19 @@ describe('hasTypedLetsInRecipe', () => {
   test('does not false-positive on a bare colon inside a Call kwarg', () => {
     assert.equal(hasTypedLetsInRecipe('Return Call [[foo]] with x="a: b".'), false);
   });
+
+  // Drain 2026-08-10-2000 — the canonical Input keyword.
+  test('detects an Input declaration', () => {
+    assert.equal(hasTypedLetsInRecipe('Input pitches: list[str] = ["C4"].\nReturn pitches.'), true);
+  });
+
+  test('detects a required Input (no default)', () => {
+    assert.equal(hasTypedLetsInRecipe('Input n: int.\nReturn n.'), true);
+  });
+
+  test('detects Input not at the start of the body', () => {
+    assert.equal(hasTypedLetsInRecipe('Let a = 1.\nInput b: int = 2.\nReturn b.'), true);
+  });
 });
 
 describe('isInBundledLibraryDir', () => {
