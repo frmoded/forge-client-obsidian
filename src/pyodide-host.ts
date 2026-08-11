@@ -873,6 +873,26 @@ def _forge_resolve_action_code(snippet_id: str, force: bool = False,
     return resolve_action_code(snip, force=force,
                                canonical_layer=canonical_layer)
 
+def _forge_derive_typed_lets_input_names(recipe_body: str):
+    """Drain 2026-08-10-1900 — names of the leading typed-Let input
+    declarations in a Recipe body, for the reactive frontmatter
+    inputs stamper. Thin wrapper over the engine's
+    derive_inputs_from_recipe (drain 1610) — the stamper only needs
+    names (reconcileInputs's existing contract is Promise<string[]>,
+    matching v0.2.20's getInputNames); type hints + defaults stay in
+    the Recipe body itself, not duplicated into frontmatter.
+    Malformed Recipe (ParseError) returns [] — the pure-core
+    hasTypedLetsInRecipe pre-filter already gates the call site on
+    'looks like it has typed Lets', so a parse failure here means a
+    transient edit mid-typing; the caller's reconcileInputs then
+    no-ops rather than clobbering frontmatter mid-edit."""
+    from forge.recipe import derive_inputs_from_recipe
+    try:
+        decls = derive_inputs_from_recipe(recipe_body)
+    except Exception:
+        return []
+    return [d.name for d in decls]
+
 def _forge_sync_user_file(relpath: str, new_body: str):
     """v0.2.17 — sync a single user-vault file change into MEMFS AND
     refresh the SnippetRegistry's cached entry for it. Called from JS
@@ -1314,6 +1334,9 @@ export interface PyodideHostInstance {
    *  with params not declared in frontmatter still surface to the
    *  user. */
   getInputNames(snippetId: string): Promise<string[]>;
+  /** Drain 2026-08-10-1900: typed-Let input names from a Recipe body
+   *  string directly (no prior transpile required). */
+  getTypedLetsInputNames(recipeBody: string): Promise<string[]>;
 }
 
 class PyodideHostInstanceImpl implements PyodideHostInstance {
@@ -1584,6 +1607,19 @@ _forge_compute_with_python(
     this.pyodide.globals.set('_forge_input_names_snippet_id', snippetId);
     const proxy = this.pyodide.runPython(
       `list(_forge_get_input_names(_forge_input_names_snippet_id))`,
+    );
+    return this._unwrap(proxy) as string[];
+  }
+
+  /** Drain 2026-08-10-1900 — typed-Let input names for the reactive
+   *  frontmatter stamper. Reads the RECIPE body directly (not the
+   *  transpiled `# Python` signature getInputNames uses), so it
+   *  stays correct even before any forge-click has transpiled the
+   *  note. */
+  async getTypedLetsInputNames(recipeBody: string): Promise<string[]> {
+    this.pyodide.globals.set('_forge_typed_lets_recipe_body', recipeBody);
+    const proxy = this.pyodide.runPython(
+      `list(_forge_derive_typed_lets_input_names(_forge_typed_lets_recipe_body))`,
     );
     return this._unwrap(proxy) as string[];
   }

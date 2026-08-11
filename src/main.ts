@@ -133,6 +133,7 @@ import { isNetRefusalError, welcomeMessage } from './closed-beta-ux.ts';
 import { shouldSkipForMemfsSync } from './memfs-sync-paths.ts';
 import { reconcileInputs } from './frontmatter-inputs-reconcile.ts';
 import { snippetIdFromPath } from './snippet-id-from-path.ts';
+import { hasTypedLetsInRecipe, isInBundledLibraryDir } from './typed-lets-inputs-stamp-core.ts';
 import {
   decideWikilinkFreezeMenu,
   decideWikilinkFreezeMenuMulti,
@@ -798,6 +799,16 @@ export default class ForgePlugin extends Plugin {
       this.app.workspace.on('file-open', (file) => { void this.maybeBackfillV113Shape(file); })
     );
 
+    // Drain 2026-08-10-1900 — reactive typed-Lets inputs: stamper,
+    // file-open trigger. See maybeStampTypedLetsInputs for the full
+    // rationale; registered as its own event (not folded into the
+    // v11.3 backfill above) since it has an independent skip-gate
+    // (typed Lets presence) and no ordering dependency on the
+    // backfill's V2-shape / Python-section concerns.
+    this.registerEvent(
+      this.app.workspace.on('file-open', (file) => { void this.maybeStampTypedLetsInputs(file); })
+    );
+
     // v0.2.260 drain 1400 Option A — populate the facet-hash cache on
     // file-open so the modify handler has a reliable baseline for
     // identifying which facet was just edited. Without this, the FIRST
@@ -962,6 +973,18 @@ export default class ForgePlugin extends Plugin {
         if (!(file instanceof TFile)) return;
         if (shouldSkipForMemfsSync(file.path)) return;
         void this.maybeUpdateSourceFacet(file);
+      }),
+    );
+
+    // Drain 2026-08-10-1900 — reactive typed-Lets inputs: stamper,
+    // save trigger. Fires on every modify; internally gated by
+    // _programmaticWriteInFlight (skips the stamper's own write —
+    // see maybeStampTypedLetsInputs) + type/typed-Lets/bundled-dir
+    // skip conditions.
+    this.registerEvent(
+      this.app.vault.on('modify', (file) => {
+        if (!(file instanceof TFile)) return;
+        void this.maybeStampTypedLetsInputs(file);
       }),
     );
 
@@ -4755,6 +4778,18 @@ export default class ForgePlugin extends Plugin {
           e,
         );
       }
+      // Drain 2026-08-10-1900 — I19 sweep twin for the typed-Lets
+      // inputs stamper: restored tabs never fire file-open through a
+      // freshly-onload'd handler (same reasoning as the backfill
+      // twin above), so the stamper needs the identical sweep.
+      try {
+        await this.maybeStampTypedLetsInputs(file);
+      } catch (e) {
+        console.error(
+          `seedSourceFacetForOpenFiles: layout-ready typed-Lets stamp failed for '${file.path}'`,
+          e,
+        );
+      }
       try {
         const body = await this.app.vault.read(file);
         if (!isV2Shape(body)) continue;
@@ -4993,6 +5028,69 @@ export default class ForgePlugin extends Plugin {
       );
     } catch (e) {
       console.error('maybeBackfillV113Shape failed', e);
+    }
+  }
+
+  /** Drain 2026-08-10-1900 — reactive frontmatter `inputs:` stamper
+   *  for typed Lets (Approach C, drain 1610). Closes the gap left by
+   *  v0.2.24's reconcileFrontmatterInputs: that reconciliation only
+   *  fires inside writeGeneratedCode (the V1 /generate write-back
+   *  path) via getInputNames (parses the TRANSPILED `# Python`
+   *  signature) — so a typed-Lets note transpiled through the V2
+   *  canonical path (writeSourcePythonBack) or hand-edited without a
+   *  forge-click never got its frontmatter reconciled at all. This
+   *  stamper derives directly from the RECIPE body's typed Lets
+   *  (correct even pre-transpile) and reuses the SAME pure-core
+   *  reconcileInputs no-op/write decision — only the adapter's
+   *  getInferredInputs differs.
+   *
+   *  Skip conditions: not `type: action|data`; no typed Lets present
+   *  (cheap regex pre-filter, avoids a Pyodide round-trip for the
+   *  far-more-common untyped case AND distinguishes "nothing to
+   *  derive" from "typed Lets present but genuinely zero inputs");
+   *  bundled-library subdir (read-only from the cohort's
+   *  perspective, matching drain 2130's convention for the v11.3
+   *  backfill). Idempotency is reconcileInputs's own no-op check —
+   *  no separate seen-set needed; withProgrammaticWrite prevents the
+   *  stamper's own write from re-triggering itself via modify. */
+  private async maybeStampTypedLetsInputs(file: TFile | null) {
+    if (!file) return;
+    if (this._programmaticWriteInFlight.has(file.path)) return;
+    try {
+      const body = await this.app.vault.read(file);
+      const typeField = getFmFieldV2(body, 'type');
+      if (typeField !== 'action' && typeField !== 'data') return;
+      if (isInBundledLibraryDir(file.path, this.libraryDirNames())) return;
+      const recipeBody = extractRecipeSection(body);
+      if (!recipeBody || !hasTypedLetsInRecipe(recipeBody)) return;
+      const hostManager = getPyodideHost();
+      if (!hostManager) return;
+      const host = await hostManager.getInstance();
+      const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
+      const result = await reconcileInputs(snippetId, {
+        getInferredInputs: async () => host.getTypedLetsInputNames(recipeBody),
+        readCurrentInputs: () => {
+          const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+          return Array.isArray(fm?.inputs)
+            ? (fm!.inputs as unknown[]).map(String)
+            : [];
+        },
+        writeInputs: async (next) => {
+          await this.withProgrammaticWrite(file.path, async () => {
+            await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+              fm.inputs = next;
+            });
+          });
+        },
+      });
+      if (result.status === 'wrote') {
+        void this.forgeOutput(
+          `${file.basename}: inputs: re-derived from typed Lets → [${result.inputs.join(', ')}]`,
+          'info',
+        );
+      }
+    } catch (e) {
+      console.error('maybeStampTypedLetsInputs failed', e);
     }
   }
 
