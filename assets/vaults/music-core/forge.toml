@@ -1,5 +1,5 @@
 name = "music-core"
-version = "0.2.1"
+version = "0.3.0"
 description = "Composition-authoring surface for the Forge music domain."
 domains = ["music"]
 
