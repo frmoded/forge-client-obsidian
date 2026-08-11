@@ -154,3 +154,41 @@ export function renderForgeError(host: ErrorRenderHost, err: ForgeError): void {
     });
   }
 }
+
+/** Drain 2026-08-10-1840 — CANNOT_INTERPRET / /generate refusal
+ *  envelope → ForgeError. The server (drain 2026-08-10-1500) sends
+ *  `error_structured: {cause, suggested_fix}` alongside the flattened
+ *  `error` string on `parsed_ok: false` responses. Pre-fix the plugin
+ *  ignored `error_structured` and emitted three plain log lines (a
+ *  Notice-toast echo, a raw `/generate validation failed after N
+ *  attempt(s): <flat error>` line, and — from the downstream empty-
+ *  Recipe guard — a third "no valid Recipe to transpile" line) with
+ *  no visual grouping, unlike every other migrated error class.
+ *
+ *  Structured when `error_structured` is present (current server);
+ *  falls back to a synthesized ForgeError from the flat `error`
+ *  string for pre-drain-1500 servers so older deployments still get
+ *  SOME structured rendering rather than nothing. `attempts` folds
+ *  into `details` — the only place that count now needs to live,
+ *  since the redundant standalone line is dropped. */
+export function forgeErrorFromGenerateRefusal(response: {
+  error?: string | null;
+  error_structured?: { cause?: string; suggested_fix?: string } | null;
+  attempts?: number;
+}): ForgeError {
+  const attempts = response.attempts ?? 1;
+  const structured = response.error_structured;
+  if (structured && structured.cause && structured.suggested_fix) {
+    return {
+      cause: structured.cause,
+      suggested_fix: structured.suggested_fix,
+      details: `attempts: ${attempts}`,
+    };
+  }
+  const flat = response.error ?? '/generate could not produce a parseable Recipe.';
+  return {
+    cause: flat,
+    suggested_fix: 'Revise the Description and run again.',
+    details: `attempts: ${attempts}`,
+  };
+}

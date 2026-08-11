@@ -148,3 +148,38 @@ test('renderer: whitespace-only details treated as absent', () => {
   renderForgeError(host, { cause: 'c', suggested_fix: 'f', details: '  \n ' });
   assert.equal(host.children.length, 2);
 });
+
+// --- /generate refusal envelope (drain 2026-08-10-1840) --------------
+
+import { forgeErrorFromGenerateRefusal } from './forge-error-core.ts';
+
+test('forgeErrorFromGenerateRefusal: structured envelope maps cause/suggested_fix, attempts folds into details', () => {
+  const err = forgeErrorFromGenerateRefusal({
+    error: 'The Description does not describe any computable action or value. Revise the Description to specify what the Recipe should compute or return.',
+    error_structured: {
+      cause: 'The Description does not describe any computable action or value.',
+      suggested_fix: 'Revise the Description to specify what the Recipe should compute or return.',
+    },
+    attempts: 1,
+  });
+  assert.equal(err.cause, 'The Description does not describe any computable action or value.');
+  assert.equal(err.suggested_fix, 'Revise the Description to specify what the Recipe should compute or return.');
+  assert.equal(err.details, 'attempts: 1');
+});
+
+test('forgeErrorFromGenerateRefusal: falls back to flat error string when error_structured absent (pre-drain-1500 server)', () => {
+  const err = forgeErrorFromGenerateRefusal({
+    error: 'LLM returned unparseable output after 3 attempts.',
+    attempts: 3,
+  });
+  assert.equal(err.cause, 'LLM returned unparseable output after 3 attempts.');
+  assert.ok(err.suggested_fix.length > 0);
+  assert.equal(err.details, 'attempts: 3');
+});
+
+test('forgeErrorFromGenerateRefusal: missing attempts defaults to 1', () => {
+  const err = forgeErrorFromGenerateRefusal({
+    error_structured: { cause: 'x', suggested_fix: 'y' },
+  });
+  assert.equal(err.details, 'attempts: 1');
+});

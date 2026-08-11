@@ -23,7 +23,7 @@ import { resolveRunTarget } from './run-snippet-target-core.ts';
 import { identifyEditedFacet, decideSourceWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
-import { classifyForgeError } from './forge-error-core.ts';
+import { classifyForgeError, forgeErrorFromGenerateRefusal } from './forge-error-core.ts';
 import {
   extractPythonSection,
   replacePythonSection,
@@ -3476,10 +3476,14 @@ export default class ForgePlugin extends Plugin {
         // surface the service's actionable error (it names the
         // Description as the fix locus) and write NOTHING.
         if (response.json?.parsed_ok === false) {
-          const serverMsg: string = response.json?.error
-            ?? '/generate could not produce a parseable Recipe.';
-          this.notice(errorPrefix ? `${errorPrefix}: ${serverMsg}` : `Forge: ${serverMsg}`);
-          this.forgeOutput(`/generate validation failed after ${response.json?.attempts ?? '?'} attempt(s):\n${serverMsg}`);
+          // Drain 2026-08-10-1840 — see the sibling recipe-dialect
+          // site for the full rationale; same structured-Notice route.
+          const structuredRefusal = forgeErrorFromGenerateRefusal(response.json);
+          this.notice(errorPrefix ? `${errorPrefix}: ${structuredRefusal.cause}` : `Forge: ${structuredRefusal.cause}`);
+          try {
+            const outputView = await this.getOutputView();
+            outputView.appendForgeError(snippetId, structuredRefusal);
+          } catch { /* output panel unavailable; toast carries the cause */ }
           return false;
         }
         if (typeof response.json?.attempts === 'number' && response.json.attempts > 1) {
@@ -3636,10 +3640,20 @@ export default class ForgePlugin extends Plugin {
         // error, write nothing, return null so the caller treats it
         // as generation-failed rather than empty-code mystery.
         if (response.json?.parsed_ok === false) {
-          const serverMsg: string = response.json?.error
-            ?? '/generate could not produce a parseable Recipe.';
-          this.notice(errorPrefix ? `${errorPrefix}: ${serverMsg}` : `Forge: ${serverMsg}`);
-          this.forgeOutput(`/generate validation failed after ${response.json?.attempts ?? '?'} attempt(s):\n${serverMsg}`);
+          // Drain 2026-08-10-1840 — route through the structured
+          // Notice card (same component every other migrated error
+          // class uses) instead of a Notice toast + plain log line.
+          // The old code also left a THIRD line from the downstream
+          // empty-Recipe guard; that guard fires unconditionally on
+          // whatever Recipe body is on disk, so it's suppressed here
+          // via the early `return null` (unchanged) — this refusal
+          // never reaches that guard's caller with anything to guard.
+          const structuredRefusal = forgeErrorFromGenerateRefusal(response.json);
+          this.notice(errorPrefix ? `${errorPrefix}: ${structuredRefusal.cause}` : `Forge: ${structuredRefusal.cause}`);
+          try {
+            const outputView = await this.getOutputView();
+            outputView.appendForgeError(snippetId, structuredRefusal);
+          } catch { /* output panel unavailable; toast carries the cause */ }
           return null;
         }
         if (typeof response.json?.attempts === 'number' && response.json.attempts > 1) {
