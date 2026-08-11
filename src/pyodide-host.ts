@@ -1009,10 +1009,17 @@ def _forge_run_snippet(snippet_id: str, args, inputs=None, vault_name=None,
         # v0.2.178: removed v0.2.16 per-call debug print (was useful
         # during the May-2026 greet-empty-stdout investigation but is
         # now permanent console noise for normal Forge-clicks).
+        # Drain 2026-08-10-1830 — thread slot_resolutions into
+        # exec_python too (previously only resolve_action_code got it
+        # above), so a TRANSITIVE Call [[x]] to a slot-bearing sibling
+        # inside this snippet's own body also resolves on the second
+        # pass. See ForgeContext.compute in executor.py for the
+        # propagation to arbitrary call-graph depth.
         stdout, result = exec_python(
             code, inputs, resolver, args=tuple(args),
             vault_path=_forge_user_vault,
             registry=reg, snippet_id=snip["snippet_id"],
+            slot_resolutions=slot_resolutions,
         )
         # v0.2.72 — return the transpiled Python alongside result so
         # the plugin can write the Python heading + english_hash back
