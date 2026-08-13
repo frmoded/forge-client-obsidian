@@ -1096,10 +1096,33 @@ def _forge_compute_with_python(snippet_id: str, args, inputs, vault_name: str, s
     return result, stdout, code
 
 # ---- Moda live-loop helpers (Phase 2) ---------------------------
-# State lives in Python globals between engine-request calls. The
-# wire serializer (_forge_moda_state_to_wire) mirrors
-# forge.api.moda._serialize_particles: per-row Particle dicts, with
-# heading/speed/width/height intentionally absent from the wire view.
+# State lives in Python globals between engine-request calls.
+#
+# Transplanted 2026-08-13 (drain 0445) from
+# forge.api.moda._serialize_particles, which was RETIRED in that same
+# drain. These comments used to cite that function as the reference
+# implementation; the behavior is recorded here so the citation does not
+# point at a deleted file.
+#
+#   _serialize_particles(particle_state) -> list[Particle]
+#     Materializes ONE wire-shape Particle per row of the state's
+#     parallel numpy arrays (ids, types, xs, ys, masses). Since Phase 7
+#     ParticleState stores per-particle fields as parallel arrays rather
+#     than a list[Particle], and this is the SINGLE place the array ->
+#     per-row-dataclass boundary is crossed — the rest of the per-tick
+#     pipeline never iterates particles.
+#     Field coercion is explicit: id=int, type=str, x=float, y=float,
+#     mass=str. The heading and speed fields remain internal-only and are
+#     INTENTIONALLY absent from the wire view.
+#
+#   /moda/init temperature convention (drain 0150 flagged this as worth
+#   preserving): the setup block is the state origin and takes an initial
+#   temperature (create water -> set_water_speed with temperature ->
+#   set_water_mass). The wire carried NO temperature on /moda/init, so
+#   the server hardcoded "medium" and the slider's value took over on
+#   the first /moda/compute. Anything reproducing the init path needs
+#   that same seed value, or the first tick runs at a different
+#   temperature than the UI shows.
 
 _forge_moda_state = None      # ParticleState dataclass instance, or None until init
 _forge_moda_session_id = None
