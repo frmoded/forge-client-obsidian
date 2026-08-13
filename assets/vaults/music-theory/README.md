@@ -4,7 +4,7 @@ A Forge vault for composing music with music21 in your Obsidian-based snippet wo
 
 ## What's inside
 
-Music-domain action and data snippets — currently centered on **Slow Burn**, a fully-worked 12-bar blues in `slow_burn/`, plus a percussion section in `percussion/` and `percussion_lab/`. Each snippet is a Forge action that returns a `music21.stream.Score` (or a list of pitches, for the scale helpers); the plugin renders the result via Verovio in the Forge Output panel.
+Music-domain action and data snippets — currently centered on **Slow Burn**, a fully-worked 12-bar blues in `slow_burn/`, plus a percussion section in `percussion/`, with percussion primitives imported cross-vault from `music-core/percussion_lab/`. Each snippet is a Forge action that returns a `music21.stream.Score` (or a list of pitches, for the scale helpers); the plugin renders the result via Verovio in the Forge Output panel.
 
 Layout:
 

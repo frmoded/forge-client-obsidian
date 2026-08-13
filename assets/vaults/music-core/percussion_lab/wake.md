@@ -1,5 +1,16 @@
 ---
 type: action
+inputs: []
+source_facet: description
+sync_state: stale-recipe
+description_hash: 8695fe3e8909845c715806b51b1dd209bd1b67cf31a74e595959e0c50c8f13f2
+recipe_hash: 48755143cf1c601bd13feeae9b9bf49e1e9d6085233c02924a3ca00c7f7e831d
+python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+recipe_derived_from_description_hash: 8695fe3e8909845c715806b51b1dd209bd1b67cf31a74e595959e0c50c8f13f2
+recipe_derived_from_source_hash: 8695fe3e8909845c715806b51b1dd209bd1b67cf31a74e595959e0c50c8f13f2
+python_derived_from_recipe_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+python_derived_from_source_hash: 8695fe3e8909845c715806b51b1dd209bd1b67cf31a74e595959e0c50c8f13f2
+recipe_version: 2
 ---
 
 # Description
@@ -24,7 +35,6 @@ brief recall + long fade:
 (none)
 
 # Recipe
-
 Let s1 = Call [[companions]] with bars=8.
 Let s2 = Call [[gathering]] with bars=4.
 Let s3 = Call [[peak]] with bars=2.
