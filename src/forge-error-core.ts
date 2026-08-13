@@ -175,20 +175,28 @@ export function forgeErrorFromGenerateRefusal(response: {
   error?: string | null;
   error_structured?: { cause?: string; suggested_fix?: string } | null;
   attempts?: number;
+  [k: string]: unknown;
 }): ForgeError {
   const attempts = response.attempts ?? 1;
+  // Drain 2026-08-13-0155 — drain 1840's spec said "`attempts`, server
+  // envelope JSON -> `details`", but only attempts shipped, so CCQA's
+  // batch-6 smoke found `Engineer details` reading just "attempts: 1".
+  // The whole envelope is already in hand here; surfacing it costs
+  // nothing and is exactly what the disclosure is for.
+  const envelope =
+    `attempts: ${attempts}\n\nserver envelope:\n${JSON.stringify(response, null, 2)}`;
   const structured = response.error_structured;
   if (structured && structured.cause && structured.suggested_fix) {
     return {
       cause: structured.cause,
       suggested_fix: structured.suggested_fix,
-      details: `attempts: ${attempts}`,
+      details: envelope,
     };
   }
   const flat = response.error ?? '/generate could not produce a parseable Recipe.';
   return {
     cause: flat,
     suggested_fix: 'Revise the Description and run again.',
-    details: `attempts: ${attempts}`,
+    details: envelope,
   };
 }

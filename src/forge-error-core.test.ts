@@ -164,7 +164,7 @@ test('forgeErrorFromGenerateRefusal: structured envelope maps cause/suggested_fi
   });
   assert.equal(err.cause, 'The Description does not describe any computable action or value.');
   assert.equal(err.suggested_fix, 'Revise the Description to specify what the Recipe should compute or return.');
-  assert.equal(err.details, 'attempts: 1');
+  assert.match(err.details ?? '', /^attempts: 1\b/);   // + server envelope, per drain 1840 spec line 65
 });
 
 test('forgeErrorFromGenerateRefusal: falls back to flat error string when error_structured absent (pre-drain-1500 server)', () => {
@@ -174,12 +174,32 @@ test('forgeErrorFromGenerateRefusal: falls back to flat error string when error_
   });
   assert.equal(err.cause, 'LLM returned unparseable output after 3 attempts.');
   assert.ok(err.suggested_fix.length > 0);
-  assert.equal(err.details, 'attempts: 3');
+  assert.match(err.details ?? '', /^attempts: 3\b/);   // + server envelope, per drain 1840 spec line 65
 });
 
 test('forgeErrorFromGenerateRefusal: missing attempts defaults to 1', () => {
   const err = forgeErrorFromGenerateRefusal({
     error_structured: { cause: 'x', suggested_fix: 'y' },
   });
-  assert.equal(err.details, 'attempts: 1');
+  assert.match(err.details ?? '', /^attempts: 1\b/);   // + server envelope, per drain 1840 spec line 65
+});
+
+test('forgeErrorFromGenerateRefusal: details carries the server envelope JSON, not just attempts', () => {
+  // Drain 2026-08-13-0155. Drain 1840's spec line 65 said
+  // "`attempts`, server envelope JSON -> `details`"; only attempts shipped,
+  // so CCQA's batch-6 smoke saw `Engineer details` reading just "attempts: 1".
+  const err = forgeErrorFromGenerateRefusal({
+    snippet_id: 'nonsense_note',
+    parsed_ok: false,
+    error: 'The Description does not describe any computable action or value.',
+    error_structured: {
+      cause: 'The Description does not describe any computable action or value.',
+      suggested_fix: 'Revise the Description to specify what the Recipe should compute or return.',
+    },
+    attempts: 1,
+  } as any);
+  assert.match(err.details ?? '', /attempts: 1/);
+  assert.match(err.details ?? '', /server envelope/i);
+  assert.match(err.details ?? '', /nonsense_note/);
+  assert.match(err.details ?? '', /"parsed_ok": false/);
 });

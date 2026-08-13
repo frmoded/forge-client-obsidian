@@ -3502,11 +3502,18 @@ export default class ForgePlugin extends Plugin {
           // Drain 2026-08-10-1840 — see the sibling recipe-dialect
           // site for the full rationale; same structured-Notice route.
           const structuredRefusal = forgeErrorFromGenerateRefusal(response.json);
-          this.notice(errorPrefix ? `${errorPrefix}: ${structuredRefusal.cause}` : `Forge: ${structuredRefusal.cause}`);
+          // Drain 2026-08-13-0155 — notice() used to fire HERE, before the
+          // card. It is not a toast (v0.2.184 routed it to forgeOutput), so
+          // it wrote a red line into the same panel carrying the same cause
+          // the card already shows — the duplicate CCQA's batch-6 smoke saw.
+          // Moved into the catch, which is the fallback the old comment
+          // already claimed it was.
           try {
             const outputView = await this.getOutputView();
             outputView.appendForgeError(snippetId, structuredRefusal);
-          } catch { /* output panel unavailable; toast carries the cause */ }
+          } catch {
+            this.notice(errorPrefix ? `${errorPrefix}: ${structuredRefusal.cause}` : `Forge: ${structuredRefusal.cause}`);
+          }
           return false;
         }
         if (typeof response.json?.attempts === 'number' && response.json.attempts > 1) {
@@ -3672,11 +3679,18 @@ export default class ForgePlugin extends Plugin {
           // via the early `return null` (unchanged) — this refusal
           // never reaches that guard's caller with anything to guard.
           const structuredRefusal = forgeErrorFromGenerateRefusal(response.json);
-          this.notice(errorPrefix ? `${errorPrefix}: ${structuredRefusal.cause}` : `Forge: ${structuredRefusal.cause}`);
+          // Drain 2026-08-13-0155 — notice() used to fire HERE, before the
+          // card. It is not a toast (v0.2.184 routed it to forgeOutput), so
+          // it wrote a red line into the same panel carrying the same cause
+          // the card already shows — the duplicate CCQA's batch-6 smoke saw.
+          // Moved into the catch, which is the fallback the old comment
+          // already claimed it was.
           try {
             const outputView = await this.getOutputView();
             outputView.appendForgeError(snippetId, structuredRefusal);
-          } catch { /* output panel unavailable; toast carries the cause */ }
+          } catch {
+            this.notice(errorPrefix ? `${errorPrefix}: ${structuredRefusal.cause}` : `Forge: ${structuredRefusal.cause}`);
+          }
           return null;
         }
         if (typeof response.json?.attempts === 'number' && response.json.attempts > 1) {
