@@ -3398,7 +3398,7 @@ export default class ForgePlugin extends Plugin {
       serviceUrl: settings.transpileServiceUrl,
     });
 
-    const modal = new ForgeGenerationModal(this.app, `Forging ${snippetId}…`);
+    const modal = new ForgeGenerationModal(this.app, `Generating Python for ${snippetId}…`);
     modal.open();
 
     try {
@@ -3581,7 +3581,7 @@ export default class ForgePlugin extends Plugin {
       snippetId,
       serviceUrl: settings.transpileServiceUrl,
     });
-    const modal = new ForgeGenerationModal(this.app, `Forging Recipe for ${snippetId}…`);
+    const modal = new ForgeGenerationModal(this.app, `Generating Recipe for ${snippetId}…`);
     modal.open();
     try {
       let payload: AlphaGenerateRequest;
