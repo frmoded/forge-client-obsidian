@@ -436,11 +436,49 @@ export default class ForgePlugin extends Plugin {
         PLUGIN_VERSION_AT_BUILD,
       );
       if (check.stale) {
-        // 30-second Notice so the user can read the reinstall path.
-        this.notice(check.noticeMessage, 30000);
+        // Log immediately — this must not depend on the render succeeding.
         console.error(
           `Forge onload: stale main.js. manifestVersion=${check.manifestVersion}, mainJsVersion=${check.buildVersion}`,
         );
+        // Drain 2026-08-14-0300 — DEFER the render to onLayoutReady.
+        //
+        // This used to call this.notice(...) directly here, which crashed
+        // and produced a misleading downstream symptom (a flat "failed
+        // after 3 attempts" connect-notice) instead of the stale-build
+        // warning. CCQA 2026-08-13-2150 caught it. Root cause, by call
+        // chain:
+        //
+        //   main.ts (here)  -> this.notice(...)                main.ts:5203
+        //   notice()        -> `void this.forgeOutput(...)`    main.ts:5207
+        //   forgeOutput     -> getOutputView()                 main.ts:5210
+        //   getOutputView   -> workspace.getRightLeaf(false)   main.ts:~5264
+        //   Obsidian's getRightLeaf -> getSideLeaf reads `.children` of a
+        //   right split that does not exist yet at onload time -> throws.
+        //
+        // Two things made this worse than a normal error. First, onload
+        // runs before the workspace layout exists, so the leaf simply is
+        // not there yet — a timing problem, not a bad argument. Second,
+        // `notice()` returns void and discards the promise with `void`,
+        // so the rejection escapes the enclosing try/catch entirely: that
+        // catch is structurally incapable of catching this, which is why
+        // the failure surfaced somewhere else entirely.
+        //
+        // onLayoutReady fires once the workspace is laid out (already used
+        // at main.ts:997 for the same class of early-onload problem), so
+        // by the time the Notice renders there is a right split to attach
+        // to. If the plugin is loaded after layout is already ready,
+        // Obsidian invokes the callback immediately.
+        this.app.workspace.onLayoutReady(() => {
+          try {
+            // 30-second Notice so the user can read the reinstall path.
+            this.notice(check.noticeMessage, 30000);
+          } catch (e) {
+            // Belt-and-braces: a failure to RENDER the warning must never
+            // take down onload. The console.error above already carries
+            // the diagnostic.
+            console.error('onload: stale-main-js notice render failed', e);
+          }
+        });
       }
     } catch (e) {
       // Per cc-prompt-queue.md HARD RULE #1 (v0.2.120).

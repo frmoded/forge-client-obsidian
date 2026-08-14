@@ -31,6 +31,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { checkVersionStamp } from "./version-stamp-check.mjs";
 
 // archiver v8 exposes named exports (ZipArchive, TarArchive, …)
 // rather than the v7 `archiver(format, opts)` factory. Reach via
@@ -288,6 +289,22 @@ async function main() {
     console.error("\nMissing required files. Run the suggested commands above and retry.");
     process.exit(1);
   }
+
+  // 2a. Version-stamp preflight (drain 2026-08-14-0300). main.js carries a
+  //     baked PLUGIN_VERSION_AT_BUILD constant; it must equal manifest.json's
+  //     version. v0.2.357 shipped a main.js stamped 0.2.356 because the
+  //     release sequence bumped the manifest without re-running `npm run
+  //     build`, and nothing here noticed. Refuse to build rather than zip a
+  //     mismatched artifact. Deliberately does NOT shell out to `npm run
+  //     build` — auto-remediation adds its own failure surface (drain §4a).
+  const mainJsSource = await fs.readFile(path.join(ROOT, "main.js"), "utf8");
+  const stampCheck = checkVersionStamp({ manifestVersion: version, mainJsSource });
+  if (!stampCheck.ok) {
+    console.error(`  ✗ version stamp — ${stampCheck.message}`);
+    console.error("\nRefusing to build a version-mismatched zip.");
+    process.exit(1);
+  }
+  console.log(`  ✓ main.js version stamp (${stampCheck.stampedVersion})`);
 
   // 2b. Engine-bundle drift preflight. The plugin's bundled engine
   //     under assets/engine/forge/ must be byte-equal to the source
