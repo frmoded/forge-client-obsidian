@@ -6,11 +6,11 @@ A **scale** is an ordered sequence of musical pitches — a ladder of notes span
 
 Before any theory, meet a scale directly. Press play to hear a full **C major scale** climb from C up to the C an octave above:
 
-![[resources/audio/c_major_scale.mp3]]
+![[scales/resources/audio/c_major_scale.mp3]]
 
 And here is that same scale written on the staff:
 
-![[resources/images/c_major_scale.svg]]
+![[scales/resources/images/c_major_scale.svg]]
 
 Listen and look together: are the steps between the notes all the same size, or are some bigger than others? Hold that question — the rest of this note answers it.
 
