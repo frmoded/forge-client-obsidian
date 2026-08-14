@@ -211,7 +211,8 @@ async function assertNoBundledVaultDrift() {
       + `\n\nIf you ran this script directly, resolve it by hand:`
       + `\n  node scripts/sync-bundled-vault.mjs ${vaultName}`);
   }
-  if (anyDrift) process.exit(1);
+  // Drain 2026-08-14-0240 — report, don't exit. See runPreflightChecks().
+  return !anyDrift;
 }
 
 async function assertNoEngineBundleDrift() {
@@ -223,7 +224,7 @@ async function assertNoEngineBundleDrift() {
   // the release on a missing sibling — just log and proceed.
   if (!(await exists(sourceRoot))) {
     console.log("\nEngine-bundle drift check: skipped (no sibling forge repo).");
-    return;
+    return true;
   }
 
   const sourceFiles = new Set(engineWalk(sourceRoot).filter(engineIsInScope));
@@ -245,7 +246,7 @@ async function assertNoEngineBundleDrift() {
 
   if (drift.length === 0) {
     console.log("\nEngine-bundle drift check: clean.");
-    return;
+    return true;
   }
 
   console.error("\nENGINE-BUNDLE DRIFT DETECTED:");
@@ -253,7 +254,8 @@ async function assertNoEngineBundleDrift() {
     console.error(`  ✗ forge/${relPath}  [${status}]`);
   }
   console.error("\nRun 'npm run sync-engine-bundle' to resolve.");
-  process.exit(1);
+  // Drain 2026-08-14-0240 — report, don't exit. See runPreflightChecks().
+  return false;
 }
 
 async function main() {
@@ -298,8 +300,7 @@ async function main() {
   //     is exercised by src/engine-bundle-drift.test.ts. We invoke it
   //     here via a filesystem-backed adapter that matches the
   //     in-scope predicate.
-  await assertNoEngineBundleDrift();
-
+  //
   // 2c. Bundled-vault drift preflight (v0.2.76). Same rationale as the
   //     engine-bundle check but for assets/vaults/<name>/ — the bundled
   //     forge-moda, forge-music, and forge-tutorial directories must
@@ -307,7 +308,25 @@ async function main() {
   //     content than the source authors maintain. Resolved by
   //     `node scripts/sync-bundled-vault.mjs <name>` per vault, or
   //     `--all` to sync everything at once.
-  await assertNoBundledVaultDrift();
+  //
+  // Drain 2026-08-14-0240 — 2b and 2c BOTH RUN, ALWAYS. They used to
+  // call process.exit(1) themselves, so 2b failing meant 2c never
+  // executed: an entire class of protection was silently skipped for
+  // days while the suite read as "two known failures" (drains 0200 /
+  // 0230). Each check now returns a boolean and we exit once, after
+  // both have reported — the way a test runner reports every failure
+  // rather than stopping at the first.
+  const engineOk = await assertNoEngineBundleDrift();
+  const vaultsOk = await assertNoBundledVaultDrift();
+
+  if (!engineOk || !vaultsOk) {
+    console.error("\n─── release preflight FAILED ───");
+    if (!engineOk) console.error("  ✗ engine-bundle drift  (see above)");
+    if (!vaultsOk) console.error("  ✗ bundled-vault drift  (see above)");
+    console.error("Both checks ran; every failure above is real and must be");
+    console.error("resolved. Fixing only the first may not unblock the build.");
+    process.exit(1);
+  }
 
   // 3. Ensure dist/ exists. Clean any prior zip for this version
   //    so the run is reproducible (no leftover archiver state).
