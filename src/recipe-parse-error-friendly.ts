@@ -61,7 +61,7 @@ const PATTERNS: Pattern[] = [
     regex: /Snippet '([^']+)' not found/,
     rewrite: (m) =>
       `Chip '${m[1]}' isn't in your library. Check the wikilink spelling; `
-      + `try Cmd-P → 'Forge: Refresh chips' if you just added it.`,
+      + `try Cmd-P → 'Refresh chip palette' if you just added it.`,
   },
 ];
 

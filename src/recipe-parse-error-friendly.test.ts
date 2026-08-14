@@ -45,7 +45,11 @@ test('unknown chip (SnippetResolutionError) → cohort message about library', (
   const result = friendlyRecipeParseError(UNKNOWN_CHIP);
   assert.equal(result.matched, true);
   assert.match(result.userMessage, /Chip 'zork'/);
-  assert.match(result.userMessage, /Refresh chips/);
+  // Drain 2026-08-14-0290: this asserted /Refresh chips/, matching a
+  // command name that does not exist. The real command is 'Refresh chip
+  // palette' (main.ts:890). The message told users to run something they
+  // could not find, and this assertion locked that in.
+  assert.match(result.userMessage, /Refresh chip palette/);
 });
 
 test('unmatched Recipe-relevant error → generic fallback (still less scary)', () => {

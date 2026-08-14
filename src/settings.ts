@@ -99,7 +99,7 @@ export class ForgeSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Server URL')
       .setDesc(
-        'URL of the local Forge engine. Used by /canonicalize and '
+        'URL of the local engine. Used by /canonicalize and '
         + '/sync_dependencies (non-/generate endpoints). V1 plugin '
         + "uses Pyodide for compute and the transpile service above "
         + 'for /generate — this field only matters if you run the '

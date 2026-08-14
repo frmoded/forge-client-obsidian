@@ -63,19 +63,19 @@ test('isNetRefusalError: empty string is not a refusal', () => {
   assert.equal(isNetRefusalError(''), false);
 });
 
-test('welcomeMessage: no-token branch nudges to Settings → Forge → Transpile token', () => {
+test('welcomeMessage: no-token branch nudges to Settings → Transpile token', () => {
   const msg = welcomeMessage(false);
   // Must mention Settings and the token field explicitly so closed-
   // beta students know exactly where to act. These three substrings
   // are the load-bearing parts of the message.
-  assert.ok(msg.includes('Welcome to Forge'), `missing greeting: ${msg}`);
+  assert.ok(msg.includes('Welcome'), `missing greeting: ${msg}`);
   assert.ok(msg.includes('Settings'), `missing Settings reference: ${msg}`);
   assert.ok(msg.toLowerCase().includes('token'), `missing token reference: ${msg}`);
 });
 
 test('welcomeMessage: with-token branch is the shorter acknowledgement', () => {
   const msg = welcomeMessage(true);
-  assert.ok(msg.includes('Forge is ready'), `missing ready ack: ${msg}`);
+  assert.ok(msg.includes('Setup is complete'), `missing ready ack: ${msg}`);
   assert.ok(msg.includes('Settings'), `missing Settings reference: ${msg}`);
   // The with-token branch should NOT include the "paste your transpile
   // token" nudge — that would be confusing for a user who already has

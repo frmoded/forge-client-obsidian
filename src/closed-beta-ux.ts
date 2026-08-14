@@ -34,6 +34,6 @@ export function isNetRefusalError(msg: string): boolean {
  *  hit the "Set your transpile token…" Notice during a Forge-click. */
 export function welcomeMessage(hasToken: boolean): string {
   return hasToken
-    ? 'Forge is ready. Open Settings → Forge to review your configuration.'
-    : 'Welcome to Forge. To enable AI-powered snippet generation, paste your transpile token at Settings → Forge → Transpile service → Transpile service token.';
+    ? 'Setup is complete. Open Settings → the plugin tab to review your configuration.'
+    : 'Welcome. To enable AI-powered snippet generation, paste your transpile token at Settings → the plugin tab → Transpile service → Transpile service token.';
 }

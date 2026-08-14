@@ -502,7 +502,7 @@ export default class ForgePlugin extends Plugin {
       // startup log to prevent console noise on every reload.
       this.addCommand({
         id: 'forge-log-chip-inventory',
-        name: 'Forge: Log chip inventory',
+        name: 'Log chip inventory',
         callback: () => {
           console.log(
             `Forge chip inventory (from bundled executor.py):\n${formatChipInventoryFull(inventory)}`,
@@ -1024,7 +1024,7 @@ export default class ForgePlugin extends Plugin {
     // working. Ribbon icon below invokes this same command.
     this.addCommand({
       id: 'forge-copy-source-raw',
-      name: 'Forge: Copy note source with headings',
+      name: 'Copy note source with headings',
       callback: async () => {
         const file = this.app.workspace.getActiveFile();
         if (!file) {
@@ -1052,7 +1052,7 @@ export default class ForgePlugin extends Plugin {
     // command and ribbon share ONE behavior contract.
     this.addRibbonIcon(
       'clipboard-copy',
-      'Forge: Copy note source with headings',
+      'Copy note source with headings',
       async () => {
         await (this.app as any).commands.executeCommandById(
           'forge-copy-source-raw',
@@ -1486,7 +1486,7 @@ export default class ForgePlugin extends Plugin {
       chipsCount: this.chipPalette.length,
     })) {
       const chipsBtn = view.addAction(
-        'puzzle', 'Forge: Open chips palette',
+        'puzzle', 'Open chips palette',
         () => { this.openChipsView(); });
       chipsBtn.addClass(CHIPS_BTN_CLASS);
     }
@@ -1494,7 +1494,7 @@ export default class ForgePlugin extends Plugin {
     // are inherently per-snippet (caller→callee dependency graph);
     // toggling the edges panel from a plain note is meaningless.
     if (forgeButtonShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
-      const edgesBtn = view.addAction('network', 'Forge: Toggle edges panel', () => { this.toggleEdgesView(); });
+      const edgesBtn = view.addAction('network', 'Toggle edges panel', () => { this.toggleEdgesView(); });
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
 

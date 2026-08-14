@@ -110,7 +110,7 @@ export function classifyForgeError(input: ClassifyInput): ForgeError | null {
   // name, but the status tells the cohort-relevant story.
   if (typeof input.status === 'number' && input.status >= 500) {
     return {
-      cause: `The Forge service failed with an internal error (HTTP ${input.status}).`,
+      cause: `The transpile service failed with an internal error (HTTP ${input.status}).`,
       suggested_fix:
         'Run again in a moment; if it keeps failing, the service ' +
         'logs have the underlying error.',
