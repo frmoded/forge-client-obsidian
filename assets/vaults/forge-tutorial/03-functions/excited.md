@@ -1,5 +1,7 @@
 ---
 type: action
+inputs:
+  - word
 ---
 
 # Description
