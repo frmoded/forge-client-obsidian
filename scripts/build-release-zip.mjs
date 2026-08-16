@@ -32,6 +32,12 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { checkVersionStamp } from "./version-stamp-check.mjs";
+import { existsSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  interpretCheckResult,
+  resolveInterpreter,
+} from "./inputs-drift-core.mjs";
 
 // archiver v8 exposes named exports (ZipArchive, TarArchive, …)
 // rather than the v7 `archiver(format, opts)` factory. Reach via
@@ -155,6 +161,61 @@ function vaultWalk(dir, base = "") {
     else out.push(rel.split(path.sep).join("/"));
   }
   return out;
+}
+
+// Drain 2026-08-16-0910 — `inputs:` frontmatter drift.
+//
+// A note whose `inputs:` disagrees with its own Recipe is shipping stale
+// metadata, exactly like a drifted bundled file — it just had no gate.
+// `forge/scripts/stamp_inputs.py --check` already knew how to answer the
+// question (drain 2230 built it with the mode); nothing called it.
+//
+// A SUBPROCESS, not a JS port. The derivation rule is
+// `derive_inputs_from_recipe`, in Python. Mirroring it here would create a
+// second answer to "what counts as an input", which is the duplicate-
+// implementation pattern several recent drains existed to remove. One
+// implementation, one boundary.
+//
+// Checks the BUNDLE (assets/vaults/<name>), not the source sibling: the
+// bundle is what ships, and it is present in every environment that can
+// build a zip. Bundle-vs-source is a separate question, already answered
+// by assertNoBundledVaultDrift above.
+async function assertNoInputsFrontmatterDrift() {
+  const stampScript = path.resolve(ROOT, "..", "forge", "scripts", "stamp_inputs.py");
+  if (!existsSync(stampScript)) {
+    // Same posture as the bundled-vault check's no-sibling-repo case, and
+    // announced for the same reason: a check that doesn't run must not
+    // read like a check that passed.
+    console.log(
+      `\nInputs-frontmatter drift check: skipped (no forge sibling repo at ${stampScript}).`);
+    return true;
+  }
+
+  const interpreter = resolveInterpreter(
+    path.resolve(ROOT, "..", "forge", ".venv", "bin", "python"), existsSync);
+
+  let allOk = true;
+  for (const vaultName of BUNDLED_VAULTS) {
+    const vaultPath = path.resolve(ROOT, "assets", "vaults", vaultName);
+    const r = spawnSync(interpreter, [stampScript, "--check", vaultPath], {
+      encoding: "utf-8",
+    });
+    const verdict = interpretCheckResult({
+      vaultName,
+      vaultPath,
+      status: r.status,
+      error: r.error,
+      stdout: r.stdout,
+      stderr: r.stderr,
+    });
+    if (verdict.ok) {
+      console.log(`\n${verdict.message}`);
+    } else {
+      console.error(`\n${verdict.message}`);
+      allOk = false;
+    }
+  }
+  return allOk;
 }
 
 async function assertNoBundledVaultDrift() {
@@ -333,14 +394,20 @@ async function main() {
   // 0230). Each check now returns a boolean and we exit once, after
   // both have reported — the way a test runner reports every failure
   // rather than stopping at the first.
+  //
+  // Drain 2026-08-16-0910 — the inputs-frontmatter gate joins on the same
+  // terms: it runs unconditionally and reports, so adding a third check
+  // can't reintroduce the very short-circuit 0240 removed.
   const engineOk = await assertNoEngineBundleDrift();
   const vaultsOk = await assertNoBundledVaultDrift();
+  const inputsOk = await assertNoInputsFrontmatterDrift();
 
-  if (!engineOk || !vaultsOk) {
+  if (!engineOk || !vaultsOk || !inputsOk) {
     console.error("\n─── release preflight FAILED ───");
     if (!engineOk) console.error("  ✗ engine-bundle drift  (see above)");
     if (!vaultsOk) console.error("  ✗ bundled-vault drift  (see above)");
-    console.error("Both checks ran; every failure above is real and must be");
+    if (!inputsOk) console.error("  ✗ inputs-frontmatter drift  (see above)");
+    console.error("Every check ran; every failure above is real and must be");
     console.error("resolved. Fixing only the first may not unblock the build.");
     process.exit(1);
   }

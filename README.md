@@ -23,7 +23,14 @@ npm test                   # node --test src/*.test.ts
 npm run release-zip        # produces dist/forge-client-obsidian-v<version>.zip
 ```
 
-The release-zip step runs two preflights: file-existence (`REQUIRED_FILES`) and engine-bundle drift (the bundled engine under `assets/engine/forge/` must be byte-equal to the source-of-truth at `../forge/forge/`). Both fail loudly with actionable hints if anything is missing or out of sync.
+The release-zip step runs four preflights, and **all of them run every time** — each returns a verdict and the script exits once, at the end, so a failure early in the list can't hide a failure later in it:
+
+1. **File existence** (`REQUIRED_FILES`) — every artifact the zip must contain.
+2. **Version stamp** — `main.js`'s built-in version must match `manifest.json`. Catches a manifest bump that never got an `npm run build`; that gap shipped v0.2.357 with a stale stamp.
+3. **Drift**: engine-bundle (`assets/engine/forge/` byte-equal to `../forge/forge/`) and, per bundled vault, `assets/vaults/<name>/` byte-equal to `../<name>/`.
+4. **`inputs:` frontmatter** — for each bundled vault, every note's `inputs:` must agree with what its own Recipe declares. Runs `forge/scripts/stamp_inputs.py --check` as a subprocess (the derivation rule is Python; there is deliberately no JS copy of it). Skipped, loudly, when the `../forge` sibling repo isn't checked out; a missing Python interpreter is a **failure**, not a skip.
+
+All four fail loudly with actionable hints naming what to run next.
 
 ### Engine bundle sync
 
