@@ -23,6 +23,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { writeBundleVersionSentinel } from "./bundle-version-sentinel.mjs";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const ASSETS = path.join(ROOT, "assets");
@@ -110,6 +112,15 @@ function main() {
   lines.push("");
 
   fs.writeFileSync(OUT, lines.join("\n"));
+
+  // Drain 2026-08-16-1400 — the sentinel is a build output, from the SAME
+  // bundleVersion baked into BUNDLED_ASSETS_VERSION above (never computed
+  // twice). Before this it was written only by the plugin at runtime, so
+  // whether the release zip carried a correct value depended on whoever
+  // last ran a plugin against this checkout — v0.2.358 shipped it stale.
+  const sentinel = writeBundleVersionSentinel(
+    path.join(ROOT, "assets"), bundleVersion);
+  console.log(`Wrote ${path.relative(ROOT, sentinel)} (${bundleVersion}).`);
 
   const kb = (totalBytes / 1024).toFixed(1);
   console.log(`Wrote ${allFiles.length} files, ${kb} KB total content.`);
