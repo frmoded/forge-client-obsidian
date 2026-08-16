@@ -114,7 +114,10 @@ test('drain-1245: other keys never submit', () => {
 test('drain-1610: actionTemplate stamps every hexa-state field at creation', async () => {
   const body = await actionTemplate('my_snippet');
   for (const field of [
-    'source_facet', 'sync_state',
+    // `sync_state` left this list in drain 2026-08-17-0100 (Phase 2):
+    // it is derived from the hash lineage on read, so no writer stamps
+    // it any more. The lineage fields it summarized are all still here.
+    'source_facet',
     'description_hash', 'recipe_hash', 'python_hash',
     'recipe_derived_from_description_hash', 'recipe_derived_from_source_hash',
     'python_derived_from_recipe_hash', 'python_derived_from_source_hash',
@@ -150,7 +153,11 @@ test('drain-1610: python_hash covers the seeded def, not the empty string', asyn
 test('drain-1610: opens Description-source, Recipe not yet derived', async () => {
   const body = await actionTemplate('my_snippet');
   assert.match(body, /^source_facet: description$/m);
-  assert.match(body, /^sync_state: stale-recipe$/m);
+  // Drain 2026-08-17-0100 (Phase 2) — was `sync_state: stale-recipe`.
+  // The template stamps nothing now; a fresh note still DERIVES
+  // `stale-recipe` (Description present, Recipe empty), so the opening
+  // state is unchanged — only who computes it moved.
+  assert.doesNotMatch(body, /^sync_state:/m);
   // recipe_version is deliberately ABSENT — see the absence test below.
   assert.doesNotMatch(body, /^recipe_version:/m);
 });
@@ -174,7 +181,9 @@ test('drain-1040: dropping it does not weaken the hexa-state', async () => {
   // stamped fields survive; only the redundant one left.
   const body = await actionTemplate('my_snippet');
   for (const field of [
-    'source_facet', 'sync_state', 'description_hash', 'recipe_hash',
+    // `sync_state` removed by drain 2026-08-17-0100 (Phase 2) — derived,
+    // not stamped.
+    'source_facet', 'description_hash', 'recipe_hash',
     'python_hash', 'recipe_derived_from_description_hash',
     'recipe_derived_from_source_hash', 'python_derived_from_recipe_hash',
     'python_derived_from_source_hash', 'english_hash',
@@ -205,11 +214,16 @@ test('drain-1040: hexa-state field set matches the MCP writer', async () => {
 
   // Field names as create_note_shell writes them (vault_fs.py).
   const MCP_HEXA_STATE = [
-    'source_facet', 'sync_state', 'description_hash', 'recipe_hash',
+    'source_facet', 'description_hash', 'recipe_hash',
     'python_hash', 'recipe_derived_from_description_hash',
     'recipe_derived_from_source_hash', 'python_derived_from_recipe_hash',
     'python_derived_from_source_hash', 'english_hash',
   ];
   for (const f of MCP_HEXA_STATE) assert.ok(emitted.has(f), `plugin missing ${f}`);
   assert.ok(!emitted.has('recipe_version'), 'neither writer stamps recipe_version');
+  // Drain 2026-08-17-0100 (Phase 2) — `sync_state` left BOTH writers in
+  // the same drain, so the parity this test guards still holds. Pinned
+  // as an absence on both sides: had only one writer dropped it, this
+  // test is what would have caught the asymmetry.
+  assert.ok(!emitted.has('sync_state'), 'neither writer stamps sync_state');
 });

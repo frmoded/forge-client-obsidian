@@ -65,10 +65,14 @@ export async function actionTemplate(name: string): Promise<string> {
   ]);
 
   // Description is source at creation: it is the facet the cohort is
-  // about to write, and Recipe/Python are derived from it. Recipe is
-  // empty and therefore not yet derived from this Description, so the
-  // note opens `stale-recipe` — an honest starting state, not a
-  // placeholder.
+  // about to write, and Recipe/Python are derived from it.
+  //
+  // Drain 2026-08-17-0100 (sync_state Phase 2) — this template used to
+  // stamp `sync_state: stale-recipe` here. It no longer stamps anything:
+  // the state is derived from the note's hash lineage on read, and a
+  // fresh note (Description present, Recipe empty) still derives
+  // `stale-recipe` — the same honest opening state, now computed, so it
+  // cannot drift from the note it describes.
   return [
     '---',
     'type: action',
@@ -86,7 +90,6 @@ export async function actionTemplate(name: string): Promise<string> {
     // inherited it, which left the two writers disagreeing on one
     // redundant field. Dropped so they agree. No observable change.
     'source_facet: description',
-    'sync_state: stale-recipe',
     `description_hash: ${descriptionHash}`,
     `recipe_hash: ${recipeHash}`,
     `python_hash: ${pythonHash}`,

@@ -617,7 +617,7 @@ describe('computeSyncState', () => {
     assert.equal(result, 'stale-python');
   });
 
-  it('returns "stale-both" when Description AND Recipe both drifted',
+  it('returns "stale-recipe" when Description AND Recipe both drifted',
     async () => {
       const d = 'hello edited';
       const r = 'Return "EDITED".';
@@ -629,7 +629,11 @@ describe('computeSyncState', () => {
         'body',
         _helpers(d, r, p, dhStored, rhStored, ph),
       );
-      assert.equal(result, 'stale-both');
+      // Drain 2026-08-17-0100 (Phase 2) — was 'stale-both'. Retired:
+      // Phase 1's inventory found zero readers of it in any repo, and
+      // under first-broken-link ordering it says nothing 'stale-recipe'
+      // does not already say.
+      assert.equal(result, 'stale-recipe');
     });
 
   it('returns "stale-python" when Recipe AND Python both drifted (recipe wins over python transitively)',

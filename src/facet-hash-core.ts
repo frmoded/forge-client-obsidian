@@ -78,21 +78,34 @@ export type CanonicalLayer = SourceLayer;
  *   - `stale-python`   Recipe edited since Python was compiled (recipe
  *                      drifted, python still matches) OR a downstream
  *                      Python-only edit not yet reconciled with Recipe.
- *   - `stale-both`     Description edited AND Recipe not re-derived
- *                      (both description + recipe body-hashes drifted).
+ *
+ *  RETIRED — `stale-both` (drain 2026-08-17-0100, sync_state Phase 2).
+ *  Phase 1's consumer inventory found ZERO readers of it anywhere in
+ *  any repo: it was declared here, produced by this function, asserted
+ *  in this file's own truth table, and carried in one forge-mcp fixture
+ *  that would have passed with any string. Nothing branched on it. Under
+ *  the derived vocabulary's first-broken-link ordering it is also
+ *  redundant with `stale-recipe` — a Recipe that no longer matches its
+ *  Description makes the Python stale whether or not the Python still
+ *  matches that Recipe.
+ *
+ *  NOTE — this whole function is now UNREFERENCED by production code:
+ *  its three callers were the writers Phase 2 removed. It is left in
+ *  place deliberately (§8: don't strip opportunistically) and is a
+ *  Phase 3 deletion candidate.
  */
 export type SyncState =
   | 'synced'
   | 'stale-recipe'
-  | 'stale-python'
-  | 'stale-both';
+  | 'stale-python';
 
 
 /** Compute the note-level sync-state rollup by comparing current facet
  *  body hashes to stored `<facet>_hash` frontmatter values.
  *
  *  Rule set (from drain §4 A.2 — mechanical hash compare):
- *   1. descMismatch && recipeMismatch          → stale-both
+ *   1. descMismatch                            → stale-recipe
+ *      (was `stale-both` when recipeMismatch too; retired above)
  *   2. descMismatch && !recipeMismatch         → stale-recipe
  *   3. !descMismatch && recipeMismatch         → stale-python
  *      (regardless of pythonMismatch — sync_state observes note-level
@@ -129,7 +142,6 @@ export async function computeSyncState(
   const recipeMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
   const pythonMismatch = storedPython !== null && storedPython !== currentPython;
 
-  if (descMismatch && recipeMismatch) return 'stale-both';
   if (descMismatch) return 'stale-recipe';
   if (recipeMismatch) return 'stale-python';
   if (pythonMismatch) return 'stale-python';
