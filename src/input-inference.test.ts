@@ -23,6 +23,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { loadPyodide } from 'pyodide';
 
+import { extractProductionPythonBlock } from './test-support/extract-python-block.ts';
+
 function walk(dir: string, base = ''): Array<{ rel: string; abs: string }> {
   const out: Array<{ rel: string; abs: string }> = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -111,63 +113,12 @@ async function bootWithSnippet(snippetId: string, body: string): Promise<any> {
 
   await py.loadPackage(['pyyaml', 'numpy']);
 
-  py.runPython(`
-import sys
-if '/bundle/engine' not in sys.path:
-    sys.path.insert(0, '/bundle/engine')
-
-from forge.core.snippet_registry import SnippetRegistry
-from forge.core.graph_resolver import GraphResolver
-from forge.core.executor import extract_python
-
-# Fresh registry per test so cases don't see stale entries.
-_forge_registry = SnippetRegistry()
-_forge_registry.scan('/bundle/user-vault')
-_forge_resolver = GraphResolver(_forge_registry)
-
-# v0.2.20: verbatim copy of pyodide-host.ts:_forge_get_input_names.
-# Drift-protection NOTE from v0.2.5 applies: keep aligned with the
-# inlined Python in src/pyodide-host.ts. v1.1 centralization in
-# forge.core.* collapses these duplicates.
-import ast as _forge_ast
-def _forge_get_input_names(snippet_id):
-    # v0.2.21 race fix: refresh registry from MEMFS before resolving.
-    relpath = f"/bundle/user-vault/{snippet_id}.md"
-    try:
-        _forge_registry.refresh_file(relpath)
-    except Exception:
-        pass
-    snip = _forge_resolver.resolve(snippet_id)
-    meta = snip.get("meta") or {}
-    declared = [str(i) for i in (meta.get("inputs") or [])]
-    body = snip.get("body") or ""
-    try:
-        code = extract_python(body)
-    except Exception:
-        return declared
-    if not code or not code.strip():
-        return declared
-    try:
-        tree = _forge_ast.parse(code)
-    except SyntaxError:
-        return declared
-    sig_args = None
-    for node in _forge_ast.walk(tree):
-        if isinstance(node, _forge_ast.FunctionDef) and node.name == "compute":
-            sig_args = (
-                [a.arg for a in node.args.args]
-                + [a.arg for a in node.args.kwonlyargs]
-            )
-            break
-    if sig_args is None:
-        return declared
-    sig_args = [a for a in sig_args if a != "context"]
-    out = list(declared)
-    for a in sig_args:
-        if a not in out:
-            out.append(a)
-    return out
-`);
+  // Drain 2026-08-16-1310 — the PRODUCTION block, extracted at test time.
+  // This file used to inject a hand-written "verbatim copy" of
+  // _forge_get_input_names, which predates the fixture-drift HARD RULE.
+  // Its tests stayed green through drain 1200's change to that function
+  // without ever executing the new code — a green that verified nothing.
+  py.runPython(extractProductionPythonBlock());
 
   return py;
 }

@@ -42,6 +42,7 @@ import {
   resolveSubmittedInputs,
 } from './run-input-defaults-core.ts';
 import { coerceRunInputValues } from './input-widget-core.ts';
+import { extractProductionPythonBlock } from './test-support/extract-python-block.ts';
 
 // ---------------------------------------------------------------- pure core
 
@@ -210,18 +211,10 @@ async function boot(): Promise<any> {
 
   await py.loadPackage(['pyyaml', 'numpy']);
 
-  // Load the production inline Python from src/pyodide-host.ts rather
-  // than a hand-written mirror (fixture-drift HARD RULE — v0.2.22 is
-  // the canonical failure this prevents).
-  const hostSource = fs.readFileSync(
-    path.resolve(process.cwd(), 'src/pyodide-host.ts'), 'utf-8');
-  const blockMatch = hostSource.match(
-    /\/\/ _PYTHON_BLOCK_BEGIN[\s\S]*?pyodide\.runPython\(`([\s\S]*?)`\);\s*\/\/ _PYTHON_BLOCK_END/,
-  );
-  if (!blockMatch) {
-    throw new Error('Could not locate the _PYTHON_BLOCK in src/pyodide-host.ts');
-  }
-  py.runPython(blockMatch[1].replace(/\\\\/g, '\\').replace(/\\\$\{/g, '${'));
+  // Drain 2026-08-16-1310 — extraction shared with the other suites that
+  // need the production block, rather than a seventh copy of the regex.
+  py.runPython(extractProductionPythonBlock());
+
 
   _booted = py;
   return py;
