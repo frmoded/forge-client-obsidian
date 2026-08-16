@@ -14,6 +14,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadPyodide } from 'pyodide';
+import { extractProductionPythonBlock } from './test-support/extract-python-block.ts';
 
 let _pyodidePromise: Promise<any> | null = null;
 function getPyodide(): Promise<any> {
@@ -100,20 +101,8 @@ async function bootSnapshotVault(): Promise<any> {
   );
 
   // Load the production Python block dynamically per §80 rider.
-  const hostSource = fs.readFileSync(
-    path.resolve(process.cwd(), 'src/pyodide-host.ts'),
-    'utf-8',
-  );
-  const blockMatch = hostSource.match(
-    /\/\/ _PYTHON_BLOCK_BEGIN[\s\S]*?pyodide\.runPython\(`([\s\S]*?)`\);\s*\/\/ _PYTHON_BLOCK_END/,
-  );
-  if (!blockMatch) {
-    throw new Error('Could not locate _PYTHON_BLOCK in src/pyodide-host.ts');
-  }
-  const productionPython = blockMatch[1]
-    .replace(/\\\\/g, '\\')
-    .replace(/\\\$\{/g, '${');
-  py.runPython(productionPython);
+  // Drain 2026-08-16-1600 — extraction shared with the other suites.
+  py.runPython(extractProductionPythonBlock());
 
   return py;
 }

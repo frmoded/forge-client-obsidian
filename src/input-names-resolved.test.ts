@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadPyodide } from 'pyodide';
+import { extractProductionPythonBlock } from './test-support/extract-python-block.ts';
 
 function walk(dir: string, base = ''): Array<{ rel: string; abs: string }> {
   const out: Array<{ rel: string; abs: string }> = [];
@@ -142,13 +143,8 @@ async function boot(): Promise<any> {
   await py.loadPackage(['pyyaml', 'numpy']);
 
   // The REAL production block, extracted at test time (fixture-drift rule).
-  const hostSource = fs.readFileSync(
-    path.resolve(process.cwd(), 'src/pyodide-host.ts'), 'utf-8');
-  const blockMatch = hostSource.match(
-    /\/\/ _PYTHON_BLOCK_BEGIN[\s\S]*?pyodide\.runPython\(`([\s\S]*?)`\);\s*\/\/ _PYTHON_BLOCK_END/,
-  );
-  if (!blockMatch) throw new Error('Could not locate the _PYTHON_BLOCK in src/pyodide-host.ts');
-  py.runPython(blockMatch[1].replace(/\\\\/g, '\\').replace(/\\\$\{/g, '${'));
+  // Drain 2026-08-16-1600 — extraction shared with the other suites.
+  py.runPython(extractProductionPythonBlock());
 
   _booted = py;
   return py;

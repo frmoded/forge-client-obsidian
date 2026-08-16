@@ -29,6 +29,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadPyodide } from 'pyodide';
+import { extractProductionPythonBlock } from './test-support/extract-python-block.ts';
 
 const GREET_BODY = `---
 type: action
@@ -125,34 +126,8 @@ async function bootGreet(): Promise<any> {
   // engine scans; production sets `/bundle/user-vault`. We also need
   // the engine on sys.path — both prerequisites match what production
   // sets up before runPython hits the marker.
-  const hostSource = fs.readFileSync(
-    path.resolve(process.cwd(), 'src/pyodide-host.ts'),
-    'utf-8',
-  );
-  const blockMatch = hostSource.match(
-    /\/\/ _PYTHON_BLOCK_BEGIN[\s\S]*?pyodide\.runPython\(`([\s\S]*?)`\);\s*\/\/ _PYTHON_BLOCK_END/,
-  );
-  if (!blockMatch) {
-    throw new Error(
-      'Could not locate the _PYTHON_BLOCK in src/pyodide-host.ts — '
-      + 'the BEGIN/END markers are missing or the inline runPython('
-      + ' shape has changed.',
-    );
-  }
-  // The template literal lives inside the source as ES-string-escaped
-  // text. Pyodide's runPython expects the un-escaped bytes (newlines,
-  // single backslashes for Python escapes). esbuild/V8 do the
-  // unescape at runtime; we must reproduce that here. The two
-  // sequences that matter for our block:
-  //   `\\` (source) → `\` (Python sees)
-  //   `\${` (source) → `${` (Python sees — string interpolation
-  //                           pass-through)
-  // No other escapes are in the block currently. Keep this minimal.
-  const productionPython = blockMatch[1]
-    .replace(/\\\\/g, '\\')
-    .replace(/\\\$\{/g, '${');
-
-  py.runPython(productionPython);
+  // Drain 2026-08-16-1600 — extraction shared with the other suites.
+  py.runPython(extractProductionPythonBlock());
 
   return py;
 }
