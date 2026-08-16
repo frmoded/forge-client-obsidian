@@ -17,6 +17,11 @@ import {
 // exercised by current cohort flows), but the dead code path was
 // still a landmine waiting for refactor.
 import { actionTemplate } from './modal-templates-core.ts';
+import {
+  initialInputValue,
+  resolveSubmittedInputs,
+  type InputDefaults,
+} from './run-input-defaults-core.ts';
 import { shouldSubmitOnKey } from './submit-on-key-core.ts';
 
 // Blocking modal shown during generation. Clicking outside, the X button, and
@@ -121,6 +126,11 @@ export class ForgeRunModal extends Modal {
     // drain 2026-08-05-1500 — optional per-input widget types. Same
     // deal: absent is the previous behaviour exactly.
     private widgets: InputWidgets = {},
+    // drain 2026-08-15-1900 — optional per-input declared defaults, as
+    // the JSON text a user would type. Absent ({}) reproduces the
+    // pre-drain behaviour exactly: no pre-fill, and a blank field
+    // submits '' as it always did.
+    private defaults: InputDefaults = {},
   ) {
     super(app);
   }
@@ -171,12 +181,15 @@ export class ForgeRunModal extends Modal {
         continue;
       }
 
-      this.values[name] = this.cached[name] ?? '';
+      // drain 2026-08-15-1900 — a declared default pre-fills the box, so
+      // the user can see what they are about to get instead of having to
+      // read the Recipe to find out.
+      this.values[name] = initialInputValue(name, this.cached, this.defaults);
       new Setting(contentEl)
         .setName(name)
         .addText(text => {
           text.setValue(this.values[name])
-            .setPlaceholder(name)
+            .setPlaceholder(this.defaults[name] ?? name)
             .onChange(v => { this.values[name] = v; });
         });
     }
@@ -195,9 +208,23 @@ export class ForgeRunModal extends Modal {
     for (const [name, host] of Object.entries(this.widgetHosts)) {
       this.values[name] = collectWidgetInput(name, host);
     }
+    // drain 2026-08-15-1900 — a blank field means "I didn't supply
+    // this". When the input declares a default, dropping the key lets
+    // Python bind that default; when it doesn't, submitting '' would be
+    // a silent wrong answer, so say so and keep the dialog open.
+    const { values, missingRequired } = resolveSubmittedInputs(
+      this.values, this.defaults);
+    if (missingRequired.length > 0) {
+      void forgeNotice(
+        this.app,
+        `Forge: ${missingRequired.join(', ')} ${missingRequired.length === 1 ? 'has' : 'have'}`
+        + ' no declared default — enter a value.',
+      );
+      return;
+    }
     // v0.2.324 — the JSON-first coercion moved to a pure core so the
     // suite can exercise the real thing. Behaviour is unchanged.
-    const kwargs = coerceRunInputValues(this.values);
+    const kwargs = coerceRunInputValues(values);
     this.close();
     this.onRun(kwargs, { ...this.values });
   }

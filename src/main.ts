@@ -4379,11 +4379,24 @@ export default class ForgePlugin extends Plugin {
     // only if Pyodide isn't ready yet (early-Forge-click edge case
     // before host warm-up).
     let inputs: string[];
+    // Drain 2026-08-15-1900 — declared defaults for the Run dialog.
+    // Empty is the safe answer: it reproduces the pre-drain dialog
+    // exactly, so a host that can't answer costs a pre-fill, never a
+    // wrong run.
+    let inputDefaults: Record<string, string> = {};
     try {
       const hostManager = getPyodideHost();
       if (!hostManager) throw new Error('Pyodide host not wired');
       const host = await hostManager.getInstance();
       inputs = await host.getInputNames(snippetId);
+      try {
+        inputDefaults = await host.getInputDefaults(snippetId);
+      } catch (e) {
+        // Separate try: a defaults lookup that throws (unparseable
+        // Recipe mid-edit, say) must not cost the user the modal.
+        console.warn(
+          `${NOTICE_PREFIX}declared input defaults unavailable for '${snippetId}'`, e);
+      }
     } catch (e) {
       console.warn(
         `${NOTICE_PREFIX}signature-inferred inputs unavailable for '${snippetId}', falling back to frontmatter`,
@@ -4435,7 +4448,7 @@ export default class ForgePlugin extends Plugin {
         // Drain 2530 — pass `file` so the successful run refreshes the
         // note's # Python section.
         this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file);
-      }, enums, widgets).open();
+      }, enums, widgets, inputDefaults).open();
     } else {
       // Drain 2530 — pass `file` so the successful run refreshes the
       // note's # Python section.

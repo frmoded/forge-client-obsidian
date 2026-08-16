@@ -804,6 +804,75 @@ def _forge_get_input_names(snippet_id: str):
             out.append(a)
     return out
 
+def _forge_get_input_defaults(snippet_id: str):
+    """Drain 2026-08-15-1900 — the DEFAULT declared for each input,
+    as the JSON text a user would type into the Run dialog's field.
+
+    Companion to _forge_get_input_names, which answers 'which inputs'
+    but not 'what happens if the user supplies nothing'. Without this
+    the dialog submitted a literal empty string for a blank field:
+    'Input word: str = "hooray"' returned '!' and 'Input n: int = 5'
+    crashed on "'' <= 1" (CCQA 2026-08-15-1842).
+
+    Source is the RESOLVED compute() signature — the transpiled
+    Recipe for a canonical note, the cached '# Python' facet
+    otherwise. That is deliberately the same code the executor binds
+    against, so a default reported here is by construction the
+    default that would apply. It also means one mechanism covers both
+    declaration styles: 'Input n: int = 5.' and the legacy leading
+    typed-'Let' form transpile to the same signature.
+
+    Only literal defaults are reported (ast.literal_eval + json).
+    A computed default has no honest text-box representation, so it
+    is omitted and that input keeps today's behaviour exactly.
+
+    Defensive throughout: an unresolvable snippet, a Recipe that
+    doesn't transpile, unparseable Python, no compute() — all return
+    {} rather than raising. An empty answer degrades to pre-drain
+    behaviour, which is the right failure direction for a dialog."""
+    import ast as _forge_ast
+    import json as _forge_json
+    try:
+        code = _forge_resolve_action_code(snippet_id)
+    except Exception:
+        return {}
+    if not code or not isinstance(code, str) or not code.strip():
+        return {}
+    try:
+        tree = _forge_ast.parse(code)
+    except SyntaxError:
+        return {}
+
+    fn = None
+    for node in _forge_ast.walk(tree):
+        if isinstance(node, _forge_ast.FunctionDef) and node.name == "compute":
+            fn = node
+            break
+    if fn is None:
+        return {}
+
+    out = {}
+    # Positional params with defaults are the LAST len(defaults) of them.
+    a = fn.args
+    if a.defaults:
+        for param, expr in zip(a.args[len(a.args) - len(a.defaults):], a.defaults):
+            if param.arg == "context":
+                continue
+            try:
+                out[param.arg] = _forge_json.dumps(_forge_ast.literal_eval(expr))
+            except Exception:
+                pass  # computed default — no text-box form; leave it out
+    # Keyword-only params pair positionally with kw_defaults, where a
+    # None entry means 'no default'.
+    for param, expr in zip(a.kwonlyargs, a.kw_defaults):
+        if expr is None or param.arg == "context":
+            continue
+        try:
+            out[param.arg] = _forge_json.dumps(_forge_ast.literal_eval(expr))
+        except Exception:
+            pass
+    return out
+
 def _forge_preflight_then_inventory(snippet_id: str):
     """v0.2.19: pre-flight inventory helper. Refreshes the registry's
     cached entry for this snippet from current MEMFS state, then
@@ -1357,6 +1426,12 @@ export interface PyodideHostInstance {
    *  with params not declared in frontmatter still surface to the
    *  user. */
   getInputNames(snippetId: string): Promise<string[]>;
+  /** Drain 2026-08-15-1900: the declared default for each input, as
+   *  the JSON text a user would type into the Run dialog. Lets a
+   *  blank field mean "use the declared default" instead of the
+   *  empty string it used to submit. Inputs without a literal
+   *  default are absent from the map. */
+  getInputDefaults(snippetId: string): Promise<Record<string, string>>;
   /** Drain 2026-08-10-1900: typed-Let input names from a Recipe body
    *  string directly (no prior transpile required). */
   getTypedLetsInputNames(recipeBody: string): Promise<string[]>;
@@ -1632,6 +1707,17 @@ _forge_compute_with_python(
       `list(_forge_get_input_names(_forge_input_names_snippet_id))`,
     );
     return this._unwrap(proxy) as string[];
+  }
+
+  /** Drain 2026-08-15-1900 — see interface doc. Reads the RESOLVED
+   *  compute() signature, so the answer is the default the executor
+   *  itself would bind. */
+  async getInputDefaults(snippetId: string): Promise<Record<string, string>> {
+    this.pyodide.globals.set('_forge_input_defaults_snippet_id', snippetId);
+    const proxy = this.pyodide.runPython(
+      `_forge_get_input_defaults(_forge_input_defaults_snippet_id)`,
+    );
+    return this._unwrap(proxy) as Record<string, string>;
   }
 
   /** Drain 2026-08-10-1900 — typed-Let input names for the reactive
