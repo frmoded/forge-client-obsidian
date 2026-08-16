@@ -4384,6 +4384,9 @@ export default class ForgePlugin extends Plugin {
     // exactly, so a host that can't answer costs a pre-fill, never a
     // wrong run.
     let inputDefaults: Record<string, string> = {};
+    // Drain 2026-08-16-1700 — dropdown options from the enum-literal
+    // type. Empty degrades to the pre-drain text field.
+    let derivedEnums: Record<string, string[]> = {};
     try {
       const hostManager = getPyodideHost();
       if (!hostManager) throw new Error('Pyodide host not wired');
@@ -4396,6 +4399,12 @@ export default class ForgePlugin extends Plugin {
         // Recipe mid-edit, say) must not cost the user the modal.
         console.warn(
           `${NOTICE_PREFIX}declared input defaults unavailable for '${snippetId}'`, e);
+      }
+      try {
+        derivedEnums = await host.getInputEnums(snippetId);
+      } catch (e) {
+        console.warn(
+          `${NOTICE_PREFIX}derived enum options unavailable for '${snippetId}'`, e);
       }
     } catch (e) {
       console.warn(
@@ -4448,7 +4457,7 @@ export default class ForgePlugin extends Plugin {
         // Drain 2530 — pass `file` so the successful run refreshes the
         // note's # Python section.
         this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file);
-      }, enums, widgets, inputDefaults).open();
+      }, enums, widgets, inputDefaults, derivedEnums).open();
     } else {
       // Drain 2530 — pass `file` so the successful run refreshes the
       // note's # Python section.

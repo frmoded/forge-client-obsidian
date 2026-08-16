@@ -79,7 +79,11 @@ export function parseInputWidgets(frontmatter: unknown): InputWidgets {
 /** What the Run modal should render for one input. */
 export type InputRendering =
   | { kind: 'widget'; widget: string; conflict: boolean }
-  | { kind: 'enum'; allowed: string[] }
+  /** Drain 2026-08-16-1700 — `source` says where the options came from:
+   *  `frontmatter` is an explicit `input_enums:` declaration, `derived`
+   *  is the input's own enum-literal type. `conflict` means the note
+   *  declared both and one was dropped. */
+  | { kind: 'enum'; allowed: string[]; source: 'frontmatter' | 'derived'; conflict: boolean }
   | { kind: 'text' };
 
 /**
@@ -100,13 +104,30 @@ export function resolveInputRendering(
   name: string,
   enums: InputEnums,
   widgets: InputWidgets,
+  // Drain 2026-08-16-1700 — options derived from the input's own
+  // enum-literal type. Absent ({}) is the pre-drain behaviour exactly.
+  derived: Record<string, string[]> = {},
 ): InputRendering {
   const widget = widgets[name];
   const allowed = enums[name];
+  const fromType = derived[name];
+  const hasAllowed = Boolean(allowed && allowed.length > 0);
+  const hasDerived = Boolean(fromType && fromType.length > 0);
+
   if (widget) {
-    return { kind: 'widget', widget, conflict: Boolean(allowed && allowed.length > 0) };
+    return { kind: 'widget', widget, conflict: hasAllowed || hasDerived };
   }
-  if (allowed && allowed.length > 0) return { kind: 'enum', allowed };
+  // FRONTMATTER WINS over the type. `input_enums:` is the explicit
+  // override — an author who wrote it meant to narrow or rename the set
+  // — but the note now says the same thing twice, so the caller warns.
+  if (hasAllowed) {
+    return {
+      kind: 'enum', allowed: allowed!, source: 'frontmatter', conflict: hasDerived,
+    };
+  }
+  if (hasDerived) {
+    return { kind: 'enum', allowed: fromType!, source: 'derived', conflict: false };
+  }
   return { kind: 'text' };
 }
 

@@ -2,6 +2,11 @@ import { App, Modal, Notice, Setting } from 'obsidian';
 import { forgeNotice } from './forge-notice.ts';
 import { initialEnumValue, type InputEnums } from './input-enums-core.ts';
 import {
+  enumOptions,
+  initialDerivedEnumValue,
+  type DerivedEnums,
+} from './derived-enums-core.ts';
+import {
   coerceRunInputValues,
   collectWidgetInput,
   renderWidget,
@@ -131,6 +136,9 @@ export class ForgeRunModal extends Modal {
     // pre-drain behaviour exactly: no pre-fill, and a blank field
     // submits '' as it always did.
     private defaults: InputDefaults = {},
+    // drain 2026-08-16-1700 — per-input options derived from the enum
+    // literal type. Absent ({}) reproduces the pre-drain dialog exactly.
+    private derivedEnums: DerivedEnums = {},
   ) {
     super(app);
   }
@@ -140,7 +148,8 @@ export class ForgeRunModal extends Modal {
     contentEl.createEl('h2', { text: `Run: ${this.snippetId}` });
 
     for (const name of this.inputs) {
-      const rendering = resolveInputRendering(name, this.enums, this.widgets);
+      const rendering = resolveInputRendering(
+        name, this.enums, this.widgets, this.derivedEnums);
 
       if (rendering.kind === 'widget') {
         if (rendering.conflict) {
@@ -170,6 +179,39 @@ export class ForgeRunModal extends Modal {
         // "Major"/"maj", and they can SEE the valid values without
         // opening the Recipe to infer them from usage.
         const allowed = rendering.allowed;
+
+        if (rendering.conflict) {
+          // Resolved, but the note declares the same value set twice and
+          // the author should be able to find out why their frontmatter
+          // list is the one showing.
+          console.warn(
+            `ForgeRunModal.onOpen: input '${name}' declares both input_enums and ` +
+            `an enum-literal type; using the frontmatter list and ignoring the type`,
+          );
+        }
+
+        if (rendering.source === 'derived') {
+          // Drain 2026-08-16-1700 — options from the input's own type.
+          // Values are JSON text so a pick round-trips exactly like the
+          // same thing typed; labels stay the bare literal.
+          const options = enumOptions(allowed);
+          this.values[name] = initialDerivedEnumValue(
+            this.cached[name], options, this.defaults[name]);
+          new Setting(contentEl)
+            .setName(name)
+            .addDropdown(dd => {
+              // No declared default means this input is REQUIRED, so the
+              // dropdown must start on nothing — otherwise it would
+              // silently satisfy an input the author never gave a value
+              // for, and 1900's missing-required Notice could never fire.
+              if (this.values[name] === '') dd.addOption('', '');
+              for (const o of options) dd.addOption(o.value, o.label);
+              dd.setValue(this.values[name])
+                .onChange(v => { this.values[name] = v; });
+            });
+          continue;
+        }
+
         this.values[name] = initialEnumValue(this.cached[name], allowed);
         new Setting(contentEl)
           .setName(name)

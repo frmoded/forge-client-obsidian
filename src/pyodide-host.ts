@@ -834,6 +834,73 @@ def _forge_signature_source(snippet_id: str, body: str):
         return None
 
 
+def _forge_get_input_enums(snippet_id: str):
+    """Drain 2026-08-16-1700 — the allowed values for each input whose
+    type is an enum literal, read off the RESOLVED compute() signature.
+
+    'Input mood: happy | sad | grumpy.' transpiles to an annotation of
+    Literal['happy', 'sad', 'grumpy'], so the type already IS the option
+    list. Before this the Run dialog only made a dropdown when the note
+    ALSO carried input_enums: frontmatter — a parallel declaration of the
+    same fact, and one no wizard tool can write, so an enum note authored
+    over MCP could not get the dropdown at all.
+
+    Only all-string Literals are reported. A mixed or non-string Literal
+    has no honest dropdown form, so it is omitted and that input keeps
+    its text field. Same defensive posture as the sibling readers: every
+    failure path returns {}, which is exactly the pre-drain behaviour.
+    """
+    import ast as _forge_ast
+    try:
+        snip = _forge_resolver.resolve(snippet_id)
+        body = snip.get("body") or ""
+    except Exception:
+        body = ""
+    code = _forge_signature_source(snippet_id, body)
+    if not code or not isinstance(code, str) or not code.strip():
+        return {}
+    try:
+        tree = _forge_ast.parse(code)
+    except SyntaxError:
+        return {}
+
+    fn = None
+    for node in _forge_ast.walk(tree):
+        if isinstance(node, _forge_ast.FunctionDef) and node.name == "compute":
+            fn = node
+            break
+    if fn is None:
+        return {}
+
+    def _literal_options(annotation):
+        # Literal['a', 'b'] parses as a Subscript whose slice is a Tuple
+        # of Constants; a single-option Literal['a'] has a bare Constant.
+        if not isinstance(annotation, _forge_ast.Subscript):
+            return None
+        target = annotation.value
+        name = getattr(target, "id", None) or getattr(target, "attr", None)
+        if name != "Literal":
+            return None
+        sl = annotation.slice
+        items = sl.elts if isinstance(sl, _forge_ast.Tuple) else [sl]
+        out = []
+        for it in items:
+            if not isinstance(it, _forge_ast.Constant) or not isinstance(it.value, str):
+                return None  # mixed or non-string — no honest dropdown
+            out.append(it.value)
+        return out or None
+
+    found = {}
+    a = fn.args
+    for param in list(a.args) + list(a.kwonlyargs):
+        if param.arg == "context" or param.annotation is None:
+            continue
+        opts = _literal_options(param.annotation)
+        if opts:
+            found[param.arg] = opts
+    return found
+
+
 def _forge_get_input_defaults(snippet_id: str):
     """Drain 2026-08-15-1900 — the DEFAULT declared for each input,
     as the JSON text a user would type into the Run dialog's field.
@@ -1466,6 +1533,10 @@ export interface PyodideHostInstance {
    *  empty string it used to submit. Inputs without a literal
    *  default are absent from the map. */
   getInputDefaults(snippetId: string): Promise<Record<string, string>>;
+  /** Drain 2026-08-16-1700: allowed values for each input whose type is
+   *  an enum literal, so the Run dialog can render a dropdown without
+   *  needing parallel `input_enums:` frontmatter. */
+  getInputEnums(snippetId: string): Promise<Record<string, string[]>>;
   /** Drain 2026-08-10-1900: typed-Let input names from a Recipe body
    *  string directly (no prior transpile required). */
   getTypedLetsInputNames(recipeBody: string): Promise<string[]>;
@@ -1752,6 +1823,17 @@ _forge_compute_with_python(
       `_forge_get_input_defaults(_forge_input_defaults_snippet_id)`,
     );
     return this._unwrap(proxy) as Record<string, string>;
+  }
+
+  /** Drain 2026-08-16-1700 — see interface doc. Same resolved-signature
+   *  read as getInputDefaults, looking at the annotation instead of the
+   *  default. */
+  async getInputEnums(snippetId: string): Promise<Record<string, string[]>> {
+    this.pyodide.globals.set('_forge_input_enums_snippet_id', snippetId);
+    const proxy = this.pyodide.runPython(
+      `_forge_get_input_enums(_forge_input_enums_snippet_id)`,
+    );
+    return this._unwrap(proxy) as Record<string, string[]>;
   }
 
   /** Drain 2026-08-10-1900 — typed-Let input names for the reactive
