@@ -773,10 +773,7 @@ def _forge_get_input_names(snippet_id: str):
     declared = [str(i) for i in (meta.get("inputs") or [])]
 
     body = snip.get("body") or ""
-    try:
-        code = extract_python(body)
-    except Exception:
-        return declared
+    code = _forge_signature_source(snippet_id, body)
     if not code or not code.strip():
         return declared
 
@@ -803,6 +800,39 @@ def _forge_get_input_names(snippet_id: str):
         if a not in out:
             out.append(a)
     return out
+
+def _forge_signature_source(snippet_id: str, body: str):
+    """The Python whose compute() signature describes this note's inputs.
+
+    Drain 2026-08-16-1200. Prefers the RESOLVED action code — the
+    transpiled Recipe for a canonical note, the cached facet otherwise —
+    because that is by construction the code the executor binds against.
+
+    The cached '# Python' facet alone is not enough, and the gap was
+    driver-visible: a Recipe-canonical note has no cached Python until
+    something transpiles it, so a hand-authored note that has never been
+    opened in a plugin-loaded vault reported NO inputs. runSnippet then
+    skipped the Run dialog entirely and computed with an empty kwargs
+    dict, never asking for inputs the note plainly declares. The bundled
+    tutorial notes only escaped it because drain 2230 stamped their
+    frontmatter; a cohort member authoring their own note got silence.
+
+    Falls back to the cached facet when resolution fails — an unparseable
+    Recipe mid-keystroke, an unresolved slot. That costs the resolved
+    read, never the dialog: degrading to the pre-drain answer is the same
+    posture drain 1900 established for defaults.
+    """
+    try:
+        code = _forge_resolve_action_code(snippet_id)
+        if code and isinstance(code, str) and code.strip():
+            return code
+    except Exception:
+        pass  # mid-edit Recipe, unresolved slot — fall through
+    try:
+        return extract_python(body)
+    except Exception:
+        return None
+
 
 def _forge_get_input_defaults(snippet_id: str):
     """Drain 2026-08-15-1900 — the DEFAULT declared for each input,
@@ -832,10 +862,14 @@ def _forge_get_input_defaults(snippet_id: str):
     behaviour, which is the right failure direction for a dialog."""
     import ast as _forge_ast
     import json as _forge_json
+    # Drain 2026-08-16-1200 — shared with _forge_get_input_names, so the
+    # dialog can never ask for one set of inputs and bind another.
     try:
-        code = _forge_resolve_action_code(snippet_id)
+        snip = _forge_resolver.resolve(snippet_id)
+        body = snip.get("body") or ""
     except Exception:
-        return {}
+        body = ""
+    code = _forge_signature_source(snippet_id, body)
     if not code or not isinstance(code, str) or not code.strip():
         return {}
     try:
