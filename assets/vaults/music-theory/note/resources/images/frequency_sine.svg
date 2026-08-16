@@ -1,0 +1,9 @@
+<svg viewBox="0 0 480 220" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <rect width="480" height="220" fill="#ffffff"/>
+  <text x="10" y="20" font-size="13" fill="#333">Lower frequency (2 cycles in this window)</text>
+  <path d="M 10,60 Q 70,20 130,60 T 250,60 T 370,60 T 470,60" fill="none" stroke="#2a6fdb" stroke-width="2.5"/>
+  <text x="10" y="130" font-size="13" fill="#333">Higher frequency, same time span (4 cycles)</text>
+  <path d="M 10,170 Q 40,150 70,170 T 130,170 T 190,170 T 250,170 T 310,170 T 370,170 T 430,170 T 470,170" fill="none" stroke="#d6482f" stroke-width="2.5"/>
+  <line x1="10" y1="200" x2="470" y2="200" stroke="#999" stroke-width="1"/>
+  <text x="220" y="215" font-size="12" fill="#666">time →</text>
+</svg>

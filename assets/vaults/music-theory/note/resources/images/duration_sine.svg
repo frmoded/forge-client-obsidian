@@ -1,0 +1,12 @@
+<svg viewBox="0 0 480 180" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <rect width="480" height="180" fill="#ffffff"/>
+  <path d="M 60,90 Q 90,50 120,90 T 180,90 T 240,90 T 300,90 T 360,90" fill="none" stroke="#2a6fdb" stroke-width="2.5"/>
+  <line x1="60" y1="140" x2="360" y2="140" stroke="#333" stroke-width="1.5"/>
+  <line x1="60" y1="132" x2="60" y2="148" stroke="#333" stroke-width="1.5"/>
+  <line x1="360" y1="132" x2="360" y2="148" stroke="#333" stroke-width="1.5"/>
+  <text x="180" y="160" font-size="13" fill="#333" text-anchor="middle">duration</text>
+  <line x1="20" y1="90" x2="440" y2="90" stroke="#ccc" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="380" y="30" font-size="12" fill="#666">note starts</text>
+  <text x="30" y="30" font-size="12" fill="#666">silence</text>
+  <text x="390" y="170" font-size="12" fill="#666">silence</text>
+</svg>

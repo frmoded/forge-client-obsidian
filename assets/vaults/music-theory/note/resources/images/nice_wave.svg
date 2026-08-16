@@ -1,0 +1,12 @@
+<svg viewBox="0 0 480 200" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <rect width="480" height="200" fill="#ffffff"/>
+  <text x="10" y="20" font-size="13" fill="#333">C4 and C5 overlaid — a clean 2:1 ratio. Every 2nd peak of C5 lines up exactly with a peak of C4.</text>
+  <path d="M 10,110 Q 70,70 130,110 T 250,110 T 370,110 T 470,110" fill="none" stroke="#2a6fdb" stroke-width="2.5"/>
+  <path d="M 10,110 Q 40,90 70,110 T 130,110 T 190,110 T 250,110 T 310,110 T 370,110 T 430,110 T 470,110" fill="none" stroke="#d6482f" stroke-width="2" opacity="0.85"/>
+  <circle cx="10" cy="110" r="4" fill="#1a1a1a"/>
+  <circle cx="130" cy="110" r="4" fill="#1a1a1a"/>
+  <circle cx="250" cy="110" r="4" fill="#1a1a1a"/>
+  <circle cx="370" cy="110" r="4" fill="#1a1a1a"/>
+  <circle cx="470" cy="110" r="4" fill="#1a1a1a"/>
+  <text x="180" y="180" font-size="12" fill="#666" text-anchor="middle">both waves cross zero together, every time — nothing to clash</text>
+</svg>

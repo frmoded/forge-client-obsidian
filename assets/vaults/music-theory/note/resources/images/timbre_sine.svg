@@ -1,0 +1,7 @@
+<svg viewBox="0 0 480 220" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <rect width="480" height="220" fill="#ffffff"/>
+  <text x="10" y="20" font-size="13" fill="#333">Pure tone — single sine wave, no overtones</text>
+  <path d="M 10,60 Q 40,30 70,60 T 130,60 T 190,60 T 250,60 T 310,60 T 370,60 T 430,60" fill="none" stroke="#2a6fdb" stroke-width="2.5"/>
+  <text x="10" y="130" font-size="13" fill="#333">Same pitch, with overtones — different timbre</text>
+  <path d="M 10,170 C 25,145 40,145 55,170 S 85,195 100,170 S 130,145 145,170 S 175,195 190,170 S 220,145 235,170 S 265,195 280,170 S 310,145 325,170 S 355,195 370,170 S 400,145 415,170 S 445,195 460,170" fill="none" stroke="#d6482f" stroke-width="2.5"/>
+</svg>

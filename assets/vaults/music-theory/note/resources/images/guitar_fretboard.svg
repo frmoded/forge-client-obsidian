@@ -1,0 +1,74 @@
+<svg viewBox="0 0 580 280" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <rect width="580" height="280" fill="#ffffff"/>
+  <text x="290" y="18" font-size="13" fill="#333" text-anchor="middle">Guitar fretboard — standard tuning, open string through fret 12</text>
+
+  <!-- fret position markers -->
+  <circle cx="184" cy="125" r="4" fill="#ddd"/>
+  <circle cx="260" cy="125" r="4" fill="#ddd"/>
+  <circle cx="336" cy="125" r="4" fill="#ddd"/>
+  <circle cx="412" cy="125" r="4" fill="#ddd"/>
+  <circle cx="526" cy="118" r="4" fill="#ddd"/>
+  <circle cx="526" cy="132" r="4" fill="#ddd"/>
+
+  <!-- strings -->
+  <line x1="55" y1="50" x2="540" y2="50" stroke="#333" stroke-width="1.2"/>
+  <line x1="55" y1="80" x2="540" y2="80" stroke="#333" stroke-width="1.4"/>
+  <line x1="55" y1="110" x2="540" y2="110" stroke="#333" stroke-width="1.6"/>
+  <line x1="55" y1="140" x2="540" y2="140" stroke="#333" stroke-width="1.8"/>
+  <line x1="55" y1="170" x2="540" y2="170" stroke="#333" stroke-width="2.0"/>
+  <line x1="55" y1="200" x2="540" y2="200" stroke="#333" stroke-width="2.2"/>
+
+  <!-- nut -->
+  <line x1="70" y1="42" x2="70" y2="208" stroke="#111" stroke-width="4"/>
+  <!-- frets -->
+  <line x1="108" y1="42" x2="108" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="146" y1="42" x2="146" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="184" y1="42" x2="184" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="222" y1="42" x2="222" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="260" y1="42" x2="260" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="298" y1="42" x2="298" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="336" y1="42" x2="336" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="374" y1="42" x2="374" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="412" y1="42" x2="412" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="450" y1="42" x2="450" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="488" y1="42" x2="488" y2="208" stroke="#999" stroke-width="1"/>
+  <line x1="526" y1="42" x2="526" y2="208" stroke="#999" stroke-width="1"/>
+
+  <!-- string name labels -->
+  <text x="30" y="53" font-size="10" fill="#333" text-anchor="middle">1 (E)</text>
+  <text x="30" y="83" font-size="10" fill="#333" text-anchor="middle">2 (B)</text>
+  <text x="30" y="113" font-size="10" fill="#333" text-anchor="middle">3 (G)</text>
+  <text x="30" y="143" font-size="10" fill="#333" text-anchor="middle">4 (D)</text>
+  <text x="30" y="173" font-size="10" fill="#333" text-anchor="middle">5 (A)</text>
+  <text x="30" y="203" font-size="10" fill="#333" text-anchor="middle">6 (E)</text>
+
+  <!-- fret number labels -->
+  <text x="70" y="222" font-size="9" fill="#666" text-anchor="middle">0</text>
+  <text x="108" y="222" font-size="9" fill="#666" text-anchor="middle">1</text>
+  <text x="146" y="222" font-size="9" fill="#666" text-anchor="middle">2</text>
+  <text x="184" y="222" font-size="9" fill="#666" text-anchor="middle">3</text>
+  <text x="222" y="222" font-size="9" fill="#666" text-anchor="middle">4</text>
+  <text x="260" y="222" font-size="9" fill="#666" text-anchor="middle">5</text>
+  <text x="298" y="222" font-size="9" fill="#666" text-anchor="middle">6</text>
+  <text x="336" y="222" font-size="9" fill="#666" text-anchor="middle">7</text>
+  <text x="374" y="222" font-size="9" fill="#666" text-anchor="middle">8</text>
+  <text x="412" y="222" font-size="9" fill="#666" text-anchor="middle">9</text>
+  <text x="450" y="222" font-size="9" fill="#666" text-anchor="middle">10</text>
+  <text x="488" y="222" font-size="9" fill="#666" text-anchor="middle">11</text>
+  <text x="526" y="222" font-size="9" fill="#666" text-anchor="middle">12</text>
+
+  <!-- string 1 (high E) note names -->
+  <g font-size="8.5" fill="#111" text-anchor="middle">
+    <text x="70" y="46">E4</text><text x="108" y="46">F4</text><text x="146" y="46">F♯4</text><text x="184" y="46">G4</text><text x="222" y="46">G♯4</text><text x="260" y="46">A4</text><text x="298" y="46">A♯4</text><text x="336" y="46">B4</text><text x="374" y="46">C5</text><text x="412" y="46">C♯5</text><text x="450" y="46">D5</text><text x="488" y="46">D♯5</text><text x="526" y="46">E5</text>
+    <!-- string 2 (B) -->
+    <text x="70" y="76">B3</text><text x="108" y="76">C4</text><text x="146" y="76">C♯4</text><text x="184" y="76">D4</text><text x="222" y="76">D♯4</text><text x="260" y="76">E4</text><text x="298" y="76">F4</text><text x="336" y="76">F♯4</text><text x="374" y="76">G4</text><text x="412" y="76">G♯4</text><text x="450" y="76">A4</text><text x="488" y="76">A♯4</text><text x="526" y="76">B4</text>
+    <!-- string 3 (G) -->
+    <text x="70" y="106">G3</text><text x="108" y="106">G♯3</text><text x="146" y="106">A3</text><text x="184" y="106">A♯3</text><text x="222" y="106">B3</text><text x="260" y="106">C4</text><text x="298" y="106">C♯4</text><text x="336" y="106">D4</text><text x="374" y="106">D♯4</text><text x="412" y="106">E4</text><text x="450" y="106">F4</text><text x="488" y="106">F♯4</text><text x="526" y="106">G4</text>
+    <!-- string 4 (D) -->
+    <text x="70" y="136">D3</text><text x="108" y="136">D♯3</text><text x="146" y="136">E3</text><text x="184" y="136">F3</text><text x="222" y="136">F♯3</text><text x="260" y="136">G3</text><text x="298" y="136">G♯3</text><text x="336" y="136">A3</text><text x="374" y="136">A♯3</text><text x="412" y="136">B3</text><text x="450" y="136">C4</text><text x="488" y="136">C♯4</text><text x="526" y="136">D4</text>
+    <!-- string 5 (A) -->
+    <text x="70" y="166">A2</text><text x="108" y="166">A♯2</text><text x="146" y="166">B2</text><text x="184" y="166">C3</text><text x="222" y="166">C♯3</text><text x="260" y="166">D3</text><text x="298" y="166">D♯3</text><text x="336" y="166">E3</text><text x="374" y="166">F3</text><text x="412" y="166">F♯3</text><text x="450" y="166">G3</text><text x="488" y="166">G♯3</text><text x="526" y="166">A3</text>
+    <!-- string 6 (low E) -->
+    <text x="70" y="196">E2</text><text x="108" y="196">F2</text><text x="146" y="196">F♯2</text><text x="184" y="196">G2</text><text x="222" y="196">G♯2</text><text x="260" y="196">A2</text><text x="298" y="196">A♯2</text><text x="336" y="196">B2</text><text x="374" y="196">C3</text><text x="412" y="196">C♯3</text><text x="450" y="196">D3</text><text x="488" y="196">D♯3</text><text x="526" y="196">E3</text>
+  </g>
+</svg>

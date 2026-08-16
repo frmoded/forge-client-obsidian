@@ -8,7 +8,7 @@ python_derived_from_source_hash: 8aaecfa415bb7256066f21225870611353cd418387b45e6
 source_facet: description
 recipe_derived_from_description_hash: 8aaecfa415bb7256066f21225870611353cd418387b45e6b1dd258eb4f996af3
 python_derived_from_recipe_hash: 788c6cce4d86865b1313053e5e7dcd3dd11139f080b9ba86a1adc1476c257df8
-recipe_version: 4
+recipe_version: 5
 sync_state: stale-recipe
 ---
 
@@ -17,7 +17,7 @@ sync_state: stale-recipe
 A starling flock at dusk. One bird turns; another follows; soon thousands move
 as a single mind, then disperse back into the trees. This piece traces that
 arc through pure percussion — no melodic content, no harmony, just rhythm
-gathering and dispersing across ~83 seconds.
+gathering and dispersing across ~80 seconds.
 
 Eight 4-bar sections at 96 BPM in 4/4, symmetric around a peak: solitary kick
 alone, companions joining on hi-hat, gathering snare with ghost notes,
@@ -35,7 +35,6 @@ other pieces reuse them with different proportions.
 (none)
 
 # Recipe
-
 Let kick_i = Call [[kick]].
 Let snare_i = Call [[snare]].
 Let hihat_i = Call [[closed_hihat]].

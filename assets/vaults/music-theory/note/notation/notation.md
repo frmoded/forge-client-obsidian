@@ -9,5 +9,7 @@ The fields, roughly in build order:
 - [[note_name]] — the seven letters A–G (only 7 names for 12 pitch classes)
 - [[accidental]] — sharp / flat / natural; how 7 letters reach all 12 classes
 - [[enharmonic_equivalence]] — two names for one pitch (C♯ = D♭)
+- [[piano_note_names]] — where the 12 pitch classes sit on a keyboard
+- [[guitar_note_names]] — where the 12 pitch classes sit on a fretted, multi-string instrument
 
 See [[note]] for the overview.
