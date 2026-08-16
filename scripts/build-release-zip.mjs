@@ -38,6 +38,7 @@ import {
   interpretCheckResult,
   resolveInterpreter,
 } from "./inputs-drift-core.mjs";
+import { snapshotVaultHead } from "./vault-head-snapshot.mjs";
 
 // archiver v8 exposes named exports (ZipArchive, TarArchive, …)
 // rather than the v7 `archiver(format, opts)` factory. Reach via
@@ -221,17 +222,34 @@ async function assertNoInputsFrontmatterDrift() {
 async function assertNoBundledVaultDrift() {
   let anyDrift = false;
   for (const vaultName of BUNDLED_VAULTS) {
-    const sourceRoot = path.resolve(ROOT, "..", vaultName);
+    const vaultPath = path.resolve(ROOT, "..", vaultName);
     const bundleRoot = path.resolve(ROOT, "assets", "vaults", vaultName);
 
     // Informational skip if source isn't a sibling (e.g. CI build with
     // only the plugin checked out).
-    if (!(await exists(sourceRoot))) {
+    if (!(await exists(vaultPath))) {
       console.log(
         `\nBundled-vault drift check (${vaultName}): skipped (no sibling repo).`);
       continue;
     }
 
+    // Drain 2026-08-16-1100 — compare against the source vault's HEAD, not
+    // its working tree. A sibling repo mid-edit no longer blocks a release,
+    // and the bundle can only ever hold committed, reproducible content.
+    // See scripts/vault-head-snapshot.mjs for why this is shared with the
+    // sync rather than reimplemented here.
+    let snapshot;
+    try {
+      snapshot = snapshotVaultHead(vaultPath);
+    } catch (e) {
+      console.error(`\nBUNDLED-VAULT CHECK FAILED (${vaultName}):`);
+      console.error(`  ${e.message}`);
+      anyDrift = true;
+      continue;
+    }
+    const sourceRoot = snapshot.root;
+
+    try {
     const sourceFiles = new Set(vaultWalk(sourceRoot).filter(vaultIsInScope));
     const bundleFiles = new Set(vaultWalk(bundleRoot).filter(vaultIsInScope));
     const drift = [];
@@ -272,6 +290,10 @@ async function assertNoBundledVaultDrift() {
       + `\n    then re-run 'bash scripts/release.sh' fresh.`
       + `\n\nIf you ran this script directly, resolve it by hand:`
       + `\n  node scripts/sync-bundled-vault.mjs ${vaultName}`);
+    } finally {
+      // Runs on the `continue` above too, so the temp tree never leaks.
+      snapshot.dispose();
+    }
   }
   // Drain 2026-08-14-0240 — report, don't exit. See runPreflightChecks().
   return !anyDrift;

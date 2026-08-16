@@ -39,6 +39,7 @@ import { fileURLToPath } from "node:url";
 // duplicated the list here + in build-release-zip.mjs; the 2026-07-28
 // arc showed the two copies drifting is a real risk.
 import { isExcludedName } from "./exclusions.mjs";
+import { snapshotVaultHead } from "./vault-head-snapshot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -78,19 +79,34 @@ function mkdirP(p) {
 
 function syncOne(vaultName) {
   const BUNDLE = path.resolve(ROOT, "assets", "vaults", vaultName);
-  const SOURCE = path.resolve(ROOT, "..", vaultName);
+  const VAULT = path.resolve(ROOT, "..", vaultName);
 
   console.log(`\n=== sync-bundled-vault: ${vaultName} ===`);
-  console.log(`  source: ${SOURCE}`);
+  console.log(`  source: ${VAULT} (at HEAD)`);
   console.log(`  bundle: ${BUNDLE}`);
 
-  if (!fs.existsSync(SOURCE)) {
-    console.error(`\nSource not found: ${SOURCE}`);
+  if (!fs.existsSync(VAULT)) {
+    console.error(`\nSource not found: ${VAULT}`);
     console.error(`Is the ${vaultName} source repo cloned as a sibling? Expected:`);
     console.error(`  <forge-client-obsidian>/../${vaultName}/`);
     process.exit(1);
   }
 
+  // Drain 2026-08-16-1100 — mirror the source vault's HEAD, not its
+  // working tree, so the bundle can only ever contain committed content.
+  // The drift gate in build-release-zip.mjs reads through the same module;
+  // if these two ever disagreed on the baseline, the gate would pass while
+  // the sync copied uncommitted files, which is the hole this closes.
+  let snapshot;
+  try {
+    snapshot = snapshotVaultHead(VAULT);
+  } catch (e) {
+    console.error(`\nCannot sync ${vaultName}: ${e.message}`);
+    process.exit(1);
+  }
+  const SOURCE = snapshot.root;
+
+  try {
   const sourceFiles = walk(SOURCE);
   const bundleFiles = walk(BUNDLE);
   const sourceSet = new Set(sourceFiles);
@@ -180,6 +196,9 @@ function syncOne(vaultName) {
     console.log(
       `  (no changes this run — any uncommitted bundle files predate it)`,
     );
+  }
+  } finally {
+    snapshot.dispose();
   }
 }
 
