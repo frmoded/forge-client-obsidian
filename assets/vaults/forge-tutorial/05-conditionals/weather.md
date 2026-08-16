@@ -1,10 +1,13 @@
 ---
 type: action
+sync_state: synced
 ---
 
 # Description
 
 Chapter 5 — Conditionals. Chooses what to say based on a value.
+
+**What's next:** [[Loops]]
 
 # Recipe
 

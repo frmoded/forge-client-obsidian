@@ -2,7 +2,7 @@
 
 When you want to do the same thing several times, you use a **loop**.
 
-Open the **countdown** note and **Forge** (🔥) it:
+Open the [[countdown]] note and **run** it:
 
 ```
 3
@@ -23,7 +23,7 @@ the current item the name `number` each time around — so it prints `3`, then
 `"Liftoff!"`.
 
 Lists are written with **angle brackets**, like `<3, 2, 1>` — that's just how
-Forge writes a list of values.
+this system writes a list of values.
 
 ## About `Return` vs `[[print]]`
 
@@ -38,13 +38,13 @@ show multiple things.
 Rule of thumb: use `Return` when you have one answer to hand back, and
 `[[print]]` when you want to show many things as the note runs.
 
-> The **For each** chip is now in your 🔥 palette — the last piece of core
+> The **For each** chip is now in your palette — the last piece of core
 > vocabulary.
 
 ## Exercise
 
-Open the **countdown** note, add more numbers to the list — try
-`<5, 4, 3, 2, 1>` — and Forge again. The countdown grows on its own, no extra
+Open the [[countdown]] note, add more numbers to the list — try
+`<5, 4, 3, 2, 1>` — and run again. The countdown grows on its own, no extra
 lines needed. Then change `"Liftoff!"` to your own send-off.
 
 ## Palette focus
@@ -53,4 +53,4 @@ Focus on **For each** in this chapter. Loops let you repeat a block once per
 item in a list. You've already met `Let`, `Call`, and `If` — this is the last
 of the primitive control constructs in the palette. Data notes come next.
 
-When you're ready, go to [[Data]] — where notes start holding values for you.
+**What's next:** [[countdown]]
