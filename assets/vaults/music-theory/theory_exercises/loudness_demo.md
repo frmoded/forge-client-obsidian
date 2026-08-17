@@ -3,7 +3,6 @@ type: action
 inputs:
   - pattern
 recipe_version: 1
-sync_state: synced
 ---
 
 # Description

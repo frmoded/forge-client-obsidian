@@ -2,7 +2,6 @@
 type: action
 inputs: [bars, velocity]
 source_facet: description
-sync_state: synced
 description_hash: a8fa1c605cb658c02f2d4e384391fc1a7289b112fd8c5e420a4e7d6b083762f4
 recipe_hash: 8da463f42c01a52c8b3853e32b0fe2ac8a4cb7a75830cd3d4cc6f965479db0bb
 python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

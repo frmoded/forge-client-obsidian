@@ -2,7 +2,6 @@
 type: action
 inputs: [style]
 source_facet: description
-sync_state: stale-python
 description_hash: 1f399496530d424c1cb3fa1bf1cd2aa4c7faede4a922f7a6857827c0b6dd4521
 recipe_hash: 88d9f9076020b3f3afc8c37a6ab5365ae3438c9a350c73a2d351e2eb0033a84b
 python_hash: a7d3126f12c2e52d72b0fc2a0027b17e7e9872165d6ddd69d123f27244ed2dbb

@@ -2,7 +2,6 @@
 type: action
 inputs: [bars, kick_velocity, snare_velocity, hihat_velocity]
 source_facet: description
-sync_state: synced
 description_hash: 8b132ec66ae97f918a1433c02d9d648394fe6872291835f8c7af59066b4598f8
 recipe_hash: 6a0077492423a0b9745a912a1eb57acf566199900fe24b5369728f3161aa3d2b
 python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

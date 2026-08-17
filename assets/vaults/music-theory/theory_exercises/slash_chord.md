@@ -5,7 +5,6 @@ inputs:
   - quality
   - bass
 recipe_version: 1
-sync_state: synced
 ---
 
 # Description

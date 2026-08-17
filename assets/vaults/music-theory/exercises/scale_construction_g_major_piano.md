@@ -4,7 +4,6 @@ inputs:
   - student_pitches
 input_widgets:
   student_pitches: piano
-sync_state: synced
 ---
 
 # Description

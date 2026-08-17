@@ -9,7 +9,6 @@ source_facet: description
 recipe_derived_from_description_hash: 8aaecfa415bb7256066f21225870611353cd418387b45e6b1dd258eb4f996af3
 python_derived_from_recipe_hash: 788c6cce4d86865b1313053e5e7dcd3dd11139f080b9ba86a1adc1476c257df8
 recipe_version: 5
-sync_state: stale-recipe
 ---
 
 # Description

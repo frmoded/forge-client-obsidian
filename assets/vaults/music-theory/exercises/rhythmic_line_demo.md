@@ -8,7 +8,6 @@ input_enums:
     - waltz
     - even_eighths
     - syncopated
-sync_state: synced
 ---
 
 # Description

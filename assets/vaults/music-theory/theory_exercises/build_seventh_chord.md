@@ -4,7 +4,6 @@ inputs:
   - tonic
   - quality
 recipe_version: 1
-sync_state: stale-recipe
 description_hash: 9002d8aaeea54203633b107212cd35da69c8cf3927987c10a147d6ba525e89a9
 recipe_hash: 0db4754ecaba644142ca1900d9fbfeed852a66f6c3b579ec8083102460dc3185
 python_hash: e5d1a4fc162f7e942b790e395406201fb6b83935dfe1843a475fc8837c15f097

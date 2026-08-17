@@ -8,7 +8,6 @@ input_enums:
     - minor
     - diminished
     - augmented
-sync_state: synced
 ---
 
 # Description

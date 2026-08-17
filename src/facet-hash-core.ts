@@ -56,97 +56,25 @@ export type SourceLayer = 'description' | 'recipe' | 'python' | 'synced';
 export type CanonicalLayer = SourceLayer;
 
 
-/** Phase 1 of the S9 hexa-state persistence arc (drain 2026-07-23-1700).
- *  A note-level rollup of facet-freshness relationships, persisted to
- *  frontmatter (`sync_state`) so external consumers (forge-mcp, cross-
- *  cowork wizard, CC drain-generated tests) can read the state machine
- *  without loading the plugin runtime.
+/** RETIRED — `SyncState` + `computeSyncState` lived here until drain
+ *  2026-08-17-0700 (sync_state Phase 3).
  *
- *  Distinct from `SourceLayer` (which facet is canonical) and from the
- *  per-facet render-time `FacetState` enum in `facet-state-core.ts`
- *  (how each facet relates to source). Co-exists with both; does NOT
- *  replace either.
+ *  They computed a note-level freshness rollup that was persisted to
+ *  `sync_state` frontmatter. Phase 2 (drain 2026-08-17-0100) removed
+ *  every writer; forge-mcp now DERIVES the value at read time from the
+ *  hash lineage already in the frontmatter, via
+ *  `forge.core.sync_state.derive_sync_state` (vendored to the plugin's
+ *  engine bundle — live code, do not confuse the two). Phase 2 left
+ *  this function standing as a deletion candidate; Phase 3 deleted it
+ *  and its truth-table tests.
  *
- *  Values (drain 2026-07-23-1900 removed the vestigial `authoring`
- *  value per YAGNI — it had no code path that ever wrote it; if a
- *  future in-transit consumer arises, re-add with a real writer +
- *  reader landing together):
- *   - `synced`         all three facets aligned with their stored hashes.
- *   - `stale-recipe`   Description edited since Recipe was last derived
- *                      (description body-hash drifted from stored, recipe
- *                      body-hash still matches stored).
- *   - `stale-python`   Recipe edited since Python was compiled (recipe
- *                      drifted, python still matches) OR a downstream
- *                      Python-only edit not yet reconciled with Recipe.
- *
- *  RETIRED — `stale-both` (drain 2026-08-17-0100, sync_state Phase 2).
- *  Phase 1's consumer inventory found ZERO readers of it anywhere in
- *  any repo: it was declared here, produced by this function, asserted
- *  in this file's own truth table, and carried in one forge-mcp fixture
- *  that would have passed with any string. Nothing branched on it. Under
- *  the derived vocabulary's first-broken-link ordering it is also
- *  redundant with `stale-recipe` — a Recipe that no longer matches its
- *  Description makes the Python stale whether or not the Python still
- *  matches that Recipe.
- *
- *  NOTE — this whole function is now UNREFERENCED by production code:
- *  its three callers were the writers Phase 2 removed. It is left in
- *  place deliberately (§8: don't strip opportunistically) and is a
- *  Phase 3 deletion candidate.
- */
-export type SyncState =
-  | 'synced'
-  | 'stale-recipe'
-  | 'stale-python';
-
-
-/** Compute the note-level sync-state rollup by comparing current facet
- *  body hashes to stored `<facet>_hash` frontmatter values.
- *
- *  Rule set (from drain §4 A.2 — mechanical hash compare):
- *   1. descMismatch                            → stale-recipe
- *      (was `stale-both` when recipeMismatch too; retired above)
- *   2. descMismatch && !recipeMismatch         → stale-recipe
- *   3. !descMismatch && recipeMismatch         → stale-python
- *      (regardless of pythonMismatch — sync_state observes note-level
- *      freshness, not per-facet lineage)
- *   4. !descMismatch && !recipeMismatch && pythonMismatch → stale-python
- *   5. no mismatches                            → synced
- *
- *  An absent stored hash counts as "matches" (no mismatch surfaced) so
- *  freshly minted notes without hashes are reported as `synced`.
- *  Matches the `whichLayerIsSource` fallback pattern.
- */
-export async function computeSyncState(
-  body: string,
-  helpers: {
-    extractDescription: (body: string) => string;
-    extractRecipeSection: (body: string) => string | null;
-    extractPythonSection: (body: string) => string | null;
-    getFrontmatterField: (body: string, key: string) => string | null;
-  },
-): Promise<SyncState> {
-  const descText = helpers.extractDescription(body);
-  const recipeText = helpers.extractRecipeSection(body) ?? '';
-  const pythonText = helpers.extractPythonSection(body) ?? '';
-
-  const storedDesc = helpers.getFrontmatterField(body, 'description_hash');
-  const storedRecipe = helpers.getFrontmatterField(body, 'recipe_hash');
-  const storedPython = helpers.getFrontmatterField(body, 'python_hash');
-
-  const currentDesc = await computeFacetHash(descText);
-  const currentRecipe = await computeFacetHash(recipeText);
-  const currentPython = await computeFacetHash(pythonText);
-
-  const descMismatch = storedDesc !== null && storedDesc !== currentDesc;
-  const recipeMismatch = storedRecipe !== null && storedRecipe !== currentRecipe;
-  const pythonMismatch = storedPython !== null && storedPython !== currentPython;
-
-  if (descMismatch) return 'stale-recipe';
-  if (recipeMismatch) return 'stale-python';
-  if (pythonMismatch) return 'stale-python';
-  return 'synced';
-}
+ *  Nothing replaced it in the plugin, because nothing in the plugin
+ *  ever READ its result: its only callers were those writers. Note the
+ *  two asked different questions — this one hashed the live note text
+ *  ("has someone edited this since it was stamped?"), the derivation
+ *  compares stored lineage stamps ("did the derivation this note
+ *  claims actually happen?"). If a consumer ever needs the former,
+ *  write it with that consumer, not ahead of one. */
 
 
 /** Compute the stable hash for a single facet body. Same normalization

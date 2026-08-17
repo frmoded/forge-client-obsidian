@@ -4,7 +4,6 @@ inputs:
   - first_name
   - last_name
 source_facet: description
-sync_state: synced
 description_hash: a9adc2cfe79c122ffc0a9bc78cead0710451892ac3431ee789a55af0446e7ee8
 recipe_hash: 0984b7a60d86eb5b59b2968af78cf7343520f11ba71070ced04e187c800e380a
 python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

@@ -4,7 +4,6 @@ inputs:
   - tonic
   - quality
 recipe_version: 1
-sync_state: synced
 ---
 
 # Description

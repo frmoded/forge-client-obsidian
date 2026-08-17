@@ -8,7 +8,6 @@ input_enums:
     - "ii-V-I (C major)"
     - "12-bar blues (C)"
     - "Canon in D"
-sync_state: synced
 ---
 
 # Description

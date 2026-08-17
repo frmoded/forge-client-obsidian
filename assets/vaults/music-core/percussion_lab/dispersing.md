@@ -2,7 +2,6 @@
 type: action
 inputs: [bars, kick_velocity, snare_velocity, hihat_velocity, ohat_velocity, ltom_velocity, mtom_velocity]
 source_facet: description
-sync_state: synced
 description_hash: 1faf036d728edb5324b7a46a8b96afeaee163005011007e11ce6f712946d4588
 recipe_hash: d8de927d620b68138205f7056e798c51416599fe5643acb6f48dc24a942ae8e2
 python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

@@ -1,7 +1,6 @@
 ---
 type: action
 source_facet: python
-sync_state: synced
 ---
 
 # Description

@@ -3,7 +3,6 @@ type: action
 inputs:
   - guess
 source_facet: description
-sync_state: stale-both
 description_hash: d6f3c2afbbcc4d738020b9996afc88049a56043ec437ac90250dfe999f597c3f
 recipe_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

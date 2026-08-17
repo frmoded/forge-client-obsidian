@@ -1,6 +1,5 @@
 ---
 type: action
-sync_state: synced
 ---
 
 # Description

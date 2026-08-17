@@ -6,7 +6,6 @@ python_hash: e5d1a4fc162f7e942b790e395406201fb6b83935dfe1843a475fc8837c15f097
 recipe_derived_from_source_hash: b3090791b934601786a5c9f912dae2704d1ff8a8faaaf4f8091781be14e518cc
 source_facet: description
 recipe_derived_from_description_hash: b3090791b934601786a5c9f912dae2704d1ff8a8faaaf4f8091781be14e518cc
-sync_state: stale-recipe
 ---
 
 # Description
