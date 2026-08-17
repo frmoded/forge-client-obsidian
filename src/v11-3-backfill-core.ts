@@ -102,6 +102,22 @@ export interface V113BackfillResult {
      *  removes the fabricated python_derived_from_source_hash.
      *  Empty when no repair fired. */
     stubSyncRepairs: Array<'source_facet'>;
+    /** Drain 2026-08-17-1200 — claims voided because THIS pass replaced
+     *  the Python body with the stub. A note that once had real Python
+     *  and has since lost its `# Python` section still carries that
+     *  body's `python_hash` and lineage; step 3 stamps hashes only when
+     *  absent, so both survive onto a body the backfill manufactured.
+     *  The stale hash then reads as a hand-edit (`pMismatch`), which
+     *  wins the seed before the stub branch is reached and elects
+     *  `source_facet: python` — and `derive_sync_state` short-circuits
+     *  that to `synced`. Voiding the claims restores I18: the stub
+     *  describes itself and certifies nothing. Empty when the backfill
+     *  did not insert a stub this pass. */
+    stubReplacedClaims: Array<
+      | 'python_hash'
+      | 'python_derived_from_recipe_hash'
+      | 'python_derived_from_source_hash'
+    >;
   };
 }
 
@@ -137,6 +153,7 @@ export async function backfillV113Shape(
     canonicalFacetSeeded: null,
     derivedFromParentSeeded: [],
     stubSyncRepairs: [],
+    stubReplacedClaims: [],
   };
 
   // Step 1: ensure # Python section exists on disk.
@@ -191,6 +208,51 @@ export async function backfillV113Shape(
     if (stored === null) {
       workingBody = helpers.setFrontmatterField(workingBody, key, value);
       actions.hashes.push(key);
+    }
+  }
+
+  // Step 3b: void the previous Python body's claims when THIS pass
+  // replaced it with the stub.
+  //
+  // Drain 2026-08-17-1200. Step 3 stamps hashes only when ABSENT, which
+  // is right for every field except the one whose subject the backfill
+  // just swapped out. A note that once had real Python and has since
+  // lost its `# Python` section keeps that body's `python_hash` and
+  // lineage; both now describe content that is gone. The stale hash
+  // reads as cohort drift, `pMismatch` wins the seed ahead of the stub
+  // branch below, and `source_facet: python` makes the engine's
+  // `derive_sync_state` short-circuit to `synced` — the backfill's own
+  // stub certified as an up-to-date source. The surviving
+  // `python_derived_from_recipe_hash` still equalled `recipe_hash` too,
+  // so the python link read current even without the short-circuit.
+  //
+  // Gated on `actions.pythonSection`, NOT on body identity. The two
+  // differ exactly where it matters: a cohort note whose real,
+  // genuinely-forged Python happens to BE `return None` is
+  // byte-identical to the stub, and a body-identity guard would strip
+  // its honest lineage. "The backfill inserted this body a few lines
+  // ago" is unambiguous — no such note reaches here with its section
+  // already on disk. (Contrast the lineage-stamping guard below, which
+  // is deliberately body-based: it must stay stable across re-opens,
+  // whereas voiding is naturally idempotent — the second pass finds
+  // nothing left to void.)
+  if (actions.pythonSection) {
+    const stalePythonHash = helpers.getFrontmatterField(workingBody, 'python_hash');
+    if (stalePythonHash !== null && stalePythonHash !== currentPythonHash) {
+      workingBody = helpers.setFrontmatterField(
+        workingBody, 'python_hash', currentPythonHash,
+      );
+      actions.stubReplacedClaims.push('python_hash');
+    }
+    for (const field of [
+      'python_derived_from_recipe_hash',
+      'python_derived_from_source_hash',
+    ] as const) {
+      if (helpers.getFrontmatterField(workingBody, field) !== null
+          && helpers.removeFrontmatterField) {
+        workingBody = helpers.removeFrontmatterField(workingBody, field);
+        actions.stubReplacedClaims.push(field);
+      }
     }
   }
 
@@ -427,7 +489,8 @@ export async function backfillV113Shape(
     || actions.canonicalHashRepairs.length > 0
     || actions.canonicalFacetSeeded !== null
     || actions.derivedFromParentSeeded.length > 0
-    || actions.stubSyncRepairs.length > 0;
+    || actions.stubSyncRepairs.length > 0
+    || actions.stubReplacedClaims.length > 0;
   return {
     changed,
     newBody: changed ? workingBody : body,

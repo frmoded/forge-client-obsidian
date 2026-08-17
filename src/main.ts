@@ -5058,6 +5058,14 @@ export default class ForgePlugin extends Plugin {
           + 're-seeded honestly — drain 2026-08-09-0400)',
         );
       }
+      if (result.actions.stubReplacedClaims.length > 0) {
+        parts.push(
+          `${result.actions.stubReplacedClaims.length} stale Python claim(s) voided `
+          + '(the `# Python` section was missing, so the stub replaced a body those '
+          + 'fields described — drain 2026-08-17-1200): '
+          + result.actions.stubReplacedClaims.join(', '),
+        );
+      }
       void this.forgeOutput(
         `Backfilled ${file.basename} to V2a v11.4 shape (${parts.join(', ')}).`,
         'info',

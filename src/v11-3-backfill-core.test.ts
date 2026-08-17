@@ -1054,3 +1054,149 @@ Say hello to the world.
   const result = await backfillV113Shape(noRecipe, HELPERS);
   assert.equal(HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'description');
 });
+
+// ---------------------------------------------------------------------------
+// Drain 2026-08-17-1200 — the v11.4 backfill must never elect its own stub
+// as a note's source, nor leave a derivation stamped for content it replaced.
+//
+// The prompt's hypothesis (a FRESH Recipe-bearing, Python-less note gets
+// lineage stamped and derives `synced`) does NOT reproduce — drain
+// 2026-08-09-0400 closed it, and `backfills missing # Python section AND all
+// three hashes...` above is its guard. The surviving path is a note that ONCE
+// had real Python and has since lost its `# Python` section: step 3 stamps
+// hashes ONLY IF ABSENT, so `python_hash` keeps the OLD body's value while the
+// body becomes the stub. That mismatch reads as a hand-edit, `pMismatch` wins
+// the seed before the stub branch is reached, and `source_facet: python` makes
+// `derive_sync_state` short-circuit to `synced` — the manufactured-freshness
+// lie, now machine-readable. The pre-existing
+// `python_derived_from_recipe_hash` still equals `recipe_hash` too, so the
+// python link reads current even without the short-circuit.
+// ---------------------------------------------------------------------------
+
+const LOST_DESC = 'Quiz the player on scale qualities.';
+const LOST_RECIPE =
+  'Call [[mcq]] with prompt="Which quality?", choices=["major","minor"].';
+const LOST_REAL_PYTHON =
+  'def compute(context):\n    return mcq(prompt="Which quality?")';
+
+/** A note whose `# Python` section was removed but whose python frontmatter
+ *  (hash + lineage, both stamped against the REAL body that is now gone)
+ *  survives. `source_facet` is absent so the seeding branch runs. */
+async function buildLostPythonSectionNote(realPython = LOST_REAL_PYTHON) {
+  const descHash = await computeFacetHash(LOST_DESC);
+  const recipeHash = await computeFacetHash(LOST_RECIPE);
+  const pyHash = await computeFacetHash(realPython);
+  return `---
+type: action
+description_hash: ${descHash}
+recipe_hash: ${recipeHash}
+python_hash: ${pyHash}
+recipe_derived_from_description_hash: ${descHash}
+python_derived_from_recipe_hash: ${recipeHash}
+---
+
+# Description
+
+${LOST_DESC}
+
+# Recipe
+
+${LOST_RECIPE}
+`;
+}
+
+test('lost-# Python note: the backfill stub is NEVER elected as source_facet', async () => {
+  const result = await backfillV113Shape(await buildLostPythonSectionNote(), HELPERS);
+  assert.equal(result.actions.pythonSection, true, 'stub was inserted');
+  assert.equal(
+    extractPythonSection(result.newBody), DEFAULT_PYTHON_STUB,
+    'body really is the backfill stub',
+  );
+  const seed = HELPERS.getFrontmatterField(result.newBody, 'source_facet');
+  assert.notEqual(
+    seed, 'python',
+    'the stub is content the backfill manufactured; it cannot be the source',
+  );
+  // A real Recipe body exists, so Recipe is the honest source.
+  assert.equal(seed, 'recipe');
+});
+
+test('lost-# Python note: stale python lineage is dropped, not carried onto the stub', async () => {
+  const result = await backfillV113Shape(await buildLostPythonSectionNote(), HELPERS);
+  assert.equal(
+    HELPERS.getFrontmatterField(result.newBody, 'python_derived_from_recipe_hash'),
+    null,
+    'lineage certifies a derivation of a body that no longer exists (I18)',
+  );
+  assert.equal(
+    HELPERS.getFrontmatterField(result.newBody, 'python_derived_from_source_hash'),
+    null,
+  );
+});
+
+test('lost-# Python note: python_hash is re-stamped to describe the stub actually on disk', async () => {
+  const result = await backfillV113Shape(await buildLostPythonSectionNote(), HELPERS);
+  assert.equal(
+    HELPERS.getFrontmatterField(result.newBody, 'python_hash'),
+    await computeFacetHash(DEFAULT_PYTHON_STUB),
+    'a stored hash must describe the body that is there now',
+  );
+});
+
+test('lost-# Python note: the healed shape is exactly the fresh-stub shape (derives stale-python)', async () => {
+  const healed = await backfillV113Shape(await buildLostPythonSectionNote(), HELPERS);
+  // The engine derives from stored values only. Absent python lineage on a
+  // present python facet is `stale-python` per
+  // tests/core/test_sync_state.py::test_absent_lineage_on_a_present_facet_is_stale_not_synced.
+  // Assert the three inputs that decision reads.
+  assert.equal(HELPERS.getFrontmatterField(healed.newBody, 'source_facet'), 'recipe');
+  assert.notEqual(HELPERS.getFrontmatterField(healed.newBody, 'recipe_hash'), null);
+  assert.equal(
+    HELPERS.getFrontmatterField(healed.newBody, 'python_derived_from_recipe_hash'), null,
+  );
+});
+
+test('lost-# Python heal is idempotent — second pass is a no-op', async () => {
+  const first = await backfillV113Shape(await buildLostPythonSectionNote(), HELPERS);
+  const second = await backfillV113Shape(first.newBody, HELPERS);
+  assert.equal(second.changed, false, 'no churn on re-open');
+  assert.equal(second.newBody, first.newBody);
+});
+
+test('REGRESSION: a real hand-edited Python body with a stale hash still elects python (I5)', async () => {
+  // Same stale-hash signature, but the body is genuine cohort content, not the
+  // stub. The drift branches must keep winning here — this is the hand-edit
+  // case the stub guard must not swallow.
+  const descHash = await computeFacetHash(LOST_DESC);
+  const recipeHash = await computeFacetHash(LOST_RECIPE);
+  const staleHash = await computeFacetHash('def compute(context):\n    return 1');
+  const handEdited = `---
+type: action
+description_hash: ${descHash}
+recipe_hash: ${recipeHash}
+python_hash: ${staleHash}
+recipe_derived_from_description_hash: ${descHash}
+---
+
+# Description
+
+${LOST_DESC}
+
+# Recipe
+
+${LOST_RECIPE}
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return mcq(prompt="Which quality?")
+\`\`\`
+`;
+  const result = await backfillV113Shape(handEdited, HELPERS);
+  assert.equal(result.actions.pythonSection, false, 'no stub inserted');
+  assert.equal(
+    HELPERS.getFrontmatterField(result.newBody, 'source_facet'), 'python',
+    'a genuine hand-edit still makes Python the source',
+  );
+});
