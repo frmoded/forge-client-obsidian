@@ -140,6 +140,19 @@ export class PyodideHost {
   private pluginId: string;
   private pluginVersion: string;
 
+  /** BRAT Phase 1b (drain 2026-08-20-1200) — set by main.ts's onload
+   *  from the hydration outcome. False means the binary runtime is
+   *  absent or failed sha256 verification, and `_init` must refuse to
+   *  boot rather than load a partial runtime (§8). Defaults TRUE so
+   *  every non-onload construction path (tests, direct use) behaves
+   *  exactly as before this drain.
+   */
+  private _runtimeHydrated = true;
+
+  setRuntimeHydrated(ready: boolean): void {
+    this._runtimeHydrated = ready;
+  }
+
   constructor(app: App, pluginId: string, pluginVersion: string) {
     this.app = app;
     this.pluginId = pluginId;
@@ -200,6 +213,18 @@ export class PyodideHost {
   }
 
   private async _init(): Promise<PyodideHostInstance> {
+    if (!this._runtimeHydrated) {
+      // Drain 2026-08-20-1200. Booting here would mount whatever
+      // fraction of the wheels happened to verify — the partial
+      // runtime that produces NameErrors with no hint that a download
+      // failed. Hydration retries idempotently on the next launch.
+      throw new Error(
+        'Forge runtime is not hydrated: the binary assets are missing or '
+        + 'failed verification. Reopen Obsidian while online to finish the '
+        + 'one-time download.',
+      );
+    }
+
     const t0 = performance.now();
     console.log("Forge: initializing Pyodide…");
 
@@ -330,32 +355,21 @@ export class PyodideHost {
     // chapters 1-9 are pure Python — unaffected by the skipped mount.
     console.log(
       `Forge wheel-mount: manifest has ${manifest.wheels?.length ?? 0} wheels; `
-      + `pluginVersion=${this.pluginVersion}; will fall back to CDN per-wheel if local missing.`
+      + `pluginVersion=${this.pluginVersion}; wheels are hydrated + sha256-verified at onload.`
     );
     if (manifest.wheels && manifest.wheels.length > 0) {
       const adapter = this.app.vault.adapter;
       const mounted: string[] = [];
-      const fellBackToCdn: string[] = [];
       const skipped: string[] = [];
       pyodide.FS.mkdir("/bundle/wheels");
       pyodide.FS.mkdir("/bundle/site-packages");
-      // v0.2.173 — wheel CDN fallback. BRAT-installed users only get
-      // main.js + manifest.json + styles.css from the release; assets/
-      // (including wheels/) is shipped only via the release zip, which
-      // BRAT doesn't extract. Local wheel files are therefore missing
-      // for ~100% of cohort users. Falling back to fetching each wheel
-      // from the GitHub release URL at runtime resolves music-domain
-      // snippet failures.
-      // v0.2.174 — two bugs from v0.2.173 fixed here:
-      //   (a) `manifest.version` was the BUNDLE manifest (no version
-      //       field) — produced `vundefined` URLs. Now uses
-      //       this.pluginVersion (passed in via constructor from the
-      //       plugin manifest).
-      //   (b) browser `fetch` from `app://obsidian.md` to github.com
-      //       was blocked by CORS. Obsidian's `requestUrl` API bypasses
-      //       CORS (it's a native HTTP call, not a browser fetch).
-      const wheelCdnBase =
-        `https://github.com/frmoded/forge-client-obsidian/releases/download/v${this.pluginVersion}`;
+      // Wheels are mounted from disk only. The v0.2.173-v0.2.174
+      // per-wheel GitHub fetch that used to live here was RETIRED by
+      // drain 2026-08-20-1200: it mounted bytes with no integrity
+      // check. brat-hydration.ts now fetches and sha256-verifies every
+      // wheel at onload, before Pyodide is allowed to boot, so by this
+      // point a wheel is either present-and-verified or the boot was
+      // refused.
       for (const relpath of manifest.wheels) {
         // relpath is e.g. "wheels/music21-8.3.0-py3-none-any.whl"
         const localPath = `.obsidian/plugins/${this.pluginId}/assets/${relpath}`;
@@ -369,30 +383,27 @@ export class PyodideHost {
           }
         }
         if (!bytes) {
-          // Fallback: fetch from GitHub release asset via Obsidian's
-          // requestUrl (bypasses CORS).
-          const wheelFname = relpath.split("/").pop();
-          const cdnUrl = `${wheelCdnBase}/${wheelFname}`;
-          try {
-            const resp = await requestUrl({ url: cdnUrl, method: "GET" });
-            if (resp.status >= 200 && resp.status < 300) {
-              bytes = new Uint8Array(resp.arrayBuffer);
-              fellBackToCdn.push(relpath);
-              console.log(
-                `Forge wheel-mount: ${wheelFname} ← CDN ok (${bytes.length} bytes)`
-              );
-            } else {
-              console.warn(
-                `Forge wheel-mount: ${wheelFname} ← CDN HTTP ${resp.status} (url=${cdnUrl})`
-              );
-            }
-          } catch (e) {
-            console.warn(
-              `Forge wheel-mount: ${wheelFname} ← CDN fetch threw`,
-              e,
-              `(url=${cdnUrl})`,
-            );
-          }
+          // Drain 2026-08-20-1200 — the v0.2.173 unverified CDN
+          // fallback that lived here is RETIRED, not disabled.
+          //
+          // It fetched each wheel from this version's GitHub release
+          // and mounted the bytes with no integrity check of any kind
+          // — the last unverified-artifact route in the plugin. BRAT
+          // Phase 1b moves that fetch to brat-hydration.ts, which
+          // verifies every artifact against the sha256 manifest baked
+          // into main.js before it is ever written to disk.
+          //
+          // So by the time execution reaches here, hydration has
+          // already run and either placed a VERIFIED wheel at
+          // localPath or refused to let Pyodide boot at all. A miss is
+          // now a real inconsistency worth surfacing, not a routine
+          // BRAT case to paper over with a second download path.
+          console.error(
+            `Forge wheel-mount: ${relpath} absent after hydration reported `
+            + `ready — the runtime is inconsistent. Music-domain snippets `
+            + `will fail. (Hydration verifies + caches wheels at onload; `
+            + `see brat-hydration.ts.)`,
+          );
         }
         if (!bytes) {
           skipped.push(relpath);
@@ -403,15 +414,10 @@ export class PyodideHost {
         mounted.push(relpath);
       }
       console.log(
-        `Forge wheel-mount summary: mounted=${mounted.length} cdn=${fellBackToCdn.length} skipped=${skipped.length}`,
+        `Forge wheel-mount summary: mounted=${mounted.length} skipped=${skipped.length}`,
       );
       if (mounted.length > 0) {
-        console.log(
-          `Forge: ${mounted.length} wheels mounted` +
-          (fellBackToCdn.length > 0
-            ? ` (${fellBackToCdn.length} from CDN fallback).`
-            : `.`)
-        );
+        console.log(`Forge: ${mounted.length} wheels mounted.`);
       }
       if (skipped.length > 0) {
         console.warn(

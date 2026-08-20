@@ -127,6 +127,7 @@ import {
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
 import { discardThenDetach } from './leaf-discard-before-detach-core.ts';
 import { restoreInlinedAssets } from './restore-inlined-assets.ts';
+import { hydrateRuntime } from './brat-hydration.ts';
 import { extractDataBody } from './data-snippet.ts';
 import { openForgeAction, ForgeHost } from './forge-action.ts';
 import { isNetRefusalError, welcomeMessage } from './closed-beta-ux.ts';
@@ -404,6 +405,11 @@ export default class ForgePlugin extends Plugin {
   // events before the user right-clicks). The synchronous index walk
   // is cheap and always fresh.
 
+  /** BRAT Phase 1b — false when the binary runtime is absent or
+   *  failed verification. Pyodide must not boot on a partial
+   *  runtime; the plan re-runs idempotently next launch. */
+  private _hydrationReady = false;
+
   async onload() {
     await this.loadSettings();
 
@@ -503,6 +509,34 @@ export default class ForgePlugin extends Plugin {
       console.error(prefixed('restoreInlinedAssets failed'), e);
     }
 
+    // BRAT Phase 1b (drain 2026-08-20-1200) — hydrate the BINARY
+    // runtime. restoreInlinedAssets above puts the ~1 MB inlined TEXT
+    // layer on disk; the 37 MB of wheels + Pyodide cannot be inlined
+    // and are fetched from THIS version's own release assets,
+    // sha256-verified against the manifest baked into main.js.
+    //
+    // Ordered after the restore and before PyodideHost deliberately:
+    // the restore creates `assets/`, and the host must not be handed a
+    // half-present runtime. On a zip install every artifact is already
+    // there, `planHydration` reports complete, and this is silent — the
+    // established path is provably untouched.
+    //
+    // Awaited rather than fired-and-forgotten: `_hydrationReady` gates
+    // Pyodide boot, and a lazy host that started while artifacts were
+    // still downloading is exactly the partial-runtime load §8 forbids.
+    try {
+      const outcome = await hydrateRuntime(
+        this.app, this.manifest.id, this.manifest.version,
+        (msg) => console.log(`${NOTICE_PREFIX}${msg}`),
+      );
+      this._hydrationReady = outcome.ready;
+    } catch (e) {
+      // hydrateRuntime does not throw; this is belt-and-braces so a
+      // surprise here cannot take onload down with it.
+      console.error(prefixed('hydrateRuntime failed'), e);
+      this._hydrationReady = false;
+    }
+
     // V1 Phase 1: wire the Pyodide host. Lazy init — actual Pyodide
     // load only happens on the first computeSnippet call for a
     // bundled-library snippet. Per V1 architecture, plugin (not
@@ -510,6 +544,7 @@ export default class ForgePlugin extends Plugin {
     // /moda/* and /compute requests through here via engine-request
     // postMessages (see moda-view.ts).
     const pyodideHost = new PyodideHost(this.app, this.manifest.id, this.manifest.version);
+    pyodideHost.setRuntimeHydrated(this._hydrationReady);
     setPyodideHost(pyodideHost);
     setPyodideHostSingleton(pyodideHost);
 
