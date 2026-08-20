@@ -21,3 +21,4 @@ dist/
 # npm run build outputs — regenerate on every build
 src/bundled-assets.generated.ts
 src/version-constant.generated.ts
+src/asset-manifest.generated.ts

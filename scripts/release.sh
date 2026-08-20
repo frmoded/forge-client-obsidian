@@ -414,6 +414,23 @@ if [ -d "assets/wheels" ]; then
   done
 fi
 
+# BRAT Phase 1 (drain 2026-08-19-0900) — the Pyodide runtime joins the
+# wheels as individual assets. A BRAT install gets no `assets/` at all,
+# so both binary buckets have to be fetchable per-file from THIS
+# version's release; src/asset-manifest.generated.ts bakes the sha256 of
+# every file uploaded here, and the client refuses anything that does
+# not match.
+#
+# Loose files rather than one pyodide-runtime.zip: the plugin has no
+# client-side unzip (fflate is not a dependency), wheels are already
+# per-file so the fetch loop exists either way, and a failed 8 MB wasm
+# then retries alone instead of dragging 14 MB behind it.
+if [ -d "assets/pyodide" ]; then
+  for pyf in assets/pyodide/*; do
+    [ -f "$pyf" ] && ASSETS+=("$pyf")
+  done
+fi
+
 gh release create "v${NEW_VERSION}" \
   --title "v${NEW_VERSION} — ${TAG_MSG}" \
   --notes "Release v${NEW_VERSION}. BRAT users: run 'Check for updates' to pull main.js. Fresh installs: use install-latest.sh against the attached zip." \
