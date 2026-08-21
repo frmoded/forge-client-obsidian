@@ -1,13 +1,17 @@
 import { App, DataAdapter, TFile, WorkspaceLeaf, MarkdownView, Notice } from 'obsidian';
 import { copyDirRecursive } from './copy-dir-core.ts';
 import { ensureForgeTomlStub } from './forge-toml-stub.ts';
-import { vaultDeclaresMusic } from './forge-music-gate.ts';
 import { compareBundledVaultVersion } from './bundled-vault-version-core.ts';
 import { ensureWelcomeFiles } from './welcome-files-core.ts';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
 import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-classifier-core.ts';
 import { computeSweepTrashList } from './sweep-bundle-dropped-core.ts';
+import {
+  BUNDLED_VAULTS_ROOT,
+  deriveBundledVaultNames,
+  type DerivedBundledVaults,
+} from './bundled-vault-extraction-core.ts';
 import {
   LEGACY_MUSIC_DIR,
   LEGACY_MUSIC_BACKUP_DIR,
@@ -233,13 +237,15 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // is ANY known source repo, not just same-name. forge-music's repo
     // (`name = "forge-music"`) was still getting forge-moda extracted
     // into it under v0.2.64's narrow same-name gate.
-    if (shouldSkipBundledExtract(sourceVaultName)) {
-      console.log(
-        `Forge: skipping forge-moda extraction — vault root declares ` +
-        `itself as source repo for ${sourceVaultName}`,
-      );
-    } else {
-      await ensureBundledForgeModa(app);
+    // v0.2.14: write a minimal forge.toml at the vault root if
+    // missing. Pre-empts the InitializeForgeVaultWizard auto-open
+    // trigger on fresh-vault first ribbon click. Independent of the
+    // sentinel, same as the bundled extraction below.
+    try {
+      const wrote = await ensureForgeTomlStub(adapter);
+      if (wrote) console.log('Forge: wrote V1 stub forge.toml');
+    } catch (e) {
+      console.error('Forge: ensureForgeTomlStub failed', e);
     }
 
     // v0.2.262 drain 1310 — migrateChipsMdToV2 removed. `_chips.md`
@@ -248,54 +254,24 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     // discovery + eventually replaced by bundled re-extract (which no
     // longer contains them).
 
-    // v0.2.76: extract bundled forge-tutorial content on first install
-    // + on forge.toml version drift. Mirrors ensureBundledForgeModa
-    // (forge-tutorial is the V1 default-on Tier 1 tutorial library —
-    // not domain-gated like forge-music; closed-beta cohorts get it
-    // automatically as the K&R-style onboarding walk).
+    // Drain 2026-08-21-2300: extract EVERY vault the bundle carries,
+    // derived from assets/vaults/ itself. Replaces three hand-written
+    // call sites (forge-moda, forge-tutorial, and a music pair gated
+    // on `domains = ["music"]`). The gate is why a fresh BRAT install
+    // got two of four vaults: the v0.2.14 stub declares no domains,
+    // so music-theory/music-core never reached extraction and the
+    // sweep reported their roots missing.
     //
-    // v0.2.66 source-vault gate also applies: a vault that IS the
-    // forge-tutorial source repo doesn't get re-extraction into itself.
+    // v0.2.64/v0.2.66 source-vault gate still applies: a vault that
+    // IS a bundled library's source repo gets nothing extracted into
+    // it.
     if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
-        `Forge: skipping forge-tutorial extraction — vault root declares ` +
+        `Forge: skipping bundled-vault extraction — vault root declares ` +
         `itself as source repo for ${sourceVaultName}`,
       );
     } else {
-      await ensureBundledForgeTutorial(app);
-    }
-
-    // v0.2.14: write a minimal forge.toml at the vault root if
-    // missing. Pre-empts the InitializeForgeVaultWizard auto-open
-    // trigger on fresh-vault first ribbon click. Same independent-
-    // of-sentinel semantics as ensureBundledForgeModa above.
-    try {
-      const wrote = await ensureForgeTomlStub(adapter);
-      if (wrote) console.log('Forge: wrote V1 stub forge.toml');
-    } catch (e) {
-      console.error('Forge: ensureForgeTomlStub failed', e);
-    }
-
-    // v0.2.15: extract the bundled music vaults IFF the user's
-    // forge.toml declares "music" in its domains array. Gated unlike
-    // forge-moda (which is V1's default-on library) because music
-    // isn't on the seminar curriculum — most students won't want the
-    // music libraries appearing in their vault.
-    //
-    // v0.2.64 — also skipped when vault IS the library's source repo
-    // (per brief (e)).
-    // v0.2.66 — symmetric gate per brief (e) followup: any source vault
-    // (not just same-name) skips music extraction too.
-    // v0.2.333 Phase 5 — forge-music renamed music-theory; music-core
-    // added. A pre-rename forge-music/ dir is parked as
-    // forge-music.bak.legacy/ (see ensureBundledMusicVaults).
-    if (shouldSkipBundledExtract(sourceVaultName)) {
-      console.log(
-        `Forge: skipping music-theory/music-core extraction — vault root ` +
-        `declares itself as source repo for ${sourceVaultName}`,
-      );
-    } else {
-      await ensureBundledMusicVaults(app);
+      await ensureAllBundledVaults(app);
     }
 
     // v0.2.262 drain 1310 — migrateChipsMdToV2 removed alongside
@@ -314,10 +290,11 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     if (!shouldSkipBundledExtract(sourceVaultName)) {
       try {
         const allTrashed: { lib: string; files: string[] }[] = [];
-        for (const lib of ['forge-moda', 'music-theory', 'forge-tutorial', 'music-core']) {
+        const sweepTargets = (await listBundledVaultNames(adapter)).names;
+        for (const lib of sweepTargets) {
           const trashed = await sweepBundleDroppedFiles(
             app,
-            `.obsidian/plugins/forge-client-obsidian/assets/vaults/${lib}`,
+            `${BUNDLED_VAULTS_ROOT}/${lib}`,
             lib,
           );
           if (trashed.length > 0) {
@@ -496,159 +473,126 @@ async function ensureBundledVault(
   console.log(`Forge: extracted bundled ${label} into vault`);
 }
 
-/** Copy the bundled forge-moda content from the plugin's assets dir
- *  into the user's vault root. v0.2.39 — version-aware: replaces the
- *  pre-v0.2.39 `exists(targetDir) → skip` gate with a version compare
- *  so drift triggers a backup + re-extract instead of silently leaving
- *  stale content. See ensureBundledVault. */
-async function ensureBundledForgeModa(app: App): Promise<void> {
-  const adapter = app.vault.adapter;
+/** List the vaults the plugin bundle actually carries. Derived from
+ *  assets/vaults/ at runtime — the set is whatever shipped, so adding
+ *  a vault to the bundle needs no edit here. Falls back to
+ *  FALLBACK_BUNDLED_VAULTS (and says so) if the listing comes back
+ *  empty, rather than extracting nothing. */
+async function listBundledVaultNames(
+  adapter: DataAdapter,
+): Promise<DerivedBundledVaults> {
+  let folders: string[] | undefined;
   try {
-    await ensureBundledVault(
-      adapter,
-      '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-moda',
-      'forge-moda',
-      'forge-moda',
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const listed = await (adapter as any).list?.(BUNDLED_VAULTS_ROOT);
+    folders = listed?.folders;
   } catch (e) {
-    // Non-fatal — the simulator and own-snippet authoring still work
-    // without forge-moda extracted as authoring content. Surface as
-    // warn rather than throwing so plugin load doesn't abort.
-    console.error('Forge: ensureBundledForgeModa failed', e);
+    console.error('Forge: listing bundled vaults failed', e);
+  }
+  const derived = deriveBundledVaultNames(folders);
+  if (derived.source === 'fallback') {
+    console.warn(
+      `Forge: could not list ${BUNDLED_VAULTS_ROOT}; falling back to ` +
+      `the built-in vault list [${derived.names.join(', ')}]`,
+    );
+  }
+  return derived;
+}
+
+/** Drain 2026-08-08-1200 / v0.2.333 Phase 5 — park a pre-rename
+ *  forge-music/ (or forge-music.legacy/) dir before any extraction.
+ *  Runs unconditionally: a leftover legacy dir collides with the
+ *  music-theory bundle at snippet discovery regardless of what the
+ *  vault declares (driver's foo vault: domains=["moda"] but
+ *  forge-music.legacy/ present). */
+async function parkLegacyMusicDirs(adapter: DataAdapter): Promise<void> {
+  const action = decideLegacyMusicRename({
+    oldExists: await adapter.exists(LEGACY_MUSIC_DIR),
+    backupExists: await adapter.exists(LEGACY_MUSIC_BACKUP_DIR),
+    legacyVariantExists: await adapter.exists(LEGACY_MUSIC_VARIANT_DIR),
+  });
+  if (action === 'rename') {
+    await adapter.rename(LEGACY_MUSIC_DIR, LEGACY_MUSIC_BACKUP_DIR);
+    console.log(
+      `Forge: parked pre-rename ${LEGACY_MUSIC_DIR}/ at ` +
+      `${LEGACY_MUSIC_BACKUP_DIR}/ (two-vault split, v0.2.333)`,
+    );
+    new Notice(legacyMusicRenameNotice(), 12000);
+  } else if (action === 'rename-legacy-variant') {
+    await adapter.rename(LEGACY_MUSIC_VARIANT_DIR, LEGACY_MUSIC_BACKUP_DIR);
+    console.log(
+      `Forge: parked ${LEGACY_MUSIC_VARIANT_DIR}/ at ` +
+      `${LEGACY_MUSIC_BACKUP_DIR}/ (no .bak. segment — it defeated ` +
+      `the engine's backup-dir exclusion; drain 2026-08-08-1200)`,
+    );
+    new Notice(legacyVariantRenameNotice(), 12000);
+  } else if (action === 'skip-backup-exists') {
+    // A legacy dir AND an earlier park both exist — refuse to
+    // clobber the backup. The leftover dir is neutralized by the
+    // MEMFS mount-skip list (pyodide-host.ts); for forge-music/ the
+    // engine's .bak.-dir discovery exclusion also applies.
+    console.log(
+      `Forge: a legacy music dir (${LEGACY_MUSIC_DIR}/ or ` +
+      `${LEGACY_MUSIC_VARIANT_DIR}/) is present but ` +
+      `${LEGACY_MUSIC_BACKUP_DIR}/ already exists; leaving both`,
+    );
   }
 }
 
-/** v0.2.76: extract bundled forge-tutorial content into the vault. The
- *  Tier 1 onboarding library — a 9-chapter K&R-style walk from
- *  first-Forge-click to composing your own snippets. Default-on
- *  (mirrors forge-moda), not gated by domain. Source-vault gate at
- *  the call site (runFirstRunCheck) skips extraction when the vault
- *  IS the forge-tutorial source repo. */
-async function ensureBundledForgeTutorial(app: App): Promise<void> {
+/** Extract every bundled vault into the user's vault, version-aware
+ *  per vault via ensureBundledVault (skip when already at the bundled
+ *  version, re-extract on drift, copy when absent).
+ *
+ *  Drain 2026-08-21-2300 — was three helpers, one of which
+ *  (ensureBundledMusicVaults) additionally required the vault's
+ *  forge.toml to declare the "music" domain. That opt-in dated from
+ *  v0.2.15, when music wasn't on the curriculum; it meant a fresh
+ *  BRAT install shipped music-theory + music-core in the bundle and
+ *  then never extracted them. The set now comes from the bundle.
+ *
+ *  Per-vault try/catch: one failing vault must not strand the rest,
+ *  and none of them are fatal to plugin load. */
+async function ensureAllBundledVaults(app: App): Promise<void> {
   const adapter = app.vault.adapter;
   try {
-    await ensureBundledVault(
-      adapter,
-      '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-tutorial',
-      'forge-tutorial',
-      'forge-tutorial',
-    );
+    await parkLegacyMusicDirs(adapter);
   } catch (e) {
-    // Non-fatal — first-Forge-click on welcome.md still works without
-    // the tutorial extracted. Surface as warn rather than throwing so
-    // plugin load doesn't abort.
-    console.error('Forge: ensureBundledForgeTutorial failed', e);
+    console.error('Forge: parkLegacyMusicDirs failed', e);
   }
-}
 
-/** v0.2.15: extract the bundled music vaults if the vault declares
- *  "music" in its forge.toml domains. v0.2.39 — version-aware
- *  re-extract on drift, sharing the ensureBundledVault helper with
- *  forge-moda. The gate is per-vault opt-in because music isn't on
- *  the V1 seminar curriculum; defaulting it on would leave unwanted
- *  files in most closed-beta vaults.
- *
- *  v0.2.333 Phase 5 two-vault split — was ensureBundledForgeMusic.
- *  Now extracts BOTH music-theory (renamed from forge-music;
- *  pedagogy: exercises, quizzes, worked pieces) AND music-core
- *  (composition-primitive authoring surface). Before extracting, a
- *  pre-rename forge-music/ dir is parked at forge-music.bak.legacy/
- *  (non-destructive; see legacy-music-rename-core.ts for why the
- *  `.bak.` name). */
-async function ensureBundledMusicVaults(app: App): Promise<void> {
-  const adapter = app.vault.adapter;
-  const tomlPath = 'forge.toml';
-
-  try {
-    // Drain 2026-08-08-1200 — the legacy park runs BEFORE the
-    // music-domain gate: a leftover forge-music/ or forge-music.legacy/
-    // collides with the music-theory bundle at snippet discovery
-    // regardless of whether the vault still declares music (driver's
-    // foo vault: domains=["moda"] but forge-music.legacy/ present).
-    const action = decideLegacyMusicRename({
-      oldExists: await adapter.exists(LEGACY_MUSIC_DIR),
-      backupExists: await adapter.exists(LEGACY_MUSIC_BACKUP_DIR),
-      legacyVariantExists: await adapter.exists(LEGACY_MUSIC_VARIANT_DIR),
-    });
-    if (action === 'rename') {
-      await adapter.rename(LEGACY_MUSIC_DIR, LEGACY_MUSIC_BACKUP_DIR);
-      console.log(
-        `Forge: parked pre-rename ${LEGACY_MUSIC_DIR}/ at ` +
-        `${LEGACY_MUSIC_BACKUP_DIR}/ (two-vault split, v0.2.333)`,
-      );
-      new Notice(legacyMusicRenameNotice(), 12000);
-    } else if (action === 'rename-legacy-variant') {
-      await adapter.rename(LEGACY_MUSIC_VARIANT_DIR, LEGACY_MUSIC_BACKUP_DIR);
-      console.log(
-        `Forge: parked ${LEGACY_MUSIC_VARIANT_DIR}/ at ` +
-        `${LEGACY_MUSIC_BACKUP_DIR}/ (no .bak. segment — it defeated ` +
-        `the engine's backup-dir exclusion; drain 2026-08-08-1200)`,
-      );
-      new Notice(legacyVariantRenameNotice(), 12000);
-    } else if (action === 'skip-backup-exists') {
-      // A legacy dir AND an earlier park both exist — refuse to
-      // clobber the backup. The leftover dir is neutralized by the
-      // MEMFS mount-skip list (pyodide-host.ts); for forge-music/ the
-      // engine's .bak.-dir discovery exclusion also applies.
-      console.log(
-        `Forge: a legacy music dir (${LEGACY_MUSIC_DIR}/ or ` +
-        `${LEGACY_MUSIC_VARIANT_DIR}/) is present but ` +
-        `${LEGACY_MUSIC_BACKUP_DIR}/ already exists; leaving both`,
-      );
-    }
-
-    if (!(await adapter.exists(tomlPath))) {
-      // No forge.toml means no domain declaration; nothing to extract.
-      // (v0.2.14's stub usually creates one, but defensive against
-      // races and adapter quirks.)
-      return;
-    }
-    const tomlBody = await adapter.read(tomlPath);
-    if (!vaultDeclaresMusic(tomlBody)) {
-      return;
-    }
-
-    await ensureBundledVault(
-      adapter,
-      '.obsidian/plugins/forge-client-obsidian/assets/vaults/music-theory',
-      'music-theory',
-      'music-theory',
-    );
-    await ensureBundledVault(
-      adapter,
-      '.obsidian/plugins/forge-client-obsidian/assets/vaults/music-core',
-      'music-core',
-      'music-core',
-    );
-  } catch (e) {
-    console.error('Forge: ensureBundledMusicVaults failed', e);
-  }
-}
-
-
-/** v0.2.45: dispatch to the right ensureBundled* helper for a domain
- *  whose activation just landed via EditVaultDomainsModal.applyDiff.
- *  Mirrors the per-domain branch list inside runFirstRunCheck.
- *
- *  - 'music' → ensureBundledMusicVaults (music-theory + music-core,
- *    the only domain-gated bundled vaults today; moda is
- *    unconditionally extracted at onload).
- *  - Other domain ids → no-op + warn (forward-compat against future
- *    domains added to forge.toml without a matching helper here).
- *
- *  Idempotent: re-firing for an already-extracted vault no-ops via
- *  ensureBundledVault's match-case (the v0.2.39 drift-detection's
- *  "already at version" path). */
-export async function ensureBundledFor(domain: string, app: App): Promise<void> {
-  if (domain === 'music') {
-    await ensureBundledMusicVaults(app);
-    return;
-  }
-  // moda is unconditionally extracted regardless of domains; nothing
-  // to do on activation. Other domain ids are forward-compat.
+  const derived = await listBundledVaultNames(adapter);
   console.log(
-    `Forge: ensureBundledFor('${domain}') — no bundled-vault helper for this domain; skipping`,
+    `Forge: bundled vaults to extract (from ${derived.source}): ` +
+    `${derived.names.join(', ')}`,
   );
+  for (const name of derived.names) {
+    try {
+      await ensureBundledVault(
+        adapter,
+        `${BUNDLED_VAULTS_ROOT}/${name}`,
+        name,
+        name,
+      );
+    } catch (e) {
+      console.error(`Forge: extracting bundled ${name} failed`, e);
+    }
+  }
+}
+
+/** v0.2.45: re-run bundled extraction when a domain activation lands
+ *  via EditVaultDomainsModal.applyDiff.
+ *
+ *  Drain 2026-08-21-2300 — extraction is no longer domain-gated, so
+ *  every bundled vault is already present by the time a domain is
+ *  activated. This stays as a repair hook: it re-runs the derived
+ *  extraction, which is idempotent (ensureBundledVault's "already at
+ *  version" path) and restores anything the user deleted. */
+export async function ensureBundledFor(domain: string, app: App): Promise<void> {
+  console.log(
+    `Forge: ensureBundledFor('${domain}') — bundled vaults are extracted ` +
+    `unconditionally; re-running the derived extraction as a repair pass`,
+  );
+  await ensureAllBundledVaults(app);
 }
 
 
