@@ -73,13 +73,30 @@ cd "$REPO_DIR"
 # path resets the trap explicitly so a successful release doesn't
 # revert the bump.
 MANIFEST_BUMPED="no"
+
+# Drain 2026-08-21-1410 — revert every TRACKED file the build rewrites,
+# not just manifest.json.
+#
+# `npm run build` also writes `assets/.bundle-version` (the sentinel
+# restore-inlined-assets.ts compares against BUNDLED_ASSETS_VERSION).
+# It is the only other tracked build output — main.js and the three
+# src/*.generated.ts files are gitignored, so they cannot dirty the
+# tree. Before this, --dry-run left the sentinel modified despite its
+# banner promising "no filesystem-visible side effects", and the NEXT
+# invocation aborted on the clean-tree guard: the dry run broke the
+# script it was rehearsing.
+_revert_build_artifacts() {
+  git checkout -- manifest.json 2>/dev/null || true
+  git checkout -- assets/.bundle-version 2>/dev/null || true
+}
+
 _cleanup_on_error() {
   local ec=$?
   if [ "$ec" -ne 0 ] && [ "$MANIFEST_BUMPED" = "yes" ]; then
     echo
     echo "=== Release aborted (exit code $ec) — reverting manifest.json bump ==="
-    git checkout -- manifest.json 2>/dev/null || true
-    echo "Manifest reverted. Fix the underlying failure and re-run release.sh."
+    _revert_build_artifacts
+    echo "Manifest + build artifacts reverted. Fix the underlying failure and re-run release.sh."
   fi
   return $ec
 }
@@ -357,8 +374,8 @@ if [ "$DRY_RUN" = "yes" ]; then
   echo "  bash scripts/release.sh $NEW_VERSION"
   # Force manifest revert on the successful dry-run path.
   # (MANIFEST_BUMPED still 'yes' → trap fires on exit; force nonzero so trap engages.)
-  git checkout -- manifest.json 2>/dev/null || true
-  echo "Manifest reverted."
+  _revert_build_artifacts
+  echo "Manifest + build artifacts reverted."
   MANIFEST_BUMPED="no"   # tell the trap: nothing more to revert
   trap - EXIT             # disable trap so a clean exit doesn't misfire
   exit 0
