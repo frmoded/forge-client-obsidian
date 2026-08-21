@@ -46,7 +46,12 @@ export type Digest = (bytes: Uint8Array) => Promise<string>;
 export type ArtifactState =
   | 'absent'
   | 'downloading'
-  | 'verified-cached'
+  /** Present with the expected byte length. NOT hash-checked — drain
+   *  2026-08-21-2310 renamed this from 'verified-cached', which
+   *  claimed an integrity check that planHydration never performs. */
+  | 'present-cached'
+  /** Fetched and sha256-verified in this session, before writing. */
+  | 'verified-fetched'
   | 'failed';
 
 export interface ArtifactPlan {
@@ -99,11 +104,11 @@ export async function planHydration(
     const destPath = `${pluginDir}/assets/${asset.relpath}`;
     let state: ArtifactState = 'absent';
     if (await fs.exists(destPath) && (await fs.size(destPath)) === asset.bytes) {
-      state = 'verified-cached';
+      state = 'present-cached';
     }
     artifacts.push({ name, asset, destPath, url: assetUrl(version, name), state });
   }
-  const pending = artifacts.filter((a) => a.state !== 'verified-cached');
+  const pending = artifacts.filter((a) => a.state !== 'present-cached');
   return {
     version,
     artifacts,
@@ -161,7 +166,7 @@ export async function fetchVerified(
   }
 
   await fsx.write(plan.destPath, bytes);
-  plan.state = 'verified-cached';
+  plan.state = 'verified-fetched';
   return { name: plan.name, ok: true };
 }
 

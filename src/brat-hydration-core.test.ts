@@ -98,7 +98,7 @@ test('a good artifact verifies and is written', async () => {
   const out = await fetchVerified(target, net({ [urlFor(WASM)]: { status: 200, body: 'WASM' } }), fs, digest);
   assert.equal(out.ok, true);
   assert.equal(fs.files.has(`${DIR}/assets/pyodide/${WASM}`), true);
-  assert.equal(target.state, 'verified-cached');
+  assert.equal(target.state, 'verified-fetched');
 });
 
 test('a TAMPERED artifact is never written to disk', async () => {
@@ -141,7 +141,7 @@ test('an offline launch reports network rather than throwing', async () => {
 
 // -- the state machine ----------------------------------------------------
 
-test('absent → downloading → verified-cached → ready', async () => {
+test('absent → downloading → verified-fetched → ready', async () => {
   const fs = memFs();
   const plan = await planHydration('0.2.363', fs, DIR, MANIFEST);
   const seen: string[] = [];
@@ -153,7 +153,7 @@ test('absent → downloading → verified-cached → ready', async () => {
   assert.equal(res.fetched.length, 2);
   assert.equal(res.bytesFetched, 14);
   assert.deepEqual(seen, ['1/2', '2/2'], 'progress fires per artifact');
-  assert.deepEqual(plan.artifacts.map((a) => a.state), ['verified-cached', 'verified-cached']);
+  assert.deepEqual(plan.artifacts.map((a) => a.state), ['verified-fetched', 'verified-fetched']);
 });
 
 test('failure stops the run and leaves the good artifacts cached for a clean retry', async () => {

@@ -36,6 +36,16 @@ import type { App } from "obsidian";
 import { requestUrl } from "obsidian";
 import { parseSnapshotState } from "./snapshot-state-core";
 import { parseLocalImports, resolveImportHostPath, shouldMountImportFile } from "./vault-imports-local-core.ts";
+import {
+  wheelMountClaim,
+  parseWheelExtractFailures,
+  deriveRuntimeHealth,
+  wheelExtractPanelEntry,
+  corruptWheelCachePath,
+  type WheelExtractFailure,
+  type RuntimeHealth,
+} from "./wheel-health-core.ts";
+import { OUTPUT_VIEW_TYPE, ForgeOutputView } from "./output-view.ts";
 
 // V1 user-vault mount: bundled-library subdirectory names. Files
 // under these top-level directories in the user's vault are SKIPPED
@@ -148,6 +158,17 @@ export class PyodideHost {
    *  exactly as before this drain.
    */
   private _runtimeHydrated = true;
+
+  /** Drain 2026-08-21-2310 (c) — last computed runtime health. A
+   *  damaged wheel must not leave the engine indistinguishable from a
+   *  healthy one; callers can ask instead of assuming. */
+  private _health: RuntimeHealth = { status: 'ready', missing: [], summary: 'engine ready' };
+
+  /** Runtime health as of the last _init. 'degraded' names the
+   *  capabilities that failed to load. */
+  getRuntimeHealth(): RuntimeHealth {
+    return this._health;
+  }
 
   setRuntimeHydrated(ready: boolean): void {
     this._runtimeHydrated = ready;
@@ -353,9 +374,16 @@ export class PyodideHost {
     // will fail with a clear error when they try to import music21
     // (until v0.2.92's CDN-fallback for wheels lands). forge-tutorial
     // chapters 1-9 are pure Python — unaffected by the skipped mount.
+    // Drain 2026-08-21-2310 (a) — this message used to assert onload
+    // sha256 verification of every wheel. Nothing is hashed at this
+    // point: the onload check is byte-length presence
+    // (drain 1200's accepted trade), which a length-preserving
+    // corruption passes. Say what was actually checked.
     console.log(
-      `Forge wheel-mount: manifest has ${manifest.wheels?.length ?? 0} wheels; `
-      + `pluginVersion=${this.pluginVersion}; wheels are hydrated + sha256-verified at onload.`
+      wheelMountClaim({
+        wheelCount: manifest.wheels?.length ?? 0,
+        pluginVersion: this.pluginVersion,
+      }),
     );
     if (manifest.wheels && manifest.wheels.length > 0) {
       const adapter = this.app.vault.adapter;
@@ -571,6 +599,12 @@ sys.path.insert(0, "/bundle/engine")
 # optional (older builds don't have manifest.wheels); guard the
 # directory existence.
 import os
+# Drain 2026-08-21-2310 — the extract stage's failures used to exist
+# only as printed lines. They are collected here so the JS side can
+# surface them in the Forge Output panel, drop the damaged cache
+# entry, and refuse to report a plain "ready".
+_forge_wheel_extract_failures = []
+_forge_wheel_import_failures = []
 if os.path.isdir("/bundle/wheels"):
     import zipfile
     SITE = "/bundle/site-packages"
@@ -587,6 +621,9 @@ if os.path.isdir("/bundle/wheels"):
                 _extracted += 1
             except Exception as _e:
                 print(f"Forge wheel-extract FAILED {fname}: {type(_e).__name__}: {_e}")
+                _forge_wheel_extract_failures.append(
+                    f"{fname}: {type(_e).__name__}: {_e}"
+                )
     print(f"Forge wheel-extract: extracted {_extracted} wheels into {SITE}")
     # Quick probe of music21 importability post-extract — informational only.
     try:
@@ -594,6 +631,7 @@ if os.path.isdir("/bundle/wheels"):
         print(f"Forge wheel-extract: music21 import OK (version={getattr(_m21_probe, 'VERSION_STR', '?')})")
     except Exception as _e:
         print(f"Forge wheel-extract: music21 import FAILED — {type(_e).__name__}: {_e}")
+        _forge_wheel_import_failures.append("music21")
 else:
     print("Forge wheel-extract: /bundle/wheels does not exist — wheels skipped")
 
@@ -1378,9 +1416,98 @@ def _forge_moda_click(x, y):
     return {"ack": True, "stdout": stdout}
 `);
     // _PYTHON_BLOCK_END
-    console.log(`Forge: engine ready in ${(performance.now() - t0).toFixed(0)}ms`);
+
+    // Drain 2026-08-21-2310 (b)+(c) — the wheel-extract stage catches
+    // a damaged wheel and degrades gracefully, which is right. What
+    // was wrong: the failure never left the console, and the engine
+    // still announced a plain "ready" while music21 was unimportable.
+    const extractFailures = parseWheelExtractFailures(
+      this._readPyStringList(pyodide, "_forge_wheel_extract_failures"),
+    );
+    const importFailures = this._readPyStringList(
+      pyodide, "_forge_wheel_import_failures",
+    );
+    const health = deriveRuntimeHealth({ extractFailures, importFailures });
+    if (extractFailures.length > 0) {
+      const deleted = await this._dropDamagedWheels(extractFailures);
+      const entry = wheelExtractPanelEntry(extractFailures, { deleted });
+      console.error(`Forge: ${entry.title}`, entry.lines);
+      await this._appendToOutputPanel(entry.title, entry.lines);
+    } else if (health.status === "degraded") {
+      // Import failed without an extract failure — still load-bearing.
+      console.error(`Forge: ${health.summary}`);
+      await this._appendToOutputPanel(
+        "⚠  Some Python features are unavailable",
+        [health.summary, "Restart Obsidian; if it persists, reinstall Forge."],
+      );
+    }
+    this._health = health;
+    console.log(
+      `Forge: ${health.summary} in ${(performance.now() - t0).toFixed(0)}ms`,
+    );
 
     return new PyodideHostInstanceImpl(pyodide);
+  }
+
+  /** Read a Python list-of-str global as a JS string[]. Returns [] for
+   *  anything unexpected — a health probe must never be the thing that
+   *  breaks the boot. */
+  private _readPyStringList(pyodide: PyodideInstance, name: string): string[] {
+    try {
+      const proxy = pyodide.globals?.get?.(name);
+      if (!proxy) return [];
+      const arr = typeof proxy.toJs === "function" ? proxy.toJs() : proxy;
+      if (typeof proxy.destroy === "function") proxy.destroy();
+      return Array.isArray(arr) ? arr.map((x: unknown) => String(x)) : [];
+    } catch (e) {
+      console.error(`Forge: could not read ${name} from the runtime`, e);
+      return [];
+    }
+  }
+
+  /** Delete the cached copy of every wheel that failed to extract, so
+   *  the next launch's hydration plan sees it missing and refetches it
+   *  WITH sha256 verification. Turns a damaged cache into a
+   *  self-healing one; returns the wheels actually removed so the
+   *  panel message can promise only what happened. */
+  private async _dropDamagedWheels(
+    failures: readonly WheelExtractFailure[],
+  ): Promise<string[]> {
+    const adapter = this.app.vault.adapter;
+    const deleted: string[] = [];
+    for (const f of failures) {
+      const path = corruptWheelCachePath(this.pluginId, f.wheel);
+      try {
+        if (await adapter.exists(path)) {
+          await adapter.remove(path);
+          deleted.push(f.wheel);
+        }
+      } catch (e) {
+        console.error(`Forge: could not remove damaged wheel ${path}`, e);
+      }
+    }
+    return deleted;
+  }
+
+  /** Write a load-bearing diagnostic to the Forge Output panel. The
+   *  standing rule: console is redundancy, the panel is the surface a
+   *  real user sees. Never opens/steals focus on its own — appends to
+   *  an existing panel, and falls back to a Notice-free console line
+   *  when no panel is open (the entry is repeated next launch anyway,
+   *  since the condition is persistent). */
+  private async _appendToOutputPanel(title: string, lines: string[]): Promise<void> {
+    try {
+      const leaf = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
+      if (!leaf) return;
+      if (!(leaf.view instanceof ForgeOutputView)) {
+        await leaf.setViewState({ type: OUTPUT_VIEW_TYPE });
+      }
+      const view = leaf.view as ForgeOutputView;
+      if (typeof view.appendMessage !== "function") return;
+      view.appendMessage("forge-runtime", [title, ...lines].join("\n"), "error");
+    } catch (e) {
+      console.error("Forge: could not write runtime health to the output panel", e);
+    }
   }
 
   /** Create all parent directories for a target file path in Pyodide's MEMFS.
