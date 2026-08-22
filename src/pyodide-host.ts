@@ -601,7 +601,7 @@ sys.path.insert(0, "/bundle/engine")
 import os
 # Drain 2026-08-21-2310 — the extract stage's failures used to exist
 # only as printed lines. They are collected here so the JS side can
-# surface them in the Forge Output panel, drop the damaged cache
+# surface them in the Forge panel, drop the damaged cache
 # entry, and refuse to report a plain "ready".
 _forge_wheel_extract_failures = []
 _forge_wheel_import_failures = []

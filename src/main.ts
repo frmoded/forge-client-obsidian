@@ -34,7 +34,22 @@ import {
 // time via AST-walking vendored `engine_libs/*_lib.py` source files.
 // Plugin sends ONLY vault notes; the service merges in library notes.
 // See forge-transpile/engine_chip_introspector.py.
-import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
+import {
+  ForgeOutputView,
+  OUTPUT_VIEW_TYPE,
+  type ForgeStripHost,
+  type StripNoteWithDefaults,
+} from './output-view.ts';
+// Drain 2026-08-22-2300 (Forge panel F1) — the Inputs strip follows the
+// active note. The field models come from the same loop the Run dialog
+// renders from, so the strip cannot drift away from the dialog.
+import {
+  buildInputFieldModels,
+  recallPanelValues,
+  rememberPanelValues,
+  forgetPanelValues,
+  type InputFieldSources,
+} from './forge-panel-strip-core.ts';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
@@ -639,6 +654,16 @@ export default class ForgePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('file-open', () => {
       void this.refreshSourceLayerStatusBar();
     }));
+    // Drain 2026-08-22-2300 (plan F1) — the Inputs strip follows the
+    // active note on the same two events. It never OPENS the panel:
+    // when no Forge panel leaf exists this is a no-op, so the strip
+    // costs nothing until the user has the panel on screen.
+    this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
+      void this.refreshForgePanelStrip();
+    }));
+    this.registerEvent(this.app.workspace.on('file-open', () => {
+      void this.refreshForgePanelStrip();
+    }));
     this.registerEvent(this.app.vault.on('modify', (file) => {
       // Debounce against active-file modifications only — saves on
       // unrelated files (autosave on another tab) shouldn't churn
@@ -1164,6 +1189,14 @@ export default class ForgePlugin extends Plugin {
       id: 'forge-sync-edges',
       name: 'Sync edges',
       callback: () => { this.syncEdgesForActive(); },
+    });
+
+    // Drain 2026-08-22-2300 (plan F1) — the panel is permanent, so it
+    // needs an opener that is not "run something and watch it appear".
+    this.addCommand({
+      id: 'open-forge-panel',
+      name: 'Open Forge panel',
+      callback: () => { void this.getOutputView(); },
     });
 
     this.addCommand({
@@ -2657,7 +2690,7 @@ export default class ForgePlugin extends Plugin {
                 });
               } catch { /* panel unavailable; toast alone still fires */ }
               this.notice(
-                `${NOTICE_PREFIX}/generate returned prose, not a Recipe — see Forge Output panel for guidance. Running prior Recipe.`,
+                `${NOTICE_PREFIX}/generate returned prose, not a Recipe — see Forge panel for guidance. Running prior Recipe.`,
               );
             } else {
               // Sub-1: closure failed. Surface actionable Notice, keep
@@ -2683,7 +2716,7 @@ export default class ForgePlugin extends Plugin {
                 .map((id) => `[[${id}]]`)
                 .join(', ');
               this.notice(
-                `${NOTICE_PREFIX}/generate produced a Recipe referencing ${unresolvedList} — see Forge Output panel for guidance. Running prior Recipe.`,
+                `${NOTICE_PREFIX}/generate produced a Recipe referencing ${unresolvedList} — see Forge panel for guidance. Running prior Recipe.`,
               );
             }
           }
@@ -4340,6 +4373,15 @@ export default class ForgePlugin extends Plugin {
     errorPrefix?: string,
     canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
     fallbackFile?: TFile,
+    // Drain 2026-08-22-2300 (plan F1) — the Inputs strip already HAS
+    // the user's values, so it dispatches through here with them rather
+    // than opening the dialog. Going through runSnippet rather than
+    // straight to computeSnippetWithArgs is the point: the strip then
+    // gets the L29 pre-flight (editor save + MEMFS sync) and the
+    // snippet-id derivation for free, instead of quietly running stale
+    // MEMFS content the moment a user types and hits Run without
+    // saving.
+    presetInputs?: Record<string, unknown>,
   ) {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     const target = resolveRunTarget(activeView, fallbackFile);
@@ -4407,6 +4449,17 @@ export default class ForgePlugin extends Plugin {
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+
+    // Drain 2026-08-22-2300 — the strip supplies its own values, so
+    // there is nothing to ask for: dispatch straight past the input
+    // resolution (which exists to populate the dialog) and past the
+    // dialog itself. The pre-flight above has already run, which is
+    // why the strip comes through here at all.
+    if (presetInputs) {
+      await this.computeSnippetWithArgs(
+        vaultPath, snippetId, [], presetInputs, errorPrefix, canonicalLayer, file);
+      return;
+    }
 
     // v0.2.20: Python signature is the source of truth for which
     // params compute() actually needs. Ask the engine for the
@@ -5281,6 +5334,132 @@ export default class ForgePlugin extends Plugin {
     );
   }
 
+  // ------------------------------------------------- Forge panel strip
+  //
+  // Drain 2026-08-22-2300 (plan F1). The strip is the panel's only run
+  // affordance; the note-toolbar ▶ and the Run dialog are untouched and
+  // stay as they are (their retirement is F4's decision, not this
+  // drain's).
+
+  /** The open Forge panel, if one exists. Deliberately does NOT create
+   *  one — following the active note must not conjure a panel. */
+  private existingOutputView(): ForgeOutputView | null {
+    for (const leaf of this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)) {
+      if (leaf.view instanceof ForgeOutputView) return leaf.view;
+    }
+    return null;
+  }
+
+  /** One host object for the life of the plugin, so the view's
+   *  identity check makes re-wiring free. */
+  private stripHostSingleton: ForgeStripHost | null = null;
+
+  private wireStripHost(view: ForgeOutputView) {
+    this.stripHostSingleton ??= {
+      run: (snippetId, kwargs, raw) => {
+        // The dialog's own dispatch path, values pre-supplied. The
+        // inputCache write keeps the dialog and the strip agreeing
+        // about last-used values, so opening the dialog after a strip
+        // run shows what the strip just ran.
+        this.inputCache[snippetId] = raw;
+        const op = () => this.runSnippet(
+          'Forge failed during execution', undefined, undefined, kwargs);
+        if (this.spinner) {
+          void this.spinner.wrapImmediate(prefixed('🔥 running …'), op);
+        } else {
+          void op();
+        }
+      },
+      remember: (snippetId, raw) => {
+        this.settings.panelStripValues =
+          rememberPanelValues(this.settings.panelStripValues ?? {}, snippetId, raw);
+        void this.saveSettings();
+      },
+      forget: (snippetId) => {
+        this.settings.panelStripValues =
+          forgetPanelValues(this.settings.panelStripValues ?? {}, snippetId);
+        void this.saveSettings();
+      },
+      isCollapsed: () => this.settings.panelStripCollapsed ?? false,
+      setCollapsed: (collapsed) => {
+        this.settings.panelStripCollapsed = collapsed;
+        void this.saveSettings();
+      },
+    };
+    view.setStripHost(this.stripHostSingleton);
+  }
+
+  /**
+   * Re-point the strip at the active note.
+   *
+   * Non-action notes hand the view `null`, which greys the last action
+   * note rather than emptying the strip — permanence is the product.
+   */
+  private async refreshForgePanelStrip(): Promise<void> {
+    const view = this.existingOutputView();
+    if (!view) return;
+    this.wireStripHost(view);
+    try {
+      view.showNoteInputs(await this.activeStripNote());
+    } catch (e) {
+      // A strip that throws must not take the panel with it.
+      console.error('refreshForgePanelStrip failed', e);
+      view.showNoteInputs(null);
+    }
+  }
+
+  /** The active note as the strip needs it, or null when the active
+   *  note is not an action note. */
+  private async activeStripNote(): Promise<StripNoteWithDefaults | null> {
+    const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+    if (!file) return null;
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (frontmatter?.type !== 'action') return null;
+
+    const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
+
+    let inputs: string[] = Array.isArray(frontmatter?.inputs) ? frontmatter.inputs : [];
+    let defaults: Record<string, string> = {};
+    let derivedEnums: Record<string, string[]> = {};
+    // The signature is the source of truth when the host is already up.
+    // It is NOT worth warming Pyodide for a leaf change, so an
+    // unavailable host degrades to the frontmatter list — the same
+    // fallback the dialog uses, one drain older.
+    try {
+      const hostManager = getPyodideHost();
+      if (hostManager) {
+        const host = await hostManager.getInstance();
+        inputs = await host.getInputNames(snippetId);
+        try {
+          defaults = await host.getInputDefaults(snippetId);
+        } catch (e) {
+          console.warn(`${NOTICE_PREFIX}strip: declared defaults unavailable for '${snippetId}'`, e);
+        }
+        try {
+          derivedEnums = await host.getInputEnums(snippetId);
+        } catch (e) {
+          console.warn(`${NOTICE_PREFIX}strip: derived enum options unavailable for '${snippetId}'`, e);
+        }
+      }
+    } catch (e) {
+      console.warn(
+        `${NOTICE_PREFIX}strip: signature-inferred inputs unavailable for '${snippetId}',`
+        + ' falling back to frontmatter', e);
+    }
+
+    const enums = parseInputEnums(frontmatter as Record<string, unknown> | null);
+    const widgets = parseInputWidgets(frontmatter as Record<string, unknown> | null);
+    // [2026-08-06-0100 (A)] widgets start fresh; typed values keep their
+    // intentional pre-fill.
+    const cached = stripWidgetSeededInputs(
+      recallPanelValues(this.settings.panelStripValues ?? {}, snippetId), widgets);
+
+    const sources: InputFieldSources = {
+      inputs, cached, enums, widgets, defaults, derivedEnums,
+    };
+    return { snippetId, sources, fields: buildInputFieldModels(sources) };
+  }
+
   private async getOutputView(): Promise<ForgeOutputView> {
     // v0.2.10: Obsidian sometimes parks a DeferredView placeholder on
     // the leaf right after setViewState resolves — the real view's
@@ -5311,6 +5490,16 @@ export default class ForgePlugin extends Plugin {
       throw new Error(prefixed('output view failed to materialize after retry'));
     };
 
+    // Drain 2026-08-22-2300 — whichever branch below produces the view,
+    // the strip gets its host and the active note before the caller
+    // appends anything, so a panel opened BY a run already shows that
+    // note's inputs.
+    const withStrip = async (leaf: WorkspaceLeaf): Promise<ForgeOutputView> => {
+      const view = await waitForRealView(leaf);
+      void this.refreshForgePanelStrip();
+      return view;
+    };
+
     const existing = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
     if (existing) {
       // v0.2.11: also reveal when the leaf already exists. Without
@@ -5332,13 +5521,13 @@ export default class ForgePlugin extends Plugin {
         root.expand();
       }
       this.app.workspace.revealLeaf(existing);
-      return waitForRealView(existing);
+      return withStrip(existing);
     }
 
     const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
     await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
-    return waitForRealView(leaf);
+    return withStrip(leaf);
   }
 
   private async computeSnippetWithArgs(
@@ -5386,7 +5575,7 @@ export default class ForgePlugin extends Plugin {
       // of the toast.
       const shortMsg = detail.length < 120 && !detail.includes('\n')
         ? detail
-        : 'see Forge output panel for details';
+        : 'see Forge panel for details';
       // Best-effort show the detail in the output view (the view may not
       // have materialized yet if the failure was very early — fall back
       // silently to the toast if so).
@@ -5469,7 +5658,7 @@ export default class ForgePlugin extends Plugin {
         ? friendly.userMessage
         : (errorMsg.length < 120 && !errorMsg.includes('\n')
             ? errorMsg
-            : 'see Forge output panel for details');
+            : 'see Forge panel for details');
       if (errorPrefix) {
         this.notice(`${errorPrefix}: ${noticeMsg}`);
       }
@@ -5607,8 +5796,8 @@ export default class ForgePlugin extends Plugin {
       console.error('Forge:', msg);
       this.notice(
         errorPrefix
-          ? `${errorPrefix}: ${msg} (see Forge Output panel)`
-          : `${NOTICE_PREFIX}${msg} (see Forge Output panel)`,
+          ? `${errorPrefix}: ${msg} (see Forge panel)`
+          : `${NOTICE_PREFIX}${msg} (see Forge panel)`,
       );
       try {
         const outputView = await this.getOutputView();

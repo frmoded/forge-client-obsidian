@@ -1,5 +1,85 @@
 
-/* Forge Output view */
+/* Forge panel (drain 2026-08-22-2300, plan F1)
+ *
+ * One leaf, two regions the view owns: the output stream on top, the
+ * permanent Inputs strip below. Not a workspace split — the strip
+ * cannot be dragged away from the output it belongs to, and the layout
+ * is identical docked, tabbed, or popped out. The strip is sized by
+ * content up to a third of the panel, so a one-input note does not
+ * reserve a third of the screen for empty space. */
+.forge-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.forge-panel .forge-panel-output-region {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.forge-panel .forge-panel-output-region .forge-output-body {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.forge-panel-inputs {
+  flex: 0 0 auto;
+  max-height: 33%;
+  overflow-y: auto;
+  border-top: 2px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.forge-panel-inputs.is-collapsed {
+  max-height: none;
+  overflow-y: visible;
+}
+
+.forge-panel-inputs-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-weight: 600;
+}
+
+.forge-panel-inputs-toggle {
+  background: none;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  padding: 0 4px;
+  color: var(--text-muted);
+}
+
+.forge-panel-inputs-body {
+  padding: 0 12px 8px;
+}
+
+.forge-panel-inputs-hint {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  padding: 0 0 6px;
+}
+
+/* Greyed: the open note is not the note in the strip. The controls
+ * stay visible — seeing the last note's inputs is the point — but
+ * nothing here can run. */
+.forge-panel-inputs.is-stale .forge-panel-inputs-body {
+  opacity: 0.55;
+}
+
+.forge-panel-inputs .forge-panel-inputs-actions {
+  border-top: none;
+  padding-top: 4px;
+}
+
+/* Forge panel — output region */
 .forge-output-header {
   display: flex;
   justify-content: space-between;

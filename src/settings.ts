@@ -26,6 +26,12 @@ export interface ForgeSettings {
   // doesn't exist in their data.json — Object.assign keeps the
   // DEFAULT_SETTINGS value during loadSettings.
   seenWelcome: boolean;
+  // Drain 2026-08-22-2300 (Forge panel F1) — the Inputs strip's
+  // per-note last-used values, keyed by snippet id, and whether the
+  // strip is collapsed. Both persist across restarts: returning to a
+  // note should return you to the values you last played it with.
+  panelStripValues: Record<string, Record<string, string>>;
+  panelStripCollapsed: boolean;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -34,6 +40,8 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   transpileServiceUrl: 'https://forge.thecodingarena.com',
   transpileServiceToken: '',
   seenWelcome: false,
+  panelStripValues: {},
+  panelStripCollapsed: false,
 };
 
 export class ForgeSettingTab extends PluginSettingTab {

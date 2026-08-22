@@ -74,7 +74,7 @@ plugin extracts two starter notes to vault root: `welcome.md` and
 
 1. In Obsidian's file tree, click `welcome.md`.
 2. Click the **Forge** button at the top of the editor.
-3. The Forge Output panel on the right shows two lines:
+3. The Forge panel on the right shows two lines:
 
    ```
    Welcome to Forge.
@@ -251,7 +251,7 @@ After install you can:
 - Click the canvas to inject ink droplets; adjust temperature with
   the slider.
 - Forge-click any action note in the vault to run it directly; the
-  result shows in the Forge Output panel.
+  result shows in the Forge panel.
 - Compose notes across the bundled `forge-moda`, `music-theory`,
   `music-core`, and `forge-tutorial` libraries plus your own vault
   notes. (`music-theory` + `music-core` replaced the pre-v0.2.333

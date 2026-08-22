@@ -1,18 +1,18 @@
 import { App, Modal, Notice, Setting } from 'obsidian';
 import { forgeNotice } from './forge-notice.ts';
-import { initialEnumValue, type InputEnums } from './input-enums-core.ts';
-import {
-  enumOptions,
-  initialDerivedEnumValue,
-  type DerivedEnums,
-} from './derived-enums-core.ts';
+import { type InputEnums } from './input-enums-core.ts';
+import { type DerivedEnums } from './derived-enums-core.ts';
 import {
   coerceRunInputValues,
   collectWidgetInput,
   renderWidget,
-  resolveInputRendering,
   type InputWidgets,
 } from './input-widget-core.ts';
+// Drain 2026-08-22-2300 (Forge panel F1) — the per-input decision loop
+// moved to a shared core so the panel's Inputs strip renders exactly
+// what this dialog renders. Precedence and initial values are that
+// loop's, unchanged; only the location moved.
+import { buildInputFieldModels } from './forge-panel-strip-core.ts';
 // v0.2.207 — Build-step hardening drain caught a missing import:
 // `actionTemplate` was referenced at line 369 without being imported.
 // This is exactly the bug class v0.2.197 hit with extractRecipeSection.
@@ -147,23 +147,31 @@ export class ForgeRunModal extends Modal {
     const { contentEl } = this;
     contentEl.createEl('h2', { text: `Run: ${this.snippetId}` });
 
-    for (const name of this.inputs) {
-      const rendering = resolveInputRendering(
-        name, this.enums, this.widgets, this.derivedEnums);
+    const models = buildInputFieldModels({
+      inputs: this.inputs,
+      cached: this.cached,
+      enums: this.enums,
+      widgets: this.widgets,
+      defaults: this.defaults,
+      derivedEnums: this.derivedEnums,
+    });
 
-      if (rendering.kind === 'widget') {
-        if (rendering.conflict) {
+    for (const model of models) {
+      const name = model.name;
+
+      if (model.kind === 'widget') {
+        if (model.conflict) {
           // Not an error — we resolved it — but the note contradicts
           // itself and the author should be able to find out why their
           // dropdown vanished.
           console.warn(
             `ForgeRunModal.onOpen: input '${name}' declares both input_enums and ` +
-            `input_widgets; using the widget ('${rendering.widget}') and ignoring the enum`,
+            `input_widgets; using the widget ('${model.widget}') and ignoring the enum`,
           );
         }
-        new Setting(contentEl).setName(name).setDesc(`${rendering.widget} widget`);
+        new Setting(contentEl).setName(name).setDesc(`${model.widget} widget`);
         const host = contentEl.createDiv({ cls: 'forge-widget-host' });
-        const outcome = renderWidget(rendering.widget, name, host, this.cached[name]);
+        const outcome = renderWidget(model.widget, name, host, model.seed);
         if (outcome.rendered === 'fallback-text') {
           // Diagnostics HARD RULE: an unregistered widget type is
           // visible, never a silently plain text box.
@@ -173,14 +181,12 @@ export class ForgeRunModal extends Modal {
         continue;
       }
 
-      if (rendering.kind === 'enum') {
+      if (model.kind === 'enum') {
         // drain 2026-07-31-1120 — enumerable input: a dropdown removes
         // both failure modes at once. The cohort cannot mistype
         // "Major"/"maj", and they can SEE the valid values without
         // opening the Recipe to infer them from usage.
-        const allowed = rendering.allowed;
-
-        if (rendering.conflict) {
+        if (model.conflict) {
           // Resolved, but the note declares the same value set twice and
           // the author should be able to find out why their frontmatter
           // list is the one showing.
@@ -190,34 +196,17 @@ export class ForgeRunModal extends Modal {
           );
         }
 
-        if (rendering.source === 'derived') {
-          // Drain 2026-08-16-1700 — options from the input's own type.
-          // Values are JSON text so a pick round-trips exactly like the
-          // same thing typed; labels stay the bare literal.
-          const options = enumOptions(allowed);
-          this.values[name] = initialDerivedEnumValue(
-            this.cached[name], options, this.defaults[name]);
-          new Setting(contentEl)
-            .setName(name)
-            .addDropdown(dd => {
-              // No declared default means this input is REQUIRED, so the
-              // dropdown must start on nothing — otherwise it would
-              // silently satisfy an input the author never gave a value
-              // for, and 1900's missing-required Notice could never fire.
-              if (this.values[name] === '') dd.addOption('', '');
-              for (const o of options) dd.addOption(o.value, o.label);
-              dd.setValue(this.values[name])
-                .onChange(v => { this.values[name] = v; });
-            });
-          continue;
-        }
-
-        this.values[name] = initialEnumValue(this.cached[name], allowed);
+        this.values[name] = model.value;
         new Setting(contentEl)
           .setName(name)
           .addDropdown(dd => {
-            for (const v of allowed) dd.addOption(v, v);
-            dd.setValue(this.values[name])
+            // No declared default means this input is REQUIRED, so the
+            // dropdown must start on nothing — otherwise it would
+            // silently satisfy an input the author never gave a value
+            // for, and 1900's missing-required Notice could never fire.
+            if (model.blankOption) dd.addOption('', '');
+            for (const o of model.options) dd.addOption(o.value, o.label);
+            dd.setValue(model.value)
               .onChange(v => { this.values[name] = v; });
           });
         continue;
@@ -226,12 +215,12 @@ export class ForgeRunModal extends Modal {
       // drain 2026-08-15-1900 — a declared default pre-fills the box, so
       // the user can see what they are about to get instead of having to
       // read the Recipe to find out.
-      this.values[name] = initialInputValue(name, this.cached, this.defaults);
+      this.values[name] = model.value;
       new Setting(contentEl)
         .setName(name)
         .addText(text => {
-          text.setValue(this.values[name])
-            .setPlaceholder(this.defaults[name] ?? name)
+          text.setValue(model.value)
+            .setPlaceholder(model.placeholder)
             .onChange(v => { this.values[name] = v; });
         });
     }

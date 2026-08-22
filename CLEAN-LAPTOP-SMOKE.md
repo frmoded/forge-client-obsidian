@@ -266,7 +266,7 @@ Type `world` and click **Run**.
 the hosted transpile service receives the English facet and returns
 Python. The Python is written back to the `# Python` section of
 `greet.md`. Pyodide executes it.
-Expected: a **Forge Output** panel opens on the right showing
+Expected: a **Forge** panel opens on the right showing
 `Hello world` (no trailing punctuation). The `greet.md` file's
 `# Python` section may show a slightly different `def compute`
 implementation than what you pasted (the LLM-generated one) — the
@@ -329,7 +329,7 @@ v0.2.38 auto-re-extract match case.
 **Step 7.4 — Forge-click a music snippet.** Open
 `forge-music/blues/song.md`. Click the **Forge** button (play triangle ▶).
 Expected: after ~5-10 seconds of computation (music21 is heavy),
-the Forge Output panel shows a rendered SVG score — multiple
+the Forge panel shows a rendered SVG score — multiple
 staves with notation, plus an audio playback widget at the bottom.
 
 **Step 7.5 — Audio playback (caveat).** Click the play button on

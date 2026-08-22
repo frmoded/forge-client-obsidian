@@ -96,7 +96,7 @@ from the Recipe and run by the engine).
    → Transpile service token).
 4. Forge calls the hosted transpile service, generates a Recipe from
    your Description, compiles it to Python, writes it back into the
-   note, and runs it. The result renders in the **Forge Output** panel.
+   note, and runs it. The result renders in the **Forge** panel.
 
 ## Library notes vs vault notes
 

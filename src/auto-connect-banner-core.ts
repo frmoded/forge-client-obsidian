@@ -71,7 +71,7 @@ export function computeAutoConnectFailureBanner(
   return {
     notice:
       `Forge: vault auto-connect failed after ${attempts} attempts — `
-      + `check that the engine is running (see Forge Output for details).`,
+      + `check that the engine is running (see Forge panel for details).`,
     panel: `Forge auto-connect: ${serverUrl} — ${detail}`,
   };
 }

@@ -1,4 +1,4 @@
-import { ItemView, MarkdownRenderer, Notice, WorkspaceLeaf } from 'obsidian';
+import { ItemView, MarkdownRenderer, Notice, Setting, WorkspaceLeaf } from 'obsidian';
 import {
   parseMcqOutput,
   renderMcqCard,
@@ -25,6 +25,21 @@ import {
   type SlotCacheNotFoundInput,
 } from './slot-cache-not-found-guidance-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
+// Drain 2026-08-22-2300 (Forge panel F1) — the Inputs strip. The field
+// models come from the SAME loop the Run dialog renders from, so the
+// strip inherits its dropdowns, pre-fill and required-input handling
+// rather than imitating them.
+import {
+  buildInputFieldModels,
+  deriveStripState,
+  submitStrip,
+  type InputFieldModel,
+  type InputFieldSources,
+  type StripNote,
+  type StripState,
+} from './forge-panel-strip-core.ts';
+import { collectWidgetInput, renderWidget } from './input-widget-core.ts';
+import type { InputDefaults } from './run-input-defaults-core.ts';
 import type { ForgeError } from './forge-error-core.ts';
 import { renderForgeError } from './forge-error-core.ts';
 
@@ -158,23 +173,71 @@ function applyPlaybackLeadIn(ns: any, secs: number): void {
 
 export const OUTPUT_VIEW_TYPE = 'forge-output';
 
+/** What the strip needs from the plugin. The view owns the DOM; the
+ *  plugin owns running snippets and persisting state, and neither has
+ *  to import the other. */
+export interface ForgeStripHost {
+  /** Run the strip's note with the strip's values. */
+  run(snippetId: string, kwargs: Record<string, unknown>, raw: Record<string, string>): void;
+  /** Persist this note's last-used values (per-note memory). */
+  remember(snippetId: string, raw: Record<string, string>): void;
+  /** Drop this note's memory — "reset to defaults". */
+  forget(snippetId: string): void;
+  /** Collapsed state, persisted in plugin data across restarts. */
+  isCollapsed(): boolean;
+  setCollapsed(collapsed: boolean): void;
+}
+
+/** An action note as the strip needs it: the field models to render,
+ *  plus the declarations they were built from — the submit path needs
+ *  the defaults to tell "left blank on purpose" from "required and
+ *  missing", and "reset to defaults" rebuilds from the same
+ *  declarations with no remembered values. */
+export interface StripNoteWithDefaults extends StripNote {
+  sources: InputFieldSources;
+}
+
 export class ForgeOutputView extends ItemView {
   private outputEl: HTMLElement;
+
+  // ---- Inputs strip (drain 2026-08-22-2300, plan F1)
+  private stripEl: HTMLElement | null = null;
+  private stripBodyEl: HTMLElement | null = null;
+  private stripHost: ForgeStripHost | null = null;
+  private stripState: StripState = deriveStripState(null, null);
+  /** The last ACTION note the strip showed. It stays on screen, greyed,
+   *  when the user moves to a note that isn't one — the strip never
+   *  vanishes, which is the whole point of the panel. */
+  private lastNote: StripNoteWithDefaults | null = null;
+  private stripValues: Record<string, string> = {};
+  private stripDefaults: InputDefaults = {};
+  /** Inputs whose value lives in a widget's DOM; read back at submit,
+   *  exactly as the dialog does. */
+  private stripWidgetHosts: Record<string, HTMLElement> = {};
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
   }
 
   getViewType() { return OUTPUT_VIEW_TYPE; }
-  getDisplayText() { return 'Forge Output'; }
+  // v0.2.365 (plan F1) — the tab is just "Forge": the view stopped
+  // being a passive log when the Inputs strip arrived. OUTPUT_VIEW_TYPE
+  // keeps its 'forge-output' string on purpose — see the note there.
+  getDisplayText() { return 'Forge'; }
   getIcon() { return 'zap'; }
 
   async onOpen() {
     const { contentEl } = this;
     contentEl.empty();
+    contentEl.addClass('forge-panel');
 
-    const header = contentEl.createDiv({ cls: 'forge-output-header' });
-    header.createEl('span', { text: 'Forge Output' });
+    // The panel is ONE leaf with two regions it owns, not a workspace
+    // split: it cannot be dragged apart, it persists with the leaf, and
+    // it works identically docked, tabbed, or popped out.
+    const outputRegion = contentEl.createDiv({ cls: 'forge-panel-output-region' });
+
+    const header = outputRegion.createDiv({ cls: 'forge-output-header' });
+    header.createEl('span', { text: 'Forge' });
     // v0.2.228 — Stop button removed per user direction 2026-07-01.
     // Stop/Clear distinction added marginal UI complexity; cohort can
     // silence-and-re-render via Clear. The teardown machinery
@@ -188,7 +251,187 @@ export class ForgeOutputView extends ItemView {
       this.outputEl.empty();
     };
 
-    this.outputEl = contentEl.createDiv({ cls: 'forge-output-body' });
+    this.outputEl = outputRegion.createDiv({ cls: 'forge-output-body' });
+
+    this.stripEl = contentEl.createDiv({ cls: 'forge-panel-inputs' });
+    this.renderStrip();
+  }
+
+  // ------------------------------------------------- Inputs strip
+
+  /** Wire the strip to the plugin. Called once, right after the view
+   *  materializes. */
+  setStripHost(host: ForgeStripHost) {
+    // Identity-checked: this is called on every leaf change, and a
+    // re-render would tear down the widget hosts (a piano's selection
+    // lives in its DOM) for no reason. The plugin passes one host
+    // object for the life of the plugin, so this settles after the
+    // first call.
+    if (this.stripHost === host) return;
+    this.stripHost = host;
+    this.renderStrip();
+  }
+
+  /**
+   * Point the strip at the active note.
+   *
+   * `note` is null when the active note is not an action note; the
+   * strip then greys the last one rather than emptying. Re-entrant and
+   * cheap: it runs on every active-leaf-change.
+   */
+  showNoteInputs(note: StripNoteWithDefaults | null) {
+    // A leaf change that lands on the note already showing is not a
+    // note switch: re-rendering would discard half-typed values and
+    // any widget selection (which lives in the widget's own DOM).
+    if (note
+        && this.stripState.mode === 'active'
+        && this.stripState.snippetId === note.snippetId) {
+      this.lastNote = note;
+      return;
+    }
+
+    this.stripState = deriveStripState(note, this.lastNote);
+    if (note) this.lastNote = note;
+    this.stripDefaults =
+      (this.stripState.note as StripNoteWithDefaults | null)?.sources.defaults ?? {};
+    this.stripValues = {};
+    for (const field of this.stripState.fields) {
+      if (field.kind !== 'widget') this.stripValues[field.name] = field.value;
+    }
+    this.renderStrip();
+  }
+
+  private renderStrip() {
+    const strip = this.stripEl;
+    if (!strip) return;
+    strip.empty();
+    this.stripWidgetHosts = {};
+
+    const state = this.stripState;
+    const collapsed = this.stripHost?.isCollapsed() ?? false;
+    strip.toggleClass('is-collapsed', collapsed);
+    strip.toggleClass('is-stale', state.disabled);
+
+    const head = strip.createDiv({ cls: 'forge-panel-inputs-header' });
+    const toggle = head.createEl('button', {
+      cls: 'forge-panel-inputs-toggle',
+      text: collapsed ? '▸' : '▾',
+    });
+    toggle.setAttribute('aria-label', collapsed ? 'Expand inputs' : 'Collapse inputs');
+    toggle.onclick = () => {
+      this.stripHost?.setCollapsed(!collapsed);
+      this.renderStrip();
+    };
+    head.createEl('span', { cls: 'forge-panel-inputs-title', text: state.header });
+
+    if (collapsed) return;
+
+    const body = strip.createDiv({ cls: 'forge-panel-inputs-body' });
+    this.stripBodyEl = body;
+
+    if (state.hint) {
+      body.createEl('div', { cls: 'forge-panel-inputs-hint', text: state.hint });
+    }
+
+    for (const field of state.fields) this.renderStripField(body, field, state.disabled);
+
+    const actions = new Setting(body).setClass('forge-panel-inputs-actions');
+    if (state.snippetId) {
+      actions.addExtraButton(btn =>
+        btn.setIcon('rotate-ccw')
+          .setTooltip('Reset to defaults')
+          .setDisabled(state.disabled)
+          .onClick(() => this.resetStripToDefaults()));
+    }
+    actions.addButton(btn => {
+      btn.setButtonText('Run').setCta().onClick(() => this.runFromStrip());
+      if (state.disabled) btn.setDisabled(true);
+    });
+  }
+
+  private renderStripField(body: HTMLElement, field: InputFieldModel, disabled: boolean) {
+    if (field.kind === 'widget') {
+      new Setting(body).setName(field.name).setDesc(`${field.widget} widget`);
+      const host = body.createDiv({ cls: 'forge-widget-host' });
+      const outcome = renderWidget(field.widget, field.name, host, field.seed);
+      if (outcome.rendered === 'fallback-text') {
+        // Diagnostics HARD RULE: an unregistered widget type is
+        // visible, never a silently plain text box.
+        void forgeNotice(this.app, `Forge: ${outcome.message}`);
+      }
+      this.stripWidgetHosts[field.name] = host;
+      return;
+    }
+
+    if (field.kind === 'enum') {
+      new Setting(body)
+        .setName(field.name)
+        .addDropdown(dd => {
+          if (field.blankOption) dd.addOption('', '');
+          for (const o of field.options) dd.addOption(o.value, o.label);
+          dd.setValue(this.stripValues[field.name] ?? field.value)
+            .setDisabled(disabled)
+            .onChange(v => { this.stripValues[field.name] = v; });
+        });
+      return;
+    }
+
+    new Setting(body)
+      .setName(field.name)
+      .addText(text => {
+        text.setValue(this.stripValues[field.name] ?? field.value)
+          .setPlaceholder(field.placeholder)
+          .setDisabled(disabled)
+          .onChange(v => { this.stripValues[field.name] = v; });
+      });
+  }
+
+  private resetStripToDefaults() {
+    const note = this.lastNote;
+    if (!note) return;
+    this.stripHost?.forget(note.snippetId);
+    // Rebuild from the note's own declarations with no remembered
+    // values — which is exactly what a first-ever open renders.
+    const fresh: StripNoteWithDefaults = {
+      snippetId: note.snippetId,
+      sources: note.sources,
+      fields: buildInputFieldModels({ ...note.sources, cached: {} }),
+    };
+    this.lastNote = fresh;
+    this.stripState = deriveStripState(
+      this.stripState.mode === 'active' ? fresh : null, fresh);
+    this.stripDefaults = fresh.sources.defaults ?? {};
+    this.stripValues = {};
+    for (const field of fresh.fields) {
+      if (field.kind !== 'widget') this.stripValues[field.name] = field.value;
+    }
+    this.renderStrip();
+  }
+
+  private runFromStrip() {
+    for (const [name, host] of Object.entries(this.stripWidgetHosts)) {
+      this.stripValues[name] = collectWidgetInput(name, host);
+    }
+    const outcome = submitStrip(
+      {
+        snippetId: this.stripState.snippetId,
+        disabled: this.stripState.disabled,
+        values: this.stripValues,
+        defaults: this.stripDefaults,
+      },
+      (snippetId, kwargs, raw) => {
+        this.stripHost?.remember(snippetId, raw);
+        this.stripHost?.run(snippetId, kwargs, raw);
+      },
+      message => { void forgeNotice(this.app, message); },
+    );
+    if (outcome.ran) return;
+    if (outcome.missingRequired.length === 0
+        && (this.stripState.disabled || !this.stripState.snippetId)) {
+      // Belt-and-braces: the button is disabled in this state, so this
+      // is only reachable if a future edit re-enables it by accident.
+      void forgeNotice(this.app, 'Forge: open an action note to run it.');
+    }
   }
 
   async onClose() {
