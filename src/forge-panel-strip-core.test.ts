@@ -367,3 +367,28 @@ test('non-vacuity: an apostrophe in a comment does not swallow the source after 
   );
   assert.deepEqual(lits, ['"plain"']);
 });
+
+test('the bundled engine + vault content ships no "Forge Output" either', () => {
+  // Drain 2026-08-23-1100 — F1's guard above covers strings AUTHORED in
+  // this repo. bundled-assets.generated.ts is the other half of what a
+  // user can read: the inlined engine sources and bundled vault prose,
+  // authored in forge and in the vault repos and rebuilt into this file
+  // by scripts/inline-bundled-assets.mjs.
+  //
+  // Those hits cannot be patched here — the next build overwrites them
+  // — so this guard's job is to say WHERE the rename has to happen,
+  // and to fail if a vault or engine edit reintroduces the old term.
+  const generated = readFileSync(
+    join(import.meta.dirname, 'bundled-assets.generated.ts'), 'utf8');
+  // One inlined file per line, `"path": "…content…",` — so the line's
+  // own leading key names the file the hit belongs to.
+  const hits: string[] = [];
+  for (const line of generated.split('\n')) {
+    if (!/forge\s+output/i.test(line)) continue;
+    const key = line.match(/^\s*"([^"]+)":/);
+    hits.push(key ? key[1] : '(unknown file)');
+  }
+  assert.deepEqual([...new Set(hits)].sort(), [],
+    'these bundled sources still say "Forge Output" — rename them in their OWN repo, '
+    + 'then rebuild; patching bundled-assets.generated.ts would be overwritten');
+});
