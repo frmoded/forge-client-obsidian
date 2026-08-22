@@ -43,6 +43,7 @@ import {
 // Drain 2026-08-22-2300 (Forge panel F1) — the Inputs strip follows the
 // active note. The field models come from the same loop the Run dialog
 // renders from, so the strip cannot drift away from the dialog.
+import { formatRegistryInventory } from './registry-inventory-core.ts';
 import {
   buildInputFieldModels,
   recallPanelValues,
@@ -1189,6 +1190,19 @@ export default class ForgePlugin extends Plugin {
       id: 'forge-sync-edges',
       name: 'Sync edges',
       callback: () => { this.syncEdgesForActive(); },
+    });
+
+    // Drain 2026-08-23-0900 — the registry probe. CCQA established
+    // there is no eval surface in the plugin (the Pyodide instance is
+    // private and attached to nothing), so a question about what the
+    // registry holds could not be asked at all from a failing session.
+    // A scoped read-only command answers it without giving the plugin
+    // an eval hook: it runs one Python helper that reads live objects
+    // and returns a plain dict.
+    this.addCommand({
+      id: 'dump-registry-inventory',
+      name: 'Dump registry inventory (debug)',
+      callback: () => { void this.dumpRegistryInventory(); },
     });
 
     // Drain 2026-08-22-2300 (plan F1) — the panel is permanent, so it
@@ -5332,6 +5346,38 @@ export default class ForgePlugin extends Plugin {
       this.forgeOutput(text, isError ? 'error' : 'info'),
       (err) => console.error('Forge notice render failed:', err),
     );
+  }
+
+  /**
+   * Read the live registry and write the dump to the Forge panel.
+   *
+   * Load-bearing diagnostics rule: the panel is the surface, the
+   * console is the copy. A reading that exists only in DevTools is a
+   * reading the person who hit the bug cannot send anyone.
+   */
+  private async dumpRegistryInventory(): Promise<void> {
+    let view: ForgeOutputView;
+    try {
+      view = await this.getOutputView();
+    } catch (e) {
+      console.error('dumpRegistryInventory: no panel', e);
+      this.notice('Forge: could not open the Forge panel for the registry dump.');
+      return;
+    }
+    try {
+      const hostManager = getPyodideHost();
+      if (!hostManager) throw new Error('Pyodide host not wired');
+      const host = await hostManager.getInstance();
+      const dump = await host.getRegistryInventory();
+      const text = formatRegistryInventory(dump);
+      view.appendMessage('registry-inventory', text, 'info');
+      console.log('Forge registry inventory', dump);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      view.appendMessage(
+        'registry-inventory', `Registry dump failed: ${msg}`, 'error');
+      console.error('dumpRegistryInventory failed', e);
+    }
   }
 
   // ------------------------------------------------- Forge panel strip

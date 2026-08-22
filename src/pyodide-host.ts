@@ -46,6 +46,7 @@ import {
   type RuntimeHealth,
 } from "./wheel-health-core.ts";
 import { OUTPUT_VIEW_TYPE, ForgeOutputView } from "./output-view.ts";
+import type { RegistryInventoryDump } from "./registry-inventory-core.ts";
 
 // V1 user-vault mount: bundled-library subdirectory names. Files
 // under these top-level directories in the user's vault are SKIPPED
@@ -1197,6 +1198,29 @@ def _forge_list_snippets():
     plain lists, plain strings."""
     return _forge_registry.list_snippets()
 
+def _forge_registry_inventory():
+    """Drain 2026-08-23-0900 — read-only registry dump for the debug
+    command. Everything here is derived from the live objects, never
+    hand-listed: the chip names come from the executor's own
+    _DOMAIN_GLOBALS, so a chip added tomorrow shows up without a plugin
+    change. Structured-clone-safe — plain dicts, lists, strings."""
+    from forge.core import executor as _ex
+    reg, _resolver = _forge_get_resolver(None)
+    inventory = reg.list_snippets()
+    domain_globals = getattr(_ex, "_DOMAIN_GLOBALS", {})
+    chip_names = sorted({name for bundle in domain_globals.values() for name in bundle})
+    return {
+        "snippets": inventory,
+        "resolutionOrder": list(getattr(reg, "_order", [])),
+        # _vaults is the registry's own key set. It can differ from
+        # both list_snippets() and _order — a vault mounted but never
+        # scanned appears in one and not the others, which is exactly
+        # the forge-tutorial / authoring question drain 1600 raised.
+        "vaultKeys": sorted(getattr(reg, "_vaults", {}).keys()),
+        "chipNames": chip_names,
+        "domains": sorted(domain_globals.keys()),
+    }
+
 def _forge_get_resolver(vault_name=None):
     """vault_name is vestigial — kept for backward compat in
     moda-view.ts's engine-request dispatch, but V1's single
@@ -1670,6 +1694,9 @@ export interface PyodideHostInstance {
    *  an enum literal, so the Run dialog can render a dropdown without
    *  needing parallel `input_enums:` frontmatter. */
   getInputEnums(snippetId: string): Promise<Record<string, string[]>>;
+  /** Drain 2026-08-23-0900 — read-only registry dump for the debug
+   *  command. Reads; never mutates. */
+  getRegistryInventory(): Promise<RegistryInventoryDump>;
   /** Drain 2026-08-10-1900: typed-Let input names from a Recipe body
    *  string directly (no prior transpile required). */
   getTypedLetsInputNames(recipeBody: string): Promise<string[]>;
@@ -1846,6 +1873,14 @@ _forge_compute_with_python(
    *  on every connect. content_types is intentionally omitted —
    *  ConnectResponse.content_types is optional and callers fall back to
    *  a hardcoded default (server.ts:32). */
+  async getRegistryInventory(): Promise<RegistryInventoryDump> {
+    // Same shape of call as getConnectInventory: run the helper, unwrap
+    // the proxy. Read-only — this is why the drain shipped a scoped
+    // command rather than an eval hook.
+    const proxy = this.pyodide.runPython(`_forge_registry_inventory()`);
+    return this._unwrap(proxy) as RegistryInventoryDump;
+  }
+
   async getConnectInventory(vault_path: string): Promise<ConnectInventory> {
     const proxy = this.pyodide.runPython(`_forge_list_snippets()`);
     const snippets = this._unwrap(proxy) as Record<
