@@ -384,7 +384,13 @@ fi
 echo
 if [ "$SKIP_BUMP" = "no" ]; then
   echo "=== Committing version bump ==="
-  git add manifest.json
+  # Drain 2026-08-22-0910 — the sentinel ships WITH the manifest.
+  # `npm run build` regenerates assets/.bundle-version (a tracked
+  # file); staging only manifest.json left every cut's HEAD carrying a
+  # stale sentinel beside a bumped manifest — the v0.2.363 cut did
+  # exactly that. Both, one commit: any window where they disagree is
+  # a state bundle-version-sentinel.test.mjs asserts cannot exist.
+  git add manifest.json assets/.bundle-version
   git commit -m "Release v${NEW_VERSION}"
   # Drain 2550 — commit is committed; the version bump is now
   # permanent. Clear MANIFEST_BUMPED so any later failure doesn't

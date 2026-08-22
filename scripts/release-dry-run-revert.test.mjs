@@ -104,3 +104,47 @@ test('the clean-tree guard is intact (§8 — fix what dirties the tree, not the
   assert.match(SH, /ERROR: working tree has uncommitted changes/);
   assert.match(SH, /Commit or stash before releasing\./);
 });
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-22-0910 — the REAL-run side of the same inconsistency.
+//
+// Drain 1410 fixed the dry run's revert and, in doing so, surfaced that
+// `release.sh`'s release commit stages only manifest.json. The build
+// also regenerates the tracked `assets/.bundle-version`, so every cut
+// left the sentinel uncommitted — HEAD carrying manifest 0.2.363 beside
+// sentinel 0.2.362 was exactly that. The standing release HARD RULE
+// ("the release commit MUST include the regenerated sentinel") was
+// enforced only by drain-time vigilance until now.
+
+/** The pathspec the release commit actually stages. */
+function releaseCommitPathspec() {
+  const idx = SH.indexOf('git commit -m "Release v${NEW_VERSION}"');
+  assert.ok(idx > 0, 'release commit site must exist');
+  const before = SH.slice(0, idx);
+  const addLine = before.split('\n').reverse().find((l) => /^\s*git add /.test(l));
+  assert.ok(addLine, 'the release commit must stage something explicitly');
+  return addLine.trim().replace(/^git add\s+/, '').split(/\s+/);
+}
+
+test('the release commit stages every tracked build artifact', () => {
+  // Derived, not listed: whatever the build rewrites AND git tracks
+  // must be in the release commit, or HEAD ships internally
+  // inconsistent metadata.
+  const staged = releaseCommitPathspec();
+  for (const f of trackedBuildArtifacts()) {
+    assert.ok(
+      staged.includes(f),
+      `${f} is a tracked build artifact but the release commit does not stage it — ` +
+      `HEAD would carry a stale ${f} beside a bumped manifest`,
+    );
+  }
+});
+
+test('the sentinel and the manifest are committed together, not in separate commits', () => {
+  // Same commit or the window between them is a state where the two
+  // disagree — which is what the bundle-version-sentinel test asserts
+  // can never be true at HEAD.
+  const staged = releaseCommitPathspec();
+  assert.ok(staged.includes('manifest.json'));
+  assert.ok(staged.includes('assets/.bundle-version'));
+});
