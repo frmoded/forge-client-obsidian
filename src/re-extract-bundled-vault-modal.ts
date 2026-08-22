@@ -26,17 +26,17 @@ export interface BundledVaultOption {
   extractedVersion: string | null;
 }
 
-/** Hardcoded list of bundled vaults the plugin ships. Mirrors the
- *  three runFirstRunCheck call sites. A registry-driven version is
- *  out of scope until third-party library install ships (§6). */
-export const BUNDLED_VAULT_NAMES = [
-  'forge-moda',
-  'music-theory',
-  'music-core',
-  'forge-tutorial',
-] as const;
-
-export type BundledVaultName = typeof BUNDLED_VAULT_NAMES[number];
+/** The bundled vaults the plugin ships. Drain 2026-08-22-0920 — was a
+ *  hand-kept copy ("Hardcoded list ... mirrors the three
+ *  runFirstRunCheck call sites"); those call sites are one derived
+ *  loop now, and this is re-exported from the single constant so the
+ *  modal cannot offer a vault the bundle does not carry. */
+import {
+  BUNDLED_VAULT_NAMES,
+  type BundledVaultName,
+} from './bundled-vault-extraction-core.ts';
+export { BUNDLED_VAULT_NAMES };
+export type { BundledVaultName };
 
 /** Read the bundled + extracted forge.toml versions for each library
  *  the plugin bundles. Caller uses the result to build the modal's

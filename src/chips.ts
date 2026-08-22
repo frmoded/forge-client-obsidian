@@ -35,6 +35,7 @@ import {
   type SnippetMetaForChips,
 } from './chips-core.ts';
 import { isSourceVault } from './source-vault-core.ts';
+import { BUNDLED_VAULT_NAME_SET } from './bundled-vault-extraction-core.ts';
 import {
   parseLocalImports,
   resolveImportHostPath,
@@ -50,18 +51,11 @@ import {
 // CHIPS_RELATIVE_PATHS, chipSourcesFor, mergeChipsConfigsWalkUp).
 // Live palette discovery lives in palette-discovery-core.ts.
 
-// v0.2.62 — names of bundled libraries the plugin knows how to extract
-// (matches welcome.ts's ensureBundledForgeModa + ensureBundledForgeMusic
-// surface). Used by isSourceVault detection: when the vault root's
-// forge.toml `name` equals one of these, the vault IS that library's
-// source repo (Path A workflow), and chip discovery walks vault-root
-// subdirs as the library's content.
-// v0.2.76 — forge-tutorial added as Tier 1 default-on onboarding library.
-// v0.2.333 Phase 5 two-vault split — forge-music renamed music-theory;
-// music-core added. Keep in sync with scripts/vaults.txt + welcome.ts.
-const KNOWN_BUNDLED_LIBRARIES = new Set([
-  'forge-moda', 'music-theory', 'music-core', 'forge-tutorial',
-]);
+// v0.2.62 — the "is this vault a bundled library's source repo?"
+// check (Path A workflow: chip discovery walks vault-root subdirs as
+// the library's content). Drain 2026-08-22-0920 — the name set moved
+// to one shared constant; this file used to carry a hand-synced copy
+// of welcome.ts's.
 
 // Re-export so existing import sites in the codebase keep working
 // without churn.
@@ -209,7 +203,7 @@ async function detectSourceVault(app: App): Promise<string | null> {
   try {
     if (!(await adapter.exists('forge.toml'))) return null;
     const body = await adapter.read('forge.toml');
-    return isSourceVault(body, KNOWN_BUNDLED_LIBRARIES);
+    return isSourceVault(body, BUNDLED_VAULT_NAME_SET);
   } catch (e) {
     console.error('Forge chips: detectSourceVault read failed', e);
     return null;

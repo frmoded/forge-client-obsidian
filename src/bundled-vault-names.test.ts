@@ -56,33 +56,22 @@ function extractNames(source: string, name: string): string[] {
   return members;
 }
 
+import {
+  BUNDLED_VAULT_NAMES as SHARED_NAMES,
+  BUNDLED_VAULT_NAME_SET as SHARED_SET,
+} from './bundled-vault-extraction-core.ts';
+
 const CANONICAL = vaultsTxt();
-const welcomeKnown = extractNames(readSrc('src/welcome.ts'), 'KNOWN_BUNDLED_LIBRARIES');
-const chipsKnown = extractNames(readSrc('src/chips.ts'), 'KNOWN_BUNDLED_LIBRARIES');
 const pyodideHost = readSrc('src/pyodide-host.ts');
 const mountSkip = extractNames(pyodideHost, 'BUNDLED_LIBRARY_NAMES');
 const pythonV1 = extractNames(pyodideHost, '_BUNDLED_LIBRARIES_V1');
 const actionBundled = extractNames(readSrc('src/forge-action.ts'), 'BUNDLED_VAULTS');
-const modalNames = extractNames(
-  readSrc('src/re-extract-bundled-vault-modal.ts'), 'BUNDLED_VAULT_NAMES',
-);
 
 test('vaults.txt is the post-split canonical set', () => {
   assert.deepEqual(
     [...CANONICAL].sort(),
     ['forge-moda', 'forge-tutorial', 'music-core', 'music-theory'],
   );
-});
-
-test('welcome.ts + chips.ts KNOWN sets cover every canonical vault', () => {
-  for (const v of CANONICAL) {
-    assert.ok(welcomeKnown.includes(v), `welcome.ts KNOWN set missing ${v}`);
-    assert.ok(chipsKnown.includes(v), `chips.ts KNOWN set missing ${v}`);
-  }
-});
-
-test('re-extract modal offers exactly the canonical vaults', () => {
-  assert.deepEqual([...modalNames].sort(), [...CANONICAL].sort());
 });
 
 test('every bundle-resolved lib (python resolution order) is canonical + mount-skipped', () => {
@@ -102,11 +91,9 @@ test('forge-action BUNDLED_VAULTS ⊆ canonical', () => {
 test('rename completeness: forge-music is gone from every live list', () => {
   for (const [label, names] of [
     ['vaults.txt', CANONICAL],
-    ['welcome KNOWN', welcomeKnown],
-    ['chips KNOWN', chipsKnown],
+    ['shared BUNDLED_VAULT_NAMES', [...SHARED_NAMES]],
     ['_BUNDLED_LIBRARIES_V1', pythonV1],
     ['forge-action BUNDLED_VAULTS', actionBundled],
-    ['modal BUNDLED_VAULT_NAMES', modalNames],
   ] as Array<[string, string[]]>) {
     assert.ok(!names.includes('forge-music'), `${label} still lists forge-music`);
   }
@@ -137,4 +124,65 @@ test('assets/vaults/ dirs match the canonical set (no orphan forge-music)', () =
     !fs.existsSync(path.join(ROOT, 'assets', 'vaults', 'forge-music')),
     'assets/vaults/forge-music still exists — the rename git mv is incomplete',
   );
+});
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-22-0920 — retire the hand-maintained copies.
+//
+// The guards above pin six lists to vaults.txt, which catches drift but
+// still requires six edits per vault. Three of them were the SAME set,
+// spelled three times: welcome.ts + chips.ts (KNOWN_BUNDLED_LIBRARIES,
+// "intentional duplication" per their comments) and the re-extract
+// modal. They now import one exported constant. The remaining three
+// are deliberately NOT the canonical set — mount-skip is canonical ∪
+// legacy names, _BUNDLED_LIBRARIES_V1 is a 3-item resolution order,
+// forge-action's is a subset — so they keep their own literals and
+// their own assertions above.
+
+test('the canonical vault-name set is exported once and equals vaults.txt', () => {
+  assert.deepEqual([...SHARED_NAMES], CANONICAL,
+    'the shared constant must be vaults.txt, in vaults.txt order');
+  assert.ok(SHARED_NAMES.length > 0, 'shared constant must not be empty');
+  for (const v of CANONICAL) assert.ok(SHARED_SET.has(v), `shared set missing ${v}`);
+});
+
+/** Does this source spell out the whole canonical set as literals? */
+function relistsCanonicalSet(source) {
+  return CANONICAL.every((v) => new RegExp(`['"]${v}['"]`).test(source));
+}
+
+test('non-vacuity: the re-listing detector actually detects a re-listing', () => {
+  // A deliberate-mismatch fixture — if this passed, the sweep below
+  // would be asserting nothing.
+  const fixture = `const X = ['${CANONICAL.join("', '")}'];`;
+  assert.equal(relistsCanonicalSet(fixture), true);
+  assert.equal(relistsCanonicalSet(`const X = ['forge-moda'];`), false);
+});
+
+test('no source file re-lists the canonical vault names by hand', () => {
+  // Only the module that OWNS the constant may spell the names.
+  // pyodide-host.ts deliberately gets no exemption: its two lists are
+  // library-RESOLUTION sets (mount-skip = resolved libs ∪ legacy dirs;
+  // _BUNDLED_LIBRARIES_V1 = a 3-entry order) and neither spells the
+  // canonical four — so if one ever grows into a copy of the bundle
+  // set, this fails instead of quietly allowing it.
+  const ALLOWED = new Set(['bundled-vault-extraction-core.ts']);
+  const offenders = fs
+    .readdirSync(path.join(ROOT, 'src'))
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+    .filter((f) => !f.includes('.generated.'))
+    .filter((f) => !ALLOWED.has(f))
+    .filter((f) => relistsCanonicalSet(readSrc(`src/${f}`)));
+  assert.deepEqual(offenders, [],
+    'these files spell out the bundled-vault set instead of importing it');
+});
+
+test('welcome.ts and chips.ts consume the shared set', () => {
+  for (const rel of ['src/welcome.ts', 'src/chips.ts']) {
+    const src = readSrc(rel);
+    assert.match(src, /BUNDLED_VAULT_NAME_SET/,
+      `${rel} must import the shared membership set`);
+    assert.ok(!/KNOWN_BUNDLED_LIBRARIES\s*=/.test(src),
+      `${rel} must no longer define its own list`);
+  }
 });

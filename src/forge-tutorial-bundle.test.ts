@@ -141,22 +141,25 @@ test('sync-bundled-vault: drift detection catches forced edit', () => {
   }
 });
 
-test('KNOWN_BUNDLED_LIBRARIES coherence: welcome.ts + chips.ts agree', () => {
-  // Read source files and assert both sets include 'forge-tutorial'.
-  // Stops the welcome/chips dual-list from drifting again silently.
-  // v0.2.333 Phase 5 two-vault split — forge-music → music-theory +
-  // music-core. (bundled-vault-names.test.ts is the stricter guard;
-  // this older check stays as a belt-and-braces regexp.)
+test('welcome.ts + chips.ts share one bundled-library set (no dual list)', () => {
+  // Drain 2026-08-22-0920 — this test used to grep both files for the
+  // four literal names, guarding a dual list that was declared
+  // "intentional duplication". The dual list is gone: both files
+  // import BUNDLED_VAULT_NAME_SET. Kept (not deleted) because the
+  // property it protects is unchanged — the two glue layers must
+  // agree about what a bundled library is — and re-pointed at the
+  // mechanism that now guarantees it. bundled-vault-names.test.ts
+  // remains the stricter guard, including the vaults.txt pinning.
   const welcomeSrc = fs.readFileSync(
     path.join(REPO, 'src', 'welcome.ts'), 'utf8');
   const chipsSrc = fs.readFileSync(
     path.join(REPO, 'src', 'chips.ts'), 'utf8');
-  for (const lib of ['forge-moda', 'music-theory', 'music-core', 'forge-tutorial']) {
+  for (const [label, src] of [['welcome.ts', welcomeSrc], ['chips.ts', chipsSrc]]) {
     assert.match(
-      welcomeSrc, new RegExp(`'${lib}'`),
-      `welcome.ts KNOWN_BUNDLED_LIBRARIES missing ${lib}.`);
-    assert.match(
-      chipsSrc, new RegExp(`'${lib}'`),
-      `chips.ts KNOWN_BUNDLED_LIBRARIES missing ${lib}.`);
+      src, /BUNDLED_VAULT_NAME_SET/,
+      `${label} must take its bundled-library set from the shared constant.`);
+    assert.ok(
+      !/KNOWN_BUNDLED_LIBRARIES\s*=\s*new Set/.test(src),
+      `${label} must not re-declare its own bundled-library set.`);
   }
 });

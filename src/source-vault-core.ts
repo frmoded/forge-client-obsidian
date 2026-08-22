@@ -55,7 +55,7 @@ export function shouldSkipBundledExtract(
 
 export function isSourceVault(
   rootTomlBody: string | null,
-  knownLibraries: Set<string>,
+  knownLibraries: ReadonlySet<string>,
 ): string | null {
   if (rootTomlBody === null) return null;
   if (rootTomlBody === '') return null;

@@ -9,6 +9,7 @@ import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-clas
 import { computeSweepTrashList } from './sweep-bundle-dropped-core.ts';
 import {
   BUNDLED_VAULTS_ROOT,
+  BUNDLED_VAULT_NAME_SET,
   deriveBundledVaultNames,
   type DerivedBundledVaults,
 } from './bundled-vault-extraction-core.ts';
@@ -22,19 +23,11 @@ import {
 } from './legacy-music-rename-core.ts';
 export { copyDirRecursive };
 
-// v0.2.64 — names of bundled libraries the auto-extract path may
-// detect as "the vault IS this library's source repo." Must match
-// chips.ts's KNOWN_BUNDLED_LIBRARIES (intentional duplication —
-// both glue layers consult the same set, but neither owns the
-// source of truth, so a tiny copy is cheaper than a new shared file).
-// v0.2.76 — forge-tutorial added as the Tier 1 onboarding library.
-// Default-on (mirrors forge-moda), not domain-gated.
-// v0.2.333 Phase 5 two-vault split — forge-music renamed music-theory;
-// music-core added (composition-primitive authoring surface, also
-// music-domain-gated). Keep in sync with scripts/vaults.txt.
-const KNOWN_BUNDLED_LIBRARIES = new Set([
-  'forge-moda', 'music-theory', 'music-core', 'forge-tutorial',
-]);
+// v0.2.64 — the auto-extract path may detect that the vault IS a
+// bundled library's source repo. Drain 2026-08-22-0920: the name set
+// used for that check is no longer spelled here (nor duplicated in
+// chips.ts, which used to carry an "intentional duplication" copy) —
+// both import the one constant.
 
 /** Read the vault root's `forge.toml` (if any) and return the matched
  *  bundled-library identity when the vault IS that library's source
@@ -45,7 +38,7 @@ async function detectSourceVault(adapter: DataAdapter): Promise<string | null> {
   try {
     if (!(await adapter.exists('forge.toml'))) return null;
     const body = await adapter.read('forge.toml');
-    return isSourceVault(body, KNOWN_BUNDLED_LIBRARIES);
+    return isSourceVault(body, BUNDLED_VAULT_NAME_SET);
   } catch (e) {
     console.error('Forge: detectSourceVault read failed', e);
     return null;

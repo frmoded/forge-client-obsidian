@@ -10,26 +10,24 @@
 // filtering (which sections show expanded), so path-prefix is
 // acceptable. Documented per the prompt §2.5.
 
+import { BUNDLED_VAULT_NAME_SET } from './bundled-vault-extraction-core.ts';
+
 /** Determine which library category corresponds to an active file
- *  path. Returns the source library name ("forge-moda" /
- *  "music-theory" / "music-core" / "forge-tutorial") for a path under
- *  that library, or null when the active file isn't inside any known
- *  library (e.g. vault root, an authoring snippet outside the
- *  libraries).
+ *  path. Returns the bundled library's name for a path under it, or
+ *  null when the active file isn't inside any bundled library (e.g.
+ *  vault root, an authoring snippet outside the libraries).
  *
  *  Bundled libraries are matched by case-sensitive top-level
- *  directory prefix. v0.2.333 Phase 5 two-vault split — forge-music
- *  renamed music-theory; music-core added. */
+ *  directory prefix. Drain 2026-08-22-0920 — the four names used to
+ *  be spelled out here as an `||` chain, which no drift guard knew
+ *  about; membership now comes from the one shared constant, so a
+ *  fifth bundled vault folds without an edit here. */
 export function libraryForActiveFilePath(
   activeFilePath: string | null,
 ): string | null {
   if (!activeFilePath) return null;
   const topDir = activeFilePath.split('/')[0];
-  if (topDir === 'forge-moda' || topDir === 'music-theory'
-      || topDir === 'music-core' || topDir === 'forge-tutorial') {
-    return topDir;
-  }
-  return null;
+  return BUNDLED_VAULT_NAME_SET.has(topDir) ? topDir : null;
 }
 
 /** Sources for library-note chip groups (drain 2330). The palette

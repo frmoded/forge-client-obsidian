@@ -18,15 +18,35 @@
 export const BUNDLED_VAULTS_ROOT =
   '.obsidian/plugins/forge-client-obsidian/assets/vaults';
 
+/** The bundled vaults this build ships, in scripts/vaults.txt order.
+ *  ONE definition for the whole plugin (drain 2026-08-22-0920): every
+ *  site that needs "is this one of ours?" imports from here instead of
+ *  spelling the names again. A test pins it to scripts/vaults.txt and
+ *  fails if any source file re-lists the set by hand.
+ *
+ *  Note the two remaining name lists in pyodide-host.ts are NOT this
+ *  set and keep their own literals on purpose: the MEMFS mount-skip
+ *  list is this set PLUS the legacy forge-music dirs, and
+ *  _BUNDLED_LIBRARIES_V1 is a three-entry Python resolution order.
+ *  Both are pinned to the canonical set by the same test file. */
+export const BUNDLED_VAULT_NAMES = [
+  'forge-moda', 'music-theory', 'forge-tutorial', 'music-core',
+] as const;
+
+export type BundledVaultName = typeof BUNDLED_VAULT_NAMES[number];
+
+/** Membership form, for the "is this vault a bundled library's source
+ *  repo?" checks in welcome.ts + chips.ts. */
+export const BUNDLED_VAULT_NAME_SET: ReadonlySet<string> =
+  new Set<string>(BUNDLED_VAULT_NAMES);
+
 /** Last-resort set, used ONLY when listing the bundle dir yields
  *  nothing. An adapter quirk must not silently downgrade a fresh
  *  install to zero extracted vaults — that would be a worse failure
- *  than the one this drain fixes. Keep in step with
- *  scripts/vaults.txt; the runtime derivation is what actually
- *  governs, and a test pins the two together. */
-export const FALLBACK_BUNDLED_VAULTS = [
-  'forge-moda', 'forge-tutorial', 'music-core', 'music-theory',
-];
+ *  than the one drain 2300 fixed. Same names as the constant above;
+ *  named separately because the ROLE is different (a fallback, not a
+ *  membership test) and the log says which one was used. */
+export const FALLBACK_BUNDLED_VAULTS: string[] = [...BUNDLED_VAULT_NAMES];
 
 export interface DerivedBundledVaults {
   /** Vault names to extract, sorted for deterministic logging. */
