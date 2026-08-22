@@ -17,7 +17,7 @@
 // drain's FEEDBACK; this guards the regression from here on.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,27 +25,32 @@ import { fileURLToPath } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SH = readFileSync(join(ROOT, 'scripts', 'release.sh'), 'utf8');
 
+/** The single list of what the build writes (scripts/build-outputs.txt),
+ *  shared with release.sh so neither can drift from the other. */
+function buildOutputCandidates() {
+  return readFileSync(join(ROOT, 'scripts', 'build-outputs.txt'), 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#'));
+}
+
+function isTracked(f) {
+  try {
+    execFileSync('git', ['ls-files', '--error-unmatch', f], {
+      cwd: ROOT, stdio: 'ignore',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Files the build writes that git would notice. A gitignored artifact
- *  cannot dirty the tree, so only tracked ones need reverting. */
+ *  cannot dirty the tree, so only tracked ones need reverting via
+ *  `git checkout` — the untracked ones need the snapshot path instead
+ *  (drain 2026-08-22-1100). */
 function trackedBuildArtifacts() {
-  const candidates = [
-    'manifest.json',
-    'assets/.bundle-version',
-    'main.js',
-    'src/version-constant.generated.ts',
-    'src/asset-manifest.generated.ts',
-    'src/bundled-assets.generated.ts',
-  ];
-  return candidates.filter((f) => {
-    try {
-      execFileSync('git', ['ls-files', '--error-unmatch', f], {
-        cwd: ROOT, stdio: 'ignore',
-      });
-      return true;
-    } catch {
-      return false;
-    }
-  });
+  return buildOutputCandidates().filter(isTracked);
 }
 
 test('the tracked-build-artifact set is exactly what we think it is', () => {
@@ -61,15 +66,23 @@ test('the tracked-build-artifact set is exactly what we think it is', () => {
 });
 
 test('every tracked build artifact is reverted by the dry-run cleanup', () => {
+  // Drain 2026-08-22-1100 — the helper used to name each file in a
+  // `git checkout -- <file>` line and this test matched them one by
+  // one. It now loops the shared build-output list and checks out the
+  // tracked ones, so the assertion moves to the mechanism: every
+  // tracked artifact must be REACHED by that loop.
   const helper = SH.slice(
     SH.indexOf('_revert_build_artifacts() {'),
     SH.indexOf('_cleanup_on_error() {'),
   );
   assert.ok(helper, 'the revert helper must exist');
+  assert.match(helper, /_build_outputs/, 'the revert must iterate the shared list');
+  assert.match(helper, /git ls-files --error-unmatch/, 'and partition it by tracked-ness');
+  assert.match(helper, /git checkout -- "\$f"/, 'checking out each tracked entry');
   for (const f of trackedBuildArtifacts()) {
     assert.ok(
-      helper.includes(`git checkout -- ${f}`),
-      `${f} is tracked and rewritten by the build, but the dry-run revert does not restore it`,
+      buildOutputCandidates().includes(f),
+      `${f} is tracked and rewritten by the build but is not in the list the revert walks`,
     );
   }
 });
@@ -147,4 +160,78 @@ test('the sentinel and the manifest are committed together, not in separate comm
   const staged = releaseCommitPathspec();
   assert.ok(staged.includes('manifest.json'));
   assert.ok(staged.includes('assets/.bundle-version'));
+});
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-22-1100 — a rehearsal restores what it rewrote,
+// TRACKED OR NOT.
+//
+// The observed gap: `_revert_build_artifacts` restores the tracked
+// artifacts, and drain 1410 reasoned (correctly, for the clean-tree
+// guard) that a gitignored file cannot dirty the tree. But main.js
+// carries an inlined version stamp, so after a dry run the working
+// copy is stamped at the rehearsed version while manifest.json has
+// gone back — `git status` clean, next preflight refusing:
+//
+//   ✗ version stamp — main.js version stamp (0.2.364) does not match
+//     manifest.json version (0.2.363).
+//
+// Note the stamp cannot be repaired by re-running the inliner: that
+// writes src/version-constant.generated.ts, which only reaches main.js
+// through esbuild. Hence snapshot-and-restore rather than re-generate.
+
+/** Build outputs that git does NOT track — the ones a `git checkout`
+ *  can never bring back, so the dry run must save them itself. */
+function untrackedBuildArtifacts() {
+  return buildOutputCandidates().filter((f) => !isTracked(f));
+}
+
+test('the untracked build-output set is exactly what we think it is', () => {
+  // Non-vacuity + drift alarm, mirroring the tracked-set test above.
+  assert.deepEqual(
+    untrackedBuildArtifacts().sort(),
+    [
+      'main.js',
+      'src/asset-manifest.generated.ts',
+      'src/bundled-assets.generated.ts',
+      'src/version-constant.generated.ts',
+    ],
+    'a new gitignored build output must be added to the snapshot set',
+  );
+});
+
+test('every untracked build output is snapshotted and restored', () => {
+  const sh = SH;
+  assert.ok(sh.includes('_snapshot_build_outputs'), 'a snapshot step must exist');
+  for (const f of untrackedBuildArtifacts()) {
+    assert.ok(
+      sh.includes(f) || sh.includes('BUILD_OUTPUTS_FILE'),
+      `${f} must be covered by the snapshot/restore set`,
+    );
+  }
+});
+
+test('the snapshot is taken before the build overwrites anything', () => {
+  const snapAt = SH.search(/^_snapshot_build_outputs$/m);
+  const buildAt = SH.search(/^npm run build$/m);
+  assert.ok(snapAt > 0, 'snapshot must be invoked, not just defined');
+  assert.ok(
+    snapAt < buildAt,
+    'snapshotting after the build would save the rewritten copies',
+  );
+});
+
+test('an output that did not exist before is removed again, not left behind', () => {
+  // Restoring "absent" is part of restoring. Without this, a dry run on
+  // a fresh clone leaves a main.js the developer never built.
+  assert.match(SH, /\.absent/, 'the snapshot must record non-existence too');
+});
+
+test('the build-output list has one definition, shared by script and test', () => {
+  // Drain 0920's lesson applied here before a second copy could exist.
+  assert.ok(
+    existsSync(join(ROOT, 'scripts', 'build-outputs.txt')),
+    'scripts/build-outputs.txt is the single list',
+  );
+  assert.ok(SH.includes('build-outputs.txt'), 'release.sh reads it');
 });

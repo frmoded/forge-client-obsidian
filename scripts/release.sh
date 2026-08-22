@@ -85,9 +85,71 @@ MANIFEST_BUMPED="no"
 # banner promising "no filesystem-visible side effects", and the NEXT
 # invocation aborted on the clean-tree guard: the dry run broke the
 # script it was rehearsing.
+# Drain 2026-08-22-1100 — the build's outputs, one list, partitioned at
+# runtime. scripts/build-outputs.txt is shared with
+# release-dry-run-revert.test.mjs so the two cannot drift.
+BUILD_OUTPUTS_FILE="$(dirname "$0")/build-outputs.txt"
+_build_outputs() {
+  grep -v '^[[:space:]]*#' "$BUILD_OUTPUTS_FILE" | grep -v '^[[:space:]]*$'
+}
+
+# Where the untracked outputs are parked for the duration of a run.
+_SNAPSHOT_DIR=""
+
+# Save every build output git does NOT track. `git checkout` can bring
+# back the tracked ones; nothing can bring these back but a copy — and
+# main.js matters because it carries an inlined version stamp, so a
+# rehearsal that leaves it rewritten desynchronises it from the
+# reverted manifest.json and the next preflight refuses to build.
+#
+# Re-generating is NOT an alternative: the stamp reaches main.js only
+# through esbuild (inline-plugin-version.mjs writes
+# src/version-constant.generated.ts), so restoring it means restoring
+# the bytes.
+_snapshot_build_outputs() {
+  _SNAPSHOT_DIR="$(mktemp -d)"
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+      continue   # tracked — git checkout restores it
+    fi
+    mkdir -p "$_SNAPSHOT_DIR/$(dirname "$f")"
+    if [ -f "$f" ]; then
+      cp "$f" "$_SNAPSHOT_DIR/$f"
+    else
+      # Absence is a state worth restoring too: a dry run on a fresh
+      # clone must not leave behind a main.js nobody built.
+      touch "$_SNAPSHOT_DIR/$f.absent"
+    fi
+  done <<< "$(_build_outputs)"
+}
+
+_restore_build_outputs() {
+  [ -z "$_SNAPSHOT_DIR" ] && return 0
+  [ -d "$_SNAPSHOT_DIR" ] || return 0
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+      continue
+    fi
+    if [ -f "$_SNAPSHOT_DIR/$f.absent" ]; then
+      rm -f "$f"
+    elif [ -f "$_SNAPSHOT_DIR/$f" ]; then
+      cp "$_SNAPSHOT_DIR/$f" "$f"
+    fi
+  done <<< "$(_build_outputs)"
+  rm -rf "$_SNAPSHOT_DIR"
+  _SNAPSHOT_DIR=""
+}
+
 _revert_build_artifacts() {
-  git checkout -- manifest.json 2>/dev/null || true
-  git checkout -- assets/.bundle-version 2>/dev/null || true
+  while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    if git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+      git checkout -- "$f" 2>/dev/null || true
+    fi
+  done <<< "$(_build_outputs)"
+  _restore_build_outputs
 }
 
 _cleanup_on_error() {
@@ -273,6 +335,8 @@ fi
 # --- Build ---
 echo
 echo "=== Building plugin ==="
+# Snapshot BEFORE the build: after it, the originals are gone.
+_snapshot_build_outputs
 npm run build
 
 # --- Verify required release artifacts ---

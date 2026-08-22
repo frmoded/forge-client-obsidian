@@ -1,0 +1,29 @@
+# scripts/build-outputs.txt
+#
+# Drain 2026-08-22-1100.
+#
+# Every file `npm run build` writes into the working tree. ONE list,
+# read by both scripts/release.sh (bash) and
+# scripts/release-dry-run-revert.test.mjs — drain 0920's lesson (one
+# fact, one definition) applied before a second copy could exist.
+#
+# The script partitions this list at runtime with `git ls-files`:
+#   - TRACKED   → restored with `git checkout --` (a dry run must not
+#                 leave the tree dirty; drain 1410).
+#   - UNTRACKED → snapshotted before the build and copied back after
+#                 (a `git checkout` cannot restore what git ignores,
+#                 and main.js carries an inlined version stamp that
+#                 desynchronises from a reverted manifest.json).
+#
+# Do not partition it by hand here: whether a file is tracked can
+# change, and the derivation is what keeps both halves honest.
+#
+# Format: one repo-relative path per line. Blank lines and `#`
+# comments ignored.
+
+manifest.json
+assets/.bundle-version
+main.js
+src/version-constant.generated.ts
+src/asset-manifest.generated.ts
+src/bundled-assets.generated.ts
