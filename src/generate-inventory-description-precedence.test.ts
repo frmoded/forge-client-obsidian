@@ -39,6 +39,8 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { DESCRIPTION_PLACEHOLDER } from './description-placeholder-core.ts';
+
 const REPO = process.cwd();
 const HOST_TS = path.join(REPO, 'src', 'pyodide-host.ts');
 const ENGINE = path.join(REPO, 'assets', 'engine');
@@ -63,7 +65,25 @@ function extractProductionFunction(): string {
   // grows escape sequences (\\, \`) this raw extraction stops being
   // the runtime text and needs an unescape step. Fail loudly then.
   assert.ok(!m[0].includes('\\\\'), 'extracted block contains JS escapes — add unescaping');
-  return m[0];
+  return extractPlaceholderPrelude(src) + '\n\n' + m[0];
+}
+
+/** Drain 2026-08-23-2100 — the function above now calls
+ *  `_forge_is_description_placeholder`, so the harness has to carry its
+ *  definition and the constant it reads. Extracted from the same source
+ *  file for the same reason the function is: a hand-copy here would be
+ *  the drift trap this file's header exists to avoid.
+ *
+ *  This slice DOES contain a JS escape — the constant is built with
+ *  `"\\n".join([...])` so that V8 hands Python a single backslash-n —
+ *  so it gets the unescape step the raw-function assertion above
+ *  demands rather than being waved through. */
+function extractPlaceholderPrelude(src: string): string {
+  const start = src.indexOf('_FORGE_DESCRIPTION_PLACEHOLDER = ');
+  assert.ok(start >= 0, 'could not find _FORGE_DESCRIPTION_PLACEHOLDER');
+  const end = src.indexOf('def _forge_get_generate_inventory(', start);
+  assert.ok(end > start, 'placeholder prelude does not precede the inventory fn');
+  return src.slice(start, end).replace(/\\\\n/g, '\\n');
 }
 
 const NOTE_YAML_AND_BODY = `---
@@ -112,6 +132,39 @@ type: action
 Return None.
 `;
 
+// Drain 2026-08-23-2100 — a note straight out of the fresh-note
+// template: the Description holds the authoring hint and nothing else.
+// The hint is instructions TO the author, not intent FROM them.
+const NOTE_UNTOUCHED_PLACEHOLDER = `---
+type: action
+description: test4
+---
+
+# Description
+
+${DESCRIPTION_PLACEHOLDER}
+
+# Recipe
+
+
+`;
+
+// The same note after the cohort types over the hint. Its intent must
+// reach /generate untouched — this is the non-vacuity half.
+const NOTE_EDITED_PLACEHOLDER = `---
+type: action
+description: test4
+---
+
+# Description
+
+Print a random number multiplied by an input scale.
+
+# Recipe
+
+
+`;
+
 test('generate inventory: # Description body wins over YAML description; YAML is V1 fallback', () => {
   const python = resolvePython();
   if (!python) {
@@ -153,6 +206,8 @@ print(json.dumps(out))
     yaml_only_v1: NOTE_YAML_ONLY_V1,
     body_only: NOTE_BODY_ONLY,
     neither: NOTE_NEITHER,
+    untouched_placeholder: NOTE_UNTOUCHED_PLACEHOLDER,
+    edited_placeholder: NOTE_EDITED_PLACEHOLDER,
   };
   const run = spawnSync(python, ['-'], {
     input: script.replace("sys.stdin.read()", JSON.stringify(JSON.stringify(notes))),
@@ -175,4 +230,20 @@ print(json.dumps(out))
   assert.equal(got.body_only, 'Play E minor scale.');
   // Neither → empty (service-side handling owns that case).
   assert.equal(got.neither, '');
+
+  // Drain 2026-08-23-2100 — the untouched template hint resolves to
+  // EMPTY, and deliberately does not fall through to the YAML
+  // description. Both halves matter: sending the hint would ask the
+  // model to implement "Describe what this note should do", and
+  // falling through would ask it to implement the note's title (the
+  // very defect the first assertion in this test guards).
+  assert.equal(got.untouched_placeholder, '');
+
+  // NON-VACUITY: once the cohort writes over the hint, their intent
+  // must reach /generate untouched. A guard that swallowed this would
+  // silently break every generated note.
+  assert.equal(
+    got.edited_placeholder,
+    'Print a random number multiplied by an input scale.',
+  );
 });

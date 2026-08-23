@@ -732,6 +732,32 @@ def _forge_find_deps(body: str):
             deps.append(dep); seen.add(dep)
     return deps
 
+# Drain 2026-08-23-2100 — the fresh-note Description placeholder.
+#
+# Written as LITERAL Python, not interpolated from
+# description-placeholder-core.ts, even though interpolation would make
+# drift impossible. Several tests extract this block from the source
+# file with a regex and feed the raw text to Pyodide (the documented
+# drift-protection harness); an unexpanded JS interpolation is a Python
+# SyntaxError there and takes 45 tests down with it. (Writing that
+# interpolation syntax even inside THIS comment breaks the build for
+# the same reason -- the comment lives inside the template literal.)
+# So this uses the
+# protocol's sanctioned option (b): a literal copy plus an explicit
+# comparison test that fails the suite the moment the two diverge --
+# see description-placeholder-core.test.ts. The line list below mirrors
+# the TS array element-for-element on purpose, so the comparison can be
+# mechanical rather than eyeballed.
+_FORGE_DESCRIPTION_PLACEHOLDER = "\\n".join([
+    'Describe what this note should do, in plain English.',
+    'Name any inputs it takes and what they mean — e.g. "...multiplied by an input scale (a number, default 1)".',
+    'Forge turns this into a runnable Recipe with typed inputs.',
+])
+
+def _forge_is_description_placeholder(text: str) -> bool:
+    """Mirror of isDescriptionPlaceholder in the same core module."""
+    return (text or "").strip() == _FORGE_DESCRIPTION_PLACEHOLDER.strip()
+
 def _forge_get_generate_inventory(snippet_id: str):
     """Materialize the inventory α's POST /generate consumes. Plain-dict
     return shape — structured-clone-safe across the JS↔Python bridge.
@@ -774,8 +800,21 @@ def _forge_get_generate_inventory(snippet_id: str):
     # passes the drain-1700 validation). Body wins when non-empty;
     # YAML remains the fallback, which preserves V1 notes — they have
     # no # Description section.
+    #
+    # Drain 2026-08-23-2100 — an UNTOUCHED placeholder is not intent.
+    # The fresh-note template seeds the Description with an authoring
+    # hint; sending it would ask the model to write a Recipe for the
+    # sentence "Describe what this note should do", which is the same
+    # defect class as the YAML-title shadowing above. It resolves to
+    # empty and deliberately does NOT fall through to the YAML
+    # description: on a dialog-created note that field holds the title,
+    # so the fallback would swap one wrong intent for another. Empty
+    # reaches the service's CANNOT_INTERPRET path, which is the honest
+    # answer for a note nobody has described yet.
     description = (extract_section(body, "description") or "").strip()
-    if not description:
+    if _forge_is_description_placeholder(description):
+        description = ""
+    elif not description:
         description = (meta.get("description") or "").strip()
     return {
         "snippet_id": snippet_id,

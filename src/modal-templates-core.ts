@@ -15,6 +15,7 @@
 // modal.ts re-exports `actionTemplate` via the existing import path
 // for backward-compat with call sites.
 
+import { DESCRIPTION_PLACEHOLDER } from './description-placeholder-core.ts';
 import { computeFacetHash } from './facet-hash-core.ts';
 import {
   extractDescription,
@@ -38,10 +39,17 @@ export async function actionTemplate(name: string): Promise<string> {
   // created, which is the exact failure class this drain removes.
   // Extracting from the real body makes the stamps agree by
   // construction rather than by care.
+  // Drain 2026-08-23-2100 — the Description seeds with an authoring
+  // hint instead of nothing. It hashes like any other content (the
+  // stamps below are still taken from the body actually written), and
+  // the generate path recognises it as the untouched placeholder so it
+  // never reaches the LLM as intent. Recipe and Python are untouched:
+  // the stub stays per the metadata-honesty precedent, and no `Input`
+  // line goes in — see description-placeholder-core.ts.
   const body = [
     '# Description',
     '',
-    '',
+    DESCRIPTION_PLACEHOLDER,
     '',
     '# Recipe',
     '',
