@@ -39,7 +39,21 @@ export function writePythonAndEnglishHash(
   update: PythonCacheUpdate,
 ): string {
   let out = body;
-  if (update.stripStaleSlots !== false) {
+  // Drain 2026-08-24-2350 — DEFAULT FLIPPED, from strip to keep.
+  //
+  // This read `!== false`, i.e. strip unless told not to. That was
+  // right while `# Slots` was a dead v0.2.70/v0.2.71 remnant. It is a
+  // trap now that the heading is a live cache the engine reads
+  // (`parse_slots_section` in resolve_action_code's V2 path): any
+  // future caller who simply forgot the flag would silently delete
+  // every resolution on the note, and the only symptom would be an
+  // LLM bill.
+  //
+  // All three production call sites already pass `false` explicitly
+  // and keep doing so — the flip is about what happens when someone
+  // passes nothing. Opting IN to the strip still works for the one
+  // remaining consumer that wants it (the investigation suite).
+  if (update.stripStaleSlots === true) {
     out = removeSlotsSection(out);
   }
   // CW-2230 — null englishHash: skip the frontmatter write entirely.

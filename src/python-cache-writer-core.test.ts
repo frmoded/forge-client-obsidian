@@ -44,7 +44,16 @@ test('writePythonAndEnglishHash: replaces existing # Python heading', () => {
   assert.strictEqual(matches?.length, 1);
 });
 
-test('writePythonAndEnglishHash: strips pre-existing # Slots heading by default', () => {
+test('writePythonAndEnglishHash: PRESERVES a # Slots heading by default', () => {
+  // Drain 2026-08-24-2350 — was "strips … by default", asserting the
+  // opposite. The default flipped because `# Slots` stopped being a
+  // dead v0.2.70/v0.2.71 remnant and became a live cache the engine
+  // reads. Stripping-unless-told-otherwise meant any caller who forgot
+  // the flag would silently delete every resolution on the note, and
+  // the only symptom would be an LLM bill.
+  //
+  // The capability is not gone — the explicit opt-in is the next test
+  // down, and it still passes.
   const body = (
     '---\ntype: action\nfacet_form: canonical\n---\n\n'
     + '# English\n\nSet x to 7.\n\n'
@@ -54,8 +63,8 @@ test('writePythonAndEnglishHash: strips pre-existing # Slots heading by default'
     pythonCode: 'def compute(context):\n    print(7)',
     englishHash: 'abc',
   });
-  assert.ok(!result.includes('# Slots'));
-  assert.ok(!result.includes('"abc": "7"'));
+  assert.ok(result.includes('# Slots'));
+  assert.ok(result.includes('"abc": "7"'));
   assert.ok(result.includes('# Python'));
 });
 

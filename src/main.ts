@@ -106,6 +106,7 @@ import {
 } from './auto-connect-banner-core.ts';
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
+import { writeSlotsSection } from './slots-section-writer-core.ts';
 import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
 import {
   checkRecipeClosure,
@@ -6133,13 +6134,34 @@ export default class ForgePlugin extends Plugin {
 
     try {
       await this.app.vault.process(file, (content) =>
-        writePythonAndEnglishHash(content, {
-          pythonCode: python,
-          englishHash,
-          stripStaleSlots: true,  // migration cleanup for v0.2.70/v0.2.71
-        }));
+        // Drain 2026-08-24-2350 — PERSIST the resolutions instead of
+        // discarding them. This call used to pass
+        // `stripStaleSlots: true`, deleting the `# Slots` heading as
+        // v0.2.70/v0.2.71 migration cleanup, because the sidecar cache
+        // was never wired up on the engine side. It is now
+        // (`parse_slots_section` in resolve_action_code's V2 path), so
+        // stripping would delete the very thing we just paid an LLM
+        // call for and every run would keep re-resolving.
+        //
+        // The migration concern the strip served is preserved rather
+        // than dropped: `writeSlotsSection` removes any existing
+        // heading before writing, so a v0.2.70/71 remnant is replaced,
+        // never duplicated or accumulated. A test pins "exactly one
+        // `# Slots` heading, always".
+        //
+        // `stripStaleSlots: false` because the two writers would
+        // otherwise fight — the inner one deleting what the outer one
+        // is about to merge from.
+        writeSlotsSection(
+          writePythonAndEnglishHash(content, {
+            pythonCode: python,
+            englishHash,
+            stripStaleSlots: false,
+          }),
+          slotResolutions,
+        ));
     } catch (e) {
-      console.error('handleSlotCacheMiss: # Python / english_hash write failed', e);
+      console.error('handleSlotCacheMiss: # Python / english_hash / # Slots write failed', e);
       // Best-effort — the result is in hand.
     }
 
