@@ -38,9 +38,55 @@ export interface ClassifyInput {
   /** The raw error text (engine traceback line, exception message,
    *  or HTTP detail). */
   errorMsg: string;
+  /** Drain 2026-08-24-0920 — which facet the note declares as its
+   *  source, so the exec-error hint can point at the facet the cohort
+   *  member actually authored. Same union `computeSnippetWithArgs`
+   *  already threads as `canonicalLayer`, so no new plumbing: the
+   *  value was already in scope at both call sites. Omit when unknown
+   *  (V1 notes, early failures) and the generic wording is used. */
+  sourceFacet?: 'description' | 'recipe' | 'python' | 'synced';
   /** Captured stdout accompanying the failure, when any. */
   stdout?: string;
 }
+
+/** Drain 2026-08-24-0920 — the exec-error fix hint, by canonical facet.
+ *
+ *  One canned hint used to tell every `SnippetExecError` victim to open
+ *  the note's `# Python`. That is right for a note whose author wrote
+ *  the Python and wrong for a generated one: the driver hit it on
+ *  2026-08-23 running a Description-canonical note whose Python they
+ *  had never seen. An error message is the moment of maximum cohort
+ *  attention, and pointing at the wrong facet teaches the D -> R -> P
+ *  chain backwards.
+ *
+ *  Rendered with `SUGGESTED_FIX_PREFIX` ("Fix: ") by renderForgeError,
+ *  so these strings deliberately do NOT carry that prefix themselves.
+ *
+ *  Wording is forge-core's proposal and is one-line-replaceable — see
+ *  the drain FEEDBACK, which prints all four verbatim for review. */
+export const EXEC_FIX_DEFAULT =
+  "Open the note's # Python section and fix the line the " +
+  'details point at, then run again.';
+
+export const EXEC_FIX_BY_FACET: Readonly<Record<string, string>> = {
+  // The author wrote this Python; pointing at it is correct.
+  python: EXEC_FIX_DEFAULT,
+  description:
+    'This note was generated from its Description. Refine the ' +
+    '# Description and run again (\u25B6) to regenerate — or edit the ' +
+    '# Recipe if the logic is close.',
+  recipe:
+    'Edit the # Recipe and run again — Forge re-derives the Python.',
+  // `synced` is the fifth value the code actually carries and the
+  // prompt did not enumerate. A synced note's chain is current and the
+  // Description is still its source, so "edit Python" is exactly as
+  // wrong here as it is for a Description-canonical note. Flagged for
+  // driver adjudication in the drain FEEDBACK.
+  synced:
+    'This note was generated from its Description. Refine the ' +
+    '# Description and run again (\u25B6) to regenerate — or edit the ' +
+    '# Recipe if the logic is close.',
+};
 
 // The five error classes migrated in drain 2026-08-08-1300. Matching
 // is by exception NAME in the raw text (stable across engine message
@@ -53,6 +99,10 @@ export interface ClassifyInput {
 const CLASS_RULES: ReadonlyArray<{
   marker: string;
   suggestedFix: string;
+  /** Drain 2026-08-24-0920 — only the exec class varies by facet. The
+   *  resolution classes are about a NAME being wrong, which reads the
+   *  same whichever facet is canonical. */
+  facetAware?: boolean;
 }> = [
   {
     marker: 'AmbiguousSnippetResolutionError',
@@ -65,9 +115,10 @@ const CLASS_RULES: ReadonlyArray<{
     // that string is a substring of this one, so substring matching
     // must test the longer name first. (Ambiguous… contains neither.)
     marker: 'SnippetExecError',
-    suggestedFix:
-      "Open the note's # Python section and fix the line the " +
-      'details point at, then run again.',
+    // Facet-aware as of drain 2026-08-24-0920 — see EXEC_FIX_BY_FACET.
+    // This stays the fallback for an unknown or absent facet.
+    suggestedFix: EXEC_FIX_DEFAULT,
+    facetAware: true,
   },
   {
     marker: 'SnippetResolutionError',
@@ -99,9 +150,14 @@ export function classifyForgeError(input: ClassifyInput): ForgeError | null {
   const raw = input.errorMsg ?? '';
   for (const rule of CLASS_RULES) {
     if (raw.includes(rule.marker)) {
+      // Unknown / absent facet falls back to rule.suggestedFix rather
+      // than rendering "Fix: undefined" — §8 says never drop the hint.
+      const facetFix = rule.facetAware && input.sourceFacet
+        ? EXEC_FIX_BY_FACET[input.sourceFacet]
+        : undefined;
       return {
         cause: extractCauseLine(raw, rule.marker),
-        suggested_fix: rule.suggestedFix,
+        suggested_fix: facetFix ?? rule.suggestedFix,
         details: withStdout(raw, input.stdout),
       };
     }

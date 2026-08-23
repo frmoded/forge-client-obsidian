@@ -5629,7 +5629,10 @@ export default class ForgePlugin extends Plugin {
         const outputView = await this.getOutputView();
         // Drain 2026-08-08-1300 — thrown compute errors can embed the
         // engine exception text; render structured when recognized.
-        const structuredThrow = classifyForgeError({ errorMsg: detail });
+        // Drain 2026-08-24-0920 — canonicalLayer is the note's
+        // source_facet and was already in scope here, so the facet-aware
+        // hint needed no new plumbing.
+        const structuredThrow = classifyForgeError({ errorMsg: detail, sourceFacet: canonicalLayer });
         if (structuredThrow) {
           outputView.appendForgeError(snippetId, structuredThrow);
         } else {
@@ -5680,7 +5683,7 @@ export default class ForgePlugin extends Plugin {
       // (ParseError is not a migrated class), so precedence is safe.
       // Unmatched errors fall through to the existing paths unchanged
       // (backwards compat).
-      const structured = classifyForgeError({ status: res.status, errorMsg, stdout });
+      const structured = classifyForgeError({ status: res.status, errorMsg, stdout, sourceFacet: canonicalLayer });
       if (structured) {
         if (errorPrefix) {
           this.notice(`${errorPrefix}: ${structured.cause}`);

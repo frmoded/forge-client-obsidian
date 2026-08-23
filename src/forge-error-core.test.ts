@@ -203,3 +203,89 @@ test('forgeErrorFromGenerateRefusal: details carries the server envelope JSON, n
   assert.match(err.details ?? '', /nonsense_note/);
   assert.match(err.details ?? '', /"parsed_ok": false/);
 });
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-24-0920 — the exec-error fix-hint respects source_facet.
+//
+// The single canned hint told EVERY SnippetExecError victim to "Open the
+// note's # Python section and fix the line the details point at". That
+// is right for a note whose author wrote the Python and wrong for the
+// Description-canonical generated note the driver was running on
+// 2026-08-23 — they never wrote that Python and editing it is the wrong
+// mental model of the whole D → R → P chain.
+// ---------------------------------------------------------------------
+
+import {
+  EXEC_FIX_BY_FACET,
+  EXEC_FIX_DEFAULT,
+} from './forge-error-core.ts';
+
+const EXEC_RAW = 'SnippetExecError: name \'scale\' is not defined';
+
+test('exec hint: python-canonical keeps the original wording', () => {
+  const err = classifyForgeError({ errorMsg: EXEC_RAW, sourceFacet: 'python' });
+  assert.equal(err?.suggested_fix, EXEC_FIX_DEFAULT);
+  assert.match(err!.suggested_fix, /# Python/);
+});
+
+test('exec hint: description-canonical points at the Description, never at Python', () => {
+  const err = classifyForgeError({ errorMsg: EXEC_RAW, sourceFacet: 'description' });
+  assert.equal(err?.suggested_fix, EXEC_FIX_BY_FACET.description);
+  assert.match(err!.suggested_fix, /# Description/);
+  assert.ok(!/Open the note's # Python/.test(err!.suggested_fix), err!.suggested_fix);
+});
+
+test('exec hint: recipe-canonical points at the Recipe', () => {
+  const err = classifyForgeError({ errorMsg: EXEC_RAW, sourceFacet: 'recipe' });
+  assert.equal(err?.suggested_fix, EXEC_FIX_BY_FACET.recipe);
+  assert.match(err!.suggested_fix, /# Recipe/);
+});
+
+test('exec hint: synced is treated as description-canonical', () => {
+  // The prompt enumerated four cases; the value the code actually
+  // carries has five — `canonicalLayer` includes 'synced'. On a synced
+  // note the chain is current and the Description is still its source,
+  // so "edit Python" is exactly as wrong as it is for a Description-
+  // canonical note. Flagged for driver adjudication in the FEEDBACK.
+  const err = classifyForgeError({ errorMsg: EXEC_RAW, sourceFacet: 'synced' });
+  assert.equal(err?.suggested_fix, EXEC_FIX_BY_FACET.description);
+});
+
+test('exec hint: absent facet falls back to the generic wording', () => {
+  const err = classifyForgeError({ errorMsg: EXEC_RAW });
+  assert.equal(err?.suggested_fix, EXEC_FIX_DEFAULT);
+});
+
+test('exec hint: unrecognized facet falls back to the generic wording', () => {
+  // NON-VACUITY on the fallback: a lookup that returned undefined for
+  // an unknown key would render "Fix: undefined" to the cohort.
+  const err = classifyForgeError({
+    errorMsg: EXEC_RAW,
+    sourceFacet: 'not_a_facet' as never,
+  });
+  assert.equal(err?.suggested_fix, EXEC_FIX_DEFAULT);
+});
+
+test('exec hint: every facet hint is non-empty and names a facet', () => {
+  // NON-VACUITY across the table: an empty string would satisfy the
+  // "does not say # Python" assertions above while telling the cohort
+  // nothing (§8: don't drop the hint for any facet).
+  for (const [facet, hint] of Object.entries(EXEC_FIX_BY_FACET)) {
+    assert.ok(hint.trim().length > 20, `${facet}: ${hint}`);
+    assert.match(hint, /# (Description|Recipe|Python)/, facet);
+  }
+});
+
+test('facet routing does not touch the other error classes', () => {
+  // §8: detection unchanged, and only the exec hint is facet-aware.
+  const resolution = classifyForgeError({
+    errorMsg: 'SnippetResolutionError: nope',
+    sourceFacet: 'description',
+  });
+  assert.match(resolution!.suggested_fix, /spelled exactly/);
+  const ambiguous = classifyForgeError({
+    errorMsg: 'AmbiguousSnippetResolutionError: two',
+    sourceFacet: 'description',
+  });
+  assert.match(ambiguous!.suggested_fix, /Rename one of the listed notes/);
+});
