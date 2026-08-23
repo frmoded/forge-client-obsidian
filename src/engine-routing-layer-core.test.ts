@@ -83,19 +83,35 @@ test('the routed value is derived exactly once, from the raw facet', () => {
   );
 });
 
-test('the error classifier still reads the RAW facet', () => {
-  // Drain 1600's actual goal. The fix must not undo it: the cohort-
-  // facing message needs to know the note is Description-canonical
-  // even though the engine must not be told.
-  const classifyOnRaw = MAIN.split('\n')
-    .filter((l) => l.includes('sourceFacet: canonicalLayer')).length;
+test('the error classifier never reads the ROUTED value', () => {
+  // Drain 1600's actual goal, and the invariant that matters: the
+  // cohort-facing message must know the note is Description-canonical
+  // even though the engine must not be told. Routing drops
+  // 'description'; the hint must not.
+  //
+  // Drain 2026-08-24-2370 — this used to assert `sourceFacet:
+  // canonicalLayer` directly. The hint now reads `displayFacet`, which
+  // is `canonicalLayer` when the caller supplied one and a derived
+  // facet when it did not (two run entry points never supplied one —
+  // the Inputs strip's play button being the one that bit CCQA). The
+  // guarantee is unchanged and still asserted below; what moved is
+  // which variable carries it.
+  const classifyOnDisplay = MAIN.split('\n')
+    .filter((l) => l.includes('sourceFacet: displayFacet')).length;
   assert.ok(
-    classifyOnRaw >= 2,
-    `expected the classifier to keep reading canonicalLayer, saw ${classifyOnRaw} call(s)`,
+    classifyOnDisplay >= 2,
+    `expected the classifier to read displayFacet, saw ${classifyOnDisplay} call(s)`,
   );
   assert.equal(
     MAIN.split('\n').filter((l) => l.includes('sourceFacet: routingLayer')).length,
     0,
     'the display hint must never be the routed value — it would lose "description"',
   );
+  // And the derived value must be SEEDED from the raw facet, never the
+  // routed one — otherwise `displayFacet` would inherit routing's
+  // dropped 'description' and this whole guarantee would be hollow.
+  const call = MAIN.slice(MAIN.indexOf('resolveHintFacet('));
+  assert.ok(call.startsWith('resolveHintFacet('), 'resolveHintFacet must be called');
+  const firstArg = call.slice('resolveHintFacet('.length, call.indexOf(',')).trim();
+  assert.equal(firstArg, 'canonicalLayer');
 });

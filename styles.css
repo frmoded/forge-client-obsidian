@@ -69,8 +69,19 @@
 
 /* Greyed: the open note is not the note in the strip. The controls
  * stay visible — seeing the last note's inputs is the point — but
- * nothing here can run. */
-.forge-panel-inputs.is-stale .forge-panel-inputs-body {
+ * nothing here can run.
+ *
+ * Drain 2026-08-24-2370 — the TITLE is dimmed too. This rule used to
+ * name only the body, and the header is its sibling, not its child, so
+ * the stale note's name kept rendering at full opacity in the header's
+ * `font-weight: 600`. CCQA check 2: "functionally fixed, visually
+ * not" — the state was correct and looked like the active one.
+ *
+ * The ▸/▾ toggle is deliberately excluded. It still works while the
+ * strip is stale, and dimming a live control to advertise a dead one
+ * would trade one wrong signal for another. */
+.forge-panel-inputs.is-stale .forge-panel-inputs-body,
+.forge-panel-inputs.is-stale .forge-panel-inputs-title {
   opacity: 0.55;
 }
 

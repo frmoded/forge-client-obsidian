@@ -17,6 +17,7 @@ import {
 } from './chip-inventory-core.ts';
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer } from './engine-routing-layer-core.ts';
+import { resolveHintFacet } from './hint-facet-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
@@ -4587,6 +4588,41 @@ export default class ForgePlugin extends Plugin {
     const vaultPath = (this.app.vault.adapter as any).basePath as string;
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 
+    // Drain 2026-08-24-2370 — THE shared door for the error hint's
+    // facet. CCQA hit "Fix: Open the note's # Python section" three
+    // times on a Description-canonical note because two entry points
+    // into runSnippet never passed a facet: the Cmd-P "Run only"
+    // command and — the one that actually bit — the Inputs strip's ▶,
+    // which is exactly how a note with declared inputs gets run.
+    //
+    // Deriving here instead of adding the argument to those two call
+    // sites is the drain-2330 lesson: a value each caller must
+    // remember to pass is a value some future caller will forget, and
+    // the failure is silent. An explicit facet still wins, so the
+    // branches that know keep deciding.
+    //
+    // DISPLAY ONLY — this never reaches `engineRoutingLayer`. What the
+    // cohort reads changes; what the engine runs does not.
+    let displayFacetForRun: 'description' | 'recipe' | 'python' | 'synced' | undefined;
+    try {
+      displayFacetForRun = await resolveHintFacet(
+        canonicalLayer,
+        await this.app.vault.read(file),
+        {
+          isV2RoutableShape,
+          whichLayerIsSource: (body) => whichLayerIsSource(body, {
+            extractDescription,
+            extractRecipeSection,
+            extractPythonSection,
+            getFrontmatterField: getFmFieldV2,
+          }),
+        },
+      );
+    } catch (e) {
+      console.error('runSnippet: hint-facet derivation failed', e);
+      displayFacetForRun = canonicalLayer;
+    }
+
     // Drain 2026-08-22-2300 — the strip supplies its own values, so
     // there is nothing to ask for: dispatch straight past the input
     // resolution (which exists to populate the dialog) and past the
@@ -4594,7 +4630,8 @@ export default class ForgePlugin extends Plugin {
     // why the strip comes through here at all.
     if (presetInputs) {
       await this.computeSnippetWithArgs(
-        vaultPath, snippetId, [], presetInputs, errorPrefix, canonicalLayer, file);
+        vaultPath, snippetId, [], presetInputs, errorPrefix, canonicalLayer, file,
+        displayFacetForRun);
       return;
     }
 
@@ -4681,12 +4718,12 @@ export default class ForgePlugin extends Plugin {
         this.inputCache[snippetId] = raw;
         // Drain 2530 — pass `file` so the successful run refreshes the
         // note's # Python section.
-        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file);
+        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file, displayFacetForRun);
       }, enums, widgets, inputDefaults, derivedEnums).open();
     } else {
       // Drain 2530 — pass `file` so the successful run refreshes the
       // note's # Python section.
-      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, canonicalLayer, file);
+      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, canonicalLayer, file, displayFacetForRun);
     }
   }
 
@@ -5764,6 +5801,11 @@ export default class ForgePlugin extends Plugin {
     // notes' Python section stays consistent with the D → R → P
     // chain per the Medium post.
     refreshPythonAfter?: TFile,
+    // Drain 2026-08-24-2370 — the facet the error hint points at,
+    // derived once at runSnippet's door. Separate from `canonicalLayer`
+    // ON PURPOSE: that one is the engine's routing directive (drain
+    // 2330) and must keep coming from the caller alone.
+    displayFacet?: 'description' | 'recipe' | 'python' | 'synced',
   ) {
     // Drain 2026-08-24-2330 — THE one door between the note's source
     // facet and the engine's routing directive. `canonicalLayer` stays
@@ -5809,7 +5851,7 @@ export default class ForgePlugin extends Plugin {
         // Drain 2026-08-24-0920 — canonicalLayer is the note's
         // source_facet and was already in scope here, so the facet-aware
         // hint needed no new plumbing.
-        const structuredThrow = classifyForgeError({ errorMsg: detail, sourceFacet: canonicalLayer });
+        const structuredThrow = classifyForgeError({ errorMsg: detail, sourceFacet: displayFacet });
         if (structuredThrow) {
           outputView.appendForgeError(snippetId, structuredThrow);
         } else {
@@ -5860,7 +5902,7 @@ export default class ForgePlugin extends Plugin {
       // (ParseError is not a migrated class), so precedence is safe.
       // Unmatched errors fall through to the existing paths unchanged
       // (backwards compat).
-      const structured = classifyForgeError({ status: res.status, errorMsg, stdout, sourceFacet: canonicalLayer });
+      const structured = classifyForgeError({ status: res.status, errorMsg, stdout, sourceFacet: displayFacet });
       if (structured) {
         if (errorPrefix) {
           this.notice(`${errorPrefix}: ${structured.cause}`);
