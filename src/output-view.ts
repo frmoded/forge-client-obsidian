@@ -1095,6 +1095,8 @@ export class ForgeOutputView extends ItemView {
     input: {
       failureMode: RejectionFailureMode;
       unresolvedWikilinks: readonly string[];
+      // Drain 2026-08-24-2310 — populated for 'free-variable-fail'.
+      undeclaredNames?: readonly string[];
       llmRawOutput: string;
       descriptionBody: string;
     },
@@ -1102,6 +1104,7 @@ export class ForgeOutputView extends ItemView {
     const guidance = deriveLlmRejectionGuidance({
       failureMode: input.failureMode,
       unresolvedWikilinks: input.unresolvedWikilinks,
+      undeclaredNames: input.undeclaredNames,
       descriptionBody: input.descriptionBody,
     });
     const entry = this.makeEntry(snippetId);
@@ -1114,9 +1117,17 @@ export class ForgeOutputView extends ItemView {
     });
 
     // Compact structured block: mode + unresolved (when applicable).
-    const modeLabel = input.failureMode === 'closure-fail'
-      ? 'closure-fail (LLM referenced unknown chips)'
-      : 'sanitize-fail (LLM emitted no valid Let/Return)';
+    // Drain 2026-08-24-2310 — a ternary could not grow a third arm
+    // without saying something false about one of them, so this is a
+    // lookup now. A mode with no label would render "undefined" to the
+    // cohort, which is why the fallback names the mode itself.
+    const MODE_LABELS: Record<string, string> = {
+      'closure-fail': 'closure-fail (LLM referenced unknown chips)',
+      'sanitize-fail': 'sanitize-fail (LLM emitted no valid Let/Return)',
+      'free-variable-fail':
+        'free-variable-fail (LLM used a name it never declared as an Input)',
+    };
+    const modeLabel = MODE_LABELS[input.failureMode] ?? input.failureMode;
     entry.createEl('p', {
       text: `Failure mode: ${modeLabel}`,
       cls: 'forge-output-message',

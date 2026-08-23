@@ -111,6 +111,10 @@ import {
   computeDescriptionDerivedRecipeStamps,
 } from './write-generated-recipe-core.ts';
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
+import {
+  collectFreeIdentifiers,
+  freeIdentifierRejectionMessage,
+} from './free-identifiers-core.ts';
 import { checkEmptyRecipeForTranspile } from './write-source-python-back-empty-recipe-core.ts';
 import { parseInputEnums } from './input-enums-core.ts';
 import { makeFacetCopyExtension } from './facet-copy-view-extension.ts';
@@ -2644,6 +2648,23 @@ export default class ForgePlugin extends Plugin {
             // which passed mixed prose+Let content through.
             const sanitized = sanitizeLlmRecipe(llmRecipe);
             const hasValidStmt = sanitized !== null;
+            // Drain 2026-08-24-2310 — the Input enforcement belt.
+            //
+            // Checked on the SANITIZED text, because that is what would
+            // be written to the note; and against the SAME `knownIds`
+            // the closure check uses, so the two cannot disagree about
+            // what counts as callable (§(a)'s one-fact discipline —
+            // that set is drain 1000's single inventory).
+            //
+            // Gated on `catalogReady` for the same reason the closure
+            // check is: without the inventory every callable would read
+            // as an undeclared free variable and the belt would reject
+            // every Recipe. Erring toward accepting matches the
+            // pre-existing stance one line up.
+            const freeVars = (catalogReady && sanitized !== null)
+              ? collectFreeIdentifiers(sanitized, knownIds)
+              : [];
+            const declaresItsInputs = freeVars.length === 0;
             // CW-description-edit-refresh-fix-with-diagnostic-logging
             // (drain 2026-07-22-2030) Phase 1 — Fork B instrumentation.
             // Emit the closure-check verdict + sanitize verdict + gate
@@ -2659,7 +2680,7 @@ export default class ForgePlugin extends Plugin {
                 hasValidStmt,
                 gatePasses: closure.ok === true && hasValidStmt },
             );
-            if (closure.ok === true && hasValidStmt) {
+            if (closure.ok === true && hasValidStmt && declaresItsInputs) {
               const currentBody = await this.app.vault.read(file);
               const currentDesc = extractDescription(currentBody) ?? '';
               const currentDescHash = await computeFacetHash(currentDesc);
@@ -2705,6 +2726,27 @@ export default class ForgePlugin extends Plugin {
               } catch (e) {
                 console.error('CW-2000: MEMFS sync after Recipe write failed', e);
               }
+            } else if (hasValidStmt && !declaresItsInputs) {
+              // Drain 2026-08-24-2310 — the Input enforcement belt.
+              // Mirrors the closure-fail treatment exactly: prior Recipe
+              // preserved, panel is the load-bearing surface, toast is
+              // redundancy. Same family of failure, so the same UX.
+              console.warn(
+                `free-variable fail: generated Recipe references undeclared ${freeVars.join(', ')}`,
+              );
+              try {
+                const outputView = await this.getOutputView();
+                outputView.appendLlmRecipeRejection(file.basename, {
+                  failureMode: 'free-variable-fail',
+                  unresolvedWikilinks: [],
+                  undeclaredNames: freeVars,
+                  llmRawOutput: llmRecipe,
+                  descriptionBody: extractDescription(v2Body) ?? '',
+                });
+              } catch { /* panel unavailable; toast alone still fires */ }
+              this.notice(
+                `${NOTICE_PREFIX}${freeIdentifierRejectionMessage(freeVars)} See Forge panel.`,
+              );
             } else if (!hasValidStmt) {
               // CW-2200: LLM returned prose / missing-chip explanation,
               // not a Recipe. Preserve prior Recipe + surface guidance.

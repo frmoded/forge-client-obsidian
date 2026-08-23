@@ -13,7 +13,13 @@
 // prose responsible, matching the driver-facing quality bar the
 // drain §3.1 sets.
 
-export type RejectionFailureMode = 'closure-fail' | 'sanitize-fail';
+export type RejectionFailureMode =
+  | 'closure-fail'
+  | 'sanitize-fail'
+  // Drain 2026-08-24-2310 — the generated Recipe referenced names it
+  // never declared. Sibling of closure-fail: same "the model ignored
+  // the contract" family, same preserved-prior-Recipe treatment.
+  | 'free-variable-fail';
 
 export interface LlmRejectionInput {
   /** Which gate rejected the LLM output. */
@@ -21,6 +27,9 @@ export interface LlmRejectionInput {
   /** For closure-fail: the wikilink names the LLM emitted that
    *  don't resolve to any known snippet. Empty for sanitize-fail. */
   unresolvedWikilinks: readonly string[];
+  /** Drain 2026-08-24-2310 — for free-variable-fail: the names the
+   *  Recipe referenced but never declared. Empty for the other modes. */
+  undeclaredNames?: readonly string[];
   /** The Description body text at the moment of Forge-click. Used
    *  to detect landmine phrases like "print hello" that likely
    *  caused the phantom chip emission. */
@@ -127,6 +136,26 @@ export function deriveLlmRejectionGuidance(
         ],
       };
     }
+  }
+
+  if (input.failureMode === 'free-variable-fail') {
+    const names = input.undeclaredNames ?? [];
+    const list = names.map((n) => `\`${n}\``).join(', ');
+    const plural = names.length > 1;
+    return {
+      likelyCause:
+        `The LLM's Recipe uses ${list || 'a name'} without declaring `
+        + `${plural ? 'them' : 'it'}. The Description mentions `
+        + `${plural ? 'inputs' : 'an input'} the Recipe didn't turn into an `
+        + `\`Input\` statement — undeclared names parse cleanly and then `
+        + `fail at run time with NameError, which is the exact failure the `
+        + `\`Input\` keyword exists to prevent.`,
+      fixOptions: [
+        `Run again — generation wobbles, and a second attempt often declares ${plural ? 'them' : 'it'}.`,
+        `Name the ${plural ? 'inputs' : 'input'} more explicitly in the Description (e.g. "takes an input scale, a number, default 1").`,
+        `Hand-author the declaration: ${names.map((n) => `\`Input ${n}: <type> = <default>.\``).join(' ')}`,
+      ],
+    };
   }
 
   if (input.failureMode === 'closure-fail') {
