@@ -16,6 +16,7 @@ import {
   parseChipInventory,
 } from './chip-inventory-core.ts';
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
+import { engineRoutingLayer } from './engine-routing-layer-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
@@ -5744,7 +5745,15 @@ export default class ForgePlugin extends Plugin {
     // chain per the Medium post.
     refreshPythonAfter?: TFile,
   ) {
-    console.log('Forge Compute →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs, canonicalLayer });
+    // Drain 2026-08-24-2330 — THE one door between the note's source
+    // facet and the engine's routing directive. `canonicalLayer` stays
+    // the raw facet everywhere cohort-facing (every classifyForgeError
+    // call below reads it directly, which is what drain 1600 threaded
+    // it here for); only the value that goes ON THE WIRE passes through
+    // engineRoutingLayer. Sending `'description'` makes the engine
+    // return no code at all — see engine-routing-layer-core.ts.
+    const routingLayer = engineRoutingLayer(canonicalLayer);
+    console.log('Forge Compute →', { serverUrl: this.settings.serverUrl, vaultPath, snippetId, args, inputs, canonicalLayer, routingLayer });
 
     try {
       const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
@@ -5760,7 +5769,7 @@ export default class ForgePlugin extends Plugin {
     try {
       res = await computeSnippet(
         this.settings.serverUrl, vaultPath, snippetId, args, inputs,
-        undefined, canonicalLayer,
+        undefined, routingLayer,
       );
     } catch (e) {
       console.error('Forge Compute Error:', e);
