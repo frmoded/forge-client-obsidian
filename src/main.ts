@@ -24,6 +24,9 @@ import { identifyEditedFacet, decideSourceWrite, type FacetHashes } from './face
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
 import { classifyForgeError, forgeErrorFromGenerateRefusal } from './forge-error-core.ts';
+import type { CallableEntry } from './callable-inventory-core.ts';
+import { buildCallableInventory, callableNamesFrom } from './callable-inventory-core.ts';
+import type { VaultNoteInput } from './callable-inventory-core.ts';
 import {
   extractPythonSection,
   replacePythonSection,
@@ -396,6 +399,15 @@ export default class ForgePlugin extends Plugin {
    *  LibraryNoteView instead of letting Obsidian create an empty
    *  note. Empty when bundled engine source is unreadable. */
   private libraryNoteIndex: Map<string, LibraryNote> = new Map();
+  /** Drain 2026-08-24-1000 — the callable inventory sent with the most
+   *  recent /generate, held so the closure check validates against THE
+   *  LIST THE MODEL WAS SHOWN rather than a parallel computation. The
+   *  two used to be computed independently (a registry-walking
+   *  helper vs. the payload's deps), which is why a closure failure could
+   *  mean "you were never told" — the failure mode this drain ends.
+   *  Null until the first generate; the closure check treats null the
+   *  way it already treats an unloaded catalog (skip, warn, accept). */
+  private lastGenerateCallables: CallableEntry[] | null = null;
   /** Drain 2330 — per-domain library-note lists preserved so the chip
    *  palette can render one "<Domain> library" group per domain.
    *  Populated alongside `libraryNoteIndex` in loadLibraryNoteCatalog;
@@ -2594,8 +2606,15 @@ export default class ForgePlugin extends Plugin {
             // Load-race case: catalog not loaded yet → skip closure
             // check (any Recipe referencing engine chips would false-
             // positive reject). Err toward accepting LLM output.
-            const knownIds = await this._collectKnownSnippetIds();
-            const catalogReady = this._libraryCatalogLoaded;
+            // Drain 2026-08-24-1000 — validate against THE LIST THE
+            // MODEL WAS SHOWN. `lastGenerateCallables` is the payload's
+            // own `callables` array, stored on the way out; there is no
+            // second computation to drift from it.
+            const shownCallables = this.lastGenerateCallables;
+            const knownIds = shownCallables
+              ? callableNamesFrom(shownCallables)
+              : new Set<string>();
+            const catalogReady = this._libraryCatalogLoaded && shownCallables !== null;
             // CW-description-edit-refresh-fix-with-diagnostic-logging
             // (drain 2026-07-22-2030) Phase 1 — Fork C instrumentation.
             // Log the catalog state at the point the Description branch
@@ -2611,7 +2630,7 @@ export default class ForgePlugin extends Plugin {
               : { ok: true as const, wikilinks: [] };
             if (!catalogReady) {
               console.warn(
-                'Library note catalog not yet loaded; skipping closure check on Description-canonical Recipe. This should be rare — if it repeats, file a bug.',
+                'Callable inventory unavailable (catalog not loaded, or no inventory was sent with this /generate); skipping closure check on Description-canonical Recipe. This should be rare — if it repeats, file a bug.',
               );
             }
             // v0.2.280 CW-2200 — sanitize LLM output down to valid V2 E--
@@ -3571,6 +3590,7 @@ export default class ForgePlugin extends Plugin {
         }
 
         const inv = await host.preflightThenInventory(snippetId);
+        const callablesForThisRun = await this.buildGenerateCallables();
         payload = {
           snippet_id: inv.snippet_id,
           description: inv.description,
@@ -3584,6 +3604,14 @@ export default class ForgePlugin extends Plugin {
           // = core-only; specific list = that subset.
           active_domains:
             this.activeDomains === null ? null : Array.from(this.activeDomains),
+          // Drain 2026-08-24-1000 — the resolvable universe, shown to
+          // the model. Stored on the way out so the closure check
+          // validates against this exact list (§8: one fact, one
+          // definition).
+          ...(() => {
+            const c = (this.lastGenerateCallables = callablesForThisRun);
+            return c ? { callables: c } : {};
+          })(),
         };
       } catch (e) {
         console.error(prefixed('inventory materialization failed'), e);
@@ -3748,6 +3776,7 @@ export default class ForgePlugin extends Plugin {
           return null;
         }
         const inv = await host.preflightThenInventory(snippetId);
+        const callablesForThisRun = await this.buildGenerateCallables();
         payload = {
           snippet_id: inv.snippet_id,
           description: inv.description,
@@ -3757,6 +3786,14 @@ export default class ForgePlugin extends Plugin {
           deps: inv.deps,
           active_domains:
             this.activeDomains === null ? null : Array.from(this.activeDomains),
+          // Drain 2026-08-24-1000 — see the sibling payload above. This
+          // is the Recipe-dialect path the Description-canonical
+          // auto-forge uses, i.e. the one whose closure check rejected
+          // the driver's `[[random_float]]`.
+          ...(() => {
+            const c = (this.lastGenerateCallables = callablesForThisRun);
+            return c ? { callables: c } : {};
+          })(),
           // CW-2000 core: request Recipe (V2 dialect), NOT Python (V1 default).
           dialect: 'recipe',
         };
@@ -3888,36 +3925,38 @@ export default class ForgePlugin extends Plugin {
    *
    *  Empty Set on Pyodide failure — caller handles via empty-catalog
    *  guardrail (see forgeSnippet Description-canonical branch). */
-  private async _collectKnownSnippetIds(): Promise<Set<string>> {
-    const known = new Set<string>();
+  /** Drain 2026-08-24-1000 — build the callable inventory: the vault's
+   *  own action notes PLUS the engine chips, each with its declared
+   *  inputs and a one-line summary.
+   *
+   *  THE single producer. Its result is both what /generate is shown
+   *  and, via `callableNamesFrom`, what the closure check accepts —
+   *  there is deliberately no other path to either. */
+  private async buildGenerateCallables(): Promise<CallableEntry[] | null> {
+    // Null when the engine-chip catalog has not loaded yet. Sending a
+    // list that is missing the chips would be worse than sending none:
+    // the service treats a supplied inventory as AUTHORITATIVE and
+    // skips its own engine-chip augmentation, so the model would lose
+    // vocabulary it has always had. Omitting the field restores the
+    // pre-drain path exactly, and the closure check skips in the same
+    // breath — which is the behaviour it already had for this case.
+    if (!this._libraryCatalogLoaded) return null;
+    let vaultNotes: VaultNoteInput[] = [];
     try {
       const pyodideHost = getPyodideHost();
       if (pyodideHost) {
         const host = await pyodideHost.getInstance();
-        const vaultPath = ((this.app.vault.adapter as any).basePath as string) ?? '';
-        const inv = await host.getConnectInventory(vaultPath);
-        for (const [vaultName, snippets] of Object.entries(inv.snippets)) {
-          for (const s of snippets) {
-            known.add(s.id);
-            known.add(`${vaultName}/${s.id}`);
-            const base = s.id.includes('/') ? s.id.split('/').pop() ?? s.id : s.id;
-            known.add(base);
-          }
-        }
+        vaultNotes = await host.getCallableInventory();
       }
     } catch (e) {
-      console.error('CW-2000 _collectKnownSnippetIds vault-notes step failed', e);
+      // A vault-notes read failure must not take /generate down: the
+      // engine chips alone are still a better prompt than none, and
+      // the closure check narrows with it (fewer names shown = fewer
+      // accepted), so the two stay consistent either way.
+      console.error('buildGenerateCallables: vault-notes step failed', e);
     }
-    // CW-2100: engine library chips are callable from V2 Recipes and
-    // MUST be in the closure check set. Catalog is loaded on plugin
-    // init (loadLibraryNoteCatalog); v0.2.281 uses the explicit
-    // `_libraryCatalogLoaded` field at the caller as the readiness
-    // signal, so this helper unconditionally emits whatever's in
-    // `libraryNoteIndex` (empty if unloaded).
-    for (const name of this.libraryNoteIndex.keys()) {
-      known.add(name);
-    }
-    return known;
+    const chips = Array.from(this.libraryNoteIndex.values());
+    return buildCallableInventory(vaultNotes, chips);
   }
 
   // Format the user-facing Notice for a non-2xx α /generate response.

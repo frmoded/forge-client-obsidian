@@ -51,6 +51,7 @@ import type { RegistryInventoryDump } from "./registry-inventory-core.ts";
 // engine's own scan would have skipped. Mirrored from the vendored
 // engine source, drift-tested.
 import { isExcludedFromVaultMount } from "./vault-mount-exclusions-core.ts";
+import type { VaultNoteInput } from "./callable-inventory-core.ts";
 
 // V1 user-vault mount: bundled-library subdirectory names. Files
 // under these top-level directories in the user's vault are SKIPPED
@@ -1245,6 +1246,50 @@ def _forge_list_snippets():
     plain lists, plain strings."""
     return _forge_registry.list_snippets()
 
+def _forge_callable_inventory():
+    """Drain 2026-08-24-1000 — every vault note the model may Call, with
+    its declared inputs and a one-line summary.
+
+    Derived from the live registry, never hand-listed: a note added
+    today is vocabulary today. Only 'type: action' entries are
+    callable, so only those are returned.
+
+    The summary is the note's '# Description' first sentence, trimmed
+    JS-side. An untouched fresh-note placeholder yields NO summary
+    (drain 2026-08-23-2100): that text is instructions to the author,
+    and shipping it would tell the model the note's purpose is
+    "Describe what this note should do".
+
+    Body reads are best-effort — a note that fails to resolve still
+    appears with its name and inputs, which are the load-bearing parts.
+    Structured-clone-safe: plain dicts, lists, strings."""
+    out = []
+    try:
+        inventory = _forge_registry.list_snippets()
+    except Exception:
+        return out
+    for vault_name, entries in inventory.items():
+        for entry in entries:
+            note_id = entry.get("id") or ""
+            if not note_id or entry.get("type") != "action":
+                continue
+            summary = ""
+            try:
+                snip = _forge_resolver.resolve(note_id)
+                body = snip.get("body", "") or ""
+                desc = (extract_section(body, "description") or "").strip()
+                if not _forge_is_description_placeholder(desc):
+                    summary = desc
+            except Exception:
+                summary = ""
+            out.append({
+                "id": note_id,
+                "type": "action",
+                "inputs": [str(i) for i in (entry.get("inputs") or [])],
+                "summary": summary,
+            })
+    return out
+
 def _forge_registry_inventory():
     """Drain 2026-08-23-0900 — read-only registry dump for the debug
     command. Everything here is derived from the live objects, never
@@ -1689,6 +1734,7 @@ export interface PyodideHostInstance {
    *  no uvicorn is running. Caller passes the vault path it would have
    *  POSTed; we echo it back for the response envelope. */
   getConnectInventory(vault_path: string): Promise<ConnectInventory>;
+  getCallableInventory(): Promise<VaultNoteInput[]>;
   /** v0.2.17: sync a single user-vault file change into MEMFS so the
    *  next compute sees the new content. Call after every disk write
    *  to a user-vault file (writeGeneratedCode, manual editor saves
@@ -1940,6 +1986,16 @@ _forge_compute_with_python(
       warnings: [],
       snippets,
     };
+  }
+
+  /** Drain 2026-08-24-1000 — the vault's action notes as callable
+   *  vocabulary: id, declared inputs, and the Description's first
+   *  sentence. Feeds `buildCallableInventory`, whose output is BOTH
+   *  what /generate is shown and what the closure check validates
+   *  against. */
+  async getCallableInventory(): Promise<VaultNoteInput[]> {
+    const proxy = this.pyodide.runPython(`_forge_callable_inventory()`);
+    return this._unwrap(proxy) as VaultNoteInput[];
   }
 
   /** v0.2.17 — push a single user-vault file's new body into MEMFS +

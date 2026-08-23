@@ -1,4 +1,5 @@
 import { requestUrl } from 'obsidian';
+import type { CallableEntry } from './callable-inventory-core.ts';
 import type { PyodideHost } from './pyodide-host.ts';
 
 // V1: plugin-side Pyodide host for engine-compute paths.
@@ -234,6 +235,13 @@ export interface AlphaGenerateRequest {
   generation_notes: string;
   deps: AlphaDependencyInfo[];
   active_domains: string[] | null;
+  // Drain 2026-08-24-1000 — the resolvable universe: the vault's own
+  // action notes plus the engine chips, one compact entry each. The
+  // server renders these into the prompt; the plugin's closure check
+  // validates against the SAME array (§8, one fact one definition).
+  // Optional so an older service ignoring it is a no-op, and so a
+  // caller that has not been updated still type-checks.
+  callables?: CallableEntry[];
   // v0.2.182 — V2 /generate Phase 2. Optional; service defaults to
   // "python" when absent (back-compat with all V1 callers). Set
   // "emm" to ask for V2 E-- recipe output instead of Python source.
