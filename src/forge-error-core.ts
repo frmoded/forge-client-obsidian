@@ -82,10 +82,15 @@ export const EXEC_FIX_BY_FACET: Readonly<Record<string, string>> = {
   // Description is still its source, so "edit Python" is exactly as
   // wrong here as it is for a Description-canonical note. Flagged for
   // driver adjudication in the drain FEEDBACK.
+  // Drain 2026-08-24-1700 — its own wording, driver-approved
+  // 2026-08-24. Drain 0920 mapped `synced` to the description text
+  // because "edit # Python" was plainly wrong for it; that was the
+  // right call at the time and the wrong text. A synced note's chain is
+  // current, so its user may correctly edit ANY facet — the description
+  // wording under-told that.
   synced:
-    'This note was generated from its Description. Refine the ' +
-    '# Description and run again (\u25B6) to regenerate — or edit the ' +
-    '# Recipe if the logic is close.',
+    'Every facet of this note is current — edit whichever one you want ' +
+    'to change (Description, Recipe, or Python) and run again.',
 };
 
 // The five error classes migrated in drain 2026-08-08-1300. Matching

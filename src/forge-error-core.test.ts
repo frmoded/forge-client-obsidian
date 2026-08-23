@@ -241,14 +241,42 @@ test('exec hint: recipe-canonical points at the Recipe', () => {
   assert.match(err!.suggested_fix, /# Recipe/);
 });
 
-test('exec hint: synced is treated as description-canonical', () => {
-  // The prompt enumerated four cases; the value the code actually
-  // carries has five — `canonicalLayer` includes 'synced'. On a synced
-  // note the chain is current and the Description is still its source,
-  // so "edit Python" is exactly as wrong as it is for a Description-
-  // canonical note. Flagged for driver adjudication in the FEEDBACK.
+test('exec hint: synced has its own wording, distinct from description', () => {
+  // Drain 2026-08-24-1700, driver-approved. Drain 0920 mapped `synced`
+  // to the description text and flagged it for adjudication; the driver
+  // adjudicated it its own string. The DISTINCTNESS is the assertion —
+  // sharing the description wording under-tells a synced note's user,
+  // who may correctly edit any facet.
   const err = classifyForgeError({ errorMsg: EXEC_RAW, sourceFacet: 'synced' });
-  assert.equal(err?.suggested_fix, EXEC_FIX_BY_FACET.description);
+  assert.equal(err?.suggested_fix, EXEC_FIX_BY_FACET.synced);
+  assert.notEqual(EXEC_FIX_BY_FACET.synced, EXEC_FIX_BY_FACET.description);
+  assert.match(err!.suggested_fix, /Every facet of this note is current/);
+  // It names all three facets, which is the thing the description
+  // wording could not say.
+  for (const facet of ['Description', 'Recipe', 'Python']) {
+    assert.match(err!.suggested_fix, new RegExp(facet), facet);
+  }
+});
+
+test('exec hint: the other four strings are untouched', () => {
+  // NON-VACUITY / §8 guard. The prompt is explicit that the other four
+  // are driver-approved AS SHIPPED; a reword there would be an
+  // unapproved change to cohort-facing text, and nothing else in the
+  // suite would catch it.
+  assert.equal(
+    EXEC_FIX_DEFAULT,
+    "Open the note's # Python section and fix the line the details point at, then run again.",
+  );
+  assert.equal(EXEC_FIX_BY_FACET.python, EXEC_FIX_DEFAULT);
+  assert.equal(
+    EXEC_FIX_BY_FACET.description,
+    'This note was generated from its Description. Refine the # Description '
+    + 'and run again (\u25B6) to regenerate — or edit the # Recipe if the logic is close.',
+  );
+  assert.equal(
+    EXEC_FIX_BY_FACET.recipe,
+    'Edit the # Recipe and run again — Forge re-derives the Python.',
+  );
 });
 
 test('exec hint: absent facet falls back to the generic wording', () => {
@@ -270,10 +298,25 @@ test('exec hint: every facet hint is non-empty and names a facet', () => {
   // NON-VACUITY across the table: an empty string would satisfy the
   // "does not say # Python" assertions above while telling the cohort
   // nothing (§8: don't drop the hint for any facet).
+  //
+  // Drain 2026-08-24-1700 — the facet name no longer has to carry a
+  // `#`. This guard was written in drain 0920 when every hint pointed
+  // at one facet in heading form, and it baked that FORMATTING in
+  // alongside the property it meant to protect. The driver-approved
+  // `synced` wording names all three in prose ("Description, Recipe, or
+  // Python") and tripped it. The property worth guarding is "the hint
+  // names a facet"; how it spells it is the driver's call, not the
+  // suite's.
   for (const [facet, hint] of Object.entries(EXEC_FIX_BY_FACET)) {
     assert.ok(hint.trim().length > 20, `${facet}: ${hint}`);
-    assert.match(hint, /# (Description|Recipe|Python)/, facet);
+    assert.match(hint, /(Description|Recipe|Python)/, facet);
   }
+});
+
+test('exec hint: a hint that names no facet at all still fails the guard', () => {
+  // NON-VACUITY for the relaxation above — proof the loosened regex did
+  // not loosen it into uselessness.
+  assert.ok(!/(Description|Recipe|Python)/.test('Try again later.'));
 });
 
 test('facet routing does not touch the other error classes', () => {
