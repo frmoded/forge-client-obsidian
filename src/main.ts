@@ -2479,7 +2479,10 @@ export default class ForgePlugin extends Plugin {
       // console alongside the existing Notice.
       console.log(`${NOTICE_PREFIX}skipping /generate, ${file.basename} is in Python mode`);
       this.notice(`${NOTICE_PREFIX}${file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
-      await this.runSnippet('Forge failed during execution', undefined, file);
+      // Drain 2026-08-24-1600 — the branch's own condition IS the facet;
+      // passing it keeps the exec-error hint pointing at # Python, which
+      // is correct here.
+      await this.runSnippet('Forge failed during execution', 'python', file);
       return;
     }
 
@@ -2808,7 +2811,18 @@ export default class ForgePlugin extends Plugin {
             // to re-query workspace state after the /generate LLM call.
             // The LLM roundtrip can shift focus; pre-v0.2.288 this
             // silently emitted "No active note to run." and lost the run.
-            await this.runSnippet('Forge failed during execution', undefined, file);
+            //
+            // Drain 2026-08-24-1600 — canonicalLayer threaded too. This
+            // is CCQA's check-5 failure, and it is NOT the P1's
+            // mechanism: the facet-aware hint (drain 0920) shipped fine
+            // in v0.2.365, but this call site dropped the argument, so
+            // classifyForgeError saw `undefined` and fell back to the
+            // generic "open the note's # Python" wording — on the one
+            // branch that is Description-canonical BY CONSTRUCTION.
+            // The sibling python-canonical call two hundred lines up
+            // has always passed 'python'; this one never passed
+            // anything.
+            await this.runSnippet('Forge failed during execution', canonicalLayer, file);
           }
         } finally {
           if (this.spinner) {
@@ -2852,6 +2866,13 @@ export default class ForgePlugin extends Plugin {
         console.error('forgeSnippet (english-mode): writeSourcePythonBack failed', e);
       }
     }
+    // Drain 2026-08-24-1600 — deliberately NOT threaded here.
+    // `canonicalLayer` is scoped to the V2-shape block far above and is
+    // genuinely out of scope at this tail, which is reached by V1 and
+    // free-English notes as well. `undefined` is the honest value for
+    // "facet unknown", and the hint table's fallback is written for
+    // exactly this case. Widening the variable's scope to satisfy a
+    // hint would trade a real invariant for a cosmetic one.
     await this.runSnippet('Forge failed during execution', undefined, file);
   }
 

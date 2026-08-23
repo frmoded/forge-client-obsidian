@@ -313,11 +313,50 @@ export function replaceRecipeSection(body: string, newEmm: string): string {
  *
  *  Returns the rewritten body. Throws if the frontmatter block is
  *  missing or malformed (e.g. no closing `---`). */
+/** sha256 of the empty string. A derivation stamp holding this value
+ *  claims "this facet was derived from an empty parent", which is never
+ *  a true statement — it is what a writer produces when it hashed a
+ *  Recipe it failed to read. Drain 2026-08-24-1600: CCQA's v0.2.365
+ *  bundle found it stamped on all four broken notes.
+ *
+ *  Same family as the `english_hash` absent-beats-empty rule (drain
+ *  2100) and the stub-is-not-synced rule (drain 0400): metadata never
+ *  certifies something that did not happen. */
+export const EMPTY_STRING_SHA256 =
+  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+/** Frontmatter fields that assert one facet was derived from another.
+ *  Deliberately a literal list rather than a pattern: `*_hash` also
+ *  matches the facets' OWN content hashes, and an empty facet legitimately
+ *  hashes to the empty-string SHA. Only the lineage claims are barred. */
+const DERIVATION_STAMP_FIELDS: ReadonlySet<string> = new Set([
+  'recipe_derived_from_description_hash',
+  'recipe_derived_from_source_hash',
+  'python_derived_from_recipe_hash',
+  'python_derived_from_source_hash',
+]);
+
 export function setFrontmatterField(
   body: string,
   key: string,
   value: string,
 ): string {
+  // Drain 2026-08-24-1600 (§8: "don't let an empty-hash stamp remain
+  // writable anywhere"). One door rather than a check at each call
+  // site — the site that produced CCQA's stamp was not the one that
+  // already guarded, and auditing writers one at a time is how the
+  // previous three of these got missed. Silently dropping the write is
+  // the honest outcome: absent lineage means "no contract" to every
+  // reader (CW-1700 freshness, facet-state-core), whereas a present
+  // empty stamp means "derived from nothing", which is a lie.
+  if (DERIVATION_STAMP_FIELDS.has(key) && value.trim() === EMPTY_STRING_SHA256) {
+    console.error(
+      `setFrontmatterField: refused to stamp ${key} with the empty-string ` +
+      `SHA256 — that asserts a derivation from an empty parent. The caller ` +
+      `hashed a facet it could not read; see drain 2026-08-24-1600.`,
+    );
+    return body;
+  }
   if (!body.startsWith('---\n')) {
     // No frontmatter — prepend a new block.
     return `---\n${key}: ${value}\n---\n\n` + body;
