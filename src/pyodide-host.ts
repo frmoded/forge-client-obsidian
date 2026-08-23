@@ -47,6 +47,10 @@ import {
 } from "./wheel-health-core.ts";
 import { OUTPUT_VIEW_TYPE, ForgeOutputView } from "./output-view.ts";
 import type { RegistryInventoryDump } from "./registry-inventory-core.ts";
+// Drain 2026-08-23-1400 — the plugin must not hand the engine files the
+// engine's own scan would have skipped. Mirrored from the vendored
+// engine source, drift-tested.
+import { isExcludedFromVaultMount } from "./vault-mount-exclusions-core.ts";
 
 // V1 user-vault mount: bundled-library subdirectory names. Files
 // under these top-level directories in the user's vault are SKIPPED
@@ -472,6 +476,10 @@ export class PyodideHost {
     for (const file of userFiles) {
       const topDir = file.path.split("/")[0];
       if (BUNDLED_LIBRARY_NAMES.has(topDir)) continue;
+      // Forge-managed state (`.forge/edges/**` snapshots, `.obsidian`,
+      // `.git`, `<lib>.bak.<ver>/`) is not vault content. Mounting it
+      // let snapshot notes be indexed as snippets.
+      if (isExcludedFromVaultMount(file.path)) continue;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fm: any = this.app.metadataCache.getFileCache(file)?.frontmatter;
       if (!fm || !FORGE_SNIPPET_TYPES.has(fm.type)) continue;
@@ -1902,6 +1910,11 @@ _forge_compute_with_python(
    *  on a user-vault file. The Python helper handles parent-dir
    *  creation + frontmatter re-parse via SnippetRegistry.refresh_file. */
   async syncUserVaultFile(relPath: string, content: string): Promise<void> {
+    // Same rule as the mount above: the engine's `refresh_file` used to
+    // index whatever path it was handed, so this door needed the guard
+    // too. (The engine now refuses reserved paths itself; both halves
+    // ship together and neither relies on the other.)
+    if (isExcludedFromVaultMount(relPath)) return;
     this.pyodide.globals.set('_forge_sync_relpath', relPath);
     this.pyodide.globals.set('_forge_sync_body', content);
     this.pyodide.runPython(`_forge_sync_user_file(_forge_sync_relpath, _forge_sync_body)`);
