@@ -162,8 +162,13 @@ test('the payload omits callables when the chip catalog is not loaded', () => {
   // vocabulary it has always had. Omitting restores the pre-drain path
   // exactly — and the closure check skips in the same breath.
   const main = fs.readFileSync(path.resolve(process.cwd(), 'src/main.ts'), 'utf8');
-  const fn = main.split('private async buildGenerateCallables()')[1] ?? '';
-  assert.match(fn.slice(0, 900), /if \(!this\._libraryCatalogLoaded\) return null;/);
+  // Drain 2026-08-24-2360 — anchor widened from the exact zero-arg
+  // signature to the name alone. The guard below is unchanged; what
+  // moved is the signature, which grew a `targetSnippetId` parameter.
+  // A test that breaks when its subject gains an argument is testing
+  // the punctuation, not the guard.
+  const fn = main.split('private async buildGenerateCallables(')[1] ?? '';
+  assert.match(fn.slice(0, 1200), /if \(!this\._libraryCatalogLoaded\) return null;/);
 });
 
 test('a null inventory disables the closure check rather than failing open on an empty set', () => {

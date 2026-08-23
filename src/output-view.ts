@@ -1099,6 +1099,10 @@ export class ForgeOutputView extends ItemView {
       undeclaredNames?: readonly string[];
       llmRawOutput: string;
       descriptionBody: string;
+      // Drain 2026-08-24-2360 — lets the guidance recognise a
+      // self-call instead of reporting the open note as an
+      // unregistered chip.
+      targetSnippetId?: string;
     },
   ) {
     const guidance = deriveLlmRejectionGuidance({
@@ -1106,6 +1110,7 @@ export class ForgeOutputView extends ItemView {
       unresolvedWikilinks: input.unresolvedWikilinks,
       undeclaredNames: input.undeclaredNames,
       descriptionBody: input.descriptionBody,
+      targetSnippetId: input.targetSnippetId,
     });
     const entry = this.makeEntry(snippetId);
     entry.addClass('is-error');

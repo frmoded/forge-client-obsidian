@@ -34,6 +34,13 @@ export interface LlmRejectionInput {
    *  to detect landmine phrases like "print hello" that likely
    *  caused the phantom chip emission. */
   descriptionBody: string;
+  /** Drain 2026-08-24-2360 — the note being generated FOR. When an
+   *  unresolved wikilink turns out to BE this note, the failure is a
+   *  self-call, not a phantom chip, and needs its own words: telling
+   *  someone that the note on their screen "isn't registered in this
+   *  vault's palette" reads as Forge being broken. Optional — absent
+   *  keeps the pre-drain behaviour exactly. */
+  targetSnippetId?: string;
 }
 
 export interface LlmRejectionGuidance {
@@ -102,6 +109,22 @@ function _landmineInDescription(
   return bareWord.test(lc) && !inWikilink.test(lc);
 }
 
+/** Drain 2026-08-24-2360 — which unresolved wikilink, if any, is the
+ *  target note itself. Returns the emitted spelling (so the message
+ *  quotes what the model actually wrote) or null. */
+function _selfCallAmong(
+  unresolved: readonly string[],
+  targetSnippetId: string | undefined,
+): string | null {
+  if (!targetSnippetId) return null;
+  const base = (id: string) => id.slice(id.lastIndexOf('/') + 1);
+  const targetBase = base(targetSnippetId);
+  for (const w of unresolved) {
+    if (w === targetSnippetId || base(w) === targetBase) return w;
+  }
+  return null;
+}
+
 /**
  * Compute human-facing guidance for a Recipe rejection.
  *
@@ -159,6 +182,32 @@ export function deriveLlmRejectionGuidance(
   }
 
   if (input.failureMode === 'closure-fail') {
+    // Drain 2026-08-24-2360 — self-call first. Since `excludeSelf`
+    // keeps the target out of its own inventory, a generated self-call
+    // now lands here as an "unresolved" name. It is not a phantom
+    // chip, and the generic wording would tell the cohort that the
+    // note open in front of them is unregistered.
+    //
+    // Basename comparison for the same reason `excludeSelf` uses it:
+    // `snippetIdFromPath` yields a bare id for a note in a non-library
+    // subdirectory, so the emitted wikilink and the target id
+    // legitimately disagree on the driver's own note shape.
+    const selfName = _selfCallAmong(input.unresolvedWikilinks, input.targetSnippetId);
+    if (selfName !== null) {
+      return {
+        likelyCause:
+          `The generated Recipe calls this note itself — \`[[${selfName}]]\` `
+          + `IS the note being generated. Running it would recurse until `
+          + `Python gave up with "maximum recursion depth exceeded". A note `
+          + `is not part of its own vocabulary, so the call doesn't resolve `
+          + `and the Recipe was rejected instead of written.`,
+        fixOptions: [
+          'Run again — the Description probably describes the work itself, and a second attempt usually writes the steps rather than delegating them.',
+          'Describe WHAT to compute rather than naming the note\'s own job (e.g. "multiply a random float by scale" rather than "do the random-number thing").',
+          `If you genuinely want recursion, hand-author it: edit the Recipe directly to \`Call [[${selfName}]]\` with a terminating condition. Generation cannot produce self-calls, by design.`,
+        ],
+      };
+    }
     const list = input.unresolvedWikilinks
       .map((w) => `\`[[${w}]]\``)
       .join(', ');

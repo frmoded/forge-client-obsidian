@@ -235,3 +235,69 @@ describe('truncateLlmOutput', () => {
     assert.match(result, /truncated/);
   });
 });
+
+// Drain 2026-08-24-2360 — the self-call rejection.
+//
+// Excluding the target from its own inventory (excludeSelf) means a
+// generated self-call now fails the closure check instead of shipping.
+// That is the intended outcome, but a cohort member reading
+// "`[[ccqa_random_r2]]` isn't registered in this vault's palette" about
+// the note they are looking at would reasonably conclude Forge is
+// broken. The guidance has to name the situation.
+describe('self-call closure failure (drain 2360)', () => {
+  it('names the self-call rather than calling the note unregistered', () => {
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['ccqa_random_r2'],
+      descriptionBody: 'Print a random number between 0 and 1 multpiied by an input var scale',
+      targetSnippetId: 'ccqa_random_r2',
+    });
+    assert.match(g.likelyCause, /itself/i);
+    assert.doesNotMatch(g.likelyCause, /isn't registered|aren't registered/);
+  });
+
+  it('tells the cohort how to get real recursion, since that is now hand-only', () => {
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['factorial'],
+      descriptionBody: 'Compute a factorial.',
+      targetSnippetId: 'factorial',
+    });
+    assert.ok(g.fixOptions.some((o) => /by hand|hand-edit|hand-author/i.test(o)));
+  });
+
+  it('matches on basename, the shape that actually failed', () => {
+    // `snippetIdFromPath` gives a bare id for a note in a non-library
+    // subdirectory, so the emitted wikilink and the target id disagree
+    // exactly as they do for the driver's `authoring/random_note`.
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['random_note'],
+      descriptionBody: 'A random number.',
+      targetSnippetId: 'authoring/random_note',
+    });
+    assert.match(g.likelyCause, /itself/i);
+  });
+
+  it('a genuinely unknown chip still gets the ordinary message', () => {
+    // NON-VACUITY. If every closure failure started reading as a
+    // self-call, the guidance would be worse than before this drain.
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['some_phantom_chip'],
+      descriptionBody: 'Do a thing.',
+      targetSnippetId: 'ccqa_random_r2',
+    });
+    assert.match(g.likelyCause, /aren't registered|isn't registered/);
+    assert.doesNotMatch(g.likelyCause, /itself/i);
+  });
+
+  it('with no targetSnippetId the behaviour is exactly as before', () => {
+    const g = deriveLlmRejectionGuidance({
+      failureMode: 'closure-fail',
+      unresolvedWikilinks: ['ccqa_random_r2'],
+      descriptionBody: 'Anything.',
+    });
+    assert.match(g.likelyCause, /aren't registered|isn't registered/);
+  });
+});

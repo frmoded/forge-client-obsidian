@@ -27,6 +27,7 @@ import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
 import { classifyForgeError, forgeErrorFromGenerateRefusal } from './forge-error-core.ts';
 import type { CallableEntry } from './callable-inventory-core.ts';
 import { buildCallableInventory, callableNamesFrom } from './callable-inventory-core.ts';
+import { excludeSelf } from './exclude-self-from-inventory-core.ts';
 import type { VaultNoteInput } from './callable-inventory-core.ts';
 import {
   extractPythonSection,
@@ -2790,6 +2791,12 @@ export default class ForgePlugin extends Plugin {
                   unresolvedWikilinks: unresolvedRaw,
                   llmRawOutput: llmRecipe,
                   descriptionBody: extractDescription(v2Body) ?? '',
+                  // Drain 2026-08-24-2360 — excludeSelf keeps the note
+                  // out of its own inventory, so a generated self-call
+                  // arrives here as "unresolved". Without this the
+                  // panel would tell the cohort that the note open in
+                  // front of them is not registered.
+                  targetSnippetId: snippetIdFromPath(file.path, this.libraryDirNames()),
                 });
               } catch { /* panel unavailable; toast alone still fires */ }
               const unresolvedList = unresolvedRaw
@@ -3655,7 +3662,7 @@ export default class ForgePlugin extends Plugin {
         }
 
         const inv = await host.preflightThenInventory(snippetId);
-        const callablesForThisRun = await this.buildGenerateCallables();
+        const callablesForThisRun = await this.buildGenerateCallables(snippetId);
         payload = {
           snippet_id: inv.snippet_id,
           description: inv.description,
@@ -3841,7 +3848,7 @@ export default class ForgePlugin extends Plugin {
           return null;
         }
         const inv = await host.preflightThenInventory(snippetId);
-        const callablesForThisRun = await this.buildGenerateCallables();
+        const callablesForThisRun = await this.buildGenerateCallables(snippetId);
         payload = {
           snippet_id: inv.snippet_id,
           description: inv.description,
@@ -3997,7 +4004,14 @@ export default class ForgePlugin extends Plugin {
    *  THE single producer. Its result is both what /generate is shown
    *  and, via `callableNamesFrom`, what the closure check accepts —
    *  there is deliberately no other path to either. */
-  private async buildGenerateCallables(): Promise<CallableEntry[] | null> {
+  private async buildGenerateCallables(
+    // Drain 2026-08-24-2360 — the note being generated FOR. Excluded
+    // from its own inventory: at /generate time the target already
+    // carries the Description being transpiled, so leaving it in shows
+    // the model a callable whose summary IS the request. CCQA's
+    // `ccqa_random_r2` called itself and died on recursion depth.
+    targetSnippetId?: string,
+  ): Promise<CallableEntry[] | null> {
     // Null when the engine-chip catalog has not loaded yet. Sending a
     // list that is missing the chips would be worse than sending none:
     // the service treats a supplied inventory as AUTHORITATIVE and
@@ -4021,7 +4035,12 @@ export default class ForgePlugin extends Plugin {
       console.error('buildGenerateCallables: vault-notes step failed', e);
     }
     const chips = Array.from(this.libraryNoteIndex.values());
-    return buildCallableInventory(vaultNotes, chips);
+    // Exclusion happens HERE, at the one producer, so the prompt
+    // payload, the closure check's accept-set and drain 2310's belt
+    // all stop seeing the self-name together. Filtering in a single
+    // consumer would leave the other two disagreeing — the exact
+    // failure drain 1000's one-object discipline exists to prevent.
+    return buildCallableInventory(excludeSelf(vaultNotes, targetSnippetId), chips);
   }
 
   // Format the user-facing Notice for a non-2xx α /generate response.
