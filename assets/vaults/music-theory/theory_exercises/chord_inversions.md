@@ -11,6 +11,12 @@ recipe_version: 1
 
 Return the three pitch names of a `quality` triad on `tonic`, reordered for `inversion` (0 = root position, 1 = first inversion, 2 = second inversion) — the same three chord tones with a different one in the bass each time; the note(s) moved out of the bass are pushed up an octave so the list stays ascending. Concept refresher: [[chord/construction/inversion]], [[chord/construction/voicing]].
 
+## Inputs
+
+- tonic — the triad's root note, e.g. "C4"
+- quality — the triad type: "major", "minor", "diminished", "augmented"
+- inversion — which chord tone sits in the bass: 0 (root position), 1 (first inversion), or 2 (second inversion)
+
 # Recipe
 
 Return {{ (lambda ps: [p.nameWithOctave for p in (ps[inversion:] + [p.transpose('P8') for p in ps[:inversion]])])([music21.pitch.Pitch(tonic).transpose(music21.interval.Interval(iv)) for iv in {"major": ["P1","M3","P5"], "minor": ["P1","m3","P5"], "diminished": ["P1","m3","d5"], "augmented": ["P1","M3","A5"]}[quality]]) }}.

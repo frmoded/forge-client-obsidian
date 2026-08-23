@@ -18,6 +18,10 @@ recipe_version: 1
 
 Construct the C major scale, tonic to tonic, one key at a time — as if pressing 8 piano keys in a row. `guess` is a list of 8 pitch names, e.g. `["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]`. Press **Run** to hear exactly what you built, with a verdict — which positions are right, which aren't, or whether you entered the wrong number of notes — printed right on the staff above your own notes. Concept refresher: [[scales/scale]]; hear the reference scale first at [[theory_exercises/complete_this_scale_challenge]].
 
+## Inputs
+
+- guess — the 8 pitch names you built, tonic to tonic, e.g. ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"]
+
 # Recipe
 
 Let correct = Call [[diatonic_scale]] with tonic="C", mode="major".

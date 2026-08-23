@@ -18,6 +18,10 @@ python_derived_from_recipe_hash: 2fabe06fc68fda752ae35b0c35abe8f71688d78fe7aaccd
 
 Complete the C major scale you heard in [[theory_exercises/complete_this_scale_challenge]]. Using the major interval pattern (W‑W‑H‑W‑W‑W‑H), work out the four notes that finish the octave after C‑D‑E‑F and set them as your `guess` — e.g. `["G4", "A4", "B4", "C5"]`. Press **Run** for note-by-note feedback. Concept refresher: [[scales/scale]].
 
+## Inputs
+
+- guess — the four notes you think complete the octave, e.g. ["G4", "A4", "B4", "C5"]
+
 # Recipe
 Let true_tonic = "C".
 Let true_mode = "major".

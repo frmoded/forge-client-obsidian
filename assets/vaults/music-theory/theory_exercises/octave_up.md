@@ -18,6 +18,10 @@ python_derived_from_recipe_hash: 04c7f7ef6501a4248adbb21fb647f49b27487733fef11fe
 
 Enter the note one octave above **C4** as your `guess` (for example, `"C5"`), then press Run. Hint: an octave up keeps the letter name, adds 1 to the octave number, and doubles the frequency. Refresher: [[octave]].
 
+## Inputs
+
+- guess — the note you think is one octave above C4, e.g. "C5"
+
 # Recipe
 
 Let start = "C4".
