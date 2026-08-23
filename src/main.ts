@@ -671,11 +671,11 @@ export default class ForgePlugin extends Plugin {
     // active note on the same two events. It never OPENS the panel:
     // when no Forge panel leaf exists this is a no-op, so the strip
     // costs nothing until the user has the panel on screen.
-    this.registerEvent(this.app.workspace.on('active-leaf-change', () => {
-      void this.refreshForgePanelStrip();
+    this.registerEvent(this.app.workspace.on('active-leaf-change', (leaf) => {
+      void this.refreshForgePanelStrip(leaf);
     }));
-    this.registerEvent(this.app.workspace.on('file-open', () => {
-      void this.refreshForgePanelStrip();
+    this.registerEvent(this.app.workspace.on('file-open', (file) => {
+      void this.refreshForgePanelStrip(undefined, file);
     }));
     this.registerEvent(this.app.vault.on('modify', (file) => {
       // Debounce against active-file modifications only — saves on
@@ -5468,8 +5468,26 @@ export default class ForgePlugin extends Plugin {
         // about last-used values, so opening the dialog after a strip
         // run shows what the strip just ran.
         this.inputCache[snippetId] = raw;
+        // Drain 2026-08-24-1610 — run the note the strip is DISPLAYING.
+        // Clicking a button inside the panel makes the panel the active
+        // leaf, so re-deriving "active" at click time finds no markdown
+        // note and the run died 3/3 with "No active note to run" while
+        // the toolbar arrow worked on the same notes. Third instance of
+        // this class: v0.2.288 fixed it for the auto-forge path, drain
+        // 1600 for a dropped facet argument. Same lesson each time —
+        // use what you were handed.
+        //
+        // Path lookup, not basename (the snippet-id HARD RULE): a
+        // library-subdir note's id is qualified and basename matching
+        // silently returns undefined for it.
+        const target = this.fileForSnippetId(snippetId);
+        if (!target) {
+          console.error(
+            `strip run: no file for snippet id ${snippetId} — the strip is `
+            + `displaying a note the vault cannot resolve.`);
+        }
         const op = () => this.runSnippet(
-          'Forge failed during execution', undefined, undefined, kwargs);
+          'Forge failed during execution', undefined, target ?? undefined, kwargs);
         if (this.spinner) {
           void this.spinner.wrapImmediate(prefixed('🔥 running …'), op);
         } else {
@@ -5501,12 +5519,34 @@ export default class ForgePlugin extends Plugin {
    * Non-action notes hand the view `null`, which greys the last action
    * note rather than emptying the strip — permanence is the product.
    */
-  private async refreshForgePanelStrip(): Promise<void> {
+  /** Drain 2026-08-24-1610 — a snippet id back to its TFile.
+   *
+   *  `<id>.md` relative to the vault root is the V1 convention the
+   *  snippet-id HARD RULE names; basename matching is what returned
+   *  undefined for library-subdir notes for 78 releases (v0.2.104). */
+  private fileForSnippetId(snippetId: string): TFile | null {
+    const f = this.app.vault.getAbstractFileByPath(`${snippetId}.md`);
+    return f instanceof TFile ? f : null;
+  }
+
+  private async refreshForgePanelStrip(
+    leaf?: WorkspaceLeaf | null,
+    file?: TFile | null,
+  ): Promise<void> {
     const view = this.existingOutputView();
     if (!view) return;
     this.wireStripHost(view);
     try {
-      view.showNoteInputs(await this.activeStripNote());
+      // Drain 2026-08-24-1610 — prefer the file the EVENT handed us.
+      // `active-leaf-change` fires before the workspace's active-view
+      // pointer settles (the same hazard the StateField rule in
+      // cc-prompt-queue.md is written about), so re-querying returned
+      // the PREVIOUS note and the strip stayed 'active' on it after a
+      // tab switch. URI-navigation worked only because its timing
+      // happened to be kinder.
+      const eventFile = file
+        ?? (leaf?.view instanceof MarkdownView ? leaf.view.file : null);
+      view.showNoteInputs(await this.activeStripNote(eventFile));
     } catch (e) {
       // A strip that throws must not take the panel with it.
       console.error('refreshForgePanelStrip failed', e);
@@ -5516,8 +5556,14 @@ export default class ForgePlugin extends Plugin {
 
   /** The active note as the strip needs it, or null when the active
    *  note is not an action note. */
-  private async activeStripNote(): Promise<StripNoteWithDefaults | null> {
-    const file = this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
+  private async activeStripNote(
+    eventFile?: TFile | null,
+  ): Promise<StripNoteWithDefaults | null> {
+    // Drain 2026-08-24-1610 — the event's file wins when we have one;
+    // the workspace re-query stays as the fallback for callers with no
+    // event in hand (the initial wire-up).
+    const file = eventFile
+      ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if (!file) return null;
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (frontmatter?.type !== 'action') return null;
