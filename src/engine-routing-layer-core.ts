@@ -68,3 +68,49 @@ export function engineRoutingLayer(
   if (sourceFacet === 'description') return undefined;
   return sourceFacet;
 }
+
+/**
+ * Drain 2026-08-24-2390 — which facet the ENGINE should be told, given
+ * what the caller passed and what the note actually is.
+ *
+ * THE GAP THIS CLOSES, measured rather than reasoned about. Drain 2370
+ * derived a facet at `runSnippet`'s shared door and used it for the
+ * error hint only, leaving routing to the caller's explicit value. Two
+ * launch paths pass none — the Inputs strip's ▶ and Cmd-P "Run only" —
+ * so on a note whose Python returns 42 and whose Recipe returns 7:
+ *
+ *   toolbar ▶ (passes 'python')  ->  42   the hand-edited Python
+ *   strip ▶   (passes nothing)   ->   7   the Recipe
+ *   Cmd-P     (passes nothing)   ->   7   the Recipe
+ *
+ * Same note, different button, different answer — a cohort member's
+ * edits silently ignored depending on where they clicked. Across the
+ * shipped vaults, 3 of the 4 notes declaring `source_facet: python`
+ * behave this way, and for all three the no-layer path raises
+ * SlotCacheMissError, so the strip fires an LLM call and then runs
+ * resolved Recipe code in place of the hand-edited Python.
+ *
+ * There is no engine-side backstop: `resolve_action_code` reads
+ * `source_facet` from frontmatter ZERO times. Its only frontmatter
+ * signal is `edit_mode: python`, and nothing in the plugin writes that
+ * — none of the four shipped notes carries it.
+ *
+ * ONLY `'python'` IS PROMOTED. That is the facet whose short-circuit
+ * exists to protect hand-authored code from a Recipe that may be stale
+ * or unparseable. `'recipe'` and `'synced'` are ignored by the engine
+ * today, so promoting them would be a behaviour change with no stated
+ * purpose. `'description'` is never promoted — see `engineRoutingLayer`
+ * above; drain 2350 deleted the engine branch, but the client belt
+ * stays, because a plugin that stopped filtering would be relying on an
+ * engine version it does not itself guarantee.
+ *
+ * An explicit caller value always wins: the branches that know their
+ * own facet decided it deliberately.
+ */
+export function routingFacetFor(
+  explicit: SourceFacet | undefined,
+  derived: SourceFacet | undefined,
+): SourceFacet | undefined {
+  if (explicit !== undefined) return explicit;
+  return derived === 'python' ? 'python' : undefined;
+}

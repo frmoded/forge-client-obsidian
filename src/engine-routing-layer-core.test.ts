@@ -23,7 +23,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-import { engineRoutingLayer } from './engine-routing-layer-core.ts';
+import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
 
 test('description is never sent as a routing signal — the original incident', () => {
   // The exact value the Description-canonical branch holds. Sending it
@@ -114,4 +114,69 @@ test('the error classifier never reads the ROUTED value', () => {
   assert.ok(call.startsWith('resolveHintFacet('), 'resolveHintFacet must be called');
   const firstArg = call.slice('resolveHintFacet('.length, call.indexOf(',')).trim();
   assert.equal(firstArg, 'canonicalLayer');
+});
+
+// --- Drain 2026-08-24-2390: routing for strip / Cmd-P launches -------
+//
+// 2370 derived a facet at runSnippet's shared door but used it for the
+// HINT only, deliberately leaving routing to the caller's explicit
+// value — and flagged that the strip and Cmd-P pass none.
+//
+// Probed on a note whose Python returns 42 and whose Recipe returns 7:
+//
+//   (a) toolbar play, canonical_layer='python'  -> 42  [hand-edited Python]
+//   (b) Inputs strip play, no layer             ->  7  [Recipe]
+//   (c) Cmd-P "Run only", no layer              ->  7  [Recipe]
+//
+// Same note, different button, different answer. And the engine reads
+// `source_facet` from frontmatter ZERO times (only `edit_mode`, which
+// nothing in the plugin writes), so a note the plugin calls
+// python-canonical has no engine-side protection at all.
+//
+// Measured across the shipped vaults: 3 of the 4 notes declaring
+// `source_facet: python` execute different code depending on the
+// button — and for all three the no-layer path raises
+// SlotCacheMissError, so the strip would fire an LLM call and then run
+// resolved Recipe code in place of the cohort's hand-edited Python.
+
+test('a derived python facet IS promoted to a routing directive', () => {
+  // The gap: strip and Cmd-P pass no explicit layer, so before this
+  // the engine transpiled the Recipe of a hand-edited note.
+  assert.equal(routingFacetFor(undefined, 'python'), 'python');
+});
+
+test('a derived description is still NOT promoted', () => {
+  // The 2330 belt stays. 2350 removed the engine branch, but a client
+  // that stops filtering would be relying on an engine it does not
+  // ship — BRAT users update the plugin and the bundled engine
+  // together, but nothing enforces that ordering.
+  assert.equal(routingFacetFor(undefined, 'description'), undefined);
+});
+
+test('derived recipe and synced are not promoted either', () => {
+  // §2 says python-canonical ONLY. The engine ignores both values
+  // today, so promoting them would be a behaviour change with no
+  // stated purpose — and one nobody would notice until it mattered.
+  assert.equal(routingFacetFor(undefined, 'recipe'), undefined);
+  assert.equal(routingFacetFor(undefined, 'synced'), undefined);
+});
+
+test('an explicit caller value always wins over the derived one', () => {
+  assert.equal(routingFacetFor('python', 'description'), 'python');
+  assert.equal(routingFacetFor('recipe', 'python'), 'recipe');
+  // Including the case where explicit 'description' must still be
+  // filtered downstream rather than replaced by the derived value.
+  assert.equal(engineRoutingLayer(routingFacetFor('description', 'python')), undefined);
+});
+
+test('no facet either way stays absent', () => {
+  assert.equal(routingFacetFor(undefined, undefined), undefined);
+});
+
+test('the shared door computes routing from the derived facet', () => {
+  assert.equal(
+    MAIN.split('\n').filter((l) => l.includes('routingFacetFor(')).length,
+    1,
+    'one promotion, at the same door 2370 derives the facet in',
+  );
 });

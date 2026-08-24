@@ -16,7 +16,7 @@ import {
   parseChipInventory,
 } from './chip-inventory-core.ts';
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
-import { engineRoutingLayer } from './engine-routing-layer-core.ts';
+import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
@@ -4623,6 +4623,27 @@ export default class ForgePlugin extends Plugin {
       displayFacetForRun = canonicalLayer;
     }
 
+    // Drain 2026-08-24-2390 — the derived facet now also decides
+    // ROUTING, for python-canonical notes only.
+    //
+    // 2370 deliberately kept this display-only and flagged the
+    // question. Probed since, on a note whose Python returns 42 and
+    // whose Recipe returns 7: the toolbar play button ran 42 and BOTH
+    // the Inputs strip and Cmd-P ran 7 — the same note giving
+    // different answers depending on which button was pressed, with
+    // the cohort member's hand-edited Python silently ignored. Three
+    // of the four shipped notes declaring `source_facet: python`
+    // behave that way, and for all three the no-layer path raises
+    // SlotCacheMissError, so the strip would spend an LLM call and
+    // then run resolved Recipe code instead of the hand edit.
+    //
+    // No engine-side backstop exists: resolve_action_code never reads
+    // `source_facet`, only `edit_mode: python`, which nothing writes.
+    //
+    // Only 'python' is promoted; 'description' stays filtered. See
+    // engine-routing-layer-core.ts.
+    const routingFacetForRun = routingFacetFor(canonicalLayer, displayFacetForRun);
+
     // Drain 2026-08-22-2300 — the strip supplies its own values, so
     // there is nothing to ask for: dispatch straight past the input
     // resolution (which exists to populate the dialog) and past the
@@ -4630,7 +4651,7 @@ export default class ForgePlugin extends Plugin {
     // why the strip comes through here at all.
     if (presetInputs) {
       await this.computeSnippetWithArgs(
-        vaultPath, snippetId, [], presetInputs, errorPrefix, canonicalLayer, file,
+        vaultPath, snippetId, [], presetInputs, errorPrefix, routingFacetForRun, file,
         displayFacetForRun);
       return;
     }
@@ -4718,12 +4739,12 @@ export default class ForgePlugin extends Plugin {
         this.inputCache[snippetId] = raw;
         // Drain 2530 — pass `file` so the successful run refreshes the
         // note's # Python section.
-        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, canonicalLayer, file, displayFacetForRun);
+        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, routingFacetForRun, file, displayFacetForRun);
       }, enums, widgets, inputDefaults, derivedEnums).open();
     } else {
       // Drain 2530 — pass `file` so the successful run refreshes the
       // note's # Python section.
-      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, canonicalLayer, file, displayFacetForRun);
+      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, routingFacetForRun, file, displayFacetForRun);
     }
   }
 
