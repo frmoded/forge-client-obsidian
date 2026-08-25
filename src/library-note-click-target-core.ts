@@ -15,8 +15,9 @@
 // This module isolates the selector + href extraction so it can be
 // `node --test`-ed under JSDOM-style fixtures without an Obsidian
 // runtime. Mirrors the pattern at main.ts:721-726 (forge-action
-// click handler) and edges-hover.ts:65-67 which both already use
-// the `??` fallback and work correctly across all render modes.
+// click handler), which uses the `??` fallback and works correctly
+// across all render modes. (This used to cite edges-hover.ts too;
+// that module was deleted at drain 2026-08-25-0150.)
 
 /** Result of resolving a click target to an library-note wikilink.
  *  `null` means the click wasn't on a wikilink we recognize. */

@@ -86,18 +86,12 @@ import {
 } from './forge-snippet-routing-core.ts';
 import { isPythonBuiltin, bareWikilinkTarget } from './python-builtins-core.ts';
 import { invalidateLibraryVaultCache } from './edges.ts';
-// v0.2.44: attachEdgeHover removed — the hover popover read snapshot
-// state from host disk via the vault adapter, but capture writes go to
-// Pyodide's MEMFS (the documented persistence gap), so the popover
-// always reported "no snapshot" with a disabled Freeze button — a
-// false-negative affordance. The right-click freeze menu (v0.2.41 +
-// v0.2.43 + v0.2.44 state-aware items) is now the single freeze
-// surface; it reads MEMFS sync via PyodideHost.readSnapshotStateSync
-// so the displayed state matches reality. Restoring the hover requires
-// either the MEMFS-to-host-disk writeback drain (separately flagged)
-// or routing the popover's snapshot read through Pyodide — both are
-// out of scope for v0.2.44.
-// import { attachEdgeHover } from './edges-hover.ts';
+// Hover-to-freeze was removed at v0.2.44 (the popover read snapshot
+// state from host disk while captures write to Pyodide's MEMFS, so it
+// always showed "no snapshot"); its module was deleted at drain
+// 2026-08-25-0150 after sitting unwired. Freeze lives on the
+// right-click wikilink menu and the Edges panel. There is nothing to
+// restore — reviving a hover affordance is a fresh design.
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings.ts';
 import { sectionPlugin, readOnlyFacetFilter } from './facet.ts';
 import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
@@ -1038,7 +1032,7 @@ export default class ForgePlugin extends Plugin {
         ?? target.closest('.cm-hmd-internal-link, .cm-link') as HTMLElement | null;
       if (!linkEl) return;
       // Extract link target. Reading mode carries it on data-href;
-      // live preview spans use innerText. Pattern from edges-hover.ts.
+      // live preview spans use innerText — hence the `??` fallback.
       const raw =
         linkEl.getAttribute('data-href')
         ?? (linkEl as HTMLElement).innerText
@@ -1293,9 +1287,12 @@ export default class ForgePlugin extends Plugin {
     // DOM coordinates via a document.body listener (capture phase, runs
     // before editor-menu), translate to a document offset via
     // CodeMirror's posAtCoords, store on the plugin instance, consume in
-    // the editor-menu handler. Same DOM-walking pattern edges-hover.ts
-    // uses for the hover popover (see edges-hover.ts:59-68 for the
-    // reading-mode / live-preview / source-mode breakdown).
+    // the editor-menu handler. The DOM-walking rule, inlined here
+    // because the module that used to document it (edges-hover.ts) was
+    // deleted at drain 2026-08-25-0150: reading mode renders wikilinks
+    // as `a.internal-link`, live preview as
+    // `span.cm-hmd-internal-link`, and source mode shows raw `[[...]]`
+    // with no DOM hook at all — that last one is an accepted gap.
     let lastContextmenuPos: { line: number; ch: number } | null = null;
     const contextmenuHandler = (ev: MouseEvent) => {
       lastContextmenuPos = null;
@@ -1475,10 +1472,6 @@ export default class ForgePlugin extends Plugin {
       name: 'Re-extract bundled library vault (overwrites local edits)',
       callback: () => { void this.openReExtractBundledVaultModal(); },
     });
-
-    // v0.2.44: hover popover removed — see import-site comment.
-    // const detachHover = attachEdgeHover(this.app, () => this.settings.serverUrl);
-    // this.register(detachHover);
 
     await runFirstRunCheck(this.app);
 
@@ -3439,8 +3432,9 @@ export default class ForgePlugin extends Plugin {
     // fallback. Per v0.2.211 + v0.2.212 driver smokes: without this,
     // the interceptor never fired in source mode → Obsidian default
     // link-create reopened forensic shadows even after the v0.2.212
-    // cleanup ran. Mirrors the working pattern at main.ts:721-726 +
-    // edges-hover.ts:65-67.
+    // cleanup ran. Mirrors the working pattern at main.ts:721-726
+    // (the `a.internal-link` / `span.cm-hmd-internal-link` walk with a
+    // `data-href ?? innerText` fallback).
     const resolved = resolveLibraryNoteClickTarget(
       evt.target as Element | null,
     );
