@@ -115,3 +115,63 @@ export function decideSourceWrite(
  *  name for one release cycle.
  *  TODO: delete in v0.2.290. */
 export const decideCanonicalWrite = decideSourceWrite;
+
+/** Which facets moved since the last observation. Extracted at drain
+ *  2026-08-25-1060 so the decision layer can see the whole change set,
+ *  not just its upstream-most member. */
+export function changedFacets(
+  current: FacetHashes,
+  cached: FacetHashes | null,
+): Array<'description' | 'recipe' | 'python'> {
+  if (cached === null) return [];
+  const changed: Array<'description' | 'recipe' | 'python'> = [];
+  if (current.desc !== cached.desc) changed.push('description');
+  if (current.recipe !== cached.recipe) changed.push('recipe');
+  if (current.python !== cached.python) changed.push('python');
+  return changed;
+}
+
+/** Decide the `source_facet` write from the full change set.
+ *
+ *  Drain 2026-08-25-1060 §1 — CW-1800 REFINEMENT, driver adopted.
+ *
+ *  THE CARVE-OUT: when SEVERAL facets moved and the stored
+ *  `source_facet` names one that did NOT move, keep the stored value.
+ *  A rewrite that never touched the facet a note points at is not
+ *  evidence about where that note's truth lives.
+ *
+ *  Concretely: a `git restore` of a note carrying machine write-back
+ *  moves Recipe and Python and leaves Description alone. Before this,
+ *  upstream-wins read that as "the Recipe was just edited" and flipped
+ *  `description` -> `recipe`. Drain 1000 reproduced exactly that on
+ *  forge-tutorial's cheer.md.
+ *
+ *  THE TRADE, accepted on the record: a genuine hand edit spanning
+ *  Recipe AND Python on a Description-sourced note now also keeps
+ *  `description`. CW-1800's own comment calls multi-facet human edits
+ *  rare and external rewrites the common case; that is the reasoning.
+ *
+ *  Single-facet changes are untouched — editing the Recipe of a
+ *  Description-sourced note still makes the Recipe the source.
+ *
+ *  THE GUARANTEE CW-1800 WAS REALLY BOUGHT FOR STILL HOLDS: a
+ *  multi-facet change can never resolve to 'python'. Description and
+ *  Recipe both precede it, so `changed[0]` is one of them whenever
+ *  either moved. That matters because drain 0110 made the ENGINE route
+ *  on `source_facet`, making 'python' the one value an unprompted flip
+ *  could use to change which code executes. Pinned by a test.
+ */
+export function decideSourceWriteFromChange(
+  changed: ReadonlyArray<'description' | 'recipe' | 'python'>,
+  storedSource: SourceLayer | null,
+): SourceLayer | null {
+  if (changed.length === 0) return null;
+  if (
+    changed.length > 1
+    && storedSource !== null
+    && !changed.includes(storedSource as 'description' | 'recipe' | 'python')
+  ) {
+    return null;
+  }
+  return decideSourceWrite(changed[0], storedSource);
+}

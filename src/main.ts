@@ -25,7 +25,7 @@ import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
 import { resolveRunTarget } from './run-snippet-target-core.ts';
-import { identifyEditedFacet, decideSourceWrite, type FacetHashes } from './facet-edit-tracker-core.ts';
+import { changedFacets, decideSourceWriteFromChange, type FacetHashes } from './facet-edit-tracker-core.ts';
 import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
 import { classifyForgeError, forgeErrorFromGenerateRefusal } from './forge-error-core.ts';
@@ -5063,7 +5063,7 @@ export default class ForgePlugin extends Plugin {
       };
 
       const cached = this._facetHashCache.get(file.path) ?? null;
-      const editedFacet = identifyEditedFacet(currentHashes, cached);
+      const changed = changedFacets(currentHashes, cached);
 
       // Always update the cache to the current snapshot — even if we
       // don't write canonical (bootstrap case) or the edit was on
@@ -5079,7 +5079,11 @@ export default class ForgePlugin extends Plugin {
         return typeof v === 'string' ? v : null;
       });
 
-      const target = decideSourceWrite(editedFacet, storedSource);
+      // Drain 2026-08-25-1060 §1 — CW-1800 refinement (driver adopted).
+      // A multi-facet change that did NOT touch the facet the note
+      // declares as its source leaves that declaration alone. See
+      // decideSourceWriteFromChange for the reasoning and the trade.
+      const target = decideSourceWriteFromChange(changed, storedSource);
 
       // Drain 2026-08-17-0100 (sync_state Phase 2) — the sync_state
       // rollup that was co-written here is GONE. It is derived from the
@@ -5093,6 +5097,21 @@ export default class ForgePlugin extends Plugin {
         await this.app.fileManager.processFrontMatter(file, (fm: any) => {
           if (target !== null) {
             fm.source_facet = target;
+            // Drain 2026-08-25-1060 §2 — when a note BECOMES
+            // python-canonical, the `python_derived_from_*` stamps
+            // describe a derivation the hand-edit just orphaned. They
+            // are inert (computeFacetStates returns Source for a
+            // python-canonical note without consulting them) but not
+            // harmless: those fossils misled three consecutive drains
+            // into believing shipped notes carried lying metadata.
+            //
+            // Writer-side only. Existing fossils on shipped notes are
+            // deliberately left alone — drain 1040 established they are
+            // a truthful record of a past derivation, not a lie.
+            if (target === 'python') {
+              delete fm.python_derived_from_recipe_hash;
+              delete fm.python_derived_from_source_hash;
+            }
           }
           // v0.2.286 migration — flush the legacy field name so notes
           // don't carry both. Idempotent on already-migrated notes.
@@ -5810,7 +5829,12 @@ export default class ForgePlugin extends Plugin {
         }
       }
     } catch (e) {
-      console.warn(
+      // Drain 2026-08-25-1060 §3 — DEBUG, not warn. This fires on
+      // every note-open when Pyodide is not yet warm, and the
+      // frontmatter fallback right below handles it correctly. A
+      // yellow console line on an expected, fully-handled path trains
+      // people to ignore the console. CCQA flagged it for that reason.
+      console.debug(
         `${NOTICE_PREFIX}strip: signature-inferred inputs unavailable for '${snippetId}',`
         + ' falling back to frontmatter', e);
     }
