@@ -15,15 +15,36 @@ export interface CopyAdapter {
  *  and folders returned by `adapter.list`; mkdir's the target dir
  *  first, then mirrors each child with the same name suffix.
  *
- *  Used by welcome.ts:ensureBundledForgeModa to extract the bundled
- *  forge-moda library from plugin assets into the user's vault root.
+ *  Used by welcome.ts's bundled-vault extraction to copy a bundled
+ *  library from plugin assets into the user's vault root.
  *  Implementation is structural — no Obsidian-specific knowledge,
  *  so it survives Obsidian API drift unless `list` itself changes
- *  shape. */
+ *  shape.
+ *
+ *  `skipDirName` (drain 2026-08-25-1010) — OPT-IN directory filter.
+ *  Callers extracting a bundle into a user vault pass
+ *  `isReservedDirName`, so Forge-managed state (`.forge/`,
+ *  `.obsidian/`, `.git/`) and backup dirs never travel from the
+ *  bundle into someone's vault.
+ *
+ *  Opt-in and not the default ON PURPOSE. The rolling-backup copy
+ *  (main.ts `snapshotToRollingBackup`) uses this same function to
+ *  preserve the outgoing extracted tree, and a backup that silently
+ *  drops the user's runtime state is not a backup. One function, two
+ *  legitimate jobs, and the caller says which.
+ *
+ *  Why this argument exists at all: drain 0140 found `.forge/`
+ *  snapshots shipping in every release zip because the zip's bulk-add
+ *  was unfiltered while the exclusion lived only in the bundle-sync
+ *  walker. Extraction is the same shape one step further down — it
+ *  copies the bundle into the user's vault. Nothing leaks today only
+ *  because 0140 emptied the bundle, which is a property of the input,
+ *  not a guarantee of the copier. */
 export async function copyDirRecursive(
   adapter: CopyAdapter,
   src: string,
   dst: string,
+  skipDirName?: (name: string) => boolean,
 ): Promise<void> {
   await adapter.mkdir(dst);
   const listing = await adapter.list(src);
@@ -36,6 +57,7 @@ export async function copyDirRecursive(
   }
   for (const dirPath of listing.folders) {
     const name = dirPath.slice(src.length + 1);
-    await copyDirRecursive(adapter, dirPath, `${dst}/${name}`);
+    if (skipDirName?.(name)) continue;
+    await copyDirRecursive(adapter, dirPath, `${dst}/${name}`, skipDirName);
   }
 }

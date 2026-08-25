@@ -3,6 +3,7 @@ import { copyDirRecursive } from './copy-dir-core.ts';
 import { ensureForgeTomlStub } from './forge-toml-stub.ts';
 import { compareBundledVaultVersion } from './bundled-vault-version-core.ts';
 import { planRollingBackup, shouldSweepLegacyBakDir } from './rolling-backup-core.ts';
+import { isReservedDirName } from './vault-mount-exclusions-core.ts';
 import { ensureWelcomeFiles } from './welcome-files-core.ts';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
@@ -507,7 +508,11 @@ async function ensureBundledVault(
   }
   // 'no-extracted' falls through to the copy below.
 
-  await copyDirRecursive(adapter, sourceDir, targetDir);
+  // Drain 2026-08-25-1010 — `isReservedDirName` so Forge-managed state
+  // and backup dirs in the bundle never travel into a user's vault.
+  // 0140 removed the `.forge/` that was actually there; this makes the
+  // absence a property of the COPIER rather than of the input.
+  await copyDirRecursive(adapter, sourceDir, targetDir, isReservedDirName);
   console.log(`Forge: extracted bundled ${label} into vault`);
 }
 

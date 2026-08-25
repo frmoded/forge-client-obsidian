@@ -148,6 +148,7 @@ import {
 } from './re-extract-bundled-vault-modal.ts';
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
 import { planRollingBackup } from './rolling-backup-core.ts';
+import { isReservedDirName } from './vault-mount-exclusions-core.ts';
 import { copyDirRecursive } from './copy-dir-core.ts';
 import { discardThenDetach } from './leaf-discard-before-detach-core.ts';
 import { restoreInlinedAssets } from './restore-inlined-assets.ts';
@@ -6444,6 +6445,11 @@ async function copyBundledOverlay(
   }
   for (const dirPath of listing.folders) {
     const name = dirPath.slice(src.length + 1);
+    // Drain 2026-08-25-1010 — same authority the extraction path uses.
+    // The manual re-extract command overlays the bundle onto the user's
+    // vault, so it is the second way bundle content reaches a vault and
+    // needs the same guarantee.
+    if (isReservedDirName(name)) continue;
     await copyBundledOverlay(adapter, dirPath, `${dst}/${name}`);
   }
 }
