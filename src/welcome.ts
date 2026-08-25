@@ -2,6 +2,7 @@ import { App, DataAdapter, TFile, WorkspaceLeaf, MarkdownView, Notice } from 'ob
 import { copyDirRecursive } from './copy-dir-core.ts';
 import { ensureForgeTomlStub } from './forge-toml-stub.ts';
 import { compareBundledVaultVersion } from './bundled-vault-version-core.ts';
+import { planRollingBackup, shouldSweepLegacyBakDir } from './rolling-backup-core.ts';
 import { ensureWelcomeFiles } from './welcome-files-core.ts';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
@@ -325,33 +326,65 @@ export async function runFirstRunCheck(app: App): Promise<void> {
   }
 }
 
-/** v0.2.106 — was renameWithBackup. The v0.2.39 .bak.<version>
- *  rename strategy was designed to preserve user edits to bundled
- *  snippets across re-extracts; in practice it accumulated noise
- *  (every drift event left another `<lib>.bak.<v>` directory at
- *  vault root) AND broke findFeaturedSnippet by having every .bak
- *  contribute another `simulation.md` with `featured: true`.
+/** Drain 2026-08-25-0120 — move the outgoing extracted vault into its
+ *  ONE rolling backup dir, replacing any previous backup.
  *
- *  Cohort smoke (Tamar) on v0.2.105 surfaced both:
- *    "Forge: multiple featured snippets found; using first by id.
- *     picked=simulation, all=simulation, simulation, simulation"
- *    + "please remove the .bak directories, they are adding noise."
+ *  Was `deleteExtractedDir` (v0.2.106), which itself replaced
+ *  `renameWithBackup` (v0.2.39). The full arc, because both previous
+ *  behaviors are still described in places people read:
  *
- *  Replaced with direct recursive delete. Trade-off: users who
- *  poked at a bundled snippet to learn lose the local copy on
- *  re-extract — but the bundled-library snippets are intended-
- *  immutable per V1 convention; user authoring lives at vault root.
+ *    v0.2.39   rename to `<vault>.bak.<version>/`. One dir per drift
+ *              event; every copy contributed another `simulation.md`
+ *              with `featured: true`, so findFeaturedSnippet broke.
+ *              Cohort smoke (Tamar, v0.2.105) reported both.
+ *    v0.2.106  delete outright. No litter — but a cohort member who
+ *              poked at a bundled snippet to learn lost it with no
+ *              recourse.
+ *    now       ONE fixed dir per vault, replaced in place. Bounded
+ *              litter (exactly one) and exactly one undo. Driver
+ *              adjudicated this as 1620 option (b).
  *
- *  Tries `adapter.rmdir(recursive)` first; falls back to a manual
- *  recursive walk if rmdir's recursive flag isn't honored. */
-async function deleteExtractedDir(
+ *  The `.bak.previous` name is not cosmetic: the engine walk and the
+ *  plugin mount both exclude `\.bak\.` segments, so the backup is
+ *  invisible to snippet discovery. See rolling-backup-core.ts.
+ *
+ *  Replace-then-move, not move-onto: `rename` onto an existing
+ *  directory is not portable across adapters. */
+async function backupExtractedDir(
   adapter: DataAdapter,
   targetDir: string,
 ): Promise<void> {
+  let folders: string[] = [];
   try {
-    await adapter.rmdir(targetDir, true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const root = await (adapter as any).list?.('/');
+    folders = root?.folders ?? [];
   } catch (e) {
-    console.error(`deleteExtractedDir: rmdir ${targetDir} failed`, e);
+    console.error('backupExtractedDir: vault root list failed', e);
+  }
+  const plan = planRollingBackup(targetDir, folders);
+  if (plan.removeExistingFirst) {
+    try {
+      await adapter.rmdir(plan.backupDir, true);
+    } catch (e) {
+      console.error(`backupExtractedDir: rmdir ${plan.backupDir} failed`, e);
+    }
+  }
+  try {
+    await adapter.rename(targetDir, plan.backupDir);
+    console.log(`Forge: ${targetDir} → ${plan.backupDir} (rolling backup)`);
+  } catch (e) {
+    // The re-extract must still happen. Fall back to the v0.2.106
+    // behavior rather than copying the new bundle on top of the old
+    // tree, which would leave bundle-dropped files behind.
+    console.error(
+      `backupExtractedDir: rename ${targetDir} → ${plan.backupDir} failed; ` +
+      `falling back to delete`, e);
+    try {
+      await adapter.rmdir(targetDir, true);
+    } catch (e2) {
+      console.error(`backupExtractedDir: fallback rmdir ${targetDir} failed`, e2);
+    }
   }
 }
 
@@ -368,7 +401,11 @@ async function deleteExtractedDir(
  *  cleanup). Sweeping forge-music.bak.* here would permanently rmdir
  *  that parked copy on next load. Old forge-music.bak.<version>
  *  litter (if any survives the v0.2.106 delete-on-extract era) now
- *  stays too — acceptable trade for not destroying the legacy park. */
+ *  stays too — acceptable trade for not destroying the legacy park.
+ *
+ *  Drain 2026-08-25-0120 — the CURRENT rolling backup
+ *  (`<vault>.bak.previous/`) is explicitly exempt. This sweep only
+ *  clears v0.2.39-era `<vault>.bak.<version>/` litter. */
 async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
   const candidates = [
     'forge-moda',
@@ -383,8 +420,11 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
     if (!root?.folders) return 0;
     for (const folder of root.folders) {
       const name = folder.split('/').filter(Boolean).pop() ?? '';
-      const bakMatch = candidates.some(c => name.startsWith(`${c}.bak.`));
-      if (!bakMatch) continue;
+      // Drain 2026-08-25-0120 — `shouldSweepLegacyBakDir` excludes the
+      // rolling backup, which has the same `<vault>.bak.` prefix. This
+      // sweep runs on EVERY onload; without the carve-out it destroys
+      // the backup the previous re-extract just made.
+      if (!shouldSweepLegacyBakDir(name, candidates)) continue;
       try {
         await adapter.rmdir(folder, true);
         removed += 1;
@@ -405,6 +445,10 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
  *  music). Compares the bundled forge.toml version against the
  *  extracted one and either skips, copies (first install), or
  *  backs-up-then-re-extracts (drift detected). v0.2.39 replaces the
+ *  NOTE (drain 2026-08-25-0120): "backup" here means the ONE rolling
+ *  `<vault>.bak.previous/` dir, replaced on every re-extract — not the
+ *  v0.2.39 per-version dirs and not v0.2.106's delete. Exactly one
+ *  backup exists per vault at any time.
  *  pre-v0.2.39 `exists(targetDir) → skip` gate that left users
  *  running stale extracted vaults until they manually `rm -rf`.
  *
@@ -412,7 +456,7 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
  *  - bundled forge.toml missing → warn, skip (no source to extract).
  *  - target dir missing → first-install copy.
  *  - target dir present, both versions equal → skip (logged).
- *  - target dir present, versions differ → backup + re-extract.
+ *  - target dir present, versions differ → roll the backup + re-extract.
  *  - target dir present, either version unparseable → warn, skip
  *    (avoid data loss; user can re-bootstrap manually). */
 async function ensureBundledVault(
@@ -456,9 +500,10 @@ async function ensureBundledVault(
     console.log(
       `Forge: ${label} drift detected (extracted ${status.extracted} → bundled ${status.bundled}); re-extracting`,
     );
-    // v0.2.106 — was renameWithBackup. See deleteExtractedDir for
-    // rationale. The .bak directories were noise.
-    await deleteExtractedDir(adapter, targetDir);
+    // Drain 2026-08-25-0120 — the outgoing tree is preserved in ONE
+    // rolling backup dir (replacing any previous). See
+    // backupExtractedDir for the v0.2.39 → v0.2.106 → now arc.
+    await backupExtractedDir(adapter, targetDir);
   }
   // 'no-extracted' falls through to the copy below.
 

@@ -63,11 +63,19 @@ export type BundledVaultVersionStatus =
  *    diagnosable.
  *  - Extracted body present but version unparseable → 'unparseable'
  *    with reason mentioning "extracted". This is the safe choice:
- *    if we can't determine the extracted version, we don't know
- *    which `.bak.<version>` name to use, so skipping avoids data loss.
+ *    if we can't determine the extracted version we can't log a
+ *    meaningful drift line, and re-extracting blind risks data loss.
  *  - Both versions parseable + equal → 'match'.
- *  - Both versions parseable + different → 'drift'. The caller
- *    backs up to `<targetDir>.bak.<extracted>` and re-extracts. */
+ *  - Both versions parseable + different → 'drift'. The caller moves
+ *    the outgoing copy to the ONE rolling backup dir
+ *    `<targetDir>.bak.previous/`, REPLACING any previous backup, and
+ *    re-extracts.
+ *
+ *    Drain 2026-08-25-0120 corrected this paragraph: it described the
+ *    v0.2.39 per-version `.bak.<extracted>` naming, which v0.2.106
+ *    replaced with delete-on-extract and which the driver's 1620
+ *    adjudication has now replaced with the rolling backup. Exactly one
+ *    backup exists per vault at any time. */
 export function compareBundledVaultVersion(
   bundledTomlBody: string | null,
   extractedTomlBody: string | null,

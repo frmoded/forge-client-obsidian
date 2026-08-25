@@ -490,10 +490,14 @@ for re-validation. Persistent state:
   Installer preserves `data.json` across release zip unpacks).
 - **forge-music vault** lives at `<vault>/forge-music/` — survives.
   Future Forge Client versions with newer `forge-music` bundles
-  trigger the v0.2.38 auto-re-extract path (`<vault>/forge-music/`
-  backed up to `<vault>/forge-music.bak.0.3.8/`, fresh copy
-  extracted). You can delete accumulated `.bak.*` directories;
-  they're not re-used.
+  trigger the auto-re-extract path (`<vault>/forge-music/` moved to
+  `<vault>/forge-music.bak.previous/`, fresh copy extracted).
+  Exactly ONE backup dir exists per vault at any time — each
+  re-extract REPLACES the previous one, so nothing accumulates. It is
+  there so a local edit to a bundled snippet is recoverable; you can
+  delete it whenever you don't need that. (Corrected drain
+  2026-08-25-0120: this used to describe the v0.2.39 per-version
+  `.bak.<version>/` dirs, which accumulated.)
 - **Snapshot files** from Phase 8 freeze/unfreeze are written to
   Pyodide's MEMFS and do NOT persist across Obsidian quit-and-
   reopen (known MEMFS-to-disk persistence gap; separate audit

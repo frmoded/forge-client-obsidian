@@ -1,4 +1,4 @@
-import { Plugin, Notice, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
+import { Plugin, Notice, DataAdapter, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
 import {
   isV2Shape,
   isV2RoutableShape,
@@ -153,6 +153,8 @@ import {
   BUNDLED_VAULT_NAMES,
 } from './re-extract-bundled-vault-modal.ts';
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
+import { planRollingBackup } from './rolling-backup-core.ts';
+import { copyDirRecursive } from './copy-dir-core.ts';
 import { discardThenDetach } from './leaf-discard-before-detach-core.ts';
 import { restoreInlinedAssets } from './restore-inlined-assets.ts';
 import { hydrateRuntime } from './brat-hydration.ts';
@@ -3264,6 +3266,21 @@ export default class ForgePlugin extends Plugin {
       return;
     }
 
+    // Drain 2026-08-25-0120 — the manual command gets the same ONE
+    // rolling backup as the auto-on-drift path.
+    //
+    // COPY, not move, and the difference is deliberate. The auto path
+    // deletes the tree wholesale, so it can rename it away. This path's
+    // whole value is its per-file diff — which files the cohort member
+    // actually edited, trashed individually so macOS Trash can recover
+    // them. Renaming the tree away first would empty `extractedFiles`
+    // and turn every count into "restored", destroying the forensics
+    // the command exists to produce. Snapshot first, then proceed
+    // unchanged.
+    if (await adapter.exists(extractedRoot)) {
+      await snapshotToRollingBackup(adapter, extractedRoot);
+    }
+
     try {
       const bundledFiles = await listAllFilesWithHash(adapter, bundledRoot);
       const extractedFiles = (await adapter.exists(extractedRoot))
@@ -6350,6 +6367,42 @@ async function listAllFilesWithHash(
   }
   await walk(root);
   return out;
+}
+
+/** Drain 2026-08-25-0120 — snapshot an extracted vault into its ONE
+ *  rolling backup dir, replacing any previous backup.
+ *
+ *  The auto-on-drift path (welcome.ts `backupExtractedDir`) RENAMES,
+ *  because it is about to delete the tree anyway. The manual re-extract
+ *  command cannot: it diffs the extracted tree file-by-file and trashes
+ *  only what drifted, so the tree has to still be there. It copies
+ *  instead. Both end at the same invariant — exactly one backup dir per
+ *  vault, holding the pre-re-extract state.
+ *
+ *  Best-effort: a failed backup must not block the re-extract the user
+ *  asked for, so failures log and carry on. */
+async function snapshotToRollingBackup(
+  adapter: DataAdapter,
+  extractedRoot: string,
+): Promise<void> {
+  try {
+    let folders: string[] = [];
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const root = await (adapter as any).list?.('/');
+      folders = root?.folders ?? [];
+    } catch (e) {
+      console.error('snapshotToRollingBackup: vault root list failed', e);
+    }
+    const plan = planRollingBackup(extractedRoot, folders);
+    if (plan.removeExistingFirst) {
+      await adapter.rmdir(plan.backupDir, true);
+    }
+    await copyDirRecursive(adapter, extractedRoot, plan.backupDir);
+    console.log(`Forge: ${extractedRoot} → ${plan.backupDir} (rolling backup)`);
+  } catch (e) {
+    console.error('snapshotToRollingBackup failed; re-extract continues', e);
+  }
 }
 
 /** v0.2.221 — copyBundledOverlay: like copyDirRecursive but tolerant of
