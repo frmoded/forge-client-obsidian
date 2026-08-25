@@ -472,7 +472,19 @@ async function main() {
   // All assets — Pyodide + engine + iframe + vaults. Raw file copy
   // (binary contents pass through unchanged at zlib level 9, which
   // doesn't shrink already-zipped wheels but doesn't hurt either).
-  archive.directory(path.join(ROOT, "assets"), `${PLUGIN_DIR_NAME}/assets`);
+  //
+  // Drain 2026-08-25-0140 — FILTERED, and the bug it closes is worth
+  // stating. This was a raw `archive.directory(...)` with no filter,
+  // while `isExcludedName` governed only the bundle SYNC and the drift
+  // CHECK. So the policy that says "`.forge/` never ships" was enforced
+  // on the two paths that don't ship anything, and not on the one that
+  // does: two `create_water_particles` edge snapshots (44 KB of one
+  // user's runtime records) were in every release zip through v0.2.368.
+  //
+  // Verified before landing: `.forge` is the ONLY thing under assets/
+  // that this filter drops, so the shipped tree is otherwise unchanged.
+  archive.directory(path.join(ROOT, "assets"), `${PLUGIN_DIR_NAME}/assets`,
+    (entry) => (vaultIsInScope(entry.name) ? entry : false));
 
   await archive.finalize();
   await finalized;
