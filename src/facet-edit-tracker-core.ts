@@ -34,10 +34,12 @@ export interface FacetHashes {
  *  Returns:
  *    - `null` when cached is null (no baseline) or nothing changed.
  *    - The facet name when exactly one facet's hash differs.
- *    - Upstream-most changed facet when multiple differ (rare —
- *      multi-facet edits between two modify events, e.g., a paste
- *      that spans facets). Upstream matches the "external rewrite
- *      preserved authored intent" default.
+ *    - Upstream-most CHANGED facet when multiple differ. The common
+ *      cause is not a human paste spanning facets but an EXTERNAL
+ *      REWRITE — `git restore`, `cp`, a sync tool — replacing the file
+ *      under the plugin. See the tiebreak comment in the body for what
+ *      that does and does not guarantee; in short, it cannot resolve
+ *      to 'python', but it does not always resolve to 'description'.
  *
  *  This function does NOT read stored_hash. It only considers what
  *  changed since we last observed the file body.
@@ -58,11 +60,31 @@ export function identifyEditedFacet(
   // downstream-wins wrongly attributed them to a Python edit and
   // flipped source_facet: python. Description + Recipe subsequently
   // rendered `— ignored` and L45 short-circuited through the Python
-  // facet even when cohort didn't Python-edit. Upstream-wins
-  // ('description') is the safer default: Description-authored intent
-  // survives external rewrites unless single-facet evidence proves
-  // otherwise. Single-facet cases unaffected — `changed[0]` equals
-  // `changed[length-1]` when only one facet moved.
+  // facet even when cohort didn't Python-edit. Single-facet cases are
+  // unaffected — `changed[0]` equals `changed[length-1]` when only one
+  // facet moved.
+  //
+  // WHAT THIS ACTUALLY GUARANTEES (drain 2026-08-25-1000, correcting
+  // an overstatement that stood here). This is upstream-most CHANGED,
+  // not upstream-most. The old wording — "Description-authored intent
+  // survives external rewrites" — is true only when the rewrite also
+  // touched the Description. When a rewrite moves Recipe and Python
+  // but leaves Description alone, this returns 'recipe' and the note's
+  // `source_facet` flips description → recipe.
+  //
+  // That is not hypothetical: it is exactly what a `git restore` of a
+  // note carrying machine write-back does, and it happened to
+  // forge-tutorial's cheer.md during drain 0130. Reproduced against
+  // these functions in `source-facet-external-rewrite.test.ts`.
+  //
+  // The guarantee that DOES hold, and the one CW-1800 was really
+  // bought for: **a multi-facet change can never resolve to 'python'**,
+  // because Description and Recipe both precede it in `changed`. That
+  // matters more since drain 0110, which made the ENGINE route on
+  // `source_facet` — so 'python' is the one value an unprompted flip
+  // could use to change which code executes. It is unreachable here
+  // unless Python is the sole facet that moved, i.e. a real, targeted
+  // Python edit.
   return changed[0];
 }
 
