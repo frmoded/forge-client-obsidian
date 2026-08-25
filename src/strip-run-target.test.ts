@@ -35,12 +35,26 @@ function mainSrc(): string {
 test('(a) the strip run binds to the displayed note, not the active leaf', () => {
   const src = mainSrc();
   const cb = src.split('run: (snippetId, kwargs, raw) => {')[1] ?? '';
-  const body = cb.slice(0, 1400);
+  // Widened at drain 2026-08-25-1030. The body carries a lot of
+  // comment now; take enough of it to reach the code.
+  const body = cb.slice(0, 3000);
   assert.ok(
     !/this\.runSnippet\(\s*'Forge failed during execution',\s*undefined,\s*undefined,/.test(body),
     'the strip run still passes no target file — it will re-derive the active leaf',
   );
-  assert.match(body, /stripRunTarget|fileForSnippetId/, body);
+  // Drain 2026-08-25-1030 — this used to read
+  // `/stripRunTarget|fileForSnippetId/`, i.e. it asserted the SPELLING
+  // of the resolver rather than the property. When 1030 replaced the
+  // id-only lookup with `resolveStripRunFile` (a strictly better answer
+  // to the same question), this guard failed for a change that fixed
+  // the very bug it exists to prevent.
+  //
+  // That is the "a guard asserts the PROPERTY, never the current
+  // spelling of it" rule, and this guard was a counterexample to it.
+  // The property is: the callback resolves a concrete target and passes
+  // it to runSnippet. Assert that.
+  assert.match(body, /const target =/, body);
+  assert.match(body, /this\.runSnippet\([^)]*target/s, body);
 });
 
 test('(a) non-vacuity: the extractor found the run callback', () => {

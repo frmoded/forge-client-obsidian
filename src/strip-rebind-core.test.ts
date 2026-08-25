@@ -183,3 +183,51 @@ test('main.ts drives the catalog from the shared constant', () => {
     'the inline two-domain list must be gone',
   );
 });
+
+// ---------------------------------------------------------------
+// Drain 2026-08-25-1030 — the SECOND grey-out mechanism, which 0100
+// did not touch and which the driver still hit on v0.2.369.
+//
+// `getOutputView()`'s `withStrip` calls `refreshForgePanelStrip()` with
+// NO arguments, on every run, so the panel opened by a run already
+// shows that note's inputs. `shouldRebindStrip` deliberately lets a
+// no-argument call through (`!leafGiven` → rebind) — but the rebind
+// then re-queries `getActiveViewOfType(MarkdownView)`, and by that
+// point the user has clicked a button inside the PANEL, so the query
+// returns null, the strip binds nothing, and it falls to `stale`:
+// dimmed, disabled, captioned "The open note is not an action note"
+// about a note that is one.
+//
+// 0100 fixed the leaf-change route to that same end state. This is the
+// panel-open route to it. Two mechanisms, one symptom — which is why
+// the fix verified in the published bundle did not stop the report.
+//
+// The rule: an OPPORTUNISTIC refresh (no leaf, no file — nobody told
+// us anything changed) may BIND the strip, but must never UNBIND it.
+// Only an event that actually names a leaf or a file is allowed to
+// take the strip's binding away.
+// ---------------------------------------------------------------
+
+import { isOpportunisticRefresh } from './strip-rebind-core.ts';
+
+test('a no-argument refresh is opportunistic — it may bind but never unbind', () => {
+  assert.equal(isOpportunisticRefresh({ leafGiven: false, fileGiven: false }), true);
+});
+
+test('an event that names a leaf or a file is authoritative and MAY unbind', () => {
+  // CCQA check 2: switching to a markdown leaf holding a non-action
+  // note must still grey the strip. That path names a leaf, so it is
+  // never opportunistic and this guard cannot suppress it.
+  assert.equal(isOpportunisticRefresh({ leafGiven: true, fileGiven: false }), false);
+  assert.equal(isOpportunisticRefresh({ leafGiven: false, fileGiven: true }), false);
+  assert.equal(isOpportunisticRefresh({ leafGiven: true, fileGiven: true }), false);
+});
+
+test('the two guards compose: a no-arg refresh still REBINDS, it just cannot clear', () => {
+  // Non-vacuity for the pair. If `shouldRebindStrip` ever started
+  // rejecting no-arg calls, the panel-opened-by-a-run case would stop
+  // showing inputs at all and this test would catch the overcorrection.
+  const ev = { leafGiven: false, leafIsMarkdown: false, fileGiven: false };
+  assert.equal(shouldRebindStrip(ev), true, 'must still attempt the bind');
+  assert.equal(isOpportunisticRefresh(ev), true, 'but a null result must not clear');
+});

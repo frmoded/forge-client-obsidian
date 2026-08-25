@@ -17,7 +17,7 @@ import {
 } from './chip-inventory-core.ts';
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
-import { shouldRebindStrip } from './strip-rebind-core.ts';
+import { shouldRebindStrip, isOpportunisticRefresh } from './strip-rebind-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
@@ -148,6 +148,7 @@ import {
 } from './re-extract-bundled-vault-modal.ts';
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
 import { planRollingBackup } from './rolling-backup-core.ts';
+import { resolveStripRunFile } from './strip-run-file-core.ts';
 import { isReservedDirName } from './vault-mount-exclusions-core.ts';
 import { copyDirRecursive } from './copy-dir-core.ts';
 import { discardThenDetach } from './leaf-discard-before-detach-core.ts';
@@ -5598,6 +5599,11 @@ export default class ForgePlugin extends Plugin {
    *  identity check makes re-wiring free. */
   private stripHostSingleton: ForgeStripHost | null = null;
 
+  /** Drain 2026-08-25-1030 — the file the strip actually bound to.
+   *  Kept so the Run button never has to reconstruct it from the
+   *  snippet id, which is a lossy projection of the path. */
+  private _stripBoundFile: TFile | null = null;
+
   private wireStripHost(view: ForgeOutputView) {
     this.stripHostSingleton ??= {
       run: (snippetId, kwargs, raw) => {
@@ -5618,11 +5624,29 @@ export default class ForgePlugin extends Plugin {
         // Path lookup, not basename (the snippet-id HARD RULE): a
         // library-subdir note's id is qualified and basename matching
         // silently returns undefined for it.
-        const target = this.fileForSnippetId(snippetId);
+        // Drain 2026-08-25-1030 — the id lookup ALONE was not enough,
+        // and this is the fourth instance of the class the comment
+        // above names three of. `snippetIdFromPath` keeps only the
+        // BASENAME for a note in a non-library subfolder (any folder
+        // without a forge.toml — any folder a cohort member makes), so
+        // `<id>.md` from the vault root misses, fallbackFile went
+        // undefined, and runSnippet re-queried a workspace whose active
+        // leaf is the panel: "No active note to run." Library-subdir
+        // notes keep a qualified id and round-trip, which is exactly
+        // why CCQA's check 2 was green while the driver's smoke vault
+        // failed. The strip already HELD the file when it bound; use it.
+        const target = resolveStripRunFile(
+          snippetId,
+          this._stripBoundFile,
+          (p) => {
+            const f = this.app.vault.getAbstractFileByPath(p);
+            return f instanceof TFile ? f : null;
+          },
+        );
         if (!target) {
           console.error(
-            `strip run: no file for snippet id ${snippetId} — the strip is `
-            + `displaying a note the vault cannot resolve.`);
+            `strip run: no file for snippet id ${snippetId} — neither the `
+            + `strip's bound file nor '${snippetId}.md' resolves in this vault.`);
         }
         const op = () => this.runSnippet(
           'Forge failed during execution', undefined, target ?? undefined, kwargs);
@@ -5699,7 +5723,21 @@ export default class ForgePlugin extends Plugin {
       // happened to be kinder.
       const eventFile = file
         ?? (leaf?.view instanceof MarkdownView ? leaf.view.file : null);
-      view.showNoteInputs(await this.activeStripNote(eventFile));
+      const note = await this.activeStripNote(eventFile);
+      // Drain 2026-08-25-1030 — an opportunistic refresh (nobody named
+      // a leaf or a file; `getOutputView` just re-checks on every run)
+      // may BIND the strip but must never UNBIND it. It re-queries the
+      // workspace, and after a click inside the panel that query finds
+      // no markdown view — which greyed the strip out on v0.2.369 even
+      // with 0100's leaf-change guard in place. Two roads, one dead
+      // end. An event that names a leaf or a file is still authoritative
+      // and still greys (CCQA check 2).
+      if (note === null && isOpportunisticRefresh({
+        leafGiven: leaf !== undefined && leaf !== null,
+        fileGiven: file !== undefined && file !== null,
+      })) return;
+      this._stripBoundFile = note ? (eventFile ?? this._stripBoundFile) : null;
+      view.showNoteInputs(note);
     } catch (e) {
       // A strip that throws must not take the panel with it.
       console.error('refreshForgePanelStrip failed', e);
