@@ -17,6 +17,7 @@ import {
 } from './chip-inventory-core.ts';
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
+import { shouldRebindStrip } from './strip-rebind-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
@@ -183,7 +184,7 @@ import { slotHighlightViewPlugin } from './slot-highlight-view-plugin.ts';
 import { staleFacetViewPlugin } from './stale-facet-view-plugin.ts';
 import { ConfirmModal } from './confirm-modal.ts';
 import { RewriteSuggestionModal } from './rewrite-suggestion-modal.ts';
-import {
+import { ENGINE_LIB_DOMAINS,
   parseEngineLib,
   buildLibraryNoteIndex,
   type LibraryNote,
@@ -3088,7 +3089,11 @@ export default class ForgePlugin extends Plugin {
    *  to prevent stray `print.md` notes).
    */
   private async loadLibraryNoteCatalog(): Promise<void> {
-    const domains = ['music', 'moda'];
+    // Drain 2026-08-25-0100 — the domain list moved to
+    // ENGINE_LIB_DOMAINS and gained `core`. It was inline here as
+    // ['music', 'moda'], which is how random_float, nth, pick_indices
+    // and mcq stayed out of the model's vocabulary.
+    const domains = ENGINE_LIB_DOMAINS;
     const perDomain: Record<string, LibraryNote[]> = {};
     for (const domain of domains) {
       const path = `${this.manifest.dir}/assets/engine/forge/${domain}/lib.py`;
@@ -5657,6 +5662,21 @@ export default class ForgePlugin extends Plugin {
     const view = this.existingOutputView();
     if (!view) return;
     this.wireStripHost(view);
+    // Drain 2026-08-25-0100 — a leaf change onto something that is not
+    // a markdown leaf is not a note switch. Clicking the panel's own
+    // Run button focuses the PANEL leaf, which used to leave the strip
+    // with nothing to bind to: it fell to `stale`, dimmed itself, and
+    // captioned "The open note is not an action note" about a note
+    // that is one. Measured: the first run still dispatched, but the
+    // strip then refused a second one.
+    //
+    // Leaf TYPE only. A markdown leaf holding a non-action note still
+    // greys — that is CCQA check-2 behaviour and stays.
+    if (!shouldRebindStrip({
+      leafGiven: leaf !== undefined && leaf !== null,
+      leafIsMarkdown: leaf?.view instanceof MarkdownView,
+      fileGiven: file !== undefined && file !== null,
+    })) return;
     try {
       // Drain 2026-08-24-1610 — prefer the file the EVENT handed us.
       // `active-leaf-change` fires before the workspace's active-view

@@ -44,6 +44,24 @@ export interface LibraryNote {
  *    indent is `> 0` (or blank) belongs to the def block; the next
  *    line at indent 0 ends it.
  */
+/** Drain 2026-08-25-0100 — the engine domains whose `lib.py` becomes
+ *  the chip catalog. ONE definition, because the list being inline in
+ *  main.ts is exactly how `core` went missing.
+ *
+ *  `core` was absent until this drain, and the omission was invisible
+ *  while the catalog only powered Cmd-click and the palette: nobody
+ *  misses a chip they were not looking for. Drain 1000 then made this
+ *  same index the model's GENERATION VOCABULARY and, because the
+ *  service treats a supplied inventory as authoritative, its gaps
+ *  became the model's gaps. The driver's `random_2` transcript is that
+ *  bill arriving: `# missing chip: random_float`, for a chip the
+ *  engine and the service both ship.
+ *
+ *  `tutorial` is still absent and still correct: it has no `lib.py`.
+ *  Its chips are Python builtins like `print`, handled by the
+ *  python-builtins path. */
+export const ENGINE_LIB_DOMAINS = ['core', 'music', 'moda'] as const;
+
 export function parseEngineLib(source: string): LibraryNote[] {
   const lines = source.split('\n');
   const chips: LibraryNote[] = [];
