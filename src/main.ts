@@ -18,7 +18,7 @@ import {
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
 import { shouldRebindStrip, isOpportunisticRefresh } from './strip-rebind-core.ts';
-import { shouldBlindRetry, attemptSuffix } from './blind-retry-core.ts';
+import { shouldBlindRetry, attemptPrefix } from './blind-retry-core.ts';
 import type { GenerateVerdict } from './blind-retry-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
@@ -2768,7 +2768,7 @@ export default class ForgePlugin extends Plugin {
                 });
               } catch { /* panel unavailable; toast alone still fires */ }
               this.notice(
-                `${NOTICE_PREFIX}${freeIdentifierRejectionMessage(freeVars)}${attemptSuffix(attempt)} See Forge panel.`,
+                `${NOTICE_PREFIX}${attemptPrefix(attempt)}${freeIdentifierRejectionMessage(freeVars)} See Forge panel.`,
               );
             } else if (!hasValidStmt) {
               // CW-2200: LLM returned prose / missing-chip explanation,
@@ -2827,7 +2827,7 @@ export default class ForgePlugin extends Plugin {
                 .map((id) => `[[${id}]]`)
                 .join(', ');
               this.notice(
-                `${NOTICE_PREFIX}/generate produced a Recipe referencing ${unresolvedList}${attemptSuffix(attempt)} — see Forge panel for guidance. Running prior Recipe.`,
+                `${NOTICE_PREFIX}${attemptPrefix(attempt)}/generate produced a Recipe referencing ${unresolvedList} — see Forge panel for guidance. Running prior Recipe.`,
               );
             }
           }

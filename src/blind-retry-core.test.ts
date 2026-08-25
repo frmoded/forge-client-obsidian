@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { shouldBlindRetry, attemptSuffix } from './blind-retry-core.ts';
+import { shouldBlindRetry, attemptPrefix } from './blind-retry-core.ts';
 
 test('the two wobble verdicts get exactly one silent retry', () => {
   assert.equal(shouldBlindRetry(1, 'free-variable-fail'), true);
@@ -32,7 +32,14 @@ test('verdicts a second roll cannot help are not retried', () => {
   assert.equal(shouldBlindRetry(1, 'call-failed'), false);
 });
 
-test('the notice says "after 2 attempts" only once a retry was spent', () => {
-  assert.equal(attemptSuffix(1), '');
-  assert.equal(attemptSuffix(2), ' (after 2 attempts)');
+test('1800 §2: the attempt marker leads the notice so a trim cannot eat it', () => {
+  assert.equal(attemptPrefix(1), '', 'a single unremarkable roll needs no marker');
+  assert.equal(attemptPrefix(2), '(attempt 2 of 2) ');
+  // The whole point: it must sit at the FRONT. A reader who quotes only
+  // the first few words still carries it.
+  const notice = `Forge: ${attemptPrefix(2)}The generated Recipe uses \`scale\` without declaring it. And several more sentences follow.`;
+  assert.ok(notice.startsWith('Forge: (attempt 2 of 2) '),
+    'the marker must precede the message body, not trail it');
+  assert.ok(notice.slice(0, 40).includes('attempt 2 of 2'),
+    'it must survive a 40-character trim — the failure mode drain 1710 hit');
 });

@@ -62,8 +62,24 @@ export function shouldBlindRetry(
   return verdict === 'free-variable-fail' || verdict === 'closure-fail';
 }
 
-/** The user-facing suffix once a retry has been spent, so the notice
- *  does not imply a single unlucky roll. Empty on the first attempt. */
-export function attemptSuffix(attempt: number): string {
-  return attempt >= 2 ? ' (after 2 attempts)' : '';
+/** The user-facing attempt marker, rendered at the FRONT of a notice.
+ *
+ *  Drain 2026-08-25-1800 §2 — moved from a trailing suffix to a
+ *  leading prefix, and the reason is a real failure of the old shape.
+ *
+ *  As a suffix it landed at the END of a multi-sentence rejection
+ *  message. When the driver pasted that notice into a report, the
+ *  paste was elided at the first sentence — exactly where a human
+ *  naturally trims — and the marker went with it. Drain 1710 then read
+ *  the absence of the marker as proof the retry never fired, which the
+ *  bytes did not support.
+ *
+ *  THE LESSON, worth more than the string: a diagnostic that only
+ *  matters when a human relays it must survive being relayed. Put it
+ *  where a trim cannot reach.
+ *
+ *  Empty on the first attempt — an unremarkable single roll needs no
+ *  marker. */
+export function attemptPrefix(attempt: number): string {
+  return attempt >= 2 ? '(attempt 2 of 2) ' : '';
 }
