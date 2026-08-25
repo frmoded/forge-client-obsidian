@@ -18,6 +18,8 @@ import {
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
 import { shouldRebindStrip, isOpportunisticRefresh } from './strip-rebind-core.ts';
+import { shouldBlindRetry, attemptSuffix } from './blind-retry-core.ts';
+import type { GenerateVerdict } from './blind-retry-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
@@ -2598,9 +2600,23 @@ export default class ForgePlugin extends Plugin {
           this.spinner.startImmediate(prefixed('🔥 generating Recipe from Description …'));
         }
         try {
+          // Drain 2026-08-25-1020 §2 — one BLIND retry before a wobble
+          // reaches a human. The belt is right to reject an undeclared
+          // free name; what the cohort should not get is a notice
+          // telling them to click again for something a second
+          // identical call usually fixes. Blind because feeding the
+          // violation back needs a service channel that does not exist
+          // (2310's `generation_notes` blocker is still real); a
+          // re-roll needs nothing new.
+          let attempt = 0;
+          let retryVerdict: GenerateVerdict = 'ok';
+          do {
+          attempt += 1;
+          retryVerdict = 'ok';
           const llmRecipe = await this._llmGenerateRecipe(
             'Forge failed during Recipe generation',
           );
+          if (llmRecipe === null) retryVerdict = 'call-failed';
           if (llmRecipe !== null) {
             // Chip-palette closure check: every [[wikilink]] in the LLM
             // Recipe must resolve to a known snippet. On failure, DO
@@ -2734,8 +2750,12 @@ export default class ForgePlugin extends Plugin {
               // preserved, panel is the load-bearing surface, toast is
               // redundancy. Same family of failure, so the same UX.
               console.warn(
-                `free-variable fail: generated Recipe references undeclared ${freeVars.join(', ')}`,
+                `free-variable fail (attempt ${attempt}): generated Recipe references undeclared ${freeVars.join(', ')}`,
               );
+              if (shouldBlindRetry(attempt, 'free-variable-fail')) {
+                retryVerdict = 'free-variable-fail';
+                continue;
+              }
               try {
                 const outputView = await this.getOutputView();
                 outputView.appendLlmRecipeRejection(file.basename, {
@@ -2747,7 +2767,7 @@ export default class ForgePlugin extends Plugin {
                 });
               } catch { /* panel unavailable; toast alone still fires */ }
               this.notice(
-                `${NOTICE_PREFIX}${freeIdentifierRejectionMessage(freeVars)} See Forge panel.`,
+                `${NOTICE_PREFIX}${freeIdentifierRejectionMessage(freeVars)}${attemptSuffix(attempt)} See Forge panel.`,
               );
             } else if (!hasValidStmt) {
               // CW-2200: LLM returned prose / missing-chip explanation,
@@ -2781,8 +2801,12 @@ export default class ForgePlugin extends Plugin {
                 ? closure.unresolved
                 : [];
               console.warn(
-                `CW-2000 closure fail: unresolved wikilinks in LLM Recipe: ${unresolvedRaw.join(', ') || '(closure ok)'}`,
+                `CW-2000 closure fail (attempt ${attempt}): unresolved wikilinks in LLM Recipe: ${unresolvedRaw.join(', ') || '(closure ok)'}`,
               );
+              if (shouldBlindRetry(attempt, 'closure-fail')) {
+                retryVerdict = 'closure-fail';
+                continue;
+              }
               try {
                 const outputView = await this.getOutputView();
                 outputView.appendLlmRecipeRejection(file.basename, {
@@ -2802,10 +2826,11 @@ export default class ForgePlugin extends Plugin {
                 .map((id) => `[[${id}]]`)
                 .join(', ');
               this.notice(
-                `${NOTICE_PREFIX}/generate produced a Recipe referencing ${unresolvedList} — see Forge panel for guidance. Running prior Recipe.`,
+                `${NOTICE_PREFIX}/generate produced a Recipe referencing ${unresolvedList}${attemptSuffix(attempt)} — see Forge panel for guidance. Running prior Recipe.`,
               );
             }
           }
+          } while (shouldBlindRetry(attempt, retryVerdict));
           // Always continue: transpile current Recipe → Python + run.
           // Preserves runSnippet UX even when LLM Recipe failed (cohort
           // still hears output from prior Recipe → prior Python path).
