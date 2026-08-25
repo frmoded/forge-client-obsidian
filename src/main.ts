@@ -149,6 +149,7 @@ import {
   BUNDLED_VAULT_NAMES,
 } from './re-extract-bundled-vault-modal.ts';
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
+import { stripPlaceholderLines } from './description-placeholder-core.ts';
 import { planRollingBackup } from './rolling-backup-core.ts';
 import { resolveStripRunFile } from './strip-run-file-core.ts';
 import { isReservedDirName } from './vault-mount-exclusions-core.ts';
@@ -3709,7 +3710,15 @@ export default class ForgePlugin extends Plugin {
         const callablesForThisRun = await this.buildGenerateCallables(snippetId);
         payload = {
           snippet_id: inv.snippet_id,
-          description: inv.description,
+          // Drain 2026-08-25-1630 §3 — strip the authoring hint's lines
+          // when the Description also carries real content. The cohort
+          // move is to APPEND under the placeholder rather than replace
+          // it, and the hint then travels to /generate as if it were
+          // part of the spec — the model is handed "Describe what this
+          // note should do" alongside the thing it is meant to build.
+          // Placeholder-alone still resolves to empty, so the
+          // is-this-note-still-blank callers are unaffected.
+          description: stripPlaceholderLines(inv.description),
           english: inv.english,
           inputs: inv.inputs,
           generation_notes: inv.generation_notes,
@@ -3895,7 +3904,15 @@ export default class ForgePlugin extends Plugin {
         const callablesForThisRun = await this.buildGenerateCallables(snippetId);
         payload = {
           snippet_id: inv.snippet_id,
-          description: inv.description,
+          // Drain 2026-08-25-1630 §3 — strip the authoring hint's lines
+          // when the Description also carries real content. The cohort
+          // move is to APPEND under the placeholder rather than replace
+          // it, and the hint then travels to /generate as if it were
+          // part of the spec — the model is handed "Describe what this
+          // note should do" alongside the thing it is meant to build.
+          // Placeholder-alone still resolves to empty, so the
+          // is-this-note-still-blank callers are unaffected.
+          description: stripPlaceholderLines(inv.description),
           english: inv.english,
           inputs: inv.inputs,
           generation_notes: inv.generation_notes,

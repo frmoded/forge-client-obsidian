@@ -51,3 +51,33 @@ export const DESCRIPTION_PLACEHOLDER = [
 export function isDescriptionPlaceholder(description: string): boolean {
   return description.trim() === DESCRIPTION_PLACEHOLDER.trim();
 }
+
+/** Drain 2026-08-25-1630 §3 — remove placeholder LINES from a
+ *  Description that also carries real content.
+ *
+ *  `isDescriptionPlaceholder` above is whole-body exact match, which
+ *  is right for "is this note still empty?". It is not enough for the
+ *  payload: the natural cohort move is to APPEND a real sentence under
+ *  the hint rather than replace it, and then the meta-instruction
+ *  travels to /generate as if it were part of the spec. The model is
+ *  handed "Describe what this note should do" alongside the thing it
+ *  is actually meant to build.
+ *
+ *  ONE FACT: the lines come from DESCRIPTION_PLACEHOLDER, the same
+ *  constant the recognizer uses. No second copy of the hint text.
+ *
+ *  EXACT-LINE match, not prefix or substring — a cohort sentence that
+ *  merely begins like the hint is real prose and must survive. Pinned
+ *  by a non-vacuity test.
+ *
+ *  Placeholder-alone still resolves to empty, exactly as today, so the
+ *  "is this note still empty?" callers are unaffected. */
+export function stripPlaceholderLines(description: string): string {
+  const hintLines = new Set(
+    DESCRIPTION_PLACEHOLDER.split('\n').map(l => l.trim()).filter(Boolean),
+  );
+  const kept = description
+    .split('\n')
+    .filter(line => !hintLines.has(line.trim()));
+  return kept.join('\n').trim();
+}

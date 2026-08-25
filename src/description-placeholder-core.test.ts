@@ -116,3 +116,56 @@ test('the generate guard does not fall through to the YAML description', () => {
   assert.match(head, /description = ""/);
   assert.match(head, /elif not description:/);
 });
+
+// ---------------------------------------------------------------
+// Drain 2026-08-25-1630 §3 — the placeholder LINE riding a real
+// Description.
+//
+// `isDescriptionPlaceholder` is exact-match by design, so it only
+// fires when the hint is the WHOLE body. But the natural cohort move
+// is to APPEND under the hint rather than replace it — which is
+// exactly what the driver did — and then the meta-instruction
+// ("Describe what this note should do…") ships inside the /generate
+// payload as if it were part of the spec.
+//
+// NOTE ON THE HYPOTHESIS: the prompt offered this as the likely
+// payload delta behind the 1020 non-reproduction. I probed it live
+// before writing this and it is NOT confirmed — 6/6 declared with the
+// placeholder prepended and 6/6 without. The strip is still correct
+// (meta-instructions are not spec), it is just not the wobble's cause.
+// ---------------------------------------------------------------
+
+import { stripPlaceholderLines } from './description-placeholder-core.ts';
+
+test('1630: the placeholder lines are stripped when real content follows', () => {
+  const body = `${DESCRIPTION_PLACEHOLDER}\n\nPrint a random number between 0 and 6 multiplied by an input var scale`;
+  assert.equal(
+    stripPlaceholderLines(body),
+    'Print a random number between 0 and 6 multiplied by an input var scale',
+  );
+});
+
+test('1630: placeholder ALONE still resolves to empty, as today', () => {
+  assert.equal(stripPlaceholderLines(DESCRIPTION_PLACEHOLDER), '');
+  assert.equal(stripPlaceholderLines(`  ${DESCRIPTION_PLACEHOLDER}  `), '');
+});
+
+test('1630: a Description with no placeholder is returned untouched', () => {
+  const real = 'Print a random number between 0 and 6 multiplied by an input var scale';
+  assert.equal(stripPlaceholderLines(real), real);
+  assert.equal(stripPlaceholderLines('Line one.\nLine two.'), 'Line one.\nLine two.');
+});
+
+test('1630: only EXACT placeholder lines go — prose that merely resembles them stays', () => {
+  // Non-vacuity for the line matcher: it must not eat a sentence that
+  // happens to start the same way. Cohort prose is not disposable.
+  const near = 'Describe what this note should do, in plain English, for a beginner.';
+  assert.equal(stripPlaceholderLines(near), near);
+});
+
+test('1630: a single placeholder line among real content is removed', () => {
+  // The hint is three lines; a cohort member may delete some and keep
+  // others. Each line is matched independently.
+  const body = 'Do the thing.\nForge turns this into a runnable Recipe with typed inputs.\nAnd then stop.';
+  assert.equal(stripPlaceholderLines(body), 'Do the thing.\nAnd then stop.');
+});
