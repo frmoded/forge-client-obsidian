@@ -51,6 +51,21 @@ The output changes to match.
 That's the loop you'll use for the whole tutorial: **change one thing, run it,
 see what happened.**
 
+## One more experiment
+
+Earlier this chapter said the note has two parts that matter *here*. There's
+a third: above the Recipe, under the *Description* heading, is a sentence in
+plain English. The **hammer** button asks an AI to re-derive the Recipe from
+those words — change a word there and press it.
+
+Notice the Recipe may **snap to something new** rather than change slightly:
+your prose is interpreted, not copied. When you want an exact string, say it
+in the Recipe — that layer does exactly what it says.
+
+> **Putting it back:** the hammer overwrites the one-line Recipe you just
+> read. When you're done experimenting, type `Return "hello, world".` back
+> into the Recipe. That layer is yours to write by hand, always.
+
 ## Palette focus
 
 The chip palette on the right shows every construct available. In this chapter
