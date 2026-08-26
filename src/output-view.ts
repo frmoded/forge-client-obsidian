@@ -1099,6 +1099,8 @@ export class ForgeOutputView extends ItemView {
       undeclaredNames?: readonly string[];
       // Drain 2026-08-26-1000 — populated for 'cycle-fail'.
       cyclicCallees?: readonly string[];
+      // Drain 2026-08-26-1020 — populated for 'recursion-shape-fail'.
+      recursionFailure?: 'no-base-case' | 'no-progress' | 'both';
       llmRawOutput: string;
       descriptionBody: string;
       // Drain 2026-08-24-2360 — lets the guidance recognise a
@@ -1112,6 +1114,7 @@ export class ForgeOutputView extends ItemView {
       unresolvedWikilinks: input.unresolvedWikilinks,
       undeclaredNames: input.undeclaredNames,
       cyclicCallees: input.cyclicCallees,
+      recursionFailure: input.recursionFailure,
       descriptionBody: input.descriptionBody,
       targetSnippetId: input.targetSnippetId,
     });

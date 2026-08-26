@@ -36,8 +36,16 @@ import { backfillV113Shape } from './v11-3-backfill-core.ts';
 import { friendlyRecipeParseError } from './recipe-parse-error-friendly.ts';
 import { classifyForgeError, forgeErrorFromGenerateRefusal } from './forge-error-core.ts';
 import type { CallableEntry } from './callable-inventory-core.ts';
-import { buildCallableInventory, callableNamesFrom } from './callable-inventory-core.ts';
-import { excludeSelf } from './exclude-self-from-inventory-core.ts';
+import {
+  buildCallableInventory,
+  callableNamesFrom,
+  labelSelfInInventory,
+} from './callable-inventory-core.ts';
+import {
+  checkRecursionShape,
+  selfReferenceLabel,
+  recursionShapeRejectionMessage,
+} from './recursion-shape-core.ts';
 import type { VaultNoteInput } from './callable-inventory-core.ts';
 import {
   extractPythonSection,
@@ -2817,6 +2825,17 @@ export default class ForgePlugin extends Plugin {
                 )
               : [];
             const noCycles = cycles.length === 0;
+            // Drain 2026-08-26-1020 (§2) — the shape gate. Self is a
+            // known id again (§1), so a self-call now passes the closure
+            // check; what decides it is STRUCTURE. Recursion with a base
+            // case and a progressing argument is accepted; a mirror
+            // (no guard, unchanged argument) is not. Reads only the
+            // generated text plus the target id, which is exactly why
+            // the SERVICE can own the corrective half of the same check.
+            const shape = (catalogReady && sanitized !== null)
+              ? checkRecursionShape(sanitized, cycleTargetId)
+              : { callsSelf: false, hasBaseCase: false, progresses: false, ok: true as const };
+            const shapeOk = shape.ok;
             // CW-description-edit-refresh-fix-with-diagnostic-logging
             // (drain 2026-07-22-2030) Phase 1 — Fork B instrumentation.
             // Emit the closure-check verdict + sanitize verdict + gate
@@ -2832,7 +2851,7 @@ export default class ForgePlugin extends Plugin {
                 hasValidStmt,
                 gatePasses: closure.ok === true && hasValidStmt },
             );
-            if (closure.ok === true && hasValidStmt && declaresItsInputs && noCycles) {
+            if (closure.ok === true && hasValidStmt && declaresItsInputs && noCycles && shapeOk) {
               const currentBody = await this.app.vault.read(file);
               const currentDesc = extractDescription(currentBody) ?? '';
               const currentDescHash = await computeFacetHash(currentDesc);
@@ -2878,6 +2897,35 @@ export default class ForgePlugin extends Plugin {
               } catch (e) {
                 console.error('CW-2000: MEMFS sync after Recipe write failed', e);
               }
+            } else if (hasValidStmt && declaresItsInputs && noCycles && !shapeOk) {
+              // Drain 2026-08-26-1020 (§2) — the shape gate's rejection.
+              // This REPLACES drain 2360's flat "it called itself"
+              // message: same UX, smarter criterion. 2360 rejected every
+              // self-call because self could not legitimately be called
+              // at all; now recursion is legal and only the mirror is
+              // refused, so the wording names WHICH half is missing.
+              //
+              // Not blind-retried, for 373's reason: the shape of the
+              // request has not changed between attempts, so a replay
+              // asks the same model the same thing.
+              console.warn(
+                `recursion-shape fail (attempt ${attempt}): ${shape.failure} `
+                + `on self-call in ${file.basename}`,
+              );
+              try {
+                const outputView = await this.getOutputView();
+                outputView.appendLlmRecipeRejection(file.basename, {
+                  failureMode: 'recursion-shape-fail',
+                  unresolvedWikilinks: [],
+                  recursionFailure: shape.failure,
+                  llmRawOutput: llmRecipe,
+                  descriptionBody: extractDescription(v2Body) ?? '',
+                });
+              } catch { /* panel unavailable; toast alone still fires */ }
+              this.notice(
+                `${NOTICE_PREFIX}${attemptPrefix(attempt)}`
+                + `${recursionShapeRejectionMessage(shape, file.basename)} See Forge panel.`,
+              );
             } else if (hasValidStmt && declaresItsInputs && !noCycles) {
               // Drain 2026-08-26-1000 — the one-hop cycle belt's
               // rejection. Same treatment as its two siblings: prior
@@ -2980,11 +3028,20 @@ export default class ForgePlugin extends Plugin {
                   unresolvedWikilinks: unresolvedRaw,
                   llmRawOutput: llmRecipe,
                   descriptionBody: extractDescription(v2Body) ?? '',
-                  // Drain 2026-08-24-2360 — excludeSelf keeps the note
-                  // out of its own inventory, so a generated self-call
-                  // arrives here as "unresolved". Without this the
-                  // panel would tell the cohort that the note open in
-                  // front of them is not registered.
+                  // Drain 2026-08-24-2360 — a generated self-call used
+                  // to arrive here as "unresolved" because the note was
+                  // excluded from its own inventory. Drain 1020 put it
+                  // back (labeled), so the COMMON path is now the shape
+                  // gate, not this one.
+                  //
+                  // Still reachable, and still needed: the label only
+                  // lands if the target is in the vault-notes list at
+                  // all. A note the registry has not indexed yet — a
+                  // freshly created one, or one whose `type` is not
+                  // `action` — is absent from the inventory, so a
+                  // self-call to it is genuinely unresolved. Without
+                  // this the panel would tell the cohort that the note
+                  // open in front of them is not registered.
                   targetSnippetId: snippetIdFromPath(file.path, this.libraryDirNames()),
                 });
               } catch { /* panel unavailable; toast alone still fires */ }
@@ -4273,7 +4330,19 @@ export default class ForgePlugin extends Plugin {
     // all stop seeing the self-name together. Filtering in a single
     // consumer would leave the other two disagreeing — the exact
     // failure drain 1000's one-object discipline exists to prevent.
-    return buildCallableInventory(excludeSelf(vaultNotes, targetSnippetId), chips);
+    // Drain 2026-08-26-1020 (§1) — the target is back IN its own
+    // inventory, labeled as itself. 2360's exclusion stopped the mirror
+    // and relocated the model's choice onto a sibling that called back
+    // (the 373 casualty); the mirror is now held out by SHAPE
+    // (recursion-shape-core), not by absence. Labeling at the one
+    // producer keeps drain 1000's one-object discipline: payload,
+    // closure accept-set and 2310's belt all see self as known again,
+    // together.
+    return labelSelfInInventory(
+      buildCallableInventory(vaultNotes, chips),
+      targetSnippetId,
+      selfReferenceLabel,
+    );
   }
 
   // Format the user-facing Notice for a non-2xx α /generate response.

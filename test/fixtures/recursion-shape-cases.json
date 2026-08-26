@@ -1,0 +1,95 @@
+{
+  "_README": [
+    "Shared-case corpus for the recursion SHAPE gate. Drain 2026-08-26-1020.",
+    "",
+    "The gate exists on BOTH sides of a language boundary: the client belt",
+    "in src/recursion-shape-core.ts (final rejection) and the service gate",
+    "in forge-transpile/recursion_shape.py (corrective turn). A shared",
+    "implementation is not available across TS and Python, so the sanctioned",
+    "shape is mirror-with-drift-test, and THIS FILE is the shared cases —",
+    "the same arrangement drain 1900 established for the free-identifier",
+    "belt.",
+    "",
+    "BOTH suites read THIS file. forge-transpile's test resolves it via",
+    "FORGE_CLIENT_REPO or the sibling checkout; when the client repo is",
+    "absent it says so rather than passing quietly."
+  ],
+  "cases": [
+    {
+      "name": "the driver's target: base case + progressing self-call",
+      "target": "factorial",
+      "recipe": "Input n: int = 5.\nIf n <= 1:\n  Return 1.\nLet rest = Call [[factorial]] with n=n - 1.\nReturn n * rest.",
+      "callsSelf": true, "hasBaseCase": true, "progresses": true, "ok": true
+    },
+    {
+      "name": "one-line guarded return counts as a base case",
+      "target": "factorial",
+      "recipe": "Input n: int = 5.\nIf n <= 1: Return 1.\nLet rest = Call [[factorial]] with n=n - 1.\nReturn n * rest.",
+      "callsSelf": true, "hasBaseCase": true, "progresses": true, "ok": true
+    },
+    {
+      "name": "the 2360 mirror: self-call, no guard, unchanged argument",
+      "target": "factorial",
+      "recipe": "Input n: int = 5.\nLet r = Call [[factorial]] with n=n.\nReturn r.",
+      "callsSelf": true, "hasBaseCase": false, "progresses": false, "ok": false,
+      "failure": "both"
+    },
+    {
+      "name": "self-call with no arguments at all is a mirror",
+      "target": "factorial",
+      "recipe": "Input n: int = 5.\nIf n <= 1:\n  Return 1.\nLet r = Call [[factorial]].\nReturn r.",
+      "callsSelf": true, "hasBaseCase": true, "progresses": false, "ok": false,
+      "failure": "no-progress"
+    },
+    {
+      "name": "progressing self-call but no base case never terminates",
+      "target": "factorial",
+      "recipe": "Input n: int = 5.\nLet rest = Call [[factorial]] with n=n - 1.\nReturn n * rest.",
+      "callsSelf": true, "hasBaseCase": false, "progresses": true, "ok": false,
+      "failure": "no-base-case"
+    },
+    {
+      "name": "a Recipe that never calls itself is not judged here",
+      "target": "factorial",
+      "recipe": "Input n: int = 5.\nLet r = Call [[random_float]].\nReturn r * n.",
+      "callsSelf": false, "hasBaseCase": false, "progresses": false, "ok": true
+    },
+    {
+      "name": "a qualified self-call is still a self-call",
+      "target": "forge-tutorial/08-recursion/factorial",
+      "recipe": "Input n: int = 5.\nIf n <= 1:\n  Return 1.\nLet rest = Call [[factorial]] with n=n - 1.\nReturn n * rest.",
+      "callsSelf": true, "hasBaseCase": true, "progresses": true, "ok": true
+    },
+    {
+      "name": "Otherwise-guarded Return is a base case too",
+      "target": "countdown",
+      "recipe": "Input n: int = 3.\nIf n > 0:\n  Let rest = Call [[countdown]] with n=n - 1.\n  Return rest.\nOtherwise:\n  Return 0.",
+      "callsSelf": true, "hasBaseCase": true, "progresses": true, "ok": true
+    },
+    {
+      "name": "a derived argument that is not arithmetic still progresses",
+      "target": "walk",
+      "recipe": "Input items: list = [].\nIf items == []:\n  Return 0.\nLet rest = Call [[walk]] with items=tail.\nReturn rest.",
+      "callsSelf": true, "hasBaseCase": true, "progresses": true, "ok": true
+    },
+    {
+      "name": "an empty target id judges nothing",
+      "target": "",
+      "recipe": "Let r = Call [[factorial]] with n=n.\nReturn r.",
+      "callsSelf": false, "hasBaseCase": false, "progresses": false, "ok": true
+    },
+    {
+      "name": "several self-calls: one progressing argument is enough",
+      "target": "fib",
+      "recipe": "Input n: int = 6.\nIf n <= 1:\n  Return n.\nLet a = Call [[fib]] with n=n - 1.\nLet b = Call [[fib]] with n=n - 2.\nReturn a + b.",
+      "callsSelf": true, "hasBaseCase": true, "progresses": true, "ok": true
+    },
+    {
+      "name": "the final unconditional Return alone is not a base case",
+      "target": "factorial",
+      "recipe": "Input n: int = 5.\nLet rest = Call [[factorial]] with n=n - 1.\nReturn rest.",
+      "callsSelf": true, "hasBaseCase": false, "progresses": true, "ok": false,
+      "failure": "no-base-case"
+    }
+  ]
+}

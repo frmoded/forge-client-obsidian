@@ -150,3 +150,35 @@ export function renderCallableInventory(
 ): string {
   return inventory.map(renderCallableLine).join('\n');
 }
+
+/** Drain 2026-08-26-1020 (§1) — mark the target's OWN entry as itself.
+ *
+ *  2360 removed the target from this list entirely. That stopped the
+ *  mirror and, three drains later, produced the factorial/show_factorial
+ *  mutual cycle: with self gone, the nearest callable was a sibling that
+ *  called back. Re-including it as a plain entry would restore the
+ *  original mirror, because the note's own summary describes exactly
+ *  what the caller wants — so it is included LABELED, and the shape gate
+ *  (recursion-shape-core) holds the mirror out by structure instead.
+ *
+ *  Labeling happens HERE, at the one producer, for drain 1000's
+ *  one-object reason: the prompt payload, the closure check's
+ *  accept-set and 2310's belt all see the same list. Self is a known id
+ *  again for all three at once.
+ */
+export function labelSelfInInventory(
+  entries: readonly CallableEntry[],
+  targetSnippetId: string | undefined | null,
+  label: (summary: string) => string,
+): CallableEntry[] {
+  if (!targetSnippetId) return [...entries];
+  const targetBase = targetSnippetId.includes('/')
+    ? (targetSnippetId.split('/').pop() ?? targetSnippetId)
+    : targetSnippetId;
+  return entries.map((e) => {
+    const isSelf = e.name === targetBase
+      || e.qualified === targetSnippetId
+      || e.name === targetSnippetId;
+    return isSelf ? { ...e, summary: label(e.summary) } : e;
+  });
+}

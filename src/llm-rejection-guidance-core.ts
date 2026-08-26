@@ -23,7 +23,11 @@ export type RejectionFailureMode =
   // Drain 2026-08-26-1000 — the generated Recipe calls a sibling note
   // whose own Recipe calls this one back. Third member of the same
   // family: the model produced a well-formed Recipe that cannot run.
-  | 'cycle-fail';
+  | 'cycle-fail'
+  // Drain 2026-08-26-1020 — the generated Recipe calls ITSELF without a
+  // base case, or without changing its argument. Replaces 2360's flat
+  // direct-self-call rejection: recursion is legal now, mirroring is not.
+  | 'recursion-shape-fail';
 
 export interface LlmRejectionInput {
   /** Which gate rejected the LLM output. */
@@ -41,6 +45,9 @@ export interface LlmRejectionInput {
   /** Drain 2026-08-26-1000 — for cycle-fail: the callees whose own
    *  Recipe calls this note back. Empty for the other modes. */
   cyclicCallees?: readonly string[];
+  /** Drain 2026-08-26-1020 — for recursion-shape-fail: which half of the
+   *  shape is missing. Absent for the other modes. */
+  recursionFailure?: 'no-base-case' | 'no-progress' | 'both';
   /** Drain 2026-08-24-2360 — the note being generated FOR. When an
    *  unresolved wikilink turns out to BE this note, the failure is a
    *  self-call, not a phantom chip, and needs its own words: telling
@@ -186,6 +193,36 @@ export function deriveLlmRejectionGuidance(
         `Hand-author the declaration: ${names.map((n) => `\`Input ${n}: <type> = <default>.\``).join(' ')}`,
       ],
     };
+  }
+
+  if (input.failureMode === 'recursion-shape-fail') {
+    const missing = input.recursionFailure ?? 'both';
+    const cause =
+      missing === 'no-base-case'
+        ? `The LLM's Recipe calls this note itself but never stops — there is `
+          + `no \`If\`-guarded \`Return\` to end the recursion, so it would run `
+          + `until Python gives up with \`maximum recursion depth exceeded\`.`
+        : missing === 'no-progress'
+        ? `The LLM's Recipe calls this note itself with the same value it was `
+          + `given, so each call would repeat the last one forever. A recursive `
+          + `call has to change something.`
+        : `The LLM's Recipe calls this note itself with no base case and no `
+          + `changed argument — that is a mirror, not recursion.`;
+    // Recursion IS legal here (drain 1020 re-included the note in its
+    // own inventory on purpose), so the fix list leads with making the
+    // recursion correct rather than with avoiding it.
+    const fixOptions = missing === 'no-progress'
+      ? [
+          'Say what shrinks on each step in the Description (e.g. "multiply n by the result for n-1").',
+          'Hand-author the recursive call with a changed argument: `Call [[this note]] with n=n - 1.`',
+          'Run again — the base case landed, so the model is close.',
+        ]
+      : [
+          'Say when it should STOP in the Description (e.g. "when n reaches 1, return 1").',
+          'Hand-author the base case: `If n <= 1:` then `Return 1.`',
+          'Run again — generation wobbles, and a second attempt often includes it.',
+        ];
+    return { likelyCause: cause, fixOptions };
   }
 
   if (input.failureMode === 'cycle-fail') {
