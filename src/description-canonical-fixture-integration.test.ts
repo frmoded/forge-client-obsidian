@@ -9,10 +9,22 @@
 // canonical detection returns 'description' (upstream mismatch wins
 // even when all three drift).
 //
-// Assertion: decideForgeClickAction('description') returns
-// 'auto_generate_then_run' — the v0.2.254 replacement for the pre-
-// v0.2.254 'abort_recipe_stale' action. Main.ts's forgeSnippet branch
-// calls this.generate() + this.runSnippet() when this signal fires.
+// Assertion (UPDATED 2026-08-26, drain 1600 §2): this file is I1's test
+// hook. It used to assert `decideForgeClickAction('description') ===
+// 'auto_generate_then_run'` — a function with ZERO production
+// consumers, so the hook guarded an intuition by probing dead code and
+// would have stayed green through any change to what the hammer
+// actually did. That function is retired.
+//
+// The hook now asserts the same intuition against the decision
+// production makes: `resolveForgeGesture('description', …) ===
+// 'generate'`, AND that forgeSnippet resolves the gesture and routes
+// its 'generate' branch. The second half is the one the old hook could
+// not see.
+//
+// The description of forgeSnippet's behaviour below is also stale:
+// since F4 (v0.2.372) the hammer DERIVES and hands off to the panel —
+// it no longer calls runSnippet at all.
 //
 // Regression guard: fixture body must NOT reference the retired
 // "Forge: Generate Recipe from Description" command anywhere on
