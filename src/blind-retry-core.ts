@@ -31,6 +31,9 @@ export type GenerateVerdict =
   | 'closure-fail'
   /** Prose, missing-chip explanation — no Let/Return statement at all. */
   | 'no-statement'
+  /** Called a sibling note whose own Recipe calls this one back (drain
+   *  2026-08-26-1000's one-hop belt). */
+  | 'cycle-fail'
   /** The call itself failed (no token, network, host down). */
   | 'call-failed';
 
@@ -52,6 +55,15 @@ export type GenerateVerdict =
  *  - `call-failed`. Nothing was generated; a retry here would paper
  *    over a missing token or a service outage, and the existing error
  *    already says which.
+ *  - `cycle-fail`. A cycle is not a wobbled detail, it is a structural
+ *    consequence of the inventory the model was shown: 2360 removed the
+ *    note from its own list, so the nearest callable was a sibling that
+ *    calls back. A blind replay sends the IDENTICAL payload and the
+ *    same inventory, so the same sibling is still the nearest thing —
+ *    the v0.2.370 lesson, that a retry replaying an identical request
+ *    against a deterministic answerer is a no-op, applies exactly. The
+ *    fix is the cohort's (hand-author the recursion, or refine the
+ *    Description), so surface it on the first attempt.
  *  - anything on attempt 2. One retry, full stop.
  */
 export function shouldBlindRetry(

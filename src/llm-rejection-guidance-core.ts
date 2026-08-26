@@ -19,7 +19,11 @@ export type RejectionFailureMode =
   // Drain 2026-08-24-2310 — the generated Recipe referenced names it
   // never declared. Sibling of closure-fail: same "the model ignored
   // the contract" family, same preserved-prior-Recipe treatment.
-  | 'free-variable-fail';
+  | 'free-variable-fail'
+  // Drain 2026-08-26-1000 — the generated Recipe calls a sibling note
+  // whose own Recipe calls this one back. Third member of the same
+  // family: the model produced a well-formed Recipe that cannot run.
+  | 'cycle-fail';
 
 export interface LlmRejectionInput {
   /** Which gate rejected the LLM output. */
@@ -34,6 +38,9 @@ export interface LlmRejectionInput {
    *  to detect landmine phrases like "print hello" that likely
    *  caused the phantom chip emission. */
   descriptionBody: string;
+  /** Drain 2026-08-26-1000 — for cycle-fail: the callees whose own
+   *  Recipe calls this note back. Empty for the other modes. */
+  cyclicCallees?: readonly string[];
   /** Drain 2026-08-24-2360 — the note being generated FOR. When an
    *  unresolved wikilink turns out to BE this note, the failure is a
    *  self-call, not a phantom chip, and needs its own words: telling
@@ -177,6 +184,31 @@ export function deriveLlmRejectionGuidance(
         `Run again — generation wobbles, and a second attempt often declares ${plural ? 'them' : 'it'}.`,
         `Name the ${plural ? 'inputs' : 'input'} more explicitly in the Description (e.g. "takes an input scale, a number, default 1").`,
         `Hand-author the declaration: ${names.map((n) => `\`Input ${n}: <type> = <default>.\``).join(' ')}`,
+      ],
+    };
+  }
+
+  if (input.failureMode === 'cycle-fail') {
+    const callees = input.cyclicCallees ?? [];
+    const list = callees.map((n) => `\`[[${n}]]\``).join(', ');
+    const plural = callees.length > 1;
+    // The driver's Description said "a note that calls itself". Leading
+    // with "refine the Description" would send exactly that cohort in a
+    // circle — their Description was already right, and the thing they
+    // want (recursion) is legal but hand-authored. So the hand-author
+    // option comes FIRST here, unlike the other modes.
+    return {
+      likelyCause:
+        `The LLM's Recipe calls ${list || 'a sibling note'}, whose own Recipe `
+        + `calls this note back. Running it would recurse until Python gives up `
+        + `with \`maximum recursion depth exceeded\`. This note is kept out of its `
+        + `own callable list (so it cannot call itself directly), which is why `
+        + `the model reached for ${plural ? 'those neighbours' : 'a neighbour'} `
+        + `instead — and ${plural ? 'they' : 'it'} happens to point back here.`,
+      fixOptions: [
+        `If this note is meant to recurse, hand-author it: recursion in Forge is written directly in the Recipe facet, not generated.`,
+        `Refine the Description to say what the helper should DO, rather than naming a note to call.`,
+        `If ${plural ? 'those notes' : 'that note'} should not call this one, edit ${plural ? 'their' : 'its'} Recipe instead.`,
       ],
     };
   }

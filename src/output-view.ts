@@ -1097,6 +1097,8 @@ export class ForgeOutputView extends ItemView {
       unresolvedWikilinks: readonly string[];
       // Drain 2026-08-24-2310 — populated for 'free-variable-fail'.
       undeclaredNames?: readonly string[];
+      // Drain 2026-08-26-1000 — populated for 'cycle-fail'.
+      cyclicCallees?: readonly string[];
       llmRawOutput: string;
       descriptionBody: string;
       // Drain 2026-08-24-2360 — lets the guidance recognise a
@@ -1109,6 +1111,7 @@ export class ForgeOutputView extends ItemView {
       failureMode: input.failureMode,
       unresolvedWikilinks: input.unresolvedWikilinks,
       undeclaredNames: input.undeclaredNames,
+      cyclicCallees: input.cyclicCallees,
       descriptionBody: input.descriptionBody,
       targetSnippetId: input.targetSnippetId,
     });

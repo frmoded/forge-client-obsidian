@@ -18,6 +18,11 @@ import {
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
 import { shouldRebindStrip, isOpportunisticRefresh } from './strip-rebind-core.ts';
+import {
+  collectOneHopCycles,
+  matchesTarget,
+  oneHopCycleRejectionMessage,
+} from './one-hop-cycle-core.ts';
 import { decideForgeLanding, type ForgeOutcome } from './forge-landing-core.ts';
 import { shouldBlindRetry, attemptPrefix } from './blind-retry-core.ts';
 import type { GenerateVerdict } from './blind-retry-core.ts';
@@ -111,6 +116,7 @@ import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
 import {
   checkRecipeClosure,
   computeDescriptionDerivedRecipeStamps,
+  extractWikilinkTargets,
 } from './write-generated-recipe-core.ts';
 import { sanitizeLlmRecipe } from './sanitize-llm-recipe-core.ts';
 import {
@@ -2401,6 +2407,59 @@ export default class ForgePlugin extends Plugin {
    *  never runs" is a value a test asserts over every outcome rather
    *  than an absence of call sites that a refactor could undo.
    */
+  /** Drain 2026-08-26-1000 — which kind of callable a name is, per the
+   *  inventory the model was actually shown.
+   *
+   *  Falls back to `'unknown'` when the name is not in the payload,
+   *  which the cycle belt treats as "do not probe". That is the right
+   *  default: a name the model invented is already the closure check's
+   *  business, and probing the registry for it would be a second
+   *  opinion about vocabulary the closure check owns. */
+  private calleeKindFromInventory(
+    shown: readonly CallableEntry[] | null,
+    name: string,
+  ): 'note' | 'chip' | 'unknown' {
+    if (!shown) return 'unknown';
+    for (const c of shown) {
+      if (c.name === name || c.qualified === name) return c.kind;
+    }
+    return 'unknown';
+  }
+
+  /** Drain 2026-08-26-1000 — the committed Recipe of every VAULT-NOTE
+   *  callee in a generated Recipe, keyed by the name as written.
+   *
+   *  Reads are best-effort by design: a callee that cannot be located
+   *  or has no `# Recipe` section is simply absent from the map, and
+   *  the belt degrades toward accepting. Rejecting on a failed read
+   *  would block authoring for a vault-state problem the cohort did not
+   *  cause.
+   *
+   *  Snippet-id resolution goes through `locateSnippetFile` — the path
+   *  lookup the HARD RULE requires — not a basename scan. */
+  private async readCalleeRecipes(
+    generatedRecipe: string,
+    targetSnippetId: string,
+    shown: readonly CallableEntry[] | null,
+  ): Promise<Map<string, string>> {
+    const out = new Map<string, string>();
+    const files = this.app.vault.getMarkdownFiles();
+    for (const callee of extractWikilinkTargets(generatedRecipe)) {
+      if (matchesTarget(callee, targetSnippetId)) continue;   // 2360 owns this
+      if (this.calleeKindFromInventory(shown, callee) !== 'note') continue;
+      try {
+        const f = locateSnippetFile(callee, files);
+        if (!f) continue;
+        const recipe = extractRecipeSection(await this.app.vault.read(f));
+        if (recipe) out.set(callee, recipe);
+      } catch (e) {
+        console.error(
+          `readCalleeRecipes: could not read Recipe for callee '${callee}'`, e);
+      }
+    }
+    return out;
+  }
+
   private async landAfterForge(file: TFile, outcome: ForgeOutcome): Promise<void> {
     const landing = decideForgeLanding(outcome);
     try {
@@ -2672,6 +2731,15 @@ export default class ForgePlugin extends Plugin {
             // own `callables` array, stored on the way out; there is no
             // second computation to drift from it.
             const shownCallables = this.lastGenerateCallables;
+            // Drain 2026-08-26-1000 — the SAME id drain 2360 excluded
+            // this note by. Derived here rather than reusing the
+            // `snippetId` declared further down, which is out of scope
+            // in this branch; the expression is identical to the one
+            // the 2360 rejection path passes as `targetSnippetId`
+            // (line ~2947), and it must stay identical — a belt that
+            // matched against a different id than the exclusion used
+            // would disagree with it about which note is "self".
+            const cycleTargetId = snippetIdFromPath(file.path, this.libraryDirNames());
             const knownIds = shownCallables
               ? callableNamesFrom(shownCallables)
               : new Set<string>();
@@ -2702,6 +2770,14 @@ export default class ForgePlugin extends Plugin {
             // which passed mixed prose+Let content through.
             const sanitized = sanitizeLlmRecipe(llmRecipe);
             const hasValidStmt = sanitized !== null;
+            // Drain 2026-08-26-1000 — resolve the callees' committed
+            // Recipes BEFORE the belt, because the belt's core is sync
+            // and a vault read is not. Only vault notes are read; chips
+            // are skipped here as well as in the core, so a chip never
+            // costs a file lookup.
+            const calleeRecipes = (catalogReady && sanitized !== null)
+              ? await this.readCalleeRecipes(sanitized, cycleTargetId, shownCallables)
+              : new Map<string, string>();
             // Drain 2026-08-24-2310 — the Input enforcement belt.
             //
             // Checked on the SANITIZED text, because that is what would
@@ -2719,6 +2795,28 @@ export default class ForgePlugin extends Plugin {
               ? collectFreeIdentifiers(sanitized, knownIds)
               : [];
             const declaresItsInputs = freeVars.length === 0;
+            // Drain 2026-08-26-1000 — the one-hop cycle belt.
+            //
+            // 2360's self-exclusion closed the ONE-node cycle and, by
+            // removing the note from its own inventory, pushed the model
+            // toward a sibling — which opened the TWO-node one. The
+            // driver hit it live on factorial/show_factorial.
+            //
+            // Same gate as its siblings above: `catalogReady`, because
+            // without the payload's inventory `kindOf` cannot tell a
+            // vault note from an engine chip and the belt would probe
+            // the registry for chips that have no Recipe at all.
+            // Checked on `sanitized` for 2310's reason — what is checked
+            // must be what would be written.
+            const cycles = (catalogReady && sanitized !== null)
+              ? collectOneHopCycles(
+                  sanitized,
+                  cycleTargetId,
+                  (name) => this.calleeKindFromInventory(shownCallables, name),
+                  (name) => calleeRecipes.get(name) ?? null,
+                )
+              : [];
+            const noCycles = cycles.length === 0;
             // CW-description-edit-refresh-fix-with-diagnostic-logging
             // (drain 2026-07-22-2030) Phase 1 — Fork B instrumentation.
             // Emit the closure-check verdict + sanitize verdict + gate
@@ -2734,7 +2832,7 @@ export default class ForgePlugin extends Plugin {
                 hasValidStmt,
                 gatePasses: closure.ok === true && hasValidStmt },
             );
-            if (closure.ok === true && hasValidStmt && declaresItsInputs) {
+            if (closure.ok === true && hasValidStmt && declaresItsInputs && noCycles) {
               const currentBody = await this.app.vault.read(file);
               const currentDesc = extractDescription(currentBody) ?? '';
               const currentDescHash = await computeFacetHash(currentDesc);
@@ -2780,6 +2878,38 @@ export default class ForgePlugin extends Plugin {
               } catch (e) {
                 console.error('CW-2000: MEMFS sync after Recipe write failed', e);
               }
+            } else if (hasValidStmt && declaresItsInputs && !noCycles) {
+              // Drain 2026-08-26-1000 — the one-hop cycle belt's
+              // rejection. Same treatment as its two siblings: prior
+              // Recipe preserved, panel is the load-bearing surface,
+              // toast is redundancy, attempt prefix at the FRONT so a
+              // first-sentence trim cannot elide it (drain 1800).
+              //
+              // Ordered AFTER the free-variable arm deliberately: a
+              // Recipe can fail both, and the undeclared-input message
+              // is the more actionable of the two.
+              console.warn(
+                `cycle fail (attempt ${attempt}): generated Recipe calls `
+                + cycles.map((c) => `${c.callee} -> ${c.backReference}`).join(', '),
+              );
+              if (shouldBlindRetry(attempt, 'cycle-fail')) {
+                retryVerdict = 'cycle-fail';
+                continue;
+              }
+              try {
+                const outputView = await this.getOutputView();
+                outputView.appendLlmRecipeRejection(file.basename, {
+                  failureMode: 'cycle-fail',
+                  unresolvedWikilinks: [],
+                  cyclicCallees: cycles.map((c) => c.callee),
+                  llmRawOutput: llmRecipe,
+                  descriptionBody: extractDescription(v2Body) ?? '',
+                });
+              } catch { /* panel unavailable; toast alone still fires */ }
+              this.notice(
+                `${NOTICE_PREFIX}${attemptPrefix(attempt)}`
+                + `${oneHopCycleRejectionMessage(cycles, file.basename)} See Forge panel.`,
+              );
             } else if (hasValidStmt && !declaresItsInputs) {
               // Drain 2026-08-24-2310 — the Input enforcement belt.
               // Mirrors the closure-fail treatment exactly: prior Recipe
