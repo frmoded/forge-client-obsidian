@@ -111,155 +111,19 @@ export class ForgeFreezeModal extends Modal {
   }
 }
 
-export class ForgeRunModal extends Modal {
-  private values: Record<string, string> = {};
-  // drain 2026-08-05-1500 — inputs whose value lives in a widget's DOM
-  // rather than in `values`. Read back at submit, not on every click:
-  // a keyboard is a lot of click handlers to have each write through.
-  private widgetHosts: Record<string, HTMLElement> = {};
-
-  constructor(
-    app: App,
-    private snippetId: string,
-    private inputs: string[],
-    private cached: Record<string, string>,
-    private onRun: (kwargs: Record<string, unknown>, raw: Record<string, string>) => void,
-    // drain 2026-07-31-1120 — optional per-input allowed values. Absent
-    // (the default) reproduces the previous all-text-boxes behaviour
-    // exactly, so every existing note is unaffected.
-    private enums: InputEnums = {},
-    // drain 2026-08-05-1500 — optional per-input widget types. Same
-    // deal: absent is the previous behaviour exactly.
-    private widgets: InputWidgets = {},
-    // drain 2026-08-15-1900 — optional per-input declared defaults, as
-    // the JSON text a user would type. Absent ({}) reproduces the
-    // pre-drain behaviour exactly: no pre-fill, and a blank field
-    // submits '' as it always did.
-    private defaults: InputDefaults = {},
-    // drain 2026-08-16-1700 — per-input options derived from the enum
-    // literal type. Absent ({}) reproduces the pre-drain dialog exactly.
-    private derivedEnums: DerivedEnums = {},
-  ) {
-    super(app);
-  }
-
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.createEl('h2', { text: `Run: ${this.snippetId}` });
-
-    const models = buildInputFieldModels({
-      inputs: this.inputs,
-      cached: this.cached,
-      enums: this.enums,
-      widgets: this.widgets,
-      defaults: this.defaults,
-      derivedEnums: this.derivedEnums,
-    });
-
-    for (const model of models) {
-      const name = model.name;
-
-      if (model.kind === 'widget') {
-        if (model.conflict) {
-          // Not an error — we resolved it — but the note contradicts
-          // itself and the author should be able to find out why their
-          // dropdown vanished.
-          console.warn(
-            `ForgeRunModal.onOpen: input '${name}' declares both input_enums and ` +
-            `input_widgets; using the widget ('${model.widget}') and ignoring the enum`,
-          );
-        }
-        new Setting(contentEl).setName(name).setDesc(`${model.widget} widget`);
-        const host = contentEl.createDiv({ cls: 'forge-widget-host' });
-        const outcome = renderWidget(model.widget, name, host, model.seed);
-        if (outcome.rendered === 'fallback-text') {
-          // Diagnostics HARD RULE: an unregistered widget type is
-          // visible, never a silently plain text box.
-          void forgeNotice(this.app, `Forge: ${outcome.message}`);
-        }
-        this.widgetHosts[name] = host;
-        continue;
-      }
-
-      if (model.kind === 'enum') {
-        // drain 2026-07-31-1120 — enumerable input: a dropdown removes
-        // both failure modes at once. The cohort cannot mistype
-        // "Major"/"maj", and they can SEE the valid values without
-        // opening the Recipe to infer them from usage.
-        if (model.conflict) {
-          // Resolved, but the note declares the same value set twice and
-          // the author should be able to find out why their frontmatter
-          // list is the one showing.
-          console.warn(
-            `ForgeRunModal.onOpen: input '${name}' declares both input_enums and ` +
-            `an enum-literal type; using the frontmatter list and ignoring the type`,
-          );
-        }
-
-        this.values[name] = model.value;
-        new Setting(contentEl)
-          .setName(name)
-          .addDropdown(dd => {
-            // No declared default means this input is REQUIRED, so the
-            // dropdown must start on nothing — otherwise it would
-            // silently satisfy an input the author never gave a value
-            // for, and 1900's missing-required Notice could never fire.
-            if (model.blankOption) dd.addOption('', '');
-            for (const o of model.options) dd.addOption(o.value, o.label);
-            dd.setValue(model.value)
-              .onChange(v => { this.values[name] = v; });
-          });
-        continue;
-      }
-
-      // drain 2026-08-15-1900 — a declared default pre-fills the box, so
-      // the user can see what they are about to get instead of having to
-      // read the Recipe to find out.
-      this.values[name] = model.value;
-      new Setting(contentEl)
-        .setName(name)
-        .addText(text => {
-          text.setValue(model.value)
-            .setPlaceholder(model.placeholder)
-            .onChange(v => { this.values[name] = v; });
-        });
-    }
-
-    new Setting(contentEl)
-      .addButton(btn =>
-        btn.setButtonText('Run').setCta().onClick(() => this.submit())
-      );
-  }
-
-  onClose() {
-    this.contentEl.empty();
-  }
-
-  private submit() {
-    for (const [name, host] of Object.entries(this.widgetHosts)) {
-      this.values[name] = collectWidgetInput(name, host);
-    }
-    // drain 2026-08-15-1900 — a blank field means "I didn't supply
-    // this". When the input declares a default, dropping the key lets
-    // Python bind that default; when it doesn't, submitting '' would be
-    // a silent wrong answer, so say so and keep the dialog open.
-    const { values, missingRequired } = resolveSubmittedInputs(
-      this.values, this.defaults);
-    if (missingRequired.length > 0) {
-      void forgeNotice(
-        this.app,
-        `Forge: ${missingRequired.join(', ')} ${missingRequired.length === 1 ? 'has' : 'have'}`
-        + ' no declared default — enter a value.',
-      );
-      return;
-    }
-    // v0.2.324 — the JSON-first coercion moved to a pure core so the
-    // suite can exercise the real thing. Behaviour is unchanged.
-    const kwargs = coerceRunInputValues(values);
-    this.close();
-    this.onRun(kwargs, { ...this.values });
-  }
-}
+// Drain 2026-08-25-2100 (plan F4) — `ForgeRunModal` lived here and is
+// RETIRED. The Forge panel's Inputs strip is the input surface now, and
+// the toolbar's Forge button derives rather than runs, so nothing is
+// left to ask the user mid-gesture.
+//
+// The dialog's input-RENDERING core is not gone — it was extracted to
+// forge-panel-strip-core.ts (buildInputFieldModels) and
+// input-widget-core.ts by drain F1, and IS what the strip renders from.
+// Only the modal shell went. If you are looking for how an input field
+// gets built, it is there, not here.
+//
+// A grep-guard in forge-landing-core.test.ts fails the suite if the
+// class name reappears anywhere under src/.
 
 type SnippetType = 'action' | 'data';
 

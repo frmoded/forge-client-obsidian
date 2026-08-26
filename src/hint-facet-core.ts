@@ -14,6 +14,13 @@
 //   main.ts  "Run only (active snippet)"  — `this.runSnippet()`
 //   main.ts  THE INPUTS STRIP's ▶         — `runSnippet(…, undefined, …)`
 //
+// UPDATED 2026-08-25 (drain 2100 / plan F4): of those two, only the
+// strip still exists — "Run only" is retired and the toolbar button no
+// longer runs at all. The strip is now the SOLE run path, and it still
+// passes no facet, so this derivation is the only thing standing
+// between the cohort and the generic hint. It went from a belt to the
+// whole trouser.
+//
 // The strip is the one that bit. CCQA's note declares a `scale` input,
 // so the strip is precisely how such a note gets run: drain 0920 and
 // 1700's approved wording was unreachable from the button the cohort

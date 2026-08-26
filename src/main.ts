@@ -18,6 +18,7 @@ import {
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
 import { shouldRebindStrip, isOpportunisticRefresh } from './strip-rebind-core.ts';
+import { decideForgeLanding, type ForgeOutcome } from './forge-landing-core.ts';
 import { shouldBlindRetry, attemptPrefix } from './blind-retry-core.ts';
 import type { GenerateVerdict } from './blind-retry-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
@@ -96,7 +97,7 @@ import { invalidateLibraryVaultCache } from './edges.ts';
 // restore — reviving a hover affordance is a fresh design.
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings.ts';
 import { sectionPlugin, readOnlyFacetFilter } from './facet.ts';
-import { ForgeSnippetModal, ForgeRunModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
+import { ForgeSnippetModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
 import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server.ts';
 import { connectWithRetry } from './auto-connect-retry-core.ts';
 import {
@@ -360,7 +361,9 @@ const CHIPS_BTN_CLASS = 'forge-chips-btn';
 
 export default class ForgePlugin extends Plugin {
   settings: ForgeSettings;
-  private inputCache: Record<string, Record<string, string>> = {};
+  // Drain 2026-08-25-2100 (F4) — `inputCache` removed. It was the Run
+  // dialog's last-used-values store; the dialog is retired and the
+  // strip persists its own values via `settings.panelStripValues`.
   // Snapshot of the registry inventory from /connect. Shape per vault:
   //   [{id, type, inputs}, ...]
   // Used as a fallback for snippet metadata when the local .md doesn't carry
@@ -1433,23 +1436,6 @@ export default class ForgePlugin extends Plugin {
     );
 
     this.addCommand({
-      id: 'forge-run-only',
-      name: 'Run only (active snippet)',
-      callback: () => {
-        // v0.2.225 — wrap with spinner per audit (driver 2026-07-01
-        // murmuration smoke). v0.2.218 wrapped the Forge button +
-        // /generate but missed forge-run-only + forge-generate-only.
-        // First-click on a music snippet via Cmd-P went silent.
-        const op = () => this.runSnippet();
-        if (this.spinner) {
-          void this.spinner.wrapImmediate(prefixed('🔥 running …'), op);
-        } else {
-          void op();
-        }
-      },
-    });
-
-    this.addCommand({
       id: 'forge-freeze-edge',
       name: 'Freeze edge',
       callback: () => { this.openFreezeModal('frozen'); },
@@ -1655,17 +1641,25 @@ export default class ForgePlugin extends Plugin {
       // (triangle). Universal "execute this" affordance — matches
       // Jupyter / VS Code / media players.
       // CW-plugin-forge-button-hover-forge-to-run (drain 2026-07-28-1600):
-      // swap the hover verb from 'Forge' to 'Run' so the tooltip matches
-      // the play-triangle glyph. Same button, same handler; only the
-      // visible verb changes. Product name "Forge" stays everywhere else
-      // (ribbon, status bar, plugin description, "Forge:" namespace
-      // prefixes on command palette + adjacent action buttons).
-      const forgeBtn = view.addAction('play', 'Run', () => {
+      // swapped the hover verb to 'Run' so the tooltip matched the
+      // play-triangle glyph.
+      //
+      // Drain 2026-08-25-2100 (plan F4) REVERSES both, because the
+      // button's job changed. It no longer executes — it derives the
+      // facets and hands you a primed panel. A play triangle promising
+      // "execute this" over a button that builds is the wrong promise,
+      // so the glyph goes back to a making gesture (`hammer`) and the
+      // verb to `Forge this note`. Running is the panel's Run button,
+      // and only that.
+      const forgeBtn = view.addAction('hammer', 'Forge this note', () => {
         // v0.2.218 — wrap with status-bar spinner. 200ms grace so
         // fast snippets don't flash.
         const op = () => this.forgeSnippet();
         if (this.spinner) {
-          void this.spinner.wrapImmediate(prefixed('🔥 running …'), op);
+          // F4 — the verb follows the button. "running" over a gesture
+          // that no longer runs is the same wrong promise as the play
+          // triangle was.
+          void this.spinner.wrapImmediate(prefixed('🔨 forging …'), op);
         } else {
           void op();
         }
@@ -2395,6 +2389,39 @@ export default class ForgePlugin extends Plugin {
   // The merged toolbar button: generate, then (on success) run.
   // Snippets in Python edit-mode skip the generate leg and run cached
   // python directly — same shape as the Phase-5 locked path.
+  /** Drain 2026-08-25-2100 (plan F4) — where a Forge-click lands.
+   *
+   *  Every branch of `forgeSnippet` used to end by calling
+   *  `runSnippet`, which is what made ▶ a run button. They now end
+   *  here instead: open the Forge panel if it is closed (the F1
+   *  "Open Forge panel" command's own logic, invoked automatically),
+   *  bind the Inputs strip to the note we just forged, and stop.
+   *
+   *  The decision itself lives in `decideForgeLanding` so "forging
+   *  never runs" is a value a test asserts over every outcome rather
+   *  than an absence of call sites that a refactor could undo.
+   */
+  private async landAfterForge(file: TFile, outcome: ForgeOutcome): Promise<void> {
+    const landing = decideForgeLanding(outcome);
+    try {
+      if (landing.openPanel) {
+        // Same call the F1 command makes. Creates the leaf when the
+        // panel is closed; returns the existing view when it is open.
+        await this.getOutputView();
+      }
+      if (landing.primeStrip) {
+        // Pass the file EXPLICITLY. `refreshForgePanelStrip` treats a
+        // named file as authoritative precisely because re-querying
+        // the workspace here races the panel we may have just opened
+        // (drain 1610's finding, and drain 1030's opportunistic-refresh
+        // guard depends on the caller naming the note).
+        await this.refreshForgePanelStrip(undefined, file);
+      }
+    } catch (e) {
+      console.error('landAfterForge: could not prime the Forge panel', e);
+    }
+  }
+
   private async forgeSnippet() {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
@@ -2487,11 +2514,11 @@ export default class ForgePlugin extends Plugin {
       // Log here so devs have explicit confirmation in the browser
       // console alongside the existing Notice.
       console.log(`${NOTICE_PREFIX}skipping /generate, ${file.basename} is in Python mode`);
-      this.notice(`${NOTICE_PREFIX}${file.basename} is in Python mode — running as-is (switch to English mode to regenerate).`);
-      // Drain 2026-08-24-1600 — the branch's own condition IS the facet;
-      // passing it keeps the exec-error hint pointing at # Python, which
-      // is correct here.
-      await this.runSnippet('Forge failed during execution', 'python', file);
+      this.notice(`${NOTICE_PREFIX}${file.basename} is in Python mode — nothing to derive (switch to English mode to regenerate). Press Run in the Forge panel to execute.`);
+      // Drain 2026-08-25-2100 (F4) — was `runSnippet(…, 'python', file)`.
+      // Nothing was derived on this branch, so the landing is 'no-op';
+      // the panel opens primed and the cohort presses Run.
+      await this.landAfterForge(file, 'no-op');
       return;
     }
 
@@ -2562,13 +2589,21 @@ export default class ForgePlugin extends Plugin {
           `${NOTICE_PREFIX}${file.basename} is Python-canonical (V2 implicit lock) — running # Python directly without re-transpile`,
         );
         this.notice(
-          `${NOTICE_PREFIX}${file.basename} → Python-canonical (hand-edited). Running as-is; no /generate, no transpile.`,
+          `${NOTICE_PREFIX}${file.basename} → Python-canonical (hand-edited). No /generate, no transpile. Press Run in the Forge panel to execute.`,
         );
-        // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — pass the
-        // canonical decision so the engine skips Recipe parse. Pre-
-        // v0.2.252 the engine parsed Recipe anyway, exploding
-        // ParseError on residual "a" bugs even when Python was fine.
-        await this.runSnippet('Forge failed during execution', 'python', file);
+        // Drain 2026-08-25-2100 (F4) — was `runSnippet(…, 'python', file)`,
+        // which carried the L45 `canonical_layer: 'python'` signal so the
+        // engine skipped the Recipe parse.
+        //
+        // The strip's Run passes `canonicalLayer: undefined`, so that
+        // signal is NOT threaded from here any more. It does not need to
+        // be: drain 0110 made `resolve_action_code` default the routing
+        // layer from the note's own `source_facet: python` frontmatter
+        // when the caller passes none — which is precisely why that drain
+        // took toolbar-vs-strip disagreement from 3-of-4 shipped
+        // python-canonical notes to 0-of-4. The engine reads the note,
+        // not the button.
+        await this.landAfterForge(file, 'no-op');
         return;
       }
       if (canonicalLayer === 'description') {
@@ -2898,7 +2933,11 @@ export default class ForgePlugin extends Plugin {
             // The sibling python-canonical call two hundred lines up
             // has always passed 'python'; this one never passed
             // anything.
-            await this.runSnippet('Forge failed during execution', canonicalLayer, file);
+            // Drain 2026-08-25-2100 (F4) — was `runSnippet(…, canonicalLayer,
+            // file)`. This branch DERIVED (generate + transpile both ran),
+            // so the landing is 'synced': the panel opens primed on the
+            // freshly-forged note and the cohort presses Run.
+            await this.landAfterForge(file, 'synced');
           }
         } finally {
           if (this.spinner) {
@@ -2949,7 +2988,10 @@ export default class ForgePlugin extends Plugin {
     // "facet unknown", and the hint table's fallback is written for
     // exactly this case. Widening the variable's scope to satisfy a
     // hint would trade a real invariant for a cosmetic one.
-    await this.runSnippet('Forge failed during execution', undefined, file);
+    // Drain 2026-08-25-2100 (F4) — was `runSnippet(…, undefined, file)`.
+    // The V1 / free-English tail: whatever derivation this path does has
+    // completed by here, so it lands 'synced' like the V2 branch above.
+    await this.landAfterForge(file, 'synced');
   }
 
   /** v0.2.126 — shared dependencies for routeActionCodeRegen. Both
@@ -4568,6 +4610,10 @@ export default class ForgePlugin extends Plugin {
   // re-derive workspace state — same fix pattern L45 codifies for
   // plugin ↔ engine routing.
   private async runSnippet(
+    // F4 — FIRST, because it is the only required one now. A required
+    // parameter cannot follow optional ones in TypeScript, and keeping
+    // it required is the point (see the note below).
+    presetInputs: Record<string, unknown>,
     errorPrefix?: string,
     canonicalLayer?: 'description' | 'recipe' | 'python' | 'synced',
     fallbackFile?: TFile,
@@ -4579,7 +4625,15 @@ export default class ForgePlugin extends Plugin {
     // snippet-id derivation for free, instead of quietly running stale
     // MEMFS content the moment a user types and hits Run without
     // saving.
-    presetInputs?: Record<string, unknown>,
+    //
+    // Drain 2026-08-25-2100 (plan F4) — REQUIRED, not optional. The Run
+    // dialog is retired, so "no preset inputs" no longer has a meaning:
+    // there is no surface left that could ask the user for them. Making
+    // the parameter required means a future caller that tries to run
+    // without values fails to compile rather than silently reviving the
+    // ask-the-user path. This is the type-level half of §1's "no third
+    // run path may survive"; the grep-guard in
+    // forge-landing-core.test.ts is the other half.
   ) {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     const target = resolveRunTarget(activeView, fallbackFile);
@@ -4709,103 +4763,21 @@ export default class ForgePlugin extends Plugin {
     // resolution (which exists to populate the dialog) and past the
     // dialog itself. The pre-flight above has already run, which is
     // why the strip comes through here at all.
-    if (presetInputs) {
-      await this.computeSnippetWithArgs(
-        vaultPath, snippetId, [], presetInputs, errorPrefix, routingFacetForRun, file,
-        displayFacetForRun);
-      return;
-    }
-
-    // v0.2.20: Python signature is the source of truth for which
-    // params compute() actually needs. Ask the engine for the
-    // signature-augmented input names; fall back to frontmatter-
-    // only if Pyodide isn't ready yet (early-Forge-click edge case
-    // before host warm-up).
-    let inputs: string[];
-    // Drain 2026-08-15-1900 — declared defaults for the Run dialog.
-    // Empty is the safe answer: it reproduces the pre-drain dialog
-    // exactly, so a host that can't answer costs a pre-fill, never a
-    // wrong run.
-    let inputDefaults: Record<string, string> = {};
-    // Drain 2026-08-16-1700 — dropdown options from the enum-literal
-    // type. Empty degrades to the pre-drain text field.
-    let derivedEnums: Record<string, string[]> = {};
-    try {
-      const hostManager = getPyodideHost();
-      if (!hostManager) throw new Error('Pyodide host not wired');
-      const host = await hostManager.getInstance();
-      inputs = await host.getInputNames(snippetId);
-      try {
-        inputDefaults = await host.getInputDefaults(snippetId);
-      } catch (e) {
-        // Separate try: a defaults lookup that throws (unparseable
-        // Recipe mid-edit, say) must not cost the user the modal.
-        console.warn(
-          `${NOTICE_PREFIX}declared input defaults unavailable for '${snippetId}'`, e);
-      }
-      try {
-        derivedEnums = await host.getInputEnums(snippetId);
-      } catch (e) {
-        console.warn(
-          `${NOTICE_PREFIX}derived enum options unavailable for '${snippetId}'`, e);
-      }
-    } catch (e) {
-      console.warn(
-        `${NOTICE_PREFIX}signature-inferred inputs unavailable for '${snippetId}', falling back to frontmatter`,
-        e,
-      );
-      // Local frontmatter is the source of truth when it exists.
-      // When it doesn't (e.g., empty install.md stub over the
-      // builtin), fall back to the inventory snapshot from /connect
-      // so we still ask for the right inputs.
-      inputs = frontmatter
-        ? (frontmatter.inputs ?? [])
-        : (this.lookupInventoryInputs(snippetId) ?? []);
-    }
-
-    if (inputs.length > 0) {
-      // [2026-08-06-0100 (B)] The modal's widget/enum declarations must
-      // be race-free. metadataCache is eventually-consistent, and the
-      // key-ABSENCE case is indistinguishable from staleness (a plain
-      // note truly lacks input_widgets; a cold-open cached entry merely
-      // hasn't parsed it yet) — 3/3 driver cold-open smokes rendered
-      // plain text boxes on the first click for exactly this reason.
-      // The registry itself is eager (registerWidget × 3 at onload), so
-      // the fix is at the data source: read the note's frontmatter
-      // disk-fresh for this rare, user-paced event. Cache remains the
-      // fallback if the read throws.
-      let modalFm: Record<string, unknown> | null =
-        (frontmatter as Record<string, unknown> | undefined) ?? null;
-      try {
-        const rawNote = await this.app.vault.read(file);
-        const fmBlock = rawNote.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-        if (fmBlock) {
-          const parsed = parseYaml(fmBlock[1]) as Record<string, unknown> | null;
-          if (parsed && typeof parsed === 'object') modalFm = parsed;
-        }
-      } catch (e) {
-        console.error('runSnippet: modal frontmatter disk read failed', e);
-      }
-      // drain 2026-07-31-1120 — enumerable inputs. Absent key → {} →
-      // all text boxes, byte-for-byte the previous behaviour.
-      const enums = parseInputEnums(modalFm);
-      // Drain 2026-08-05-1500 — widget sidecar, same treatment.
-      const widgets = parseInputWidgets(modalFm);
-      // [2026-08-06-0100 (A)] widgets start fresh each click; text
-      // inputs keep their intentional pre-fill.
-      const cached = stripWidgetSeededInputs(
-        this.inputCache[snippetId] ?? {}, widgets);
-      new ForgeRunModal(this.app, snippetId, inputs, cached, (kwargs, raw) => {
-        this.inputCache[snippetId] = raw;
-        // Drain 2530 — pass `file` so the successful run refreshes the
-        // note's # Python section.
-        this.computeSnippetWithArgs(vaultPath, snippetId, [], kwargs as Record<string, unknown>, errorPrefix, routingFacetForRun, file, displayFacetForRun);
-      }, enums, widgets, inputDefaults, derivedEnums).open();
-    } else {
-      // Drain 2530 — pass `file` so the successful run refreshes the
-      // note's # Python section.
-      await this.computeSnippetWithArgs(vaultPath, snippetId, [], {}, errorPrefix, routingFacetForRun, file, displayFacetForRun);
-    }
+    // Drain 2026-08-25-2100 (plan F4) — the Run dialog is retired and
+    // `presetInputs` is now REQUIRED, so there is nothing left to ask
+    // for and nobody left to ask. Everything that used to live between
+    // here and the dialog existed solely to populate it: the engine
+    // signature lookup, the declared defaults, the derived enums, the
+    // disk-fresh frontmatter re-read for widget declarations, the
+    // widget-seeded input stripping. The strip resolves all of that
+    // itself (forge-panel-strip-core) before it ever dispatches.
+    //
+    // The pre-flight above (editor force-save + MEMFS sync, L29) still
+    // runs, which is the reason the strip comes through runSnippet at
+    // all instead of calling computeSnippetWithArgs directly.
+    await this.computeSnippetWithArgs(
+      vaultPath, snippetId, [], presetInputs, errorPrefix, routingFacetForRun, file,
+      displayFacetForRun);
   }
 
   // Walk the inventory to find a snippet's declared inputs. Resolution order
@@ -5668,11 +5640,15 @@ export default class ForgePlugin extends Plugin {
   private wireStripHost(view: ForgeOutputView) {
     this.stripHostSingleton ??= {
       run: (snippetId, kwargs, raw) => {
-        // The dialog's own dispatch path, values pre-supplied. The
-        // inputCache write keeps the dialog and the strip agreeing
-        // about last-used values, so opening the dialog after a strip
-        // run shows what the strip just ran.
-        this.inputCache[snippetId] = raw;
+        // Drain 2026-08-25-2100 (F4) — the `this.inputCache[snippetId] = raw`
+        // write that used to sit here is GONE along with the dialog it
+        // fed. It existed to keep the dialog and the strip agreeing about
+        // last-used values; with no dialog there is no second opinion to
+        // reconcile, and its only reader lived in the block F4 deleted,
+        // so keeping it would have left write-only state that reads like
+        // a live cache. The strip's own memory is `panelStripValues`
+        // (remember/forget below), which is persisted to settings.
+        void raw;
         // Drain 2026-08-24-1610 — run the note the strip is DISPLAYING.
         // Clicking a button inside the panel makes the panel the active
         // leaf, so re-deriving "active" at click time finds no markdown
@@ -5710,7 +5686,7 @@ export default class ForgePlugin extends Plugin {
             + `strip's bound file nor '${snippetId}.md' resolves in this vault.`);
         }
         const op = () => this.runSnippet(
-          'Forge failed during execution', undefined, target ?? undefined, kwargs);
+          kwargs, 'Forge failed during execution', undefined, target ?? undefined);
         if (this.spinner) {
           void this.spinner.wrapImmediate(prefixed('🔥 running …'), op);
         } else {

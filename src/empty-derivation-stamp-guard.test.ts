@@ -65,28 +65,62 @@ function mainSrc(): string {
   return fsMod.readFileSync(pathMod.resolve(process.cwd(), 'src/main.ts'), 'utf8');
 }
 
-test('the Description-canonical branch threads its facet into runSnippet', () => {
+// ---------------------------------------------------------------------
+// Drain 2026-08-25-2100 (plan F4) REPLACED the three tests that stood
+// here. They pinned the exact `await this.runSnippet('Forge failed
+// during execution', <facet>, file);` source lines inside forgeSnippet,
+// asserting that each branch threaded its facet so the error hint
+// pointed at the right section. F4 deletes those call sites outright:
+// forging derives and hands off, and the run happens from the panel.
+//
+// The PROPERTY they guarded is not gone, and it was not weakened — it
+// moved, and got stronger. `resolveHintFacet` (drain 2330) derives the
+// facet from the note's own body whenever the caller passes none, on
+// exactly the reasoning that a value each caller must remember to pass
+// is one some future caller will forget. The panel's Run passes
+// `undefined`, and the hint is still right.
+//
+// So these guard the mechanism rather than the call sites: a facet
+// reaches the hint WITHOUT anyone threading it. That assertion would
+// have failed before drain 2330 and fails again if the derivation is
+// ever removed in favour of caller-threading.
+// ---------------------------------------------------------------------
+
+test('the error-hint facet is DERIVED, not threaded by the caller', () => {
   const src = mainSrc();
-  assert.ok(
-    src.includes("await this.runSnippet('Forge failed during execution', canonicalLayer, file);"),
-    'the Description-canonical branch dropped canonicalLayer again',
+  assert.match(
+    src, /displayFacetForRun = await resolveHintFacet\(/,
+    'runSnippet must derive the hint facet from the note itself',
+  );
+  assert.match(
+    src, /resolveHintFacet\(\s*canonicalLayer,\s*await this\.app\.vault\.read\(file\),/,
+    'the derivation must read the note — an explicit facet still wins, '
+    + 'but absence must fall through to the note, not to undefined',
   );
 });
 
-test('the python-mode branch threads its facet too', () => {
-  assert.ok(
-    mainSrc().includes("await this.runSnippet('Forge failed during execution', 'python', file);"),
+test('the sole run call site passes no facet, and that is fine', () => {
+  // NON-VACUITY for the test above: if some caller were still threading
+  // a facet, the derivation could be dead code and the guard vacuous.
+  // The panel strip — the only run surface after F4 — passes none.
+  const src = mainSrc();
+  const calls = [...src.matchAll(/this\.runSnippet\(/g)];
+  assert.equal(calls.length, 1, `expected one run call site, found ${calls.length}`);
+  assert.match(
+    src, /this\.runSnippet\(\s*\n\s*kwargs, 'Forge failed during execution', undefined, target/,
+    'the strip must dispatch with no explicit facet, exercising the derivation',
   );
 });
 
-test('no forgeSnippet run-call silently drops the facet where it is in scope', () => {
-  // NON-VACUITY / the general form. Two of the three call sites inside
-  // forgeSnippet passed `undefined` while the value sat in scope; only
-  // one did so legitimately (the V1 / free-English tail, where the
-  // variable genuinely is not in scope and undefined is the honest
-  // answer). Anything beyond that one is the defect returning.
-  const src = mainSrc();
-  const undefinedCalls = [...src.matchAll(
-    /await this\.runSnippet\('Forge failed during execution', undefined, file\);/g)];
-  assert.equal(undefinedCalls.length, 1, `${undefinedCalls.length} run-calls drop the facet`);
+test('resolveHintFacet degrades to undefined rather than throwing', () => {
+  // The run matters and the hint does not; a probe that threw would
+  // take a run down for a nicety. Pinned here because F4 made the
+  // derivation the ONLY source of the hint — before, a caller-threaded
+  // facet covered for it.
+  const core = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/hint-facet-core.ts'), 'utf8');
+  assert.ok(
+    /NOTHING HERE THROWS/.test(core),
+    'hint-facet-core lost its no-throw contract',
+  );
 });

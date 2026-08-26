@@ -77,7 +77,11 @@ export function engineRoutingLayer(
  * derived a facet at `runSnippet`'s shared door and used it for the
  * error hint only, leaving routing to the caller's explicit value. Two
  * launch paths pass none — the Inputs strip's ▶ and Cmd-P "Run only" —
- * so on a note whose Python returns 42 and whose Recipe returns 7:
+ * so on a note whose Python returns 42 and whose Recipe returns 7
+ * (drain 2100 / plan F4 has since retired "Run only" AND stopped the
+ * toolbar button running, leaving the strip as the only launch path;
+ * the table below is the historical measurement that motivated this
+ * module, not a description of today's surfaces):
  *
  *   toolbar ▶ (passes 'python')  ->  42   the hand-edited Python
  *   strip ▶   (passes nothing)   ->   7   the Recipe

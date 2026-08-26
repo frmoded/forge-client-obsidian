@@ -93,12 +93,17 @@ from the Recipe and run by the engine).
    Print "hello " followed by the name.
    \`\`\`
 
-3. Click the **Forge** button at the top of the editor. Paste your
-   transpile token if prompted (Settings → Forge → Transpile service
-   → Transpile service token).
+3. Click the **Forge this note** button (the hammer) at the top of the
+   editor. Paste your transpile token if prompted (Settings → Forge →
+   Transpile service → Transpile service token).
 4. Forge calls the hosted transpile service, generates a Recipe from
-   your Description, compiles it to Python, writes it back into the
-   note, and runs it. The result renders in the **Forge** panel.
+   your Description, compiles it to Python, and writes it back into
+   the note. It then opens the **Forge** panel with this note's inputs
+   ready — but it does NOT run yet. Building and running are two
+   gestures.
+5. Press **Run** in the Forge panel to execute. The result renders
+   there. Change an input and press Run again — you only need to Forge
+   again when you change the note itself.
 
 ## Library notes vs vault notes
 
@@ -107,8 +112,10 @@ Notes come in two flavors:
   engine-provided primitives — \`print\`, \`bar\`, \`voices\`, etc.).
   Cmd-click a wikilink like \`[[print]]\` in a Recipe to read its
   Description + Python source (read-only).
-- **Vault notes** are notes you author in this vault. Click the Run
-  button (▶) to execute; edit them freely.
+- **Vault notes** are notes you author in this vault. Press **Run** in
+  the Forge panel to execute one; edit them freely. (The note toolbar's
+  hammer forges — derives Recipe and Python — and hands the panel a
+  primed note; it does not run.)
 
 In a Recipe, \`Call [[name]]\` resolves to a library note OR a vault
 note of the same basename. The plugin's chip palette surfaces all

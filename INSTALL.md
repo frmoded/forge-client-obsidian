@@ -94,8 +94,10 @@ restore. Delete both and reload Obsidian to get them back.
 ## Verifying it works
 
 1. Open the command palette: **Cmd-P** (Mac) or **Ctrl-P** (Windows/Linux).
-2. Type **Forge** — you should see commands like "Forge: Run only
-   (active snippet)" and "Forge: Open 3D View".
+2. Type **Forge** — you should see commands like "Forge: Open Forge
+   panel" and "Forge: Open 3D View". (There is no run command: since
+   v0.2.372 running lives on the Forge panel's **Run** button, and the
+   note toolbar's hammer forges without running.)
 3. Run **Forge: Open 3D View**. A panel opens with a simulation
    canvas (~500 small pale-blue water particles in a rectangle).
 4. Click the **Run simulation** button in the panel header. Wait a
