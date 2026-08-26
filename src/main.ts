@@ -28,6 +28,10 @@ import { shouldBlindRetry, attemptPrefix } from './blind-retry-core.ts';
 import type { GenerateVerdict } from './blind-retry-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
 import {
+  mayMachineWriteFacet,
+  sourceFacetWriteRefusal,
+} from './source-facet-write-guard-core.ts';
+import {
   resolveForgeGesture,
   NOTHING_TO_DERIVE_NOTICE,
 } from './source-aware-forge-click-core.ts';
@@ -4643,6 +4647,24 @@ export default class ForgePlugin extends Plugin {
     // "syntax errors are a separate concern" scope note).
     try {
       const bodyForEmptyCheck = await this.app.vault.read(file);
+      // Drain 2026-08-26-1620 (P1) — machinery may never overwrite a
+      // SOURCE facet. Drain 2530's post-run refresh is correct on a
+      // recipe-canonical note, where `# Python` is derived; on a
+      // python-canonical note `# Python` is the cohort's hand-written
+      // SOURCE, and refreshing it destroyed their code after exactly one
+      // run while leaving `source_facet: python` stamped — data loss
+      // plus a frontmatter lie.
+      //
+      // The guard lives HERE, at the writer, rather than at each caller:
+      // a per-caller check is the shape that lets the next caller
+      // forget, which is precisely how 2530's refresh reached a source
+      // facet. Uses the read this method already does.
+      const storedSourceFacet = getSourceFacet(
+        bodyForEmptyCheck, (b, k) => getFmFieldV2(b, k));
+      if (!mayMachineWriteFacet('python', storedSourceFacet)) {
+        console.log(sourceFacetWriteRefusal('python', file.path));
+        return;
+      }
       const recipeForEmptyCheck = extractRecipeSection(bodyForEmptyCheck);
       const emptyCheck = checkEmptyRecipeForTranspile(recipeForEmptyCheck);
       if (!emptyCheck.shouldTranspile) {
