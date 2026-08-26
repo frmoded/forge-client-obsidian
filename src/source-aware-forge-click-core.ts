@@ -46,42 +46,25 @@ export type SourceLayer =
  *  TODO: delete in v0.2.290. */
 export type CanonicalLayer = SourceLayer;
 
-/** What forgeSnippet should do, given the source layer. The string
- *  values are stable across Phase 2.5 + later drains so callers can
- *  switch on them in a future status-bar / decoration extension. */
-export type ForgeClickAction =
-  /** Run the # Python facet AS-IS. No transpile, no overwrite. The
-   *  Path Y delivery: V2 cohort hand-edits to Python are preserved.
-   *  Caller emits a notice indicating Python-source mode. */
-  | 'run_python_directly'
-  /** v0.2.254 drain 2026-07-03-1100 — Description was hand-edited so
-   *  Recipe + Python are stale. Auto-run the full pipeline:
-   *  /generate (Description → Recipe + Python via the hosted service)
-   *  → execute the fresh Python. Cohort no longer has to invoke a
-   *  separate command. Replaces the pre-v0.2.254 `abort_recipe_stale`
-   *  action that told cohort to run the (long-retired)
-   *  "Forge: Generate Recipe from Description" command. */
-  | 'auto_generate_then_run'
-  /** Standard V2 transpile path: Recipe → Python via the engine. The
-   *  default for synced / recipe-source / probe-failed states. */
-  | 'standard_transpile';
-
-/** Decide what Forge-click should do for a V2 note given its source
- *  layer.
- *
- *  Pass `null` when the probe failed (e.g. hash helpers threw). The
- *  function defaults to `standard_transpile` in that case — Phase 1
- *  behavior preserved so a hash-machine bug can't take Forge-click
- *  offline.
- */
-export function decideForgeClickAction(
-  sourceLayer: SourceLayer | null,
-): ForgeClickAction {
-  if (sourceLayer === 'python') return 'run_python_directly';
-  if (sourceLayer === 'description') return 'auto_generate_then_run';
-  // 'recipe', 'synced', null → standard transpile.
-  return 'standard_transpile';
-}
+// ---------------------------------------------------------------------
+// Drain 2026-08-26-1600 §2 — `ForgeClickAction` and
+// `decideForgeClickAction` lived here and are RETIRED.
+//
+// They had ZERO production consumers. The branching in `forgeSnippet`
+// has always been inline, so this function decided nothing; its enum
+// went stale at F4 besides (`run_python_directly` and
+// `auto_generate_then_run` both named RUNNING, which the hammer stopped
+// doing in v0.2.372). Its only callers were its own unit test and
+// `description-canonical-fixture-integration.test.ts` — which is I1's
+// test hook, so an intuition was being guarded by a probe of dead code.
+//
+// `resolveForgeGesture` below is the live decision, and it ships with a
+// wiring guard so this cannot recur. I1's hook now points at it plus
+// the `forgeSnippet` branch that consumes it.
+//
+// Surfaced by drain 2026-08-26-1500; retired on forge-core's
+// adjudication in 1600.
+// ---------------------------------------------------------------------
 
 // ---------------------------------------------------------------------
 // Drain 2026-08-26-1500 — the RE-ROLL gesture.

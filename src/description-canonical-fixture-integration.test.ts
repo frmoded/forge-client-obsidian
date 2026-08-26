@@ -41,7 +41,8 @@ import {
   getFrontmatterField,
 } from './v2-note-core.ts';
 import { whichLayerIsSource } from './facet-hash-core.ts';
-import { decideForgeClickAction } from './source-aware-forge-click-core.ts';
+import { readFileSync } from 'node:fs';
+import { resolveForgeGesture } from './source-aware-forge-click-core.ts';
 import { sourceLayerStatusTooltip } from './source-layer-status-bar-core.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -76,9 +77,40 @@ describe('L41 description-canonical fixture (v0.2.254 auto-forge)', () => {
     assert.equal(canonical, 'description');
   });
 
-  it('decideForgeClickAction("description") → "auto_generate_then_run" (v0.2.254 pipeline)', () => {
-    const action = decideForgeClickAction('description');
-    assert.equal(action, 'auto_generate_then_run');
+  // Drain 2026-08-26-1600 §2 — I1's TEST HOOK, re-pointed.
+  //
+  // This used to call `decideForgeClickAction`, which had ZERO
+  // production consumers: the branching in `forgeSnippet` is inline, so
+  // I1's hook was exercising a function production never ran. An
+  // intuition whose hook tests dead code has no hook. That function is
+  // retired in this drain; the hook now asserts the same intuition
+  // against the decision production actually makes.
+  //
+  // PIN TYPE: PROPERTY (I1 — a Description-canonical note forges without
+  // cohort intervention), asserted through the live wiring.
+  it('I1: a Description-canonical note forges without cohort intervention', () => {
+    // The gesture production resolves. `null` stored facet is the
+    // realistic case for a note whose Description was just edited.
+    assert.equal(resolveForgeGesture('description', null), 'generate');
+    assert.equal(resolveForgeGesture('description', 'description'), 'generate');
+  });
+
+  it('I1 is wired: forgeSnippet routes the generate gesture, no prompt', () => {
+    // The half the old hook could never see — that the decision reaches
+    // production. `resolveForgeGesture` is called in `forgeSnippet`, and
+    // its 'generate' branch is the one holding the /generate call.
+    const main = readFileSync(
+      new URL('./main.ts', import.meta.url), 'utf8');
+    assert.match(main, /const gesture = resolveForgeGesture\(/,
+      'the gesture is not resolved in main.ts');
+    assert.match(main, /if \(gesture === 'generate'\) \{/,
+      'the generate branch is not wired to the gesture');
+    const body = main.slice(
+      main.indexOf('private async forgeSnippet()'),
+      main.indexOf('private async runSnippet('));
+    assert.equal(
+      [...body.matchAll(/this\._llmGenerateRecipe\(/g)].length, 1,
+      'the generate branch must hold exactly one /generate call');
   });
 
   it('tooltip describes the auto-forge pipeline (not the retired command)', () => {
