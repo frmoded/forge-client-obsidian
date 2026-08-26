@@ -20,8 +20,6 @@ Chapter 3 — a reusable note that takes a word and returns it with excitement.
 
 - word — the word to make excited
 
-**What's next:** [[function_inputs]]
-
 # Recipe
 
 Input word: str = "hooray".

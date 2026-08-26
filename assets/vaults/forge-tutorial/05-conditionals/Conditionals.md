@@ -42,3 +42,5 @@ Focus on **If** and **Otherwise** for this chapter. The `If ... , ... Otherwise
 [[Loops]].
 
 **What's next:** [[weather]]
+
+**After this chapter:** [[Loops]]

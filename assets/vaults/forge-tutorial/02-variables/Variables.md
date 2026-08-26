@@ -47,3 +47,5 @@ Output panel. Ignore `If`, `Otherwise`, `For each` for now — those come in
 later chapters ([[Conditionals]], [[Loops]]).
 
 **What's next:** [[greeting]]
+
+**After this chapter:** [[Functions]]

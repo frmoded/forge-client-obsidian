@@ -6,8 +6,6 @@ type: action
 
 Chapter 5 — Conditionals. Chooses what to say based on a value.
 
-**What's next:** [[Loops]]
-
 # Recipe
 
 Let temperature = 72.

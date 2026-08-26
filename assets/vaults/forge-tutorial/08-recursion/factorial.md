@@ -1,13 +1,13 @@
 ---
 type: action
 inputs: [n]
-description_hash: 49f64f4c8107cc2ba041157c310bb3073a2e8c0f4814a7ec4abaa72488ed1950
+description_hash: e1cf47f025216257478b615ad529f6cdc24334fab291803fb9f720dbef088be0
 recipe_hash: e904c2ecff41676e938d327a4d3744b5f804b9d6f6931d948373f1de26cbb15c
 python_hash: e4c921fd6bd0ff7f404a7bf31e80052ee8e83c2fa419fab084833b7f9db11c76
-recipe_derived_from_source_hash: 49f64f4c8107cc2ba041157c310bb3073a2e8c0f4814a7ec4abaa72488ed1950
+recipe_derived_from_source_hash: e1cf47f025216257478b615ad529f6cdc24334fab291803fb9f720dbef088be0
 source_facet: description
-recipe_derived_from_description_hash: 49f64f4c8107cc2ba041157c310bb3073a2e8c0f4814a7ec4abaa72488ed1950
-python_derived_from_source_hash: 49f64f4c8107cc2ba041157c310bb3073a2e8c0f4814a7ec4abaa72488ed1950
+recipe_derived_from_description_hash: e1cf47f025216257478b615ad529f6cdc24334fab291803fb9f720dbef088be0
+python_derived_from_source_hash: e1cf47f025216257478b615ad529f6cdc24334fab291803fb9f720dbef088be0
 python_derived_from_recipe_hash: e904c2ecff41676e938d327a4d3744b5f804b9d6f6931d948373f1de26cbb15c
 recipe_version: 1
 ---
@@ -19,8 +19,6 @@ a note that calls itself to multiply n by every number below it.
 ## Inputs
 
 - n — non-negative integer
-
-**What's next:** [[Slots]]
 
 # Recipe
 Input n: int = 5.

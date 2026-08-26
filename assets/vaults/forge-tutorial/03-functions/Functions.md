@@ -84,3 +84,7 @@ Ignore `If`, `Otherwise`, `For each` for now — those come in later chapters
 ([[Conditionals]], [[Loops]]).
 
 **What's next:** [[cheer]]
+
+**Order in this chapter:** [[cheer]] → [[excited]] → [[function_inputs]] → [[mood]]
+
+**After this chapter:** [[Composition]]

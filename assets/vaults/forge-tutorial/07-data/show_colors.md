@@ -14,8 +14,6 @@ python_derived_from_recipe_hash: c59639dbd7ce35208cf04471658a9993e64f5c5fb028c58
 
 Chapter 7 — Data. Reads a list from a data note and walks through it.
 
-**What's next:** [[colors]]
-
 # Recipe
 
 Let palette = [[colors]].

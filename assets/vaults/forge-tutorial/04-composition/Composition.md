@@ -52,3 +52,7 @@ skill is nesting them. Ignore `If`, `Otherwise`, `For each` for now —
 [[Conditionals]] and [[Loops]] cover those.
 
 **What's next:** [[describe_it]]
+
+**Order in this chapter:** [[describe_it]] → [[excited_word]]
+
+**After this chapter:** [[Conditionals]]

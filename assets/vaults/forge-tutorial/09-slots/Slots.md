@@ -88,3 +88,5 @@ compose songs and run models with the very same notes-and-clicks you already
 know. Go make something you care about.
 
 **What's next:** [[octopus_fact]]
+
+**After this chapter:** none — that's the whole tutorial. Nicely done.

@@ -12,8 +12,6 @@ recipe_derived_from_description_hash: 68183f61c7d30caa91a7191e263938a5e5f2818034
 
 Chapter 2 — Variables. Names two values and joins them into a greeting.
 
-**What's next:** [[Functions]]
-
 # Recipe
 
 Let name = "Ada".

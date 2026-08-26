@@ -12,8 +12,6 @@ recipe_derived_from_description_hash: b3090791b934601786a5c9f912dae2704d1ff8a8fa
 
 Chapter 4 — a small note that just returns a word. Meant to be called by another note.
 
-**What's next:** [[Conditionals]]
-
 # Recipe
 
 Return "wonderful".

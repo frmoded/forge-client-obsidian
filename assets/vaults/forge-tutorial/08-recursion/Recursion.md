@@ -51,3 +51,5 @@ That's the core tour. One more idea — letting the engine fill in a value for
 you with `{{ … }}` — is next in [[Slots]].
 
 **What's next:** [[show_factorial]]
+
+**After this chapter:** [[Slots]]

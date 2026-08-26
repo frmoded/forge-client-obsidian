@@ -53,3 +53,5 @@ No new palette constructs; the new idea is the note's `type: data` frontmatter.
 it. Focus on the shape difference between the two.
 
 **What's next:** [[show_colors]]
+
+**Order in this chapter:** [[show_colors]] → [[colors]]
