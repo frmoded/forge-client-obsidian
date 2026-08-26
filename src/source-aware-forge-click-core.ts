@@ -82,3 +82,75 @@ export function decideForgeClickAction(
   // 'recipe', 'synced', null → standard transpile.
   return 'standard_transpile';
 }
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-26-1500 — the RE-ROLL gesture.
+//
+// Driver adjudication: "each Description→Recipe transpiling should be
+// re-generatable by the LLM on demand — possibly, not
+// deterministically." Before this drain, the hammer on a fully-synced
+// note derived nothing: `whichLayerIsSource` returns 'synced' when every
+// hash matches, 'synced' falls through to the transpile tail, and a
+// fresh roll required faking a Description edit.
+//
+// Post-F4 the semantics are clean and the driver chose them:
+// **Forge means derive; on a synced note it means derive AGAIN.**
+//
+// CACHE POLICY IS NOT WEAKENED BY THIS. Run still never re-hits the LLM;
+// lineage caching stands untouched. ONLY the explicit Forge GESTURE
+// re-derives. If you are reading this because a synced note "wastes" an
+// LLM call on Forge — that is the feature, deliberately, per drain
+// 2026-08-26-1500. Do not re-add a freshness short-circuit here.
+// ---------------------------------------------------------------------
+
+/** What the hammer should derive, once the probe and the note's own
+ *  stored `source_facet` are both taken into account. */
+export type ForgeGesture =
+  /** Re-run /generate from the Description. Fires on a stale
+   *  Description-canonical note AND on a synced one whose stored source
+   *  is `description` — the re-roll. */
+  | 'generate'
+  /** Recipe → Python via the engine. Deterministic and cheap; zero LLM
+   *  unless slots miss. */
+  | 'transpile'
+  /** Python is the source. There is nothing upstream to derive, so the
+   *  gesture answers with a notice rather than a silent no-op. */
+  | 'nothing_to_derive';
+
+/**
+ * Resolve the hammer's meaning for a V2 note.
+ *
+ * `probe` is `whichLayerIsSource`'s verdict — which facet drifted. When
+ * nothing has drifted it returns `'synced'`, which says what is FRESH
+ * but not what the note IS. That is the gap this function closes:
+ * `stored` is the note's own `source_facet` frontmatter (drain 1200
+ * made it a stored fact rather than an inference), so a synced note
+ * still knows which derivation it is the product of.
+ *
+ * `stored` is consulted ONLY when the probe says `'synced'`. A drifted
+ * facet is authoritative about itself — that is I5, and this drain does
+ * not touch it.
+ */
+export function resolveForgeGesture(
+  probe: SourceLayer | null,
+  stored: SourceLayer | null,
+): ForgeGesture {
+  if (probe === 'python') return 'nothing_to_derive';
+  if (probe === 'description') return 'generate';
+  if (probe === 'synced') {
+    // The re-roll. A synced note derives AGAIN, along whichever edge
+    // produced it.
+    if (stored === 'description') return 'generate';
+    if (stored === 'python') return 'nothing_to_derive';
+    return 'transpile';
+  }
+  // 'recipe', or a failed probe (null): transpile. Phase 1 behaviour,
+  // preserved so a hash-machine bug cannot take the hammer offline.
+  return 'transpile';
+}
+
+/** The notice for a note whose source is Python. §1: the gesture always
+ *  answers — never a silent no-op. */
+export const NOTHING_TO_DERIVE_NOTICE =
+  'Python is this note’s source — edit it directly; there is '
+  + 'nothing to re-derive.';

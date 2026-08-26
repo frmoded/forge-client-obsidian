@@ -27,6 +27,10 @@ import { decideForgeLanding, type ForgeOutcome } from './forge-landing-core.ts';
 import { shouldBlindRetry, attemptPrefix } from './blind-retry-core.ts';
 import type { GenerateVerdict } from './blind-retry-core.ts';
 import { resolveHintFacet } from './hint-facet-core.ts';
+import {
+  resolveForgeGesture,
+  NOTHING_TO_DERIVE_NOTICE,
+} from './source-aware-forge-click-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
@@ -2651,12 +2655,30 @@ export default class ForgePlugin extends Plugin {
         '{ v2Body.length:', v2Body.length,
         ', file:', file.basename, '}',
       );
-      if (canonicalLayer === 'python') {
+      // Drain 2026-08-26-1500 — the RE-ROLL. `whichLayerIsSource` says
+      // what is FRESH, not what the note IS: a fully-synced note comes
+      // back 'synced' and used to fall through to the transpile tail,
+      // deriving nothing, so a fresh roll meant faking a Description
+      // edit. `resolveForgeGesture` consults the note's own stored
+      // `source_facet` in exactly that case, so a synced note derives
+      // AGAIN along whichever edge produced it.
+      //
+      // CACHE POLICY IS NOT WEAKENED. Run still never re-hits the LLM;
+      // lineage caching stands. Only this explicit gesture re-derives.
+      // See the module note in source-aware-forge-click-core.ts before
+      // "fixing" a synced Forge back into a freshness short-circuit.
+      const storedFacetForGesture = getSourceFacet(v2Body, (b, k) => getFmFieldV2(b, k));
+      const gesture = resolveForgeGesture(canonicalLayer, storedFacetForGesture);
+      console.log(
+        '[Forge] gesture =', gesture,
+        '{ probe:', canonicalLayer, ', stored:', storedFacetForGesture, '}',
+      );
+      if (gesture === 'nothing_to_derive') {
         console.log(
           `${NOTICE_PREFIX}${file.basename} is Python-canonical (V2 implicit lock) — running # Python directly without re-transpile`,
         );
         this.notice(
-          `${NOTICE_PREFIX}${file.basename} → Python-canonical (hand-edited). No /generate, no transpile. Press Run in the Forge panel to execute.`,
+          `${NOTICE_PREFIX}${file.basename} → ${NOTHING_TO_DERIVE_NOTICE} Press Run in the Forge panel to execute.`,
         );
         // Drain 2026-08-25-2100 (F4) — was `runSnippet(…, 'python', file)`,
         // which carried the L45 `canonical_layer: 'python'` signal so the
@@ -2673,7 +2695,7 @@ export default class ForgePlugin extends Plugin {
         await this.landAfterForge(file, 'no-op');
         return;
       }
-      if (canonicalLayer === 'description') {
+      if (gesture === 'generate') {
         // v0.2.277 CW-2000 Option A — TWO-HOP auto-forge on Description-
         // canonical: LLM Description → Recipe (dialect='recipe'), then
         // E-- transpile Recipe → Python via writeSourcePythonBack
