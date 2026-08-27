@@ -1,16 +1,17 @@
 ---
 type: action
-description_hash: b3090791b934601786a5c9f912dae2704d1ff8a8faaaf4f8091781be14e518cc
+description_hash: 1573abc7f5be2766a4a66ac7e725327fb4aa8c34f0539ff9241501f59d6e7786
 recipe_hash: 56d57d0cd90edae9d303afe671b937a0122b0e406e1639f59be9e4218153e842
-python_hash: e5d1a4fc162f7e942b790e395406201fb6b83935dfe1843a475fc8837c15f097
-recipe_derived_from_source_hash: b3090791b934601786a5c9f912dae2704d1ff8a8faaaf4f8091781be14e518cc
+python_hash: fceae879c7e08affcd558f1895c3743f6d95c21de0b2b159446f81f6e0883d11
+recipe_derived_from_source_hash: 1573abc7f5be2766a4a66ac7e725327fb4aa8c34f0539ff9241501f59d6e7786
 source_facet: description
-recipe_derived_from_description_hash: b3090791b934601786a5c9f912dae2704d1ff8a8faaaf4f8091781be14e518cc
+recipe_derived_from_description_hash: 1573abc7f5be2766a4a66ac7e725327fb4aa8c34f0539ff9241501f59d6e7786
+python_derived_from_recipe_hash: 56d57d0cd90edae9d303afe671b937a0122b0e406e1639f59be9e4218153e842
 ---
 
 # Description
 
-Chapter 4 — a small note that just returns a word. Meant to be called by another note.
+A small note that just returns the word "wonderful". Meant to be called by another note.
 
 # Recipe
 
@@ -20,5 +21,5 @@ Return "wonderful".
 
 ```python
 def compute(context):
-    return None
+  return 'wonderful'
 ```

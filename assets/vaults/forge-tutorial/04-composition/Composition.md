@@ -1,7 +1,7 @@
 # Chapter 4 — Composition
 
-Remember `welcome.md` from when you first opened the vault? It called a second
-note, `greet`, to do part of its work. That's **composition**: notes
+Remember [[welcome]] from when you first opened the vault? It called a second
+note, [[greet]], to do part of its work. That's **composition**: notes
 calling notes. It's the heart of how this system scales from tiny pieces to
 big things.
 
@@ -45,10 +45,8 @@ at your new note instead.
 
 Focus on chained **Call [[...]]** patterns and **Let ... = Call ...** in this
 chapter. You've already met all the Recipe constructs the sample uses; the new
-skill is nesting them. Ignore `If`, `Otherwise`, `For each` for now —
-[[Conditionals]] and [[Loops]] cover those.
-
-**What's next:** [[describe_it]]
+skill is nesting them. Still ignoring `If`, `Otherwise`, `For each`, as in
+chapter 1 — [[Conditionals]] and [[Loops]] cover them properly.
 
 **Order in this chapter:** [[describe_it]] → [[excited_word]]
 

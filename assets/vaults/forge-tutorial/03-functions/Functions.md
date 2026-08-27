@@ -42,24 +42,35 @@ note.
 
 > **Return** is now in your palette.
 
-## More on inputs
-
-Two more notes round out this chapter.
+## A note with two inputs
 
 Open [[function_inputs]] and run it — it takes **two** inputs, `first_name`
-and `last_name`, and joins them. Nothing new syntactically: every
-`Input ... = ....` line adds one more parameter, and the note's `inputs:`
-frontmatter grows to match. One input or five, the shape is the same.
+and `last_name`, and joins them:
 
-Open [[mood]] and look at its `style` input. So far every input has been open
-text — type whatever you like. `style` instead declares a **fixed set of
-choices**, which makes it render as a dropdown in the run panel instead of a
-text box: pick `"cheerful"`, `"formal"`, or `"sleepy"` rather than typing
-freely. Inside the Recipe it's still just a string — the branching that picks
-a reply uses the `If` / `Otherwise` you'll meet properly next chapter. A
-dropdown is worth reaching for whenever an input only ever makes sense as one
-of a short, known list — it stops the person running the note from typing
-something the Recipe doesn't expect.
+```
+Ada Lovelace
+```
+
+Nothing new syntactically: every `Input ... = ....` line adds one more
+parameter. One input or five, the shape is the same.
+
+## An input with a fixed set of choices
+
+Open [[mood]] and run it — you'll see:
+
+```
+Hey hey hey!!!
+```
+
+Look at its `style` input. So far every input has been open text — type
+whatever you like. `style` instead declares a **fixed set of choices**, which
+makes it render as a dropdown in the run panel instead of a text box: pick
+`"cheerful"`, `"formal"`, or `"sleepy"` rather than typing freely. Inside the
+Recipe it's still just a string — the branching that picks a reply uses `If`
+/ `Otherwise`, which you'll meet properly in [[Conditionals]]. A dropdown is
+worth reaching for whenever an input only ever makes sense as one of a short,
+known list — it stops the person running the note from typing something the
+Recipe doesn't expect.
 
 ## Exercise (make your own)
 
@@ -78,8 +89,8 @@ to build anything here.
 
 Focus on **Return**, **Let**, and **Call [[...]]** for this chapter. The
 `Return ...` construct is how a note hands a result back to its caller.
-Ignore `If`, `Otherwise`, `For each` for now — those come in later chapters
-([[Conditionals]], [[Loops]]).
+Still ignoring `If`, `Otherwise`, `For each`, as in chapter 1 —
+[[Conditionals]] and [[Loops]] cover them properly.
 
 **Order in this chapter:** [[cheer]] → [[excited]] → [[function_inputs]] → [[mood]]
 

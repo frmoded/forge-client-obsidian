@@ -123,14 +123,32 @@ covers it properly" costs one sentence and prevents a silent inconsistency.
 ## Known gaps (honest, not yet fixed)
 
 - The "Chapter N — " scene-setting prefix (principle 2) is stripped from
-  `mood.md` only; 12 other action notes across chapters 2-9 still carry it,
-  4 of them currently blocked on uncommitted working-tree drift.
-- Principle 6 (pin the literal) has not yet been applied to `excited.md` or
-  `function_inputs.md` — both are live candidates, pending driver adjudication.
-- Principle 9 (set expectations once) has been applied retroactively to
-  chapter 2 only; chapter 3 still repeats the "ignore X, Y, Z" disclaimer in
-  full. Not yet revised.
-- Chapters 4 and onward have not been read against this guide at all.
+  chapters 1-3's action notes and `mood.md`; `04-composition/describe_it.md`,
+  `excited_word.md`, and the orphan `describe_forge.md` still carry it
+  (queued, 2026-08-27).
+- Principle 6 (pin the literal) is **resolved** for `excited.md` and
+  `function_inputs.md` (both pin their defaults explicitly, verified against
+  live `/generate` controls — see the "Limit" note below principle 6).
+  `04-composition/describe_it.md` and `excited_word.md` do NOT pin their
+  literals yet and are worse instances than any chapter-3 gap ever was —
+  `describe_it.md`'s Description doesn't even describe the shape of the
+  string it builds (queued, 2026-08-27).
+- Principle 9 (set expectations once) has been applied to chapters 1-4 as of
+  2026-08-27 — chapter 1 (`Hello.md`) carries the full statement, chapters 3
+  and 4 each carry a brief "still ignoring X, Y, Z, as in chapter 1" pointer.
+- Principle 5 (single nav-footer form) had a live double-footer violation in
+  `04-composition/Composition.md` (`What's next` AND `Order in this chapter`
+  together) — fixed 2026-08-27.
+- Principle 10 (show one real failure, chapter 3's missing-`word=` mistake)
+  is still unresolved — no `fix_me`-equivalent broken note exists for
+  chapter 3. Pending driver adjudication: is a new broken-note exercise
+  worth adding here, the way `fix_me.md` works for chapter 2?
+- `04-composition/describe_forge.md` is an orphan file — never referenced by
+  `Composition.md`, carries the same defects as `describe_it.md` plus an
+  unused, slightly different Recipe, and has no hash-lineage frontmatter at
+  all. Pending driver adjudication: delete it, or wire it into the chapter
+  as a real exercise artifact.
+- Chapters 5-9 have not been read against this guide at all.
 
 ## Worked example: Chapter 2 (Variables)
 
