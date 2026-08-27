@@ -36,6 +36,9 @@ Then [[cheer]] uses it:
 - [[excited]] returns `"hooray!"`, and `Return` hands that back to whoever
   ran [[cheer]] — the Output panel shows it.
 
+Open [[fix_the_call]] — it's broken exactly that way. Run it, read the real
+error, then fix the call.
+
 A note that takes an input and returns something is this system's idea of a
 **function**: a named, reusable step. And making one is just making another
 note.

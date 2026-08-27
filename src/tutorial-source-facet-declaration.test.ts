@@ -55,6 +55,11 @@ const EXPECTED: Record<string, string | null> = {
                                                        // rather than silently absorbed
   '02-variables/greeting.md':           'description',
   '03-functions/cheer.md':              'description',
+  '03-functions/fix_the_call.md':       'recipe',       // chapter 3's broken-on-purpose
+                                                       // note (drain 2026-08-27-1200).
+                                                       // `recipe` because both facets are
+                                                       // hand-authored and the Recipe IS
+                                                       // the artifact under repair
   '03-functions/excited.md':            'description',
   '03-functions/function_inputs.md':    'description',
   '03-functions/mood.md':               'description',
