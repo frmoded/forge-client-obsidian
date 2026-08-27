@@ -17,7 +17,7 @@ You didn't type that fact. The engine did.
 
 Open the note and look. The key line is:
 
-> Let fact = {{an interesting fact about octopuses}}.
+> Let fact = {{a random fun fact about octopuses}}.
 
 The new piece is `{{ … }}` — a **value slot**. Inside the double curly braces you
 write a *request* in plain English instead of a value. When you run it, the
@@ -63,11 +63,10 @@ writing for you.
 ## If you want to overrule it (optional, advanced)
 
 Don't like the answer it picked? You can replace it directly by editing the
-Python facet. Under the hexa-state visibility contract (see the state suffix
-legend in the plugin's INSTALL.md), editing the Python body flips that facet to
-`— source` — the plugin recognizes your hand-edit as authoritative and won't
-overwrite it on the next run. It's a peek at the ceiling — you never *have* to
-do this, but it's there when you want full control.
+Python facet. Once you hand-edit that code, the plugin treats your edit as
+authoritative and won't overwrite it the next time the note runs. It's a peek
+at the ceiling — you never *have* to do this, but it's there when you want
+full control.
 
 ## Palette focus
 

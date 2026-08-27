@@ -223,7 +223,63 @@ covers it properly" costs one sentence and prevents a silent inconsistency.
   fixed; CC withdrew its own "systematic rather than two accidents" guess
   (message `1245` §5) rather than let it harden into a premise. Two accidents
   it was.
-- Chapters 5-9 have not been read against this guide at all.
+- Chapters 5-9 audited against this guide 2026-08-27 (two parallel reads: ch5-7,
+  ch8-9). Findings, split by what was fixed directly vs. what needs a CC drain
+  (hash-tracked action/data notes go through CC, per this session's standing
+  practice — even unstamped ones, for consistency):
+  - **Fixed directly (companion notes, no hash concerns):** `06-loops/Loops.md`
+    had a real factual error, not just a style violation — it taught list
+    literals with angle brackets (`<3, 2, 1>`) in three places, while every
+    actual note in the vault (`countdown.md`, `colors.md`) uses square brackets
+    (`[3, 2, 1]`); corrected all three. Also trimmed a principle-3 repeat (the
+    `Return`-vs-`[[print]]` explanation was stated in full, then restated
+    almost identically as a "rule of thumb" one paragraph later). `07-data/Data.md`
+    had a principle-5 double footer (`What's next` + `Order in this chapter`
+    together) and was the only chapter missing an `After this chapter` pointer
+    entirely — fixed both, pointing on to `[[Recursion]]`. `08-recursion/Recursion.md`
+    had a three-line footer (`What's next` + `Order in this chapter` +
+    `After this chapter`, one line too many) and two narration/code mismatches:
+    prose said "Otherwise it returns…" but `factorial.md`'s actual Recipe has no
+    `Otherwise` keyword at all — a bare If-block-then-unconditional-Return
+    idiom — reworded to "If that's not true yet…"; and the Palette-focus
+    paragraph restated the base-case warning a second time while also
+    misquoting the guard as `If n < 2` (the real Recipe says `If n <= 1`) —
+    cut the restatement rather than just fix the quote, since it was
+    redundant either way. `09-slots/Slots.md` quoted its Recipe line as
+    `{{an interesting fact about octopuses}}` when `octopus_fact.md`'s actual
+    Recipe reads `{{a random fun fact about octopuses}}` — corrected the quote
+    to match. Also simplified a stranded implementation aside ("hexa-state
+    visibility contract," with a forward-reference to the plugin's `INSTALL.md`)
+    into plain tutorial language — chapter 9 is the tutorial's last chapter, so
+    a forward reference here has nowhere to land (principle 4).
+  - **Needs a CC drain (hash-tracked or vault-note edits, not hand-edited here):**
+    `05-conditionals/weather.md` and `06-loops/countdown.md` still carry the
+    "Chapter N — " prefix (principle 2); both are deliberately unstamped, so
+    this is low-urgency but should still go through CC for the same reason
+    `hello_world.md`'s prefix strip did. `07-data/colors.md` and
+    `07-data/show_colors.md` carry a "Chapter 7 — " prefix too.
+    `07-data/show_colors.md` is the more urgent of the two: it carries REAL
+    hash-lineage (a live `/generate` input) and its Description is pure shape
+    ("Reads a list from a data note and walks through it") — never names
+    `[[colors]]` or the actual output (`red`/`green`/`blue`) — a live
+    principle-6 risk, same shape as the `excited`/`function_inputs` findings
+    above. `08-recursion/factorial.md` has the same live principle-6 risk: its
+    default `n=5` is unpinned in both the Description and `## Inputs`, and the
+    note IS hash-stamped (unlike `show_factorial.md`). Most severe:
+    `09-slots/octopus_fact.md` — carries the "Chapter 9 — " prefix AND generic
+    engine-mechanism prose in its Description instead of naming what it
+    actually computes (an extreme principle-6 violation, doesn't even say
+    "octopus fact"); its `# Python` facet is **broken** (`return None`),
+    directly contradicting the chapter's own narrated promise
+    ("Octopuses have three hearts."); and its hash-lineage is **incomplete**
+    (`python_derived_from_recipe_hash` / `python_derived_from_source_hash`
+    absent entirely) — the same dishonest-stamp class as the `describe_it.md`
+    bug above, but missing fields rather than wrong ones. CC drains for all of
+    the above posted 2026-08-27 (Loop mode charter, chapters 5-9 polish).
+- `09-slots/Slots.md`'s closing footer (`**After this chapter:** none — that's
+  the whole tutorial. Nicely done.`) is a good example worth keeping as a
+  reference: correctly identifies itself as the terminal chapter, no phantom
+  pointer, no double footer. Noted so a future edit doesn't "fix" it.
 
 ## Worked example: Chapter 2 (Variables)
 

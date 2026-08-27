@@ -49,6 +49,6 @@ No new palette constructs; the new idea is the note's `type: data` frontmatter.
 [[colors]] is a data note; [[show_colors]] is a normal action note that consumes
 it. Focus on the shape difference between the two.
 
-**What's next:** [[show_colors]]
-
 **Order in this chapter:** [[show_colors]] → [[colors]]
+
+**After this chapter:** [[Recursion]]

@@ -19,10 +19,10 @@ are at work:
 
 - **A stopping point.** If `n` is at most `1`, it returns `1`. Without a
   stopping point, the note would call itself forever.
-- **A step toward it.** Otherwise it returns `n` times [[factorial]] of
-  `n minus 1` — to find `factorial` of `5` it asks for `factorial` of `4`, which
-  asks for `3`, and so on down to `1`, where it stops. Then all those answers
-  multiply back up to `120`.
+- **A step toward it.** If that's not true yet, it returns `n` times
+  [[factorial]] of `n minus 1` — to find `factorial` of `5` it asks for
+  `factorial` of `4`, which asks for `3`, and so on down to `1`, where it
+  stops. Then all those answers multiply back up to `120`.
 
 The second note, [[show_factorial]], just calls it and returns the result:
 
@@ -44,14 +44,11 @@ the answer jumps to `720`. Then try `n=3` and check it by hand: `3 × 2 × 1 = 6
 
 No new palette constructs in this chapter — recursion re-uses `Let`, `Call`,
 `If`, and `Return`. The new mental idea is a note calling **itself** by
-name via `Call [[factorial]]` from inside [[factorial]]. Watch the base-case
-guard (the `If n < 2` branch) — recursion without a base case runs forever.
+name via `Call [[factorial]]` from inside [[factorial]].
 
 That's the core tour. One more idea — letting the engine fill in a value for
 you with `{{ … }}` — is next in [[Slots]].
 
-**What's next:** [[show_factorial]]
+**Order in this chapter:** [[show_factorial]] → [[factorial]]
 
 **After this chapter:** [[Slots]]
-
-**Order in this chapter:** [[show_factorial]] → [[factorial]]

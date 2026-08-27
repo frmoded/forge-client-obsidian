@@ -15,14 +15,14 @@ Liftoff!
 
 Open the note and look. The heart of it is a **For each** line:
 
-> For each number in `<3, 2, 1>`:
+> For each number in `[3, 2, 1]`:
 
 This runs the lines indented beneath it once for every item in the list, giving
 the current item the name `number` each time around — so it prints `3`, then
 `2`, then `1`. After the loop finishes, one last un-indented line prints
 `"Liftoff!"`.
 
-Lists are written with **angle brackets**, like `<3, 2, 1>` — that's just how
+Lists are written with **square brackets**, like `[3, 2, 1]` — that's just how
 this system writes a list of values.
 
 ## About `Return` vs `[[print]]`
@@ -35,13 +35,10 @@ and you'd never see `2` or `1`. `[[print]]` **emits** one line and lets the
 Recipe keep going — which is exactly what you need when a loop is meant to
 show multiple things.
 
-Rule of thumb: use `Return` when you have one answer to hand back, and
-`[[print]]` when you want to show many things as the note runs.
-
 ## Exercise
 
 Open the [[countdown]] note, add more numbers to the list — try
-`<5, 4, 3, 2, 1>` — and run again. The countdown grows on its own, no extra
+`[5, 4, 3, 2, 1]` — and run again. The countdown grows on its own, no extra
 lines needed. Then change `"Liftoff!"` to your own send-off.
 
 ## Palette focus
