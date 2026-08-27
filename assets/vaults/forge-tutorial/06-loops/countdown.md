@@ -4,7 +4,7 @@ type: action
 
 # Description
 
-Chapter 6 — Loops. Does the same thing once for each item in a list.
+Does the same thing once for each item in a list.
 
 # Recipe
 

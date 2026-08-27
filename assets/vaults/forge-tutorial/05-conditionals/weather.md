@@ -4,7 +4,7 @@ type: action
 
 # Description
 
-Chapter 5 — Conditionals. Chooses what to say based on a value.
+Chooses what to say based on a value.
 
 # Recipe
 
