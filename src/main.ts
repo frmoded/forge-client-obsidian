@@ -10,6 +10,7 @@ import {
   removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core.ts';
 import { BUNDLED_ASSETS } from './bundled-assets.generated.ts';
+import { restoreActiveNoteToLastCommit, restoreVaultToLastCommit } from './restore-note-to-git.ts';
 import { GENERIC_ATTRIBUTION } from './output-entry-meta-core.ts';
 import {
   formatChipInventoryFull,
@@ -1147,6 +1148,21 @@ export default class ForgePlugin extends Plugin {
     });
 
     this.addSettingTab(new ForgeSettingTab(this.app, this));
+
+    // Drain 2026-08-27-0400 — Gate S. The hammer re-roll is a designed
+    // feature; this is its undo. Decisions live in
+    // restore-note-to-git-core.ts, wiring in restore-note-to-git.ts.
+    this.addCommand({
+      id: 'forge-restore-note-to-last-commit',
+      name: 'Restore active note to last commit',
+      callback: async () => { await restoreActiveNoteToLastCommit(this.app); },
+    });
+
+    this.addCommand({
+      id: 'forge-restore-vault-to-last-commit',
+      name: 'Restore ALL notes to last commit',
+      callback: async () => { await restoreVaultToLastCommit(this.app); },
+    });
 
     this.addCommand({
       id: 'forge-toggle-edges-panel',
