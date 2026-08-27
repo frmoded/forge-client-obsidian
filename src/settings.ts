@@ -32,6 +32,11 @@ export interface ForgeSettings {
   // note should return you to the values you last played it with.
   panelStripValues: Record<string, Record<string, string>>;
   panelStripCollapsed: boolean;
+  /** Drain 2026-08-27-0700 (Gate V) — fraction of the Forge panel's
+   *  height given to the input strip. NEVER trusted as stored: the read
+   *  path runs it through clampStripFraction, because a 0 or 1 here
+   *  hides a region AND the divider that would undo it. */
+  panelStripFraction: number;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -42,6 +47,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   seenWelcome: false,
   panelStripValues: {},
   panelStripCollapsed: false,
+  panelStripFraction: 0.33,
 };
 
 export class ForgeSettingTab extends PluginSettingTab {

@@ -1675,3 +1675,19 @@
 [data-forge-guitar-pos][data-selected="true"] .forge-guitar-open-ring {
   opacity: 1;
 }
+
+/* Drain 2026-08-27-0700 (Gate V) — draggable output/input split. The
+   strip's height now comes from an inline flex-basis; `max-height` is
+   cleared at render time so the old 33% cap behaves as a DEFAULT. */
+.forge-panel-split-divider {
+  height: 6px;
+  margin: -3px 0 0;
+  cursor: row-resize;
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.forge-panel-split-divider:hover {
+  background: var(--interactive-accent);
+  opacity: 0.4;
+}

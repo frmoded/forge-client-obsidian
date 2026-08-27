@@ -6,6 +6,7 @@ import {
   type McqElement,
 } from './mcq-widget-core.ts';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio.ts';
+import { clampStripFraction, stripFractionFromDrag, stripFlexBasis, DEFAULT_STRIP_FRACTION } from './forge-panel-split-core.ts';
 import { shouldRenderEntryMeta } from './output-entry-meta-core.ts';
 import {
   readScoreViewMode,
@@ -187,6 +188,10 @@ export interface ForgeStripHost {
   /** Collapsed state, persisted in plugin data across restarts. */
   isCollapsed(): boolean;
   setCollapsed(collapsed: boolean): void;
+  /** Split fraction, persisted. The GETTER is responsible for clamping —
+   *  see forge-panel-split-core.ts for why the read path owns it. */
+  getStripFraction(): number;
+  setStripFraction(fraction: number): void;
 }
 
 /** An action note as the strip needs it: the field models to render,
@@ -321,6 +326,16 @@ export class ForgeOutputView extends ItemView {
     const collapsed = this.stripHost?.isCollapsed() ?? false;
     strip.toggleClass('is-collapsed', collapsed);
     strip.toggleClass('is-stale', state.disabled);
+
+    // Drain 2026-08-27-0700 — apply the persisted split. Clamped by the
+    // host's getter, so a hand-edited or stale data.json cannot hide a
+    // region here.
+    strip.style.flexBasis = stripFlexBasis(
+      this.stripHost?.getStripFraction() ?? DEFAULT_STRIP_FRACTION,
+    );
+    strip.style.maxHeight = 'none';   // the 33% cap is now a DEFAULT, not a cap
+
+    this.renderSplitDivider(strip);
 
     const head = strip.createDiv({ cls: 'forge-panel-inputs-header' });
     const toggle = head.createEl('button', {
@@ -1261,6 +1276,43 @@ export class ForgeOutputView extends ItemView {
     }
 
     entry.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  /** Draggable separator between the output region and the input strip.
+   *  Drag sets the strip's flex-basis; the output region absorbs the rest
+   *  through its existing `flex: 1 1 auto`. Double-click resets. */
+  private renderSplitDivider(strip: HTMLElement) {
+    const panel = strip.parentElement;
+    if (!panel) return;
+    const divider = strip.createDiv({ cls: 'forge-panel-split-divider' });
+    divider.setAttribute('aria-label', 'Resize input strip (double-click to reset)');
+
+    const applyFromPointer = (clientY: number) => {
+      const box = panel.getBoundingClientRect();
+      const fraction = stripFractionFromDrag(clientY, box.top, box.height);
+      strip.style.flexBasis = stripFlexBasis(fraction);
+      return fraction;
+    };
+
+    divider.onpointerdown = (down: PointerEvent) => {
+      down.preventDefault();
+      let latest = this.stripHost?.getStripFraction() ?? DEFAULT_STRIP_FRACTION;
+      const move = (e: PointerEvent) => { latest = applyFromPointer(e.clientY); };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        // Persist ONCE, on release — a drag is many events and each one
+        // would otherwise be a settings write.
+        this.stripHost?.setStripFraction(latest);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    };
+
+    divider.ondblclick = () => {
+      strip.style.flexBasis = stripFlexBasis(DEFAULT_STRIP_FRACTION);
+      this.stripHost?.setStripFraction(DEFAULT_STRIP_FRACTION);
+    };
   }
 
   private makeEntry(snippetId: string): HTMLElement {

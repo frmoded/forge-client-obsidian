@@ -10,6 +10,7 @@ import {
   removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core.ts';
 import { BUNDLED_ASSETS } from './bundled-assets.generated.ts';
+import { clampStripFraction } from './forge-panel-split-core.ts';
 import { restoreActiveNoteToLastCommit, restoreVaultToLastCommit } from './restore-note-to-git.ts';
 import { GENERIC_ATTRIBUTION } from './output-entry-meta-core.ts';
 import {
@@ -5961,6 +5962,13 @@ export default class ForgePlugin extends Plugin {
       forget: (snippetId) => {
         this.settings.panelStripValues =
           forgetPanelValues(this.settings.panelStripValues ?? {}, snippetId);
+        void this.saveSettings();
+      },
+      // THE READ PATH CLAMPS, not the write path: a dangerous value can
+      // also arrive from a hand-edited data.json or an older build.
+      getStripFraction: () => clampStripFraction(this.settings.panelStripFraction),
+      setStripFraction: (fraction) => {
+        this.settings.panelStripFraction = clampStripFraction(fraction);
         void this.saveSettings();
       },
       isCollapsed: () => this.settings.panelStripCollapsed ?? false,
