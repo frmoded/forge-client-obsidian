@@ -21,6 +21,49 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(__dirname, '..');
 const BUNDLE_DIR = path.join(REPO, 'assets', 'vaults', 'forge-tutorial');
 
+/** Build a throwaway mini-repo so the bundle tests never write to the
+ *  SHIPPED `assets/vaults/`.
+ *
+ *  Both `sync-bundled-vault.mjs` and `build-release-zip.mjs` derive their
+ *  root from their OWN `__dirname` (`const ROOT = path.resolve(__dirname,
+ *  "..")`), not from `cwd` — so passing `cwd` cannot redirect them, and a
+ *  symlinked `scripts/` cannot either, because Node resolves a module to
+ *  its realpath before computing `import.meta.url`. `scripts/` therefore
+ *  has to be a real copy; it is a handful of `.mjs` files plus
+ *  `vaults.txt`, which those scripts read relative to their own dir.
+ *
+ *  Everything the scripts only READ is symlinked rather than copied —
+ *  `assets/pyodide` alone is tens of megabytes. `assets/vaults` is the
+ *  thing under test, so it is a real, writable copy.
+ *
+ *  Drain 2026-08-26-2130. */
+function makeTempRepo(): { root: string; cleanup: () => void } {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'fco-bundle-test-'));
+  const root = path.join(base, 'repo');
+  fs.mkdirSync(path.join(root, 'assets'), { recursive: true });
+
+  fs.cpSync(path.join(REPO, 'scripts'), path.join(root, 'scripts'), { recursive: true });
+  fs.cpSync(path.join(REPO, 'assets', 'vaults'), path.join(root, 'assets', 'vaults'), {
+    recursive: true,
+  });
+  for (const child of fs.readdirSync(path.join(REPO, 'assets'))) {
+    if (child === 'vaults') continue;
+    fs.symlinkSync(path.join(REPO, 'assets', child), path.join(root, 'assets', child));
+  }
+  for (const f of ['main.js', 'manifest.json', 'styles.css', 'package.json', 'node_modules']) {
+    const src = path.join(REPO, f);
+    if (fs.existsSync(src)) fs.symlinkSync(src, path.join(root, f));
+  }
+  // The scripts resolve each source vault as `<root>/../<name>`, and the
+  // engine drift check as `<root>/../forge/forge`. Symlink the real ones:
+  // they are read-only for these tests.
+  for (const sib of ['forge', 'forge-tutorial', 'forge-moda', 'music-theory', 'music-core']) {
+    const src = path.resolve(REPO, '..', sib);
+    if (fs.existsSync(src)) fs.symlinkSync(src, path.join(base, sib));
+  }
+  return { root, cleanup: () => fs.rmSync(base, { recursive: true, force: true }) };
+}
+
 test('forge-tutorial bundle: required files present', () => {
   // Smoke check that sync-bundled-vault has been run for tutorial.
   // Without these, ensureBundledForgeTutorial silently no-ops with a
@@ -82,18 +125,37 @@ test('sync-bundled-vault: idempotent — second run produces no changes', () => 
     );
     return;
   }
-  const script = path.join(REPO, 'scripts', 'sync-bundled-vault.mjs');
-  // First run.
-  execSync(`node ${script} forge-tutorial`, { cwd: REPO, stdio: 'pipe' });
-  // Second run — must be a clean no-op.
-  const out = execSync(`node ${script} forge-tutorial`, {
-    cwd: REPO, encoding: 'utf8',
-  });
-  assert.match(
-    out,
-    /0 added, 0 updated/,
-    `Second sync run was not a no-op. Output:\n${out}`,
-  );
+  // Drain 2026-08-26-2130 — against a temp copy, never the shipped bundle.
+  const tmp = makeTempRepo();
+  try {
+    const script = path.join(tmp.root, 'scripts', 'sync-bundled-vault.mjs');
+    // First run.
+    execSync(`node ${script} forge-tutorial`, { cwd: tmp.root, stdio: 'pipe' });
+    // Second run — must be a clean no-op.
+    const out = execSync(`node ${script} forge-tutorial`, {
+      cwd: tmp.root, encoding: 'utf8',
+    });
+    assert.match(
+      out,
+      /0 added, 0 updated/,
+      `Second sync run was not a no-op. Output:\n${out}`,
+    );
+    // The script must have operated on the COPY. Grep-verify the positive:
+    // the temp path is what it reported, not merely that the real one is absent.
+    // realpath: macOS resolves /var -> /private/var, and the script prints
+    // the resolved path. Comparing the unresolved one fails on a correct fix.
+    const realTmp = fs.realpathSync(tmp.root);
+    assert.ok(
+      out.includes(`bundle: ${realTmp}`),
+      `sync ran against a path that is not the temp copy. Output:\n${out}`,
+    );
+    assert.ok(
+      !out.includes(`bundle: ${REPO}/assets`),
+      'sync targeted the SHIPPED bundle',
+    );
+  } finally {
+    tmp.cleanup();
+  }
 });
 
 test('sync-bundled-vault: drift detection catches forced edit', () => {
@@ -107,9 +169,13 @@ test('sync-bundled-vault: drift detection catches forced edit', () => {
     );
     return;
   }
-  const bundledToml = path.join(BUNDLE_DIR, 'forge.toml');
-  const backup = path.join(os.tmpdir(), 'forge-tutorial-toml.bak');
-  fs.copyFileSync(bundledToml, backup);
+  // Drain 2026-08-26-2130 — the marker goes into a TEMP copy of the
+  // bundle. Previously it was appended to the real shipped forge.toml with
+  // only a `finally` protecting it, so a killed run (Ctrl-C, OOM, CI
+  // timeout) left `# DRIFT_TEST_MARKER` inside the asset users install.
+  // Now a killed run leaves a stray directory in /tmp instead.
+  const tmp = makeTempRepo();
+  const bundledToml = path.join(tmp.root, 'assets', 'vaults', 'forge-tutorial', 'forge.toml');
   try {
     // Append a stray line to force drift.
     fs.appendFileSync(bundledToml, '\n# DRIFT_TEST_MARKER\n');
@@ -118,7 +184,7 @@ test('sync-bundled-vault: drift detection catches forced edit', () => {
       // Build-release-zip runs the preflight; if drift is detected, it
       // exits 1. Capture stderr.
       execSync('node scripts/build-release-zip.mjs', {
-        cwd: REPO, stdio: 'pipe',
+        cwd: tmp.root, stdio: 'pipe',
       });
     } catch (e) {
       const stderr = String((e as { stderr?: Buffer }).stderr ?? '');
@@ -135,9 +201,9 @@ test('sync-bundled-vault: drift detection catches forced edit', () => {
       'The release-preflight protection is silently skipped.',
     );
   } finally {
-    // Restore — must run regardless of test outcome.
-    fs.copyFileSync(backup, bundledToml);
-    fs.unlinkSync(backup);
+    // A throwaway tree: nothing to restore, and nothing lost if this
+    // never runs. That relocation of the blast radius IS the fix.
+    tmp.cleanup();
   }
 });
 
