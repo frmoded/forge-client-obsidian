@@ -100,6 +100,15 @@ test('tutorial bundle: a derived Python facet carries its provenance', async () 
     // A python-canonical note IS its own source: no lineage to carry.
     // The backfill stub is not derived either, and correctly says so by
     // omitting the field (v11-3-backfill-core.ts).
+    // Drain 2026-08-27-0340 — a note with NO stamp block at all is exempt.
+    // `fix_me.md` (chapter 2's deliberately-broken exercise) and the
+    // unstamped chapter 5/6 notes carry a Python facet and no hashes
+    // whatsoever; there is no provenance to contradict, and demanding a
+    // derived-from field from a note that declares no hashes is a false
+    // positive, not a finding. The guard's subject is notes that DO make
+    // provenance claims.
+    const recipeHashPresent = getFrontmatterField(t, 'recipe_hash');
+    if (!recipeHashPresent) continue;
     if (declared === 'python' || py === null || py === DEFAULT_PYTHON_STUB) continue;
     guarded++;
     const pdr = getFrontmatterField(t, 'python_derived_from_recipe_hash');
