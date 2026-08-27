@@ -10,6 +10,7 @@ import {
   removeFrontmatterField as removeFmFieldV2,
 } from './v2-note-core.ts';
 import { BUNDLED_ASSETS } from './bundled-assets.generated.ts';
+import { GENERIC_ATTRIBUTION } from './output-entry-meta-core.ts';
 import {
   formatChipInventoryFull,
   formatChipInventorySummary,
@@ -5783,7 +5784,7 @@ export default class ForgePlugin extends Plugin {
   public async forgeOutput(
     text: string,
     kind: 'info' | 'error' | 'success' = 'info',
-    snippetId: string = 'Forge',
+    snippetId: string = GENERIC_ATTRIBUTION,
   ): Promise<void> {
     try {
       const view = await this.getOutputView();

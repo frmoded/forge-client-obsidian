@@ -19,12 +19,13 @@
 
 import type { App } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
+import { GENERIC_ATTRIBUTION } from './output-entry-meta-core.ts';
 
 export async function forgeNotice(
   app: App,
   text: string,
   kind: 'info' | 'error' | 'success' = 'info',
-  snippetId: string = 'Forge',
+  snippetId: string = GENERIC_ATTRIBUTION,
 ): Promise<void> {
   try {
     let leaf = app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];

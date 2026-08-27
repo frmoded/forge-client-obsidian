@@ -6,6 +6,7 @@ import {
   type McqElement,
 } from './mcq-widget-core.ts';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio.ts';
+import { shouldRenderEntryMeta } from './output-entry-meta-core.ts';
 import {
   readScoreViewMode,
   toggleScoreViewMode,
@@ -308,23 +309,20 @@ export class ForgeOutputView extends ItemView {
     this.stripWidgetHosts = {};
 
     const state = this.stripState;
-    const collapsed = this.stripHost?.isCollapsed() ?? false;
-    strip.toggleClass('is-collapsed', collapsed);
     strip.toggleClass('is-stale', state.disabled);
 
     const head = strip.createDiv({ cls: 'forge-panel-inputs-header' });
-    const toggle = head.createEl('button', {
-      cls: 'forge-panel-inputs-toggle',
-      text: collapsed ? '▸' : '▾',
-    });
-    toggle.setAttribute('aria-label', collapsed ? 'Expand inputs' : 'Collapse inputs');
-    toggle.onclick = () => {
-      this.stripHost?.setCollapsed(!collapsed);
-      this.renderStrip();
-    };
     head.createEl('span', { cls: 'forge-panel-inputs-title', text: state.header });
 
-    if (collapsed) return;
+    // Drain 2026-08-27-0230 — the collapse toggle is gone at the driver's
+    // request. THE `if (collapsed) return` GATE HAD TO GO WITH IT, and that
+    // is not cosmetic: `panelStripCollapsed` is PERSISTED (main.ts:5949-5951),
+    // so anyone who had collapsed the strip before this change would have
+    // been left with a permanently hidden input strip and no control to
+    // bring it back. The strip now always renders expanded; the stale
+    // setting is inert. `stripHost.isCollapsed/setCollapsed` are left in
+    // place rather than ripped out, so re-introducing a collapse affordance
+    // is a UI change and not a plumbing change.
 
     const body = strip.createDiv({ cls: 'forge-panel-inputs-body' });
     this.stripBodyEl = body;
@@ -1255,9 +1253,17 @@ export class ForgeOutputView extends ItemView {
 
   private makeEntry(snippetId: string): HTMLElement {
     const entry = this.outputEl.createDiv({ cls: 'forge-output-entry' });
-    const meta = entry.createDiv({ cls: 'forge-output-meta' });
-    meta.createEl('span', { text: snippetId, cls: 'forge-output-id' });
-    meta.createEl('span', { text: new Date().toLocaleTimeString(), cls: 'forge-output-time' });
+    // Drain 2026-08-27-0230 — ONE guard, at the writer, not per call site.
+    // All eight makeEntry callers pass a variable; the generic/real
+    // distinction is made by whoever called them, and generic messages
+    // arrive through forgeNotice / forgeOutput whose snippetId DEFAULTS to
+    // 'Forge'. Deciding here covers every current caller and every future
+    // one — the same reasoning as drain 1620's write guard.
+    if (shouldRenderEntryMeta(snippetId)) {
+      const meta = entry.createDiv({ cls: 'forge-output-meta' });
+      meta.createEl('span', { text: snippetId, cls: 'forge-output-id' });
+      meta.createEl('span', { text: new Date().toLocaleTimeString(), cls: 'forge-output-time' });
+    }
     return entry;
   }
 }

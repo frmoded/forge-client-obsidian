@@ -149,9 +149,9 @@ test('non-vacuity: the model tracks its declarations rather than shaping everyth
 // ------------------------------------------------------- the strip
 
 test('the header names the note and counts its inputs', () => {
-  assert.equal(stripHeaderText('mood', 1), '▶ mood — 1 input');
-  assert.equal(stripHeaderText('chord', 2), '▶ chord — 2 inputs');
-  assert.equal(stripHeaderText('hello', 0), '▶ hello — no inputs');
+  assert.equal(stripHeaderText('mood', 1), 'mood — 1 input');
+  assert.equal(stripHeaderText('chord', 2), 'chord — 2 inputs');
+  assert.equal(stripHeaderText('hello', 0), 'hello — no inputs');
 });
 
 test('an active action note fills the strip and enables the Run button', () => {
@@ -163,7 +163,7 @@ test('an active action note fills the strip and enables the Run button', () => {
   assert.equal(state.mode, 'active');
   assert.equal(state.snippetId, 'mood');
   assert.equal(state.disabled, false);
-  assert.equal(state.header, '▶ mood — 1 input');
+  assert.equal(state.header, 'mood — 1 input');
   assert.equal(state.hint, null);
   assert.equal(state.fields.length, 1);
 });
@@ -199,7 +199,7 @@ test('switching notes re-renders the strip for the new note', () => {
     ...NO_SOURCES, inputs: ['mood'], enums: { mood: ['happy', 'sad'] } }) }, null);
   const factorial = deriveStripState({ snippetId: 'factorial', fields: buildInputFieldModels({
     ...NO_SOURCES, inputs: ['n'], defaults: { n: '5' } }) }, mood.note);
-  assert.equal(factorial.header, '▶ factorial — 1 input');
+  assert.equal(factorial.header, 'factorial — 1 input');
   assert.equal(factorial.fields[0].kind, 'text');
   assert.equal((factorial.fields[0] as { value: string }).value, '5');
 });

@@ -170,13 +170,17 @@ export interface StripState {
   note: StripNote | null;
 }
 
-const EMPTY_HEADER = '▶ Forge';
+// Drain 2026-08-27-0230 — the leading ▶ was baked into the header STRING
+// and rendered as plain text in a <span> (output-view.ts). It is the same
+// glyph the REAL play button uses (inline-play-core.ts:101), so it read as
+// an inert fake run button beside the section title. Dropped from both.
+const EMPTY_HEADER = 'Forge';
 
 export function stripHeaderText(snippetId: string, inputCount: number): string {
   const count = inputCount === 0
     ? 'no inputs'
     : `${inputCount} input${inputCount === 1 ? '' : 's'}`;
-  return `▶ ${snippetId} — ${count}`;
+  return `${snippetId} — ${count}`;
 }
 
 /**
