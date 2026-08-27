@@ -4510,6 +4510,10 @@ export default class ForgePlugin extends Plugin {
         currentDescriptionHash: currentDescHash,
         currentRecipeHash,
         currentPythonHash,
+        // Drain 2026-08-27-1700 — the stamps helper needs to know
+        // whether the Recipe is this forge's own product or the
+        // cohort's hand-authored source. See the write below.
+        sourceFacet: getFmFieldV2(newContent, 'source_facet'),
       });
       // CW-generate-persist-path-fix-backfill-and-write (drain
       // 2026-07-29-2230) Option 3 — when this note has no Recipe body,
@@ -4532,7 +4536,17 @@ export default class ForgePlugin extends Plugin {
         newContent, 'recipe_derived_from_description_hash',
         stamps.recipe_derived_from_description_hash,
       );
-      if (hasRecipeBody) {
+      // Drain 2026-08-27-1700 — refuse AND RETRACT the recipe-parent
+      // claim when this forge did not derive the Python from the
+      // Recipe. Skipping the write alone is not enough: a stamp left
+      // by an earlier, genuine E-- transpile would survive next to
+      // freshly LLM-generated Python and tell the same lie by a
+      // different route. `removeFrontmatterField` is idempotent, so
+      // the common case (no stamp to begin with, as on the pristine
+      // bundled fixture) is a no-op.
+      if (stamps.python_derived_from_recipe_hash === null) {
+        newContent = removeFmFieldV2(newContent, 'python_derived_from_recipe_hash');
+      } else if (hasRecipeBody) {
         newContent = setFmFieldV2(
           newContent, 'python_derived_from_recipe_hash',
           stamps.python_derived_from_recipe_hash,

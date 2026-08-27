@@ -25,7 +25,12 @@ export interface AutoForgeStamps {
   recipe_hash: string;
   python_hash: string;
   recipe_derived_from_description_hash: string;
-  python_derived_from_recipe_hash: string;
+  /** Drain 2026-08-27-1700 — `null` means DO NOT CLAIM Recipe-derivation
+   *  (and remove any stamp a previous, genuine derivation left behind).
+   *  /generate never receives the Recipe, so this claim is only ever
+   *  honest when the Recipe is itself a product of the same
+   *  Description-canonical forge. See the header note. */
+  python_derived_from_recipe_hash: string | null;
   // Legacy v11.5 fields — kept for transition per CW-1500-A/B.
   recipe_derived_from_source_hash: string;
   python_derived_from_source_hash: string;
@@ -38,6 +43,13 @@ export interface AutoForgeStampInput {
   currentRecipeHash: string;
   /** SHA-256 of current Python body content (post writePythonAndEnglishHash). */
   currentPythonHash: string;
+  /** Stored `source_facet` — the note's canonical facet, a STORED fact
+   *  since drain 1200 rather than an inference, which is what makes the
+   *  question answerable at a write site without re-deriving hashes
+   *  (the same property drain 1620's `mayMachineWriteFacet` relies on).
+   *  Absent/unknown PERMITS the claim, matching that guard's convention:
+   *  a pre-1200 note has no hand-authored Recipe to misrepresent. */
+  sourceFacet?: string | null;
 }
 
 /** Compute the frontmatter stamps for the auto-forge write.
@@ -62,12 +74,30 @@ export interface AutoForgeStampInput {
 export function computeAutoForgeStamps(
   input: AutoForgeStampInput,
 ): AutoForgeStamps {
+  // Drain 2026-08-27-1700 — the recipe-parent claim, gated on truth.
+  //
+  // generate()'s payload carries description / english / inputs /
+  // generation_notes / deps / callables and NO RECIPE, so the Python
+  // this writer is stamping was never derived from the Recipe. The
+  // claim was an assertion of the canonical Description → Recipe →
+  // Python model, not a record of what happened.
+  //
+  // It survives only where the model actually holds: on a
+  // Description-canonical forge, forgeSnippet's sibling
+  // _llmGenerateRecipe rebuilt the Recipe from this same Description
+  // moments earlier, so "Python is current with the Recipe" is true
+  // even though the LLM read the Description. Where the Recipe is the
+  // SOURCE — hand-authored, untouched by this forge — the claim is
+  // false, and CCQA caught it on real shipped library content.
+  const recipeIsProductOfThisForge =
+    !input.sourceFacet || input.sourceFacet === 'description';
   return {
     description_hash: input.currentDescriptionHash,
     recipe_hash: input.currentRecipeHash,
     python_hash: input.currentPythonHash,
     recipe_derived_from_description_hash: input.currentDescriptionHash,
-    python_derived_from_recipe_hash: input.currentRecipeHash,
+    python_derived_from_recipe_hash:
+      recipeIsProductOfThisForge ? input.currentRecipeHash : null,
     recipe_derived_from_source_hash: input.currentDescriptionHash,
     python_derived_from_source_hash: input.currentDescriptionHash,
   };
