@@ -1,11 +1,10 @@
 # Chapter 4 — Composition
 
-Remember [[welcome]] from when you first opened the vault? It called a second
-note, [[greet]], to do part of its work. That's **composition**: notes
-calling notes. It's the heart of how this system scales from tiny pieces to
-big things.
+[[welcome]] called a second note, [[greet]], to do part of its work — that's
+**composition**: notes calling notes, how this system scales from tiny
+pieces to big things.
 
-This chapter has two notes. Open the [[describe_it]] note and **run** it:
+Open [[describe_it]] and **run** it:
 
 ```
 This is wonderful.
@@ -13,40 +12,25 @@ This is wonderful.
 
 ## What's new
 
-Open [[describe_it]] and look — it's short. It calls another note,
-[[excited_word]], stores what comes back in `word`, and then returns
-`"This is " + word + "."`. The new idea is that one line:
+[[describe_it]] is short. It calls [[excited_word]], stores what comes back
+in `word`, and returns `"This is " + word + "."` — the new idea is one line:
 
 > Let word = Call [[excited_word]].
 
-That [[excited_word]] is a **call to another note**. When [[describe_it]]
-runs, it asks [[excited_word]] to do its job and hands back the result.
-
-Now open the [[excited_word]] note in this same folder. It's tiny:
-
-> Return "wonderful".
-
-That's a whole note whose only job is to return a word. [[describe_it]]
-doesn't care *how* it decides — it just uses what comes back. Small pieces,
-combined.
+[[excited_word]] is tiny too — `Return "wonderful".` [[describe_it]] doesn't
+care *how* it decides, it just uses what comes back. Small pieces, combined.
 
 ## Exercise
 
-Open the [[excited_word]] note, change `"wonderful"` to `"powerful"` (or
-anything you like), save it, then **run** the [[describe_it]] note
-again. You changed one small note, and the bigger one followed. That's
-composition working for you.
-
-Want to go further? Right-click `excited_word.md` → **Make a copy**, rename it
-(say `another_word.md`), return a different word, and point [[describe_it]]
-at your new note instead.
+Open [[excited_word]], change `"wonderful"` to anything you like, save it,
+then **run** [[describe_it]] again. You changed one small note and the
+bigger one followed — that's composition working for you.
 
 ## Palette focus
 
-Focus on chained **Call [[...]]** patterns and **Let ... = Call ...** in this
-chapter. You've already met all the Recipe constructs the sample uses; the new
-skill is nesting them. Still ignoring `If`, `Otherwise`, `For each`, as in
-chapter 1 — [[Conditionals]] and [[Loops]] cover them properly.
+Chained **Call [[...]]** and **Let ... = Call ...**. Still ignoring `If`,
+`Otherwise`, `For each`, as in chapter 1 — [[Conditionals]] and [[Loops]]
+cover them properly.
 
 **Order in this chapter:** [[describe_it]] → [[excited_word]]
 

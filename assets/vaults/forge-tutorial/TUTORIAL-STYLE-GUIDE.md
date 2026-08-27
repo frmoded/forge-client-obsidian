@@ -164,9 +164,9 @@ covers it properly" costs one sentence and prevents a silent inconsistency.
 
 - The "Chapter N — " scene-setting prefix (principle 2) is stripped from
   chapters 1-3's action notes, `mood.md`, and — as of drain `1100`,
-  2026-08-27 — `04-composition/describe_it.md` and `excited_word.md`. Only
-  the orphan `describe_forge.md` still carries it, and that file is slated
-  for deletion (see below), not a prefix fix.
+  2026-08-27 — `04-composition/describe_it.md` and `excited_word.md`. The
+  orphan `describe_forge.md`, which still carried it, was deleted 2026-08-27
+  rather than fixed (see below) — the prefix gap is fully resolved.
 - Principle 6 (pin the literal) is **resolved** for `excited.md`,
   `function_inputs.md`, `hello_world.md`, `describe_it.md`, and
   `excited_word.md` (all verified against live `/generate` controls — see
@@ -186,24 +186,28 @@ covers it properly" costs one sentence and prevents a silent inconsistency.
   collision noted under principle 10 above. It cost a `release.sh` preflight
   fix along the way; see the same note.
 - `02-variables/fix_me.md` has **no engine test at all** (verified 2026-08-27:
-  no method in `TestActionNotesExec` contains the string `fix_me`). It is one
-  of the two notes currently keeping `test_every_action_note_has_a_test` red;
-  the other is the driver's own scratch file `test_random.md`. Note that
-  untracking `test_random.md` from git does NOT clear that red — the gate walks
-  the filesystem, not the index — so only removing the file from the vault
-  does.
-- `04-composition/describe_forge.md` is an orphan file — never referenced by
-  `Composition.md`, carries the same prefix/literal defects `describe_it.md`
-  had plus an unused, slightly different Recipe, and has no hash-lineage
-  frontmatter at all. Driver adjudicated 2026-08-27: delete it. Deletion is
-  blocked in the sandbox (a recurring `.git/index.lock` permission issue,
-  not a content question) — the file still exists on disk pending a
-  driver-run command. **Amended 2026-08-27:** the deletion is NOT a one-file
-  `git rm` — `describe_forge` has a live engine test
-  (`test_tutorial_exec_smoke.py:154 test_describe_forge`, asserting
-  `"Forge is wonderful."`) and a frozen edge snapshot at
-  `.forge/edges/authoring/describe_forge/`. Deleting only the note turns the
-  engine suite red. All three go together.
+  no method in `TestActionNotesExec` contains the string `fix_me`). It is the
+  one remaining note keeping `test_every_action_note_has_a_test` red — a
+  decision, not a fix: whether it should be exempted, or gain coverage the
+  way `fix_the_call.md` did. The driver's own scratch file `test_random.md`
+  (the other note keeping that gate red) is now deleted from the vault
+  entirely, per driver instruction 2026-08-27 — untracking it from git alone
+  had NOT cleared the red (the gate walks the filesystem, not the index);
+  deleting it did.
+- `04-composition/describe_forge.md` — the orphan file, never referenced by
+  `Composition.md` — is **fully removed** as of 2026-08-27. Driver
+  adjudicated deletion (`dfdc6d4`); the first pass only removed the vault
+  note and missed that it had a live engine test
+  (`test_tutorial_exec_smoke.py:154`, asserting `"Forge is wonderful."`), a
+  frozen edge snapshot (`.forge/edges/authoring/describe_forge/`), and a
+  synced copy already sitting in the bundled release mirror. A follow-up
+  drain (`1300`, `severity: high`) removed the dead test and the edge
+  snapshot and re-ran the mirror sync — proven red first (TDD applies to
+  removals too), confirmed clean after (`pytest` 1284→1283, one test fewer
+  and one failure fewer, nothing previously-passing moved). Lesson worth
+  keeping: deleting a vault file is not finished when the file is gone —
+  it's finished when the bundled mirror syncs, or the deleted note ships
+  to cohort installs anyway.
 - `04-composition/describe_it.md` stamps `python_hash` AND
   `python_derived_from_recipe_hash` as the SHA-256 of the empty string while
   the file has no `# Python` section and a real, different `recipe_hash` —
