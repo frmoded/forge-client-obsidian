@@ -8,6 +8,7 @@ import {
   snapshotPath,
 } from './edges.ts';
 import { detectDrift } from './dependencies.ts';
+import { getPyodideHost } from './pyodide-host.ts';
 import { freezeEdge, syncDependencies } from './server.ts';
 import { forgeNotice } from './forge-notice.ts';
 
@@ -131,9 +132,29 @@ export class ForgeEdgesView extends ItemView {
     const sync = actions.createEl('button', { text: 'Sync edges', cls: 'mod-cta' });
     sync.onclick = async () => {
       if (!this.currentSnippetId) return;
-      const vaultPath = (this.app.vault.adapter as any).basePath as string;
-      const res = await syncDependencies(this.serverUrl(), vaultPath, this.currentSnippetId);
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (!view?.file) return;
+      const body = await this.app.vault.read(view.file);
+      const res = await syncDependencies(body);
       if (res.status === 200) {
+        if (res.json.body !== body) {
+          await this.app.vault.modify(view.file, res.json.body);
+          // Same obligation main.ts's syncDependenciesLocal carries: the
+          // executor reads MEMFS through the registry, so a body write
+          // without this leaves the note running as its previous self.
+          // memfs-sync-after-body-write.test.ts scans main.ts only, so
+          // this site is not covered by it -- hence the explicit call and
+          // this comment.
+          try {
+            const hostManager = getPyodideHost();
+            if (hostManager) {
+              const host = await hostManager.getInstance();
+              await host.syncUserVaultFile(view.file.path, res.json.body);
+            }
+          } catch (e) {
+            console.error('edges-view: MEMFS sync after body write failed', e);
+          }
+        }
         void forgeNotice(this.app, 'Forge: edges synced.');
         await this.refresh();
       } else {

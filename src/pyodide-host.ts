@@ -1209,6 +1209,32 @@ def _forge_qualify_snippet_id(snippet_id: str) -> str:
         return snip['snippet_id']
     return snippet_id
 
+def _forge_sync_dependencies(python_source: str, body: str) -> str:
+    """Drain 2026-08-27-1500 (Gate Z, re-adjudicated) — B7 dependency
+    sync, in-process.
+
+    This was an HTTP round-trip to a local engine at localhost:8000 for
+    eight releases, on the strength of a server.ts comment claiming a
+    Pyodide port "requires mirroring the engine's full body-rewrite
+    logic". It does not: the logic is two pure string functions in
+    forge.core.dependencies, and that module has been vendored into this
+    bundle the whole time. Same situation freeze was in before v0.2.30.
+
+    Pure string in, pure string out -- no vault access, no registry, no
+    network. The client reads the note and writes the result, which is the
+    read-transform-write shape every facet write here already uses.
+    """
+    from forge.core.dependencies import (
+        extract_dependencies,
+        apply_dependencies_to_body,
+    )
+    import json as _json
+    deps = extract_dependencies(python_source)
+    return _json.dumps({
+        "dependencies": deps,
+        "body": apply_dependencies_to_body(body, deps),
+    })
+
 def _forge_set_edge_state(caller_id: str, callee_id: str, state: str, vault_name: str = ""):
     """v0.2.30: flip an edge's snapshot state (live ↔ frozen) by
     calling the engine's set_snapshot_state directly. Routes the
@@ -1748,6 +1774,11 @@ export interface PyodideHostInstance {
    *  doesn't exist (per constitution F5 — can't freeze what hasn't
    *  been captured). */
   setEdgeState(callerId: string, calleeId: string, state: 'live' | 'frozen'): Promise<void>;
+  /** Drain 2026-08-27-1500 — B7 dep-sync, local. Content in, content out. */
+  syncDependencies(
+    pythonSource: string,
+    body: string,
+  ): Promise<{ dependencies: string[]; body: string }>;
   /** v0.2.44: synchronous read of the snapshot file's `state:` field
    *  from MEMFS for the (caller, callee) edge. Used by the right-click
    *  freeze menu to decide which item to gray out at menu-build time.
@@ -2013,6 +2044,21 @@ _forge_compute_with_python(
     this.pyodide.globals.set('_forge_sync_relpath', relPath);
     this.pyodide.globals.set('_forge_sync_body', content);
     this.pyodide.runPython(`_forge_sync_user_file(_forge_sync_relpath, _forge_sync_body)`);
+  }
+
+  /** Drain 2026-08-27-1500 — B7 dependency sync, local. Mirrors
+   *  setEdgeState's globals-then-runPython idiom (the freeze precedent).
+   *  Returns the rewritten body; the caller owns the file write. */
+  async syncDependencies(
+    pythonSource: string,
+    body: string,
+  ): Promise<{ dependencies: string[]; body: string }> {
+    this.pyodide.globals.set('_forge_deps_python', pythonSource);
+    this.pyodide.globals.set('_forge_deps_body', body);
+    const out = this.pyodide.runPython(
+      `_forge_sync_dependencies(_forge_deps_python, _forge_deps_body)`,
+    );
+    return JSON.parse(String(out));
   }
 
   async setEdgeState(

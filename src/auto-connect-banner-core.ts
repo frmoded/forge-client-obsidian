@@ -37,7 +37,8 @@ export interface BannerInputs {
  *    → green "vault auto-connected" line.
  *  - engineHttpStatus is 'unreachable' or 'error'
  *    → WARNING line: Pyodide-only connected; engine unreachable.
- *      Only "Sync edges" actually fails.
+ *      As of drain 2026-08-27-1500, NOTHING the cohort workflow
+ *      exercises fails: sync_dependencies went local too.
  *
  *  Drain 2026-08-27-1310 (Gate Z) — this warning named three operations
  *  and was wrong about two. `canonicalize` is gone (retired this drain:
@@ -63,9 +64,9 @@ export function computeAutoConnectBanner(inputs: BannerInputs): BannerSignal {
   return {
     message:
       `Forge: vault auto-connected (Pyodide only)${suffix}. Engine at `
-      + `${inputs.serverUrl} is unreachable${detail} — "Sync edges" will `
-      + `fail until the engine responds. Everything else, including Run `
-      + `and Freeze, works without it.`,
+      + `${inputs.serverUrl} is unreachable${detail}. Nothing you can do `
+      + `from the panel needs it — Run, Forge, Freeze and Sync edges all `
+      + `work without it.`,
     kind: 'warning',
   };
 }

@@ -4620,7 +4620,7 @@ export default class ForgePlugin extends Plugin {
       // After writing the new Python, ask the BE to sync the # Dependencies
       // section so the body reflects the just-written code (B7).
       try {
-        await syncDependencies(this.settings.serverUrl, vaultPath, id);
+        await this.syncDependenciesLocal(file);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         if (isNetRefusalError(msg)) {
@@ -4846,16 +4846,35 @@ export default class ForgePlugin extends Plugin {
     }
     // v0.2.26: qualified snippet_id for library subdir files.
     const snippetId = snippetIdFromPath(view.file.path, this.libraryDirNames());
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
-    const res = await syncDependencies(this.settings.serverUrl, vaultPath, snippetId);
-    if (res.status === 200) {
-      const deps: string[] = res.json?.dependencies ?? [];
+    try {
+      const deps = await this.syncDependenciesLocal(view.file);
       this.notice(`${NOTICE_PREFIX}synced ${deps.length} dependenc${deps.length === 1 ? 'y' : 'ies'}.`);
-    } else {
-      const detail = res.json?.detail ?? `HTTP ${res.status}`;
-      this.notice(`${NOTICE_PREFIX}sync failed — ${detail}`);
-      console.error('Forge sync_dependencies failed', res);
+    } catch (e) {
+      this.notice(`${NOTICE_PREFIX}sync failed — ${e instanceof Error ? e.message : String(e)}`);
+      console.error('Forge sync_dependencies failed', e);
     }
+  }
+
+  /** Drain 2026-08-27-1500 (Gate Z) — B7 dependency sync, in-process.
+   *  Read the note, hand its Python facet and body to the engine through
+   *  Pyodide, write the result back. The same read-transform-write shape
+   *  writeSourcePythonBack uses; no network, so it works with the engine
+   *  unreachable, which is the whole point of going local. */
+  private async syncDependenciesLocal(file: TFile): Promise<string[]> {
+    const body = await this.app.vault.read(file);
+    const res = await syncDependencies(body);
+    if (res.status !== 200) {
+      throw new Error(`sync_dependencies returned ${res.status}`);
+    }
+    if (res.json.body !== body) {
+      await this.app.vault.modify(file, res.json.body);
+      // The executor reads MEMFS through the snippet registry, so a body
+      // write that skips this leaves the note RUNNING AS ITS PREVIOUS SELF
+      // while looking correct everywhere a human would check. Caught by
+      // memfs-sync-after-body-write.test.ts the moment this write landed.
+      await this.syncMemfsAfterBodyWrite(file, res.json.body, 'syncDependenciesLocal');
+    }
+    return res.json.dependencies;
   }
 
   // errorPrefix forwards into computeSnippetWithArgs so the forge flow can

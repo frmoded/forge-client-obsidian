@@ -1,5 +1,6 @@
 import { requestUrl } from 'obsidian';
 import type { CallableEntry } from './callable-inventory-core.ts';
+import { extractPythonSection } from './v2-note-core.ts';
 import type { PyodideHost } from './pyodide-host.ts';
 
 // V1: plugin-side Pyodide host for engine-compute paths.
@@ -128,27 +129,32 @@ export async function connectVault(serverUrl: string, vaultPath: string): Promis
   return result;
 }
 
-// NOTE (v0.2.6): syncDependencies stays on HTTP. It IS called on the
-// post-/generate write path (main.ts writeGeneratedCode line ~1248) so
-// closed-beta users will see it fail; the call is wrapped in try/catch
-// with console.warn and is non-fatal — the Python facet is already
-// written by then, and compute proceeds without the # Dependencies
-// section being refreshed. Migrating B7 dep-sync to Pyodide requires
-// mirroring the engine's full body-rewrite logic and is deferred to
-// v1.1 alongside the forge.core.llm centralization.
+// Drain 2026-08-27-1500 (Gate Z, re-adjudicated) — B7 dep-sync is LOCAL.
+//
+// This was an HTTP POST to a local engine at localhost:8000 for eight
+// releases, deferred on the strength of a comment claiming a Pyodide port
+// "requires mirroring the engine's full body-rewrite logic". It does not:
+// the logic is two pure string functions in forge.core.dependencies, and
+// that module has been vendored into the bundle the whole time. Same
+// situation freeze was in before v0.2.30 moved it local.
+//
+// Content in, content out. The caller reads the note and writes the
+// result — the read-transform-write shape every facet write already uses.
 export async function syncDependencies(
-  serverUrl: string,
-  vaultPath: string,
-  snippetId: string,
-): Promise<{ status: number; json: any }> {
-  const res = await requestUrl({
-    url: `${serverUrl}/sync_dependencies`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId }),
-    throw: false,
-  });
-  return { status: res.status, json: res.json };
+  body: string,
+): Promise<{ status: number; json: { dependencies: string[]; body: string } }> {
+  if (!_pyodideHost) {
+    return { status: 503, json: { dependencies: [], body } };
+  }
+  try {
+    const host = await _pyodideHost.getInstance();
+    const python = extractPythonSection(body) ?? '';
+    const out = await host.syncDependencies(python, body);
+    return { status: 200, json: out };
+  } catch (e) {
+    console.error('Forge sync_dependencies failed:', e);
+    return { status: 500, json: { dependencies: [], body } };
+  }
 }
 
 // Drain 2026-08-27-1310 (Gate Z, option a) — `canonicalizeSnippet` was
