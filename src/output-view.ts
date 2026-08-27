@@ -309,20 +309,32 @@ export class ForgeOutputView extends ItemView {
     this.stripWidgetHosts = {};
 
     const state = this.stripState;
+    // Drain 2026-08-27-0410 — Gate T. The collapse toggle was removed in
+    // drain 0230 with the ▶ glyph beside it, on the reading that the two
+    // complaints were one. They were not: the ▶ was a fake run-button
+    // look-alike (gone, and staying gone); this is a real control. Restored
+    // verbatim from 160278b^ rather than reconstructed. The plumbing was
+    // deliberately left in place at the time so this would be wiring, not a
+    // re-implementation — `if (collapsed) return` comes back with it,
+    // because without that gate the button toggles a class and nothing
+    // hides.
+    const collapsed = this.stripHost?.isCollapsed() ?? false;
+    strip.toggleClass('is-collapsed', collapsed);
     strip.toggleClass('is-stale', state.disabled);
 
     const head = strip.createDiv({ cls: 'forge-panel-inputs-header' });
+    const toggle = head.createEl('button', {
+      cls: 'forge-panel-inputs-toggle',
+      text: collapsed ? '▸' : '▾',
+    });
+    toggle.setAttribute('aria-label', collapsed ? 'Expand inputs' : 'Collapse inputs');
+    toggle.onclick = () => {
+      this.stripHost?.setCollapsed(!collapsed);
+      this.renderStrip();
+    };
     head.createEl('span', { cls: 'forge-panel-inputs-title', text: state.header });
 
-    // Drain 2026-08-27-0230 — the collapse toggle is gone at the driver's
-    // request. THE `if (collapsed) return` GATE HAD TO GO WITH IT, and that
-    // is not cosmetic: `panelStripCollapsed` is PERSISTED (main.ts:5949-5951),
-    // so anyone who had collapsed the strip before this change would have
-    // been left with a permanently hidden input strip and no control to
-    // bring it back. The strip now always renders expanded; the stale
-    // setting is inert. `stripHost.isCollapsed/setCollapsed` are left in
-    // place rather than ripped out, so re-introducing a collapse affordance
-    // is a UI change and not a plumbing change.
+    if (collapsed) return;
 
     const body = strip.createDiv({ cls: 'forge-panel-inputs-body' });
     this.stripBodyEl = body;
