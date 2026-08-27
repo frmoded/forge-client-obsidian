@@ -45,6 +45,10 @@ const BUNDLE = path.resolve(
  *  a reason, not silently in a note. */
 const EXPECTED: Record<string, string | null> = {
   '01-hello/hello_world.md':            null,          // unstamped by design
+  '02-variables/fix_me.md':             null,          // driver's chapter-2 exercise
+                                                       // note (41208d9); unstamped as
+                                                       // shipped, pinned so a later flip
+                                                       // is caught like any other
   '02-variables/greeting.md':           'description',
   '03-functions/cheer.md':              'description',
   '03-functions/excited.md':            'description',

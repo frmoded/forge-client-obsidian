@@ -75,3 +75,5 @@ We'll cover each one in later chapters (`Let` in [[Variables]], `Call` in
 [[Functions]], `If` in [[Conditionals]], `For each` in [[Loops]]).
 
 **What's next:** [[hello_world]]
+
+**After this chapter:** [[Variables]]

@@ -53,3 +53,5 @@ you with `{{ … }}` — is next in [[Slots]].
 **What's next:** [[show_factorial]]
 
 **After this chapter:** [[Slots]]
+
+**Order in this chapter:** [[show_factorial]] → [[factorial]]

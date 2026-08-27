@@ -11,7 +11,7 @@ Hello, Ada
 
 ## What's new
 
-Open the note and look — it does three small things, each on its own line:
+Open it and look. It does three things, one per line:
 
 - it names a value: **`Let … = …`** — `Let name = "Ada"` makes a box called
   `name` holding the text `"Ada"`, so you can use the name instead of typing
@@ -34,12 +34,19 @@ Open the [[greeting]] note, change `"Ada"` to your own name, and run again —
 the greeting follows. Then try changing `"Hello, "` to `"Hi there, "`. Two boxes,
 one result: that's what variables buy you.
 
+## Now find a bug that isn't yours
+
+Open [[fix_me]] and run it. It's supposed to print a greeting, the same shape
+as [[greeting]] — but it doesn't. **It's broken on purpose.** Read its Recipe,
+find the one word that shouldn't have quotes around it, fix it, and run again.
+Everything you need is already in this chapter.
+
 ## Palette focus
 
-Focus on **Let** for this chapter — you'll see it twice in [[greeting]].
-`Return` from chapter 1 comes back too, handing the built-up greeting to the
-Output panel. Ignore `If`, `Otherwise`, `For each` for now — those come in
-later chapters ([[Conditionals]], [[Loops]]).
+This chapter's only new chip is **Let** — you'll see it twice in [[greeting]].
+`Return` carries over from chapter 1. The palette has more chips than that
+(`If`, `Otherwise`, `For each` among them); they wait for later chapters
+([[Conditionals]], [[Loops]]) and won't come up again here.
 
 **What's next:** [[greeting]]
 
