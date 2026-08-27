@@ -13,18 +13,13 @@ Hello, Ada
 
 Open the note and look — it does three small things, each on its own line:
 
-- it names a value: `Let name = "Ada"` makes a box called `name` holding the
-  text `"Ada"`;
-- it builds a greeting: `Let greeting = "Hello, " + name` — and **`+`**
-  joins two pieces of text, so this becomes `"Hello, Ada"`;
+- it names a value: **`Let … = …`** — `Let name = "Ada"` makes a box called
+  `name` holding the text `"Ada"`, so you can use the name instead of typing
+  the value again;
+- it builds a greeting: `Let greeting = "Hello, " + name` — and **`+`** joins
+  two pieces of text, so this becomes `"Hello, Ada"`. You'll meet `+` again
+  with numbers, where it adds;
 - it returns the result.
-
-Two new ideas, both small:
-
-- **Let … = …** gives a value a name. Now you can use the name instead of
-  typing the value again.
-- **`+`** joins two pieces of text. (You'll meet it again with numbers, where
-  it adds.)
 
 Notice `Return` is handed `greeting` with **no quotes** — because `greeting`
 is a *name* standing for a value, not the literal word "greeting". Quotes mean
