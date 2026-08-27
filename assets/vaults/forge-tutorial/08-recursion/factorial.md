@@ -14,7 +14,7 @@ recipe_version: 1
 
 # Description
 
-a note that calls itself to multiply n by every number below it.
+a note that calls itself to multiply n by every number below it — with n=5, computes 5 × 4 × 3 × 2 × 1 = 120.
 
 ## Inputs
 

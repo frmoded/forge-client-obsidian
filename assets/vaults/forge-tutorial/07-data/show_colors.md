@@ -12,7 +12,7 @@ python_derived_from_recipe_hash: c59639dbd7ce35208cf04471658a9993e64f5c5fb028c58
 
 # Description
 
-Chapter 7 — Data. Reads a list from a data note and walks through it.
+Reads the color list from [[colors]] and prints each one: "red", "green", "blue".
 
 # Recipe
 

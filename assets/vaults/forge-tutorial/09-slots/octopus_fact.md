@@ -10,15 +10,7 @@ recipe_derived_from_description_hash: 1f7f1a10c756007f27596d3b93eb853ecdeef77bfe
 
 # Description
 
-Chapter 9 — the engine fills in a value from your plain-English request.
-
-The `{{...}}` syntax is the V2.1 "expressiveness escape valve": when
-you can't (or don't want to) deterministically specify a value in
-the Recipe, write a free-English description between double-braces.
-The engine routes that description to an LLM at compile time; the resolved
-expression is cached in this note's frontmatter so subsequent
-runs are instant. Edit the description text → cache key
-changes → re-resolves on the next run.
+A value slot lets the engine supply a random fun fact about octopuses.
 
 # Recipe
 

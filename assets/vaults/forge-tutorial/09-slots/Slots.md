@@ -34,8 +34,9 @@ runs, translated from your Recipe. In the earlier chapters that translation is
 **automatic and exact**: the same Recipe always becomes the same Python, with no
 thinking required, so the engine could re-make it any time for free.
 
-A slot note's `# Python` is different — open [[octopus_fact]] and look at it.
-Where your `{{ … }}` was, there's now an actual fact, written right into the code.
+A slot note's `# Python` is different — **run [[octopus_fact]] first if you
+haven't yet, then** open it and look. Where your `{{ … }}` was, there's now
+an actual fact, written right into the code.
 That fact wasn't a mechanical translation: the **LLM had to think it up** to fill
 the slot. And because thinking it up takes a real moment, the engine asks
 **once** — when it first translates your Recipe — and **saves the answer**
