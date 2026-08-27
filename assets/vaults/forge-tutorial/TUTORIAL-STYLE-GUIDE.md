@@ -70,6 +70,18 @@ argument: 'word'`. An underdetermined Description doesn't only risk the wrong
 answer; it risks no note at all. (Confirmed 2026-08-27, drain `0340`'s
 control run.)
 
+**Limit: pinning defends the value, not the shape of the call.** `cheer.md`
+needed to demonstrate a default flowing through an argument-less call, not
+just produce the right string. Neither a bare Description nor one that says
+"with no arguments" outright stopped a hammer re-roll from reintroducing an
+explicit argument — both re-derived to `Call [[excited]] with word="hooray"`.
+Pinning still keeps the *value* correct (`"hooray!"`), so a value-only test
+stays green even as the call's shape drifts back — but if the shape itself
+is the lesson (a default flowing through, a variable used instead of
+re-typed, a note called with nothing), prose cannot defend it; only a test
+that asserts the Recipe's actual text can. (Confirmed 2026-08-27, drain
+`0530`.)
+
 **7. One idea per teaching beat.** Don't compress two new concepts into one
 subsection because the chapter is running long. Give each new idea its own
 "open it, run it, here's what you'll see" treatment, the same shape the
