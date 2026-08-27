@@ -151,29 +151,11 @@ export async function syncDependencies(
   return { status: res.status, json: res.json };
 }
 
-// Phase 6.5: reverse direction of /generate. Server reads the snippet's
-// python facet, asks the LLM for a canonical English description, returns
-// it as plain text. The plugin owns the file write.
-//
-// NOTE (v0.2.6): canonicalize stays on HTTP per prompt 2026-05-26-0000 §6.
-// The hosted α service doesn't expose /canonicalize yet — adding it is
-// v1.1 work. Closed-beta users invoking the canonicalize flow will hit
-// ECONNREFUSED against the default localhost:8000; that's the documented
-// closed-beta behavior. Only the English→Python direction is supported.
-export async function canonicalizeSnippet(
-  serverUrl: string,
-  vaultPath: string,
-  snippetId: string,
-): Promise<{ status: number; json: any }> {
-  const res = await requestUrl({
-    url: `${serverUrl}/canonicalize`,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ vault_path: vaultPath, snippet_id: snippetId }),
-    throw: false,
-  });
-  return { status: res.status, json: res.json };
-}
+// Drain 2026-08-27-1310 (Gate Z, option a) — `canonicalizeSnippet` was
+// retired here. It POSTed to the local engine's /canonicalize, an endpoint
+// the hosted service never exposed, and it had ZERO call sites: imported
+// once in main.ts and never invoked. Drain 1000 found it; this drain
+// removed it. Tombstoned rather than silently deleted, per drain 1600.
 
 // v0.2.30: freezeEdge routes through Pyodide. The engine's
 // snapshots.py:set_snapshot_state has the right function; HTTP was

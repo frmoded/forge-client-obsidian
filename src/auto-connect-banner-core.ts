@@ -37,7 +37,15 @@ export interface BannerInputs {
  *    → green "vault auto-connected" line.
  *  - engineHttpStatus is 'unreachable' or 'error'
  *    → WARNING line: Pyodide-only connected; engine unreachable.
- *      Sync/canonicalize/freeze will fail against this engine URL.
+ *      Only "Sync edges" actually fails.
+ *
+ *  Drain 2026-08-27-1310 (Gate Z) — this warning named three operations
+ *  and was wrong about two. `canonicalize` is gone (retired this drain:
+ *  zero call sites, and the hosted service never exposed the endpoint).
+ *  `freeze` has routed through Pyodide since v0.2.30 — freezeEdge checks
+ *  `_pyodideHost` first and the HTTP call is a dev-mode-only fallback, so
+ *  it does NOT fail when the engine is unreachable. Naming working
+ *  operations as broken teaches users to ignore the banner.
  */
 export function computeAutoConnectBanner(inputs: BannerInputs): BannerSignal {
   const suffix = inputs.attempts === 1 ? '' : ` (after ${inputs.attempts} attempts)`;
@@ -55,8 +63,9 @@ export function computeAutoConnectBanner(inputs: BannerInputs): BannerSignal {
   return {
     message:
       `Forge: vault auto-connected (Pyodide only)${suffix}. Engine at `
-      + `${inputs.serverUrl} is unreachable${detail} — Sync edges, `
-      + `canonicalize, and freeze will fail until the engine responds.`,
+      + `${inputs.serverUrl} is unreachable${detail} — "Sync edges" will `
+      + `fail until the engine responds. Everything else, including Run `
+      + `and Freeze, works without it.`,
     kind: 'warning',
   };
 }

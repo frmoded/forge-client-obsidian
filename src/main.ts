@@ -122,7 +122,7 @@ import { invalidateLibraryVaultCache } from './edges.ts';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings.ts';
 import { sectionPlugin, readOnlyFacetFilter } from './facet.ts';
 import { ForgeSnippetModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
-import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, canonicalizeSnippet, setPyodideHost, resolveSlotsAlpha } from './server.ts';
+import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, setPyodideHost, resolveSlotsAlpha } from './server.ts';
 import { connectWithRetry } from './auto-connect-retry-core.ts';
 import {
   computeAutoConnectBanner,
