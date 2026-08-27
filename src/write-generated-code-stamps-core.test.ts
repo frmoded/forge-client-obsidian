@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { computeFacetStates, FacetState } from './facet-state-core.ts';
 
 import {
   computeAutoForgeStamps,
@@ -255,4 +256,40 @@ test('1700 REGRESSION FIXTURE: the shipped Recipe-canonical note CCQA hit', () =
     'still stamps the exact false claim CCQA reported',
   );
   assert.equal(stamps.python_derived_from_recipe_hash, null);
+});
+
+test('1700 the note now RENDERS honestly: Python shows out-of-date vs the Recipe', () => {
+  // The user-visible half. Refusing the stamp is only right if what the
+  // cohort then sees is true. With the claim retracted, facet-state
+  // falls back to the legacy `python_derived_from_source_hash` — which
+  // this same writer sets to the DESCRIPTION hash — compares it against
+  // the current Recipe body hash, and disagrees. The hexa-state suffix
+  // reads `— derived from Recipe, out of date`, which is exactly the
+  // situation: Python generated from the Description, Recipe untouched.
+  const stamps = computeAutoForgeStamps({
+    currentDescriptionHash: 'D',
+    currentRecipeHash: 'R_HAND_CURATED',
+    currentPythonHash: 'P_FROM_DESCRIPTION',
+    sourceFacet: 'recipe',
+  });
+  const fm = {
+    getFrontmatterField(key: string): string | null {
+      if (key === 'python_derived_from_recipe_hash') {
+        return stamps.python_derived_from_recipe_hash; // null → retracted
+      }
+      if (key === 'python_derived_from_source_hash') {
+        return stamps.python_derived_from_source_hash;
+      }
+      if (key === 'recipe_derived_from_description_hash') {
+        return stamps.recipe_derived_from_description_hash;
+      }
+      return null;
+    },
+  };
+  const states = computeFacetStates('recipe', fm, {
+    description: 'D', recipe: 'R_HAND_CURATED', python: 'P_FROM_DESCRIPTION',
+  });
+  assert.equal(states.recipe, FacetState.Source);
+  assert.equal(states.python, FacetState.DerivedFromRecipeOutOfDate,
+    'the note still tells the cohort its Python matches the Recipe');
 });
