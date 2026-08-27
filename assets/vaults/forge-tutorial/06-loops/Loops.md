@@ -38,9 +38,6 @@ show multiple things.
 Rule of thumb: use `Return` when you have one answer to hand back, and
 `[[print]]` when you want to show many things as the note runs.
 
-> The **For each** chip is now in your palette — the last piece of core
-> vocabulary.
-
 ## Exercise
 
 Open the [[countdown]] note, add more numbers to the list — try

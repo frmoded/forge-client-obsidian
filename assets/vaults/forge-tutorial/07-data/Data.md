@@ -31,9 +31,6 @@ countdown: a loop that shows multiple things uses `[[print]]`, not `Return`.)
 Action notes *do*; data notes *hold*; together they keep your values in one
 place.
 
-> The [[colors]] chip is in your palette — a value you can drop into any
-> note.
-
 ## Exercise
 
 Open the [[colors]] note and add a color — `["red", "green", "blue",

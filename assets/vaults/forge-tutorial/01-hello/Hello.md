@@ -68,7 +68,7 @@ in the Recipe — that layer does exactly what it says.
 
 ## Palette focus
 
-The chip palette on the right shows every construct available. In this chapter
+The palette on the right shows every construct available. In this chapter
 you only need **Return** — the one construct in [[hello_world]]. You'll see other
 palette entries like `Let`, `If`, `For each`, `Call` — ignore them for now.
 We'll cover each one in later chapters (`Let` in [[Variables]], `Call` in

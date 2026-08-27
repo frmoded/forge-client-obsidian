@@ -27,8 +27,6 @@ Since `72` is not greater than `80`, it skips the first block and runs the
 `<` (is less than), `>=` (is at least), `<=` (is at most), `==` (equals), and
 `!=` (does not equal).
 
-> The **If** and **Otherwise** chips are now in your palette.
-
 ## Exercise
 
 Open the [[weather]] note, change `72` to `95`, and run again. Now the

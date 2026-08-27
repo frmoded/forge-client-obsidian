@@ -30,9 +30,6 @@ That's a whole note whose only job is to return a word. [[describe_it]]
 doesn't care *how* it decides — it just uses what comes back. Small pieces,
 combined.
 
-> The [[excited_word]] chip is in your palette — a building block you can call
-> from anywhere, just like [[excited]] from chapter 3.
-
 ## Exercise
 
 Open the [[excited_word]] note, change `"wonderful"` to `"powerful"` (or

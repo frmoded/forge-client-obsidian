@@ -62,6 +62,14 @@ excitement" is a spec for *any* excited-returning function; a Description that
 says 'returns "hooray!" when given "hooray"' is a spec for *this* one, and
 survives regeneration.
 
+**A fourth failure mode is worse than substitution: the default can vanish
+outright.** An unpinned re-roll of `excited` didn't just pick a different
+word — it dropped the default argument entirely, and the regenerated note
+stopped running: `SnippetExecError: compute() missing 1 required positional
+argument: 'word'`. An underdetermined Description doesn't only risk the wrong
+answer; it risks no note at all. (Confirmed 2026-08-27, drain `0340`'s
+control run.)
+
 **7. One idea per teaching beat.** Don't compress two new concepts into one
 subsection because the chapter is running long. Give each new idea its own
 "open it, run it, here's what you'll see" treatment, the same shape the
