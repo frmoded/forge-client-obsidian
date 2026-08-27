@@ -93,7 +93,10 @@ import { ChipsManifest, loadPaletteForActiveVault, loadImportedVaultChips } from
 import { ChipPaletteGroup } from './chips-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core.ts';
-import { routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core.ts';
+import {
+  shouldWarnRecipeCanonicalFallback,
+  recipeCanonicalFallbackNotice,
+  routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core.ts';
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import {
@@ -3244,6 +3247,39 @@ export default class ForgePlugin extends Plugin {
       },
       hasToken: !!this.settings.transpileServiceToken,
       generate: async (_id) => {
+        // Drain 2026-08-27-1830 — end the silent fallback on a
+        // Recipe-canonical note.
+        //
+        // This dep is reached from routeActionCodeRegen's Phase 2 and
+        // nowhere else, i.e. exactly when E-- yielded nothing and
+        // /generate is about to write Python derived from the
+        // DESCRIPTION over a note whose Recipe is the source. Drain
+        // 1700 measured that /generate's payload carries no Recipe at
+        // all, so the Recipe there is not stale — it was never read.
+        //
+        // Wired HERE rather than at the two call sites on purpose:
+        // forgeSnippet's tail and dispatchModaBranch both build their
+        // deps from this one method, so a future third caller cannot
+        // forget it. Same reasoning drain 1620 used for putting
+        // mayMachineWriteFacet inside writeSourcePythonBack.
+        //
+        // Non-fatal: a failure to warn must never block the generation
+        // the cohort asked for (HARD RULE #1 — console.error naming the
+        // method).
+        try {
+          const noteFile = this.app.vault.getAbstractFileByPath(`${_id}.md`);
+          if (noteFile instanceof TFile) {
+            const body = await this.app.vault.read(noteFile);
+            if (shouldWarnRecipeCanonicalFallback(getFmFieldV2(body, 'source_facet'))) {
+              this.notice(
+                `${NOTICE_PREFIX}${recipeCanonicalFallbackNotice(noteFile.basename)}`,
+                8000,
+              );
+            }
+          }
+        } catch (e) {
+          console.error('routingDeps.generate: recipe-canonical fallback notice failed', e);
+        }
         const ok = await this.generate('Forge failed during generation');
         if (!ok) throw new Error('generate failed');
         // generate() writes the new Python to disk + MEMFS via

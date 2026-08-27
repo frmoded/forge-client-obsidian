@@ -82,3 +82,50 @@ export async function routeActionCodeRegen(
     return { ok: false, reason: 'http-error', message };
   }
 }
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-27-1830 — making the fallback LOUD on Recipe-canonical
+// notes.
+//
+// Phase 2 above is correct for a free-text-English note: E-- cannot
+// compile prose, and /generate is the whole point. It is a different
+// thing entirely on a note whose `source_facet` is `recipe`. There the
+// Recipe is a hand-authored artifact, and /generate's request payload
+// carries description / english / inputs / generation_notes / deps /
+// callables and NO RECIPE (measured in drain 1700 §1) — so the Python
+// that lands was not derived from the Recipe at all, and the Recipe's
+// semantics are simply discarded.
+//
+// Drain 1700 made the resulting frontmatter honest: the note now renders
+// `— derived from Recipe, out of date` instead of claiming currency.
+// But that is a suffix someone has to notice. Forge-core's adjudication
+// (drain 1830 §0, answering message 1810) was shape 3 of three: keep the
+// behaviour, end the silence.
+//
+// Shape 1 — refusing the fallback outright — is philosophically the
+// better match for the "hand-authored artifact is the source" doctrine
+// (drain 1620's mayMachineWriteFacet, drain 1700 itself). It is
+// deliberately NOT what this drain does: a Recipe-canonical note with an
+// unresolved `{{ }}` slot would stop producing any runnable Python, and
+// nobody has yet measured how many bundled notes that would brick.
+
+/** Should the E-- → /generate fallback warn before it writes?
+ *
+ *  True only when the note's STORED source facet is `recipe`. Absent /
+ *  unknown PERMITS silently, matching the convention drains 1620 and
+ *  1700 both adopted: a pre-drain-1200 note carries no hand-authored
+ *  claim, and warning on every legacy note would cry wolf. */
+export function shouldWarnRecipeCanonicalFallback(
+  storedSourceFacet: string | null | undefined,
+): boolean {
+  return storedSourceFacet === 'recipe';
+}
+
+/** The notice text. Says which note, what happened, and what the reader
+ *  should do — the Recipe was not merely stale in that output, it was
+ *  never read. */
+export function recipeCanonicalFallbackNotice(noteName: string): string {
+  return `${noteName}: the Recipe could not be compiled, so the Python was `
+    + `generated from the Description instead. The Recipe was not used — `
+    + `check the result against it.`;
+}
