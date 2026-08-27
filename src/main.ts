@@ -5333,7 +5333,17 @@ export default class ForgePlugin extends Plugin {
       // A multi-facet change that did NOT touch the facet the note
       // declares as its source leaves that declaration alone. See
       // decideSourceWriteFromChange for the reasoning and the trade.
-      const target = decideSourceWriteFromChange(changed, storedSource);
+      // Gate M (drain 2026-08-27-1320) — the caller already holds every
+      // signal the carve-out needs: `body` carries the stamp and
+      // `currentHashes.recipe` was computed three lines up. Nothing had to
+      // be threaded through; only the decision function was blind to it.
+      const pyDerivedFrom = getFmFieldV2(body, 'python_derived_from_recipe_hash');
+      const pythonLineageIsCurrent =
+        typeof pyDerivedFrom === 'string' && pyDerivedFrom === currentHashes.recipe;
+
+      const target = decideSourceWriteFromChange(
+        changed, storedSource, pythonLineageIsCurrent,
+      );
 
       // Drain 2026-08-17-0100 (sync_state Phase 2) — the sync_state
       // rollup that was co-written here is GONE. It is derived from the

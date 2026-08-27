@@ -164,6 +164,7 @@ export function changedFacets(
 export function decideSourceWriteFromChange(
   changed: ReadonlyArray<'description' | 'recipe' | 'python'>,
   storedSource: SourceLayer | null,
+  pythonLineageIsCurrent: boolean = false,
 ): SourceLayer | null {
   if (changed.length === 0) return null;
   if (
@@ -173,5 +174,33 @@ export function decideSourceWriteFromChange(
   ) {
     return null;
   }
-  return decideSourceWrite(changed[0], storedSource);
+  const target = decideSourceWrite(changed[0], storedSource);
+
+  // GATE M (drain 2026-08-27-1320) — the machine-derived carve-out.
+  //
+  // Four times this session a drain regenerated a `# Python` facet BY
+  // TRANSPILE from the note's own Recipe -- mood, function_inputs,
+  // greeting, describe_it -- and this function read it as a targeted
+  // hand-edit, flipped `source_facet` to 'python' and dropped the
+  // lineage. Every one had to be repaired by hand afterwards.
+  //
+  // THE SIGNAL: a writer that sets `python_derived_from_recipe_hash`
+  // equal to the note's CURRENT `recipe_hash` is asserting "this Python
+  // was derived from this Recipe". A person hand-editing Python does not
+  // produce that state -- their edit leaves the stamp pointing at
+  // whatever it pointed at before, which no longer matches.
+  //
+  // SCOPE: only when the flip would be to 'python'. A Recipe or
+  // Description edit is unaffected, so CW-1800's guarantee is untouched:
+  // a multi-facet change still cannot resolve to 'python' at all.
+  //
+  // THIS IS PURE LINEAGE-HASH MATCHING, not a check that the content is
+  // what transpile would actually produce. Verifying that would mean
+  // running the transpiler inside a decision module that deliberately has
+  // no engine access. A writer that stamps the lineage falsely is telling
+  // a lie about provenance, which is a different defect from this one and
+  // is not this function's to catch.
+  if (target === 'python' && pythonLineageIsCurrent) return null;
+
+  return target;
 }

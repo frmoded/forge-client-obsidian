@@ -174,3 +174,81 @@ describe('CW-1800 refinement (drain 1060)', () => {
   assert.equal(decideSourceWriteFromChange(['python'], 'description'), 'python');
 });
 });
+
+describe('Gate M — the machine-derived carve-out', () => {
+// ---------------------------------------------------------------------
+// GATE M — the machine-derived carve-out (drain 2026-08-27-1320).
+//
+// Four real occurrences this session, all the same shape: a drain
+// regenerated a `# Python` facet by transpile, this function read it as a
+// hand-edit, and `source_facet` flipped to 'python' with the lineage
+// dropped. These use those four notes' actual shapes.
+// ---------------------------------------------------------------------
+
+/** The four historical cases, by their real stored declarations. */
+const HISTORICAL: ReadonlyArray<{ note: string; stored: 'description' }> = [
+  { note: 'mood',            stored: 'description' },
+  { note: 'function_inputs', stored: 'description' },
+  { note: 'greeting',        stored: 'description' },
+  { note: 'describe_it',     stored: 'description' },
+];
+
+  it('Gate M: a transpile-regenerated Python facet does NOT flip source_facet', () => {
+  for (const { note, stored } of HISTORICAL) {
+    assert.equal(
+      decideSourceWriteFromChange(['python'], stored, /*lineageCurrent=*/ true),
+      null,
+      `${note}: the carve-out did not apply — this is the bug that hit four times`,
+    );
+  }
+  });
+
+  it('Gate M: without the carve-out those same cases still flip — the bug, pinned', () => {
+  // Non-vacuity in the strongest form: the SAME inputs with the lineage
+  // signal false reproduce the historical behaviour exactly. If this ever
+  // returns null, the carve-out has swallowed the real-edit path.
+  for (const { note, stored } of HISTORICAL) {
+    assert.equal(
+      decideSourceWriteFromChange(['python'], stored, /*lineageCurrent=*/ false),
+      'python',
+      `${note}: a genuine hand-edit stopped flipping — the carve-out is too wide`,
+    );
+  }
+  });
+
+  it('Gate M: a real hand-edit is still escapable — stale or absent lineage flips', () => {
+  // The carve-out must not be a one-way door: someone who genuinely takes
+  // over the Python facet still gets source_facet: python.
+  assert.equal(decideSourceWriteFromChange(['python'], 'description', false), 'python');
+  assert.equal(decideSourceWriteFromChange(['python'], 'recipe', false), 'python');
+  assert.equal(decideSourceWriteFromChange(['python'], null, false), 'python');
+  });
+
+  it('Gate M: the carve-out is scoped to python — Recipe and Description edits are untouched', () => {
+  // Even with the lineage flag set, a Recipe edit still makes the Recipe
+  // the source. The flag must not leak into the other facets' decisions.
+  assert.equal(decideSourceWriteFromChange(['recipe'], 'description', true), 'recipe');
+  assert.equal(decideSourceWriteFromChange(['description'], 'recipe', true), 'description');
+  });
+
+  it('Gate M: CW-1800s guarantee survives — a multi-facet change still cannot resolve to python', () => {
+  // 'python' is the one value an unprompted flip could use to change which
+  // code executes (drain 0110). Description and Recipe both precede it.
+  assert.notEqual(decideSourceWriteFromChange(['recipe', 'python'], 'recipe', true), 'python');
+  assert.notEqual(decideSourceWriteFromChange(['description', 'python'], 'description', false), 'python');
+  });
+
+  it('Gate M: drain 1210s exact sequence no longer flips', () => {
+  // describe_it had NO `# Python` section; drain 1210 added one by
+  // transpile and stamped python_derived_from_recipe_hash == recipe_hash.
+  // That is a single-facet python change with current lineage.
+  assert.equal(decideSourceWriteFromChange(['python'], 'description', true), null);
+  });
+
+  it('Gate M: the default keeps pre-drain behaviour for callers that pass two args', () => {
+  // The third parameter is optional so existing callers and tests are
+  // unaffected; omitting it means "no lineage claim", i.e. flip.
+  assert.equal(decideSourceWriteFromChange(['python'], 'description'), 'python');
+  });
+
+});
