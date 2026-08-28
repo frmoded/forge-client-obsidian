@@ -379,6 +379,9 @@ const LOCK_BTN_CLASS = 'forge-lock-btn';
 // without `_chips.md` don't see a dead icon.
 const CHIPS_BTN_CLASS = 'forge-chips-btn';
 
+// Drain 2026-08-28-0900 — "Restore to last commit" toolbar button.
+const RESTORE_BTN_CLASS = 'forge-restore-btn';
+
 // v0.2.83 → v0.2.84 — gestural-mutex controller migrated to a CM6
 // ViewPlugin. v0.2.83 used 200ms setInterval polling on a per-leaf
 // FacetMutexController instance; v0.2.84 hooks into ViewUpdate via
@@ -1625,7 +1628,7 @@ export default class ForgePlugin extends Plugin {
     // their predecessors swept after the Run+Generate→Forge and lock→edit-mode
     // refactors.
     view.containerEl.querySelectorAll(
-      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .forge-chips-btn, .forge-dag-btn`
+      `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .forge-chips-btn, .forge-dag-btn, .${RESTORE_BTN_CLASS}`
     ).forEach(el => el.remove());
 
     // v0.2.46: hoist the frontmatter lookup so the chip-toolbar
@@ -1661,6 +1664,35 @@ export default class ForgePlugin extends Plugin {
         () => { this.openChipsView(); });
       chipsBtn.addClass(CHIPS_BTN_CLASS);
     }
+    // Drain 2026-08-28-0900 — surface the existing "Restore active note
+    // to last commit" command as a toolbar button, next to chips. Driver
+    // R1: the mechanism already existed (drain 2026-08-27-0200/0400) but
+    // was hidden behind Cmd/Ctrl-P.
+    //
+    // Calls the SAME restore-to-git function the command palette entry
+    // calls, directly, rather than re-implementing any of its logic.
+    // That function already: shells `git status`, shows a ConfirmModal
+    // naming what is lost
+    // (describeRestore), refuses an untracked note with a Notice, and
+    // refuses a no-op note ("already matches the last commit") with a
+    // Notice. A new entry point, not new behavior.
+    //
+    // UNGATED by file type, matching the underlying command (which has
+    // no type restriction) and the New-action-note button below —
+    // restore-to-git is a general safety net, not a snippet-authoring
+    // action like chips/edges/Forge.
+    //
+    // Deliberately NOT gated on git status here. syncButtons() fires on
+    // every layout-change / editor-change event; shelling `git status`
+    // synchronously on every render would be a new, unprecedented cost
+    // in a function where every other gate reads cached frontmatter
+    // only. The command's own git call already reports "nothing to
+    // restore" via Notice when clicked on a clean note — reused as-is
+    // rather than duplicated here as a disabled-state precheck.
+    const restoreBtn = view.addAction(
+      'history', 'Restore to last commit',
+      () => { void restoreActiveNoteToLastCommit(this.app); });
+    restoreBtn.addClass(RESTORE_BTN_CLASS);
     // v0.2.77 — gate the edges panel toggle on snippet-ness. Edges
     // are inherently per-snippet (caller→callee dependency graph);
     // toggling the edges panel from a plain note is meaningless.

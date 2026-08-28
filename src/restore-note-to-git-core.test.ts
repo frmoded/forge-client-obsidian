@@ -135,3 +135,84 @@ test('git refuses an untracked pathspec rather than acting on it', () => {
     assert.ok(fs.existsSync(path.join(dir, 'untracked.md')));
   } finally { cleanup(); }
 });
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-28-0900 — surface the existing restore-to-last-commit
+// command as a per-note toolbar button, next to the chips button.
+//
+// The decision logic above (decideRestoreNote, selectRestorablePaths,
+// describeRestore) is unchanged by this drain — the button is a thin
+// wire to `restoreActiveNoteToLastCommit`, the same function the
+// command palette entry already calls. That function already shells
+// `git status` before showing a Notice.ConfirmModal, already refuses
+// an untracked note with a clear Notice, and already refuses a
+// no-op note ("already matches the last commit") — so this drain
+// introduces no new decision logic to unit-test here, per §4's own
+// instruction not to re-test what's already covered.
+//
+// What IS worth pinning, mutation-verified same as drains 1700/1830:
+// that the button is actually wired into syncButtons(), calls the
+// SAME function rather than a duplicate, and does not gate on git
+// status at render time (see the rationale in the comment this test
+// asserts against).
+
+import { readFileSync } from 'node:fs';
+
+test('0900 WIRED: the toolbar button calls restoreActiveNoteToLastCommit directly', () => {
+  const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+  const syncButtons = main.slice(
+    main.indexOf('syncButtons() {'),
+    main.indexOf('syncButtons() {') + main.slice(main.indexOf('syncButtons() {')).indexOf('\n  }\n') + 4,
+  );
+  assert.match(
+    syncButtons, /addAction\(\s*'history'/,
+    "the restore button is not registered with the 'history' icon",
+  );
+  assert.match(
+    syncButtons, /Restore to last commit/,
+    'the restore button has no tooltip naming what it does',
+  );
+  assert.match(
+    syncButtons, /void restoreActiveNoteToLastCommit\(this\.app\); \}\)/,
+    'the button does not call the existing restore function',
+  );
+  // Not a duplicate decision: the button's callback must be a bare call,
+  // not a re-implementation of confirm/status logic already inside
+  // restoreActiveNoteToLastCommit.
+  assert.doesNotMatch(
+    syncButtons, /new ConfirmModal\(/,
+    'the toolbar wiring re-implements confirmation instead of reusing the command',
+  );
+});
+
+test('0900 the button is NOT gated on a synchronous git shell-out', () => {
+  // syncButtons() fires on every 'layout-change' and editor-change event
+  // (main.ts:886, 909, 927, 1797, 1846, 2359). Every existing gate in
+  // this function reads cached frontmatter only. A git-status shell call
+  // here would be a new, unprecedented cost paid on every keystroke-
+  // adjacent re-render — the button must always render (when the note
+  // type qualifies) and let restoreActiveNoteToLastCommit's own git call
+  // report "nothing to restore" via Notice, same as the command does.
+  const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+  const syncButtons = main.slice(
+    main.indexOf('syncButtons() {'),
+    main.indexOf('syncButtons() {') + main.slice(main.indexOf('syncButtons() {')).indexOf('\n  }\n') + 4,
+  );
+  assert.doesNotMatch(
+    syncButtons, /execFileSync|git\(/,
+    'syncButtons shells to git — this blocks every layout-change event',
+  );
+});
+
+test('0900 NON-VACUITY: syncButtons still registers the chips and Forge buttons', () => {
+  // Scope pin, same shape as drain 1700's non-vacuity tests: a wiring
+  // assertion that never checks for regression is only checking that
+  // TEXT exists, not that the surrounding feature survived.
+  const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+  const syncButtons = main.slice(
+    main.indexOf('syncButtons() {'),
+    main.indexOf('syncButtons() {') + main.slice(main.indexOf('syncButtons() {')).indexOf('\n  }\n') + 4,
+  );
+  assert.match(syncButtons, /addAction\(\s*'puzzle'/, 'the chips button is gone');
+  assert.match(syncButtons, /addAction\(\s*'hammer'/, 'the Forge button is gone');
+});
