@@ -153,6 +153,22 @@ run panel: parameter names, defaults, and dropdown-vs-text-box rendering. It
 cannot be replaced by an implicit mention in the Description. What CAN shrink
 is the per-line doc text — don't restate what the Description already said.
 
+> **A real engine gap, found 2026-08-27 (drain `1620`): `## Inputs` is
+> hashed but never sent.** Two components disagree on where the Description
+> facet ends. The service's own extractor (`executor.py:894`) breaks on any
+> line starting with `#`, so the `## Inputs` heading terminates what
+> `/generate` actually receives. The plugin's extractor (`v2-note-core.ts`
+> `_extractH1Section`) breaks only on the next H1, so `## Inputs` sits
+> INSIDE `description_hash`. Consequence: editing `## Inputs` invalidates
+> `description_hash` and every `*_derived_from_*` stamp hanging off it,
+> while changing nothing about what the LLM actually sees — all cost, zero
+> principle-6 protection. **Do not pin a load-bearing value inside
+> `## Inputs` expecting it to defend against a hammer re-roll — it does
+> not.** Only text inside the `# Description` heading itself (before any
+> H2) is read by `/generate`. This is a live engine defect (two components
+> should agree on facet boundaries) recommended for its own investigation
+> drain, not yet queued as of this writing.
+
 **12. Name a construct the moment it appears, even if it isn't "taught" yet.**
 If a Recipe shown mid-chapter uses something the tutorial hasn't formally
 introduced (an `If`/`Otherwise` branch appearing before the Conditionals
@@ -263,23 +279,97 @@ covers it properly" costs one sentence and prevents a silent inconsistency.
     ("Reads a list from a data note and walks through it") — never names
     `[[colors]]` or the actual output (`red`/`green`/`blue`) — a live
     principle-6 risk, same shape as the `excited`/`function_inputs` findings
-    above. `08-recursion/factorial.md` has the same live principle-6 risk: its
-    default `n=5` is unpinned in both the Description and `## Inputs`, and the
-    note IS hash-stamped (unlike `show_factorial.md`). Most severe:
-    `09-slots/octopus_fact.md` — carries the "Chapter 9 — " prefix AND generic
+    above. `08-recursion/factorial.md` has the same live principle-6 risk, and
+    it is no longer hypothetical: drain `1620` MEASURED it. Two live `/generate`
+    runs differing only in Description text gave `Input n: int = 1.` from the
+    shipped wording and `Input n: int = 5.` from a wording that names the worked
+    example — so an unpinned `n=5` does not merely drift, it **collapses onto
+    the base case**, turning chapter 8's `5! = 120` into `1! = 1`. Pin it in the
+    `# Description` prose ONLY; per principle 11's engine-gap note, pinning in
+    `## Inputs` costs lineage and buys nothing.
+    `09-slots/octopus_fact.md` carries the "Chapter 9 — " prefix AND generic
     engine-mechanism prose in its Description instead of naming what it
     actually computes (an extreme principle-6 violation, doesn't even say
-    "octopus fact"); its `# Python` facet is **broken** (`return None`),
-    directly contradicting the chapter's own narrated promise
-    ("Octopuses have three hearts."); and its hash-lineage is **incomplete**
-    (`python_derived_from_recipe_hash` / `python_derived_from_source_hash`
-    absent entirely) — the same dishonest-stamp class as the `describe_it.md`
-    bug above, but missing fields rather than wrong ones. CC drains for all of
+    "octopus fact"). **Two further claims made in the original Iteration 88/89
+    audit were REFUTED by drain `1630`'s measurement, and are corrected here
+    rather than quietly dropped — both were forge-core's errors, and the note
+    was wrongly called "the worst finding across all nine chapters":**
+    (a) *"its `# Python` facet is broken (`return None`)"* — it is not. The stub
+    is never reached: `resolve_action_code` raises `SlotCacheMissError` first,
+    which is the DESIGNED first-run path (no `edit_mode: python`, `source_facet`
+    is `description`, and the note has no `english_hash` so there is no cache
+    hit). The plugin catches the 409, calls `/resolve-slot`, and writes the
+    resolved Python back. The demo works. The real and much smaller defect was
+    that `Slots.md` told the learner to open the note WITHOUT first running it,
+    so the pre-run stub contradicted one instruction — fixed at `0e651f7`.
+    (b) *"hash-lineage is incomplete — the same dishonest-stamp class as
+    `describe_it.md`"* — it is the opposite. `v11-3-backfill-core.ts` (CW-1500-B)
+    deliberately LEAVES `python_derived_from_recipe_hash` absent in the two-hop
+    Description-canonical case, because seeding it would render "in sync" for a
+    derivation that never happened. `describe_it.md`'s bug was fields PRESENT
+    WITH WRONG VALUES; this note omits fields it cannot back, which is the same
+    honesty principle drain `1700` shipped. **Do not add those fields until the
+    Python facet holds a genuinely derived value.** CC drains for all of
     the above posted 2026-08-27 (Loop mode charter, chapters 5-9 polish).
+- **Lineage-on-a-Description-edit, resolved 2026-08-27 (drain `2100`,
+  shipped `df61f77`):** `show_colors.md`, `factorial.md`, and `octopus_fact.md`
+  all hit the same gate — a live `/generate` re-derivation from the corrected
+  Description reproduces a Recipe that is semantically equivalent to the
+  shipped one but not always byte-identical (variable naming and
+  shorthand-vs-explicit call syntax can differ). Resolved by re-reading what
+  the stamp actually asserts (`facet-state-core.ts:6-11,89`): it answers
+  ONE question — "has the Description changed since the Recipe was last
+  forged?" — by comparing a stored snapshot to the current body. It never
+  claimed byte-reproducibility, and could not: the generator is an LLM.
+  **The correct action on a Description edit is therefore the NULL action —
+  do not write to any `*_derived_from_*` field, for any of the three notes.**
+  Verified shipped: `git show df61f77` touches only each note's Description
+  line; every lineage stamp is byte-unchanged. The notes now honestly render
+  "Recipe out of date" until a real re-forge happens, which is true.
+- **Vault-wide shorthand-non-reproducibility hypothesis — MEASURED AND
+  CLOSED, 2026-08-27 (drain `2100`):** three notes (`show_colors.md`,
+  `factorial.md`, `octopus_fact.md`) showed `/generate`
+  emitting the explicit call form (`Call [[note]] with arg=value`) where the
+  vault's own hand-authored Recipes consistently use the shorthand
+  (`[[note]] value.`), raising the worry that every Description-canonical
+  note with a chip call might be in this position. A vault-wide grep for
+  `source_facet: description` notes using the shorthand form found exactly
+  ONE (`show_colors.md`); `countdown.md` also uses the shorthand but is
+  unstamped, so it isn't in the population. The three original sightings had
+  three different causes (shorthand-vs-explicit, a `Let`-decomposition, a
+  different slot text) — ordinary LLM non-determinism, not one mechanism, not
+  systemic. **No vault-scale audit needed; do not open one.**
 - `09-slots/Slots.md`'s closing footer (`**After this chapter:** none — that's
   the whole tutorial. Nicely done.`) is a good example worth keeping as a
   reference: correctly identifies itself as the terminal chapter, no phantom
   pointer, no double footer. Noted so a future edit doesn't "fix" it.
+- **"Unattributed" vault mutations — CAUSE IDENTIFIED, 2026-08-27.** Two
+  stashes sit in `forge-tutorial` recording working-tree note rewrites with no
+  agent session behind them (`stash@{1}` on `describe_it.md`, `stash@{0}` on
+  `factorial.md`), and CC reported them as an unexplained pattern. Measured:
+  both carry the SAME signature — a Recipe re-decomposed into intermediate
+  `Let` variables (the exact shape `/generate` produces), plus
+  `python_derived_from_source_hash` added where it was absent, plus — the
+  decisive one — `show_factorial.md` gaining a complete frontmatter hash block
+  AND a `def compute(context): return None` stub in the same pass. A hammer
+  press on one note cannot stamp a *different, unstamped* note; the v11-3
+  backfill can, and does, on plugin load. This vault is itself an Obsidian
+  vault with the plugin installed (`.obsidian/plugins/forge-client-obsidian`,
+  v0.2.380), so a live Obsidian session on `~/projects/forge-tutorial` writes
+  into the same working tree two agents commit from. Not a stray keybinding,
+  not a background test. The `factorial.md` symptom specifically (`n=5` →
+  `n=1`) is a faithful re-derivation from the OLD unpinned Description — the
+  defect drain `1620`/`2100` measured and fixed, not a new one; with `n=5` now
+  pinned it should not recur. **Both stashes are discard candidates** (each
+  would reintroduce something already repaired, and `show_factorial`'s half
+  would re-add the empty-hash stub class drain `1210` removed), but dropping a
+  stash is destructive and driver-gated.
+- **A blanket `git stash push -u` in a shared working tree captures another
+  agent's in-flight work.** `stash@{0}`'s third file is forge-core's own
+  uncommitted `TUTORIAL-STYLE-GUIDE.md` edits (81 lines), swept in alongside
+  the re-roll CC meant to set aside. Nothing was lost — the identical diffstat
+  was re-written and is committed here — but a stash in this repo must be
+  path-scoped to the files the stashing agent is actually protecting.
 
 ## Worked example: Chapter 2 (Variables)
 
