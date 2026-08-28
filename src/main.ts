@@ -90,6 +90,7 @@ import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view.ts';
 import { ChipsManifest, loadPaletteForActiveVault, loadImportedVaultChips } from './chips.ts';
+import { decideRightLeafPlacement } from './right-leaf-eviction-core.ts';
 import { ChipPaletteGroup } from './chips-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core.ts';
@@ -1288,7 +1289,9 @@ export default class ForgePlugin extends Plugin {
       id: 'forge-open-3d',
       name: 'Open 3D View',
       callback: async () => {
-        const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+        // Drain 2026-08-28-0910 §3 — split rather than evict a sibling
+        // Forge panel already in the right sidebar.
+        const leaf = this.pickRightLeaf(THREE_VIEW_TYPE);
         await leaf.setViewState({ type: THREE_VIEW_TYPE, active: true });
         this.app.workspace.revealLeaf(leaf);
       },
@@ -2346,7 +2349,9 @@ export default class ForgePlugin extends Plugin {
       this.app.workspace.revealLeaf(existing);
       return;
     }
-    const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    // Drain 2026-08-28-0910 §3 (R5) — was getRightLeaf(false) directly,
+    // which evicted an open Forge/Run panel in place. Split instead.
+    const leaf = this.pickRightLeaf(CHIPS_VIEW_TYPE);
     await leaf.setViewState({ type: CHIPS_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
@@ -2434,7 +2439,10 @@ export default class ForgePlugin extends Plugin {
       existing.detach();
       return;
     }
-    const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    // Drain 2026-08-28-0910 §3 — same eviction bug shape as chips/output/
+    // 3D, found via a full sweep and fixed alongside them (not named in
+    // the original report; see FEEDBACK for why it's included).
+    const leaf = this.pickRightLeaf(EDGES_VIEW_TYPE);
     await leaf.setViewState({ type: EDGES_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
   }
@@ -6224,6 +6232,29 @@ export default class ForgePlugin extends Plugin {
     return { snippetId, sources, fields: buildInputFieldModels(sources) };
   }
 
+  // Drain 2026-08-28-0910 §3 (R5) / §4 (R6) — the shared fix for the
+  // right-sidebar leaf-eviction bug. `getRightLeaf(false)` reuses the
+  // sidebar's existing leaf regardless of what view it holds, so
+  // opening a Forge panel while a DIFFERENT Forge panel already
+  // occupies that leaf silently overwrote it — the chips button
+  // evicting the Run panel (R5) and, in reverse, a run evicting an
+  // open chips panel (R6, confirmed same mechanism — see FEEDBACK).
+  //
+  // Decision lives in right-leaf-eviction-core.ts so it is testable
+  // without an `obsidian` import. This wrapper does the one impure
+  // step the pure core can't: reading the candidate leaf's CURRENT
+  // view type before deciding whether reusing it would evict a
+  // sibling Forge panel.
+  private pickRightLeaf(wantType: string): WorkspaceLeaf {
+    const candidate = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    const currentType = candidate?.view?.getViewType?.() ?? null;
+    const placement = decideRightLeafPlacement(currentType, wantType);
+    if (placement === 'split') {
+      return this.app.workspace.getRightLeaf(true) as WorkspaceLeaf;
+    }
+    return candidate;
+  }
+
   private async getOutputView(): Promise<ForgeOutputView> {
     // v0.2.10: Obsidian sometimes parks a DeferredView placeholder on
     // the leaf right after setViewState resolves — the real view's
@@ -6288,7 +6319,10 @@ export default class ForgePlugin extends Plugin {
       return withStrip(existing);
     }
 
-    const leaf = this.app.workspace.getRightLeaf(false) as WorkspaceLeaf;
+    // Drain 2026-08-28-0910 §3 (R6) — the reverse direction of the R5
+    // report: a run opening the Forge panel while chips/edges/3D
+    // already occupies the right leaf used to evict it in place.
+    const leaf = this.pickRightLeaf(OUTPUT_VIEW_TYPE);
     await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
     this.app.workspace.revealLeaf(leaf);
     return withStrip(leaf);
