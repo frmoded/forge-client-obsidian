@@ -151,3 +151,84 @@ describe('computePalette', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------
+// Drain 2026-08-29-0810 §1 (R3) — "remove all the Notes section chips."
+//
+// computePalette() ITSELF IS DELIBERATELY UNCHANGED. Investigating the
+// merge pipeline before touching anything found the Notes group is not
+// purely cosmetic: mergeLibraryChipsIntoPalette's A4 shadow-check
+// (library-chip-merge-core.ts:69-70) builds its "does the vault already
+// have a chip with this label" set by scanning EVERY group in
+// vaultGroups — which, pre-this-drain, meant computePalette's Notes
+// group. Removing the Notes group at computePalette itself would have
+// silently broken shadowing: a user's own note named e.g.
+// `walking_bass_line` would stop suppressing the library's same-named
+// chip, because the vault-discovered chip would no longer exist
+// anywhere for the shadow-check to see.
+//
+// The fix instead runs AFTER mergeLibraryChipsIntoPalette has already
+// consumed the real Notes group for its shadow-set — dropNotesGroup-
+// FromPalette only removes the group from what finally reaches the
+// UI, never from what the merge step reasons about.
+
+import { dropNotesGroupFromPalette } from './palette-discovery-core.ts';
+
+describe('dropNotesGroupFromPalette', () => {
+  it('removes the Notes group, keeps everything else, in order', () => {
+    const groups = [
+      { sourceName: LANGUAGE_GROUP_NAME, chips: [] },
+      { sourceName: NOTES_GROUP_NAME, chips: [{ label: 'x', insertion: 'x' }] },
+      { sourceName: 'Music library', chips: [{ label: 'y', insertion: 'y' }] },
+    ];
+    const out = dropNotesGroupFromPalette(groups);
+    assert.deepEqual(out.map(g => g.sourceName), [LANGUAGE_GROUP_NAME, 'Music library']);
+  });
+
+  it('NON-VACUITY: a palette with no Notes group is returned unchanged', () => {
+    const groups = [{ sourceName: LANGUAGE_GROUP_NAME, chips: [] }];
+    const out = dropNotesGroupFromPalette(groups);
+    assert.deepEqual(out, groups);
+  });
+
+  it('an EMPTY Notes group is still dropped (absence of chips is not the trigger — the name is)', () => {
+    const groups = [
+      { sourceName: LANGUAGE_GROUP_NAME, chips: [] },
+      { sourceName: NOTES_GROUP_NAME, chips: [] },
+    ];
+    const out = dropNotesGroupFromPalette(groups);
+    assert.equal(out.length, 1);
+  });
+
+  it('never mutates the input array', () => {
+    const groups = [
+      { sourceName: NOTES_GROUP_NAME, chips: [] },
+      { sourceName: LANGUAGE_GROUP_NAME, chips: [] },
+    ];
+    const before = groups.length;
+    dropNotesGroupFromPalette(groups);
+    assert.equal(groups.length, before);
+  });
+});
+
+// ---------------------------------------------------------------------
+// WIRING — the half a pure-core assertion cannot see.
+
+import { readFileSync } from 'node:fs';
+
+describe('drain 0810 §1 wiring', () => {
+  it('loadPaletteForActiveVault drops the Notes group AFTER the merge, not before', () => {
+    const chipsSrc = readFileSync(new URL('./chips.ts', import.meta.url), 'utf8');
+    const fn = chipsSrc.slice(
+      chipsSrc.indexOf('export async function loadPaletteForActiveVault'),
+      chipsSrc.indexOf('export async function loadPaletteForActiveVault')
+        + chipsSrc.slice(chipsSrc.indexOf('export async function loadPaletteForActiveVault')).indexOf('\n}\n') + 3,
+    );
+    const mergeIdx = fn.indexOf('mergeLibraryChipsIntoPalette(');
+    const dropIdx = fn.indexOf('dropNotesGroupFromPalette(');
+    assert.ok(mergeIdx !== -1, 'mergeLibraryChipsIntoPalette is not called');
+    assert.ok(dropIdx !== -1, 'dropNotesGroupFromPalette is not called');
+    assert.ok(dropIdx > mergeIdx,
+      'Notes group dropped BEFORE the merge — this breaks A4 shadowing');
+  });
+});

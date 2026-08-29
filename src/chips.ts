@@ -186,6 +186,7 @@ export function resolveSnippetPath(
 
 import {
   computePalette,
+  dropNotesGroupFromPalette,
   type SnippetMetaForPalette,
 } from './palette-discovery-core.ts';
 import { mergeLibraryChipsIntoPalette } from './library-chip-merge-core.ts';
@@ -274,7 +275,13 @@ export async function loadPaletteForActiveVault(
   }
 
   const vaultGroups = computePalette(inventory);
-  return mergeLibraryChipsIntoPalette(vaultGroups, libraryNotesByDomain);
+  const merged = mergeLibraryChipsIntoPalette(vaultGroups, libraryNotesByDomain);
+  // Drain 2026-08-29-0810 §1 (R3) — "remove all the Notes section
+  // chips." Filtered AFTER the merge, not by changing computePalette:
+  // the merge's A4 shadow-check needs the real Notes group to know
+  // which library chips a vault note already shadows by label.
+  // Filtering earlier would silently break that protection.
+  return dropNotesGroupFromPalette(merged);
 }
 
 /** Vault-root snippet inventory (personal group). Mirrors the shape

@@ -110,3 +110,20 @@ export function computePalette(
     },
   ];
 }
+
+/** Drop the Notes group from an already-merged palette.
+ *
+ *  MUST run AFTER `mergeLibraryChipsIntoPalette`, not as a change to
+ *  `computePalette` itself. The merge step's A4 shadow-check
+ *  (`library-chip-merge-core.ts`) scans every group in `vaultGroups`
+ *  to know which library chips a vault note already shadows by label —
+ *  filtering the Notes group out any earlier would silently break that
+ *  protection, since the vault-discovered chip it needs to see would
+ *  no longer exist anywhere. This function only removes the group from
+ *  what finally reaches the chips panel; the merge step still sees the
+ *  real content. */
+export function dropNotesGroupFromPalette(
+  groups: ChipPaletteGroup[],
+): ChipPaletteGroup[] {
+  return groups.filter((g) => g.sourceName !== NOTES_GROUP_NAME);
+}

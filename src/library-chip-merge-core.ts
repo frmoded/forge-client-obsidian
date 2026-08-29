@@ -93,3 +93,26 @@ export function mergeLibraryChipsIntoPalette(
   }
   return out;
 }
+
+/** Filter a per-domain library-note map to only the domains the
+ *  predicate accepts.
+ *
+ *  Drain 2026-08-29-0810 §2/§3 — R4/R5 asked that MODA/Music Library
+ *  chips only appear when the vault's `forge.toml` declares that
+ *  domain. Deliberately generic (no domain-name special-casing): the
+ *  caller decides what "active" means (e.g. `domain === 'core' ||
+ *  isDomainActive(domain)`, exempting universal engine primitives
+ *  from the gate). Applied to a COPY of `libraryNotesByDomain` passed
+ *  into the chip-palette path only — the source map itself, which
+ *  also feeds `/generate`'s callable-resolution inventory, is left
+ *  untouched. */
+export function filterActiveDomainNotes(
+  notesByDomain: Record<string, LibraryNote[]>,
+  isActive: (domain: string) => boolean,
+): Record<string, LibraryNote[]> {
+  const out: Record<string, LibraryNote[]> = {};
+  for (const [domain, notes] of Object.entries(notesByDomain)) {
+    if (isActive(domain)) out[domain] = notes;
+  }
+  return out;
+}

@@ -90,6 +90,7 @@ import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
 import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view.ts';
 import { ChipsManifest, loadPaletteForActiveVault, loadImportedVaultChips } from './chips.ts';
+import { filterActiveDomainNotes } from './library-chip-merge-core.ts';
 import { decideRightLeafPlacement } from './right-leaf-eviction-core.ts';
 import { ChipPaletteGroup } from './chips-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
@@ -2374,7 +2375,20 @@ export default class ForgePlugin extends Plugin {
       // the await so the palette loader sees a consistent view even
       // if loadLibraryNoteCatalog completes concurrently. L59 spirit
       // (capture live state to const before an await).
-      const notesByDomain = this.libraryNotesByDomain;
+      // Drain 2026-08-29-0810 §2/§3 (R4/R5) — filter to a COPY for the
+      // chip-palette path only. `this.libraryNotesByDomain` itself
+      // stays fully populated (it also feeds /generate's callable-
+      // resolution inventory via getLibraryNotesByDomain — narrowing
+      // the source map would silently change what the LLM can call,
+      // which neither R4 nor R5 asked for). 'core' is exempt: it is
+      // universal engine vocabulary, never itself listed in any real
+      // vault's forge.toml domains= (confirmed against every bundled
+      // vault), so gating it on isDomainActive would hide it for every
+      // vault that declares domains at all.
+      const notesByDomain = filterActiveDomainNotes(
+        this.libraryNotesByDomain,
+        (domain) => domain === 'core' || this.isDomainActive(domain),
+      );
       const palette = await loadPaletteForActiveVault(
         this.app, this.chipsManifest(), notesByDomain);
       // Drain 2026-08-10-1430 (Phase 4b) — append one group per
