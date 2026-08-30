@@ -136,6 +136,7 @@ import {
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
 import { writeSlotsSection } from './slots-section-writer-core.ts';
+import { parseSlotCacheMissFromPythonError } from './slot-cache-miss-python-error-core.ts';
 import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
 import {
   checkRecipeClosure,
@@ -4822,7 +4823,38 @@ export default class ForgePlugin extends Plugin {
     // return fresh transpile output, and the freshly-written
     // english_hash self-heals the snippet's cache contract going
     // forward.
-    const python = await host.resolveActionCode(snippetId, { force: true });
+    //
+    // Drain 2026-08-30-0945 — self-heal a SlotCacheMissError instead of
+    // letting it propagate to the caller's swallow-and-console.error
+    // (the CW-2000 catch around this call). The RUN path has always
+    // self-healed this (handleSlotCacheMiss, via the HTTP 409 branch);
+    // this transpile-only write-back path had no equivalent, so a
+    // fresh Description-canonical note with any unresolved {{ ... }}
+    // slot silently never got a # Python facet on first Forge-click.
+    //
+    // Per forge/core/slot_cache.py's SlotCacheMissError docstring, this
+    // is the SANCTIONED place to catch and resolve it — the error must
+    // NOT be caught at runtime (execution), but this is transpile time,
+    // exactly the "plugin orchestration layer" the docstring names.
+    //
+    // Bounded to ONE retry, matching handleSlotCacheMiss's own
+    // second-pass shape: if the retry itself throws (a genuinely
+    // different failure, or a second miss), let it propagate to the
+    // existing outer catch unchanged — no retry loop.
+    let python: string;
+    let resolvedSlotsForCache: Record<string, string> | null = null;
+    try {
+      python = await host.resolveActionCode(snippetId, { force: true });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const missing = parseSlotCacheMissFromPythonError(message);
+      if (missing === null) throw e;
+      const resolveOutcome = await this.resolveMissingSlotsViaAlpha(snippetId, missing);
+      if (resolveOutcome === null) throw e;
+      resolvedSlotsForCache = resolveOutcome.slotResolutions;
+      python = await host.resolveActionCode(
+        snippetId, { force: true, slotResolutions: resolvedSlotsForCache });
+    }
     if (!python) return;
     const body = await this.app.vault.read(file);
     // Drain 2026-08-05-2100 mechanism (b) — this site's `?? ''` +
@@ -4864,6 +4896,16 @@ export default class ForgePlugin extends Plugin {
         englishHash,
         stripStaleSlots: false,
       });
+      // Drain 2026-08-30-0945 — persist the just-resolved slots into
+      // # Slots, same as handleSlotCacheMiss's own write (drain
+      // 2026-08-24-2350's "persist, don't discard" rule). Without
+      // this, the resolution paid for here is used once and thrown
+      // away — the next Forge-click re-hits the LLM instead of a
+      // cache hit. `stripStaleSlots: false` above means writeSlots-
+      // Section below is the only place a stale heading gets replaced.
+      if (resolvedSlotsForCache !== null) {
+        next = writeSlotsSection(next, resolvedSlotsForCache);
+      }
       // Only stamp python_hash if the resulting body actually has a
       // # Python section (V2 visible-mode). Avoids a stale baseline
       // for V1 notes whose # Python facet is written by the V1 cache
@@ -6585,6 +6627,78 @@ export default class ForgePlugin extends Plugin {
    *  Returns the compute result envelope on success; null on
    *  failure (after surfacing a Notice).
    */
+  // Drain 2026-08-30-0945 — extracted from handleSlotCacheMiss's own
+  // step 1, verbatim, so writeSourcePythonBack's new self-heal path
+  // (transpile-only, no compute) reuses the exact same /resolve-slot
+  // batching + error handling instead of a second, independently-
+  // drifting implementation. Per the standing rule against vendoring
+  // drift: two slot-cache-miss recovery paths is exactly the shape
+  // this codebase has been burned by before.
+  private async resolveMissingSlotsViaAlpha(
+    snippetId: string,
+    // Narrower than SlotRequestPayload on purpose: this function never
+    // reads domain_hints from `missing` (it always sets its own `[]`
+    // below), and the engine's SlotCacheMissError.missing shape
+    // (forge/core/slot_cache.py) never carries domain_hints either —
+    // requiring the full SlotRequestPayload shape here would force
+    // every caller into a lying `as` cast.
+    missing: Array<{ slot_text: string; snippet_id: string; surrounding_context: string }>,
+    errorPrefix?: string,
+  ): Promise<{ slotResolutions: Record<string, string>; responseCount: number } | null> {
+    const requests: SlotRequestPayload[] = missing.map((m) => ({
+      slot_text: m.slot_text,
+      snippet_id: m.snippet_id ?? snippetId,
+      surrounding_context: m.surrounding_context ?? '',
+      domain_hints: [],
+    }));
+    let resolved;
+    try {
+      resolved = await resolveSlotsAlpha(
+        this.settings.transpileServiceUrl,
+        this.settings.transpileServiceToken,
+        requests,
+      );
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error('Forge slot resolution call failed:', e);
+      this.notice(errorPrefix
+        ? `${errorPrefix}: slot resolution failed — ${detail}`
+        : `${NOTICE_PREFIX}slot resolution failed — ${detail}`);
+      return null;
+    }
+
+    if (resolved.status === 0) {
+      const msg = resolved.json?.detail ?? 'Slot resolution requires a transpile token.';
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
+      return null;
+    }
+    if (resolved.status >= 400) {
+      const detail = resolved.json?.detail;
+      const errorMsg = (detail && typeof detail === 'object' && detail.error)
+        ? detail.error
+        : (typeof detail === 'string' ? detail : `HTTP ${resolved.status}`);
+      console.error('Forge slot resolution non-2xx:', resolved.status, detail);
+      this.notice(errorPrefix
+        ? `${errorPrefix}: slot resolution failed — ${errorMsg}`
+        : `${NOTICE_PREFIX}slot resolution failed — ${errorMsg}`);
+      return null;
+    }
+
+    const responses = resolved.json?.responses ?? [];
+    if (!Array.isArray(responses) || responses.length !== requests.length) {
+      const msg = `slot resolution returned ${responses?.length ?? 0} responses for ${requests.length} requests; bailing`;
+      console.error('Forge:', msg);
+      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
+      return null;
+    }
+
+    const slotResolutions: Record<string, string> = {};
+    for (const r of responses) {
+      slotResolutions[r.cache_key] = r.python_expr;
+    }
+    return { slotResolutions, responseCount: responses.length };
+  }
+
   private async handleSlotCacheMiss(
     snippetId: string,
     missing: SlotRequestPayload[],
@@ -6642,59 +6756,11 @@ export default class ForgePlugin extends Plugin {
       return null;
     }
 
-    // 1. Batch /resolve-slot.
-    const requests: SlotRequestPayload[] = missing.map((m) => ({
-      slot_text: m.slot_text,
-      snippet_id: m.snippet_id ?? snippetId,
-      surrounding_context: m.surrounding_context ?? '',
-      domain_hints: [],
-    }));
-    let resolved;
-    try {
-      resolved = await resolveSlotsAlpha(
-        this.settings.transpileServiceUrl,
-        this.settings.transpileServiceToken,
-        requests,
-      );
-    } catch (e) {
-      const detail = e instanceof Error ? e.message : String(e);
-      console.error('Forge slot resolution call failed:', e);
-      this.notice(errorPrefix
-        ? `${errorPrefix}: slot resolution failed — ${detail}`
-        : `${NOTICE_PREFIX}slot resolution failed — ${detail}`);
-      return null;
-    }
-
-    if (resolved.status === 0) {
-      const msg = resolved.json?.detail ?? 'Slot resolution requires a transpile token.';
-      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
-      return null;
-    }
-    if (resolved.status >= 400) {
-      const detail = resolved.json?.detail;
-      const errorMsg = (detail && typeof detail === 'object' && detail.error)
-        ? detail.error
-        : (typeof detail === 'string' ? detail : `HTTP ${resolved.status}`);
-      console.error('Forge slot resolution non-2xx:', resolved.status, detail);
-      this.notice(errorPrefix
-        ? `${errorPrefix}: slot resolution failed — ${errorMsg}`
-        : `${NOTICE_PREFIX}slot resolution failed — ${errorMsg}`);
-      return null;
-    }
-
-    const responses = resolved.json?.responses ?? [];
-    if (!Array.isArray(responses) || responses.length !== requests.length) {
-      const msg = `slot resolution returned ${responses?.length ?? 0} responses for ${requests.length} requests; bailing`;
-      console.error('Forge:', msg);
-      this.notice(errorPrefix ? `${errorPrefix}: ${msg}` : `${NOTICE_PREFIX}${msg}`);
-      return null;
-    }
-
-    // Build slot_resolutions dict for the second compute call.
-    const slotResolutions: Record<string, string> = {};
-    for (const r of responses) {
-      slotResolutions[r.cache_key] = r.python_expr;
-    }
+    // 1. Batch /resolve-slot, via the shared helper (drain 0945).
+    const resolveOutcome = await this.resolveMissingSlotsViaAlpha(
+      snippetId, missing, errorPrefix);
+    if (resolveOutcome === null) return null;
+    const { slotResolutions, responseCount } = resolveOutcome;
 
     // 2. Second compute call with slot_resolutions inline. Returns
     //    the transpiled Python + result + stdout.
@@ -6804,7 +6870,7 @@ export default class ForgePlugin extends Plugin {
       console.error('handleSlotCacheMiss: post-write MEMFS sync failed', e);
     }
 
-    console.log(prefixed('slot cache write succeeded'), { snippetId, count: responses.length });
+    console.log(prefixed('slot cache write succeeded'), { snippetId, count: responseCount });
 
     // 5. Return the compute envelope to the caller.
     return {

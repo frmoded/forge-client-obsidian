@@ -160,12 +160,22 @@ test('adding # Slots changes no facet HASH', async () => {
 const MAIN = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
 
 test('the slot-miss handler persists its resolutions', () => {
-  assert.equal(
-    MAIN.split('\n').filter((l) => l.includes('slotResolutions,')).length,
-    1,
-    'writeSlotsSection must be called with the fetched resolutions',
-  );
-  assert.ok(MAIN.includes('writeSlotsSection('));
+  // Drain 2026-08-30-0945 — was a substring count of `slotResolutions,`
+  // asserted to equal exactly 1. That coincidentally matched this
+  // drain's own destructuring syntax (`const { slotResolutions,
+  // responseCount } = ...`) two lines it was never meant to count,
+  // turning a correct refactor into a false failure. Counting the
+  // actual invocation (`writeSlotsSection(`) instead is precise
+  // regardless of what a caller names its local variable.
+  //
+  // TWO real call sites are now correct, not a regression: the
+  // original in handleSlotCacheMiss (the RUN path's second-pass
+  // persistence), and a new one in writeSourcePythonBack (the
+  // transpile-only write-back path's own self-heal, added by drain
+  // 0945 — see slot-cache-miss-python-error-core.test.ts for its own
+  // wiring test).
+  const callSites = MAIN.split('\n').filter((l) => l.includes('writeSlotsSection(')).length;
+  assert.equal(callSites, 2, 'expected exactly two writeSlotsSection call sites');
 });
 
 test('no production call site strips # Slots any more', () => {

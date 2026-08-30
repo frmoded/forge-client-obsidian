@@ -1101,7 +1101,7 @@ def _forge_preflight_then_inventory(snippet_id: str):
     return _forge_get_generate_inventory(snippet_id)
 
 def _forge_resolve_action_code(snippet_id: str, force: bool = False,
-                               canonical_layer=None):
+                               canonical_layer=None, slot_resolutions=None):
     """v0.2.101 — return the action's Python source WITHOUT executing it.
 
     For facet_form: canonical snippets, this is the freshly transpiled
@@ -1124,6 +1124,14 @@ def _forge_resolve_action_code(snippet_id: str, force: bool = False,
     v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — canonical_layer
     threads through to resolve_action_code for its short-circuit
     handling of python-canonical + description-canonical notes.
+
+    Drain 2026-08-30-0945 — slot_resolutions (a cache_key-to-
+    python_expr dict, or None) forwarded to resolve_action_code's own
+    long-standing parameter of the same name. Without it, a value slot
+    with no cache entry raises SlotCacheMissError on every call from
+    this function — the transpile-only write-back path had no way to
+    supply a second-pass resolution the way computeViaEngineWithPython
+    already can via its own slot_resolutions argument.
     """
     relpath = f"/bundle/user-vault/{snippet_id}.md"
     try:
@@ -1133,8 +1141,8 @@ def _forge_resolve_action_code(snippet_id: str, force: bool = False,
         pass
     resolver = GraphResolver(_forge_registry)
     snip = resolver.resolve(snippet_id)
-    return resolve_action_code(snip, force=force,
-                               canonical_layer=canonical_layer)
+    return resolve_action_code(snip, slot_resolutions=slot_resolutions,
+                               force=force, canonical_layer=canonical_layer)
 
 def _forge_derive_typed_lets_input_names(recipe_body: str):
     """Drain 2026-08-10-1900 — names of the leading typed-Let input
@@ -1746,6 +1754,10 @@ export interface PyodideHostInstance {
        *  Undefined preserves pre-v0.2.252 behavior for callers that
        *  haven't been updated. */
       sourceLayer?: 'description' | 'recipe' | 'python' | 'synced';
+      /** Drain 2026-08-30-0945 — second-pass slot resolutions for a
+       *  retry after SlotCacheMissError. See the implementation's own
+       *  comment for the full rationale. */
+      slotResolutions?: Record<string, string>;
     },
   ): Promise<string>;
   modaInit(): Promise<ModaInitResult>;
@@ -1928,6 +1940,11 @@ _forge_compute_with_python(
     opts?: {
       force?: boolean;
       sourceLayer?: 'description' | 'recipe' | 'python' | 'synced';
+      // Drain 2026-08-30-0945 — second-pass slot resolutions, same
+      // `{cache_key: python_expr}` shape computeViaEngineWithPython
+      // already accepts. Lets a caller retry after a
+      // SlotCacheMissError without switching to a full compute.
+      slotResolutions?: Record<string, string>;
     },
   ): Promise<string> {
     // v0.2.128 — `force` opt bypasses the engine's legacy
@@ -1948,9 +1965,18 @@ _forge_compute_with_python(
       "_forge_resolve_canonical_layer",
       opts?.sourceLayer ?? null,
     );
-    const out = this.pyodide.runPython(
-      `_forge_resolve_action_code(_forge_resolve_target, force=_forge_resolve_force, canonical_layer=_forge_resolve_canonical_layer)`,
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.pyodide.globals.set(
+      "_forge_resolve_slot_resolutions",
+      (opts?.slotResolutions ?? null) as any);
+    const out = this.pyodide.runPython(`
+_forge_resolve_action_code(
+    _forge_resolve_target,
+    force=_forge_resolve_force,
+    canonical_layer=_forge_resolve_canonical_layer,
+    slot_resolutions=(_forge_resolve_slot_resolutions.to_py() if _forge_resolve_slot_resolutions else None),
+)
+`);
     return String(out ?? "");
   }
 
