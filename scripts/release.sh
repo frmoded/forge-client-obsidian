@@ -330,6 +330,28 @@ if [ "$SKIP_BUMP" = "no" ]; then
   # Drain 2550 — mark for the EXIT trap so a preflight failure
   # between here and the commit rolls the bump back automatically.
   MANIFEST_BUMPED="yes"
+
+  # Drain 2026-09-08-1620 — Obsidian's community-plugin submission
+  # requires versions.json to map every published version to the
+  # minAppVersion it shipped with. Adding the key here, inside the
+  # same MANIFEST_BUMPED-guarded branch, means the existing revert
+  # trap (_cleanup_on_error → _revert_build_artifacts, both call sites
+  # already shared per drain 2026-08-22-1100) reverts this file for
+  # free on a failed preflight or a --dry-run — versions.json is
+  # listed in build-outputs.txt alongside manifest.json for exactly
+  # that reason. jq's key-set is idempotent, so a re-run for the same
+  # version is a no-op rather than a diff.
+  #
+  # NOT covered: the SKIP_BUMP=yes path (manifest pre-bumped by an
+  # upstream commit in a multi-repo prompt). That path never sets
+  # MANIFEST_BUMPED, so wiring versions.json there too would write a
+  # key with no revert-on-failure safety net. Left out deliberately —
+  # flagged as a known gap in this drain's FEEDBACK rather than
+  # threaded through a differently-guarded path.
+  MIN_APP_VERSION="$(jq -r '.minAppVersion' manifest.json)"
+  tmp_versions="$(mktemp)"
+  jq --arg v "$NEW_VERSION" --arg m "$MIN_APP_VERSION" '.[$v] = $m' versions.json > "$tmp_versions" && mv "$tmp_versions" versions.json
+  echo "  versions.json: $NEW_VERSION → $MIN_APP_VERSION"
 fi
 
 # --- Build ---
@@ -454,7 +476,11 @@ if [ "$SKIP_BUMP" = "no" ]; then
   # stale sentinel beside a bumped manifest — the v0.2.363 cut did
   # exactly that. Both, one commit: any window where they disagree is
   # a state bundle-version-sentinel.test.mjs asserts cannot exist.
-  git add manifest.json assets/.bundle-version
+  # Drain 2026-09-08-1620 — versions.json joins the same commit for
+  # the identical reason: a HEAD where manifest.json names a version
+  # versions.json doesn't map is the Obsidian-submission equivalent of
+  # the stale-sentinel state this comment already describes.
+  git add manifest.json assets/.bundle-version versions.json
   git commit -m "Release v${NEW_VERSION}"
   # Drain 2550 — commit is committed; the version bump is now
   # permanent. Clear MANIFEST_BUMPED so any later failure doesn't

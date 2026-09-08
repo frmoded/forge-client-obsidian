@@ -60,7 +60,7 @@ test('the tracked-build-artifact set is exactly what we think it is', () => {
   // when a dry run poisons the next release.
   assert.deepEqual(
     trackedBuildArtifacts().sort(),
-    ['assets/.bundle-version', 'manifest.json'],
+    ['assets/.bundle-version', 'manifest.json', 'versions.json'],
     'a newly-tracked build artifact must be added to _revert_build_artifacts',
   );
 });

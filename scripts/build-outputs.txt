@@ -2,7 +2,10 @@
 #
 # Drain 2026-08-22-1100.
 #
-# Every file `npm run build` writes into the working tree. ONE list,
+# Every file `npm run build` writes into the working tree, PLUS the
+# files release.sh's own version-bump step edits directly (manifest.json;
+# versions.json as of drain 2026-09-08-1620) — anything that needs the
+# same revert-on-failure / revert-on-dry-run safety net. ONE list,
 # read by both scripts/release.sh (bash) and
 # scripts/release-dry-run-revert.test.mjs — drain 0920's lesson (one
 # fact, one definition) applied before a second copy could exist.
@@ -22,6 +25,7 @@
 # comments ignored.
 
 manifest.json
+versions.json
 assets/.bundle-version
 main.js
 src/version-constant.generated.ts
