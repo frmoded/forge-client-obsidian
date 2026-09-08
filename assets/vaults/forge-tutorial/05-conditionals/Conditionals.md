@@ -1,4 +1,4 @@
-# Chapter 5 — Conditionals
+*Chapter 5*
 
 Programs get interesting when they make choices. This system does that with
 **If** and **Otherwise**.
@@ -41,4 +41,4 @@ Focus on **If** and **Otherwise** for this chapter. The `If ... , ... Otherwise
 
 **What's next:** [[weather]]
 
-**After this chapter:** [[Loops]]
+**Next Lesson:** [[Loops]]

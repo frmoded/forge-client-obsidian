@@ -1,4 +1,4 @@
-# Chapter 3 — Functions
+*Chapter 3*
 
 So far each note does its thing top to bottom. Sometimes you want a step you
 can name once and reuse with different inputs. In this system, you do that by
@@ -97,4 +97,4 @@ Still ignoring `If`, `Otherwise`, `For each`, as in chapter 1 —
 
 **Order in this chapter:** [[cheer]] → [[excited]] → [[function_inputs]] → [[mood]]
 
-**After this chapter:** [[Composition]]
+**Next Lesson:** [[Composition]]

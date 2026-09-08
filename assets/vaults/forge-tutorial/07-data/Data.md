@@ -1,4 +1,4 @@
-# Chapter 7 — Data
+*Chapter 7*
 
 Not every note *does* something. Some just *hold* something — a list, a
 number, a chunk of text — ready for other notes to use. Those are **data
@@ -51,4 +51,4 @@ it. Focus on the shape difference between the two.
 
 **Order in this chapter:** [[show_colors]] → [[colors]]
 
-**After this chapter:** [[Recursion]]
+**Next Lesson:** [[Recursion]]

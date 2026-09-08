@@ -1,4 +1,4 @@
-# Chapter 8 — Recursion
+*Chapter 8*
 
 Here's a surprising idea: a note is allowed to call **itself**. That's
 **recursion** — a tidy way to solve a problem by doing a little bit and handing
@@ -51,4 +51,4 @@ you with `{{ … }}` — is next in [[Slots]].
 
 **Order in this chapter:** [[show_factorial]] → [[factorial]]
 
-**After this chapter:** [[Slots]]
+**Next Lesson:** [[Slots]]

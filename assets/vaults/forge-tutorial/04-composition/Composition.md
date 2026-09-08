@@ -1,4 +1,4 @@
-# Chapter 4 — Composition
+*Chapter 4*
 
 [[welcome]] called a second note, [[greet]], to do part of its work — that's
 **composition**: notes calling notes, how this system scales from tiny
@@ -34,4 +34,4 @@ cover them properly.
 
 **Order in this chapter:** [[describe_it]] → [[excited_word]]
 
-**After this chapter:** [[Conditionals]]
+**Next Lesson:** [[Conditionals]]

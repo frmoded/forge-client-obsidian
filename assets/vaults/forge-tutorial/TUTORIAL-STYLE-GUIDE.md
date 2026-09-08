@@ -114,7 +114,15 @@ while the front half took its time is a real, noticeable unevenness.
 **8. Protect exercises where the learner builds something.** Copy a note,
 rename it, change one line, run it — that is the moment a learner does real
 constructionist work rather than reading pre-built examples. Don't trim these
-for length; they're doing the opposite of padding.
+for length; they're doing the opposite of padding. This is the tutorial
+vault's application of the same pedagogical bet named explicitly in
+`~/projects/forge-moda-bootstrap/forge-wizard-protocol.md`'s "Music vault
+authoring — constructionist patterns" section (rooted in Papert's
+constructionism: "learners build knowledge by building artifacts") — that
+section's anti-pattern checklist and "must force a Run click" rule of thumb
+are worth reading even though they're written against the music vault, since
+the underlying criterion (does the note make the learner build, not just
+read) is the same one this principle is naming here.
 
 **9. Set expectations once, not per chapter.** If several chapters in a row
 say "ignore `If`, `Otherwise`, `For each` for now — those come later," that's

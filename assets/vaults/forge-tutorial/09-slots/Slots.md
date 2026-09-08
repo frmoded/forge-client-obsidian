@@ -1,4 +1,4 @@
-# Chapter 9 — Slots
+*Chapter 9*
 
 Every value so far, you wrote yourself: `"Ada"`, `72`, `<3, 2, 1>`. This last
 chapter is the fun one. You can leave a value *blank* — describe what you want in
@@ -89,4 +89,4 @@ know. Go make something you care about.
 
 **What's next:** [[octopus_fact]]
 
-**After this chapter:** none — that's the whole tutorial. Nicely done.
+**Next Lesson:** none — that's the whole tutorial. Nicely done.

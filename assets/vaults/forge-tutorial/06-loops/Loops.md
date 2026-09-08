@@ -1,4 +1,4 @@
-# Chapter 6 — Loops
+*Chapter 6*
 
 When you want to do the same thing several times, you use a **loop**.
 
@@ -49,4 +49,4 @@ of the primitive control constructs in the palette. Data notes come next.
 
 **What's next:** [[countdown]]
 
-**After this chapter:** [[Data]]
+**Next Lesson:** [[Data]]

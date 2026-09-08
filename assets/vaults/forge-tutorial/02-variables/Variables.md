@@ -1,4 +1,4 @@
-# Chapter 2 — Variables
+*Chapter 2*
 
 In chapter 1 you returned a fixed message. This time, let's give values names so
 we can build with them.
@@ -29,6 +29,4 @@ as [[greeting]] — but it doesn't. **It's broken on purpose.** Read its Recipe,
 find the one word that shouldn't have quotes around it, fix it, and run again.
 Everything you need is already in this chapter.
 
-**What's next:** [[greeting]]
-
-**After this chapter:** [[Functions]]
+**Next Lesson:** [[Functions]]
