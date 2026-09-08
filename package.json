@@ -21,7 +21,7 @@
   },
   "keywords": [],
   "author": "Oded Fuhrmann",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@codemirror/language": "^6.12.3",
     "@types/node": "^16.11.6",
