@@ -120,4 +120,4 @@ See [LICENSE](LICENSE) and the engine repo for upstream attribution.
 ## Part of the Forge ecosystem
 
 - Engine: https://github.com/frmoded/forge
-- Vaults: https://github.com/frmoded/forge-moda, https://github.com/frmoded/forge-music
+- Vaults: https://github.com/frmoded/forge-moda, https://github.com/frmoded/music-theory, https://github.com/frmoded/music-core, https://github.com/frmoded/forge-tutorial
