@@ -1,10 +1,44 @@
 # forge-client-obsidian
 
-Obsidian plugin for the [Forge](https://github.com/frmoded/forge) snippet system. Embeds the Pyodide-based Forge engine + bundled libraries (forge-moda, forge-music) directly into the plugin so closed-beta users can install with a single zip — no separate Python or engine deployment needed.
+An Obsidian plugin for writing notes that mix plain-language prose with
+runnable Python and running that Python right inside Obsidian — no
+separate Python install, engine, or terminal setup on your machine.
+
+**Status**: currently distributed via [BRAT](https://github.com/TfTHacker/obsidian42-brat)
+or a manual zip install (see below). A submission to Obsidian's
+community plugin directory is in progress.
+
+## What it does
+
+- Write a note in three linked parts: a plain-language **Description**
+  of what you want, a structured **Recipe**, and the **Python** code
+  that actually runs. Edit whichever one you're comfortable with, and
+  the others stay in sync.
+- Click **Forge** on any note to run it and see the result right in
+  the editor — no terminal required.
+- Open a built-in 3D particle simulator and interact with a live
+  physics simulation from inside Obsidian.
+- Draw on a growing library of ready-made notes for simulation and
+  music composition, or write your own.
+- Everything computes locally in your browser (via Pyodide). The only
+  optional network call is to a hosted service that turns a
+  plain-language Description into a Recipe.
 
 ## For end-users
 
-See **[INSTALL.md](INSTALL.md)** — three-step zip install + token setup.
+**[Full install guide: INSTALL.md](INSTALL.md)** — plain-language
+walkthrough, no terminal/git/npm/Python knowledge assumed.
+
+Quick version:
+
+1. Download the latest `forge-client-obsidian-vX.Y.Z.zip` from the
+   [Releases page](https://github.com/frmoded/forge-client-obsidian/releases).
+2. Unzip it into `<your-vault>/.obsidian/plugins/forge-client-obsidian/`.
+3. In Obsidian: **Settings → Community plugins**, enable **Forge Client**.
+
+See [INSTALL.md](INSTALL.md) for the full walkthrough, including
+one-time token setup for the note-authoring service and a
+troubleshooting section.
 
 ## For plugin development
 
