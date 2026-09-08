@@ -5445,6 +5445,12 @@ export default class ForgePlugin extends Plugin {
         desc: await computeFacetHash(descText),
         recipe: await computeFacetHash(recipeText),
         python: await computeFacetHash(pythonText),
+        // Drain 2026-09-08-1240 — seed the lineage-stamp snapshot too,
+        // so a note that's ALREADY lineage-current before any edit this
+        // session (fix_me.md's exact repro) compares its first hand-edit
+        // against this pre-existing value, not against `undefined`. See
+        // Gate M's refinement comment in facet-edit-tracker-core.ts.
+        pyDerivedFrom: getFmFieldV2(body, 'python_derived_from_recipe_hash'),
       });
     } catch (e) {
       console.error(`captureFacetHashCacheForFile: failed for '${file.path}'`, e);
@@ -5471,14 +5477,35 @@ export default class ForgePlugin extends Plugin {
       const descText = extractDescription(body);
       const recipeText = extractRecipeSection(body) ?? '';
       const pythonText = extractPythonSection(body) ?? '';
+      // Drain 2026-08-25-1060 §1 — CW-1800 refinement (driver adopted).
+      // A multi-facet change that did NOT touch the facet the note
+      // declares as its source leaves that declaration alone. See
+      // decideSourceWriteFromChange for the reasoning and the trade.
+      // Gate M (drain 2026-08-27-1320) — the caller already holds every
+      // signal the carve-out needs: `body` carries the stamp and
+      // `currentHashes.recipe` was computed three lines up. Nothing had to
+      // be threaded through; only the decision function was blind to it.
+      const pyDerivedFrom = getFmFieldV2(body, 'python_derived_from_recipe_hash');
       const currentHashes: FacetHashes = {
         desc: await computeFacetHash(descText),
         recipe: await computeFacetHash(recipeText),
         python: await computeFacetHash(pythonText),
+        pyDerivedFrom,
       };
 
       const cached = this._facetHashCache.get(file.path) ?? null;
       const changed = changedFacets(currentHashes, cached);
+
+      // Gate M refinement (drain 2026-09-08-1240) — was the stamp value
+      // ITSELF written as part of THIS observation, or is it sitting at
+      // whatever it was the last time we looked? Compared against the
+      // cache BEFORE this call overwrites it below. `cached === null`
+      // (never observed this file before) counts as "not fresh" — there
+      // is no prior write event to attribute freshness to, and
+      // `changed.length === 0` in that case short-circuits before Gate M
+      // is reached anyway (see decideSourceWriteFromChange's first line).
+      const pythonLineageStampJustWritten =
+        cached !== null && cached.pyDerivedFrom !== pyDerivedFrom;
 
       // Always update the cache to the current snapshot — even if we
       // don't write canonical (bootstrap case) or the edit was on
@@ -5494,20 +5521,11 @@ export default class ForgePlugin extends Plugin {
         return typeof v === 'string' ? v : null;
       });
 
-      // Drain 2026-08-25-1060 §1 — CW-1800 refinement (driver adopted).
-      // A multi-facet change that did NOT touch the facet the note
-      // declares as its source leaves that declaration alone. See
-      // decideSourceWriteFromChange for the reasoning and the trade.
-      // Gate M (drain 2026-08-27-1320) — the caller already holds every
-      // signal the carve-out needs: `body` carries the stamp and
-      // `currentHashes.recipe` was computed three lines up. Nothing had to
-      // be threaded through; only the decision function was blind to it.
-      const pyDerivedFrom = getFmFieldV2(body, 'python_derived_from_recipe_hash');
       const pythonLineageIsCurrent =
         typeof pyDerivedFrom === 'string' && pyDerivedFrom === currentHashes.recipe;
 
       const target = decideSourceWriteFromChange(
-        changed, storedSource, pythonLineageIsCurrent,
+        changed, storedSource, pythonLineageIsCurrent, pythonLineageStampJustWritten,
       );
 
       // Drain 2026-08-17-0100 (sync_state Phase 2) — the sync_state
@@ -5633,6 +5651,16 @@ export default class ForgePlugin extends Plugin {
           desc: currentDesc,
           recipe: currentRecipe,
           python: currentPython,
+          // Drain 2026-09-08-1240 — seed the lineage-stamp snapshot on
+          // the workspace-restored-tab path too (this sweep is CW-1500-A's
+          // twin of captureFacetHashCacheForFile for tabs that never fire
+          // a fresh file-open event). Without this, a restored tab whose
+          // lineage was ALREADY current would cache `pyDerivedFrom:
+          // undefined`, and its first hand-edit would read as "the stamp
+          // just changed" (undefined !== the real value) — the exact
+          // false-fresh misfire this drain fixes, just via a different
+          // bootstrap path than fix_me.md's own repro used.
+          pyDerivedFrom: getFmFieldV2(body, 'python_derived_from_recipe_hash'),
         });
 
         // Read stored hashes once — used by both canonical-seed +

@@ -22,11 +22,21 @@
 
 import type { SourceLayer } from './facet-hash-core.ts';
 
-/** Snapshot of the three facet body hashes for a single file. */
+/** Snapshot of the three facet body hashes for a single file.
+ *
+ *  `pyDerivedFrom` (drain 2026-09-08-1240) is optional so every
+ *  existing call site and test fixture that builds this shape with
+ *  only the three body hashes keeps compiling unchanged. It caches
+ *  the note's `python_derived_from_recipe_hash` frontmatter value AT
+ *  THE TIME this snapshot was taken — not a body hash, the lineage
+ *  STAMP itself — so the next observation can tell whether the stamp
+ *  moved (a write just (re)asserted derivation) or sat still (nothing
+ *  wrote frontmatter since we last looked). See Gate M below. */
 export interface FacetHashes {
   desc: string;
   recipe: string;
   python: string;
+  pyDerivedFrom?: string | null;
 }
 
 /** Determine which facet was just edited given current vs cached hashes.
@@ -165,6 +175,7 @@ export function decideSourceWriteFromChange(
   changed: ReadonlyArray<'description' | 'recipe' | 'python'>,
   storedSource: SourceLayer | null,
   pythonLineageIsCurrent: boolean = false,
+  pythonLineageStampJustWritten: boolean = true,
 ): SourceLayer | null {
   if (changed.length === 0) return null;
   if (
@@ -200,7 +211,30 @@ export function decideSourceWriteFromChange(
   // no engine access. A writer that stamps the lineage falsely is telling
   // a lie about provenance, which is a different defect from this one and
   // is not this function's to catch.
-  if (target === 'python' && pythonLineageIsCurrent) return null;
+  //
+  // GATE M REFINEMENT (drain 2026-09-08-1240) — the blind spot.
+  // `pythonLineageIsCurrent` is a STANDING check: it stays true for as
+  // long as the stamp numerically matches recipe_hash, with no signal
+  // for how LONG it's been sitting that way. Hand-editing `# Python`
+  // never touches the stamp — only a transpile write does — so a note
+  // whose lineage went current once (the common steady state, not an
+  // edge case: any note with unedited Python since its last /generate)
+  // reads every subsequent hand-edit as another machine-derive event,
+  // forever. fix_me.md reproduced this from cold: no transpile involved
+  // at all, lineage current from an earlier /generate, first-ever
+  // hand-edit silently swallowed.
+  //
+  // `pythonLineageStampJustWritten` narrows the carve-out to the ONE
+  // modify event where the stamp value ITSELF changed since it was last
+  // observed (the caller compares against a per-file cache — see
+  // `FacetHashes.pyDerivedFrom` above and its call site in main.ts).
+  // That is the moment a transpile write's own frontmatter mutation is
+  // freshly visible; every later modify event on the same unchanged
+  // stamp is real, unexplained Python content and must flip. Defaults
+  // to `true` so every pre-existing 3-arg call site (main.ts callers
+  // that haven't threaded the cache yet, and this file's own
+  // historical Gate M tests) keeps its exact prior behaviour.
+  if (target === 'python' && pythonLineageIsCurrent && pythonLineageStampJustWritten) return null;
 
   return target;
 }

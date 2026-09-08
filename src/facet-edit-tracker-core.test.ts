@@ -252,3 +252,59 @@ const HISTORICAL: ReadonlyArray<{ note: string; stored: 'description' }> = [
   });
 
 });
+
+describe('Gate M blind spot — fix_me.md (drain 2026-09-08-1240)', () => {
+  // Gate M's carve-out condition (`pythonLineageIsCurrent`) was a
+  // STANDING check: it stayed true for as long as
+  // `python_derived_from_recipe_hash` numerically matched `recipe_hash`,
+  // with no signal for how LONG it had been sitting that way. Hand-
+  // editing `# Python` never writes that field — only a transpile write
+  // does — so a note whose lineage went current once (the common steady
+  // state: any note with unedited Python since its last /generate) read
+  // every subsequent hand-edit as another machine-derive event, forever.
+  //
+  // fix_me.md reproduced this from cold: no transpile involved at all,
+  // lineage current from an earlier /generate, first-ever hand-edit
+  // silently swallowed. Confirmed RED pre-fix by calling the (then-3-arg)
+  // pure function twice in a row with identical inputs — nothing in that
+  // signature could distinguish "just transpiled" from "still typing";
+  // see the drain's FEEDBACK for the exact pre-fix transcript.
+  //
+  // This test PINS A MECHANISM, not just a property: it exercises the
+  // new 4th parameter's exact contract (does the caller's cached lineage
+  // stamp match what's on disk right now, or did it just change) rather
+  // than only the end-to-end "does it eventually flip" property. If the
+  // caller-freshness wiring in main.ts's `maybeUpdateSourceFacet` moves
+  // to a different mechanism, this SHOULD go red — reassess, don't just
+  // rewrite it to match.
+  it('call 1 (stamp freshly written, e.g. a transpile) still suppresses — Gate M unchanged', () => {
+    assert.equal(
+      decideSourceWriteFromChange(['python'], 'recipe', true, /*pythonLineageStampJustWritten=*/ true),
+      null,
+    );
+  });
+
+  it('call 2 (same lineage-current value, but the stamp did NOT move since call 1) must flip', () => {
+    // The exact fix_me.md shape: a second Python-only change where
+    // nothing rewrote python_derived_from_recipe_hash in between — the
+    // stamp is stale evidence, not fresh evidence, of this content.
+    assert.equal(
+      decideSourceWriteFromChange(['python'], 'recipe', true, /*pythonLineageStampJustWritten=*/ false),
+      'python',
+    );
+  });
+
+  it('a note that was ALREADY lineage-current before any edit this session flips on the very first hand-edit', () => {
+    // fix_me.md's literal starting state: no transpile this session at
+    // all, lineage current since an earlier /generate. The caller-side
+    // cache (main.ts) seeds from the note's pre-existing stamp at
+    // file-open, so the very first hand-edit already sees "stamp
+    // unchanged since last observation" — no second keystroke required
+    // to recover. This is the caller-capture contract L59/L60 describe:
+    // main.ts's own integration test (below) exercises the CALLER half.
+    assert.equal(
+      decideSourceWriteFromChange(['python'], 'recipe', true, /*pythonLineageStampJustWritten=*/ false),
+      'python',
+    );
+  });
+});
