@@ -42,13 +42,6 @@ Then make a data note of your own: right-click `colors.md` → **Make a copy**,
 rename it `animals.md`, and put a list of animals inside. Point a copy of
 [[show_colors]] at it to print your own list.
 
-## Palette focus
-
-This chapter introduces **data notes** — action-note siblings that hold values.
-No new palette constructs; the new idea is the note's `type: data` frontmatter.
-[[colors]] is a data note; [[show_colors]] is a normal action note that consumes
-it. Focus on the shape difference between the two.
-
 **Order in this chapter:** [[show_colors]] → [[colors]]
 
 **Next Lesson:** [[Recursion]]

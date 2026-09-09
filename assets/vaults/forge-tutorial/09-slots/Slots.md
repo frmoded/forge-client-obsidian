@@ -69,13 +69,6 @@ authoritative and won't overwrite it the next time the note runs. It's a peek
 at the ceiling — you never *have* to do this, but it's there when you want
 full control.
 
-## Palette focus
-
-Slots introduce **`{{ ... }}`** — a Recipe-level value slot filled by the LLM
-at run time and cached in the Python facet. No new palette-clickable
-construct; the syntax is written by hand inside a `Let ... = ...` line or
-inline in a `Call [[...]]` argument.
-
 ## That's the tour
 
 You started by making the computer say hello. Nine chapters later you're naming

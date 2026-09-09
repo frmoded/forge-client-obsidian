@@ -57,24 +57,6 @@ Ada Lovelace
 Nothing new syntactically: every `Input ... = ....` line adds one more
 parameter. One input or five, the shape is the same.
 
-## An input with a fixed set of choices
-
-Open [[mood]] and run it — you'll see:
-
-```
-Hey hey hey!!!
-```
-
-Look at its `style` input. So far every input has been open text — type
-whatever you like. `style` instead declares a **fixed set of choices**, which
-makes it render as a dropdown in the run panel instead of a text box: pick
-`"cheerful"`, `"formal"`, or `"sleepy"` rather than typing freely. Inside the
-Recipe it's still just a string — the branching that picks a reply uses `If`
-/ `Otherwise`, which you'll meet properly in [[Conditionals]]. A dropdown is
-worth reaching for whenever an input only ever makes sense as one of a short,
-known list — it stops the person running the note from typing something the
-Recipe doesn't expect.
-
 ## Exercise (make your own)
 
 Let's write a function of your own.
@@ -88,13 +70,6 @@ Let's write a function of your own.
 You just created a note, named it, and called it — the same loop you'll use
 to build anything here.
 
-## Palette focus
-
-Focus on **Return**, **Let**, and **Call [[...]]** for this chapter. The
-`Return ...` construct is how a note hands a result back to its caller.
-Still ignoring `If`, `Otherwise`, `For each`, as in chapter 1 —
-[[Conditionals]] and [[Loops]] cover them properly.
-
-**Order in this chapter:** [[cheer]] → [[excited]] → [[function_inputs]] → [[mood]]
+**Order in this chapter:** [[cheer]] → [[excited]] → [[function_inputs]]
 
 **Next Lesson:** [[Composition]]

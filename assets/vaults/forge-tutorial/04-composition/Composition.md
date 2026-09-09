@@ -26,12 +26,6 @@ Open [[excited_word]], change `"wonderful"` to anything you like, save it,
 then **run** [[describe_it]] again. You changed one small note and the
 bigger one followed — that's composition working for you.
 
-## Palette focus
-
-Chained **Call [[...]]** and **Let ... = Call ...**. Still ignoring `If`,
-`Otherwise`, `For each`, as in chapter 1 — [[Conditionals]] and [[Loops]]
-cover them properly.
-
 **Order in this chapter:** [[describe_it]] → [[excited_word]]
 
 **Next Lesson:** [[Conditionals]]

@@ -33,12 +33,28 @@ Open the [[weather]] note, change `72` to `95`, and run again. Now the
 condition is true, so you'll see "It's hot." Try a few values right around `80`
 to find the dividing line.
 
-## Palette focus
+## A choice with a fixed set of options
 
-Focus on **If** and **Otherwise** for this chapter. The `If ... , ... Otherwise
-...` construct is this system's branching. Ignore `For each` for now — that's
-[[Loops]].
+Open [[mood]] and run it — you'll see:
 
-**What's next:** [[weather]]
+```
+Hey hey hey!!!
+```
+
+Look at its `style` input. Every input you've met so far has been open text —
+type whatever you like. `style` instead declares a **fixed set of choices**,
+which makes it render as a **dropdown** in the run panel instead of a text
+box: pick `"cheerful"`, `"formal"`, or `"sleepy"` rather than typing freely.
+Inside the Recipe it's still just a string, and this note's Recipe uses
+exactly the `If` you just learned to pick a reply based on which one you
+chose. Change the dropdown to `"formal"` and run again — you'll see "Good day
+to you." instead of "Hey hey hey!!!"
+
+A dropdown is worth reaching for whenever an input only ever makes sense as
+one of a short, known list — it stops the person running the note from typing
+something the Recipe doesn't expect, and it pairs naturally with `If` to
+branch on the choice.
+
+**Order in this chapter:** [[weather]] → [[mood]]
 
 **Next Lesson:** [[Loops]]

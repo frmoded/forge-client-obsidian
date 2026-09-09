@@ -40,12 +40,6 @@ pointed at the same note that contains it. That's all recursion is.
 Open the [[show_factorial]] note and change `n=5` to `n=6`. **Run** it —
 the answer jumps to `720`. Then try `n=3` and check it by hand: `3 × 2 × 1 = 6`.
 
-## Palette focus
-
-No new palette constructs in this chapter — recursion re-uses `Let`, `Call`,
-`If`, and `Return`. The new mental idea is a note calling **itself** by
-name via `Call [[factorial]]` from inside [[factorial]].
-
 That's the core tour. One more idea — letting the engine fill in a value for
 you with `{{ … }}` — is next in [[Slots]].
 
