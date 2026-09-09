@@ -91,8 +91,8 @@ export async function connectVault(serverUrl: string, vaultPath: string): Promis
         result.engine_http_status = 'error';
         result.engine_http_error = `HTTP ${httpRes.status}`;
         console.warn(
-          'Forge Connect: engine HTTP /connect returned non-2xx — Pyodide path OK '
-          + 'but HTTP endpoints (sync/canonicalize/freeze) will 400 until engine responds.',
+          'Forge Connect: engine HTTP /connect returned non-2xx — Pyodide path OK; '
+          + 'nothing the panel does needs it (Run, Forge, Freeze, and Sync edges all work without it).',
           httpRes.status,
         );
       }
@@ -100,8 +100,8 @@ export async function connectVault(serverUrl: string, vaultPath: string): Promis
       result.engine_http_status = 'unreachable';
       result.engine_http_error = e instanceof Error ? e.message : String(e);
       console.warn(
-        'Forge Connect: engine HTTP /connect unreachable — Pyodide path OK '
-        + 'but HTTP endpoints (sync/canonicalize/freeze) will 400 until engine responds.',
+        'Forge Connect: engine HTTP /connect unreachable — Pyodide path OK; '
+        + 'nothing the panel does needs it (Run, Forge, Freeze, and Sync edges all work without it).',
         e,
       );
     }
