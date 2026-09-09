@@ -53,6 +53,4 @@ in the rest — plain English in, a real working value out.
 Want the deep language reference instead of the gentle walk? That's the E--
 language tutorial (coming later) — this one keeps things concrete.
 
-> **Status:** all nine chapters are written and runnable.
-
-**What's next:** [[Hello]]
+**Next Lesson:** [[Hello]]
