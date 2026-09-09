@@ -62,9 +62,15 @@ const EXPECTED: Record<string, string | null> = {
                                                        // the artifact under repair
   '03-functions/excited.md':            'description',
   '03-functions/function_inputs.md':    'description',
-  '03-functions/mood.md':               'description',
   '04-composition/describe_it.md':      'description',
   '04-composition/excited_word.md':     'description',
+  // Drain 2026-09-09-0140 — mood.md moved 03-functions -> 05-conditionals
+  // (forge-tutorial b11230e, mirrored here at 955f4ef): its Recipe uses
+  // `If` branching, which ch3 explicitly tells learners to ignore, so the
+  // content now lives in the conditionals chapter. source_facet unchanged
+  // by the move — re-verified against the bundled file's own frontmatter,
+  // not copied blindly.
+  '05-conditionals/mood.md':            'description',
   '05-conditionals/weather.md':         null,          // unstamped
   '06-loops/countdown.md':              null,          // unstamped
   '07-data/show_colors.md':             'description',
