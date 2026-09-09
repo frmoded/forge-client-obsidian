@@ -235,6 +235,7 @@ import {
 import { makeDependenciesFoldExtension } from './dependencies-fold-view-plugin.ts';
 import { findDependenciesRange } from './dependencies-section-core.ts';
 import { NOTICE_PREFIX, prefixed, swallowRenderFailure } from './notice-core.ts';
+import { resolveUserAnthropicKey } from './byok-key-resolution-core.ts';
 
 // v0.2.42: replacePythonSection extracted to pure-core
 // src/replace-python-section-core.ts so the trailing-content
@@ -4093,6 +4094,10 @@ export default class ForgePlugin extends Plugin {
           // = core-only; specific list = that subset.
           active_domains:
             this.activeDomains === null ? null : Array.from(this.activeDomains),
+          // Drain 2026-09-09-0930 (BYOK Phase 1). See
+          // byok-key-resolution-core.ts for the toggle/empty-key
+          // decision — pure-core, directly tested there.
+          user_anthropic_key: resolveUserAnthropicKey(settings),
           // Drain 2026-08-24-1000 — the resolvable universe, shown to
           // the model. Stored on the way out so the closure check
           // validates against this exact list (§8: one fact, one
@@ -4283,6 +4288,10 @@ export default class ForgePlugin extends Plugin {
           deps: inv.deps,
           active_domains:
             this.activeDomains === null ? null : Array.from(this.activeDomains),
+          // Drain 2026-09-09-0930 (BYOK Phase 1). See
+          // byok-key-resolution-core.ts for the toggle/empty-key
+          // decision — pure-core, directly tested there.
+          user_anthropic_key: resolveUserAnthropicKey(settings),
           // Drain 2026-08-24-1000 — see the sibling payload above. This
           // is the Recipe-dialect path the Description-canonical
           // auto-forge uses, i.e. the one whose closure check rejected

@@ -19,6 +19,14 @@ export interface ForgeSettings {
   // shared secret per closed-beta cohort; per-user tokens are v1.1.
   transpileServiceUrl: string;
   transpileServiceToken: string;
+  // Drain 2026-09-09-0930 (BYOK Phase 1). This pair does NOT replace
+  // transpileServiceToken above — that token still authenticates the
+  // CALLER to Forge's own hosted service (shared/free-tier identity).
+  // This pair only changes WHICH Anthropic key the service uses once
+  // it has already authenticated the caller, for the one /generate
+  // request that carries it. Never sent when the toggle is off.
+  useOwnAnthropicKey: boolean;
+  ownAnthropicKey: string;
   // v0.2.7: persisted across sessions via Obsidian's loadData/saveData.
   // Defaults to false so a fresh install fires the welcome notice once;
   // flipped to true immediately after the notice is shown. Migrating
@@ -44,6 +52,8 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   useDevIframe: false,
   transpileServiceUrl: 'https://forge.thecodingarena.com',
   transpileServiceToken: '',
+  useOwnAnthropicKey: false,
+  ownAnthropicKey: '',
   seenWelcome: false,
   panelStripValues: {},
   panelStripCollapsed: false,
@@ -106,6 +116,50 @@ export class ForgeSettingTab extends PluginSettingTab {
         text.inputEl.autocomplete = 'off';
         text.inputEl.spellcheck = false;
       });
+
+    // Drain 2026-09-09-0930 (BYOK Phase 1). Does NOT replace the
+    // token above — see ForgeSettings' own comment on this pair.
+    new Setting(containerEl)
+      .setName('Use my own Anthropic API key')
+      .setDesc(
+        'Off by default (uses the shared/free-tier key). When on, '
+        + 'your key is sent with this one request only — never stored '
+        + 'server-side, never persisted anywhere but this vault.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.useOwnAnthropicKey)
+          .onChange(async (value) => {
+            this.plugin.settings.useOwnAnthropicKey = value;
+            await this.plugin.saveSettings();
+            // Redraw so the key field below appears/disappears with
+            // the toggle — same pattern as any other structural
+            // settings-tab change in Obsidian.
+            this.display();
+          })
+      );
+
+    if (this.plugin.settings.useOwnAnthropicKey) {
+      new Setting(containerEl)
+        .setName('Your Anthropic API key')
+        .setDesc(
+          'Paste your own key from console.anthropic.com. Used for '
+          + "this request only; never persisted server-side or "
+          + 'shared beyond that.'
+        )
+        .addText(text => {
+          text
+            .setPlaceholder('paste your key here')
+            .setValue(this.plugin.settings.ownAnthropicKey)
+            .onChange(async (value) => {
+              this.plugin.settings.ownAnthropicKey = value.trim();
+              await this.plugin.saveSettings();
+            });
+          text.inputEl.type = 'password';
+          text.inputEl.autocomplete = 'off';
+          text.inputEl.spellcheck = false;
+        });
+    }
 
     // --- Local engine (dev, secondary endpoints) ------------------
     containerEl.createEl('h3', { text: 'Local engine (dev)' });

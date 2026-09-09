@@ -237,6 +237,14 @@ export interface AlphaGenerateRequest {
   // back-compat alias for one release; the service maps both to the
   // same V2 prompt path.
   dialect?: 'python' | 'recipe' | 'emm';
+  // Drain 2026-09-09-0930 (BYOK Phase 1). When present, the hosted
+  // service uses this key instead of its own shared secret for this
+  // one request — see forge-transpile's anthropic_client._client_for.
+  // Never persisted; the caller sends it only when the BYOK toggle is
+  // on AND the key field is non-empty (main.ts's payload construction
+  // sends undefined otherwise, matching the service's own "absent =
+  // no key" handling).
+  user_anthropic_key?: string;
 }
 
 export interface GenerateResponse {
