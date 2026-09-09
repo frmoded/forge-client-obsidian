@@ -10,7 +10,7 @@ Open [[describe_it]] and **run** it:
 This is wonderful.
 ```
 
-## What's new
+## What's new - One note calling another
 
 [[describe_it]] is short. It calls [[excited_word]], stores what comes back
 in `word`, and returns `"This is " + word + "."` — the new idea is one line:
@@ -25,7 +25,5 @@ care *how* it decides, it just uses what comes back. Small pieces, combined.
 Open [[excited_word]], change `"wonderful"` to anything you like, save it,
 then **run** [[describe_it]] again. You changed one small note and the
 bigger one followed — that's composition working for you.
-
-**Order in this chapter:** [[describe_it]] → [[excited_word]]
 
 **Next Lesson:** [[Conditionals]]

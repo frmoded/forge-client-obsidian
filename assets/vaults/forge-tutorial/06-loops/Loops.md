@@ -11,7 +11,7 @@ Open the [[countdown]] note and **run** it:
 Liftoff!
 ```
 
-## What's new
+## What's new - The For each loop
 
 Open the note and look. The heart of it is a **For each** line:
 
@@ -40,7 +40,5 @@ show multiple things.
 Open the [[countdown]] note, add more numbers to the list — try
 `[5, 4, 3, 2, 1]` — and run again. The countdown grows on its own, no extra
 lines needed. Then change `"Liftoff!"` to your own send-off.
-
-**What's next:** [[countdown]]
 
 **Next Lesson:** [[Data]]

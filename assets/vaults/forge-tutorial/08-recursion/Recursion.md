@@ -10,7 +10,7 @@ Open the [[show_factorial]] note and **run** it. You'll see:
 120
 ```
 
-## What's new
+## What's new - A note calling itself
 
 The star is the [[factorial]] note, and it calls *itself*. It takes an input
 `n`, declared right at the top of its Recipe: `Input n: int = 5.`. `factorial`
@@ -20,20 +20,15 @@ are at work:
 - **A stopping point.** If `n` is at most `1`, it returns `1`. Without a
   stopping point, the note would call itself forever.
 - **A step toward it.** If that's not true yet, it returns `n` times
-  [[factorial]] of `n minus 1` — to find `factorial` of `5` it asks for
-  `factorial` of `4`, which asks for `3`, and so on down to `1`, where it
-  stops. Then all those answers multiply back up to `120`.
+  [[factorial]] of `n minus 1` — so `factorial` of `5` asks for `4`, then `3`,
+  down to `1`, where it stops, and the answers multiply back up to `120`.
 
 The second note, [[show_factorial]], just calls it and returns the result:
 
 > Let r = Call [[factorial]] with n=5.
 > Return r.
 
-(Notice `n=5` — same rule as chapter 3: a note that takes an input is called
-by name.)
-
-Everything here you've already met — `Return`, `If`, calling a note — just
-pointed at the same note that contains it. That's all recursion is.
+(Notice `n=5` — same named-argument rule as chapter 3.)
 
 ## Exercise - Try a different number
 
@@ -42,7 +37,5 @@ the answer jumps to `720`. Then try `n=3` and check it by hand: `3 × 2 × 1 = 6
 
 That's the core tour. One more idea — letting the engine fill in a value for
 you with `{{ … }}` — is next in [[Slots]].
-
-**Order in this chapter:** [[show_factorial]] → [[factorial]]
 
 **Next Lesson:** [[Slots]]

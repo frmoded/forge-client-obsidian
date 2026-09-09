@@ -9,7 +9,7 @@ Open the [[greeting]] note and **run** it. You'll see:
 Hello, Ada
 ```
 
-## What's new
+## What's new - Naming values with Let
 
 Three lines: `Let name = "Ada"` names a value — a box called `name` holding
 `"Ada"`. `Let greeting = "Hello, " + name` builds on it, and `+` joins text.

@@ -11,7 +11,7 @@ Open the [[cheer]] note and **run** it. You'll see:
 hooray!
 ```
 
-## What's new
+## What's new - Calling a function with an input
 
 There are two notes here. The reusable one is [[excited]], and it's one line:
 
@@ -27,18 +27,11 @@ Then [[cheer]] uses it:
 > Let shout = Call [[excited]] with word="hooray".
 > Return shout.
 
-- [[excited]] is called with `word="hooray"` — that hands it the input `word`
-  set to `"hooray"`.
-- Notice the `word=` part. When a note takes an input, you pass it **by
-  name** — `word="hooray"`, not just `"hooray"`. Leaving off the `word=` is the
-  most common early mistake: the engine needs the name to know which input you
-  mean.
+- [[excited]] is called with `word="hooray"` — setting its input `word` to `"hooray"`.
+- Notice the `word=` part — inputs are passed **by name**, not positionally.
+  Leave it off and you'll see exactly what happens in the next exercise.
 - [[excited]] returns `"hooray!"`, and `Return` hands that back to whoever
   ran [[cheer]] — the Output panel shows it.
-
-A note that takes an input and returns something is this system's idea of a
-**function**: a named, reusable step. And making one is just making another
-note.
 
 ## Exercise - Fix a bug
 

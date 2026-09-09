@@ -13,7 +13,7 @@ Octopuses have three hearts.
 
 You didn't type that fact. The engine did.
 
-## What's new
+## What's new - The {{ }} value slot
 
 Open the note and look. The key line is:
 
@@ -30,24 +30,15 @@ make it real.
 ## Where the answer goes
 
 You've seen a `# Python` section in every note so far — it's the code that
-runs, translated from your Recipe. In the earlier chapters that translation is
-**automatic and exact**: the same Recipe always becomes the same Python, with no
-thinking required, so the engine could re-make it any time for free.
+runs, translated from your Recipe. In earlier chapters that translation is
+**automatic and exact**, so the engine could redo it any time for free.
 
-A slot note's `# Python` is different — **run [[octopus_fact]] first if you
-haven't yet, then** open it and look. Where your `{{ … }}` was, there's now
-an actual fact, written right into the code.
-That fact wasn't a mechanical translation: the **LLM had to think it up** to fill
-the slot. And because thinking it up takes a real moment, the engine asks
-**once** — when it first translates your Recipe — and **saves the answer**
-there, so it never has to ask again. (That's the only time the LLM is
-involved, and it happens before the note runs, not while it runs.)
-
-That's the whole point: a slot note's `# Python` is a *remembered answer*, not
-just a translation. Run it again and it's instant — the engine reads the saved
-fact, no LLM, for free, the same every time. Change the Recipe, though —
-including the words inside the slot — and the engine sees a new request, asks
-the LLM again, and saves the new answer.
+A slot note is different. **Run [[octopus_fact]] first if you haven't, then**
+open its `# Python` — where `{{ … }}` was, there's now an actual fact, because
+the **LLM had to think it up**. That takes a real moment, so the engine asks
+**once**, when it first translates the Recipe, and **saves the answer** —
+it never asks again unless you change the Recipe, including the words inside
+the slot.
 
 ## Exercise - Ask about something else
 
@@ -79,7 +70,5 @@ Everything else you build is these same pieces, combined your way.
 From here the wide walls open up: the music and simulation domains let you
 compose songs and run models with the very same notes-and-clicks you already
 know. Go make something you care about.
-
-**What's next:** [[octopus_fact]]
 
 **Next Lesson:** none — that's the whole tutorial. Nicely done.

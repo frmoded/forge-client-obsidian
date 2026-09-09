@@ -1,8 +1,6 @@
 *Chapter 7*
 
-Not every note *does* something. Some just *hold* something — a list, a
-number, a chunk of text — ready for other notes to use. Those are **data
-notes**.
+Not every note *does* something. Some just *hold* it — these are **data notes**.
 
 Open the [[show_colors]] note and **run** it:
 
@@ -12,24 +10,18 @@ green
 blue
 ```
 
-## What's new
+## What's new - Notes that just hold data
 
-There are two notes here. First, the [[colors]] note — open it and look.
-It's just a list, with no steps:
+There are two notes here — first, [[colors]], just a list with no steps:
 
 ```
 ["red", "green", "blue"]
 ```
 
-Its frontmatter says `type: data`, which means "this note *is* a value." When
-something calls it, it simply hands back that list.
+Its frontmatter says `type: data` — calling it just hands back the list.
 
-Then the [[show_colors]] note calls [[colors]] to get the list, names it
-`palette`, and loops over it with the **For each** you learned last chapter —
-printing each color in turn. (Same `Return`-vs-`[[print]]` reason as the
-countdown: a loop that shows multiple things uses `[[print]]`, not `Return`.)
-Action notes *do*; data notes *hold*; together they keep your values in one
-place.
+Then [[show_colors]] calls [[colors]], names the list `palette`, and loops
+over it with **For each** (same `Return`-vs-`[[print]]` reason as last chapter).
 
 ## Exercise - Add your own data
 
@@ -41,7 +33,5 @@ separate, which is exactly the point.
 Then make a data note of your own: right-click `colors.md` → **Make a copy**,
 rename it `animals.md`, and put a list of animals inside. Point a copy of
 [[show_colors]] at it to print your own list.
-
-**Order in this chapter:** [[show_colors]] → [[colors]]
 
 **Next Lesson:** [[Recursion]]

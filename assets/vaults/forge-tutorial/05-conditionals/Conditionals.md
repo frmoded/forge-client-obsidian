@@ -9,13 +9,17 @@ Open the [[weather]] note and **run** it:
 It's pleasant.
 ```
 
-## What's new
+## What's new - We now have if statements
 
 Open the note and look. It sets a value, `temperature`, to `72`, and then
 makes a choice:
 
-- **If** `temperature is greater than 80`, it returns "It's hot."
-- **Otherwise**, it returns "It's pleasant."
+```
+If temperature > 80:
+  Return "It's hot.".
+Otherwise:
+  Return "It's pleasant.".
+```
 
 Each choice's lines are **indented** underneath it — that's how the engine
 knows which lines belong to the `If` and which belong to the `Otherwise`.
@@ -54,7 +58,5 @@ A dropdown is worth reaching for whenever an input only ever makes sense as
 one of a short, known list — it stops the person running the note from typing
 something the Recipe doesn't expect, and it pairs naturally with `If` to
 branch on the choice.
-
-**Order in this chapter:** [[weather]] → [[mood]]
 
 **Next Lesson:** [[Loops]]

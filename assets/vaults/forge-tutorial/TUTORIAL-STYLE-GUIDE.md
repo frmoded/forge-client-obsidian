@@ -40,11 +40,19 @@ moment they're learning what a function is. Cut it, or move it to wherever the
 tutorial actually teaches that mechanism — but don't strand it "for later" if
 no later chapter exists to receive it. (Found in `Functions.md`.)
 
-**5. Navigation footers: the minimum set, no duplication.** `**What's next:**`
-and `**Order in this chapter:**` say the same thing when a chapter has more
-than one action note — the former is just the first entry of the latter.
-Use `Order in this chapter` (or `What's next` alone, for a single-note
-chapter) — never both.
+**5. Navigation footers: `**Next Lesson:**` only, nothing else.** (Revised
+2026-09-09, driver decision.) Earlier drafts also carried an
+`**Order in this chapter:**` line for chapters with more than one action
+note, walking `[[note-a]] → [[note-b]]`. That line was removed from every
+chapter that had it — the ordering it stated is already given by the
+chapter's own body prose, which opens each note by name in the order the
+learner is meant to visit them ("Open [[weather]]... Open [[mood]]...").
+A separate footer line restating that order in wikilink-arrow form was
+redundant with content the learner has already read by the time they reach
+the footer. Do not reintroduce `Order in this chapter` (or any other
+footer beyond `Next Lesson`) without a fresh driver decision — this
+principle previously required exactly one of the two forms; it now
+requires exactly `Next Lesson` and nothing more.
 
 **6. Pin every literal that's load-bearing for the lesson.** This is the
 sharpest one, and it cost real content drift to learn. If a Description
