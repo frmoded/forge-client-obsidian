@@ -1,4 +1,4 @@
-import { ItemView, TFile, WorkspaceLeaf } from 'obsidian';
+import { FileSystemAdapter, ItemView, TFile, WorkspaceLeaf } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
 import { getPyodideHost } from './pyodide-host.ts';
 import type { ForgeSettings } from './settings.ts';
@@ -270,7 +270,7 @@ export class ForgeModaView extends ItemView {
     if (!win) return;
     const featured = this.findFeaturedSnippet();
     if (!featured) return;
-    const vaultPath = (this.app.vault.adapter as { basePath?: string }).basePath;
+    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
     if (!vaultPath) {
       console.warn('Forge: cannot postMessage featured-snippet — vault adapter has no basePath');
       return;

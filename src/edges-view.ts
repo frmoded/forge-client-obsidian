@@ -1,4 +1,4 @@
-import { ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { FileSystemAdapter, ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
 import {
   SnapshotMeta,
   listIncoming,
@@ -233,7 +233,7 @@ export class ForgeEdgesView extends ItemView {
 
   private async toggleEdge(edge: SnapshotMeta) {
     const next = edge.state === 'frozen' ? 'live' : 'frozen';
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
     const res = await freezeEdge(this.serverUrl(), vaultPath, edge.caller, edge.callee, next);
     if (res.status === 200) {
       void forgeNotice(this.app, `Forge: ${edge.caller} → ${edge.callee} now ${next}`);
@@ -245,7 +245,7 @@ export class ForgeEdgesView extends ItemView {
   }
 
   private async bulkSet(edges: SnapshotMeta[], state: 'frozen' | 'live') {
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
     const url = this.serverUrl();
     let ok = 0, fail = 0;
     for (const e of edges) {

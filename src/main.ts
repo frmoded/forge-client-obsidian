@@ -1,4 +1,4 @@
-import { Plugin, Notice, DataAdapter, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
+import { Plugin, Notice, DataAdapter, FileSystemAdapter, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
 import {
   isV2Shape,
   isV2RoutableShape,
@@ -1437,7 +1437,7 @@ export default class ForgePlugin extends Plugin {
         const fireFreezeForCallee = async (
           state: 'frozen' | 'live', targetCallee: string,
         ) => {
-          const vaultPath = (this.app.vault.adapter as any).basePath as string;
+          const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
           const verb = state === 'frozen' ? 'freeze' : 'unfreeze';
           try {
             const res = await freezeEdge(
@@ -1557,7 +1557,7 @@ export default class ForgePlugin extends Plugin {
    *  in the panel. Never throws. */
   public async _autoConnectOnLoad(): Promise<void> {
     const serverUrl = this.settings.serverUrl;
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
     const result = await connectWithRetry(
       () => connectVault(serverUrl, vaultPath),
       { maxAttempts: 3, backoffMs: 1000 },
@@ -1960,7 +1960,7 @@ export default class ForgePlugin extends Plugin {
     // stays in sync with the backend's deserialize_from_wire registry. If the
     // call fails (server offline, older backend), the modal falls back to a
     // hardcoded list — creation still works.
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
     let contentTypes: string[] | undefined;
     try {
       const connectRes = await connectVault(this.settings.serverUrl, vaultPath);
@@ -1980,7 +1980,7 @@ export default class ForgePlugin extends Plugin {
     return {
       app: this.app,
       serverUrlOf: () => this.settings.serverUrl,
-      vaultPathOf: () => (this.app.vault.adapter as any).basePath as string,
+      vaultPathOf: () => (this.app.vault.adapter as FileSystemAdapter).getBasePath(),
       reloadActiveDomains: () => this.loadActiveDomains(),
       openModaView: () => { this.openModaView(); },
       openChipsView: () => { this.openChipsView(); },
@@ -2465,7 +2465,7 @@ export default class ForgePlugin extends Plugin {
   private openFreezeModal(state: 'frozen' | 'live') {
     new ForgeFreezeModal(this.app, state, this.freezeCache, async (caller, callee) => {
       this.freezeCache = { caller, callee };
-      const vaultPath = (this.app.vault.adapter as any).basePath as string;
+      const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
       const verb = state === 'frozen' ? 'freeze' : 'unfreeze';
       try {
         const res = await freezeEdge(this.settings.serverUrl, vaultPath, caller, callee, state);
@@ -4513,7 +4513,7 @@ export default class ForgePlugin extends Plugin {
 
   private async writeGeneratedCode(generated: Record<string, string>) {
     const files = this.app.vault.getMarkdownFiles();
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
 
     for (const [id, code] of Object.entries(generated)) {
       // v0.2.104 — qualified snippet_id fix. Path lookup first;
@@ -5125,7 +5125,7 @@ export default class ForgePlugin extends Plugin {
     // the registry, which indexes library subdir snippets under
     // qualified bare IDs like `blues/song`.
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
-    const vaultPath = (this.app.vault.adapter as any).basePath as string;
+    const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
 
     // Drain 2026-08-24-2370 — THE shared door for the error hint's

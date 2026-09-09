@@ -32,7 +32,7 @@
 // require streaming the user's vault into MEMFS at every compute,
 // which is a significant follow-up.
 
-import type { App } from "obsidian";
+import type { App, FileSystemAdapter } from "obsidian";
 import { requestUrl } from "obsidian";
 import { parseSnapshotState } from "./snapshot-state-core";
 import { parseLocalImports, resolveImportHostPath, shouldMountImportFile } from "./vault-imports-local-core.ts";
@@ -520,9 +520,8 @@ export class PyodideHost {
     // import's on-disk tree needs node fs, absent on mobile —
     // log-and-skip, engine then degrades to single-vault scan.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const adapterForImports = this.app.vault.adapter as any;
-      const vaultBasePath: string | undefined = adapterForImports?.basePath;
+      const adapterForImports = this.app.vault.adapter as FileSystemAdapter;
+      const vaultBasePath: string = adapterForImports.getBasePath();
       let activeToml: string | null = null;
       if (await adapterForImports.exists?.("forge.toml")) {
         activeToml = await adapterForImports.read("forge.toml");

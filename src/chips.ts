@@ -27,7 +27,7 @@
 // feedback §4). v0.2.51 — diagnostic logs removed; the loader is
 // now production-quiet again.
 
-import { App, parseYaml, TFile } from 'obsidian';
+import { App, FileSystemAdapter, parseYaml, TFile } from 'obsidian';
 import { snippetIdFromPath } from './snippet-id-from-path.ts';
 import {
   ChipPaletteGroup,
@@ -372,9 +372,8 @@ async function buildSourceVaultInventory(
 export async function loadImportedVaultChips(app: App): Promise<ChipPaletteGroup[]> {
   const out: ChipPaletteGroup[] = [];
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const adapter = app.vault.adapter as any;
-    const basePath: string | undefined = adapter?.basePath;
+    const adapter = app.vault.adapter as FileSystemAdapter;
+    const basePath: string = adapter.getBasePath();
     if (!basePath || !(await adapter.exists?.('forge.toml'))) return out;
     const decls = parseLocalImports(await adapter.read('forge.toml'));
     if (decls.length === 0) return out;
