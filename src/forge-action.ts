@@ -280,18 +280,23 @@ async function installVault(_host: ForgeHost, vaultName: string): Promise<boolea
   }
 
   console.warn(
-    `Forge: install requested for "${vaultName}" — V1 closed beta `
-    + 'does not support remote vault install.',
+    `Forge: install requested for "${vaultName}" — only the built-in `
+    + 'vaults are available right now.',
   );
   // v0.2.230 — forgeNotice's 3rd arg is `kind` ('info'|'error'|'success'),
   // not a duration. Pre-fix the 10000 was a leftover from the legacy
   // toast API (Notice takes ms). forgeNotice renders into the output
   // panel and has no per-call duration. Dropped the bad arg.
+  //
+  // Drain 2026-09-09-0020 — reworded away from "V1 closed beta" (per
+  // drain 2355's closed-beta-ux.ts paragraph): that phrase means
+  // nothing to a public, non-beta user who just installed this from
+  // Obsidian's directory. The LIMITATION is unchanged — still no
+  // remote vault registry — only the wording changed.
   void forgeNotice(this.app,
-    `Forge: install of "${vaultName}" skipped — V1 closed beta has `
-    + 'no remote vault registry. Only bundled vaults (forge-moda, '
-    + 'music-theory, music-core) are available; additional vaults are '
-    + 'deferred to v1.1+.',
+    `Forge: install of "${vaultName}" skipped — only the built-in `
+    + 'vaults (forge-moda, music-theory, music-core) are available '
+    + 'right now. More vaults are planned.',
   );
   return false;
 }
@@ -483,8 +488,9 @@ class EditVaultDomainsModal extends Modal {
       if (!ok) {
         if (status) status.setText(`Installing ${d.vault} … failed`);
         // v0.2.14: secondary Notice removed. installVault's v0.2.14
-        // neuter already surfaced "V1 closed beta has no remote vault
-        // registry…" — the previous "Fix the issue and retry" message
+        // neuter already surfaced "only the built-in vaults are
+        // available right now…" (reworded drain 2026-09-09-0020) —
+        // the previous "Fix the issue and retry" message
         // is confusing because there's no issue to fix. The in-modal
         // status update above stays so the user sees which row failed.
         this.refreshSaveBtn();

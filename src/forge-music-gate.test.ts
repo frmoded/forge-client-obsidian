@@ -56,7 +56,7 @@ test('vaultDeclaresMusic: realistic v0.2.14 stub then user edit', () => {
   // gets checked.
   const body = `# Forge vault manifest
 # This file declares which domain libraries this vault depends on.
-# For V1 closed beta, leave empty — forge-moda is pre-bundled into
+# For now, leave empty — forge-moda is pre-bundled into
 # the plugin and available without being declared here.
 
 domains = ["music"]

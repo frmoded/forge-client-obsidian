@@ -19,7 +19,7 @@ export const FORGE_TOML_STUB_PATH = 'forge.toml';
  *  when v1.1+ ships additional domain libraries. */
 export const FORGE_TOML_STUB_BODY = `# Forge vault manifest
 # This file declares which domain libraries this vault depends on.
-# For V1 closed beta, leave empty — forge-moda is pre-bundled into
+# For now, leave empty — forge-moda is pre-bundled into
 # the plugin and available without being declared here.
 
 domains = []
