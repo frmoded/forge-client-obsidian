@@ -3,13 +3,14 @@ type: action
 inputs:
   - tonic
   - quality
-recipe_version: 1
+recipe_version: 2
 description_hash: 9002d8aaeea54203633b107212cd35da69c8cf3927987c10a147d6ba525e89a9
-recipe_hash: 0db4754ecaba644142ca1900d9fbfeed852a66f6c3b579ec8083102460dc3185
-python_hash: 5b5d868494c81c1e5a2108f6ea6a9690073d1e9b1df435813ebb08812198beb2
+recipe_hash: 79195ed2e624a9e865bc9b14f900c473b821f6310e8e4882ff97c469590d8be4
+python_hash: 28b2fce3f08f346746391a1bc5ed85aa8f10119090e6e0130aab1fc8bd0e5f25
 recipe_derived_from_source_hash: 9002d8aaeea54203633b107212cd35da69c8cf3927987c10a147d6ba525e89a9
 source_facet: recipe
 recipe_derived_from_description_hash: 9002d8aaeea54203633b107212cd35da69c8cf3927987c10a147d6ba525e89a9
+python_derived_from_recipe_hash: 79195ed2e624a9e865bc9b14f900c473b821f6310e8e4882ff97c469590d8be4
 ---
 
 # Description
@@ -23,19 +24,11 @@ Return the pitch names of a chord built on `tonic` by stacking thirds past the t
 
 # Recipe
 
-Return {{ [p.nameWithOctave for p in [music21.pitch.Pitch(tonic).transpose(music21.interval.Interval(iv)) for iv in {"maj7": ["P1","M3","P5","M7"], "dom7": ["P1","M3","P5","m7"], "min7": ["P1","m3","P5","m7"], "half_dim7": ["P1","m3","d5","m7"], "dim7": ["P1","m3","d5","d7"], "dom9": ["P1","M3","P5","m7","M9"], "dom11": ["P1","M3","P5","m7","M9","P11"], "dom13": ["P1","M3","P5","m7","M9","P11","M13"]}[quality]]] }}.
+Return Call [[build_chord]] with tonic=tonic, quality=quality.
 
 # Python
 
 ```python
 def compute(context):
-    raise NotImplementedError(
-        "build_seventh_chord: this note's Recipe describes a real "
-        "music21 chord-building computation that hasn't been "
-        "implemented yet (tracked separately — needs either a "
-        "confirmed E-- Recipe-grammar path for raw music21 calls, or "
-        "a shared chord-building library snippet). Returning None "
-        "silently was worse than failing loudly, so this is a "
-        "deliberate stopgap, not a bug."
-    )
+  return build_chord(tonic=tonic, quality=quality)
 ```
