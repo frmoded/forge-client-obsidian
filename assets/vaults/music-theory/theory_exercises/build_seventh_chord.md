@@ -6,7 +6,7 @@ inputs:
 recipe_version: 1
 description_hash: 9002d8aaeea54203633b107212cd35da69c8cf3927987c10a147d6ba525e89a9
 recipe_hash: 0db4754ecaba644142ca1900d9fbfeed852a66f6c3b579ec8083102460dc3185
-python_hash: e5d1a4fc162f7e942b790e395406201fb6b83935dfe1843a475fc8837c15f097
+python_hash: 5b5d868494c81c1e5a2108f6ea6a9690073d1e9b1df435813ebb08812198beb2
 recipe_derived_from_source_hash: 9002d8aaeea54203633b107212cd35da69c8cf3927987c10a147d6ba525e89a9
 source_facet: recipe
 recipe_derived_from_description_hash: 9002d8aaeea54203633b107212cd35da69c8cf3927987c10a147d6ba525e89a9
@@ -29,5 +29,13 @@ Return {{ [p.nameWithOctave for p in [music21.pitch.Pitch(tonic).transpose(music
 
 ```python
 def compute(context):
-    return None
+    raise NotImplementedError(
+        "build_seventh_chord: this note's Recipe describes a real "
+        "music21 chord-building computation that hasn't been "
+        "implemented yet (tracked separately — needs either a "
+        "confirmed E-- Recipe-grammar path for raw music21 calls, or "
+        "a shared chord-building library snippet). Returning None "
+        "silently was worse than failing loudly, so this is a "
+        "deliberate stopgap, not a bug."
+    )
 ```
