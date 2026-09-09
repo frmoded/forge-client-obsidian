@@ -169,12 +169,21 @@ until you re-forge.
 
 The Pyodide compute path is fully offline once installed: all Python,
 the music21 library, and the forge engine run inside your browser
-without contacting any server. **One exception**: audio playback (the
-play button on rendered music scores) uses `html-midi-player`, which
-fetches SoundFont samples from `storage.googleapis.com/magentadata/`
-on first play. The samples are browser-cached, so subsequent plays
-work offline. If you're behind a strict firewall or air-gapped, audio
-playback won't initialize — visual score rendering, all computation,
+without contacting any server. **A few exceptions**:
+
+- Audio playback (the play button on rendered music scores) uses
+  `html-midi-player`, which fetches SoundFont samples from
+  `storage.googleapis.com/magentadata/` on first play. The samples are
+  browser-cached, so subsequent plays work offline.
+- Clicking the **Forge** ribbon icon → **Edit vault domains…** fetches
+  the current vault list from a small JSON file on GitHub
+  (`forge-registry`) to populate the picker.
+- The built-in simulator (Cmd-P → "Forge: Open 3D View") loads its UI
+  font (Inter) from Google Fonts when it opens.
+
+If you're behind a strict firewall or air-gapped: audio playback won't
+initialize, the vault-domains picker won't populate, and the simulator
+falls back to a system font. Visual score rendering, all computation,
 and freezing notes still work without network access.
 
 ## Authoring notes — hand-authored notes
