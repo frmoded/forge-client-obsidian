@@ -35,7 +35,7 @@ by name.)
 Everything here you've already met — `Return`, `If`, calling a note — just
 pointed at the same note that contains it. That's all recursion is.
 
-## Exercise
+## Exercise - Try a different number
 
 Open the [[show_factorial]] note and change `n=5` to `n=6`. **Run** it —
 the answer jumps to `720`. Then try `n=3` and check it by hand: `3 × 2 × 1 = 6`.

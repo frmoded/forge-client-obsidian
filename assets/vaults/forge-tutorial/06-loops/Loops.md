@@ -35,7 +35,7 @@ and you'd never see `2` or `1`. `[[print]]` **emits** one line and lets the
 Recipe keep going — which is exactly what you need when a loop is meant to
 show multiple things.
 
-## Exercise
+## Exercise - Grow the list
 
 Open the [[countdown]] note, add more numbers to the list — try
 `[5, 4, 3, 2, 1]` — and run again. The countdown grows on its own, no extra

@@ -36,16 +36,16 @@ Then [[cheer]] uses it:
 - [[excited]] returns `"hooray!"`, and `Return` hands that back to whoever
   ran [[cheer]] — the Output panel shows it.
 
-Open [[fix_the_call]] — it's broken exactly that way. Run it, read the real
-error, then fix the call.
-
 A note that takes an input and returns something is this system's idea of a
 **function**: a named, reusable step. And making one is just making another
 note.
 
-> **Return** is now in your palette.
+## Exercise - Fix a bug
 
-## A note with two inputs
+Open [[fix_the_call]] — it's broken exactly that way. Run it, read the real
+error, then fix the call.
+
+## Exercise - Two inputs
 
 Open [[function_inputs]] and run it — it takes **two** inputs, `first_name`
 and `last_name`, and joins them:
@@ -54,10 +54,7 @@ and `last_name`, and joins them:
 Ada Lovelace
 ```
 
-Nothing new syntactically: every `Input ... = ....` line adds one more
-parameter. One input or five, the shape is the same.
-
-## Exercise (make your own)
+## Exercise - Make your own function
 
 Let's write a function of your own.
 
@@ -69,7 +66,5 @@ Let's write a function of your own.
 
 You just created a note, named it, and called it — the same loop you'll use
 to build anything here.
-
-**Order in this chapter:** [[cheer]] → [[excited]] → [[function_inputs]]
 
 **Next Lesson:** [[Composition]]

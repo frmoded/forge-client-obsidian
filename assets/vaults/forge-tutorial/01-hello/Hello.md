@@ -15,13 +15,13 @@ That's it. You ran a program. **Forge, then Run** is the sequence for every
 note in this tutorial. (Tip: middle-click a note to open it in its own tab,
 alongside this lesson.)
 
-## Exercise 1
+## Exercise - Change the message
 
 Replace `"hello, world"` with your own text — keeping the quotes — then Forge
 and Run again. That's the loop for the whole tutorial: **change one thing,
 Forge it, run it, see what happened.**
 
-## Exercise 2
+## Exercise - Rewrite the description
 
 Above the Recipe, under *Description*, is a plain-English sentence. Edit it
 to describe a different greeting, then click the hammer again — the same

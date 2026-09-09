@@ -27,7 +27,7 @@ Since `72` is not greater than `80`, it skips the first block and runs the
 `<` (is less than), `>=` (is at least), `<=` (is at most), `==` (equals), and
 `!=` (does not equal).
 
-## Exercise
+## Exercise - Cross the threshold
 
 Open the [[weather]] note, change `72` to `95`, and run again. Now the
 condition is true, so you'll see "It's hot." Try a few values right around `80`

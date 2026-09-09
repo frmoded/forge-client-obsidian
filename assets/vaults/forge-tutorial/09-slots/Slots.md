@@ -49,7 +49,7 @@ fact, no LLM, for free, the same every time. Change the Recipe, though —
 including the words inside the slot — and the engine sees a new request, asks
 the LLM again, and saves the new answer.
 
-## Exercise
+## Exercise - Ask about something else
 
 Change `octopuses` to something you're curious about — volcanoes, the moon, your
 favorite animal:

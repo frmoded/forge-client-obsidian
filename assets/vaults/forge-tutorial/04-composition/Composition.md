@@ -20,7 +20,7 @@ in `word`, and returns `"This is " + word + "."` — the new idea is one line:
 [[excited_word]] is tiny too — `Return "wonderful".` [[describe_it]] doesn't
 care *how* it decides, it just uses what comes back. Small pieces, combined.
 
-## Exercise
+## Exercise - Change a called note
 
 Open [[excited_word]], change `"wonderful"` to anything you like, save it,
 then **run** [[describe_it]] again. You changed one small note and the

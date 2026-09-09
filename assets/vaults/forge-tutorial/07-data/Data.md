@@ -31,7 +31,7 @@ countdown: a loop that shows multiple things uses `[[print]]`, not `Return`.)
 Action notes *do*; data notes *hold*; together they keep your values in one
 place.
 
-## Exercise
+## Exercise - Add your own data
 
 Open the [[colors]] note and add a color — `["red", "green", "blue",
 "purple"]` — then **run** the [[show_colors]] note again. The loop picks

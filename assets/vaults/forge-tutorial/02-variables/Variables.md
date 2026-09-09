@@ -16,7 +16,7 @@ Three lines: `Let name = "Ada"` names a value — a box called `name` holding
 `Return greeting` hands back the *value* — no quotes, because quotes would
 return the literal word "greeting" instead of what `greeting` holds.
 
-## Exercise
+## Exercise - Change the values
 
 Open the [[greeting]] note, change `"Ada"` to your own name, and run again —
 the greeting follows. Then try changing `"Hello, "` to `"Hi there, "`. Two boxes,
