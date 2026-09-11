@@ -7,23 +7,13 @@ tweak you make yourself.
 You don't need to know how to program. You need curiosity and a willingness to
 change one thing and click again.
 
-## You've already made something
-
-When you first opened the vault, a file called `welcome.md` was sitting at the
-top of it. If you ran it, you saw it say hello — and quietly call a second
-note, `greet`, to do part of the work. That was the whole idea in miniature:
-small pieces that run, and that call each other.
-
-This tutorial slows that moment down and shows you how it works, one idea at a
-time, until you're writing your own.
-
 ## How to use it
 
 Each chapter is a folder. Inside a chapter you'll find:
 
 - a short **lesson note** (named after the chapter, like `Hello`) — read it first;
 - one or more **action notes** (`.md` files) — the working examples;
-- an **Exercise** at the end of the lesson — a one-line change to try.
+- one or more **Exercises** at the end of the lesson — hands-on changes to try.
 
 The rhythm for every chapter is the same:
 

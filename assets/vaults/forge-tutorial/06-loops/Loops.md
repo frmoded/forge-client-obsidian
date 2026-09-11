@@ -41,4 +41,15 @@ Open the [[countdown]] note, add more numbers to the list — try
 `[5, 4, 3, 2, 1]` — and run again. The countdown grows on its own, no extra
 lines needed. Then change `"Liftoff!"` to your own send-off.
 
+## Exercise - Skip a number
+
+`If` (chapter 5) and `For each` nest the same way anything else indented
+does. Change the print line to:
+
+> If number != 3:
+>   [[print]] number.
+
+Run again: `3` disappears, everything else still counts down. That's the
+whole trick — one indented block inside another.
+
 **Next Lesson:** [[Data]]
