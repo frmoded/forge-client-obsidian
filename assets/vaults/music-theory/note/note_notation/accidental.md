@@ -6,4 +6,4 @@ An **accidental** is a modifier that shifts a note by [[semitone|semitones]]: **
 
 So a written note is a letter plus (optionally) an accidental. And because you can reach a pitch by sharpening one letter *or* flattening the next, some pitches end up with two names — see [[enharmonic_equivalence]].
 
-Part of the [[notation]] of a note.
+Part of the [[note_notation]] of a note.

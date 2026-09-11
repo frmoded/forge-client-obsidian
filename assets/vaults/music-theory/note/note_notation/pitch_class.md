@@ -18,4 +18,4 @@ On guitar, pitch class C shows up at several different fret/string positions rat
 
 There are exactly **12 pitch classes** — one per [[semitone]] in the octave. This is the cleanest engineer's handle on a note: **pitch = (pitch class, octave)**. The [[note_name|letter]] + [[accidental]] give you the class; the octave number gives you the register. See [[piano_note_names]] and [[guitar_note_names]] for how the 12 pitch classes map onto each instrument.
 
-Part of the [[notation]] of a note.
+Part of the [[note_notation]] of a note.

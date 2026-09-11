@@ -10,4 +10,4 @@ Move one key to the right and the [[pitch_class]] changes by a [[semitone]]; mov
 
 Contrast with [[guitar_note_names]]: a piano has exactly one physical key per pitch class per octave; a guitar has several strings that can each reach the same pitch class at different frets, so the same note can be played in more than one place.
 
-Part of the [[notation]] of a note.
+Part of the [[note_notation]] of a note.

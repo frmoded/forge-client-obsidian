@@ -8,4 +8,4 @@ Twelve frets is exactly one [[octave]]: fret 12 on any string is the same [[pitc
 
 Notice the same [[pitch_class]] shows up in several places at once — e.g. the open 2nd string (B3) and fret 4 of the 3rd string are both B, just reached differently. That's the thing a guitar has that a piano doesn't: [[piano_note_names|a piano has exactly one key per pitch class per octave]]; a guitar reaches most pitch classes on more than one string.
 
-Part of the [[notation]] of a note.
+Part of the [[note_notation]] of a note.

@@ -12,4 +12,4 @@ On guitar, a semitone is simpler to see than to read: it's exactly **one fret** 
 
 In equal temperament each semitone is a [[frequency]] ratio of **2^(1/12) ≈ 1.0595**. Every scale, chord, and interval is just a count of these steps — a whole step is two semitones, an octave is twelve.
 
-Part of the [[notation]] of a note.
+Part of the [[note_notation]] of a note.
