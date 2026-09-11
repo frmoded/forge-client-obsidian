@@ -102,8 +102,15 @@ function removeEmptyShaEnglishHash(body: string): string {
 // --- Frontmatter english_hash ---------------------------------------
 
 /** Find the YAML frontmatter block (delimited by `---` on lines 0 and
- *  N for some N>0). Returns null if no frontmatter present. */
-function findFrontmatterBounds(body: string): { start: number; end: number } | null {
+ *  N for some N>0). Returns null if no frontmatter present.
+ *
+ *  CW 1200 — exported so slots-section-writer-core.ts can share this
+ *  rather than duplicating it a second time; that file's own
+ *  `writeSlotsSection` now writes a frontmatter field
+ *  (`slots_cache`) the same way this file's `replaceOrInsertEnglishHash`
+ *  writes `english_hash`, and both need the same frontmatter-block
+ *  boundary logic. */
+export function findFrontmatterBounds(body: string): { start: number; end: number } | null {
   const lines = body.split('\n');
   if (lines.length === 0 || lines[0] !== '---') return null;
   for (let i = 1; i < lines.length; i++) {
