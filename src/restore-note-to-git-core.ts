@@ -107,3 +107,30 @@ export function describeRestore(paths: readonly string[]): string {
  *  command that did nothing. */
 export const RESTORE_STEPS = ['flush', 'checkout', 'reload'] as const;
 export type RestoreStep = (typeof RESTORE_STEPS)[number];
+
+// Drain 2026-09-12-0030 — the checkout step (RESTORE_STEPS[1]) had no
+// error handling at its call sites: `execFileSync` throws on any
+// non-zero git exit (a stale `.git/index.lock`, or any other checkout
+// failure), and that throw became an unhandled promise rejection — no
+// Notice, no Forge Output entry, the file's content simply unchanged.
+// The eligibility check one step earlier IS wrapped in try/catch, which
+// masked the gap: it looks like this module already handles git
+// failures, but it only ever handled the read-only status check.
+export type CheckoutOutcome =
+  | { ok: true }
+  | { ok: false; noticeText: string };
+
+/** Attempt a checkout via the caller's own git-shelling thunk, and turn
+ *  a thrown error into a Notice-ready message instead of letting it
+ *  escape. `runCheckout` is injected so this decision is testable
+ *  without importing `child_process` or `obsidian` here — the impure
+ *  file's own git() call is passed in as a zero-arg closure. */
+export function attemptCheckout(runCheckout: () => void): CheckoutOutcome {
+  try {
+    runCheckout();
+    return { ok: true };
+  } catch (e) {
+    const raw = e instanceof Error ? e.message : String(e);
+    return { ok: false, noticeText: `Restore failed: ${raw}` };
+  }
+}

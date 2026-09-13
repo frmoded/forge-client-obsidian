@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 
 import {
   parseGitStatusShort, isUntracked, selectRestorablePaths,
-  decideRestoreNote, describeRestore, RESTORE_STEPS,
+  decideRestoreNote, describeRestore, RESTORE_STEPS, attemptCheckout,
 } from './restore-note-to-git-core.ts';
 
 const SAMPLE = [
@@ -134,6 +134,98 @@ test('git refuses an untracked pathspec rather than acting on it', () => {
     );
     assert.ok(fs.existsSync(path.join(dir, 'untracked.md')));
   } finally { cleanup(); }
+});
+
+// ---------------------------------------------------------------------
+// Drain 2026-09-12-0030 — restore-to-last-commit silently swallowed a
+// checkout failure (main.ts:100/139 had no try/catch around the one git
+// call that actually mutates state; the thrown execFileSync error became
+// an unhandled promise rejection — no Notice, no Forge Output entry, the
+// success path after the checkout was simply never reached).
+//
+// attemptCheckout is the extracted decision: given the caller's actual
+// git-shelling thunk, did it succeed, and if not, what should the Notice
+// say. Pure — no obsidian import here, per this repo's own documented
+// convention that restore-note-to-git.ts (the impure half, `import {
+// App, MarkdownView, Notice, TFile } from 'obsidian'`) cannot be
+// imported under `node --test` (the `obsidian` npm package is a
+// types-only stub with an empty `main`; the loader throws
+// ERR_MODULE_NOT_FOUND before mock.module's interception can run —
+// verified directly, not assumed, before choosing this design).
+//
+// The failure case below is not simulated by a mock: it manufactures
+// the EXACT root-cause condition the drain's investigation found (a
+// stale `.git/index.lock` — `git status` succeeds with the lock
+// present, `git checkout` does not), against a real temp repo, and
+// drives attemptCheckout with the real git binary throwing for real.
+
+test('attemptCheckout: a clean checkout reports ok', () => {
+  const { dir, git, cleanup } = tmpRepo();
+  try {
+    fs.writeFileSync(path.join(dir, 'tracked.md'), 'original\n');
+    git('add', '-A'); git('commit', '-qm', 'init');
+    fs.writeFileSync(path.join(dir, 'tracked.md'), 'drift\n');
+
+    const outcome = attemptCheckout(() => { git('checkout', '--', 'tracked.md'); });
+
+    assert.deepEqual(outcome, { ok: true });
+    assert.equal(fs.readFileSync(path.join(dir, 'tracked.md'), 'utf8'), 'original\n');
+  } finally { cleanup(); }
+});
+
+test('attemptCheckout: a real stale index.lock is caught, not thrown', () => {
+  // The exact reproduction from the drain's investigation: a stale
+  // `.git/index.lock` left behind (e.g. by a crashed/killed git
+  // process) makes `git status` succeed but `git checkout` fail with
+  // "fatal: Unable to create '.../index.lock': File exists." — this is
+  // the real error class execFileSync throws in production, not a
+  // stand-in.
+  const { dir, git, cleanup } = tmpRepo();
+  try {
+    fs.writeFileSync(path.join(dir, 'tracked.md'), 'original\n');
+    git('add', '-A'); git('commit', '-qm', 'init');
+    fs.writeFileSync(path.join(dir, 'tracked.md'), 'drift\n');
+    fs.writeFileSync(path.join(dir, '.git', 'index.lock'), '');
+
+    // Confirm the premise: status is unaffected by the stale lock (this
+    // is exactly why the drain's root-cause read matters — the
+    // eligibility check's own try/catch never fires here).
+    assert.doesNotThrow(() => git('status', '--short', '--', 'tracked.md'));
+
+    let outcome!: ReturnType<typeof attemptCheckout>;
+    assert.doesNotThrow(() => {
+      outcome = attemptCheckout(() => { git('checkout', '--', 'tracked.md'); });
+    }, 'attemptCheckout let the checkout error escape instead of catching it');
+
+    assert.equal(outcome.ok, false);
+    if (!outcome.ok) {
+      assert.match(outcome.noticeText, /^Restore failed: /);
+      assert.match(outcome.noticeText, /index\.lock/);
+    }
+    // The checkout genuinely did not happen — drift is still on disk.
+    assert.equal(fs.readFileSync(path.join(dir, 'tracked.md'), 'utf8'), 'drift\n');
+  } finally { cleanup(); }
+});
+
+test('restore-note-to-git.ts wraps BOTH mutating checkout calls in attemptCheckout', () => {
+  // restore-note-to-git.ts imports 'obsidian' and cannot be executed
+  // under node --test (see file header above) — same constraint the
+  // 0900 tests below already work around by reading main.ts as text.
+  // This asserts the wiring the drain's fix requires: neither call site
+  // that mutates state (single-note, vault-wide) may call `git(base,
+  // ['checkout', ...])` unguarded.
+  const src = fs.readFileSync(new URL('./restore-note-to-git.ts', import.meta.url), 'utf8');
+  const bareCheckoutCalls = src.match(/(?<!attemptCheckout\(\(\) => \{ )git\(base, \['checkout'/g) ?? [];
+  assert.deepEqual(
+    bareCheckoutCalls, [],
+    'a checkout call is not wrapped by attemptCheckout — its thrown error would ' +
+    'become an unhandled rejection again',
+  );
+  const wrapped = src.match(/attemptCheckout\(/g) ?? [];
+  assert.equal(
+    wrapped.length, 2,
+    'expected exactly two attemptCheckout call sites (single-note + vault-wide)',
+  );
 });
 
 // ---------------------------------------------------------------------

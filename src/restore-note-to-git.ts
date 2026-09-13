@@ -19,7 +19,7 @@
 import { App, MarkdownView, Notice, TFile } from 'obsidian';
 import { ConfirmModal } from './confirm-modal.ts';
 import {
-  decideRestoreNote, selectRestorablePaths, describeRestore,
+  decideRestoreNote, selectRestorablePaths, describeRestore, attemptCheckout,
 } from './restore-note-to-git-core.ts';
 
 /** The vault's absolute path. Desktop-only; callers guard. */
@@ -97,7 +97,8 @@ export async function restoreActiveNoteToLastCommit(app: App): Promise<void> {
   if (!ok) return;
 
   await flushOpenEditors(app);
-  git(base, ['checkout', '--', decision.path]);
+  const outcome = attemptCheckout(() => { git(base, ['checkout', '--', decision.path]); });
+  if (outcome.ok === false) { new Notice(outcome.noticeText); return; }
   await reloadOpenEditors(app, [decision.path]);
   new Notice(`Restored ${decision.path} to last commit.`);
 }
@@ -136,7 +137,8 @@ export async function restoreVaultToLastCommit(app: App): Promise<void> {
   if (!second) return;
 
   await flushOpenEditors(app);
-  git(base, ['checkout', '--', ...paths]);
+  const outcome = attemptCheckout(() => { git(base, ['checkout', '--', ...paths]); });
+  if (outcome.ok === false) { new Notice(outcome.noticeText); return; }
   const reloaded = await reloadOpenEditors(app, paths);
   new Notice(`Restored ${paths.length} notes; refreshed ${reloaded.length} open editor(s).`);
 }
