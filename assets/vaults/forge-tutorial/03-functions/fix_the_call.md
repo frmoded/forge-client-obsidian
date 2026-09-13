@@ -3,6 +3,9 @@ type: action
 description_hash: 9b73a75e1c77bd7a2a7351ee25e2c82524e30cd7ba0c94c109589efda35f7d52
 recipe_hash: 8d18c804d30a2a42d5cc32ac19c073fcb7e7eb606d64b93981faec685014d875
 source_facet: recipe
+python_hash: e5d1a4fc162f7e942b790e395406201fb6b83935dfe1843a475fc8837c15f097
+recipe_derived_from_source_hash: 9b73a75e1c77bd7a2a7351ee25e2c82524e30cd7ba0c94c109589efda35f7d52
+recipe_derived_from_description_hash: 9b73a75e1c77bd7a2a7351ee25e2c82524e30cd7ba0c94c109589efda35f7d52
 ---
 
 # Description
@@ -16,3 +19,10 @@ the call.
 
 Let shout = Call [[excited]] with "hooray".
 Return shout.
+
+# Python
+
+```python
+def compute(context):
+    return None
+```

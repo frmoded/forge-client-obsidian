@@ -12,4 +12,4 @@ The fields:
 - [[loudness]] — perceived intensity (the brain's read-out of amplitude)
 - [[consonance_and_dissonance]] — why some intervals sound settled together and others clash
 
-See [[notation]] for the names we attach to these sounds, and [[note]] for the overview.
+See [[note_notation]] for the names we attach to these sounds, and [[notes]] for the overview.

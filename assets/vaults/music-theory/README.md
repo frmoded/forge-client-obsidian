@@ -4,7 +4,15 @@ A Forge vault for composing music with music21 in your Obsidian-based snippet wo
 
 ## What's inside
 
-Music-domain action and data snippets — currently centered on **Slow Burn**, a fully-worked 12-bar blues in `slow_burn/`, plus a percussion section in `percussion/`, with percussion primitives imported cross-vault from `music-core/percussion_lab/`. Each snippet is a Forge action that returns a `music21.stream.Score` (or a list of pitches, for the scale helpers); the plugin renders the result via Verovio in the Forge panel.
+Two halves. The **theory** half (`notes/`, `scales/`, `chord/`) is prose-and-practice: what a note, a scale, a chord actually are, each concept note explained so you build or hear it yourself rather than just read about it — a note that doesn't make you press Run at least once has skipped the point. The **composition** half is a library of action and data snippets — currently centered on **Slow Burn**, a fully-worked 12-bar blues in `slow_burn/`, plus a percussion section in `percussion/` (with percussion primitives imported cross-vault from `music-core/percussion_lab/`). Graded practice for the theory concepts and general widget demos both live together in `exercises/`. Each snippet is a Forge action that returns a `music21.stream.Score` (or a list of pitches, for the scale helpers); the plugin renders the result via Verovio in the Forge panel.
+
+Concept navigation, if you're starting from theory:
+
+- [[notes]] — the atom of music: how a note is named (notation) and what it physically is (physics).
+- [[scales]] — scales as ordered pitch sequences built from interval patterns; hear one, then build one yourself.
+- [[chord]] — chords built by stacking thirds: triads, seventh chords, inversions, voicings, chord symbols and Roman numerals, and how chords function together in progressions and cadences.
+
+Start wherever your question starts. Everything cross-links back to this page.
 
 Layout:
 
@@ -14,6 +22,11 @@ music-theory/
 ├── LICENSE
 ├── NOTICE
 ├── forge.toml          # declares domains = ["music"]
+├── notes/              # concept: what a note is (notation + physics)
+├── scales/             # concept: scales, interval patterns
+├── chord/              # concept: chords (construction, notation, function)
+├── exercises/          # graded theory practice + general widget demos (see [[exercises/Exercises]])
+├── percussion/         # percussion notation + fully-worked percussion pieces
 └── slow_burn/
     ├── twelve_bar_blues_progression.md  # I IV I I IV IV I I V IV I V (data)
     ├── chorus.md                        # 1 chorus = harmonic frame + AAB vocal

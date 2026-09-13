@@ -4,18 +4,18 @@
 
 Look at three C's spread across a keyboard — C3, C4, C5, each one an octave above the last:
 
-![[note/resources/images/pitch_keyboard.svg]]
+![[notes/resources/images/pitch_keyboard.svg]]
 
 Now listen to the same kind of jump, one octave, A3 up to A4:
 
-![[note/resources/audio/pitch_octave_a3_a4.mp3]]
+![[notes/resources/audio/pitch_octave_a3_a4.mp3]]
 
 Notice both examples do the same thing: they get physically farther apart in *frequency* (each octave doubles it — A3 is 220 Hz, A4 is 440 Hz) while staying the exact same perceptual step apart in *pitch*. That's the core fact of this note: pitch is a perception, not a raw measurement, and it doesn't track frequency in a straight line — doubling the frequency doesn't sound "twice as high," it sounds like the *same note one octave higher*. See [[frequency]] for that (logarithmic) mapping.
 
 Curious what a single pitch actually looks like as a physical wave, rather than just a label? Here's A4 (440 Hz) as a wave packet — the dashed envelope is the note starting and stopping, not going on forever:
 
-![[note/resources/images/pitch_wave_packet.svg]]
+![[notes/resources/images/pitch_wave_packet.svg]]
 
-**Try it:** [[theory_exercises/octave_up]] — enter the note one octave above C4 and get feedback that ties the name, the octave number, and the frequency together.
+**Try it:** [[exercises/octave_up]] — enter the note one octave above C4 and get feedback that ties the name, the octave number, and the frequency together.
 
 Part of the [[physics]] of a note.
