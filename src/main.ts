@@ -3281,6 +3281,14 @@ export default class ForgePlugin extends Plugin {
     // Drain 2026-08-25-2100 (F4) — was `runSnippet(…, undefined, file)`.
     // The V1 / free-English tail: whatever derivation this path does has
     // completed by here, so it lands 'synced' like the V2 branch above.
+    //
+    // 2026-09-13 — this was the one Forge-click outcome with zero
+    // user-facing message on success (the sibling no-op/generate
+    // branches both narrate). No cue that the click did anything or
+    // that Run is the next step reads as "nothing happened," which
+    // drain 1145's investigation found is the likely cause of the
+    // driver's reported "had to click Forge twice."
+    this.notice(`${NOTICE_PREFIX}${file.basename} transpiled — press Run in the Forge panel to execute.`);
     await this.landAfterForge(file, 'synced');
   }
 
