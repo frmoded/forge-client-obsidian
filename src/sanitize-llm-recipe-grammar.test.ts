@@ -92,6 +92,7 @@ test('every statement head the real grammar accepts survives the sanitizer', () 
     Let: 'Let x = 1.',
     Input: 'Input n: int = 3.',
     Return: 'Return x.',
+    Print: 'Print "hello, world".',
     Call: 'Call [[go]] with state=state.',
     Repeat: 'Repeat 3 times:',
     For: 'For each t in items:',

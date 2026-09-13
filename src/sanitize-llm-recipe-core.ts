@@ -9,7 +9,7 @@
 // LOOK like valid V2 E-- Recipe syntax:
 //
 //   - every statement form the engine's parser accepts (Let, Input,
-//     Return, Call, If / Otherwise, For each, Repeat, and the
+//     Return, Print, Call, If / Otherwise, For each, Repeat, and the
 //     `[[<id>]] <args>.` shorthand), plus indented block bodies
 //   - blank lines
 //
@@ -63,6 +63,11 @@ function _isValidRecipeLine(line: string): boolean {
   // "Returning the score" doesn't match. `Return.` (bare) is legal too.
   if (/^Return\s+\S/.test(trimmed)) return true;
   if (/^Return\.$/.test(trimmed)) return true;
+  // Print <expr> — v29 constitution amendment (2026-09-13). Unlike
+  // Return, a bare `Print.` is a parser-level ParseError (see
+  // PrintStmt's docstring in parser.py), so there is no bare-form
+  // branch to mirror here.
+  if (/^Print\s+\S/.test(trimmed)) return true;
   // Call [[chip]] with k=v. — the canonical statement-position call.
   // Requires the wikilink so "Call me later" stays prose.
   if (/^Call\s+\[\[/.test(trimmed)) return true;

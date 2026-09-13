@@ -28,15 +28,24 @@ import { deriveChip, type Chip, type ChipPaletteGroup, type SnippetMetaForChips 
 
 export type { Chip, ChipPaletteGroup, SnippetMetaForChips };
 
-/** The 6 language primitives available in every vault. These are
+/** The 7 language primitives available in every vault. These are
  *  grammar constructs (not notes) so they live in plugin source.
  *  Pre-v0.2.258 the same 6 were declared in tutorial's
  *  `_meta/_chips.md` as `synthetic_chips`; that file is retired this
- *  drain. */
+ *  drain.
+ *
+ *  `Print` added per the v29 constitution amendment (2026-09-13) —
+ *  the `print` entry above is the OLD kwargs-call form
+ *  (`Call [[print]] with text=...`), which transpiles to a runtime
+ *  TypeError (see the amendment's own rationale); it is deliberately
+ *  left as-is here, out of scope for the amendment's own drain
+ *  ("this drain only ADDS the new keyword"). `Print` is the new,
+ *  correct, first-class statement keyword. */
 export const LANGUAGE_PRIMITIVES: Chip[] = [
   { label: 'print', insertion: 'Call [[print]] with text="<message>".', insertionV2: 'Call [[print]] with text="<message>".' },
   { label: 'Let', insertion: 'Let <name> = <value>.', insertionV2: 'Let <name> = <value>.' },
   { label: 'Return', insertion: 'Return <value>.', insertionV2: 'Return <value>.' },
+  { label: 'Print', insertion: 'Print <expr>.', insertionV2: 'Print <expr>.' },
   { label: 'If', insertion: 'If <condition>:\n    <body>', insertionV2: 'If <condition>:\n    <body>' },
   { label: 'Otherwise', insertion: 'Otherwise:\n    <body>', insertionV2: 'Otherwise:\n    <body>' },
   { label: 'For each', insertion: 'For each <item> in <collection>:\n    <body>', insertionV2: 'For each <item> in <collection>:\n    <body>' },

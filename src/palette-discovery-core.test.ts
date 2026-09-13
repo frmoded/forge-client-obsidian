@@ -33,7 +33,7 @@ describe('computePalette', () => {
     const palette = computePalette([]);
     assert.deepEqual(
       palette[0].chips.map(c => c.label),
-      ['print', 'Let', 'Return', 'If', 'Otherwise', 'For each'],
+      ['print', 'Let', 'Return', 'Print', 'If', 'Otherwise', 'For each'],
     );
   });
 
