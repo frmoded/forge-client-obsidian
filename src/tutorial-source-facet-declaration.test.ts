@@ -44,7 +44,19 @@ const BUNDLE = path.resolve(
  *  `description` is the norm; a deliberate exception belongs here with
  *  a reason, not silently in a note. */
 const EXPECTED: Record<string, string | null> = {
-  '01-hello/hello_world.md':            null,          // unstamped by design
+  '01-hello/hello_world.md':            'recipe',      // stamped `recipe` by
+                                                       // this session's own
+                                                       // fix arc (drains
+                                                       // 2026-09-14-0620,
+                                                       // -0700, commit
+                                                       // da09e5e; re-synced
+                                                       // into the bundle by
+                                                       // -1600, confirmed
+                                                       // unrelated to -1615's
+                                                       // own changes via
+                                                       // git stash, drain
+                                                       // 2026-09-14-2405) —
+                                                       // no longer unstamped
   '02-variables/fix_me.md':             'recipe',      // drifted to `recipe` via
                                                        // legitimate forge-tutorial
                                                        // content changes landed
