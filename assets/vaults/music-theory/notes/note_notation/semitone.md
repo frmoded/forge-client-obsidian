@@ -1,5 +1,3 @@
-# Semitone (half step)
-
 A **semitone** (or half step) is the smallest interval in standard tuning: **1/12 of an [[octave]]**. It's the quantization grid everything else is built on — hear the tightest step there is, C up to C♯:
 
 ![[notes/resources/audio/semitone.mp3]]

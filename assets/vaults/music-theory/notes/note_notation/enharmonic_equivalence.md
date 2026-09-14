@@ -1,5 +1,3 @@
-# Enharmonic equivalence
-
 **Enharmonic equivalence** is when two different names point at the identical pitch: **C♯ and D♭ are the same sound**. Same value, different spelling — an alias. On the page they're written differently:
 
 ![[notes/resources/images/enharmonic.svg]]

@@ -1,5 +1,3 @@
-# Loudness
-
 **Loudness** is the perceived intensity of a note — how soft or strong it sounds. Like [[pitch]], it's a *perceptual* quantity — your brain's read-out of the physical **amplitude** of the sound wave (how much the air pressure swings), related to sound intensity and commonly measured in **decibels (dB)**.
 
 Look at the same tone at two different amplitudes — same frequency, same shape, just scaled up or down:

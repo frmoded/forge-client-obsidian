@@ -1,5 +1,3 @@
-# Pitch class
-
 A **pitch class** is a note's identity independent of octave — essentially [[pitch]] *mod* [[octave]]. Every C, in any register, belongs to pitch class C. The three notes below are all pitch class C:
 
 ![[notes/resources/audio/pitch_class.mp3]]

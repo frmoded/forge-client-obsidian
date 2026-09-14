@@ -1,5 +1,3 @@
-# Note Notation
-
 The **symbolic** side of a note — how we identify, name, and write it. These are *conventions* (agreed-upon labels), not physical facts about the sound; see [[physics]] for the sonic reality they point at.
 
 The fields, roughly in build order:

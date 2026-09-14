@@ -1,5 +1,3 @@
-# Octave
-
 An **octave** is the interval between a [[frequency]] and its double — a **2:1 ratio**. Notes an octave apart sound so alike that we call them "the same note, higher or lower": they share a letter [[note_name|name]] and belong to the same [[pitch_class|pitch class]]. Two waves, one exactly double the other's frequency:
 
 ![[notes/resources/images/octave_sine.svg]]

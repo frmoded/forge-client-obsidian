@@ -1,5 +1,3 @@
-# Exercises
-
 Graded practice and interactive demos, spanning every concept in [[notes]],
 [[scales]], and [[chord]] — not tied to one topic directory, so they live
 here instead. Every note either grades an attempt against a real answer or

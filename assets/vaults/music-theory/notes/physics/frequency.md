@@ -1,5 +1,3 @@
-# Frequency
-
 **Frequency** is the physical cause of [[pitch]]: how many times per second a sound wave repeats its cycle, measured in **hertz (Hz)**. Pitch and frequency are not the same thing — frequency is the *input* (a physical fact about the wave), pitch is the *perception* your brain forms from it.
 
 Two waves across the same span of time, one cycling twice as often as the other — the faster one is the higher frequency:

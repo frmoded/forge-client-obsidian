@@ -1,5 +1,3 @@
-# Guitar Note Names
-
 Standard tuning sets the six open strings to **E2 A2 D3 G3 B3 E4** — the same pitch classes ([[pitch_class]]) as any other instrument, just fixed as starting points a few [[semitone|semitones]] apart (four, between the G and B strings; five, everywhere else). Moving up one fret raises a string by exactly one semitone, so once you know where a note is on one string, the rest follow from counting.
 
 Twelve frets is exactly one [[octave]]: fret 12 on any string is the same [[pitch_class]] as that string open, one octave higher. The pattern then repeats. Every note on the fretboard, open string through fret 12:

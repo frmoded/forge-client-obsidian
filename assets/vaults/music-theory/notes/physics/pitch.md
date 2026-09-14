@@ -1,5 +1,3 @@
-# Pitch
-
 **Pitch** is the perceived highness or lowness of a note. It's a *perceptual* quantity — your brain's read-out of a sound's [[frequency]]. Everything else in this section refines it: [[frequency]] is its physical cause, [[timbre]] and [[loudness]] are the other qualities your ear reads off the same sound, and [[duration]] places the note in time.
 
 Look at three C's spread across a keyboard — C3, C4, C5, each one an octave above the last:

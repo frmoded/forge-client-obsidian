@@ -1,5 +1,3 @@
-# Chord
-
 A **chord** is multiple notes sounding together, built by stacking thirds on a root. This section routes into three lenses on that idea:
 
 - [[construction]] — what a chord is MADE of: triads, quality, root, chord tones, seventh chords, extensions, inversions, voicings.

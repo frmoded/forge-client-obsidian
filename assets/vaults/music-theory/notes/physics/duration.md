@@ -1,5 +1,3 @@
-# Duration
-
 **Duration** is how long a note lasts — its extent along the time axis. If [[pitch]] is the *vertical* axis of music (high vs. low), duration is the *horizontal* one (short vs. long, early vs. late).
 
 A tone bounded in time — the wave itself doesn't change, only how long it's allowed to run:

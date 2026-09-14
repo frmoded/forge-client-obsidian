@@ -1,5 +1,3 @@
-# Physics
-
 The **physical and perceptual** side of a note — what it is as sound. These are facts about the sound itself (and how the ear reads them), independent of what we choose to call it.
 
 The fields:

@@ -1,5 +1,3 @@
-# Piano Note Names
-
 A piano keyboard repeats the same 12-key pattern — 7 white keys, 5 black keys — once per [[octave]]. The white keys are the seven [[note_name|naturals]] (C D E F G A B); the black keys fill the five gaps with [[accidental|sharps and flats]] (C♯/D♭, D♯/E♭, F♯/G♭, G♯/A♭, A♯/B♭). Two of the naturals — E→F and B→C — sit right next to each other with no black key between them; that's the same "missing semitone" the [[accidental]] note describes, just visible directly on the keys instead of on the staff.
 
 One octave, C to B, every key labeled:

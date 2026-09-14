@@ -1,5 +1,3 @@
-# Accidental
-
 An **accidental** is a modifier that shifts a note by [[semitone|semitones]]: **sharp ♯** (+1), **flat ♭** (−1), **natural ♮** (cancel). It's the mechanism that lets 7 [[note_name|letters]] address all 12 [[pitch_class|pitch classes]] — C♯ is just "C nudged up one semitone." Below: C natural, then C♯, then C♭:
 
 ![[notes/resources/images/accidental.svg]]

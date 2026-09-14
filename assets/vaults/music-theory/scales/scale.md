@@ -1,5 +1,3 @@
-# Scale
-
 A **scale** is an ordered sequence of musical pitches — a ladder of notes spanning an octave that a piece of music draws its melody and harmony from.
 
 ## Hear it, and see it

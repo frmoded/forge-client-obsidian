@@ -1,5 +1,3 @@
-# Note name
-
 The **note names** are the seven letters **A–G** that label the "natural" notes, cycling back to A after G. Here are the seven naturals in order from C:
 
 ![[notes/resources/images/note_name.svg]]
