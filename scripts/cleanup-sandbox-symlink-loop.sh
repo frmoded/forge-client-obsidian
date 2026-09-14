@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# NOTE (this checkout): obsidian_sandbox/sandbox/.obsidian/plugins/ mixes
+# static directories (e.g. hot-reload, obsidian42-brat) alongside the live
+# symlink described below — not every entry under plugins/ is a symlink.
+#
 # v0.2.196 housekeeping drain — detect + repair the symlink loop that
 # breaks `tests/moda/test_go_snapshot.py` setup.
 #
