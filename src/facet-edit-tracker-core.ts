@@ -126,14 +126,54 @@ export function decideSourceWrite(
  *  TODO: delete in v0.2.290. */
 export const decideCanonicalWrite = decideSourceWrite;
 
+/** A facet's STORED hash (frontmatter), as opposed to `FacetHashes`'
+ *  in-memory-cache snapshot. `null` means the facet has never been
+ *  stamped (absent frontmatter field), not "empty string." */
+export interface StoredFacetHashes {
+  desc: string | null;
+  recipe: string | null;
+  python: string | null;
+}
+
 /** Which facets moved since the last observation. Extracted at drain
  *  2026-08-25-1060 so the decision layer can see the whole change set,
- *  not just its upstream-most member. */
+ *  not just its upstream-most member.
+ *
+ *  COLD-CACHE FALLBACK (2026-09-14, hello_world.md bug). `cached ===
+ *  null` used to mean "no baseline, report nothing changed" — which
+ *  reads a genuine first edit on a note the in-memory cache hasn't
+ *  observed yet as a no-op. main.ts seeds the cache on file-open and
+ *  via an onLayoutReady sweep for already-open tabs, but neither is
+ *  awaited by the modify handler, so a cold cache is reachable via a
+ *  race (or any other bootstrap path not yet enumerated) — the exact
+ *  trigger for the hello_world.md incident was not conclusively
+ *  pinned, so this fixes every possible cause rather than one
+ *  hypothesized trigger. When the caller passes `storedHashes` (the
+ *  note's OWN frontmatter hash fields), a cold cache falls back to
+ *  comparing against those instead of silently reporting no change —
+ *  slower (one extra frontmatter read upstream) but never silently
+ *  wrong, matching the ORIGINAL stored-hash-based mechanism this
+ *  cache-based one replaced (see this file's own header comment).
+ *  Omitting `storedHashes` preserves the pre-fallback behavior for
+ *  any caller that hasn't threaded it through. A `null` stored value
+ *  (facet never stamped) is treated as "no baseline for THIS facet
+ *  either" — non-empty current content still counts as changed,
+ *  matching this codebase's general absence-is-not-evidence-of-no-
+ *  content convention (the e3b0c442… empty-string-sentinel pattern
+ *  used elsewhere for unstamped facets). */
 export function changedFacets(
   current: FacetHashes,
   cached: FacetHashes | null,
+  storedHashes?: StoredFacetHashes,
 ): Array<'description' | 'recipe' | 'python'> {
-  if (cached === null) return [];
+  if (cached === null) {
+    if (!storedHashes) return [];
+    const changed: Array<'description' | 'recipe' | 'python'> = [];
+    if (current.desc !== (storedHashes.desc ?? '')) changed.push('description');
+    if (current.recipe !== (storedHashes.recipe ?? '')) changed.push('recipe');
+    if (current.python !== (storedHashes.python ?? '')) changed.push('python');
+    return changed;
+  }
   const changed: Array<'description' | 'recipe' | 'python'> = [];
   if (current.desc !== cached.desc) changed.push('description');
   if (current.recipe !== cached.recipe) changed.push('recipe');

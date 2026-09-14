@@ -5511,7 +5511,18 @@ export default class ForgePlugin extends Plugin {
       };
 
       const cached = this._facetHashCache.get(file.path) ?? null;
-      const changed = changedFacets(currentHashes, cached);
+      // 2026-09-14 cold-cache fix (hello_world.md incident) — a cold
+      // cache (no in-memory baseline yet) falls back to the note's own
+      // STORED hash fields instead of silently reporting no change.
+      // See changedFacets' own doc comment for the full reasoning.
+      const storedDescHash = getFmFieldV2(body, 'description_hash');
+      const storedRecipeHash = getFmFieldV2(body, 'recipe_hash');
+      const storedPythonHash = getFmFieldV2(body, 'python_hash');
+      const changed = changedFacets(currentHashes, cached, {
+        desc: typeof storedDescHash === 'string' ? storedDescHash : null,
+        recipe: typeof storedRecipeHash === 'string' ? storedRecipeHash : null,
+        python: typeof storedPythonHash === 'string' ? storedPythonHash : null,
+      });
 
       // Gate M refinement (drain 2026-09-08-1240) — was the stamp value
       // ITSELF written as part of THIS observation, or is it sitting at

@@ -308,3 +308,80 @@ describe('Gate M blind spot — fix_me.md (drain 2026-09-08-1240)', () => {
     );
   });
 });
+
+describe('cold-cache stored-hash fallback (2026-09-14, hello_world.md cold-cache bug)', () => {
+  // hello_world.md, live in Obsidian this session: driver edited the
+  // Recipe, clicked Forge, and Forge re-derived Recipe FROM Description
+  // instead of moving forward from what the driver typed —
+  // `source_facet` never flipped away from `description`.
+  //
+  // ROOT MECHANISM, confirmed by direct code read (facet-edit-tracker-
+  // core.ts's own header comment, "Bootstrap" paragraph):
+  // `_facetHashCache` starts empty; a modify event on a file the cache
+  // has no entry for (`cached === null`) has always returned `changed
+  // = []` — no baseline means "nothing changed" rather than "unknown,
+  // go check." That reads a genuine first edit as a no-op.
+  //
+  // main.ts DOES seed the cache on file-open and on the onLayoutReady
+  // sweep for already-open tabs — this drain's own investigation did
+  // not conclusively pin which of those two paths (or a third,
+  // un-enumerated one, e.g. a race between the async file-open
+  // populate and a fast subsequent edit) left hello_world.md's cache
+  // cold at the moment of the driver's edit. Rather than gating the
+  // fix on nailing that exact trigger, this converts EVERY possible
+  // cold-cache cause into correct behavior: fall back to the note's
+  // own STORED hash fields (already in frontmatter) instead of the
+  // in-memory cache. Slower (one extra comparison) but never silently
+  // wrong, matching the ORIGINAL pre-cache mechanism this subsystem's
+  // own header comment says it replaced.
+
+  it('RED (current code): cold cache + Recipe edit reports nothing changed, even with stored hashes available', () => {
+    // This is the literal bug. A caller with the OLD 2-arg call shape
+    // (no stored-hash fallback) sees the Recipe edit as invisible.
+    const current = H('D_unchanged', 'R_EDITED', 'P_unchanged');
+    const changed = changedFacets(current, null);
+    assert.deepEqual(changed, [],
+      'documents current (bug) behavior: a cold cache silently reports no change');
+  });
+
+  it('cold cache + stored hashes present: falls back to stored-hash comparison, detects the Recipe edit', () => {
+    const current = H('D_unchanged', 'R_EDITED', 'P_unchanged');
+    const stored = { desc: 'D_unchanged', recipe: 'R_stored_stale', python: 'P_unchanged' };
+    const changed = changedFacets(current, null, stored);
+    assert.deepEqual(changed, ['recipe']);
+    assert.equal(decideSourceWriteFromChange(changed, 'description'), 'recipe',
+      'the driver hand-typed the Recipe; it becomes the source, matching the ordinary single-facet case');
+  });
+
+  it('cold cache + stored hashes present, nothing actually differs: no false positive', () => {
+    const current = H('D', 'R', 'P');
+    const stored = { desc: 'D', recipe: 'R', python: 'P' };
+    assert.deepEqual(changedFacets(current, null, stored), []);
+  });
+
+  it('cold cache + a facet was never stamped (null stored value): non-empty current content counts as changed', () => {
+    // hello_world.md's committed shape (finding 5): no Python section,
+    // no hash frontmatter at all. A never-stamped facet's stored value
+    // is absent, not empty-string; treat it the same as the rest of
+    // this codebase treats an unstamped facet (e3b0c442... empty-
+    // string-sentinel convention) — absence is not evidence of no
+    // content, so real content still counts as changed.
+    const current = H('D', 'R_hand_typed', '');
+    const stored = { desc: 'D', recipe: null, python: null };
+    assert.deepEqual(changedFacets(current, null, stored), ['recipe']);
+  });
+
+  it('warm cache still takes priority over stored hashes when both are available', () => {
+    // The stored-hash fallback is ONLY for cached === null. A warm
+    // cache is strictly more precise (identifies the freshly-edited
+    // facet even when stored_hash carries unrelated residual drift —
+    // the whole reason this cache-based mechanism replaced pure
+    // stored-hash comparison in the first place, per this file's own
+    // header comment). Passing stored hashes alongside a real cache
+    // must not change the warm-cache answer.
+    const current = H('D', 'R_edited', 'P');
+    const cached = H('D', 'R_before', 'P');
+    const stored = { desc: 'D_totally_different_stale_value', recipe: null, python: null };
+    assert.deepEqual(changedFacets(current, cached, stored), ['recipe']);
+  });
+});
