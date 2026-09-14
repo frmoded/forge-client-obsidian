@@ -45,14 +45,14 @@ const BUNDLE = path.resolve(
  *  a reason, not silently in a note. */
 const EXPECTED: Record<string, string | null> = {
   '01-hello/hello_world.md':            null,          // unstamped by design
-  '02-variables/fix_me.md':             'synced',      // driver's chapter-2 exercise
-                                                       // note. Unstamped when added
-                                                       // (41208d9); stamped `synced` by
-                                                       // the driver's own Forge run
-                                                       // (f408e63, "stamp fix_me.md from
-                                                       // driver's own Forge run") — an
-                                                       // intended change, recorded here
-                                                       // rather than silently absorbed
+  '02-variables/fix_me.md':             'recipe',      // drifted to `recipe` via
+                                                       // legitimate forge-tutorial
+                                                       // content changes landed
+                                                       // 2026-09-13/14 (confirmed via
+                                                       // `git show HEAD:<path>` in the
+                                                       // real repo, drain
+                                                       // 2026-09-14-0620 §7(b)) — not
+                                                       // a regression
   '02-variables/greeting.md':           'description',
   '03-functions/cheer.md':              'description',
   '03-functions/fix_the_call.md':       'recipe',       // chapter 3's broken-on-purpose
@@ -71,14 +71,31 @@ const EXPECTED: Record<string, string | null> = {
   // by the move — re-verified against the bundled file's own frontmatter,
   // not copied blindly.
   '05-conditionals/mood.md':            'description',
-  '05-conditionals/weather.md':         null,          // unstamped
+  '05-conditionals/weather.md':         'recipe',      // drifted to `recipe` via
+                                                       // legitimate forge-tutorial
+                                                       // content changes landed
+                                                       // 2026-09-13/14 (confirmed via
+                                                       // `git show HEAD:<path>` in the
+                                                       // real repo, drain
+                                                       // 2026-09-14-0620 §7(b)) — not
+                                                       // a regression
   '06-loops/countdown.md':              null,          // unstamped
   '07-data/show_colors.md':             'description',
   '08-recursion/factorial.md':          'description',
-  '08-recursion/show_factorial.md':     null,          // unstamped in the bundle;
-                                                       // the driver's live copy carries a
-                                                       // v11.3 backfill stamp that has never
-                                                       // been committed (held out since 1730)
+  '08-recursion/show_factorial.md':     'recipe',      // drifted to `recipe` via
+                                                       // legitimate forge-tutorial
+                                                       // content changes landed
+                                                       // 2026-09-13/14 (confirmed via
+                                                       // `git show HEAD:<path>` in the
+                                                       // real repo, drain
+                                                       // 2026-09-14-0620 §7(b)) — not
+                                                       // a regression. Supersedes the
+                                                       // prior "unstamped, driver's
+                                                       // live copy carries an
+                                                       // uncommitted v11.3 backfill
+                                                       // stamp" note (held out since
+                                                       // 1730) — that stamp is
+                                                       // committed now
   '09-slots/octopus_fact.md':           'description',
 };
 
