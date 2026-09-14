@@ -62,6 +62,11 @@ fi
 
 VAULT="${VAULT:-$HOME/forge-vaults/bluh}"
 PLUGIN_DIR="$VAULT/.obsidian/plugins/forge"
+# 2026-09-14 plugin-id-migration drain — the pre-rename (aeda673)
+# install location. A vault last installed before the rename has its
+# live plugin here, not under PLUGIN_DIR; see the migration block
+# after step 5 below.
+OLD_PLUGIN_DIR="$VAULT/.obsidian/plugins/forge-client-obsidian"
 
 # --- 1. Resolve target release ---
 
@@ -206,6 +211,14 @@ if [[ -f "$PLUGIN_DIR/data.json" ]]; then
   DATA_BACKUP="/tmp/forge-data-$TAG-$(date +%s).bak.json"
   cp "$PLUGIN_DIR/data.json" "$DATA_BACKUP"
   echo "  backed up data.json → $DATA_BACKUP"
+elif [[ -f "$OLD_PLUGIN_DIR/data.json" ]]; then
+  # Pre-rename install migration: PLUGIN_DIR (new id) has no data.json
+  # yet, but the OLD-id folder does — this vault hasn't been
+  # re-installed since the id changed. Back up from there so settings
+  # (transpile token, server URL, etc.) survive the migration.
+  DATA_BACKUP="/tmp/forge-data-$TAG-$(date +%s).bak.json"
+  cp "$OLD_PLUGIN_DIR/data.json" "$DATA_BACKUP"
+  echo "  backed up data.json from pre-rename folder ($OLD_PLUGIN_DIR) → $DATA_BACKUP"
 else
   echo "  no existing data.json to back up (fresh install)"
 fi
@@ -239,6 +252,47 @@ else
   fi
   echo "  fallback install complete. On next Obsidian load, the plugin"
   echo "  will self-restore assets/ from BUNDLED_ASSETS inlined in main.js."
+fi
+
+# --- 5.5. Migrate a pre-rename install (2026-09-14 plugin-id drain) ---
+#
+# The plugin id changed forge-client-obsidian -> forge (aeda673). A
+# vault last installed before that rename still has the OLD-id folder
+# on disk, with its own unchanged manifest.json still reporting
+# "id": "forge-client-obsidian". Obsidian's plugin loader is widely
+# understood to key an enabled entry in community-plugins.json against
+# each folder's manifest.json `id` field, not the folder name — that
+# specific mechanism is NOT independently confirmed from a source
+# inside this repo, so treat it as a well-supported but unverified
+# claim. Regardless of the exact mechanism, community-plugins.json
+# should list the CURRENT id, so the rewrite below is correct either
+# way.
+#
+# Without this block: the OLD folder's stale manifest keeps satisfying
+# the still-present old-id entry, so Obsidian goes on loading the
+# STALE build on next launch and never touches the freshly-written
+# PLUGIN_DIR above — this script would report success while the
+# tester's running plugin never actually changes.
+#
+# Order matters for crash safety: this only runs after step 5's write
+# into PLUGIN_DIR has completed (a failed unzip/fetch exits the whole
+# script under `set -e`, well before this line), and it double-checks
+# PLUGIN_DIR/manifest.json actually exists before touching the old
+# folder — a partial write should never cost the tester their last
+# working copy.
+if [[ -d "$OLD_PLUGIN_DIR" && -f "$PLUGIN_DIR/manifest.json" ]]; then
+  echo "Migrating pre-rename install: removing $OLD_PLUGIN_DIR ..."
+  rm -rf "$OLD_PLUGIN_DIR"
+
+  CP_JSON="$VAULT/.obsidian/community-plugins.json"
+  if [[ -f "$CP_JSON" ]] \
+    && grep -q '"forge-client-obsidian"' "$CP_JSON" \
+    && ! grep -q '"forge"' "$CP_JSON"; then
+    echo "  updating community-plugins.json: forge-client-obsidian → forge"
+    TMP_CP="$(mktemp)"
+    sed 's/"forge-client-obsidian"/"forge"/' "$CP_JSON" > "$TMP_CP"
+    mv "$TMP_CP" "$CP_JSON"
+  fi
 fi
 
 # --- 6. Restore data.json ---
