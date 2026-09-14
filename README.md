@@ -33,7 +33,7 @@ Quick version:
 
 1. Download the latest `forge-client-obsidian-vX.Y.Z.zip` from the
    [Releases page](https://github.com/frmoded/forge-client-obsidian/releases).
-2. Unzip it into `<your-vault>/.obsidian/plugins/forge-client-obsidian/`.
+2. Unzip it into `<your-vault>/.obsidian/plugins/forge/`.
 3. In Obsidian: **Settings → Community plugins**, enable **Forge Client**.
 
 See [INSTALL.md](INSTALL.md) for the full walkthrough, including

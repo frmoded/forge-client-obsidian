@@ -101,10 +101,10 @@ test('(b) a corrupt wheel produces a panel entry naming it and the recovery', ()
 });
 
 test('(b) the corrupt cached wheel is deleted so hydration refetches it', async () => {
-  const p = corruptWheelCachePath('forge-client-obsidian', 'music21-8.3.0-py3-none-any.whl');
+  const p = corruptWheelCachePath('forge', 'music21-8.3.0-py3-none-any.whl');
   assert.equal(
     p,
-    '.obsidian/plugins/forge-client-obsidian/assets/wheels/music21-8.3.0-py3-none-any.whl',
+    '.obsidian/plugins/forge/assets/wheels/music21-8.3.0-py3-none-any.whl',
   );
   // And with it gone, the next launch's plan marks it pending —
   // i.e. it will be refetched AND sha256-verified at fetch time.

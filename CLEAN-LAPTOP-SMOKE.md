@@ -145,7 +145,7 @@ later (depending on your connection), a second Notice appears:
 **"Forge Client installed — fresh → v0.X.Y"**.
 Expected: this confirms the ~33 MB release zip was downloaded,
 SHA-verified, unpacked into
-`<vault>/.obsidian/plugins/forge-client-obsidian/`, and the
+`<vault>/.obsidian/plugins/forge/`, and the
 plugin is now ready to load. If the Notice never appears, see
 Failure mode F3 below.
 
@@ -186,7 +186,7 @@ otherwise.
 the X). Reopen Settings → Community plugins → Forge Client. The
 token field should still show ●●●●.
 Expected: persistence works. The token is now in
-`<vault>/.obsidian/plugins/forge-client-obsidian/data.json` —
+`<vault>/.obsidian/plugins/forge/data.json` —
 vault-local, not in keychain. Forge Installer preserves
 `data.json` across plugin updates, so your token survives future
 Forge Client upgrades.
@@ -485,7 +485,7 @@ After completing the smoke, the vault `forge-clean-smoke` is reusable
 for re-validation. Persistent state:
 
 - **Transpile token** lives in
-  `<vault>/.obsidian/plugins/forge-client-obsidian/data.json` —
+  `<vault>/.obsidian/plugins/forge/data.json` —
   survives Obsidian restarts AND Forge Client upgrades (Forge
   Installer preserves `data.json` across release zip unpacks).
 - **forge-music vault** lives at `<vault>/forge-music/` — survives.

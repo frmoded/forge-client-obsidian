@@ -200,8 +200,8 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     } else {
       try {
         const result = await ensureWelcomeFiles(adapter, {
-          welcomeBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md',
-          greetBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md',
+          welcomeBundle: '.obsidian/plugins/forge/assets/welcome/welcome.md',
+          greetBundle: '.obsidian/plugins/forge/assets/welcome/greet.md',
         });
         if (result.kind === 'extracted') {
           console.log('Forge: extracted welcome.md + greet.md to vault root');
@@ -849,12 +849,12 @@ async function refreshOutdatedWelcomes(
     { path: WELCOME_PATH, bundlePath: null, label: 'Welcome.md' },
     {
       path: 'welcome.md',
-      bundlePath: '.obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md',
+      bundlePath: '.obsidian/plugins/forge/assets/welcome/welcome.md',
       label: 'welcome.md',
     },
     {
       path: 'greet.md',
-      bundlePath: '.obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md',
+      bundlePath: '.obsidian/plugins/forge/assets/welcome/greet.md',
       label: 'greet.md',
     },
   ];

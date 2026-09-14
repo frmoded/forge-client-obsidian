@@ -123,7 +123,7 @@ export function wheelExtractPanelEntry(
   } else {
     lines.push(
       'Could not remove the damaged copy automatically. Delete it from ' +
-      '.obsidian/plugins/forge-client-obsidian/assets/wheels/ and restart ' +
+      '.obsidian/plugins/forge/assets/wheels/ and restart ' +
       'Obsidian; Forge will re-download and verify it.',
     );
   }

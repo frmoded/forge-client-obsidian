@@ -58,20 +58,20 @@ test('restoreInlinedAssets: writes all inlined assets to plugin/assets/ on fresh
   const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
   const { BUNDLED_ASSETS } = await import('./bundled-assets.generated.ts');
 
-  const written = await restoreInlinedAssets(app, 'forge-client-obsidian');
+  const written = await restoreInlinedAssets(app, 'forge');
   const expectedCount = Object.keys(BUNDLED_ASSETS).length;
   assert.equal(written, expectedCount,
     `Fresh install must write all ${expectedCount} inlined assets; got ${written}.`);
 
   // Spot-check that a known file landed at the expected path.
-  const hellopath = '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-tutorial/01-hello/Hello.md';
+  const hellopath = '.obsidian/plugins/forge/assets/vaults/forge-tutorial/01-hello/Hello.md';
   assert.equal(adapter.files.has(hellopath), true,
     `Expected ${hellopath} to be written.`);
   assert.equal(adapter.files.has(
-    '.obsidian/plugins/forge-client-obsidian/assets/engine/forge/__init__.py'
+    '.obsidian/plugins/forge/assets/engine/forge/__init__.py'
   ), true, 'Expected engine __init__.py to be written.');
   assert.equal(adapter.files.has(
-    '.obsidian/plugins/forge-client-obsidian/assets/manifest.json'
+    '.obsidian/plugins/forge/assets/manifest.json'
   ), true, 'Expected top-level manifest.json to be written.');
 });
 
@@ -80,10 +80,10 @@ test('restoreInlinedAssets: idempotent — second run writes nothing', async () 
   const app = makeApp(adapter);
   const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
 
-  const firstRun = await restoreInlinedAssets(app, 'forge-client-obsidian');
+  const firstRun = await restoreInlinedAssets(app, 'forge');
   assert.ok(firstRun > 0, 'First run must write at least one file.');
 
-  const secondRun = await restoreInlinedAssets(app, 'forge-client-obsidian');
+  const secondRun = await restoreInlinedAssets(app, 'forge');
   assert.equal(secondRun, 0,
     `Second run must be idempotent — all files already exist; expected 0 writes, got ${secondRun}.`);
 });
@@ -95,15 +95,15 @@ test('restoreInlinedAssets: version mismatch forces overwrite of all files (v0.2
   // a stale sentinel. The stale iframe scenario that prompted
   // v0.2.98: BRAT updates main.js to v0.2.97 but leaves the
   // v0.2.96 iframe HTML untouched — version stamp catches this.
-  const stalePath = '.obsidian/plugins/forge-client-obsidian/assets/iframe/index.html';
+  const stalePath = '.obsidian/plugins/forge/assets/iframe/index.html';
   adapter.files.set(stalePath, '<html>STALE v0.2.96 iframe</html>');
-  const sentinelPath = '.obsidian/plugins/forge-client-obsidian/assets/.bundle-version';
+  const sentinelPath = '.obsidian/plugins/forge/assets/.bundle-version';
   adapter.files.set(sentinelPath, '0.2.96');
 
   const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
   const { BUNDLED_ASSETS, BUNDLED_ASSETS_VERSION } = await import('./bundled-assets.generated.ts');
 
-  const written = await restoreInlinedAssets(app, 'forge-client-obsidian');
+  const written = await restoreInlinedAssets(app, 'forge');
   const expectedCount = Object.keys(BUNDLED_ASSETS).length;
   assert.equal(written, expectedCount,
     `Stale sentinel must force-overwrite all ${expectedCount} files; got ${written}.`);
@@ -118,15 +118,15 @@ test('restoreInlinedAssets: creates intermediate directories', async () => {
   const app = makeApp(adapter);
   const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
 
-  await restoreInlinedAssets(app, 'forge-client-obsidian');
+  await restoreInlinedAssets(app, 'forge');
 
   // Verify some directories were created.
   assert.equal(adapter.dirs.has(
-    '.obsidian/plugins/forge-client-obsidian/assets'), true);
+    '.obsidian/plugins/forge/assets'), true);
   assert.equal(adapter.dirs.has(
-    '.obsidian/plugins/forge-client-obsidian/assets/vaults'), true);
+    '.obsidian/plugins/forge/assets/vaults'), true);
   assert.equal(adapter.dirs.has(
-    '.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-tutorial'), true);
+    '.obsidian/plugins/forge/assets/vaults/forge-tutorial'), true);
 });
 
 test('BUNDLED_ASSETS: contains expected top-level keys', async () => {

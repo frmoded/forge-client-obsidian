@@ -24,13 +24,13 @@ Downloads folder).
 ### 3. Unzip into the plugins directory
 
 - Unzip the release zip. You'll get a folder called
-  `forge-client-obsidian`.
+  `forge`.
 - Move (or extract directly to) that folder so it lives at
-  `<your-vault>/.obsidian/plugins/forge-client-obsidian/`.
+  `<your-vault>/.obsidian/plugins/forge/`.
 - After this step you should have files like:
-  - `<your-vault>/.obsidian/plugins/forge-client-obsidian/main.js`
-  - `<your-vault>/.obsidian/plugins/forge-client-obsidian/manifest.json`
-  - `<your-vault>/.obsidian/plugins/forge-client-obsidian/assets/`
+  - `<your-vault>/.obsidian/plugins/forge/main.js`
+  - `<your-vault>/.obsidian/plugins/forge/manifest.json`
+  - `<your-vault>/.obsidian/plugins/forge/assets/`
 
 ### 4. Enable the plugin in Obsidian
 
@@ -219,9 +219,9 @@ present.
 ### Plugin doesn't appear in Settings → Community plugins
 
 The unzip likely landed in the wrong place. Check that
-`<your-vault>/.obsidian/plugins/forge-client-obsidian/main.js`
+`<your-vault>/.obsidian/plugins/forge/main.js`
 exists. If it's at
-`<your-vault>/.obsidian/plugins/forge-client-obsidian/forge-client-obsidian/main.js`
+`<your-vault>/.obsidian/plugins/forge/forge/main.js`
 (nested twice), move the inner folder up one level.
 
 ### Simulation panel is blank / canvas doesn't appear
@@ -232,7 +232,7 @@ Look for red error messages.
 
 Most common cause: the `assets/` directory didn't come along with
 the unzip. Verify
-`<your-vault>/.obsidian/plugins/forge-client-obsidian/assets/`
+`<your-vault>/.obsidian/plugins/forge/assets/`
 exists and contains subdirectories `engine/`, `iframe/`,
 `pyodide/`, `vaults/`.
 
@@ -246,7 +246,7 @@ for support.
 ### Updating to a new version
 
 Repeat steps 1-3: download the new zip, unzip, and replace the
-existing `forge-client-obsidian/` folder. Obsidian picks up the
+existing `forge/` folder. Obsidian picks up the
 changes on next reload.
 
 ## What this plugin does

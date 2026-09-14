@@ -30,8 +30,8 @@ test('shouldSkipForMemfsSync: .obsidian/ is skipped', () => {
   // covered by this skip — editing files there is a developer
   // operation, not a vault-side change.
   assert.equal(shouldSkipForMemfsSync('.obsidian/workspace.json'), true);
-  assert.equal(shouldSkipForMemfsSync('.obsidian/plugins/forge-client-obsidian/data.json'), true);
-  assert.equal(shouldSkipForMemfsSync('.obsidian/plugins/forge-client-obsidian/assets/vaults/forge-moda/setup.md'), true);
+  assert.equal(shouldSkipForMemfsSync('.obsidian/plugins/forge/data.json'), true);
+  assert.equal(shouldSkipForMemfsSync('.obsidian/plugins/forge/assets/vaults/forge-moda/setup.md'), true);
 });
 
 test('shouldSkipForMemfsSync: .forge/ is skipped', () => {

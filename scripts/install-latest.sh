@@ -28,7 +28,7 @@ REPO="${REPO:-frmoded/forge-client-obsidian}"
 
 # CW-vault-drift-audit (2026-07-16): --all-vaults mode. Discovers every
 # git-tracked Obsidian vault under $SCAN_ROOT (default $HOME) with a
-# tracked forge-client-obsidian install, then re-invokes this script
+# tracked forge install, then re-invokes this script
 # once per vault with VAULT=<vault> so each gets the same fast-path OR
 # fallback logic below. Excludes vaults where the plugin dir is NOT
 # git-tracked (transient per-machine installs like bluh — handled by
@@ -47,7 +47,7 @@ if [[ "${1:-}" == "--all-vaults" ]]; then
       continue
     fi
     git -C "$vault_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
-    git -C "$vault_dir" ls-files ".obsidian/plugins/forge-client-obsidian/" 2>/dev/null | head -1 | grep -q . || continue
+    git -C "$vault_dir" ls-files ".obsidian/plugins/forge/" 2>/dev/null | head -1 | grep -q . || continue
     TOTAL=$((TOTAL + 1))
     echo ""
     echo "→ $vault_dir"
@@ -61,7 +61,7 @@ if [[ "${1:-}" == "--all-vaults" ]]; then
 fi
 
 VAULT="${VAULT:-$HOME/forge-vaults/bluh}"
-PLUGIN_DIR="$VAULT/.obsidian/plugins/forge-client-obsidian"
+PLUGIN_DIR="$VAULT/.obsidian/plugins/forge"
 
 # --- 1. Resolve target release ---
 

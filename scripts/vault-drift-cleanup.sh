@@ -15,7 +15,7 @@
 #
 # On the drift's actual origin: `install-latest.sh` does NOT touch vault
 # notes. It backs up data.json, replaces
-# `.obsidian/plugins/forge-client-obsidian/`, and restores data.json —
+# `.obsidian/plugins/forge/`, and restores data.json —
 # nothing else. Note-content drift comes from the PLUGIN re-extracting
 # bundled vault content at runtime, plus local edits by driver, wizard,
 # and CCQA between installs. Aiming cleanup at install-latest would miss

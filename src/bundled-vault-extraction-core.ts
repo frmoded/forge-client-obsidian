@@ -16,7 +16,7 @@
 
 /** Where the plugin's bundled vaults live inside the user's vault. */
 export const BUNDLED_VAULTS_ROOT =
-  '.obsidian/plugins/forge-client-obsidian/assets/vaults';
+  '.obsidian/plugins/forge/assets/vaults';
 
 /** The bundled vaults this build ships, in scripts/vaults.txt order.
  *  ONE definition for the whole plugin (drain 2026-08-22-0920): every

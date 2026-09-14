@@ -20,9 +20,11 @@
 // (version comes from manifest.json; never bumped here.)
 //
 // The zip's internal structure puts everything under a top-level
-// `forge-client-obsidian/` directory. Students unzip into
-// `.obsidian/plugins/` → the result is `.obsidian/plugins/
-// forge-client-obsidian/main.js` with sibling files. No manual
+// `forge/` directory (the Obsidian plugin id — see PLUGIN_ID below;
+// distinct from PLUGIN_DIR_NAME, which names the zip FILE itself and
+// stays "forge-client-obsidian", the unrenamed GitHub repo slug).
+// Students unzip into `.obsidian/plugins/` → the result is
+// `.obsidian/plugins/forge/main.js` with sibling files. No manual
 // subdirectory shuffling.
 
 import fs from "node:fs/promises";
@@ -51,7 +53,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const DIST = path.join(ROOT, "dist");
 
+// 2026-09-14 — plugin id rename split this in two. `PLUGIN_DIR_NAME`
+// drives the EXTERNAL zip filename + release URL, which explicitly
+// stays "forge-client-obsidian" (the GitHub repo slug, unaffected by
+// the Obsidian plugin id rename — see manifest.json's `id` field and
+// the CW drain that renamed it). `PLUGIN_ID` drives the INTERNAL
+// archive folder structure (what install-latest.sh's `unzip -d
+// .../plugins/` actually produces), which MUST match manifest.json's
+// `id` — a zip whose internal folder doesn't match `id` would unzip
+// into a directory Obsidian never looks for.
 const PLUGIN_DIR_NAME = "forge-client-obsidian";
+const PLUGIN_ID = "forge";
 
 // Files that MUST exist before we can package a release. Preflight
 // fails with a clear message if any are missing — much easier to
@@ -444,8 +456,9 @@ async function main() {
   }
 
   // 4. Bundle into zip. Top-level directory inside the zip is
-  //    `forge-client-obsidian/` so the unzip-into-plugins flow
-  //    produces the right structure automatically.
+  //    `forge/` (PLUGIN_ID) so the unzip-into-plugins flow produces
+  //    `.obsidian/plugins/forge/` automatically — matching what
+  //    Obsidian actually looks for (manifest.json's `id`).
   console.log(`\nBuilding ${zipName}…`);
   const tStart = performance.now();
   const output = createWriteStream(zipPath);
@@ -464,10 +477,10 @@ async function main() {
 
   // Top-level plugin files. styles.css is optional — only include
   // if the repo has one. Other repos in this ecosystem don't.
-  archive.file(path.join(ROOT, "main.js"),       { name: `${PLUGIN_DIR_NAME}/main.js` });
-  archive.file(path.join(ROOT, "manifest.json"), { name: `${PLUGIN_DIR_NAME}/manifest.json` });
+  archive.file(path.join(ROOT, "main.js"),       { name: `${PLUGIN_ID}/main.js` });
+  archive.file(path.join(ROOT, "manifest.json"), { name: `${PLUGIN_ID}/manifest.json` });
   if (await exists(path.join(ROOT, "styles.css"))) {
-    archive.file(path.join(ROOT, "styles.css"),  { name: `${PLUGIN_DIR_NAME}/styles.css` });
+    archive.file(path.join(ROOT, "styles.css"),  { name: `${PLUGIN_ID}/styles.css` });
   }
   // All assets — Pyodide + engine + iframe + vaults. Raw file copy
   // (binary contents pass through unchanged at zlib level 9, which
@@ -483,7 +496,7 @@ async function main() {
   //
   // Verified before landing: `.forge` is the ONLY thing under assets/
   // that this filter drops, so the shipped tree is otherwise unchanged.
-  archive.directory(path.join(ROOT, "assets"), `${PLUGIN_DIR_NAME}/assets`,
+  archive.directory(path.join(ROOT, "assets"), `${PLUGIN_ID}/assets`,
     (entry) => (vaultIsInScope(entry.name) ? entry : false));
 
   await archive.finalize();

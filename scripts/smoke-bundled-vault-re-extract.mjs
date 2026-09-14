@@ -144,7 +144,7 @@ async function main() {
   const adapter = makeFsAdapter(tmp);
   adapter.__root = tmp;
 
-  const pluginAssets = ".obsidian/plugins/forge-client-obsidian/assets/vaults/forge-music";
+  const pluginAssets = ".obsidian/plugins/forge/assets/vaults/forge-music";
   const targetDir = "forge-music";
 
   // Seed: bundled forge-music with version 0.3.8 + a content file.

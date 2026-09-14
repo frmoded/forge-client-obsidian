@@ -46,7 +46,7 @@ function net(table: Record<string, { status: number; body: string }>): Hydration
   };
 }
 
-const DIR = '.obsidian/plugins/forge-client-obsidian';
+const DIR = '.obsidian/plugins/forge';
 const urlFor = (n: string) => `${RELEASE_BASE}/v0.2.363/${n}`;
 
 // -- §8: no third-party CDN, never "latest" --------------------------------

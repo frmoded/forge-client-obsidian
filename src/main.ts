@@ -3652,7 +3652,7 @@ export default class ForgePlugin extends Plugin {
     }
     const adapter = this.app.vault.adapter;
     const bundledRoot =
-      `.obsidian/plugins/forge-client-obsidian/assets/vaults/${vaultName}`;
+      `.obsidian/plugins/${this.manifest.id}/assets/vaults/${vaultName}`;
     const extractedRoot = vaultName;
 
     if (!(await adapter.exists(bundledRoot))) {

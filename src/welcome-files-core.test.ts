@@ -14,8 +14,8 @@ import type {
 } from './welcome-files-core.ts';
 
 const BUNDLE_PATHS: WelcomeBundledPaths = {
-  welcomeBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md',
-  greetBundle: '.obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md',
+  welcomeBundle: '.obsidian/plugins/forge/assets/welcome/welcome.md',
+  greetBundle: '.obsidian/plugins/forge/assets/welcome/greet.md',
 };
 
 const WELCOME_BODY = 'welcome body\n';

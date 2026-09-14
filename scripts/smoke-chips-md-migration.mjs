@@ -95,7 +95,7 @@ function makeFsAdapter(root) {
 async function migrateChipsMdToV2(adapter, libraryDirName) {
   const extractedPath = `${libraryDirName}/_meta/_chips.md`;
   const bundledPath =
-    `.obsidian/plugins/forge-client-obsidian/assets/vaults/${libraryDirName}/_meta/_chips.md`;
+    `.obsidian/plugins/forge/assets/vaults/${libraryDirName}/_meta/_chips.md`;
   const metaDir = `${libraryDirName}/_meta`;
 
   if (!(await adapter.exists(extractedPath))) return { action: "no-op-absent" };
@@ -177,7 +177,7 @@ async function main() {
   const adapter = makeFsAdapter(tmp);
 
   const pluginAssets =
-    ".obsidian/plugins/forge-client-obsidian/assets/vaults/forge-moda";
+    ".obsidian/plugins/forge/assets/vaults/forge-moda";
   const libDir = "forge-moda";
 
   // Seed: bundled v2 _chips.md.

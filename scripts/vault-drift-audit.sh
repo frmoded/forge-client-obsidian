@@ -17,7 +17,7 @@
 #   SCAN_ROOT=<path>     (default: $HOME) — top of the discovery walk
 #
 # Discovery: walks $SCAN_ROOT for any `.obsidian/` dir, filters to those
-# inside a git repo whose `.obsidian/plugins/forge-client-obsidian/` is
+# inside a git repo whose `.obsidian/plugins/forge/` is
 # git-tracked. Vaults where the plugin is NOT tracked (i.e., transient
 # per-machine installs like bluh) are skipped — they're not the drift
 # class this drain targets.
@@ -83,12 +83,12 @@ while IFS= read -r obs_dir; do
   # Skip if not a git repo
   git -C "$vault_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || continue
 
-  # Skip if forge-client-obsidian not tracked in this vault
-  if ! git -C "$vault_dir" ls-files ".obsidian/plugins/forge-client-obsidian/" 2>/dev/null | head -1 | grep -q .; then
+  # Skip if forge not tracked in this vault
+  if ! git -C "$vault_dir" ls-files ".obsidian/plugins/forge/" 2>/dev/null | head -1 | grep -q .; then
     continue
   fi
 
-  plugin_dir="$obs_dir/plugins/forge-client-obsidian"
+  plugin_dir="$obs_dir/plugins/forge"
   manifest="$plugin_dir/manifest.json"
 
   FOUND=$((FOUND + 1))

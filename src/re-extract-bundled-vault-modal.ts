@@ -47,7 +47,7 @@ export async function loadBundledVaultOptions(
   const options: BundledVaultOption[] = [];
   for (const vaultName of BUNDLED_VAULT_NAMES) {
     const bundledTomlPath =
-      `.obsidian/plugins/forge-client-obsidian/assets/vaults/${vaultName}/forge.toml`;
+      `.obsidian/plugins/forge/assets/vaults/${vaultName}/forge.toml`;
     const extractedTomlPath = `${vaultName}/forge.toml`;
 
     let bundledVersion: string | null = null;

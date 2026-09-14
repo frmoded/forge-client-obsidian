@@ -5,13 +5,13 @@
 # Root cause (investigated 2026-06-29):
 #
 # The user's dev setup symlinks
-#   ~/projects/forge-vaults/forge-moda-vault/.obsidian/plugins/forge-client-obsidian
+#   ~/projects/forge-vaults/forge-moda-vault/.obsidian/plugins/forge
 #   → ~/projects/forge-client-obsidian/
 #
 # (so plugin edits are visible in the vault without re-installing). The
 # plugin source repo has an `obsidian_sandbox/sandbox/` subdir that is
 # ITSELF an Obsidian vault, with its OWN
-#   obsidian_sandbox/sandbox/.obsidian/plugins/forge-client-obsidian
+#   obsidian_sandbox/sandbox/.obsidian/plugins/forge
 #   → ~/projects/forge-client-obsidian/
 # symlink. When `shutil.copytree` walks the outer vault, it follows the
 # symlink into the source repo, recurses into obsidian_sandbox/sandbox,
@@ -43,7 +43,7 @@ if [[ "${1:-}" == "--execute" ]]; then
 fi
 
 REPO_ROOT="${REPO_ROOT:-$HOME/projects/forge-client-obsidian}"
-INNER_PLUGIN_SYMLINK="$REPO_ROOT/obsidian_sandbox/sandbox/.obsidian/plugins/forge-client-obsidian"
+INNER_PLUGIN_SYMLINK="$REPO_ROOT/obsidian_sandbox/sandbox/.obsidian/plugins/forge"
 
 if [[ ! -L "$INNER_PLUGIN_SYMLINK" ]]; then
   echo "Nothing to clean up — no symlink at:"
@@ -69,8 +69,8 @@ DRY RUN — would remove the inner symlink:
     → $target
 
 This breaks the recursion loop:
-  forge-moda-vault/.obsidian/plugins/forge-client-obsidian
-    → forge-client-obsidian/obsidian_sandbox/sandbox/.obsidian/plugins/forge-client-obsidian
+  forge-moda-vault/.obsidian/plugins/forge
+    → forge-client-obsidian/obsidian_sandbox/sandbox/.obsidian/plugins/forge
     → forge-client-obsidian (back where we started)
 
 Re-run with --execute to remove. No content is lost; the sandbox vault

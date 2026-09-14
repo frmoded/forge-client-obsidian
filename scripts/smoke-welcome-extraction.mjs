@@ -82,8 +82,8 @@ async function main() {
   const adapter = makeFsAdapter(tmp);
 
   const PATHS = {
-    welcomeBundle: ".obsidian/plugins/forge-client-obsidian/assets/welcome/welcome.md",
-    greetBundle: ".obsidian/plugins/forge-client-obsidian/assets/welcome/greet.md",
+    welcomeBundle: ".obsidian/plugins/forge/assets/welcome/welcome.md",
+    greetBundle: ".obsidian/plugins/forge/assets/welcome/greet.md",
   };
 
   // Seed the bundled assets (mimicking the post-install plugin layout).
