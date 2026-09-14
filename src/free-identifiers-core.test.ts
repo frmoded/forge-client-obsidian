@@ -90,6 +90,21 @@ test('keywords and booleans are not identifiers', () => {
   );
 });
 
+test('Print is a keyword, not a free identifier', () => {
+  // Drain 2026-09-14-1615. v29 constitution amendment (2026-09-13)
+  // added `Print expr.` as a real statement keyword. KEYWORDS never
+  // learned about it, so a correctly-generated `Print "hello, world".`
+  // Recipe (post drain 0740's prompt-template fix) was rejected as
+  // referencing the undeclared name `Print` — live /generate returned
+  // `parsed_ok: false`, "The generated Recipe uses `Print` without
+  // declaring it", after the parser (2026-09-13-1130) and the prompt
+  // template (0740) were already correct.
+  assert.deepEqual(
+    collectFreeIdentifiers('Print "hello, world".', CALLABLES),
+    [],
+  );
+});
+
 test('an Input type annotation is not a reference', () => {
   // `Input mode: 'major' | 'minor' = "major".` — the type is not a name
   // the Recipe references.

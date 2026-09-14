@@ -27,7 +27,7 @@
 
 /** E-- keywords and literals — never user identifiers. */
 const KEYWORDS: ReadonlySet<string> = new Set([
-  'Let', 'Input', 'Return', 'Call', 'with', 'If', 'Otherwise',
+  'Let', 'Input', 'Return', 'Print', 'Call', 'with', 'If', 'Otherwise',
   'For', 'each', 'in', 'Repeat', 'times',
   'True', 'False', 'None', 'and', 'or', 'not',
 ]);
