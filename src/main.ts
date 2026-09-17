@@ -20,7 +20,7 @@ import {
 } from './chip-inventory-core.ts';
 import { locateSnippetFile, type LocateAttempt } from './locate-snippet-file-core.ts';
 import { engineRoutingLayer, routingFacetFor } from './engine-routing-layer-core.ts';
-import { shouldRebindStrip, isOpportunisticRefresh } from './strip-rebind-core.ts';
+import { shouldRebindStrip, isOpportunisticRefresh, isActionNoteForStrip } from './strip-rebind-core.ts';
 import {
   collectOneHopCycles,
   matchesTarget,
@@ -6293,7 +6293,24 @@ export default class ForgePlugin extends Plugin {
       ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.file;
     if (!file) return null;
     const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (frontmatter?.type !== 'action') return null;
+    // Drain 2026-09-17-0100 — metadataCache is eventually-consistent
+    // and can lag a just-completed write (same mechanism as v0.2.123's
+    // isModaFeaturedSnippet/handleInlinePlay precedent). A Forge-click
+    // on a recipe-canonical note writes # Python + hashes back, then
+    // immediately calls into here; on the FIRST click the cache had
+    // not yet re-parsed, so `frontmatter?.type` read undefined even
+    // though the note's real, on-disk frontmatter always said
+    // `type: action`. Only pay for the extra disk read when the cache
+    // doesn't already say the note qualifies.
+    let freshType: string | null = null;
+    if (frontmatter?.type !== 'action') {
+      try {
+        freshType = getFmFieldV2(await this.app.vault.read(file), 'type');
+      } catch (e) {
+        console.error('activeStripNote: fresh disk read fallback failed', e);
+      }
+    }
+    if (!isActionNoteForStrip(frontmatter?.type, freshType)) return null;
 
     const snippetId = snippetIdFromPath(file.path, this.libraryDirNames());
 

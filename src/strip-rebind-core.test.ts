@@ -99,9 +99,18 @@ test('a non-action MARKDOWN note still greys — CCQA check 2 is kept', () => {
   // note is an action note. Greying a real markdown note that is not
   // an action note is deliberate behaviour this drain must not undo,
   // so the null-note path through activeStripNote stays intact.
+  //
+  // Drain 2026-09-17-0100 evolved the literal line this test used to
+  // pin (`if (frontmatter?.type !== 'action') return null;`) into a
+  // call through `isActionNoteForStrip` — the semantic guarantee (a
+  // genuinely non-action note still returns null) is unchanged and is
+  // covered end-to-end by that function's own tests above
+  // ('a genuinely non-action note stays non-action'); this test now
+  // pins that the null-return path is still wired through that
+  // decision, not hand-rolled again inline.
   assert.ok(
-    MAIN.includes("if (frontmatter?.type !== 'action') return null;"),
-    'activeStripNote must still return null for a non-action note',
+    MAIN.includes('if (!isActionNoteForStrip(frontmatter?.type, freshType)) return null;'),
+    'activeStripNote must still return null for a non-action note, via isActionNoteForStrip',
   );
 });
 
@@ -230,4 +239,45 @@ test('the two guards compose: a no-arg refresh still REBINDS, it just cannot cle
   const ev = { leafGiven: false, leafIsMarkdown: false, fileGiven: false };
   assert.equal(shouldRebindStrip(ev), true, 'must still attempt the bind');
   assert.equal(isOpportunisticRefresh(ev), true, 'but a null result must not clear');
+});
+
+// ---------------------------------------------------------------
+// Drain 2026-09-17-0100 — `metadataCache.getFileCache` lags a
+// just-completed write, so a Forge-click on a `recipe`-canonical note
+// (transpile branch) read the note as NOT an action note on the FIRST
+// click, even though its real, on-disk frontmatter always said
+// `type: action`. CCQA's console trace: identical transpile output on
+// clicks 1 and 2, but the strip only bound on click 2.
+//
+// This is the same mechanism v0.2.123's `isModaFeaturedSnippet` /
+// `handleInlinePlay` precedent already hit and fixed for a different
+// callsite (that docstring: "the just-opened file's metadataCache
+// hadn't populated yet ... Either way, this fallback reads the file
+// directly so the routing always has authoritative data"). Same fix
+// shape here: metadataCache stays the fast path, a fresh disk read is
+// the fallback only when the cache does not already say `action`.
+// ---------------------------------------------------------------
+
+import { isActionNoteForStrip } from './strip-rebind-core.ts';
+
+test('cached type=action is trusted outright — no fresh read needed', () => {
+  assert.equal(isActionNoteForStrip('action', null), true);
+  assert.equal(isActionNoteForStrip('action', undefined), true);
+});
+
+test('THE BUG: stale/undefined cache rescued by a fresh disk read that says action', () => {
+  assert.equal(isActionNoteForStrip(undefined, 'action'), true);
+  assert.equal(isActionNoteForStrip(null, 'action'), true);
+});
+
+test('a genuinely non-action note stays non-action — cache and disk agree', () => {
+  assert.equal(isActionNoteForStrip('data', 'data'), false);
+  assert.equal(isActionNoteForStrip(undefined, undefined), false);
+  assert.equal(isActionNoteForStrip(undefined, null), false);
+});
+
+test('a stale WRONG cached value is still rescued by a fresh read that says action', () => {
+  // Not just "missing" — belt-and-suspenders against any stale
+  // non-null value the cache might be mid-reparse on.
+  assert.equal(isActionNoteForStrip('data', 'action'), true);
 });

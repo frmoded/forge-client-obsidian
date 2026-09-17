@@ -80,3 +80,31 @@ export function isOpportunisticRefresh(
 ): boolean {
   return !ev.leafGiven && !ev.fileGiven;
 }
+
+/**
+ * Is this note an action note, for strip-binding purposes?
+ *
+ * Drain 2026-09-17-0100 — `metadataCache.getFileCache(file)?.
+ * frontmatter` is eventually-consistent: it can lag a just-completed
+ * vault write. Forge-click's transpile branch writes `# Python` +
+ * hash fields back to the note, then immediately calls
+ * `landAfterForge` -> `refreshForgePanelStrip` -> `activeStripNote`,
+ * whose only use of frontmatter here is this type gate. On the FIRST
+ * click the cache had not yet re-parsed, so `cachedType` read
+ * undefined even though the note's real, on-disk frontmatter always
+ * said `type: action` — the strip greyed out with "not an action
+ * note" and Run stayed disabled. The SECOND, identical click found
+ * the by-then-settled cache correct (CCQA's console trace: same
+ * transpile output both times, strip only bound the second time).
+ *
+ * Same mechanism, same fix shape as v0.2.123's `isModaFeaturedSnippet`
+ * / `handleInlinePlay` precedent for a different callsite: cache stays
+ * the fast path; a fresh, synchronously-parsed disk read is the
+ * fallback, not a timing-dependent retry or delay.
+ */
+export function isActionNoteForStrip(
+  cachedType: string | null | undefined,
+  freshType: string | null | undefined,
+): boolean {
+  return cachedType === 'action' || freshType === 'action';
+}
