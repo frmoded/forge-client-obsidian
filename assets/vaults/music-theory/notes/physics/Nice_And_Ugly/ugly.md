@@ -1,4 +1,4 @@
-C4 and D♭4 — a single [[semitone]] apart. The frequencies are so close they beat against each other instead of locking together, the opposite of what makes an interval [[nice]]. The score:
+C4 and D♭4 — a single [[semitone]] apart. The frequencies are so close they beat against each other instead of locking together, the opposite of what makes an interval [[very_nice_(harmony)|nice]]. The score:
 
 ![[notes/resources/images/ugly_score.svg]]
 
