@@ -15,5 +15,3 @@ Curious what a single pitch actually looks like as a physical wave, rather than 
 ![[notes/resources/images/pitch_wave_packet.svg]]
 
 **Try it:** [[exercises/octave_up]] — enter the note one octave above C4 and get feedback that ties the name, the octave number, and the frequency together.
-
-Part of the [[physics]] of a note.

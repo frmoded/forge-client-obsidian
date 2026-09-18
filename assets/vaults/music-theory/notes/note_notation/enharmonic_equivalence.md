@@ -7,5 +7,3 @@
 ![[notes/resources/audio/enharmonic.mp3]]
 
 Which name you write depends on the key and context, not the sound. This is the direct consequence of covering 12 [[pitch_class|pitch classes]] with a 7-[[note_name|letter]] + [[accidental]] scheme: some pitches get reached from two directions.
-
-Part of the [[note_notation]] of a note.

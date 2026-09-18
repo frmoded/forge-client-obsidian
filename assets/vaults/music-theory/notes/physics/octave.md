@@ -17,5 +17,3 @@ And because *each* octave is another doubling, you can climb them in a stack —
 The octave is the *period* of the whole naming system: it spans **12 [[semitone|semitones]]**, and the names cycle back every octave. That climbing stack is exactly why the frequency→[[pitch]] map is **logarithmic**— equal musical steps (octaves) are equal *ratios* (×2), not equal hertz gaps.
 
 **Try it:** [[exercises/octave_up]] — enter the note one octave above C4 and get feedback that ties the name, the octave number, and the frequency together.
-
-Part of the [[physics]] of a note.

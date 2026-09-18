@@ -5,5 +5,3 @@ A tone bounded in time — the wave itself doesn't change, only how long it's al
 ![[notes/resources/images/duration_sine.svg]]
 
 Duration is the raw material of rhythm: whole notes, half notes, quarter notes, and so on are all durations measured relative to a beat. A melody is [[pitch]] and duration together — *which* notes, for *how long*.
-
-Part of the [[physics]] of a note.
