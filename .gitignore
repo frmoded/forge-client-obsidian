@@ -5,6 +5,12 @@ main.js
 .claude/
 .hotreload
 
+# Python bytecode cache from the vendored engine bundle (assets/engine/forge/),
+# regenerated on import — never should have been trackable, was blocking
+# release.sh's clean-working-tree check as untracked cruft. Added 2026-09-18.
+__pycache__/
+*.pyc
+
 # Pyodide binary assets (assets/pyodide/) ARE committed for BRAT
 # distribution — Tamar's closed-beta audience can't run terminal
 # commands post-install. `npm run setup-assets` is still useful for
