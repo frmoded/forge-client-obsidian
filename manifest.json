@@ -1,7 +1,7 @@
 {
   "id": "forge-actions",
-  "name": "Forge",
-  "version": "0.5.0",
+  "name": "Forge Actions",
+  "version": "0.5.1",
   "minAppVersion": "1.5.0",
   "description": "Obsidian client for Forge.",
   "author": "Oded Fuhrmann",
