@@ -313,7 +313,7 @@ if [ "$SKIP_BUMP" = "yes" ] && [ "$LAST_COMMIT_MSG" = "Release v${NEW_VERSION}" 
   echo
   echo "If you intended to re-run the release for some reason (e.g., asset"
   echo "update), drop the existing tag with:"
-  echo "  git tag -d v${NEW_VERSION} && git push origin :v${NEW_VERSION}"
+  echo "  git tag -d ${NEW_VERSION} && git push origin :${NEW_VERSION}"
   echo "and run release.sh again."
   exit 0
 fi
@@ -496,13 +496,24 @@ else
 fi
 
 echo
-echo "=== Tagging v${NEW_VERSION} ==="
-git tag -a "v${NEW_VERSION}" -m "${TAG_MSG}"
+echo "=== Tagging ${NEW_VERSION} ==="
+# NOTE (2026-09-21): tag is bare "${NEW_VERSION}", NOT "v${NEW_VERSION}".
+# Obsidian's community-directory review requires the GitHub release tag to
+# match manifest.json's version field EXACTLY (docs: "it should be '1.0.0'
+# not 'v1.0.0'") - discovered when the forge-actions submission's first
+# real release hit "No release matches your manifest version" with a
+# v-prefixed tag despite the manifest and tag otherwise agreeing. Every
+# prior release in this repo's history used a v-prefixed tag; that was
+# never actually validated against this requirement because no release was
+# submitted to the directory before now. install-latest.sh reads whatever
+# tag string the GitHub API returns and never assumes a "v" prefix, so this
+# is safe for existing installs.
+git tag -a "${NEW_VERSION}" -m "${TAG_MSG}"
 
 echo
 echo "=== Pushing to origin ==="
 git push origin main
-git push origin "v${NEW_VERSION}"
+git push origin "${NEW_VERSION}"
 
 # --- Create GitHub release with assets ---
 echo
@@ -544,7 +555,7 @@ if [ -d "assets/pyodide" ]; then
   done
 fi
 
-gh release create "v${NEW_VERSION}" \
+gh release create "${NEW_VERSION}" \
   --title "v${NEW_VERSION} — ${TAG_MSG}" \
   --notes "Release v${NEW_VERSION}. BRAT users: run 'Check for updates' to pull main.js. Fresh installs: use install-latest.sh against the attached zip." \
   "${ASSETS[@]}"
@@ -559,7 +570,7 @@ gh release create "v${NEW_VERSION}" \
 # start hitting 404s.
 echo
 echo "=== Verifying uploaded assets ==="
-REMOTE_ASSETS="$(gh release view "v${NEW_VERSION}" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+REMOTE_ASSETS="$(gh release view "${NEW_VERSION}" --json assets --jq '.assets[].name' 2>/dev/null || true)"
 MISSING=()
 for f in "${ASSETS[@]}"; do
   # Match on basename since gh strips paths on upload.
@@ -580,7 +591,7 @@ if [ ${#MISSING[@]} -gt 0 ]; then
     for f in "${ASSETS[@]}"; do
       if [ "$(basename "$f")" = "$m" ]; then local_path="$f"; break; fi
     done
-    echo "  gh release upload v${NEW_VERSION} \"$local_path\" --clobber"
+    echo "  gh release upload ${NEW_VERSION} \"$local_path\" --clobber"
   done
   echo
   echo "Do NOT skip this — install-latest.sh users hit 404 without them."
