@@ -313,10 +313,6 @@ export class ForgeSnippetModal extends Modal {
     this.validationEl = contentEl.createEl('div', {
       cls: 'forge-modal-validation',
     });
-    this.validationEl.style.display = 'none';
-    this.validationEl.style.color = 'var(--text-error)';
-    this.validationEl.style.marginTop = '8px';
-    this.validationEl.style.marginBottom = '8px';
 
     new Setting(contentEl)
       .addButton(btn =>
@@ -336,13 +332,13 @@ export class ForgeSnippetModal extends Modal {
   private showValidationError(message: string): void {
     if (!this.validationEl) return;
     this.validationEl.setText(message);
-    this.validationEl.style.display = 'block';
+    this.validationEl.addClass('is-visible');
   }
 
   private clearValidationError(): void {
     if (!this.validationEl) return;
     this.validationEl.setText('');
-    this.validationEl.style.display = 'none';
+    this.validationEl.removeClass('is-visible');
   }
 
   private attachDropHandlers(el: HTMLElement) {

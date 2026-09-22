@@ -41,8 +41,7 @@ export class ForgeModaView extends ItemView {
       return DEV_IFRAME_URL;
     }
     const relpath = `.obsidian/plugins/${this.deps.pluginId}/assets/iframe/index.html`;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (this.app.vault.adapter as any).getResourcePath(relpath);
+    return this.app.vault.adapter.getResourcePath(relpath);
   }
 
   getViewType() { return MODA_VIEW_TYPE; }
@@ -52,18 +51,13 @@ export class ForgeModaView extends ItemView {
   async onOpen() {
     const container = this.contentEl;
     container.empty();
-    container.style.padding = '0';
-    container.style.overflow = 'hidden';
+    container.addClass('forge-moda-view-container');
     // v0.2.93 — reset the iframe-ready flag on every onOpen since
     // detaching + reattaching the view rebuilds the iframe DOM.
     this.iframeReadyFired = false;
 
-    const iframe = container.createEl('iframe');
+    const iframe = container.createEl('iframe', { cls: 'forge-moda-iframe' });
     iframe.src = this.iframeSrc();
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    iframe.style.border = 'none';
-    iframe.style.display = 'block';
     this.iframeEl = iframe;
 
     // Featured-snippet discovery handshake + compute-result relay.
@@ -360,6 +354,6 @@ export class ForgeModaView extends ItemView {
   // Tiny silencer to keep TS happy about TFile unused while still
   // hinting that getMarkdownFiles returns TFile[] (referenced in
   // findFeaturedSnippet). No-op at runtime.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- documents the TFile[] return type used elsewhere (see comment above); never read directly.
   private _typeHintTFile?: TFile;
 }

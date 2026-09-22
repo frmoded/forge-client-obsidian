@@ -119,7 +119,7 @@ export function readFrontmatterType(doc: string): string | null {
  *  v0.2.102 call site in main.ts (registerEditorExtension); not
  *  used by the CSS-class approach. */
 export function makeFrontmatterFoldExtension(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- kept for the v0.2.102 call site's signature (see doc comment above); unused by this CSS-class implementation.
   _getHost: () => FrontmatterFoldHost | null,
 ): Extension {
   return EditorView.editorAttributes.compute([], (state) => {

@@ -28,6 +28,8 @@
     "archiver": "^8.0.0",
     "builtin-modules": "3.3.0",
     "esbuild": "0.17.3",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.2",
     "happy-dom": "^20.10.2",
     "obsidian": "latest",
     "typescript": "^5.9.3"

@@ -14,12 +14,7 @@ export class ForgeThreeView extends ItemView {
   async onOpen() {
     const container = this.contentEl;
     container.empty();
-    container.style.padding = '0';
-    container.style.overflow = 'hidden';
-    container.style.display = 'flex';
-    container.style.alignItems = 'center';
-    container.style.justifyContent = 'center';
-    container.style.color = 'var(--text-muted)';
+    container.addClass('forge-three-view-placeholder');
     container.createEl('span', { text: 'Forge 3D — coming soon' });
   }
 

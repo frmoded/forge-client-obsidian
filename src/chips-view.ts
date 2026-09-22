@@ -485,7 +485,7 @@ export class ChipsView extends ItemView {
 // Keep `insertChipText` re-exported through this module's import to
 // stop tree-shake-vs-lint warnings: it's part of the cursor-aware
 // helper's contract (fallback when cursor not in body).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- referenced only to keep the import alive against tree-shaking; see the comment above.
 const _legacyInsert = insertChipText;
 
 // ------ Pure helpers for V3 tooltip extraction ------

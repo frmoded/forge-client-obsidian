@@ -247,10 +247,26 @@ export interface AlphaGenerateRequest {
   user_anthropic_key?: string;
 }
 
+/** The α /generate response envelope. Drain 2026-09-21-1756 typed this
+ *  from every field actually read off it in main.ts's two
+ *  generateSnippetAlpha call sites — `detail` stays `unknown` since it
+ *  is itself either a plain string or an {error, retryable, kind}
+ *  object depending on status (see formatAlphaErrorNotice). The index
+ *  signature keeps this assignable into forgeErrorFromGenerateRefusal's
+ *  structural parameter type. */
+export interface GenerateResponseJson {
+  code?: string;
+  snippet_id?: string;
+  parsed_ok?: boolean;
+  attempts?: number;
+  detail?: unknown;
+  pushback?: { proceduralness?: unknown } | null;
+  [k: string]: unknown;
+}
+
 export interface GenerateResponse {
   status: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  json: any;
+  json: GenerateResponseJson;
 }
 
 /** POST the materialized snippet inventory to the hosted α service.

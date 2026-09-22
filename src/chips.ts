@@ -377,7 +377,7 @@ export async function loadImportedVaultChips(app: App): Promise<ChipPaletteGroup
     if (!basePath || !(await adapter.exists?.('forge.toml'))) return out;
     const decls = parseLocalImports(await adapter.read('forge.toml'));
     if (decls.length === 0) return out;
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-var-requires -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
     const nodeFs = require('fs');
     for (const decl of decls) {
       try {
@@ -403,14 +403,14 @@ export async function loadImportedVaultChips(app: App): Promise<ChipPaletteGroup
               continue;
             }
             if (!fm || typeof fm !== 'object') continue;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const f = fm as any;
+            const f = fm as Record<string, unknown>;
             if (f.type !== 'action' && f.type !== 'data') continue;
+            const type: 'action' | 'data' = f.type === 'action' ? 'action' : 'data';
             const bare = childRel.slice(0, -3);
             metas.push({
               id: bare,
               basename: bare.split('/').pop() ?? bare,
-              type: f.type,
+              type,
               inputs: Array.isArray(f.inputs)
                 ? f.inputs.filter((x: unknown): x is string => typeof x === 'string')
                 : undefined,

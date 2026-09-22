@@ -32,7 +32,7 @@ function vaultBasePath(app: App): string | null {
  *  idiom — the plugin has no git helper of its own, and main.ts had no
  *  child_process call at all before this drain. */
 function git(cwd: string, args: string[]): string {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-var-requires -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
   const { execFileSync } = require('child_process');
   return String(execFileSync('git', args, { cwd, encoding: 'utf8' }));
 }

@@ -364,8 +364,7 @@ async function backupExtractedDir(
 ): Promise<void> {
   let folders: string[] = [];
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const root = await (adapter as any).list?.('/');
+    const root = await adapter.list('/');
     folders = root?.folders ?? [];
   } catch (e) {
     console.error('backupExtractedDir: vault root list failed', e);
@@ -423,8 +422,7 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
   // adapter.list returns { folders: string[]; files: string[] } at
   // the given path; "/" lists vault root.
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const root = await (adapter as any).list?.('/');
+    const root = await adapter.list('/');
     if (!root?.folders) return 0;
     for (const folder of root.folders) {
       const name = folder.split('/').filter(Boolean).pop() ?? '';
@@ -533,8 +531,7 @@ async function listBundledVaultNames(
 ): Promise<DerivedBundledVaults> {
   let folders: string[] | undefined;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const listed = await (adapter as any).list?.(BUNDLED_VAULTS_ROOT);
+    const listed = await adapter.list(BUNDLED_VAULTS_ROOT);
     folders = listed?.folders;
   } catch (e) {
     console.error('Forge: listing bundled vaults failed', e);

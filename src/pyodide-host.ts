@@ -94,24 +94,49 @@ const BUNDLED_LIBRARY_NAMES = new Set<string>([
 const FORGE_SNIPPET_TYPES = new Set<string>(["action", "data", "snapshot"]);
 
 // Pyodide's runtime type isn't exported as a clean public type; the
-// loader returns an `any`-ish object. We narrow what we touch.
+// loader returns an object whose real shape TypeScript can't see. We
+// narrow what we touch — `unknown` on the two Python-result-bearing
+// members below, so every call site narrows explicitly rather than
+// inheriting `any`'s blanket bypass.
 export interface PyodideInstance {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  runPython: (code: string) => any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  runPythonAsync: (code: string) => Promise<any>;
+  runPython: (code: string) => unknown;
+  runPythonAsync: (code: string) => Promise<unknown>;
   loadPackage: (packages: string | string[]) => Promise<void>;
   FS: {
     mkdir: (path: string) => void;
     writeFile: (path: string, data: string | Uint8Array) => void;
+    readFile: (path: string, opts: { encoding: 'utf8' }) => string;
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  globals: any;
+  // `.set(key, value)` and `.get(key)` are the only members called on
+  // this — see the many `pyodide.globals.set(...)` sites below and
+  // `_readPyStringList`'s `.get(name)`.
+  globals: {
+    set: (key: string, value: unknown) => void;
+    get: (key: string) => PyProxyLike | undefined;
+  };
+}
+
+/** Structural shape of a Pyodide PyProxy, narrowed to exactly the
+ *  members this file calls on one (`.get(index)` to read a tuple
+ *  element, `.toJs()` to convert to a plain JS value, `.destroy()` to
+ *  release it). Pyodide doesn't ship a usable public type for this. */
+export interface PyProxyLike {
+  get?: (key: number | string) => unknown;
+  toJs?: (opts?: { dict_converter?: (entries: Iterable<[string, unknown]>) => unknown }) => unknown;
+  destroy?: () => void;
+}
+
+/** The subset of PyProxyLike actually needed for reading a Python
+ *  tuple's positional elements — `_forge_compute` and its siblings
+ *  always return a real tuple, so `.get`/`.destroy` are non-optional
+ *  here (unlike PyProxyLike's duck-typed usage in `_readPyStringList`). */
+export interface PyProxyTuple {
+  get: (index: number) => unknown;
+  destroy: () => void;
 }
 
 export interface ComputeResult {
   // Whatever the snippet's compute() returned, after Pyodide → JS conversion.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   result: unknown;
   // Captured stdout from print() calls inside the snippet (or its callees).
   stdout: string;
@@ -219,8 +244,7 @@ export class PyodideHost {
     // Plugin install location: <vault>/.obsidian/plugins/<plugin-id>/
     // assets/ sits next to main.js inside that directory.
     const vaultPath = `.obsidian/plugins/${this.pluginId}/assets/${relpath}`;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const fullUrl: string = (this.app.vault.adapter as any).getResourcePath(vaultPath);
+    const fullUrl: string = this.app.vault.adapter.getResourcePath(vaultPath);
     // Strip everything from the first `?` onward — the cache-buster.
     const q = fullUrl.indexOf("?");
     return q >= 0 ? fullUrl.slice(0, q) : fullUrl;
@@ -274,8 +298,7 @@ export class PyodideHost {
     // need `process.browser` truthy during the import + loadPyodide
     // call. We restore the original value in finally so unrelated
     // code that inspects `process.browser` isn't affected.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const proc = (globalThis as any).process;
+    const proc = globalThis.process as { browser?: boolean } | undefined;
     const hadBrowser = proc && Object.prototype.hasOwnProperty.call(proc, "browser");
     const prevBrowser = proc?.browser;
     if (proc) proc.browser = true;
@@ -310,11 +333,11 @@ export class PyodideHost {
         indexURL = CDN_BASE;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const pyodideModule: any = await import(/* @vite-ignore */ pyodideJsUrl);
+      const pyodideModule = await import(/* @vite-ignore */ pyodideJsUrl) as {
+        loadPyodide: (opts: { indexURL: string }) => Promise<PyodideInstance>;
+      };
       const loadPyodide = pyodideModule.loadPyodide;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       pyodide = await loadPyodide({ indexURL });
     } finally {
       if (proc) {
@@ -481,8 +504,7 @@ export class PyodideHost {
       // `.git`, `<lib>.bak.<ver>/`) is not vault content. Mounting it
       // let snapshot notes be indexed as snippets.
       if (isExcludedFromVaultMount(file.path)) continue;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fm: any = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
       if (!fm || !FORGE_SNIPPET_TYPES.has(fm.type)) continue;
       const content = await this.app.vault.read(file);
       const target = "/bundle/user-vault/" + file.path;
@@ -496,9 +518,8 @@ export class PyodideHost {
     // fragment library is available to snippet generation. Optional —
     // missing forge.toml is fine for compute-only V1 paths.
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const adapter = this.app.vault.adapter as any;
-      if (await adapter.exists?.("forge.toml")) {
+      const adapter = this.app.vault.adapter;
+      if (await adapter.exists("forge.toml")) {
         const toml = await adapter.read("forge.toml");
         pyodide.FS.writeFile("/bundle/user-vault/forge.toml", toml);
       }
@@ -528,7 +549,7 @@ export class PyodideHost {
       }
       const importDecls = activeToml ? parseLocalImports(activeToml) : [];
       if (importDecls.length > 0 && vaultBasePath) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        // eslint-disable-next-line @typescript-eslint/no-var-requires -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
         const nodeFs = require("fs");
         for (const decl of importDecls) {
           try {
@@ -1854,20 +1875,15 @@ class PyodideHostInstanceImpl implements PyodideHostInstance {
     slotResolutions?: Record<string, string>,
     sourceLayer?: 'description' | 'recipe' | 'python' | 'synced',
   ): Promise<ComputeResult> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.pyodide.globals.set("_forge_args_in", args as any);
+    this.pyodide.globals.set("_forge_args_in", args);
     this.pyodide.globals.set("_forge_snippet_id", snippet_id);
     // v0.2.22: thread modal-supplied kwargs to the Python side.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.pyodide.globals.set("_forge_inputs_in", inputs as any);
+    this.pyodide.globals.set("_forge_inputs_in", inputs);
     this.pyodide.globals.set("_forge_vault_name", "");
     // v0.2.72 — slotResolutions: dict of cache_key → python_expr
     // supplied by the plugin on second pass after /resolve-slot
     // round-trip. None on first pass.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.pyodide.globals.set(
-      "_forge_slot_resolutions",
-      (slotResolutions ?? null) as any);
+    this.pyodide.globals.set("_forge_slot_resolutions", slotResolutions ?? null);
     // v0.2.252 drain 2026-07-03-1000 §3.3 (L45 impl) — plugin's
     // canonical-layer decision threaded to engine; short-circuits
     // Recipe parse on python-canonical, routes to None on
@@ -1885,12 +1901,11 @@ _forge_compute(
     (_forge_slot_resolutions.to_py() if _forge_slot_resolutions else None),
     canonical_layer=_forge_canonical_layer,
 )
-`);
+`) as PyProxyTuple;
     const result = tuple.get(0);
     const stdout = tuple.get(1);
     const resultJs = this._unwrap(result);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tuple.destroy?.();
+    tuple.destroy();
     return { result: resultJs, stdout: String(stdout ?? "") };
   }
 
@@ -1902,16 +1917,11 @@ _forge_compute(
     inputs: Record<string, unknown> = {},
     slotResolutions?: Record<string, string>,
   ): Promise<ComputeResult & { python?: string }> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.pyodide.globals.set("_forge_args_in", args as any);
+    this.pyodide.globals.set("_forge_args_in", args);
     this.pyodide.globals.set("_forge_snippet_id", snippet_id);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.pyodide.globals.set("_forge_inputs_in", inputs as any);
+    this.pyodide.globals.set("_forge_inputs_in", inputs);
     this.pyodide.globals.set("_forge_vault_name", "");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.pyodide.globals.set(
-      "_forge_slot_resolutions",
-      (slotResolutions ?? null) as any);
+    this.pyodide.globals.set("_forge_slot_resolutions", slotResolutions ?? null);
     const tuple = this.pyodide.runPython(`
 _forge_compute_with_python(
     _forge_snippet_id,
@@ -1920,13 +1930,12 @@ _forge_compute_with_python(
     _forge_vault_name,
     (_forge_slot_resolutions.to_py() if _forge_slot_resolutions else None),
 )
-`);
+`) as PyProxyTuple;
     const result = tuple.get(0);
     const stdout = tuple.get(1);
     const python = tuple.get(2);
     const resultJs = this._unwrap(result);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tuple.destroy?.();
+    tuple.destroy();
     return {
       result: resultJs,
       stdout: String(stdout ?? ""),
@@ -1964,10 +1973,9 @@ _forge_compute_with_python(
       "_forge_resolve_canonical_layer",
       opts?.sourceLayer ?? null,
     );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.pyodide.globals.set(
       "_forge_resolve_slot_resolutions",
-      (opts?.slotResolutions ?? null) as any);
+      opts?.slotResolutions ?? null);
     const out = this.pyodide.runPython(`
 _forge_resolve_action_code(
     _forge_resolve_target,
@@ -2130,8 +2138,7 @@ _forge_resolve_action_code(
     const path = `/bundle/user-vault/.forge/edges/${qCaller}/${qCallee}.md`;
     let body: string | null = null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      body = (this.pyodide.FS as any).readFile(path, { encoding: 'utf8' }) as string;
+      body = this.pyodide.FS.readFile(path, { encoding: 'utf8' });
     } catch {
       body = null;
     }
@@ -2200,8 +2207,7 @@ _forge_resolve_action_code(
    *  proxy to release the Python-side reference. Primitives pass
    *  through unchanged; dicts come out as plain Objects. */
   private _unwrap(value: unknown): unknown {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const v = value as any;
+    const v = value as PyProxyLike | null | undefined;
     if (v && typeof v.toJs === "function") {
       const out = v.toJs({ dict_converter: Object.fromEntries });
       v.destroy?.();

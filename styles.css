@@ -40,6 +40,15 @@
   overflow-y: visible;
 }
 
+/* Drain 2026-08-27-0700 — once a persisted split fraction drives the
+   strip's height via inline flex-basis, the 33% max-height above is a
+   DEFAULT, not a cap; this class neutralizes it. Applied unconditionally
+   on every renderStrip() call. Drain 2026-09-21-1756 moved this off an
+   inline style. */
+.forge-panel-inputs.has-persisted-split {
+  max-height: none;
+}
+
 .forge-panel-inputs-header {
   display: flex;
   align-items: center;
@@ -369,6 +378,15 @@
   max-width: 100%;
   height: auto;
   display: block;
+}
+
+/* v0.2.154 — score zoom sets an explicit pixel width on the SVG; without
+   this override the max-width: 100% rule above clamps it right back
+   down. Higher specificity than the base rule above, applied
+   unconditionally whenever applyZoom() runs (including at 100%).
+   Drain 2026-09-21-1756 moved this off an inline style. */
+.forge-output-score svg.forge-zoomable {
+  max-width: none;
 }
 
 .forge-midi-player {
@@ -724,6 +742,20 @@
   background-color: var(--background-modifier-hover);
 }
 
+/* v0.2.236 drain 2026-07-02-2130's inline validation area, hidden by
+   default; toggled visible on a duplicate-name or other pre-flight
+   failure. Drain 2026-09-21-1756 moved this off inline styles. */
+.forge-modal-validation {
+  display: none;
+  color: var(--text-error);
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.forge-modal-validation.is-visible {
+  display: block;
+}
+
 /* Binary preview hosts in the output panel. The native element fits into the
    available column; we cap height for video so a long clip doesn't push the
    rest of the panel offscreen. */
@@ -877,6 +909,31 @@
 }
 .forge-moda-chips-view .forge-chip:hover {
   background: var(--interactive-hover);
+}
+
+/* MoDa simulator view — the iframe fills the whole leaf, no browser
+   chrome bleeding in at the edges. Drain 2026-09-21-1756 moved this
+   off inline styles. */
+.forge-moda-view-container {
+  padding: 0;
+  overflow: hidden;
+}
+.forge-moda-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+}
+
+/* Forge 3D view — placeholder pane, centered "coming soon" text.
+   Drain 2026-09-21-1756 moved this off inline styles. */
+.forge-three-view-placeholder {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
 }
 
 /* Chips v2 — generalized palette view. Old .forge-moda-chips-view

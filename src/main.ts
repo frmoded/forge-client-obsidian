@@ -1,4 +1,5 @@
 import { Plugin, Notice, DataAdapter, FileSystemAdapter, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
+import type { EditorView } from '@codemirror/view';
 import {
   isV2Shape,
   isV2RoutableShape,
@@ -1358,9 +1359,11 @@ export default class ForgePlugin extends Plugin {
       lastContextmenuPos = null;
       const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (!activeView) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cm = (activeView.editor as any).cm;
-      if (!cm || typeof cm.posAtCoords !== 'function') return;
+      // Per v0.2.83's spike: `editor.cm` returns the underlying CM6
+      // EditorView — not part of Obsidian's public `Editor` interface,
+      // hence the structural cast rather than a real subtype.
+      const cm = (activeView.editor as unknown as { cm?: EditorView }).cm;
+      if (!cm) return;
       const offset = cm.posAtCoords({ x: ev.clientX, y: ev.clientY }, false);
       if (typeof offset !== 'number' || offset < 0) return;
       lastContextmenuPos = activeView.editor.offsetToPos(offset);
@@ -4506,8 +4509,7 @@ export default class ForgePlugin extends Plugin {
   // - Anything else: include the status + raw detail for visibility.
   private formatAlphaErrorNotice(
     status: number,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    detail: any,
+    detail: unknown,
     serviceUrl: string,
     errorPrefix?: string,
   ): string {
@@ -4516,7 +4518,9 @@ export default class ForgePlugin extends Plugin {
       return `${prefix}: Transpile token rejected — check Settings → Forge → Transpile token, or contact the service operator (${serviceUrl}) if you believe it should be valid.`;
     }
     if (detail && typeof detail === 'object' && 'retryable' in detail) {
-      const { error, retryable, kind } = detail;
+      const { error, retryable, kind } = detail as {
+        error?: string; retryable: boolean; kind?: string;
+      };
       const tail = retryable
         ? 'transient — try again in a moment.'
         : 'not retryable — paste the error to the service operator.';
@@ -5253,8 +5257,7 @@ export default class ForgePlugin extends Plugin {
    *  (V2 cross-device sync) swaps the backend at one site. */
   private expandedStateStorage(): ExpandedStateStorage | null {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ls = (globalThis as any).localStorage;
+      const ls = globalThis.localStorage;
       if (ls && typeof ls.getItem === 'function'
           && typeof ls.setItem === 'function') {
         return ls as ExpandedStateStorage;
@@ -7029,8 +7032,7 @@ async function snapshotToRollingBackup(
   try {
     let folders: string[] = [];
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const root = await (adapter as any).list?.('/');
+      const root = await adapter.list('/');
       folders = root?.folders ?? [];
     } catch (e) {
       console.error('snapshotToRollingBackup: vault root list failed', e);

@@ -22,6 +22,7 @@ import {
 import {
   StateField,
   RangeSetBuilder,
+  type EditorState,
   type Extension,
 } from '@codemirror/state';
 import { findDependenciesRange } from './dependencies-section-core.ts';
@@ -45,8 +46,7 @@ export function makeDependenciesFoldExtension(): Extension {
   return [decoField];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildDecorations(state: any): DecorationSet {
+function buildDecorations(state: EditorState): DecorationSet {
   const doc: string = state.doc.toString();
   const range = findDependenciesRange(doc);
   if (!range) return Decoration.none;

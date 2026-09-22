@@ -333,7 +333,8 @@ export class ForgeOutputView extends ItemView {
     strip.style.flexBasis = stripFlexBasis(
       this.stripHost?.getStripFraction() ?? DEFAULT_STRIP_FRACTION,
     );
-    strip.style.maxHeight = 'none';   // the 33% cap is now a DEFAULT, not a cap
+    // the 33% cap is now a DEFAULT, not a cap — see .has-persisted-split.
+    strip.addClass('has-persisted-split');
 
     this.renderSplitDivider(strip);
 
@@ -714,8 +715,7 @@ export class ForgeOutputView extends ItemView {
    *  the pure-core's defensive default kicks in. */
   private scoreViewModeStorage(): ScoreViewModeStorage | null {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ls = (globalThis as any).localStorage;
+      const ls = globalThis.localStorage;
       if (ls && typeof ls.getItem === 'function'
           && typeof ls.setItem === 'function') {
         return ls as ScoreViewModeStorage;
@@ -998,13 +998,14 @@ export class ForgeOutputView extends ItemView {
             // { max-width: 100% }` which clamps any width above the
             // container's width back to 100%. v0.2.153 set
             // style.width = "Xpx" but the inline width was capped by
-            // max-width, so the SVG never grew. Setting maxWidth =
-            // 'none' here lets the explicit width win, and the
-            // .forge-output-score wrapper's overflow-x: auto
-            // surfaces a horizontal scrollbar.
-            svgEl.style.maxWidth = 'none';
+            // max-width, so the SVG never grew. The `.forge-zoomable`
+            // class (higher specificity than the base rule) lets the
+            // explicit width win, and the .forge-output-score
+            // wrapper's overflow-x: auto surfaces a horizontal
+            // scrollbar. `height: auto` is already the base rule's
+            // default, so no inline override is needed for it.
+            svgEl.classList.add('forge-zoomable');
             svgEl.style.width = `${w}px`;
-            svgEl.style.height = 'auto';
           });
           zoomLabel.setText(`${Math.round(z * 100)}%`);
         };

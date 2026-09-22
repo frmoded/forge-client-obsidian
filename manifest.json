@@ -2,8 +2,8 @@
   "id": "forge-actions",
   "name": "Forge Actions",
   "version": "0.5.1",
-  "minAppVersion": "1.5.0",
-  "description": "Obsidian client for Forge.",
+  "minAppVersion": "1.7.2",
+  "description": "Client for the Forge recipe/notebook engine.",
   "author": "Oded Fuhrmann",
   "authorUrl": "https://github.com/frmoded",
   "isDesktopOnly": true
