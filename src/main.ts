@@ -102,6 +102,7 @@ import {
   routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core.ts';
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
+import { decideHtmlEmbedPluginNotice } from './html-embed-plugin-check-core.ts';
 import {
   readExpandedState,
   writeExpandedState,
@@ -737,6 +738,20 @@ export default class ForgePlugin extends Plugin {
     }));
     // Initial paint (file may already be open at plugin load).
     void this.refreshSourceLayerStatusBar();
+
+    // Drain 2026-09-22-1840 — warn when a `.html` asset lands under
+    // `assets/` (forge_create_asset, drain 2026-09-21-0900) and the
+    // "Local HTML Embed" plugin needed to render it isn't installed
+    // AND enabled. Checked FRESH on every matching create (not cached
+    // at onload) — the driver can install/enable the plugin mid-
+    // session, and a stale cached answer would keep warning (or stay
+    // silent) past that point.
+    this.registerEvent(this.app.vault.on('create', (file) => {
+      if (!(file instanceof TFile)) return;
+      if (file.extension !== 'html') return;
+      if (!file.path.startsWith('assets/')) return;
+      this.maybeNotifyHtmlEmbedPluginState(file.path);
+    }));
 
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
@@ -5252,6 +5267,14 @@ export default class ForgePlugin extends Plugin {
   // inside the same backup dir fires the Notice once.
   private _bakNoticeSeenSet = new Set<string>();
 
+  // Drain 2026-09-22-1840 — per-session dedup of the html-embed-plugin
+  // Notice, keyed by decision `state` (not by file path): creating
+  // many `.html` assets in one session without installing the plugin
+  // must fire the "not-installed" message once, not once per file.
+  // Installing the plugin mid-session (not-installed -> installed-
+  // disabled) is a genuinely NEW state and gets its own one-time fire.
+  private _htmlEmbedNoticeStatesShown = new Set<string>();
+
   /** v0.2.138 — get the host's localStorage (or null in headless
    *  tests). Wrapped so a future migration to vault-local config
    *  (V2 cross-device sync) swaps the backend at one site. */
@@ -5983,6 +6006,52 @@ export default class ForgePlugin extends Plugin {
       `by convention; running Forge on them is not recommended.`,
       8000,
     );
+  }
+
+  // Drain 2026-09-22-1840. `app.plugins.manifests` / `app.plugins.
+  // getPlugin` are real, actively-used internal Obsidian APIs — not
+  // part of the typed `obsidian` package (zero matches in
+  // obsidian.d.ts, confirmed fresh this drain), but confirmed live in
+  // BRAT's own bundled main.js (`app.plugins.getPlugin("periodic-
+  // notes")` to check load state; `Object.values(this.plugin.app.
+  // plugins.manifests)` to enumerate installed plugins) — the same
+  // shape this method relies on. Obsidian does not contractually
+  // guarantee internal APIs stay stable across versions, hence the
+  // structural cast (not `any`) and the try/catch that degrades to a
+  // silent no-op rather than ever throwing during a vault-event
+  // handler.
+  private maybeNotifyHtmlEmbedPluginState(assetPath: string): void {
+    const pluginId = 'local-html-embed';
+    let installed: boolean;
+    let enabled: boolean;
+    try {
+      const internals = this.app as unknown as {
+        plugins: {
+          manifests: Record<string, unknown>;
+          getPlugin: (id: string) => unknown;
+        };
+      };
+      installed = pluginId in internals.plugins.manifests;
+      enabled = !!internals.plugins.getPlugin(pluginId);
+    } catch (e) {
+      console.warn(prefixed('html-embed plugin-state check failed'), e);
+      return;
+    }
+
+    const decision = decideHtmlEmbedPluginNotice(installed, enabled);
+    if (decision.state === 'installed-enabled') return;
+    if (this._htmlEmbedNoticeStatesShown.has(decision.state)) return;
+    this._htmlEmbedNoticeStatesShown.add(decision.state);
+
+    console.log(`${NOTICE_PREFIX}${decision.noticeMessage} (${assetPath})`);
+    // v0.2.246 precedent (see the forensic-shadow-cleanup site,
+    // main.ts:~3804): a rare, event-driven, actionable-now message is
+    // exactly the case that precedent chose a transient toast for over
+    // the persistent output panel. Plain text only — no clickable
+    // settings-jump action; see this drain's FEEDBACK for why that was
+    // investigated (app.setting.open()/openTabById('community-
+    // plugins') confirmed real via BRAT's own source) but not shipped.
+    new Notice(decision.noticeMessage, 15000);
   }
 
   private async maybePreviewDataSnippet(file: TFile | null) {
