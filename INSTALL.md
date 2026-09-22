@@ -180,11 +180,18 @@ without contacting any server. **A few exceptions**:
   (`forge-registry`) to populate the picker.
 - The built-in simulator (Cmd-P → "Forge: Open 3D View") loads its UI
   font (Inter) from Google Fonts when it opens.
+- If you installed via [BRAT](https://github.com/TfTHacker/obsidian42-brat) (which ships without the
+  `assets/` directory), the plugin self-hydrates on first load: it fetches its own missing runtime
+  files (Pyodide, wheels, bundled vaults) from this repo's GitHub release assets, SHA-verified
+  against the manifest before use. A normal zip install already has `assets/` and never triggers
+  this path.
 
 If you're behind a strict firewall or air-gapped: audio playback won't
-initialize, the vault-domains picker won't populate, and the simulator
-falls back to a system font. Visual score rendering, all computation,
-and freezing notes still work without network access.
+initialize, the vault-domains picker won't populate, the simulator
+falls back to a system font, and a BRAT install won't be able to
+self-hydrate its runtime (use a fresh zip install instead). Visual
+score rendering, all computation, and freezing notes still work
+without network access once installed.
 
 ## Authoring notes — hand-authored notes
 
