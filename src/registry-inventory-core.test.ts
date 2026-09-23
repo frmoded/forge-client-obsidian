@@ -154,5 +154,5 @@ test('an empty registry is reported as empty, not as a blank report', () => {
   assert.match(text, /0 snippets across 0 vaults/);
   assert.match(text, /SHIM SHADOW/);
   // A registry with no chips at all is itself a finding worth seeing.
-  assert.match(text, /chip names/i);
+  assert.match(text, /library note names/i);
 });

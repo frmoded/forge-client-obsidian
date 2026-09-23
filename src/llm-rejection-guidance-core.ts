@@ -80,7 +80,7 @@ const LANDMINE_IDENTIFIERS: Record<string, {
     verb: 'print',
     builtinAdvice:
       'Print "text". is the built-in verb for stdout (constitution B7.2). '
-      + 'Use Print "..." in the Recipe facet directly — no `[[print]]` chip needed.',
+      + 'Use Print "..." in the Recipe facet directly — no `[[print]]` library note needed.',
   },
   // CW-print-log-debug-landmine-lane-p3 (drain 2026-07-20-2000).
   // Belt-and-suspenders for `log` / `debug` — drain 1720 measured the
@@ -92,14 +92,14 @@ const LANDMINE_IDENTIFIERS: Record<string, {
   log: {
     verb: 'log',
     builtinAdvice:
-      'There is no Recipe-level `log` chip in V2. For diagnostic output, '
+      'There is no Recipe-level `log` library note in V2. For diagnostic output, '
       + 'use `Print "..."` in the Recipe facet (constitution B7.2), or emit '
       + 'the intent as Description prose and leave logging to the Python facet.',
   },
   debug: {
     verb: 'debug',
     builtinAdvice:
-      'There is no Recipe-level `debug` chip in V2. Move debug-oriented '
+      'There is no Recipe-level `debug` library note in V2. Move debug-oriented '
       + 'behavior into the Python facet directly, or use `Print "..."` in '
       + 'the Recipe for quick stdout inspection during development.',
   },
@@ -163,13 +163,13 @@ export function deriveLlmRejectionGuidance(
       return {
         likelyCause:
           `Your Description contains \`${landmine.verb}\` as prose — `
-          + `the LLM interpreted it as a chip name and emitted `
-          + `\`Call [[${ident}]]\`. But no \`${ident}\` chip is registered `
+          + `the LLM interpreted it as a library note name and emitted `
+          + `\`Call [[${ident}]]\`. But no \`${ident}\` library note is registered `
           + `in this vault's palette.`,
         fixOptions: [
           `Remove the \`${landmine.verb}\` prose from Description; keep only intent-level language.`,
           landmine.builtinAdvice,
-          `If you meant a real chip named \`${ident}\`, add it to the library (Sprint 4+; usually not the right move).`,
+          `If you meant a real library note named \`${ident}\`, add it to the library (Sprint 4+; usually not the right move).`,
         ],
       };
     }
@@ -282,13 +282,13 @@ export function deriveLlmRejectionGuidance(
       .join(', ');
     return {
       likelyCause:
-        `The LLM emitted ${list || 'unresolved wikilinks'} — chip names `
+        `The LLM emitted ${list || 'unresolved wikilinks'} — library note names `
         + `that aren't registered in this vault's palette. The Description `
-        + `may have language that reads to the LLM as a chip invocation.`,
+        + `may have language that reads to the LLM as a library note invocation.`,
       fixOptions: [
-        'Rephrase the Description to avoid words that read as chip names.',
+        'Rephrase the Description to avoid words that read as library note names.',
         'Move the intended behavior into the Python facet directly and hand-edit the Recipe to match.',
-        'If you meant a real chip, verify the name via forge_read_note_catalog.',
+        'If you meant a real library note, verify the name via forge_read_note_catalog.',
       ],
     };
   }
@@ -302,7 +302,7 @@ export function deriveLlmRejectionGuidance(
       + `intent, or it explicitly asked for an explanation rather than code.`,
     fixOptions: [
       'Add a concrete "Return the ..." sentence to Description.',
-      'Include the name of at least one chip you want the Recipe to use (e.g. "using [[major_pentatonic]]").',
+      'Include the name of at least one library note you want the Recipe to use (e.g. "using [[major_pentatonic]]").',
       'Hand-author the Recipe body directly and Forge-click; the Description-canonical branch will re-baseline stamps on next edit.',
     ],
   };

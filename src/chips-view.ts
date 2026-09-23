@@ -218,8 +218,8 @@ export class ChipsView extends ItemView {
       root.createEl('p', {
         cls: 'forge-chips-empty',
         text:
-          'No chips defined. Add a `_chips.md` data snippet to your ' +
-          'vault to surface authoring chips here.',
+          'No library notes defined. Add a `_chips.md` data snippet to your ' +
+          'vault to surface authoring library notes here.',
       });
       return;
     }
@@ -242,7 +242,7 @@ export class ChipsView extends ItemView {
       if (type !== 'action') {
         root.createEl('p', {
           cls: 'forge-chips-empty',
-          text: 'Chips only insert into action snippets. Switch to an action snippet to use chips.',
+          text: 'Library notes only insert into action snippets. Switch to an action snippet to use library notes.',
         });
         return;
       }
@@ -386,7 +386,7 @@ export class ChipsView extends ItemView {
     // read instead of trapping a real action snippet.
     const type = await this.fileType(file);
     if (type !== 'action') {
-      void forgeNotice(this.app, 'Chips only insert into action snippets.');
+      void forgeNotice(this.app, 'Library notes only insert into action snippets.');
       return;
     }
 

@@ -654,13 +654,13 @@ export default class ForgePlugin extends Plugin {
       // startup log to prevent console noise on every reload.
       this.addCommand({
         id: 'forge-log-chip-inventory',
-        name: 'Log chip inventory',
+        name: 'Log library note inventory',
         callback: () => {
           console.log(
             `Forge chip inventory (from bundled executor.py):\n${formatChipInventoryFull(inventory)}`,
           );
           new Notice(
-            `Chip inventory logged to console (${formatChipInventorySummary(inventory)})`,
+            `Library note inventory logged to console (${formatChipInventorySummary(inventory)})`,
           );
         },
       });
@@ -3929,7 +3929,7 @@ export default class ForgePlugin extends Plugin {
   private async openLibraryNoteView(chipName: string): Promise<void> {
     if (!this.libraryNoteIndex.has(chipName)) {
       await this.forgeOutput(
-        `Engine chip "${chipName}" not found in catalog.`, 'error',
+        `Engine library note "${chipName}" not found in catalog.`, 'error',
       );
       return;
     }

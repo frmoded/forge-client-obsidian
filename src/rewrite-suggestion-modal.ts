@@ -45,7 +45,7 @@ export class RewriteSuggestionModal extends Modal {
       text: (
         'A good Description expresses intent ("a slow blues with vocal lead "'
         + 'and drums underneath"). Recipe is the structured plan; Python is '
-        + 'compiled from Recipe. When the Description names individual chip '
+        + 'compiled from Recipe. When the Description names individual library note '
         + 'calls or step sequences, the LLM has no interpretive work — it '
         + 'just transliterates prose into code.'
       ),

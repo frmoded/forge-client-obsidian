@@ -67,7 +67,7 @@ describe('deriveLlmRejectionGuidance', () => {
     assert.match(g.likelyCause, /nonexistent_chip|unresolved/i);
     // Generic guidance still surfaces a "verify chip name" suggestion.
     const joined = g.fixOptions.join(' ');
-    assert.match(joined, /catalog|palette|chip name/i);
+    assert.match(joined, /catalog|palette|library note name/i);
   });
 
   it('CASE 4 — sanitize-fail: prose-only LLM output', () => {
@@ -142,7 +142,7 @@ describe('deriveLlmRejectionGuidance — pattern robustness', () => {
       descriptionBody: '',
     });
     // No landmine match — falls through to generic closure-fail.
-    assert.match(g.likelyCause, /unresolved|chip name/i);
+    assert.match(g.likelyCause, /unresolved|library note name/i);
   });
 
   it('gracefully handles empty unresolved list on closure-fail', () => {

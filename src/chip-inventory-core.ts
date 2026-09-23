@@ -50,9 +50,9 @@ export function parseChipInventory(executorSource: string): ChipInventory {
 }
 
 // Short one-line summary for the startup log. Example:
-//   "music: 34 chips, moda: 15 chips"
+//   "music: 34 library notes, moda: 15 library notes"
 export function formatChipInventorySummary(inv: ChipInventory): string {
-  return `music: ${inv.music.length} chips, moda: ${inv.moda.length} chips`;
+  return `music: ${inv.music.length} library notes, moda: ${inv.moda.length} library notes`;
 }
 
 // Full multi-line dump for the Cmd-P command. Example:

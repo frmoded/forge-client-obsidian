@@ -111,21 +111,21 @@ export function formatRegistryInventory(dump: RegistryInventoryDump): string {
   lines.push(`Resolution order: ${dump.resolutionOrder.join(' → ') || '(none)'}`);
   lines.push(`Vault keys: ${dump.vaultKeys.join(', ') || '(none)'}`);
   lines.push(`Active domains: ${dump.domains.join(', ') || '(none)'}`);
-  lines.push(`Engine chip names: ${dump.chipNames.length}`);
+  lines.push(`Engine library note names: ${dump.chipNames.length}`);
   lines.push('');
 
   // First, because it is the open question.
-  lines.push('SHIM SHADOW candidates — snippet basenames that collide with an engine chip:');
+  lines.push('SHIM SHADOW candidates — snippet basenames that collide with an engine library note:');
   if (shadows.length === 0) {
-    lines.push('  none — no snippet basename matches any engine chip name.');
+    lines.push('  none — no snippet basename matches any engine library note name.');
   } else {
     for (const hit of shadows) {
       lines.push(`  ${hit.basename}  ←  ${hit.id}  (vault: ${hit.vault})`);
     }
     lines.push('');
-    lines.push('  Each of these installs a context.compute() shim under the chip\'s own');
+    lines.push('  Each of these installs a context.compute() shim under the library note\'s own');
     lines.push('  name. Shims are spread after the domain globals, so the snippet wins');
-    lines.push('  and a bare call in emitted Python reaches it instead of the chip.');
+    lines.push('  and a bare call in emitted Python reaches it instead of the library note.');
   }
   lines.push('');
 

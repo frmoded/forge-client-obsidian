@@ -1161,7 +1161,7 @@ export class ForgeOutputView extends ItemView {
     // lookup now. A mode with no label would render "undefined" to the
     // cohort, which is why the fallback names the mode itself.
     const MODE_LABELS: Record<string, string> = {
-      'closure-fail': 'closure-fail (LLM referenced unknown chips)',
+      'closure-fail': 'closure-fail (LLM referenced unknown library notes)',
       'sanitize-fail': 'sanitize-fail (LLM emitted no valid Let/Return)',
       'free-variable-fail':
         'free-variable-fail (LLM used a name it never declared as an Input)',

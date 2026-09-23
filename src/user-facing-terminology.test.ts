@@ -6,10 +6,12 @@
 // read the SHIPPED SOURCE and pin specific literals — that the retired
 // wording is gone from the listed sites and that labels which must agree
 // with each other actually do. If a label is intentionally reworded
-// again this SHOULD go red — reassess, don't just rewrite. They are not a
-// general "no user-facing 'chip' anywhere" guarantee: the plugin still has
-// other user-visible 'chip' strings outside this drain's scope (see the
-// drain FEEDBACK), so a blanket regex would be red today.
+// again this SHOULD go red — reassess, don't just rewrite. They are a
+// list of known sites, NOT a blanket "no user-visible 'chip' anywhere"
+// guarantee: a new user-facing string that says 'chip' would not be caught
+// here (the closing case-insensitive sweep in drain 2026-09-23-1915's
+// FEEDBACK is what established the surface is clean). Extended by drain
+// 2026-09-23-1915 to cover the rest of the previously-deferred strings.
 //
 // Source is extracted at test time, not copied, so the guards cannot
 // drift from what ships (queue rule: mirrors must load production source
@@ -25,6 +27,11 @@ const MAIN = src('main.ts');
 const FORGE_ACTION = src('forge-action.ts');
 const CHIPS_VIEW = src('chips-view.ts');
 const PARSE_ERR = src('recipe-parse-error-friendly.ts');
+const INVENTORY = src('chip-inventory-core.ts');
+const LLM_GUIDANCE = src('llm-rejection-guidance-core.ts');
+const REWRITE_MODAL = src('rewrite-suggestion-modal.ts');
+const OUTPUT_VIEW = src('output-view.ts');
+const REGISTRY = src('registry-inventory-core.ts');
 
 /** The `name:` of the addCommand registered under the given id. */
 function commandName(mainSrc: string, id: string): string {
@@ -93,5 +100,73 @@ test('retired wording is gone from the listed sites (non-vacuity: each was prese
   };
   for (const [file, needle] of retired) {
     assert.ok(!files[file].includes(needle), `${file} still contains retired string: ${needle}`);
+  }
+});
+
+// ---- drain 2026-09-23-1915: the rest of the previously-deferred strings ----
+
+test("the 'Log library note inventory' command and its Notice use the new wording", () => {
+  assert.equal(commandName(MAIN, 'forge-log-chip-inventory'), 'Log library note inventory');
+  assert.ok(MAIN.includes('`Library note inventory logged to console ('));
+});
+
+test('both call sites of the inventory summary go through the one formatter (startup log + Notice)', () => {
+  const uses = MAIN.match(/formatChipInventorySummary\(inventory\)/g) ?? [];
+  assert.equal(uses.length, 2, 'main.ts:startup console.log and the Notice must share one formatter');
+  assert.ok(INVENTORY.includes('library notes, moda: ${inv.moda.length} library notes'));
+});
+
+test("the engine-not-found Notice and the palette view's guard/empty-state text use the new wording", () => {
+  assert.ok(MAIN.includes('`Engine library note "${chipName}" not found in catalog.`'));
+  assert.ok(CHIPS_VIEW.includes("'No library notes defined."));
+  assert.ok(CHIPS_VIEW.includes("'vault to surface authoring library notes here.'"));
+  assert.ok(CHIPS_VIEW.includes("'Library notes only insert into action snippets. Switch to an action snippet to use library notes.'"));
+  assert.ok(CHIPS_VIEW.includes("'Library notes only insert into action snippets.'"));
+});
+
+test('the modal body, closure-fail label, and registry-dump text use the new wording', () => {
+  assert.ok(REWRITE_MODAL.includes('names individual library note '));
+  assert.ok(OUTPUT_VIEW.includes("'closure-fail (LLM referenced unknown library notes)'"));
+  for (const phrase of [
+    'Engine library note names:',
+    'collide with an engine library note:',
+    'matches any engine library note name.',
+    "under the library note\\'s own",
+    'instead of the library note.',
+  ]) {
+    assert.ok(REGISTRY.includes(phrase), `registry-inventory-core.ts missing: ${phrase}`);
+  }
+});
+
+test('retired wording is gone from the 1915 sites (non-vacuity: each was present before this drain)', () => {
+  const retired: Array<[string, string, string]> = [
+    ['main.ts', MAIN, "'Log chip inventory'"],
+    ['main.ts', MAIN, '`Chip inventory logged'],
+    ['main.ts', MAIN, '`Engine chip "'],
+    ['chip-inventory-core.ts', INVENTORY, '} chips, moda:'],
+    ['chips-view.ts', CHIPS_VIEW, "'No chips defined."],
+    ['chips-view.ts', CHIPS_VIEW, 'authoring chips here'],
+    ['chips-view.ts', CHIPS_VIEW, "'Chips only insert"],
+    ['chips-view.ts', CHIPS_VIEW, 'to use chips.'],
+    ['rewrite-suggestion-modal.ts', REWRITE_MODAL, 'names individual chip '],
+    ['output-view.ts', OUTPUT_VIEW, 'unknown chips)'],
+    ['registry-inventory-core.ts', REGISTRY, 'Engine chip names'],
+    ['registry-inventory-core.ts', REGISTRY, 'engine chip:'],
+    ['registry-inventory-core.ts', REGISTRY, 'matches any engine chip name.'],
+    ['registry-inventory-core.ts', REGISTRY, "the chip\\'s own"],
+    ['registry-inventory-core.ts', REGISTRY, 'instead of the chip.'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, '`[[print]]` chip needed'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, '`log` chip in V2'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, '`debug` chip in V2'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, 'as a chip name'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, '}\\` chip is registered'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, 'a real chip'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, '— chip names'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, 'as a chip invocation'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, 'read as chip names'],
+    ['llm-rejection-guidance-core.ts', LLM_GUIDANCE, 'at least one chip'],
+  ];
+  for (const [file, text, needle] of retired) {
+    assert.ok(!text.includes(needle), `${file} still contains retired string: ${needle}`);
   }
 });

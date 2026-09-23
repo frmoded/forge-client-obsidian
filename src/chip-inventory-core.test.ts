@@ -118,12 +118,12 @@ describe('formatChipInventorySummary', () => {
       music: ['a', 'b', 'c'],
       moda: ['x', 'y'],
     });
-    assert.equal(summary, 'music: 3 chips, moda: 2 chips');
+    assert.equal(summary, 'music: 3 library notes, moda: 2 library notes');
   });
 
   it('handles empty domains', () => {
     const summary = formatChipInventorySummary({ music: [], moda: [] });
-    assert.equal(summary, 'music: 0 chips, moda: 0 chips');
+    assert.equal(summary, 'music: 0 library notes, moda: 0 library notes');
   });
 });
 
