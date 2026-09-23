@@ -1412,9 +1412,13 @@ function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string
       });
       gbBtn.addEventListener('click', async () => {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
           const fs = require('fs');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
           const os = require('os');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
           const path = require('path');
+          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
           const { exec } = require('child_process');
           // Sanitize snippetId for filesystem — keep only alnum + dash + underscore.
           const safeId = snippetId.replace(/[^a-zA-Z0-9_-]/g, '_');
