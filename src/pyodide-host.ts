@@ -558,7 +558,7 @@ export class PyodideHost {
       }
       const importDecls = activeToml ? parseLocalImports(activeToml) : [];
       if (importDecls.length > 0 && vaultBasePath) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
         const nodeFs = require("fs");
         for (const decl of importDecls) {
           try {

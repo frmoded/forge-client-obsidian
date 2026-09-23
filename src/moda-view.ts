@@ -354,6 +354,5 @@ export class ForgeModaView extends ItemView {
   // Tiny silencer to keep TS happy about TFile unused while still
   // hinting that getMarkdownFiles returns TFile[] (referenced in
   // findFeaturedSnippet). No-op at runtime.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- documents the TFile[] return type used elsewhere (see comment above); never read directly.
   private _typeHintTFile?: TFile;
 }
