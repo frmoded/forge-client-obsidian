@@ -1,0 +1,5 @@
+For centuries, music had rhythm without a reliable way to write it down — plainchant notation recorded pitch far more precisely than duration, and singers relied on memorized convention to know how long a note should last. Mensural notation, developed across the 13th–14th centuries, was the first system to fix duration as precisely as pitch: named note shapes, each carrying an exact value relative to the others, ancestors of our modern noteheads.
+
+The barline and the modern time signature are later still. Regular, recurring meter as notated today only stabilizes once theory starts treating rhythm as fundamentally DIVISIVE — start from a whole and keep halving — rather than the older ADDITIVE tradition many folk and non-Western rhythmic systems still use, building a cycle up from smaller units in an asymmetric pattern (3+2+2, not 4+4). A tuplet is divisive notation reaching, awkwardly, to borrow an additive grouping for just one beat.
+
+**Listen for it:** count along with a piece in 7/8, or a compound meter like 6/8, against a plain 4/4 — the difference in feel is centuries of two rhythmic philosophies meeting on the same page.

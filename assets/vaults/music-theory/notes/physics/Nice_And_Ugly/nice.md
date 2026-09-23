@@ -1,29 +1,13 @@
-Some intervals sound settled and pleasant when played together; others sound tense and clashing. This isn't just taste — it's physics. Consonant intervals have frequencies related by simple whole-number ratios — harmonically related tones whose waveforms lock together instead of drifting. The [[octave]]'s 2:1 is the simplest case; [[fifths|the perfect fifth's 3:2]] is the next.
+Not every simple ratio is an octave. Take two tones whose frequencies stand in a **2:3 ratio** — the next-simplest ratio after the octave's 1:2 — and the same thing happens: the waveforms lock together instead of drifting, because two cycles of the lower tone complete in exactly the same span as three cycles of the higher one.
 
-C4 and C5 — an [[octave]] apart, the cleanest possible ratio. The score:
+The two signals on their own:
 
-![[notes/resources/images/nice_score.svg]]
+![[notes/resources/images/twothirds_wave.svg]]
 
-Hear each note alone, then both together as a single chord:
+Add them together and the combined signal repeats cleanly too — a longer repeat than the octave's, but still a repeat, not a beat:
 
-**C4:**
+![[notes/resources/images/twothirds_combined.svg]]
 
-![[notes/resources/audio/nice_c4.mp3]]
+Contrast with [[ugly]], where the ratio isn't simple and the combined signal never quite closes — that's a beat, not a repeat.
 
-**C5:**
-
-![[notes/resources/audio/nice_c5.mp3]]
-
-**C4 + C5 together:**
-
-![[notes/resources/audio/nice_together.mp3]]
-
-The two waves line up cleanly — every second peak of the higher note coincides exactly with a peak of the lower one:
-
-![[notes/resources/images/nice_wave.svg]]
-
-Add the two waves together and the combined signal is just as clean — the same repeating shape every C4 cycle, no beating:
-
-![[notes/resources/images/nice_combined.svg]]
-
-Contrast with [[ugly]], where the frequencies are close enough to beat instead of lock together.
+See [[nice_and_ugly_history]] for what happens if you apply this same 2:3 relationship again.
