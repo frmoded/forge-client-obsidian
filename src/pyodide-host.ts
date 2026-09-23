@@ -333,6 +333,15 @@ export class PyodideHost {
         indexURL = CDN_BASE;
       }
 
+      // pyodideJsUrl is either a CDN template literal or an Obsidian-generated
+      // app://<hash>/... resource URL from getResourcePath() (see the
+      // pluginAssetUrl() doc comment above); no static/literal rewrite can
+      // express the latter, and it is not user- or network-controlled input
+      // (it's derived from this plugin's own bundled asset path). Investigated
+      // 2026-09-23, drain 2026-09-23-1042 FEEDBACK §3. The directive below
+      // must stay on the line directly above the import() — disable-next-line
+      // only reaches the very next line, not past intervening comments.
+      // eslint-disable-next-line no-unsanitized/method -- runtime app:// resource URL from getResourcePath(), not user/network input; see comment above
       const pyodideModule = await import(/* @vite-ignore */ pyodideJsUrl) as {
         loadPyodide: (opts: { indexURL: string }) => Promise<PyodideInstance>;
       };
