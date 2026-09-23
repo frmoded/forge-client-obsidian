@@ -138,7 +138,7 @@ function showActionMenu(
   // add chips). The view's own onOpen always refreshes from disk, so
   // clicking this fetches the current palette state.
   menu.addItem(i =>
-    i.setTitle('Open chips palette').setIcon('puzzle')
+    i.setTitle('Open library note palette').setIcon('puzzle')
       .onClick(() => host.openChipsView()));
   menu.addSeparator();
 

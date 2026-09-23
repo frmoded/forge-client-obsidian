@@ -37,7 +37,7 @@ const PATTERNS: Pattern[] = [
     // "expected = after kwarg name 'a'"
     regex: /expected = after kwarg name '([^']+)'/,
     rewrite: (m) =>
-      `Recipe kwarg near '${m[1]}' — the grammar is 'Call [[chip]] with name=value'. `
+      `Recipe kwarg near '${m[1]}' — the grammar is 'Call [[library-note]] with name=value'. `
       + `Did you mean '${m[1]}=...'? Or is there an extra word before the kwarg list?`,
   },
   {
@@ -60,8 +60,8 @@ const PATTERNS: Pattern[] = [
     // "Snippet 'foo' not found. Searched: ..."
     regex: /Snippet '([^']+)' not found/,
     rewrite: (m) =>
-      `Chip '${m[1]}' isn't in your library. Check the wikilink spelling; `
-      + `try Cmd-P → 'Refresh chip palette' if you just added it.`,
+      `Library note '${m[1]}' isn't in your library. Check the wikilink spelling; `
+      + `try Cmd-P → 'Refresh library note palette' if you just added it.`,
   },
 ];
 

@@ -1063,7 +1063,7 @@ export default class ForgePlugin extends Plugin {
     // ribbon menu.
     this.addCommand({
       id: 'forge-refresh-chips',
-      name: 'Refresh chip palette',
+      name: 'Refresh library note palette',
       callback: () => { this.reloadChipPalette(/*refreshOpenView=*/ true); },
     });
 
@@ -1684,7 +1684,7 @@ export default class ForgePlugin extends Plugin {
       chipsCount: this.chipPalette.length,
     })) {
       const chipsBtn = view.addAction(
-        'puzzle', 'Open chips palette',
+        'puzzle', 'Open library note palette',
         () => { this.openChipsView(); });
       chipsBtn.addClass(CHIPS_BTN_CLASS);
     }

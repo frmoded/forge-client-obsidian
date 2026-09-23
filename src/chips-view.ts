@@ -74,7 +74,7 @@ export class ChipsView extends ItemView {
   }
 
   getViewType() { return CHIPS_VIEW_TYPE; }
-  getDisplayText() { return 'Forge chips'; }
+  getDisplayText() { return 'Forge library notes'; }
   getIcon() { return 'puzzle'; }
 
   async onOpen() {
@@ -207,7 +207,7 @@ export class ChipsView extends ItemView {
     root.addClass('forge-chips-view');
 
     const header = root.createDiv({ cls: 'forge-chips-header' });
-    header.createEl('h3', { text: 'Forge chips' });
+    header.createEl('h3', { text: 'Forge library notes' });
     const refreshBtn = header.createEl('button', {
       text: 'Refresh',
       cls: 'forge-chips-refresh',
@@ -373,8 +373,8 @@ export class ChipsView extends ItemView {
     );
     const file = resolved?.file as TFile | undefined;
     if (!file) {
-      void forgeNotice(this.app, 'Forge chips: click into an action snippet first, ' +
-        'then click the chip.');
+      void forgeNotice(this.app, 'Forge library notes: click into an action snippet first, ' +
+        'then click the library note.');
       return;
     }
 
@@ -475,7 +475,7 @@ export class ChipsView extends ItemView {
       return content;
     });
     if (outcomeBox.v === 'ok') {
-      void forgeNotice(this.app, `Forge chips: inserted "${insertion}".`);
+      void forgeNotice(this.app, `Forge library notes: inserted "${insertion}".`);
     } else if (outcomeBox.v === 'no-english') {
       void forgeNotice(this.app, 'Snippet has no # English section to insert into.');
     }

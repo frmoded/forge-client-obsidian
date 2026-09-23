@@ -30,7 +30,7 @@ test('kwarg-missing-equals → cohort message about kwarg grammar', () => {
   const result = friendlyRecipeParseError(KWARG_MISSING_EQUALS);
   assert.equal(result.matched, true);
   assert.match(result.userMessage, /kwarg near 'a'/);
-  assert.match(result.userMessage, /Call \[\[chip\]\] with name=value/);
+  assert.match(result.userMessage, /Call \[\[library-note\]\] with name=value/);
   assert.equal(result.rawTraceback, KWARG_MISSING_EQUALS);
 });
 
@@ -44,12 +44,15 @@ test('unterminated string → cohort message about unclosed quote', () => {
 test('unknown chip (SnippetResolutionError) → cohort message about library', () => {
   const result = friendlyRecipeParseError(UNKNOWN_CHIP);
   assert.equal(result.matched, true);
-  assert.match(result.userMessage, /Chip 'zork'/);
+  assert.match(result.userMessage, /Library note 'zork'/);
   // Drain 2026-08-14-0290: this asserted /Refresh chips/, matching a
-  // command name that does not exist. The real command is 'Refresh chip
-  // palette' (main.ts:890). The message told users to run something they
-  // could not find, and this assertion locked that in.
-  assert.match(result.userMessage, /Refresh chip palette/);
+  // command name that does not exist. The real command is 'Refresh library
+  // note palette' (main.ts; renamed from 'Refresh chip palette' by drain
+  // 2026-09-23-1810). The message told users to run something they could
+  // not find, and this assertion locked that in. The drift guard in
+  // user-facing-terminology.test.ts now ties the two together against
+  // main.ts's actual command name.
+  assert.match(result.userMessage, /Refresh library note palette/);
 });
 
 test('unmatched Recipe-relevant error → generic fallback (still less scary)', () => {
