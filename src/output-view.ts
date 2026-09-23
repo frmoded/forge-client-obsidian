@@ -27,6 +27,7 @@ import {
   type SlotCacheNotFoundInput,
 } from './slot-cache-not-found-guidance-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
+import { parseSvgMarkup } from './svg-markup-core.ts';
 // Drain 2026-08-22-2300 (Forge panel F1) — the Inputs strip. The field
 // models come from the SAME loop the Run dialog renders from, so the
 // strip inherits its dropdowns, pre-fill and required-input handling
@@ -633,11 +634,12 @@ export class ForgeOutputView extends ItemView {
 
   private renderSVG(entry: HTMLElement, body: string) {
     const host = entry.createDiv({ cls: 'forge-output-svg' });
-    // The body is the user's own SVG markup from a file they authored — same
-    // trust boundary as any other content in their vault. innerHTML is fine
-    // here. If the markup is invalid, the browser will silently render
-    // whatever it can parse.
-    host.innerHTML = body.trim();
+    // The body is the user's own SVG markup from a file they authored.
+    // Parsed via parseSvgMarkup (not `.innerHTML =`, which Obsidian's
+    // directory review rejects outright) — invalid markup still renders
+    // whatever the HTML parser can recover, and script / on* / javascript:
+    // content is stripped on the way in.
+    host.append(...parseSvgMarkup(body, new DOMParser()));
   }
 
   private renderResult(entry: HTMLElement, result: unknown, snippetId: string) {
@@ -969,7 +971,7 @@ export class ForgeOutputView extends ItemView {
           attr: { 'aria-label': 'Zoom in' },
         });
         const scoreWrap = host.createDiv({ cls: 'forge-output-score' });
-        scoreWrap.innerHTML = svg;
+        scoreWrap.append(...parseSvgMarkup(svg, new DOMParser()));
         // v0.2.153 — zoom scales the SVG elements' width/height
         // attributes directly. Pre-v0.2.153 used CSS transform: scale
         // on .forge-output-score, but I also set width: 100/z% which

@@ -1,4 +1,4 @@
-# forge-client-obsidian
+# Forge Actions
 
 An Obsidian plugin for writing notes that mix plain-language prose with
 runnable Python and running that Python right inside Obsidian — no

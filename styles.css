@@ -442,7 +442,6 @@
   border-radius: 4px;
   color: var(--text-muted);
   text-decoration: none;
-  cursor: pointer;
 }
 
 .forge-output-download:hover {

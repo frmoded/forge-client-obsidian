@@ -75,7 +75,7 @@ export class ForgeSettingTab extends PluginSettingTab {
     // --- Transpile service (hosted /generate) ---------------------
     // First section — the token field is the one thing students must
     // configure post-install before /generate works.
-    containerEl.createEl('h3', { text: 'Transpile service' });
+    new Setting(containerEl).setName('Transpile service').setHeading();
 
     new Setting(containerEl)
       .setName('Transpile service URL')
@@ -162,7 +162,7 @@ export class ForgeSettingTab extends PluginSettingTab {
     }
 
     // --- Local engine (dev, secondary endpoints) ------------------
-    containerEl.createEl('h3', { text: 'Local engine (dev)' });
+    new Setting(containerEl).setName('Local engine (dev)').setHeading();
 
     new Setting(containerEl)
       .setName('Server URL')

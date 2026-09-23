@@ -1,7 +1,7 @@
 {
   "id": "forge-actions",
   "name": "Forge Actions",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "minAppVersion": "1.7.2",
   "description": "Client for the Forge recipe/notebook engine.",
   "author": "Oded Fuhrmann",
