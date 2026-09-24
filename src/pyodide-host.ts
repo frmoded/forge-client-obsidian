@@ -714,7 +714,7 @@ _forge_registry.scan(_forge_user_vault)
 # v0.2.333: two-vault split — forge-music renamed music-theory;
 # music-core added. v1.0 audit (task #19) collapses the JS-side +
 # Python-side + forge-action.ts copies into one shared constant.
-_BUNDLED_LIBRARIES_V1 = ["forge-moda", "music-theory", "music-core"]
+_BUNDLED_LIBRARIES_V1 = ["forge-moda"]
 _existing_order = [v for v in _forge_registry.resolution_order() if v != "forge"]
 for _lib in _BUNDLED_LIBRARIES_V1:
     if _lib not in _existing_order:

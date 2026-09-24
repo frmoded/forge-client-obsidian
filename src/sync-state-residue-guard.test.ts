@@ -53,7 +53,7 @@ test('no bundled note carries a persisted sync_state: line', () => {
   // Guard the guard: an empty walk would pass vacuously, which is the
   // failure mode L32 names for set-difference sweeps.
   assert.ok(
-    notes.length > 100,
+    notes.length > 20, // lean branch ships only forge-moda + forge-tutorial (56 notes)
     `expected the bundled-vault walk to find the shipped notes, found ${notes.length}`,
   );
 
@@ -74,7 +74,7 @@ test('no inlined note asset carries a persisted sync_state: line', () => {
   const noteKeys = Object.keys(BUNDLED_ASSETS).filter((k) => k.endsWith('.md'));
 
   assert.ok(
-    noteKeys.length > 100,
+    noteKeys.length > 20, // lean branch inlines only forge-moda + forge-tutorial notes (58)
     `expected inlined note assets, found ${noteKeys.length}`,
   );
 

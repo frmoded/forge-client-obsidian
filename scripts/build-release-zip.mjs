@@ -78,11 +78,8 @@ const REQUIRED_FILES = [
   { path: "assets/vaults/forge-moda/forge.toml",              hint: "Repo is missing the forge-moda vault bundle — unexpected." },
   // v0.2.333 Phase 5 two-vault split — forge-music renamed music-theory;
   // music-core added.
-  { path: "assets/vaults/music-theory/forge.toml",            hint: "Repo is missing the music-theory vault bundle — run `node scripts/sync-bundled-vault.mjs music-theory`." },
   // v0.8.0 — `blues/` renamed to `slow_burn/` (drain 2026-07-02-1800).
   // Progression data note now lives at slow_burn/twelve_bar_blues_progression.md.
-  { path: "assets/vaults/music-theory/slow_burn/twelve_bar_blues_progression.md", hint: "music-theory bundle missing slow_burn/twelve_bar_blues_progression.md — re-sync the slow_burn subdir." },
-  { path: "assets/vaults/music-core/forge.toml",              hint: "Repo is missing the music-core vault bundle — run `node scripts/sync-bundled-vault.mjs music-core`." },
   // v0.2.76: Tier 1 tutorial bundle. Source at ~/projects/forge-tutorial/.
   { path: "assets/vaults/forge-tutorial/forge.toml",          hint: "forge-tutorial bundle missing — run `node scripts/sync-bundled-vault.mjs forge-tutorial`." },
   { path: "assets/vaults/forge-tutorial/README.md",           hint: "forge-tutorial bundle missing README — re-sync." },
@@ -92,8 +89,6 @@ const REQUIRED_FILES = [
   // actually works in Pyodide (closed-beta has no network). Pin
   // versions in the hint so a fresh setup can re-vendor the same
   // wheel files; see src/music21-bundle.test.ts for the verification.
-  { path: "assets/wheels/music21-8.3.0-py3-none-any.whl",     hint: "music21 wheel missing — re-vendor: pip download --no-deps -d assets/wheels music21==8.3.0 chardet jsonpickle more-itertools webcolors joblib requests urllib3 certifi idna; charset-normalizer needs --platform any --python-version 313 --only-binary :all: for the pure-Python wheel." },
-  { path: "assets/engine/forge/music/lib.py",                 hint: "forge.music.lib missing from engine bundle — copy from ~/projects/forge/forge/music/{__init__.py,lib.py} into assets/engine/forge/music/." },
 ];
 
 async function exists(p) {
