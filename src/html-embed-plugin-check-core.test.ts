@@ -66,3 +66,43 @@ test('decideHtmlEmbedPluginNotice: plugin display name is named plainly, not by 
     assert.match(disabled.noticeMessage, /Local HTML Embed/);
   }
 });
+
+// --- drain 2026-09-25-1910: the create-time gate was too narrow -------------
+// main.ts only checked `.html` creates whose path started with `assets/`, but
+// forge_create_asset writes to ANY vault-relative path (e.g. the monochord
+// gadget at music_instruments/resources/html/monochord.html), so the Notice
+// silently never fired for it. The path decision now lives in the pure core.
+import { readFileSync } from 'node:fs';
+import { isHtmlEmbedCandidatePath } from './html-embed-plugin-check-core.ts';
+
+test('isHtmlEmbedCandidatePath: a nested (non-assets/-root) .html create IS a candidate', () => {
+  assert.equal(isHtmlEmbedCandidatePath('music_instruments/resources/html/monochord.html'), true);
+  assert.equal(isHtmlEmbedCandidatePath('notes/resources/html/widget.html'), true);
+});
+
+test('isHtmlEmbedCandidatePath: assets/ and vault-root .html are still candidates', () => {
+  assert.equal(isHtmlEmbedCandidatePath('assets/cc-html-embed-test.html'), true);
+  assert.equal(isHtmlEmbedCandidatePath('page.html'), true);
+});
+
+test('isHtmlEmbedCandidatePath: extension match is case-insensitive and exact', () => {
+  assert.equal(isHtmlEmbedCandidatePath('a/B.HTML'), true);
+  assert.equal(isHtmlEmbedCandidatePath('a/b.htmlx'), false);
+  assert.equal(isHtmlEmbedCandidatePath('a/b.md'), false);
+  assert.equal(isHtmlEmbedCandidatePath('a/b.svg'), false);
+  assert.equal(isHtmlEmbedCandidatePath('a/html'), false);
+});
+
+test('isHtmlEmbedCandidatePath: hidden directories (.obsidian plugin files etc.) are not', () => {
+  assert.equal(isHtmlEmbedCandidatePath('.obsidian/plugins/forge/assets/iframe/index.html'), false);
+  assert.equal(isHtmlEmbedCandidatePath('notes/.cache/x.html'), false);
+});
+
+test("main.ts's vault 'create' handler uses the predicate, not an assets/ prefix gate", () => {
+  const src = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
+  const i = src.indexOf('maybeNotifyHtmlEmbedPluginState(file.path)');
+  assert.ok(i > 0, 'could not find the create-handler call site');
+  const handler = src.slice(Math.max(0, i - 400), i + 60);
+  assert.match(handler, /isHtmlEmbedCandidatePath\(file\.path\)/);
+  assert.doesNotMatch(handler, /startsWith\('assets\/'\)/);
+});

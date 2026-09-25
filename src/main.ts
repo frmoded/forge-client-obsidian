@@ -102,7 +102,7 @@ import {
   routeActionCodeRegen, type RoutingDeps } from './route-action-code-regen-core.ts';
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
-import { decideHtmlEmbedPluginNotice } from './html-embed-plugin-check-core.ts';
+import { decideHtmlEmbedPluginNotice, isHtmlEmbedCandidatePath } from './html-embed-plugin-check-core.ts';
 import {
   readExpandedState,
   writeExpandedState,
@@ -739,8 +739,8 @@ export default class ForgePlugin extends Plugin {
     // Initial paint (file may already be open at plugin load).
     void this.refreshSourceLayerStatusBar();
 
-    // Drain 2026-09-22-1840 — warn when a `.html` asset lands under
-    // `assets/` (forge_create_asset, drain 2026-09-21-0900) and the
+    // Drain 2026-09-22-1840 — warn when a `.html` asset lands in the vault
+    // (forge_create_asset, drain 2026-09-21-0900) and the
     // "Local HTML Embed" plugin needed to render it isn't installed
     // AND enabled. Checked FRESH on every matching create (not cached
     // at onload) — the driver can install/enable the plugin mid-
@@ -748,8 +748,9 @@ export default class ForgePlugin extends Plugin {
     // silent) past that point.
     this.registerEvent(this.app.vault.on('create', (file) => {
       if (!(file instanceof TFile)) return;
-      if (file.extension !== 'html') return;
-      if (!file.path.startsWith('assets/')) return;
+      // Any .html anywhere (not just under assets/): forge_create_asset writes
+      // to any vault-relative path — see isHtmlEmbedCandidatePath.
+      if (!isHtmlEmbedCandidatePath(file.path)) return;
       this.maybeNotifyHtmlEmbedPluginState(file.path);
     }));
 

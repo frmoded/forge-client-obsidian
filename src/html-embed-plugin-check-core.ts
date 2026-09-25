@@ -67,3 +67,22 @@ export function decideHtmlEmbedPluginNotice(
       + `Settings → Community plugins → search "${PLUGIN_DISPLAY_NAME}" → install.`,
   };
 }
+
+/** Should a freshly created vault file trigger the html-embed plugin-state check?
+ *
+ *  Any `.html` file, ANYWHERE in the vault. This used to require the path to
+ *  start with `assets/`, but `forge_create_asset` writes to whatever
+ *  vault-relative path the caller gives it (its own docs use
+ *  `note/resources/images/...`; the monochord gadget landed at
+ *  `music_instruments/resources/html/monochord.html`), so the Notice silently
+ *  never fired for it — a false negative that let a broken embed ship for days.
+ *  A stray unrelated `.html` file costing one (per-state, per-session-deduped)
+ *  Notice is the much cheaper error.
+ *
+ *  Paths with a hidden segment (`.obsidian/...`, `.cache/...`) are excluded:
+ *  plugin bundles and the Forge plugin's own restored iframe assets are `.html`
+ *  files that are never html-embed targets. */
+export function isHtmlEmbedCandidatePath(path: string): boolean {
+  if (!/\.html$/i.test(path)) return false;
+  return !path.split('/').some((segment) => segment.startsWith('.'));
+}
