@@ -10,9 +10,9 @@ test('libraryForActiveFilePath: forge-moda match', () => {
   assert.equal(libraryForActiveFilePath('forge-moda/sub/file.md'), 'forge-moda');
 });
 
-test('libraryForActiveFilePath: music-theory + music-core match (v0.2.333 split)', () => {
-  assert.equal(libraryForActiveFilePath('music-theory/lab.md'), 'music-theory');
-  assert.equal(libraryForActiveFilePath('music-core/sketch.md'), 'music-core');
+test('libraryForActiveFilePath: music libraries are not bundled on the lean branch', () => {
+  assert.equal(libraryForActiveFilePath('music-theory/lab.md'), null);
+  assert.equal(libraryForActiveFilePath('music-core/sketch.md'), null);
   // Pre-split name is no longer a known library — a stale forge-music/
   // dir (or the parked forge-music.bak.legacy/) must not fold-group.
   assert.equal(libraryForActiveFilePath('forge-music/lab.md'), null);
@@ -102,10 +102,10 @@ test('initialExpandedLibraries: null active + only library groups → nothing ex
 
 test('initialExpandedLibraries: active in known lib still expands only that one (library groups stay closed)', () => {
   const r = initialExpandedLibraries(
-    'music-theory/slow_burn/twelve_bar_blues_progression.md',
-    ['music-theory', 'forge-moda', 'Music library'],
+    'forge-tutorial/01-hello/Hello.md',
+    ['forge-tutorial', 'forge-moda', 'Moda library'],
   );
-  // Music context wins → only music-theory expanded; Music library
-  // stays closed even though it's the semantically related group.
-  assert.deepEqual(Array.from(r), ['music-theory']);
+  // Active file's own library wins → only forge-tutorial expanded; Moda
+  // library stays closed even though it's another known group.
+  assert.deepEqual(Array.from(r), ['forge-tutorial']);
 });

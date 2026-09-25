@@ -155,12 +155,8 @@ import { parseInputEnums } from './input-enums-core.ts';
 import { makeFacetCopyExtension } from './facet-copy-view-extension.ts';
 import {
   parseInputWidgets,
-  registerWidget,
   stripWidgetSeededInputs,
 } from './input-widget-core.ts';
-import { pianoWidget } from './input-widget-piano.ts';
-import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
-import { chordBuilderWidget } from './input-widget-chord-builder.ts';
 import { shouldRefreshPythonAfterRun } from './refresh-python-after-run-core.ts';
 import { decideModaDispatch } from './moda-dispatch-decision-core.ts';
 import { englishHashForStamp } from './english-hash-core.ts';
@@ -491,13 +487,9 @@ export default class ForgePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
-    // Drains 2026-08-05-1500/-1530/-1600 — register the run-input
-    // widgets. All three WidgetType names now have renderers; an
-    // unknown type in frontmatter still gets the fallback text box
-    // plus a Notice naming it.
-    registerWidget(pianoWidget);
-    registerWidget(guitarFretboardWidget);
-    registerWidget(chordBuilderWidget);
+    // Run-input widgets (piano / guitar fretboard / chord builder) are music-
+    // domain and are not registered on this lean branch; a widget type in
+    // frontmatter falls back to the plain text box plus a Notice naming it.
 
     // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
     // manifest.json but fails to replace main.js, leaving cohort

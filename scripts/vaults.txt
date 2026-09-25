@@ -25,6 +25,4 @@
 # ignored. Order is the iteration order for release-prep.sh.
 
 forge-moda
-music-theory
 forge-tutorial
-music-core

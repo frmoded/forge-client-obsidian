@@ -30,7 +30,7 @@ export const BUNDLED_VAULTS_ROOT =
  *  _BUNDLED_LIBRARIES_V1 is a three-entry Python resolution order.
  *  Both are pinned to the canonical set by the same test file. */
 export const BUNDLED_VAULT_NAMES = [
-  'forge-moda', 'music-theory', 'forge-tutorial', 'music-core',
+  'forge-moda', 'forge-tutorial',
 ] as const;
 
 export type BundledVaultName = typeof BUNDLED_VAULT_NAMES[number];

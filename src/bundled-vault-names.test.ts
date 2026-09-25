@@ -70,7 +70,7 @@ const actionBundled = extractNames(readSrc('src/forge-action.ts'), 'BUNDLED_VAUL
 test('vaults.txt is the post-split canonical set', () => {
   assert.deepEqual(
     [...CANONICAL].sort(),
-    ['forge-moda', 'forge-tutorial', 'music-core', 'music-theory'],
+    ['forge-moda', 'forge-tutorial'],
   );
 });
 
@@ -79,7 +79,7 @@ test('every bundle-resolved lib (python resolution order) is canonical + mount-s
     assert.ok(CANONICAL.includes(v), `_BUNDLED_LIBRARIES_V1 has non-canonical ${v}`);
     assert.ok(mountSkip.includes(v), `BUNDLED_LIBRARY_NAMES missing bundle lib ${v}`);
   }
-  assert.deepEqual(pythonV1, ['forge-moda', 'music-theory', 'music-core']);
+  assert.deepEqual(pythonV1, ['forge-moda']);
 });
 
 test('forge-action BUNDLED_VAULTS ⊆ canonical', () => {
@@ -148,7 +148,11 @@ test('the canonical vault-name set is exported once and equals vaults.txt', () =
 
 /** Does this source spell out the whole canonical set as literals? */
 function relistsCanonicalSet(source) {
-  return CANONICAL.every((v) => new RegExp(`['"]${v}['"]`).test(source));
+  // A re-listing is ONE array literal that spells every canonical name —
+  // not a file that merely mentions each name somewhere (with a two-name
+  // canonical set, plain mentions in prose/strings are common).
+  const groups = source.match(/\[[^\]]*\]/g) ?? [];
+  return groups.some((g) => CANONICAL.every((v) => new RegExp(`['"]${v}['"]`).test(g)));
 }
 
 test('non-vacuity: the re-listing detector actually detects a re-listing', () => {
@@ -166,7 +170,11 @@ test('no source file re-lists the canonical vault names by hand', () => {
   // _BUNDLED_LIBRARIES_V1 = a 3-entry order) and neither spells the
   // canonical four — so if one ever grows into a copy of the bundle
   // set, this fails instead of quietly allowing it.
-  const ALLOWED = new Set(['bundled-vault-extraction-core.ts']);
+  // welcome.ts's sweepLegacyBakDirs `candidates` is a FIXED historical set
+  // (the two vaults that ever produced `<lib>.bak.<version>` litter), not
+  // "the current bundle" — it equals the canonical set on the lean branch
+  // only by coincidence, so it is exempt from the by-hand-copy check.
+  const ALLOWED = new Set(['bundled-vault-extraction-core.ts', 'welcome.ts']);
   const offenders = fs
     .readdirSync(path.join(ROOT, 'src'))
     .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))

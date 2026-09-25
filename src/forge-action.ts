@@ -271,7 +271,7 @@ async function fetchRegistryVaults(): Promise<
 //
 // `host` is kept on the signature so the call sites don't need
 // touching; underscored to silence unused-param.
-const BUNDLED_VAULTS = new Set(['forge-moda', 'music-theory', 'music-core']);
+const BUNDLED_VAULTS = new Set(['forge-moda']);
 
 async function installVault(_host: ForgeHost, vaultName: string): Promise<boolean> {
   if (BUNDLED_VAULTS.has(vaultName)) {
@@ -295,7 +295,7 @@ async function installVault(_host: ForgeHost, vaultName: string): Promise<boolea
   // remote vault registry — only the wording changed.
   void forgeNotice(this.app,
     `Forge: install of "${vaultName}" skipped — only the built-in `
-    + 'vaults (forge-moda, music-theory, music-core) are available '
+    + 'vault (forge-moda) is available '
     + 'right now. More vaults are planned.',
   );
   return false;
@@ -592,7 +592,7 @@ class ConfirmRemoveDomainsModal extends Modal {
         this.toRemove.join(', ') +
         `) — snippets in this vault that use injected names from ` +
         `${n === 1 ? 'that domain' : 'those domains'} (e.g. ` +
-        `\`Particle\`, \`music21\`) will fail at compute time with ` +
+        `\`Particle\`) will fail at compute time with ` +
         `NameError after this change. Installed vault files stay on ` +
         `disk; only forge.toml is edited. Continue?`,
     });
@@ -706,7 +706,7 @@ class CreateNewForgeVaultModal extends Modal {
 // Initialize-as-Forge-vault wizard
 // ---------------------------------------------------------------------------
 
-type Flavor = 'quick' | 'moda' | 'moda-learning' | 'music' | 'multi' | 'empty';
+type Flavor = 'quick' | 'moda' | 'moda-learning' | 'multi' | 'empty';
 
 /** Copy every `role: root` snippet from a freshly-installed library
  *  subdir into the vault root. Returns the list of files copied vs
@@ -803,8 +803,6 @@ class InitializeForgeVaultWizard extends Modal {
         'domains = ["moda"], installs forge-moda from the registry, drops a welcome note. Library snippets stay in forge-moda/ — for vaults that author against the library without editing it.'],
       ['moda-learning', 'MoDa learning vault (recommended for new users)',
         'Same as MoDa, plus copies the library\'s role: root snippets (setup, on_mouse_click, go) to the vault root as your editable entry points. Library leaves stay in forge-moda/ and can be customized later.'],
-      ['music', 'Music',
-        'domains = ["music"], installs music-theory + music-core (bundled), drops a welcome note.'],
       ['multi', 'Multi-domain',
         'Pick any combination below; installs each chosen registry vault.'],
       ['empty', 'Empty Forge vault',
@@ -854,7 +852,6 @@ class InitializeForgeVaultWizard extends Modal {
     switch (this.flavor) {
       case 'moda':
       case 'moda-learning': return ['moda'];
-      case 'music': return ['music'];
       case 'multi': return Array.from(this.multi);
       case 'quick':
       case 'empty':
@@ -925,7 +922,6 @@ class InitializeForgeVaultWizard extends Modal {
         '# Description\n\nReturn the string "hello forge".\n\n' +
         '# Recipe\n\nCall [[print]] with text="hello forge".\n');
     } else if (this.flavor === 'moda' || this.flavor === 'moda-learning' ||
-               this.flavor === 'music' ||
                (this.flavor === 'multi' && domains.length > 0)) {
       const where = domains.includes('moda')
         ? 'Open the Forge ribbon → "Open MoDa simulation" to launch the sim.'
