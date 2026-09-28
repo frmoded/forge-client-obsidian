@@ -1,6 +1,6 @@
 {
   "id": "forge-actions",
-  "name": "Forge Actions",
+  "name": "Forge Actions (Beta)",
   "version": "0.6.0",
   "minAppVersion": "1.7.2",
   "description": "Client for the Forge recipe/notebook engine.",
