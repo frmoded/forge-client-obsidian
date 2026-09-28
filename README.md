@@ -1,12 +1,15 @@
 # Forge Actions
 
+> ⚠️ **Beta — actively evolving.** Expect rough edges and breaking changes between versions.
+
 An Obsidian plugin for writing notes that mix plain-language prose with
 runnable Python and running that Python right inside Obsidian — no
 separate Python install, engine, or terminal setup on your machine.
 
-**Status**: currently distributed via [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-or a manual zip install (see below). A submission to Obsidian's
-community plugin directory is in progress.
+**Status**: beta, and available in Obsidian's community plugin directory
+(**Settings → Community plugins → Browse**, search for "Forge Actions").
+You can also install it via [BRAT](https://github.com/TfTHacker/obsidian42-brat)
+or a manual zip (see below).
 
 ## What it does
 
@@ -34,7 +37,7 @@ Quick version:
 1. Download the latest `forge-client-obsidian-vX.Y.Z.zip` from the
    [Releases page](https://github.com/frmoded/forge-client-obsidian/releases).
 2. Unzip it into `<your-vault>/.obsidian/plugins/forge/`.
-3. In Obsidian: **Settings → Community plugins**, enable **Forge Client**.
+3. In Obsidian: **Settings → Community plugins**, enable **Forge Actions**.
 
 See [INSTALL.md](INSTALL.md) for the full walkthrough, including
 one-time token setup for the note-authoring service and a
