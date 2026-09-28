@@ -103,7 +103,7 @@ test('CW-1900 no field aliasing: mutating one output field does not affect helpe
 //
 // CCQA found `python_derived_from_recipe_hash` stamped equal to the
 // note's CURRENT `recipe_hash` on the Recipe-canonical bundled fixture
-// `music-theory/exercises/scale_quality_quiz.md`, after a hammer press
+// `forge-tutorial/01-hello/hello_world.md`, after a hammer press
 // that left the Recipe untouched and regenerated `# Python` from the
 // DESCRIPTION. The note then actively claimed its Python was a faithful
 // derivation of its Recipe — a hash-integrity LIE, not staleness.
@@ -230,8 +230,16 @@ test('1700 REGRESSION FIXTURE: the shipped Recipe-canonical note CCQA hit', () =
   // frontmatter block, which would only prove I typed what the code does.
   // §4 forbids running the repro against the live library file; reading
   // it is not running it.
+  //
+  // Was `music-theory/exercises/scale_quality_quiz.md` (CCQA's original repro note); that
+  // vault was removed from assets/ by the obsidian-lean-v1 strip and main inherited the gap
+  // in the merge, leaving this fixture path pointing at nothing (drain 2026-09-28). Repointed
+  // at `forge-tutorial/01-hello/hello_world.md`, a still-bundled Recipe-canonical note that
+  // independently carries the exact same false-claim shape in its own committed frontmatter
+  // (`python_derived_from_recipe_hash` equal to `recipe_hash`) — not a fixture I hand-crafted
+  // to fit the test.
   const note = readFileSync(
-    new URL('../assets/vaults/music-theory/exercises/scale_quality_quiz.md',
+    new URL('../assets/vaults/forge-tutorial/01-hello/hello_world.md',
       import.meta.url), 'utf8');
   const fm = (k: string) => {
     const m = new RegExp(`^${k}:\\s*(.*)$`, 'm').exec(note.slice(0, note.indexOf('\n---\n', 4)));
