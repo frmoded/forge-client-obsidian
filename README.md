@@ -6,10 +6,8 @@ An Obsidian plugin for writing notes that mix plain-language prose with
 runnable Python and running that Python right inside Obsidian — no
 separate Python install, engine, or terminal setup on your machine.
 
-**Status**: beta, and available in Obsidian's community plugin directory
-(**Settings → Community plugins → Browse**, search for "Forge Actions").
-You can also install it via [BRAT](https://github.com/TfTHacker/obsidian42-brat)
-or a manual zip (see below).
+**Status**: beta. Not yet in Obsidian's community plugin directory — install via
+[BRAT](https://github.com/TfTHacker/obsidian42-brat) or a manual zip (see below).
 
 ## What it does
 
