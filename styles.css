@@ -1747,3 +1747,37 @@
   background: var(--interactive-accent);
   opacity: 0.4;
 }
+
+/* Drain 2026-09-29-1030 — native html-embed code-block processor,
+   replacing the third-party "Local HTML Embed" plugin dependency.
+   Height is the one genuinely per-embed-instance value (parsed from
+   the code block's own source) and stays as an inline style on the
+   element per this file's own established convention (see
+   .forge-panel-split-divider above / output-view.ts's flex-basis) —
+   everything static lives here instead. No caption/chrome wrapper by
+   design (the actual point of this drain): the iframe is the entire
+   rendered surface. */
+.forge-html-embed-iframe {
+  width: 100%;
+  border: none;
+  display: block;
+}
+
+.forge-html-embed-error {
+  margin: 8px 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-error-hover);
+}
+
+.forge-html-embed-error-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.forge-html-embed-error-detail {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
