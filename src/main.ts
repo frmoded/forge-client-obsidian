@@ -103,6 +103,7 @@ import {
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
+import { musicEdition } from './music-edition-selected.ts';
 import {
   readExpandedState,
   writeExpandedState,
@@ -487,9 +488,11 @@ export default class ForgePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
-    // Run-input widgets (piano / guitar fretboard / chord builder) are music-
-    // domain and are not registered on this lean branch; a widget type in
-    // frontmatter falls back to the plain text box plus a Notice naming it.
+    // Drains 2026-08-05-1500/-1530/-1600 — the run-input widgets (piano / guitar fretboard /
+    // chord builder) are a music-edition feature: registered through the seam. In the lean
+    // edition this is a no-op, so a widget type in frontmatter falls back to the plain text box
+    // plus a Notice naming it.
+    musicEdition.registerInputWidgets();
 
     // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
     // manifest.json but fails to replace main.js, leaving cohort

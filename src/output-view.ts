@@ -7,6 +7,7 @@ import {
 } from './mcq-widget-core.ts';
 import { clampStripFraction, stripFractionFromDrag, stripFlexBasis, DEFAULT_STRIP_FRACTION } from './forge-panel-split-core.ts';
 import { shouldRenderEntryMeta } from './output-entry-meta-core.ts';
+import { musicEdition } from './music-edition-selected.ts';
 import { ForgeSaveDataModal, dataTemplate } from './modal.ts';
 import { forgeNotice } from './forge-notice.ts';
 import {
@@ -112,6 +113,8 @@ export class ForgeOutputView extends ItemView {
     // Stop/Clear distinction added marginal UI complexity; cohort can
     // clear and re-render via Clear. Only the standalone button DOM goes.
     header.createEl('button', { text: 'Clear' }).onclick = () => {
+      // v0.2.224 — silence audio before tearing down DOM (no-op in the lean edition).
+      musicEdition.stopPlayers(this.outputEl, (m, e) => console.error(m, e));
       this.outputEl.empty();
     };
 
@@ -319,6 +322,8 @@ export class ForgeOutputView extends ItemView {
   }
 
   async onClose() {
+    // v0.2.224 — silence audio before tearing down DOM (no-op in the lean edition).
+    musicEdition.stopPlayers(this.contentEl, (m, e) => console.error(m, e));
     this.contentEl.empty();
   }
 
@@ -382,6 +387,8 @@ export class ForgeOutputView extends ItemView {
   // type:data snippet. Replace semantics match the user mental model — the
   // panel reflects what they're looking at, not a log of every preview.
   async previewDataSnippet(snippetId: string, contentType: string, body: string, sourcePath: string) {
+    // v0.2.224 — silence any active midi-player before swapping content (no-op in lean).
+    musicEdition.stopPlayers(this.outputEl, (m, e) => console.error(m, e));
     this.outputEl.empty();
     const entry = this.makeEntry(snippetId);
     entry.addClass('is-data-preview');
@@ -393,6 +400,8 @@ export class ForgeOutputView extends ItemView {
   // URL to a native HTML element and let the browser do the work. Image/audio/
   // video each get their format-appropriate element.
   async previewBinarySnippet(snippetId: string, contentType: string, contentRef: string) {
+    // v0.2.224 — silence any active midi-player before swapping content (no-op in lean).
+    musicEdition.stopPlayers(this.outputEl, (m, e) => console.error(m, e));
     this.outputEl.empty();
     const entry = this.makeEntry(snippetId);
     entry.addClass('is-data-preview');
@@ -433,7 +442,8 @@ export class ForgeOutputView extends ItemView {
   ) {
     switch (contentType) {
       case 'musicxml':
-        this.renderText(entry, body);
+        // Score rendering is a music-edition feature; the lean edition shows the source as text.
+        if (!musicEdition.renderMusicXML(entry, body, snippetId)) this.renderText(entry, body);
         return;
       case 'json':
         this.renderJSON(entry, body);
@@ -500,9 +510,11 @@ export class ForgeOutputView extends ItemView {
     if (isTagged(result)) {
       switch (result.type) {
         case 'musicxml':
-          // Score rendering (Verovio) is music-domain and is not shipped on
-          // this lean branch; show the payload source as plain text.
-          this.renderText(entry, String((result as { content?: unknown }).content ?? ''));
+          // Score rendering (Verovio, dual-XML percussion toggle) is a music-edition feature;
+          // the lean edition shows the payload source as plain text.
+          if (!musicEdition.renderTaggedMusicXML(entry, result as Record<string, unknown>, snippetId)) {
+            this.renderText(entry, String((result as { content?: unknown }).content ?? ''));
+          }
           return;
         // case 'svg':  case 'ifc':  // when those land
       }
