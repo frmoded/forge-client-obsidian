@@ -104,24 +104,34 @@ test('listing hygiene: basenames, dedupe, sorted, no dotfiles', () => {
   assert.deepEqual(derived.names, ['forge-moda', 'music-theory']);
 });
 
-test('the derived set agrees with scripts/vaults.txt (no hand-maintained drift)', () => {
-  // Derived-not-hand-maintained evidence: what ships under
-  // assets/vaults/ IS the canonical vaults.txt list. If they ever
-  // diverge, the bundle wins at runtime and this fails loudly.
+test('the derived set agrees with the vault list files (no hand-maintained drift), for BOTH editions', () => {
+  // Derived-not-hand-maintained evidence. Music-edition Phase 2: assets/vaults/ now holds the vaults of
+  // EVERY edition (the edition is chosen at BUILD time by scripts/editions.mjs, never by what is on disk),
+  // so what is tracked under assets/vaults/ is the UNION of scripts/vaults.txt (lean) and
+  // scripts/vaults.music.txt (music). Each edition's own list must then be derivable from a listing of
+  // exactly those folders — which is what the runtime does with the folders a build extracted.
+  const readList = (file: string) => fs
+    .readFileSync(path.join(REPO, 'scripts', file), 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#'));
+  const lean = readList('vaults.txt');
+  const music = readList('vaults.music.txt');
   const onDisk = fs
     .readdirSync(path.join(REPO, 'assets', 'vaults'), { withFileTypes: true })
     .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
     .map((d) => d.name)
     .sort();
-  const canonical = fs
-    .readFileSync(path.join(REPO, 'scripts', 'vaults.txt'), 'utf8')
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l !== '' && !l.startsWith('#'))
-    .sort();
+  const union = [...new Set([...lean, ...music])].sort();
   assert.ok(onDisk.length > 0, 'assets/vaults must not be empty');
-  assert.deepEqual(onDisk, canonical);
-  assert.deepEqual(deriveBundledVaultNames(listingFor(onDisk)).names, canonical);
+  assert.deepEqual(onDisk, union, 'assets/vaults must hold exactly the union of both editions\' vaults');
+  for (const [edition, list] of [['lean', lean], ['music', music]] as const) {
+    assert.deepEqual(
+      deriveBundledVaultNames(listingFor([...list])).names,
+      [...list].sort(),
+      `${edition}: the derived set must equal that edition's list file`,
+    );
+  }
 });
 
 test('welcome.ts extracts from the derived set, not a hardcoded list', () => {

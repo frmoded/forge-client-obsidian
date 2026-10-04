@@ -1,0 +1,31 @@
+A **pitch class** is a note's identity independent of octave — essentially [[pitch]] *mod* [[octave]]. Every C, in any register, belongs to pitch class C. The three notes below are all pitch class C:
+
+![[notes/resources/audio/pitch_class.mp3]]
+
+Here they are on the staff:
+
+![[notes/resources/images/pitch_class_score.svg]]
+
+Reading the [[octave]] number off the staff: in treble clef, **C4** (middle C) sits one ledger line below the staff — the most common reference point for finding your way around. **C5**, an octave higher, sits inside the staff, in the third space up. **C3**, an octave below middle C, sits several ledger lines further down still — which is exactly why bass clef exists: it moves the staff itself down so low notes like C3 don't need a stack of ledger lines to write. Same three pitch classes, same letter, three different vertical positions — the ledger-line count (or which clef is used at all) is what tells you the octave.
+
+And here's where they sit on a piano — same key, three octaves apart:
+
+![[notes/resources/images/pitch_class_piano.svg]]
+
+On guitar, pitch class C shows up at several different fret/string positions rather than one fixed spot — find every C (and every other pitch class) on the full fretboard map in [[guitar]].
+
+There are exactly **12 pitch classes** — one per [[semitone]] in the octave. This is the cleanest engineer's handle on a note: **pitch = (pitch class, octave)**. The [[note_name|letter]] + [[accidental]] give you the class; the octave number gives you the register. See [[piano]] and [[guitar]] for how the 12 pitch classes map onto each instrument.
+
+
+<div style="
+  display:flex;
+  justify-content:space-between;
+  font-size:12px;
+  color:#666666;
+  border-top:1px solid #F2F2EC;
+  padding:6px 2px;
+  margin:10px 0;
+">
+<span>&uarr; <a class="internal-link" data-href="Note_notation" href="Note_notation" style="color:#1963D1;">Note_notation</a></span>
+<span><a class="internal-link" data-href="semitone" href="semitone" style="color:#1963D1;">semitone</a> &rarr;</span>
+</div>

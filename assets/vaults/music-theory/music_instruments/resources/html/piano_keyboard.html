@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Piano keyboard</title>
+<style>
+  /* Palette: forge_music_theory_style_guide.md, "Color scheme" (revised 2026-09-25).
+     Same values as monochord.html. */
+  :root {
+    --paper: #FDFCFA;   /* Vault Background (Paper) */
+    --ink: #2B2B2B;     /* Title Text */
+    --muted: #555555;   /* Body Text / Plot Labels */
+    --axis: #666666;    /* Axis Lines / Strong Ticks */
+    --grid: #F2F2EC;    /* Faint Gridlines / Fine Ticks */
+    --left: #2B2B2B;    /* Primary Signal / Input 1 */
+    --right: #B39373;   /* Secondary Signal / Input 2 */
+    --right-text: #7A644E; /* --right darkened for legible TEXT on the paper background */
+    --derived: #64748B; /* Combined / Derived Series */
+    --highlight: #F8C54B; /* Highlight: a held key */
+    --accent: #D72027;  /* Primary Accent: keyboard focus */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--muted);
+    padding: 8px 10px 14px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 660px; margin: 0 auto; }
+  /* Two octaves do not fit a phone at a legible size, so the keyboard keeps a
+     minimum width and scrolls sideways there instead of shrinking its labels. */
+  .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  svg { display: block; width: 100%; min-width: 560px; height: auto; user-select: none; -webkit-user-select: none; }
+  .key { cursor: pointer; }
+  .key:focus { outline: none; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.white.held rect { fill: var(--highlight); }
+  .key.black.held rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
+  .key.black.held text { fill: var(--ink); }
+  /* Plain :focus (not :focus-visible): a mouse click focuses the key too, and
+     :focus-visible would hide the ring exactly when the user clicked it. */
+  .key:focus rect { stroke: var(--accent); stroke-width: 3; }
+  .key text { pointer-events: none; }
+  .key.white text { fill: var(--muted); font-size: 11px; }
+  .key.black text { fill: var(--paper); font-size: 8.5px; }
+  select {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: #fff; border: 1px solid var(--axis); border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; min-height: 40px;
+  }
+  select:hover { border-color: var(--ink); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; }
+  button {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: #fff; border: 1px solid var(--axis); border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; min-height: 40px;
+  }
+  button:hover { border-color: var(--ink); }
+  button:active { background: var(--grid); }
+  button.left  { border-color: var(--left);  color: var(--left); }
+  /* Role shows in COLOR only: same border weight, radius and text weight on every button.
+     The Secondary-Signal tan (--right) is a line/fill color and is only 2.9:1 against white as a
+     1px border, so it read as a thinner, washed-out border; use its text-safe darker shade. */
+  button.right { border-color: var(--right-text); color: var(--right-text); }
+  button.both  { border-color: var(--derived); color: var(--derived); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="scroller"><svg id="svg" role="group" aria-label="Piano keyboard, C3 to C5. Click a key to hold it, then play the held notes."></svg></div>
+
+<div class="controls">
+  <button class="both"  id="bT" title="All held notes at once, as a chord">Play together</button>
+  <button class="left"  id="bU" title="Held notes one at a time, lowest to highest">Play ascending</button>
+  <button class="right" id="bD" title="Held notes one at a time, highest to lowest">Play descending</button>
+  <button id="bC" title="Release every held key">Clear</button>
+  <select id="tuning" aria-label="Tuning system" title="Equal temperament: 12 identical semitones. Pythagorean: pure 3:2 fifths from C; the wolf fifth falls between G# and Eb (the D# key is really Eb here). Meantone: fifths narrowed for pure major thirds. Well temperament (Werckmeister III): four fifths narrowed, the rest pure, so every key is usable but each sounds a little different.">
+    <option value="equal" selected>Equal temperament</option>
+    <option value="pythagorean">Pythagorean</option>
+    <option value="meantone">Meantone (1/4-comma)</option>
+    <option value="well">Well temperament (Werckmeister III)</option>
+  </select>
+</div>
+
+</div>
+<script>
+(function () {
+  "use strict";
+
+  // --- pure math (no DOM) ------------------------------------------------
+  // Standard concert pitch, 12-tone equal temperament: A4 (MIDI 69) = 440 Hz and
+  // every semitone multiplies the frequency by 2^(1/12). Change A4_HZ to retune.
+  var A4_HZ = 440;
+  var LOW = 48, HIGH = 72;                       // C3 .. C5 inclusive (MIDI numbers)
+  var STAGGER = 0.2;                             // seconds between arpeggio onsets
+  var NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  // Tuning systems. Both keep A4 = 440 Hz, so switching only moves the other pitch classes.
+  //  - equal: every semitone is exactly 100 cents.
+  //  - pythagorean: pure 3:2 fifths stacked from C. Cents above C for each pitch class
+  //    (the conventional chain E-flat, B-flat, F, C, G, D, A, E, B, F-sharp, C-sharp, G-sharp, so the
+  //    "D#" and "A#" keys carry E-flat 32/27 and B-flat 16/9). Twelve pure fifths do not close into
+  //    seven octaves, so one fifth has to absorb the comma (the "wolf"): here it is G# -> D#, about
+  //    678.5 cents instead of 701.96. That is one legitimate spelling, not THE Pythagorean tuning.
+  var PYTH_CENTS = [0, 113.69, 203.91, 294.13, 407.82, 498.04, 611.73, 701.96, 815.64, 905.87, 996.09, 1109.78];
+  //  - meantone (quarter-comma): same Eb-Bb-F-C-G-D-A-E-B-F#-C#-G# chain as Pythagorean, but each
+  //    fifth is narrowed by 1/4 of the SYNTONIC comma (~21.5 cents, not the ~23.5-cent Pythagorean
+  //    comma used above) so four stacked fifths land on a pure major third. Computed, not hand-copied,
+  //    from the chain-of-fifths construction, so it cannot drift from the fifth size it is built on.
+  var PURE_FIFTH = 1200 * Math.log2(3 / 2);                 // 701.9550... cents
+  var SYNTONIC_COMMA = 1200 * Math.log2(81 / 80);            // 21.5063... cents
+  var MEANTONE_FIFTH = PURE_FIFTH - SYNTONIC_COMMA / 4;       // ~696.578 cents
+  function fifthChainCents(fifthCents) {
+    // Position i (0..11) is `i - 3` fifths from C, in the chain Eb Bb F C G D A E B F# C# G#;
+    // PC_ORDER maps that chain position to the pitch-class index (0=C .. 11=B) it lands on.
+    var PC_ORDER = [3, 10, 5, 0, 7, 2, 9, 4, 11, 6, 1, 8];
+    var cents = new Array(12);
+    for (var i = 0; i < 12; i++) {
+      var raw = (i - 3) * fifthCents;
+      cents[PC_ORDER[i]] = ((raw % 1200) + 1200) % 1200;
+    }
+    return cents;
+  }
+  var MEAN_CENTS = fifthChainCents(MEANTONE_FIFTH);
+  //  - well temperament (Werckmeister III, 1691): cents above C, given directly (not a uniform
+  //    chain) — fifths C-G, G-D, D-A and B-F# are each narrowed by 1/4 Pythagorean comma, the other
+  //    eight fifths are left pure, so every key is usable but no two keys sound quite alike.
+  var WERCK_CENTS = [0, 90.225, 192.180, 294.135, 390.225, 498.045, 588.270, 696.090, 792.180, 888.270, 996.090, 1092.180];
+  var TUNING_TABLES = { pythagorean: PYTH_CENTS, meantone: MEAN_CENTS, well: WERCK_CENTS };
+  var TUNINGS = ["equal", "pythagorean", "meantone", "well"];
+  function midiToHz(m, system) {
+    var table = TUNING_TABLES[system];
+    if (!table) return A4_HZ * Math.pow(2, (m - 69) / 12);          // "equal", or no system given
+    var pc = m % 12, oct = Math.floor(m / 12) - 1;                   // C4 = MIDI 60 -> oct 4
+    return A4_HZ * Math.pow(2, (table[pc] - table[9]) / 1200 + (oct - 4));   // anchored at A4 = 440
+  }
+  function midiToName(m) { return NAMES[m % 12] + (Math.floor(m / 12) - 1); }   // scientific pitch notation
+  function isBlack(m) { return NAMES[m % 12].length === 2; }
+  function sortedHeld(held) { return Array.from(held).sort(function (a, b) { return a - b; }); }
+  // What to sound for a held set: [{midi, hz, when}] with `when` in seconds from
+  // the button press. An empty set gives an empty plan, i.e. nothing happens.
+  function planPlay(held, mode, system) {
+    var ms = sortedHeld(held);
+    if (mode === "down") ms.reverse();
+    return ms.map(function (m, i) {
+      return { midi: m, hz: midiToHz(m, system), when: mode === "together" ? 0 : i * STAGGER };
+    });
+  }
+  // --- end pure math -----------------------------------------------------
+
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { A4_HZ: A4_HZ, LOW: LOW, HIGH: HIGH, STAGGER: STAGGER, midiToHz: midiToHz, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS, fifthChainCents: fifthChainCents, PURE_FIFTH: PURE_FIFTH, MEANTONE_FIFTH: MEANTONE_FIFTH, TUNINGS: TUNINGS, midiToName: midiToName, isBlack: isBlack, planPlay: planPlay };
+    return;
+  }
+
+  var NS = "http://www.w3.org/2000/svg";
+  var WW = 40, WH = 150, BW = 24, BH = 92, PAD = 2;
+  var $ = function (id) { return document.getElementById(id); };
+  var svg = $("svg"), keyEls = {};
+  // C3 + C4 start held, so "Play together" gives an octave on load.
+  var held = new Set([48, 60]);
+  var tuning = "equal";                          // default: equal temperament, as before
+
+  function el(tag, attrs, parent) {
+    var n = document.createElementNS(NS, tag);
+    for (var a in attrs) n.setAttribute(a, attrs[a]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+
+  // Lay out: white keys first, then black keys on top (so they win the hit test).
+  // That puts black keys after all white ones in the DOM, so each key gets an explicit
+  // tabindex in pitch order (C3 = 1 ... C5 = 25): Tab then walks the keyboard left to right.
+  var whites = [], blacks = [], wi = 0, m;
+  for (m = LOW; m <= HIGH; m++) {
+    if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 });   // sits on the boundary after the previous white
+    else { whites.push({ m: m, x: PAD + wi * WW }); wi++; }
+  }
+  svg.setAttribute("viewBox", "0 0 " + (wi * WW + 2 * PAD) + " " + (WH + 2 * PAD));
+
+  function makeKey(k, black) {
+    var g = el("g", { "class": "key " + (black ? "black" : "white"), tabindex: String(k.m - LOW + 1), role: "button",
+                      "aria-pressed": "false", "aria-label": midiToName(k.m), "data-midi": k.m }, svg);
+    el("rect", { x: k.x, y: PAD, width: black ? BW : WW, height: black ? BH : WH, rx: black ? 3 : 4 }, g);
+    var t = el("text", { x: k.x + (black ? BW : WW) / 2, y: black ? BH - 8 : WH - 8, "text-anchor": "middle" }, g);
+    t.textContent = midiToName(k.m);
+    keyEls[k.m] = g;
+    g.addEventListener("click", function () { toggle(k.m); try { g.focus({ preventScroll: true }); } catch (_) {} });
+    g.addEventListener("keydown", function (e) {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key === "Enter" || e.key === " ") { toggle(k.m); e.preventDefault(); }   // Space would otherwise scroll
+    });
+  }
+  whites.forEach(function (k) { makeKey(k, false); });
+  blacks.forEach(function (k) { makeKey(k, true); });
+
+  function toggle(midi) {
+    if (held.has(midi)) held.delete(midi); else held.add(midi);
+    render();
+  }
+  function render() {
+    for (var k in keyEls) {
+      var on = held.has(+k);
+      keyEls[k].classList.toggle("held", on);
+      keyEls[k].setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+
+  // --- Web Audio: OscillatorNode notes ----------------------------------
+  var ctx = null, wave = null;
+  function audio() {
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      // same plucked-string-ish spectrum as the monochord: harmonics falling off as 1/n^2
+      var re = new Float32Array(7), im = new Float32Array(7);
+      for (var n = 1; n < 7; n++) im[n] = 1 / (n * n);
+      wave = ctx.createPeriodicWave(re, im);
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function pluck(hz, when, peak) {
+    var c = audio(); if (!c) return;
+    var t0 = c.currentTime + (when || 0);
+    var o = c.createOscillator(), g = c.createGain();
+    o.setPeriodicWave(wave); o.frequency.value = hz;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.01);   // quick attack
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 4.4);  // ring out
+    o.connect(g); g.connect(c.destination);
+    o.start(t0); o.stop(t0 + 4.6);
+  }
+  function play(mode) {
+    var plan = planPlay(held, mode, tuning);   // read at play time, so held keys re-sound in the current tuning
+    if (!plan.length) return;                                // nothing held: do nothing
+    // Chords stack partials, so scale each voice down to keep the sum from clipping.
+    var peak = 0.28 / Math.sqrt(mode === "together" ? plan.length : 1);
+    plan.forEach(function (n) { pluck(n.hz, n.when, peak); });
+  }
+  $("bT").addEventListener("click", function () { play("together"); });
+  $("bU").addEventListener("click", function () { play("up"); });
+  $("bD").addEventListener("click", function () { play("down"); });
+  $("bC").addEventListener("click", function () { held.clear(); render(); });
+  $("tuning").addEventListener("change", function (e) { tuning = e.target.value; });
+
+  render();
+})();
+</script>
+</body>
+</html>

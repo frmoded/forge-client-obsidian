@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rhythm Box</title>
+<style>
+  /* Palette: forge_music_theory_style_guide.md, "Color scheme" (revised 2026-09-25).
+     Same values as monochord.html, piano_keyboard.html, guitar_fretboard.html, lute_fretboard.html. */
+  :root {
+    --paper: #FDFCFA;   /* Vault Background (Paper) */
+    --ink: #2B2B2B;     /* Title Text */
+    --muted: #555555;   /* Body Text / Plot Labels */
+    --axis: #666666;    /* Axis Lines / Strong Ticks */
+    --grid: #F2F2EC;    /* Faint Gridlines / Fine Ticks */
+    --zero: #A69B91;    /* Zero-line / beat divider */
+    --left: #2B2B2B;    /* Primary Signal (kick) */
+    --right: #B39373;   /* Secondary Signal */
+    --right-text: #7A644E; /* --right darkened for legible TEXT on the paper background */
+    --derived: #64748B; /* Combined / Derived Series (hi-hat) */
+    --highlight: #F8C54B; /* Highlight: a held/active step */
+    --accent: #D72027;  /* Primary Accent: keyboard focus, playing-step indicator */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--muted);
+    padding: 8px 10px 14px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  button {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: #fff; border: 1px solid var(--axis); border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; min-height: 40px;
+  }
+  button:hover { border-color: var(--ink); }
+  button:active { background: var(--grid); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.play { border-color: var(--derived); color: var(--derived); font-weight: 600; min-width: 76px; }
+  button.play.playing { background: var(--derived); color: #fff; }
+  .bpm { display: flex; align-items: center; gap: 4px; border: 1px solid var(--axis); border-radius: 6px; padding: 2px; }
+  .bpm button { border: none; min-width: 34px; min-height: 34px; padding: 4px; }
+  .bpm .val { min-width: 54px; text-align: center; font-variant-numeric: tabular-nums; font-size: 14px; color: var(--ink); }
+  .step-pos { min-width: 62px; text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
+  .sliders { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 10px; align-items: center; }
+  .slider-field { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .slider-field-wrap { display: flex; flex-direction: column; gap: 2px; }
+  .swing-caption { margin: 0; font-size: 11px; color: var(--muted); max-width: 320px; }
+  .slider-field input[type="range"] { width: 110px; }
+  .banks { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
+  .banks button { min-width: 36px; min-height: 34px; padding: 4px 8px; }
+  .export-msg { font-size: 12px; color: var(--muted); min-height: 16px; }
+  .export-fallback { width: 100%; height: 150px; margin-top: 8px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 6px; }
+  .banks button.active { background: var(--highlight); border-color: var(--ink); font-weight: 600; }
+  #timeSig {
+    font: inherit; font-size: 13px; color: var(--ink); margin-left: 10px;
+    background: #fff; border: 1px solid var(--axis); border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; min-height: 34px;
+  }
+  #timeSig:hover { border-color: var(--ink); }
+  .grid-wrap { min-width: 620px; }
+  .channel-row { display: grid; grid-template-columns: 110px repeat(16, 1fr); gap: 3px; align-items: center; margin-bottom: 4px; }
+  .channel-label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+  .channel-label .name { flex: 1; }
+  .mini-btn {
+    min-width: 22px; min-height: 22px; padding: 0; font-size: 10px; border-radius: 4px;
+    border: 1px solid var(--axis); background: #fff; color: var(--muted); line-height: 1;
+  }
+  .mini-btn.on.mute { background: var(--right-text); color: #fff; border-color: var(--right-text); }
+  .mini-btn.on.solo { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .step {
+    min-height: 34px; border: 1px solid var(--grid); border-radius: 4px; background: #fff;
+    cursor: pointer; padding: 0; position: relative;
+    transition: transform 150ms ease-out;   /* smooths the swing-preview nudge as the slider moves */
+  }
+  .step:hover { border-color: var(--axis); }
+  .step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .step.on { background: var(--right); border-color: var(--right-text); }
+  .step.beat-start { border-left: 2px solid var(--zero); }
+  .step.playing::after {
+    /* Was --accent (#D72027, saturated red) -- driver: "a bit harsh". #F8C54B (the guide's
+       --highlight gold) was tried first since it's the guide's own "active step" vocabulary, but
+       it measures only 1.57:1 contrast against the paper background as a thin border -- nearly
+       invisible, the same class of bug the piano/guitar/lute button-border fix caught earlier
+       this session. This desaturated red keeps "red = position marker" recognizable (distinct
+       from the gold/tan/slate "on" colors below) while dropping saturation, at 5.04:1 contrast. */
+    content: ""; position: absolute; inset: -3px; border: 2px solid #B54A50; border-radius: 6px; pointer-events: none;
+  }
+  /* Was var(--left) #2B2B2B (near-black, same value as Title Text) -- driver: "same but less so".
+     var(--muted) #555555 (already used for Body Text) is visibly softer while staying clearly
+     "on" against the paper background (7.27:1) and against the other two channels' on-colors. */
+  .step[data-channel="kick"].on { background: var(--muted); border-color: var(--ink); }
+  .step[data-channel="hihat"].on { background: var(--derived); border-color: #4b5a70; }
+  .bottom-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="transport">
+  <button class="play" id="bPlay" title="Start or stop the sequencer" aria-pressed="false">Play</button>
+  <div class="bpm">
+    <button id="bBpmDown" title="Decrease BPM" aria-label="Decrease BPM">−</button>
+    <span class="val" id="bpmVal">120 BPM</span>
+    <button id="bBpmUp" title="Increase BPM" aria-label="Increase BPM">+</button>
+  </div>
+  <button id="bTap" title="Tap a few times to set the tempo">Tap tempo</button>
+  <span class="step-pos" id="stepPos" aria-live="polite">-- / 16</span>
+</div>
+
+<div class="sliders">
+  <div class="slider-field-wrap">
+    <label class="slider-field">Swing
+      <input type="range" id="swing" min="0" max="100" value="0" aria-label="Swing amount">
+      <span id="swingVal">0%</span>
+    </label>
+    <p class="swing-caption">Delays every off-beat 16th note &mdash; try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells below nudge right as a preview, even while stopped.</p>
+  </div>
+  <label class="slider-field">Volume
+    <input type="range" id="volume" min="0" max="100" value="80" aria-label="Volume">
+    <span id="volumeVal">80%</span>
+  </label>
+</div>
+
+<div class="banks" role="group" aria-label="Pattern bank">
+  <button data-bank="A" class="active">A</button>
+  <button data-bank="B">B</button>
+  <button data-bank="C">C</button>
+  <button data-bank="D">D</button>
+  <select id="timeSig" aria-label="Time signature" title="Switching time signature stops playback and clears all four pattern banks (a 4/4 pattern has no meaningful 3/4 equivalent to preserve). Applies to every bank, not just the current one.">
+    <option value="4/4" selected>4/4</option>
+    <option value="3/4">3/4 (waltz)</option>
+  </select>
+</div>
+
+<div class="scroller">
+  <div class="grid-wrap" id="grid" role="group" aria-label="16-step pattern grid, kick, snare, hi-hat"></div>
+</div>
+
+<div class="bottom-row">
+  <button id="bRandom" title="Fill the current pattern with a musically biased random beat">Random</button>
+  <button id="bClear" title="Empty the current pattern">Clear</button>
+  <button id="bExport" title="Copy this bank's pattern (plus time signature, swing and tempo) as JSON, ready to paste into a data note">Export JSON</button>
+  <span class="export-msg" id="exportMsg" role="status" aria-live="polite"></span>
+</div>
+<textarea id="exportFallback" class="export-fallback" readonly hidden aria-label="Pattern JSON (select all and copy)"></textarea>
+
+</div>
+<script>
+// --- pure math (no DOM) -- BEGIN pure-core -------------------------------------------------
+var STEPS = 16;                                  // default (4/4) step count; a parameter everywhere it matters
+var GROUP_SIZE = 4;                              // 16th notes per beat, same for every signature this ship supports
+var CHANNELS = ["kick", "snare", "hihat"];
+var BANKS = ["A", "B", "C", "D"];
+var MIN_BPM = 40, MAX_BPM = 240;
+// Exactly two signatures, per the driver's explicit scope (no UI for arbitrary beats-per-bar).
+// `steps = beatsPerBar * subdivision`, `groupSize = subdivision` — the grid and every pure
+// function below are written generically against these two numbers, not against 16/12 directly,
+// so a third signature later is a new TIME_SIGNATURES entry, not a parallel set of functions.
+var TIME_SIGNATURES = {
+  "4/4": { label: "4/4", beatsPerBar: 4, subdivision: 4, steps: 16, groupSize: 4 },
+  "3/4": { label: "3/4 (waltz)", beatsPerBar: 3, subdivision: 4, steps: 12, groupSize: 4 }
+};
+
+function clampBpm(bpm) { return Math.max(MIN_BPM, Math.min(MAX_BPM, bpm)); }
+// One 16th note, in seconds, at a given BPM (BPM is quarter notes per minute; a 16th is 1/4 of that).
+function stepSeconds(bpm) { return 60 / bpm / 4; }
+
+// Standard swing: delay every SECOND 16th of each eighth-note pair (steps 1,3,5,... 0-indexed —
+// the "off" 16th) by a fraction of one 16th-note's duration. 0% = straight grid; 100% = the off
+// 16th sits halfway to the NEXT 16th (a gentle, non-extreme swing feel; some DAWs push further
+// toward a full triplet feel at 100% — this implementation caps at +0.5 step, a defensible,
+// commonly-used middle ground, stated explicitly here rather than left ambiguous).
+function swingOffsetSeconds(bpm, swingPct, stepIndex) {
+  var pct = Math.max(0, Math.min(100, swingPct));
+  if (stepIndex % 2 === 0) return 0;                 // only the "off" 16th of each pair swings
+  return (pct / 100) * 0.5 * stepSeconds(bpm);
+}
+
+// Tap tempo: push a new tap timestamp (ms) onto a rolling history, discarding it (starting a
+// fresh run) if the gap since the last tap is too large to be the same tempo. Keeps at most
+// `maxTaps` most recent taps so a long tapping session doesn't drift on stale early taps.
+function pushTap(history, t, maxTaps, resetGapMs) {
+  maxTaps = maxTaps || 8; resetGapMs = resetGapMs == null ? 2000 : resetGapMs;
+  var h = history.slice();
+  if (h.length && (t - h[h.length - 1]) > resetGapMs) h = [];
+  h.push(t);
+  if (h.length > maxTaps) h = h.slice(h.length - maxTaps);
+  return h;
+}
+// BPM from the average interval between consecutive taps in the history; null if fewer than 2
+// taps (not enough to measure an interval yet).
+function bpmFromTapHistory(history) {
+  if (history.length < 2) return null;
+  var sum = 0;
+  for (var i = 1; i < history.length; i++) sum += history[i] - history[i - 1];
+  var avgMs = sum / (history.length - 1);
+  if (avgMs <= 0) return null;
+  return clampBpm(60000 / avgMs);
+}
+
+// Random-pattern bias: how likely each channel is to sound on a given step, so "Random" produces
+// a recognizable beat rather than noise. `groupSize` = 16th notes per beat (always 4 in this
+// ship, but read from the signature, not hardcoded): a DOWNBEAT is the first 16th of any beat
+// (step % groupSize === 0); a BACKBEAT generalizes "beat 2 and 4" to "every other beat starting
+// from the second one" (floor(step/groupSize) is odd) — for 4/4 that's beats 2 AND 4 (steps 4
+// and 12, exactly the original hardcoded pair); for 3/4 it's beat 2 only (step 4), the one
+// mid-bar accent a waltz actually wants. The hi-hat's density pattern doesn't depend on bar
+// length at all, so it's untouched. Kick's non-downbeat weight is likewise bar-length-independent.
+function channelStepWeight(channel, step, groupSize) {
+  groupSize = groupSize == null ? GROUP_SIZE : groupSize;
+  var onDownbeat = step % groupSize === 0;
+  var onBackbeat = onDownbeat && Math.floor(step / groupSize) % 2 === 1;
+  if (channel === "kick") return onDownbeat ? 0.85 : (step % 2 === 0 ? 0.25 : 0.08);
+  if (channel === "snare") return onBackbeat ? 0.9 : (step % groupSize === 2 ? 0.15 : 0.05);
+  if (channel === "hihat") return step % 2 === 0 ? 0.85 : 0.55;
+  return 0;
+}
+// `rng` is injectable (defaults to Math.random) so this is deterministically testable: pass a
+// fixed sequence of "random" values and the resulting pattern is exactly predictable.
+function randomizePattern(rng, steps, groupSize) {
+  rng = rng || Math.random;
+  steps = steps == null ? STEPS : steps;
+  var pattern = {};
+  CHANNELS.forEach(function (ch) {
+    pattern[ch] = [];
+    for (var s = 0; s < steps; s++) pattern[ch].push(rng() < channelStepWeight(ch, s, groupSize));
+  });
+  return pattern;
+}
+
+function emptyPattern(steps) {
+  steps = steps == null ? STEPS : steps;
+  var pattern = {};
+  CHANNELS.forEach(function (ch) { pattern[ch] = new Array(steps).fill(false); });
+  return pattern;
+}
+
+// Mute/solo: standard behavior — if ANY channel is soloed, only soloed channels are audible
+// (multiple channels can be soloed at once); with nothing soloed, every non-muted channel plays.
+function isChannelAudible(channel, muted, soloed) {
+  if (soloed.size > 0) return soloed.has(channel);
+  return !muted.has(channel);
+}
+
+// --- Lookahead scheduler (the "Tale of Two Clocks" pattern), as a pure state machine ---------
+// `state` = { currentStep, nextNoteTime } where nextNoteTime is an AudioContext.currentTime-scale
+// timestamp (seconds) for when `currentStep` is due to play next.
+// Returns { events: [{step, time}], state: <new state> }: every step whose scheduled time falls
+// within [now, now + scheduleAheadTime) gets an event, and the state advances past all of them.
+// This function touches no audio/DOM at all, so the actual "does it drift" question is answered
+// by this function's own arithmetic, not by timers — a real driver ear-check still matters for
+// perceived feel, but the SCHEDULING MATH itself is fully unit-testable.
+function advanceScheduler(state, now, bpm, swingPct, scheduleAheadTime, steps) {
+  steps = steps == null ? STEPS : steps;
+  var events = [];
+  var currentStep = state.currentStep, nextNoteTime = state.nextNoteTime;
+  while (nextNoteTime < now + scheduleAheadTime) {
+    events.push({ step: currentStep, time: nextNoteTime });
+    var dur = stepSeconds(bpm);
+    var nextStep = (currentStep + 1) % steps;
+    nextNoteTime += dur;
+    // The swing offset for the UPCOMING step is added on top of its nominal grid time, then
+    // subtracted back off before the step after that, so swing does not accumulate drift.
+    nextNoteTime += swingOffsetSeconds(bpm, swingPct, nextStep) - swingOffsetSeconds(bpm, swingPct, currentStep);
+    currentStep = nextStep;
+  }
+  return { events: events, state: { currentStep: currentStep, nextNoteTime: nextNoteTime } };
+}
+
+// Swing VISUAL preview only — a horizontal nudge (in px) for the off-beat step cells, so the eye
+// can see roughly what the ear will hear before or during playback. Reads swingPct and step
+// parity, same as swingOffsetSeconds, but is a SEPARATE function that never feeds back into
+// advanceScheduler/swingOffsetSeconds — presentation, not timing. (Driver-requested legibility
+// polish; the audio-timing functions above are unchanged by this drain.)
+function swingVisualPx(swingPct, stepIndex) {
+  var pct = Math.max(0, Math.min(100, swingPct));
+  if (stepIndex % 2 === 0) return 0;                  // only the "off" 16th nudges, same convention as swingOffsetSeconds
+  return (pct / 100) * 6;                              // capped at 6px — a preview, not a ruler
+}
+// Rhythm-data export (Beat-as-data Phase 0): serialize one bank's pattern + the widget's live
+// time signature / swing / tempo into the JSON shape the engine's `rhythm_data_to_stream` reads.
+// Field names mirror this file's own state exactly (TIME_SIGNATURES entry -> time_signature/steps/
+// group_size; swingPct -> swing_pct; bpm -> tempo_bpm; pattern -> channels), so this is a direct
+// serialization, not a reshaping. Channel arrays stay on ONE line each (valid JSON either way) so a
+// pasted note reads like a grid instead of 16 lines per channel.
+function buildRhythmData(timeSigKey, swingPct, bpm, pattern) {
+  var sig = TIME_SIGNATURES[timeSigKey];
+  var channels = {};
+  CHANNELS.forEach(function (ch) {
+    var row = new Array(sig.steps).fill(false);
+    (pattern[ch] || []).slice(0, sig.steps).forEach(function (v, i) { row[i] = !!v; });
+    channels[ch] = row;
+  });
+  return { time_signature: timeSigKey, steps: sig.steps, group_size: sig.groupSize,
+           swing_pct: swingPct, tempo_bpm: Math.round(bpm), channels: channels };
+}
+function rhythmDataJson(data) {
+  var lines = [
+    '  "time_signature": ' + JSON.stringify(data.time_signature) + ',',
+    '  "steps": ' + data.steps + ',',
+    '  "group_size": ' + data.group_size + ',',
+    '  "swing_pct": ' + data.swing_pct + ',',
+    '  "tempo_bpm": ' + data.tempo_bpm + ',',
+    '  "channels": {'
+  ];
+  var names = Object.keys(data.channels);
+  names.forEach(function (ch, i) {
+    lines.push('    ' + JSON.stringify(ch) + ': ' + JSON.stringify(data.channels[ch]).replace(/,/g, ', ') + (i < names.length - 1 ? ',' : ''));
+  });
+  lines.push('  }');
+  return '{\n' + lines.join('\n') + '\n}';
+}
+// --- pure math -- END pure-core -------------------------------------------------------------
+
+if (typeof document === "undefined") {           // node test harness
+  module.exports = {
+    STEPS: STEPS, GROUP_SIZE: GROUP_SIZE, TIME_SIGNATURES: TIME_SIGNATURES,
+    CHANNELS: CHANNELS, BANKS: BANKS, MIN_BPM: MIN_BPM, MAX_BPM: MAX_BPM,
+    clampBpm: clampBpm, stepSeconds: stepSeconds, swingOffsetSeconds: swingOffsetSeconds, swingVisualPx: swingVisualPx,
+    pushTap: pushTap, bpmFromTapHistory: bpmFromTapHistory,
+    channelStepWeight: channelStepWeight, randomizePattern: randomizePattern, emptyPattern: emptyPattern,
+    isChannelAudible: isChannelAudible, advanceScheduler: advanceScheduler,
+    buildRhythmData: buildRhythmData, rhythmDataJson: rhythmDataJson
+  };
+} else {
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var CHANNEL_LABEL = { kick: "Kick", snare: "Snare", hihat: "Hi-hat" };
+
+  // --- state --------------------------------------------------------------------------------
+  var bpm = 120;
+  var swingPct = 0;
+  var volume = 0.8;
+  var bank = "A";
+  var timeSig = "4/4";
+  var steps = TIME_SIGNATURES[timeSig].steps, groupSize = TIME_SIGNATURES[timeSig].groupSize;
+  var patterns = {}; BANKS.forEach(function (b) { patterns[b] = emptyPattern(steps); });
+  var muted = new Set(), soloed = new Set();
+  var tapHistory = [];
+  var playing = false;
+  var currentStep = -1;                // for the visual indicator only
+  var schedulerState = { currentStep: 0, nextNoteTime: 0 };
+  var timerId = null;
+  var LOOKAHEAD_MS = 25, SCHEDULE_AHEAD_S = 0.1;
+
+  // --- DOM: build the grid ---------------------------------------------------------------
+  // Rebuilt (not just re-rendered) whenever the time signature changes, since the step COUNT
+  // itself changes; a plain re-render can't add or remove columns.
+  var stepEls = {};                    // stepEls[channel][step] -> element
+  var gridEl = $("grid");
+  function buildGrid() {
+    gridEl.innerHTML = "";
+    stepEls = {};
+    gridEl.setAttribute("aria-label", steps + "-step pattern grid (" + timeSig + "), kick, snare, hi-hat");
+    CHANNELS.forEach(function (ch) {
+      var row = document.createElement("div");
+      row.className = "channel-row";
+      row.style.gridTemplateColumns = "110px repeat(" + steps + ", 1fr)";
+      var label = document.createElement("div");
+      label.className = "channel-label";
+      var nameSpan = document.createElement("span");
+      nameSpan.className = "name"; nameSpan.textContent = CHANNEL_LABEL[ch];
+      var mBtn = document.createElement("button");
+      mBtn.className = "mini-btn mute"; mBtn.textContent = "M"; mBtn.setAttribute("aria-label", "Mute " + CHANNEL_LABEL[ch]); mBtn.setAttribute("aria-pressed", "false");
+      var sBtn = document.createElement("button");
+      sBtn.className = "mini-btn solo"; sBtn.textContent = "S"; sBtn.setAttribute("aria-label", "Solo " + CHANNEL_LABEL[ch]); sBtn.setAttribute("aria-pressed", "false");
+      label.appendChild(nameSpan); label.appendChild(mBtn); label.appendChild(sBtn);
+      row.appendChild(label);
+      stepEls[ch] = [];
+      for (var s = 0; s < steps; s++) {
+        var btn = document.createElement("button");
+        btn.className = "step" + (s % groupSize === 0 ? " beat-start" : "");
+        btn.type = "button";
+        btn.setAttribute("data-channel", ch);
+        btn.setAttribute("data-step", s);
+        btn.setAttribute("aria-pressed", "false");
+        btn.setAttribute("aria-label", CHANNEL_LABEL[ch] + " step " + (s + 1));
+        (function (ch, s, btn) {
+          btn.addEventListener("click", function () { toggleStep(ch, s); });
+        })(ch, s, btn);
+        row.appendChild(btn);
+        stepEls[ch][s] = btn;
+      }
+      mBtn.addEventListener("click", function () { toggleMute(ch); });
+      sBtn.addEventListener("click", function () { toggleSolo(ch); });
+      gridEl.appendChild(row);
+      row.setAttribute("data-mute-btn-" + ch, "");
+    });
+  }
+  buildGrid();
+
+  function toggleStep(ch, s) {
+    patterns[bank][ch][s] = !patterns[bank][ch][s];
+    renderGrid();
+  }
+  function toggleMute(ch) { if (muted.has(ch)) muted.delete(ch); else muted.add(ch); renderMuteSolo(); }
+  function toggleSolo(ch) { if (soloed.has(ch)) soloed.delete(ch); else soloed.add(ch); renderMuteSolo(); }
+  function renderMuteSolo() {
+    CHANNELS.forEach(function (ch) {
+      var row = gridEl.querySelector('[data-mute-btn-' + ch + ']');
+      var mBtn = row.querySelector(".mini-btn.mute"), sBtn = row.querySelector(".mini-btn.solo");
+      mBtn.classList.toggle("on", muted.has(ch)); mBtn.setAttribute("aria-pressed", muted.has(ch) ? "true" : "false");
+      sBtn.classList.toggle("on", soloed.has(ch)); sBtn.setAttribute("aria-pressed", soloed.has(ch) ? "true" : "false");
+    });
+  }
+  function renderGrid() {
+    CHANNELS.forEach(function (ch) {
+      for (var s = 0; s < steps; s++) {
+        var on = patterns[bank][ch][s];
+        stepEls[ch][s].classList.toggle("on", on);
+        stepEls[ch][s].setAttribute("aria-pressed", on ? "true" : "false");
+      }
+    });
+  }
+  function renderPlayhead() {
+    CHANNELS.forEach(function (ch) {
+      for (var s = 0; s < steps; s++) stepEls[ch][s].classList.toggle("playing", playing && s === currentStep);
+    });
+    $("stepPos").textContent = playing && currentStep >= 0 ? (currentStep + 1) + " / " + steps : "-- / " + steps;
+  }
+  // Swing preview: nudge the off-beat step cells sideways by swingVisualPx, independent of
+  // playback state, so the eye can see the delay grow as the slider moves, even while stopped.
+  function renderSwingPreview() {
+    CHANNELS.forEach(function (ch) {
+      for (var s = 0; s < steps; s++) {
+        var px = swingVisualPx(swingPct, s);
+        stepEls[ch][s].style.transform = px ? "translateX(" + px + "px)" : "";
+      }
+    });
+  }
+
+  // --- transport / bpm / banks ---------------------------------------------------------------
+  function setBpm(v) { bpm = clampBpm(v); $("bpmVal").textContent = Math.round(bpm) + " BPM"; }
+  $("bBpmUp").addEventListener("click", function () { setBpm(bpm + 1); });
+  $("bBpmDown").addEventListener("click", function () { setBpm(bpm - 1); });
+  $("bTap").addEventListener("click", function () {
+    tapHistory = pushTap(tapHistory, performance.now());
+    var t = bpmFromTapHistory(tapHistory);
+    if (t != null) setBpm(t);
+  });
+  $("swing").addEventListener("input", function (e) { swingPct = +e.target.value; $("swingVal").textContent = swingPct + "%"; renderSwingPreview(); });
+  $("volume").addEventListener("input", function (e) { volume = (+e.target.value) / 100; $("volumeVal").textContent = e.target.value + "%"; });
+  Array.prototype.forEach.call(document.querySelectorAll(".banks button"), function (b) {
+    b.addEventListener("click", function () {
+      bank = b.getAttribute("data-bank");                 // switching bank does NOT stop playback;
+      Array.prototype.forEach.call(document.querySelectorAll(".banks button"), function (x) { x.classList.toggle("active", x === b); });
+      renderGrid();                                        // the scheduler keeps reading `patterns[bank]` from the next step it schedules
+    });
+  });
+  $("bRandom").addEventListener("click", function () { patterns[bank] = randomizePattern(null, steps, groupSize); renderGrid(); });
+  $("bClear").addEventListener("click", function () { patterns[bank] = emptyPattern(steps); renderGrid(); });
+  // Export: clipboard first; if the host denies clipboard-write (iframe permissions vary by embedder),
+  // fall back to execCommand("copy") on a hidden-then-selected textarea, and as a last resort show the
+  // JSON in a read-only textarea for a manual select-all/copy. The user always ends with the JSON.
+  var exportMsgTimer = null;
+  function exportMsg(text) {
+    $("exportMsg").textContent = text;
+    clearTimeout(exportMsgTimer);
+    exportMsgTimer = setTimeout(function () { $("exportMsg").textContent = ""; }, 2500);
+  }
+  $("bExport").addEventListener("click", function () {
+    var json = rhythmDataJson(buildRhythmData(timeSig, swingPct, bpm, patterns[bank]));
+    var ta = $("exportFallback");
+    function showManual() { ta.hidden = false; ta.value = json; ta.focus(); ta.select(); exportMsg("Copy blocked here - JSON shown below, press Cmd/Ctrl+C"); }
+    function legacyCopy() {
+      ta.hidden = false; ta.value = json; ta.focus(); ta.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      if (ok) { ta.hidden = true; exportMsg("Copied"); } else { showManual(); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(json).then(function () { ta.hidden = true; exportMsg("Copied"); }, legacyCopy);
+    } else { legacyCopy(); }
+  });
+  // Time signature: applies GLOBALLY (one signature for the whole widget, not per-bank — nothing
+  // in the request implies mixed meters across banks). Switching stops playback (a mid-flight
+  // scheduler tied to the OLD step count would either desync from the new grid or need to survive
+  // a step-count change mid-cycle, neither of which is worth the complexity for a driver-facing
+  // toggle) and clears every bank's pattern (a 4/4 pattern has no meaningful mapping onto 3/4's
+  // different bar length, so silently truncating/padding would just look broken — clearing and
+  // saying so via the select's own tooltip is the honest choice).
+  $("timeSig").addEventListener("change", function (e) {
+    if (playing) stop();
+    timeSig = e.target.value;
+    var sig = TIME_SIGNATURES[timeSig];
+    steps = sig.steps; groupSize = sig.groupSize;
+    BANKS.forEach(function (b) { patterns[b] = emptyPattern(steps); });
+    buildGrid();
+    renderGrid(); renderMuteSolo(); renderPlayhead(); renderSwingPreview();
+  });
+
+  // --- Web Audio: synthesis + lookahead scheduler --------------------------------------------
+  var ctx = null;
+  function audio() {
+    if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function masterGain(c) { var g = c.createGain(); g.gain.value = volume; g.connect(c.destination); return g; }
+  function playKick(c, t) {
+    var o = c.createOscillator(), g = c.createGain(), mg = masterGain(c);
+    o.type = "sine"; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+    g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g); g.connect(mg); o.start(t); o.stop(t + 0.25);
+  }
+  function noiseBuffer(c, seconds) {
+    var n = Math.max(1, Math.floor(c.sampleRate * seconds));
+    var buf = c.createBuffer(1, n, c.sampleRate);
+    var data = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
+    return buf;
+  }
+  function playSnare(c, t) {
+    var mg = masterGain(c);
+    var noise = c.createBufferSource(); noise.buffer = noiseBuffer(c, 0.2);
+    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1800; bp.Q.value = 0.7;
+    var ng = c.createGain(); ng.gain.setValueAtTime(0.7, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    noise.connect(bp); bp.connect(ng); ng.connect(mg); noise.start(t); noise.stop(t + 0.16);
+    var o = c.createOscillator(), og = c.createGain();
+    o.type = "triangle"; o.frequency.value = 180;
+    og.gain.setValueAtTime(0.35, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    o.connect(og); og.connect(mg); o.start(t); o.stop(t + 0.12);
+  }
+  function playHihat(c, t) {
+    var mg = masterGain(c);
+    var noise = c.createBufferSource(); noise.buffer = noiseBuffer(c, 0.1);
+    var hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 7000;
+    var g = c.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    noise.connect(hp); hp.connect(g); g.connect(mg); noise.start(t); noise.stop(t + 0.07);
+  }
+  var VOICE = { kick: playKick, snare: playSnare, hihat: playHihat };
+
+  function scheduleStep(step, time) {
+    var c = audio(); if (!c) return;
+    CHANNELS.forEach(function (ch) {
+      if (patterns[bank][ch][step] && isChannelAudible(ch, muted, soloed)) VOICE[ch](c, time);
+    });
+  }
+
+  function schedulerTick() {
+    var c = audio(); if (!c) return;
+    var out = advanceScheduler(schedulerState, c.currentTime, bpm, swingPct, SCHEDULE_AHEAD_S, steps);
+    out.events.forEach(function (ev) {
+      scheduleStep(ev.step, ev.time);
+      // Update the visual step indicator on its OWN loose timer (setTimeout keyed off the
+      // *scheduled* audio time), not off the lookahead loop itself — the lookahead loop runs
+      // every LOOKAHEAD_MS regardless of note timing, so driving the visual off IT would jitter.
+      var delayMs = Math.max(0, (ev.time - c.currentTime) * 1000);
+      setTimeout(function () { if (playing) { currentStep = ev.step; renderPlayhead(); } }, delayMs);
+    });
+    schedulerState = out.state;
+  }
+
+  function start() {
+    var c = audio(); if (!c) return;
+    playing = true;
+    schedulerState = { currentStep: 0, nextNoteTime: c.currentTime + 0.05 };
+    $("bPlay").textContent = "Stop"; $("bPlay").classList.add("playing"); $("bPlay").setAttribute("aria-pressed", "true");
+    timerId = setInterval(schedulerTick, LOOKAHEAD_MS);
+    schedulerTick();
+  }
+  function stop() {
+    playing = false;
+    if (timerId) { clearInterval(timerId); timerId = null; }
+    currentStep = -1; renderPlayhead();
+    $("bPlay").textContent = "Play"; $("bPlay").classList.remove("playing"); $("bPlay").setAttribute("aria-pressed", "false");
+  }
+  $("bPlay").addEventListener("click", function () { if (playing) stop(); else start(); });
+
+  setBpm(bpm);
+  renderGrid();
+  renderMuteSolo();
+  renderPlayhead();
+  renderSwingPreview();
+})();
+}
+</script>
+</body>
+</html>
