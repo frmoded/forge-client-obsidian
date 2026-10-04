@@ -1182,6 +1182,18 @@ export default class ForgePlugin extends Plugin {
       callback: async () => { await restoreVaultToLastCommit(this.app); },
     });
 
+    // beat_as_data Phase 0.5 (drain 2026-10-04-1200) — palette entry for the New Forge note dialog. The
+    // dialog (ForgeSnippetModal) already existed, but was reachable ONLY from the per-note toolbar action
+    // (and, until the menu cleanup 84ee2f9, a ribbon icon) — git history shows no palette command for it
+    // ever existed, so it could not be started with no note open. This reaches the SAME flow from anywhere.
+    // Obsidian prefixes the plugin name, so it shows as "Forge Actions: New Forge note". No ribbon icon,
+    // deliberately: the menu cleanup made the Forge `package` icon the single ribbon entry point.
+    this.addCommand({
+      id: 'forge-new-note',
+      name: 'New Forge note',
+      callback: () => { void this.createNewSnippet(); },
+    });
+
     this.addCommand({
       id: 'forge-toggle-edges-panel',
       name: 'Toggle edges panel',
@@ -1716,7 +1728,7 @@ export default class ForgePlugin extends Plugin {
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
 
-    const snippetBtn = view.addAction('file-plus', 'New action note', () => { this.createNewSnippet(); });
+    const snippetBtn = view.addAction('file-plus', 'New Forge note', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
     // v0.2.77 — Forge button only on snippet files (type: action|data).

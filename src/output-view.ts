@@ -8,7 +8,8 @@ import {
 import { clampStripFraction, stripFractionFromDrag, stripFlexBasis, DEFAULT_STRIP_FRACTION } from './forge-panel-split-core.ts';
 import { shouldRenderEntryMeta } from './output-entry-meta-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
-import { ForgeSaveDataModal, dataTemplate } from './modal.ts';
+import { ForgeSaveDataModal } from './modal.ts';
+import { dataTemplate } from './new-note-core.ts';
 import { forgeNotice } from './forge-notice.ts';
 import {
   deriveLlmRejectionGuidance,

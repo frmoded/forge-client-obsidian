@@ -28,6 +28,16 @@ import {
   type InputDefaults,
 } from './run-input-defaults-core.ts';
 import { shouldSubmitOnKey } from './submit-on-key-core.ts';
+import {
+  FALLBACK_CONTENT_TYPES,
+  checkNewNotePath,
+  dataTemplate,
+  describeNewNoteLocation,
+  isBinaryContentType,
+  newNoteFolder,
+  newNotePath,
+} from './new-note-core.ts';
+import { BUNDLED_VAULT_NAME_SET } from './bundled-vault-extraction-core.ts';
 
 // Blocking modal shown during generation. Clicking outside, the X button, and
 // pressing Escape all funnel through close(); we no-op those until the caller
@@ -127,29 +137,9 @@ export class ForgeFreezeModal extends Modal {
 
 type SnippetType = 'action' | 'data';
 
-// Used when /connect doesn't carry a content_types list (older backend, or
-// connect failed). Keep aligned with forge.core.serialization.SUPPORTED_CONTENT_TYPES.
-const FALLBACK_CONTENT_TYPES = ['json', 'text', 'markdown', 'svg', 'jpeg'];
-
-// Fence language tag per content_type. Obsidian's preview renders these
-// nicely; the Phase 2 rendering work will lean on the same mapping.
-const FENCE_LANG: Record<string, string> = {
-  json: 'json',
-  text: 'text',
-  markdown: 'markdown',
-  svg: 'xml',
-  jpeg: 'text',
-};
-
-// Seed payload per content_type — short and instructive where possible,
-// blank where any concrete seed would feel arbitrary.
-const SEED: Record<string, string> = {
-  json: '{}',
-  text: '',
-  markdown: '',
-  svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"></svg>',
-  jpeg: '',
-};
+// FALLBACK_CONTENT_TYPES, FENCE_LANG, SEED, dataTemplate and isBinaryContentType now live in
+// new-note-core.ts (pure-core, tested). They were moved verbatim; only the text-type list gained yaml +
+// musicxml (see that file).
 
 // v0.2.77 — action templates extracted to a pure-core module so they
 // can be tested directly. modal.ts re-exports them for any external
@@ -159,25 +149,6 @@ const SEED: Record<string, string> = {
 // re-audit. Zero internal consumers; tests import directly from
 // modal-templates-core. External consumers (if any) should switch to
 // the same import path.
-
-// When `content` is provided (e.g., from "Save as data snippet"), it replaces
-// the per-content_type seed payload and lands inside the same fenced block.
-export function dataTemplate(name: string, contentType: string, content?: string): string {
-  const lang = FENCE_LANG[contentType] ?? 'text';
-  const body = content ?? SEED[contentType] ?? '';
-  return [
-    '---',
-    'type: data',
-    `content_type: ${contentType}`,
-    `description: ${name}`,
-    '---',
-    '',
-    '```' + lang,
-    body,
-    '```',
-    '',
-  ].join('\n');
-}
 
 // Wrapper .md for a binary data snippet. The bytes live at content_ref; the
 // body is intentionally empty (the backend rejects content_ref + body content
@@ -192,10 +163,6 @@ function binaryTemplate(name: string, contentType: string, contentRef: string): 
     '---',
     '',
   ].join('\n');
-}
-
-function isBinaryContentType(ct: string): boolean {
-  return ct.startsWith('image/') || ct.startsWith('audio/') || ct.startsWith('video/') || ct === 'jpeg';
 }
 
 // Map a binary MIME content_type to a canonical file extension. Falls back to
@@ -224,7 +191,7 @@ export class ForgeSnippetModal extends Modal {
   private snippetName = '';
   private snippetType: SnippetType = 'action';
   private contentType: string;
-  private contentTypes: string[];
+  private contentTypes: readonly string[];
   private contentTypeSetting?: Setting;
   private dropSetting?: Setting;
   private dropZoneEl?: HTMLElement;
@@ -250,10 +217,15 @@ export class ForgeSnippetModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl('h2', { text: 'New action note' });
+    contentEl.createEl('h2', { text: 'New Forge note' });
+
+    // beat_as_data Phase 0.5: where the note will land depends on the active file (see new-note-core.ts).
+    // Computed once at open — the dialog is modal, so the active file cannot change while it is up.
+    const folder = newNoteFolder(this.app.workspace.getActiveFile()?.path, BUNDLED_VAULT_NAME_SET);
 
     new Setting(contentEl)
-      .setName('Action note name')
+      .setName('Note name')
+      .setDesc(describeNewNoteLocation(folder))
       .addText(text => {
         text.setPlaceholder('my-action-note').onChange(v => {
           this.snippetName = v.trim();
@@ -271,7 +243,7 @@ export class ForgeSnippetModal extends Modal {
       });
 
     new Setting(contentEl)
-      .setName('Snippet Type')
+      .setName('Note type')
       .addDropdown(drop =>
         drop
           .addOption('action', 'Action')
@@ -285,8 +257,8 @@ export class ForgeSnippetModal extends Modal {
 
     // v0.2.108 — action shape selector removed.
     this.contentTypeSetting = new Setting(contentEl)
-      .setName('Content Type')
-      .setDesc('Format of the data payload (only used for Data snippets)')
+      .setName('Content type')
+      .setDesc('Format of the data payload (only used for Data notes)')
       .addDropdown(drop => {
         for (const ct of this.contentTypes) drop.addOption(ct, ct);
         drop.setValue(this.contentType).onChange(v => {
@@ -392,18 +364,21 @@ export class ForgeSnippetModal extends Modal {
       return;
     }
 
-    const path = `${this.snippetName}.md`;
+    // beat_as_data Phase 0.5: the active file's folder (vault root when none, or when the active file is
+    // inside a plugin-managed bundled library folder) — see newNotePath in new-note-core.ts.
+    const path = newNotePath(
+      this.app.workspace.getActiveFile()?.path, this.snippetName, BUNDLED_VAULT_NAME_SET,
+    );
 
     // v0.2.236 drain 2026-07-02-2130 — pre-flight duplicate check.
     // Path-scoped only (per §1.3 pushback): naming a note the same as
     // one in another subdirectory is fine — Forge resolves by path.
     // Only the EXACT PATH the new note would land at gets checked.
-    const existing = this.app.vault.getAbstractFileByPath(path);
-    if (existing) {
-      this.showValidationError(
-        `A note named "${this.snippetName}" already exists at ${path}. ` +
-        `Choose a different name or open the existing note.`,
-      );
+    const check = checkNewNotePath(
+      path, this.snippetName, (p) => this.app.vault.getAbstractFileByPath(p) !== null,
+    );
+    if (check.ok === false) {
+      this.showValidationError(check.message);
       void forgeNotice(
         this.app,
         `Note creation failed: "${path}" already exists.`,
