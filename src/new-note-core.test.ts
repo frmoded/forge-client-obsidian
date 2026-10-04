@@ -9,12 +9,15 @@ import { fileURLToPath } from 'node:url';
 import {
   FALLBACK_CONTENT_TYPES,
   TEXT_CONTENT_TYPES,
+  binaryNotePaths,
+  binaryTemplate,
   checkNewNotePath,
   dataTemplate,
   describeNewNoteLocation,
   isBinaryContentType,
   newNoteFolder,
   newNotePath,
+  validateNoteName,
 } from './new-note-core.ts';
 import { actionTemplate } from './modal-templates-core.ts';
 import { EDITION_VAULT_NAMES } from './edition-core.ts';
@@ -203,4 +206,100 @@ test('the dialog places notes via newNotePath and checks collisions via checkNew
   const modal = read('src/modal.ts');
   assert.match(modal, /const path = newNotePath\(/);
   assert.match(modal, /checkNewNotePath\(/);
+});
+
+// ---- drain 2026-10-04-2200: binary placement (F1), stale errors (F3), `/` leak (F4), jpeg quoting (F5) ----
+
+/** The body of one `private ...` method of the modal, for source-level wiring pins. */
+function modalMethod(name: string): string {
+  const src = read('src/modal.ts');
+  const start = Math.max(src.indexOf(`private async ${name}(`), src.indexOf(`private ${name}(`));
+  assert.ok(start >= 0, `modal.ts has no ${name}()`);
+  const next = src.indexOf('\n  private ', start + 10);
+  return src.slice(start, next < 0 ? undefined : next);
+}
+
+test('F1: a binary note\'s wrapper .md lands in the SAME folder the "Creates in" line names (non-root)', () => {
+  const active = 'Projects/Beats/riff.md';
+  const { mdRel } = binaryNotePaths(active, 'photo', '.jpg', LEAN_MANAGED);
+  assert.equal(mdRel, 'Projects/Beats/photo.md');
+  assert.equal(mdRel, newNotePath(active, 'photo', LEAN_MANAGED), 'binary and text notes share one placement rule');
+  assert.equal(describeNewNoteLocation(newNoteFolder(active, LEAN_MANAGED)), 'Creates in: Projects/Beats/');
+});
+
+test('F1: root and managed-folder cases for binary notes match the text rule (root)', () => {
+  assert.equal(binaryNotePaths(null, 'photo', '.jpg', LEAN_MANAGED).mdRel, 'photo.md');
+  assert.equal(binaryNotePaths('top.md', 'photo', '.jpg', LEAN_MANAGED).mdRel, 'photo.md');
+  assert.equal(binaryNotePaths('forge-moda/x.md', 'photo', '.jpg', LEAN_MANAGED).mdRel, 'photo.md');
+  assert.equal(binaryNotePaths('music-theory/x.md', 'photo', '.jpg', MUSIC_MANAGED).mdRel, 'photo.md');
+});
+
+test('F1: the asset bytes stay at _assets/<name><ext> regardless of the note\'s folder (unchanged)', () => {
+  assert.equal(binaryNotePaths('Projects/Beats/riff.md', 'photo', '.jpg', LEAN_MANAGED).assetRel, '_assets/photo.jpg');
+  assert.equal(binaryNotePaths(null, 'photo', '.png', LEAN_MANAGED).assetRel, '_assets/photo.png');
+});
+
+test('F1: the duplicate check for a binary note tests the REAL (non-root) wrapper path, not the root', () => {
+  const { mdRel } = binaryNotePaths('Projects/Beats/riff.md', 'photo', '.jpg', LEAN_MANAGED);
+  const asked: string[] = [];
+  const onlyRealPathExists = (p: string) => { asked.push(p); return p === 'Projects/Beats/photo.md'; };
+  const hit = checkNewNotePath(mdRel, 'photo', onlyRealPathExists);
+  assert.equal(hit.ok, false);
+  assert.deepEqual(asked, ['Projects/Beats/photo.md']);
+  // a note of the same name at the ROOT must not block creating it in the folder
+  assert.equal(checkNewNotePath(mdRel, 'photo', (p) => p === 'photo.md').ok, true);
+});
+
+test('F1 wiring: submitBinary() takes both paths from binaryNotePaths, has no hard-coded root .md literal, and dup-checks the md via checkNewNotePath', () => {
+  const body = modalMethod('submitBinary');
+  assert.match(body, /binaryNotePaths\(\s*this\.app\.workspace\.getActiveFile\(\)\?\.path/);
+  assert.doesNotMatch(body, /`\$\{this\.snippetName\}\.md`/, 'wrapper path must not be rebuilt as a root literal');
+  assert.match(body, /checkNewNotePath\(\s*mdRel/);
+});
+
+test('F4: a "/" in the note name is rejected up front with Obsidian\'s wording, naming no filesystem path', () => {
+  const r = validateNoteName('a/b');
+  assert.equal(r.ok, false);
+  if (r.ok === false) {
+    assert.equal(r.message, 'File name cannot contain any of the following characters: \\ / :');
+    assert.doesNotMatch(r.message, /ENOENT|\/Users\//);
+  }
+  assert.equal(validateNoteName('/leading').ok, false);
+  assert.equal(validateNoteName('trailing/').ok, false);
+});
+
+test('F4: ordinary names (spaces, dots, dashes, unicode) are still accepted', () => {
+  for (const n of ['my-note', 'my note', 'v1.2', 'Ünïcode ♪', 'a_b']) assert.equal(validateNoteName(n).ok, true, n);
+});
+
+test('F4 wiring: submit() validates the name BEFORE routing to the binary path or touching the vault', () => {
+  const body = modalMethod('submit');
+  const v = body.indexOf('validateNoteName(');
+  assert.ok(v >= 0, 'submit() must call validateNoteName');
+  assert.ok(v < body.indexOf('submitBinary()'), 'validate before the binary route');
+  assert.ok(v < body.indexOf('vault.create('), 'validate before any write');
+  assert.ok(v < body.indexOf('getAbstractFileByPath('), 'validate before the vault lookup');
+});
+
+test('F3 wiring: every relevant field change clears the stale inline error (name, note type, content type, dropped file)', () => {
+  const src = read('src/modal.ts');
+  assert.match(src, /private onFieldEdited\(\)\s*\{\s*this\.clearValidationError\(\);/);
+  assert.match(src, /this\.snippetName = v\.trim\(\);\s*this\.onFieldEdited\(\);/, 'name edit');
+  assert.match(src, /this\.snippetType = v as SnippetType;\s*this\.onFieldEdited\(\);/, 'note type change');
+  assert.match(src, /this\.contentType = v;\s*this\.onFieldEdited\(\);/, 'content type change');
+  assert.match(modalMethod('setDroppedFile'), /this\.onFieldEdited\(\);/, 'file attached');
+});
+
+test('F5: the binary wrapper writes content_type UNQUOTED, exactly like the text data note (oversight, not deliberate)', () => {
+  for (const ct of ['jpeg', 'image/jpeg', 'image/png', 'audio/mpeg', 'video/mp4']) {
+    const md = binaryTemplate('pic', ct, '_assets/pic.jpg');
+    assert.match(md, new RegExp(`^content_type: ${ct.replace('/', '\\/')}$`, 'm'), ct);
+    assert.doesNotMatch(md, /content_type: "/);
+  }
+  assert.equal(
+    binaryTemplate('pic', 'jpeg', '_assets/pic.jpg'),
+    ['---', 'type: data', 'content_type: jpeg', 'content_ref: _assets/pic.jpg', 'description: pic', '---', ''].join('\n'),
+  );
+  // same key shape as the text template modulo content_ref
+  assert.equal(frontmatterKeys(binaryTemplate('pic', 'jpeg', 'x')).join(','), 'type,content_type,content_ref,description');
 });

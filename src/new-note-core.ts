@@ -119,3 +119,50 @@ export function checkNewNotePath(
   }
   return { ok: true };
 }
+
+/** Wrapper .md for a binary data note. The bytes live at `contentRef`; the body is intentionally empty (the
+ *  backend rejects content_ref + body content in the same note).
+ *
+ *  content_type is written UNQUOTED, exactly as dataTemplate does. It was quoted here from the first commit
+ *  (4469de9) with no recorded reason; nothing depends on it (the engine reads frontmatter with yaml.safe_load, where
+ *  `jpeg` and `"jpeg"` are the same string) so it was an oversight, fixed for consistency (drain 2026-10-04-2200 F5). */
+export function binaryTemplate(name: string, contentType: string, contentRef: string): string {
+  return [
+    '---',
+    'type: data',
+    `content_type: ${contentType}`,
+    `content_ref: ${contentRef}`,
+    `description: ${name}`,
+    '---',
+    '',
+  ].join('\n');
+}
+
+/** Where a binary data note's two files land. The wrapper .md follows the SAME folder-aware rule as every other
+ *  new note (newNotePath), so it lands where the dialog's "Creates in:" line says; the asset bytes stay at
+ *  `_assets/<name><ext>` at the vault root. */
+export function binaryNotePaths(
+  activeFilePath: string | null | undefined,
+  name: string,
+  ext: string,
+  managedTopLevelDirs: ReadonlySet<string> = new Set(),
+): { mdRel: string; assetRel: string } {
+  return {
+    assetRel: `_assets/${name}${ext}`,
+    mdRel: newNotePath(activeFilePath, name, managedTopLevelDirs),
+  };
+}
+
+/** Obsidian's own wording for a forbidden character in a file name (app.js, validator `jD`: it checks each
+ *  "/"-separated segment against `\ / :` on macOS/Linux, and throws "File name cannot contain any of the
+ *  following characters: \ / :"). Obsidian never raises it for "/" itself — it treats "/" as a folder
+ *  separator — so a "/" in the name used to pass through and fail much later in the file write with a raw
+ *  `ENOENT: ... open '/Users/...'` (absolute path leaked). We reject it BEFORE any write, with Obsidian's text. */
+export const FORBIDDEN_NAME_CHARS_MESSAGE = 'File name cannot contain any of the following characters: \\ / :';
+
+/** Pre-flight name check for the "New Forge note" dialog. Only "/" is rejected here; ":" and "\\" are still
+ *  rejected (with the same message) by Obsidian's own validator inside vault.create. */
+export function validateNoteName(name: string): NewNoteCheck {
+  if (name.includes('/')) return { ok: false, message: FORBIDDEN_NAME_CHARS_MESSAGE };
+  return { ok: true };
+}

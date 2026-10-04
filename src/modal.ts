@@ -30,12 +30,15 @@ import {
 import { shouldSubmitOnKey } from './submit-on-key-core.ts';
 import {
   FALLBACK_CONTENT_TYPES,
+  binaryNotePaths,
+  binaryTemplate,
   checkNewNotePath,
   dataTemplate,
   describeNewNoteLocation,
   isBinaryContentType,
   newNoteFolder,
   newNotePath,
+  validateNoteName,
 } from './new-note-core.ts';
 import { BUNDLED_VAULT_NAME_SET } from './bundled-vault-extraction-core.ts';
 
@@ -150,21 +153,6 @@ type SnippetType = 'action' | 'data';
 // modal-templates-core. External consumers (if any) should switch to
 // the same import path.
 
-// Wrapper .md for a binary data snippet. The bytes live at content_ref; the
-// body is intentionally empty (the backend rejects content_ref + body content
-// in the same snippet).
-function binaryTemplate(name: string, contentType: string, contentRef: string): string {
-  return [
-    '---',
-    'type: data',
-    `content_type: "${contentType}"`,
-    `content_ref: ${contentRef}`,
-    `description: ${name}`,
-    '---',
-    '',
-  ].join('\n');
-}
-
 // Map a binary MIME content_type to a canonical file extension. Falls back to
 // the dropped file's own extension when we don't have a preferred one.
 function extensionFor(contentType: string, originalName: string): string {
@@ -229,6 +217,7 @@ export class ForgeSnippetModal extends Modal {
       .addText(text => {
         text.setPlaceholder('my-action-note').onChange(v => {
           this.snippetName = v.trim();
+          this.onFieldEdited();
         });
         // Drain 2026-08-03-1245 — Enter submits, so naming a note never
         // requires reaching for the mouse. `isComposing` guards IME
@@ -251,6 +240,7 @@ export class ForgeSnippetModal extends Modal {
           .setValue(this.snippetType)
           .onChange(v => {
             this.snippetType = v as SnippetType;
+            this.onFieldEdited();
             this.updateContentTypeVisibility();
           })
       );
@@ -263,6 +253,7 @@ export class ForgeSnippetModal extends Modal {
         for (const ct of this.contentTypes) drop.addOption(ct, ct);
         drop.setValue(this.contentType).onChange(v => {
           this.contentType = v;
+          this.onFieldEdited();
           this.updateContentTypeVisibility();
         });
       });
@@ -311,6 +302,12 @@ export class ForgeSnippetModal extends Modal {
     this.validationEl.removeClass('is-visible');
   }
 
+  // Any edit to a field the last error was about makes that message stale — clear it now rather than leaving it
+  // on screen until the next submit (drain 2026-10-04-2200 F3).
+  private onFieldEdited() {
+    this.clearValidationError();
+  }
+
   private attachDropHandlers(el: HTMLElement) {
     el.addEventListener('click', () => {
       const inp = document.createElement('input');
@@ -336,6 +333,7 @@ export class ForgeSnippetModal extends Modal {
 
   private setDroppedFile(f: File) {
     this.droppedFile = f;
+    this.onFieldEdited();
     if (this.dropZoneEl) {
       this.dropZoneEl.empty();
       const kb = (f.size / 1024).toFixed(1);
@@ -356,6 +354,14 @@ export class ForgeSnippetModal extends Modal {
     if (!this.snippetName) {
       this.showValidationError('Snippet name is required.');
       void forgeNotice(this.app, 'Note creation failed: name is required.', 'error');
+      return;
+    }
+
+    // Before ANY vault lookup or write: a "/" would otherwise surface as a raw ENOENT carrying an absolute path.
+    const nameCheck = validateNoteName(this.snippetName);
+    if (nameCheck.ok === false) {
+      this.showValidationError(nameCheck.message);
+      void forgeNotice(this.app, `Note creation failed: ${nameCheck.message}`, 'error');
       return;
     }
 
@@ -444,18 +450,18 @@ export class ForgeSnippetModal extends Modal {
     }
 
     const ext = extensionFor(this.contentType, this.droppedFile.name);
-    const assetRel = `_assets/${this.snippetName}${ext}`;
-    const mdRel = `${this.snippetName}.md`;
+    const { assetRel, mdRel } = binaryNotePaths(
+      this.app.workspace.getActiveFile()?.path, this.snippetName, ext, BUNDLED_VAULT_NAME_SET,
+    );
 
     // v0.2.236 drain 2026-07-02-2130 — pre-flight duplicate check
     // on both the wrapper .md AND the asset file. Either conflict
     // aborts + keeps dialog open.
-    const existingMd = this.app.vault.getAbstractFileByPath(mdRel);
-    if (existingMd) {
-      this.showValidationError(
-        `A note named "${this.snippetName}" already exists at ${mdRel}. ` +
-        `Choose a different name.`,
-      );
+    const mdCheck = checkNewNotePath(
+      mdRel, this.snippetName, (p) => this.app.vault.getAbstractFileByPath(p) !== null,
+    );
+    if (mdCheck.ok === false) {
+      this.showValidationError(mdCheck.message);
       void forgeNotice(
         this.app,
         `Note creation failed: "${mdRel}" already exists.`,
