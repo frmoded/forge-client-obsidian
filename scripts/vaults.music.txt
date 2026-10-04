@@ -1,0 +1,7 @@
+# Bundled vaults for the MUSIC edition (FORGE_EDITION=music). The lean edition uses vaults.txt.
+# One name per line; read by scripts/editions.mjs and (via VAULTS_FILE) scripts/release-prep.sh.
+
+forge-moda
+music-theory
+forge-tutorial
+music-core

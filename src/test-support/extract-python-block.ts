@@ -14,6 +14,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { EDITION_PYTHON_LIBRARIES } from '../edition-core.ts';
+import { EDITION } from '../edition-selected.ts';
 
 const BLOCK_RE =
   /\/\/ _PYTHON_BLOCK_BEGIN[\s\S]*?pyodide\.runPython\(`([\s\S]*?)`\);\s*\/\/ _PYTHON_BLOCK_END/;
@@ -25,8 +27,15 @@ const BLOCK_RE =
  * escapes V8 would resolve at runtime have to be resolved here:
  *   `\\`   (source) -> `\`   (Python sees)
  *   `\${`  (source) -> `${`  (pass-through interpolation)
- * Those are the only two sequences the block uses; keep this minimal so a
+ * Those are the only two ESCAPES the block uses; keep this minimal so a
  * new escape fails loudly rather than being silently mangled.
+ *
+ * The block also has exactly ONE real (unescaped) interpolation since the
+ * music-edition Phase 2: `${JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION])}`
+ * (the Python library resolution order). It is resolved here from the SAME
+ * production constants the plugin evaluates — never a hand-copied value — and
+ * ANY other unresolved interpolation throws, for the same reason a new escape
+ * does.
  *
  * Throws when the markers are missing — never returns empty. A test that
  * silently executed no production code would be the exact failure this
@@ -43,5 +52,18 @@ export function extractProductionPythonBlock(
       + `BEGIN/END markers are missing or the inline runPython( shape changed.`,
     );
   }
-  return match[1].replace(/\\\\/g, '\\').replace(/\\\$\{/g, '${');
+  const LIBRARIES_INTERPOLATION = '${JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION])}';
+  const resolved = match[1].split(LIBRARIES_INTERPOLATION).join(
+    JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION]),
+  );
+  // Any `${` still present that is not an escaped pass-through (`\${`) is an interpolation this
+  // helper does not know how to resolve — fail loudly instead of handing Python a literal `${...}`.
+  const unresolved = resolved.match(/(?<!\\)\$\{[^}]*\}/g);
+  if (unresolved) {
+    throw new Error(
+      `Unresolved template interpolation(s) in the production Python block: ${unresolved.join(', ')}. `
+      + 'Teach extract-python-block.ts to resolve them from the production constants.',
+    );
+  }
+  return resolved.replace(/\\\\/g, '\\').replace(/\\\$\{/g, '${');
 }

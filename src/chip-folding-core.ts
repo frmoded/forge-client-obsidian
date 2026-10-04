@@ -24,10 +24,13 @@ import { BUNDLED_VAULT_NAME_SET } from './bundled-vault-extraction-core.ts';
  *  fifth bundled vault folds without an edit here. */
 export function libraryForActiveFilePath(
   activeFilePath: string | null,
+  // Music-edition Phase 2: defaults to the CURRENT edition's bundled set (so callers are unchanged);
+  // tests pass an explicit edition's set to pin both editions' behavior.
+  bundled: ReadonlySet<string> = BUNDLED_VAULT_NAME_SET,
 ): string | null {
   if (!activeFilePath) return null;
   const topDir = activeFilePath.split('/')[0];
-  return BUNDLED_VAULT_NAME_SET.has(topDir) ? topDir : null;
+  return bundled.has(topDir) ? topDir : null;
 }
 
 /** Sources for library-note chip groups (drain 2330). The palette
@@ -57,8 +60,9 @@ function isLibraryGroupSource(sourceName: string): boolean {
 export function initialExpandedLibraries(
   activeFilePath: string | null,
   allSources: string[],
+  bundled: ReadonlySet<string> = BUNDLED_VAULT_NAME_SET,
 ): Set<string> {
-  const ctx = libraryForActiveFilePath(activeFilePath);
+  const ctx = libraryForActiveFilePath(activeFilePath, bundled);
   if (ctx && allSources.includes(ctx)) {
     return new Set([ctx]);
   }

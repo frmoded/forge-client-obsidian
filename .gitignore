@@ -28,3 +28,8 @@ dist/
 src/bundled-assets.generated.ts
 src/version-constant.generated.ts
 src/asset-manifest.generated.ts
+
+# Music edition: the 11 music21-chain wheels are FETCHED + sha256-verified into assets/wheels/ by
+# `npm run fetch-music-wheels` (pins: scripts/music-wheels.json) — never committed, so the lean build
+# and the repo stay free of 22.8 MB of binaries.
+assets/wheels/

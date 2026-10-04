@@ -54,7 +54,7 @@ const ROOT = path.resolve(__dirname, "..");
 // KNOWN_BUNDLED_LIBRARIES in src/welcome.ts + src/chips.ts — those are
 // bundled into main.js and run inside Obsidian, where vaults.txt does
 // not exist.
-import { KNOWN_VAULTS } from "./vaults.mjs";
+import { KNOWN_VAULTS, ALL_KNOWN_VAULTS } from "./vaults.mjs";
 
 function walk(dir, base = "") {
   const out = [];
@@ -211,9 +211,9 @@ function main() {
   } else {
     targets = [];
     for (const a of args) {
-      if (!KNOWN_VAULTS.has(a)) {
+      if (!ALL_KNOWN_VAULTS.has(a)) {
         console.error(`Unknown vault: ${a}`);
-        console.error(`Known vaults: ${[...KNOWN_VAULTS].join(", ")}`);
+        console.error(`Known vaults: ${[...ALL_KNOWN_VAULTS].join(", ")}`);
         process.exit(1);
       }
       targets.push(a);

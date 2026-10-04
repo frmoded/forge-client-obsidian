@@ -34,6 +34,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { checkVersionStamp } from "./version-stamp-check.mjs";
+import { editionConfig, assetInEdition } from "./editions.mjs";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import {
@@ -85,11 +86,22 @@ const REQUIRED_FILES = [
   { path: "assets/vaults/forge-tutorial/README.md",           hint: "forge-tutorial bundle missing README — re-sync." },
   { path: "assets/vaults/forge-tutorial/01-hello/Hello.md",   hint: "forge-tutorial bundle missing 01-hello/Hello.md — re-sync." },
   { path: "assets/vaults/forge-tutorial/09-slots/Slots.md",   hint: "forge-tutorial bundle missing 09-slots/Slots.md (final chapter) — re-sync." },
-  // v0.2.27: vendored music21 + minimum deps so the music domain
-  // actually works in Pyodide (closed-beta has no network). Pin
-  // versions in the hint so a fresh setup can re-vendor the same
-  // wheel files; see src/music21-bundle.test.ts for the verification.
 ];
+
+// Music-edition Phase 2: what a MUSIC zip additionally requires (these were unconditional before the
+// lean strip). v0.2.27: vendored music21 + minimum deps so the music domain works in Pyodide; the
+// wheel set is fetched + hash-verified by `npm run fetch-music-wheels` (scripts/music-wheels.json).
+// v0.8.0: `blues/` renamed to `slow_burn/` (drain 2026-07-02-1800).
+const MUSIC_REQUIRED_FILES = [
+  { path: "assets/vaults/music-theory/forge.toml", hint: "Music edition: music-theory bundle missing — run `FORGE_EDITION=music node scripts/sync-bundled-vault.mjs music-theory`." },
+  { path: "assets/vaults/music-theory/slow_burn/twelve_bar_blues_progression.md", hint: "music-theory bundle missing slow_burn/twelve_bar_blues_progression.md — re-sync." },
+  { path: "assets/vaults/music-core/forge.toml", hint: "Music edition: music-core bundle missing — run `FORGE_EDITION=music node scripts/sync-bundled-vault.mjs music-core`." },
+  { path: "assets/wheels/music21-8.3.0-py3-none-any.whl", hint: "Music edition: music21 wheel missing — run `npm run fetch-music-wheels`." },
+  { path: "assets/engine/forge/music/lib.py", hint: "forge.music.lib missing from engine bundle — run `npm run sync-engine-bundle`." },
+];
+
+const EDITION_CFG = editionConfig();
+if (EDITION_CFG.edition === "music") REQUIRED_FILES.push(...MUSIC_REQUIRED_FILES);
 
 async function exists(p) {
   try { await fs.access(p); return true; } catch { return false; }
@@ -492,7 +504,9 @@ async function main() {
   // Verified before landing: `.forge` is the ONLY thing under assets/
   // that this filter drops, so the shipped tree is otherwise unchanged.
   archive.directory(path.join(ROOT, "assets"), `${PLUGIN_ID}/assets`,
-    (entry) => (vaultIsInScope(entry.name) ? entry : false));
+    // Phase 2: also drop anything outside this edition (a lean zip must not carry music wheels/vaults
+    // that merely sit in assets/ on the build machine).
+    (entry) => (vaultIsInScope(entry.name) && assetInEdition(entry.name, EDITION_CFG) ? entry : false));
 
   await archive.finalize();
   await finalized;

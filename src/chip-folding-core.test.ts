@@ -109,3 +109,53 @@ test('initialExpandedLibraries: active in known lib still expands only that one 
   // library stays closed even though it's another known group.
   assert.deepEqual(Array.from(r), ['forge-tutorial']);
 });
+
+// ---------------------------------------------------------------------------
+// Music-edition Phase 2 — both editions' expectations pinned EXPLICITLY. The tests above run against
+// the ambient (lean) build; these pass each edition's bundled set so the music behavior the lean
+// strip removed (787961d) is covered too, without needing a music build.
+// ---------------------------------------------------------------------------
+import { EDITION_VAULT_NAMES } from './edition-core.ts';
+
+const LEAN_SET: ReadonlySet<string> = new Set(EDITION_VAULT_NAMES.lean);
+const MUSIC_SET: ReadonlySet<string> = new Set(EDITION_VAULT_NAMES.music);
+
+test('edition-explicit: lean does not recognize music libraries; music does (v0.2.333 split)', () => {
+  assert.equal(libraryForActiveFilePath('music-theory/lab.md', LEAN_SET), null);
+  assert.equal(libraryForActiveFilePath('music-core/sketch.md', LEAN_SET), null);
+  assert.equal(libraryForActiveFilePath('music-theory/lab.md', MUSIC_SET), 'music-theory');
+  assert.equal(libraryForActiveFilePath('music-core/sketch.md', MUSIC_SET), 'music-core');
+  // Both editions: the pre-split name is never a library (stale forge-music/ must not fold-group).
+  assert.equal(libraryForActiveFilePath('forge-music/lab.md', LEAN_SET), null);
+  assert.equal(libraryForActiveFilePath('forge-music/lab.md', MUSIC_SET), null);
+  // Both editions: moda and tutorial are libraries.
+  for (const set of [LEAN_SET, MUSIC_SET]) {
+    assert.equal(libraryForActiveFilePath('forge-moda/x.md', set), 'forge-moda');
+    assert.equal(libraryForActiveFilePath('forge-tutorial/01-hello/x.md', set), 'forge-tutorial');
+  }
+});
+
+test('edition-explicit (music): an active music-theory note expands only music-theory', () => {
+  const r = initialExpandedLibraries(
+    'music-theory/slow_burn/twelve_bar_blues_progression.md',
+    ['music-theory', 'forge-moda', 'Music library'],
+    MUSIC_SET,
+  );
+  // Music context wins -> only music-theory expanded; Music library stays closed even though it's the
+  // semantically related group. (Pre-strip assertion, restored for the music edition.)
+  assert.deepEqual(Array.from(r), ['music-theory']);
+});
+
+test('edition-explicit (lean): the same music-theory path has no library context, so every non-library group expands', () => {
+  const r = initialExpandedLibraries(
+    'music-theory/slow_burn/twelve_bar_blues_progression.md',
+    ['music-theory', 'forge-moda', 'Music library'],
+    LEAN_SET,
+  );
+  assert.deepEqual(Array.from(r).sort(), ['forge-moda', 'music-theory']);
+});
+
+test('edition-explicit: the ambient default equals the current edition (lean in the committed tree)', () => {
+  assert.equal(libraryForActiveFilePath('music-theory/lab.md'), null);
+  assert.equal(libraryForActiveFilePath('forge-moda/lab.md'), 'forge-moda');
+});

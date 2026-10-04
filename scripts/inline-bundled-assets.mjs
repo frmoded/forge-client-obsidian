@@ -22,6 +22,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { editionConfig, assetInEdition } from "./editions.mjs";
 
 import { writeBundleVersionSentinel } from "./bundle-version-sentinel.mjs";
 
@@ -31,6 +32,10 @@ const ASSETS = path.join(ROOT, "assets");
 const OUT = path.join(ROOT, "src", "bundled-assets.generated.ts");
 
 const INLINE_DIRS = ["vaults", "engine", "iframe", "welcome"];
+
+// Phase 2: only this edition's vaults are inlined. Without this, tracked assets/vaults/music-* would be
+// baked into the LEAN main.js (this walk used to take every directory present).
+const CFG = editionConfig();
 
 function walk(dir, base = "") {
   const out = [];
@@ -55,7 +60,7 @@ function main() {
   const allFiles = [];
   for (const sub of INLINE_DIRS) {
     const dir = path.join(ASSETS, sub);
-    const files = walk(dir);
+    const files = walk(dir).filter((f) => assetInEdition(`${sub}/${f.rel}`, CFG));
     for (const f of files) {
       allFiles.push({ rel: `${sub}/${f.rel}`, abs: f.abs });
     }

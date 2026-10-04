@@ -29,6 +29,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { BUNDLED_ASSETS } from './bundled-assets.generated.ts';
+import { EDITION } from './edition-selected.ts';
+
+// Music-edition Phase 2: the bundle's size floor depends on the edition the generated assets were built
+// for. Lean ships forge-moda + forge-tutorial (~56 notes); music adds music-theory + music-core (>100).
+const MIN_BUNDLED_NOTES = EDITION === 'music' ? 100 : 20;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VAULTS = path.join(ROOT, 'assets', 'vaults');
@@ -53,7 +58,7 @@ test('no bundled note carries a persisted sync_state: line', () => {
   // Guard the guard: an empty walk would pass vacuously, which is the
   // failure mode L32 names for set-difference sweeps.
   assert.ok(
-    notes.length > 20, // lean branch ships only forge-moda + forge-tutorial (56 notes)
+    notes.length > MIN_BUNDLED_NOTES, // lean: forge-moda + forge-tutorial (56 notes); music: >100
     `expected the bundled-vault walk to find the shipped notes, found ${notes.length}`,
   );
 
@@ -74,7 +79,7 @@ test('no inlined note asset carries a persisted sync_state: line', () => {
   const noteKeys = Object.keys(BUNDLED_ASSETS).filter((k) => k.endsWith('.md'));
 
   assert.ok(
-    noteKeys.length > 20, // lean branch inlines only forge-moda + forge-tutorial notes (58)
+    noteKeys.length > MIN_BUNDLED_NOTES, // lean inlines only forge-moda + forge-tutorial notes (58); music: >100
     `expected inlined note assets, found ${noteKeys.length}`,
   );
 

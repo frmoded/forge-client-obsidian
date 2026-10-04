@@ -22,6 +22,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { editionConfig, listEditionAssets } from "./editions.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -52,15 +53,20 @@ function dirSize(dir) {
   return total;
 }
 
-const subdirs = fs.readdirSync(ASSETS, { withFileTypes: true })
-  .filter((e) => e.isDirectory())
-  .map((e) => e.name)
-  .sort();
+// Music-edition Phase 2: the footprint reports THIS EDITION's assets only. A lean build on a machine
+// that holds fetched music wheels must not print (or imply it ships) 22 MB of wheels.
+const cfg = editionConfig();
+const perDir = new Map();
+for (const rel of listEditionAssets(ASSETS, cfg)) {
+  const top = rel.split("/")[0];
+  perDir.set(top, (perDir.get(top) ?? 0) + fs.statSync(path.join(ASSETS, rel)).size);
+}
+const subdirs = [...perDir.keys()].filter((d) => fs.statSync(path.join(ASSETS, d)).isDirectory()).sort();
 
-console.log("\nPlugin asset footprint:");
+console.log(`\nPlugin asset footprint (edition=${cfg.edition}):`);
 let total = 0;
 for (const sub of subdirs) {
-  const sz = dirSize(path.join(ASSETS, sub));
+  const sz = perDir.get(sub);
   total += sz;
   console.log(`  ${sub.padEnd(10)} ${(sz / 1024 / 1024).toFixed(2).padStart(7)} MB`);
 }

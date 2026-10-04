@@ -13,30 +13,18 @@
 // parse trivially; this module keeps the .mjs side from duplicating
 // the parse.
 
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+// Music-edition Phase 2: the list is per-edition. scripts/vaults.txt is the LEAN list (default),
+// scripts/vaults.music.txt the MUSIC list; scripts/editions.mjs owns the parsing and the rule that
+// edition membership is decided by edition, never by directory contents.
+import { editionConfig, ALL_VAULTS } from "./editions.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-/** Parse vaults.txt: one name per line, `#` comments + blanks ignored. */
-function readVaults() {
-  const file = path.join(__dirname, "vaults.txt");
-  const raw = fs.readFileSync(file, "utf8");
-  const names = [];
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    names.push(trimmed);
-  }
-  if (names.length === 0) {
-    throw new Error(`${file} lists no vaults — expected at least one.`);
-  }
-  return names;
-}
-
-/** Canonical bundled-vault names, in vaults.txt order. */
-export const BUNDLED_VAULTS = readVaults();
+/** Canonical bundled-vault names for the CURRENT edition (FORGE_EDITION), in list-file order. */
+export const BUNDLED_VAULTS = editionConfig().vaults;
 
 /** Same list as a Set, for allowlist checks. */
 export const KNOWN_VAULTS = new Set(BUNDLED_VAULTS);
+
+/** Every vault ANY edition can bundle. sync-bundled-vault.mjs validates explicit names against this,
+ *  so `node scripts/sync-bundled-vault.mjs music-theory` works from a lean checkout; `--all` still
+ *  means "this edition's vaults". */
+export const ALL_KNOWN_VAULTS = new Set(ALL_VAULTS);

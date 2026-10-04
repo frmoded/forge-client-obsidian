@@ -29,6 +29,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { editionConfig } from "./editions.mjs";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,9 +48,9 @@ export function sha256(buf) {
  *  across machines and runs — a manifest that reordered itself would
  *  produce a spurious main.js diff on every build.
  */
-export function buildEntries(assetsRoot) {
+export function buildEntries(assetsRoot, dirs = HYDRATABLE_DIRS) {
   const byName = new Map();
-  for (const dir of HYDRATABLE_DIRS) {
+  for (const dir of dirs) {
     const abs = path.join(assetsRoot, dir);
     if (!fs.existsSync(abs)) continue;
     for (const fname of fs.readdirSync(abs).sort()) {
@@ -112,12 +113,15 @@ export const HYDRATABLE_TOTAL_BYTES = ${total};
 function main() {
   const assetsRoot = path.join(ROOT, "assets");
   const outPath = path.join(ROOT, "src", "asset-manifest.generated.ts");
-  const entries = buildEntries(assetsRoot);
+  // Phase 2: hydratable dirs come from the EDITION (lean: pyodide only; music: wheels + pyodide) —
+  // a lean build must not bake fetched music wheels' hashes into main.js.
+  const cfg = editionConfig();
+  const entries = buildEntries(assetsRoot, cfg.hydratableDirs);
 
   if (entries.length === 0) {
     console.error(
       "[build-asset-manifest] refusing to write an EMPTY manifest — " +
-      "assets/wheels/ and assets/pyodide/ are both missing or empty. " +
+      `edition=${cfg.edition}: ${cfg.hydratableDirs.map((d) => `assets/${d}/`).join(" and ")} missing or empty. ` +
       "An empty manifest would make the hydrator believe there is " +
       "nothing to download and boot a BRAT install with no runtime.",
     );

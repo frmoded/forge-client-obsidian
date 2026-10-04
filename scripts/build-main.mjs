@@ -25,19 +25,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { EDITIONS, resolveEdition } from "./editions.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-export const EDITIONS = ["lean", "music"];
-
-export function resolveEdition(value) {
-  const edition = value === undefined || value === "" ? "lean" : value;
-  if (!EDITIONS.includes(edition)) {
-    throw new Error(
-      `FORGE_EDITION must be one of ${EDITIONS.join(" | ")} (default lean); got ${JSON.stringify(value)}`,
-    );
-  }
-  return edition;
-}
+// Re-exported: scripts/build-main.test.mjs (Phase 1) imports these from here.
+export { EDITIONS, resolveEdition };
 
 export function editionPlugin(edition) {
   return {
@@ -45,6 +37,12 @@ export function editionPlugin(edition) {
     setup(b) {
       b.onResolve({ filter: /(^|\/)music-edition-selected(\.ts)?$/ }, () => ({
         path: path.join(ROOT, "src", edition === "music" ? "music-edition.full.ts" : "music-edition.lean.ts"),
+      }));
+      // Phase 2: the runtime edition id (vault lists, wizard flavors, Python resolution order).
+      // Committed as lean; redirected for the music edition from the SAME env var, so the runtime
+      // constant and the asset selection in scripts/editions.mjs can never disagree within one build.
+      b.onResolve({ filter: /(^|\/)edition-selected(\.ts)?$/ }, () => ({
+        path: path.join(ROOT, "src", edition === "music" ? "edition-selected.music.ts" : "edition-selected.ts"),
       }));
     },
   };

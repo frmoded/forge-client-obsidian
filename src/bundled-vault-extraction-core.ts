@@ -18,7 +18,10 @@
 export const BUNDLED_VAULTS_ROOT =
   '.obsidian/plugins/forge/assets/vaults';
 
-/** The bundled vaults this build ships, in scripts/vaults.txt order.
+import { EDITION_VAULT_NAMES } from './edition-core.ts';
+import { EDITION } from './edition-selected.ts';
+
+/** The bundled vaults this build ships, in scripts/vaults.txt (lean) / vaults.music.txt (music) order.
  *  ONE definition for the whole plugin (drain 2026-08-22-0920): every
  *  site that needs "is this one of ours?" imports from here instead of
  *  spelling the names again. A test pins it to scripts/vaults.txt and
@@ -29,11 +32,13 @@ export const BUNDLED_VAULTS_ROOT =
  *  list is this set PLUS the legacy forge-music dirs, and
  *  _BUNDLED_LIBRARIES_V1 is a three-entry Python resolution order.
  *  Both are pinned to the canonical set by the same test file. */
-export const BUNDLED_VAULT_NAMES = [
-  'forge-moda', 'forge-tutorial',
-] as const;
+export const BUNDLED_VAULT_NAMES: readonly string[] = EDITION_VAULT_NAMES[EDITION];
 
-export type BundledVaultName = typeof BUNDLED_VAULT_NAMES[number];
+/** Every name ANY edition can bundle (the type is a superset; membership checks use the current
+ *  edition's BUNDLED_VAULT_NAMES / BUNDLED_VAULT_NAME_SET). */
+export type BundledVaultName =
+  | typeof EDITION_VAULT_NAMES.lean[number]
+  | typeof EDITION_VAULT_NAMES.music[number];
 
 /** Membership form, for the "is this vault a bundled library's source
  *  repo?" checks in welcome.ts + chips.ts. */

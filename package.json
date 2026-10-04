@@ -4,7 +4,7 @@
   "description": "Obsidian client for Forge.",
   "main": "main.js",
   "scripts": {
-    "build": "node scripts/lint-backtick-trap.mjs && node scripts/inline-plugin-version.mjs && node scripts/build-manifest.mjs && node scripts/build-asset-manifest.mjs && node scripts/inline-bundled-assets.mjs && npm run typecheck && node scripts/build-main.mjs && node scripts/copy-assets.mjs",
+    "build": "node scripts/lint-backtick-trap.mjs && node scripts/check-edition-assets.mjs && node scripts/inline-plugin-version.mjs && node scripts/build-manifest.mjs && node scripts/build-asset-manifest.mjs && node scripts/inline-bundled-assets.mjs && npm run typecheck && node scripts/build-main.mjs && node scripts/copy-assets.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:warn": "node scripts/typecheck-warn.mjs",
     "lint": "node scripts/lint-backtick-trap.mjs",
@@ -17,7 +17,9 @@
     "prebuild": "npm run check-engine-bundle",
     "sync-bundled-vaults": "node scripts/sync-bundled-vault.mjs --all",
     "inline-assets": "node scripts/inline-bundled-assets.mjs",
-    "release-zip": "node scripts/build-release-zip.mjs"
+    "release-zip": "node scripts/build-release-zip.mjs",
+    "fetch-music-wheels": "node scripts/fetch-music-wheels.mjs",
+    "check-edition-assets": "node scripts/check-edition-assets.mjs"
   },
   "keywords": [],
   "author": "Oded Fuhrmann",

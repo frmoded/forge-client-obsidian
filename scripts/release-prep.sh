@@ -72,7 +72,14 @@ cd "$REPO_DIR"
 # exercised without editing the tracked vaults.txt (which would dirty
 # the plugin tree and trip the guard above before the vault loop runs).
 VAULTS=()
-VAULTS_FILE="${VAULTS_FILE:-$REPO_DIR/scripts/vaults.txt}"
+# Music-edition Phase 2: the default list follows FORGE_EDITION (lean -> vaults.txt, music ->
+# vaults.music.txt). Unknown editions are an error here too, not a silent fall-through to lean.
+case "${FORGE_EDITION:-lean}" in
+  lean)  DEFAULT_VAULTS_FILE="$REPO_DIR/scripts/vaults.txt" ;;
+  music) DEFAULT_VAULTS_FILE="$REPO_DIR/scripts/vaults.music.txt" ;;
+  *) echo "ERROR: FORGE_EDITION must be lean or music (got \"$FORGE_EDITION\")"; exit 1 ;;
+esac
+VAULTS_FILE="${VAULTS_FILE:-$DEFAULT_VAULTS_FILE}"
 if [ ! -f "$VAULTS_FILE" ]; then
   echo "ERROR: vault config not found at $VAULTS_FILE"
   exit 1

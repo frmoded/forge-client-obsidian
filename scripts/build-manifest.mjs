@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { editionConfig, assetInEdition } from "./editions.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ASSETS = path.resolve(__dirname, "..", "assets");
@@ -35,7 +36,11 @@ if (!fs.existsSync(ASSETS)) {
 }
 
 // Exclude the manifest itself (would otherwise self-reference).
-const files = walk(ASSETS).filter((f) => f !== "manifest.json").sort();
+// Phase 2: filtered by EDITION, not by what is on disk — a dev machine holding music wheels/vaults
+// must still produce the lean manifest (see scripts/editions.mjs).
+const cfg = editionConfig();
+const files = walk(ASSETS).filter((f) => f !== "manifest.json" && assetInEdition(f, cfg)).sort();
+console.log(`[build-manifest] edition=${cfg.edition}`);
 
 // Categorize files for the loader's convenience. The loader fetches
 // pyodide/* via the Pyodide bootstrap (indexURL), wheels/* via
