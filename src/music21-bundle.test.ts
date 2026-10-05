@@ -307,10 +307,11 @@ _tempos = [m.number for p in _layered.parts for m in p.flatten().getElementsByCl
 `);
   assert.equal(py.runPython('_a_parts'), 3, 'one Part per channel (kick, snare, hihat)');
   assert.equal(py.runPython('_layered_parts'), 6, 'two data notes -> six Parts layered');
-  // Straight rock: kick on beats 1 and 3, a sixteenth long.
-  assert.deepEqual(py.runPython('_kick_a').toJs(), [[0, 0.25], [2, 0.25]]);
-  // Syncopated kick (steps 0, 3, 10 of 16): offsets 0, 0.75, 2.5.
-  assert.deepEqual(py.runPython('_kick_b').toJs(), [[0, 0.25], [0.75, 0.25], [2.5, 0.25]]);
+  // Straight rock: kick on beats 1 and 3, WRITTEN a half note each (Beatbox Phase 4: a hit is as long as the gap to the next
+  // hit in its channel, the last one to the bar line; it was a sixteenth + rests). The onsets 0 and 2 are what they always were.
+  assert.deepEqual(py.runPython('_kick_a').toJs(), [[0, 2], [2, 2]]);
+  // Syncopated kick (steps 0, 3, 10 of 16): onsets 0, 0.75, 2.5, written 0.75 / 1.75 / 1.5 long (the gaps; the last to the bar line).
+  assert.deepEqual(py.runPython('_kick_b').toJs(), [[0, 0.75], [0.75, 1.75], [2.5, 1.5]]);
   assert.deepEqual(py.runPython('_tempos').toJs(), [100, 100, 100, 100, 100, 100]);
 });
 
@@ -364,6 +365,7 @@ _bars = [len(p.getElementsByClass('Measure')) for p in _score.parts]
 _vels = [[n.volume.velocity for n in p.flatten().notes] for p in _score.parts]
 _kick = [float(n.offset) for n in _score.parts[0].flatten().notes]
 _accents = [sum(any(type(a).__name__ == 'Accent' for a in n.articulations) for n in p.flatten().notes) for p in _score.parts]
+_hit_counts = [len(p.flatten().notes) for p in _score.parts]
 `);
   return { py, from: note.from };
 }
@@ -427,4 +429,42 @@ _kick, _snare, _hat = _by[35], _by[38], _by[42]
   assert.deepEqual(py.runPython('_kick').toJs(), [112, 72]);
   assert.deepEqual(py.runPython('_snare').toJs(), [72, 112]);
   assert.deepEqual(py.runPython('_hat').toJs(), [112, 112, 72, 112, 72, 112, 112, 112]);
+});
+
+// ---------------------------------------------------------------------------------------------------
+// Beat-as-data Phase 4 (drain 2026-10-05-2100) — the three extend_rhythm example notes, each note's own stored Python run in
+// Pyodide with the BUNDLED engine + FETCHED wheels (same vault-freshness handling as above: bundled copy if present, else the
+// source vault, else an explicit skip).
+// ---------------------------------------------------------------------------------------------------
+
+const extendedSkip = (name: string) =>
+  exampleSkip(name) ?? (WHEELS_PRESENT ? false : 'music wheels not fetched');
+
+baseTest('rhythm_extended_fills in Pyodide: four bars, the fill (snare 64/80/96/112) only in bar four, one accent', { skip: extendedSkip('rhythm_extended_fills') }, async () => {
+  const { py } = await runExampleNote('rhythm_extended_fills');
+  assert.deepEqual(py.runPython('_names').toJs(), ['Kick', 'Snare', 'Closed Hi-Hat']);
+  assert.deepEqual(py.runPython('_bars').toJs(), [4, 4, 4]);
+  assert.deepEqual(py.runPython('_hit_counts').toJs(), [8, 11, 30]);   // hi-hat loses steps 12 and 14 in bar four
+  assert.deepEqual(py.runPython('_accents').toJs(), [0, 1, 0]);        // only the fill's final 112 reaches the accent threshold
+  const snare = py.runPython('_vels').toJs()[1] as number[];
+  assert.deepEqual(snare.slice(-4), [64, 80, 96, 112]);
+});
+
+baseTest('rhythm_extended_building in Pyodide: hi-hat quarters, eighths, sixteenths, sixteenths (4+8+16+16 hits); no accents', { skip: extendedSkip('rhythm_extended_building') }, async () => {
+  const { py } = await runExampleNote('rhythm_extended_building');
+  assert.deepEqual(py.runPython('_bars').toJs(), [4, 4, 4]);
+  assert.deepEqual(py.runPython('_hit_counts').toJs(), [8, 8, 44]);
+  assert.deepEqual(py.runPython('_accents').toJs(), [0, 0, 0]);
+  const hat = py.runPython('_vels').toJs()[2] as number[];
+  assert.deepEqual(hat.slice(0, 4), [80, 80, 80, 80]);
+});
+
+baseTest('rhythm_extended_ghost in Pyodide: sixteen quiet (36) snare ghosts across four bars; backbeats untouched; no accents', { skip: extendedSkip('rhythm_extended_ghost') }, async () => {
+  const { py } = await runExampleNote('rhythm_extended_ghost');
+  assert.deepEqual(py.runPython('_bars').toJs(), [4, 4, 4]);
+  assert.deepEqual(py.runPython('_hit_counts').toJs(), [8, 24, 32]);
+  assert.deepEqual(py.runPython('_accents').toJs(), [0, 0, 0]);
+  const snare = py.runPython('_vels').toJs()[1] as Array<number | null>;
+  assert.equal(snare.filter((v) => v === 36).length, 16);
+  assert.equal(snare.filter((v) => v === 90).length, 8);               // the 8 seed backbeats: plain hits, played at the default 90 because the channel carries ints
 });
