@@ -313,3 +313,100 @@ _tempos = [m.number for p in _layered.parts for m in p.flatten().getElementsByCl
   assert.deepEqual(py.runPython('_kick_b').toJs(), [[0, 0.25], [0.75, 0.25], [2.5, 0.25]]);
   assert.deepEqual(py.runPython('_tempos').toJs(), [100, 100, 100, 100, 100, 100]);
 });
+
+// ---------------------------------------------------------------------------------------------------
+// Beat-as-data Phases 2+3 (drain 2026-10-04-2330) — rhythm_sequence and rhythm_accented, executed in Pyodide
+// with the BUNDLED engine + FETCHED music21 wheels. What runs is the note's own stored `# Python` section.
+//
+// Vault-freshness caveat: the BUNDLED music-theory copy (assets/vaults/music-theory) only gains these notes
+// when the driver re-syncs it (`FORGE_EDITION=music node scripts/sync-bundled-vault.mjs ...`). So the note is
+// read from the bundled copy when it is there (post-sync) and otherwise from the SOURCE vault checkout
+// (../music-theory); with neither, the test skips with that explicit reason rather than silently passing.
+// The two data-note leaves are always read from the bundled copy (they ship today).
+// ---------------------------------------------------------------------------------------------------
+
+function exampleNote(name: string): { text: string; from: 'bundled' | 'source' } | null {
+  const candidates: Array<['bundled' | 'source', string]> = [
+    ['bundled', path.resolve(process.cwd(), 'assets/vaults/music-theory/rhythm_data', `${name}.md`)],
+    ['source', path.resolve(process.cwd(), '../music-theory/rhythm_data', `${name}.md`)],
+  ];
+  for (const [from, file] of candidates) {
+    if (fs.existsSync(file)) return { text: fs.readFileSync(file, 'utf-8'), from };
+  }
+  return null;
+}
+
+function noteFrontmatterAndPython(text: string): { python: string } {
+  const m = text.match(/# Python\n\n```python\n([\s\S]*?)\n```/);
+  assert.ok(m, 'note has no # Python section');
+  return { python: m[1] };
+}
+
+// Runs a note's compiled Python the way the plugin runtime does: the data-note leaves are functions that
+// return their parsed JSON; lib chips are in scope; `compute(context)` is the entry point.
+async function runExampleNote(name: string): Promise<{ py: any; from: string }> {
+  const note = exampleNote(name);
+  assert.ok(note, `neither the bundled nor the source music-theory vault has rhythm_data/${name}.md`);
+  const py = await bootWithMusic21();
+  py.globals.set('_pattern_a_json', JSON.stringify(bundledRhythmData('rhythm_pattern_straight_rock')));
+  py.globals.set('_pattern_b_json', JSON.stringify(bundledRhythmData('rhythm_pattern_syncopated')));
+  py.globals.set('_note_python', noteFrontmatterAndPython(note.text).python);
+  py.runPython(`
+import json
+import forge.music.lib as _lib
+_ns = {n: getattr(_lib, n) for n in dir(_lib) if not n.startswith('_')}
+_ns['rhythm_pattern_straight_rock'] = lambda: json.loads(_pattern_a_json)
+_ns['rhythm_pattern_syncopated'] = lambda: json.loads(_pattern_b_json)
+exec(_note_python, _ns)
+_score = _ns['compute'](None)
+_names = [p.getInstrument().instrumentName for p in _score.parts]
+_bars = [len(p.getElementsByClass('Measure')) for p in _score.parts]
+_vels = [[n.volume.velocity for n in p.flatten().notes] for p in _score.parts]
+_kick = [float(n.offset) for n in _score.parts[0].flatten().notes]
+`);
+  return { py, from: note.from };
+}
+
+const exampleSkip = (name: string) =>
+  exampleNote(name) ? undefined : `skipped: rhythm_data/${name}.md is in neither the bundled music-theory vault (not re-synced yet) nor ../music-theory`;
+
+baseTest('rhythm_sequence (note\'s own Python) runs in Pyodide: a 2-bar Score, same-instrument staves merged, straight rock then syncopated', { skip: exampleSkip('rhythm_sequence') ?? (WHEELS_PRESENT ? false : 'music wheels not fetched') }, async () => {
+  const { py } = await runExampleNote('rhythm_sequence');
+  assert.deepEqual(py.runPython('_names').toJs(), ['Kick', 'Snare', 'Closed Hi-Hat']);
+  assert.deepEqual(py.runPython('_bars').toJs(), [2, 2, 2]);
+  // straight rock kick (steps 0, 8 -> 0, 2) in bar 1, then syncopated kick (0, 3, 10 -> 4, 4.75, 6.5) in bar 2
+  assert.deepEqual(py.runPython('_kick').toJs(), [0, 2, 4, 4.75, 6.5]);
+});
+
+baseTest('rhythm_accented (note\'s own Python) runs in Pyodide: one bar, accents land where the syncopated mask hits', { skip: exampleSkip('rhythm_accented') ?? (WHEELS_PRESENT ? false : 'music wheels not fetched') }, async () => {
+  const { py } = await runExampleNote('rhythm_accented');
+  assert.deepEqual(py.runPython('_names').toJs(), ['Kick', 'Snare', 'Closed Hi-Hat']);
+  assert.deepEqual(py.runPython('_bars').toJs(), [1, 1, 1]);
+  assert.deepEqual(py.runPython('_vels').toJs(), [
+    [112, 72],
+    [72, 112],
+    [112, 112, 72, 112, 72, 112, 112, 112],
+  ]);
+});
+
+test('accent_mask velocities survive a MIDI write in Pyodide (the accents reach the file, not just the in-memory notes)', async () => {
+  const py = await bootWithMusic21();
+  py.globals.set('_pattern_a_json', JSON.stringify(bundledRhythmData('rhythm_pattern_straight_rock')));
+  py.globals.set('_pattern_b_json', JSON.stringify(bundledRhythmData('rhythm_pattern_syncopated')));
+  py.runPython(`
+import json, os, tempfile
+from forge.music.lib import accent_mask, rhythm_data_to_stream
+from music21 import converter
+
+_score = rhythm_data_to_stream(accent_mask(json.loads(_pattern_a_json), json.loads(_pattern_b_json)))
+_fp = os.path.join(tempfile.mkdtemp(), 'accented.mid')
+_score.write('midi', fp=_fp)
+_by = {}
+for _n in sorted(converter.parse(_fp).flatten().notes, key=lambda n: float(n.offset)):
+    _by.setdefault(_n.storedInstrument.percMapPitch, []).append(_n.volume.velocity)
+_kick, _snare, _hat = _by[35], _by[38], _by[42]
+`);
+  assert.deepEqual(py.runPython('_kick').toJs(), [112, 72]);
+  assert.deepEqual(py.runPython('_snare').toJs(), [72, 112]);
+  assert.deepEqual(py.runPython('_hat').toJs(), [112, 112, 72, 112, 72, 112, 112, 112]);
+});
