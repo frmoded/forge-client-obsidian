@@ -363,6 +363,7 @@ _names = [p.getInstrument().instrumentName for p in _score.parts]
 _bars = [len(p.getElementsByClass('Measure')) for p in _score.parts]
 _vels = [[n.volume.velocity for n in p.flatten().notes] for p in _score.parts]
 _kick = [float(n.offset) for n in _score.parts[0].flatten().notes]
+_accents = [sum(any(type(a).__name__ == 'Accent' for a in n.articulations) for n in p.flatten().notes) for p in _score.parts]
 `);
   return { py, from: note.from };
 }
@@ -387,6 +388,23 @@ baseTest('rhythm_accented (note\'s own Python) runs in Pyodide: one bar, accents
     [72, 112],
     [112, 112, 72, 112, 72, 112, 112, 112],
   ]);
+});
+
+// Beatbox Phase 3b (drain 2026-10-05-1800): the loud hits are VISIBLE — an Accent articulation on every hit whose
+// authored velocity is >= 100 — and the mark is notation only (the velocities above are exactly as authored).
+baseTest('rhythm_accented (note\'s own Python) in Pyodide: Accent marks on exactly the loud hits — kick 1, snare 1, hi-hat 6 — velocities untouched', { skip: exampleSkip('rhythm_accented') ?? (WHEELS_PRESENT ? false : 'music wheels not fetched') }, async () => {
+  const { py } = await runExampleNote('rhythm_accented');
+  assert.deepEqual(py.runPython('_accents').toJs(), [1, 1, 6]);
+  assert.deepEqual(py.runPython('_vels').toJs(), [
+    [112, 72],
+    [72, 112],
+    [112, 112, 72, 112, 72, 112, 112, 112],
+  ]);
+});
+
+baseTest('rhythm_sequence (note\'s own Python) in Pyodide: all-boolean data carries no accent marks', { skip: exampleSkip('rhythm_sequence') ?? (WHEELS_PRESENT ? false : 'music wheels not fetched') }, async () => {
+  const { py } = await runExampleNote('rhythm_sequence');
+  assert.deepEqual(py.runPython('_accents').toJs(), [0, 0, 0]);
 });
 
 test('accent_mask velocities survive a MIDI write in Pyodide (the accents reach the file, not just the in-memory notes)', async () => {
