@@ -134,26 +134,42 @@ async function renderHtmlEmbed(
   // No caption/chrome — this is the actual point of the drain (the
   // driver dislikes the third-party plugin's unremovable "HTML Embed
   // · path · height" bar). The iframe is the entire rendered surface.
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const blobUrl = URL.createObjectURL(blob);
-
-  const iframe = el.createEl('iframe', { cls: 'forge-html-embed-iframe' });
-  iframe.src = blobUrl;
-  iframe.sandbox.add('allow-scripts');
-  iframe.sandbox.add('allow-same-origin');
   // The one genuinely per-embed-instance style (parsed from the code
-  // block's own source) — everything static lives in styles.css's
-  // .forge-html-embed-iframe rule instead, per this repo's inline-
-  // styles convention (see styles.css's own comment at that rule).
-  iframe.style.height = `${parsed.heightPx}px`;
-  iframe.setAttribute('loading', 'lazy');
-  iframe.setAttribute('referrerpolicy', 'no-referrer');
+  // block's own source) is the height — everything static lives in
+  // styles.css's .forge-html-embed-iframe rule instead, per this repo's
+  // inline-styles convention (see styles.css's own comment at that rule).
+  const { blobUrl } = createSandboxedWidgetIframe(el, html, `${parsed.heightPx}px`);
 
   // Matches the third-party plugin's own cleanup: revoke the blob URL
   // when this component unloads (note closed/re-rendered, plugin
   // unloaded) rather than leaking it for the life of the Obsidian
   // process.
   plugin.register(() => URL.revokeObjectURL(blobUrl));
+}
+
+/**
+ * The ONE place a vault-authored .html widget gets its iframe: a `blob:` URL of the file's content, sandboxed with exactly
+ * `allow-scripts` and `allow-same-origin` (see the SANDBOXING note at the top of this file) — no wider flags. Extracted
+ * (Beat-as-data Phase 5, drain 2026-10-05-2100) so the "Edit rhythm in Rhythm Box" view hosts the widget through the SAME code
+ * instead of building a second iframe with its own, possibly looser, settings. Behaviour of the html-embed processor is unchanged.
+ * The caller owns revoking `blobUrl` when its host goes away.
+ */
+export function createSandboxedWidgetIframe(
+  parent: HTMLElement,
+  html: string,
+  heightCss: string,
+): { iframe: HTMLIFrameElement; blobUrl: string } {
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const blobUrl = URL.createObjectURL(blob);
+
+  const iframe = parent.createEl('iframe', { cls: 'forge-html-embed-iframe' });
+  iframe.src = blobUrl;
+  iframe.sandbox.add('allow-scripts');
+  iframe.sandbox.add('allow-same-origin');
+  iframe.style.height = heightCss;
+  iframe.setAttribute('loading', 'lazy');
+  iframe.setAttribute('referrerpolicy', 'no-referrer');
+  return { iframe, blobUrl };
 }
 
 function renderEmbedError(el: HTMLElement, title: string, detail: string): void {

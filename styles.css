@@ -1763,6 +1763,12 @@
   display: block;
 }
 
+/* Beat-as-data Phase 5: the pane that hosts the Rhythm Box widget for "Edit rhythm in Rhythm Box" — the widget fills it edge to edge. */
+.forge-rhythm-edit-view {
+  padding: 0;
+  overflow: hidden;
+}
+
 .forge-html-embed-error {
   margin: 8px 0 16px;
   padding: 12px 14px;

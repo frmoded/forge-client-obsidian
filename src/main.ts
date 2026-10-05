@@ -103,6 +103,7 @@ import {
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
+import { registerRhythmEdit } from './rhythm-edit-view.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import {
   readExpandedState,
@@ -743,6 +744,8 @@ export default class ForgePlugin extends Plugin {
     // and this drain's FEEDBACK §4 for why the old check was retired
     // outright rather than repurposed.
     registerHtmlEmbedProcessor(this);
+    // Beat-as-data Phase 5 (drain 2026-10-05-2100): "Edit rhythm in Rhythm Box" — edit a rhythm data note through the widget.
+    registerRhythmEdit(this);
 
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
