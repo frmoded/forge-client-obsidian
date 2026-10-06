@@ -30,9 +30,10 @@ const BLOCK_RE =
  * Those are the only two ESCAPES the block uses; keep this minimal so a
  * new escape fails loudly rather than being silently mangled.
  *
- * The block also has exactly ONE real (unescaped) interpolation since the
- * music-edition Phase 2: `${JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION])}`
- * (the Python library resolution order). It is resolved here from the SAME
+ * The block has exactly TWO real (unescaped) interpolations: since music-edition
+ * Phase 2 `${JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION])}` (the Python library
+ * resolution order), and since drain 2026-10-05-2330 `${JSON.stringify(EDITION)}`
+ * (the FORGE_EDITION flag the engine reads for its lean-edition message). Each is resolved here from the SAME
  * production constants the plugin evaluates — never a hand-copied value — and
  * ANY other unresolved interpolation throws, for the same reason a new escape
  * does.
@@ -53,9 +54,10 @@ export function extractProductionPythonBlock(
     );
   }
   const LIBRARIES_INTERPOLATION = '${JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION])}';
-  const resolved = match[1].split(LIBRARIES_INTERPOLATION).join(
-    JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION]),
-  );
+  const EDITION_INTERPOLATION = '${JSON.stringify(EDITION)}';
+  const resolved = match[1]
+    .split(LIBRARIES_INTERPOLATION).join(JSON.stringify(EDITION_PYTHON_LIBRARIES[EDITION]))
+    .split(EDITION_INTERPOLATION).join(JSON.stringify(EDITION));
   // Any `${` still present that is not an escaped pass-through (`\${`) is an interpolation this
   // helper does not know how to resolve — fail loudly instead of handing Python a literal `${...}`.
   const unresolved = resolved.match(/(?<!\\)\$\{[^}]*\}/g);

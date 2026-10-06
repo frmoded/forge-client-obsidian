@@ -108,7 +108,27 @@ const CLASS_RULES: ReadonlyArray<{
    *  resolution classes are about a NAME being wrong, which reads the
    *  same whichever facet is canonical. */
   facetAware?: boolean;
+  /** Drain 2026-10-05-2330 — which exception's own message line is the
+   *  cause, when that is not the matched marker (the music21 rules match on
+   *  a phrase INSIDE a message). The first of these that appears as `Name:`
+   *  in the raw text wins: the engine wraps a chip's RuntimeError as
+   *  `SnippetExecError: <message>`, a bare traceback ends `RuntimeError: <message>`. */
+  causeMarkers?: readonly string[];
 }> = [
+  // Drain 2026-10-05-2330 (CCQA R1). These two precede the generic exec rule on purpose: a music21 RuntimeError is
+  // wrapped in a SnippetExecError, and the exec rule's facet advice ("Every facet of this note is current — edit
+  // whichever one you want to change") is simply untrue for it — the note is fine; the runtime is missing music21.
+  // The engine's two messages (forge/music/lib.py _require_music21) get true advice each.
+  {
+    marker: 'Music features are not included in the Lean edition',
+    causeMarkers: ['RuntimeError', 'SnippetExecError'],
+    suggestedFix: 'Install the Music edition of Forge Actions, then run this note again.',
+  },
+  {
+    marker: 'music21 is not yet mounted',
+    causeMarkers: ['RuntimeError', 'SnippetExecError'],
+    suggestedFix: 'Wait a few seconds for the music library to finish loading, then run again.',
+  },
   {
     marker: 'AmbiguousSnippetResolutionError',
     suggestedFix:
@@ -161,7 +181,10 @@ export function classifyForgeError(input: ClassifyInput): ForgeError | null {
         ? EXEC_FIX_BY_FACET[input.sourceFacet]
         : undefined;
       return {
-        cause: extractCauseLine(raw, rule.marker),
+        cause: extractCauseLine(
+          raw,
+          rule.causeMarkers?.find((m) => raw.includes(`${m}:`)) ?? rule.marker,
+        ),
         suggested_fix: facetFix ?? rule.suggestedFix,
         details: withStdout(raw, input.stdout),
       };

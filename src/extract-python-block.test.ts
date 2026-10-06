@@ -14,6 +14,20 @@ test('the real block resolves the library order to a plain Python list (lean edi
   assert.equal(py.includes('${'), false, 'an unresolved interpolation reached Python');
 });
 
+test('the real block resolves the edition flag the engine reads for its lean-edition message (lean build)', () => {
+  const py = extractProductionPythonBlock();
+  assert.match(py, /^_forge_os\.environ\["FORGE_EDITION"\] = "lean"$/m);
+});
+
+test('an unknown interpolation next to the edition flag is also REJECTED', () => {
+  const real = fs.readFileSync(path.resolve(process.cwd(), 'src/pyodide-host.ts'), 'utf-8');
+  const poisoned = real.replace('_forge_os.environ["FORGE_EDITION"] = ${JSON.stringify(EDITION)}', '_forge_os.environ["FORGE_EDITION"] = ${somethingElse}');
+  assert.notEqual(poisoned, real, 'fixture did not change — the flag line moved');
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'forge-pyblock-')), 'host.ts');
+  fs.writeFileSync(f, poisoned);
+  assert.throws(() => extractProductionPythonBlock(f), /Unresolved template interpolation/);
+});
+
 test('an unknown interpolation in the block is REJECTED, not passed through to Python', () => {
   const real = fs.readFileSync(path.resolve(process.cwd(), 'src/pyodide-host.ts'), 'utf-8');
   const poisoned = real.replace(

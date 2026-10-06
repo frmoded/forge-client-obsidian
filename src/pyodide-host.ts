@@ -634,6 +634,13 @@ export class PyodideHost {
 import sys
 sys.path.insert(0, "/bundle/engine")
 
+# Which edition this runtime belongs to ("lean" | "music"). The engine reads it at CALL time
+# (forge.music.lib._require_music21) to tell "this edition does not include music21" (Lean: the wheel
+# never loads, so "wait a few seconds" would be a dead end) from "music21 is still loading". Set before the
+# engine imports below; the value is the same EDITION constant that picks the library order further down.
+import os as _forge_os
+_forge_os.environ["FORGE_EDITION"] = ${JSON.stringify(EDITION)}
+
 # v0.2.27: extract vendored wheels (music21 + minimum deps) into a
 # site-packages dir and put it on sys.path. No micropip — see the
 # JS-side comment above the wheel mount for why. The wheels mount is

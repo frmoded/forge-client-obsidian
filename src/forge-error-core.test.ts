@@ -332,3 +332,77 @@ test('facet routing does not touch the other error classes', () => {
   });
   assert.match(ambiguous!.suggested_fix, /Rename one of the listed notes/);
 });
+
+// ---------------------------------------------------------------------
+// Drain 2026-10-05-2330 (CCQA finding R1) — a music21 RuntimeError is not about the note's facets.
+//
+// On the Lean edition CCQA ran a music note and the panel said "music21 is not yet mounted ... wait ... retry"
+// AND "Fix: Every facet of this note is current — edit whichever one you want to change". Neither piece of advice
+// helps: the wheel never loads on Lean, and the note is fine. The error is wrapped in a SnippetExecError, so it
+// fell into the generic exec rule and its facet-aware hint. Two specific rules now precede it.
+// ---------------------------------------------------------------------
+
+const LEAN_MSG =
+  'Music features are not included in the Lean edition of Forge Actions. Install the Music edition to run music notes.';
+const WAIT_MSG =
+  'music21 is not yet mounted in this pyodide runtime. This usually resolves within a few seconds of plugin startup — '
+  + 'please wait for the music21 wheel to finish loading and retry.';
+const FACETS = ['python', 'description', 'recipe', 'synced', undefined] as const;
+
+for (const facet of FACETS) {
+  test(`lean message (facet ${facet ?? 'unknown'}): true Fix, never the facet advice`, () => {
+    const err = classifyForgeError({ errorMsg: `SnippetExecError: RuntimeError: ${LEAN_MSG}`, sourceFacet: facet });
+    assert.ok(err);
+    assert.equal(err!.cause, LEAN_MSG);
+    assert.match(err!.suggested_fix, /Music edition/);
+    assert.ok(!/Every facet of this note is current/.test(err!.suggested_fix), err!.suggested_fix);
+    assert.ok(!/# Python|# Description|# Recipe/.test(err!.suggested_fix), err!.suggested_fix);
+    assert.ok(!/wait|retry/i.test(err!.suggested_fix), 'no wait advice on an edition that will never load music21');
+  });
+
+  test(`still-loading message (facet ${facet ?? 'unknown'}): true Fix (wait), never the facet advice`, () => {
+    const err = classifyForgeError({ errorMsg: `SnippetExecError: RuntimeError: ${WAIT_MSG}`, sourceFacet: facet });
+    assert.ok(err);
+    assert.match(err!.cause, /^music21 is not yet mounted/);
+    assert.match(err!.suggested_fix, /Wait a few seconds/);
+    assert.ok(!/Every facet of this note is current/.test(err!.suggested_fix), err!.suggested_fix);
+  });
+}
+
+test('music21 messages: found in a traceback too, and the cause is the exception message alone', () => {
+  const raw = 'Traceback (most recent call last):\n  File "<exec>", line 3, in compute\n'
+    + `RuntimeError: ${LEAN_MSG}\n\nSnippetExecError: note failed`;
+  const err = classifyForgeError({ errorMsg: raw, sourceFacet: 'synced' });
+  assert.equal(err!.cause, LEAN_MSG);
+  assert.match(err!.details ?? '', /Traceback/);
+});
+
+test('music21 messages: the REAL wrapped shape the engine produces (SnippetExecError: <message>, no RuntimeError prefix) gives a clean cause', () => {
+  // Captured from a real Pyodide run of the production block (lean-edition-music-message.test.ts): the exec wrapper
+  // prints "SnippetExecError: <the RuntimeError's message>", with no "RuntimeError:" in the text at all.
+  for (const [msg, fix] of [[LEAN_MSG, /Music edition/], [WAIT_MSG, /Wait a few seconds/]] as const) {
+    const err = classifyForgeError({ errorMsg: `SnippetExecError: ${msg}`, sourceFacet: 'synced' });
+    assert.equal(err!.cause, msg);
+    assert.match(err!.suggested_fix, fix);
+  }
+});
+
+test('music21 messages: the engineer details still carry the full raw text and stdout', () => {
+  const err = classifyForgeError({ errorMsg: `SnippetExecError: RuntimeError: ${LEAN_MSG}`, stdout: 'hello' });
+  assert.match(err!.details ?? '', /Lean edition/);
+  assert.match(err!.details ?? '', /--- stdout ---\nhello/);
+});
+
+test('music21 messages: every OTHER exec error keeps the facet-aware hint exactly as before (non-vacuity)', () => {
+  for (const facet of ['python', 'description', 'recipe', 'synced'] as const) {
+    const err = classifyForgeError({ errorMsg: EXEC_RAW, sourceFacet: facet });
+    assert.equal(err!.suggested_fix, EXEC_FIX_BY_FACET[facet]);
+  }
+  const other = classifyForgeError({ errorMsg: 'SnippetExecError: RuntimeError: something else went wrong', sourceFacet: 'synced' });
+  assert.equal(other!.suggested_fix, EXEC_FIX_BY_FACET.synced);
+});
+
+test('music21 messages: a different error that merely mentions music21 is not reclassified', () => {
+  const err = classifyForgeError({ errorMsg: "SnippetExecError: ModuleNotFoundError: No module named 'music21'", sourceFacet: 'synced' });
+  assert.equal(err!.suggested_fix, EXEC_FIX_BY_FACET.synced);
+});
