@@ -10,6 +10,8 @@
 // (equivalent to typing in the editor): no note code runs, nothing is written unless the user clicks Save, and the write is
 // refused if the note changed on disk since it was opened. D7 (`read_only: true`) IS honoured: such a note is never written.
 
+import type { AutosaveStatus } from './rhythm-autosave-core.ts';
+
 export const RHYTHM_CHANNELS = ['kick', 'snare', 'hihat'] as const;
 export const MAX_RHYTHM_STEPS = 64;
 
@@ -35,10 +37,14 @@ export type Validation<T> = { ok: true; value: T } | { ok: false; message: strin
 export const MSG_READY = 'forge-rhythm-ready';           // widget -> plugin, once its script has run
 export const MSG_LOAD = 'forge-rhythm-load';             // plugin -> widget, in answer to ready
 export const MSG_SAVE = 'forge-rhythm-save';             // widget -> plugin, on its Save click
-export const MSG_SAVE_RESULT = 'forge-rhythm-save-result'; // plugin -> widget, drives the "Saved to <note>" indicator
+export const MSG_SAVE_RESULT = 'forge-rhythm-save-result'; // plugin -> widget (Phase 5; still understood by the widget, no longer sent)
+// Phase 5b (autosave). Backward compatible: nothing above changed.
+export const MSG_RELOAD = 'forge-rhythm-reload';           // widget -> plugin: the user clicked "Reload from note"
+export const MSG_STATUS = 'forge-rhythm-status';           // plugin -> widget: the autosave indicator (saving | saved | error | conflict | idle)
 
 export type WidgetMessage =
   | { kind: 'ready' }
+  | { kind: 'reload' }
   | { kind: 'save'; data: unknown }
   | { kind: 'malformed'; reason: string }   // claims to be ours but unusable: dropped with a console warning, never written
   | { kind: 'ignored' };                    // not a message we know: dropped silently
@@ -51,6 +57,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 export function parseWidgetMessage(raw: unknown): WidgetMessage {
   if (!isPlainObject(raw)) return { kind: 'ignored' };
   if (raw.type === MSG_READY) return { kind: 'ready' };
+  if (raw.type === MSG_RELOAD) return { kind: 'reload' };
   if (raw.type === MSG_SAVE) {
     if (isPlainObject(raw.data)) return { kind: 'save', data: raw.data };
     return { kind: 'malformed', reason: 'a save message without a data object' };
@@ -64,6 +71,13 @@ export function buildLoadMessage(data: RhythmData, noteName: string) {
 
 export function buildSaveResultMessage(ok: boolean, message: string) {
   return { type: MSG_SAVE_RESULT, ok, message };
+}
+
+/** The autosave indicator the widget shows in its host bar. `message` is present for `error` and `conflict` only. */
+export function buildStatusMessage(status: AutosaveStatus) {
+  return status.state === 'error' || status.state === 'conflict'
+    ? { type: MSG_STATUS, state: status.state, message: status.message }
+    : { type: MSG_STATUS, state: status.state };
 }
 
 // ---- validation (mirrors forge/music/lib.py rhythm_data_to_stream) ----------------------------------------------
@@ -264,4 +278,69 @@ export function applySave(currentText: string, fingerprintAtLoad: string, payloa
  *  candidate. Whether its body is actually rhythm data (and not read_only) is checked on invocation, with a Notice naming why. */
 export function isRhythmEditCandidate(frontmatter: Record<string, unknown> | null | undefined): boolean {
   return !!frontmatter && typeof frontmatter === 'object' && frontmatter.type === 'data' && frontmatter.content_type === 'json';
+}
+
+// ---- the note session behind autosave (Phase 5b) ---------------------------------------------------------------
+
+export type ModifyVerdict = 'ignore' | 'reload' | 'conflict';
+
+/**
+ * The fingerprint bookkeeping that lets autosave write the same note over and over WITHOUT ever mistaking its own writes for an
+ * external change, and still notice a real one. Pure: the caller (the view) feeds it the note's current text.
+ *
+ *  - baseline  the fingerprint of the note as we last read it or last wrote it.
+ *  - expected  the fingerprint of the text our IN-FLIGHT write is producing. It is set INSIDE apply() (i.e. inside the atomic
+ *              vault.process callback), so the modify event that write triggers — which Obsidian may deliver before the process()
+ *              promise resolves — is recognised as ours.
+ *  commit() makes expected the new baseline after a successful write; rollback() forgets it after a failed one.
+ */
+export class RhythmNoteSession {
+  private baseline: string;
+  private expected: string | null = null;
+
+  constructor(baselineFingerprint: string) {
+    this.baseline = baselineFingerprint;
+  }
+
+  static fromText(text: string): RhythmNoteSession {
+    return new RhythmNoteSession(contentFingerprint(text));
+  }
+
+  /** Run inside the atomic read-modify-write. Same decision as applySave, plus it records what we are about to write. */
+  apply(currentText: string, payload: unknown): SaveResult {
+    const result = applySave(currentText, this.baseline, payload);
+    if (result.ok) this.expected = contentFingerprint(result.text);
+    return result;
+  }
+
+  /** The write succeeded: what we wrote is now the baseline, so the next autosave is not "stale". */
+  commit(): void {
+    if (this.expected !== null) {
+      this.baseline = this.expected;
+      this.expected = null;
+    }
+  }
+
+  /** The write failed: nothing was written, forget the expectation. */
+  rollback(): void {
+    this.expected = null;
+  }
+
+  /** The user reloaded from the note: its current text is the new baseline. */
+  rebaseline(text: string): void {
+    this.baseline = contentFingerprint(text);
+    this.expected = null;
+  }
+
+  /**
+   * A vault `modify` event for this note arrived; what should we do?
+   *  ignore    it is our own write (or a no-op touch): content equals the baseline or the write in flight.
+   *  conflict  someone else changed it while a save is pending / in flight: never write over it.
+   *  reload    someone else changed it and nothing of ours is pending: show the new content.
+   */
+  classifyModify(currentText: string, busy: boolean): ModifyVerdict {
+    const fp = contentFingerprint(currentText);
+    if (fp === this.baseline || fp === this.expected) return 'ignore';
+    return busy ? 'conflict' : 'reload';
+  }
 }

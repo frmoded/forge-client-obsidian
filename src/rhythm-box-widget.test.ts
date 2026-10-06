@@ -1,4 +1,5 @@
-// Beat-as-data Phase 5 (drain 2026-10-05-2100): the Rhythm Box widget's side of "edit a rhythm data note through the widget".
+// Beat-as-data Phase 5 (drain 2026-10-05-2100) + 5b (drain 2026-10-06-1200): the Rhythm Box widget's side of "edit a rhythm data note
+// through the widget" — load from the note, and (5b) AUTOSAVE every pattern-data change instead of a Save button.
 //
 // HOW the widget is tested (the repo had no widget tests): rhythm_box.html is a single file whose script has a pure-core region
 // exported through `module.exports` when there is no `document`. Two layers, both using what the repo already has:
@@ -150,12 +151,29 @@ async function loadWidget(asHost: boolean): Promise<Harness> {
 }
 
 const load = (data: unknown, noteName = 'my beat') => ({ type: 'forge-rhythm-load', data, noteName });
-const lastSave = (h: Harness) => [...h.posted].reverse().find((m) => m.type === 'forge-rhythm-save');
+const saves = (h: Harness) => h.posted.filter((m) => m.type === 'forge-rhythm-save');
+const lastSave = (h: Harness) => saves(h).at(-1);
+const fire = (h: Harness, id: string, type: string) => h.el(id).dispatchEvent(new h.win.Event(type, { bubbles: true }));
+const status = (h: Harness, state: string, message?: string) => h.send({ type: 'forge-rhythm-status', state, ...(message === undefined ? {} : { message }) });
 
-test('widget DOM: standalone behaviour is unchanged — no ready message, Save and the host bar hidden, cells toggle, Export works', { skip }, async () => {
+/** Run `action` and return how many save intents it posted. */
+async function savesPosted(h: Harness, action: () => void | Promise<void>): Promise<number> {
+  const before = saves(h).length;
+  await action();
+  await new Promise((r) => setTimeout(r, 5));
+  return saves(h).length - before;
+}
+
+async function loadedHost(data: RhythmData = rock(), name = 'my beat'): Promise<Harness> {
+  const h = await loadWidget(true);
+  await h.send(load(data, name));
+  return h;
+}
+
+test('widget DOM: standalone behaviour is unchanged — no ready message, no host bar, no Save button, cells toggle, Export works', { skip }, async () => {
   const h = await loadWidget(false);
   assert.deepEqual(h.posted, []);
-  assert.equal(h.el('bSave').hidden, true);
+  assert.equal(h.el('bSave') === null, true, 'there is no Save button any more');
   assert.equal(h.el('hostBar').hidden, true);
   assert.equal(h.doc.querySelectorAll('.step').length, 48);
   h.cell('kick', 0).click();
@@ -165,22 +183,32 @@ test('widget DOM: standalone behaviour is unchanged — no ready message, Save a
   Object.defineProperty(h.win.navigator, 'clipboard', { value: { writeText: (t: string) => { copied = t; return Promise.resolve(); } }, configurable: true });
   h.el('bExport').click();
   assert.match(copied, /"kick": \[true, false, false/);
-  // a host message in standalone mode (parent === window) is not accepted
-  await h.send(load(rock()), h.win);
-  assert.equal(h.el('bSave').hidden, true);
+  await h.send(load(rock()), h.win);                        // a host message in standalone mode (parent === window) is not accepted
+  assert.equal(h.el('hostBar').hidden, true);
+  assert.deepEqual(h.posted, [], 'standalone never posts anything (no autosave)');
 });
 
-test('widget DOM: hosted, it announces itself once with {type: forge-rhythm-ready}', { skip }, async () => {
+test('widget DOM: standalone time-signature change is immediate, as before — no confirm bar', { skip }, async () => {
+  const h = await loadWidget(false);
+  h.cell('kick', 0).click();
+  h.el('timeSig').value = '3/4';
+  fire(h, 'timeSig', 'change');
+  assert.equal(h.doc.querySelectorAll('.step').length, 36);
+  assert.equal(h.el('tsConfirm').hidden, true);
+  assert.equal(h.doc.querySelectorAll('.step.on').length, 0, 'the banks were cleared at once');
+});
+
+test('widget DOM: hosted, it announces itself once with {type: forge-rhythm-ready}, shows no Save button and keeps the host bar hidden until a load', { skip }, async () => {
   const h = await loadWidget(true);
   assert.deepEqual(h.posted, [{ type: 'forge-rhythm-ready' }]);
-  assert.equal(h.el('bSave').hidden, true, 'Save stays hidden until a load message arrives');
+  assert.equal(h.el('bSave') === null, true, 'no Save button');
+  assert.equal(h.el('hostBar').hidden, true);
 });
 
-test('widget DOM: a load message sets signature, tempo, swing and the grid; Save and the note name appear', { skip }, async () => {
+test('widget DOM: a load message sets signature, tempo, swing and the grid, shows the note name — and posts NOTHING back', { skip }, async () => {
   const h = await loadWidget(true);
   const d = rock(); d.tempo_bpm = 88; d.swing_pct = 25;
   await h.send(load(d, 'straight rock'));
-  assert.equal(h.el('bSave').hidden, false);
   assert.equal(h.el('hostBar').hidden, false);
   assert.equal(h.el('hostNote').textContent, 'straight rock');
   assert.equal(h.el('bpmVal').textContent, '88 BPM');
@@ -191,6 +219,7 @@ test('widget DOM: a load message sets signature, tempo, swing and the grid; Save
   assert.deepEqual(on('kick'), [0, 8]);
   assert.deepEqual(on('snare'), [4, 12]);
   assert.deepEqual(on('hihat'), [0, 2, 4, 6, 8, 10, 12, 14]);
+  assert.equal(saves(h).length, 0, 'loading is never a data change');
 });
 
 test('widget DOM: loading a 3/4 note rebuilds the grid to 12 steps', { skip }, async () => {
@@ -202,12 +231,10 @@ test('widget DOM: loading a 3/4 note rebuilds the grid to 12 steps', { skip }, a
 
 test('widget DOM: the loaded pattern is in bank A, the other banks are cleared (even ones the user had filled), and bank A is selected', { skip }, async () => {
   const h = await loadWidget(true);
-  // the user had worked in bank B and C before the note was loaded
   h.doc.querySelector('.banks button[data-bank="B"]').click();
   h.cell('snare', 3).click();
   h.doc.querySelector('.banks button[data-bank="C"]').click();
   h.cell('hihat', 5).click();
-  assert.equal(h.doc.querySelectorAll('.step.on').length, 1);
   await h.send(load(rock()));
   assert.ok(h.doc.querySelector('.banks button[data-bank="A"]').classList.contains('active'));
   assert.ok(!h.doc.querySelector('.banks button[data-bank="C"]').classList.contains('active'));
@@ -218,25 +245,56 @@ test('widget DOM: the loaded pattern is in bank A, the other banks are cleared (
   }
 });
 
-test('widget DOM: Save sends exactly the loaded data when nothing was touched — int velocities preserved', { skip }, async () => {
+test('widget DOM: before a note has been loaded, data actions post NOTHING (a hosted page must never overwrite a note it has not read)', { skip }, async () => {
   const h = await loadWidget(true);
-  const d = rock(); d.channels.hihat[0] = 112; d.channels.hihat[2] = 72; d.channels.kick[0] = 100; d.channels.snare[4] = 36;
-  await h.send(load(d));
-  h.el('bSave').click();
-  assert.deepEqual(lastSave(h), { type: 'forge-rhythm-save', data: d });
+  assert.equal(await savesPosted(h, () => h.cell('kick', 0).click()), 0);
+  assert.equal(await savesPosted(h, () => h.el('bBpmUp').click()), 0);
 });
 
-test('widget DOM: a click toggles an int cell to a rest and an empty cell to a plain true; untouched ints survive the save', { skip }, async () => {
+test('widget DOM: after a load it refused, data actions still post nothing', { skip }, async () => {
   const h = await loadWidget(true);
-  const d = rock(); d.channels.hihat[0] = 112; d.channels.hihat[2] = 72;
+  const d: any = rock(); d.time_signature = '5/4';
   await h.send(load(d));
-  h.cell('hihat', 0).click();            // 112 -> rest
-  h.cell('hihat', 1).click();            // empty -> plain true
-  h.el('bSave').click();
-  const saved = lastSave(h).data.channels.hihat;
-  assert.equal(saved[0], false);
-  assert.equal(saved[1], true);
-  assert.equal(saved[2], 72, 'a cell nobody touched keeps its velocity');
+  assert.match(h.el('loadMsg').textContent, /Could not load this note: .*supports/);
+  assert.equal(await savesPosted(h, () => h.cell('kick', 0).click()), 0);
+});
+
+// ---- AUTOSAVE: which actions post a save intent ---------------------------------------------------------------
+
+test('autosave: a cell toggle posts exactly ONE save with the new pattern', { skip }, async () => {
+  const h = await loadedHost();
+  assert.equal(await savesPosted(h, () => h.cell('snare', 0).click()), 1);
+  const sent = lastSave(h);
+  assert.equal(sent.data.channels.snare[0], true);
+  assert.deepEqual(sent.data.channels.kick, rock().channels.kick);
+});
+
+test('autosave: every pattern-data action posts exactly one save — tempo up/down, swing, Random, Clear', { skip }, async () => {
+  const h = await loadedHost();
+  assert.equal(await savesPosted(h, () => h.el('bBpmUp').click()), 1);
+  assert.equal(lastSave(h).data.tempo_bpm, 101);
+  assert.equal(await savesPosted(h, () => h.el('bBpmDown').click()), 1);
+  assert.equal(lastSave(h).data.tempo_bpm, 100);
+  assert.equal(await savesPosted(h, () => { h.el('swing').value = '40'; fire(h, 'swing', 'input'); }), 1);
+  assert.equal(lastSave(h).data.swing_pct, 40);
+  assert.equal(await savesPosted(h, () => h.el('bRandom').click()), 1);
+  assert.equal(await savesPosted(h, () => h.el('bClear').click()), 1);
+  assert.deepEqual(lastSave(h).data.channels, { kick: new Array(16).fill(false), snare: new Array(16).fill(false), hihat: new Array(16).fill(false) });
+});
+
+test('autosave: tap tempo saves when it COMMITS a tempo change, not on the first tap', { skip }, async () => {
+  const h = await loadedHost();
+  let t = 0;
+  Object.defineProperty(h.win.performance, 'now', { value: () => t, configurable: true });
+  assert.equal(await savesPosted(h, () => { t = 0; h.el('bTap').click(); }), 0, 'one tap is not a tempo yet');
+  assert.equal(await savesPosted(h, () => { t = 500; h.el('bTap').click(); }), 1, 'the second tap commits 120 BPM');
+  assert.equal(lastSave(h).data.tempo_bpm, 120);
+});
+
+test('autosave: a tempo button at its limit changes nothing and saves nothing', { skip }, async () => {
+  const d = rock(); d.tempo_bpm = 240;
+  const h = await loadedHost(d);
+  assert.equal(await savesPosted(h, () => h.el('bBpmUp').click()), 0);
 });
 
 test('widget DOM: cells with a velocity >= 100 are drawn accented, 99 and plain hits are not', { skip }, async () => {
@@ -252,62 +310,181 @@ test('widget DOM: cells with a velocity >= 100 are drawn accented, 99 and plain 
   assert.ok(!h.cell('kick', 0).classList.contains('accent'));
 });
 
-test('widget DOM: Save data equals Export JSON data for the same state', { skip }, async () => {
-  const h = await loadWidget(true);
+test('autosave: untouched velocity cells keep their velocity in every payload; a click clears an int cell and sets an empty one to a plain true', { skip }, async () => {
+  const d = rock(); d.channels.hihat[0] = 112; d.channels.hihat[2] = 72;
+  const h = await loadedHost(d);
+  await savesPosted(h, () => h.cell('hihat', 0).click());       // 112 -> rest
+  await savesPosted(h, () => h.cell('hihat', 1).click());       // empty -> plain true
+  const saved = lastSave(h).data.channels.hihat;
+  assert.equal(saved[0], false);
+  assert.equal(saved[1], true);
+  assert.equal(saved[2], 72, 'a cell nobody touched keeps its velocity');
+});
+
+test('autosave: the actions that are NOT data changes never save — play, mute, solo, volume, every bank button', { skip }, async () => {
+  const h = await loadedHost();
+  assert.equal(await savesPosted(h, () => h.el('bPlay').click()), 0);
+  assert.equal(await savesPosted(h, () => h.doc.querySelector('.mini-btn.mute').click()), 0);
+  assert.equal(await savesPosted(h, () => h.doc.querySelector('.mini-btn.solo').click()), 0);
+  assert.equal(await savesPosted(h, () => { h.el('volume').value = '30'; fire(h, 'volume', 'input'); }), 0);
+  for (const b of ['B', 'C', 'D', 'A']) {
+    assert.equal(await savesPosted(h, () => h.doc.querySelector(`.banks button[data-bank="${b}"]`).click()), 0, `bank ${b}`);
+  }
+  assert.equal(await savesPosted(h, () => h.el('bExport').click()), 0);
+});
+
+test('autosave: the payload equals the Export JSON for the same state', { skip }, async () => {
   const d = rock(); d.channels.hihat[0] = 112;
-  await h.send(load(d));
-  h.cell('snare', 0).click();
+  const h = await loadedHost(d);
+  await savesPosted(h, () => h.cell('snare', 0).click());
   let copied = '';
   Object.defineProperty(h.win.navigator, 'clipboard', { value: { writeText: (t: string) => { copied = t; return Promise.resolve(); } }, configurable: true });
   h.el('bExport').click();
-  h.el('bSave').click();
   assert.deepEqual(JSON.parse(copied), lastSave(h).data);
 });
 
-test('widget DOM: messages that do not come from the embedding window are ignored', { skip }, async () => {
-  const h = await loadWidget(true);
-  await h.send(load(rock()), { postMessage() {} });          // some other window
-  await h.send(load(rock()), null);
-  assert.equal(h.el('bSave').hidden, true);
-  await h.send(load(rock()), h.host);                        // the real host
-  assert.equal(h.el('bSave').hidden, false);
+test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and nothing else in the widget does', { skip }, () => {
+  const posts = [...SCRIPT.matchAll(/type: "forge-rhythm-save"/g)];
+  assert.equal(posts.length, 1, 'exactly one place posts a save intent');
+  assert.match(SCRIPT, /function commitChange\(\) \{[\s\S]*?type: "forge-rhythm-save"/);
+  const callers = [...SCRIPT.matchAll(/commitChange\(\)/g)].length - 1;      // minus the definition
+  assert.ok(callers >= 7, `commitChange is called from the data actions (found ${callers})`);
 });
 
-test('widget DOM: unknown or malformed host messages are ignored', { skip }, async () => {
-  const h = await loadWidget(true);
-  for (const m of [null, 'x', 5, [], {}, { type: 'other' }, { type: 5 }]) await h.send(m);
-  assert.equal(h.el('bSave').hidden, true);
+// ---- time-signature change: an in-widget confirm bar (the sandbox blocks window.confirm) ------------------------
+
+test('hosted time-signature change: shows the confirm bar, changes nothing and saves nothing until the user confirms', { skip }, async () => {
+  const h = await loadedHost();
+  assert.equal(h.el('tsConfirm').hidden, true);
+  const n = await savesPosted(h, () => { h.el('timeSig').value = '3/4'; fire(h, 'timeSig', 'change'); });
+  assert.equal(n, 0);
+  assert.equal(h.el('tsConfirm').hidden, false);
+  assert.match(h.el('tsConfirm').textContent, /clears the pattern in the note/i);
+  assert.match(h.el('tsConfirm').textContent, /3\/4/);
+  assert.equal(h.doc.querySelectorAll('.step').length, 48, 'the grid is untouched');
+  assert.equal(h.el('timeSig').value, '4/4', 'the select shows the signature that is still in force');
+  assert.equal(h.doc.querySelectorAll('.step.on').length, 12, 'the pattern is intact');
 });
 
-test('widget DOM: a load it cannot save back is refused on the widget with a message and Save stays hidden', { skip }, async () => {
-  const h = await loadWidget(true);
-  const d: any = rock(); d.time_signature = '5/4';
-  await h.send(load(d));
-  assert.equal(h.el('bSave').hidden, true);
-  assert.match(h.el('loadMsg').textContent, /Could not load this note: .*supports/);
+test('hosted time-signature change: Cancel leaves everything as it was and saves nothing', { skip }, async () => {
+  const h = await loadedHost();
+  h.el('timeSig').value = '3/4'; fire(h, 'timeSig', 'change');
+  const n = await savesPosted(h, () => h.el('tsCancel').click());
+  assert.equal(n, 0);
+  assert.equal(h.el('tsConfirm').hidden, true);
+  assert.equal(h.doc.querySelectorAll('.step').length, 48);
+  assert.equal(h.el('timeSig').value, '4/4');
+  assert.equal(h.doc.querySelectorAll('.step.on').length, 12);
 });
 
-test('widget DOM: the save result drives the "Saved to <note>" indicator, errors are shown as errors', { skip }, async () => {
-  const h = await loadWidget(true);
-  await h.send(load(rock(), 'straight rock'));
-  await h.send({ type: 'forge-rhythm-save-result', ok: true, message: 'ok' });
-  assert.equal(h.el('saveMsg').textContent, 'Saved to straight rock');
+test('hosted time-signature change: Change rebuilds the grid, clears the banks and posts exactly one save of the empty 3/4 pattern', { skip }, async () => {
+  const h = await loadedHost();
+  h.el('timeSig').value = '3/4'; fire(h, 'timeSig', 'change');
+  const n = await savesPosted(h, () => h.el('tsChange').click());
+  assert.equal(n, 1);
+  assert.equal(h.el('tsConfirm').hidden, true);
+  assert.equal(h.doc.querySelectorAll('.step').length, 36);
+  const sent = lastSave(h).data;
+  assert.equal(sent.time_signature, '3/4');
+  assert.equal(sent.steps, 12);
+  assert.deepEqual(sent.channels.kick, new Array(12).fill(false));
+});
+
+// ---- the indicator, and "Reload from note" ----------------------------------------------------------------------
+
+test('indicator: saving / saved / error / conflict come from the plugin, and errors do not time out', { skip }, async () => {
+  const h = await loadedHost();
+  await status(h, 'saving');
+  assert.equal(h.el('saveMsg').textContent, 'Saving…');
+  await status(h, 'saved');
+  assert.equal(h.el('saveMsg').textContent, 'Saved');
   assert.ok(!h.el('saveMsg').classList.contains('error'));
+  await status(h, 'error', 'Not saved: this note is marked read_only: true');
+  assert.equal(h.el('saveMsg').textContent, 'Not saved: this note is marked read_only: true');
+  assert.ok(h.el('saveMsg').classList.contains('error'));
+  await new Promise((r) => setTimeout(r, 3500));            // longer than the old transient timer
+  assert.equal(h.el('saveMsg').textContent, 'Not saved: this note is marked read_only: true', 'an error stays until the next success');
+  await status(h, 'saved');
+  assert.equal(h.el('saveMsg').textContent, 'Saved');
+  assert.ok(!h.el('saveMsg').classList.contains('error'));
+});
+
+test('indicator: the old transient "saved" message does not exist any more — "Saved" stays', { skip }, async () => {
+  const h = await loadedHost();
+  await status(h, 'saved');
+  await new Promise((r) => setTimeout(r, 3500));
+  assert.equal(h.el('saveMsg').textContent, 'Saved');
+});
+
+test('conflict: the message shows and "Reload from note" appears; clicking it posts forge-rhythm-reload', { skip }, async () => {
+  const h = await loadedHost();
+  assert.equal(h.el('bReload').hidden, true);
+  await status(h, 'conflict', 'The note changed on disk — your latest edit was not saved.');
+  assert.match(h.el('saveMsg').textContent, /changed on disk/);
+  assert.ok(h.el('saveMsg').classList.contains('error'));
+  assert.equal(h.el('bReload').hidden, false);
+  h.el('bReload').click();
+  assert.deepEqual(h.posted.at(-1), { type: 'forge-rhythm-reload' });
+});
+
+test('conflict: a fresh load clears the conflict and hides Reload; "idle" clears the indicator', { skip }, async () => {
+  const h = await loadedHost();
+  await status(h, 'conflict', 'changed');
+  await h.send(load(rock(), 'my beat'));
+  assert.equal(h.el('bReload').hidden, true);
+  assert.equal(h.el('saveMsg').textContent, '');
+  await status(h, 'saved');
+  await status(h, 'idle');
+  assert.equal(h.el('saveMsg').textContent, '');
+});
+
+test('status messages from anything but the embedding window, or with an unknown state, are ignored', { skip }, async () => {
+  const h = await loadedHost();
+  await h.send({ type: 'forge-rhythm-status', state: 'error', message: 'spoof' }, { postMessage() {} });
+  assert.equal(h.el('saveMsg').textContent, '');
+  await status(h, 'exploding', 'x');
+  assert.equal(h.el('saveMsg').textContent, '');
+});
+
+test('the old forge-rhythm-save-result message is still understood (backward compatible)', { skip }, async () => {
+  const h = await loadedHost(rock(), 'straight rock');
   await h.send({ type: 'forge-rhythm-save-result', ok: false, message: 'Not saved: the note changed on disk' });
   assert.equal(h.el('saveMsg').textContent, 'Not saved: the note changed on disk');
   assert.ok(h.el('saveMsg').classList.contains('error'));
 });
 
-test('widget DOM: the messages the widget sends are ones the plugin core recognises', { skip }, async () => {
+// ---- trust and protocol shape ---------------------------------------------------------------------------------
+
+test('widget DOM: messages that do not come from the embedding window are ignored', { skip }, async () => {
   const h = await loadWidget(true);
-  assert.equal(parseWidgetMessage(h.posted[0]).kind, 'ready');
-  await h.send(load(rock()));
-  h.el('bSave').click();
-  assert.equal(parseWidgetMessage(lastSave(h)).kind, 'save');
+  await h.send(load(rock()), { postMessage() {} });          // some other window
+  await h.send(load(rock()), null);
+  assert.equal(h.el('hostBar').hidden, true);
+  await h.send(load(rock()), h.host);                        // the real host
+  assert.equal(h.el('hostBar').hidden, false);
 });
 
-test('widget source: only the embedding window may talk to the widget (source check) and Save is hidden by default', { skip }, () => {
+test('widget DOM: unknown or malformed host messages are ignored', { skip }, async () => {
+  const h = await loadWidget(true);
+  for (const m of [null, 'x', 5, [], {}, { type: 'other' }, { type: 5 }]) await h.send(m);
+  assert.equal(h.el('hostBar').hidden, true);
+});
+
+test('widget DOM: the messages the widget sends are ones the plugin core recognises', { skip }, async () => {
+  const h = await loadedHost();
+  assert.equal(parseWidgetMessage(h.posted[0]).kind, 'ready');
+  await savesPosted(h, () => h.cell('kick', 1).click());
+  assert.equal(parseWidgetMessage(lastSave(h)).kind, 'save');
+  await status(h, 'conflict', 'x');
+  h.el('bReload').click();
+  assert.equal(parseWidgetMessage(h.posted.at(-1)).kind, 'reload');
+});
+
+test('widget source: only the embedding window may talk to the widget; no Save button; the sandbox-blocked dialogs are never used', { skip }, () => {
   assert.match(SCRIPT, /e\.source !== h/);
-  assert.match(html, /<button id="bSave" hidden/);
+  assert.ok(!/id="bSave"/.test(html), 'the Save button is gone');
   assert.match(html, /id="hostBar" hidden/);
+  assert.match(html, /id="tsConfirm"[^>]* hidden/);
+  assert.match(html, /id="bReload" hidden/);
+  assert.ok(!/window\.confirm|[^.\w]confirm\(|window\.alert|[^.\w]alert\(|window\.prompt|[^.\w]prompt\(/.test(SCRIPT), 'allow-scripts + allow-same-origin only: confirm/alert/prompt are blocked in the sandbox');
 });

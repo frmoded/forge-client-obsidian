@@ -8,8 +8,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   RHYTHM_CHANNELS,
+  RhythmNoteSession,
   applySave,
   buildLoadMessage,
+  buildStatusMessage,
   buildSaveResultMessage,
   contentFingerprint,
   extractJsonBlock,
@@ -299,4 +301,98 @@ test('availability: only a data note whose content_type is json is a candidate',
 
 test('the channel list matches the engine\'s converter channels', () => {
   assert.deepEqual([...RHYTHM_CHANNELS], ['kick', 'snare', 'hihat']);
+});
+
+// ---- Phase 5b (drain 2026-10-06-1200): protocol additions + the note session behind autosave -----------------------
+
+test('protocol 5b: the widget\'s reload request is recognised, and the status message the plugin sends has a fixed shape', () => {
+  assert.deepEqual(parseWidgetMessage({ type: 'forge-rhythm-reload' }), { kind: 'reload' });
+  assert.deepEqual(parseWidgetMessage({ type: 'forge-rhythm-reload', junk: 1 }), { kind: 'reload' });
+  assert.deepEqual(buildStatusMessage({ state: 'saving' }), { type: 'forge-rhythm-status', state: 'saving' });
+  assert.deepEqual(buildStatusMessage({ state: 'saved' }), { type: 'forge-rhythm-status', state: 'saved' });
+  assert.deepEqual(buildStatusMessage({ state: 'idle' }), { type: 'forge-rhythm-status', state: 'idle' });
+  assert.deepEqual(buildStatusMessage({ state: 'error', message: 'Not saved: x' }), { type: 'forge-rhythm-status', state: 'error', message: 'Not saved: x' });
+  assert.deepEqual(buildStatusMessage({ state: 'conflict', message: 'changed' }), { type: 'forge-rhythm-status', state: 'conflict', message: 'changed' });
+});
+
+const sessionNote = () => noteText(formatRhythmJson(rock()));
+const toggled = (i: number): RhythmData => { const d = rock(); d.channels.kick[i] = !d.channels.kick[i]; return d; };
+
+test('session: a save, once committed, re-baselines — the NEXT autosave is not refused as "changed on disk"', () => {
+  let text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  for (let i = 1; i <= 5; i++) {
+    const r = session.apply(text, toggled(i));
+    assert.equal(r.ok, true, `autosave ${i}`);
+    if (r.ok) text = r.text;
+    session.commit();
+  }
+});
+
+test('session: WITHOUT the re-baseline a second autosave is wrongly refused as stale (why commit() exists)', () => {
+  let text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  const first = session.apply(text, toggled(1));
+  assert.ok(first.ok);
+  if (first.ok) text = first.text;
+  // commit() deliberately NOT called
+  const second = session.apply(text, toggled(2));
+  assert.equal(second.ok, false);
+  if (second.ok === false) assert.equal(second.kind, 'stale');
+});
+
+test('session: rollback() after a failed write leaves the baseline alone', () => {
+  const text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  assert.ok(session.apply(text, toggled(1)).ok);
+  session.rollback();
+  assert.ok(session.apply(text, toggled(2)).ok, 'the unchanged note is still the baseline');
+});
+
+test('session: an external edit makes the next save refuse as stale', () => {
+  const text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  const r = session.apply(text.replace('"A beat"', '"A beat, edited elsewhere"'), toggled(1));
+  assert.equal(r.ok, false);
+  if (r.ok === false) assert.equal(r.kind, 'stale');
+});
+
+test('classify: the modify event caused by our own write is IGNORED — whether it arrives before or after the write resolves', () => {
+  let text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  const r = session.apply(text, toggled(3));
+  assert.ok(r.ok);
+  if (r.ok) text = r.text;
+  assert.equal(session.classifyModify(text, true), 'ignore', 'event fires inside the in-flight write (baseline not committed yet)');
+  session.commit();
+  assert.equal(session.classifyModify(text, false), 'ignore', 'event fires after the write resolved');
+});
+
+test('classify: an external change with nothing pending reloads; with a save pending it is a conflict', () => {
+  const text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  const external = text.replace('"A beat"', '"A beat, edited elsewhere"');
+  assert.equal(session.classifyModify(external, false), 'reload');
+  assert.equal(session.classifyModify(external, true), 'conflict');
+});
+
+test('classify: an external change that lands during OUR in-flight write is still a conflict', () => {
+  const text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  assert.ok(session.apply(text, toggled(1)).ok);
+  assert.equal(session.classifyModify(text.replace('"A beat"', '"changed"'), true), 'conflict');
+});
+
+test('classify: a modify event with the baseline content (a touch / no-op) is ignored', () => {
+  const text = sessionNote();
+  assert.equal(RhythmNoteSession.fromText(text).classifyModify(text, false), 'ignore');
+});
+
+test('session: rebaseline(text) after a reload accepts the external version as the new baseline', () => {
+  const text = sessionNote();
+  const session = RhythmNoteSession.fromText(text);
+  const external = text.replace('"A beat"', '"A beat, edited elsewhere"');
+  session.rebaseline(external);
+  assert.ok(session.apply(external, toggled(1)).ok);
+  assert.equal(session.classifyModify(external, false), 'ignore');
 });
