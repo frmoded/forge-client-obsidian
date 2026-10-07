@@ -16,6 +16,8 @@ export const RHYTHM_CHANNELS = ['kick', 'snare', 'hihat'] as const;
 export const MAX_RHYTHM_STEPS = 64;
 
 /** Where the widget lives in a vault that has the music-theory content. */
+/** The Beat Box view's registered type (Phase 5c: lives here so edges-view.ts can recognise a Beat Box tab without importing the view). */
+export const RHYTHM_EDIT_VIEW_TYPE = 'forge-rhythm-edit';
 export const RHYTHM_BOX_WIDGET_PATH = 'music_instruments/resources/html/rhythm_box.html';
 
 /** A rhythm step: false = rest, true = a hit at the default velocity, an int 1-127 = a hit at that MIDI velocity (0 also reads as a rest). */

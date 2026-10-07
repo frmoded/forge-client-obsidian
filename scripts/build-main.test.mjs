@@ -52,7 +52,27 @@ test("music build: DOES contain the music chain (guards the lean assertion again
   assert.ok(js.length > 5_000_000, `music main.js suspiciously small (${js.length} bytes)`);
 });
 
-test("lean build stays lean in size: far below the music build", async () => {
-  const lean = await buildTo("lean");
-  assert.ok(lean.length < 3_000_000, `lean main.js grew to ${lean.length} bytes (baseline ~1.8 MB)`);
+// Phase 5c rider (drain 2026-10-07-0100): this used to measure lean main.js INCLUDING src/bundled-assets.generated.ts — a gitignored build
+// artifact holding whichever edition `npm run build` ran for last — so it was green after a lean build and red right after a music build.
+// It now builds both editions with the generated assets stubbed out: a CODE-only size, identical whatever was built before.
+function buildCodeOnly(edition) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `forge-${edition}-code-`));
+  const outfile = path.join(dir, "main.js");
+  return buildMain({ edition, outfile, stubInlinedAssets: true }).then(() => fs.statSync(outfile).size);
+}
+
+test("lean build stays lean in size: code-only, far below the music build, independent of the last `npm run build`", async () => {
+  const lean = await buildCodeOnly("lean");
+  const music = await buildCodeOnly("music");
+  assert.ok(lean < 1_500_000, `lean main.js code grew to ${lean} bytes (baseline ~0.64 MB)`);
+  assert.ok(lean * 5 < music, `lean (${lean}) is no longer far below music (${music})`);
+});
+
+test("the size test does not depend on the generated assets: stubbing them changes the build, and the real file is not read", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-lean-stub-"));
+  const withStub = path.join(dir, "stub.js");
+  await buildMain({ edition: "lean", outfile: withStub, stubInlinedAssets: true });
+  const js = fs.readFileSync(withStub, "utf8");
+  assert.match(js, /BUNDLED_ASSETS_VERSION\s*=\s*"stub"/, "the stub module is what got bundled");
+  assert.equal(js.includes("Domain modules pre-injected into the snippet namespace"), false, "no inlined engine file CONTENT leaked in from the generated module");
 });

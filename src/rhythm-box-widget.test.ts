@@ -229,20 +229,47 @@ test('widget DOM: loading a 3/4 note rebuilds the grid to 12 steps', { skip }, a
   assert.equal(h.el('timeSig').value, '3/4');
 });
 
-test('widget DOM: the loaded pattern is in bank A, the other banks are cleared (even ones the user had filled), and bank A is selected', { skip }, async () => {
+test('widget DOM: loading a note replaces the single live pattern and shows it (hosted mode has ONE pattern per note — no bank selector)', { skip }, async () => {
   const h = await loadWidget(true);
-  h.doc.querySelector('.banks button[data-bank="B"]').click();
-  h.cell('snare', 3).click();
-  h.doc.querySelector('.banks button[data-bank="C"]').click();
-  h.cell('hihat', 5).click();
+  h.cell('snare', 3).click();                                       // before any load nothing is bound to a note
   await h.send(load(rock()));
-  assert.ok(h.doc.querySelector('.banks button[data-bank="A"]').classList.contains('active'));
-  assert.ok(!h.doc.querySelector('.banks button[data-bank="C"]').classList.contains('active'));
-  assert.equal(h.doc.querySelectorAll('.step.on').length, 2 + 2 + 8, 'bank A shows the loaded pattern');
+  assert.equal(h.doc.querySelectorAll('.step.on').length, 2 + 2 + 8, 'the loaded pattern is what is shown; nothing of the earlier clicks survives');
+  assert.ok(!h.cell('snare', 3).classList.contains('on'));
+});
+
+test('hosted: the bank buttons A-D are hidden (once hosted, before or after a load), the time-signature select stays visible', { skip }, async () => {
+  const h = await loadWidget(true);
+  const banks = [...h.doc.querySelectorAll('.banks button[data-bank]')];
+  assert.equal(banks.length, 4);
+  assert.ok(banks.every((b: any) => b.hidden === true), 'hidden before the load arrives');
+  await h.send(load(rock()));
+  assert.ok(banks.every((b: any) => b.hidden === true), 'and after');
+  assert.equal(h.el('timeSig').hidden, false);
+});
+
+test('hosted: even a (programmatic) bank click changes nothing — the grid stays the note\'s pattern, no save, bank A stays active', { skip }, async () => {
+  const h = await loadedHost();
+  const before = h.doc.querySelectorAll('.step.on').length;
   for (const b of ['B', 'C', 'D']) {
-    h.doc.querySelector(`.banks button[data-bank="${b}"]`).click();
-    assert.equal(h.doc.querySelectorAll('.step.on').length, 0, `bank ${b} is empty after a load`);
+    assert.equal(await savesPosted(h, () => h.doc.querySelector(`.banks button[data-bank="${b}"]`).click()), 0);
+    assert.equal(h.doc.querySelectorAll('.step.on').length, before, `bank ${b}: grid unchanged`);
   }
+  assert.ok(h.doc.querySelector('.banks button[data-bank="A"]').classList.contains('active'));
+  await savesPosted(h, () => h.cell('kick', 1).click());
+  assert.equal(lastSave(h).data.channels.kick[1], true, 'autosave writes the one pattern (bank A) — there is no bank concept to get wrong');
+});
+
+test('standalone: the bank buttons are visible and switching banks works exactly as before (the widget is also a teaching widget)', { skip }, async () => {
+  const h = await loadWidget(false);
+  const banks = [...h.doc.querySelectorAll('.banks button[data-bank]')];
+  assert.ok(banks.every((b: any) => b.hidden !== true));
+  h.cell('kick', 0).click();
+  h.doc.querySelector('.banks button[data-bank="B"]').click();
+  assert.equal(h.doc.querySelectorAll('.step.on').length, 0, 'bank B is its own empty pattern');
+  h.cell('snare', 4).click();
+  h.doc.querySelector('.banks button[data-bank="A"]').click();
+  assert.ok(h.cell('kick', 0).classList.contains('on') && !h.cell('snare', 4).classList.contains('on'));
+  assert.ok(h.doc.querySelector('.banks button[data-bank="A"]').classList.contains('active'));
 });
 
 test('widget DOM: before a note has been loaded, data actions post NOTHING (a hosted page must never overwrite a note it has not read)', { skip }, async () => {

@@ -44,7 +44,10 @@ export interface AutosavePipeline {
   flush(): Promise<void>;
   /** An external change was detected while a save was pending: drop the pending edit, stop writing, report the conflict. */
   halt(message: string): void;
-  /** The user reloaded from the note: clear the halt and any error. */
+  /** A SILENT hold (Phase 5c, around "Restore to last commit"): drop what is pending, ignore further edits, emit nothing. Callers
+   *  `await flush()` first so any write already in flight has landed. Lifted by resume(). */
+  pause(): void;
+  /** The user reloaded from the note (or a hold ended): clear the halt / pause and any error. */
   resume(): void;
   status(): AutosaveStatus;
   /** True while an edit is waiting for its debounce, a write is in flight, or one is queued. */
@@ -126,6 +129,12 @@ export function createAutosavePipeline(deps: AutosaveDeps): AutosavePipeline {
       clearTimerIfAny();
       lastError = message;
       emit({ state: 'conflict', message });
+    },
+    pause() {
+      halted = true;
+      hasLatest = false;
+      queued = false;
+      clearTimerIfAny();
     },
     resume() {
       halted = false;

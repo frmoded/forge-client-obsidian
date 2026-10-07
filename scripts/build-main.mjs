@@ -48,7 +48,22 @@ export function editionPlugin(edition) {
   };
 }
 
-export async function buildMain({ edition, outfile = path.join(ROOT, "main.js") } = {}) {
+/** Replace the generated inlined-assets module with an empty one. The generated file depends on whichever edition `npm run build` last ran
+ *  for (it inlines that edition's vaults), so any size measurement that includes it is build-order dependent. A CODE-only build is not. */
+export function stubInlinedAssetsPlugin() {
+  return {
+    name: "forge-stub-inlined-assets",
+    setup(b) {
+      b.onResolve({ filter: /(^|\/)bundled-assets\.generated(\.ts)?$/ }, () => ({ path: "bundled-assets-stub", namespace: "forge-stub" }));
+      b.onLoad({ filter: /.*/, namespace: "forge-stub" }, () => ({
+        contents: 'export const BUNDLED_ASSETS_VERSION = "stub"; export const BUNDLED_ASSETS = {};',
+        loader: "js",
+      }));
+    },
+  };
+}
+
+export async function buildMain({ edition, outfile = path.join(ROOT, "main.js"), stubInlinedAssets = false } = {}) {
   const ed = resolveEdition(edition ?? process.env.FORGE_EDITION);
   await build({
     entryPoints: [path.join(ROOT, "src", "main.ts")],
@@ -57,7 +72,7 @@ export async function buildMain({ edition, outfile = path.join(ROOT, "main.js") 
     external: ["obsidian", "@codemirror/view", "@codemirror/state", "@codemirror/language"],
     format: "cjs",
     outfile,
-    plugins: [editionPlugin(ed)],
+    plugins: stubInlinedAssets ? [editionPlugin(ed), stubInlinedAssetsPlugin()] : [editionPlugin(ed)],
     logLevel: "info",
   });
   return { edition: ed, outfile };

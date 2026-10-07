@@ -209,7 +209,7 @@ import {
 // in python-cache-writer-core as an internal helper consumed by
 // writePythonAndEnglishHash.
 import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core.ts';
-import { forgeButtonShouldShow } from './forge-button-gate-core.ts';
+import { forgeButtonShouldShow, edgesToggleShouldShow } from './forge-button-gate-core.ts';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core.ts';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin.ts';
 import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin.ts';
@@ -745,7 +745,11 @@ export default class ForgePlugin extends Plugin {
     // outright rather than repurposed.
     registerHtmlEmbedProcessor(this);
     // Beat-as-data Phase 5 (drain 2026-10-05-2100): "Edit rhythm in Rhythm Box" — edit a rhythm data note through the widget.
-    registerRhythmEdit(this);
+    registerRhythmEdit(this, {
+      isDefaultViewEnabled: () => this.settings.openRhythmNotesInBeatBox,
+      createNewNote: () => { void this.createNewSnippet(); },
+      toggleEdgesPanel: () => { void this.toggleEdgesView(); },
+    });
 
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
@@ -1726,7 +1730,7 @@ export default class ForgePlugin extends Plugin {
     // v0.2.77 — gate the edges panel toggle on snippet-ness. Edges
     // are inherently per-snippet (caller→callee dependency graph);
     // toggling the edges panel from a plain note is meaningless.
-    if (forgeButtonShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
+    if (edgesToggleShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
       const edgesBtn = view.addAction('network', 'Toggle edges panel', () => { this.toggleEdgesView(); });
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
@@ -1735,6 +1739,7 @@ export default class ForgePlugin extends Plugin {
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
     // v0.2.77 — Forge button only on snippet files (type: action|data).
+    // Phase 5c (2026-10-07): `type: data` removed from this gate — see forge-button-gate-core.ts.
     // Pre-v0.2.77 the button appeared on every markdown file; clicking
     // on a non-snippet (e.g. forge-tutorial/01-hello/Hello.md lesson
     // note) errored with no helpful feedback. Gate via the pure-core

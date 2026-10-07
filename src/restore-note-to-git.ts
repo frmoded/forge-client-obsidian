@@ -21,6 +21,7 @@ import { ConfirmModal } from './confirm-modal.ts';
 import {
   decideRestoreNote, selectRestorablePaths, describeRestore, attemptCheckout,
 } from './restore-note-to-git-core.ts';
+import { collectRestoreParticipants, flushRestoreParticipants, runRestoreWithHolds } from './restore-hold-core.ts';
 
 /** The vault's absolute path. Desktop-only; callers guard. */
 function vaultBasePath(app: App): string | null {
@@ -71,12 +72,20 @@ async function reloadOpenEditors(app: App, paths: readonly string[]): Promise<st
 
 /** "Restore active note to last commit." */
 export async function restoreActiveNoteToLastCommit(app: App): Promise<void> {
+  await restoreNoteToLastCommit(app, app.workspace.getActiveFile());
+}
+
+/** Restore ONE named note to its last commit. The Beat Box header button passes its own file explicitly (Phase 5c) instead of relying on
+ *  the active-file lookup. Open Beat Boxes showing the note are held around the checkout (restore-hold-core.ts): their autosave is flushed
+ *  and silenced first, and they reload from disk afterwards — success or failure. */
+export async function restoreNoteToLastCommit(app: App, file: TFile | null | undefined): Promise<void> {
   const base = vaultBasePath(app);
   if (!base) { new Notice('Restore is desktop-only.'); return; }
 
-  const file = app.workspace.getActiveFile();
   if (!file) { new Notice('No active note.'); return; }
 
+  // An edit still waiting in a Beat Box's autosave debounce is part of the note: write it first, so `git status` sees it.
+  await flushRestoreParticipants(collectRestoreParticipants(), [file.path]);
   let status: string;
   try { status = git(base, ['status', '--short', '--', file.path]); }
   catch (e) { new Notice('Restore failed: this vault is not a git repository.'); return; }
@@ -97,7 +106,8 @@ export async function restoreActiveNoteToLastCommit(app: App): Promise<void> {
   if (!ok) return;
 
   await flushOpenEditors(app);
-  const outcome = attemptCheckout(() => { git(base, ['checkout', '--', decision.path]); });
+  const outcome = await runRestoreWithHolds(collectRestoreParticipants(), [decision.path],
+    () => attemptCheckout(() => { git(base, ['checkout', '--', decision.path]); }));
   if (outcome.ok === false) { new Notice(outcome.noticeText); return; }
   await reloadOpenEditors(app, [decision.path]);
   new Notice(`Restored ${decision.path} to last commit.`);
@@ -108,6 +118,8 @@ export async function restoreVaultToLastCommit(app: App): Promise<void> {
   const base = vaultBasePath(app);
   if (!base) { new Notice('Restore is desktop-only.'); return; }
 
+  const open = collectRestoreParticipants();
+  await flushRestoreParticipants(open, open.map((p) => p.path));
   let status: string;
   try { status = git(base, ['status', '--short']); }
   catch (e) { new Notice('Restore failed: this vault is not a git repository.'); return; }
@@ -137,7 +149,8 @@ export async function restoreVaultToLastCommit(app: App): Promise<void> {
   if (!second) return;
 
   await flushOpenEditors(app);
-  const outcome = attemptCheckout(() => { git(base, ['checkout', '--', ...paths]); });
+  const outcome = await runRestoreWithHolds(collectRestoreParticipants(), paths,
+    () => attemptCheckout(() => { git(base, ['checkout', '--', ...paths]); }));
   if (outcome.ok === false) { new Notice(outcome.noticeText); return; }
   const reloaded = await reloadOpenEditors(app, paths);
   new Notice(`Restored ${paths.length} notes; refreshed ${reloaded.length} open editor(s).`);

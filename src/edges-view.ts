@@ -1,4 +1,5 @@
-import { FileSystemAdapter, ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { FileSystemAdapter, FileView, ItemView, MarkdownView, Notice, TFile, WorkspaceLeaf } from 'obsidian';
+import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 import {
   SnapshotMeta,
   listIncoming,
@@ -65,8 +66,13 @@ export class ForgeEdgesView extends ItemView {
       // currentFile fallback we'd flip to "Open a snippet to see its
       // edges." every time the user hit Refresh.
       const activeMd = this.app.workspace.getActiveViewOfType(MarkdownView);
+      // Phase 5c: a rhythm note open as a Beat Box is a note tab too (a FileView of type forge-rhythm-edit) — follow it.
+      const activeFileView = this.app.workspace.getActiveViewOfType(FileView);
+      const activeBeatBoxFile = activeFileView?.getViewType() === RHYTHM_EDIT_VIEW_TYPE ? activeFileView.file : null;
       if (activeMd?.file) {
         this.currentFile = activeMd.file;
+      } else if (activeBeatBoxFile) {
+        this.currentFile = activeBeatBoxFile;
       } else if (!this.currentFile) {
         // First-open / post-hot-reload case: no markdown is the active
         // leaf, currentFile was never set. Walk the open markdown leaves

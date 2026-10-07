@@ -45,6 +45,9 @@ export interface ForgeSettings {
    *  path runs it through clampStripFraction, because a 0 or 1 here
    *  hides a region AND the divider that would undo it. */
   panelStripFraction: number;
+  /** Beat-as-data Phase 5c (drain 2026-10-07-0100): open rhythm data notes (type: data, content_type: json, valid rhythm body) in the
+   *  Beat Box by default. Off = Phase 5b behaviour (the "Open as Beat Box" header button only). */
+  openRhythmNotesInBeatBox: boolean;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -58,6 +61,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   panelStripValues: {},
   panelStripCollapsed: false,
   panelStripFraction: 0.33,
+  openRhythmNotesInBeatBox: true,
 };
 
 export class ForgeSettingTab extends PluginSettingTab {
@@ -160,6 +164,25 @@ export class ForgeSettingTab extends PluginSettingTab {
           text.inputEl.spellcheck = false;
         });
     }
+
+    // --- Notes ----------------------------------------------------
+    new Setting(containerEl).setName('Notes').setHeading();
+
+    new Setting(containerEl)
+      .setName('Open rhythm data notes in Beat Box by default')
+      .setDesc(
+        'A rhythm data note (type: data, content_type: json, with a valid rhythm pattern) opens as the Beat Box grid instead of JSON text. '
+        + '"Open as JSON" in the tab header switches that tab back and it stays JSON until you navigate away. '
+        + 'Off: rhythm notes open as text and you use "Open as Beat Box" in the header.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.openRhythmNotesInBeatBox)
+          .onChange(async (value) => {
+            this.plugin.settings.openRhythmNotesInBeatBox = value;
+            await this.plugin.saveSettings();
+          })
+      );
 
     // --- Local engine (dev, secondary endpoints) ------------------
     new Setting(containerEl).setName('Local engine (dev)').setHeading();

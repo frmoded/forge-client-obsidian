@@ -242,6 +242,37 @@ test('while halted an edit is ignored COMPLETELY: no timer, no "saving", not bus
   w.finish();
 });
 
+test('pause(): a SILENT hold (used around a restore) — pending edit dropped, later edits ignored, no status emitted, until resume()', async () => {
+  const { clock, w, p, statuses } = rig();
+  p.submit({ n: 1 });
+  const before = statuses.length;
+  p.pause();
+  assert.equal(clock.pending(), 0, 'the pending debounce timer is cancelled');
+  assert.equal(p.busy(), false);
+  p.submit({ n: 2 });
+  clock.advance(5000);
+  await p.flush();
+  assert.equal(w.calls.length, 0, 'nothing is written while paused — a restore can never be overwritten by a queued save');
+  assert.equal(statuses.length, before, 'pause() and the ignored edit emit no status');
+  p.resume();
+  p.submit({ n: 3 });
+  clock.advance(600);
+  assert.deepEqual(w.calls, [{ n: 3 }]);
+  w.finish();
+});
+
+test('pause() does not abandon a write already in flight: flush() first, then pause() — the in-flight write completes before the hold', async () => {
+  const { clock, w, p } = rig();
+  p.submit({ n: 1 });
+  clock.advance(600);
+  assert.equal(w.inflight(), 1);
+  const held = p.flush().then(() => p.pause());
+  w.finish();
+  await held;
+  assert.equal(w.inflight(), 0);
+  assert.equal(p.busy(), false);
+});
+
 test('a write that THROWS becomes an error status, never an unhandled rejection', async () => {
   const clock = makeClock();
   const statuses: AutosaveStatus[] = [];
