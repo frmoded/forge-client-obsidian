@@ -78,7 +78,7 @@ test('marks: scoped to leaf + file; clear when the leaf shows another file; a ne
 function rig(over: { info?: Partial<LeafInfo>; rhythm?: boolean; setting?: boolean } = {}) {
   const leaf = { name: 'leaf' };
   const info: LeafInfo = { location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true, ...over.info };
-  const state = { info: info as LeafInfo | null, setting: over.setting ?? true, rhythm: over.rhythm ?? true, swaps: [] as string[], reads: 0 };
+  const state = { info: info as LeafInfo | null, setting: over.setting ?? true, rhythm: over.rhythm ?? true, swaps: [] as string[], reads: 0, slept: [] as number[] };
   const events: Array<() => Promise<unknown>> = [];
   const c = createDefaultViewController<object>({
     settingOn: () => state.setting,
@@ -90,6 +90,8 @@ function rig(over: { info?: Partial<LeafInfo>; rhythm?: boolean; setting?: boole
       await Promise.all([c.evaluate(leaf), c.evaluate(leaf)]);
       state.info = { ...info, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false };
     },
+    isSwapped: () => state.info?.viewType === 'forge-rhythm-edit',
+    sleep: async (ms) => { state.slept.push(ms); },
   });
   return { c, leaf, state, events };
 }
@@ -150,6 +152,8 @@ test('controller: if the leaf changed while the body was being read, the swap is
     describe: () => state.info,
     readBodyIsRhythm: async () => { state.info = { ...state.info!, filePath: 'moved.md' }; return true; },
     swapToBeatBox: async (_l, p) => { state.swaps.push(p); },
+    isSwapped: () => false,
+    sleep: async () => {},
   });
   assert.equal(await c2.evaluate(leaf), 'stale');
   assert.equal(state.swaps.length, 0);
@@ -170,9 +174,73 @@ test('controller: an error while swapping releases the guard, so a later pass ca
     describe: () => ({ location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true }),
     readBodyIsRhythm: async () => true,
     swapToBeatBox: async () => { swaps++; if (fail) throw new Error('boom'); },
+    isSwapped: () => !fail,
+    sleep: async () => {},
   });
   await assert.rejects(c.evaluate(leaf), /boom/);
   fail = false;
   assert.equal(await c.evaluate(leaf), 'swap');
   assert.equal(swaps, 2);
+});
+
+// Obsidian's WorkspaceLeaf.setViewState silently returns when the leaf is already inside another setViewState (`if (this.working) return`).
+// A swap attempted from an event handler can therefore be DROPPED without any error: the controller verifies and retries.
+function flaky(dropFirst: number) {
+  const leaf = {};
+  const st = { info: { location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true } as LeafInfo | null, attempts: 0, slept: [] as number[] };
+  const c = createDefaultViewController<object>({
+    settingOn: () => true,
+    describe: () => st.info,
+    readBodyIsRhythm: async () => true,
+    swapToBeatBox: async () => { st.attempts++; if (st.attempts > dropFirst) st.info = { ...st.info!, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false }; },
+    isSwapped: () => st.info?.viewType === 'forge-rhythm-edit',
+    sleep: async (ms) => { st.slept.push(ms); },
+  });
+  return { c, leaf, st };
+}
+
+test('controller: a swap Obsidian silently drops (leaf busy) is verified and retried with backoff until it takes', async () => {
+  const { c, leaf, st } = flaky(2);
+  assert.equal(await c.evaluate(leaf), 'swap');
+  assert.equal(st.attempts, 3);
+  assert.equal(st.slept.length, 2);
+  assert.ok(st.slept[0] < st.slept[1], 'backoff grows');
+});
+
+test('controller: a swap that never takes gives up after a bounded number of attempts and says so — no infinite retry', async () => {
+  const { c, leaf, st } = flaky(99);
+  assert.equal(await c.evaluate(leaf), 'swap-failed');
+  assert.equal(st.attempts, 4, 'one try plus three retries');
+});
+
+test('controller: a retry is abandoned if the leaf moved to another note in the meantime', async () => {
+  const { c, leaf, st } = flaky(99);
+  const origSleep = st.slept;
+  const c2 = createDefaultViewController<object>({
+    settingOn: () => true,
+    describe: () => st.info,
+    readBodyIsRhythm: async () => true,
+    swapToBeatBox: async () => { st.attempts++; },
+    isSwapped: () => false,
+    sleep: async () => { st.info = { ...st.info!, filePath: 'elsewhere.md' }; },
+  });
+  assert.equal(await c2.evaluate(leaf), 'stale');
+  assert.equal(st.attempts, 1);
+  void c; void origSleep;
+});
+
+test('controller: the guard stays held across retries (events during a retry window cannot start another swap)', async () => {
+  const leaf = {};
+  const st = { info: { location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true } as LeafInfo | null, attempts: 0, inner: [] as string[] };
+  const c = createDefaultViewController<object>({
+    settingOn: () => true,
+    describe: () => st.info,
+    readBodyIsRhythm: async () => true,
+    swapToBeatBox: async () => { st.attempts++; if (st.attempts > 1) st.info = { ...st.info!, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false }; },
+    isSwapped: () => st.info?.viewType === 'forge-rhythm-edit',
+    sleep: async () => { st.inner.push(await c.evaluate(leaf)); },
+  });
+  assert.equal(await c.evaluate(leaf), 'swap');
+  assert.deepEqual(st.inner, ['swap-in-progress']);
+  assert.equal(st.attempts, 2);
 });

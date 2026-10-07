@@ -19,7 +19,7 @@
 // warning and never written. A write is validated BEFORE it happens, made with one atomic `vault.process`, replaces ONLY the
 // note's json block, and is refused if the note changed on disk since the baseline or if it is marked `read_only: true` (D7).
 
-import { EditableFileView, MarkdownView, Notice, TFile, type App, type Menu, type Plugin, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
+import { EditableFileView, MarkdownView, Notice, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
 import { createAutosavePipeline, type AutosavePipeline, type SaveOutcome } from './rhythm-autosave-core.ts';
 import { createDefaultViewController, type LeafInfo, type LeafLocation } from './rhythm-default-view-core.ts';
@@ -326,8 +326,13 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
     swapToBeatBox: async (leaf, path) => {
       // keep focus where it is: only the already-active leaf is re-activated by the swap
       const active = app.workspace.getActiveViewOfType(MarkdownView)?.leaf === leaf;
-      await leaf.setViewState({ type: RHYTHM_EDIT_VIEW_TYPE, active, state: { file: path } });
+      // `popstate: true` is an INTERNAL flag of WorkspaceLeaf.setViewState (absent from the typings; read from Obsidian 1.14.4's own source):
+      // it keeps this swap OUT of the leaf's navigation history. Without it a type change records the markdown state as a back-entry, so
+      // Back from the Beat Box would land on the markdown view, be swapped again, and the user could never go back past the note.
+      await leaf.setViewState({ type: RHYTHM_EDIT_VIEW_TYPE, active, state: { file: path }, popstate: true } as ViewState);
     },
+    isSwapped: (leaf) => leaf.view.getViewType() === RHYTHM_EDIT_VIEW_TYPE,
+    sleep: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
   });
   const evaluateAllLeaves = () => {
     for (const leaf of app.workspace.getLeavesOfType('markdown')) {

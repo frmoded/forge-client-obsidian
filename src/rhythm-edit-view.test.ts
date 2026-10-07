@@ -211,8 +211,16 @@ test('default view: the allow-list reads the leaf\'s ROOT — main area and side
 
 test('default view: the swap happens in the SAME leaf (setViewState) and only the already-active leaf is re-activated', () => {
   const body = code(view);
-  assert.match(body, /swapToBeatBox: async \(leaf, path\) => \{[\s\S]*?await leaf\.setViewState\(\{ type: RHYTHM_EDIT_VIEW_TYPE, active, state: \{ file: path \} \}\);/);
+  assert.match(body, /swapToBeatBox: async \(leaf, path\) => \{[\s\S]*?await leaf\.setViewState\(\{ type: RHYTHM_EDIT_VIEW_TYPE, active, state: \{ file: path \}, popstate: true \} as ViewState\);/);
+  assert.match(body, /isSwapped: \(leaf\) => leaf\.view\.getViewType\(\) === RHYTHM_EDIT_VIEW_TYPE,/);
   assert.match(body, /const active = app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf === leaf;/);
+});
+
+test('default view: the automatic swap stays out of navigation history (internal popstate flag), the explicit toggles do not use it', () => {
+  const body = code(view);
+  assert.equal([...body.matchAll(/popstate: true/g)].length, 1, 'only the automatic swap');
+  const explicit = /export async function switchLeafToBeatBox[\s\S]*?\n\}\n/.exec(body)![0];
+  assert.ok(!/popstate/.test(explicit));
 });
 
 test('default view: "Open as JSON" marks the leaf BEFORE switching (so the events the switch fires see the mark)', () => {

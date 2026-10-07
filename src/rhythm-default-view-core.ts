@@ -46,7 +46,8 @@ export type DefaultViewReason =
   | 'not-candidate'
   | 'prefer-markdown'
   | 'invalid-rhythm'
-  | 'stale';
+  | 'stale'
+  | 'swap-failed';
 
 export interface DefaultViewDecision { swap: boolean; reason: DefaultViewReason }
 
@@ -95,9 +96,16 @@ export interface DefaultViewDeps<K extends object> {
   describe(leaf: K): LeafInfo | null;
   /** Read the note and say whether its body is editable rhythm data. Only called after every cheap check passed. */
   readBodyIsRhythm(leaf: K, path: string): Promise<boolean>;
-  /** `leaf.setViewState(...)` to the Beat Box, in the SAME leaf. */
+  /** `leaf.setViewState(...)` to the Beat Box, in the SAME leaf. NOTE: Obsidian's setViewState silently returns (no error) when the leaf
+   *  is already inside another setViewState, so a call can be dropped — hence isSwapped + the retry below. */
   swapToBeatBox(leaf: K, path: string): Promise<void>;
+  /** Is the leaf now a Beat Box? */
+  isSwapped(leaf: K): boolean;
+  sleep(ms: number): Promise<void>;
 }
+
+/** Waits between swap attempts: one try, then three retries with growing delays (a leaf that is busy is busy for milliseconds). */
+export const SWAP_RETRY_DELAYS_MS: readonly number[] = [60, 180, 500];
 
 export interface DefaultViewController<K extends object> {
   evaluate(leaf: K): Promise<DefaultViewReason>;
@@ -135,10 +143,17 @@ export function createDefaultViewController<K extends object>(deps: DefaultViewD
     swapping.add(leaf);
     try {
       await deps.swapToBeatBox(leaf, path);
+      for (const delay of SWAP_RETRY_DELAYS_MS) {
+        if (deps.isSwapped(leaf)) return 'swap';
+        await deps.sleep(delay);
+        const again = deps.describe(leaf);                        // still the same plain markdown view of the same note?
+        if (!again || !again.isPlainMarkdownView || again.filePath !== path) return deps.isSwapped(leaf) ? 'swap' : 'stale';
+        await deps.swapToBeatBox(leaf, path);
+      }
+      return deps.isSwapped(leaf) ? 'swap' : 'swap-failed';
     } finally {
       swapping.delete(leaf);
     }
-    return 'swap';
   }
 
   return { evaluate, markPreferMarkdown: (leaf, path) => marks.mark(leaf, path), clearPreferMarkdown: (leaf) => marks.clear(leaf) };
