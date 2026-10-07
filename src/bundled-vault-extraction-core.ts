@@ -41,7 +41,7 @@ export type BundledVaultName =
   | typeof EDITION_VAULT_NAMES.music[number];
 
 /** Membership form, for the "is this vault a bundled library's source
- *  repo?" checks in welcome.ts + chips.ts. */
+ *  repo?" checks in welcome.ts (and formerly chips.ts). */
 export const BUNDLED_VAULT_NAME_SET: ReadonlySet<string> =
   new Set<string>(BUNDLED_VAULT_NAMES);
 

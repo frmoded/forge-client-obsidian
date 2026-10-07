@@ -11,7 +11,7 @@
 // (typically the names welcome.ts knows how to extract: forge-moda
 // and forge-music today).
 //
-// Founding consumer: chips.ts v0.2.62, surfaces the source-vault's
+// Founding consumer: chips.ts v0.2.62 (retired with the palette, 2026-10-07; welcome.ts remains), surfaces the source-vault's
 // own subdirs (e.g. `percussion/`, `percussion_lab/`) as the library's
 // content for chip auto-discovery. Brief (c) per forge-music cowork.
 // Future consumer: welcome.ts auto-extract guards (brief (e)).

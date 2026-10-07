@@ -118,8 +118,8 @@ Notes come in two flavors:
   primed note; it does not run.)
 
 In a Recipe, \`Call [[name]]\` resolves to a library note OR a vault
-note of the same basename. The plugin's chip palette surfaces all
-the library notes available in the active domains.
+note of the same basename. Library notes from the active domains are
+always available — Cmd-click a \`[[name]]\` wikilink to read one.
 
 ## What you'll find in this vault
 

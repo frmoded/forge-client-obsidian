@@ -60,8 +60,8 @@ const PATTERNS: Pattern[] = [
     // "Snippet 'foo' not found. Searched: ..."
     regex: /Snippet '([^']+)' not found/,
     rewrite: (m) =>
-      `Library note '${m[1]}' isn't in your library. Check the wikilink spelling; `
-      + `try Cmd-P → 'Refresh library note palette' if you just added it.`,
+      `Library note '${m[1]}' isn't in your library. Check the wikilink spelling `
+      + `(vault notes are matched by file name).`,
   },
 ];
 

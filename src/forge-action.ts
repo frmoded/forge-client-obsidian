@@ -63,12 +63,6 @@ export interface ForgeHost {
   vaultPathOf(): string;
   reloadActiveDomains(): Promise<void>;
   openModaView(): void;
-  // Open the chip palette view (same path as the `forge-open-chips`
-  // command). The menu entry is always visible — the view itself
-  // renders an empty-state message when no `_chips.md` is present
-  // in the vault, so users discover the affordance there rather
-  // than being gated out by a hidden menu item.
-  openChipsView(): void;
   // v0.2.45: snapshot of currently-active domains, used by
   // EditVaultDomainsModal.applyDiff to compute the activation diff
   // before reloadActiveDomains shifts the in-memory state. Returns a
@@ -134,18 +128,6 @@ function showActionMenu(
   menu.addItem(i =>
     i.setTitle('Edit vault domains…').setIcon('plus-circle')
       .onClick(() => new EditVaultDomainsModal(host).open()));
-  menu.addSeparator();
-
-  // Chips palette — canonical entry point per the chips-v2 follow-up.
-  // Always visible (was previously gated on hasChips, but that hid the
-  // entry from any vault whose _chips.md hadn't been read into the
-  // cached palette yet — a discoverability trap, since the view
-  // itself renders an empty-state message that teaches users how to
-  // add chips). The view's own onOpen always refreshes from disk, so
-  // clicking this fetches the current palette state.
-  menu.addItem(i =>
-    i.setTitle('Open library note palette').setIcon('puzzle')
-      .onClick(() => host.openChipsView()));
   menu.addSeparator();
 
   if (domainActive(declared, 'moda')) {

@@ -3,8 +3,8 @@
 //
 // WHY A TS PARSER EXISTS AT ALL: the canonical [imports] parser is
 // forge.core.vault_imports.parse_imports (Python; also vendored in
-// forge-mcp). The plugin cannot reuse it for the chip palette because
-// the palette loads at layout-ready while Pyodide is LAZY-init — and
+// forge-mcp). The plugin cannot reuse it before Pyodide boots (the
+// engine host mounts imports lazily, and the plugin needs the list at layout-ready) — and
 // the Pyodide copy also can't validate import targets that aren't
 // mounted yet (chicken-and-egg). So this module implements the
 // MINIMAL subset the plugin needs: the local-form declaration list,
@@ -14,9 +14,6 @@
 // engine's Phase 2 posture. If the [imports] grammar grows, extend
 // forge.core.vault_imports FIRST and mirror only what the plugin
 // needs here.
-
-import { deriveChip } from './chips-core.ts';
-import type { Chip, ChipPaletteGroup, SnippetMetaForChips } from './chips-core.ts';
 
 export interface LocalImportDecl {
   name: string;
@@ -91,20 +88,4 @@ export function shouldMountImportFile(relPath: string): boolean {
   const base = segs[segs.length - 1];
   if (base.startsWith('.')) return false;
   return base === 'forge.toml' || base.endsWith('.md');
-}
-
-/** Build the chip-palette group for one imported vault from its
- *  synthesized snippet metas. Reuses deriveChip so S7 underscore /
- *  chip:false / snapshot exclusions behave identically to every
- *  other palette source. */
-export function buildImportChipGroup(
-  importName: string,
-  metas: SnippetMetaForChips[],
-): ChipPaletteGroup {
-  const chips: Chip[] = [];
-  for (const meta of metas) {
-    const chip = deriveChip(meta);
-    if (chip) chips.push(chip);
-  }
-  return { sourceName: `Import: ${importName}`, chips };
 }

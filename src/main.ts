@@ -89,11 +89,8 @@ import {
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
 import { ForgeEdgesView, EDGES_VIEW_TYPE } from './edges-view.ts';
 import { ForgeModaView, MODA_VIEW_TYPE } from './moda-view.ts';
-import { ChipsView, CHIPS_VIEW_TYPE, ChipsHost } from './chips-view.ts';
-import { ChipsManifest, loadPaletteForActiveVault, loadImportedVaultChips } from './chips.ts';
-import { filterActiveDomainNotes } from './library-chip-merge-core.ts';
 import { decideRightLeafPlacement } from './right-leaf-eviction-core.ts';
-import { ChipPaletteGroup } from './chips-core.ts';
+import { detachLegacyViewLeaves } from './legacy-view-cleanup-core.ts';
 // v0.2.121 — getFacetForm import removed; facet_form gate is gone.
 // import { getFacetForm } from './facet-form-core.ts';
 import {
@@ -208,7 +205,6 @@ import {
 // english_hash stamping. replaceOrInsertPythonHeading still lives
 // in python-cache-writer-core as an internal helper consumed by
 // writePythonAndEnglishHash.
-import { shouldShowChipsToolbarButton } from './chip-toolbar-button-core.ts';
 import { forgeButtonShouldShow, edgesToggleShouldShow } from './forge-button-gate-core.ts';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core.ts';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin.ts';
@@ -375,13 +371,6 @@ const HAMMER_BTN_CLASS = 'forge-hammer-btn';
 const EDGES_BTN_CLASS = 'forge-edges-btn';
 const FORGE_BTN_CLASS = 'forge-forge-btn';
 const LOCK_BTN_CLASS = 'forge-lock-btn';
-// Per-snippet chip toolbar icon. Retired in the chips-v2 follow-up
-// (e4ed813) and restored in chips v2-full per the user's choice —
-// some redundancy with the Forge-ribbon-menu "Open chips palette"
-// entry, but the per-snippet location keeps the affordance close to
-// where insertion lands. Gated on chipPalette.length > 0 so vaults
-// without `_chips.md` don't see a dead icon.
-const CHIPS_BTN_CLASS = 'forge-chips-btn';
 
 // Drain 2026-08-28-0900 — "Restore to last commit" toolbar button.
 const RESTORE_BTN_CLASS = 'forge-restore-btn';
@@ -456,12 +445,6 @@ export default class ForgePlugin extends Plugin {
    *  Null until the first generate; the closure check treats null the
    *  way it already treats an unloaded catalog (skip, warn, accept). */
   private lastGenerateCallables: CallableEntry[] | null = null;
-  /** Drain 2330 — per-domain library-note lists preserved so the chip
-   *  palette can render one "<Domain> library" group per domain.
-   *  Populated alongside `libraryNoteIndex` in loadLibraryNoteCatalog;
-   *  read by `chipsManifest`-adjacent surfaces that call
-   *  loadPaletteForActiveVault. Empty until the catalog loads. */
-  private libraryNotesByDomain: Record<string, LibraryNote[]> = {};
   /** v0.2.281 — explicit catalog-readiness signal. Flips true exactly
    *  once per session after `loadLibraryNoteCatalog()` returns. CW-2100
    *  guardrail (Description-canonical closure check) reads this rather
@@ -873,8 +856,11 @@ export default class ForgePlugin extends Plugin {
       getSettings: () => this.settings,
       pluginId: this.manifest.id,
     }));
-    this.registerView(CHIPS_VIEW_TYPE, leaf =>
-      new ChipsView(leaf, this.chipsHost()));
+    // The library-note palette side panel was retired (drain 2026-10-07-0200): sweep any saved `forge-chips` pane once the layout is up,
+    // instead of letting Obsidian restore it as an empty ghost pane.
+    this.app.workspace.onLayoutReady(() => {
+      detachLegacyViewLeaves(this.app.workspace);
+    });
 
     // v0.2.206 — Engine-chip-as-note: register the LibraryNoteView
     // type so Cmd-click on [[chip]] can open it. The view looks up
@@ -1048,26 +1034,6 @@ export default class ForgePlugin extends Plugin {
     if (this.isDomainActive('moda')) {
       this.registerDomainCommands('moda');
     }
-
-    // Chips v2 is domain-agnostic: load once at activate, surface the
-    // palette via the chips view. The "Forge: Open chips palette"
-    // command and per-snippet icon stay available even when the
-    // palette is empty — the view itself renders an explanatory
-    // empty-state message.
-    await this.reloadChipPalette();
-    // v0.2.236 drain 2026-07-02-2030: `forge-open-chips` retired. UI
-    // alt: puzzle icon in the editor action row (context-gated on
-    // chip-showing notes) + "Open chips palette" in the Forge
-    // ribbon menu.
-    this.addCommand({
-      id: 'forge-refresh-chips',
-      name: 'Refresh library note palette',
-      callback: () => { this.reloadChipPalette(/*refreshOpenView=*/ true); },
-    });
-
-    // v0.2.262 drain 1310 — `_chips.md` file-watch retired. Palette
-    // now auto-discovered from `type: action` notes; there's no
-    // curator file to watch. Refresh command remains as escape hatch.
 
     // v0.2.58: B7.2 — intercept wikilink-clicks whose target is a
     // recognized Python builtin. Without this, canonical snippets
@@ -1665,41 +1631,18 @@ export default class ForgePlugin extends Plugin {
       `.${SNIPPET_BTN_CLASS}, .${RUN_BTN_CLASS}, .${HAMMER_BTN_CLASS}, .${EDGES_BTN_CLASS}, .${FORGE_BTN_CLASS}, .${LOCK_BTN_CLASS}, .forge-chips-btn, .forge-dag-btn, .${RESTORE_BTN_CLASS}`
     ).forEach(el => el.remove());
 
-    // v0.2.46: hoist the frontmatter lookup so the chip-toolbar
-    // decision can use it. Previously fm was computed below for the
-    // edit-mode toggle only. Moving it up keeps a single source of
-    // truth + lets both toolbar buttons branch on the same data.
+    // Hoisted frontmatter lookup: one source of truth for the edges and Forge-button gates below.
     const fm = view.file
       ? this.app.metadataCache.getFileCache(view.file)?.frontmatter
       : undefined;
 
     // Order matters: Obsidian's view.addAction PREPENDS — the most
     // recently added action renders leftmost. So to get the visual
-    // left-to-right order [Forge, New Snippet, (mode), edges, chips]
-    // we add them in REVERSE: chips first, then edges, mode,
+    // left-to-right order [Forge, New Snippet, edges, restore]
+    // we add them in REVERSE: restore first, then edges,
     // New Snippet, and Forge LAST so it lands at the far left.
-    //
-    // v0.2.46: chip-toolbar visibility moved to the pure-core helper
-    // shouldShowChipsToolbarButton. Pre-v0.2.46 gated on
-    // `chipPalette.length > 0`, which hid the button in any vault
-    // without a loaded _chips.md — a discoverability trap mirroring
-    // the action-menu trap fixed in c3848d9. New gate: file type is
-    // `action` (chip insertion is meaningful for action-snippet
-    // authoring only; the chips view's empty-state messaging
-    // handles the no-chips-yet discovery surface). See
-    // src/chip-toolbar-button-core.ts for the decision logic +
-    // src/chip-toolbar-button-core.test.ts for the 7 cases.
-    if (shouldShowChipsToolbarButton({
-      fileType: typeof fm?.type === 'string' ? fm.type : undefined,
-      chipsCount: this.chipPalette.length,
-    })) {
-      const chipsBtn = view.addAction(
-        'puzzle', 'Open library note palette',
-        () => { this.openChipsView(); });
-      chipsBtn.addClass(CHIPS_BTN_CLASS);
-    }
     // Drain 2026-08-28-0900 — surface the existing "Restore active note
-    // to last commit" command as a toolbar button, next to chips. Driver
+    // to last commit" command as a toolbar button. Driver
     // R1: the mechanism already existed (drain 2026-08-27-0200/0400) but
     // was hidden behind Cmd/Ctrl-P.
     //
@@ -1714,7 +1657,7 @@ export default class ForgePlugin extends Plugin {
     // UNGATED by file type, matching the underlying command (which has
     // no type restriction) and the New-action-note button below —
     // restore-to-git is a general safety net, not a snippet-authoring
-    // action like chips/edges/Forge.
+    // action like edges/Forge.
     //
     // Deliberately NOT gated on git status here. syncButtons() fires on
     // every layout-change / editor-change event; shelling `git status`
@@ -2013,7 +1956,6 @@ export default class ForgePlugin extends Plugin {
       vaultPathOf: () => (this.app.vault.adapter as FileSystemAdapter).getBasePath(),
       reloadActiveDomains: () => this.loadActiveDomains(),
       openModaView: () => { this.openModaView(); },
-      openChipsView: () => { this.openChipsView(); },
       // v0.2.45: domain-activation plumbing for EditVaultDomainsModal.
       currentActiveDomains: () => this.currentActiveDomains(),
       registerDomainCommands: (domain: string) => { this.registerDomainCommands(domain); },
@@ -2371,107 +2313,6 @@ export default class ForgePlugin extends Plugin {
     }
   }
 
-  // Chips v2. Domain-agnostic palette pane in the right sidebar. The
-  // view reads `_chips.md` from the vault root + each declared-domain
-  // subdir on open / on refresh; renders an empty-state message if
-  // no chips are defined.
-  private async openChipsView() {
-    const existing = this.app.workspace.getLeavesOfType(CHIPS_VIEW_TYPE)[0];
-    if (existing) {
-      this.app.workspace.revealLeaf(existing);
-      return;
-    }
-    // Drain 2026-08-28-0910 §3 (R5) — was getRightLeaf(false) directly,
-    // which evicted an open Forge/Run panel in place. Split instead.
-    const leaf = this.pickRightLeaf(CHIPS_VIEW_TYPE);
-    await leaf.setViewState({ type: CHIPS_VIEW_TYPE, active: true });
-    this.app.workspace.revealLeaf(leaf);
-  }
-
-  // Cached merged palette. Drives the toolbar-icon visibility (only
-  // shown when chips exist) and lets the open view ask the plugin
-  // for a snapshot rather than re-reading disk per render. Reloaded
-  // on plugin activate and on the explicit "Refresh chip palette"
-  // command.
-  private chipPalette: ChipPaletteGroup[] = [];
-  private openChipsViews = new Set<ChipsView>();
-  // V3 file-watch debounce: coalesce rapid `_chips.md` modify events
-  // (e.g. a save flurry while typing in the data snippet) so we only
-  // reload the palette once when the dust settles.
-  private chipsReloadTimer: number | null = null;
-
-  private async reloadChipPalette(refreshOpenView = false) {
-    try {
-      // Drain 2330 — snapshot the per-domain library catalog before
-      // the await so the palette loader sees a consistent view even
-      // if loadLibraryNoteCatalog completes concurrently. L59 spirit
-      // (capture live state to const before an await).
-      // Drain 2026-08-29-0810 §2/§3 (R4/R5) — filter to a COPY for the
-      // chip-palette path only. `this.libraryNotesByDomain` itself
-      // stays fully populated (it also feeds /generate's callable-
-      // resolution inventory via getLibraryNotesByDomain — narrowing
-      // the source map would silently change what the LLM can call,
-      // which neither R4 nor R5 asked for). 'core' is exempt: it is
-      // universal engine vocabulary, never itself listed in any real
-      // vault's forge.toml domains= (confirmed against every bundled
-      // vault), so gating it on isDomainActive would hide it for every
-      // vault that declares domains at all.
-      const notesByDomain = filterActiveDomainNotes(
-        this.libraryNotesByDomain,
-        (domain) => domain === 'core' || this.isDomainActive(domain),
-      );
-      const palette = await loadPaletteForActiveVault(
-        this.app, this.chipsManifest(), notesByDomain);
-      // Drain 2026-08-10-1430 (Phase 4b) — append one group per
-      // [imports]-declared vault (e.g. "Import: music-core"). Empty
-      // on mobile / no-imports / unreadable targets.
-      const importGroups = await loadImportedVaultChips(this.app);
-      this.chipPalette = [...palette, ...importGroups];
-    } catch (e) {
-      console.error('Forge chips: load failed', e);
-      this.chipPalette = [];
-    }
-    if (refreshOpenView) {
-      for (const v of this.openChipsViews) {
-        void v.refresh();
-      }
-    }
-    // Toolbar icon's visibility depends on chipPalette.length — keep
-    // it in sync after a refresh.
-    this.syncButtons();
-  }
-
-  private chipsManifest(): ChipsManifest {
-    // v0.2.67 — populate `activeFilePath` from the workspace so the
-    // chip palette loader can run v3.1 walk-up against per-chapter
-    // `_chips.md` files. Snapshot taken at manifest-read time so each
-    // `loadChipsForActiveVault` invocation sees a coherent view of
-    // "what file is active right now."
-    const activeFile = this.app.workspace.getActiveFile();
-    return {
-      vaultName: this.app.vault.getName(),
-      // v0.2.47: chip source discovery driven by on-disk installed
-      // library subdirs (libraryDirNames), not by declared domains.
-      // Pre-v0.2.47 used `domains: this.activeDomains` — which missed
-      // forge-moda chips in vaults with `domains = ["music"]` even
-      // though forge-moda is unconditionally extracted (welcome.ts:104).
-      // The chip view's empty-state messaging discovered the gap
-      // during v0.2.46 smoke when the user opened the chips palette
-      // from forge-moda/simulation.md and saw nothing.
-      libraryDirNames: Array.from(this.libraryDirNames()),
-      activeFilePath: activeFile?.path ?? null,
-    };
-  }
-
-  private chipsHost(): ChipsHost {
-    return {
-      getManifest: () => this.chipsManifest(),
-      getLibraryNotesByDomain: () => this.libraryNotesByDomain,
-      registerView: (v) => { this.openChipsViews.add(v); },
-      unregisterView: (v) => { this.openChipsViews.delete(v); },
-    };
-  }
-
   // v0.2.240 drain 2026-07-02-2330: stepModaSimulation retired per
   // driver override. Its sole caller (forge-step-moda Cmd-P command)
   // is gone. Cohort loses the Step capability; add a Step button to
@@ -2484,8 +2325,8 @@ export default class ForgePlugin extends Plugin {
       existing.detach();
       return;
     }
-    // Drain 2026-08-28-0910 §3 — same eviction bug shape as chips/output/
-    // 3D, found via a full sweep and fixed alongside them (not named in
+    // Drain 2026-08-28-0910 §3 — same eviction bug shape as the output/
+    // 3D panels, found via a full sweep and fixed alongside them (not named in
     // the original report; see FEEDBACK for why it's included).
     const leaf = this.pickRightLeaf(EDGES_VIEW_TYPE);
     await leaf.setViewState({ type: EDGES_VIEW_TYPE, active: true });
@@ -3533,16 +3374,10 @@ export default class ForgePlugin extends Plugin {
       }
     }
     this.libraryNoteIndex = buildLibraryNoteIndex(perDomain);
-    // Drain 2330 — stash the per-domain shape too, so the palette
-    // loader can render one library group per domain.
-    this.libraryNotesByDomain = perDomain;
     // v0.2.281 — flip the explicit readiness signal AFTER the index is
     // populated so any concurrent forgeSnippet flow reads a consistent
     // state (index populated → signal true, not the reverse).
     this._libraryCatalogLoaded = true;
-    // Drain 2330 — refresh any open chip palette so newly-loaded
-    // library chips surface without waiting for a manual reload.
-    void this.reloadChipPalette(true);
     console.warn(
       `[Forge library-note catalog] loaded ${this.libraryNoteIndex.size} chips `
       + `(${domains.map(d => `${d}: ${perDomain[d]?.length ?? 0}`).join(', ')})`,
@@ -6394,9 +6229,9 @@ export default class ForgePlugin extends Plugin {
   // right-sidebar leaf-eviction bug. `getRightLeaf(false)` reuses the
   // sidebar's existing leaf regardless of what view it holds, so
   // opening a Forge panel while a DIFFERENT Forge panel already
-  // occupies that leaf silently overwrote it — the chips button
+  // occupies that leaf silently overwrote it — one panel button
   // evicting the Run panel (R5) and, in reverse, a run evicting an
-  // open chips panel (R6, confirmed same mechanism — see FEEDBACK).
+  // open sibling panel (R6, confirmed same mechanism — see FEEDBACK).
   //
   // Decision lives in right-leaf-eviction-core.ts so it is testable
   // without an `obsidian` import. This wrapper does the one impure

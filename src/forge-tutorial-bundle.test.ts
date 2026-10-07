@@ -207,7 +207,7 @@ test('sync-bundled-vault: drift detection catches forced edit', () => {
   }
 });
 
-test('welcome.ts + chips.ts share one bundled-library set (no dual list)', () => {
+test('welcome.ts takes its bundled-library set from the shared constant (no private list; chips.ts, its former twin, retired 2026-10-07)', () => {
   // Drain 2026-08-22-0920 — this test used to grep both files for the
   // four literal names, guarding a dual list that was declared
   // "intentional duplication". The dual list is gone: both files
@@ -218,9 +218,7 @@ test('welcome.ts + chips.ts share one bundled-library set (no dual list)', () =>
   // remains the stricter guard, including the vaults.txt pinning.
   const welcomeSrc = fs.readFileSync(
     path.join(REPO, 'src', 'welcome.ts'), 'utf8');
-  const chipsSrc = fs.readFileSync(
-    path.join(REPO, 'src', 'chips.ts'), 'utf8');
-  for (const [label, src] of [['welcome.ts', welcomeSrc], ['chips.ts', chipsSrc]]) {
+  for (const [label, src] of [['welcome.ts', welcomeSrc]]) {
     assert.match(
       src, /BUNDLED_VAULT_NAME_SET/,
       `${label} must take its bundled-library set from the shared constant.`);

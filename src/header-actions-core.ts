@@ -4,6 +4,8 @@
 // none of them for free. This table is the audit: for each markdown-view action, is it also on the Beat Box, and if not, why not.
 // header-actions-core.test.ts pins it against the source — add or remove a markdown-view action without a decision here and the suite fails.
 //
+// (The "Open library note palette" action was retired entirely on 2026-10-07 — it is no longer on any view.)
+//
 // Order is left-to-right as rendered. Obsidian's addAction PREPENDS, so a view adds them right-to-left (last in this list first).
 
 export interface MarkdownHeaderAction {
@@ -31,10 +33,6 @@ export const MARKDOWN_HEADER_ACTIONS: readonly MarkdownHeaderAction[] = [
   {
     id: 'restore-to-last-commit', icon: 'history', title: 'Restore to last commit', beatBox: 'added',
     reason: 'the safety net; ungated on the markdown view. In the Beat Box it holds autosave, checks out, then reloads the widget from disk.',
-  },
-  {
-    id: 'library-palette', icon: 'puzzle', title: 'Open library note palette', beatBox: 'not-applicable',
-    reason: 'inserts library notes into an ACTION note being authored (gated on type: action); a data note has no editor to insert into.',
   },
 ];
 

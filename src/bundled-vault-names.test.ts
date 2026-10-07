@@ -13,7 +13,7 @@
 // the v0.2.22 fixture-drift trap) and asserts the sync relations.
 //
 // If this test fails after you added/renamed a bundled vault: update
-// scripts/vaults.txt AND the sets in src/welcome.ts, src/chips.ts,
+// scripts/vaults.txt AND the sets in src/welcome.ts, (formerly src/chips.ts),
 // src/pyodide-host.ts (both lists), src/forge-action.ts, and
 // src/re-extract-bundled-vault-modal.ts together.
 
@@ -206,7 +206,7 @@ test('assets/vaults/ dirs match the canonical set (no orphan forge-music)', () =
 //
 // The guards above pin six lists to vaults.txt, which catches drift but
 // still requires six edits per vault. Three of them were the SAME set,
-// spelled three times: welcome.ts + chips.ts (KNOWN_BUNDLED_LIBRARIES,
+// spelled three times: welcome.ts + chips.ts, since retired (KNOWN_BUNDLED_LIBRARIES,
 // "intentional duplication" per their comments) and the re-extract
 // modal. They now import one exported constant. The remaining three
 // are deliberately NOT the canonical set — mount-skip is canonical ∪
@@ -264,8 +264,8 @@ test('no source file re-lists the canonical vault names by hand', () => {
     'these files spell out the bundled-vault set instead of importing it');
 });
 
-test('welcome.ts and chips.ts consume the shared set', () => {
-  for (const rel of ['src/welcome.ts', 'src/chips.ts']) {
+test('welcome.ts consumes the shared set (chips.ts, its former twin, was retired with the palette on 2026-10-07)', () => {
+  for (const rel of ['src/welcome.ts']) {
     const src = readSrc(rel);
     assert.match(src, /BUNDLED_VAULT_NAME_SET/,
       `${rel} must import the shared membership set`);

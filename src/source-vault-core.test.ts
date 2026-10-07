@@ -136,7 +136,7 @@ test('isSourceVault: whitespace around = tolerated', () => {
 });
 
 // v0.2.64 — production-set regression (per brief (e)). Verifies the
-// exact set both welcome.ts and chips.ts use against the typical
+// exact set welcome.ts uses (chips.ts did too, until 2026-10-07) against the typical
 // cohort-vault shape that should NOT trigger source-vault gating.
 test('isSourceVault: production set excludes a normal cohort vault', () => {
   const PROD_SET = new Set(['forge-moda', 'forge-music']);

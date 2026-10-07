@@ -1,7 +1,8 @@
 // Drain 2026-08-28-0910 §3/§4 — the right-sidebar leaf-eviction bug.
 //
-// THE BUG (R5, R6). `openChipsView`, `getOutputView`, and the "Open 3D
-// View" command each check for an EXISTING leaf of their OWN view type
+// THE BUG (R5, R6). `getOutputView`, the edges toggle and the "Open 3D
+// View" command (and, until the 2026-10-07 palette retirement,
+// `openChipsView`) each check for an EXISTING leaf of their OWN view type
 // (`getLeavesOfType(X)[0]`) and, finding none, call
 // `this.app.workspace.getRightLeaf(false)` unconditionally. Obsidian's
 // `getRightLeaf(false)` returns the right sidebar's existing leaf (or
@@ -10,9 +11,9 @@
 // leaf's content in place.
 //
 // So: Forge panel open, right sidebar has exactly one leaf, holding it.
-// Click chips → `openChipsView` finds no forge-chips leaf → calls
+// Open another Forge view → it finds no leaf of its own type → calls
 // `getRightLeaf(false)` → gets the SAME leaf → overwrites it with the
-// chips view. The Forge panel is not closed by any explicit code path;
+// new view. The Forge panel is not closed by any explicit code path;
 // it is evicted by leaf reuse. This is deterministic given Obsidian's
 // documented split-vs-reuse contract (obsidian.d.ts:7002,
 // `getRightLeaf(split: boolean)`) — confirmed by reading the three call
@@ -32,13 +33,13 @@
  *  (not imported from the view modules) so this pure-core has no
  *  `obsidian` import and runs under `node --test`. */
 export const FORGE_RIGHT_SIDEBAR_VIEW_TYPES = [
-  'forge-output', 'forge-chips', 'forge-three',
+  'forge-output', 'forge-three',
   // Drain 2026-08-28-0910 — not named in the prompt's three call
   // sites, but found via a full sweep of getRightLeaf(false) call
   // sites and confirmed to be the identical bug shape (see FEEDBACK).
   // The prompt's own §3 reasoning generalizes: 'if it has the same
   // bug, that's the same fix in three places, not one' — extended
-  // here to four.
+  // here to four (three after the palette's retirement).
   'forge-edges-view',
 ] as const;
 

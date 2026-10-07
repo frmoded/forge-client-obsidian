@@ -721,7 +721,6 @@
   color: var(--text-normal);
 }
 
-
 /* Binary asset drop zone in the New Snippet modal. Shown when the selected
    data content_type is binary (image/*, audio/*, video/*). */
 .forge-modal-drop {
@@ -888,28 +887,6 @@
   color: var(--text-muted);
 }
 
-/* MoDa chips POC — sidebar pane with one (eventually more) chip
-   button. Match Obsidian's native button look; nothing fancy for v1. */
-.forge-moda-chips-view h3 {
-  margin-top: 0;
-}
-.forge-moda-chips-view .forge-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4em;
-}
-.forge-moda-chips-view .forge-chip {
-  padding: 0.3em 0.7em;
-  font-size: 0.9em;
-  border-radius: 999px;
-  background: var(--interactive-normal);
-  border: 1px solid var(--background-modifier-border);
-  cursor: pointer;
-}
-.forge-moda-chips-view .forge-chip:hover {
-  background: var(--interactive-hover);
-}
-
 /* MoDa simulator view — the iframe fills the whole leaf, no browser
    chrome bleeding in at the edges. Drain 2026-09-21-1756 moved this
    off inline styles. */
@@ -935,54 +912,6 @@
   color: var(--text-muted);
 }
 
-/* Chips v2 — generalized palette view. Old .forge-moda-chips-view
-   selectors above are left in place harmlessly (no DOM uses them after
-   the v2 rename) — sweeping them belongs to a separate UX-polish pass. */
-.forge-chips-view h3 {
-  margin-top: 0;
-}
-.forge-chips-view .forge-chips-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5em;
-  margin-bottom: 0.4em;
-}
-.forge-chips-view .forge-chips-refresh {
-  padding: 0.2em 0.6em;
-  font-size: 0.8em;
-}
-.forge-chips-view .forge-chips-group {
-  margin-bottom: 0.8em;
-}
-.forge-chips-view .forge-chips-group-header {
-  margin: 0.3em 0;
-  font-size: 0.85em;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.forge-chips-view .forge-chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4em;
-}
-.forge-chips-view .forge-chip {
-  padding: 0.3em 0.7em;
-  font-size: 0.9em;
-  border-radius: 999px;
-  background: var(--interactive-normal);
-  border: 1px solid var(--background-modifier-border);
-  cursor: pointer;
-}
-.forge-chips-view .forge-chip:hover {
-  background: var(--interactive-hover);
-}
-.forge-chips-view .forge-chips-empty {
-  color: var(--text-muted);
-  font-size: 0.9em;
-}
-
 /* Two-vault refactor (constitution A5.1): editor marker for a vault-
    root snippet that shadows a same-name library snippet. A4
    resolution makes the root copy authoritative; the marker tells the
@@ -1005,16 +934,6 @@
   font-size: 0.85em;
   font-weight: 500;
   margin-left: 0.4em;
-}
-
-/* Chips v2-full — sub-group headers within a source group, when
-   chips declare a `group` field (e.g. forge-moda's 16 chips split
-   into Setup / Click / Go / Particle actions / Temperature). */
-.forge-chips-view .forge-chips-subgroup-header {
-  margin: 0.6em 0 0.3em 0;
-  font-size: 0.85em;
-  font-weight: 500;
-  color: var(--text-normal);
 }
 
 /* v0.2.82 Item B — visually de-emphasize `.bak.<version>/` library
@@ -1049,43 +968,6 @@
 /*
 .forge-frontmatter-placeholder { ... }
 */
-
-/* v0.2.112 Item A — chip palette library section headers.
-   The h4 became a <button> so it's focusable and screen-reader
-   announced as a toggle. Arrow indicates fold state; count shows
-   chip count per library. */
-.forge-chips-group-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  background: none;
-  border: none;
-  padding: 6px 0;
-  margin: 8px 0 0;
-  font-size: 1em;
-  font-weight: 600;
-  color: var(--text-normal);
-  text-align: left;
-  cursor: pointer;
-}
-.forge-chips-group-header:hover {
-  color: var(--interactive-accent);
-}
-.forge-chips-group-arrow {
-  display: inline-block;
-  width: 12px;
-  font-size: 0.8em;
-  color: var(--text-muted);
-}
-.forge-chips-group-label {
-  flex: 1;
-}
-.forge-chips-group-count {
-  font-size: 0.85em;
-  font-weight: normal;
-  color: var(--text-muted);
-}
 
 /* v0.2.116 — frontmatter HIDE (Tamar overwhelm fix, finally).
    Eight prior CM6-decoration attempts (v0.2.108→v0.2.115) all

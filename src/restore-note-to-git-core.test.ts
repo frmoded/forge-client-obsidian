@@ -296,7 +296,7 @@ test('0900 the button is NOT gated on a synchronous git shell-out', () => {
   );
 });
 
-test('0900 NON-VACUITY: syncButtons still registers the chips and Forge buttons', () => {
+test('0900 NON-VACUITY: syncButtons still registers the edges, new-note and Forge buttons (the chips button retired 2026-10-07)', () => {
   // Scope pin, same shape as drain 1700's non-vacuity tests: a wiring
   // assertion that never checks for regression is only checking that
   // TEXT exists, not that the surrounding feature survived.
@@ -305,6 +305,8 @@ test('0900 NON-VACUITY: syncButtons still registers the chips and Forge buttons'
     main.indexOf('syncButtons() {'),
     main.indexOf('syncButtons() {') + main.slice(main.indexOf('syncButtons() {')).indexOf('\n  }\n') + 4,
   );
-  assert.match(syncButtons, /addAction\(\s*'puzzle'/, 'the chips button is gone');
+  assert.match(syncButtons, /addAction\('network'/, 'the edges button is gone');
+  assert.match(syncButtons, /addAction\('file-plus'/, 'the new-note button is gone');
+  assert.ok(!/addAction\(\s*'puzzle'/.test(syncButtons), 'the retired chips button came back');
   assert.match(syncButtons, /addAction\(\s*'hammer'/, 'the Forge button is gone');
 });

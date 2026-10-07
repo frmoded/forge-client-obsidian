@@ -19,13 +19,12 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 const src = (f: string) => readFileSync(new URL(`./${f}`, import.meta.url), 'utf8');
 
 const MAIN = src('main.ts');
 const FORGE_ACTION = src('forge-action.ts');
-const CHIPS_VIEW = src('chips-view.ts');
 const PARSE_ERR = src('recipe-parse-error-friendly.ts');
 const INVENTORY = src('chip-inventory-core.ts');
 const LLM_GUIDANCE = src('llm-rejection-guidance-core.ts');
@@ -42,37 +41,23 @@ function commandName(mainSrc: string, id: string): string {
   return m![1];
 }
 
-test('the parse-error message names the command that actually exists', () => {
-  const name = commandName(MAIN, 'forge-refresh-chips');
-  assert.equal(name, 'Refresh library note palette');
-  // The exact drift drain 2026-08-14-0290 hit once: a message telling the
-  // user to run a command that is not in the palette.
-  assert.ok(
-    PARSE_ERR.includes(`Cmd-P → '${name}'`),
-    `recipe-parse-error-friendly.ts must reference the real command name '${name}'`,
-  );
+const CMD_P_POINTER = /Cmd-P\s*(?:→|->)\s*'([^']+)'/g;
+
+test('every Cmd-P command a user-facing message names is a command main.ts really registers', () => {
+  // The drift drain 2026-08-14-0290 hit once: a message telling the user to run a command that is not in the palette. After the library-note
+  // palette was retired (2026-10-07) its "Refresh library note palette" hint was removed; this guard now covers any such pointer, anywhere.
+  const registered = new Set([...MAIN.matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]));
+  const files = readdirSync(new URL('./', import.meta.url)).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.includes('.generated.'));
+  for (const f of files) {
+    for (const m of src(f).matchAll(CMD_P_POINTER)) {
+      assert.ok(registered.has(m[1]), `${f} tells the user to run '${m[1]}', which main.ts does not register`);
+    }
+  }
 });
 
-test("the 'open palette' label agrees across the toolbar button and the ribbon menu", () => {
-  const toolbar = MAIN.match(/addAction\(\s*'puzzle',\s*'([^']+)'/);
-  const menu = FORGE_ACTION.match(/setTitle\('([^']+)'\)\.setIcon\('puzzle'\)/);
-  assert.ok(toolbar && menu, 'label extractors are stale');
-  assert.equal(toolbar![1], menu![1]);
-  assert.equal(menu![1], 'Open library note palette');
-});
-
-test('the palette view uses one name for itself (tab title, panel header)', () => {
-  const tab = CHIPS_VIEW.match(/getDisplayText\(\)\s*\{\s*return '([^']+)'/);
-  const header = CHIPS_VIEW.match(/createEl\('h3',\s*\{\s*text:\s*'([^']+)'\s*\}\)/);
-  assert.ok(tab && header, 'extractors are stale');
-  assert.equal(tab![1], 'Forge library notes');
-  assert.equal(header![1], tab![1]);
-});
-
-test("the palette view's Notices use the new name, including the second half of the guard Notice", () => {
-  assert.ok(CHIPS_VIEW.includes("'Forge library notes: click into an action snippet first, '"));
-  assert.ok(CHIPS_VIEW.includes("'then click the library note.'"));
-  assert.ok(CHIPS_VIEW.includes('`Forge library notes: inserted "${insertion}".`'));
+test("non-vacuity: the pointer extractor finds a pointer, and the 'registered' set really holds main.ts command names", () => {
+  assert.deepEqual([...`try Cmd-P → 'Nope' now`.matchAll(CMD_P_POINTER)].map((m) => m[1]), ['Nope']);
+  assert.ok(MAIN.includes("name: 'Log library note inventory'"));
 });
 
 test("the Recipe kwarg hint's grammar example no longer says [[chip]]", () => {
@@ -84,10 +69,6 @@ test('retired wording is gone from the listed sites (non-vacuity: each was prese
     ['main.ts', "'Refresh chip palette'"],
     ['main.ts', "'Open chips palette'"],
     ['forge-action.ts', "'Open chips palette'"],
-    ['chips-view.ts', "'Forge chips'"],
-    ['chips-view.ts', 'Forge chips: click into'],
-    ['chips-view.ts', 'Forge chips: inserted'],
-    ['chips-view.ts', "then click the chip."],
     ['recipe-parse-error-friendly.ts', "[[chip]] with name=value"],
     ['recipe-parse-error-friendly.ts', "Refresh chip palette"],
     ['recipe-parse-error-friendly.ts', "`Chip '"],
@@ -95,7 +76,6 @@ test('retired wording is gone from the listed sites (non-vacuity: each was prese
   const files: Record<string, string> = {
     'main.ts': MAIN,
     'forge-action.ts': FORGE_ACTION,
-    'chips-view.ts': CHIPS_VIEW,
     'recipe-parse-error-friendly.ts': PARSE_ERR,
   };
   for (const [file, needle] of retired) {
@@ -116,12 +96,8 @@ test('both call sites of the inventory summary go through the one formatter (sta
   assert.ok(INVENTORY.includes('library notes, moda: ${inv.moda.length} library notes'));
 });
 
-test("the engine-not-found Notice and the palette view's guard/empty-state text use the new wording", () => {
+test('the engine-not-found Notice uses the new wording', () => {
   assert.ok(MAIN.includes('`Engine library note "${chipName}" not found in catalog.`'));
-  assert.ok(CHIPS_VIEW.includes("'No library notes defined."));
-  assert.ok(CHIPS_VIEW.includes("'vault to surface authoring library notes here.'"));
-  assert.ok(CHIPS_VIEW.includes("'Library notes only insert into action snippets. Switch to an action snippet to use library notes.'"));
-  assert.ok(CHIPS_VIEW.includes("'Library notes only insert into action snippets.'"));
 });
 
 test('the modal body, closure-fail label, and registry-dump text use the new wording', () => {
@@ -144,10 +120,6 @@ test('retired wording is gone from the 1915 sites (non-vacuity: each was present
     ['main.ts', MAIN, '`Chip inventory logged'],
     ['main.ts', MAIN, '`Engine chip "'],
     ['chip-inventory-core.ts', INVENTORY, '} chips, moda:'],
-    ['chips-view.ts', CHIPS_VIEW, "'No chips defined."],
-    ['chips-view.ts', CHIPS_VIEW, 'authoring chips here'],
-    ['chips-view.ts', CHIPS_VIEW, "'Chips only insert"],
-    ['chips-view.ts', CHIPS_VIEW, 'to use chips.'],
     ['rewrite-suggestion-modal.ts', REWRITE_MODAL, 'names individual chip '],
     ['output-view.ts', OUTPUT_VIEW, 'unknown chips)'],
     ['registry-inventory-core.ts', REGISTRY, 'Engine chip names'],

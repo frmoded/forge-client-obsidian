@@ -18,7 +18,7 @@ const main = code(read('src/main.ts'));
 const view = code(read('src/rhythm-edit-view.ts'));
 
 test('every markdown-view header action has an explicit decision with a reason', () => {
-  assert.ok(MARKDOWN_HEADER_ACTIONS.length >= 5);
+  assert.ok(MARKDOWN_HEADER_ACTIONS.length >= 4);
   for (const a of MARKDOWN_HEADER_ACTIONS) {
     assert.ok(a.beatBox === 'added' || a.beatBox === 'not-applicable', a.id);
     assert.ok(a.reason.length > 15, `${a.id} needs a real reason`);
@@ -38,12 +38,12 @@ test('the Beat Box view\'s actions are exactly the audit\'s "added" ones plus th
   assert.deepEqual(BEAT_BOX_ACTIONS.map((a) => a.id), ['new-forge-note', 'edges-toggle', 'restore-to-last-commit', 'open-as-json']);
 });
 
-test('the specific decisions: restore + new note + edges ADDED; library palette and the hammer NOT applicable', () => {
+test('the specific decisions: restore + new note + edges ADDED; the hammer NOT applicable; the retired library palette has no entry at all', () => {
   const by = Object.fromEntries(MARKDOWN_HEADER_ACTIONS.map((a) => [a.id, a.beatBox]));
   assert.equal(by['restore-to-last-commit'], 'added');
   assert.equal(by['new-forge-note'], 'added');
   assert.equal(by['edges-toggle'], 'added');
-  assert.equal(by['library-palette'], 'not-applicable');
+  assert.equal(by['library-palette'], undefined);
   assert.equal(by['forge-this-note'], 'not-applicable');
 });
 

@@ -45,14 +45,11 @@ test('unknown chip (SnippetResolutionError) → cohort message about library', (
   const result = friendlyRecipeParseError(UNKNOWN_CHIP);
   assert.equal(result.matched, true);
   assert.match(result.userMessage, /Library note 'zork'/);
-  // Drain 2026-08-14-0290: this asserted /Refresh chips/, matching a
-  // command name that does not exist. The real command is 'Refresh library
-  // note palette' (main.ts; renamed from 'Refresh chip palette' by drain
-  // 2026-09-23-1810). The message told users to run something they could
-  // not find, and this assertion locked that in. The drift guard in
-  // user-facing-terminology.test.ts now ties the two together against
-  // main.ts's actual command name.
-  assert.match(result.userMessage, /Refresh library note palette/);
+  // The hint used to send the user to Cmd-P → 'Refresh library note palette'. That command (and the palette) were retired on
+  // 2026-10-07; the message must not point at a command that is gone. The drift guard in user-facing-terminology.test.ts ties every
+  // Cmd-P command named in a user message to a command main.ts really registers.
+  assert.match(result.userMessage, /Check the wikilink spelling/);
+  assert.ok(!/palette|Cmd-P/.test(result.userMessage));
 });
 
 test('unmatched Recipe-relevant error → generic fallback (still less scary)', () => {
