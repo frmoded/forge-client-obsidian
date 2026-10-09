@@ -25,6 +25,9 @@ import {
 
 const ROOT = process.cwd();
 
+/** Beat-as-data Phase 7: the five world-rhythm notes (read from the SOURCE vault; the bundled copy gains them only after the driver's vault sync). */
+const PHASE7_NOTES = ['rhythm_pattern_tresillo', 'rhythm_pattern_hemiola', 'rhythm_pattern_bell_12_8', 'rhythm_pattern_clave_son_3_2', 'rhythm_pattern_tha_dhi_gi_na_thom'];
+
 /** A rhythm-data note from the music-theory vault: the SOURCE checkout if present, else the bundled copy. */
 function vaultNote(name: string): string {
   for (const base of ['../music-theory/rhythm_data', 'assets/vaults/music-theory/rhythm_data']) {
@@ -136,7 +139,7 @@ test('format: key order does not depend on the input object\'s key order', () =>
   assert.equal(formatRhythmJson(shuffled), formatRhythmJson(rock()));
 });
 
-for (const name of ['rhythm_pattern_straight_rock', 'rhythm_pattern_syncopated']) {
+for (const name of ['rhythm_pattern_straight_rock', 'rhythm_pattern_syncopated', ...PHASE7_NOTES]) {
   test(`format GOLDEN: re-serialising ${name} reproduces its json block byte for byte`, () => {
     const text = vaultNote(name);
     const block = extractJsonBlock(text);
@@ -208,7 +211,7 @@ test('write: replaces ONLY the json block; the frontmatter and every other byte 
 });
 
 test('write: an unchanged save reproduces the shipped notes byte for byte (no diff at all)', () => {
-  for (const name of ['rhythm_pattern_straight_rock', 'rhythm_pattern_syncopated']) {
+  for (const name of ['rhythm_pattern_straight_rock', 'rhythm_pattern_syncopated', ...PHASE7_NOTES]) {
     const original = vaultNote(name);
     const read = readRhythmNote(original);
     assert.ok(read.ok);
@@ -300,7 +303,7 @@ test('availability: only a data note whose content_type is json is a candidate',
 });
 
 test('the channel list matches the engine\'s converter channels', () => {
-  assert.deepEqual([...RHYTHM_CHANNELS], ['kick', 'snare', 'hihat']);
+  assert.deepEqual([...RHYTHM_CHANNELS], ['kick', 'snare', 'hihat', 'bell', 'claves', 'conga_high', 'conga_low']);
 });
 
 // ---- Phase 5b (drain 2026-10-06-1200): protocol additions + the note session behind autosave -----------------------
@@ -395,4 +398,62 @@ test('session: rebaseline(text) after a reload accepts the external version as t
   session.rebaseline(external);
   assert.ok(session.apply(external, toggled(1)).ok);
   assert.equal(session.classifyModify(external, false), 'ignore');
+});
+
+
+// ---- Beat-as-data Phase 7: world-rhythm channels and meters -------------------------------------------------------
+
+test('Phase 7 validate: the four new channels are accepted, in any order, alongside the old three', () => {
+  const d: any = { time_signature: '12/8', steps: 12, group_size: 3, swing_pct: 0, tempo_bpm: 120, channels: {} };
+  for (const ch of ['bell', 'claves', 'conga_high', 'conga_low', 'kick']) d.channels[ch] = new Array(12).fill(false);
+  const r = validateRhythmData(d);
+  assert.equal(r.ok, true);
+  if (r.ok) assert.deepEqual(Object.keys(r.value.channels), ['bell', 'claves', 'conga_high', 'conga_low', 'kick']);
+});
+
+test('Phase 7 validate: an unknown channel is still rejected, and the message lists the full supported set', () => {
+  const d: any = rock();
+  d.channels.cowbell = new Array(16).fill(false);
+  const r = validateRhythmData(d);
+  assert.equal(r.ok, false);
+  if (r.ok === false) {
+    assert.match(r.message, /cowbell/);
+    for (const ch of RHYTHM_CHANNELS) assert.ok(r.message.includes(ch), ch);
+  }
+});
+
+test('Phase 7 validate: the new meters pass — the plugin never restricted time signatures, only grids that fit the group size (≤ 64 steps)', () => {
+  for (const [ts, steps, group] of [['12/8', 12, 3], ['6/8', 6, 3], ['5/4', 20, 4]] as Array<[string, number, number]>) {
+    const d: any = { time_signature: ts, steps, group_size: group, swing_pct: 0, tempo_bpm: 100, channels: { kick: new Array(steps).fill(false) } };
+    assert.equal(validateRhythmData(d).ok, true, ts);
+  }
+  const bad: any = { time_signature: '5/4', steps: 20, group_size: 3, swing_pct: 0, tempo_bpm: 100, channels: { kick: new Array(20).fill(false) } };
+  assert.equal(validateRhythmData(bad).ok, false);
+});
+
+test('Phase 7 PARITY: the plugin channel list equals the engine\'s _RHYTHM_CHANNEL_INSTRUMENTS keys, read from the bundled lib.py (it fails if either drifts)', () => {
+  const lib = fs.readFileSync(path.resolve(ROOT, 'assets/engine/forge/music/lib.py'), 'utf-8');
+  const block = /_RHYTHM_CHANNEL_INSTRUMENTS = \{([\s\S]*?)\n\}/.exec(lib);
+  assert.ok(block, 'the registry was not found in the bundled lib.py');
+  const engine = [...block![1].matchAll(/^\s*"([a-z_]+)":/gm)].map((m) => m[1]);
+  assert.ok(engine.length >= 7, `engine channels: ${engine.join(', ')}`);
+  assert.deepEqual([...RHYTHM_CHANNELS].sort(), [...engine].sort());
+});
+
+test('Phase 7: each of the five notes is a readable rhythm note with the channels and meter it should have', () => {
+  const expect: Record<string, [string, string[]]> = {
+    rhythm_pattern_tresillo: ['4/4', ['kick']],
+    rhythm_pattern_hemiola: ['3/4', ['kick', 'hihat']],
+    rhythm_pattern_bell_12_8: ['12/8', ['bell']],
+    rhythm_pattern_clave_son_3_2: ['4/4', ['claves']],
+    rhythm_pattern_tha_dhi_gi_na_thom: ['5/4', ['conga_high', 'conga_low']],
+  };
+  for (const name of PHASE7_NOTES) {
+    const r = readRhythmNote(vaultNote(name));
+    assert.equal(r.ok, true, name);
+    if (r.ok) {
+      assert.equal(r.value.data.time_signature, expect[name][0], name);
+      assert.deepEqual(Object.keys(r.value.data.channels), expect[name][1], name);
+    }
+  }
 });

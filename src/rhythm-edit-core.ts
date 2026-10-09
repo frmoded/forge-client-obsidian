@@ -12,7 +12,9 @@
 
 import type { AutosaveStatus } from './rhythm-autosave-core.ts';
 
-export const RHYTHM_CHANNELS = ['kick', 'snare', 'hihat'] as const;
+/** Every channel the engine's `rhythm_data_to_stream` knows (its `_RHYTHM_CHANNEL_INSTRUMENTS` keys; a parity test reads them from the
+ *  bundled lib.py). Phase 7 added the four world-rhythm percussion channels. */
+export const RHYTHM_CHANNELS = ['kick', 'snare', 'hihat', 'bell', 'claves', 'conga_high', 'conga_low'] as const;
 export const MAX_RHYTHM_STEPS = 64;
 
 /** Where the widget lives in a vault that has the music-theory content. */

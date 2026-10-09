@@ -101,7 +101,7 @@ test('widget core: parseRhythmLoad accepts a valid 4/4 and 3/4 pattern, keeping 
 });
 
 for (const [label, mutate, why] of [
-  ['an unsupported time signature', (d: any) => { d.time_signature = '5/4'; }, /supports/],
+  ['an unsupported time signature', (d: any) => { d.time_signature = '7/8'; }, /supports/],
   ['a grid that does not match the signature', (d: any) => { d.steps = 12; for (const c of Object.keys(d.channels)) d.channels[c] = d.channels[c].slice(0, 12); }, /steps/],
   ['a tempo outside the widget range', (d: any) => { d.tempo_bpm = 300; }, /tempo_bpm/],
   ['a fractional tempo (a save would round it)', (d: any) => { d.tempo_bpm = 100.5; }, /tempo_bpm/],
@@ -225,7 +225,8 @@ test('widget DOM: a load message sets signature, tempo, swing and the grid, show
 test('widget DOM: loading a 3/4 note rebuilds the grid to 12 steps', { skip }, async () => {
   const h = await loadWidget(true);
   await h.send(load({ time_signature: '3/4', steps: 12, group_size: 4, swing_pct: 0, tempo_bpm: 90, channels: { kick: [true, ...new Array(11).fill(false)] } }));
-  assert.equal(h.doc.querySelectorAll('.step').length, 36);
+  // Phase 7: one row per channel IN THE NOTE (this note has only kick) — 12 cells, not 3 fixed rows of 12.
+  assert.equal(h.doc.querySelectorAll('.step').length, 12);
   assert.equal(h.el('timeSig').value, '3/4');
 });
 
@@ -280,7 +281,7 @@ test('widget DOM: before a note has been loaded, data actions post NOTHING (a ho
 
 test('widget DOM: after a load it refused, data actions still post nothing', { skip }, async () => {
   const h = await loadWidget(true);
-  const d: any = rock(); d.time_signature = '5/4';
+  const d: any = rock(); d.time_signature = '7/8';
   await h.send(load(d));
   assert.match(h.el('loadMsg').textContent, /Could not load this note: .*supports/);
   assert.equal(await savesPosted(h, () => h.cell('kick', 0).click()), 0);
@@ -670,4 +671,278 @@ test('widget source: only the embedding window may talk to the widget; no Save b
   assert.match(html, /id="confirmBar"[^>]* hidden/);
   assert.match(html, /id="bReload" hidden/);
   assert.ok(!/window\.confirm|[^.\w]confirm\(|window\.alert|[^.\w]alert\(|window\.prompt|[^.\w]prompt\(/.test(SCRIPT), 'allow-scripts + allow-same-origin only: confirm/alert/prompt are blocked in the sandbox');
+});
+
+
+// ======================================================================================================================
+// Beat-as-data Phase 7 (drain 2026-10-07-1700): world-rhythm vocabulary — channels bell / claves / conga_high / conga_low, meters
+// 12/8, 6/8 and 5/4, one row per channel IN THE NOTE (not a fixed three), Add / Remove instrument, and five notes that must
+// round-trip byte-identically.
+// ======================================================================================================================
+
+const NOTE_DIR = path.resolve(process.cwd(), '../music-theory/rhythm_data');
+const FIVE = ['rhythm_pattern_tresillo', 'rhythm_pattern_hemiola', 'rhythm_pattern_bell_12_8', 'rhythm_pattern_clave_son_3_2', 'rhythm_pattern_tha_dhi_gi_na_thom'];
+const haveFive = FIVE.every((n) => fs.existsSync(path.join(NOTE_DIR, n + '.md')));
+const skipFive = haveFive ? false : 'the five Phase 7 notes are not in the music-theory source checkout';
+const noteJson = (n: string): { data: any; block: string } => {
+  const text = fs.readFileSync(path.join(NOTE_DIR, n + '.md'), 'utf-8');
+  const m = /```json\n([\s\S]*?)\n```/.exec(text)!;
+  return { data: JSON.parse(m[1]), block: m[1] };
+};
+const NEW_CHANNELS = ['bell', 'claves', 'conga_high', 'conga_low'];
+
+test('P7 core: the widget knows exactly the engine\'s channels (parity with _RHYTHM_CHANNEL_INSTRUMENTS in the bundled lib.py)', { skip }, () => {
+  const lib = fs.readFileSync(path.resolve(process.cwd(), 'assets/engine/forge/music/lib.py'), 'utf-8');
+  const block = /_RHYTHM_CHANNEL_INSTRUMENTS = \{([\s\S]*?)\n\}/.exec(lib)!;
+  const engine = [...block[1].matchAll(/^\s*"([a-z_]+)":/gm)].map((m) => m[1]);
+  assert.ok(engine.length >= 7, `engine channels read from lib.py: ${engine}`);
+  assert.deepEqual([...pureCore().CHANNELS].sort(), [...engine].sort());
+});
+
+test('P7 core: the three new meters are in the table with their step length (an eighth in the compound meters)', { skip }, () => {
+  const t = pureCore().TIME_SIGNATURES;
+  assert.deepEqual([t['12/8'].steps, t['12/8'].groupSize, t['12/8'].stepQl], [12, 3, 0.5]);
+  assert.deepEqual([t['6/8'].steps, t['6/8'].groupSize, t['6/8'].stepQl], [6, 3, 0.5]);
+  assert.deepEqual([t['5/4'].steps, t['5/4'].groupSize, t['5/4'].stepQl], [20, 4, 0.25]);
+  assert.deepEqual([t['4/4'].stepQl, t['3/4'].stepQl], [0.25, 0.25]);
+});
+
+test('P7 core: playback speed follows the step length — a step in 12/8 lasts twice a sixteenth at the same quarter-note tempo', { skip }, () => {
+  const w = pureCore();
+  assert.equal(w.stepSeconds(120), 0.125);
+  assert.equal(w.stepSeconds(120, 0.5), 0.25);
+  const ev = w.advanceScheduler({ currentStep: 0, nextNoteTime: 0 }, 0, 120, 0, 1.01, 12, 0.5).events.map((e: any) => e.time);
+  assert.deepEqual(ev.slice(0, 4), [0, 0.25, 0.5, 0.75]);
+  const four = w.advanceScheduler({ currentStep: 0, nextNoteTime: 0 }, 0, 120, 0, 1.01, 16).events.map((e: any) => e.time);
+  assert.deepEqual(four.slice(0, 3), [0, 0.125, 0.25], 'the 4/4 default is unchanged');
+});
+
+test('P7 core: parseRhythmLoad accepts every new meter and channel, keeps the NOTE\'s channel order as the row order', { skip }, () => {
+  const w = pureCore();
+  const r = w.parseRhythmLoad({ time_signature: '12/8', steps: 12, group_size: 3, swing_pct: 0, tempo_bpm: 120,
+    channels: { bell: [true, ...new Array(11).fill(false)] } });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.state.rows, ['bell']);
+  const r2 = w.parseRhythmLoad({ time_signature: '5/4', steps: 20, group_size: 4, swing_pct: 0, tempo_bpm: 90,
+    channels: { conga_low: new Array(20).fill(false), conga_high: [112, ...new Array(19).fill(false)] } });
+  assert.deepEqual(r2.state.rows, ['conga_low', 'conga_high']);
+  assert.equal(w.parseRhythmLoad({ time_signature: '6/8', steps: 6, group_size: 3, swing_pct: 0, tempo_bpm: 100, channels: { claves: new Array(6).fill(false) } }).ok, true);
+});
+
+test('P7 core: a meter with the wrong grid, an unknown channel and an empty channel set are still refused', { skip }, () => {
+  const w = pureCore();
+  assert.equal(w.parseRhythmLoad({ time_signature: '12/8', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 120, channels: { bell: new Array(16).fill(false) } }).ok, false);
+  assert.equal(w.parseRhythmLoad({ time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 120, channels: { cowbell: new Array(16).fill(false) } }).ok, false);
+  assert.equal(w.parseRhythmLoad({ time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 120, channels: {} }).ok, false);
+});
+
+test('P7 core: buildRhythmData writes exactly the rows given, in that order (default: kick, snare, hihat as before)', { skip }, () => {
+  const w = pureCore();
+  const pattern = w.emptyPattern(12);
+  pattern.bell[0] = true;
+  const d = w.buildRhythmData('12/8', 0, 120, pattern, ['bell']);
+  assert.deepEqual(Object.keys(d.channels), ['bell']);
+  assert.equal(d.steps, 12);
+  assert.equal(d.group_size, 3);
+  assert.deepEqual(Object.keys(w.buildRhythmData('4/4', 0, 100, w.emptyPattern(16)).channels), ['kick', 'snare', 'hihat']);
+});
+
+test('P7 core: randomizePattern fills only the rows asked for and consumes the rng in row order', { skip }, () => {
+  const w = pureCore();
+  const p = w.randomizePattern(() => 0, 16, 4, ['claves']);
+  assert.ok(p.claves.some(Boolean));
+  assert.ok(!p.kick.some(Boolean) && !p.bell.some(Boolean));
+  const q = w.randomizePattern(() => 0.5, 16, 4);               // default rows: unchanged behaviour
+  assert.ok(Array.isArray(q.kick) && Array.isArray(q.hihat));
+});
+
+test('P7 round trip: every one of the five notes loads and re-serialises BYTE-IDENTICALLY (the json block, as the plugin would write it)', { skip: skipFive }, () => {
+  const w = pureCore();
+  for (const n of FIVE) {
+    const { data, block } = noteJson(n);
+    const r = w.parseRhythmLoad(data);
+    assert.equal(r.ok, true, `${n}: ${r.message}`);
+    const out = w.buildRhythmData(r.state.timeSig, r.state.swingPct, r.state.bpm, r.state.pattern, r.state.rows);
+    assert.equal(w.rhythmDataJson(out), block, n);
+    assert.equal(formatRhythmJson(out), block, `${n} (plugin formatter)`);
+  }
+});
+
+test('P7 DOM: hosted, the grid shows ONE ROW PER CHANNEL IN THE NOTE, in the note\'s order — a bell note shows only the Bell row', { skip }, async () => {
+  const h = await loadWidget(true);
+  await h.send(load({ time_signature: '12/8', steps: 12, group_size: 3, swing_pct: 0, tempo_bpm: 120, channels: { bell: [true, false, true, false, true, true, false, true, false, true, false, true] } }, 'bell'));
+  const rowsShown = [...h.doc.querySelectorAll('.channel-row .name')].map((e: any) => e.textContent);
+  assert.deepEqual(rowsShown, ['Bell']);
+  assert.equal(h.doc.querySelectorAll('.step').length, 12);
+  assert.equal(h.doc.querySelectorAll('.step.beat-start').length, 4, '12/8: four groups of three');
+  assert.equal(h.el('timeSig').value, '12/8');
+});
+
+test('P7 DOM: a two-channel note in a different order keeps that order, and standalone keeps the default three rows', { skip }, async () => {
+  const h = await loadWidget(true);
+  await h.send(load({ time_signature: '5/4', steps: 20, group_size: 4, swing_pct: 0, tempo_bpm: 90,
+    channels: { conga_low: new Array(20).fill(false), conga_high: [112, ...new Array(19).fill(false)] } }));
+  assert.deepEqual([...h.doc.querySelectorAll('.channel-row .name')].map((e: any) => e.textContent), ['Low Conga', 'High Conga']);
+  assert.equal(h.doc.querySelectorAll('.step.beat-start').length, 10, '5/4: five groups of four, in each of the two rows');
+  const s = await loadWidget(false);
+  assert.deepEqual([...s.doc.querySelectorAll('.channel-row .name')].map((e: any) => e.textContent), ['Kick', 'Snare', 'Hi-hat']);
+});
+
+test('P7 DOM: the time-signature menu offers 12/8, 6/8 and 5/4; standalone switching to 12/8 rebuilds a 12-step grid in four groups', { skip }, async () => {
+  const h = await loadWidget(false);
+  const opts = [...h.doc.querySelectorAll('#timeSig option')].map((o: any) => o.value);
+  assert.deepEqual(opts, ['4/4', '3/4', '12/8', '6/8', '5/4']);
+  h.el('timeSig').value = '12/8'; fire(h, 'timeSig', 'change');
+  assert.equal(h.doc.querySelectorAll('.step').length, 36);
+  assert.equal(h.doc.querySelectorAll('.step.beat-start').length, 12);
+});
+
+test('P7 DOM: hosted time-signature change to 12/8 still goes through the confirm bar and saves 12 steps in groups of 3', { skip }, async () => {
+  const h = await loadedHost();
+  h.el('timeSig').value = '12/8'; fire(h, 'timeSig', 'change');
+  assert.equal(h.el('confirmBar').hidden, false);
+  assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1);
+  const sent = lastSave(h).data;
+  assert.deepEqual([sent.time_signature, sent.steps, sent.group_size], ['12/8', 12, 3]);
+  assert.deepEqual(Object.keys(sent.channels), ['kick', 'snare', 'hihat'], 'the rows are kept');
+});
+
+test('P7 DOM: "Add instrument" lists the channels not shown; choosing one adds its row and hosted posts exactly ONE save containing it', { skip }, async () => {
+  const h = await loadedHost();
+  const options = [...h.doc.querySelectorAll('#addInstrument option')].map((o: any) => o.value).filter(Boolean);
+  assert.deepEqual(options, NEW_CHANNELS);
+  const n = await savesPosted(h, () => { h.el('addInstrument').value = 'claves'; fire(h, 'addInstrument', 'change'); });
+  assert.equal(n, 1);
+  assert.deepEqual(Object.keys(lastSave(h).data.channels), ['kick', 'snare', 'hihat', 'claves']);
+  assert.deepEqual(lastSave(h).data.channels.claves, new Array(16).fill(false));
+  assert.deepEqual([...h.doc.querySelectorAll('#addInstrument option')].map((o: any) => o.value).filter(Boolean), ['bell', 'conga_high', 'conga_low']);
+  assert.ok(h.cell('claves', 3), 'the new row has cells');
+  h.cell('claves', 3).click();
+  assert.equal(lastSave(h).data.channels.claves[3], true);
+});
+
+test('P7 DOM: standalone "Add instrument" adds the row and posts nothing', { skip }, async () => {
+  const h = await loadWidget(false);
+  h.el('addInstrument').value = 'bell'; fire(h, 'addInstrument', 'change');
+  assert.deepEqual([...h.doc.querySelectorAll('.channel-row .name')].map((e: any) => e.textContent), ['Kick', 'Snare', 'Hi-hat', 'Bell']);
+  assert.deepEqual(h.posted, []);
+});
+
+test('P7 DOM: removing an EMPTY row is immediate and autosaves once; removing a row WITH hits asks first (confirm bar), saves nothing until Remove', { skip }, async () => {
+  const h = await loadedHost();
+  h.el('addInstrument').value = 'bell'; fire(h, 'addInstrument', 'change');
+  const removeBtn = (ch: string) => h.doc.querySelector(`.channel-row [data-remove="${ch}"]`);
+  assert.equal(await savesPosted(h, () => removeBtn('bell').click()), 1, 'empty row: immediate');
+  assert.deepEqual(Object.keys(lastSave(h).data.channels), ['kick', 'snare', 'hihat']);
+  // a row with hits
+  assert.equal(await savesPosted(h, () => removeBtn('snare').click()), 0);
+  assert.equal(h.el('confirmBar').hidden, false);
+  assert.match(h.el('confirmText').textContent, /Snare/);
+  assert.equal(h.doc.querySelectorAll('.channel-row').length, 3, 'still there');
+  assert.equal(await savesPosted(h, () => h.el('confirmCancel').click()), 0);
+  assert.equal(h.doc.querySelectorAll('.channel-row').length, 3);
+  removeBtn('snare').click();
+  assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1);
+  assert.deepEqual(Object.keys(lastSave(h).data.channels), ['kick', 'hihat']);
+});
+
+test('P7 DOM: the last row cannot be removed (the note would have no channels)', { skip }, async () => {
+  const h = await loadWidget(true);
+  await h.send(load({ time_signature: '12/8', steps: 12, group_size: 3, swing_pct: 0, tempo_bpm: 120, channels: { bell: new Array(12).fill(false) } }));
+  const btn: any = h.doc.querySelector('.channel-row [data-remove="bell"]');
+  assert.equal(btn.disabled, true);
+  assert.equal(await savesPosted(h, () => btn.click()), 0);
+  assert.equal(h.doc.querySelectorAll('.channel-row').length, 1);
+  // defence in depth: even with the button force-enabled, the guard in the code refuses
+  btn.disabled = false;
+  assert.equal(await savesPosted(h, () => btn.click()), 0);
+  assert.equal(h.doc.querySelectorAll('.channel-row').length, 1);
+  assert.equal(h.el('confirmBar').hidden, true);
+});
+
+test('P7 DOM: each of the five notes, loaded and saved with no net edit, posts the SAME data (byte-identical json)', { skip: skipFive }, async () => {
+  for (const n of FIVE) {
+    const { data, block } = noteJson(n);
+    const h = await loadWidget(true);
+    await h.send(load(data, n));
+    const ch = Object.keys(data.channels)[0];
+    h.cell(ch, 1).click(); h.cell(ch, 1).click();                     // an edit and its undo: a save is posted with the original data
+    const sent = lastSave(h).data;
+    assert.deepEqual(sent, data, n);
+    assert.equal(pureCore().rhythmDataJson(sent), block, n);
+  }
+});
+
+test('P7 DOM: accents (velocity >= 100) on the new channels keep the double ring; velocities survive', { skip }, async () => {
+  const h = await loadWidget(true);
+  const d = { time_signature: '5/4', steps: 20, group_size: 4, swing_pct: 0, tempo_bpm: 90,
+    channels: { conga_high: [112, false, false, false, 80, ...new Array(15).fill(false)], conga_low: new Array(20).fill(false) } };
+  await h.send(load(d));
+  assert.ok(h.cell('conga_high', 0).classList.contains('accent'));
+  assert.ok(!h.cell('conga_high', 4).classList.contains('accent'));
+  assert.ok(h.cell('conga_high', 4).classList.contains('on'));
+});
+
+// ---- sounds: the four new voices exist and are recognisably different from each other and from the old three ------------------
+
+function fakeAudio(win: any) {
+  const log: Array<{ kind: string; type?: string; freq?: number; t?: number }> = [];
+  const param = () => ({ value: 0, setValueAtTime(v: number) { this.value = v; }, exponentialRampToValueAtTime() {}, linearRampToValueAtTime() {} });
+  const node = (kind: string, extra: any = {}) => ({ connect() {}, disconnect() {}, start(t?: number) { log.push({ kind, type: (this as any).type, freq: (this as any).frequency?.value, t }); }, stop() {}, ...extra });
+  class FakeCtx {
+    currentTime = 0; sampleRate = 8000; state = 'running'; destination = {};
+    constructor() { win.__ctx = this; }
+    resume() {}
+    createGain() { return { gain: param(), connect() {}, disconnect() {} }; }
+    createOscillator() { const o: any = node('osc', { frequency: param(), type: 'sine' }); return o; }
+    createBiquadFilter() { return { type: 'lowpass', frequency: param(), Q: param(), gain: param(), connect() {}, disconnect() {} }; }
+    createBufferSource() { return node('noise', { buffer: null }); }
+    createBuffer(_c: number, n: number) { return { getChannelData: () => new Float32Array(n) }; }
+  }
+  win.AudioContext = FakeCtx;
+  return log;
+}
+
+async function soundOf(channel: string, steps = 16, group = 4, ts = '4/4') {
+  const h = await loadWidget(true);
+  const log = fakeAudio(h.win);
+  await h.send(load({ time_signature: ts, steps, group_size: group, swing_pct: 0, tempo_bpm: 120, channels: { [channel]: [true, ...new Array(steps - 1).fill(false)] } }));
+  h.el('bPlay').click();
+  h.el('bPlay').click();
+  return JSON.stringify(log.map((l) => [l.kind, l.type, l.freq]));
+}
+
+test('P7 sounds: every channel makes sound, and no two channels make the same sound', { skip }, async () => {
+  const all = ['kick', 'snare', 'hihat', ...NEW_CHANNELS];
+  const sounds: Record<string, string> = {};
+  for (const ch of all) {
+    sounds[ch] = await soundOf(ch);
+    assert.notEqual(sounds[ch], '[]', `${ch} produced no audio nodes`);
+  }
+  assert.equal(new Set(Object.values(sounds)).size, all.length, JSON.stringify(sounds));
+});
+
+test('P7 sounds: the widget\'s voice table names all seven channels (source pin)', { skip }, () => {
+  assert.match(SCRIPT, /var VOICE = \{ kick: playKick, snare: playSnare, hihat: playHihat, bell: playBell, claves: playClaves, conga_high: playCongaHigh, conga_low: playCongaLow \};/);
+});
+
+test('P7 playback: scheduleStep plays only the rows shown (a removed row is silent)', { skip }, () => {
+  assert.match(SCRIPT, /function scheduleStep\(step, time\) \{[\s\S]*?rows\.forEach\(function \(ch\) \{/);
+});
+
+test('P7 playback speed: in 12/8 at 120 BPM a step lasts 0.25 s (an eighth), in 4/4 0.125 s (a sixteenth) — through the real scheduler wiring', { skip }, async () => {
+  async function stepGap(ts: string, steps: number, group: number): Promise<number> {
+    const h = await loadWidget(true);
+    const log = fakeAudio(h.win);
+    await h.send(load({ time_signature: ts, steps, group_size: group, swing_pct: 0, tempo_bpm: 120, channels: { claves: new Array(steps).fill(true) } }));
+    h.el('bPlay').click();                       // schedules step 0 at 0.05 s
+    (h.win as any).__ctx.currentTime = 0.4;      // the scheduler's next tick looks 0.1 s ahead of this
+    await new Promise((r) => setTimeout(r, 90));
+    h.el('bPlay').click();
+    const times = [...new Set(log.filter((l) => l.kind === 'osc').map((l) => Math.round((l.t ?? 0) * 1000) / 1000))].sort((a, b) => a - b);
+    assert.ok(times.length >= 2, `${ts}: at least two steps scheduled, got ${JSON.stringify(times)}`);
+    return Math.round((times[1] - times[0]) * 1000) / 1000;
+  }
+  assert.equal(await stepGap('12/8', 12, 3), 0.25);
+  assert.equal(await stepGap('4/4', 16, 4), 0.125);
 });
