@@ -112,6 +112,8 @@ import {
   type ExpandedStateStorage,
 } from './expanded-state-core.ts';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
+import { BUILD_STAMP } from './build-stamp.generated.ts';
+import { formatBuildStamp } from './build-stamp-core.ts';
 import {
   decideForgeRouting,
   hasRoutingKeys,
@@ -206,6 +208,7 @@ import {
 // in python-cache-writer-core as an internal helper consumed by
 // writePythonAndEnglishHash.
 import { forgeButtonShouldShow, edgesToggleShouldShow } from './forge-button-gate-core.ts';
+import { headerSignature, installHeaderSync, needsHeaderSync } from './header-sync-core.ts';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core.ts';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin.ts';
 import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin.ts';
@@ -660,6 +663,7 @@ export default class ForgePlugin extends Plugin {
     statusBarItem.setText(`Forge v${this.manifest.version}`);
     statusBarItem.title =
       `Forge Client v${this.manifest.version}\n`
+      + `Build: ${formatBuildStamp(BUILD_STAMP)}\n`
       + `Plugin ID: ${this.manifest.id}\n`
       + `Min app version: ${this.manifest.minAppVersion}`;
 
@@ -889,9 +893,22 @@ export default class ForgePlugin extends Plugin {
 
     this.registerEditorExtension([sectionPlugin, readOnlyFacetFilter]);
 
-    this.registerEvent(
-      this.app.workspace.on('layout-change', () => this.syncButtons())
-    );
+    // Header actions: every event that can follow a (restored, possibly deferred) view becoming usable — NOT just layout-change (drain
+    // 2026-10-09-2200; header-sync-core.ts has the root cause). Coalesced, idempotent, walks every open markdown view.
+    const headerSync = installHeaderSync({
+      onWorkspace: (ev, fn) => {
+        this.registerEvent(this.app.workspace.on(ev as 'layout-change', fn));
+      },
+      onMetadata: (ev, fn) => {
+        this.registerEvent(this.app.metadataCache.on(ev as 'changed', fn));
+      },
+      onLayoutReady: (fn) => { this.app.workspace.onLayoutReady(fn); },
+    }, {
+      setTimer: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer: (h) => window.clearTimeout(h as number),
+      sync: () => this.syncAllHeaderActions(),
+    });
+    this.register(() => headerSync.dispose());
 
     // Body edits don't fire layout-change, so the drift indicator on the
     // lock button would never refresh as the user types. Hook vault.modify
@@ -931,7 +948,7 @@ export default class ForgePlugin extends Plugin {
       }),
     );
 
-    this.syncButtons();
+    this.syncAllHeaderActions();
 
     // Phase 2 — Render data-snippet bodies in the output panel when the user
     // navigates to one. Local parse (no /compute round-trip) and "replace"
@@ -1618,10 +1635,33 @@ export default class ForgePlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
-  syncButtons() {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+  /** Header actions of every open markdown view (drain 2026-10-09-2200). A restored tab can become a usable MarkdownView after the last
+   *  `layout-change` of a cold start, and the old code only ever looked at the ACTIVE view at the moment an event happened; this walks every
+   *  loaded markdown leaf (a still-deferred leaf is skipped and picked up by the next event) and is idempotent per view. */
+  private syncAllHeaderActions(): void {
+    for (const leaf of this.app.workspace.getLeavesOfType('markdown')) {
+      const v = leaf.view;
+      if (v instanceof MarkdownView) this.syncButtons(v);
+    }
+  }
+
+  /** What each markdown view's header was last built for (note path + frontmatter type); see header-sync-core.ts. */
+  private headerSignatures = new WeakMap<MarkdownView, string>();
+
+  syncButtons(target?: MarkdownView) {
+    const view = target ?? this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) return;
     this.syncShadowMarker(view);
+
+    // Idempotent: skip when this view's header already carries OUR actions and was built for this note + type. Extra triggers (the cold-start
+    // events subscribed in onload) therefore cost nothing and can never duplicate or flicker the header.
+    {
+      const fmNow = view.file ? this.app.metadataCache.getFileCache(view.file)?.frontmatter : undefined;
+      const sig = headerSignature(view.file?.path, fmNow?.type);
+      const present = view.containerEl.querySelector(`.${RESTORE_BTN_CLASS}`) !== null;
+      if (!needsHeaderSync({ signature: sig, lastSignature: this.headerSignatures.get(view), actionsPresent: present })) return;
+      this.headerSignatures.set(view, sig);
+    }
 
     // Remove any stale Forge buttons from a previous plugin load before adding fresh ones.
     // RUN_BTN_CLASS / HAMMER_BTN_CLASS / LOCK_BTN_CLASS are listed so users still get

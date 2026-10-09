@@ -263,7 +263,7 @@ test('restore: the header action targets the Beat Box\'s own file explicitly, an
 
 test('hammer: the Forge button is gated on forgeButtonShouldShow (action only); the edges toggle on its own predicate; the Beat Box never has a hammer', () => {
   const m = code(main);
-  const sync = /syncButtons\(\) \{[\s\S]*?\n  \}\n/.exec(m)![0];
+  const sync = /syncButtons\(target\?: MarkdownView\) \{[\s\S]*?\n  \}\n/.exec(m)![0];
   assert.match(sync, /if \(edgesToggleShouldShow\(\{ type: typeof fm\?\.type === 'string' \? fm\.type : undefined \}\)\) \{\s*const edgesBtn = view\.addAction\('network'/);
   assert.match(sync, /if \(forgeButtonShouldShow\(\{ type: typeof fm\?\.type === 'string' \? fm\.type : undefined \}\)\) \{[\s\S]*?view\.addAction\('hammer', 'Forge this note'/);
   assert.ok(!/hammer/.test(code(view)), 'no hammer in the Beat Box view');

@@ -253,8 +253,8 @@ import { readFileSync } from 'node:fs';
 test('0900 WIRED: the toolbar button calls restoreActiveNoteToLastCommit directly', () => {
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
   const syncButtons = main.slice(
-    main.indexOf('syncButtons() {'),
-    main.indexOf('syncButtons() {') + main.slice(main.indexOf('syncButtons() {')).indexOf('\n  }\n') + 4,
+    main.indexOf('syncButtons(target?: MarkdownView) {'),
+    main.indexOf('syncButtons(target?: MarkdownView) {') + main.slice(main.indexOf('syncButtons(target?: MarkdownView) {')).indexOf('\n  }\n') + 4,
   );
   assert.match(
     syncButtons, /addAction\(\s*'history'/,
@@ -287,8 +287,8 @@ test('0900 the button is NOT gated on a synchronous git shell-out', () => {
   // report "nothing to restore" via Notice, same as the command does.
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
   const syncButtons = main.slice(
-    main.indexOf('syncButtons() {'),
-    main.indexOf('syncButtons() {') + main.slice(main.indexOf('syncButtons() {')).indexOf('\n  }\n') + 4,
+    main.indexOf('syncButtons(target?: MarkdownView) {'),
+    main.indexOf('syncButtons(target?: MarkdownView) {') + main.slice(main.indexOf('syncButtons(target?: MarkdownView) {')).indexOf('\n  }\n') + 4,
   );
   assert.doesNotMatch(
     syncButtons, /execFileSync|git\(/,
@@ -302,8 +302,8 @@ test('0900 NON-VACUITY: syncButtons still registers the edges, new-note and Forg
   // TEXT exists, not that the surrounding feature survived.
   const main = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
   const syncButtons = main.slice(
-    main.indexOf('syncButtons() {'),
-    main.indexOf('syncButtons() {') + main.slice(main.indexOf('syncButtons() {')).indexOf('\n  }\n') + 4,
+    main.indexOf('syncButtons(target?: MarkdownView) {'),
+    main.indexOf('syncButtons(target?: MarkdownView) {') + main.slice(main.indexOf('syncButtons(target?: MarkdownView) {')).indexOf('\n  }\n') + 4,
   );
   assert.match(syncButtons, /addAction\('network'/, 'the edges button is gone');
   assert.match(syncButtons, /addAction\('file-plus'/, 'the new-note button is gone');

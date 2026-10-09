@@ -26,7 +26,7 @@ test('every markdown-view header action has an explicit decision with a reason',
 });
 
 test('audit vs source: syncButtons() registers exactly the actions the audit lists (icon + tooltip)', () => {
-  const sync = /syncButtons\(\) \{[\s\S]*?\n  \}\n/.exec(main)![0];
+  const sync = /syncButtons\(target\?: MarkdownView\) \{[\s\S]*?\n  \}\n/.exec(main)![0];
   const found = [...sync.matchAll(/view\.addAction\(\s*'([^']+)',\s*'([^']+)'/g)].map((m) => `${m[1]}|${m[2]}`).sort();
   const audited = MARKDOWN_HEADER_ACTIONS.map((a) => `${a.icon}|${a.title}`).sort();
   assert.deepEqual(found, audited, 'a markdown-view action was added or removed without updating src/header-actions-core.ts');
