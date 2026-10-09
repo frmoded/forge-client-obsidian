@@ -24,7 +24,8 @@ test('the subscribed event set is exactly: layout-change, active-leaf-change, fi
   assert.match(core, /export const HEADER_SYNC_METADATA_EVENTS = \['resolved', 'changed'\] as const;/);
   assert.match(core, /for \(const ev of events\.workspace\) host\.onWorkspace\(ev, \(\) => scheduler\.request\(\)\);/);
   assert.match(core, /for \(const ev of events\.metadata\) host\.onMetadata\(ev, \(\) => scheduler\.request\(\)\);/);
-  assert.match(core, /host\.onLayoutReady\(\(\) => \{ scheduler\.runNow\(\); scheduler\.request\(\); \}\);/);
+  assert.match(core, /host\.onLayoutReady\(\(\) => \{\s*scheduler\.runNow\(\);\s*scheduler\.request\(\);\s*for \(const ms of HEADER_SYNC_CATCH_UP_MS\) catchUps\.push\(deps\.setTimer\(\(\) => scheduler\.runNow\(\), ms\)\);/);
+  assert.match(core, /export const HEADER_SYNC_CATCH_UP_MS = \[300, 1200, 4000\] as const;/);
 });
 
 test('the sync walks EVERY open markdown view, skipping ones that are not loaded yet (a deferred leaf is picked up by the next event)', () => {

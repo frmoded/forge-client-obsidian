@@ -169,7 +169,7 @@ test('FIX: a burst of cold-start events (layout-change x3, resolved x2, file-ope
   const f = fakeHost();
   const { c, syncs } = install(f);
   f.emitW('layout-change'); f.emitW('layout-change'); f.emitM('resolved'); f.emitW('file-open'); f.layoutReady(); f.emitW('layout-change'); f.emitM('resolved');
-  c.advance(1000);
+  c.advance(250);                                   // before the first catch-up pass (300 ms)
   assert.deepEqual(syncs, ['sync', 'sync']);
 });
 
@@ -197,4 +197,29 @@ test('install: dispose() cancels pending work', () => {
   handle.dispose();
   c.advance(1000);
   assert.deepEqual(syncs, []);
+});
+
+test('FIX (no-event ordering): a leaf whose view loads silently AFTER layout-ready is still caught by the three catch-up passes (300 / 1200 / 4000 ms)', () => {
+  const f = fakeHost();
+  const { c, syncs } = install(f);
+  f.layoutReady();
+  const atReady = syncs.length;
+  c.advance(250);
+  assert.equal(syncs.length, atReady + 1, 'the coalesced pass');
+  c.advance(100);                                   // 350 ms: first catch-up
+  c.advance(900);                                   // 1250 ms: second
+  c.advance(3000);                                  // 4250 ms: third
+  assert.equal(syncs.length, atReady + 1 + 3);
+  c.advance(60000);
+  assert.equal(syncs.length, atReady + 1 + 3, 'and then it stops: no polling forever');
+});
+
+test('install: dispose() also cancels the catch-up passes', () => {
+  const f = fakeHost();
+  const { c, syncs, handle } = install(f);
+  f.layoutReady();
+  const n = syncs.length;
+  handle.dispose();
+  c.advance(10000);
+  assert.equal(syncs.length, n);
 });

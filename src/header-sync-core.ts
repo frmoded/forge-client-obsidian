@@ -21,6 +21,9 @@ export const HEADER_SYNC_WORKSPACE_EVENTS = ['layout-change', 'active-leaf-chang
 /** Metadata-cache events: the frontmatter `type` that gates the Forge button arrives with these on a cold start. */
 export const HEADER_SYNC_METADATA_EVENTS = ['resolved', 'changed'] as const;
 export const HEADER_SYNC_DEBOUNCE_MS = 60;
+/** After layout-ready, three more catch-up passes. The sync is idempotent and costs one query per view when nothing changed, so this is a
+ *  safety net for the one ordering no event can be proven to cover: a restored leaf whose view finishes loading with NO event at all. */
+export const HEADER_SYNC_CATCH_UP_MS = [300, 1200, 4000] as const;
 
 /** What a view's header was last built for. A different note or a changed frontmatter `type` changes the set of actions. */
 export function headerSignature(path: string | null | undefined, type: unknown): string {
@@ -98,6 +101,11 @@ export function installHeaderSync(host: HeaderSyncHost, deps: HeaderSyncInstall)
   for (const ev of events.metadata) host.onMetadata(ev, () => scheduler.request());
   // Layout-ready: the workspace is laid out and restored leaves exist. Sync at once, and once more after the debounce (a leaf that is still
   // deferred right now is picked up by the events above, and by this second pass if its view arrives in the meantime).
-  host.onLayoutReady(() => { scheduler.runNow(); scheduler.request(); });
-  return { scheduler, dispose: () => scheduler.dispose() };
+  const catchUps: unknown[] = [];
+  host.onLayoutReady(() => {
+    scheduler.runNow();
+    scheduler.request();
+    for (const ms of HEADER_SYNC_CATCH_UP_MS) catchUps.push(deps.setTimer(() => scheduler.runNow(), ms));
+  });
+  return { scheduler, dispose: () => { catchUps.forEach((h) => deps.clearTimer(h)); scheduler.dispose(); } };
 }
