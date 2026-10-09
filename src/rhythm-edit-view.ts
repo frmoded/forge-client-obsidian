@@ -19,11 +19,15 @@
 // warning and never written. A write is validated BEFORE it happens, made with one atomic `vault.process`, replaces ONLY the
 // note's json block, and is refused if the note changed on disk since the baseline or if it is marked `read_only: true` (D7).
 
-import { EditableFileView, MarkdownView, Notice, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
+import { EditableFileView, MarkdownView, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
 import { createAutosavePipeline, type AutosavePipeline, type SaveOutcome } from './rhythm-autosave-core.ts';
-import { createDefaultViewController, type LeafInfo, type LeafLocation } from './rhythm-default-view-core.ts';
+import { createDefaultViewController, type LeafInfo, type LeafLocation, type SwapTarget } from './rhythm-default-view-core.ts';
 import { registerRestoreParticipants } from './restore-hold-core.ts';
+import { musicEdition } from './music-edition-selected.ts';
+import { RhythmScoreView } from './rhythm-score-view.ts';
+import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts';
+import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsFor, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import {
   RHYTHM_BOX_WIDGET_PATH,
@@ -38,19 +42,13 @@ import {
 
 export { RHYTHM_EDIT_VIEW_TYPE };
 export const RHYTHM_EDIT_COMMAND_NAME = 'Edit rhythm in Rhythm Box';
-export const OPEN_AS_BEAT_BOX_TITLE = 'Open as Beat Box';
-export const OPEN_AS_JSON_TITLE = 'Open as JSON';
 const EXTERNAL_CHANGE_MESSAGE = 'The note changed on disk — your latest edit was not saved. Reload from the note to continue.';
 
 /** What the plugin lends the view: the settings flag and the two vault-level actions that live in main.ts, plus the default-view marks. */
-export interface RhythmEditHooks {
+export interface RhythmEditHooks extends ModeSwitchHooks {
   isDefaultViewEnabled(): boolean;
   createNewNote(): void;
   toggleEdgesPanel(): void;
-  /** "Open as JSON" was chosen on this leaf for this file: do not bounce it back to the Beat Box. */
-  markPreferMarkdown(leaf: WorkspaceLeaf, path: string): void;
-  /** An explicit switch to the Beat Box on this leaf. */
-  clearPreferMarkdown(leaf: WorkspaceLeaf): void;
 }
 
 /** Thrown inside the vault.process callback to ABORT the write (nothing is written when the callback throws). */
@@ -89,7 +87,10 @@ export class RhythmEditView extends EditableFileView {
   constructor(leaf: WorkspaceLeaf, private readonly hooks: RhythmEditHooks) {
     super(leaf);
     // Obsidian's addAction PREPENDS, so these are added right-to-left; the rendered order is the one in header-actions-core.ts.
-    this.addAction('braces', OPEN_AS_JSON_TITLE, () => { void this.openAsJson(); });
+    // The mode buttons (Phase 6) come from the pure table: Open as Score (music edition only), then Open as JSON, rightmost.
+    for (const a of [...headerActionsFor('beatbox', musicEdition.id)].reverse()) {
+      this.addAction(a.icon, a.title, () => { void this.switchMode(a.mode); });
+    }
     this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });
     this.addAction('network', 'Toggle edges panel', () => { this.hooks.toggleEdgesPanel(); });
     this.addAction('file-plus', 'New Forge note', () => { this.hooks.createNewNote(); });
@@ -168,8 +169,8 @@ export class RhythmEditView extends EditableFileView {
     this.contentEl.empty();
     const box = this.contentEl.createDiv({ cls: 'forge-rhythm-edit-refusal' });
     box.createEl('p', { text: message });
-    const btn = box.createEl('button', { text: OPEN_AS_JSON_TITLE });
-    btn.addEventListener('click', () => { void this.openAsJson(); });
+    const btn = box.createEl('button', { text: MODE_ACTIONS.json.title });
+    btn.addEventListener('click', () => { void this.switchMode('json'); });
   }
 
   private async mount(file: TFile): Promise<void> {
@@ -252,33 +253,30 @@ export class RhythmEditView extends EditableFileView {
     }
   }
 
-  /** Switch THIS tab back to the note's normal markdown view (pending edits are written first), and remember — for this leaf and this
-   *  file only — that the user chose JSON, so the default-view logic does not bounce the tab straight back to the Beat Box. */
-  private async openAsJson(): Promise<void> {
-    const filePath = this.file?.path;
-    if (!filePath) return;
+  /** Switch THIS tab to another mode of the note (JSON / Score). Pending edits are written first; the per-leaf+file mark is set by the
+   *  shared mode switch BEFORE the swap, so "Open as JSON" / "Open as Score" stick. */
+  private async switchMode(to: RhythmMode): Promise<void> {
+    const file = this.file;
+    if (!file) return;
     await this.flush();
-    this.hooks.markPreferMarkdown(this.leaf, filePath);
-    await this.leaf.setViewState({ type: 'markdown', active: true, state: { file: filePath } });
+    await switchLeafToMode(this.app, this.leaf, file, 'beatbox', to, this.hooks);
   }
 }
 
-/** Switch `leaf` (the note's own tab) to the Beat Box for `file`. The ONLY place that changes a leaf to the rhythm view on request — it
- *  never opens a tab. A matching note is checked up front, so the user gets a Notice naming why instead of an empty pane. */
-export async function switchLeafToBeatBox(app: App, leaf: WorkspaceLeaf, file: TFile): Promise<void> {
-  const note = readRhythmNote(await app.vault.read(file));
-  if (note.ok === false) {
-    new Notice(`Edit rhythm: ${note.message}`, 8000);
-    return;
-  }
-  await leaf.setViewState({ type: RHYTHM_EDIT_VIEW_TYPE, active: true, state: { file: file.path } });
+/** Which mode is this leaf in right now (by its view type)? */
+function modeOfLeaf(leaf: WorkspaceLeaf): RhythmMode {
+  const t = leaf.view?.getViewType?.();
+  if (t === RHYTHM_EDIT_VIEW_TYPE) return 'beatbox';
+  if (t === RHYTHM_SCORE_VIEW_TYPE) return 'score';
+  return 'json';
 }
 
 /** The command / file-menu entry: "switch this note's tab to Beat Box". A tab already showing the note is reused; only when there
  *  is none (the note is not open) does a new tab open. */
-export async function openRhythmEditor(app: App, file: TFile, from?: WorkspaceLeaf | null): Promise<void> {
+export async function openRhythmEditor(app: App, file: TFile, hooks: ModeSwitchHooks, from?: WorkspaceLeaf | null): Promise<void> {
   const own = from ?? app.workspace.getLeavesOfType('markdown').find((l) => l.view instanceof MarkdownView && l.view.file?.path === file.path);
-  await switchLeafToBeatBox(app, own ?? app.workspace.getLeaf('tab'), file);
+  const leaf = own ?? app.workspace.getLeaf('tab');
+  await switchLeafToMode(app, leaf, file, modeOfLeaf(leaf), 'beatbox', hooks);
 }
 
 function isCandidateFile(app: App, file: TFile | null | undefined): file is TFile {
@@ -310,28 +308,30 @@ function describeLeaf(app: App, leaf: WorkspaceLeaf): LeafInfo | null {
   };
 }
 
-/** Register the view, the command (visible only on a `type: data`, `content_type: json` note), the file / editor context-menu
- *  items, the "Open as Beat Box" header action on matching notes' markdown views, and the default-view swap. */
+/** Register the views (Beat Box; Score on the music edition), the commands (visible only on a `type: data`, `content_type: json` note),
+ *  the file / editor context-menu items, the mode buttons on matching notes' markdown views, and the default-view swap. */
 export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, 'isDefaultViewEnabled' | 'createNewNote' | 'toggleEdgesPanel'>): void {
   const app = plugin.app;
+  const edition = musicEdition.id;
 
-  // ---- default view: a valid rhythm note opens as a Beat Box ---------------------------------------------------------------
+  // ---- default view: a valid rhythm note opens as a Beat Box (or the Score, if that is what this leaf last chose) ---------------
   const defaultView = createDefaultViewController<WorkspaceLeaf>({
     settingOn: () => base.isDefaultViewEnabled(),
+    edition,
     describe: (leaf) => describeLeaf(app, leaf),
     readBodyIsRhythm: async (_leaf, path) => {
       const f = app.vault.getAbstractFileByPath(path);
       return f instanceof TFile && readRhythmNote(await app.vault.read(f)).ok === true;
     },
-    swapToBeatBox: async (leaf, path) => {
+    swapTo: async (leaf, path, target: SwapTarget) => {
       // keep focus where it is: only the already-active leaf is re-activated by the swap
       const active = app.workspace.getActiveViewOfType(MarkdownView)?.leaf === leaf;
       // `popstate: true` is an INTERNAL flag of WorkspaceLeaf.setViewState (absent from the typings; read from Obsidian 1.14.4's own source):
       // it keeps this swap OUT of the leaf's navigation history. Without it a type change records the markdown state as a back-entry, so
       // Back from the Beat Box would land on the markdown view, be swapped again, and the user could never go back past the note.
-      await leaf.setViewState({ type: RHYTHM_EDIT_VIEW_TYPE, active, state: { file: path }, popstate: true } as ViewState);
+      await leaf.setViewState({ type: VIEW_TYPE_BY_MODE[target], active, state: { file: path }, popstate: true } as ViewState);
     },
-    isSwapped: (leaf) => leaf.view.getViewType() === RHYTHM_EDIT_VIEW_TYPE,
+    isSwapped: (leaf, target: SwapTarget) => leaf.view.getViewType() === VIEW_TYPE_BY_MODE[target],
     sleep: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
   });
   const evaluateAllLeaves = () => {
@@ -347,30 +347,42 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
 
   const hooks: RhythmEditHooks = {
     ...base,
-    markPreferMarkdown: (leaf, path) => defaultView.markPreferMarkdown(leaf, path),
-    clearPreferMarkdown: (leaf) => defaultView.clearPreferMarkdown(leaf),
+    setMark: (leaf: WorkspaceLeaf, path: string, mark: ModeMark | null) => defaultView.setMark(leaf, path, mark),
   };
 
   plugin.registerView(RHYTHM_EDIT_VIEW_TYPE, (leaf) => new RhythmEditView(leaf, hooks));
-  const toBeatBox = async (file: TFile, from?: WorkspaceLeaf | null) => {
-    if (from) hooks.clearPreferMarkdown(from);
-    await openRhythmEditor(app, file, from);
-  };
+  if (edition === 'music') plugin.registerView(RHYTHM_SCORE_VIEW_TYPE, (leaf) => new RhythmScoreView(leaf, hooks));
+
   plugin.addCommand({
     id: 'edit-rhythm-in-rhythm-box',
     name: RHYTHM_EDIT_COMMAND_NAME,
     checkCallback: (checking: boolean) => {
       const file = app.workspace.getActiveFile();
       if (!isCandidateFile(app, file)) return false;
-      if (!checking) void toBeatBox(file, app.workspace.getActiveViewOfType(MarkdownView)?.leaf);
+      if (!checking) void openRhythmEditor(app, file, hooks, app.workspace.getActiveViewOfType(MarkdownView)?.leaf);
       return true;
     },
   });
+  if (edition === 'music') {
+    plugin.addCommand({
+      id: 'open-rhythm-note-as-score',
+      name: 'Open rhythm note as Score',
+      checkCallback: (checking: boolean) => {
+        const file = app.workspace.getActiveFile();
+        if (!isCandidateFile(app, file)) return false;
+        const leaf = app.workspace.getActiveViewOfType(MarkdownView)?.leaf ?? app.workspace.getMostRecentLeaf();
+        if (!leaf) return false;
+        if (!checking) void switchLeafToMode(app, leaf, file, modeOfLeaf(leaf), 'score', hooks);
+        return true;
+      },
+    });
+  }
   const addItem = (menu: Menu, file: TFile, from?: WorkspaceLeaf | null) => {
-    menu.addItem((item) => item.setTitle(RHYTHM_EDIT_COMMAND_NAME).setIcon('music').onClick(() => { void toBeatBox(file, from); }));
+    menu.addItem((item) => item.setTitle(RHYTHM_EDIT_COMMAND_NAME).setIcon('music').onClick(() => { void openRhythmEditor(app, file, hooks, from); }));
   };
   plugin.registerEvent(app.workspace.on('file-menu', (menu, file, _source, leaf) => {
-    if (leaf?.view instanceof RhythmEditView) return;             // already in the Beat Box: its own "…" menu needs no "Edit rhythm"
+    const t = leaf?.view?.getViewType?.();
+    if (t === RHYTHM_EDIT_VIEW_TYPE || t === RHYTHM_SCORE_VIEW_TYPE) return;   // already in a rhythm view: its own "…" menu needs no "Edit rhythm"
     if (file instanceof TFile && isCandidateFile(app, file)) addItem(menu, file);
   }));
   plugin.registerEvent(app.workspace.on('editor-menu', (menu, _editor, view) => {
@@ -378,9 +390,10 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
     if (file && isCandidateFile(app, file)) addItem(menu, file, view instanceof MarkdownView ? view.leaf : null);
   }));
 
-  // Header action: present on a markdown view exactly while its note is a candidate. A markdown view is reused when its tab navigates to
-  // another note, so the set is re-synced on every event that can change the answer.
-  const headerActions = new WeakMap<MarkdownView, HTMLElement>();
+  // Mode buttons on a markdown view, present exactly while its note is a candidate. A markdown view is reused when its tab navigates to
+  // another note, so the set is re-synced on every event that can change the answer. From the JSON mode they are Beat Box and (music
+  // edition) Score, from the pure header table.
+  const headerActions = new WeakMap<MarkdownView, HTMLElement[]>();
   const syncHeaderActions = () => {
     for (const leaf of app.workspace.getLeavesOfType('markdown')) {
       const view = leaf.view;
@@ -388,15 +401,14 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
       const want = isCandidateFile(app, view.file);
       const have = headerActions.get(view);
       if (want && !have) {
-        headerActions.set(view, view.addAction('music', OPEN_AS_BEAT_BOX_TITLE, () => {
+        // addAction PREPENDS: add right-to-left so the rendered order is the table's order
+        const els = [...headerActionsFor('json', edition)].reverse().map((a) => view.addAction(a.icon, a.title, () => {
           const file = view.file;
-          if (isCandidateFile(app, file)) {
-            hooks.clearPreferMarkdown(view.leaf);
-            void switchLeafToBeatBox(app, view.leaf, file);
-          }
+          if (isCandidateFile(app, file)) void switchLeafToMode(app, view.leaf, file, 'json', a.mode, hooks);
         }));
+        headerActions.set(view, els);
       } else if (!want && have) {
-        have.remove();
+        have.forEach((el) => el.remove());
         headerActions.delete(view);
       }
     }
@@ -419,10 +431,13 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
     return out;
   }));
 
-  // Plugin unload: write whatever is pending (the debounce timer would otherwise die with the plugin).
+  // Plugin unload: write whatever is pending (the debounce timer would otherwise die with the plugin), and silence any score playback.
   plugin.register(() => {
     for (const leaf of app.workspace.getLeavesOfType(RHYTHM_EDIT_VIEW_TYPE)) {
       if (leaf.view instanceof RhythmEditView) void leaf.view.flush();
+    }
+    for (const leaf of app.workspace.getLeavesOfType(RHYTHM_SCORE_VIEW_TYPE)) {
+      if (leaf.view instanceof RhythmScoreView) leaf.view.stopAudio();
     }
   });
 }

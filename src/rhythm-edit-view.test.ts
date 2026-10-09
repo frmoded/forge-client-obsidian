@@ -11,8 +11,11 @@ import { RHYTHM_BOX_WIDGET_PATH } from './rhythm-edit-core.ts';
 const read = (rel: string) => fs.readFileSync(path.resolve(process.cwd(), rel), 'utf-8');
 const view = read('src/rhythm-edit-view.ts');
 const embed = read('src/html-embed-view.ts');
+
 const main = read('src/main.ts');
 const code = (src: string) => src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');   // comments out, so a pin cannot be satisfied by prose
+const switchSrc = code(read('src/rhythm-mode-switch.ts'));
+const scoreSrc = code(read('src/rhythm-score-view.ts'));
 
 test('sandbox: the shared iframe helper adds exactly allow-scripts and allow-same-origin — nothing wider', () => {
   const adds = [...code(embed).matchAll(/sandbox\.add\('([^']+)'\)/g)].map((m) => m[1]);
@@ -70,11 +73,11 @@ test('autosave: the pipeline is the 600 ms core with real timers injected; there
   assert.ok(!/private async save\(|this\.save\(|this\.saving/.test(body));
 });
 
-test('flush: pending edits are written on view close, when the view moves off a note, when switching back to JSON, on restore, and on plugin unload', () => {
+test('flush: pending edits are written on view close, when the view moves off a note, when switching mode, on restore, and on plugin unload', () => {
   const body = code(view);
   assert.match(body, /async onClose\(\): Promise<void> \{\s*window\.removeEventListener\('message', this\.onMessage\);\s*await this\.flush\(\);\s*await super\.onClose\(\);/);
   assert.match(body, /async onUnloadFile\(file: TFile\): Promise<void> \{\s*await this\.flush\(\);\s*this\.pipeline\?\.dispose\(\);/);
-  assert.match(body, /private async openAsJson\(\): Promise<void> \{[\s\S]*?await this\.flush\(\);[\s\S]*?setViewState/);
+  assert.match(body, /private async switchMode\(to: RhythmMode\): Promise<void> \{[\s\S]*?await this\.flush\(\);\s*await switchLeafToMode\(/);
   assert.match(body, /async holdForRestore\(\): Promise<void> \{\s*await this\.flush\(\);\s*this\.pipeline\?\.pause\(\);/);
   assert.match(body, /plugin\.register\(\(\) => \{\s*for \(const leaf of app\.workspace\.getLeavesOfType\(RHYTHM_EDIT_VIEW_TYPE\)\) \{\s*if \(leaf\.view instanceof RhythmEditView\) void leaf\.view\.flush\(\);/);
 });
@@ -95,44 +98,43 @@ test('messages to the widget are built only by the core\'s builders', () => {
 
 test('a note that stops matching shows the refusal message with an "Open as JSON" button — the pane is never left stuck or silently closed', () => {
   const body = code(view);
-  assert.match(body, /private showRefusal\(message: string\): void \{[\s\S]*?createEl\('button', \{ text: OPEN_AS_JSON_TITLE \}\)[\s\S]*?this\.openAsJson\(\)/);
+  assert.match(body, /private showRefusal\(message: string\): void \{[\s\S]*?createEl\('button', \{ text: MODE_ACTIONS\.json\.title \}\)[\s\S]*?this\.switchMode\('json'\)/);
   assert.match(body, /if \(note\.ok === false\) return this\.showRefusal\(`Edit rhythm: \$\{note\.message\}`\);/);
   assert.match(body, /if \(note\.ok === false\) \{\s*this\.showRefusal\(`Edit rhythm: \$\{note\.message\}`\);/);
-  // a note that does not exist at all is closed by Obsidian's FileView (no file => result.close); the view detaches nothing itself
   assert.ok(!/this\.fail\(|detach\(\)/.test(body));
 });
 
-test('toggle: "Open as Beat Box" changes the note\'s OWN leaf — switchLeafToBeatBox never opens a tab', () => {
+test('toggle: every mode switch changes the note\'s OWN leaf through ONE helper that never opens a tab', () => {
+  assert.match(switchSrc, /await leaf\.setViewState\(\{ type: VIEW_TYPE_BY_MODE\[to\], active: true, state: \{ file: file\.path \} \}\);/);
+  assert.ok(!/getLeaf\(/.test(switchSrc), 'no getLeaf anywhere in the mode switch');
   const body = code(view);
-  const fn = /export async function switchLeafToBeatBox[\s\S]*?\n\}\n/.exec(body)![0];
-  assert.match(fn, /leaf\.setViewState\(\{ type: RHYTHM_EDIT_VIEW_TYPE, active: true, state: \{ file: file\.path \} \}\)/);
-  assert.ok(!/getLeaf\(/.test(fn), 'no getLeaf anywhere on the toggle path');
-  assert.equal([...body.matchAll(/getLeaf\('tab'\)/g)].length, 1, 'a new tab is opened in exactly one place: the command/menu fallback when no tab shows the note');
+  assert.equal([...body.matchAll(/getLeaf\('tab'\)/g)].length, 1, 'a new tab opens in exactly one place: the command/menu fallback when no tab shows the note');
   const opener = /export async function openRhythmEditor[\s\S]*?\n\}\n/.exec(body)![0];
   assert.match(opener, /getLeavesOfType\('markdown'\)\.find\(\(l\) => l\.view instanceof MarkdownView && l\.view\.file\?\.path === file\.path\)/);
-  assert.match(opener, /switchLeafToBeatBox\(app, own \?\? app\.workspace\.getLeaf\('tab'\), file\)/);
+  assert.match(opener, /const leaf = own \?\? app\.workspace\.getLeaf\('tab'\);\s*await switchLeafToMode\(app, leaf, file, modeOfLeaf\(leaf\), 'beatbox', hooks\);/);
+  // the three view files route their switches through it, and none calls setViewState for a MODE change itself
+  assert.ok(!/setViewState\(\{ type: 'markdown'/.test(body));
+  assert.ok(!/setViewState/.test(scoreSrc));
 });
 
-test('toggle: the header action on the markdown view switches view.leaf (the note\'s own tab) and the command passes the active markdown leaf', () => {
+test('toggle: the mode buttons on the markdown view switch view.leaf (the note\'s own tab); the command passes the active markdown leaf', () => {
   const body = code(view);
-  assert.match(body, /view\.addAction\('music', OPEN_AS_BEAT_BOX_TITLE, \(\) => \{\s*const file = view\.file;\s*if \(isCandidateFile\(app, file\)\) \{\s*hooks\.clearPreferMarkdown\(view\.leaf\);\s*void switchLeafToBeatBox\(app, view\.leaf, file\);/);
-  assert.match(body, /void toBeatBox\(file, app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf\)/);
-  assert.match(body, /const toBeatBox = async \(file: TFile, from\?: WorkspaceLeaf \| null\) => \{\s*if \(from\) hooks\.clearPreferMarkdown\(from\);\s*await openRhythmEditor\(app, file, from\);/);
+  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
+  assert.match(body, /void openRhythmEditor\(app, file, hooks, app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf\)/);
 });
 
 test('header actions appear only for matching notes: added when the note is a candidate, removed when it is not, re-synced on every relevant event', () => {
   const body = code(view);
   assert.match(body, /const want = isCandidateFile\(app, view\.file\);\s*const have = headerActions\.get\(view\);\s*if \(want && !have\) \{/);
-  assert.match(body, /\} else if \(!want && have\) \{\s*have\.remove\(\);\s*headerActions\.delete\(view\);/);
+  assert.match(body, /\} else if \(!want && have\) \{\s*have\.forEach\(\(el\) => el\.remove\(\)\);\s*headerActions\.delete\(view\);/);
   for (const ev of ["'file-open'", "'active-leaf-change'", "'layout-change'"]) assert.ok(body.includes(`app.workspace.on(${ev}, syncHeaderActions)`), ev);
   assert.ok(body.includes("app.metadataCache.on('changed', syncHeaderActions)"));
 });
 
-test('toggle back: "Open as JSON" is a header action of the Beat Box view and returns the SAME leaf to markdown for the same file; no JSON editor of our own', () => {
+test('toggle back: "Open as JSON" is a header action of the Beat Box view, comes from the mode table and returns the SAME leaf to markdown; no JSON editor of our own', () => {
   const body = code(view);
-  assert.match(body, /this\.addAction\('braces', OPEN_AS_JSON_TITLE, \(\) => \{ void this\.openAsJson\(\); \}\);/);
-  assert.match(body, /await this\.leaf\.setViewState\(\{ type: 'markdown', active: true, state: \{ file: filePath \} \}\);/);
-  assert.ok(!/CodeMirror|EditorView|new Editor|createEl\('textarea'/.test(body), 'the view builds no editor of its own');
+  assert.match(body, /for \(const a of \[\.\.\.headerActionsFor\('beatbox', musicEdition\.id\)\]\.reverse\(\)\) \{\s*this\.addAction\(a\.icon, a\.title, \(\) => \{ void this\.switchMode\(a\.mode\); \}\);/);
+  assert.ok(!/CodeMirror|EditorView|new Editor|createEl\('textarea'/.test(body), 'the view builds no editor of our own');
 });
 
 test('no per-file memory: nothing in the view persists a view preference', () => {
@@ -140,9 +142,8 @@ test('no per-file memory: nothing in the view persists a view preference', () =>
   assert.ok(!/saveData|loadData|localStorage|sessionStorage/.test(body));
 });
 
-test('the editor is refused (with a Notice naming why) before any pane switches: read_only, wrong type, wrong body', () => {
-  const body = code(view);
-  assert.match(body, /const note = readRhythmNote\(await app\.vault\.read\(file\)\);\s*if \(note\.ok === false\) \{\s*new Notice\(`Edit rhythm: \$\{note\.message\}`, 8000\);\s*return;/);
+test('the mode switch refuses (with a Notice naming why) before any pane switches: read_only, wrong type, wrong body', () => {
+  assert.match(switchSrc, /if \(to !== 'json'\) \{\s*const note = readRhythmNote\(await app\.vault\.read\(file\)\);\s*if \(note\.ok === false\) \{\s*new Notice\(`\$\{to === 'score' \? 'Score' : 'Edit rhythm'\}: \$\{note\.message\}`, 8000\);\s*return;/);
 });
 
 test('registration: main.ts registers the view, command and menus once, via registerRhythmEdit, lending it the setting and two vault-level actions', () => {
@@ -190,8 +191,8 @@ test('FileView: a layout saved by Phase 5b ({filePath}) still opens — setState
   assert.match(code(view), /typeof legacy\.filePath === 'string' && typeof legacy\.file !== 'string'\s*\? \{ \.\.\.\(state as object\), file: legacy\.filePath \}/);
 });
 
-test('FileView: the file-menu item "Edit rhythm in Rhythm Box" is skipped inside the Beat Box\'s own "…" menu', () => {
-  assert.match(code(view), /on\('file-menu', \(menu, file, _source, leaf\) => \{\s*if \(leaf\?\.view instanceof RhythmEditView\) return;/);
+test('FileView: the file-menu item "Edit rhythm in Rhythm Box" is skipped inside a rhythm view\'s own "…" menu (Beat Box and Score)', () => {
+  assert.match(code(view), /on\('file-menu', \(menu, file, _source, leaf\) => \{\s*const t = leaf\?\.view\?\.getViewType\?\.\(\);\s*if \(t === RHYTHM_EDIT_VIEW_TYPE \|\| t === RHYTHM_SCORE_VIEW_TYPE\) return;/);
 });
 
 test('default view: the swap is driven by the pure controller on file-open / active-leaf-change / layout-change / metadata changed / layout-ready', () => {
@@ -209,25 +210,23 @@ test('default view: the allow-list reads the leaf\'s ROOT — main area and side
   assert.match(body, /const isPlainMarkdownView = view instanceof MarkdownView;/);
 });
 
-test('default view: the swap happens in the SAME leaf (setViewState) and only the already-active leaf is re-activated', () => {
+test('default view: the swap happens in the SAME leaf (setViewState) to the target view type, and only the already-active leaf is re-activated', () => {
   const body = code(view);
-  assert.match(body, /swapToBeatBox: async \(leaf, path\) => \{[\s\S]*?await leaf\.setViewState\(\{ type: RHYTHM_EDIT_VIEW_TYPE, active, state: \{ file: path \}, popstate: true \} as ViewState\);/);
-  assert.match(body, /isSwapped: \(leaf\) => leaf\.view\.getViewType\(\) === RHYTHM_EDIT_VIEW_TYPE,/);
+  assert.match(body, /swapTo: async \(leaf, path, target: SwapTarget\) => \{[\s\S]*?await leaf\.setViewState\(\{ type: VIEW_TYPE_BY_MODE\[target\], active, state: \{ file: path \}, popstate: true \} as ViewState\);/);
+  assert.match(body, /isSwapped: \(leaf, target: SwapTarget\) => leaf\.view\.getViewType\(\) === VIEW_TYPE_BY_MODE\[target\],/);
   assert.match(body, /const active = app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf === leaf;/);
 });
 
-test('default view: the automatic swap stays out of navigation history (internal popstate flag), the explicit toggles do not use it', () => {
-  const body = code(view);
-  assert.equal([...body.matchAll(/popstate: true/g)].length, 1, 'only the automatic swap');
-  const explicit = /export async function switchLeafToBeatBox[\s\S]*?\n\}\n/.exec(body)![0];
-  assert.ok(!/popstate/.test(explicit));
+test('default view: the automatic swap stays out of navigation history (internal popstate flag); the explicit mode switch does not use it', () => {
+  assert.equal([...code(view).matchAll(/popstate: true/g)].length, 1, 'only the automatic swap');
+  assert.ok(!/popstate/.test(switchSrc));
 });
 
-test('default view: "Open as JSON" marks the leaf BEFORE switching (so the events the switch fires see the mark)', () => {
-  const body = code(view);
-  const mark = body.indexOf('this.hooks.markPreferMarkdown(this.leaf, filePath);');
-  const swap = body.indexOf("await this.leaf.setViewState({ type: 'markdown'");
+test('default view: the mode switch marks the leaf BEFORE switching (so the events the switch fires see the mark), through the controller', () => {
+  const mark = switchSrc.indexOf('hooks.setMark(leaf, file.path, t.mark);');
+  const swap = switchSrc.indexOf('await leaf.setViewState(');
   assert.ok(mark > 0 && swap > mark);
+  assert.match(code(view), /setMark: \(leaf: WorkspaceLeaf, path: string, mark: ModeMark \| null\) => defaultView\.setMark\(leaf, path, mark\),/);
 });
 
 test('setting: "Open rhythm data notes in Beat Box by default" exists, defaults ON, and is what the view consults', () => {

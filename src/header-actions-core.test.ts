@@ -35,7 +35,7 @@ test('audit vs source: syncButtons() registers exactly the actions the audit lis
 test('the Beat Box view\'s actions are exactly the audit\'s "added" ones plus the Beat-Box-only ones, in the same left-to-right order', () => {
   const added = MARKDOWN_HEADER_ACTIONS.filter((a) => a.beatBox === 'added').map((a) => a.id);
   assert.deepEqual(BEAT_BOX_ACTIONS.map((a) => a.id).filter((id) => !BEAT_BOX_ONLY_ACTIONS.some((o) => o.id === id)), added);
-  assert.deepEqual(BEAT_BOX_ACTIONS.map((a) => a.id), ['new-forge-note', 'edges-toggle', 'restore-to-last-commit', 'open-as-json']);
+  assert.deepEqual(BEAT_BOX_ACTIONS.map((a) => a.id), ['new-forge-note', 'edges-toggle', 'restore-to-last-commit', 'open-as-score', 'open-as-json']);
 });
 
 test('the specific decisions: restore + new note + edges ADDED; the hammer NOT applicable; the retired library palette has no entry at all', () => {
@@ -47,14 +47,12 @@ test('the specific decisions: restore + new note + edges ADDED; the hammer NOT a
   assert.equal(by['forge-this-note'], 'not-applicable');
 });
 
-test('the Beat Box view registers each of those actions, in order, with the same icon and tooltip as the markdown view', () => {
-  // addAction PREPENDS, so the view adds them right-to-left: open-as-json first ... new-forge-note last (leftmost)
-  const adds = [...view.matchAll(/this\.addAction\('([^']+)', ([A-Za-z_.']+)/g)].map((m) => m[1]);
-  const expected = [...BEAT_BOX_ACTIONS].reverse().map((a) => a.icon);
-  assert.deepEqual(adds, expected);
-  for (const a of BEAT_BOX_ACTIONS) {
-    assert.ok(view.includes(`BEAT_BOX_ACTION_BY_ID['${a.id}'].title`) || view.includes(a.title), `title wired for ${a.id}`);
-  }
+test('the Beat Box view registers the three shared actions in order with the markdown view\'s icon and tooltip, then the mode buttons from the table', () => {
+  // addAction PREPENDS, so the view adds right-to-left: mode buttons first (rightmost), then restore, edges, new note (leftmost)
+  assert.match(view, /for \(const a of \[\.\.\.headerActionsFor\('beatbox', musicEdition\.id\)\]\.reverse\(\)\) \{/);
+  const adds = [...view.matchAll(/this\.addAction\('([^']+)', '([^']+)'/g)].map((m) => `${m[1]}|${m[2]}`);
+  const shared = BEAT_BOX_ACTIONS.filter((a) => !BEAT_BOX_ONLY_ACTIONS.some((o) => o.id === a.id)).reverse().map((a) => `${a.icon}|${a.title}`);
+  assert.deepEqual(adds, shared);
 });
 
 test('markdown-view icons and titles are reused verbatim for the shared actions (parity, not a lookalike)', () => {

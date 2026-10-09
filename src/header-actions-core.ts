@@ -40,6 +40,8 @@ export interface BeatBoxAction { id: string; icon: string; title: string }
 
 /** Actions only the Beat Box view has. */
 export const BEAT_BOX_ONLY_ACTIONS: readonly BeatBoxAction[] = [
+  // The mode buttons (rhythm-mode-core.ts is the source of truth for titles/icons; "Open as Score" exists on the music edition only).
+  { id: 'open-as-score', icon: 'list-music', title: 'Open as Score' },
   { id: 'open-as-json', icon: 'braces', title: 'Open as JSON' },
 ];
 

@@ -4,7 +4,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  PreferMarkdownMarks,
   createDefaultViewController,
   decideDefaultView,
   type DefaultViewInput,
@@ -13,11 +12,11 @@ import {
 
 const ok = (over: Partial<DefaultViewInput> = {}): DefaultViewInput => ({
   settingOn: true, location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'rhythm_data/a.md', extension: 'md',
-  frontmatterIsCandidate: true, bodyIsRhythm: true, markedMarkdownPath: null, swapInProgress: false, ...over,
+  frontmatterIsCandidate: true, bodyIsRhythm: true, mark: null, edition: 'music', swapInProgress: false, ...over,
 });
 
 test('a plain markdown leaf in the main area showing a valid rhythm note is swapped to the Beat Box', () => {
-  assert.deepEqual(decideDefaultView(ok()), { swap: true, reason: 'swap' });
+  assert.deepEqual(decideDefaultView(ok()), { swap: true, reason: 'swap', target: 'beatbox' });
 });
 
 test('sidebars\' document leaves count as normal leaves', () => {
@@ -54,23 +53,14 @@ test('the setting off restores the Phase 5b behaviour (button only): never swap'
   assert.deepEqual(decideDefaultView(ok({ settingOn: false })), { swap: false, reason: 'setting-off' });
 });
 
-test('a prefer-markdown mark for THIS file is respected; a mark for another file is not', () => {
-  assert.equal(decideDefaultView(ok({ markedMarkdownPath: 'rhythm_data/a.md' })).reason, 'prefer-markdown');
-  assert.equal(decideDefaultView(ok({ markedMarkdownPath: 'rhythm_data/other.md' })).swap, true);
+test('a "stay in JSON" mark is respected; a "stay in Score" mark opens the Score on the music edition and the Beat Box on lean', () => {
+  assert.equal(decideDefaultView(ok({ mark: 'markdown' })).reason, 'prefer-markdown');
+  assert.deepEqual(decideDefaultView(ok({ mark: 'score' })), { swap: true, reason: 'swap', target: 'score' });
+  assert.deepEqual(decideDefaultView(ok({ mark: 'score', edition: 'lean' })), { swap: true, reason: 'swap', target: 'beatbox' });
 });
 
 test('a swap already in progress for the leaf is never started twice', () => {
   assert.deepEqual(decideDefaultView(ok({ swapInProgress: true })), { swap: false, reason: 'swap-in-progress' });
-});
-
-test('marks: scoped to leaf + file; clear when the leaf shows another file; a new leaf starts without one', () => {
-  const marks = new PreferMarkdownMarks<object>();
-  const leafA = {}, leafB = {};
-  marks.mark(leafA, 'a.md');
-  assert.equal(marks.reconcile(leafA, 'a.md'), 'a.md');
-  assert.equal(marks.reconcile(leafB, 'a.md'), null, 'another leaf (e.g. a new tab) is not marked');
-  assert.equal(marks.reconcile(leafA, 'b.md'), null, 'leaf navigated to another file');
-  assert.equal(marks.reconcile(leafA, 'a.md'), null, 'and navigating back to the note starts in the Beat Box again');
 });
 
 // ---- the controller: marks + guard + the awaited body read, with Obsidian injected ---------------------------------
@@ -84,7 +74,8 @@ function rig(over: { info?: Partial<LeafInfo>; rhythm?: boolean; setting?: boole
     settingOn: () => state.setting,
     describe: () => state.info,
     readBodyIsRhythm: async () => { state.reads++; return state.rhythm; },
-    swapToBeatBox: async (_l, p) => {
+    edition: 'music',
+    swapTo: async (_l, p) => {
       state.swaps.push(p);
       // the swap itself fires layout / file-open events that re-enter the controller — they must not start a second swap
       await Promise.all([c.evaluate(leaf), c.evaluate(leaf)]);
@@ -106,7 +97,7 @@ test('controller: a valid rhythm note is swapped exactly once even though the sw
 
 test('controller: "Open as JSON" sticks — after markPreferMarkdown the same leaf and file are never swapped again', async () => {
   const { c, leaf, state } = rig();
-  c.markPreferMarkdown(leaf, 'r.md');
+  c.setMark(leaf, 'r.md', 'markdown');
   assert.equal(await c.evaluate(leaf), 'prefer-markdown');
   assert.equal(await c.evaluate(leaf), 'prefer-markdown');
   assert.equal(state.swaps.length, 0);
@@ -115,15 +106,15 @@ test('controller: "Open as JSON" sticks — after markPreferMarkdown the same le
 
 test('controller: an explicit "Open as Beat Box" (clearPreferMarkdown) ends the stay-in-markdown choice for the leaf', async () => {
   const { c, leaf } = rig();
-  c.markPreferMarkdown(leaf, 'r.md');
+  c.setMark(leaf, 'r.md', 'markdown');
   assert.equal(await c.evaluate(leaf), 'prefer-markdown');
-  c.clearPreferMarkdown(leaf);
+  c.setMark(leaf, 'r.md', null);
   assert.equal(await c.evaluate(leaf), 'swap');
 });
 
 test('controller: navigating the marked leaf to another note clears the mark, so coming back to the rhythm note opens the Beat Box', async () => {
   const { c, leaf, state } = rig({ info: { frontmatterIsCandidate: false } });
-  c.markPreferMarkdown(leaf, 'r.md');
+  c.setMark(leaf, 'r.md', 'markdown');
   state.info = { ...state.info!, filePath: 'other.md' };
   assert.equal(await c.evaluate(leaf), 'not-candidate');
   state.info = { ...state.info!, filePath: 'r.md', frontmatterIsCandidate: true };
@@ -149,9 +140,10 @@ test('controller: if the leaf changed while the body was being read, the swap is
   void readOriginal;
   const c2 = createDefaultViewController<object>({
     settingOn: () => true,
+    edition: 'music',
     describe: () => state.info,
     readBodyIsRhythm: async () => { state.info = { ...state.info!, filePath: 'moved.md' }; return true; },
-    swapToBeatBox: async (_l, p) => { state.swaps.push(p); },
+    swapTo: async (_l, p) => { state.swaps.push(p); },
     isSwapped: () => false,
     sleep: async () => {},
   });
@@ -171,9 +163,10 @@ test('controller: an error while swapping releases the guard, so a later pass ca
   let fail = true; let swaps = 0;
   const c = createDefaultViewController<object>({
     settingOn: () => true,
+    edition: 'music',
     describe: () => ({ location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true }),
     readBodyIsRhythm: async () => true,
-    swapToBeatBox: async () => { swaps++; if (fail) throw new Error('boom'); },
+    swapTo: async () => { swaps++; if (fail) throw new Error('boom'); },
     isSwapped: () => !fail,
     sleep: async () => {},
   });
@@ -190,9 +183,10 @@ function flaky(dropFirst: number) {
   const st = { info: { location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true } as LeafInfo | null, attempts: 0, slept: [] as number[] };
   const c = createDefaultViewController<object>({
     settingOn: () => true,
+    edition: 'music',
     describe: () => st.info,
     readBodyIsRhythm: async () => true,
-    swapToBeatBox: async () => { st.attempts++; if (st.attempts > dropFirst) st.info = { ...st.info!, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false }; },
+    swapTo: async () => { st.attempts++; if (st.attempts > dropFirst) st.info = { ...st.info!, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false }; },
     isSwapped: () => st.info?.viewType === 'forge-rhythm-edit',
     sleep: async (ms) => { st.slept.push(ms); },
   });
@@ -218,9 +212,10 @@ test('controller: a retry is abandoned if the leaf moved to another note in the 
   const origSleep = st.slept;
   const c2 = createDefaultViewController<object>({
     settingOn: () => true,
+    edition: 'music',
     describe: () => st.info,
     readBodyIsRhythm: async () => true,
-    swapToBeatBox: async () => { st.attempts++; },
+    swapTo: async () => { st.attempts++; },
     isSwapped: () => false,
     sleep: async () => { st.info = { ...st.info!, filePath: 'elsewhere.md' }; },
   });
@@ -234,13 +229,58 @@ test('controller: the guard stays held across retries (events during a retry win
   const st = { info: { location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true } as LeafInfo | null, attempts: 0, inner: [] as string[] };
   const c = createDefaultViewController<object>({
     settingOn: () => true,
+    edition: 'music',
     describe: () => st.info,
     readBodyIsRhythm: async () => true,
-    swapToBeatBox: async () => { st.attempts++; if (st.attempts > 1) st.info = { ...st.info!, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false }; },
+    swapTo: async () => { st.attempts++; if (st.attempts > 1) st.info = { ...st.info!, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false }; },
     isSwapped: () => st.info?.viewType === 'forge-rhythm-edit',
     sleep: async () => { st.inner.push(await c.evaluate(leaf)); },
   });
   assert.equal(await c.evaluate(leaf), 'swap');
   assert.deepEqual(st.inner, ['swap-in-progress']);
   assert.equal(st.attempts, 2);
+});
+
+// ---- Phase 6: the Score target ------------------------------------------------------------------------------------------------
+
+function scoreRig(edition: 'lean' | 'music') {
+  const leaf = {};
+  const st = { info: { location: 'main', viewType: 'markdown', isPlainMarkdownView: true, filePath: 'r.md', extension: 'md', frontmatterIsCandidate: true } as LeafInfo | null, targets: [] as string[] };
+  const c = createDefaultViewController<object>({
+    settingOn: () => true,
+    edition,
+    describe: () => st.info,
+    readBodyIsRhythm: async () => true,
+    swapTo: async (_l, _p, target) => { st.targets.push(target); st.info = { ...st.info!, viewType: `forge-rhythm-${target}`, isPlainMarkdownView: false }; },
+    isSwapped: (_l, target) => st.info?.viewType === `forge-rhythm-${target}`,
+    sleep: async () => {},
+  });
+  return { c, leaf, st };
+}
+
+test('Score is sticky: a leaf marked "score" is re-opened as the Score (not the Beat Box) when it shows the note again', async () => {
+  const { c, leaf, st } = scoreRig('music');
+  c.setMark(leaf, 'r.md', 'score');
+  assert.equal(await c.evaluate(leaf), 'swap');
+  assert.deepEqual(st.targets, ['score']);
+});
+
+test('no mark on the music edition: the default target is still the Beat Box', async () => {
+  const { c, leaf, st } = scoreRig('music');
+  assert.equal(await c.evaluate(leaf), 'swap');
+  assert.deepEqual(st.targets, ['beatbox']);
+});
+
+test('lean edition: a stale "score" mark can never open the Score — it opens the Beat Box', async () => {
+  const { c, leaf, st } = scoreRig('lean');
+  c.setMark(leaf, 'r.md', 'score');
+  assert.equal(await c.evaluate(leaf), 'swap');
+  assert.deepEqual(st.targets, ['beatbox']);
+});
+
+test('the Score mark is scoped to leaf + file: another note on that leaf opens the Beat Box', async () => {
+  const { c, leaf, st } = scoreRig('music');
+  c.setMark(leaf, 'other.md', 'score');
+  assert.equal(await c.evaluate(leaf), 'swap');
+  assert.deepEqual(st.targets, ['beatbox']);
 });

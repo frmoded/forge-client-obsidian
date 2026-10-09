@@ -1497,6 +1497,19 @@ def _forge_compute_with_python(snippet_id: str, args, inputs, vault_name: str, s
     result = serialize_result(raw_result, snip)
     return result, stdout, code
 
+def _forge_rhythm_score_payload(data_json: str, title: str):
+    """Beat-as-data Phase 6 — rhythm data JSON -> tagged MusicXML payload (the dual multi-staff + kit shape for percussion).
+
+    Plugin-side glue, NOT an engine function: it only composes two existing engine entry points, rhythm_data_to_stream and
+    serialize_result (the serializer _forge_compute uses for a music21 Score). Never touches the vault: the data comes in as a
+    string, the payload goes out as a dict. Raises on invalid data (rhythm_data_to_stream's own ValueError naming the channel
+    and step) so the plugin can show it."""
+    import json as _json
+    from forge.music.lib import rhythm_data_to_stream
+    data = _json.loads(data_json)
+    score = rhythm_data_to_stream(data)
+    return serialize_result(score, {"snippet_id": title, "meta": {"title": title}})
+
 # ---- Moda live-loop helpers (Phase 2) ---------------------------
 # State lives in Python globals between engine-request calls.
 #
@@ -1811,6 +1824,8 @@ export interface PyodideHostInstance {
    *  POSTed; we echo it back for the response envelope. */
   getConnectInventory(vault_path: string): Promise<ConnectInventory>;
   getCallableInventory(): Promise<VaultNoteInput[]>;
+  /** Beat-as-data Phase 6: the engine's Score (tagged MusicXML payload) for a rhythm data note's JSON. Pure compute, writes nothing. */
+  computeRhythmScore(data: unknown, title: string): Promise<unknown>;
   /** v0.2.17: sync a single user-vault file change into MEMFS so the
    *  next compute sees the new content. Call after every disk write
    *  to a user-vault file (writeGeneratedCode, manual editor saves
@@ -2075,6 +2090,15 @@ _forge_resolve_action_code(
    *  sentence. Feeds `buildCallableInventory`, whose output is BOTH
    *  what /generate is shown and what the closure check validates
    *  against. */
+  /** Beat-as-data Phase 6 — the engine's Score for a rhythm data note's JSON, as the tagged MusicXML payload Run output renders. Pure
+   *  compute: nothing is written anywhere. Throws (with the engine's own message) on invalid data. */
+  async computeRhythmScore(data: unknown, title: string): Promise<unknown> {
+    this.pyodide.globals.set("_forge_rhythm_data_json", JSON.stringify(data));
+    this.pyodide.globals.set("_forge_rhythm_title", title);
+    const proxy = this.pyodide.runPython(`_forge_rhythm_score_payload(_forge_rhythm_data_json, _forge_rhythm_title)`);
+    return this._unwrap(proxy);
+  }
+
   async getCallableInventory(): Promise<VaultNoteInput[]> {
     const proxy = this.pyodide.runPython(`_forge_callable_inventory()`);
     return this._unwrap(proxy) as VaultNoteInput[];
