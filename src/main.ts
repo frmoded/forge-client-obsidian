@@ -5343,22 +5343,28 @@ export default class ForgePlugin extends Plugin {
    *  EVENT_WRITE_SETTLE_MS for a late delete event; `'user'` writes pay no latency. See frontmatter-write-guard-core.ts. */
   private readonly deletionTracker = createDeletionTracker();
 
-  private async guardedProcessFrontMatter(
-    file: TFile,
-    fn: (fm: any) => void,
-    kind: 'user' | 'event' = 'user',
-  ): Promise<void> {
+  /** Run `write` (a `processFrontMatter` or a whole-body `vault.modify` — both end in an adapter write that CREATES a missing file)
+   *  under the write-after-delete guard. */
+  private async guardedWrite(file: TFile, write: () => Promise<void>, kind: 'user' | 'event' = 'user'): Promise<void> {
     await guardedFrontMatterWrite({
       path: file.path,
       now: () => Date.now(),
       tracker: this.deletionTracker,
       exists: () => this.app.vault.adapter.exists(file.path),
       remove: () => this.app.vault.adapter.remove(file.path),
-      write: () => this.app.fileManager.processFrontMatter(file, fn),
+      write,
       settle: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
       settleMs: kind === 'event' ? EVENT_WRITE_SETTLE_MS : 0,
       log: (m) => console.warn(`[forge] ${m}`),
     });
+  }
+
+  private async guardedProcessFrontMatter(
+    file: TFile,
+    fn: (fm: any) => void,
+    kind: 'user' | 'event' = 'user',
+  ): Promise<void> {
+    await this.guardedWrite(file, () => this.app.fileManager.processFrontMatter(file, fn), kind);
   }
 
   private async withProgrammaticWrite<T>(
@@ -5802,7 +5808,9 @@ export default class ForgePlugin extends Plugin {
       // backfill (including canonical_facet seeding) from triggering
       // the hand-edit canonical_facet write path.
       await this.withProgrammaticWrite(file.path, async () => {
-        await this.app.vault.modify(file, result.newBody);
+        // Drain 2026-10-11-0900 §4: same TOCTOU as processFrontMatter (vault.modify -> adapter.write creates a missing file), so the
+        // file-open backfill goes through the same guard.
+        await this.guardedWrite(file, () => this.app.vault.modify(file, result.newBody), 'event');
       });
       // Drain 2026-08-05-1200 — the backfill can ADD a `# Python`
       // section (v11.3 shape). Without this sync, disk gains the

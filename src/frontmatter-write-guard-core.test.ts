@@ -152,9 +152,17 @@ test('wiring: every plugin frontmatter write goes through guardedProcessFrontMat
   const raw = [...main.matchAll(/fileManager\.processFrontMatter\(/g)].length;
   assert.equal(raw, 1, 'the only direct call is inside the guard helper');
   assert.match(main, /private async guardedProcessFrontMatter\(/);
+  assert.match(main, /write: \(\) => this\.app\.fileManager\.processFrontMatter|this\.guardedWrite\(file, \(\) => this\.app\.fileManager\.processFrontMatter\(file, fn\), kind\)/);
   assert.match(main, /this\.app\.vault\.on\('delete', \(f\) => \{\s*this\.deletionTracker\.noteDeleted\(f\.path, Date\.now\(\)\);/);
   // the two modify-event writers settle (they are what races a `git rm`); user-initiated writes do not
   assert.equal([...main.matchAll(/guardedProcessFrontMatter\(file, \(fm: any\) => \{/g)].length, 6);
   assert.equal([...main.matchAll(/\}, 'event'\);/g)].length, 2, 'maybeUpdateSourceFacet and maybeStampTypedLetsInputs');
   assert.match(main, /settleMs: kind === 'event' \? EVENT_WRITE_SETTLE_MS : 0/);
+});
+
+test('wiring: the file-open backfill\'s whole-body vault.modify goes through the same guard (it ends in adapter.write, which also creates)', () => {
+  const main = fs.readFileSync(path.resolve(process.cwd(), 'src/main.ts'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(main, /await this\.guardedWrite\(file, \(\) => this\.app\.vault\.modify\(file, result\.newBody\), 'event'\);/);
+  assert.match(main, /private async guardedWrite\(/);
+  assert.ok(!/\n\s*await this\.app\.vault\.modify\(file, result\.newBody\)/.test(main), 'never awaited bare');
 });
