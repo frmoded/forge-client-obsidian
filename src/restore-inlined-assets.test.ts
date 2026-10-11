@@ -144,3 +144,53 @@ test('BUNDLED_ASSETS: contains expected top-level keys', async () => {
   assert.ok(keys.includes('manifest.json'),
     'BUNDLED_ASSETS must contain top-level manifest.json.');
 });
+
+// ---- Drain 2026-10-10-2100 (b): content identity, and the folder Obsidian actually loaded ----------------------------------
+
+test('restoreInlinedAssets: SAME plugin version but a different bundle CONTENT ID forces the restore (the CCQA case: 0.6.1 across many builds)', async () => {
+  const adapter = makeStubAdapter();
+  const app = makeApp(adapter);
+  const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
+  const { BUNDLED_ASSETS, BUNDLED_ASSETS_VERSION, BUNDLED_ASSETS_CONTENT_ID } = await import('./bundled-assets.generated.ts');
+
+  // A previous build, same version, different content.
+  const stale = '.obsidian/plugins/forge-actions/assets/engine/forge/__init__.py';
+  adapter.files.set(stale, '# STALE content from an earlier build');
+  adapter.files.set('.obsidian/plugins/forge-actions/assets/.bundle-version', BUNDLED_ASSETS_VERSION);
+  adapter.files.set('.obsidian/plugins/forge-actions/assets/.bundle-content-id', 'an-older-build');
+
+  const written = await restoreInlinedAssets(app, 'forge-actions');
+  assert.equal(written, Object.keys(BUNDLED_ASSETS).length, 'every inlined file is restored');
+  assert.notEqual(adapter.files.get(stale), '# STALE content from an earlier build');
+  assert.equal(adapter.files.get('.obsidian/plugins/forge-actions/assets/.bundle-content-id'), BUNDLED_ASSETS_CONTENT_ID);
+});
+
+test('restoreInlinedAssets: version AND content id both current → nothing written (fast path preserved)', async () => {
+  const adapter = makeStubAdapter();
+  const app = makeApp(adapter);
+  const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
+  assert.ok((await restoreInlinedAssets(app, 'forge-actions')) > 0);
+  const writesBefore = adapter.files.size;
+  assert.equal(await restoreInlinedAssets(app, 'forge-actions'), 0);
+  assert.equal(adapter.files.size, writesBefore);
+});
+
+test('restoreInlinedAssets: a current version sentinel with NO content id is not trusted (restores once, then stamps it)', async () => {
+  const adapter = makeStubAdapter();
+  const app = makeApp(adapter);
+  const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
+  const { BUNDLED_ASSETS_VERSION, BUNDLED_ASSETS_CONTENT_ID } = await import('./bundled-assets.generated.ts');
+  adapter.files.set('.obsidian/plugins/forge-actions/assets/.bundle-version', BUNDLED_ASSETS_VERSION);
+  assert.ok((await restoreInlinedAssets(app, 'forge-actions')) > 0);
+  assert.equal(adapter.files.get('.obsidian/plugins/forge-actions/assets/.bundle-content-id'), BUNDLED_ASSETS_CONTENT_ID);
+});
+
+test('restoreInlinedAssets: writes under the folder it is GIVEN (manifest.dir), not one rebuilt from the id', async () => {
+  const adapter = makeStubAdapter();
+  const app = makeApp(adapter);
+  const { restoreInlinedAssets } = await import('./restore-inlined-assets.ts');
+  await restoreInlinedAssets(app, 'forge-actions', '.obsidian/plugins/renamed-folder');
+  assert.ok(adapter.files.has('.obsidian/plugins/renamed-folder/assets/manifest.json'));
+  assert.ok(![...adapter.files.keys()].some((k) => k.startsWith('.obsidian/plugins/forge-actions/')),
+    'nothing is written under a folder Obsidian did not load the plugin from');
+});

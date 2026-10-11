@@ -28,6 +28,9 @@ import path from "node:path";
 /** Matches SENTINEL_FILE in src/restore-inlined-assets.ts. */
 export const SENTINEL_FILENAME = ".bundle-version";
 
+/** Matches CONTENT_ID_FILE in src/restore-inlined-assets.ts. Drain 2026-10-10-2100 (b). */
+export const CONTENT_ID_FILENAME = ".bundle-content-id";
+
 /**
  * Write `version` to `<assetsDir>/.bundle-version` and return the path.
  *
@@ -54,5 +57,26 @@ export function writeBundleVersionSentinel(assetsDir, version) {
   fs.mkdirSync(assetsDir, { recursive: true });
   const target = path.join(assetsDir, SENTINEL_FILENAME);
   fs.writeFileSync(target, version);
+  return target;
+}
+
+/**
+ * Write the bundle's content identity to `<assetsDir>/.bundle-content-id` (no trailing newline — byte-identical to the runtime
+ * write). Drain 2026-10-10-2100 (b): `.bundle-version` is the plugin version, the same across many builds, so a build whose bundled
+ * notes changed but whose version did not looked "current" to the restore fast path. This file carries what changed.
+ *
+ * A build OUTPUT (gitignored), like assets/manifest.json: writing it never dirties the tree.
+ */
+export function writeBundleContentIdSentinel(assetsDir, contentId) {
+  if (typeof contentId !== "string" || contentId.trim() === "") {
+    throw new Error(
+      `bundle content id sentinel: refusing to write an empty content id `
+      + `(got ${JSON.stringify(contentId)}). A blank id never matches `
+      + `BUNDLED_ASSETS_CONTENT_ID, so every launch would re-restore every inlined asset.`,
+    );
+  }
+  fs.mkdirSync(assetsDir, { recursive: true });
+  const target = path.join(assetsDir, CONTENT_ID_FILENAME);
+  fs.writeFileSync(target, contentId);
   return target;
 }

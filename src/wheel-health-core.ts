@@ -104,7 +104,7 @@ export interface WheelPanelEntry {
  *  the user's terms. */
 export function wheelExtractPanelEntry(
   failures: readonly WheelExtractFailure[],
-  outcome: { deleted: readonly string[] },
+  outcome: { deleted: readonly string[]; wheelsDir?: string },
 ): WheelPanelEntry {
   const deleted = new Set(outcome?.deleted ?? []);
   const lines: string[] = [];
@@ -123,7 +123,7 @@ export function wheelExtractPanelEntry(
   } else {
     lines.push(
       'Could not remove the damaged copy automatically. Delete it from ' +
-      '.obsidian/plugins/forge/assets/wheels/ and restart ' +
+      `${outcome?.wheelsDir ?? "the assets/wheels/ folder inside Forge's plugin folder"} and restart ` +
       'Obsidian; Forge will re-download and verify it.',
     );
   }

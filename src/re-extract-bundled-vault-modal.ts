@@ -33,6 +33,7 @@ export interface BundledVaultOption {
  *  modal cannot offer a vault the bundle does not carry. */
 import {
   BUNDLED_VAULT_NAMES,
+  bundledVaultsRoot,
   type BundledVaultName,
 } from './bundled-vault-extraction-core.ts';
 export { BUNDLED_VAULT_NAMES };
@@ -43,11 +44,11 @@ export type { BundledVaultName };
  *  radio-button labels. */
 export async function loadBundledVaultOptions(
   adapter: DataAdapter,
+  pluginDir: string,
 ): Promise<BundledVaultOption[]> {
   const options: BundledVaultOption[] = [];
   for (const vaultName of BUNDLED_VAULT_NAMES) {
-    const bundledTomlPath =
-      `.obsidian/plugins/forge/assets/vaults/${vaultName}/forge.toml`;
+    const bundledTomlPath = `${bundledVaultsRoot(pluginDir)}/${vaultName}/forge.toml`;
     const extractedTomlPath = `${vaultName}/forge.toml`;
 
     let bundledVersion: string | null = null;

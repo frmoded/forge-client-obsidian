@@ -14,9 +14,23 @@
 // adding a fifth vault to assets/vaults/ (and scripts/vaults.txt)
 // needs no edit here.
 
-/** Where the plugin's bundled vaults live inside the user's vault. */
-export const BUNDLED_VAULTS_ROOT =
-  '.obsidian/plugins/forge/assets/vaults';
+/** Where the plugin's restored assets live: `<plugin folder>/assets`. Drain 2026-10-10-2100 — derived from the folder Obsidian loaded
+ *  the plugin from (`this.manifest.dir`), never from a hard-coded id: the id changed `forge` → `forge-actions` at v0.5.0 and the old
+ *  literal kept pointing extraction at the stale pre-rename folder. */
+export function pluginAssetsRoot(pluginDir: string): string {
+  return `${pluginDir.replace(/\/+$/, '')}/assets`;
+}
+
+/** Where the plugin's bundled vaults live inside the user's vault (the SOURCE of every extraction). */
+export function bundledVaultsRoot(pluginDir: string): string {
+  return `${pluginAssetsRoot(pluginDir)}/vaults`;
+}
+
+/** The two welcome notes the plugin ships (extracted to the vault root on first run). */
+export function bundledWelcomePaths(pluginDir: string): { welcome: string; greet: string } {
+  const root = `${pluginAssetsRoot(pluginDir)}/welcome`;
+  return { welcome: `${root}/welcome.md`, greet: `${root}/greet.md` };
+}
 
 import { EDITION_VAULT_NAMES } from './edition-core.ts';
 import { EDITION } from './edition-selected.ts';
@@ -62,7 +76,7 @@ export interface DerivedBundledVaults {
   source: 'bundle' | 'fallback';
 }
 
-/** Turn an `adapter.list(BUNDLED_VAULTS_ROOT).folders` result into the
+/** Turn an `adapter.list(bundledVaultsRoot(pluginDir)).folders` result into the
  *  set of bundled vault names. Obsidian returns vault-relative full
  *  paths; we want basenames. Dotted entries (.DS_Store and friends)
  *  are not vaults. */

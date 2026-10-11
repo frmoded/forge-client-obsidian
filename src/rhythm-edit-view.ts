@@ -21,6 +21,7 @@
 
 import { EditableFileView, MarkdownView, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
+import { resolveWidgetFile } from './bundled-widget-lookup.ts';
 import { createAutosavePipeline, type AutosavePipeline, type SaveOutcome } from './rhythm-autosave-core.ts';
 import { createDefaultViewController, type LeafInfo, type LeafLocation, type SwapTarget } from './rhythm-default-view-core.ts';
 import { registerRestoreParticipants } from './restore-hold-core.ts';
@@ -177,12 +178,11 @@ export class RhythmEditView extends EditableFileView {
     const text = await this.app.vault.read(file);
     const note = readRhythmNote(text);
     if (note.ok === false) return this.showRefusal(`Edit rhythm: ${note.message}`);
-    const widget = this.app.vault.getAbstractFileByPath(RHYTHM_BOX_WIDGET_PATH);
-    if (!(widget instanceof TFile)) {
-      return this.showRefusal(`Edit rhythm: the Rhythm Box widget was not found at ${RHYTHM_BOX_WIDGET_PATH} (it ships in the music-theory vault).`);
-    }
-    const html = await this.app.vault.read(widget);
-    if (!html.trim()) return this.showRefusal(`Edit rhythm: ${RHYTHM_BOX_WIDGET_PATH} is empty.`);
+    // Drain 2026-10-10-2100 (a): root-relative vault file → the same path under each bundled-vault folder → the plugin's own inlined
+    // copy. In a normal user vault the library is the `music-theory/` SUBFOLDER, so the old root-absolute lookup could never succeed.
+    const widget = await resolveWidgetFile(this.app, RHYTHM_BOX_WIDGET_PATH);
+    if (widget.ok === false) return this.showRefusal(`Edit rhythm: the Rhythm Box widget was ${widget.message}`);
+    const html = widget.html;
 
     this.session = RhythmNoteSession.fromText(text);
     this.pipeline = createAutosavePipeline({

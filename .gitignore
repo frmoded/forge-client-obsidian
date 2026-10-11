@@ -20,6 +20,11 @@ __pycache__/
 # (paths depend on which wheels are present); stays gitignored.
 assets/manifest.json
 
+# Build output / runtime records (drain 2026-10-10-2100): the bundle's content identity (written by inline-bundled-assets.mjs and
+# shipped in the asset folder) and the per-vault record of what was last extracted (written by the plugin into its own folder).
+assets/.bundle-content-id
+assets/.extracted-bundle-ids.json
+
 # Release zips for V1 distribution; produced by `npm run release-zip`.
 # Upload to GitHub Releases manually per V1 closed-beta workflow.
 dist/

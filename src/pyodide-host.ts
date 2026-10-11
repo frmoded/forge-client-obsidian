@@ -1631,7 +1631,10 @@ def _forge_moda_click(x, y):
     const health = deriveRuntimeHealth({ extractFailures, importFailures });
     if (extractFailures.length > 0) {
       const deleted = await this._dropDamagedWheels(extractFailures);
-      const entry = wheelExtractPanelEntry(extractFailures, { deleted });
+      const entry = wheelExtractPanelEntry(extractFailures, {
+        deleted,
+        wheelsDir: corruptWheelCachePath(this.pluginId, ''),
+      });
       console.error(`Forge: ${entry.title}`, entry.lines);
       await this._appendToOutputPanel(entry.title, entry.lines);
     } else if (health.status === "degraded") {

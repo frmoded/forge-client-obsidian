@@ -59,6 +59,8 @@ export const BRAT_REPO_URL =
 
 export interface ForgeHost {
   app: App;
+  /** The folder Obsidian loaded the plugin from (`manifest.dir`) — where the bundled vaults to extract live. */
+  pluginDir: string;
   serverUrlOf(): string;
   vaultPathOf(): string;
   reloadActiveDomains(): Promise<void>;
@@ -524,7 +526,7 @@ class EditVaultDomainsModal extends Modal {
     for (const action of actions) {
       try {
         if (action.type === 'extract') {
-          await ensureBundledFor(action.domain, this.host.app);
+          await ensureBundledFor(action.domain, this.host.app, this.host.pluginDir);
         } else if (action.type === 'register-commands') {
           this.host.registerDomainCommands(action.domain);
         }

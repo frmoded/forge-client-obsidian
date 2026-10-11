@@ -26,9 +26,11 @@ import { fileURLToPath } from 'node:url';
 import { vaultDeclaresMusic } from './forge-music-gate.ts';
 import { FORGE_TOML_STUB_BODY } from './forge-toml-stub.ts';
 import {
-  BUNDLED_VAULTS_ROOT,
   FALLBACK_BUNDLED_VAULTS,
+  bundledVaultsRoot,
+  bundledWelcomePaths,
   deriveBundledVaultNames,
+  pluginAssetsRoot,
 } from './bundled-vault-extraction-core.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,6 +38,7 @@ const REPO = path.resolve(__dirname, '..');
 
 /** What Obsidian's `adapter.list()` returns for the bundle dir: full
  *  vault-relative folder paths, not basenames. */
+const BUNDLED_VAULTS_ROOT = bundledVaultsRoot('.obsidian/plugins/forge-actions');
 function listingFor(names: string[]): string[] {
   return names.map((n) => `${BUNDLED_VAULTS_ROOT}/${n}`);
 }
@@ -148,4 +151,40 @@ test('welcome.ts extracts from the derived set, not a hardcoded list', () => {
     !src.includes('vaultDeclaresMusic'),
     'extraction coverage must not depend on the declared domains',
   );
+});
+
+
+// ---- Drain 2026-10-10-2100 (b): the extraction SOURCE root ------------------------------------------------------------
+// The plugin id changed `forge` → `forge-actions` at v0.5.0 (commit beb5854) but this root stayed `.obsidian/plugins/forge/…`: on an
+// upgraded vault the extractor kept reading the stale v0.4.0 folder (ClaudeQA: music-theory 0.11.18, no music_instruments/), and on a
+// fresh install of 0.5+ the folder does not exist at all. The root is now derived from the folder Obsidian loaded the plugin from.
+
+test('roots are derived from the plugin folder Obsidian loaded (manifest.dir), never from a hard-coded id', () => {
+  assert.equal(pluginAssetsRoot('.obsidian/plugins/forge-actions'), '.obsidian/plugins/forge-actions/assets');
+  assert.equal(bundledVaultsRoot('.obsidian/plugins/forge-actions'), '.obsidian/plugins/forge-actions/assets/vaults');
+  assert.equal(bundledVaultsRoot('.obsidian/plugins/some-other-folder/'), '.obsidian/plugins/some-other-folder/assets/vaults', 'trailing slash tolerated');
+  assert.deepEqual(bundledWelcomePaths('.obsidian/plugins/forge-actions'), {
+    welcome: '.obsidian/plugins/forge-actions/assets/welcome/welcome.md',
+    greet: '.obsidian/plugins/forge-actions/assets/welcome/greet.md',
+  });
+});
+
+test('no plugin source file hard-codes the pre-0.5.0 plugin folder `.obsidian/plugins/forge/`', () => {
+  const stripped = (src: string) => src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const offenders: string[] = [];
+  for (const f of fs.readdirSync(path.join(REPO, 'src'))) {
+    if (!f.endsWith('.ts') || f.endsWith('.test.ts') || f.includes('.generated.')) continue;
+    const body = stripped(fs.readFileSync(path.join(REPO, 'src', f), 'utf8'));
+    if (/plugins\/forge(?![-\w])/.test(body)) offenders.push(f);
+  }
+  assert.deepEqual(offenders, [], 'derive the folder from manifest.dir (or the pluginDir parameter) instead');
+});
+
+test('main.ts hands the loaded plugin folder to the first-run extraction, the asset restore and the Forge action host', () => {
+  const stripped = (src: string) => src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  const main = stripped(fs.readFileSync(path.join(REPO, 'src', 'main.ts'), 'utf8'));
+  assert.match(main, /runFirstRunCheck\(this\.app, this\.manifest\.dir\)/);
+  assert.match(main, /restoreInlinedAssets\(this\.app, this\.manifest\.id, this\.manifest\.dir\)/);
+  assert.match(main, /pluginDir: this\.manifest\.dir/, 'the ForgeHost carries it so ensureBundledFor re-extracts from the same place');
+  assert.match(main, /loadBundledVaultOptions\(this\.app\.vault\.adapter, this\.manifest\.dir\)/);
 });

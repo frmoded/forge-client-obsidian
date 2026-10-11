@@ -180,6 +180,7 @@ import {
   BUNDLED_VAULT_NAMES,
 } from './re-extract-bundled-vault-modal.ts';
 import { decideReExtractActions } from './re-extract-bundled-vault-core.ts';
+import { bundledVaultsRoot } from './bundled-vault-extraction-core.ts';
 import { stripPlaceholderLines } from './description-placeholder-core.ts';
 import { planRollingBackup } from './rolling-backup-core.ts';
 import { resolveStripRunFile } from './strip-run-file-core.ts';
@@ -561,7 +562,7 @@ export default class ForgePlugin extends Plugin {
     // iframe loader paths work unchanged. Idempotent: dev install
     // sees all files already present and skips.
     try {
-      const written = await restoreInlinedAssets(this.app, this.manifest.id);
+      const written = await restoreInlinedAssets(this.app, this.manifest.id, this.manifest.dir);
       if (written > 0) {
         console.log(`${NOTICE_PREFIX}restored ${written} inlined assets to plugin directory (BRAT-install support)`);
       }
@@ -1527,7 +1528,7 @@ export default class ForgePlugin extends Plugin {
       callback: () => { void this.openReExtractBundledVaultModal(); },
     });
 
-    await runFirstRunCheck(this.app);
+    await runFirstRunCheck(this.app, this.manifest.dir);
 
     // v0.2.8: ensureServerRunning() was called here in pre-V1 builds
     // to auto-spawn uvicorn from a hardcoded venv path. Pyodide makes
@@ -1992,6 +1993,7 @@ export default class ForgePlugin extends Plugin {
   private forgeHost(): ForgeHost {
     return {
       app: this.app,
+      pluginDir: this.manifest.dir,
       serverUrlOf: () => this.settings.serverUrl,
       vaultPathOf: () => (this.app.vault.adapter as FileSystemAdapter).getBasePath(),
       reloadActiveDomains: () => this.loadActiveDomains(),
@@ -3520,7 +3522,7 @@ export default class ForgePlugin extends Plugin {
    *  Caller: command palette entry registered in onload(). */
   private async openReExtractBundledVaultModal(): Promise<void> {
     try {
-      const options = await loadBundledVaultOptions(this.app.vault.adapter);
+      const options = await loadBundledVaultOptions(this.app.vault.adapter, this.manifest.dir);
       new ReExtractBundledVaultModal(this.app, {
         options,
         onConfirm: (vaultName) => this.reExtractBundledVault(vaultName),
@@ -3555,8 +3557,7 @@ export default class ForgePlugin extends Plugin {
       return;
     }
     const adapter = this.app.vault.adapter;
-    const bundledRoot =
-      `.obsidian/plugins/${this.manifest.id}/assets/vaults/${vaultName}`;
+    const bundledRoot = `${bundledVaultsRoot(this.manifest.dir)}/${vaultName}`;
     const extractedRoot = vaultName;
 
     if (!(await adapter.exists(bundledRoot))) {

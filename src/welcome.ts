@@ -1,8 +1,15 @@
 import { App, DataAdapter, TFile, WorkspaceLeaf, MarkdownView, Notice } from 'obsidian';
 import { copyDirRecursive } from './copy-dir-core.ts';
 import { ensureForgeTomlStub } from './forge-toml-stub.ts';
-import { compareBundledVaultVersion } from './bundled-vault-version-core.ts';
-import { planRollingBackup, shouldSweepLegacyBakDir } from './rolling-backup-core.ts';
+import { shouldSweepLegacyBakDir } from './rolling-backup-core.ts';
+import {
+  ensureBundledVaultCore,
+  extractedIdsPath,
+  parseExtractedIds,
+  serializeExtractedIds,
+  type ExtractorAdapter,
+} from './bundled-vault-extractor-core.ts';
+import { BUNDLED_ASSETS_CONTENT_ID } from './bundled-assets.generated.ts';
 import { isReservedDirName } from './vault-mount-exclusions-core.ts';
 import { ensureWelcomeFiles } from './welcome-files-core.ts';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
@@ -10,7 +17,8 @@ import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
 import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-classifier-core.ts';
 import { computeSweepTrashList } from './sweep-bundle-dropped-core.ts';
 import {
-  BUNDLED_VAULTS_ROOT,
+  bundledVaultsRoot,
+  bundledWelcomePaths,
   BUNDLED_VAULT_NAME_SET,
   deriveBundledVaultNames,
   type DerivedBundledVaults,
@@ -130,7 +138,7 @@ simulation is built; edit them to experiment.
 Edit or delete this Welcome note anytime — Forge won't recreate it.
 `;
 
-export async function runFirstRunCheck(app: App): Promise<void> {
+export async function runFirstRunCheck(app: App, pluginDir: string): Promise<void> {
   const adapter = app.vault.adapter;
   console.log('Forge: runFirstRunCheck starting');
 
@@ -199,9 +207,10 @@ export async function runFirstRunCheck(app: App): Promise<void> {
       );
     } else {
       try {
+        const welcomePaths = bundledWelcomePaths(pluginDir);
         const result = await ensureWelcomeFiles(adapter, {
-          welcomeBundle: '.obsidian/plugins/forge/assets/welcome/welcome.md',
-          greetBundle: '.obsidian/plugins/forge/assets/welcome/greet.md',
+          welcomeBundle: welcomePaths.welcome,
+          greetBundle: welcomePaths.greet,
         });
         if (result.kind === 'extracted') {
           console.log('Forge: extracted welcome.md + greet.md to vault root');
@@ -222,7 +231,7 @@ export async function runFirstRunCheck(app: App): Promise<void> {
       // refresh of welcome.md/greet.md. Sweep + refresh any V1-shape
       // or Obsidian-default welcome files left behind.
       try {
-        await refreshOutdatedWelcomes(app, adapter);
+        await refreshOutdatedWelcomes(app, adapter, pluginDir);
       } catch (e) {
         console.error('Forge: refreshOutdatedWelcomes failed', e);
       }
@@ -273,7 +282,7 @@ export async function runFirstRunCheck(app: App): Promise<void> {
         `itself as source repo for ${sourceVaultName}`,
       );
     } else {
-      await ensureAllBundledVaults(app);
+      await ensureAllBundledVaults(app, pluginDir);
     }
 
     // v0.2.262 drain 1310 — migrateChipsMdToV2 removed alongside
@@ -292,11 +301,11 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     if (!shouldSkipBundledExtract(sourceVaultName)) {
       try {
         const allTrashed: { lib: string; files: string[] }[] = [];
-        const sweepTargets = (await listBundledVaultNames(adapter)).names;
+        const sweepTargets = (await listBundledVaultNames(adapter, pluginDir)).names;
         for (const lib of sweepTargets) {
           const trashed = await sweepBundleDroppedFiles(
             app,
-            `${BUNDLED_VAULTS_ROOT}/${lib}`,
+            `${bundledVaultsRoot(pluginDir)}/${lib}`,
             lib,
           );
           if (trashed.length > 0) {
@@ -331,67 +340,6 @@ export async function runFirstRunCheck(app: App): Promise<void> {
     }
   } catch (e) {
     console.error('Forge: runFirstRunCheck failed', e);
-  }
-}
-
-/** Drain 2026-08-25-0120 — move the outgoing extracted vault into its
- *  ONE rolling backup dir, replacing any previous backup.
- *
- *  Was `deleteExtractedDir` (v0.2.106), which itself replaced
- *  `renameWithBackup` (v0.2.39). The full arc, because both previous
- *  behaviors are still described in places people read:
- *
- *    v0.2.39   rename to `<vault>.bak.<version>/`. One dir per drift
- *              event; every copy contributed another `simulation.md`
- *              with `featured: true`, so findFeaturedSnippet broke.
- *              Cohort smoke (Tamar, v0.2.105) reported both.
- *    v0.2.106  delete outright. No litter — but a cohort member who
- *              poked at a bundled snippet to learn lost it with no
- *              recourse.
- *    now       ONE fixed dir per vault, replaced in place. Bounded
- *              litter (exactly one) and exactly one undo. Driver
- *              adjudicated this as 1620 option (b).
- *
- *  The `.bak.previous` name is not cosmetic: the engine walk and the
- *  plugin mount both exclude `\.bak\.` segments, so the backup is
- *  invisible to snippet discovery. See rolling-backup-core.ts.
- *
- *  Replace-then-move, not move-onto: `rename` onto an existing
- *  directory is not portable across adapters. */
-async function backupExtractedDir(
-  adapter: DataAdapter,
-  targetDir: string,
-): Promise<void> {
-  let folders: string[] = [];
-  try {
-    const root = await adapter.list('/');
-    folders = root?.folders ?? [];
-  } catch (e) {
-    console.error('backupExtractedDir: vault root list failed', e);
-  }
-  const plan = planRollingBackup(targetDir, folders);
-  if (plan.removeExistingFirst) {
-    try {
-      await adapter.rmdir(plan.backupDir, true);
-    } catch (e) {
-      console.error(`backupExtractedDir: rmdir ${plan.backupDir} failed`, e);
-    }
-  }
-  try {
-    await adapter.rename(targetDir, plan.backupDir);
-    console.log(`Forge: ${targetDir} → ${plan.backupDir} (rolling backup)`);
-  } catch (e) {
-    // The re-extract must still happen. Fall back to the v0.2.106
-    // behavior rather than copying the new bundle on top of the old
-    // tree, which would leave bundle-dropped files behind.
-    console.error(
-      `backupExtractedDir: rename ${targetDir} → ${plan.backupDir} failed; ` +
-      `falling back to delete`, e);
-    try {
-      await adapter.rmdir(targetDir, true);
-    } catch (e2) {
-      console.error(`backupExtractedDir: fallback rmdir ${targetDir} failed`, e2);
-    }
   }
 }
 
@@ -447,79 +395,9 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
   return removed;
 }
 
-/** Shared extraction routine for bundled vaults (forge-moda + forge-
- *  music). Compares the bundled forge.toml version against the
- *  extracted one and either skips, copies (first install), or
- *  backs-up-then-re-extracts (drift detected). v0.2.39 replaces the
- *  NOTE (drain 2026-08-25-0120): "backup" here means the ONE rolling
- *  `<vault>.bak.previous/` dir, replaced on every re-extract — not the
- *  v0.2.39 per-version dirs and not v0.2.106's delete. Exactly one
- *  backup exists per vault at any time.
- *  pre-v0.2.39 `exists(targetDir) → skip` gate that left users
- *  running stale extracted vaults until they manually `rm -rf`.
- *
- *  Behavior matrix:
- *  - bundled forge.toml missing → warn, skip (no source to extract).
- *  - target dir missing → first-install copy.
- *  - target dir present, both versions equal → skip (logged).
- *  - target dir present, versions differ → roll the backup + re-extract.
- *  - target dir present, either version unparseable → warn, skip
- *    (avoid data loss; user can re-bootstrap manually). */
-async function ensureBundledVault(
-  adapter: DataAdapter,
-  sourceDir: string,
-  targetDir: string,
-  label: string,
-): Promise<void> {
-  if (!(await adapter.exists(sourceDir))) {
-    console.warn(`Forge: bundled ${label} missing from plugin assets; skipping extraction`);
-    return;
-  }
-
-  const bundledTomlPath = `${sourceDir}/forge.toml`;
-  const extractedTomlPath = `${targetDir}/forge.toml`;
-  const bundledBody = (await adapter.exists(bundledTomlPath))
-    ? await adapter.read(bundledTomlPath)
-    : null;
-  const extractedBody =
-    (await adapter.exists(targetDir)) && (await adapter.exists(extractedTomlPath))
-      ? await adapter.read(extractedTomlPath)
-      : null;
-
-  const status = compareBundledVaultVersion(bundledBody, extractedBody);
-
-  if (status.kind === 'no-bundled') {
-    console.warn(`Forge: bundled ${label} forge.toml missing or unreadable; skipping`);
-    return;
-  }
-  if (status.kind === 'unparseable') {
-    console.warn(
-      `Forge: cannot compare ${label} versions (${status.reason}); skipping to avoid data loss`,
-    );
-    return;
-  }
-  if (status.kind === 'match') {
-    console.log(`Forge: ${label} already at version ${status.version}; skipping`);
-    return;
-  }
-  if (status.kind === 'drift') {
-    console.log(
-      `Forge: ${label} drift detected (extracted ${status.extracted} → bundled ${status.bundled}); re-extracting`,
-    );
-    // Drain 2026-08-25-0120 — the outgoing tree is preserved in ONE
-    // rolling backup dir (replacing any previous). See
-    // backupExtractedDir for the v0.2.39 → v0.2.106 → now arc.
-    await backupExtractedDir(adapter, targetDir);
-  }
-  // 'no-extracted' falls through to the copy below.
-
-  // Drain 2026-08-25-1010 — `isReservedDirName` so Forge-managed state
-  // and backup dirs in the bundle never travel into a user's vault.
-  // 0140 removed the `.forge/` that was actually there; this makes the
-  // absence a property of the COPIER rather than of the input.
-  await copyDirRecursive(adapter, sourceDir, targetDir, isReservedDirName);
-  console.log(`Forge: extracted bundled ${label} into vault`);
-}
+// Drain 2026-10-10-2100 (b) — the per-vault extraction routine (version compare, rolling backup, first-install copy, and the new
+// content-identity "add missing files" pass) moved to bundled-vault-extractor-core.ts so a real extraction can be tested without
+// `obsidian`. See that file's header for the behaviour matrix.
 
 /** List the vaults the plugin bundle actually carries. Derived from
  *  assets/vaults/ at runtime — the set is whatever shipped, so adding
@@ -528,10 +406,12 @@ async function ensureBundledVault(
  *  empty, rather than extracting nothing. */
 async function listBundledVaultNames(
   adapter: DataAdapter,
+  pluginDir: string,
 ): Promise<DerivedBundledVaults> {
+  const vaultsRoot = bundledVaultsRoot(pluginDir);
   let folders: string[] | undefined;
   try {
-    const listed = await adapter.list(BUNDLED_VAULTS_ROOT);
+    const listed = await adapter.list(vaultsRoot);
     folders = listed?.folders;
   } catch (e) {
     console.error('Forge: listing bundled vaults failed', e);
@@ -539,7 +419,7 @@ async function listBundledVaultNames(
   const derived = deriveBundledVaultNames(folders);
   if (derived.source === 'fallback') {
     console.warn(
-      `Forge: could not list ${BUNDLED_VAULTS_ROOT}; falling back to ` +
+      `Forge: could not list ${vaultsRoot}; falling back to ` +
       `the built-in vault list [${derived.names.join(', ')}]`,
     );
   }
@@ -599,7 +479,7 @@ async function parkLegacyMusicDirs(adapter: DataAdapter): Promise<void> {
  *
  *  Per-vault try/catch: one failing vault must not strand the rest,
  *  and none of them are fatal to plugin load. */
-async function ensureAllBundledVaults(app: App): Promise<void> {
+async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<void> {
   const adapter = app.vault.adapter;
   try {
     await parkLegacyMusicDirs(adapter);
@@ -607,22 +487,42 @@ async function ensureAllBundledVaults(app: App): Promise<void> {
     console.error('Forge: parkLegacyMusicDirs failed', e);
   }
 
-  const derived = await listBundledVaultNames(adapter);
+  const derived = await listBundledVaultNames(adapter, pluginDir);
   console.log(
     `Forge: bundled vaults to extract (from ${derived.source}): ` +
     `${derived.names.join(', ')}`,
   );
+
+  // Drain 2026-10-10-2100 (b): the identity each vault was last extracted at lives in the PLUGIN folder, not the user's vault.
+  const idsPath = extractedIdsPath(pluginDir);
+  let recorded: Record<string, string> = {};
+  try {
+    recorded = parseExtractedIds((await adapter.exists(idsPath)) ? await adapter.read(idsPath) : null);
+  } catch (e) {
+    console.error('Forge: reading the extracted-bundle record failed; treating as none', e);
+  }
+  const next = { ...recorded };
+
   for (const name of derived.names) {
     try {
-      await ensureBundledVault(
-        adapter,
-        `${BUNDLED_VAULTS_ROOT}/${name}`,
-        name,
-        name,
-      );
+      const outcome = await ensureBundledVaultCore(adapter as ExtractorAdapter, {
+        sourceDir: `${bundledVaultsRoot(pluginDir)}/${name}`,
+        targetDir: name,
+        label: name,
+        bundleId: BUNDLED_ASSETS_CONTENT_ID,
+        recordedId: recorded[name] ?? null,
+      });
+      if (outcome.record) next[name] = BUNDLED_ASSETS_CONTENT_ID;
     } catch (e) {
       console.error(`Forge: extracting bundled ${name} failed`, e);
     }
+  }
+
+  try {
+    const body = serializeExtractedIds(next);
+    if (body !== serializeExtractedIds(recorded)) await adapter.write(idsPath, body);
+  } catch (e) {
+    console.error('Forge: writing the extracted-bundle record failed (the next launch re-checks; nothing is lost)', e);
   }
 }
 
@@ -634,12 +534,12 @@ async function ensureAllBundledVaults(app: App): Promise<void> {
  *  activated. This stays as a repair hook: it re-runs the derived
  *  extraction, which is idempotent (ensureBundledVault's "already at
  *  version" path) and restores anything the user deleted. */
-export async function ensureBundledFor(domain: string, app: App): Promise<void> {
+export async function ensureBundledFor(domain: string, app: App, pluginDir: string): Promise<void> {
   console.log(
     `Forge: ensureBundledFor('${domain}') — bundled vaults are extracted ` +
     `unconditionally; re-running the derived extraction as a repair pass`,
   );
-  await ensureAllBundledVaults(app);
+  await ensureAllBundledVaults(app, pluginDir);
 }
 
 
@@ -837,7 +737,9 @@ async function listAllDirsRecursive(
 async function refreshOutdatedWelcomes(
   app: App,
   adapter: DataAdapter,
+  pluginDir: string,
 ): Promise<void> {
+  const welcomePaths = bundledWelcomePaths(pluginDir);
   const candidates: Array<{
     path: string;
     bundlePath: string | null;  // null → use WELCOME_NOTE constant
@@ -846,12 +748,12 @@ async function refreshOutdatedWelcomes(
     { path: WELCOME_PATH, bundlePath: null, label: 'Welcome.md' },
     {
       path: 'welcome.md',
-      bundlePath: '.obsidian/plugins/forge/assets/welcome/welcome.md',
+      bundlePath: welcomePaths.welcome,
       label: 'welcome.md',
     },
     {
       path: 'greet.md',
-      bundlePath: '.obsidian/plugins/forge/assets/welcome/greet.md',
+      bundlePath: welcomePaths.greet,
       label: 'greet.md',
     },
   ];

@@ -53,6 +53,7 @@
 
 import { TFile } from 'obsidian';
 import { parseHtmlEmbedSource } from './html-embed-view-core.ts';
+import { resolveWidgetFile } from './bundled-widget-lookup.ts';
 
 /** Narrow structural slice of `Plugin` + `App` this file actually
  *  needs, per this repo's structural-adapter-type convention — keeps
@@ -109,27 +110,18 @@ async function renderHtmlEmbed(
     return;
   }
 
-  const abstractFile = plugin.app.vault.getAbstractFileByPath(parsed.path);
-  if (!(abstractFile instanceof TFile)) {
-    renderEmbedError(el, 'html-embed: file not found', `Path: ${parsed.path}`);
+  // Drain 2026-10-10-2100 (a): the path is relative to the BUNDLED library's root, which is the vault root only in the dev vault.
+  // In a normal user vault the library is extracted as a subfolder, so look there too, then in the plugin's own inlined copy.
+  const widget = await resolveWidgetFile(plugin.app, parsed.path);
+  if (widget.ok === false) {
+    renderEmbedError(el, 'html-embed: file not found', `Path: ${parsed.path}\n${widget.message}`);
     return;
   }
   if (!parsed.path.toLowerCase().endsWith('.html')) {
     renderEmbedError(el, 'html-embed: target is not an .html file', `Path: ${parsed.path}`);
     return;
   }
-
-  let html: string;
-  try {
-    html = await plugin.app.vault.read(abstractFile);
-  } catch (e) {
-    renderEmbedError(el, 'html-embed: could not read file', `${parsed.path}\n${(e as Error)?.message ?? e}`);
-    return;
-  }
-  if (!html.trim()) {
-    renderEmbedError(el, 'html-embed: file is empty', `Path: ${parsed.path}`);
-    return;
-  }
+  const html = widget.html;
 
   // No caption/chrome — this is the actual point of the drain (the
   // driver dislikes the third-party plugin's unremovable "HTML Embed

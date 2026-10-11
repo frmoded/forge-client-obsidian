@@ -56,7 +56,7 @@ export function stubInlinedAssetsPlugin() {
     setup(b) {
       b.onResolve({ filter: /(^|\/)bundled-assets\.generated(\.ts)?$/ }, () => ({ path: "bundled-assets-stub", namespace: "forge-stub" }));
       b.onLoad({ filter: /.*/, namespace: "forge-stub" }, () => ({
-        contents: 'export const BUNDLED_ASSETS_VERSION = "stub"; export const BUNDLED_ASSETS = {};',
+        contents: 'export const BUNDLED_ASSETS_VERSION = "stub"; export const BUNDLED_ASSETS_CONTENT_ID = "stub"; export const BUNDLED_ASSETS = {};',
         loader: "js",
       }));
     },
