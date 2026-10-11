@@ -14,3 +14,28 @@ export function formatBuildStamp(stamp: BuildStamp): string {
   if (stamp.sha === 'unknown') return `unknown build${time}`;
   return `${stamp.sha}${stamp.dirty ? '+dirty' : ''}${time}`;
 }
+
+export interface StatusBarTooltipInput {
+  version: string;
+  /** `formatBuildStamp(BUILD_STAMP)`. */
+  build: string;
+  pluginId: string;
+  minAppVersion: string;
+}
+
+/** The status-bar item's hover text, on ONE line (separators, not newlines), so it reads the same however the tooltip wraps. */
+export function statusBarTooltip(i: StatusBarTooltipInput): string {
+  return `Forge Client v${i.version} · Build: ${i.build} · Plugin ID: ${i.pluginId} · Min app version: ${i.minAppVersion}`;
+}
+
+/** Obsidian draws its own tooltip from `aria-label`, positioned by `data-tooltip-position`; a bare `title` on a status-bar item never
+ *  showed there (drain 2026-10-11-0900 §6). Any native `title` is cleared so two tooltips cannot stack. */
+export function setStatusBarTooltip(
+  el: { setAttribute(name: string, value: string): void; removeAttribute?(name: string): void; title?: string },
+  text: string,
+): void {
+  el.setAttribute('aria-label', text);
+  el.setAttribute('data-tooltip-position', 'top');
+  el.removeAttribute?.('title');
+  if ('title' in el) el.title = undefined;
+}

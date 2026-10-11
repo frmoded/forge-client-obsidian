@@ -19,9 +19,21 @@
 // never reached an existing vault. The identity is baked at build time (scripts/inline-bundled-assets.mjs) and recorded per vault
 // in the PLUGIN folder — never inside the user's vault.
 //
+// Drain 2026-10-11-0900 §2 + §3 — the extraction MANIFEST (bundled-library-manifest-core.ts) turns "may I touch this file?" into a fact:
+//   drift + manifest        → PER-FILE update: unedited files update in place, new files are added, edited files are left (the new
+//                             bundle version is written beside them as `<name>.bundled`), deleted files stay deleted, bundle-dropped
+//                             files go only if unedited. The one-generation rolling backup is kept as a COPY, as a safety net.
+//   drift, no manifest      → today's wholesale path (rolling backup + re-extract), then a manifest is recorded.
+//   same version, new id    → add-missing as before, except a file the manifest says we extracted and the user deleted stays deleted.
+//   same version, same id, no manifest → adopt-manifest: no vault write; files byte-identical to the bundle are recorded.
+// `manifest: undefined` means "this caller does not use manifests" and gives exactly the pre-manifest behaviour.
+//
 // NO OBSIDIAN IMPORTS (pure-core convention).
 
 import { copyDirRecursive, type CopyAdapter } from './copy-dir-core.ts';
+import {
+  findDroppedCandidates, hashBytes, planFileDrift, planManifestSweep, type Manifest,
+} from './bundled-library-manifest-core.ts';
 import { compareBundledVaultVersion, type BundledVaultVersionStatus } from './bundled-vault-version-core.ts';
 import { planRollingBackup } from './rolling-backup-core.ts';
 import { isReservedDirName } from './vault-mount-exclusions-core.ts';
@@ -38,6 +50,8 @@ export interface ExtractorAdapter extends CopyAdapter {
 export type ExtractionAction =
   | 'copy-all'
   | 'backup-and-reextract'
+  | 'per-file-update'
+  | 'adopt-manifest'
   | 'add-missing'
   | 'skip-same-identity'
   | 'skip-no-source'
@@ -56,6 +70,14 @@ export interface ExtractionOutcome {
   copied: string[];
   /** True when this pass left the vault matching the bundle identity, so the caller should record it. */
   record: boolean;
+  /** The vault's manifest after this pass, or null when this pass did not produce one (the caller keeps what it had). */
+  manifest: Manifest | null;
+  /** Per-file drift only: files updated in place / newly added / left because edited / trashed because dropped+unedited / dropped but edited. */
+  updated: string[];
+  added: string[];
+  leftEdited: string[];
+  removed: string[];
+  keptEdited: string[];
 }
 
 /** The decision table. Pure: the caller supplies the two file listings (only read for `match`). */
@@ -65,16 +87,24 @@ export function planAutoExtraction(input: {
   recordedId: string | null;
   bundledFiles: readonly string[];
   extractedFiles: readonly string[];
+  /** 'off' = this caller predates manifests (legacy behaviour); 'none' = manifests are used but this vault has none yet. */
+  manifest?: 'off' | 'none' | 'present';
+  /** The paths the manifest says were extracted — a missing one of these was DELETED BY THE USER and is not re-added. */
+  manifestPaths?: ReadonlySet<string>;
 }): ExtractionPlan {
+  const m = input.manifest ?? 'off';
   switch (input.status) {
     case 'no-extracted': return { action: 'copy-all', files: [] };
-    case 'drift': return { action: 'backup-and-reextract', files: [] };
+    case 'drift': return { action: m === 'present' ? 'per-file-update' : 'backup-and-reextract', files: [] };
     case 'no-bundled': return { action: 'skip-no-bundled', files: [] };
     case 'unparseable': return { action: 'skip-unparseable', files: [] };
     case 'match': {
-      if (input.recordedId === input.bundleId) return { action: 'skip-same-identity', files: [] };
+      if (input.recordedId === input.bundleId) {
+        return { action: m === 'none' ? 'adopt-manifest' : 'skip-same-identity', files: [] };
+      }
       const have = new Set(input.extractedFiles);
-      const missing = input.bundledFiles.filter((f) => !have.has(f));
+      const known = input.manifestPaths ?? new Set<string>();
+      const missing = input.bundledFiles.filter((f) => !have.has(f) && !known.has(f));
       return { action: 'add-missing', files: [...missing].sort() };
     }
   }
@@ -138,12 +168,65 @@ async function backupExtractedDir(adapter: ExtractorAdapter, targetDir: string):
   }
 }
 
+/** `{ <path relative to the library root>: <hash> }` of every file in a bundle directory. */
+export async function manifestOfBundleDir(adapter: ExtractorAdapter, sourceDir: string): Promise<Manifest> {
+  const out: Manifest = {};
+  if (!(await adapter.exists(sourceDir))) return out;
+  for (const rel of await listFilesRelative(adapter, sourceDir)) out[rel] = hashBytes(await adapter.readBinary(`${sourceDir}/${rel}`));
+  return out;
+}
+
+const emptyOutcome = (action: ExtractionAction): ExtractionOutcome => ({
+  action, copied: [], record: false, manifest: null, updated: [], added: [], leftEdited: [], removed: [], keptEdited: [],
+});
+
+async function hashFile(adapter: ExtractorAdapter, path: string): Promise<string> {
+  return hashBytes(await adapter.readBinary(path));
+}
+
+/** Hash every named file under `root` (null when it is not there). */
+async function hashMany(adapter: ExtractorAdapter, root: string, rels: readonly string[]): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  for (const rel of rels) {
+    const p = `${root}/${rel}`;
+    out[rel] = (await adapter.exists(p)) ? await hashFile(adapter, p) : null;
+  }
+  return out;
+}
+
+async function writeCopy(adapter: ExtractorAdapter, from: string, to: string): Promise<void> {
+  const slash = to.lastIndexOf('/');
+  if (slash > 0) await mkdirP(adapter, to.slice(0, slash));
+  await adapter.writeBinary(to, await adapter.readBinary(from));
+}
+
+/** The ONE rolling backup as a COPY of the vault (the vault stays in place). Best effort: a failed backup must not block the update. */
+async function snapshotToRollingBackupCore(adapter: ExtractorAdapter, targetDir: string): Promise<void> {
+  try {
+    let folders: string[] = [];
+    try { folders = (await adapter.list('/'))?.folders ?? []; } catch { /* the plan below copes with an empty list */ }
+    const plan = planRollingBackup(targetDir, folders);
+    if (plan.removeExistingFirst) await adapter.rmdir(plan.backupDir, true);
+    await copyDirRecursive(adapter, targetDir, plan.backupDir);
+    console.log(`Forge: ${targetDir} → ${plan.backupDir} (rolling backup, copy)`);
+  } catch (e) {
+    console.error('snapshotToRollingBackupCore failed; the update continues', e);
+  }
+}
+
 export async function ensureBundledVaultCore(
   adapter: ExtractorAdapter,
-  opts: { sourceDir: string; targetDir: string; label: string; bundleId: string; recordedId: string | null },
+  opts: {
+    sourceDir: string; targetDir: string; label: string; bundleId: string; recordedId: string | null;
+    /** The vault's manifest: an object, `null` (manifests in use, none recorded yet) or `undefined` (a caller that predates manifests). */
+    manifest?: Manifest | null;
+    /** How a bundle-dropped, unedited file is removed (Obsidian: leaf-detach + system trash). Defaults to a plain remove. */
+    trash?: (path: string) => Promise<void>;
+  },
 ): Promise<ExtractionOutcome> {
   const { sourceDir, targetDir, label, bundleId, recordedId } = opts;
-  const skip = (action: ExtractionAction): ExtractionOutcome => ({ action, copied: [], record: false });
+  const mState: 'off' | 'none' | 'present' = opts.manifest === undefined ? 'off' : opts.manifest === null ? 'none' : 'present';
+  const skip = (action: ExtractionAction): ExtractionOutcome => emptyOutcome(action);
 
   if (!(await adapter.exists(sourceDir))) {
     console.warn(`Forge: bundled ${label} missing from plugin assets; skipping extraction`);
@@ -159,7 +242,8 @@ export async function ensureBundledVaultCore(
       : null;
   const status = compareBundledVaultVersion(bundledBody, extractedBody);
 
-  const lists = status.kind === 'match'
+  const needLists = status.kind === 'match' || (status.kind === 'drift' && mState === 'present');
+  const lists = needLists
     ? { bundled: await listFilesRelative(adapter, sourceDir), extracted: await listFilesRelative(adapter, targetDir) }
     : { bundled: [] as string[], extracted: [] as string[] };
   const plan = planAutoExtraction({
@@ -168,7 +252,12 @@ export async function ensureBundledVaultCore(
     recordedId,
     bundledFiles: lists.bundled,
     extractedFiles: lists.extracted,
+    manifest: mState,
+    manifestPaths: opts.manifest ? new Set(Object.keys(opts.manifest)) : undefined,
   });
+
+  /** The manifest of a tree we just wrote from the bundle: every bundle file's hash. */
+  const manifestOfBundle = (): Promise<Manifest> => manifestOfBundleDir(adapter, sourceDir);
 
   switch (plan.action) {
     case 'skip-no-bundled':
@@ -182,19 +271,82 @@ export async function ensureBundledVaultCore(
     case 'skip-same-identity':
       console.log(`Forge: ${label} already at version ${status.kind === 'match' ? status.version : '?'} with this bundle's content; skipping`);
       return skip('skip-same-identity');
+
+    case 'adopt-manifest': {
+      // No vault write at all: record which files are byte-identical to the bundle, so later passes can tell edited from untouched.
+      const both = lists.bundled.filter((rel) => lists.extracted.includes(rel));
+      const bundleH = await hashMany(adapter, sourceDir, both);
+      const diskH = await hashMany(adapter, targetDir, both);
+      const adopted: Manifest = {};
+      for (const rel of both) if (bundleH[rel] !== null && bundleH[rel] === diskH[rel]) adopted[rel] = bundleH[rel] as string;
+      console.log(`Forge: ${label} manifest recorded for ${Object.keys(adopted).length} unedited file(s); no vault files were written`);
+      return { ...emptyOutcome('adopt-manifest'), record: true, manifest: adopted };
+    }
+
     case 'add-missing': {
-      for (const rel of plan.files) {
-        const to = `${targetDir}/${rel}`;
-        const slash = to.lastIndexOf('/');
-        if (slash > 0) await mkdirP(adapter, to.slice(0, slash));
-        await adapter.writeBinary(to, await adapter.readBinary(`${sourceDir}/${rel}`));
-      }
+      for (const rel of plan.files) await writeCopy(adapter, `${sourceDir}/${rel}`, `${targetDir}/${rel}`);
       console.log(
         `Forge: ${label} bundle content changed at version ${status.kind === 'match' ? status.version : '?'}; ` +
         `added ${plan.files.length} missing file(s), left existing files untouched`,
       );
-      return { action: 'add-missing', copied: plan.files, record: true };
+      let next: Manifest | null = null;
+      if (mState !== 'off') {
+        next = { ...(opts.manifest ?? {}) };
+        // adopt files that are byte-identical to the bundle (a vault extracted before manifests), plus what was just added
+        const both = lists.bundled.filter((rel) => lists.extracted.includes(rel) && !(rel in next!));
+        const bundleH = await hashMany(adapter, sourceDir, both);
+        const diskH = await hashMany(adapter, targetDir, both);
+        for (const rel of both) if (bundleH[rel] !== null && bundleH[rel] === diskH[rel]) next[rel] = bundleH[rel] as string;
+        for (const rel of plan.files) next[rel] = await hashFile(adapter, `${sourceDir}/${rel}`);
+      }
+      return { ...emptyOutcome('add-missing'), copied: plan.files, record: true, manifest: next };
     }
+
+    case 'per-file-update': {
+      const manifest = opts.manifest as Manifest;
+      const bundleH = await hashMany(adapter, sourceDir, lists.bundled);
+      const bundleHashes = Object.fromEntries(Object.entries(bundleH).map(([k, v]) => [k, v as string]));
+      const dropped = findDroppedCandidates(manifest, new Set(lists.bundled));
+      const diskRels = [...new Set([...lists.bundled, ...dropped])];
+      const diskHashes = await hashMany(adapter, targetDir, diskRels);
+      const drift = planFileDrift({ manifest, bundleHashes, diskHashes });
+      if (status.kind === 'drift') {
+        console.log(`Forge: ${label} drift detected (extracted ${status.extracted} → bundled ${status.bundled}); updating per file`);
+      }
+      const willWrite = drift.update.length + drift.add.length + drift.remove.length + drift.leftEdited.length > 0;
+      if (willWrite) await snapshotToRollingBackupCore(adapter, targetDir);
+      for (const rel of [...drift.update, ...drift.add]) await writeCopy(adapter, `${sourceDir}/${rel}`, `${targetDir}/${rel}`);
+      const sidecars: string[] = [];
+      for (const rel of drift.leftEdited) {
+        try {
+          await writeCopy(adapter, `${sourceDir}/${rel}`, `${targetDir}/${rel}.bundled`);   // the new version, beside the user's file
+          sidecars.push(`${rel}.bundled`);
+        } catch (e) {
+          console.error(`Forge: could not write ${rel}.bundled`, e);
+        }
+      }
+      const removed: string[] = [];
+      const keptEdited = [...drift.keptEdited];
+      const next = { ...drift.next };
+      for (const rel of drift.remove) {
+        try {
+          await (opts.trash ?? ((p: string) => adapter.rmdir(p, false)))(`${targetDir}/${rel}`);
+          removed.push(rel);
+        } catch (e) {
+          console.error(`Forge: could not remove bundle-dropped ${rel}`, e);
+          next[rel] = manifest[rel];                       // still ours: retried on the next pass
+        }
+      }
+      console.log(
+        `Forge: ${label} per-file drift: ${drift.update.length} updated, ${drift.add.length} added, ${drift.leftEdited.length} edited (left), ` +
+        `${removed.length} dropped removed, ${keptEdited.length} dropped-but-edited kept`,
+      );
+      return {
+        ...emptyOutcome('per-file-update'), record: true, manifest: next,
+        updated: drift.update, added: drift.add, leftEdited: drift.leftEdited, removed, keptEdited,
+      };
+    }
+
     case 'backup-and-reextract':
       if (status.kind === 'drift') {
         console.log(`Forge: ${label} drift detected (extracted ${status.extracted} → bundled ${status.bundled}); re-extracting`);
@@ -208,7 +360,47 @@ export async function ensureBundledVaultCore(
   // Drain 2026-08-25-1010 — `isReservedDirName` so Forge-managed state and backup dirs in the bundle never travel into a user's vault.
   await copyDirRecursive(adapter, sourceDir, targetDir, isReservedDirName);
   console.log(`Forge: extracted bundled ${label} into vault`);
-  return { action: plan.action, copied: [], record: true };
+  return { ...emptyOutcome(plan.action), record: true, manifest: mState === 'off' ? null : await manifestOfBundle() };
+}
+
+// ---- the launch sweep ------------------------------------------------------------------------------------------------------
+
+export interface SweepResult {
+  /** Paths (relative to the library root) trashed: in the manifest, absent from the bundle, byte-identical to what was extracted. */
+  removed: string[];
+  /** Dropped from the bundle but edited since: left alone and relinquished. */
+  keptEdited: string[];
+  /** The manifest after the sweep, or null when there was none (nothing is ever trashed without one). */
+  next: Manifest | null;
+}
+
+/** The bundle-dropped sweep, manifest-based (drain 2026-10-11-0900 §2). With no manifest it does nothing. */
+export async function sweepBundleDroppedCore(
+  adapter: ExtractorAdapter,
+  opts: { sourceDir: string; targetDir: string; manifest: Manifest | null; trash: (path: string) => Promise<void> },
+): Promise<SweepResult> {
+  const { sourceDir, targetDir, manifest, trash } = opts;
+  if (manifest === null) return { removed: [], keptEdited: [], next: null };
+  const bundleFiles = new Set((await adapter.exists(sourceDir)) ? await listFilesRelative(adapter, sourceDir) : []);
+  const candidates = findDroppedCandidates(manifest, bundleFiles);
+  const diskHashes = bundleFiles.size === 0 ? {} : await hashMany(adapter, targetDir, candidates);
+  const plan = planManifestSweep({ manifest, bundleFiles, diskHashes });
+  if (plan.bailedEmptyBundle) {
+    console.error(`[sweep] ${targetDir}: the bundle listing is empty but the manifest is not; refusing to sweep (${sourceDir})`);
+    return { removed: [], keptEdited: [], next: manifest };
+  }
+  const removed: string[] = [];
+  const next = { ...plan.next };
+  for (const rel of plan.remove) {
+    try {
+      await trash(`${targetDir}/${rel}`);
+      removed.push(rel);
+    } catch (e) {
+      console.error(`[sweep] ${targetDir}: could not trash ${rel}`, e);
+      next[rel] = manifest[rel];                         // still ours: retried on the next launch
+    }
+  }
+  return { removed, keptEdited: plan.keptEdited, next };
 }
 
 // ---- the identity record ------------------------------------------------------------------------------------------

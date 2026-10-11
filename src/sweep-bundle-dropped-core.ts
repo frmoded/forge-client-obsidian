@@ -13,6 +13,11 @@
 //    extracted file as "not in bundle" and trash the whole library.
 //
 // The wrapper in welcome.ts wires this to adapter.list + vault.trash.
+//
+// Drain 2026-10-11-0900 §2 — SUPERSEDED at runtime. "Not in the bundle" does not mean "not the user's": this classification trashed any
+// file in an extracted library folder that the bundle did not list, including a user's own notes. The launch sweep is now
+// manifest-based (bundled-library-manifest-core.ts planManifestSweep): only a file the plugin extracted, that left the bundle, and is
+// still byte-identical to what it wrote. This module is kept only for its classification tests; nothing in the runtime imports it.
 
 export interface SweepDecision {
   /** Extracted files whose relPath is not present in the bundle set —

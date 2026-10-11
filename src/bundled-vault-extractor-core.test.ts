@@ -236,13 +236,243 @@ test('identity record: lives in the PLUGIN folder (never the user\'s vault), rou
 import fs from 'node:fs';
 import path from 'node:path';
 
-test('welcome.ts: extraction passes the baked bundle id and the vault\'s RECORDED id, and records the id only when a pass says to', () => {
+test('welcome.ts: extraction passes the baked bundle id, the vault\'s RECORDED id and manifest, and records both only when a pass says to', () => {
   const src = fs.readFileSync(path.resolve(process.cwd(), 'src/welcome.ts'), 'utf8')
     .replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   assert.match(src, /bundleId: BUNDLED_ASSETS_CONTENT_ID/);
   assert.match(src, /recordedId: recorded\[name\] \?\? null/);
+  assert.match(src, /manifest: manifestsBefore\[name\] \?\? null/);
   assert.match(src, /if \(outcome\.record\) next\[name\] = BUNDLED_ASSETS_CONTENT_ID;/);
+  assert.match(src, /if \(outcome\.manifest !== null\) manifests\[name\] = outcome\.manifest;/);
   assert.match(src, /const idsPath = extractedIdsPath\(pluginDir\)/);
   assert.match(src, /await adapter\.write\(idsPath, body\)/);
   assert.match(src, /sourceDir: `\$\{bundledVaultsRoot\(pluginDir\)\}\/\$\{name\}`/, 'the SOURCE is the folder Obsidian loaded the plugin from');
+  // the manifest store is written back by BOTH the extraction pass and the sweep (a pass that forgets leaves the next one blind)
+  assert.equal([...src.matchAll(/await writeManifestStore\(adapter, pluginDir, manifestsBefore, manifests\);/g)].length, 2);
+  assert.match(src, /await writeManifestStore\(adapter, pluginDir, manifestsBefore, manifests\);\s*return summary;/);
+});
+
+test('welcome.ts: the launch sweep is manifest-based — no listing-diff trash, one Notice, the manifest written back', () => {
+  const src = fs.readFileSync(path.resolve(process.cwd(), 'src/welcome.ts'), 'utf8')
+    .replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/computeSweepTrashList/.test(src), 'the "not in the bundle = trash it" classification is gone from the runtime path');
+  assert.match(src, /sweepBundleDroppedCore\(adapter as ExtractorAdapter, \{/);
+  assert.match(src, /manifestsBefore\[lib\] \?\? null/);
+  assert.match(src, /formatLibraryNotice\(\{ leftEdited: libraryPass\.leftEdited, keptEdited, removed \}\)/);
+  assert.equal([...src.matchAll(/new Notice\(notice, 14000\)/g)].length, 1, 'exactly one Notice for the pass');
+  assert.match(src, /if \(manifest === null\) \{[\s\S]*?return none;/, 'no manifest -> nothing is swept');
+});
+
+// ============================================================================================================================
+// Drain 2026-10-11-0900 §2 + §3 — manifest-based sweep and per-file drift (the manifest: bundled-library-manifest-core.ts)
+// ============================================================================================================================
+import { hashBytes, type Manifest } from './bundled-library-manifest-core.ts';
+import { sweepBundleDroppedCore } from './bundled-vault-extractor-core.ts';
+
+const bytes = (s: string) => new TextEncoder().encode(s);
+const hs = (s: string) => hashBytes(bytes(s));
+const FILE_A = `${DST}/notes/a.md`;
+
+function manifestOf(files: Record<string, string>): Manifest {
+  return Object.fromEntries(Object.entries(files).map(([rel, c]) => [rel, hs(c)]));
+}
+const runM = (a: MemAdapter, o: { bundleId: string; recordedId: string | null; manifest: Manifest | null }) =>
+  ensureBundledVaultCore(a, { sourceDir: SRC, targetDir: DST, label: 'music-theory', ...o });
+
+test('manifest: a first install records the hash of every file it extracted', async () => {
+  const a = new MemAdapter(bundle());
+  const r = await runM(a, { bundleId: 'id-2', recordedId: null, manifest: null });
+  assert.equal(r.action, 'copy-all');
+  assert.deepEqual(r.manifest, manifestOf({
+    'forge.toml': toml('0.11.28'),
+    'notes/a.md': 'bundled a',
+    'music_instruments/rhythm_box.md': 'bundled rhythm box',
+    'music_instruments/resources/html/rhythm_box.html': '<html>widget</html>',
+    'rhythm_data/rhythm_pattern_straight_rock.md': 'bundled straight rock',
+  }));
+});
+
+test('per-file drift: an UNEDITED file updates in place, a new file is added, an EDITED file is untouched (new version written beside it)', async () => {
+  const oldBundleFiles = { 'forge.toml': toml('0.11.18'), 'notes/a.md': 'old a', 'notes/b.md': 'old b' };
+  const a = new MemAdapter({
+    // the NEW bundle
+    [`${SRC}/forge.toml`]: toml('0.11.28'),
+    [`${SRC}/notes/a.md`]: 'new a',
+    [`${SRC}/notes/b.md`]: 'new b',
+    [`${SRC}/notes/c.md`]: 'brand new c',
+    // the vault: a.md unedited (== manifest), b.md EDITED by the user, plus the user's own note
+    [`${DST}/forge.toml`]: toml('0.11.18'),
+    [`${DST}/notes/a.md`]: 'old a',
+    [`${DST}/notes/b.md`]: 'MY EDIT of b',
+    [`${DST}/rhythm_data/my_note.md`]: 'USER NOTE',
+  });
+  const r = await runM(a, { bundleId: 'id-2', recordedId: 'id-1', manifest: manifestOf(oldBundleFiles) });
+  assert.equal(r.action, 'per-file-update');
+  assert.equal(a.files.get(`${DST}/notes/a.md`), 'new a', 'unedited -> updated in place');
+  assert.equal(a.files.get(`${DST}/notes/c.md`), 'brand new c', 'new file added');
+  assert.equal(a.files.get(`${DST}/notes/b.md`), 'MY EDIT of b', 'edited file untouched');
+  assert.equal(a.files.get(`${DST}/notes/b.md.bundled`), 'new b', 'the new bundle version is written beside it');
+  assert.equal(a.files.get(`${DST}/rhythm_data/my_note.md`), 'USER NOTE', 'a user note is untouched');
+  assert.equal(a.files.get(`${DST}/forge.toml`), toml('0.11.28'), 'forge.toml is itself an unedited bundle file: updated, so the version moves');
+  assert.deepEqual(r.updated.sort(), ['forge.toml', 'notes/a.md']);
+  assert.deepEqual(r.added, ['notes/c.md']);
+  assert.deepEqual(r.leftEdited, ['notes/b.md']);
+  assert.equal(r.record, true);
+  // the manifest now describes the new state; the edited file is relinquished
+  assert.equal(r.manifest!['notes/a.md'], hs('new a'));
+  assert.equal(r.manifest!['notes/c.md'], hs('brand new c'));
+  assert.equal('notes/b.md' in r.manifest!, false);
+});
+
+test('per-file drift keeps the one-generation rolling backup as a safety net (a COPY: the vault stays in place)', async () => {
+  const a = new MemAdapter({
+    [`${SRC}/forge.toml`]: toml('0.11.28'), [`${SRC}/notes/a.md`]: 'new a',
+    [`${DST}/forge.toml`]: toml('0.11.18'), [`${DST}/notes/a.md`]: 'old a', [`${DST}/mine.md`]: 'USER',
+  });
+  await runM(a, { bundleId: 'id-2', recordedId: 'id-1', manifest: manifestOf({ 'forge.toml': toml('0.11.18'), 'notes/a.md': 'old a' }) });
+  assert.equal(a.files.get(`${DST}.bak.previous/notes/a.md`), 'old a', 'the backup holds the PRE-update tree');
+  assert.equal(a.files.get(`${DST}.bak.previous/mine.md`), 'USER');
+  assert.equal(a.files.get(`${DST}/notes/a.md`), 'new a');
+  assert.equal(a.files.get(`${DST}/mine.md`), 'USER');
+});
+
+test('per-file drift: a file the user DELETED stays deleted, and is remembered', async () => {
+  const a = new MemAdapter({
+    [`${SRC}/forge.toml`]: toml('0.11.28'), [`${SRC}/notes/a.md`]: 'new a', [`${SRC}/notes/gone.md`]: 'new gone',
+    [`${DST}/forge.toml`]: toml('0.11.18'), [`${DST}/notes/a.md`]: 'old a',   // gone.md was extracted earlier, then deleted
+  });
+  const r = await runM(a, {
+    bundleId: 'id-2', recordedId: 'id-1',
+    manifest: manifestOf({ 'forge.toml': toml('0.11.18'), 'notes/a.md': 'old a', 'notes/gone.md': 'old gone' }),
+  });
+  assert.equal(a.files.has(`${DST}/notes/gone.md`), false);
+  assert.equal(r.manifest!['notes/gone.md'], hs('old gone'), 'remembered, so a later bundle does not bring it back either');
+});
+
+test('per-file drift: a file dropped from the bundle is removed only if unedited; an edited one is kept (and reported)', async () => {
+  const removed: string[] = [];
+  const a = new MemAdapter({
+    [`${SRC}/forge.toml`]: toml('0.11.28'), [`${SRC}/notes/stays.md`]: 's',
+    [`${DST}/forge.toml`]: toml('0.11.18'), [`${DST}/notes/stays.md`]: 's',
+    [`${DST}/notes/dropped.md`]: 'orig dropped', [`${DST}/notes/dropped_edited.md`]: 'MINE', [`${DST}/notes/user_only.md`]: 'USER',
+  });
+  const r = await ensureBundledVaultCore(a, {
+    sourceDir: SRC, targetDir: DST, label: 'music-theory', bundleId: 'id-2', recordedId: 'id-1',
+    manifest: manifestOf({ 'forge.toml': toml('0.11.18'), 'notes/stays.md': 's', 'notes/dropped.md': 'orig dropped', 'notes/dropped_edited.md': 'orig edited' }),
+    trash: async (p) => { removed.push(p); await a.rmdir(p, false); },
+  });
+  assert.deepEqual(removed, [`${DST}/notes/dropped.md`]);
+  assert.equal(a.files.get(`${DST}/notes/dropped_edited.md`), 'MINE');
+  assert.equal(a.files.get(`${DST}/notes/user_only.md`), 'USER');
+  assert.deepEqual(r.keptEdited, ['notes/dropped_edited.md']);
+});
+
+test('legacy (a vault extracted before manifests) on DRIFT keeps today\'s protection: rolling backup + re-extract, then a manifest is recorded', async () => {
+  const a = new MemAdapter({
+    ...bundle('0.11.28'),
+    [`${DST}/forge.toml`]: toml('0.11.18'),
+    [`${DST}/notes/a.md`]: 'MY LOCAL EDIT',
+  });
+  const r = await runM(a, { bundleId: 'id-2', recordedId: 'id-2', manifest: null });
+  assert.equal(r.action, 'backup-and-reextract');
+  assert.equal(a.files.get(`${DST}.bak.previous/notes/a.md`), 'MY LOCAL EDIT');
+  assert.equal(a.files.get(`${DST}/notes/a.md`), 'bundled a');
+  assert.equal(r.manifest!['notes/a.md'], hs('bundled a'));
+});
+
+test('same version, same identity, NO manifest yet: the vault is not written to; the manifest adopts only files byte-identical to the bundle', async () => {
+  const a = new MemAdapter({
+    ...bundle('0.11.28'),
+    [`${DST}/forge.toml`]: toml('0.11.28'),
+    [`${DST}/notes/a.md`]: 'bundled a',            // identical to the bundle: adoptable
+    [`${DST}/music_instruments/rhythm_box.md`]: 'I EDITED THIS',   // differs: NOT adopted (never auto-touched either)
+  });
+  const before = a.writes.length;
+  const r = await runM(a, { bundleId: 'id-2', recordedId: 'id-2', manifest: null });
+  assert.equal(r.action, 'adopt-manifest');
+  assert.equal(a.writes.length, before, 'not a single vault write');
+  assert.equal(r.manifest!['notes/a.md'], hs('bundled a'));
+  assert.equal(r.manifest!['forge.toml'], hs(toml('0.11.28')));
+  assert.equal('music_instruments/rhythm_box.md' in r.manifest!, false);
+  assert.equal(r.record, true);
+});
+
+test('add-missing with a manifest: a file the user deleted is NOT brought back; a genuinely new file is added; an edit is untouched', async () => {
+  const a = new MemAdapter({
+    ...bundle('0.11.28', { [`${SRC}/notes/new_in_bundle.md`]: 'fresh' }),
+    [`${DST}/forge.toml`]: toml('0.11.28'),
+    [`${DST}/notes/a.md`]: 'MY EDIT',
+    // music_instruments/* were extracted before, then the user deleted them (they are in the manifest, not on disk)
+  });
+  const manifest = manifestOf({
+    'notes/a.md': 'bundled a', 'music_instruments/rhythm_box.md': 'bundled rhythm box',
+    'music_instruments/resources/html/rhythm_box.html': '<html>widget</html>',
+    'rhythm_data/rhythm_pattern_straight_rock.md': 'bundled straight rock',
+  });
+  const r = await runM(a, { bundleId: 'id-3', recordedId: 'id-2', manifest });
+  assert.equal(r.action, 'add-missing');
+  assert.deepEqual(r.copied, ['notes/new_in_bundle.md']);
+  assert.equal(a.files.has(`${DST}/music_instruments/rhythm_box.md`), false, 'a remembered deletion stays deleted');
+  assert.equal(a.files.get(`${DST}/notes/a.md`), 'MY EDIT');
+  assert.equal(r.manifest!['notes/new_in_bundle.md'], hs('fresh'));
+});
+
+// ---- the launch sweep, orchestrated (what welcome.ts wires to Obsidian's trash) ------------------------------------------------
+
+test('SWEEP: a user note in rhythm_data/ survives two launches; only an unedited, manifest-listed, bundle-dropped file is trashed', async () => {
+  const trashed: string[] = [];
+  const a = new MemAdapter({
+    [`${SRC}/forge.toml`]: toml('0.11.28'), [`${SRC}/notes/stays.md`]: 's',
+    [`${DST}/notes/stays.md`]: 's',
+    [`${DST}/notes/dropped.md`]: 'orig',
+    [`${DST}/rhythm_data/my_pattern.md`]: 'MY OWN RHYTHM NOTE',
+  });
+  let manifest: Manifest = manifestOf({ 'notes/stays.md': 's', 'notes/dropped.md': 'orig' });
+  const launch = async () => {
+    const r = await sweepBundleDroppedCore(a, {
+      sourceDir: SRC, targetDir: DST, manifest,
+      trash: async (p) => { trashed.push(p); await a.rmdir(p, false); },
+    });
+    manifest = r.next;
+    return r;
+  };
+  const first = await launch();
+  const second = await launch();
+  assert.deepEqual(first.removed, ['notes/dropped.md']);
+  assert.deepEqual(second.removed, []);
+  assert.deepEqual(trashed, [`${DST}/notes/dropped.md`]);
+  assert.equal(a.files.get(`${DST}/rhythm_data/my_pattern.md`), 'MY OWN RHYTHM NOTE', 'survived both launches');
+});
+
+test('SWEEP: with NO manifest (a legacy vault) nothing is ever trashed', async () => {
+  const a = new MemAdapter({
+    [`${SRC}/forge.toml`]: toml('0.11.28'), [`${SRC}/notes/stays.md`]: 's',
+    [`${DST}/notes/stays.md`]: 's', [`${DST}/notes/old_extracted.md`]: 'x', [`${DST}/mine.md`]: 'USER',
+  });
+  const r = await sweepBundleDroppedCore(a, { sourceDir: SRC, targetDir: DST, manifest: null, trash: async () => { throw new Error('must not trash'); } });
+  assert.deepEqual(r.removed, []);
+  assert.equal(r.next, null);
+});
+
+test('SWEEP: an unreadable/empty bundle listing trashes nothing', async () => {
+  const a = new MemAdapter({ [`${DST}/notes/a.md`]: 'a' });
+  const r = await sweepBundleDroppedCore(a, {
+    sourceDir: SRC, targetDir: DST, manifest: manifestOf({ 'notes/a.md': 'a' }),
+    trash: async () => { throw new Error('must not trash'); },
+  });
+  assert.deepEqual(r.removed, []);
+});
+
+// ---- the manual "Re-extract bundled library vault" command shares the rule (drain 2026-10-11-0900 §2) ---------------------------
+
+test('main.ts: the manual re-extract trashes a bundle-dropped file only if the manifest lists it, and refreshes the manifest afterwards', () => {
+  const main = fs.readFileSync(path.resolve(process.cwd(), 'src/main.ts'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(main, /const libraryManifest = await readLibraryManifest\(this\.app, this\.manifest\.dir, vaultName\);/);
+  assert.match(main, /if \(!libraryManifest \|\| !\(relPath in libraryManifest\)\) \{\s*notOurs\.push\(relPath\);\s*continue;\s*\}/);
+  assert.match(main, /await recordLibraryManifestFromBundle\(this\.app, this\.manifest\.dir, vaultName\);/);
+  // the order matters: trash decisions are made BEFORE the overlay, the manifest is refreshed AFTER it
+  const overlay = main.indexOf('await copyBundledOverlay(adapter, bundledRoot, extractedRoot);');
+  const refresh = main.indexOf('await recordLibraryManifestFromBundle(');
+  const read = main.indexOf('await readLibraryManifest(');
+  assert.ok(read > 0 && overlay > read && refresh > overlay);
 });

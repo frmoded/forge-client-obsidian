@@ -1,8 +1,10 @@
 // Drain 2026-10-10-2100 (a) — a vault-authored .html widget must be found in a NORMAL user vault, where the bundled
-// library is a SUBFOLDER (`music-theory/…`), not the vault root. Three tiers, in this order:
+// library is a SUBFOLDER (`music-theory/…`), not the vault root. Three tiers.
+// Drain 2026-10-11-0900 §1 SWAPPED tiers 2 and 3 (driver decision): the widget and the plugin share a message protocol, so the plugin's
+// own inlined copy must beat a possibly STALE extracted copy. Order now:
 //   1. a vault file at the root-relative path (the driver's dev vault, and any user override, still win)
-//   2. the same relative path under each bundled-vault folder the plugin knows
-//   3. the plugin's own inlined copy (`vaults/<name>/<path>` in BUNDLED_ASSETS) — works with no extraction at all
+//   2. the plugin's own inlined copy (`vaults/<name>/<path>` in BUNDLED_ASSETS) — works with no extraction at all, never stale
+//   3. the same relative path under each bundled-vault folder the plugin knows (the extracted copy)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -37,7 +39,7 @@ function makeDeps(opts: {
   };
 }
 
-test('tier 1 wins: a root-relative vault file beats the bundled folder and the inlined copy', async () => {
+test('tier 1 wins: a root-relative vault file beats the inlined copy and the bundled folder', async () => {
   const d = makeDeps({
     vault: { [REL]: '<root/>', [`music-theory/${REL}`]: '<folder/>' },
     inlined: { [inlinedAssetKey('music-theory', REL)]: '<inlined/>' },
@@ -52,11 +54,22 @@ test('tier 1 wins: a root-relative vault file beats the bundled folder and the i
   assert.deepEqual(d.reads, [REL], 'a tier-1 hit reads nothing else');
 });
 
-test('tier 2 wins over tier 3: the extracted folder in a normal user vault', async () => {
+test('STALE EXTRACTION does not outrank the plugin: the inlined copy beats the extracted bundled folder (drain 2026-10-11-0900 §1)', async () => {
   const d = makeDeps({
-    vault: { [`music-theory/${REL}`]: '<folder/>' },
-    inlined: { [inlinedAssetKey('music-theory', REL)]: '<inlined/>' },
+    vault: { [`music-theory/${REL}`]: '<stale-extracted-widget/>' },
+    inlined: { [inlinedAssetKey('music-theory', REL)]: '<current-plugin-widget/>' },
   });
+  const r = await resolveBundledAwareFile(REL, d);
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.equal(r.tier, 'plugin-bundle');
+    assert.equal(r.html, '<current-plugin-widget/>');
+  }
+  assert.ok(!d.reads.includes(`music-theory/${REL}`), 'the extracted folder is not even read once the plugin copy answered');
+});
+
+test('the extracted bundled folder is still the fallback when the plugin has no inlined copy (e.g. a build without it)', async () => {
+  const d = makeDeps({ vault: { [`music-theory/${REL}`]: '<folder/>' } });
   const r = await resolveBundledAwareFile(REL, d);
   assert.equal(r.ok, true);
   if (r.ok) {
@@ -66,7 +79,7 @@ test('tier 2 wins over tier 3: the extracted folder in a normal user vault', asy
   }
 });
 
-test('tier 2 walks every bundled vault name, in the plugin\'s own order, first hit wins', async () => {
+test('the folder fallback walks every bundled vault name, in the plugin\'s own order, first hit wins', async () => {
   const d = makeDeps({
     vault: { [`music-core/${REL}`]: '<core/>', [`music-theory/${REL}`]: '<theory/>' },
   });
@@ -75,7 +88,7 @@ test('tier 2 walks every bundled vault name, in the plugin\'s own order, first h
   assert.deepEqual(d.reads, [REL, `forge-moda/${REL}`, `music-theory/${REL}`]);
 });
 
-test('tier 3 is the guarantee: nothing extracted, nothing in the vault — the inlined plugin copy is used', async () => {
+test('the plugin copy is the guarantee: nothing extracted, nothing in the vault — the inlined plugin copy is used', async () => {
   const d = makeDeps({ inlined: { [inlinedAssetKey('music-theory', REL)]: '<inlined/>' } });
   const r = await resolveBundledAwareFile(REL, d);
   assert.equal(r.ok, true);
@@ -142,14 +155,14 @@ test('lean edition (no bundled music vault names): tier 1 and the refusal only �
   assert.deepEqual(searchOrder(REL, []).map((s) => s.tier), ['vault-root']);
 });
 
-test('searchOrder is exactly root, then folders, then inlined — one entry per bundled name', () => {
+test('searchOrder is exactly root, then inlined, then folders — one entry per bundled name', () => {
   const o = searchOrder(REL, ['a', 'b']);
   assert.deepEqual(o.map((s) => [s.tier, s.location]), [
     ['vault-root', REL],
-    ['bundled-vault-folder', `a/${REL}`],
-    ['bundled-vault-folder', `b/${REL}`],
     ['plugin-bundle', `vaults/a/${REL}`],
     ['plugin-bundle', `vaults/b/${REL}`],
+    ['bundled-vault-folder', `a/${REL}`],
+    ['bundled-vault-folder', `b/${REL}`],
   ]);
 });
 

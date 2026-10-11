@@ -5,11 +5,13 @@
 // vault root only in the driver's dev vault. In every normal user vault the bundled library is extracted as `music-theory/…`,
 // so a root-absolute lookup (the Beat Box view, and every `html-embed` block in the bundled notes) can never succeed there.
 //
-// Order — each tier is tried only when the previous one missed:
+// Order — each tier is tried only when the previous one missed (drain 2026-10-11-0900 §1 swapped the last two):
 //   1. 'vault-root'            the vault file at the root-relative path. Today's behaviour; the dev vault and any user override win.
-//   2. 'bundled-vault-folder'  the same path under each bundled-vault folder the plugin knows (`<name>/<path>`).
-//   3. 'plugin-bundle'         the plugin's own inlined copy (`vaults/<name>/<path>` in BUNDLED_ASSETS). It needs no extraction, so it
-//                              holds even if the user deleted — or never got — the extracted folder. This tier is the guarantee.
+//   2. 'plugin-bundle'         the plugin's own inlined copy (`vaults/<name>/<path>` in BUNDLED_ASSETS). It needs no extraction, so it
+//                              holds even if the user deleted — or never got — the extracted folder, and it is never STALE: the widget
+//                              and the plugin share a message protocol, so the plugin's own copy must beat an old extraction.
+//   3. 'bundled-vault-folder'  the same path under each bundled-vault folder the plugin knows (`<name>/<path>`) — the extracted copy,
+//                              a fallback for a build that carries no inlined copy.
 //
 // The set of bundled-vault names is INJECTED (the host passes BUNDLED_VAULT_NAMES); this file keeps no list of its own.
 
@@ -26,7 +28,7 @@ export interface BundledAwareDeps {
 
 export interface SearchStep {
   tier: BundledAwareTier;
-  /** What was looked at: a vault path (tiers 1-2) or an inlined asset key (tier 3). */
+  /** What was looked at: a vault path (the vault root, the bundled folders) or an inlined asset key (the plugin bundle). */
   location: string;
 }
 
@@ -49,8 +51,8 @@ function isJoinable(relPath: string): boolean {
 export function searchOrder(relPath: string, bundledVaultNames: readonly string[]): SearchStep[] {
   const steps: SearchStep[] = [{ tier: 'vault-root', location: relPath }];
   if (!isJoinable(relPath)) return steps;
-  for (const name of bundledVaultNames) steps.push({ tier: 'bundled-vault-folder', location: `${name}/${relPath}` });
   for (const name of bundledVaultNames) steps.push({ tier: 'plugin-bundle', location: inlinedAssetKey(name, relPath) });
+  for (const name of bundledVaultNames) steps.push({ tier: 'bundled-vault-folder', location: `${name}/${relPath}` });
   return steps;
 }
 

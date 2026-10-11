@@ -7,15 +7,23 @@ import {
   extractedIdsPath,
   parseExtractedIds,
   serializeExtractedIds,
+  manifestOfBundleDir,
+  sweepBundleDroppedCore,
   type ExtractorAdapter,
 } from './bundled-vault-extractor-core.ts';
+import {
+  formatLibraryNotice,
+  manifestsPath,
+  parseManifests,
+  serializeManifests,
+  type ManifestStore,
+} from './bundled-library-manifest-core.ts';
 import { BUNDLED_ASSETS_CONTENT_ID } from './bundled-assets.generated.ts';
 import { isReservedDirName } from './vault-mount-exclusions-core.ts';
 import { ensureWelcomeFiles } from './welcome-files-core.ts';
 import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
 import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-classifier-core.ts';
-import { computeSweepTrashList } from './sweep-bundle-dropped-core.ts';
 import {
   bundledVaultsRoot,
   bundledWelcomePaths,
@@ -276,13 +284,14 @@ export async function runFirstRunCheck(app: App, pluginDir: string): Promise<voi
     // v0.2.64/v0.2.66 source-vault gate still applies: a vault that
     // IS a bundled library's source repo gets nothing extracted into
     // it.
+    let libraryPass: LibraryPassSummary = { leftEdited: {}, keptEdited: {}, removed: {} };
     if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
         `Forge: skipping bundled-vault extraction — vault root declares ` +
         `itself as source repo for ${sourceVaultName}`,
       );
     } else {
-      await ensureAllBundledVaults(app, pluginDir);
+      libraryPass = await ensureAllBundledVaults(app, pluginDir);
     }
 
     // v0.2.262 drain 1310 — migrateChipsMdToV2 removed alongside
@@ -300,32 +309,31 @@ export async function runFirstRunCheck(app: App, pluginDir: string): Promise<voi
     // bundled library's repo, we don't sweep INTO the repo.
     if (!shouldSkipBundledExtract(sourceVaultName)) {
       try {
-        const allTrashed: { lib: string; files: string[] }[] = [];
+        // Drain 2026-10-11-0900 §2 — MANIFEST-based: only a file the plugin extracted, that is gone from the bundle, and is still
+        // byte-identical to what it wrote is trashed. A user's own note (never in the manifest) survives every launch.
+        const manifestsBefore = await readManifestStore(adapter, pluginDir);
+        const manifests: ManifestStore = { ...manifestsBefore };
+        const removed: Record<string, string[]> = { ...libraryPass.removed };
+        const keptEdited: Record<string, string[]> = { ...libraryPass.keptEdited };
         const sweepTargets = (await listBundledVaultNames(adapter, pluginDir)).names;
         for (const lib of sweepTargets) {
-          const trashed = await sweepBundleDroppedFiles(
+          const r = await sweepBundleDroppedFiles(
             app,
             `${bundledVaultsRoot(pluginDir)}/${lib}`,
             lib,
+            manifestsBefore[lib] ?? null,
           );
-          if (trashed.length > 0) {
-            console.log(
-              `Forge: ${lib} bundle-dropped sweep moved ${trashed.length} file(s) to trash: ${trashed.join(', ')}`,
-            );
-            allTrashed.push({ lib, files: trashed });
+          if (r.next !== null) manifests[lib] = r.next;
+          if (r.trashed.length > 0) {
+            console.log(`Forge: ${lib} bundle-dropped sweep moved ${r.trashed.length} unedited extracted file(s) to trash: ${r.trashed.join(', ')}`);
+            removed[lib] = [...(removed[lib] ?? []), ...r.trashed];
           }
+          if (r.keptEdited.length > 0) keptEdited[lib] = [...(keptEdited[lib] ?? []), ...r.keptEdited];
         }
-        if (allTrashed.length > 0) {
-          // Surface via Notice so cohort knows what was moved (and can
-          // recover from system trash if anything was locally authored).
-          const summary = allTrashed
-            .map(({ lib, files }) => `${lib}: ${files.length} (${files.slice(0, 3).join(', ')}${files.length > 3 ? `, +${files.length - 3} more` : ''})`)
-            .join('; ');
-          new Notice(
-            `Forge: bundle-dropped files moved to system trash — ${summary}. Recover from macOS Trash if you authored them yourself.`,
-            12000,
-          );
-        }
+        await writeManifestStore(adapter, pluginDir, manifestsBefore, manifests);
+        // ONE Notice for the whole pass: what was moved to the trash, and what was left alone because the user had edited it.
+        const notice = formatLibraryNotice({ leftEdited: libraryPass.leftEdited, keptEdited, removed });
+        if (notice !== null) new Notice(notice, 14000);
       } catch (e) {
         console.error('runFirstRunCheck: bundle-dropped sweep failed', e);
       }
@@ -479,8 +487,55 @@ async function parkLegacyMusicDirs(adapter: DataAdapter): Promise<void> {
  *
  *  Per-vault try/catch: one failing vault must not strand the rest,
  *  and none of them are fatal to plugin load. */
-async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<void> {
+/** What an extraction pass left alone — the raw material of the ONE Notice (drain 2026-10-11-0900 §2/§3). */
+interface LibraryPassSummary {
+  leftEdited: Record<string, string[]>;
+  keptEdited: Record<string, string[]>;
+  removed: Record<string, string[]>;
+}
+
+/** The manifest record, kept beside the identity record in the plugin folder (never in the user's vault). */
+async function readManifestStore(adapter: DataAdapter, pluginDir: string): Promise<ManifestStore> {
+  try {
+    const p = manifestsPath(pluginDir);
+    return parseManifests((await adapter.exists(p)) ? await adapter.read(p) : null);
+  } catch (e) {
+    console.error('Forge: reading the extraction manifests failed; treating as none (nothing will be swept or updated per file)', e);
+    return {};
+  }
+}
+
+async function writeManifestStore(adapter: DataAdapter, pluginDir: string, before: ManifestStore, after: ManifestStore): Promise<void> {
+  try {
+    const body = serializeManifests(after);
+    if (body !== serializeManifests(before)) await adapter.write(manifestsPath(pluginDir), body);
+  } catch (e) {
+    console.error('Forge: writing the extraction manifests failed (the next launch re-derives them; nothing is lost)', e);
+  }
+}
+
+/** The extraction manifest of ONE library vault (path -> hash as extracted), or null when none is recorded. */
+export async function readLibraryManifest(app: App, pluginDir: string, vaultName: string): Promise<Record<string, string> | null> {
+  const store = await readManifestStore(app.vault.adapter, pluginDir);
+  return store[vaultName] ?? null;
+}
+
+/** After a manual re-extract the vault holds the bundle's files: record their hashes as the vault's manifest. */
+export async function recordLibraryManifestFromBundle(app: App, pluginDir: string, vaultName: string): Promise<void> {
   const adapter = app.vault.adapter;
+  try {
+    const before = await readManifestStore(adapter, pluginDir);
+    const after: ManifestStore = { ...before };
+    after[vaultName] = await manifestOfBundleDir(adapter as ExtractorAdapter, `${bundledVaultsRoot(pluginDir)}/${vaultName}`);
+    await writeManifestStore(adapter, pluginDir, before, after);
+  } catch (e) {
+    console.error('Forge: recording the extraction manifest after a re-extract failed (the next launch re-adopts what matches the bundle)', e);
+  }
+}
+
+async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<LibraryPassSummary> {
+  const adapter = app.vault.adapter;
+  const summary: LibraryPassSummary = { leftEdited: {}, keptEdited: {}, removed: {} };
   try {
     await parkLegacyMusicDirs(adapter);
   } catch (e) {
@@ -502,6 +557,10 @@ async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<void
     console.error('Forge: reading the extracted-bundle record failed; treating as none', e);
   }
   const next = { ...recorded };
+  // Drain 2026-10-11-0900 §2/§3: the manifest of what was extracted (path -> hash), so a file is only ever updated or swept if it is
+  // still byte-identical to what the plugin wrote.
+  const manifestsBefore = await readManifestStore(adapter, pluginDir);
+  const manifests: ManifestStore = { ...manifestsBefore };
 
   for (const name of derived.names) {
     try {
@@ -511,8 +570,14 @@ async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<void
         label: name,
         bundleId: BUNDLED_ASSETS_CONTENT_ID,
         recordedId: recorded[name] ?? null,
+        manifest: manifestsBefore[name] ?? null,
+        trash: (p) => trashVaultFile(app, p),
       });
       if (outcome.record) next[name] = BUNDLED_ASSETS_CONTENT_ID;
+      if (outcome.manifest !== null) manifests[name] = outcome.manifest;
+      if (outcome.leftEdited.length > 0) summary.leftEdited[name] = outcome.leftEdited;
+      if (outcome.keptEdited.length > 0) summary.keptEdited[name] = outcome.keptEdited;
+      if (outcome.removed.length > 0) summary.removed[name] = outcome.removed;
     } catch (e) {
       console.error(`Forge: extracting bundled ${name} failed`, e);
     }
@@ -524,6 +589,8 @@ async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<void
   } catch (e) {
     console.error('Forge: writing the extracted-bundle record failed (the next launch re-checks; nothing is lost)', e);
   }
+  await writeManifestStore(adapter, pluginDir, manifestsBefore, manifests);
+  return summary;
 }
 
 /** v0.2.45: re-run bundled extraction when a domain activation lands
@@ -570,102 +637,39 @@ export async function sweepBundleDroppedFiles(
   app: App,
   bundledRoot: string,
   extractedRoot: string,
-): Promise<string[]> {
+  manifest: Record<string, string> | null,
+): Promise<{ trashed: string[]; keptEdited: string[]; next: Record<string, string> | null }> {
   const adapter = app.vault.adapter;
-  const trashed: string[] = [];
+  const none = { trashed: [] as string[], keptEdited: [] as string[], next: manifest };
   if (!(await adapter.exists(extractedRoot))) {
     console.log(`[sweep] ${extractedRoot}: extracted root missing; skip`);
-    return trashed;
+    return none;
   }
   if (!(await adapter.exists(bundledRoot))) {
     console.log(`[sweep] ${extractedRoot}: bundled root missing (${bundledRoot}); skip`);
-    return trashed;
+    return none;
+  }
+  if (manifest === null) {
+    // Drain 2026-10-11-0900 §2: without a record of what the plugin extracted, "not in the bundle" does not mean "not the user's".
+    console.log(`[sweep] ${extractedRoot}: no extraction manifest yet; nothing is swept`);
+    return none;
   }
 
-  const bundledFiles = await listAllFilesRecursive(adapter, bundledRoot);
-  const extractedFiles = await listAllFilesRecursive(adapter, extractedRoot);
+  const result = await sweepBundleDroppedCore(adapter as ExtractorAdapter, {
+    sourceDir: bundledRoot,
+    targetDir: extractedRoot,
+    manifest,
+    trash: (fullPath) => trashVaultFile(app, fullPath),
+  });
   console.log(
-    `[sweep] ${extractedRoot}: bundled=${bundledFiles.size}, extracted=${extractedFiles.size}`,
+    `[sweep] ${extractedRoot}: removed=${result.removed.length} (extracted by us, dropped from the bundle, unedited), ` +
+    `kept-edited=${result.keptEdited.length}`,
   );
 
-  const decision = computeSweepTrashList(bundledFiles, extractedFiles);
-  if (decision.bailUnsafeEmptyBundle) {
-    // Safety net: bundled walk returned an empty set. If we proceeded,
-    // every extracted file would be classified as "not in bundle" and
-    // trashed — catastrophic wipe. Refuse.
-    console.error(
-      `[sweep] ${extractedRoot}: bundle walk returned 0 files but extracted has ${extractedFiles.size}. ` +
-      `Refusing to sweep (would wipe the extracted library). Bundle path: ${bundledRoot}`,
-    );
-    return trashed;
-  }
-  console.log(
-    `[sweep] ${extractedRoot}: classification toTrash=${decision.toTrash.length}`,
-  );
-
-  for (const relPath of decision.toTrash) {
-    const fullPath = `${extractedRoot}/${relPath}`;
-    console.log(`[sweep] ${extractedRoot}: trashing ${relPath}`);
-    const af = app.vault.getAbstractFileByPath(fullPath);
-    if (af instanceof TFile) {
-      // Detach any leaves displaying the file before trash, mirroring
-      // the trashForensicShadow leaf-detach contract from v0.2.214.
-      const leavesToDetach: WorkspaceLeaf[] = [];
-      app.workspace.iterateAllLeaves((leaf) => {
-        const v = leaf.view;
-        if (v instanceof MarkdownView && v.file?.path === fullPath) {
-          leavesToDetach.push(leaf);
-        }
-      });
-      for (const leaf of leavesToDetach) {
-        try { leaf.detach(); } catch (e) {
-          console.error(`sweepBundleDroppedFiles: detach failed for ${fullPath}`, e);
-        }
-      }
-      try {
-        await app.vault.trash(af, true);
-      } catch (e) {
-        console.error(`sweepBundleDroppedFiles: vault.trash failed for ${fullPath}`, e);
-      }
-      // Verify + fall back to adapter.remove if trash silently no-op'd.
-      let stillExists = false;
-      try { stillExists = await adapter.exists(fullPath); } catch {/* noop */}
-      if (stillExists) {
-        try {
-          await adapter.remove(fullPath);
-        } catch (e) {
-          console.error(`sweepBundleDroppedFiles: adapter.remove fallback failed for ${fullPath}`, e);
-          continue;
-        }
-      }
-      trashed.push(relPath);
-    } else {
-      // Not modeled as a TFile — direct adapter.remove. Happens when
-      // the file exists on disk but Obsidian's index doesn't see it
-      // (e.g. plugin extracted the file via adapter.write bypassing
-      // the vault API). Diagnostic log helps drain 2026-07-02-2000
-      // investigation identify this path.
-      console.log(
-        `[sweep] ${extractedRoot}: ${relPath} not in vault index; falling back to adapter.remove`,
-      );
-      try {
-        await adapter.remove(fullPath);
-        trashed.push(relPath);
-      } catch (e) {
-        console.error(`sweepBundleDroppedFiles: adapter.remove failed for ${fullPath}`, e);
-      }
-    }
-  }
-
-  // v0.2.236 — after per-file trash, sweep now-empty directories
-  // that shipped in a prior bundle version but were fully dropped
-  // in the current one. Drain 2026-07-02-2000: driver wants `blues/`
-  // gone as a directory once its 10 files are trashed. Idempotent:
-  // dirs already gone → no-op. Failures log + continue.
+  // v0.2.236 — after per-file trash, sweep now-empty directories that shipped in a prior bundle version but were fully dropped in
+  // the current one. Idempotent; failures log + continue. (Only directories ABSENT from the bundle and EMPTY are removed.)
   try {
-    const bundledDirs = await collectExtractedDirsAbsentFromBundle(
-      adapter, bundledRoot, extractedRoot,
-    );
+    const bundledDirs = await collectExtractedDirsAbsentFromBundle(adapter, bundledRoot, extractedRoot);
     for (const dirRel of bundledDirs) {
       const fullDir = `${extractedRoot}/${dirRel}`;
       try {
@@ -682,8 +686,37 @@ export async function sweepBundleDroppedFiles(
     console.error(`sweepBundleDroppedFiles: empty-dir enumeration failed`, e);
   }
 
-  trashed.sort();
-  return trashed;
+  return { trashed: [...result.removed].sort(), keptEdited: result.keptEdited, next: result.next };
+}
+
+/** Trash one vault file: detach any leaf showing it, send it to the system trash, fall back to a plain remove if the trash silently
+ *  no-op'd. THROWS when the file is still there afterwards (the caller then keeps the manifest entry and retries next launch). */
+async function trashVaultFile(app: App, fullPath: string): Promise<void> {
+  const adapter = app.vault.adapter;
+  const af = app.vault.getAbstractFileByPath(fullPath);
+  if (af instanceof TFile) {
+    // Detach any leaves displaying the file before trash, mirroring the trashForensicShadow leaf-detach contract from v0.2.214.
+    const leavesToDetach: WorkspaceLeaf[] = [];
+    app.workspace.iterateAllLeaves((leaf) => {
+      const v = leaf.view;
+      if (v instanceof MarkdownView && v.file?.path === fullPath) leavesToDetach.push(leaf);
+    });
+    for (const leaf of leavesToDetach) {
+      try { leaf.detach(); } catch (e) {
+        console.error(`trashVaultFile: detach failed for ${fullPath}`, e);
+      }
+    }
+    try {
+      await app.vault.trash(af, true);
+    } catch (e) {
+      console.error(`trashVaultFile: vault.trash failed for ${fullPath}`, e);
+    }
+    if (await adapter.exists(fullPath)) await adapter.remove(fullPath);
+  } else {
+    // Not modeled as a TFile (the file exists on disk but Obsidian's index does not see it): direct adapter.remove.
+    await adapter.remove(fullPath);
+  }
+  if (await adapter.exists(fullPath)) throw new Error(`${fullPath} is still present after trash`);
 }
 
 /** Enumerate every extracted directory (relative path) whose name is

@@ -113,7 +113,8 @@ import {
 } from './expanded-state-core.ts';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
 import { BUILD_STAMP } from './build-stamp.generated.ts';
-import { formatBuildStamp } from './build-stamp-core.ts';
+import { formatBuildStamp, setStatusBarTooltip, statusBarTooltip } from './build-stamp-core.ts';
+import { EVENT_WRITE_SETTLE_MS, createDeletionTracker, guardedFrontMatterWrite } from './frontmatter-write-guard-core.ts';
 import {
   decideForgeRouting,
   hasRoutingKeys,
@@ -173,7 +174,7 @@ import { renderMcqCard } from './mcq-widget-core.ts';
 import type { McqDocument, McqElement } from './mcq-widget-core.ts';
 import { syncFileToMemfsAfterWrite } from './post-write-memfs-sync-core.ts';
 import { PyodideHost, setPyodideHostSingleton, getPyodideHost } from './pyodide-host.ts';
-import { runFirstRunCheck } from './welcome.ts';
+import { readLibraryManifest, recordLibraryManifestFromBundle, runFirstRunCheck } from './welcome.ts';
 import {
   ReExtractBundledVaultModal,
   loadBundledVaultOptions,
@@ -662,11 +663,14 @@ export default class ForgePlugin extends Plugin {
     // are settings-tab territory, not status-bar territory).
     const statusBarItem = this.addStatusBarItem();
     statusBarItem.setText(`Forge v${this.manifest.version}`);
-    statusBarItem.title =
-      `Forge Client v${this.manifest.version}\n`
-      + `Build: ${formatBuildStamp(BUILD_STAMP)}\n`
-      + `Plugin ID: ${this.manifest.id}\n`
-      + `Min app version: ${this.manifest.minAppVersion}`;
+    // Drain 2026-10-11-0900 §6: an Obsidian tooltip (aria-label + data-tooltip-position). The bare `title` this used to set never
+    // showed on a status-bar item, so hovering "Forge v…" displayed nothing.
+    setStatusBarTooltip(statusBarItem, statusBarTooltip({
+      version: this.manifest.version,
+      build: formatBuildStamp(BUILD_STAMP),
+      pluginId: this.manifest.id,
+      minAppVersion: this.manifest.minAppVersion,
+    }));
 
     // v0.2.205 — Implicit locking Phase 2.5 §2.3: canonical-layer
     // status bar entry. Shows the active V2 note's canonical layer
@@ -710,6 +714,10 @@ export default class ForgePlugin extends Plugin {
     }));
     this.registerEvent(this.app.workspace.on('file-open', (file) => {
       void this.refreshForgePanelStrip(undefined, file);
+    }));
+    // Drain 2026-10-11-0900 §4 — feed the deletion tracker the frontmatter-write guard consults (a note deleted while a write ran).
+    this.registerEvent(this.app.vault.on('delete', (f) => {
+      this.deletionTracker.noteDeleted(f.path, Date.now());
     }));
     this.registerEvent(this.app.vault.on('modify', (file) => {
       // Debounce against active-file modifications only — saves on
@@ -1838,7 +1846,7 @@ export default class ForgePlugin extends Plugin {
       // the next Forge-click. For canonical slot-bearing snippets
       // this triggers a /resolve-slot roundtrip, but server-side
       // resolution cache keeps it fast.
-      await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+      await this.guardedProcessFrontMatter(file, (fm: any) => {
         delete fm.edit_mode;
         delete fm.locked;                  // legacy alias — clean up while we're here
         delete fm.locked_english_hash;     // v0.2.102: retired field; clean up old vaults
@@ -1874,7 +1882,7 @@ export default class ForgePlugin extends Plugin {
     // until the user toggles back to english + Forges. We previously
     // wrote a snapshot here for a defunct drift ribbon button (v0.2.79
     // removed); the field is dead weight now.
-    await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+    await this.guardedProcessFrontMatter(file, (fm: any) => {
       fm.edit_mode = 'python';
       delete fm.locked;                  // migrate off the legacy field
       delete fm.locked_english_hash;     // retired field; clean up
@@ -3616,7 +3624,15 @@ export default class ForgePlugin extends Plugin {
       // cohort can recover via macOS Trash if needed. Surface the
       // names so cohort knows what was moved.
       let bundleDroppedTrashed = 0;
+      // Drain 2026-10-11-0900 §2 — "not in the bundle" does not mean "not the user's": only a file the extraction MANIFEST lists
+      // (i.e. the plugin put it there) is trashed. A note the user authored in the library folder is left alone.
+      const libraryManifest = await readLibraryManifest(this.app, this.manifest.dir, vaultName);
+      const notOurs: string[] = [];
       for (const relPath of decision.filesBundleDropped) {
+        if (!libraryManifest || !(relPath in libraryManifest)) {
+          notOurs.push(relPath);
+          continue;
+        }
         const fullPath = `${extractedRoot}/${relPath}`;
         const af = this.app.vault.getAbstractFileByPath(fullPath);
         if (af instanceof TFile) {
@@ -3635,19 +3651,23 @@ export default class ForgePlugin extends Plugin {
       // each file into the extracted location. mkdir-tolerant of pre-
       // existing parent dirs (the user-authored / filesUntouched cases).
       await copyBundledOverlay(adapter, bundledRoot, extractedRoot);
+      // The vault now holds the bundle's files: record their hashes so later per-file drift sees them as unedited.
+      await recordLibraryManifestFromBundle(this.app, this.manifest.dir, vaultName);
 
       let summary =
         `Re-extracted '${vaultName}': ${trashed} edited file(s) trashed, ` +
         `${decision.filesUntouched.length} already-canonical, ` +
         `${decision.filesToCreate.length} restored`;
       if (bundleDroppedTrashed > 0) {
-        const sample = decision.filesBundleDropped.slice(0, 3).join(', ');
-        const more = decision.filesBundleDropped.length > 3
-          ? `, +${decision.filesBundleDropped.length - 3} more` : '';
-        summary += `, ${bundleDroppedTrashed} bundle-dropped file(s) moved to system trash (${sample}${more}). Recover from macOS Trash if you authored them yourself.`;
-      } else {
-        summary += '.';
+        const trashedNames = decision.filesBundleDropped.filter((r) => !notOurs.includes(r));
+        const sample = trashedNames.slice(0, 3).join(', ');
+        const more = trashedNames.length > 3 ? `, +${trashedNames.length - 3} more` : '';
+        summary += `, ${bundleDroppedTrashed} bundle-dropped file(s) moved to system trash (${sample}${more})`;
       }
+      if (notOurs.length > 0) {
+        summary += `; ${notOurs.length} other file(s) in the folder are yours and were left alone`;
+      }
+      summary += '.';
       console.log(`${NOTICE_PREFIX}${summary}`);
       this.notice(`${NOTICE_PREFIX}${summary}`, bundleDroppedTrashed > 0 ? 12000 : 8000);
     } catch (e) {
@@ -4900,7 +4920,7 @@ export default class ForgePlugin extends Plugin {
           : [];
       },
       writeInputs: async (next) => {
-        await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+        await this.guardedProcessFrontMatter(file, (fm: any) => {
           fm.inputs = next;
         });
       },
@@ -5316,6 +5336,31 @@ export default class ForgePlugin extends Plugin {
    *  as programmatic — a rare edge case worth trading for simplicity. */
   private _programmaticWriteInFlight: Set<string> = new Set();
 
+  /** Drain 2026-10-11-0900 §4 — every frontmatter write the plugin makes goes through here. Obsidian's `processFrontMatter` is
+   *  read -> transform -> `fs.writeFile`, which CREATES a missing file, so a write that lands after an external `git rm` re-created the
+   *  deleted note (ClaudeQA 7df5c08). The guard never starts a write to a path that is gone, and removes the note again if a delete was
+   *  observed while the write ran. `'event'` writes (the modify handlers, the ones that race a git operation) also wait
+   *  EVENT_WRITE_SETTLE_MS for a late delete event; `'user'` writes pay no latency. See frontmatter-write-guard-core.ts. */
+  private readonly deletionTracker = createDeletionTracker();
+
+  private async guardedProcessFrontMatter(
+    file: TFile,
+    fn: (fm: any) => void,
+    kind: 'user' | 'event' = 'user',
+  ): Promise<void> {
+    await guardedFrontMatterWrite({
+      path: file.path,
+      now: () => Date.now(),
+      tracker: this.deletionTracker,
+      exists: () => this.app.vault.adapter.exists(file.path),
+      remove: () => this.app.vault.adapter.remove(file.path),
+      write: () => this.app.fileManager.processFrontMatter(file, fn),
+      settle: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
+      settleMs: kind === 'event' ? EVENT_WRITE_SETTLE_MS : 0,
+      log: (m) => console.warn(`[forge] ${m}`),
+    });
+  }
+
   private async withProgrammaticWrite<T>(
     filePath: string,
     op: () => Promise<T>,
@@ -5470,7 +5515,7 @@ export default class ForgePlugin extends Plugin {
 
       // Write via processFrontMatter so we don't churn body text.
       await this.withProgrammaticWrite(file.path, async () => {
-        await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+        await this.guardedProcessFrontMatter(file, (fm: any) => {
           if (target !== null) {
             fm.source_facet = target;
             // Drain 2026-08-25-1060 §2 — when a note BECOMES
@@ -5494,7 +5539,7 @@ export default class ForgePlugin extends Plugin {
           if ('canonical_facet' in fm) {
             delete fm.canonical_facet;
           }
-        });
+        }, 'event');
       });
       if (target !== null) {
         console.log(
@@ -5694,7 +5739,7 @@ export default class ForgePlugin extends Plugin {
         }
 
         await this.withProgrammaticWrite(file.path, async () => {
-          await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+          await this.guardedProcessFrontMatter(file, (fm: any) => {
             if (!sourceAlreadyPresent) {
               fm.source_facet = seed;
             } else if (needsLegacyMigration) {
@@ -5852,9 +5897,9 @@ export default class ForgePlugin extends Plugin {
         },
         writeInputs: async (next) => {
           await this.withProgrammaticWrite(file.path, async () => {
-            await this.app.fileManager.processFrontMatter(file, (fm: any) => {
+            await this.guardedProcessFrontMatter(file, (fm: any) => {
               fm.inputs = next;
-            });
+            }, 'event');
           });
         },
       });
