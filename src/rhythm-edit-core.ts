@@ -46,6 +46,16 @@ export const MSG_SAVE_RESULT = 'forge-rhythm-save-result'; // plugin -> widget (
 export const MSG_RELOAD = 'forge-rhythm-reload';           // widget -> plugin: the user clicked "Reload from note"
 export const MSG_STATUS = 'forge-rhythm-status';           // plugin -> widget: the autosave indicator (saving | saved | error | conflict | idle)
 
+// Phase 8 (the embed). Nothing above changed. The first three are widget -> plugin and are only ever sent in playground mode (except
+// `current-data`, which answers a request); `request-data` / `stop` are plugin -> widget.
+export const MSG_REQUEST_DATA = 'forge-rhythm-request-data';   // plugin -> widget: "send me your CURRENT data" (a read of widget state, not a save)
+export const MSG_CURRENT_DATA = 'forge-rhythm-current-data';   // widget -> plugin: the answer, `{data}`
+export const MSG_STOP = 'forge-rhythm-stop';                   // plugin -> widget: stop playing now
+export const MSG_PLAYING = 'forge-rhythm-playing';             // widget -> plugin: `{playing: boolean}` (playground only)
+export const MSG_OPEN_NOTE = 'forge-rhythm-open-note';         // widget -> plugin: the "Open note" button (playground only)
+export const MSG_EDITED = 'forge-rhythm-edited';               // widget -> plugin: a local edit happened (no data; playground only)
+export const MSG_RESET = 'forge-rhythm-reset';                 // widget -> plugin: Reset was clicked (playground only)
+
 export type WidgetMessage =
   | { kind: 'ready' }
   | { kind: 'reload' }
@@ -69,8 +79,51 @@ export function parseWidgetMessage(raw: unknown): WidgetMessage {
   return { kind: 'ignored' };
 }
 
-export function buildLoadMessage(data: RhythmData, noteName: string) {
-  return { type: MSG_LOAD, data, noteName };
+/** How the widget is hosted. `edit` (the default, and the only mode before Phase 8): the widget edits a NOTE and autosaves. `playground`
+ *  (Phase 8, the `forge-rhythm` embed): the widget is a toy over a copy of the data — it NEVER posts a save, it shows Reset / Open note
+ *  and a "not saved" label, and it asks no confirmation. */
+export type RhythmHostMode = 'edit' | 'playground';
+
+/** The load message. For `edit` it is exactly what it always was (no `mode` key), so an older widget and every existing test are unaffected. */
+export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit') {
+  return mode === 'playground' ? { type: MSG_LOAD, data, noteName, mode } : { type: MSG_LOAD, data, noteName };
+}
+
+export function buildRequestDataMessage() {
+  return { type: MSG_REQUEST_DATA };
+}
+
+export function buildStopMessage() {
+  return { type: MSG_STOP };
+}
+
+export type EmbedWidgetMessage =
+  | { kind: 'ready' }
+  | { kind: 'edited' }
+  | { kind: 'reset' }
+  | { kind: 'open-note' }
+  | { kind: 'playing'; playing: boolean }
+  | { kind: 'current-data'; data: unknown }
+  | { kind: 'save-ignored' }                // an embed never writes: a save is recognised ONLY so it can be dropped on purpose
+  | { kind: 'malformed'; reason: string }
+  | { kind: 'ignored' };
+
+/** Classify a raw `message` payload from an embed's widget. A `forge-rhythm-save` is classified `save-ignored` and carries NO data, so
+ *  no code path past this function can ever hold what a save would have written. The caller must ALSO check `event.source`. */
+export function parseEmbedWidgetMessage(raw: unknown): EmbedWidgetMessage {
+  if (!isPlainObject(raw)) return { kind: 'ignored' };
+  switch (raw.type) {
+    case MSG_READY: return { kind: 'ready' };
+    case MSG_EDITED: return { kind: 'edited' };
+    case MSG_RESET: return { kind: 'reset' };
+    case MSG_OPEN_NOTE: return { kind: 'open-note' };
+    case MSG_SAVE: return { kind: 'save-ignored' };
+    case MSG_PLAYING:
+      return typeof raw.playing === 'boolean' ? { kind: 'playing', playing: raw.playing } : { kind: 'malformed', reason: 'a playing message without a boolean' };
+    case MSG_CURRENT_DATA:
+      return 'data' in raw ? { kind: 'current-data', data: raw.data } : { kind: 'malformed', reason: 'a current-data message without data' };
+    default: return { kind: 'ignored' };
+  }
 }
 
 export function buildSaveResultMessage(ok: boolean, message: string) {

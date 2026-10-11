@@ -4,7 +4,7 @@
 //                         It always reads the SAVED note (never a widget's in-memory state) and never writes anything.
 //   createScoreScheduler  re-render freshness: debounce external modify events, one render in flight, the latest request queued.
 
-import { readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
+import { readRhythmNote, validateRhythmData, type RhythmData } from './rhythm-edit-core.ts';
 
 export const SCORE_DEBOUNCE_MS = 250;
 
@@ -26,6 +26,18 @@ function isMusicXmlPayload(v: unknown): v is Record<string, unknown> {
   return r.type === 'musicxml' && typeof r.content === 'string' && r.content.length > 0;
 }
 
+/** Engine call + payload check, shared by the note-based score (above) and the playground's data-based one (Phase 8) — ONE pipeline. */
+async function computeScore(compute: ScoreDeps['compute'], data: RhythmData, title: string): Promise<ScoreOutcome> {
+  let result: unknown;
+  try {
+    result = await compute(data, title);
+  } catch (e) {
+    return { kind: 'error', message: `Score: the engine could not build the score (${(e as Error)?.message ?? e})` };
+  }
+  if (!isMusicXmlPayload(result)) return { kind: 'error', message: 'Score: the engine returned no score for this note.' };
+  return { kind: 'score', payload: result };
+}
+
 export async function produceScore(deps: ScoreDeps, title: string): Promise<ScoreOutcome> {
   let text: string;
   try {
@@ -35,14 +47,15 @@ export async function produceScore(deps: ScoreDeps, title: string): Promise<Scor
   }
   const note = readRhythmNote(text);
   if (note.ok === false) return { kind: 'refusal', message: `Score: ${note.message}` };
-  let result: unknown;
-  try {
-    result = await deps.compute(note.value.data, title);
-  } catch (e) {
-    return { kind: 'error', message: `Score: the engine could not build the score (${(e as Error)?.message ?? e})` };
-  }
-  if (!isMusicXmlPayload(result)) return { kind: 'error', message: 'Score: the engine returned no score for this note.' };
-  return { kind: 'score', payload: result };
+  return computeScore(deps.compute, note.value.data, title);
+}
+
+/** Phase 8: the score of rhythm data that is NOT (necessarily) in a note — a playground's current, unsaved state. Validated exactly as a
+ *  note's data is; reads no note; writes nothing. */
+export async function produceScoreFromData(compute: ScoreDeps['compute'], data: unknown, title: string): Promise<ScoreOutcome> {
+  const valid = validateRhythmData(data);
+  if (valid.ok === false) return { kind: 'refusal', message: `Score: ${valid.message}` };
+  return computeScore(compute, valid.value, title);
 }
 
 export interface ScoreSchedulerDeps {

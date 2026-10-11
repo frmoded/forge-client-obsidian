@@ -1669,3 +1669,56 @@
   color: var(--text-muted);
   white-space: pre-wrap;
 }
+
+/* Beat-as-data Phase 8 (drain 2026-10-10-2200): the `forge-rhythm` embed block — a rhythm data note shown inline as a playground Beat
+   Box. Toolbar (title, Open note, Score in the music edition) above the widget iframe; an inline notice when the note changed under
+   local edits; the engraved score takes the iframe's place while it is toggled on. Height is the one per-embed value and is set on the
+   iframe by createSandboxedWidgetIframe, as for html-embed. */
+.forge-rhythm-embed {
+  margin: 8px 0 16px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.forge-rhythm-embed-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.forge-rhythm-embed-title {
+  font-weight: 600;
+  margin-right: auto;
+}
+
+.forge-rhythm-embed-status,
+.forge-rhythm-embed-stale {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.forge-rhythm-embed-stale {
+  background: var(--background-modifier-hover);
+}
+
+.forge-rhythm-embed-hidden {
+  display: none;
+}
+
+.forge-rhythm-embed-error {
+  margin: 8px 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-error-hover);
+}
+
+.forge-rhythm-embed-error p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}

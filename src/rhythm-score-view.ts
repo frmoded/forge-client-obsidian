@@ -10,7 +10,7 @@
 
 import { EditableFileView, type TFile, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
-import { getPyodideHost } from './pyodide-host.ts';
+import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
 import { produceScore, createScoreScheduler, type ScoreScheduler } from './rhythm-score-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE, MODE_ACTIONS, headerActionsFor, type RhythmMode } from './rhythm-mode-core.ts';
 import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts';
@@ -92,11 +92,7 @@ export class RhythmScoreView extends EditableFileView {
     this.contentEl.createDiv({ cls: 'forge-rhythm-score-status', text: 'Rendering score…' });
     const outcome = await produceScore({
       readNote: () => this.app.vault.read(file),       // the SAVED note, every time
-      compute: async (data, title) => {
-        const host = getPyodideHost();
-        if (!host) throw new Error('the engine is not available');
-        return (await host.getInstance()).computeRhythmScore(data, title);
-      },
+      compute: computeRhythmScoreViaEngine,
     }, file.basename);
     if (seq !== this.renderSeq) return;                // a newer render (or an unload) superseded this one
     this.contentEl.empty();

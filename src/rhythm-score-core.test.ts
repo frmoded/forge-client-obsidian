@@ -179,3 +179,36 @@ test('after an edit in the Beat Box, flushing the autosave (what the mode switch
   await produceScore(deps, 't');
   assert.equal(sent[1].channels.snare[4], true, 'the Score shows the edit');
 });
+
+// ---- Phase 8 (drain 2026-10-10-2200): the score of data that is not (yet) in a note — a playground's current state ------------
+
+import { produceScoreFromData } from './rhythm-score-core.ts';
+
+const PLAYGROUND_DATA = {
+  time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 90,
+  channels: { kick: [true, ...new Array(15).fill(false)] },
+};
+
+test('produceScoreFromData: valid data -> the engine is called with the VALIDATED data and its payload is returned', async () => {
+  let seen: unknown = null;
+  const r = await produceScoreFromData(async (d, t) => { seen = [d, t]; return { type: 'musicxml', content: '<score/>' }; }, PLAYGROUND_DATA, 'my title');
+  assert.equal(r.kind, 'score');
+  assert.deepEqual(seen, [PLAYGROUND_DATA, 'my title']);
+});
+
+test('produceScoreFromData: invalid data is a refusal that never reaches the engine', async () => {
+  let called = false;
+  for (const bad of [null, 'x', { time_signature: '4/4' }, { ...PLAYGROUND_DATA, steps: 0 }]) {
+    const r = await produceScoreFromData(async () => { called = true; return { type: 'musicxml', content: 'x' }; }, bad, 't');
+    assert.equal(r.kind, 'refusal');
+  }
+  assert.equal(called, false);
+});
+
+test('produceScoreFromData: an engine throw, or a payload that is not musicxml, is an error (same wording as the note-based score)', async () => {
+  const thrown = await produceScoreFromData(async () => { throw new Error('boom'); }, PLAYGROUND_DATA, 't');
+  assert.equal(thrown.kind, 'error');
+  if (thrown.kind === 'error') assert.match(thrown.message, /engine could not build the score \(boom\)/);
+  const junk = await produceScoreFromData(async () => ({ type: 'text' }), PLAYGROUND_DATA, 't');
+  assert.equal(junk.kind, 'error');
+});

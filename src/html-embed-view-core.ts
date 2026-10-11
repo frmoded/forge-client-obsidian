@@ -50,6 +50,13 @@ export const DEFAULT_HEIGHT_PX = 720;
 
 const HEIGHT_LINE_RE = /^(\d+)(px)?$/i;
 
+/** The height rule of an `html-embed` block's second line, exported so the `forge-rhythm` embed (Phase 8) uses the SAME rule rather
+ *  than a copy: whole pixels, with an optional `px`. Null when the text is not that. */
+export function parseHeightPx(text: string): number | null {
+  const m = text.trim().match(HEIGHT_LINE_RE);
+  return m ? Number(m[1]) : null;
+}
+
 export function parseHtmlEmbedSource(source: string): HtmlEmbedParsed {
   const lines = source
     .split('\n')

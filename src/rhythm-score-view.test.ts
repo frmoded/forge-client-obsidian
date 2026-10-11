@@ -34,7 +34,9 @@ test('reuse, not duplication: the Score view renders through the music-edition s
 });
 
 test('compute path: the host method sends the PARSED data to plugin-side Python that composes rhythm_data_to_stream + serialize_result', () => {
-  assert.match(score, /\(await host\.getInstance\(\)\)\.computeRhythmScore\(data, title\);/);
+  // Phase 8: the closure moved to the shared src/rhythm-score-engine.ts (the embed's Score toggle uses it too); the view hands it over.
+  assert.match(score, /compute: computeRhythmScoreViaEngine,/);
+  assert.match(code(read('src/rhythm-score-engine.ts')), /\(await host\.getInstance\(\)\)\.computeRhythmScore\(data, title\);/);
   assert.match(host, /async computeRhythmScore\(data: unknown, title: string\): Promise<unknown> \{\s*this\.pyodide\.globals\.set\("_forge_rhythm_data_json", JSON\.stringify\(data\)\);/);
   const raw = read('src/pyodide-host.ts');
   assert.match(raw, /def _forge_rhythm_score_payload\(data_json: str, title: str\):/);

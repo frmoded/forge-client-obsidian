@@ -22,6 +22,7 @@
 import { EditableFileView, MarkdownView, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
+import { registerRhythmEmbed } from './rhythm-embed-view.ts';
 import { createAutosavePipeline, type AutosavePipeline, type SaveOutcome } from './rhythm-autosave-core.ts';
 import { createDefaultViewController, type LeafInfo, type LeafLocation, type SwapTarget } from './rhythm-default-view-core.ts';
 import { registerRestoreParticipants } from './restore-hold-core.ts';
@@ -349,6 +350,10 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
     ...base,
     setMark: (leaf: WorkspaceLeaf, path: string, mark: ModeMark | null) => defaultView.setMark(leaf, path, mark),
   };
+
+  // Phase 8: the `forge-rhythm` code block — a rhythm data note embedded in any note as a playground Beat Box (it never writes). "Open
+  // note" uses this same opener: a tab already showing the note is reused, otherwise a new tab, in the Beat Box.
+  registerRhythmEmbed(plugin, { openNote: (file) => { void openRhythmEditor(app, file, hooks, null); } });
 
   plugin.registerView(RHYTHM_EDIT_VIEW_TYPE, (leaf) => new RhythmEditView(leaf, hooks));
   if (edition === 'music') plugin.registerView(RHYTHM_SCORE_VIEW_TYPE, (leaf) => new RhythmScoreView(leaf, hooks));

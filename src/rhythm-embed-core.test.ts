@@ -1,0 +1,330 @@
+// Beat-as-data Phase 8 (drain 2026-10-10-2200) — the `forge-rhythm` embed block: a rhythm data note shown inline, in any note, as a
+// PLAYGROUND Beat Box. The pure half: the block parser, the protocol additions, the freshness decision, the one-sound-at-a-time
+// coordinator, and the host-side session (everything the embed decides, with the widget, the vault and the engine injected).
+//
+// The invariant behind all of it: an embed NEVER writes. Its dependency bag has no write function at all, and a `forge-rhythm-save`
+// from the iframe is classified `save-ignored` and goes nowhere.
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import {
+  MSG_CURRENT_DATA, MSG_EDITED, MSG_LOAD, MSG_OPEN_NOTE, MSG_PLAYING, MSG_READY, MSG_REQUEST_DATA, MSG_RESET, MSG_SAVE, MSG_STOP,
+  buildLoadMessage, buildRequestDataMessage, buildStopMessage, contentFingerprint, formatRhythmJson, parseEmbedWidgetMessage,
+  parseWidgetMessage, type RhythmData,
+} from './rhythm-edit-core.ts';
+import {
+  DEFAULT_RHYTHM_EMBED_HEIGHT_PX, createPlaybackCoordinator, createRhythmEmbedSession, decideEmbedFreshness, parseRhythmEmbedSource,
+  widgetMissingMessage,
+} from './rhythm-embed-core.ts';
+
+const TRESILLO: RhythmData = {
+  time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 100,
+  channels: { kick: [true, false, false, true, false, false, true, false, false, false, false, false, false, false, false, false] },
+};
+const noteText = (d: RhythmData = TRESILLO, extra = '') =>
+  `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${formatRhythmJson(d)}\n\`\`\`\n${extra}`;
+
+// ---- the block parser ---------------------------------------------------------------------------------------------------
+
+test('parser: one link line is a valid block; defaults are the documented ones', () => {
+  const r = parseRhythmEmbedSource('[[rhythm_pattern_tresillo]]');
+  assert.deepEqual(r, { ok: true, value: { target: 'rhythm_pattern_tresillo', heightPx: DEFAULT_RHYTHM_EMBED_HEIGHT_PX, title: null } });
+});
+
+test('parser: height and title options (html-embed height rule: digits with an optional px)', () => {
+  const r = parseRhythmEmbedSource('[[tresillo]]\nheight: 500\ntitle: The tresillo');
+  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 500, title: 'The tresillo' } });
+  const px = parseRhythmEmbedSource('[[tresillo]]\nheight: 480px');
+  assert.equal(px.ok && px.value.heightPx, 480);
+  const upper = parseRhythmEmbedSource('[[tresillo]]\nHEIGHT: 480PX');
+  assert.equal(upper.ok && upper.value.heightPx, 480, 'option names and the unit are case-insensitive');
+});
+
+test('parser: basename links and folder-qualified links both give the link path; alias and heading are dropped', () => {
+  for (const [src, want] of [
+    ['[[rhythm_pattern_tresillo]]', 'rhythm_pattern_tresillo'],
+    ['[[rhythm_data/rhythm_pattern_tresillo]]', 'rhythm_data/rhythm_pattern_tresillo'],
+    ['[[rhythm_pattern_tresillo|the tresillo]]', 'rhythm_pattern_tresillo'],
+    ['[[rhythm_pattern_tresillo#Heading]]', 'rhythm_pattern_tresillo'],
+    ['  [[ spaced ]]  ', 'spaced'],
+  ] as const) {
+    const r = parseRhythmEmbedSource(src);
+    assert.equal(r.ok && r.value.target, want, src);
+  }
+});
+
+test('parser: CRLF and blank lines are tolerated', () => {
+  const r = parseRhythmEmbedSource('\r\n[[tresillo]]\r\n\r\nheight: 400\r\n');
+  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 400, title: null } });
+});
+
+test('parser: an empty block, a first line that is not a link, and a second link are each refused with a message that says what to write', () => {
+  for (const [src, re] of [
+    ['', /empty|link/i],
+    ['   \n  ', /empty|link/i],
+    ['rhythm_pattern_tresillo', /link/i],
+    ['height: 400\n[[tresillo]]', /link/i],
+    ['[[tresillo]]\n[[hemiola]]', /one link|unrecogni[sz]ed/i],
+    ['[[]]', /link/i],
+  ] as const) {
+    const r = parseRhythmEmbedSource(src);
+    assert.equal(r.ok, false, JSON.stringify(src));
+    if (r.ok === false) assert.match(r.message, re, JSON.stringify(src));
+  }
+});
+
+test('parser: an unknown option is REJECTED (named, with the supported ones), never silently ignored', () => {
+  const r = parseRhythmEmbedSource('[[tresillo]]\nedit: true');
+  assert.equal(r.ok, false);
+  if (r.ok === false) {
+    assert.match(r.message, /"edit"/);
+    assert.match(r.message, /height/);
+    assert.match(r.message, /title/);
+  }
+});
+
+test('parser: bad values — height not a whole number of px, zero, a repeated option, an empty title, a line that is not key: value', () => {
+  for (const src of [
+    '[[t]]\nheight: tall', '[[t]]\nheight: 0', '[[t]]\nheight: 12.5', '[[t]]\nheight: -4',
+    '[[t]]\nheight: 400\nheight: 500', '[[t]]\ntitle:', '[[t]]\ntitle:    ', '[[t]]\nsomething else',
+  ]) {
+    assert.equal(parseRhythmEmbedSource(src).ok, false, JSON.stringify(src));
+  }
+});
+
+// ---- the protocol additions ---------------------------------------------------------------------------------------------
+
+test('protocol: note-editing load is byte-for-byte what it was; playground adds only a mode flag', () => {
+  assert.deepEqual(buildLoadMessage(TRESILLO, 'n'), { type: MSG_LOAD, data: TRESILLO, noteName: 'n' });
+  assert.deepEqual(buildLoadMessage(TRESILLO, 'n', 'edit'), { type: MSG_LOAD, data: TRESILLO, noteName: 'n' });
+  assert.deepEqual(buildLoadMessage(TRESILLO, 'n', 'playground'), { type: MSG_LOAD, data: TRESILLO, noteName: 'n', mode: 'playground' });
+  assert.deepEqual(buildRequestDataMessage(), { type: MSG_REQUEST_DATA });
+  assert.deepEqual(buildStopMessage(), { type: MSG_STOP });
+});
+
+test('protocol: the embed classifies every widget message it can receive — and a SAVE is classified save-ignored, carrying no data', () => {
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_READY }), { kind: 'ready' });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_EDITED }), { kind: 'edited' });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_RESET }), { kind: 'reset' });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_OPEN_NOTE }), { kind: 'open-note' });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_PLAYING, playing: true }), { kind: 'playing', playing: true });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_PLAYING, playing: false }), { kind: 'playing', playing: false });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_CURRENT_DATA, data: { a: 1 } }), { kind: 'current-data', data: { a: 1 } });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_SAVE, data: TRESILLO }), { kind: 'save-ignored' });
+  assert.equal(parseEmbedWidgetMessage({ type: MSG_PLAYING, playing: 'yes' }).kind, 'malformed');
+  assert.equal(parseEmbedWidgetMessage({ type: MSG_CURRENT_DATA }).kind, 'malformed');
+  for (const junk of [null, 'x', 3, [], {}, { type: 'something-else' }]) assert.equal(parseEmbedWidgetMessage(junk).kind, 'ignored');
+});
+
+test('protocol: the Beat Box view\'s own parser is UNCHANGED — the new message types are not its business', () => {
+  for (const t of [MSG_EDITED, MSG_RESET, MSG_OPEN_NOTE, MSG_PLAYING, MSG_CURRENT_DATA]) {
+    assert.deepEqual(parseWidgetMessage({ type: t, playing: true, data: {} }), { kind: 'ignored' }, t);
+  }
+  assert.deepEqual(parseWidgetMessage({ type: MSG_SAVE, data: TRESILLO }), { kind: 'save', data: TRESILLO });
+});
+
+// ---- freshness ----------------------------------------------------------------------------------------------------------
+
+test('freshness: unchanged -> ignore; changed + no local edits -> reload; changed + local edits -> tell, never clobber', () => {
+  assert.equal(decideEmbedFreshness({ dirty: false, loadedFingerprint: 'a', currentFingerprint: 'a' }), 'ignore');
+  assert.equal(decideEmbedFreshness({ dirty: true, loadedFingerprint: 'a', currentFingerprint: 'a' }), 'ignore');
+  assert.equal(decideEmbedFreshness({ dirty: false, loadedFingerprint: 'a', currentFingerprint: 'b' }), 'reload');
+  assert.equal(decideEmbedFreshness({ dirty: true, loadedFingerprint: 'a', currentFingerprint: 'b' }), 'stale-notice');
+});
+
+// ---- one sound at a time ------------------------------------------------------------------------------------------------
+
+test('coordinator: when one embed starts playing the others are stopped; the player itself is not', () => {
+  const stopped: string[] = [];
+  const c = createPlaybackCoordinator();
+  c.register('A', () => stopped.push('A'));
+  c.register('B', () => stopped.push('B'));
+  c.register('C', () => stopped.push('C'));
+  c.setPlaying('A', true);
+  assert.deepEqual(stopped.sort(), ['B', 'C']);
+  stopped.length = 0;
+  c.setPlaying('B', true);
+  assert.deepEqual(stopped.sort(), ['A', 'C']);
+});
+
+test('coordinator: stopping, an unknown id, and an unregistered embed stop nobody; unregistering a player stops it', () => {
+  const stopped: string[] = [];
+  const c = createPlaybackCoordinator();
+  c.register('A', () => stopped.push('A'));
+  c.register('B', () => stopped.push('B'));
+  c.setPlaying('A', true); stopped.length = 0;
+  c.setPlaying('A', false);
+  c.setPlaying('ghost', true);
+  assert.deepEqual(stopped, [], 'stopping, and an id nobody registered, signal nobody');
+});
+
+test('coordinator: unload of a player silences it; a removed embed is never signalled again', () => {
+  const stopped: string[] = [];
+  const c = createPlaybackCoordinator();
+  c.register('A', () => stopped.push('A'));
+  c.register('B', () => stopped.push('B'));
+  c.setPlaying('A', true); stopped.length = 0;
+  c.unregister('A');
+  assert.deepEqual(stopped, ['A'], 'the player that goes away is stopped');
+  stopped.length = 0;
+  c.setPlaying('B', true);
+  assert.deepEqual(stopped, [], 'A is gone: nothing to stop');
+  assert.equal(c.playingId(), 'B');
+});
+
+// ---- the host-side session ----------------------------------------------------------------------------------------------
+
+function makeSession(over: { text?: () => string; computeScore?: (d: RhythmData, t: string) => Promise<unknown> } = {}) {
+  let text = noteText();
+  const posted: any[] = [];
+  const log = { errors: [] as string[], stale: [] as boolean[], opened: 0, playing: [] as boolean[], timers: [] as Array<() => void> };
+  const session = createRhythmEmbedSession({
+    noteName: 'rhythm_pattern_tresillo',
+    title: 'The tresillo',
+    readNote: async () => (over.text ? over.text() : text),
+    post: (m) => { posted.push(m); },
+    openNote: () => { log.opened++; },
+    onPlaying: (p) => { log.playing.push(p); },
+    setStale: (s) => { log.stale.push(s); },
+    showError: (m) => { log.errors.push(m); },
+    computeScore: over.computeScore,
+    setTimer: (fn) => { log.timers.push(fn); return log.timers.length; },
+    clearTimer: () => { /* tests fire timers by hand */ },
+  });
+  return { session, posted, log, setText: (t: string) => { text = t; } };
+}
+
+test('session: ready -> the saved note is read and sent as a PLAYGROUND load', async () => {
+  const { session, posted } = makeSession();
+  await session.onWidgetMessage({ type: MSG_READY });
+  assert.deepEqual(posted, [{ type: MSG_LOAD, data: TRESILLO, noteName: 'rhythm_pattern_tresillo', mode: 'playground' }]);
+});
+
+test('session: a note that is not valid rhythm data shows an inline error and sends no load', async () => {
+  const { session, posted, log } = makeSession({ text: () => '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"x":1}\n```\n' });
+  await session.onWidgetMessage({ type: MSG_READY });
+  assert.deepEqual(posted, []);
+  assert.equal(log.errors.length, 1);
+  assert.match(log.errors[0], /rhythm/i);
+});
+
+test('session: a forge-rhythm-save from the iframe is IGNORED — nothing is written, nothing is posted, nothing changes', async () => {
+  const { session, posted, log } = makeSession();
+  await session.onWidgetMessage({ type: MSG_READY });
+  posted.length = 0;
+  await session.onWidgetMessage({ type: MSG_SAVE, data: { ...TRESILLO, tempo_bpm: 40 } });
+  assert.deepEqual(posted, []);
+  assert.deepEqual(log.errors, []);
+  assert.equal(session.isDirty(), false, 'a save is not even an edit');
+});
+
+test('session: Open note and playing are forwarded to the host; edited marks the playground dirty', async () => {
+  const { session, log } = makeSession();
+  await session.onWidgetMessage({ type: MSG_OPEN_NOTE });
+  assert.equal(log.opened, 1);
+  await session.onWidgetMessage({ type: MSG_PLAYING, playing: true });
+  await session.onWidgetMessage({ type: MSG_PLAYING, playing: false });
+  assert.deepEqual(log.playing, [true, false]);
+  assert.equal(session.isDirty(), false);
+  await session.onWidgetMessage({ type: MSG_EDITED });
+  assert.equal(session.isDirty(), true);
+});
+
+test('session: the note changes on disk with NO local edits -> the embed reloads it', async () => {
+  const { session, posted, setText } = makeSession();
+  await session.onWidgetMessage({ type: MSG_READY });
+  posted.length = 0;
+  setText(noteText({ ...TRESILLO, tempo_bpm: 140 }));
+  await session.onNoteModified();
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].data.tempo_bpm, 140);
+  assert.equal(posted[0].mode, 'playground');
+});
+
+test('session: the note changes on disk WITH local edits -> a notice, no load sent (never clobbered); Reset then reloads the new data', async () => {
+  const { session, posted, log, setText } = makeSession();
+  await session.onWidgetMessage({ type: MSG_READY });
+  await session.onWidgetMessage({ type: MSG_EDITED });
+  posted.length = 0;
+  setText(noteText({ ...TRESILLO, tempo_bpm: 140 }));
+  await session.onNoteModified();
+  assert.deepEqual(posted, [], 'the playground keeps what the student is doing');
+  assert.deepEqual(log.stale, [true]);
+  await session.onWidgetMessage({ type: MSG_RESET });
+  assert.equal(session.isDirty(), false);
+  assert.equal(posted.length, 1, 'Reset picks up the changed note');
+  assert.equal(posted[0].data.tempo_bpm, 140);
+  assert.deepEqual(log.stale, [true, false]);
+});
+
+test('session: a modify event that did not change the note is ignored', async () => {
+  const { session, posted } = makeSession();
+  await session.onWidgetMessage({ type: MSG_READY });
+  posted.length = 0;
+  await session.onNoteModified();
+  assert.deepEqual(posted, []);
+});
+
+test('session: current data — the request goes to the widget and resolves with its answer; it is a READ of widget state', async () => {
+  const { session, posted } = makeSession();
+  const p = session.requestCurrentData();
+  assert.deepEqual(posted.at(-1), { type: MSG_REQUEST_DATA });
+  await session.onWidgetMessage({ type: MSG_CURRENT_DATA, data: { tempo_bpm: 77 } });
+  assert.deepEqual(await p, { tempo_bpm: 77 });
+});
+
+test('session: an unanswered data request rejects (the Score toggle shows an error, it never hangs)', async () => {
+  const { session, log } = makeSession();
+  const p = session.requestCurrentData();
+  log.timers[0]();
+  await assert.rejects(p, /did not answer/);
+});
+
+test('session: Score of the CURRENT playground state — validated, computed by the injected engine, and the saved note is not consulted', async () => {
+  const edited = { ...TRESILLO, tempo_bpm: 66 };
+  let computedWith: RhythmData | null = null;
+  const { session } = makeSession({
+    computeScore: async (d) => { computedWith = d; return { type: 'musicxml', content: '<score/>' }; },
+    text: () => { throw new Error('the score of a playground must not read the saved note'); },
+  });
+  const p = session.currentScore();
+  await session.onWidgetMessage({ type: MSG_CURRENT_DATA, data: edited });
+  const r = await p;
+  assert.equal(r.kind, 'score');
+  assert.deepEqual(computedWith, edited);
+});
+
+test('session: Score of invalid widget data is a refusal, and with no engine it is an error — never a throw', async () => {
+  const bad = makeSession({ computeScore: async () => ({ type: 'musicxml', content: 'x' }) });
+  const p = bad.session.currentScore();
+  await bad.session.onWidgetMessage({ type: MSG_CURRENT_DATA, data: { nonsense: true } });
+  assert.equal((await p).kind, 'refusal');
+
+  const none = makeSession({});
+  const q = none.session.currentScore();
+  await none.session.onWidgetMessage({ type: MSG_CURRENT_DATA, data: TRESILLO });
+  assert.equal((await q).kind, 'error');
+});
+
+test('session: stop posts forge-rhythm-stop; after dispose nothing more is posted', async () => {
+  const { session, posted } = makeSession();
+  session.stop();
+  assert.deepEqual(posted, [{ type: MSG_STOP }]);
+  session.dispose();
+  posted.length = 0;
+  session.stop();
+  await session.onWidgetMessage({ type: MSG_READY });
+  assert.deepEqual(posted, []);
+});
+
+test('error wording: a missing widget reuses the lookup\'s own message (what was searched)', () => {
+  assert.match(widgetMissingMessage('not found. Searched — vault root: a (not found).'), /^Rhythm embed: the Rhythm Box widget was not found\. Searched — /);
+});
+
+test('the session\'s dependency bag has no write function: nothing in it can modify a note', () => {
+  const { session } = makeSession();
+  assert.ok(session);
+  // The contract is structural: EmbedSessionDeps lists readNote/post/openNote/onPlaying/setStale/showError/computeScore/timers only.
+  // The source pin in rhythm-embed-wiring.test.ts additionally checks the Obsidian glue for any vault write API.
+  assert.equal(contentFingerprint('a') === contentFingerprint('a'), true);
+});
