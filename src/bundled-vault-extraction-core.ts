@@ -59,6 +59,20 @@ export type BundledVaultName =
 export const BUNDLED_VAULT_NAME_SET: ReadonlySet<string> =
   new Set<string>(BUNDLED_VAULT_NAMES);
 
+/** The names under which a vault root may declare itself the SOURCE REPO of a bundled library (drain 2026-10-12-1700 §3).
+ *  Deliberately NOT the current edition's list: the gate must agree with what extraction would actually do, and extraction extracts
+ *  whatever the plugin folder carries (see deriveBundledVaultNames). A lean build deployed beside a music-bearing assets folder used
+ *  to extract music-theory INTO the music-theory source repo, because the gate only knew the lean pair. So: every name ANY edition
+ *  can bundle, plus the folder names found in the plugin's `assets/vaults/` listing (a vault the constant has never heard of). */
+export function sourceVaultNames(listedFolders: readonly string[] | undefined | null): ReadonlySet<string> {
+  const names = new Set<string>([...EDITION_VAULT_NAMES.lean, ...EDITION_VAULT_NAMES.music]);
+  for (const folder of listedFolders ?? []) {
+    const name = String(folder).split('/').filter(Boolean).pop() ?? '';
+    if (name !== '' && !name.startsWith('.')) names.add(name);
+  }
+  return names;
+}
+
 /** Last-resort set, used ONLY when listing the bundle dir yields
  *  nothing. An adapter quirk must not silently downgrade a fresh
  *  install to zero extracted vaults — that would be a worse failure

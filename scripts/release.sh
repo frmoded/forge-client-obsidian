@@ -238,6 +238,20 @@ else
       exit 1
     fi
 
+    # Drain 2026-10-12-1700 §2 — the synced notes must also be internally
+    # consistent: every note's stored description_hash is the hash of its
+    # own Description (the plugin's algorithm). 17 of 49 shipped notes were
+    # not, which made a freshly extracted hello_world read "Description
+    # source / out of date" and send its first click to the LLM.
+    if ! node scripts/check-bundled-description-hashes.mjs; then
+      echo
+      echo "ERROR: the synced bundle ships notes whose description_hash is not"
+      echo "       the hash of their own Description (see above). Nothing was"
+      echo "       committed. Re-stamp at the source (--fix), bump, commit,"
+      echo "       re-run release.sh."
+      exit 1
+    fi
+
     git add assets/vaults/
     git commit -q -m "sync bundled vaults (release-prep)"
     echo "  ✓ committed: $(git log -1 --pretty=%h) sync bundled vaults (release-prep)"

@@ -1,0 +1,82 @@
+// Drain 2026-10-12-1700 §2(e) — what a freshly extracted `forge-tutorial/01-hello/hello_world` DOES, before and after its description_hash is
+// re-stamped, through the plugin's own functions (no copy of the logic):
+//   whichLayerIsSource  -> the probe the hammer reads ("Description source / out of date" is this saying 'description')
+//   resolveForgeGesture -> 'generate' (the LLM) vs 'transpile' (deterministic Recipe -> Python)
+// The fixture is the note exactly as committed at forge-tutorial HEAD (its description_hash is the stale 4f851f4a…).
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { whichLayerIsSource, detectStaleFacets } from './facet-hash-core.ts';
+import {
+  extractDescription, extractPythonSection, extractRecipeSection, getFrontmatterField,
+} from './v2-note-core.ts';
+import { resolveForgeGesture } from './source-aware-forge-click-core.ts';
+import { checkNote, restampNote } from '../scripts/check-bundled-description-hashes-core.mjs';
+
+const HELLO_WORLD_AT_HEAD = `---
+type: action
+description_hash: 4f851f4a216f44c0172536f0af88497f6ef4afe46e70f278587c52559587145a
+recipe_hash: f9b77731c88889f2724e58f2c2a104c22758661b6b71c208ea45ec4c555cf08c
+recipe_derived_from_description_hash: 4f851f4a216f44c0172536f0af88497f6ef4afe46e70f278587c52559587145a
+recipe_derived_from_source_hash: 4f851f4a216f44c0172536f0af88497f6ef4afe46e70f278587c52559587145a
+source_facet: recipe
+python_hash: b20fdbaa35ecb4668702368a21b11966bdc4e7ff42b5e2e6b03403d0c0e77045
+python_derived_from_source_hash: f9b77731c88889f2724e58f2c2a104c22758661b6b71c208ea45ec4c555cf08c
+python_derived_from_recipe_hash: f9b77731c88889f2724e58f2c2a104c22758661b6b71c208ea45ec4c555cf08c
+---
+
+# Description
+
+Prints the exact text "hello, world".
+
+# Recipe
+
+Print "hello, world".
+
+# Python
+
+\`\`\`python
+def compute(context):
+  print('hello, world')
+\`\`\`
+`;
+
+const helpers = {
+  extractDescription, extractRecipeSection, extractPythonSection,
+  getFrontmatterField: (b: string, k: string) => {
+    const v = getFrontmatterField(b, k);
+    return typeof v === 'string' ? v : null;
+  },
+};
+const probe = (body: string) => whichLayerIsSource(body, helpers);
+const gestureOf = async (body: string) => {
+  const source = getFrontmatterField(body, 'source_facet');
+  return resolveForgeGesture(await probe(body), (source as any) ?? null);
+};
+
+test('REPRO — as shipped: the note reads "Description source" and the first click is a GENERATION (the LLM)', async () => {
+  assert.equal((await checkNote(HELLO_WORLD_AT_HEAD)).ok, false, 'the stored description_hash is not the hash of its Description');
+  assert.equal(await probe(HELLO_WORLD_AT_HEAD), 'description', 'although the file says source_facet: recipe');
+  assert.deepEqual([...await detectStaleFacets(HELLO_WORLD_AT_HEAD, helpers)].sort(), ['python', 'recipe']);
+  assert.equal(await gestureOf(HELLO_WORLD_AT_HEAD), 'generate');
+});
+
+test('after the re-stamp: the note reports synced, no facet is stale, and the first click is a deterministic TRANSPILE', async () => {
+  const fixed = await restampNote(HELLO_WORLD_AT_HEAD);
+  assert.notEqual(fixed, HELLO_WORLD_AT_HEAD);
+  assert.equal((await checkNote(fixed)).ok, true);
+  assert.equal(await probe(fixed), 'synced');
+  assert.equal((await detectStaleFacets(fixed, helpers)).size, 0);
+  assert.equal(await gestureOf(fixed), 'transpile', 'Recipe -> Python via the engine; no LLM');
+  // the recipe and python stamps — the facets the click actually consumes — are exactly as they were
+  assert.equal(getFrontmatterField(fixed, 'recipe_hash'), 'f9b77731c88889f2724e58f2c2a104c22758661b6b71c208ea45ec4c555cf08c');
+  assert.equal(getFrontmatterField(fixed, 'python_hash'), 'b20fdbaa35ecb4668702368a21b11966bdc4e7ff42b5e2e6b03403d0c0e77045');
+  assert.equal(getFrontmatterField(fixed, 'source_facet'), 'recipe');
+});
+
+test('a Description-source note (stored source_facet: description) still re-rolls on its first click after a re-stamp — by design, not a regression', async () => {
+  const note = HELLO_WORLD_AT_HEAD.replace('source_facet: recipe', 'source_facet: description');
+  const fixed = await restampNote(note);
+  assert.equal(await probe(fixed), 'synced');
+  assert.equal(await gestureOf(fixed), 'generate', 'resolveForgeGesture: a synced note derives AGAIN along the edge that produced it');
+});

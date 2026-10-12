@@ -27,7 +27,7 @@ import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-clas
 import {
   bundledVaultsRoot,
   bundledWelcomePaths,
-  BUNDLED_VAULT_NAME_SET,
+  sourceVaultNames,
   deriveBundledVaultNames,
   type DerivedBundledVaults,
 } from './bundled-vault-extraction-core.ts';
@@ -52,11 +52,17 @@ export { copyDirRecursive };
  *  repo. v0.2.64 — used by ensureBundled* + ensureWelcomeFiles gates
  *  to skip auto-extract on source repos (per brief (e)). Defensive:
  *  missing/unreadable forge.toml → null (treat as a normal vault). */
-async function detectSourceVault(adapter: DataAdapter): Promise<string | null> {
+async function detectSourceVault(adapter: DataAdapter, pluginDir: string): Promise<string | null> {
   try {
     if (!(await adapter.exists('forge.toml'))) return null;
     const body = await adapter.read('forge.toml');
-    return isSourceVault(body, BUNDLED_VAULT_NAME_SET);
+    // Drain 2026-10-12-1700 §3: NOT the edition-only BUNDLED_VAULT_NAME_SET. Extraction extracts whatever the plugin folder carries,
+    // so the gate must know every name extraction could extract: all editions' names plus the folder listing.
+    let listed: string[] = [];
+    try {
+      listed = (await adapter.list(bundledVaultsRoot(pluginDir)))?.folders ?? [];
+    } catch { /* an unreadable bundle dir still leaves every edition's names */ }
+    return isSourceVault(body, sourceVaultNames(listed));
   } catch (e) {
     console.error('Forge: detectSourceVault read failed', e);
     return null;
@@ -166,7 +172,7 @@ export async function runFirstRunCheck(app: App, pluginDir: string): Promise<voi
     // gate. Pre-v0.2.69 the lowercase ensureWelcomeFiles path was
     // gated but the older capital-W path was not, so source vaults
     // got a phantom Welcome.md each first run. Bug 1 fix.
-    const sourceVaultName = await detectSourceVault(adapter);
+    const sourceVaultName = await detectSourceVault(adapter, pluginDir);
 
     // Welcome-note + sentinel: gated by the existing sentinel check
     // AND, v0.2.69, the source-vault gate so opening forge-music's
@@ -602,6 +608,15 @@ async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<Libr
  *  extraction, which is idempotent (ensureBundledVault's "already at
  *  version" path) and restores anything the user deleted. */
 export async function ensureBundledFor(domain: string, app: App, pluginDir: string): Promise<void> {
+  // Drain 2026-10-12-1700 §3: this entry point had NO source-vault gate (only runFirstRunCheck did), so activating a domain from
+  // the dev vault's Edit-domains modal extracted the bundled libraries into the library's own source repo.
+  const sourceVaultName = await detectSourceVault(app.vault.adapter, pluginDir);
+  if (shouldSkipBundledExtract(sourceVaultName)) {
+    console.log(
+      `Forge: ensureBundledFor('${domain}') — skipped: vault root declares itself the source repo for ${sourceVaultName}`,
+    );
+    return;
+  }
   console.log(
     `Forge: ensureBundledFor('${domain}') — bundled vaults are extracted ` +
     `unconditionally; re-running the derived extraction as a repair pass`,
