@@ -1,14 +1,9 @@
-// Drain 2026-10-14-0900 §5 — CHARACTERIZATION, not a requirement: what an 8-step, group_size 4, 4/4 rhythm note (an "eighth-note
-// grid" tresillo: kick on 0, 3, 6) does today in the Rhythm Box widget and in the Score.
+// Drain 2026-10-14-0900 §5 characterized an 8-step, group_size 4, 4/4 rhythm note: the Score handled it and the widget REFUSED it.
+// Drain 2026-10-14-1200 closed the widget half: 4/4 + 8 steps + group_size 2 or 4 (eighth-note resolution) is now a valid grid.
 //
-//   Score  (the engine's rhythm_data_to_stream): HANDLES it. step length = bar / steps = an eighth, so the kick is written 3+3+2
-//          eighths = dotted quarter, dotted quarter, quarter — a correct tresillo.
-//   Widget (rhythm_box.html parseRhythmLoad):   REFUSES it, with a message: it knows only a fixed menu of signatures
-//          (4/4 = 16 steps in groups of 4, 3/4 = 12, 12/8 = 12 / 3, 6/8 = 6 / 3, 5/4 = 20 / 4), so "4/4 with 8 steps" is not on it.
-//
-// This pins CURRENT behavior so a later request for an 8-step tresillo starts from a measured fact. It is a mechanism-level pin of
-// a limitation: if the widget learns 8-step grids, the widget test SHOULD go red — reassess and update, do not "fix" it back.
-// The data note `rhythm_pattern_tresillo` itself is unchanged (16 steps, kick on 0/6/12), as instructed.
+// What stays pinned here is the PAIRING, which is the property: the Score (the engine's rhythm_data_to_stream) and the widget agree on what an
+// eighth-note-resolution 4/4 bar is. The detailed widget behavior (load, menu, save round trip, playback speed) is in rhythm-box-circle.test.ts.
+// The data note `rhythm_pattern_tresillo` is unchanged (16 steps) — no existing data note was converted.
 import assert from 'node:assert/strict';
 import { test as baseTest } from 'node:test';
 
@@ -20,12 +15,21 @@ const EIGHT_STEP_TRESILLO = {
   channels: { kick: [true, false, false, true, false, false, true, false] },
 };
 
-baseTest('widget: an 8-step 4/4 pattern is REFUSED with the signature menu\'s own message — not silently re-gridded', { skip: widgetSkip }, async () => {
+baseTest('widget: an 8-step 4/4 pattern LOADS (it was refused before 2026-10-14-1200) and shows eight cells', { skip: widgetSkip }, async () => {
+  for (const group of [2, 4]) {
+    const h = await loadWidget(true);
+    await h.send({ type: 'forge-rhythm-load', mode: 'playground', noteName: 'rhythm_pattern_tresillo_8', data: { ...EIGHT_STEP_TRESILLO, group_size: group } });
+    assert.equal(h.el('loadMsg').textContent, '', `group ${group}: no refusal`);
+    assert.equal(h.doc.querySelectorAll('#grid .step[data-channel="kick"]').length, 8);
+  }
+});
+
+baseTest('widget: a 4/4 grid that is neither 16 nor 8 steps is still refused, now naming BOTH allowed grids', { skip: widgetSkip }, async () => {
   const h = await loadWidget(true);
-  await h.send({ type: 'forge-rhythm-load', mode: 'playground', noteName: 'rhythm_pattern_tresillo_8', data: EIGHT_STEP_TRESILLO });
+  await h.send({ type: 'forge-rhythm-load', mode: 'playground', noteName: 'x', data: { ...EIGHT_STEP_TRESILLO, steps: 12, channels: { kick: new Array(12).fill(false) } } });
   assert.equal(
     h.el('loadMsg').textContent,
-    'Could not load this note: 4/4 here means 16 steps in groups of 4; this pattern has 8 steps in groups of 4.',
+    'Could not load this note: 4/4 here means 16 steps in groups of 4 (or 8 steps in groups of 2 or 4); this pattern has 12 steps in groups of 4.',
   );
 });
 

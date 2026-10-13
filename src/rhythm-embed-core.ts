@@ -1,7 +1,7 @@
 // Beat-as-data Phase 8 (drain 2026-10-10-2200) — the `forge-rhythm` embed block, pure half. Obsidian-free (the repo's pure-core
 // convention): rhythm-embed-view.ts supplies the vault, the DOM and the engine and calls into this for every decision.
 //
-//   parseRhythmEmbedSource   the block body: a wikilink, then optional `height:` / `title:` lines.
+//   parseRhythmEmbedSource   the block body: a wikilink, then optional `height:` / `title:` / `view:` lines.
 //   decideEmbedFreshness     the note changed on disk: reload, tell, or ignore.
 //   createPlaybackCoordinator  one sound at a time across embeds.
 //   createRhythmEmbedSession the host side of ONE embed: what each widget message means, with every effect injected.
@@ -11,14 +11,18 @@
 import { parseHeightPx } from './html-embed-view-core.ts';
 import {
   buildLoadMessage, buildRequestDataMessage, buildStopMessage, contentFingerprint, parseEmbedWidgetMessage, readRhythmNote,
-  type RhythmData,
+  type RhythmData, type RhythmWidgetView,
 } from './rhythm-edit-core.ts';
 import { produceScoreFromData, type ScoreOutcome } from './rhythm-score-core.ts';
 
 /** A block with no `height:` line. The Beat Box widget plus its playground bar needs a little more than the html-embed's 360. */
 export const DEFAULT_RHYTHM_EMBED_HEIGHT_PX = 420;
+/** A block with `view: circle` and no `height:` line: the necklace is a square (the widget's circle is as tall as the pane is wide),
+ *  so it needs the room the grid does not. An explicit `height:` always wins. */
+export const DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX = 780;
 export const RHYTHM_EMBED_LANGUAGE = 'forge-rhythm';
-const SUPPORTED_OPTIONS = ['height', 'title'] as const;
+const SUPPORTED_OPTIONS = ['height', 'title', 'view'] as const;
+const SUPPORTED_VIEWS: readonly RhythmWidgetView[] = ['grid', 'circle'];
 export const DATA_REQUEST_TIMEOUT_MS = 2000;
 
 export interface RhythmEmbedOptions {
@@ -27,6 +31,8 @@ export interface RhythmEmbedOptions {
   heightPx: number;
   /** The `title:` option, or null (the host then uses the note's name). */
   title: string | null;
+  /** The `view:` option (the view the widget starts in), or null (the widget's own default: grid). */
+  view: RhythmWidgetView | null;
 }
 
 export type RhythmEmbedParse = { ok: true; value: RhythmEmbedOptions } | { ok: false; message: string };
@@ -44,12 +50,13 @@ export function parseRhythmEmbedSource(source: string): RhythmEmbedParse {
   if (!link || link[1].trim() === '') {
     return bad(`The first line must be a link to a rhythm data note, like [[rhythm_pattern_tresillo]] (got "${lines[0]}").`);
   }
-  let heightPx = DEFAULT_RHYTHM_EMBED_HEIGHT_PX;
+  let heightPx: number | null = null;
   let title: string | null = null;
+  let view: RhythmWidgetView | null = null;
   const seen = new Set<string>();
   for (const line of lines.slice(1)) {
     const m = OPTION_RE.exec(line);
-    if (!m) return bad(`Unrecognised line "${line}". After the link, only "height: <px>" and "title: <text>" are understood — one link per block.`);
+    if (!m) return bad(`Unrecognised line "${line}". After the link, only "height: <px>", "title: <text>" and "view: circle|grid" are understood — one link per block.`);
     const key = m[1].toLowerCase();
     const value = m[2].trim();
     if (!(SUPPORTED_OPTIONS as readonly string[]).includes(key)) {
@@ -61,12 +68,19 @@ export function parseRhythmEmbedSource(source: string): RhythmEmbedParse {
       const px = parseHeightPx(value);
       if (px === null || px <= 0) return bad(`height must be a whole number of pixels, like "height: 420" (got "${value}").`);
       heightPx = px;
+    } else if (key === 'view') {
+      const v = value.toLowerCase();
+      if (!(SUPPORTED_VIEWS as readonly string[]).includes(v)) {
+        return bad(`view must be "circle" or "grid" (got "${value}").`);
+      }
+      view = v as RhythmWidgetView;
     } else {
       if (value === '') return bad('title must not be empty — leave the line out to use the note\'s name.');
       title = value;
     }
   }
-  return { ok: true, value: { target: link[1].trim(), heightPx, title } };
+  const defaultHeight = view === 'circle' ? DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX : DEFAULT_RHYTHM_EMBED_HEIGHT_PX;
+  return { ok: true, value: { target: link[1].trim(), heightPx: heightPx ?? defaultHeight, title, view } };
 }
 
 // ---- freshness ----------------------------------------------------------------------------------------------------------
@@ -135,6 +149,8 @@ export interface EmbedSessionDeps {
   noteName: string;
   /** Header title: the `title:` option, else the note's name. */
   title: string;
+  /** The `view:` option, handed to the widget with every load (it applies it once). Absent/null = the widget's default. */
+  view?: RhythmWidgetView | null;
   /** The data note's CURRENT saved text. The ONLY thing an embed ever asks the vault for — there is no write counterpart. */
   readNote(): Promise<string>;
   /** Post a message to this embed's widget iframe. */
@@ -198,7 +214,7 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
     loadedFingerprint = contentFingerprint(text);
     dirty = false;
     setStale(false);
-    post(buildLoadMessage(note.value.data, deps.noteName, 'playground') as Record<string, unknown>);
+    post(buildLoadMessage(note.value.data, deps.noteName, 'playground', deps.view ?? null) as Record<string, unknown>);
   }
 
   return {

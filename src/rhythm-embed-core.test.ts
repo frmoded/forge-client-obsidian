@@ -13,7 +13,7 @@ import {
   parseWidgetMessage, type RhythmData,
 } from './rhythm-edit-core.ts';
 import {
-  DEFAULT_RHYTHM_EMBED_HEIGHT_PX, createPlaybackCoordinator, createRhythmEmbedSession, decideEmbedFreshness, parseRhythmEmbedSource,
+  DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, DEFAULT_RHYTHM_EMBED_HEIGHT_PX, createPlaybackCoordinator, createRhythmEmbedSession, decideEmbedFreshness, parseRhythmEmbedSource,
   widgetMissingMessage,
 } from './rhythm-embed-core.ts';
 
@@ -28,16 +28,45 @@ const noteText = (d: RhythmData = TRESILLO, extra = '') =>
 
 test('parser: one link line is a valid block; defaults are the documented ones', () => {
   const r = parseRhythmEmbedSource('[[rhythm_pattern_tresillo]]');
-  assert.deepEqual(r, { ok: true, value: { target: 'rhythm_pattern_tresillo', heightPx: DEFAULT_RHYTHM_EMBED_HEIGHT_PX, title: null } });
+  assert.deepEqual(r, { ok: true, value: { target: 'rhythm_pattern_tresillo', heightPx: DEFAULT_RHYTHM_EMBED_HEIGHT_PX, title: null, view: null } });
 });
 
 test('parser: height and title options (html-embed height rule: digits with an optional px)', () => {
   const r = parseRhythmEmbedSource('[[tresillo]]\nheight: 500\ntitle: The tresillo');
-  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 500, title: 'The tresillo' } });
+  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 500, title: 'The tresillo', view: null } });
   const px = parseRhythmEmbedSource('[[tresillo]]\nheight: 480px');
   assert.equal(px.ok && px.value.heightPx, 480);
   const upper = parseRhythmEmbedSource('[[tresillo]]\nHEIGHT: 480PX');
   assert.equal(upper.ok && upper.value.heightPx, 480, 'option names and the unit are case-insensitive');
+});
+
+test('parser: view option — circle and grid are accepted (case-insensitive), anything else is refused inline naming the two values', () => {
+  const c = parseRhythmEmbedSource('[[clave]]\nview: circle');
+  assert.equal(c.ok && c.value.view, 'circle');
+  const g = parseRhythmEmbedSource('[[clave]]\nview: grid');
+  assert.equal(g.ok && g.value.view, 'grid');
+  const up = parseRhythmEmbedSource('[[clave]]\nVIEW: Circle');
+  assert.equal(up.ok && up.value.view, 'circle');
+  for (const bad of ['view: wheel', 'view:', 'view: circle grid']) {
+    const r = parseRhythmEmbedSource(`[[clave]]\n${bad}`);
+    assert.equal(r.ok, false, bad);
+    if (r.ok === false) assert.match(r.message, /circle/i, bad);
+  }
+  const twice = parseRhythmEmbedSource('[[clave]]\nview: circle\nview: grid');
+  assert.equal(twice.ok, false);
+});
+
+test('parser: the default height follows the view (circle is taller); an explicit height always wins, in either order', () => {
+  const circle = parseRhythmEmbedSource('[[clave]]\nview: circle');
+  assert.equal(circle.ok && circle.value.heightPx, DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX);
+  assert.ok(DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX > DEFAULT_RHYTHM_EMBED_HEIGHT_PX);
+  const grid = parseRhythmEmbedSource('[[clave]]\nview: grid');
+  assert.equal(grid.ok && grid.value.heightPx, DEFAULT_RHYTHM_EMBED_HEIGHT_PX);
+  for (const src of ['[[clave]]\nview: circle\nheight: 500', '[[clave]]\nheight: 500\nview: circle']) {
+    const r = parseRhythmEmbedSource(src);
+    assert.equal(r.ok && r.value.heightPx, 500, src);
+    assert.equal(r.ok && r.value.view, 'circle', src);
+  }
 });
 
 test('parser: basename links and folder-qualified links both give the link path; alias and heading are dropped', () => {
@@ -55,7 +84,7 @@ test('parser: basename links and folder-qualified links both give the link path;
 
 test('parser: CRLF and blank lines are tolerated', () => {
   const r = parseRhythmEmbedSource('\r\n[[tresillo]]\r\n\r\nheight: 400\r\n');
-  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 400, title: null } });
+  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 400, title: null, view: null } });
 });
 
 test('parser: an empty block, a first line that is not a link, and a second link are each refused with a message that says what to write', () => {
@@ -198,6 +227,20 @@ test('session: ready -> the saved note is read and sent as a PLAYGROUND load', a
   const { session, posted } = makeSession();
   await session.onWidgetMessage({ type: MSG_READY });
   assert.deepEqual(posted, [{ type: MSG_LOAD, data: TRESILLO, noteName: 'rhythm_pattern_tresillo', mode: 'playground' }]);
+});
+
+test('session: a view option rides on the load (the widget applies it once); no option leaves the load unchanged', async () => {
+  let posted: any[] = [];
+  const mk = (view?: 'circle' | 'grid' | null) => createRhythmEmbedSession({
+    noteName: 'n', title: 'n', view, readNote: async () => noteText(), post: (m) => { posted.push(m); }, openNote: () => {},
+    onPlaying: () => {}, setStale: () => {}, showError: () => {}, setTimer: () => 0, clearTimer: () => {},
+  });
+  await mk('circle').onWidgetMessage({ type: MSG_READY });
+  assert.deepEqual(posted, [{ type: MSG_LOAD, data: TRESILLO, noteName: 'n', mode: 'playground', view: 'circle' }]);
+  posted = [];
+  await mk(null).onWidgetMessage({ type: MSG_READY });
+  assert.equal('view' in posted[0], false, 'no view key at all when none was asked for');
+  assert.deepEqual(buildLoadMessage(TRESILLO, 'n', 'edit', 'circle'), { type: MSG_LOAD, data: TRESILLO, noteName: 'n', view: 'circle' });
 });
 
 test('session: a note that is not valid rhythm data shows an inline error and sends no load', async () => {

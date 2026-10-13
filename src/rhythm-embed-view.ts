@@ -168,6 +168,7 @@ class RhythmEmbed extends MarkdownRenderChild {
       this.session = createRhythmEmbedSession({
         noteName: this.file.basename,
         title,
+        view: options.view,
         readNote: () => this.app.vault.read(this.file),
         post: (message) => { this.iframe?.contentWindow?.postMessage(message, '*'); },
         openNote: () => { if (this.file) this.hooks.openNote(this.file); },

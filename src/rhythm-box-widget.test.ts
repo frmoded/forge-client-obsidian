@@ -16,7 +16,11 @@ import { Window } from 'happy-dom';
 import { formatRhythmJson, parseWidgetMessage, type RhythmData } from './rhythm-edit-core.ts';
 
 const WIDGET_REL = 'music_instruments/resources/html/rhythm_box.html';
-const CANDIDATES = [path.resolve(process.cwd(), '../music-theory', WIDGET_REL), path.resolve(process.cwd(), 'assets/vaults/music-theory', WIDGET_REL)];
+const CANDIDATES = [
+  ...(process.env.RHYTHM_BOX_WIDGET_FILE ? [path.resolve(process.env.RHYTHM_BOX_WIDGET_FILE)] : []),   // see test-support/rhythm-widget-harness.ts
+  path.resolve(process.cwd(), '../music-theory', WIDGET_REL),
+  path.resolve(process.cwd(), 'assets/vaults/music-theory', WIDGET_REL),
+];
 const WIDGET_FILE = CANDIDATES.find((f) => fs.existsSync(f));
 const skip = WIDGET_FILE ? false : 'rhythm_box.html found in neither ../music-theory nor the bundled music-theory vault';
 const html = WIDGET_FILE ? fs.readFileSync(WIDGET_FILE, 'utf-8') : '';
@@ -374,13 +378,14 @@ test('autosave: the payload equals the Export JSON for the same state', { skip }
   assert.deepEqual(JSON.parse(copied), lastSave(h).data);
 });
 
-test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and exactly four places call it', { skip }, () => {
+test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and exactly five places call it', { skip }, () => {
   const posts = [...SCRIPT.matchAll(/type: "forge-rhythm-save"/g)];
   assert.equal(posts.length, 1, 'exactly one place posts a save intent');
   assert.match(SCRIPT, /function commitChange\(\) \{[\s\S]*?type: "forge-rhythm-save"/);
   const noComments = SCRIPT.replace(/\/\/.*$/gm, '');
   const callers = [...noComments.matchAll(/commitChange\(\)/g)].length - 1;      // minus the definition
-  assert.equal(callers, 4, 'cell toggle, tempo (changeBpm), swing, and the confirmed whole-pattern change (Random / Clear / time signature)');
+  // drain 2026-10-14-1200: +1 — Rotate (the Circle view's turn-the-whole-pattern buttons) is a normal edit, so it goes through the same one door.
+  assert.equal(callers, 5, 'cell toggle, tempo (changeBpm), swing, the confirmed whole-pattern change (Random / Clear / time signature), and rotate');
   assert.match(noComments, /function applyWholePatternChange\(action\) \{[\s\S]*?\n    commitChange\(\);\n  \}/);
 });
 
@@ -788,10 +793,10 @@ test('P7 DOM: a two-channel note in a different order keeps that order, and stan
   assert.deepEqual([...s.doc.querySelectorAll('.channel-row .name')].map((e: any) => e.textContent), ['Kick', 'Snare', 'Hi-hat']);
 });
 
-test('P7 DOM: the time-signature menu offers 12/8, 6/8 and 5/4; standalone switching to 12/8 rebuilds a 12-step grid in four groups', { skip }, async () => {
+test('P7 DOM: the time-signature menu offers 12/8, 6/8 and 5/4 (and, since drain 2026-10-14-1200, 4/4 in eighth notes); standalone switching to 12/8 rebuilds a 12-step grid in four groups', { skip }, async () => {
   const h = await loadWidget(false);
   const opts = [...h.doc.querySelectorAll('#timeSig option')].map((o: any) => o.value);
-  assert.deepEqual(opts, ['4/4', '3/4', '12/8', '6/8', '5/4']);
+  assert.deepEqual(opts, ['4/4', '4/4@8', '3/4', '12/8', '6/8', '5/4']);
   h.el('timeSig').value = '12/8'; fire(h, 'timeSig', 'change');
   assert.equal(h.doc.querySelectorAll('.step').length, 36);
   assert.equal(h.doc.querySelectorAll('.step.beat-start').length, 12);

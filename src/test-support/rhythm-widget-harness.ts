@@ -8,7 +8,13 @@ import path from 'node:path';
 import { Window } from 'happy-dom';
 
 const WIDGET_REL = 'music_instruments/resources/html/rhythm_box.html';
-const CANDIDATES = [path.resolve(process.cwd(), '../music-theory', WIDGET_REL), path.resolve(process.cwd(), 'assets/vaults/music-theory', WIDGET_REL)];
+// RHYTHM_BOX_WIDGET_FILE: an explicit widget file (a clean worktree of the source vault) — takes precedence, so a change to the widget can be
+// tested before the sibling checkout has pulled it. Unset, the lookup is exactly what it always was.
+const CANDIDATES = [
+  ...(process.env.RHYTHM_BOX_WIDGET_FILE ? [path.resolve(process.env.RHYTHM_BOX_WIDGET_FILE)] : []),
+  path.resolve(process.cwd(), '../music-theory', WIDGET_REL),
+  path.resolve(process.cwd(), 'assets/vaults/music-theory', WIDGET_REL),
+];
 export const WIDGET_FILE = CANDIDATES.find((f) => fs.existsSync(f));
 export const skip: string | false = WIDGET_FILE ? false : 'rhythm_box.html found in neither ../music-theory nor the bundled music-theory vault';
 export const widgetHtml = WIDGET_FILE ? fs.readFileSync(WIDGET_FILE, 'utf-8') : '';

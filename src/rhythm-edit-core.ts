@@ -85,8 +85,13 @@ export function parseWidgetMessage(raw: unknown): WidgetMessage {
 export type RhythmHostMode = 'edit' | 'playground';
 
 /** The load message. For `edit` it is exactly what it always was (no `mode` key), so an older widget and every existing test are unaffected. */
-export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit') {
-  return mode === 'playground' ? { type: MSG_LOAD, data, noteName, mode } : { type: MSG_LOAD, data, noteName };
+/** The view a `forge-rhythm` block may ask the widget to START in (`view: circle`). A suggestion only: the widget applies it on its
+ *  first load, never persists it, and ignores anything but these two strings. */
+export type RhythmWidgetView = 'grid' | 'circle';
+
+export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null) {
+  const base = mode === 'playground' ? { type: MSG_LOAD, data, noteName, mode } : { type: MSG_LOAD, data, noteName };
+  return view === null ? base : { ...base, view };
 }
 
 export function buildRequestDataMessage() {

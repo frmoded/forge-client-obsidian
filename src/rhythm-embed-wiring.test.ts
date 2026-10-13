@@ -44,6 +44,10 @@ test('sandbox: the iframe comes from the shared helper (allow-scripts only); no 
   assert.ok(!/createEl\('iframe'|createElement\('iframe'|<iframe|sandbox/.test(view.replace(/createSandboxedWidgetIframe/g, '')));
 });
 
+test('the block\'s view option reaches the session (and so every load, Reset included)', () => {
+  assert.match(view, /view: options\.view,/);
+});
+
 test('no native dialogs: the sandbox blocks them, so there is no confirm / alert / prompt', () => {
   assert.ok(!/\b(window\.)?(confirm|alert|prompt)\(/.test(view));
 });
