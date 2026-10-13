@@ -17,9 +17,10 @@ import { produceScoreFromData, type ScoreOutcome } from './rhythm-score-core.ts'
 
 /** A block with no `height:` line. The Beat Box widget plus its playground bar needs a little more than the html-embed's 360. */
 export const DEFAULT_RHYTHM_EMBED_HEIGHT_PX = 420;
-/** A block with `view: circle` and no `height:` line: the necklace is a square (the widget's circle is as tall as the pane is wide),
- *  so it needs the room the grid does not. An explicit `height:` always wins. */
-export const DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX = 780;
+/** A block with `view: circle` and no `height:` line: the necklace is a square (the widget's circle is as tall as the pane is wide), so it
+ *  needs the room the grid does not. Measured in real Chromium at a 460 px pane: the widget's content ends at ~920 px for one ring and
+ *  ~965 px for four (bar, switch, ring chips, the circle, then the Random / Clear row). An explicit `height:` always wins. */
+export const DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX = 960;
 export const RHYTHM_EMBED_LANGUAGE = 'forge-rhythm';
 const SUPPORTED_OPTIONS = ['height', 'title', 'view'] as const;
 const SUPPORTED_VIEWS: readonly RhythmWidgetView[] = ['grid', 'circle'];
