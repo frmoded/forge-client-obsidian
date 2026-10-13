@@ -35,13 +35,18 @@ const backfillHelpers = {
 
 /** `{ applies, open: string[], run: string[] }` — each entry names one write. `applies` is false for anything the plugin's own
  *  open-time writers skip (not `type: action`, or not V2 shape): such a note is never rewritten by them. */
-export async function auditNote(body, { backfill = (b) => backfillV113Shape(b, backfillHelpers) } = {}) {
+export async function auditNote(body, { backfill = (b) => backfillV113Shape(b, backfillHelpers), libraryGated = false } = {}) {
   if (asString(body, "type") !== "action" || !isV2Shape(body)) return { applies: false, open: [], run: [] };
 
   const open = [];
   // 1. the file-open backfill (main.ts maybeBackfillV113Shape). `backfill` is injectable ONLY so a test can isolate step 2: today the
   //    backfill's decisions are a superset of the sweep's, so step 2 is otherwise unreachable from the outside.
-  const bf = await backfill(body);
+  //
+  //    `libraryGated` (drain 2026-10-14-0900 §2): a note under a bundled-library directory is NEVER written on open — both open-time
+  //    writers return early on `isInBundledLibraryDir` (main.ts), exactly as the typed-Input stamper always did. That is the state of
+  //    every note in the BUNDLE. An authoring vault's own notes (the source repo opened as itself) are not under a library dir, so
+  //    `libraryGated: false` models opening one of those.
+  const bf = libraryGated ? { changed: false, newBody: body, actions: {} } : await backfill(body);
   let afterOpen = body;
   if (bf.changed) {
     afterOpen = bf.newBody;
@@ -57,7 +62,9 @@ export async function auditNote(body, { backfill = (b) => backfillV113Shape(b, b
     if (open.length === 0) open.push("rewrites the body");
   }
   // 2. the layout-ready sweep reads the POST-backfill body (main.ts awaits the backfill first)
-  const seed = await planOpenSeed(afterOpen, { ...backfillHelpers, getFrontmatterField: getFrontmatterField });
+  const seed = libraryGated
+    ? { write: false }
+    : await planOpenSeed(afterOpen, { ...backfillHelpers, getFrontmatterField: getFrontmatterField });
   if (seed.write) {
     if (seed.setSourceFacet !== null) open.push(`sets source_facet: ${seed.setSourceFacet}`);
     if (seed.seedRecipeParent !== null) open.push("seeds recipe_derived_from_description_hash");
@@ -97,19 +104,23 @@ function* walk(dir) {
   }
 }
 
-/** Every `.md` under `dir` that would be written on open or Run: `[{ path (relative, posix), open, run }]`, sorted. */
-export async function auditVault(dir) {
+/** Every `.md` under `dir` that would be written on open or Run: `[{ path (relative, posix), open, run }]`, sorted; plus `clean`, the
+ *  audited action notes that would NOT be (the candidates for scripts/open-time-readonly.txt). */
+export async function auditVault(dir, { libraryGated = false } = {}) {
   const out = [];
+  const clean = [];
   let applicable = 0;
   for (const abs of walk(dir)) {
     const rel = path.relative(dir, abs).split(path.sep).join("/");
-    const r = await auditNote(fs.readFileSync(abs, "utf8"));
+    const r = await auditNote(fs.readFileSync(abs, "utf8"), { libraryGated });
     if (!r.applies) continue;
     applicable++;
     if (r.open.length || r.run.length) out.push({ path: rel, open: r.open, run: r.run });
+    else clean.push(rel);
   }
   out.sort((a, b) => a.path.localeCompare(b.path));
-  return { applicable, writing: out };
+  clean.sort();
+  return { applicable, writing: out, clean };
 }
 
 /** Parse `scripts/open-time-readonly.txt`: one `<vault>/<path>.md` per line, `#` comments and blanks ignored. */

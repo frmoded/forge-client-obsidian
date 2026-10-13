@@ -2665,18 +2665,10 @@ export default class ForgePlugin extends Plugin {
         '{ v2Body.length:', v2Body.length,
         ', file:', file.basename, '}',
       );
-      // Drain 2026-08-26-1500 — the RE-ROLL. `whichLayerIsSource` says
-      // what is FRESH, not what the note IS: a fully-synced note comes
-      // back 'synced' and used to fall through to the transpile tail,
-      // deriving nothing, so a fresh roll meant faking a Description
-      // edit. `resolveForgeGesture` consults the note's own stored
-      // `source_facet` in exactly that case, so a synced note derives
-      // AGAIN along whichever edge produced it.
-      //
-      // CACHE POLICY IS NOT WEAKENED. Run still never re-hits the LLM;
-      // lineage caching stands. Only this explicit gesture re-derives.
-      // See the module note in source-aware-forge-click-core.ts before
-      // "fixing" a synced Forge back into a freshness short-circuit.
+      // Drain 2026-10-14-0900 §1 — `whichLayerIsSource` says what is FRESH, not what the note IS; `resolveForgeGesture` also reads
+      // the stored `source_facet`, but a `synced` verdict NEVER selects /generate (it supersedes the 2026-08-26-1500 re-roll):
+      // a note the probe calls fresh is transpiled, not regenerated. See the module note in source-aware-forge-click-core.ts
+      // before "fixing" a synced Forge back into a re-roll.
       const storedFacetForGesture = getSourceFacet(v2Body, (b, k) => getFmFieldV2(b, k));
       const gesture = resolveForgeGesture(canonicalLayer, storedFacetForGesture);
       console.log(
@@ -5611,6 +5603,11 @@ export default class ForgePlugin extends Plugin {
         if (!plan.write) {
           continue;
         }
+        // Drain 2026-10-14-0900 §2 — the hash cache above is in-memory and stays (a user's deliberate edit of a library note still
+        // needs its baseline); the FRONTMATTER WRITE below does not happen for a bundled-library note. Opening writes nothing.
+        if (isInBundledLibraryDir(file.path, this.libraryDirNames())) {
+          continue;
+        }
 
         await this.withProgrammaticWrite(file.path, async () => {
           await this.guardedProcessFrontMatter(file, (fm: any) => {
@@ -5642,6 +5639,12 @@ export default class ForgePlugin extends Plugin {
 
   private async maybeBackfillV113Shape(file: TFile | null) {
     if (!file) return;
+    // Drain 2026-10-14-0900 §2 — a bundled-library note is read-only from the cohort's side: merely OPENING it must write nothing.
+    // This is the same gate `maybeStampTypedLetsInputs` has always had; the backfill lacked it, so opening any library note
+    // inserted a stub `# Python` and stamped hashes (58 of 82 shipped action notes, measured). Checked BEFORE the dedup Set add
+    // (L37): the Set must only record files that were actually considered. The source vault's own notes are not under a library
+    // dir, so authoring is unaffected.
+    if (isInBundledLibraryDir(file.path, this.libraryDirNames())) return;
     if (this._v113BackfillSeen.has(file.path)) {
       return;
     }

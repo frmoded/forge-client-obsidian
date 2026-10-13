@@ -8,25 +8,39 @@
 // decisions.
 //
 // SANDBOXING — a hard floor, not a nice-to-have (per this drain's
-// prompt, §4/§8). Read the actual installed third-party plugin's
-// source directly (`.obsidian/plugins/local-html-embed/main.js`,
-// confirmed this drain, not trusted secondhand from an earlier
-// FEEDBACK citation) rather than assuming. It builds a `blob:` URL
-// from the target .html file's content and sets:
-//   iframe.sandbox.add('allow-scripts');
-//   iframe.sandbox.add('allow-same-origin');
-//   iframe.setAttribute('loading', 'lazy');
-//   iframe.setAttribute('referrerpolicy', 'no-referrer');
-// This processor matches all four exactly — `allow-scripts` (every
-// widget is vanilla JS + Web Audio, needs script execution) and
-// `allow-same-origin` (needed for the iframe's own JS to read/write
-// its own document — without it a blob-URL iframe's scripts run in a
-// unique opaque origin that breaks even same-document DOM access in
-// some engines) are the same two flags the plugin being replaced
-// uses; no broader flags are added (no `allow-top-navigation`,
-// `allow-popups`, `allow-forms`, etc. — none of the five widgets need
-// them, and adding them would be strictly weaker sandboxing than the
-// thing this replaces, which §8 forbids).
+// prompt, §4/§8). The third-party plugin being replaced builds a `blob:`
+// URL from the target .html file's content and sets BOTH
+// `allow-scripts` and `allow-same-origin`. This processor used to match
+// it; drain 2026-10-14-0900 §6 does NOT, on purpose, and sets
+// `allow-scripts` ONLY.
+//
+// Why `allow-same-origin` goes: with both flags the framed document is
+// SAME-ORIGIN with Obsidian itself (a blob URL takes its creator's
+// origin), so a vault-authored widget could reach `window.parent` — in
+// an Electron renderer that is the app, `require` and all — and the
+// browser says so on every mount ("An iframe which has both
+// allow-scripts and allow-same-origin for its sandbox attribute can
+// escape its sandboxing"). Measured in real Chromium against the five
+// shipped widgets (scripts/probe-widget-sandbox.mjs): with
+// `allow-scripts` alone every widget still loads and runs, the Rhythm
+// Box's host handshake + load + request-data round trip still works
+// (postMessage with `'*'` and an `event.source === iframe.contentWindow`
+// check never depended on origin), Web Audio still starts, and the
+// host can no longer read the frame's document. What it does take away
+// is storage (`localStorage` throws) and direct DOM access to the
+// parent — neither of which any shipped widget uses (grep: none) and
+// neither of which a widget should ever have.
+//
+// The old comment here called `allow-same-origin` "needed for the
+// iframe's own JS to read/write its own document". It is not: an
+// opaque-origin document reads and writes ITS OWN DOM freely.
+//
+// `allow-scripts` itself stays (every widget is vanilla JS + Web
+// Audio). No broader flags are added (no `allow-top-navigation`,
+// `allow-popups`, `allow-forms`, ...). The Clipboard API is refused to a
+// cross-origin frame without a permissions-policy grant; the Rhythm
+// Box's "Export JSON" already falls back to `execCommand('copy')`, so
+// no `allow="clipboard-write"` is added.
 //
 // NOT reused: moda-view.ts's `iframeSrc()`/onOpen() pattern. Read it
 // in full before designing this (see this drain's FEEDBACK §1) —
@@ -140,8 +154,8 @@ async function renderHtmlEmbed(
 }
 
 /**
- * The ONE place a vault-authored .html widget gets its iframe: a `blob:` URL of the file's content, sandboxed with exactly
- * `allow-scripts` and `allow-same-origin` (see the SANDBOXING note at the top of this file) — no wider flags. Extracted
+ * The ONE place a vault-authored .html widget gets its iframe: a `blob:` URL of the file's content, sandboxed with `allow-scripts`
+ * ONLY — never `allow-same-origin` (see the SANDBOXING note at the top of this file) — no wider flags. Extracted
  * (Beat-as-data Phase 5, drain 2026-10-05-2100) so the "Edit rhythm in Rhythm Box" view hosts the widget through the SAME code
  * instead of building a second iframe with its own, possibly looser, settings. Behaviour of the html-embed processor is unchanged.
  * The caller owns revoking `blobUrl` when its host goes away.
@@ -157,7 +171,7 @@ export function createSandboxedWidgetIframe(
   const iframe = parent.createEl('iframe', { cls: 'forge-html-embed-iframe' });
   iframe.src = blobUrl;
   iframe.sandbox.add('allow-scripts');
-  iframe.sandbox.add('allow-same-origin');
+  // Drain 2026-10-14-0900 §6 — NOT 'allow-same-origin': with it the widget is same-origin with the app (see the note at the top).
   iframe.style.height = heightCss;
   iframe.setAttribute('loading', 'lazy');
   iframe.setAttribute('referrerpolicy', 'no-referrer');

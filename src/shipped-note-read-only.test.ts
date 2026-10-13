@@ -26,6 +26,7 @@ import { applyPythonWriteBack } from './python-write-back-core.ts';
 import { computeFacetHash, whichLayerIsSource } from './facet-hash-core.ts';
 import { extractPythonSection, extractRecipeSection, getFrontmatterField, extractDescription } from './v2-note-core.ts';
 import { hasTypedLetsInRecipe } from './typed-lets-inputs-stamp-core.ts';
+import { resolveForgeGesture } from './source-aware-forge-click-core.ts';
 import { engine } from './test-support/real-rhythm-engine.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -87,6 +88,17 @@ test('the typed-Input stamper has nothing to stamp: the engine derives exactly t
   assert.match(QUIZ, /^inputs:\n {2}- guess$/m, 'frontmatter inputs: already equals the derived list → reconcileInputs is a no-op');
 });
 
+test('the HAMMER on the derived quiz transpiles — verdict synced + stored source_facet: description never reaches /generate (drain 2026-10-14-0900 §1)', async () => {
+  // The exact observed sequence: `whichLayerIsSource verdict = synced`, then `gesture = generate { probe: synced, stored: description }`
+  // and an LLM rewrote the quiz. Through the plugin's own probe + the plugin's own gesture function.
+  const probe = await whichLayerIsSource(QUIZ, {
+    extractDescription, extractRecipeSection, extractPythonSection, getFrontmatterField: asString,
+  });
+  assert.equal(probe, 'synced');
+  assert.equal(asString(QUIZ, 'source_facet'), 'description');
+  assert.equal(resolveForgeGesture(probe, 'description'), 'transpile');
+});
+
 test('no value slots: nothing for a slot cache to hold, so no LLM resolve on Run', () => {
   assert.doesNotMatch(extractRecipeSection(QUIZ)!, /\{\{/);
   assert.equal(asString(QUIZ, 'slots_cache'), null);
@@ -110,6 +122,14 @@ test('NON-VACUITY — the empty-SHA english_hash remnant is flagged on Run (the 
   const withRemnant = QUIZ.replace(/\n---\n\n# Description/, '\nenglish_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n---\n\n# Description');
   assert.notEqual(withRemnant, QUIZ);
   assert.ok((await auditNote(withRemnant)).run.length > 0);
+});
+
+test('every note on the read-only ratchet exists in the bundle — a typo fails here, not only at build time', () => {
+  const list = fs.readFileSync(path.join(ROOT, 'scripts/open-time-readonly.txt'), 'utf8')
+    .split(/\r?\n/).map((l) => l.replace(/#.*$/, '').trim()).filter(Boolean);
+  assert.ok(list.length >= 25, `the ratchet should carry the derived + library-gated clean notes, has ${list.length}`);
+  const missing = list.filter((rel) => !fs.existsSync(path.join(ROOT, 'assets/vaults', rel)));
+  assert.deepEqual(missing, []);
 });
 
 test('WIRING (mechanism pin) — the gate runs in prebuild and in release.sh\'s preflight, and the note is on the required list', () => {

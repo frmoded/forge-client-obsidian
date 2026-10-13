@@ -1,4 +1,30 @@
 # Notes that MUST ship read-only: opening them, and pressing Run, must write nothing into the note.
 # Gate: scripts/check-open-time-writes.mjs (prebuild + release preflight). Format: <vault>/<path inside the vault>.md
-# Add a note here once it ships fully derived (a # Python the engine would produce, and every hash the plugin would stamp).
+# A note belongs here once it ships fully derived (a # Python the engine would produce, and every hash the plugin would stamp), or —
+# for a bundled-library note — once the only thing that could have written it was an open-time writer that is now library-gated.
+# Regenerate the candidates with:  node scripts/check-open-time-writes.mjs --list-clean <vault dir>…
+forge-tutorial/02-variables/fix_me.md
+forge-tutorial/02-variables/greeting.md
+forge-tutorial/03-functions/cheer.md
+forge-tutorial/03-functions/excited.md
+forge-tutorial/03-functions/function_inputs.md
+forge-tutorial/04-composition/excited_word.md
+forge-tutorial/05-conditionals/mood.md
+forge-tutorial/07-data/show_colors.md
+forge-tutorial/08-recursion/factorial.md
+forge-tutorial/08-recursion/show_factorial.md
+music-theory/exercises/build_triad.md
+music-theory/exercises/chord_progression.md
+music-theory/exercises/chord_stream_demo.md
+music-theory/exercises/melodic_line_demo.md
+music-theory/exercises/octave_up.md
+music-theory/exercises/piano_play_smoke.md
+music-theory/exercises/rhythmic_line_demo.md
 music-theory/exercises/scale_quality_quiz.md
+music-theory/percussion/murmuration.md
+music-theory/rhythm_data/rhythm_accented.md
+music-theory/rhythm_data/rhythm_extended_building.md
+music-theory/rhythm_data/rhythm_extended_fills.md
+music-theory/rhythm_data/rhythm_extended_ghost.md
+music-theory/rhythm_data/rhythm_multiplex.md
+music-theory/rhythm_data/rhythm_sequence.md

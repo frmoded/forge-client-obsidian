@@ -13,7 +13,7 @@
 // header carries the same safety-net actions as a note tab (header-actions-core.ts is the audit).
 //
 // Hosting: the widget is rendered through createSandboxedWidgetIframe (html-embed-view.ts) — the SAME blob-URL iframe, with the
-// same sandbox flags (allow-scripts + allow-same-origin, nothing wider), as every html-embed widget. No second iframe code path.
+// same sandbox flags (allow-scripts ONLY — no allow-same-origin, nothing wider), as every html-embed widget. No second iframe code path.
 //
 // Trust: only messages whose `event.source` is OUR iframe's window are considered. A malformed message is dropped with a console
 // warning and never written. A write is validated BEFORE it happens, made with one atomic `vault.process`, replaces ONLY the

@@ -38,7 +38,7 @@ test('trust: only OUR iframe\'s window is listened to, checked BEFORE the payloa
   assert.ok(!/postMessage\(.*forge-rhythm-save/.test(view));
 });
 
-test('sandbox: the iframe comes from the shared helper (exactly allow-scripts + allow-same-origin); no iframe or sandbox flag of its own', () => {
+test('sandbox: the iframe comes from the shared helper (allow-scripts only); no iframe or sandbox flag of its own', () => {
   assert.match(view, /import \{ createSandboxedWidgetIframe \} from '\.\/html-embed-view\.ts'/);
   assert.match(view, /createSandboxedWidgetIframe\(this\.bodyEl, widget\.html, `\$\{options\.heightPx\}px`\)/);
   assert.ok(!/createEl\('iframe'|createElement\('iframe'|<iframe|sandbox/.test(view.replace(/createSandboxedWidgetIframe/g, '')));

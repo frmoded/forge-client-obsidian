@@ -10,6 +10,12 @@
 //   node scripts/check-open-time-writes.mjs --report        list EVERY note that would write (exit 0 regardless)
 //   node scripts/check-open-time-writes.mjs --report <dir>… same, for specific vault directories (e.g. a source vault repo)
 //   node scripts/check-open-time-writes.mjs --require <vault>/<path>.md <dir>…   gate named directories for the named notes only
+//   node scripts/check-open-time-writes.mjs --list-clean <dir>…   print the audited notes that would NOT be written (ratchet candidates)
+//   node scripts/check-open-time-writes.mjs --as-source-vault <dir>…   model OPENING the notes in an AUTHORING vault (the source repo
+//                                                           itself), where the open-time writers are NOT library-gated
+//
+// By default every note is audited as a BUNDLED-LIBRARY note: opening it writes nothing (both open-time writers return early on
+// `isInBundledLibraryDir`, drain 2026-10-14-0900 §2), so only the Run-time write can touch it.
 //
 // Exit codes: 0 ok (or --report), 1 a required note would be written, 2 usage / missing directory / required note not found.
 import fs from "node:fs";
@@ -20,10 +26,12 @@ import { auditVault, parseRequiredList } from "./check-open-time-writes-core.mjs
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
 const report = argv.includes("--report");
+const asSourceVault = argv.includes("--as-source-vault");
+const listClean = argv.includes("--list-clean");
 const required = [];
 const dirs = [];
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === "--report") continue;
+  if (argv[i] === "--report" || argv[i] === "--as-source-vault" || argv[i] === "--list-clean") continue;
   if (argv[i] === "--require") { required.push(argv[++i]); continue; }
   dirs.push(argv[i]);
 }
@@ -49,11 +57,19 @@ if (!report && !explicitDirs) {
 }
 
 const writing = new Map(); // "<vault>/<rel>" -> { open, run }
+const cleanNotes = [];
 let applicable = 0;
 for (const dir of dirs) {
-  const r = await auditVault(dir);
+  const r = await auditVault(dir, { libraryGated: !asSourceVault });
   applicable += r.applicable;
+  for (const c of r.clean) cleanNotes.push(`${path.basename(dir)}/${c}`);
   for (const w of r.writing) writing.set(`${path.basename(dir)}/${w.path}`, w);
+}
+
+if (listClean) {
+  // the notes that would NOT be written: candidates for scripts/open-time-readonly.txt, one `<vault>/<path>.md` per line
+  for (const c of cleanNotes.sort()) console.log(c);
+  process.exit(0);
 }
 
 if (report) {

@@ -670,7 +670,7 @@ test('widget source: only the embedding window may talk to the widget; no Save b
   assert.match(html, /id="hostBar" hidden/);
   assert.match(html, /id="confirmBar"[^>]* hidden/);
   assert.match(html, /id="bReload" hidden/);
-  assert.ok(!/window\.confirm|[^.\w]confirm\(|window\.alert|[^.\w]alert\(|window\.prompt|[^.\w]prompt\(/.test(SCRIPT), 'allow-scripts + allow-same-origin only: confirm/alert/prompt are blocked in the sandbox');
+  assert.ok(!/window\.confirm|[^.\w]confirm\(|window\.alert|[^.\w]alert\(|window\.prompt|[^.\w]prompt\(/.test(SCRIPT), 'sandboxed (allow-scripts only): confirm/alert/prompt are blocked in the sandbox');
 });
 
 

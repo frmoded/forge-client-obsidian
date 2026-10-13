@@ -17,9 +17,9 @@ const code = (src: string) => src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?
 const switchSrc = code(read('src/rhythm-mode-switch.ts'));
 const scoreSrc = code(read('src/rhythm-score-view.ts'));
 
-test('sandbox: the shared iframe helper adds exactly allow-scripts and allow-same-origin — nothing wider', () => {
+test('sandbox: the shared iframe helper adds exactly allow-scripts — never allow-same-origin, nothing wider (drain 2026-10-14-0900 §6; pins the MECHANISM, widget-iframe-sandbox.test.ts pins the property)', () => {
   const adds = [...code(embed).matchAll(/sandbox\.add\('([^']+)'\)/g)].map((m) => m[1]);
-  assert.deepEqual(adds, ['allow-scripts', 'allow-same-origin']);
+  assert.deepEqual(adds, ['allow-scripts']);
   assert.ok(!/sandbox\s*=|setAttribute\('sandbox'/.test(code(embed)), 'no other way of setting the sandbox');
   assert.match(code(embed), /setAttribute\('referrerpolicy', 'no-referrer'\)/);
 });

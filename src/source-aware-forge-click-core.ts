@@ -67,31 +67,21 @@ export type CanonicalLayer = SourceLayer;
 // ---------------------------------------------------------------------
 
 // ---------------------------------------------------------------------
-// Drain 2026-08-26-1500 — the RE-ROLL gesture.
+// Drain 2026-08-26-1500 introduced a RE-ROLL: Forge on a fully-synced `source_facet: description` note went to /generate again.
+// SUPERSEDED by drain 2026-10-14-0900 §1 (driver/forge-core, on CCQA's report): the hammer never regenerates on a `synced`
+// verdict. The class bug it produced: `scale_quality_quiz` logged `verdict = synced`, then `gesture = generate { probe: synced,
+// stored: description }`, and an LLM rewrote a library note that was already derived. A fresh note is derived; forging it again
+// transpiles (Recipe → Python via the engine, no LLM unless a slot misses). To re-derive from the Description, edit the
+// Description — the probe then names it and the gesture is 'generate'.
 //
-// Driver adjudication: "each Description→Recipe transpiling should be
-// re-generatable by the LLM on demand — possibly, not
-// deterministically." Before this drain, the hammer on a fully-synced
-// note derived nothing: `whichLayerIsSource` returns 'synced' when every
-// hash matches, 'synced' falls through to the transpile tail, and a
-// fresh roll required faking a Description edit.
-//
-// Post-F4 the semantics are clean and the driver chose them:
-// **Forge means derive; on a synced note it means derive AGAIN.**
-//
-// CACHE POLICY IS NOT WEAKENED BY THIS. Run still never re-hits the LLM;
-// lineage caching stands untouched. ONLY the explicit Forge GESTURE
-// re-derives. If you are reading this because a synced note "wastes" an
-// LLM call on Forge — that is the feature, deliberately, per drain
-// 2026-08-26-1500. Do not re-add a freshness short-circuit here.
+// What is NOT changed: Run never re-hits the LLM; lineage caching stands.
 // ---------------------------------------------------------------------
 
 /** What the hammer should derive, once the probe and the note's own
  *  stored `source_facet` are both taken into account. */
 export type ForgeGesture =
-  /** Re-run /generate from the Description. Fires on a stale
-   *  Description-canonical note AND on a synced one whose stored source
-   *  is `description` — the re-roll. */
+  /** Re-run /generate from the Description. Fires ONLY when the probe names the Description as the drifted facet — never on a
+   *  synced note (drain 2026-10-14-0900 §1 retired the 2026-08-26-1500 re-roll). */
   | 'generate'
   /** Recipe → Python via the engine. Deterministic and cheap; zero LLM
    *  unless slots miss. */
@@ -110,9 +100,9 @@ export type ForgeGesture =
  * made it a stored fact rather than an inference), so a synced note
  * still knows which derivation it is the product of.
  *
- * `stored` is consulted ONLY when the probe says `'synced'`. A drifted
- * facet is authoritative about itself — that is I5, and this drain does
- * not touch it.
+ * `stored` is consulted ONLY when the probe says `'synced'`, and only to
+ * tell a Python-source note (nothing upstream to derive) from the rest.
+ * A drifted facet is authoritative about itself — that is I5.
  */
 export function resolveForgeGesture(
   probe: SourceLayer | null,
@@ -121,9 +111,11 @@ export function resolveForgeGesture(
   if (probe === 'python') return 'nothing_to_derive';
   if (probe === 'description') return 'generate';
   if (probe === 'synced') {
-    // The re-roll. A synced note derives AGAIN, along whichever edge
-    // produced it.
-    if (stored === 'description') return 'generate';
+    // Drain 2026-10-14-0900 §1 — a note the probe calls FRESH is never regenerated: the hammer never regenerates on `synced`,
+    // whatever the stored source_facet. This supersedes the 2026-08-26-1500 re-roll (a synced `source_facet: description` note
+    // went to /generate). Observed: scale_quality_quiz logged `verdict = synced`, then `gesture = generate { probe: synced,
+    // stored: description }`, and an LLM rewrote a library note that was already derived. To re-derive from the Description, edit
+    // it — the probe then says 'description'. Do not re-add a freshness-blind re-roll here.
     if (stored === 'python') return 'nothing_to_derive';
     return 'transpile';
   }

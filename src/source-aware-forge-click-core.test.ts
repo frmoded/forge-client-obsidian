@@ -25,10 +25,17 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 
-test('THE RE-ROLL: a synced Description-canonical note derives AGAIN', () => {
-  // The whole drain. Before it, this returned a transpile and the
-  // cohort had to fake a Description edit to get a fresh roll.
-  assert.equal(resolveForgeGesture('synced', 'description'), 'generate');
+test('THE CLASS BUG: a synced Description-source note TRANSPILES — the hammer never regenerates a note the probe calls fresh', () => {
+  // Drain 2026-10-14-0900 §1 (driver/forge-core, CCQA option (b)). Supersedes the 2026-08-26-1500 "re-roll", which sent a synced
+  // note with `source_facet: description` to /generate. Observed: `scale_quality_quiz` logged `verdict = synced`, then
+  // `gesture = generate { probe: synced, stored: description }`, and an LLM rewrote a library note that was already derived.
+  assert.equal(resolveForgeGesture('synced', 'description'), 'transpile');
+});
+
+test('PROPERTY: for EVERY stored source_facet, a synced verdict never selects the LLM', () => {
+  for (const stored of ['description', 'recipe', 'python', 'synced', null] as const) {
+    assert.notEqual(resolveForgeGesture('synced', stored), 'generate', `synced/${stored}`);
+  }
 });
 
 test('a synced Recipe-canonical note re-transpiles', () => {
@@ -65,15 +72,14 @@ test('a failed probe still transpiles — a hash bug cannot take Forge offline',
   assert.equal(resolveForgeGesture(null, null), 'transpile');
 });
 
-test('the synced short-circuit carries the do-not-revert note', () => {
-  // §2: the next reader must not "fix" the re-roll back into a cache
-  // check. Guard the PROPERTY that the reasoning is present and cites
-  // this drain, not its exact wording.
+test('the synced branch carries the do-not-revert note, citing the drain that superseded the re-roll', () => {
+  // The next reader must not re-introduce "synced + description → generate". Guard the PROPERTY that the reasoning is present
+  // and cites BOTH drains, not its exact wording. (pins the MECHANISM: a comment exists — if the module is restructured, reassess.)
   const src = fs.readFileSync(
     path.resolve(process.cwd(), 'src/source-aware-forge-click-core.ts'), 'utf8');
+  assert.match(src, /2026-10-14-0900/);
   assert.match(src, /2026-08-26-1500/);
-  assert.match(src, /Run still never re-hits the LLM/);
-  assert.match(src, /Do not re-add a freshness short-circuit/);
+  assert.match(src, /never regenerates/);
 });
 
 test('the gesture is WIRED — resolveForgeGesture reaches main.ts', () => {
