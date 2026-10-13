@@ -252,6 +252,18 @@ else
       exit 1
     fi
 
+    # Drain 2026-10-13-2100 §2 — notes listed in scripts/open-time-readonly.txt
+    # must ship exactly what the plugin would write: opening one, or pressing
+    # Run on it, must change nothing. A library note the plugin rewrites reads
+    # as "edited" to the manifest and stops auto-updating.
+    if ! node scripts/check-open-time-writes.mjs; then
+      echo
+      echo "ERROR: a note that must ship read-only would be rewritten by the"
+      echo "       plugin (see above). Nothing was committed. Make it ship fully"
+      echo "       derived at the source vault, bump, commit, re-run release.sh."
+      exit 1
+    fi
+
     git add assets/vaults/
     git commit -q -m "sync bundled vaults (release-prep)"
     echo "  ✓ committed: $(git log -1 --pretty=%h) sync bundled vaults (release-prep)"

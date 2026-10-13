@@ -413,11 +413,9 @@ async function sweepLegacyBakDirs(adapter: DataAdapter): Promise<number> {
 // content-identity "add missing files" pass) moved to bundled-vault-extractor-core.ts so a real extraction can be tested without
 // `obsidian`. See that file's header for the behaviour matrix.
 
-/** List the vaults the plugin bundle actually carries. Derived from
- *  assets/vaults/ at runtime — the set is whatever shipped, so adding
- *  a vault to the bundle needs no edit here. Falls back to
- *  FALLBACK_BUNDLED_VAULTS (and says so) if the listing comes back
- *  empty, rather than extracting nothing. */
+/** The vaults to extract: the EDITION's name table, filtered to what the plugin bundle physically carries (drain 2026-10-13-2100 §3 —
+ *  the edition decides, never the disk listing). Falls back to the whole table (and says so) if the listing comes back empty,
+ *  rather than extracting nothing. */
 async function listBundledVaultNames(
   adapter: DataAdapter,
   pluginDir: string,
@@ -553,6 +551,18 @@ async function ensureAllBundledVaults(app: App, pluginDir: string): Promise<Libr
     `Forge: bundled vaults to extract (from ${derived.source}): ` +
     `${derived.names.join(', ')}`,
   );
+  // Drain 2026-10-13-2100 §3 — the EDITION decides; the folder only says what is physically there. Say what was left alone.
+  if (derived.ignored.length > 0) {
+    console.log(
+      `Forge: not extracting [${derived.ignored.join(', ')}] — the bundle folder carries ${derived.ignored.length === 1 ? 'it' : 'them'} ` +
+      `but this build's edition does not ship ${derived.ignored.length === 1 ? 'it' : 'them'}`,
+    );
+  }
+  if (derived.missing.length > 0) {
+    console.warn(
+      `Forge: this edition ships [${derived.missing.join(', ')}] but the bundle folder does not carry ${derived.missing.length === 1 ? 'it' : 'them'}`,
+    );
+  }
 
   // Drain 2026-10-10-2100 (b): the identity each vault was last extracted at lives in the PLUGIN folder, not the user's vault.
   const idsPath = extractedIdsPath(pluginDir);

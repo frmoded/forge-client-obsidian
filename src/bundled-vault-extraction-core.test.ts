@@ -25,7 +25,9 @@ import { fileURLToPath } from 'node:url';
 
 import { vaultDeclaresMusic } from './forge-music-gate.ts';
 import { FORGE_TOML_STUB_BODY } from './forge-toml-stub.ts';
+import { EDITION_VAULT_NAMES } from './edition-core.ts';
 import {
+  BUNDLED_VAULT_NAMES,
   FALLBACK_BUNDLED_VAULTS,
   bundledVaultsRoot,
   bundledWelcomePaths,
@@ -43,56 +45,57 @@ function listingFor(names: string[]): string[] {
   return names.map((n) => `${BUNDLED_VAULTS_ROOT}/${n}`);
 }
 
-test('fresh vault: every vault the bundle carries is scheduled for extraction', () => {
-  // The exact fresh-install shape from the smoke report: all four
-  // bundled, none extracted yet.
-  const derived = deriveBundledVaultNames(
-    listingFor(['forge-moda', 'music-theory', 'forge-tutorial', 'music-core']),
-  );
-  assert.equal(derived.source, 'bundle');
-  assert.deepEqual(
-    derived.names,
-    ['forge-moda', 'forge-tutorial', 'music-core', 'music-theory'],
-    'all four bundled vaults must be extracted on first launch',
-  );
+// ---- Drain 2026-10-13-2100 §3: the EDITION decides what is extracted, never the disk listing ------------------------------
+// Before: `deriveBundledVaultNames` returned whatever folders `assets/vaults/` listed. A lean build deployed beside a music-bearing
+// assets folder (the assets are deployed wholesale; the edition is chosen at BUILD time, never by what is on disk) extracted
+// music-theory and music-core into a vault that never asked for them. The source-vault gate (`sourceVaultNames`) was widened to
+// stop that landing inside the music-theory SOURCE repo; this is the other half: a lean install never extracts music content at all.
+//
+// The listing is still consulted — but only to answer "is the folder physically there?" for names the edition already claimed.
+const ALL_FOUR = ['forge-moda', 'music-theory', 'forge-tutorial', 'music-core'];
+
+test('lean edition, polluted folder (all four on disk): ONLY the lean pair is extracted — the repro', () => {
+  const derived = deriveBundledVaultNames(listingFor(ALL_FOUR), 'lean');
+  assert.deepEqual(derived.names, ['forge-moda', 'forge-tutorial']);
+  assert.deepEqual(derived.ignored, ['music-core', 'music-theory'], 'what the folder carried that this edition does not ship is reported');
+  assert.equal(derived.source, 'edition');
 });
 
-test('the root cause is the domain gate, and the derivation ignores it', () => {
-  // Regression witness. The fresh-vault stub declares no domains, so
-  // the v0.2.15 music gate was — and still is — false there. That is
-  // exactly why music-theory/music-core never reached extraction.
-  assert.equal(
-    vaultDeclaresMusic(FORGE_TOML_STUB_BODY),
-    false,
-    'fresh-vault stub still declares no domains (unchanged)',
-  );
-  // The derived set must include them anyway: extraction coverage is
-  // no longer a function of the vault's declared domains.
-  const derived = deriveBundledVaultNames(
-    listingFor(['forge-moda', 'music-theory', 'forge-tutorial', 'music-core']),
-  );
-  assert.ok(derived.names.includes('music-theory'));
-  assert.ok(derived.names.includes('music-core'));
+test('music edition, fresh install: all four bundled vaults are scheduled (the original drain-2300 fix still holds)', () => {
+  const derived = deriveBundledVaultNames(listingFor(ALL_FOUR), 'music');
+  assert.deepEqual(derived.names, ['forge-moda', 'forge-tutorial', 'music-core', 'music-theory']);
+  assert.deepEqual(derived.ignored, []);
 });
 
-test('a fifth bundled vault needs no code change', () => {
-  const derived = deriveBundledVaultNames(
-    listingFor(['forge-moda', 'forge-tutorial', 'music-core', 'music-theory', 'forge-poetry']),
-  );
-  assert.ok(
-    derived.names.includes('forge-poetry'),
-    'a vault added to assets/vaults/ must extract without editing a list',
-  );
+test('the root cause of drain 2300 was the domain gate, and the derivation still ignores it', () => {
+  // Regression witness. The fresh-vault stub declares no domains, so the v0.2.15 music gate was — and still is — false there.
+  assert.equal(vaultDeclaresMusic(FORGE_TOML_STUB_BODY), false, 'fresh-vault stub still declares no domains (unchanged)');
+  const derived = deriveBundledVaultNames(listingFor(ALL_FOUR), 'music');
+  assert.ok(derived.names.includes('music-theory') && derived.names.includes('music-core'));
 });
 
-test('empty or unreadable listing falls back rather than extracting nothing', () => {
-  // Non-vacuity guard: an adapter quirk that returns no folders must
-  // not silently degrade a fresh install to zero extracted vaults —
-  // that would be worse than the bug being fixed.
+test('a vault the bundle carries but NO edition names is not extracted (a fifth folder needs an edition-table entry)', () => {
+  for (const edition of ['lean', 'music'] as const) {
+    const derived = deriveBundledVaultNames(listingFor([...ALL_FOUR, 'forge-poetry']), edition);
+    assert.ok(!derived.names.includes('forge-poetry'), `${edition}: the disk listing must not add names`);
+    assert.ok(derived.ignored.includes('forge-poetry'));
+  }
+});
+
+test('a name the edition claims but the bundle lacks is reported as missing, not invented', () => {
+  const derived = deriveBundledVaultNames(listingFor(['forge-moda']), 'lean');
+  assert.deepEqual(derived.names, ['forge-moda']);
+  assert.deepEqual(derived.missing, ['forge-tutorial']);
+});
+
+test('empty or unreadable listing falls back to the edition table rather than extracting nothing', () => {
+  // Non-vacuity guard: an adapter quirk that returns no folders must not silently degrade a fresh install to zero extracted vaults.
   for (const bad of [[], undefined, null]) {
-    const derived = deriveBundledVaultNames(bad as string[] | undefined);
-    assert.equal(derived.source, 'fallback');
-    assert.deepEqual(derived.names, [...FALLBACK_BUNDLED_VAULTS].sort());
+    for (const edition of ['lean', 'music'] as const) {
+      const derived = deriveBundledVaultNames(bad as string[] | undefined, edition);
+      assert.equal(derived.source, 'fallback');
+      assert.deepEqual(derived.names, [...EDITION_VAULT_NAMES[edition]].sort());
+    }
   }
   assert.ok(FALLBACK_BUNDLED_VAULTS.length > 0, 'fallback must not be empty');
 });
@@ -103,16 +106,28 @@ test('listing hygiene: basenames, dedupe, sorted, no dotfiles', () => {
     `${BUNDLED_VAULTS_ROOT}/forge-moda`,
     `${BUNDLED_VAULTS_ROOT}/forge-moda`,
     `${BUNDLED_VAULTS_ROOT}/.DS_Store`,
-  ]);
+  ], 'music');
   assert.deepEqual(derived.names, ['forge-moda', 'music-theory']);
+  assert.deepEqual(derived.ignored, [], 'dotfiles are not vaults, so they are not "ignored vaults" either');
+});
+
+test('MECHANISM pin — the default edition is the build\'s own EDITION (the ambient test edition is lean, so a value test cannot see this)', () => {
+  const src = fs.readFileSync(path.join(REPO, 'src', 'bundled-vault-extraction-core.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.match(src, /edition: Edition = EDITION,/);
+});
+
+test('the current edition is the default (the shipped call site passes no edition)', () => {
+  assert.deepEqual(
+    deriveBundledVaultNames(listingFor(ALL_FOUR)).names,
+    [...BUNDLED_VAULT_NAMES].sort(),
+  );
 });
 
 test('the derived set agrees with the vault list files (no hand-maintained drift), for BOTH editions', () => {
-  // Derived-not-hand-maintained evidence. Music-edition Phase 2: assets/vaults/ now holds the vaults of
-  // EVERY edition (the edition is chosen at BUILD time by scripts/editions.mjs, never by what is on disk),
-  // so what is tracked under assets/vaults/ is the UNION of scripts/vaults.txt (lean) and
-  // scripts/vaults.music.txt (music). Each edition's own list must then be derivable from a listing of
-  // exactly those folders — which is what the runtime does with the folders a build extracted.
+  // assets/vaults/ holds the vaults of EVERY edition (the edition is chosen at BUILD time by scripts/editions.mjs), so what is
+  // tracked there is the UNION of scripts/vaults.txt (lean) and scripts/vaults.music.txt (music). Each edition's own list must be
+  // exactly what the edition table yields from a listing of that union — i.e. the table, not the folder, is what decides.
   const readList = (file: string) => fs
     .readFileSync(path.join(REPO, 'scripts', file), 'utf8')
     .split('\n')
@@ -130,9 +145,9 @@ test('the derived set agrees with the vault list files (no hand-maintained drift
   assert.deepEqual(onDisk, union, 'assets/vaults must hold exactly the union of both editions\' vaults');
   for (const [edition, list] of [['lean', lean], ['music', music]] as const) {
     assert.deepEqual(
-      deriveBundledVaultNames(listingFor([...list])).names,
+      deriveBundledVaultNames(listingFor(onDisk), edition).names,
       [...list].sort(),
-      `${edition}: the derived set must equal that edition's list file`,
+      `${edition}: extraction from the full on-disk union must equal that edition's list file`,
     );
   }
 });
@@ -153,6 +168,14 @@ test('welcome.ts extracts from the derived set, not a hardcoded list', () => {
   );
 });
 
+
+test('welcome.ts names what it LEFT ALONE (a polluted folder is visible in the console, not silent) and keeps the source-vault gate', () => {
+  const src = fs.readFileSync(path.join(REPO, 'src', 'welcome.ts'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.match(src, /derived\.ignored/, 'the ignored folders are reported');
+  assert.match(src, /derived\.missing/, 'a name the edition ships but the folder lacks is reported');
+  assert.match(src, /sourceVaultNames\(/, 'the source-vault gate still reads every edition\'s names + the listing (§3 keeps it)');
+});
 
 // ---- Drain 2026-10-10-2100 (b): the extraction SOURCE root ------------------------------------------------------------
 // The plugin id changed `forge` → `forge-actions` at v0.5.0 (commit beb5854) but this root stayed `.obsidian/plugins/forge/…`: on an

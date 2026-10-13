@@ -139,6 +139,8 @@ import {
 } from './auto-connect-banner-core.ts';
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
+import { applyPythonWriteBack } from './python-write-back-core.ts';
+import { planOpenSeed } from './open-seed-core.ts';
 import { writeSlotsSection } from './slots-section-writer-core.ts';
 import { parseSlotCacheMissFromPythonError } from './slot-cache-miss-python-error-core.ts';
 import { computeAutoForgeStamps } from './write-generated-code-stamps-core.ts';
@@ -2495,6 +2497,12 @@ export default class ForgePlugin extends Plugin {
   }
 
   private async forgeSnippet() {
+    // Drain 2026-10-13-2100 §4 — the first hammer click in a freshly reloaded window has been reported to do nothing visible. These
+    // two lines tell the cases apart in DevTools: no "click received" = the click never reached here (handler bound to a not-yet-usable
+    // view); a large "pre-flight done" = it waited for the engine boot below, with no feedback. Logged BEFORE the view lookup, which
+    // can return silently-ish, so the absence of this line is itself the finding.
+    const clickedAt = Date.now();
+    console.log('[Forge] hammer click received', { file: this.app.workspace.getActiveFile()?.path ?? null });
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view?.file) {
       this.notice('No active note to forge.');
@@ -2558,6 +2566,7 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       console.error('forgeSnippet: pre-flight disk→MEMFS sync failed', e);
     }
+    console.log('[Forge] pre-flight done', Date.now() - clickedAt, 'ms');
 
     // v0.2.123 — routing dispatch via pure-core decideForgeRouting.
     // Precedence: python-mode > moda > english-mode. metadataCache
@@ -4832,64 +4841,17 @@ export default class ForgePlugin extends Plugin {
         return typeof v === 'string' ? v : null;
       },
     });
+    // Drain 2026-10-13-2100 §2 — the stamping body is `applyPythonWriteBack` (python-write-back-core.ts): pure, so "does Run rewrite this
+    // note?" is answerable headless by the very function called here. Contract unchanged (python_hash + lineage rooted at the
+    // CANONICAL's hash per v0.2.248 §3.2; Recipe is the parent per v0.2.264; no stamps when Python is itself the source).
     await this.withProgrammaticWrite(file.path, () =>
-      this.app.vault.process(file, (content) => {
-      let next = writePythonAndEnglishHash(content, {
-        pythonCode: python,
+      this.app.vault.process(file, (content) => applyPythonWriteBack(content, {
+        python,
+        pythonHash,
         englishHash,
-        stripStaleSlots: false,
-      });
-      // Drain 2026-08-30-0945 — persist the just-resolved slots into
-      // # Slots, same as handleSlotCacheMiss's own write (drain
-      // 2026-08-24-2350's "persist, don't discard" rule). Without
-      // this, the resolution paid for here is used once and thrown
-      // away — the next Forge-click re-hits the LLM instead of a
-      // cache hit. `stripStaleSlots: false` above means writeSlots-
-      // Section below is the only place a stale heading gets replaced.
-      if (resolvedSlotsForCache !== null) {
-        next = writeSlotsSection(next, resolvedSlotsForCache);
-      }
-      // Only stamp python_hash if the resulting body actually has a
-      // # Python section (V2 visible-mode). Avoids a stale baseline
-      // for V1 notes whose # Python facet is written by the V1 cache
-      // path but doesn't participate in the 3-layer state machine.
-      if (extractPythonSection(next) !== null) {
-        next = setFmFieldV2(next, 'python_hash', pythonHash);
-        // v0.2.248 drain 2026-07-03-0600 §3.2 — stamp
-        // python_derived_from_source_hash at the CANONICAL's hash
-        // (its root source), not a prefer-recipe shortcut. When
-        // canonical is 'synced', treat as Description per §3.1
-        // convention (Description canonical when nothing drifted).
-        // 'python' canonical is terminal — Python driving itself
-        // is a rare case (cohort hand-edited Python); no derived-
-        // from stamp applies. Skip in that case; leave the field
-        // as-is (or absent if never stamped).
-        const rh = getFmFieldV2(next, 'recipe_hash');
-        const dh = getFmFieldV2(next, 'description_hash');
-        let sourceHash: string | null = null;
-        if (canonicalForStamp === 'description') {
-          sourceHash = typeof dh === 'string' ? dh : null;
-        } else if (canonicalForStamp === 'recipe') {
-          sourceHash = typeof rh === 'string' ? rh : null;
-        } else if (canonicalForStamp === 'synced') {
-          // §3.1 convention.
-          sourceHash = typeof dh === 'string' ? dh : null;
-        }
-        // canonical === 'python' → no stamp (skip).
-        if (sourceHash !== null) {
-          next = setFmFieldV2(next, 'python_derived_from_source_hash', sourceHash);
-        }
-        // v0.2.264 drain 2026-07-03-1500 — v11.6 hexa-state. Python's
-        // parent-hash is Recipe (immediate parent). Stamp at current
-        // recipe_hash whenever we're writing Python back — the compile
-        // path guarantees Python was just derived from current Recipe.
-        // Skip on 'python' canonical (no derivation happened).
-        if (canonicalForStamp !== 'python' && typeof rh === 'string') {
-          next = setFmFieldV2(next, 'python_derived_from_recipe_hash', rh);
-        }
-      }
-      return next;
-    }));
+        sourceLayer: canonicalForStamp,
+        resolvedSlots: resolvedSlotsForCache,
+      })));
     // Keep MEMFS in sync for the next compute.
     try {
       const readBack = await this.app.vault.read(file);
@@ -5621,149 +5583,51 @@ export default class ForgePlugin extends Plugin {
         const typeField = getFmFieldV2(body, 'type');
         if (typeField !== 'action') continue;
 
+        // Drain 2026-10-13-2100 — every decision below is `planOpenSeed` (open-seed-core.ts): pure, so "does merely opening this note
+        // rewrite it?" is answerable headless by the function called here. Moved out of this method unchanged.
+        const plan = await planOpenSeed(body, {
+          extractDescription,
+          extractRecipeSection,
+          extractPythonSection,
+          getFrontmatterField: (b, k) => getFmFieldV2(b, k),
+          computeFacetHash,
+        });
+
         // v0.2.260 drain 1400 Option A — populate the hash cache for
         // this file so the modify handler can identify "just edited"
         // facets by comparing to a reliable baseline. Always fires
         // regardless of canonical_facet presence.
-        const descText = extractDescription(body);
-        const recipeText = extractRecipeSection(body) ?? '';
-        const pythonText = extractPythonSection(body) ?? '';
-        const currentDesc = await computeFacetHash(descText);
-        const currentRecipe = await computeFacetHash(recipeText);
-        const currentPython = await computeFacetHash(pythonText);
         this._facetHashCache.set(file.path, {
-          desc: currentDesc,
-          recipe: currentRecipe,
-          python: currentPython,
-          // Drain 2026-09-08-1240 — seed the lineage-stamp snapshot on
-          // the workspace-restored-tab path too (this sweep is CW-1500-A's
-          // twin of captureFacetHashCacheForFile for tabs that never fire
-          // a fresh file-open event). Without this, a restored tab whose
-          // lineage was ALREADY current would cache `pyDerivedFrom:
-          // undefined`, and its first hand-edit would read as "the stamp
-          // just changed" (undefined !== the real value) — the exact
-          // false-fresh misfire this drain fixes, just via a different
-          // bootstrap path than fix_me.md's own repro used.
-          pyDerivedFrom: getFmFieldV2(body, 'python_derived_from_recipe_hash'),
+          desc: plan.current.desc,
+          recipe: plan.current.recipe,
+          python: plan.current.python,
+          // Drain 2026-09-08-1240 — seed the lineage-stamp snapshot on the workspace-restored-tab path too (CW-1500-A's twin of
+          // captureFacetHashCacheForFile): without it a restored tab whose lineage was ALREADY current would cache
+          // `pyDerivedFrom: undefined` and its first hand-edit would read as "the stamp just changed".
+          pyDerivedFrom: plan.pyDerivedFrom as any,
         });
 
-        // Read stored hashes once — used by both canonical-seed +
-        // parent-hash-seed branches below.
-        const storedDesc = getFmFieldV2(body, 'description_hash');
-        const storedRecipe = getFmFieldV2(body, 'recipe_hash');
-        const storedPython = getFmFieldV2(body, 'python_hash');
-
-        // CW-1500-A (drain 2026-07-03-1500) — v11.6 parent-hash seed.
-        // Fires INDEPENDENTLY of canonical_facet presence: a note may
-        // already have canonical_facet (drain 1200 seed) but be missing
-        // the v11.6 parent-hash fields.
-        //
-        // Migration rules (§2.3 of drain 1500 prompt):
-        // - recipe_derived_from_description_hash seeded when legacy
-        //   recipe_derived_from_source_hash === description_hash.
-        // - python_derived_from_recipe_hash seeded when legacy
-        //   python_derived_from_source_hash === recipe_hash (direct).
-        // - Two-hop Description-canonical (legacy === description_hash)
-        //   → LEAVE ABSENT per CW-1500-B safe default.
-        const legacyRecipeParent = getFmFieldV2(body, 'recipe_derived_from_source_hash');
-        const legacyPythonParent = getFmFieldV2(body, 'python_derived_from_source_hash');
-        const existingRecipeV116 = getFmFieldV2(body, 'recipe_derived_from_description_hash');
-        const existingPythonV116 = getFmFieldV2(body, 'python_derived_from_recipe_hash');
-        const seedRecipeParent =
-          typeof existingRecipeV116 !== 'string'
-          && typeof legacyRecipeParent === 'string'
-          && typeof storedDesc === 'string'
-          && legacyRecipeParent === storedDesc;
-        const seedPythonParent =
-          typeof existingPythonV116 !== 'string'
-          && typeof legacyPythonParent === 'string'
-          && typeof storedRecipe === 'string'
-          && legacyPythonParent === storedRecipe;
-
-        // v0.2.286 — prefer `source_facet`; accept legacy `canonical_facet`
-        // as a signal the note was seeded by an older plugin. Either
-        // one being present means "don't seed."
-        const existingSource = getFmFieldV2(body, 'source_facet');
-        const existingCanonical = getFmFieldV2(body, 'canonical_facet');
-        const sourceAlreadyPresent =
-          (typeof existingSource === 'string' && existingSource.length > 0)
-          || (typeof existingCanonical === 'string' && existingCanonical.length > 0);
-        // Notes carrying only the legacy name need a migration write on
-        // this pass — otherwise they'd stay on `canonical_facet` until
-        // a hand-edit triggered `maybeUpdateSourceFacet`.
-        const needsLegacyMigration =
-          (typeof existingSource !== 'string' || existingSource.length === 0)
-          && typeof existingCanonical === 'string'
-          && existingCanonical.length > 0;
-
-        // Compute source_facet seed via upstream-wins inference —
-        // only used when source_facet is absent.
-        const dMismatch = typeof storedDesc === 'string' && storedDesc !== currentDesc;
-        const rMismatch = typeof storedRecipe === 'string' && storedRecipe !== currentRecipe;
-        const pMismatch = typeof storedPython === 'string' && storedPython !== currentPython;
-        let seed: 'description' | 'recipe' | 'python' | 'synced';
-        if (dMismatch) seed = 'description';
-        else if (rMismatch) seed = 'recipe';
-        else if (pMismatch) seed = 'python';
-        else {
-          // CW-generate-empty-recipe-populated-python-fix-arc
-          // (drain 2026-07-28-1305). Mirrors whichLayerIsSource's
-          // content-based fallback: fresh notes with NO stored hashes
-          // pick the populated facet as source. Pre-fix, this branch
-          // seeded 'synced' → routing bypassed the Description-canonical
-          // path → CCQA `postproc_hello` reproduction crash.
-          const noStoredHashes =
-            typeof storedDesc !== 'string'
-            && typeof storedRecipe !== 'string'
-            && typeof storedPython !== 'string';
-          if (noStoredHashes) {
-            const descText2 = descText;
-            const recipeText2 = recipeText;
-            const pythonText2 = pythonText;
-            if (descText2.trim().length > 0) seed = 'description';
-            else if (recipeText2.trim().length > 0) seed = 'recipe';
-            else if (pythonText2.trim().length > 0) seed = 'python';
-            else seed = 'synced';
-          } else {
-            seed = 'synced';
-          }
-        }
-
-        // Drain 2026-08-17-0100 (Phase 2) — the sync_state seed that
-        // stood here is gone too. Same reason as the modify handler:
-        // derived on read, so seeding can only create something to
-        // disagree with.
-
         // Skip write entirely when there is nothing to change.
-        if (
-          sourceAlreadyPresent
-          && !needsLegacyMigration
-          && !seedRecipeParent
-          && !seedPythonParent
-        ) {
+        if (!plan.write) {
           continue;
         }
 
         await this.withProgrammaticWrite(file.path, async () => {
           await this.guardedProcessFrontMatter(file, (fm: any) => {
-            if (!sourceAlreadyPresent) {
-              fm.source_facet = seed;
-            } else if (needsLegacyMigration) {
-              // Note has `canonical_facet` but no `source_facet`. Copy
-              // the value across; the delete below removes the legacy
-              // field.
-              fm.source_facet = existingCanonical;
+            if (plan.setSourceFacet !== null) {
+              // Seeded by inference, or (legacy) copied across from `canonical_facet` — the delete below removes the legacy field.
+              fm.source_facet = plan.setSourceFacet;
             }
             // v0.2.286 migration — drop the legacy field name on any
             // note that had it. Idempotent when already absent.
             if ('canonical_facet' in fm) {
               delete fm.canonical_facet;
             }
-            if (seedRecipeParent) {
-              fm.recipe_derived_from_description_hash = legacyRecipeParent;
+            if (plan.seedRecipeParent !== null) {
+              fm.recipe_derived_from_description_hash = plan.seedRecipeParent;
             }
-            if (seedPythonParent) {
-              fm.python_derived_from_recipe_hash = legacyPythonParent;
+            if (plan.seedPythonParent !== null) {
+              fm.python_derived_from_recipe_hash = plan.seedPythonParent;
             }
           });
         });

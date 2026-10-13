@@ -32,7 +32,7 @@ export function bundledWelcomePaths(pluginDir: string): { welcome: string; greet
   return { welcome: `${root}/welcome.md`, greet: `${root}/greet.md` };
 }
 
-import { EDITION_VAULT_NAMES } from './edition-core.ts';
+import { EDITION_VAULT_NAMES, type Edition } from './edition-core.ts';
 import { EDITION } from './edition-selected.ts';
 
 /** The bundled vaults this build ships, in scripts/vaults.txt (lean) / vaults.music.txt (music) order.
@@ -82,29 +82,50 @@ export function sourceVaultNames(listedFolders: readonly string[] | undefined | 
 export const FALLBACK_BUNDLED_VAULTS: string[] = [...BUNDLED_VAULT_NAMES];
 
 export interface DerivedBundledVaults {
-  /** Vault names to extract, sorted for deterministic logging. */
+  /** Vault names to extract, sorted for deterministic logging. Always a subset of the EDITION's name table. */
   names: string[];
-  /** 'bundle' when derived from the listing, 'fallback' when the
-   *  listing was empty/unreadable. Callers log the distinction so a
-   *  silent fallback is never mistaken for a real derivation. */
-  source: 'bundle' | 'fallback';
+  /** 'edition' when the table was intersected with a readable listing; 'fallback' when the listing was empty/unreadable and the
+   *  whole table is used. Callers log the distinction so a silent fallback is never mistaken for a real derivation. */
+  source: 'edition' | 'fallback';
+  /** Folders the bundle carries that THIS edition does not ship (e.g. music vaults beside a lean build). Never extracted. */
+  ignored: string[];
+  /** Names the edition ships but the bundle folder does not carry — reported, never invented. */
+  missing: string[];
 }
 
-/** Turn an `adapter.list(bundledVaultsRoot(pluginDir)).folders` result into the
- *  set of bundled vault names. Obsidian returns vault-relative full
- *  paths; we want basenames. Dotted entries (.DS_Store and friends)
- *  are not vaults. */
-export function deriveBundledVaultNames(
-  folders: string[] | undefined | null,
-): DerivedBundledVaults {
-  const names = new Set<string>();
+const basenamesOf = (folders: readonly string[] | undefined | null): string[] => {
+  const out = new Set<string>();
   for (const folder of folders ?? []) {
     const name = String(folder).split('/').filter(Boolean).pop() ?? '';
-    if (name === '' || name.startsWith('.')) continue;
-    names.add(name);
+    if (name !== '' && !name.startsWith('.')) out.add(name);
   }
-  if (names.size === 0) {
-    return { names: [...FALLBACK_BUNDLED_VAULTS].sort(), source: 'fallback' };
+  return [...out];
+};
+
+/** Which bundled vaults to extract (drain 2026-10-13-2100 §3: THE EDITION DECIDES; the disk never does).
+ *
+ *  The edition table (`EDITION_VAULT_NAMES`) is the only source of membership. `assets/vaults/` is deployed wholesale and carries
+ *  every edition's vaults, so a listing says what is physically THERE, not what this build is. Before this, the set WAS the
+ *  listing, so a lean build deployed beside a music-bearing folder extracted music-theory and music-core into a vault that never
+ *  asked for them (and, from the music-theory source vault, into the source repo — the source-vault gate stops that case too).
+ *
+ *  The listing is consulted only as a presence filter over names the edition already claimed. An empty/unreadable listing falls
+ *  back to the whole table: an adapter quirk must not silently degrade a fresh install to zero extracted vaults.
+ *  `edition` defaults to the build's own (the shipped call site passes nothing); tests name both. */
+export function deriveBundledVaultNames(
+  folders: readonly string[] | undefined | null,
+  edition: Edition = EDITION,
+): DerivedBundledVaults {
+  const wanted: readonly string[] = EDITION_VAULT_NAMES[edition];
+  const listed = basenamesOf(folders);
+  if (listed.length === 0) {
+    return { names: [...wanted].sort(), source: 'fallback', ignored: [], missing: [] };
   }
-  return { names: [...names].sort(), source: 'bundle' };
+  const present = new Set(listed);
+  return {
+    names: wanted.filter((n) => present.has(n)).sort(),
+    source: 'edition',
+    ignored: listed.filter((n) => !wanted.includes(n)).sort(),
+    missing: wanted.filter((n) => !present.has(n)).sort(),
+  };
 }

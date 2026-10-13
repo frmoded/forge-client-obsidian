@@ -208,8 +208,16 @@ test('the slot-miss handler persists its resolutions', () => {
   // transpile-only write-back path's own self-heal, added by drain
   // 0945 — see slot-cache-miss-python-error-core.test.ts for its own
   // wiring test).
-  const callSites = MAIN.split('\n').filter((l) => l.includes('writeSlotsSection(')).length;
-  assert.equal(callSites, 2, 'expected exactly two writeSlotsSection call sites');
+  //
+  // Drain 2026-10-13-2100 — the second site MOVED, it did not go away: writeSourcePythonBack's `vault.process` body is now the pure
+  // `applyPythonWriteBack` (python-write-back-core.ts), so that call site lives there and main.ts calls the core. This pins the
+  // MECHANISM (where the calls are); the property — resolutions are persisted on both paths — is pinned by
+  // python-write-back-core.test.ts ("resolved slots are persisted into the note").
+  const CORE = readFileSync(new URL('./python-write-back-core.ts', import.meta.url), 'utf8');
+  const sites = (src: string) => src.split('\n').filter((l) => !l.trim().startsWith('//') && l.includes('writeSlotsSection(')).length;
+  assert.equal(sites(MAIN), 1, 'handleSlotCacheMiss (the RUN path) still persists its resolutions in main.ts');
+  assert.equal(sites(CORE), 1, 'writeSourcePythonBack persists through applyPythonWriteBack');
+  assert.ok(MAIN.includes('applyPythonWriteBack('), 'and main.ts routes that write through the core');
 });
 
 test('no production call site strips # Slots any more', () => {
