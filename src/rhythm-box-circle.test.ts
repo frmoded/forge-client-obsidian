@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { loadWidget, fakeAudio, skip, widgetScript, type Harness } from './test-support/rhythm-widget-harness.ts';
+import { loadWidget, fakeAudio, skip, widgetHtml, widgetScript, type Harness } from './test-support/rhythm-widget-harness.ts';
 
 function pureCore(): any {
   const mod: { exports: any } = { exports: {} };
@@ -277,7 +277,10 @@ test('Circle: more than 4 instruments falls back with the inline message and kee
   const h4 = await editing(four);
   await toCircle(h4);
   assert.equal(h4.el('bViewCircle').getAttribute('aria-pressed'), 'true');
-  assert.equal(h4.el('viewMsg').textContent, '');
+  // Drain 2026-10-15-2230: exactly four rings is allowed, and now says why the circle's Add-instrument control is disabled (it was silent).
+  // This pins the MECHANISM (where the message lives); the property — circle at 4 works, at 5 it falls back — is the two asserts above.
+  assert.match(h4.el('viewMsg').textContent ?? '', /4 instruments/);
+  assert.notEqual(h4.el('viewMsg').textContent, 'Circle view shows up to 4 instruments; use Grid', 'it is the "limit reached" note, not the fallback');
 });
 
 test('Polygon: the selected ring\'s hits, in order; default = the first channel; clicking a ring label selects; "Show shape" toggles', { skip }, async () => {
@@ -500,8 +503,13 @@ test('Circle works at ~460 px: the SVG scales to its container instead of overfl
   const h = await editing(ROCK());
   await toCircle(h);
   const svg = h.doc.querySelector('#circle')!;
-  assert.equal(svg.getAttribute('viewBox'), '0 0 460 460');
-  assert.match(String(svg.getAttribute('style') ?? '') + String(svg.getAttribute('class') ?? ''), /circle-svg|max-width/);
+  // Drain 2026-10-15-2230: the circle is sized by its ring count (circleSizeFor), no longer a fixed 460 square; in a pane narrower than
+  // that, CSS (max-width: 100%) scales it down exactly as before — the property this test is about.
+  const w = pureCore();
+  assert.equal(svg.getAttribute('viewBox'), `0 0 ${w.circleSizeFor(16, 3)} ${w.circleSizeFor(16, 3)}`);
+  assert.ok(w.circleSizeFor(16, 3) <= 460);
+  assert.match(widgetHtml, /svg\.circle-svg \{[^}]*max-width: 100%/);
+  assert.match(String(svg.getAttribute('class') ?? ''), /circle-svg/);
 });
 
 test('8-step 4/4: the widget loads it, shows eight cells, offers it in the meter menu, and a load -> save with no edit is byte-identical', { skip }, async () => {

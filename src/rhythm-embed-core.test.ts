@@ -13,7 +13,7 @@ import {
   parseWidgetMessage, type RhythmData,
 } from './rhythm-edit-core.ts';
 import {
-  DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, DEFAULT_RHYTHM_EMBED_HEIGHT_PX, createPlaybackCoordinator, createRhythmEmbedSession, decideEmbedFreshness, parseRhythmEmbedSource,
+  DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, DEFAULT_RHYTHM_EMBED_HEIGHT_PX, createPlaybackCoordinator, embedHeightFor, createRhythmEmbedSession, decideEmbedFreshness, parseRhythmEmbedSource,
   widgetMissingMessage,
 } from './rhythm-embed-core.ts';
 
@@ -28,12 +28,12 @@ const noteText = (d: RhythmData = TRESILLO, extra = '') =>
 
 test('parser: one link line is a valid block; defaults are the documented ones', () => {
   const r = parseRhythmEmbedSource('[[rhythm_pattern_tresillo]]');
-  assert.deepEqual(r, { ok: true, value: { target: 'rhythm_pattern_tresillo', heightPx: DEFAULT_RHYTHM_EMBED_HEIGHT_PX, title: null, view: null } });
+  assert.deepEqual(r, { ok: true, value: { target: 'rhythm_pattern_tresillo', heightPx: DEFAULT_RHYTHM_EMBED_HEIGHT_PX, heightExplicit: false, title: null, view: null } });
 });
 
 test('parser: height and title options (html-embed height rule: digits with an optional px)', () => {
   const r = parseRhythmEmbedSource('[[tresillo]]\nheight: 500\ntitle: The tresillo');
-  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 500, title: 'The tresillo', view: null } });
+  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 500, heightExplicit: true, title: 'The tresillo', view: null } });
   const px = parseRhythmEmbedSource('[[tresillo]]\nheight: 480px');
   assert.equal(px.ok && px.value.heightPx, 480);
   const upper = parseRhythmEmbedSource('[[tresillo]]\nHEIGHT: 480PX');
@@ -69,6 +69,34 @@ test('parser: the default height follows the view (circle is taller); an explici
   }
 });
 
+test('parser: heightExplicit says whether the author wrote a height line (the view then keeps its hands off)', () => {
+  assert.equal((parseRhythmEmbedSource('[[clave]]') as any).value.heightExplicit, false);
+  assert.equal((parseRhythmEmbedSource('[[clave]]\nview: circle') as any).value.heightExplicit, false);
+  assert.equal((parseRhythmEmbedSource('[[clave]]\nheight: 480') as any).value.heightExplicit, true);
+  assert.equal((parseRhythmEmbedSource('[[clave]]\nview: circle\nheight: 300') as any).value.heightExplicit, true);
+});
+
+// Drain 2026-10-15-2230 §2 — the defaults follow the compact layout, measured in real Chromium at a 460 px pane (worst case: a wider pane
+// is shorter). Before: grid 488-602 px for 1-4 instruments (default 420 — it scrolled), circle 961 px whatever was in it (default 960).
+test('embedHeightFor: the default height follows what is IN the note — instruments for the grid, rings for the circle', () => {
+  const grid = [1, 2, 3, 4].map((n) => embedHeightFor(null, n));
+  const circle = [1, 2, 3, 4].map((n) => embedHeightFor('circle', n));
+  assert.deepEqual(grid, [300, 330, 360, 390]);
+  assert.deepEqual(circle, [510, 570, 650, 720]);
+  for (const series of [grid, circle]) assert.ok(series.every((v, i) => i === 0 || v > series[i - 1]), 'monotone: more instruments, more room');
+  assert.equal(embedHeightFor('grid', 3), embedHeightFor(null, 3), 'grid is the default view');
+  assert.equal(embedHeightFor('grid', 6), 390 + 2 * 30, 'the grid has no instrument limit: one more row, a little more room');
+  assert.equal(embedHeightFor('circle', 5), embedHeightFor('grid', 5), 'five instruments: the circle falls back to the grid, so the grid\'s room');
+});
+
+test('embedHeightFor: the fixed defaults are the 4-instrument worst case, and an unknown count gets them', () => {
+  assert.equal(DEFAULT_RHYTHM_EMBED_HEIGHT_PX, 390);
+  assert.equal(DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, 720);
+  assert.equal(embedHeightFor(null, 0), DEFAULT_RHYTHM_EMBED_HEIGHT_PX);
+  assert.equal(embedHeightFor('circle', 0), DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX);
+  assert.ok(DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX < 960, 'less than the 960 that was clipping nothing but wasting half the space');
+});
+
 test('parser: basename links and folder-qualified links both give the link path; alias and heading are dropped', () => {
   for (const [src, want] of [
     ['[[rhythm_pattern_tresillo]]', 'rhythm_pattern_tresillo'],
@@ -84,7 +112,7 @@ test('parser: basename links and folder-qualified links both give the link path;
 
 test('parser: CRLF and blank lines are tolerated', () => {
   const r = parseRhythmEmbedSource('\r\n[[tresillo]]\r\n\r\nheight: 400\r\n');
-  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 400, title: null, view: null } });
+  assert.deepEqual(r, { ok: true, value: { target: 'tresillo', heightPx: 400, heightExplicit: true, title: null, view: null } });
 });
 
 test('parser: an empty block, a first line that is not a link, and a second link are each refused with a message that says what to write', () => {

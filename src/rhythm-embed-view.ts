@@ -24,6 +24,7 @@ import {
   createRhythmEmbedSession,
   noteNotFoundMessage,
   notRhythmMessage,
+  embedHeightFor,
   parseRhythmEmbedSource,
   widgetMissingMessage,
   type RhythmEmbedSession,
@@ -179,7 +180,10 @@ class RhythmEmbed extends MarkdownRenderChild {
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
         clearTimer: (h) => window.clearTimeout(h as number),
       });
-      const { iframe, blobUrl } = createSandboxedWidgetIframe(this.bodyEl, widget.html, `${options.heightPx}px`);
+      // Drain 2026-10-15-2230 — an explicit `height:` is used as written; otherwise the default follows what is IN the note (the compact
+      // layout's height depends on its instrument / ring count — rhythm-embed-core.ts embedHeightFor, measured in real Chromium).
+      const heightPx = options.heightExplicit ? options.heightPx : embedHeightFor(options.view, Object.keys(note.value.data.channels).length);
+      const { iframe, blobUrl } = createSandboxedWidgetIframe(this.bodyEl, widget.html, `${heightPx}px`);
       this.iframe = iframe;
       this.blobUrl = blobUrl;
     } catch (e) {

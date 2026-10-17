@@ -15,12 +15,30 @@ import {
 } from './rhythm-edit-core.ts';
 import { produceScoreFromData, type ScoreOutcome } from './rhythm-score-core.ts';
 
-/** A block with no `height:` line. The Beat Box widget plus its playground bar needs a little more than the html-embed's 360. */
-export const DEFAULT_RHYTHM_EMBED_HEIGHT_PX = 420;
-/** A block with `view: circle` and no `height:` line: the necklace is a square (the widget's circle is as tall as the pane is wide), so it
- *  needs the room the grid does not. Measured in real Chromium at a 460 px pane: the widget's content ends at ~920 px for one ring and
- *  ~965 px for four (bar, switch, ring chips, the circle, then the Random / Clear row). An explicit `height:` always wins. */
-export const DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX = 960;
+/** The default height of a Beat Box embed, grid view, with FOUR instruments — the worst case; a note with fewer gets less (`embedHeightFor`).
+ *  Drain 2026-10-15-2230: measured in real Chromium at a 460 px pane (a wider pane is shorter), after the compact layout. Before it, the grid
+ *  needed 488-602 px for 1-4 instruments and this was 420, so every playground embed scrolled inside its frame. */
+export const DEFAULT_RHYTHM_EMBED_HEIGHT_PX = 390;
+/** The same for `view: circle` with four rings (the circle's limit). Was 960 — a fixed 460 px square plus a tall toolbar whatever the note held. */
+export const DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX = 720;
+
+// Measured heights at a 460 px pane, rounded UP with 10-20 px of slack (fonts differ in Obsidian's Electron), by instrument count:
+//   grid   1: 290  2: 320  3: 350  4: 380   (+30 per row beyond four — the grid has no instrument limit)
+//   circle 1: 502  2: 554  3: 636  4: 710   (the circle is sized by its ring count; more than four falls back to the grid)
+const GRID_BY_INSTRUMENTS = [300, 330, 360, 390];
+const CIRCLE_BY_RINGS = [510, 570, 650, 720];
+const GRID_ROW_PX = 30;
+
+/** The default height for an embed that gave no `height:` line, from what is IN the note. An unknown count (0) gets the worst case. */
+export function embedHeightFor(view: RhythmWidgetView | null, instruments: number): number {
+  const n = Math.max(0, Math.floor(instruments));
+  const gridHeight = n === 0 ? DEFAULT_RHYTHM_EMBED_HEIGHT_PX
+    : n <= GRID_BY_INSTRUMENTS.length ? GRID_BY_INSTRUMENTS[n - 1]
+    : GRID_BY_INSTRUMENTS[GRID_BY_INSTRUMENTS.length - 1] + (n - GRID_BY_INSTRUMENTS.length) * GRID_ROW_PX;
+  if (view !== 'circle') return gridHeight;
+  if (n === 0) return DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX;
+  return n <= CIRCLE_BY_RINGS.length ? CIRCLE_BY_RINGS[n - 1] : gridHeight;     // 5+ instruments: the widget falls back to Grid
+}
 export const RHYTHM_EMBED_LANGUAGE = 'forge-rhythm';
 const SUPPORTED_OPTIONS = ['height', 'title', 'view'] as const;
 const SUPPORTED_VIEWS: readonly RhythmWidgetView[] = ['grid', 'circle'];
@@ -29,7 +47,10 @@ export const DATA_REQUEST_TIMEOUT_MS = 2000;
 export interface RhythmEmbedOptions {
   /** The link path as written (`rhythm_pattern_tresillo` or `rhythm_data/rhythm_pattern_tresillo`), alias and heading removed. */
   target: string;
+  /** The block's height: the author's `height:` line, else the fixed default for the view (the 4-instrument worst case). */
   heightPx: number;
+  /** True when the author wrote a `height:` line — the view then uses `heightPx` as written instead of sizing to the note. */
+  heightExplicit: boolean;
   /** The `title:` option, or null (the host then uses the note's name). */
   title: string | null;
   /** The `view:` option (the view the widget starts in), or null (the widget's own default: grid). */
@@ -81,7 +102,7 @@ export function parseRhythmEmbedSource(source: string): RhythmEmbedParse {
     }
   }
   const defaultHeight = view === 'circle' ? DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX : DEFAULT_RHYTHM_EMBED_HEIGHT_PX;
-  return { ok: true, value: { target: link[1].trim(), heightPx: heightPx ?? defaultHeight, title, view } };
+  return { ok: true, value: { target: link[1].trim(), heightPx: heightPx ?? defaultHeight, heightExplicit: heightPx !== null, title, view } };
 }
 
 // ---- freshness ----------------------------------------------------------------------------------------------------------
