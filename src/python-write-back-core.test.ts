@@ -101,6 +101,8 @@ test('MECHANISM pin — writeSourcePythonBack hands its process callback to the 
   const start = main.indexOf('private async writeSourcePythonBack(');
   const end = main.indexOf('private async', start + 10);
   const method = main.slice(start, end);
-  assert.match(method, /applyPythonWriteBack\(/, 'the write goes through the pure core');
+  // Drain 2026-10-15-2100 §1 — the call became `planPythonWriteBack` (which calls `applyPythonWriteBack`, then decides whether a library
+  // note should be touched at all). Still the MECHANISM pin: the write goes through the pure core, not an inline copy.
+  assert.match(method, /planPythonWriteBack\(/, 'the write goes through the pure core');
   assert.doesNotMatch(method, /setFmFieldV2\(next, 'python_hash'/, 'no inline copy of the stamping remains');
 });

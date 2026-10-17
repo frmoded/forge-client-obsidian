@@ -12,7 +12,8 @@
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
 import { writeSlotsSection } from './slots-section-writer-core.ts';
 import { extractPythonSection, getFrontmatterField, setFrontmatterField } from './v2-note-core.ts';
-import type { SourceLayer } from './facet-hash-core.ts';
+import { getSourceFacet, type SourceLayer } from './facet-hash-core.ts';
+import { effectiveSourceFacet } from './effective-source-core.ts';
 
 export interface PythonWriteBackInput {
   /** The just-resolved Python (the engine's transpile, or the cached body). */
@@ -43,10 +44,15 @@ export function applyPythonWriteBack(content: string, input: PythonWriteBackInpu
     next = setFrontmatterField(next, 'python_hash', input.pythonHash);
     const rh = getFrontmatterField(next, 'recipe_hash');
     const dh = getFrontmatterField(next, 'description_hash');
+    // Drain 2026-10-15-2100 §1 — a `synced` probe verdict is a FRESHNESS finding (no facet drifted), not a statement of which facet
+    // the note derives from; that is the stored `source_facet`. Reading `synced` as Description re-rooted every hash-consistent
+    // recipe-source note (every shipped one) at the Description hash on the first hammer click. One definition: effective-source-core.
+    const stored = getSourceFacet(content, (b, k) => { const v = getFrontmatterField(b, k); return typeof v === 'string' ? v : null; });
+    const layer = effectiveSourceFacet(input.sourceLayer, stored);
     let sourceHash: string | null = null;
-    if (input.sourceLayer === 'description' || input.sourceLayer === 'synced') {
-      sourceHash = typeof dh === 'string' ? dh : null;   // 'synced' is treated as Description (§3.1 convention)
-    } else if (input.sourceLayer === 'recipe') {
+    if (layer === 'description' || layer === 'synced') {
+      sourceHash = typeof dh === 'string' ? dh : null;   // 'synced' with no stored source_facet stays Description (the §3.1 convention)
+    } else if (layer === 'recipe') {
       sourceHash = typeof rh === 'string' ? rh : null;
     }
     // 'python' → no stamp: Python driving itself is terminal.
@@ -55,9 +61,52 @@ export function applyPythonWriteBack(content: string, input: PythonWriteBackInpu
     }
     // v11.6 hexa-state: Python's parent is the Recipe — stamp it whenever we write Python back, except when Python is the source
     // (no derivation happened).
-    if (input.sourceLayer !== 'python' && typeof rh === 'string') {
+    if (layer !== 'python' && typeof rh === 'string') {
       next = setFrontmatterField(next, 'python_derived_from_recipe_hash', rh);
     }
   }
   return next;
+}
+
+// ---- the write-nothing guard ------------------------------------------------------------------------------------------------
+
+/** Frontmatter keys that only record WHERE a facet was derived from. A library note whose only difference is one of these is not
+ *  worth a write: the content the cohort sees and runs is identical. */
+const LINEAGE_KEY_RE = /^(recipe|python)_derived_from_(source|description|recipe)_hash\s*:/;
+
+/** The comparison form: lineage lines dropped, trailing whitespace trimmed per line, trailing blank lines at EOF dropped. */
+function cosmeticForm(body: string): string {
+  return body
+    .split('\n')
+    .filter((line) => !LINEAGE_KEY_RE.test(line))
+    .map((line) => line.replace(/[ \t\r]+$/, ''))
+    .join('\n')
+    .replace(/\n+$/, '');
+}
+
+export function differsOnlyCosmetically(before: string, after: string): boolean {
+  return cosmeticForm(before) === cosmeticForm(after);
+}
+
+export interface PythonWritePlan {
+  /** False → do not touch the file at all. */
+  write: boolean;
+  /** What the file should contain (the unchanged `content` when `write` is false). */
+  next: string;
+}
+
+/**
+ * Drain 2026-10-15-2100 §1 — decide whether a Run / transpile write-back should reach the disk.
+ *
+ * A shipped library note is a FIXED artifact: the cohort edits their own copy, not the library's, and a click that dirties the
+ * library tree shows up as a git diff the author never made (CCQA, hello_world). So for a note under a bundled-library directory,
+ * when the writer's result differs from what is on disk ONLY in derived-lineage stamps or trailing whitespace, nothing is written.
+ * A real difference — different Python, a changed `python_hash`, an English hash — still persists (the transpile result IS the
+ * product of the click); a cohort note (`library: false`) keeps its lineage maintenance.
+ */
+export function planPythonWriteBack(content: string, input: PythonWriteBackInput, opts: { library: boolean }): PythonWritePlan {
+  const next = applyPythonWriteBack(content, input);
+  if (next === content) return { write: false, next: content };
+  if (opts.library && differsOnlyCosmetically(content, next)) return { write: false, next: content };
+  return { write: true, next };
 }

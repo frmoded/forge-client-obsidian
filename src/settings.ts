@@ -41,6 +41,9 @@ export interface ForgeSettings {
   // strip is collapsed. Both persist across restarts: returning to a
   // note should return you to the values you last played it with.
   panelStripValues: Record<string, Record<string, string>>;
+  /** Drain 2026-10-15-2100 §2 — the input signature each note's remembered values were stored under; a note whose signature is no
+   *  longer that one (deleted and re-created, enum options changed) recalls nothing. */
+  panelStripSignatures: Record<string, string>;
   panelStripCollapsed: boolean;
   /** Drain 2026-08-27-0700 (Gate V) — fraction of the Forge panel's
    *  height given to the input strip. NEVER trusted as stored: the read
@@ -61,6 +64,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   ownAnthropicKey: '',
   seenWelcome: false,
   panelStripValues: {},
+  panelStripSignatures: {},
   panelStripCollapsed: false,
   panelStripFraction: 0.33,
   openRhythmNotesInBeatBox: true,

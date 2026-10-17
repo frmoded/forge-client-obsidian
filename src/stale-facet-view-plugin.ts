@@ -17,7 +17,9 @@ import { RangeSetBuilder } from '@codemirror/state';
 import {
   whichLayerIsSource,
   computeFacetHash,
+  getSourceFacet,
 } from './facet-hash-core.ts';
+import { effectiveSourceFacet } from './effective-source-core.ts';
 import {
   computeFacetStates,
   suffixTextForState,
@@ -289,7 +291,11 @@ export const staleFacetViewPlugin = ViewPlugin.fromClass(
       if (this.pendingDoc !== body) {
         return;
       }
-      const states = computeFacetStates(canonical, oneArgReader, currentBodyHashes);
+      // Drain 2026-10-15-2100 §1 — `synced` is a freshness verdict, not a source: defer to the note's own stored source_facet
+      // (CCQA: hello_world, source_facet: recipe, drew "Description — source / Recipe — derived from Description").
+      const stored = getSourceFacet(body, twoArgReader);
+      const effective = effectiveSourceFacet(canonical, stored) ?? canonical;
+      const states = computeFacetStates(effective, oneArgReader, currentBodyHashes);
       this.decorations = buildFacetStateDecorations(body, states);
       try {
         this.view.dispatch({});

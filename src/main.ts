@@ -81,9 +81,11 @@ import {
 import { formatRegistryInventory } from './registry-inventory-core.ts';
 import {
   buildInputFieldModels,
-  recallPanelValues,
-  rememberPanelValues,
-  forgetPanelValues,
+  recallValidPanelValues,
+  rememberPanelValuesWithSignature,
+  forgetPanelNote,
+  renamePanelNote,
+  stripInputSignature,
   type InputFieldSources,
 } from './forge-panel-strip-core.ts';
 import { ForgeThreeView, THREE_VIEW_TYPE } from './three-view.ts';
@@ -139,7 +141,7 @@ import {
 } from './auto-connect-banner-core.ts';
 import type { AlphaGenerateRequest, AlphaDependencyInfo, SlotRequestPayload } from './server.ts';
 import { writePythonAndEnglishHash } from './python-cache-writer-core.ts';
-import { applyPythonWriteBack } from './python-write-back-core.ts';
+import { planPythonWriteBack } from './python-write-back-core.ts';
 import { planOpenSeed } from './open-seed-core.ts';
 import { writeSlotsSection } from './slots-section-writer-core.ts';
 import { parseSlotCacheMissFromPythonError } from './slot-cache-miss-python-error-core.ts';
@@ -720,6 +722,26 @@ export default class ForgePlugin extends Plugin {
     // Drain 2026-10-11-0900 §4 — feed the deletion tracker the frontmatter-write guard consults (a note deleted while a write ran).
     this.registerEvent(this.app.vault.on('delete', (f) => {
       this.deletionTracker.noteDeleted(f.path, Date.now());
+      // Drain 2026-10-15-2100 §2 — the strip's remembered values belong to the note; a deleted note takes them with it, so a note
+      // re-created at the same path starts clean instead of inheriting the old note's choices.
+      if (f instanceof TFile && f.extension === 'md') {
+        const id = snippetIdFromPath(f.path, this.libraryDirNames());
+        const next = forgetPanelNote(this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {}, id);
+        this.settings.panelStripValues = next.memory;
+        this.settings.panelStripSignatures = next.signatures;
+        void this.saveSettings();
+      }
+    }));
+    this.registerEvent(this.app.vault.on('rename', (f, oldPath) => {
+      // ...and a renamed note keeps its values under the new id.
+      if (f instanceof TFile && f.extension === 'md') {
+        const next = renamePanelNote(
+          this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {},
+          snippetIdFromPath(oldPath, this.libraryDirNames()), snippetIdFromPath(f.path, this.libraryDirNames()));
+        this.settings.panelStripValues = next.memory;
+        this.settings.panelStripSignatures = next.signatures;
+        void this.saveSettings();
+      }
     }));
     this.registerEvent(this.app.vault.on('modify', (file) => {
       // Debounce against active-file modifications only — saves on
@@ -4836,14 +4858,27 @@ export default class ForgePlugin extends Plugin {
     // Drain 2026-10-13-2100 §2 — the stamping body is `applyPythonWriteBack` (python-write-back-core.ts): pure, so "does Run rewrite this
     // note?" is answerable headless by the very function called here. Contract unchanged (python_hash + lineage rooted at the
     // CANONICAL's hash per v0.2.248 §3.2; Recipe is the parent per v0.2.264; no stamps when Python is itself the source).
-    await this.withProgrammaticWrite(file.path, () =>
-      this.app.vault.process(file, (content) => applyPythonWriteBack(content, {
-        python,
-        pythonHash,
-        englishHash,
-        sourceLayer: canonicalForStamp,
-        resolvedSlots: resolvedSlotsForCache,
-      })));
+    //
+    // Drain 2026-10-15-2100 §1 — and "does Run rewrite this note?" now has a second answer: for a note under a bundled-library
+    // directory, a write whose ONLY difference is derived lineage or trailing whitespace is not made (CCQA: the hammer on the
+    // shipped hello_world dirtied the library tree). The plan is made from a fresh read; the file is touched only if it says so.
+    // A real difference (new Python, a changed python_hash, an English hash) still persists, and a cohort note keeps its lineage
+    // maintenance.
+    const writeInput = {
+      python,
+      pythonHash,
+      englishHash,
+      sourceLayer: canonicalForStamp,
+      resolvedSlots: resolvedSlotsForCache,
+    };
+    const plan = planPythonWriteBack(
+      await this.app.vault.read(file), writeInput,
+      { library: isInBundledLibraryDir(file.path, this.libraryDirNames()) });
+    if (plan.write) {
+      await this.withProgrammaticWrite(file.path, () =>
+        this.app.vault.process(file, (content) =>
+          planPythonWriteBack(content, writeInput, { library: false }).next));
+    }
     // Keep MEMFS in sync for the next compute.
     try {
       const readBack = await this.app.vault.read(file);
@@ -5953,6 +5988,8 @@ export default class ForgePlugin extends Plugin {
    *  Kept so the Run button never has to reconstruct it from the
    *  snippet id, which is a lossy projection of the path. */
   private _stripBoundFile: TFile | null = null;
+  /** snippet id -> the control signature the strip last built for it (see recallValidPanelValues). */
+  private readonly stripSignatures = new Map<string, string>();
 
   private wireStripHost(view: ForgeOutputView) {
     this.stripHostSingleton ??= {
@@ -6011,13 +6048,22 @@ export default class ForgePlugin extends Plugin {
         }
       },
       remember: (snippetId, raw) => {
-        this.settings.panelStripValues =
-          rememberPanelValues(this.settings.panelStripValues ?? {}, snippetId, raw);
+        // The signature the strip built this note's controls under. Absent (it always is set by the build that preceded the run, but
+        // an unknown signature must not be invented): remember the values without one, i.e. the legacy, name-filtered recall.
+        const sig = this.stripSignatures.get(snippetId);
+        const next = sig === undefined
+          ? { memory: { ...(this.settings.panelStripValues ?? {}), [snippetId]: { ...raw } }, signatures: this.settings.panelStripSignatures ?? {} }
+          : rememberPanelValuesWithSignature(
+            this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {}, snippetId, raw, sig);
+        this.settings.panelStripValues = next.memory;
+        this.settings.panelStripSignatures = next.signatures;
         void this.saveSettings();
       },
       forget: (snippetId) => {
-        this.settings.panelStripValues =
-          forgetPanelValues(this.settings.panelStripValues ?? {}, snippetId);
+        const next = forgetPanelNote(
+          this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {}, snippetId);
+        this.settings.panelStripValues = next.memory;
+        this.settings.panelStripSignatures = next.signatures;
         void this.saveSettings();
       },
       // THE READ PATH CLAMPS, not the write path: a dangerous value can
@@ -6177,8 +6223,14 @@ export default class ForgePlugin extends Plugin {
     const widgets = parseInputWidgets(frontmatter as Record<string, unknown> | null);
     // [2026-08-06-0100 (A)] widgets start fresh; typed values keep their
     // intentional pre-fill.
+    // Drain 2026-10-15-2100 §2 — recall only what was remembered under THIS note's current control set (see the signature note in
+    // forge-panel-strip-core.ts); the signature is kept so `remember` below stores the value under the one it was typed in.
+    const signature = stripInputSignature({ inputs, enums, widgets, derivedEnums });
+    this.stripSignatures.set(snippetId, signature);
     const cached = stripWidgetSeededInputs(
-      recallPanelValues(this.settings.panelStripValues ?? {}, snippetId), widgets);
+      recallValidPanelValues(
+        this.settings.panelStripValues ?? {}, this.settings.panelStripSignatures ?? {}, snippetId, signature, inputs),
+      widgets);
 
     const sources: InputFieldSources = {
       inputs, cached, enums, widgets, defaults, derivedEnums,

@@ -266,6 +266,87 @@ export function forgetPanelValues(
   return out;
 }
 
+// ----------------------------------------- value memory outlives its note
+
+// Drain 2026-10-15-2100 §2 — the memory above is keyed by snippet id alone. A note deleted and re-created at the same path kept the
+// OLD note's values; where the old note's input was a dropdown (options derived from the transpiled `# Python`) and the new one has no
+// signature yet, the same input rendered as free text, pre-filled with the old choice. Three defences live here, all pure:
+//   - forget / follow a note on delete / rename;
+//   - remember the INPUT SIGNATURE a value was typed under, and drop the memory when the note's signature is no longer that one;
+//   - for memory written before signatures existed, keep only the inputs the note still declares.
+
+/** snippet id -> the signature its remembered values were stored under. */
+export type PanelSignatures = Record<string, string>;
+
+/** Everything that shapes the strip's CONTROLS for one note, as a stable string: declared input names (in order), and per input
+ *  which source its control comes from and what that source offers. Values and defaults are deliberately NOT part of it — a changed
+ *  default must not wipe what the person last chose. */
+export function stripInputSignature(
+  sources: Pick<InputFieldSources, 'inputs' | 'enums' | 'widgets' | 'derivedEnums'>,
+): string {
+  const { inputs, enums = {}, widgets = {}, derivedEnums = {} } = sources;
+  return JSON.stringify(inputs.map((name) => [
+    name,
+    widgets[name] !== undefined ? ['widget', String(widgets[name])]
+      : enums[name] !== undefined ? ['enum', [...enums[name]].sort()]
+      : derivedEnums[name] !== undefined ? ['derived', [...derivedEnums[name]].sort()]
+      : ['text'],
+  ]));
+}
+
+export function rememberPanelValuesWithSignature(
+  memory: PanelValueMemory,
+  signatures: PanelSignatures,
+  snippetId: string,
+  values: Record<string, string>,
+  signature: string,
+): { memory: PanelValueMemory; signatures: PanelSignatures } {
+  return {
+    memory: rememberPanelValues(memory, snippetId, values),
+    signatures: { ...signatures, [snippetId]: signature },
+  };
+}
+
+/** What the strip may pre-fill. A stored signature that is not the current one means the values belong to a different control set:
+ *  nothing is recalled. No stored signature (memory from before this existed): recall, but only inputs the note still declares
+ *  when the caller passes them. */
+export function recallValidPanelValues(
+  memory: PanelValueMemory,
+  signatures: PanelSignatures,
+  snippetId: string,
+  currentSignature: string,
+  declaredInputs?: string[],
+): Record<string, string> {
+  const stored = signatures[snippetId];
+  if (stored !== undefined) return stored === currentSignature ? recallPanelValues(memory, snippetId) : {};
+  const recalled = recallPanelValues(memory, snippetId);
+  if (declaredInputs === undefined) return recalled;
+  return Object.fromEntries(Object.entries(recalled).filter(([name]) => declaredInputs.includes(name)));
+}
+
+export function forgetPanelNote(
+  memory: PanelValueMemory,
+  signatures: PanelSignatures,
+  snippetId: string,
+): { memory: PanelValueMemory; signatures: PanelSignatures } {
+  const sigs = { ...signatures };
+  delete sigs[snippetId];
+  return { memory: forgetPanelValues(memory, snippetId), signatures: sigs };
+}
+
+export function renamePanelNote(
+  memory: PanelValueMemory,
+  signatures: PanelSignatures,
+  oldId: string,
+  newId: string,
+): { memory: PanelValueMemory; signatures: PanelSignatures } {
+  const mem = { ...memory };
+  const sigs = { ...signatures };
+  if (oldId in mem) { mem[newId] = mem[oldId]; delete mem[oldId]; }
+  if (oldId in sigs) { sigs[newId] = sigs[oldId]; delete sigs[oldId]; }
+  return { memory: mem, signatures: sigs };
+}
+
 // ------------------------------------------------------- run wiring
 
 export interface StripSubmission {

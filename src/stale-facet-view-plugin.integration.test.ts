@@ -122,3 +122,38 @@ test('CM6 integration: synced/description-canonical → downstream `— derived 
     harness.destroy();
   }
 });
+
+// Drain 2026-10-15-2100 §1 — the panel must say what the note's own `source_facet` says when the hash probe answers `synced`.
+// CCQA: on the shipped `hello_world` (`source_facet: recipe`, all hashes consistent) the headings read "Description — source" and
+// "Recipe — derived from Description". The probe's `synced` was being read as Description. Real shipped bytes, not a hand-built twin.
+import fs from 'node:fs';
+import path from 'node:path';
+
+const HELLO_WORLD = fs.readFileSync(
+  path.resolve(import.meta.dirname, '..', 'assets', 'vaults', 'forge-tutorial', '01-hello', 'hello_world.md'), 'utf8');
+
+test('CM6 integration (real hello_world): source_facet: recipe + consistent hashes → Recipe "— source", Description "— ignored", Python "— derived from Recipe"', async () => {
+  const harness = createIntegrationHarness();
+  try {
+    const view = harness.mount(HELLO_WORLD, [staleFacetViewPlugin]);
+    await waitForDecorations(harness);
+    const html = view.contentDOM.innerHTML;
+    assert.ok(!html.includes('derived from Description'), `no facet is derived from the Description on a recipe-source note; got: ${html.slice(0, 900)}`);
+    const suffixes = [...html.matchAll(/— (source|ignored|derived from [A-Za-z]+(?:, out of date)?)/g)].map((m) => m[0]);
+    assert.deepEqual(suffixes, ['— ignored', '— source', '— derived from Recipe'], 'Description, Recipe, Python — in document order');
+  } finally {
+    harness.destroy();
+  }
+});
+
+test('CM6 integration (real hello_world): the same bytes with source_facet: description keep the Description-source reading (non-vacuity of the fix)', async () => {
+  const harness = createIntegrationHarness();
+  try {
+    const view = harness.mount(HELLO_WORLD.replace('source_facet: recipe', 'source_facet: description'), [staleFacetViewPlugin]);
+    await waitForDecorations(harness);
+    const suffixes = [...view.contentDOM.innerHTML.matchAll(/— (source|ignored|derived from [A-Za-z]+(?:, out of date)?)/g)].map((m) => m[0]);
+    assert.equal(suffixes[0], '— source', 'Description is the source when the note says so');
+  } finally {
+    harness.destroy();
+  }
+});

@@ -217,7 +217,9 @@ test('the slot-miss handler persists its resolutions', () => {
   const sites = (src: string) => src.split('\n').filter((l) => !l.trim().startsWith('//') && l.includes('writeSlotsSection(')).length;
   assert.equal(sites(MAIN), 1, 'handleSlotCacheMiss (the RUN path) still persists its resolutions in main.ts');
   assert.equal(sites(CORE), 1, 'writeSourcePythonBack persists through applyPythonWriteBack');
-  assert.ok(MAIN.includes('applyPythonWriteBack('), 'and main.ts routes that write through the core');
+  // Drain 2026-10-15-2100 §1 — main.ts now calls `planPythonWriteBack` (the library write-nothing guard, which wraps the same
+  // `applyPythonWriteBack`); the mechanism is unchanged: main.ts routes that write through the core.
+  assert.ok(MAIN.includes('planPythonWriteBack('), 'and main.ts routes that write through the core');
 });
 
 test('no production call site strips # Slots any more', () => {
