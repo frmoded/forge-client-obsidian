@@ -75,3 +75,34 @@ for (const vault of ['forge-moda', 'music-theory', 'forge-tutorial', 'music-core
     assert.deepEqual(failures, []);
   });
 }
+
+// Drain 2026-10-18-1200 — the test above iterates the Run writer ALONE the second time. A churn between an open-time writer and the Run
+// writer (the backfill's lineage repair undoing the Run writer's root, and vice versa) is invisible to it. The property that was missing:
+// once a note is what the plugin would write, merely OPENING it — in an authoring vault, where the open-time writers are not
+// library-gated — writes nothing, and so does the next open-then-Run cycle.
+import { restampNote } from '../scripts/restamp-library-notes-core.mjs';
+
+for (const vault of ['forge-moda', 'music-theory', 'forge-tutorial', 'music-core']) {
+  test(`${vault}: once restamped, a note is left alone by the file-open backfill and the layout-ready sweep (no open <-> Run churn)`, async () => {
+    const dir = path.join(VAULTS, vault);
+    let actionNotes = 0;
+    const failures: string[] = [];
+    for (const file of mdFiles(dir)) {
+      const body = fs.readFileSync(file, 'utf8');
+      if (str(body, 'type') !== 'action' || !isV2Shape(body)) continue;
+      actionNotes++;
+      const rel = `${vault}/${path.relative(dir, file).split(path.sep).join('/')}`;
+      const { next: settled } = await restampNote(body);
+      const open = await backfillV113Shape(settled, H);
+      if (open.changed) failures.push(`${rel}: opening the restamped note still writes (${JSON.stringify(open.actions)})`);
+      const seed = await planOpenSeed(settled, { ...H, getFrontmatterField: (b, k) => getFrontmatterField(b, k) });
+      if (seed.write) failures.push(`${rel}: the layout-ready sweep still writes the restamped note`);
+      if (extractPythonSection(settled) !== null) {
+        const afterRun = await writeBack(settled);
+        if (afterRun !== settled) failures.push(`${rel}: Run still rewrites the restamped note`);
+      }
+    }
+    assert.ok(actionNotes > 0, `${vault}: the vault must contain V2 action notes, or this test proves nothing`);
+    assert.deepEqual(failures, []);
+  });
+}

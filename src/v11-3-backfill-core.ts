@@ -309,7 +309,16 @@ export async function backfillV113Shape(
       const recipeHash = helpers.getFrontmatterField(workingBody, 'recipe_hash');
       const recipeDerivedFrom = helpers.getFrontmatterField(
         workingBody, 'recipe_derived_from_source_hash');
+      // Drain 2026-10-18-1200 — only a note whose SOURCE is (or may be) the Description can carry that residue. Since drain
+      // 2026-10-15-2100 the Run writer roots a `source_facet: recipe` note's lineage at the RECIPE hash — the same signature, correctly
+      // — and a Python-source note derives from nothing above it. Repairing those back to the Description hash undid the Run write on
+      // every open (and Run undid the repair): a cross-writer churn. A note with no stored source_facet (or the legacy
+      // canonical_facet naming description) is the original v0.2.243 population and still repairs.
+      const storedSource = helpers.getFrontmatterField(workingBody, 'source_facet')
+        ?? helpers.getFrontmatterField(workingBody, 'canonical_facet');
+      const sourceMayBeDescription = storedSource !== 'recipe' && storedSource !== 'python';
       const looksLikeBugResidue =
+        sourceMayBeDescription &&
         recipeHash !== null &&
         pythonStamp === recipeHash &&
         recipeDerivedFrom === currentDescStamp;

@@ -28,3 +28,5 @@ music-theory/rhythm_data/rhythm_extended_fills.md
 music-theory/rhythm_data/rhythm_extended_ghost.md
 music-theory/rhythm_data/rhythm_multiplex.md
 music-theory/rhythm_data/rhythm_sequence.md
+music-theory/slow_burn/chorus.md
+music-theory/slow_burn/solo_chorus.md

@@ -410,6 +410,70 @@ def compute(context):
   );
 });
 
+// Drain 2026-10-18-1200 — the repair above and the Run writer disagreed about a RECIPE-source note. Since drain 2026-10-15-2100 the Run
+// writer roots `python_derived_from_source_hash` at the SOURCE facet, so a `source_facet: recipe` note carries the Recipe hash there — and
+// (its legacy `recipe_derived_from_source_hash` still being the Description hash) that is byte-for-byte the "v0.2.243 bug residue"
+// signature, which this repair rewrites back to the Description hash. Opening the note undid what Run had written; Run undid the open.
+// Not a property of any one writer: a CROSS-WRITER churn (the v0.2.249 strip <-> v0.2.251 keep class), which per-writer tests cannot see.
+const RECIPE_SOURCE_RECIPE_ROOTED = `---
+type: action
+description_hash: DDD
+recipe_hash: RRR
+python_hash: PPP
+recipe_derived_from_source_hash: DDD
+python_derived_from_source_hash: RRR
+source_facet: recipe
+recipe_derived_from_description_hash: DDD
+python_derived_from_recipe_hash: RRR
+---
+
+# Description
+
+x
+
+# Recipe
+
+y
+
+# Python
+
+\`\`\`python
+def compute(context):
+    return None
+\`\`\`
+`;
+
+test('v114-canonical-hash-repair: does NOT fire on a source_facet: recipe note — its Recipe-rooted lineage is correct, not residue', async () => {
+  const result = await backfillV113Shape(RECIPE_SOURCE_RECIPE_ROOTED, HELPERS);
+  assert.deepEqual(result.actions.canonicalHashRepairs, []);
+  assert.equal(getFrontmatterField(result.newBody, 'python_derived_from_source_hash'), 'RRR');
+  assert.equal(result.changed, false, 'opening a fully-stamped recipe-source note writes nothing');
+});
+
+test('v114-canonical-hash-repair: the same signature on a source_facet: python note is not residue either (Python derives from nothing above it)', async () => {
+  const result = await backfillV113Shape(RECIPE_SOURCE_RECIPE_ROOTED.replace('source_facet: recipe', 'source_facet: python'), HELPERS);
+  assert.deepEqual(result.actions.canonicalHashRepairs, []);
+});
+
+test('v114-canonical-hash-repair: the legacy canonical_facet name counts as a stored source too — a legacy recipe-source note is not repaired', async () => {
+  const legacy = RECIPE_SOURCE_RECIPE_ROOTED.replace('source_facet: recipe', 'canonical_facet: recipe');
+  const result = await backfillV113Shape(legacy, HELPERS);
+  assert.deepEqual(result.actions.canonicalHashRepairs, []);
+  assert.equal(getFrontmatterField(result.newBody, 'python_derived_from_source_hash'), 'RRR');
+});
+
+test('v114-canonical-hash-repair: non-vacuity — the SAME signature still repairs on a Description-source note and on a note with no stored source_facet (the original v0.2.248 cases)', async () => {
+  for (const variant of [
+    RECIPE_SOURCE_RECIPE_ROOTED.replace('source_facet: recipe', 'source_facet: description'),
+    RECIPE_SOURCE_RECIPE_ROOTED.replace('source_facet: recipe\n', ''),
+    RECIPE_SOURCE_RECIPE_ROOTED.replace('source_facet: recipe', 'canonical_facet: description'),      // the legacy field name
+  ]) {
+    const result = await backfillV113Shape(variant, HELPERS);
+    assert.deepEqual(result.actions.canonicalHashRepairs, ['python_derived_from_source_hash']);
+    assert.equal(getFrontmatterField(result.newBody, 'python_derived_from_source_hash'), 'DDD');
+  }
+});
+
 test('v114-canonical-hash-repair: does NOT fire on Recipe-canonical forge (recipe derived-from ≠ description_hash)', async () => {
   // If python_derived_from = recipe_hash but recipe_derived_from is
   // ALSO recipe_hash (not description_hash), this is a Recipe-canonical
