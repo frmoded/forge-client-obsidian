@@ -230,8 +230,17 @@ export function replaceOrInsertPythonHeading(
   return trimmed + '\n\n' + formatPythonHeading(pythonCode) + '\n';
 }
 
+/** The fenced `# Python` block for `pythonCode`.
+ *
+ *  Drain 2026-10-19-0900 §1 — the code is NORMALISED before it is fenced: leading blank lines and ALL trailing whitespace are dropped, so the
+ *  fence is always "```python\n<code>\n```" whatever the engine's output ends with. The engine's `resolve_action_code` returns Python that
+ *  ends with a newline (19 of the 35 shipped notes that carry a `# Python` section), and this used to wrap it verbatim — a blank line before
+ *  the closing fence on every hammer click / Run write-back (CCQA: shipped `hello_world`, md5 adc26a23… -> 953dee65…). The READER already
+ *  trims (`extractPythonSection`), so a section written without the blank line is read back as exactly the same Python and hashes the same;
+ *  nothing is lost, and `replacePythonSection` (the other writer) has always trimmed. */
 function formatPythonHeading(pythonCode: string): string {
-  return `# Python\n\n\`\`\`python\n${pythonCode}\n\`\`\``;
+  const code = pythonCode.replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, '');
+  return `# Python\n\n\`\`\`python\n${code}\n\`\`\``;
 }
 
 // --- # Slots strip (migration cleanup) ------------------------------

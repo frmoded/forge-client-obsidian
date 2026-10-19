@@ -3,11 +3,13 @@
 # A note belongs here once it ships fully derived (a # Python the engine would produce, and every hash the plugin would stamp), or —
 # for a bundled-library note — once the only thing that could have written it was an open-time writer that is now library-gated.
 # Regenerate the candidates with:  node scripts/check-open-time-writes.mjs --list-clean <vault dir>…
+forge-tutorial/01-hello/hello_world.md
 forge-tutorial/02-variables/fix_me.md
 forge-tutorial/02-variables/greeting.md
 forge-tutorial/03-functions/cheer.md
 forge-tutorial/03-functions/excited.md
 forge-tutorial/03-functions/function_inputs.md
+forge-tutorial/04-composition/describe_it.md
 forge-tutorial/04-composition/excited_word.md
 forge-tutorial/05-conditionals/mood.md
 forge-tutorial/07-data/show_colors.md

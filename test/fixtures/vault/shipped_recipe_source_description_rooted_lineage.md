@@ -29,5 +29,4 @@ def compute(context):
   name = 'Codey'
   greeting = (('Hello, ' + name) + '!')
   return 'greeting'
-
 ```

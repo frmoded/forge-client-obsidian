@@ -53,5 +53,4 @@ def compute(context, guess: Literal['major', 'minor', 'diminished', 'augmented']
       else:
         guess_index = 3
   return mcq(question='Which quality has intervals W-W-H-W-W-W-H?', choices=choices, correct_index=0, guess=guess_index, explanation='The W-W-H-W-W-W-H pattern is the definition of the major scale — see [[scales/Scales]].')
-
 ```
