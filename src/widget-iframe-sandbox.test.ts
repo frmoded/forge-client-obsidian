@@ -73,8 +73,19 @@ test('the shipped widgets use nothing an opaque origin takes away (the five gadg
   assert.deepEqual(offenders, []);
 });
 
-test('the clipboard Export has a fallback — a cross-origin frame is refused navigator.clipboard without a policy grant', () => {
-  const rhythm = widgetFiles().find((w) => w.name === 'rhythm_box.html')!.text;
-  assert.match(rhythm, /navigator\.clipboard\.writeText\(json\)\.then\([\s\S]*?,\s*legacyCopy\s*\)/, 'the rejection path falls back to execCommand');
-  assert.match(rhythm, /document\.execCommand\("copy"\)/);
+// Drain 2026-10-19-1800: this used to pin the Rhythm Box's Export JSON button ("rejection falls back to execCommand"); the button was removed in drain
+// 2026-10-19-1500 (it passed that drain only because the sibling checkout still held the old widget). The property it protected is general — a hosted
+// widget lives in a cross-origin sandboxed frame, where navigator.clipboard is refused without a policy grant — so it now covers EVERY widget.
+const usesClipboardWithoutFallback = (text: string) =>
+  /navigator\.clipboard/.test(text) && !(/navigator\.clipboard\.writeText\([^)]*\)\.then\([\s\S]*?,\s*\w+\s*\)/.test(text) && /document\.execCommand\(["']copy["']\)/.test(text));
+
+test('a widget that uses navigator.clipboard has a fallback — a cross-origin frame is refused it without a policy grant', () => {
+  const offenders = widgetFiles().filter((w) => usesClipboardWithoutFallback(w.text)).map((w) => w.name);
+  assert.deepEqual(offenders, []);
+});
+
+test('NON-VACUITY: the clipboard detector fires on a widget with no fallback and passes one that has it', () => {
+  assert.equal(usesClipboardWithoutFallback('navigator.clipboard.writeText(json);'), true);
+  assert.equal(usesClipboardWithoutFallback('navigator.clipboard.writeText(json).then(ok, legacyCopy); document.execCommand("copy");'), false);
+  assert.equal(usesClipboardWithoutFallback('no clipboard here'), false);
 });

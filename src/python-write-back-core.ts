@@ -74,12 +74,36 @@ export function applyPythonWriteBack(content: string, input: PythonWriteBackInpu
  *  worth a write: the content the cohort sees and runs is identical. */
 const LINEAGE_KEY_RE = /^(recipe|python)_derived_from_(source|description|recipe)_hash\s*:/;
 
-/** The comparison form: lineage lines dropped, trailing whitespace trimmed per line, trailing blank lines at EOF dropped. */
+/** Drop the blank lines at the END of every ```python fence (those directly before the closing fence). Drain 2026-10-19-1800: the pre-Iteration-82
+ *  writer fenced the engine's Python verbatim and baked such a line into every library note it ever wrote back; the current writer does not, so a library
+ *  note carrying one differs from what the writer produces by that line alone — whitespace, not content. Only python fences, only at their end: a blank
+ *  line inside the code, or at the end of any other fence, is not touched. */
+function dropBlankLinesAtEndOfPythonFences(lines: string[]): string[] {
+  const out: string[] = [];
+  let inPython = false;
+  for (const line of lines) {
+    if (!inPython) {
+      if (/^```python\s*$/.test(line)) inPython = true;
+      out.push(line);
+      continue;
+    }
+    if (/^```\s*$/.test(line)) {
+      while (out.length > 0 && out[out.length - 1] === '') out.pop();           // (lines are already right-trimmed by cosmeticForm)
+      inPython = false;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/** The comparison form: lineage lines dropped, trailing whitespace trimmed per line, blank lines at the end of a python fence and at EOF dropped. */
 function cosmeticForm(body: string): string {
-  return body
-    .split('\n')
-    .filter((line) => !LINEAGE_KEY_RE.test(line))
-    .map((line) => line.replace(/[ \t\r]+$/, ''))
+  return dropBlankLinesAtEndOfPythonFences(
+    body
+      .split('\n')
+      .filter((line) => !LINEAGE_KEY_RE.test(line))
+      .map((line) => line.replace(/[ \t\r]+$/, '')),
+  )
     .join('\n')
     .replace(/\n+$/, '');
 }
