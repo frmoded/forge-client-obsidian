@@ -119,8 +119,12 @@ test('Action Note uses the plugin\'s own scaffold (actionTemplate): type: action
 
 test('the dialog builds notes through those two functions and nothing else (no hand-built template in modal.ts)', () => {
   const modal = read('src/modal.ts');
-  assert.match(modal, /await actionTemplate\(this\.snippetName\)/);
-  assert.match(modal, /dataTemplate\(this\.snippetName, this\.contentType\)/);
+  // Drain 2026-10-20-1700 — pins the MECHANISM: the dialog's data content now comes from planNewNote -> dataNoteContent -> dataTemplate (or the rhythm template); an action
+  // note still from actionTemplate. If the dialog is restructured this SHOULD go red — reassess, don't just rewrite. The property (no hand-built template) is the last line.
+  assert.match(modal, /plan\.content \?\? await actionTemplate\(this\.snippetName\)/);
+  assert.match(read('src/new-note-core.ts'), /content: input\.type === 'data' \? dataNoteContent\(input\.name, input\.choice\) : null/);
+  assert.match(read('src/new-note-core.ts'), /isRhythmChoice\(choice\) \? rhythmNoteTemplate\(name\) : dataTemplate\(name, choice\)/);
+  assert.doesNotMatch(modal, /'type: data'|`type: data`/, 'no hand-built frontmatter in modal.ts');
 });
 
 // ---- placement -------------------------------------------------------------------------------------------
@@ -203,9 +207,15 @@ test('dialog + toolbar copy is content-type-agnostic: "New Forge note", "Note na
 });
 
 test('the dialog places notes via newNotePath and checks collisions via checkNewNotePath (no ad-hoc path literal for the text path)', () => {
+  // Drain 2026-10-20-1700 — pins the MECHANISM: the text path is decided by planNewNote, which calls newNotePath and checkNewNotePath; the binary branch still calls
+  // checkNewNotePath itself. If the dialog is restructured this SHOULD go red — reassess, don't just rewrite.
   const modal = read('src/modal.ts');
-  assert.match(modal, /const path = newNotePath\(/);
-  assert.match(modal, /checkNewNotePath\(/);
+  const core = read('src/new-note-core.ts');
+  assert.match(modal, /const plan = planNewNote\(\{/);
+  assert.match(modal, /const path = plan\.path;/);
+  assert.match(core, /const path = newNotePath\(input\.activeFilePath, input\.name, input\.managedTopLevelDirs\);/);
+  assert.match(core, /checkNewNotePath\(path, input\.name, input\.exists\)/);
+  assert.match(modal, /checkNewNotePath\(/, 'the binary branch');
 });
 
 // ---- drain 2026-10-04-2200: binary placement (F1), stale errors (F3), `/` leak (F4), jpeg quoting (F5) ----

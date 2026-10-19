@@ -148,7 +148,7 @@ test('the mode switch refuses (with a Notice naming why) before any pane switche
 });
 
 test('registration: main.ts registers the view, command and menus once, via registerRhythmEdit, lending it the setting and two vault-level actions', () => {
-  assert.match(main, /import \{ registerRhythmEdit \} from '\.\/rhythm-edit-view\.ts';/);
+  assert.match(main, /import \{ registerRhythmEdit, type RhythmEditHandle \} from '\.\/rhythm-edit-view\.ts';/);   // drain 2026-10-20-1700: it now also returns the Beat Box opener
   assert.equal([...code(main).matchAll(/registerRhythmEdit\(this, \{/g)].length, 1);
   assert.match(code(main), /isDefaultViewEnabled: \(\) => this\.settings\.openRhythmNotesInBeatBox,\s*createNewNote: \(\) => \{ void this\.createNewSnippet\(\); \},\s*toggleEdgesPanel: \(\) => \{ void this\.toggleEdgesView\(\); \},/);
   const body = code(view);

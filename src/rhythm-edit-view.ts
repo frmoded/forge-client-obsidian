@@ -334,7 +334,13 @@ function describeLeaf(app: App, leaf: WorkspaceLeaf): LeafInfo | null {
 
 /** Register the views (Beat Box; Score on the music edition), the commands (visible only on a `type: data`, `content_type: json` note),
  *  the file / editor context-menu items, the mode buttons on matching notes' markdown views, and the default-view swap. */
-export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, 'isDefaultViewEnabled' | 'createNewNote' | 'toggleEdgesPanel'>): void {
+/** What the rest of the plugin may ask of the Beat Box once it is registered. Drain 2026-10-20-1700: the "New Forge note" dialog opens a rhythm note it just created in the Beat Box
+ *  through this — the same opener as the command and the embed's Open note (a tab already showing the note is reused). */
+export interface RhythmEditHandle {
+  openRhythmNote(file: TFile, from?: WorkspaceLeaf | null): Promise<void>;
+}
+
+export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, 'isDefaultViewEnabled' | 'createNewNote' | 'toggleEdgesPanel'>): RhythmEditHandle {
   const app = plugin.app;
   const edition = musicEdition.id;
 
@@ -468,4 +474,5 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
       if (leaf.view instanceof RhythmScoreView) leaf.view.stopAudio();
     }
   });
+  return { openRhythmNote: (file: TFile, from?: WorkspaceLeaf | null) => openRhythmEditor(app, file, hooks, from) };
 }

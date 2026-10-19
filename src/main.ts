@@ -102,7 +102,7 @@ import {
 import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
-import { registerRhythmEdit } from './rhythm-edit-view.ts';
+import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import {
   readExpandedState,
@@ -402,6 +402,8 @@ export default class ForgePlugin extends Plugin {
   // Used as a fallback for snippet metadata when the local .md doesn't carry
   // it (e.g., an empty stub overlaying a builtin).
   private snippetInventory: Record<string, Array<{ id: string; type: string; inputs: string[] }>> = {};
+  /** Drain 2026-10-20-1700 — set by registerRhythmEdit; lets the "New Forge note" dialog open a rhythm note it just made in the Beat Box. */
+  private rhythmEdit: RhythmEditHandle | null = null;
   private freezeCache: { caller?: string; callee?: string } = {};
   // v0.2.7: closed-beta polish. With no uvicorn running,
   // writeGeneratedCode's syncDependencies call hits ECONNREFUSED on
@@ -765,7 +767,7 @@ export default class ForgePlugin extends Plugin {
     // outright rather than repurposed.
     registerHtmlEmbedProcessor(this);
     // Beat-as-data Phase 5 (drain 2026-10-05-2100): "Edit rhythm in Rhythm Box" — edit a rhythm data note through the widget.
-    registerRhythmEdit(this, {
+    this.rhythmEdit = registerRhythmEdit(this, {
       isDefaultViewEnabled: () => this.settings.openRhythmNotesInBeatBox,
       createNewNote: () => { void this.createNewSnippet(); },
       toggleEdgesPanel: () => { void this.toggleEdgesView(); },
@@ -2015,7 +2017,10 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       console.error('createNewSnippet: connect failed before opening New Snippet modal; falling back to default content_types', e);
     }
-    new ForgeSnippetModal(this.app, contentTypes).open();
+    new ForgeSnippetModal(this.app, contentTypes, {
+      // Drain 2026-10-20-1700 — a rhythm note the dialog just made opens in the Beat Box, in the tab it was opened in.
+      openRhythmNote: (file, leaf) => this.rhythmEdit?.openRhythmNote(file, leaf) ?? Promise.resolve(),
+    }).open();
   }
 
   // Adapter handed to the Forge ribbon action module so it never has to

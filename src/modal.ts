@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting } from 'obsidian';
+import { App, Modal, Notice, Setting, type TFile, type WorkspaceLeaf } from 'obsidian';
 import { forgeNotice } from './forge-notice.ts';
 import { type InputEnums } from './input-enums-core.ts';
 import { type DerivedEnums } from './derived-enums-core.ts';
@@ -33,11 +33,13 @@ import {
   binaryNotePaths,
   binaryTemplate,
   checkNewNotePath,
-  dataTemplate,
+  contentChoices,
+  contentTypeDescription,
   describeNewNoteLocation,
   isBinaryContentType,
+  isRhythmChoice,
   newNoteFolder,
-  newNotePath,
+  planNewNote,
   validateNoteName,
 } from './new-note-core.ts';
 import { BUNDLED_VAULT_NAME_SET } from './bundled-vault-extraction-core.ts';
@@ -195,7 +197,8 @@ export class ForgeSnippetModal extends Modal {
   // contentTypes comes from /connect's response; the caller fetches it before
   // opening the modal. Falls back to a hardcoded list if absent (older backend
   // or /connect failed) so the modal still works without a live server.
-  constructor(app: App, contentTypes?: string[]) {
+  // `hooks.openRhythmNote` (drain 2026-10-20-1700): how a created rhythm note is opened in the Beat Box (the plugin's own opener).
+  constructor(app: App, contentTypes?: string[], private readonly hooks: { openRhythmNote?(file: TFile, leaf: WorkspaceLeaf): Promise<void> } = {}) {
     super(app);
     this.contentTypes = (contentTypes && contentTypes.length > 0)
       ? contentTypes
@@ -248,12 +251,14 @@ export class ForgeSnippetModal extends Modal {
     // v0.2.108 — action shape selector removed.
     this.contentTypeSetting = new Setting(contentEl)
       .setName('Content type')
-      .setDesc('Format of the data payload (only used for Data notes)')
+      .setDesc(contentTypeDescription(this.contentType))
       .addDropdown(drop => {
-        for (const ct of this.contentTypes) drop.addOption(ct, ct);
+        // Drain 2026-10-20-1700 — the backend's list plus "Rhythm (Beat Box)" right after json (new-note-core.ts contentChoices).
+        for (const c of contentChoices(this.contentTypes)) drop.addOption(c.value, c.label);
         drop.setValue(this.contentType).onChange(v => {
           this.contentType = v;
           this.onFieldEdited();
+          this.contentTypeSetting?.setDesc(contentTypeDescription(v));   // drain 2026-10-20-1700: the sentence under the menu follows the choice
           this.updateContentTypeVisibility();
         });
       });
@@ -370,35 +375,30 @@ export class ForgeSnippetModal extends Modal {
       return;
     }
 
-    // beat_as_data Phase 0.5: the active file's folder (vault root when none, or when the active file is
-    // inside a plugin-managed bundled library folder) — see newNotePath in new-note-core.ts.
-    const path = newNotePath(
-      this.app.workspace.getActiveFile()?.path, this.snippetName, BUNDLED_VAULT_NAME_SET,
-    );
-
-    // v0.2.236 drain 2026-07-02-2130 — pre-flight duplicate check.
-    // Path-scoped only (per §1.3 pushback): naming a note the same as
-    // one in another subdirectory is fine — Forge resolves by path.
-    // Only the EXACT PATH the new note would land at gets checked.
-    const check = checkNewNotePath(
-      path, this.snippetName, (p) => this.app.vault.getAbstractFileByPath(p) !== null,
-    );
-    if (check.ok === false) {
-      this.showValidationError(check.message);
-      void forgeNotice(
-        this.app,
-        `Note creation failed: "${path}" already exists.`,
-        'error',
-      );
+    // beat_as_data Phase 0.5 + drain 2026-10-20-1700: ONE decision (planNewNote in new-note-core.ts) — the name check, the active file's folder (vault root when none, or when the
+    // active file is inside a plugin-managed bundled library folder), the duplicate check on that exact path (v0.2.236: path-scoped, nothing is overwritten or auto-suffixed) and,
+    // for a data note, its content (the Rhythm (Beat Box) choice makes the starter rhythm note).
+    const plan = planNewNote({
+      activeFilePath: this.app.workspace.getActiveFile()?.path,
+      name: this.snippetName,
+      type: this.snippetType,
+      choice: this.contentType,
+      managedTopLevelDirs: BUNDLED_VAULT_NAME_SET,
+      exists: (p) => this.app.vault.getAbstractFileByPath(p) !== null,
+    });
+    if (plan.ok === false) {
+      this.showValidationError(plan.message);
+      // the notices keep the wording they always had: the duplicate one names the path, the name one carries Obsidian's sentence
+      void forgeNotice(this.app, plan.reason === 'exists' ? `Note creation failed: "${plan.path}" already exists.` : `Note creation failed: ${plan.message}`, 'error');
       return;
     }
+    const path = plan.path;
 
     // Drain 2026-08-03-1610 — actionTemplate is async now: it stamps
     // the full hexa-state at creation, and the hashes come from
     // SubtleCrypto. submit() is already async, so this is an await.
-    const content = this.snippetType === 'data'
-      ? dataTemplate(this.snippetName, this.contentType)
-      : await actionTemplate(this.snippetName);
+    const content = plan.content ?? await actionTemplate(this.snippetName);
+    const isRhythm = this.snippetType === 'data' && isRhythmChoice(this.contentType);
 
     let file;
     try {
@@ -418,7 +418,7 @@ export class ForgeSnippetModal extends Modal {
 
     void forgeNotice(
       this.app,
-      `Created ${this.snippetType} note: ${path}`,
+      `Created ${isRhythm ? 'rhythm' : this.snippetType} note: ${path}`,
       'success',
     );
     this.close();
@@ -427,7 +427,11 @@ export class ForgeSnippetModal extends Modal {
     // whole point of the data snippet is the body content they're about to
     // paste, so saving them a second click matters.
     try {
-      await this.app.workspace.getLeaf(false).openFile(file);
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(file);
+      // Drain 2026-10-20-1700 — a rhythm note opens in the BEAT BOX, in this tab and focused, through the plugin's own opener (the Phase 5c default-view swap would do the same
+      // once the metadata cache has the frontmatter; this does not wait for it, and it is idempotent with it).
+      if (isRhythm) await this.hooks.openRhythmNote?.(file, leaf);
     } catch (e) {
       console.error('ForgeSnippetModal.submit: could not open newly created snippet', e);
     }

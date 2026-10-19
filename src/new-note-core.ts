@@ -8,6 +8,8 @@
 // (dataTemplate, FENCE_LANG, SEED, isBinaryContentType, the duplicate-name message) and extended only where
 // this drain's scope adds behavior (yaml/musicxml, active-folder placement, location text).
 
+import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
+
 /** Text content types the engine can deserialize — MUST stay equal to TEXT_CONTENT_TYPES in
  *  forge/core/serialization.py (pinned by new-note-core.test.ts, which reads the engine file the plugin
  *  bundles, so drift fails the suite instead of silently hiding a type from the dialog). */
@@ -58,6 +60,102 @@ export function dataTemplate(name: string, contentType: string, content?: string
     '```',
     '',
   ].join('\n');
+}
+
+// ---- the Rhythm (Beat Box) choice (drain 2026-10-20-1700) ---------------------------------------------------------------------
+//
+// The dialog's data kinds are the Content type dropdown, so "make a rhythm note" is one more entry there. It is NOT a backend content type: the note it makes is an
+// ordinary `type: data`, `content_type: json` note whose json is a valid rhythm pattern, which the Phase 5c allow-list (rhythm-default-view-core.ts) opens in the Beat Box.
+
+/** The dropdown value of the choice. Recognised only by exact match. */
+export const RHYTHM_CHOICE = 'rhythm';
+export const RHYTHM_CHOICE_LABEL = 'Rhythm (Beat Box)';
+
+export function isRhythmChoice(choice: string): boolean {
+  return choice === RHYTHM_CHOICE;
+}
+
+export interface ContentChoice { value: string; label: string }
+
+/** The Content type menu: the backend's list in its order (so the first entry, the default, is unchanged) with "Rhythm (Beat Box)" right after `json` — or at the end when the
+ *  list has no json. Never doubled. */
+export function contentChoices(contentTypes: readonly string[]): ContentChoice[] {
+  const plain = (value: string): ContentChoice => ({ value, label: value });
+  const rhythm: ContentChoice = { value: RHYTHM_CHOICE, label: RHYTHM_CHOICE_LABEL };
+  if (contentTypes.includes(RHYTHM_CHOICE)) return contentTypes.map((v) => (v === RHYTHM_CHOICE ? rhythm : plain(v)));
+  const out: ContentChoice[] = [];
+  for (const v of contentTypes) {
+    out.push(plain(v));
+    if (v === 'json') out.push(rhythm);
+  }
+  if (!contentTypes.includes('json')) out.push(rhythm);
+  return out;
+}
+
+/** The sentence under the Content type menu. */
+export function contentTypeDescription(choice: string): string {
+  return isRhythmChoice(choice)
+    ? 'Makes a one-bar kick and snare groove that opens in the Beat Box, where every change saves itself.'
+    : 'Format of the data payload (only used for Data notes)';
+}
+
+/** The starter pattern: one plain bar of 4/4 in sixteenth-note steps — kick on beats 1 and 3, snare on 2 and 4 — so Play has something to say. Plain hits only (`true`),
+ *  never an invented velocity. */
+export const RHYTHM_STARTER: RhythmData = {
+  time_signature: '4/4',
+  steps: 16,
+  group_size: 4,
+  swing_pct: 0,
+  tempo_bpm: 100,
+  channels: {
+    kick: [true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false],
+    snare: [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
+  },
+};
+
+/** A starter rhythm data note. The json block is `formatRhythmJson` — the Beat Box's own writer — so the first autosave rewrites only the cell that changed. The description is
+ *  a double-quoted scalar (a JSON string is a YAML one), so a name with a quote, a backslash or a `#` cannot break the frontmatter. */
+export function rhythmNoteTemplate(name: string): string {
+  return [
+    '---',
+    'type: data',
+    'content_type: json',
+    `description: ${JSON.stringify(`${name} — a one-bar rhythm for the Beat Box: kick on beats 1 and 3, snare on 2 and 4.`)}`,
+    '---',
+    '',
+    '```json',
+    formatRhythmJson(RHYTHM_STARTER),
+    '```',
+    '',
+  ].join('\n');
+}
+
+/** The text of a new DATA note for the chosen kind. */
+export function dataNoteContent(name: string, choice: string): string {
+  return isRhythmChoice(choice) ? rhythmNoteTemplate(name) : dataTemplate(name, choice);
+}
+
+export type NewNotePlan =
+  | { ok: true; path: string; content: string | null }
+  | { ok: false; reason: 'empty' | 'name' | 'exists'; message: string; path?: string };
+
+/** Everything the dialog decides before it writes a non-binary note, in one place: the name is checked first (before any vault lookup), then the path (the active file's folder, or the
+ *  vault root inside a plugin-managed library), then that exact path must be free, then the content (data notes only — an action note's content is built by the dialog). */
+export function planNewNote(input: {
+  activeFilePath: string | null | undefined;
+  name: string;
+  type: 'action' | 'data';
+  choice: string;
+  managedTopLevelDirs: ReadonlySet<string>;
+  exists: (path: string) => boolean;
+}): NewNotePlan {
+  if (!input.name) return { ok: false, reason: 'empty', message: 'Snippet name is required.' };
+  const nameCheck = validateNoteName(input.name);
+  if (nameCheck.ok === false) return { ok: false, reason: 'name', message: nameCheck.message };
+  const path = newNotePath(input.activeFilePath, input.name, input.managedTopLevelDirs);
+  const free = checkNewNotePath(path, input.name, input.exists);
+  if (free.ok === false) return { ok: false, reason: 'exists', message: free.message, path };
+  return { ok: true, path, content: input.type === 'data' ? dataNoteContent(input.name, input.choice) : null };
 }
 
 export function isBinaryContentType(ct: string): boolean {
