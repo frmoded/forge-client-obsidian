@@ -156,7 +156,7 @@ function gateTree(siblings) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'otw-tree-'));
   const client = path.join(root, 'forge-client-obsidian');
   fs.mkdirSync(path.join(client, 'scripts'), { recursive: true });
-  for (const f of ['check-open-time-writes.mjs', 'check-open-time-writes-core.mjs']) fs.copyFileSync(path.join(__dirname, f), path.join(client, 'scripts', f));
+  for (const f of ['check-open-time-writes.mjs', 'check-open-time-writes-core.mjs', 'engine-recording.mjs']) fs.copyFileSync(path.join(__dirname, f), path.join(client, 'scripts', f));
   fs.symlinkSync(path.join(__dirname, '..', 'src'), path.join(client, 'src'));
   const book = path.join(client, 'assets', 'vaults', 'music-theory', 'exercises');
   fs.mkdirSync(book, { recursive: true });
@@ -198,7 +198,7 @@ test('non-vacuity: the same tree WITH a flagged note in assets/vaults IS red —
 });
 
 test('MECHANISM pin: the gate names no path outside its own root and runs no other process (if either changes, reassess independence — do not just rewrite)', () => {
-  for (const f of ['check-open-time-writes.mjs', 'check-open-time-writes-core.mjs']) {
+  for (const f of ['check-open-time-writes.mjs', 'check-open-time-writes-core.mjs', 'engine-recording.mjs']) {
     const src = fs.readFileSync(path.join(__dirname, f), 'utf8').replace(/\/\/.*$/gm, '');
     assert.doesNotMatch(src, /child_process|execSync|spawn|git /, `${f} starts no process`);
     assert.doesNotMatch(src, /["']\.\.["']\s*,\s*["']music|projects\/|homedir|process\.env\.HOME/i, `${f} names no sibling checkout`);

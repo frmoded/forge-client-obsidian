@@ -7,12 +7,15 @@
 //   run:   src/python-write-back-core.ts `applyPythonWriteBack` (the write that follows a Cmd-P Run / Forge click: `# Python`,
 //                                                           python_hash, lineage, english_hash heal)
 //
-// What this cannot see (it has no engine): whether the engine's transpile of the Recipe equals the shipped `# Python`. The run check
-// therefore asks the weaker, still useful question "given the note's OWN Python, would the writer change anything?" — which already
-// catches a missing `# Python`, a stale python_hash, wrong lineage, and the empty-SHA english_hash remnant. The suite
-// (shipped-note-read-only.test.ts) closes the remaining gap for the notes the gate requires, by running the real engine.
+// What it cannot do itself (it has no engine): transpile. The run check therefore has two models. Given the engine's RECORDED Python for the note
+// (`enginePython`, drain 2026-10-19-1530; scripts/engine-recording.mjs keeps the recording honest) it asks the real question: "given what the engine
+// returns, would the writer change this note?" — which is exactly what a hammer click / Run write-back does. Without a recording it falls back to
+// the weaker "given the note's OWN Python, would the writer change anything?" — which catches a missing `# Python`, a stale python_hash, wrong lineage
+// and the empty-SHA english_hash remnant, but is blind to a shipped Python that is not what the engine produces (and `auditVault` lists those notes
+// as `unrecorded`, so the fallback is never silent).
 import fs from "node:fs";
 import path from "node:path";
+import { recordedPythonFor } from "./engine-recording.mjs";
 import { backfillV113Shape } from "../src/v11-3-backfill-core.ts";
 import { planOpenSeed } from "../src/open-seed-core.ts";
 import { applyPythonWriteBack } from "../src/python-write-back-core.ts";
@@ -35,7 +38,7 @@ const backfillHelpers = {
 
 /** `{ applies, open: string[], run: string[] }` — each entry names one write. `applies` is false for anything the plugin's own
  *  open-time writers skip (not `type: action`, or not V2 shape): such a note is never rewritten by them. */
-export async function auditNote(body, { backfill = (b) => backfillV113Shape(b, backfillHelpers), libraryGated = false } = {}) {
+export async function auditNote(body, { backfill = (b) => backfillV113Shape(b, backfillHelpers), libraryGated = false, enginePython = null } = {}) {
   if (asString(body, "type") !== "action" || !isV2Shape(body)) return { applies: false, open: [], run: [] };
 
   const open = [];
@@ -81,16 +84,22 @@ export async function auditNote(body, { backfill = (b) => backfillV113Shape(b, b
     // the open backfill puts a stub there first; Run then replaces the stub with the engine's transpile
     run.push("adds a # Python section (none shipped)");
   } else if (python !== null) {
+    // `enginePython` (recorded): what Run would write is the ENGINE's output; otherwise the note's own Python stands in for it.
+    const runPython = typeof enginePython === "string" ? enginePython : python;
     const written = applyPythonWriteBack(afterOpen, {
-      python,
-      pythonHash: await computeFacetHash(python),
+      python: runPython,
+      pythonHash: await computeFacetHash(runPython),
       englishHash: null, // V2 notes carry no `# English` facet, so englishHashForStamp(…) is null: the writer writes none (and heals the remnant)
       sourceLayer: await whichLayerIsSource(afterOpen, {
         extractDescription, extractRecipeSection, extractPythonSection, getFrontmatterField: asString,
       }),
       resolvedSlots: null,
     });
-    if (written !== afterOpen) run.push("rewrites # Python / python_hash / lineage / english_hash");
+    if (written !== afterOpen) {
+      run.push(typeof enginePython === "string"
+        ? "rewrites # Python / python_hash / lineage — the engine's transpile of the Recipe differs from the shipped note"
+        : "rewrites # Python / python_hash / lineage / english_hash");
+    }
   }
   return { applies: true, open, run };
 }
@@ -106,21 +115,27 @@ function* walk(dir) {
 
 /** Every `.md` under `dir` that would be written on open or Run: `[{ path (relative, posix), open, run }]`, sorted; plus `clean`, the
  *  audited action notes that would NOT be (the candidates for scripts/open-time-readonly.txt). */
-export async function auditVault(dir, { libraryGated = false } = {}) {
+export async function auditVault(dir, { libraryGated = false, recording = null } = {}) {
   const out = [];
   const clean = [];
+  const unrecorded = [];
   let applicable = 0;
   for (const abs of walk(dir)) {
     const rel = path.relative(dir, abs).split(path.sep).join("/");
-    const r = await auditNote(fs.readFileSync(abs, "utf8"), { libraryGated });
+    const body = fs.readFileSync(abs, "utf8");
+    // recorded mode: the engine's Python for this note (null when unrecorded or recorded for a different Recipe)
+    const enginePython = recording ? recordedPythonFor(recording, `${path.basename(dir)}/${rel.replace(/\.md$/, "")}`, body) : null;
+    const r = await auditNote(body, { libraryGated, enginePython });
     if (!r.applies) continue;
     applicable++;
+    if (recording && enginePython === null) unrecorded.push(rel);
     if (r.open.length || r.run.length) out.push({ path: rel, open: r.open, run: r.run });
     else clean.push(rel);
   }
   out.sort((a, b) => a.path.localeCompare(b.path));
   clean.sort();
-  return { applicable, writing: out, clean };
+  unrecorded.sort();
+  return { applicable, writing: out, clean, unrecorded };
 }
 
 /** Parse `scripts/open-time-readonly.txt`: one `<vault>/<path>.md` per line, `#` comments and blanks ignored. */

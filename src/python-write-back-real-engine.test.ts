@@ -81,22 +81,23 @@ test('replaceOrInsertPythonHeading is idempotent on real engine output, and inse
  *  does change them — a REAL difference, which the plugin is right to persist. Found by this test's real-engine view of the library (drain
  *  2026-10-19-0900); fixing them means re-deriving the Python at the source (a transpile), which that drain's restamp tool never does.
  *  A RATCHET: a note may leave this list (when it is re-derived), never join it — a new offender fails the test below, and a listed note
- *  that no longer offends fails it too, so the list can only shrink. `onRatchet` marks the ones scripts/open-time-readonly.txt claims
- *  "pressing Run writes nothing" for — a claim the gate's own Run model (the note's OWN Python as input) cannot see to be false. */
-const NOT_DERIVED: Record<string, { why: string; onRatchet: boolean }> = {
-  'forge-tutorial/05-conditionals/weather': { why: 'stored Python is the stub `return None`', onRatchet: false },
-  'music-theory/exercises/build_seventh_chord': { why: 'stored signature lacks the inputs the engine now emits', onRatchet: false },
-  'music-theory/exercises/build_triad': { why: 'stored signature lacks the inputs the engine now emits', onRatchet: true },
-  'music-theory/exercises/chord_progression': { why: 'stored signature lacks the inputs the engine now emits', onRatchet: true },
-  'music-theory/exercises/guitar_play_smoke': { why: 'stored Python lacks the Recipe\'s default argument (Python older than its Recipe)', onRatchet: false },
-  'music-theory/exercises/piano_play_smoke': { why: 'stored signature lacks the inputs the engine now emits', onRatchet: true },
-  'music-theory/exercises/scale_construction_a_minor_piano': { why: 'stored Python is the stub `return None`', onRatchet: false },
-  'music-theory/exercises/scale_construction_f_major_piano': { why: 'stored Python is the stub `return None`', onRatchet: false },
-  'music-theory/exercises/scale_construction_g_major_piano': { why: 'stored Python is the stub `return None`', onRatchet: false },
-  'music-theory/percussion/loom': { why: 'hand-written Python (comments, different structure) under a Recipe', onRatchet: false },
-  'music-theory/slow_burn/chorus': { why: 'hand-written Python (comments, different structure) under a Recipe', onRatchet: true },
-  'music-theory/slow_burn/slow_burn': { why: 'hand-written Python (comments, different structure) under a Recipe', onRatchet: false },
-  'music-theory/slow_burn/solo_chorus': { why: 'hand-written Python (comments, different structure) under a Recipe', onRatchet: true },
+ *  that no longer offends fails it too, so the list can only shrink. (Until drain 2026-10-19-1530 five of them were on
+ *  scripts/open-time-readonly.txt, claiming "pressing Run writes nothing" — a claim the gate's old Run model could not see to be false; the gate
+ *  now models Run with the recorded engine output and the ratchet was corrected.) */
+const NOT_DERIVED: Record<string, { why: string }> = {
+  'forge-tutorial/05-conditionals/weather': { why: 'stored Python is the stub `return None`' },
+  'music-theory/exercises/build_seventh_chord': { why: 'stored signature lacks the inputs the engine now emits' },
+  'music-theory/exercises/build_triad': { why: 'stored signature lacks the inputs the engine now emits' },
+  'music-theory/exercises/chord_progression': { why: 'stored signature lacks the inputs the engine now emits' },
+  'music-theory/exercises/guitar_play_smoke': { why: 'stored Python lacks the Recipe\'s default argument (Python older than its Recipe)' },
+  'music-theory/exercises/piano_play_smoke': { why: 'stored signature lacks the inputs the engine now emits' },
+  'music-theory/exercises/scale_construction_a_minor_piano': { why: 'stored Python is the stub `return None`' },
+  'music-theory/exercises/scale_construction_f_major_piano': { why: 'stored Python is the stub `return None`' },
+  'music-theory/exercises/scale_construction_g_major_piano': { why: 'stored Python is the stub `return None`' },
+  'music-theory/percussion/loom': { why: 'hand-written Python (comments, different structure) under a Recipe' },
+  'music-theory/slow_burn/chorus': { why: 'hand-written Python (comments, different structure) under a Recipe' },
+  'music-theory/slow_burn/slow_burn': { why: 'hand-written Python (comments, different structure) under a Recipe' },
+  'music-theory/slow_burn/solo_chorus': { why: 'hand-written Python (comments, different structure) under a Recipe' },
 };
 
 /** The notes among `offenders` that are not on the named list — what the ratchet test below fails on. */
@@ -134,14 +135,7 @@ test('the named not-yet-derived notes really DO differ from the engine (non-vacu
   }
 });
 
-test('the ratchet\'s Run claim, checked against the real engine: which read-only-ratchet notes a real Run WOULD still write', () => {
-  const ratchet = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'scripts', 'open-time-readonly.txt'), 'utf8')
-    .split('\n').filter((l) => l && !l.startsWith('#')).map((l) => l.replace(/\.md$/, ''));
-  const claimedButWrites = Object.entries(NOT_DERIVED).filter(([rel]) => ratchet.includes(rel)).map(([rel]) => rel).sort();
-  assert.deepEqual(claimedButWrites, Object.entries(NOT_DERIVED).filter(([, v]) => v.onRatchet).map(([rel]) => rel).sort(),
-    'onRatchet in NOT_DERIVED must match scripts/open-time-readonly.txt');
-  assert.ok(claimedButWrites.length > 0, 'if this is empty the ratchet\'s claim has become true — delete this test and the onRatchet flags');
-});
+// (The ratchet's agreement with the real engine is now enforced where the ratchet lives: scripts/check-open-time-writes-recorded.test.mjs and the gate itself.)
 
 test('the recording is not stale: every recorded note still has the Recipe the shipped copy has (re-record with scripts/record-engine-transpile.py)', () => {
   const stale: string[] = [];

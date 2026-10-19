@@ -71,7 +71,11 @@ def main():
                 notes[rel] = {'recipe': (m.group(1) if m else '').strip(), 'python': py}
                 if has_python:
                     notes[rel]['note'] = txt          # the committed bytes the plugin would be rewriting
-    out = {'engine_sha': engine_sha, 'vault_shas': shas, 'notes': notes, 'unavailable': unavailable}
+    # The gate (check-open-time-writes) refuses a recording whose digest differs from the BUNDLED engine's: same scope rule as the sync script.
+    digest = subprocess.run(
+        ['node', '--no-warnings', '--experimental-strip-types', os.path.join(here, 'engine-bundle-digest.mjs'), os.path.join(forge, 'forge')],
+        capture_output=True, text=True, check=True).stdout.strip()
+    out = {'engine_sha': engine_sha, 'engine_bundle_digest': digest, 'vault_shas': shas, 'notes': notes, 'unavailable': unavailable}
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, 'w', encoding='utf-8') as fh:
         json.dump(out, fh, indent=1, sort_keys=True, ensure_ascii=False)

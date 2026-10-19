@@ -11,6 +11,11 @@
 //   node scripts/check-open-time-writes.mjs --report <dir>… same, for specific vault directories (e.g. a source vault repo)
 //   node scripts/check-open-time-writes.mjs --require <vault>/<path>.md <dir>…   gate named directories for the named notes only
 //   node scripts/check-open-time-writes.mjs --list-clean <dir>…   print the audited notes that would NOT be written (ratchet candidates)
+//   node scripts/check-open-time-writes.mjs --recording [file]   model Run with the engine's RECORDED Python (default file:
+//                                                           test/fixtures/engine-transpile/shipped-notes.json; on by default for the bundle gate)
+//   node scripts/check-open-time-writes.mjs --no-recording      the old model: Run = the writer fed the note's OWN Python (blind to a shipped
+//                                                           Python the engine would not produce)
+//   node scripts/check-open-time-writes.mjs --engine-dir <dir>  the bundled engine the recording is checked against (default assets/engine/forge)
 //   node scripts/check-open-time-writes.mjs --as-source-vault <dir>…   model OPENING the notes in an AUTHORING vault (the source repo
 //                                                           itself), where the open-time writers are NOT library-gated
 //
@@ -22,17 +27,24 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { auditVault, parseRequiredList } from "./check-open-time-writes-core.mjs";
+import { loadRecording, recordingProblems } from "./engine-recording.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
 const report = argv.includes("--report");
 const asSourceVault = argv.includes("--as-source-vault");
 const listClean = argv.includes("--list-clean");
+const noRecording = argv.includes("--no-recording");
 const required = [];
 const dirs = [];
+let recordingFile = null;
+let engineDirArg = null;
+const DEFAULT_RECORDING = path.join(ROOT, "test", "fixtures", "engine-transpile", "shipped-notes.json");
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === "--report" || argv[i] === "--as-source-vault" || argv[i] === "--list-clean") continue;
+  if (argv[i] === "--report" || argv[i] === "--as-source-vault" || argv[i] === "--list-clean" || argv[i] === "--no-recording") continue;
   if (argv[i] === "--require") { required.push(argv[++i]); continue; }
+  if (argv[i] === "--recording") { recordingFile = argv[i + 1] && !argv[i + 1].startsWith("--") && fs.existsSync(argv[i + 1]) && fs.statSync(argv[i + 1]).isFile() ? argv[++i] : DEFAULT_RECORDING; continue; }
+  if (argv[i] === "--engine-dir") { engineDirArg = argv[++i]; continue; }
   dirs.push(argv[i]);
 }
 const explicitDirs = dirs.length > 0;
@@ -56,12 +68,31 @@ if (!report && !explicitDirs) {
   if (fs.existsSync(list)) required.push(...parseRequiredList(fs.readFileSync(list, "utf8")));
 }
 
+// Recorded-engine mode (drain 2026-10-19-1530): on for the bundle gate by default, opt-in (--recording) for named directories. A recording that is
+// stale relative to the bundled engine or the shipped Recipes is refused BEFORE any note is judged: a gate that trusted it would be certifying
+// against an engine that is no longer the one shipped.
+let recording = null;
+if (!noRecording && (recordingFile !== null || (!explicitDirs && fs.existsSync(DEFAULT_RECORDING)))) {
+  recording = loadRecording(recordingFile ?? DEFAULT_RECORDING);
+  const problems = recordingProblems(recording, {
+    engineDir: engineDirArg ?? path.join(ROOT, "assets", "engine", "forge"),
+    vaultsDir: explicitDirs ? null : path.join(ROOT, "assets", "vaults"),
+  });
+  if (problems.length > 0) {
+    for (const p of problems) console.error(`  STALE   ${p}`);
+    console.error("\ncheck-open-time-writes: the engine recording the gate models Run with cannot be trusted (above).");
+    process.exit(1);
+  }
+}
+
 const writing = new Map(); // "<vault>/<rel>" -> { open, run }
+const unrecordedNotes = [];
 const cleanNotes = [];
 let applicable = 0;
 for (const dir of dirs) {
-  const r = await auditVault(dir, { libraryGated: !asSourceVault });
+  const r = await auditVault(dir, { libraryGated: !asSourceVault, recording });
   applicable += r.applicable;
+  for (const u of r.unrecorded) unrecordedNotes.push(`${path.basename(dir)}/${u}`);
   for (const c of r.clean) cleanNotes.push(`${path.basename(dir)}/${c}`);
   for (const w of r.writing) writing.set(`${path.basename(dir)}/${w.path}`, w);
 }
@@ -107,4 +138,8 @@ if (failed > 0) {
   );
   process.exit(1);
 }
-console.log(`check-open-time-writes: ok (${required.length} required read-only note(s); ${writing.size} other note(s) are reported by --report)`);
+console.log(
+  `check-open-time-writes: ok (${required.length} required read-only note(s); ${writing.size} other note(s) are reported by --report`
+  + (recording ? `; Run modelled with the engine's recorded output, ${unrecordedNotes.length} unrecorded note(s) modelled from their own Python` : "; Run modelled from each note's own Python — no engine recording")
+  + ")",
+);
