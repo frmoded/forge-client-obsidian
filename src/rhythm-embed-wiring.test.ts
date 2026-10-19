@@ -131,14 +131,35 @@ test('every error is inline and never throws out of the processor', () => {
   assert.match(view, /forge-rhythm-embed-error/);
 });
 
-// Drain 2026-10-18-1800 (driver clarification): a changed note reloads the embed even over local edits, and the embed says so for a few seconds.
-test('mechanism pin: the embed view shows the "Updated from note" label briefly, hides it again, and cancels the timer on unload', () => {
+// Drain 2026-10-18-1800 (driver clarification): a changed note reloads the embed even over local edits, and the embed says so.
+// Drain 2026-10-19-1500: the label is timed by ATTENTION (updated-label-core.ts) so it is seen, and sits in the toolbar row.
+test('mechanism pin: the embed view shows "Updated from note" in the toolbar, times it by attention, and tears every listener down', () => {
   const view = fs.readFileSync(path.resolve(import.meta.dirname, 'rhythm-embed-view.ts'), 'utf8');
   assert.match(view, /showUpdated: \(\) => \{ this\.flashUpdated\(\); \}/);
-  assert.match(view, /text: UPDATED_FROM_NOTE_LABEL/);
-  assert.match(view, /window\.setTimeout\(\(\) => \{[\s\S]*?toggleClass\('forge-rhythm-embed-hidden', true\)[\s\S]*?\}, UPDATED_FROM_NOTE_MS\)/, 'the timer callback hides the label again');
-  assert.match(view, /this\.unloaded = true;\s*if \(this\.updatedTimer !== null\) \{ window\.clearTimeout\(this\.updatedTimer\)/);
-  assert.doesNotMatch(view, /setStale|staleEl|forge-rhythm-embed-stale/, 'the Phase 8 warning is gone');
+  assert.match(view, /this\.updatedEl = bar\.createSpan\(\{ cls: 'forge-rhythm-embed-updated forge-rhythm-embed-hidden', text: UPDATED_FROM_NOTE_LABEL, attr: \{ role: 'status', 'aria-live': 'polite' \} \}\)/, 'in the toolbar row, a polite live region');
+  assert.match(view, /createUpdatedLabel\(\{\s*ms: UPDATED_FROM_NOTE_MS,/);
+  assert.match(view, /isAttentive: \(\) => isLabelAttentive\(\{ windowFocused: document\.hasFocus\(\), pageVisible: document\.visibilityState === 'visible', onScreen: this\.onScreen \}\)/);
+  assert.match(view, /new IntersectionObserver\(/);
+  for (const ev of ['focus', 'blur']) {
+    assert.match(view, new RegExp(`window\\.addEventListener\\('${ev}', this\\.onAttention\\)`));
+    assert.match(view, new RegExp(`window\\.removeEventListener\\('${ev}', this\\.onAttention\\)`));
+  }
+  assert.match(view, /document\.addEventListener\('visibilitychange', this\.onAttention\)/);
+  assert.match(view, /document\.removeEventListener\('visibilitychange', this\.onAttention\)/);
+  assert.match(view, /this\.unloaded = true;\s*this\.releaseUpdatedLabel\(\);/);
+  assert.doesNotMatch(view, /setStale|staleEl|forge-rhythm-embed-stale|updatedTimer/, 'neither the Phase 8 warning nor the old wall-clock timer is left');
   const css = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'styles.css'), 'utf8');
-  assert.match(css, /\.forge-rhythm-embed-updated \{/);
+  assert.match(css, /\.forge-rhythm-embed-updated \{[^}]*border: 1px solid var\(--interactive-accent\)/, 'visible, calm: an accent outline, not an error colour');
+});
+
+// Drain 2026-10-19-1500 §2 — ONE "Open note" per embed: the host toolbar's (outside the iframe, so it works even when the widget errors).
+// The widget's own button is gone; an OLDER widget file (a vault not yet updated) may still post `forge-rhythm-open-note`, so the host keeps
+// answering it rather than silently dropping a click.
+test('mechanism pin: the embed has exactly ONE Open note in its toolbar, wired to the plugin\'s opener; an older widget\'s message is still answered', () => {
+  const view = fs.readFileSync(path.resolve(import.meta.dirname, 'rhythm-embed-view.ts'), 'utf8');
+  const toolbar = view.slice(view.indexOf("const bar = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-toolbar' })"));
+  assert.equal((toolbar.slice(0, toolbar.indexOf('this.statusEl')).match(/text: 'Open note'/g) ?? []).length, 1, 'one Open note button in the toolbar');
+  assert.match(toolbar, /openBtn\.addEventListener\('click', \(\) => \{ this\.hooks\.openNote\(this\.file\); \}\);/);
+  const core = fs.readFileSync(path.resolve(import.meta.dirname, 'rhythm-embed-core.ts'), 'utf8');
+  assert.match(core, /case 'open-note': deps\.openNote\(\); return;/, 'the session still answers the message an older widget posts');
 });

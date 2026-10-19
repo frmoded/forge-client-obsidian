@@ -17,6 +17,7 @@
 import { MarkdownRenderChild, TFile, type App, type MarkdownPostProcessorContext, type Plugin } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
 import { attachAutoHeight } from './widget-auto-height.ts';
+import { createUpdatedLabel, isLabelAttentive, type UpdatedLabel } from './updated-label-core.ts';
 import { parseWidgetResize, type AutoHeightController } from './widget-auto-height-core.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
 import { RHYTHM_BOX_WIDGET_PATH, readRhythmNote } from './rhythm-edit-core.ts';
@@ -64,7 +65,11 @@ class RhythmEmbed extends MarkdownRenderChild {
   private blobUrl: string | null = null;
   private bodyEl!: HTMLElement;
   private updatedEl: HTMLElement | null = null;
-  private updatedTimer: number | null = null;
+  /** Drain 2026-10-19-1500 — times the "Updated from note" label by ATTENTION (window focused, page visible, embed on screen), not by the wall clock. */
+  private updatedLabel: UpdatedLabel | null = null;
+  private onScreen = true;
+  private screenObserver: IntersectionObserver | null = null;
+  private readonly onAttention = (): void => { this.updatedLabel?.attentionChanged(); };
   private scoreBtn: HTMLButtonElement | null = null;
   private scoreHost: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
@@ -94,6 +99,9 @@ class RhythmEmbed extends MarkdownRenderChild {
 
   onload(): void {
     window.addEventListener('message', this.onMessage);
+    window.addEventListener('focus', this.onAttention);
+    window.addEventListener('blur', this.onAttention);
+    document.addEventListener('visibilitychange', this.onAttention);
     coordinator.register(this.id, () => this.session?.stop());
     // The data note changed on disk (the Beat Box tab autosaving, a hand edit, a sync): reload only if the playground has no local edits.
     this.registerEvent(this.app.vault.on('modify', (f) => {
@@ -107,8 +115,11 @@ class RhythmEmbed extends MarkdownRenderChild {
 
   onunload(): void {
     this.unloaded = true;
-    if (this.updatedTimer !== null) { window.clearTimeout(this.updatedTimer); this.updatedTimer = null; }
+    this.releaseUpdatedLabel();
     window.removeEventListener('message', this.onMessage);
+    window.removeEventListener('focus', this.onAttention);
+    window.removeEventListener('blur', this.onAttention);
+    document.removeEventListener('visibilitychange', this.onAttention);
     coordinator.unregister(this.id);
     this.session?.dispose();
     this.session = null;
@@ -128,6 +139,7 @@ class RhythmEmbed extends MarkdownRenderChild {
    *  note that exists but is not (valid) rhythm data, so it can be fixed in its own tab. */
   private showError(message: string, openNote = false): void {
     this.inErrorState = true;
+    this.releaseUpdatedLabel();
     this.session?.dispose();
     this.session = null;
     this.releaseIframe();
@@ -175,6 +187,10 @@ class RhythmEmbed extends MarkdownRenderChild {
       this.containerEl.addClass('forge-rhythm-embed');
       const bar = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-toolbar' });
       bar.createSpan({ cls: 'forge-rhythm-embed-title', text: title });
+      // Drain 2026-10-19-1500 — the label lives IN the toolbar row (no layout shift), is a polite live region, and is timed by attention.
+      this.releaseUpdatedLabel();
+      this.updatedEl = bar.createSpan({ cls: 'forge-rhythm-embed-updated forge-rhythm-embed-hidden', text: UPDATED_FROM_NOTE_LABEL, attr: { role: 'status', 'aria-live': 'polite' } });
+      this.startUpdatedLabel(this.updatedEl);
       const openBtn = bar.createEl('button', { text: 'Open note', attr: { title: 'Open this rhythm in its own tab, where changes are saved' } });
       openBtn.addEventListener('click', () => { this.hooks.openNote(this.file); });
       if (musicEdition.id === 'music') {
@@ -182,8 +198,6 @@ class RhythmEmbed extends MarkdownRenderChild {
         this.scoreBtn.addEventListener('click', () => { void this.toggleScore(); });
       }
       this.statusEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-status' });
-      this.updatedEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-updated', text: UPDATED_FROM_NOTE_LABEL });
-      this.updatedEl.toggleClass('forge-rhythm-embed-hidden', true);
       this.bodyEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-body' });
 
       this.session = createRhythmEmbedSession({
@@ -214,15 +228,37 @@ class RhythmEmbed extends MarkdownRenderChild {
     }
   }
 
-  /** Drain 2026-10-18-1800 — the embed was reloaded because the note changed on disk: say so for a few seconds, then go quiet. */
+  /** Drain 2026-10-18-1800 — the embed was reloaded because the note changed on disk: say so. Drain 2026-10-19-1500 — and make sure it is SEEN:
+   *  the 4 s run only while the window is focused, the page visible and the embed on screen (updated-label-core.ts). */
   private flashUpdated(): void {
-    if (!this.updatedEl) return;
-    this.updatedEl.toggleClass('forge-rhythm-embed-hidden', false);
-    if (this.updatedTimer !== null) window.clearTimeout(this.updatedTimer);
-    this.updatedTimer = window.setTimeout(() => {
-      this.updatedTimer = null;
-      this.updatedEl?.toggleClass('forge-rhythm-embed-hidden', true);
-    }, UPDATED_FROM_NOTE_MS);
+    this.updatedLabel?.flash();
+  }
+
+  private startUpdatedLabel(el: HTMLElement): void {
+    this.onScreen = true;
+    if (typeof IntersectionObserver === 'function') {
+      this.screenObserver = new IntersectionObserver((entries) => {
+        const last = entries[entries.length - 1];
+        if (last) { this.onScreen = last.isIntersecting; this.updatedLabel?.attentionChanged(); }
+      });
+      this.screenObserver.observe(this.containerEl);
+    }
+    this.updatedLabel = createUpdatedLabel({
+      ms: UPDATED_FROM_NOTE_MS,
+      isAttentive: () => isLabelAttentive({ windowFocused: document.hasFocus(), pageVisible: document.visibilityState === 'visible', onScreen: this.onScreen }),
+      now: () => Date.now(),
+      show: () => { el.toggleClass('forge-rhythm-embed-hidden', false); },
+      hide: () => { el.toggleClass('forge-rhythm-embed-hidden', true); },
+      setTimer: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer: (id) => window.clearTimeout(id),
+    });
+  }
+
+  private releaseUpdatedLabel(): void {
+    this.updatedLabel?.dispose();
+    this.updatedLabel = null;
+    this.screenObserver?.disconnect();
+    this.screenObserver = null;
   }
 
   /** The visible height of the pane this embed sits in (Reading view or Live Preview scroller); the window's when it cannot be found. */

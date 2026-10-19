@@ -257,3 +257,29 @@ test('MECHANISM pin: the embed view\'s modify handler and the tab view\'s modify
   assert.match(tab, /modifyRecovery\(\{ hasSession: session !== null, hasIframe: this\.iframe !== null \}\) === 'remount'/);
   assert.match(tab, /private async sendLoad\(\)[\s\S]*?if \(!this\.iframe\) \{[\s\S]*?await this\.mount\(this\.file\)/);
 });
+
+// ======================================================================================================================
+// Drain 2026-10-19-1500 §3 — EVERY route by which the note can change reaches the same place: one vault `modify` event -> onNoteModified ->
+// a reload -> showUpdated. (Whether the student SEES the label is the attention-timed label's job: updated-label-core.test.ts.)
+// ======================================================================================================================
+
+test('the label is requested on every route: Beat Box tab autosave, `git checkout`, Restore to last commit, an external editor — clean or dirty embed — and on none that changed nothing', async () => {
+  const routes: Array<[string, boolean, string]> = [
+    ['autosave from the tab (a 3/4 edit saved)', false, textOf(TRESILLO_34)],
+    ['`git checkout -- rhythm_pattern_tresillo.md` after an edit', true, TRESILLO_TEXT],
+    ['Restore to last commit', false, TRESILLO_TEXT],
+    ['an external editor / a sync', true, textOf(TRESILLO_34)],
+  ];
+  for (const [route, dirty, newText] of routes) {
+    const e = embedSession(route.includes('checkout') || route.includes('Restore') ? textOf(TRESILLO_34) : TRESILLO_TEXT);
+    await e.session.onWidgetMessage({ type: MSG_READY });
+    if (dirty) await e.session.onWidgetMessage({ type: 'forge-rhythm-edited' });
+    e.setText(newText); await e.session.onNoteModified();
+    assert.equal(e.log.updated, 1, route);
+    assert.equal(e.loads().length, 2, `${route}: reloaded`);
+  }
+  const same = embedSession(TRESILLO_TEXT);
+  await same.session.onWidgetMessage({ type: MSG_READY });
+  await same.session.onNoteModified();
+  assert.equal(same.log.updated, 0, 'a modify event that changed nothing shows no label');
+});

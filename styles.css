@@ -1696,15 +1696,27 @@
   margin-right: auto;
 }
 
-.forge-rhythm-embed-status,
-.forge-rhythm-embed-updated {
+.forge-rhythm-embed-status {
   padding: 4px 10px;
   font-size: 12px;
   color: var(--text-muted);
 }
 
+/* Drain 2026-10-19-1500 — "Updated from note": a small accent-outlined pill IN the toolbar row (so showing it never moves the widget), legible
+   but calm. It is timed by attention (updated-label-core.ts), so it is on screen for 4 s of being seen. */
 .forge-rhythm-embed-updated {
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  border: 1px solid var(--interactive-accent);
+  border-radius: 999px;
+  color: var(--text-normal);
   background: var(--background-modifier-hover);
+}
+
+.forge-rhythm-embed-updated::before {
+  content: "\21BB\00a0";
+  color: var(--interactive-accent);
 }
 
 .forge-rhythm-embed-hidden {

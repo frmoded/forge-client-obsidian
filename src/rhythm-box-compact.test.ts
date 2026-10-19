@@ -152,11 +152,11 @@ test('the rendered circle uses that size: viewBox and CSS width follow the ring 
   assert.equal(svg.getAttribute('viewBox'), `0 0 ${w.circleSizeFor(16, 4)} ${w.circleSizeFor(16, 4)}`, 'a 4th ring grows the circle');
 });
 
-test('compact: no control was removed — every id the widget had is still there', { skip }, () => {
-  for (const id of ['hostBar', 'hostEditing', 'hostNote', 'playgroundLabel', 'loadMsg', 'saveMsg', 'bReload', 'bReset', 'bOpenNote', 'confirmBar',
+test('compact: every control that is meant to stay is still there (Random, Clear, Export JSON and the widget-side Open note were removed on purpose, drain 2026-10-19-1500)', { skip }, () => {
+  for (const id of ['hostBar', 'hostEditing', 'hostNote', 'playgroundLabel', 'loadMsg', 'saveMsg', 'bReload', 'bReset', 'confirmBar',
     'confirmText', 'confirmOk', 'confirmCancel', 'bPlay', 'bBpmDown', 'bpmVal', 'bBpmUp', 'bTap', 'stepPos', 'swing', 'swingVal', 'volume',
     'volumeVal', 'timeSig', 'viewSwitch', 'bViewGrid', 'bViewCircle', 'viewMsg', 'gridView', 'grid', 'addInstrument', 'circleView', 'bRotLeft',
-    'bRotRight', 'bMirror', 'bMirrorGrid', 'bShape', 'ringLegend', 'circle', 'bRandom', 'bClear', 'bExport', 'exportMsg', 'exportFallback']) {
+    'bRotRight', 'bMirror', 'bMirrorGrid', 'bShape', 'ringLegend', 'circle']) {
     assert.ok(new RegExp(`id="${id}"`).test(widgetHtml), `#${id}`);
   }
   assert.equal((widgetHtml.match(/data-bank="[A-D]"/g) ?? []).length, 4, 'the four banks');
@@ -187,21 +187,7 @@ test('compact: Swing and Volume share one row, and the long swing caption is a t
   assert.match(h.el('swing').getAttribute('title') ?? '', /off-beat/i, 'and sighted users get it on hover');
 });
 
-test('compact: Random, Clear and Export JSON sit behind ONE "more" menu (still real buttons, closed by default)', { skip }, async () => {
-  const h = await editing();
-  const more = h.el('moreMenu') as HTMLElement;
-  assert.equal(more.tagName, 'DETAILS');
-  assert.equal((more as unknown as HTMLDetailsElement).open, false);
-  for (const id of ['bRandom', 'bClear', 'bExport']) {
-    assert.ok(more.contains(h.el(id)), id);
-    assert.equal(h.el(id).tagName, 'BUTTON');
-  }
-  assert.ok(more.querySelector('summary')?.getAttribute('aria-label') || more.querySelector('summary')?.getAttribute('title'), 'the summary is labelled');
-  // the confirm-bar flow is untouched: Clear in a note still asks first
-  const e = await editing();
-  e.el('bClear').click();
-  assert.equal(e.el('confirmBar').hidden, false);
-});
+// (drain 2026-10-19-1500: 'compact: Random, Clear and Export JSON sit behind ONE "more" menu' deleted with the menu; rhythm-box-removed-controls.test.ts pins their absence.)
 
 test('compact: the circle toolbar is icon buttons with tooltips and aria-labels — short visible text, full names for assistive tech', { skip }, () => {
   for (const [id, label] of [['bRotLeft', /left/i], ['bRotRight', /right/i], ['bMirror', /mirror/i], ['bShape', /shape/i]] as const) {

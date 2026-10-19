@@ -84,12 +84,7 @@ test('widget core: Export/Save data keeps int velocities instead of flattening t
   assert.deepEqual(w.buildRhythmData('4/4', 0, 100, { kick: [true, false] }).channels.kick.slice(0, 2), [true, false]);   // booleans as before
 });
 
-test('widget core: Export JSON text == the plugin\'s formatRhythmJson (two implementations, one shape), ints included', { skip }, () => {
-  const w = pureCore();
-  const d = rock();
-  d.channels.hihat[0] = 112; d.channels.snare[1] = 36; d.channels.kick[0] = 100;
-  for (const data of [rock(), d]) assert.equal(w.rhythmDataJson(data), formatRhythmJson(data));
-});
+// (drain 2026-10-19-1500: 'widget core: Export JSON text == formatRhythmJson' deleted — the widget no longer has a JSON serializer; the plugin's formatRhythmJson is the only one.)
 
 test('widget core: parseRhythmLoad accepts a valid 4/4 and 3/4 pattern, keeping ints', { skip }, () => {
   const w = pureCore();
@@ -174,7 +169,7 @@ async function loadedHost(data: RhythmData = rock(), name = 'my beat'): Promise<
   return h;
 }
 
-test('widget DOM: standalone behaviour is unchanged — no ready message, no host bar, no Save button, cells toggle, Export works', { skip }, async () => {
+test('widget DOM: standalone behaviour is unchanged — no ready message, no host bar, no Save button, cells toggle', { skip }, async () => {
   const h = await loadWidget(false);
   assert.deepEqual(h.posted, []);
   assert.equal(h.el('bSave') === null, true, 'there is no Save button any more');
@@ -183,10 +178,6 @@ test('widget DOM: standalone behaviour is unchanged — no ready message, no hos
   h.cell('kick', 0).click();
   assert.ok(h.cell('kick', 0).classList.contains('on'));
   assert.ok(!h.cell('kick', 0).classList.contains('accent'));
-  let copied = '';
-  Object.defineProperty(h.win.navigator, 'clipboard', { value: { writeText: (t: string) => { copied = t; return Promise.resolve(); } }, configurable: true });
-  h.el('bExport').click();
-  assert.match(copied, /"kick": \[true, false, false/);
   await h.send(load(rock()), h.win);                        // a host message in standalone mode (parent === window) is not accepted
   assert.equal(h.el('hostBar').hidden, true);
   assert.deepEqual(h.posted, [], 'standalone never posts anything (no autosave)');
@@ -301,7 +292,7 @@ test('autosave: a cell toggle posts exactly ONE save with the new pattern', { sk
   assert.deepEqual(sent.data.channels.kick, rock().channels.kick);
 });
 
-test('autosave: every pattern-data action posts exactly one save — tempo up/down, swing, and (after Continue) Random, Clear', { skip }, async () => {
+test('autosave: every pattern-data action posts exactly one save — tempo up/down and swing (Random and Clear are gone)', { skip }, async () => {
   const h = await loadedHost();
   assert.equal(await savesPosted(h, () => h.el('bBpmUp').click()), 1);
   assert.equal(lastSave(h).data.tempo_bpm, 101);
@@ -309,12 +300,7 @@ test('autosave: every pattern-data action posts exactly one save — tempo up/do
   assert.equal(lastSave(h).data.tempo_bpm, 100);
   assert.equal(await savesPosted(h, () => { h.el('swing').value = '40'; fire(h, 'swing', 'input'); }), 1);
   assert.equal(lastSave(h).data.swing_pct, 40);
-  // Random and Clear are data actions too, but hosted they ask first (drain 2026-10-07-0300): nothing is saved until Continue.
-  h.el('bRandom').click();
-  assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1);
-  h.el('bClear').click();
-  assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1);
-  assert.deepEqual(lastSave(h).data.channels, { kick: new Array(16).fill(false), snare: new Array(16).fill(false), hihat: new Array(16).fill(false) });
+  // (Random and Clear were data actions that asked first; drain 2026-10-19-1500 removed them. The confirmed meter / remove-row actions are covered below.)
 });
 
 test('autosave: tap tempo saves when it COMMITS a tempo change, not on the first tap', { skip }, async () => {
@@ -365,18 +351,9 @@ test('autosave: the actions that are NOT data changes never save — play, mute,
   for (const b of ['B', 'C', 'D', 'A']) {
     assert.equal(await savesPosted(h, () => h.doc.querySelector(`.banks button[data-bank="${b}"]`).click()), 0, `bank ${b}`);
   }
-  assert.equal(await savesPosted(h, () => h.el('bExport').click()), 0);
 });
 
-test('autosave: the payload equals the Export JSON for the same state', { skip }, async () => {
-  const d = rock(); d.channels.hihat[0] = 112;
-  const h = await loadedHost(d);
-  await savesPosted(h, () => h.cell('snare', 0).click());
-  let copied = '';
-  Object.defineProperty(h.win.navigator, 'clipboard', { value: { writeText: (t: string) => { copied = t; return Promise.resolve(); } }, configurable: true });
-  h.el('bExport').click();
-  assert.deepEqual(JSON.parse(copied), lastSave(h).data);
-});
+// (drain 2026-10-19-1500: 'autosave: the payload equals the Export JSON for the same state' deleted with Export JSON.)
 
 test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and exactly eight places call it', { skip }, () => {
   const posts = [...SCRIPT.matchAll(/type: "forge-rhythm-save"/g)];
@@ -388,7 +365,7 @@ test('autosave: "which actions save" is auditable — one commitChange() posts t
   // drain 2026-10-18-1800: +1 — Mirror (reverse the rhythm in time) is the same kind of edit as Rotate, through the same one door. This pins the
   // drain 2026-10-18-1800: +2 — the per-ring controls (rotate the selected ring, move the selected ring) go through the same one door.
   // MECHANISM (how many call sites there are); the property — every data change saves through commitChange — is pinned per action elsewhere.
-  assert.equal(callers, 8, 'cell toggle, tempo (changeBpm), swing, the confirmed whole-pattern change (Random / Clear / time signature), rotate, mirror, rotate ring, move ring');
+  assert.equal(callers, 8, 'cell toggle, tempo (changeBpm), swing, the confirmed whole-pattern change (time signature / remove row), rotate, mirror, rotate ring, move ring');
   assert.match(noComments, /function applyWholePatternChange\(action\) \{[\s\S]*?\n    commitChange\(\);\n  \}/);
 });
 
@@ -429,130 +406,116 @@ test('hosted time-signature change: Change rebuilds the grid, clears the banks a
   assert.deepEqual(sent.channels.kick, new Array(12).fill(false));
 });
 
-// ---- Random / Clear: the SAME inline confirm bar as the time-signature change (drain 2026-10-07-0300) --------------------------
+// ---- the ONE inline confirm bar: the time-signature change and removing a row that has hits ----------------------------------------
+// Drain 2026-10-19-1500: these were written with Random and Clear as the questions; those buttons are gone, so the same behaviours (one bar,
+// Cancel / Continue, replaced by a newer question, dismissed by any other edit, never resurrected, not asked in a playground or before a load)
+// are now pinned with the two questions that remain.
 
 const onCount = (h: Harness) => h.doc.querySelectorAll('.step.on').length;
-const askRandom = (h: Harness) => h.el('bRandom').click();
-const askClear = (h: Harness) => h.el('bClear').click();
+const stepCount = (h: Harness) => h.doc.querySelectorAll('.step').length;
+const askMeter = (h: Harness) => { h.el('timeSig').value = '3/4'; fire(h, 'timeSig', 'change'); };
+const askRemove = (h: Harness) => h.doc.querySelector('[data-remove="snare"]').click();
 
-test('hosted Clear: shows the confirm bar, changes nothing and posts nothing until Continue', { skip }, async () => {
+test('hosted meter change: shows the confirm bar, changes nothing and posts nothing until Change', { skip }, async () => {
   const h = await loadedHost();
   const before = onCount(h);
-  assert.equal(await savesPosted(h, () => askClear(h)), 0);
+  assert.equal(await savesPosted(h, () => askMeter(h)), 0);
   assert.equal(h.el('confirmBar').hidden, false);
-  assert.match(h.el('confirmText').textContent, /Clear the pattern\?/);
+  assert.match(h.el('confirmText').textContent, /3\/4/);
   assert.match(h.el('confirmText').textContent, /note/);
-  assert.equal(h.el('confirmOk').textContent, 'Continue');
+  assert.equal(h.el('confirmOk').textContent, 'Change');
   assert.equal(h.el('confirmCancel').textContent, 'Cancel');
   assert.equal(onCount(h), before, 'the grid is untouched while the question is open');
+  assert.equal(stepCount(h), 48);
 });
 
-test('hosted Random: shows the confirm bar with its own wording, changes nothing and posts nothing until Continue', { skip }, async () => {
+test('hosted remove-row (a row with hits): shows the confirm bar with its own wording, changes nothing and posts nothing until Remove', { skip }, async () => {
   const h = await loadedHost();
-  const before = onCount(h);
-  assert.equal(await savesPosted(h, () => askRandom(h)), 0);
+  assert.equal(await savesPosted(h, () => askRemove(h)), 0);
   assert.equal(h.el('confirmBar').hidden, false);
-  assert.match(h.el('confirmText').textContent, /Randomi[sz]e the pattern\?/);
-  assert.equal(h.el('confirmOk').textContent, 'Continue');
-  assert.equal(onCount(h), before);
+  assert.match(h.el('confirmText').textContent, /Remove the Snare row\?/);
+  assert.equal(h.el('confirmOk').textContent, 'Remove');
+  assert.equal(stepCount(h), 48, 'the row is still there');
 });
 
-test('Clear → Cancel: pattern intact, bar gone, nothing saved', { skip }, async () => {
+test('meter change → Cancel: pattern intact, bar gone, nothing saved', { skip }, async () => {
   const h = await loadedHost();
   const before = onCount(h);
-  askClear(h);
+  askMeter(h);
+  assert.equal(await savesPosted(h, () => h.el('confirmCancel').click()), 0);
+  assert.equal(h.el('confirmBar').hidden, true);
+  assert.equal(onCount(h), before);
+  assert.equal(stepCount(h), 48);
+});
+
+test('remove-row → Cancel: the row and its hits stay, bar gone, nothing saved', { skip }, async () => {
+  const h = await loadedHost();
+  const before = onCount(h);
+  askRemove(h);
   assert.equal(await savesPosted(h, () => h.el('confirmCancel').click()), 0);
   assert.equal(h.el('confirmBar').hidden, true);
   assert.equal(onCount(h), before);
 });
 
-test('Random → Cancel: pattern intact, bar gone, nothing saved', { skip }, async () => {
+test('remove-row → Remove: the row goes and exactly ONE save without it is posted', { skip }, async () => {
   const h = await loadedHost();
-  const before = [...h.doc.querySelectorAll('.step.on')].map((e: any) => e.dataset.channel + e.dataset.step).join();
-  h.win.Math.random = () => 0;                                        // would make every step a hit if it were applied
-  askRandom(h);
-  assert.equal(await savesPosted(h, () => h.el('confirmCancel').click()), 0);
-  assert.equal([...h.doc.querySelectorAll('.step.on')].map((e: any) => e.dataset.channel + e.dataset.step).join(), before);
-});
-
-test('Clear → Continue: the pattern is emptied and exactly ONE save of the empty pattern is posted', { skip }, async () => {
-  const h = await loadedHost();
-  askClear(h);
+  askRemove(h);
   assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1);
   assert.equal(h.el('confirmBar').hidden, true);
-  assert.equal(onCount(h), 0);
-  assert.deepEqual(lastSave(h).data.channels, { kick: new Array(16).fill(false), snare: new Array(16).fill(false), hihat: new Array(16).fill(false) });
+  assert.deepEqual(Object.keys(lastSave(h).data.channels), ['kick', 'hihat']);
+  assert.equal(stepCount(h), 32);
 });
 
-test('Random → Continue: the pattern changes and exactly ONE save with the new pattern is posted', { skip }, async () => {
+test('only ONE confirm bar at a time: asking the meter question while the remove question is open REPLACES it (and vice versa)', { skip }, async () => {
   const h = await loadedHost();
-  h.win.Math.random = () => 0;                                        // deterministic: every weighted step becomes a hit
-  askRandom(h);
-  assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1);
-  assert.equal(h.el('confirmBar').hidden, true);
-  assert.notEqual(onCount(h), 12, 'the rock pattern was replaced');
-  const sent = lastSave(h).data.channels;
-  const shown = (ch: string) => [...Array(16).keys()].map((s) => h.cell(ch, s).classList.contains('on'));
-  for (const ch of ['kick', 'snare', 'hihat']) assert.deepEqual(sent[ch].map(Boolean), shown(ch), `${ch}: saved == shown`);
-});
-
-test('only ONE confirm bar at a time: asking Clear while the Random question is open REPLACES it (and vice versa, and over the time-signature one)', { skip }, async () => {
-  const h = await loadedHost();
-  askRandom(h);
-  askClear(h);
-  assert.match(h.el('confirmText').textContent, /Clear the pattern\?/);
+  askRemove(h);
+  askMeter(h);
+  assert.match(h.el('confirmText').textContent, /3\/4/);
   assert.equal(h.doc.querySelectorAll('[role="alertdialog"]').length, 1);
-  assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1, 'Continue applies the LATEST question only');
-  assert.equal(onCount(h), 0);
+  assert.equal(await savesPosted(h, () => h.el('confirmOk').click()), 1, 'Change applies the LATEST question only');
+  assert.equal(stepCount(h), 36, 'three rows at 12 steps: the snare row is still there');
   const h2 = await loadedHost();
-  askClear(h2);
-  askRandom(h2);
-  assert.match(h2.el('confirmText').textContent, /Randomi[sz]e/);
-  h2.el('timeSig').value = '3/4'; fire(h2, 'timeSig', 'change');
-  assert.match(h2.el('confirmText').textContent, /3\/4/);
-  assert.equal(h2.doc.querySelectorAll('.step').length, 48, 'nothing applied by replacing');
+  askMeter(h2);
+  askRemove(h2);
+  assert.match(h2.el('confirmText').textContent, /Remove the Snare row/);
+  assert.equal(stepCount(h2), 48, 'nothing applied by replacing');
 });
 
 test('any OTHER data edit made while a confirm is open dismisses it WITHOUT applying the pending action (cell, tempo, swing)', { skip }, async () => {
   for (const edit of [(h: Harness) => h.cell('snare', 0).click(), (h: Harness) => h.el('bBpmUp').click(), (h: Harness) => { h.el('swing').value = '30'; fire(h, 'swing', 'input'); }]) {
     const h = await loadedHost();
-    askClear(h);
+    askMeter(h);
     const n = await savesPosted(h, () => edit(h));
     assert.equal(n, 1, 'the edit itself still autosaves');
     assert.equal(h.el('confirmBar').hidden, true, 'the pending question is gone');
-    assert.ok(onCount(h) > 0, 'Clear was NOT applied');
+    assert.equal(stepCount(h), 48, 'the meter change was NOT applied');
   }
 });
 
-test('a dismissed confirm cannot be resurrected: clicking Continue after another edit does nothing', { skip }, async () => {
+test('a dismissed confirm cannot be resurrected: clicking Change after another edit does nothing', { skip }, async () => {
   const h = await loadedHost();
-  askClear(h);
+  askMeter(h);
   h.cell('snare', 0).click();
   const saves0 = saves(h).length;
   h.el('confirmOk').click();
   await new Promise((r) => setTimeout(r, 5));
   assert.equal(saves(h).length, saves0);
-  assert.ok(onCount(h) > 0);
+  assert.equal(stepCount(h), 48);
 });
 
-test('standalone: Random and Clear apply IMMEDIATELY — no confirm bar, no messages posted', { skip }, async () => {
+test('standalone: the meter change and removing a row apply IMMEDIATELY — no confirm bar, no messages posted', { skip }, async () => {
   const h = await loadWidget(false);
-  h.cell('kick', 0).click();
-  askClear(h);
+  askRemove(h);
   assert.equal(h.el('confirmBar').hidden, true);
-  assert.equal(onCount(h), 0, 'cleared at once');
-  h.win.Math.random = () => 0;
-  askRandom(h);
+  assert.equal(stepCount(h), 32, 'row removed at once');
+  askMeter(h);
   assert.equal(h.el('confirmBar').hidden, true);
-  assert.ok(onCount(h) > 0, 'randomized at once');
   assert.deepEqual(h.posted, []);
 });
 
-test('hosted but NOT loaded: Random and Clear never open a confirm (nothing to protect) and never save', { skip }, async () => {
+test('hosted but NOT loaded: the meter change never opens a confirm (nothing to protect) and never saves', { skip }, async () => {
   const h = await loadWidget(true);
-  assert.equal(await savesPosted(h, () => askClear(h)), 0);
-  assert.equal(h.el('confirmBar').hidden, true);
-  assert.equal(await savesPosted(h, () => askRandom(h)), 0);
+  assert.equal(await savesPosted(h, () => askMeter(h)), 0);
   assert.equal(h.el('confirmBar').hidden, true);
 });
 
@@ -560,25 +523,22 @@ test('playback actions never open a confirm, never save and do not dismiss a pen
   const h = await loadedHost();
   assert.equal(await savesPosted(h, () => h.el('bPlay').click()), 0);
   assert.equal(h.el('confirmBar').hidden, true);
-  askClear(h);
+  askMeter(h);
   assert.equal(await savesPosted(h, () => { h.doc.querySelector('.mini-btn.mute').click(); h.doc.querySelector('.mini-btn.solo').click(); h.el('volume').value = '30'; fire(h, 'volume', 'input'); h.el('bPlay').click(); h.el('bPlay').click(); }), 0);
   assert.equal(h.el('confirmBar').hidden, false, 'still asking (after mute, solo, volume, play and stop)');
-  assert.equal(h.el('confirmText').textContent.includes('Clear the pattern?'), true);
+  assert.equal(/3\/4/.test(h.el('confirmText').textContent), true);
 });
 
-test('a fresh load from the note dismisses a pending Random/Clear question', { skip }, async () => {
+test('a fresh load from the note dismisses a pending question', { skip }, async () => {
   const h = await loadedHost();
-  askClear(h);
+  askMeter(h);
   await h.send(load(rock()));
   assert.equal(h.el('confirmBar').hidden, true);
   assert.equal(onCount(h), 12);
 });
 
-test('auditable: Random and Clear no longer call commitChange() directly — only the confirmed path does', { skip }, () => {
-  assert.ok(!/\$\("bRandom"\)\.addEventListener\("click", function \(\) \{[^}]*commitChange/.test(SCRIPT));
-  assert.ok(!/\$\("bClear"\)\.addEventListener\("click", function \(\) \{[^}]*commitChange/.test(SCRIPT));
+test('auditable: ONE confirm bar element, reused by every question, and still exactly one place posts a save intent', { skip }, () => {
   assert.equal([...SCRIPT.matchAll(/type: "forge-rhythm-save"/g)].length, 1, 'still exactly one place posts a save intent');
-  assert.equal([...SCRIPT.matchAll(/id="confirmBar"/g)].length + [...html.matchAll(/id="confirmBar"/g)].length >= 1, true);
   assert.equal([...html.matchAll(/id="confirmBar"/g)].length, 1, 'ONE confirm bar element, reused by every question');
 });
 
@@ -755,14 +715,7 @@ test('P7 core: buildRhythmData writes exactly the rows given, in that order (def
   assert.deepEqual(Object.keys(w.buildRhythmData('4/4', 0, 100, w.emptyPattern(16)).channels), ['kick', 'snare', 'hihat']);
 });
 
-test('P7 core: randomizePattern fills only the rows asked for and consumes the rng in row order', { skip }, () => {
-  const w = pureCore();
-  const p = w.randomizePattern(() => 0, 16, 4, ['claves']);
-  assert.ok(p.claves.some(Boolean));
-  assert.ok(!p.kick.some(Boolean) && !p.bell.some(Boolean));
-  const q = w.randomizePattern(() => 0.5, 16, 4);               // default rows: unchanged behaviour
-  assert.ok(Array.isArray(q.kick) && Array.isArray(q.hihat));
-});
+// (drain 2026-10-19-1500: 'P7 core: randomizePattern …' deleted — the randomizer is gone with the Random button.)
 
 test('P7 round trip: every one of the five notes loads and re-serialises BYTE-IDENTICALLY (the json block, as the plugin would write it)', { skip: skipFive }, () => {
   const w = pureCore();
@@ -771,7 +724,6 @@ test('P7 round trip: every one of the five notes loads and re-serialises BYTE-ID
     const r = w.parseRhythmLoad(data);
     assert.equal(r.ok, true, `${n}: ${r.message}`);
     const out = w.buildRhythmData(r.state.timeSig, r.state.swingPct, r.state.bpm, r.state.pattern, r.state.rows);
-    assert.equal(w.rhythmDataJson(out), block, n);
     assert.equal(formatRhythmJson(out), block, `${n} (plugin formatter)`);
   }
 });
@@ -877,7 +829,7 @@ test('P7 DOM: each of the five notes, loaded and saved with no net edit, posts t
     h.cell(ch, 1).click(); h.cell(ch, 1).click();                     // an edit and its undo: a save is posted with the original data
     const sent = lastSave(h).data;
     assert.deepEqual(sent, data, n);
-    assert.equal(pureCore().rhythmDataJson(sent), block, n);
+    assert.equal(formatRhythmJson(sent), block, `${n} (the plugin's formatter writes the same bytes)`);
   }
 });
 

@@ -2,8 +2,8 @@
 //
 // Playground = the widget embedded in a chapter by a `forge-rhythm` block. It is a toy over a COPY of the note's data:
 //   - it never posts `forge-rhythm-save` (the hard pin — checked after every kind of data action),
-//   - it shows a "not saved" label, Reset and Open note; no autosave indicator, no Save / Reload-from-note,
-//   - Random / Clear / time signature apply at once (nothing is at risk; Reset undoes them),
+//   - it shows a "not saved" label and Reset (Open note is the host toolbar's); no autosave indicator, no Save / Reload-from-note,
+//   - the time-signature change applies at once (nothing is at risk; Reset undoes it),
 //   - it answers `forge-rhythm-request-data` with its CURRENT state, and `forge-rhythm-stop` stops playback.
 // Standalone behaviour and note-editing behaviour are covered by rhythm-box-widget.test.ts and must stay as they are.
 import assert from 'node:assert/strict';
@@ -25,14 +25,13 @@ async function playground(data: unknown = ROCK): Promise<Harness> {
   return h;
 }
 
-test('playground load: label, Reset and Open note are shown; the autosave controls are not', { skip }, async () => {
+test('playground load: label and Reset are shown; the autosave controls are not', { skip }, async () => {
   const h = await playground();
   assert.equal(h.el('hostBar').hidden, false);
   assert.match(h.el('playgroundLabel').textContent, /playground/i);
   assert.match(h.el('playgroundLabel').textContent, /not saved/i);
   assert.equal(h.el('playgroundLabel').hidden, false);
   assert.equal(h.el('bReset').hidden, false);
-  assert.equal(h.el('bOpenNote').hidden, false);
   assert.equal(h.el('bReload').hidden, true, 'no Reload-from-note');
   assert.equal(h.el('saveMsg').textContent, '', 'no autosave indicator text');
   assert.equal(h.el('hostEditing').hidden, true, 'the "Editing <note>" prefix is the note-editing mode\'s');
@@ -40,13 +39,12 @@ test('playground load: label, Reset and Open note are shown; the autosave contro
   assert.deepEqual(onSteps(h, 'kick'), [0, 8], 'the data is on the grid');
 });
 
-test('note-editing load (no mode flag) is unchanged: "Editing", no playground label / Reset / Open note', { skip }, async () => {
+test('note-editing load (no mode flag) is unchanged: "Editing", no playground label / Reset', { skip }, async () => {
   const h = await loadWidget(true);
   await h.send(loadEdit(ROCK, 'my beat'));
   assert.equal(h.el('hostEditing').hidden, false);
   assert.equal(h.el('playgroundLabel').hidden, true);
   assert.equal(h.el('bReset').hidden, true);
-  assert.equal(h.el('bOpenNote').hidden, true);
   h.cell('kick', 1).click();
   await settle();
   assert.equal(types(h, 'forge-rhythm-save').length, 1, 'note-editing still autosaves');
@@ -68,8 +66,6 @@ test('HARD PIN: every kind of data action in playground mode posts ZERO saves (a
     ['tempo up', () => h.el('bBpmUp').click()],
     ['tempo down', () => h.el('bBpmDown').click()],
     ['swing', () => { h.el('swing').value = '40'; fire(h, 'swing', 'input'); }],
-    ['random', () => h.el('bRandom').click()],
-    ['clear', () => h.el('bClear').click()],
     ['time signature', () => { h.el('timeSig').value = '3/4'; fire(h, 'timeSig', 'change'); }],
     ['add instrument', () => { h.el('addInstrument').value = 'bell'; fire(h, 'addInstrument', 'change'); }],
   ];
@@ -99,16 +95,8 @@ test('HARD PIN: remove instrument, and a load/status/save-result from the host, 
   assert.equal(h.el('bReload').hidden, true, 'and never the Reload-from-note button');
 });
 
-test('playground: Random, Clear and a time-signature change apply AT ONCE — no confirm bar', { skip }, async () => {
+test('playground: a time-signature change applies AT ONCE — no confirm bar', { skip }, async () => {
   const h = await playground();
-  h.el('bClear').click();
-  await settle();
-  assert.equal(h.el('confirmBar').hidden, true);
-  assert.equal(h.doc.querySelectorAll('.step.on').length, 0, 'Clear applied immediately');
-  h.el('bRandom').click();
-  await settle();
-  assert.equal(h.el('confirmBar').hidden, true);
-  assert.ok(h.doc.querySelectorAll('.step.on').length > 0, 'Random applied immediately');
   h.el('timeSig').value = '3/4';
   fire(h, 'timeSig', 'change');
   await settle();
@@ -117,10 +105,11 @@ test('playground: Random, Clear and a time-signature change apply AT ONCE — no
   assert.equal(h.doc.querySelectorAll('.step').length, 12 * 3, 'the grid is 3/4 now');
 });
 
-test('note-editing mode still asks first (the contrast): Random shows the confirm bar', { skip }, async () => {
+test('note-editing mode still asks first (the contrast): the time-signature change shows the confirm bar', { skip }, async () => {
   const h = await loadWidget(true);
   await h.send(loadEdit(ROCK, 'n'));
-  h.el('bRandom').click();
+  h.el('timeSig').value = '3/4';
+  fire(h, 'timeSig', 'change');
   await settle();
   assert.equal(h.el('confirmBar').hidden, false);
 });
@@ -143,13 +132,7 @@ test('Reset restores the loaded data (cells, tempo, swing, meter, rows), tells t
   assert.equal(types(h, 'forge-rhythm-save').length, 0);
 });
 
-test('Open note asks the host to open the data note — and nothing else', { skip }, async () => {
-  const h = await playground();
-  const before = h.posted.length;
-  h.el('bOpenNote').click();
-  await settle();
-  assert.deepEqual(h.posted.slice(before), [{ type: 'forge-rhythm-open-note' }]);
-});
+// (drain 2026-10-19-1500: 'Open note asks the host to open the data note' deleted — the widget has no Open note any more; the host toolbar's button is pinned in rhythm-embed-wiring.test.ts.)
 
 test('request-data answers with the CURRENT state (edited, unsaved), not the loaded one', { skip }, async () => {
   const h = await playground();
@@ -212,7 +195,6 @@ test('standalone (no host) is untouched by Phase 8: nothing posted, no playgroun
   const h = await loadWidget(false);
   assert.deepEqual(h.posted, []);
   assert.equal(h.el('bReset').hidden, true);
-  assert.equal(h.el('bOpenNote').hidden, true);
   h.cell('kick', 0).click();
   assert.deepEqual(h.posted, []);
 });
