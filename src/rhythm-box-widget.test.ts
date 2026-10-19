@@ -14,15 +14,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 import { formatRhythmJson, parseWidgetMessage, type RhythmData } from './rhythm-edit-core.ts';
-
-const WIDGET_REL = 'music_instruments/resources/html/rhythm_box.html';
-const CANDIDATES = [
-  ...(process.env.RHYTHM_BOX_WIDGET_FILE ? [path.resolve(process.env.RHYTHM_BOX_WIDGET_FILE)] : []),   // see test-support/rhythm-widget-harness.ts
-  path.resolve(process.cwd(), '../music-theory', WIDGET_REL),
-  path.resolve(process.cwd(), 'assets/vaults/music-theory', WIDGET_REL),
-];
-const WIDGET_FILE = CANDIDATES.find((f) => fs.existsSync(f));
-const skip = WIDGET_FILE ? false : 'rhythm_box.html found in neither ../music-theory nor the bundled music-theory vault';
+import { readVaultFile } from './test-support/vault-source.ts';
+import { WIDGET_FILE, skip } from './test-support/rhythm-widget-harness.ts';   // the ONE resolution (override, else sibling/bundle — which must agree), see vault-source.ts
 const html = WIDGET_FILE ? fs.readFileSync(WIDGET_FILE, 'utf-8') : '';
 const SCRIPT = (/<script>([\s\S]*?)<\/script>/.exec(html) ?? [])[1] ?? '';
 
@@ -643,12 +636,11 @@ test('widget source: only the embedding window may talk to the widget; no Save b
 // round-trip byte-identically.
 // ======================================================================================================================
 
-const NOTE_DIR = path.resolve(process.cwd(), '../music-theory/rhythm_data');
 const FIVE = ['rhythm_pattern_tresillo', 'rhythm_pattern_hemiola', 'rhythm_pattern_bell_12_8', 'rhythm_pattern_clave_son_3_2', 'rhythm_pattern_tha_dhi_gi_na_thom'];
-const haveFive = FIVE.every((n) => fs.existsSync(path.join(NOTE_DIR, n + '.md')));
-const skipFive = haveFive ? false : 'the five Phase 7 notes are not in the music-theory source checkout';
+const haveFive = FIVE.every((n) => readVaultFile('music-theory', `rhythm_data/${n}.md`) !== null);   // sibling or bundle; they must agree (vault-source.ts)
+const skipFive = haveFive ? false : 'the five Phase 7 notes are in neither the music-theory source checkout nor the bundled vault';
 const noteJson = (n: string): { data: any; block: string } => {
-  const text = fs.readFileSync(path.join(NOTE_DIR, n + '.md'), 'utf-8');
+  const text = readVaultFile('music-theory', `rhythm_data/${n}.md`)!;
   const m = /```json\n([\s\S]*?)\n```/.exec(text)!;
   return { data: JSON.parse(m[1]), block: m[1] };
 };

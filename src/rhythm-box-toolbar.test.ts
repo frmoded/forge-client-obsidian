@@ -17,6 +17,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { loadWidget, skip, widgetHtml, widgetScript, type Harness } from './test-support/rhythm-widget-harness.ts';
+import { readVaultFile } from './test-support/vault-source.ts';
 import { readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
 
 function pureCore(): any {
@@ -25,8 +26,9 @@ function pureCore(): any {
   return mod.exports;
 }
 const noteData = (name: string): RhythmData => {
-  const p = path.resolve(import.meta.dirname, '..', 'assets', 'vaults', 'music-theory', 'rhythm_data', `${name}.md`);
-  const r = readRhythmNote(fs.readFileSync(p, 'utf8'));
+  const text = readVaultFile('music-theory', `rhythm_data/${name}.md`);          // sibling or bundle; both present and different THROWS, naming both (vault-source.ts)
+  assert.ok(text !== null, `${name}: neither the sibling vault nor the bundle has it`);
+  const r = readRhythmNote(text!);
   assert.ok(r.ok, name);
   return (r as { ok: true; value: { data: RhythmData } }).value.data;
 };

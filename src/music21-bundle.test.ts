@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { loadPyodide } from 'pyodide';
+import { resolveVaultFile } from './test-support/vault-source.ts';
 
 // Music-edition Phase 2: the 11 wheels are FETCHED + sha256-verified into the gitignored assets/wheels/
 // (`npm run fetch-music-wheels`), not committed. A checkout that has not fetched them skips this suite
@@ -327,14 +328,9 @@ _tempos = [m.number for p in _layered.parts for m in p.flatten().getElementsByCl
 // ---------------------------------------------------------------------------------------------------
 
 function exampleNote(name: string): { text: string; from: 'bundled' | 'source' } | null {
-  const candidates: Array<['bundled' | 'source', string]> = [
-    ['bundled', path.resolve(process.cwd(), 'assets/vaults/music-theory/rhythm_data', `${name}.md`)],
-    ['source', path.resolve(process.cwd(), '../music-theory/rhythm_data', `${name}.md`)],
-  ];
-  for (const [from, file] of candidates) {
-    if (fs.existsSync(file)) return { text: fs.readFileSync(file, 'utf-8'), from };
-  }
-  return null;
+  // Drain 2026-10-20-1100: sibling or bundle through ONE function — and if both have the note and differ, THROW naming both (test-support/vault-source.ts).
+  const r = resolveVaultFile('music-theory', `rhythm_data/${name}.md`);
+  return r === null ? null : { text: fs.readFileSync(r.path, 'utf-8'), from: r.source === 'bundle' ? 'bundled' : 'source' };
 }
 
 function noteFrontmatterAndPython(text: string): { python: string } {

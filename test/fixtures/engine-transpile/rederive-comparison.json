@@ -1,0 +1,143 @@
+{
+ "engine_sha": "4ea6ad5a20191bedfb183147c0e346ec8fa04bca",
+ "notes": {
+  "music-theory/percussion/loom": {
+   "new": {
+    "1": {
+     "digest": "c03670b0acd74098",
+     "notes": 1024,
+     "staves": 4
+    },
+    "2": {
+     "digest": "c03670b0acd74098",
+     "notes": 1024,
+     "staves": 4
+    }
+   },
+   "new_python": "def compute(context):\n  cell = phase_cell()\n  return phase_shifter(cell=cell, num_voices=4, bars_per_section=4, total_sections=8, shift_per_section_eighths=1, ts_str='12/8', bpm=96, velocity_profile='human')\n",
+   "old": {
+    "1": {
+     "digest": "c03670b0acd74098",
+     "notes": 1024,
+     "staves": 4
+    },
+    "2": {
+     "digest": "c03670b0acd74098",
+     "notes": 1024,
+     "staves": 4
+    }
+   },
+   "old_depends_on_seed": false,
+   "old_note": "---\ntype: action\ndescription_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a\nrecipe_hash: 46ddd92c6036542a6c86c7fb450e1a94cfd6961229266bd2f69108fcbcdaaa41\npython_hash: 9468f582204c98a6a46fa3824a25668069cf6bc279670571f33c5889bd6c3d82\nrecipe_derived_from_source_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a\npython_derived_from_source_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a\nsource_facet: synced\nrecipe_derived_from_description_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a\n---\n\n# Description\n\nFour threads of the Reich \"Clapping Music\" cell weave through each\nother, shifting by an eighth note per section. The threads diverge\nthen mathematically realign: voice 4 returns to unison with voice 1\nat section 5 (0-indexed S=4: 3 × 1 × 4 = 12, which is 0 mod 12);\nvoice 3 at section 7 (S=6: 2 × 1 × 6 = 12 mod 12 = 0). The piece is\nwhat those shifts sound like — phase music as woven fabric. Closed\nhi-hat for all four voices; 32 bars in 12/8 at 96 BPM; ~80 seconds.\n\nThe composition delegates the rhythmic cell to [[phase_cell]] and the\nphase-shifting algorithm to [[phase_shifter]]. This snippet stays\ntiny — it picks the parameters that make the piece (4 voices,\n1-eighth shift per section, 4 bars per section, 8 sections, 12/8 at\n96 BPM, 'human' velocity) and composes them. Swap the cell or change\na parameter and the architecture stays whole.\n\n## Inputs\n\n(none)\n\n# Recipe\n\nLet cell = Call [[phase_cell]].\nReturn Call [[phase_shifter]] with cell=cell, num_voices=4, bars_per_section=4, total_sections=8, shift_per_section_eighths=1, ts_str=\"12/8\", bpm=96, velocity_profile=\"human\".\n\n# Python\n\n```python\ndef compute(context):\n    # v0.7.0: phase_cell / phase_shifter are now library notes in\n    # forge.music.lib; called directly. phase_shifter's `voices` kwarg\n    # was renamed to `num_voices` to avoid shadowing the lib's voices()\n    # composition chip.\n    cell = phase_cell()\n    return phase_shifter(\n        cell=cell,\n        num_voices=4,\n        bars_per_section=4,\n        total_sections=8,\n        shift_per_section_eighths=1,\n        ts_str='12/8',\n        bpm=96,\n        velocity_profile='human',\n    )\n```\n\n# Dependencies\n\n[[phase_cell]] [[phase_shifter]]\n",
+   "old_python": "def compute(context):\n    # v0.7.0: phase_cell / phase_shifter are now library notes in\n    # forge.music.lib; called directly. phase_shifter's `voices` kwarg\n    # was renamed to `num_voices` to avoid shadowing the lib's voices()\n    # composition chip.\n    cell = phase_cell()\n    return phase_shifter(\n        cell=cell,\n        num_voices=4,\n        bars_per_section=4,\n        total_sections=8,\n        shift_per_section_eighths=1,\n        ts_str='12/8',\n        bpm=96,\n        velocity_profile='human',\n    )",
+   "recipe": "Let cell = Call [[phase_cell]].\nReturn Call [[phase_shifter]] with cell=cell, num_voices=4, bars_per_section=4, total_sections=8, shift_per_section_eighths=1, ts_str=\"12/8\", bpm=96, velocity_profile=\"human\".",
+   "verdict": "identical"
+  },
+  "music-theory/slow_burn/chorus": {
+   "new": {
+    "1": {
+     "digest": "4ff5dc28ec0f012d",
+     "notes": 58,
+     "staves": 2
+    },
+    "2": {
+     "digest": "4ff5dc28ec0f012d",
+     "notes": 58,
+     "staves": 2
+    }
+   },
+   "new_python": "def compute(context):\n  form_score = form()\n  phrase_a1 = vocal_phrase_a()\n  phrase_a2 = vocal_phrase_a()\n  phrase_b = vocal_phrase_b()\n  vocal_line = sequence_list(sections=[phrase_a1, phrase_a2, phrase_b])\n  return voices_list(sections=[form_score, vocal_line])\n",
+   "old": {
+    "1": {
+     "digest": "4ff5dc28ec0f012d",
+     "notes": 58,
+     "staves": 2
+    },
+    "2": {
+     "digest": "4ff5dc28ec0f012d",
+     "notes": 58,
+     "staves": 2
+    }
+   },
+   "old_depends_on_seed": false,
+   "old_note": "---\ntype: action\ndescription_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235\nrecipe_hash: 1f29c2e7526303b05483a2b3993137828ee85ea1f0c6fde8f20df526993e5119\npython_hash: 94cde7d260b1b6aa50e5d09eed9b8ece0dd13403b572251fc5e6251c1114c2af\nrecipe_derived_from_source_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235\npython_derived_from_source_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235\nsource_facet: synced\nrecipe_derived_from_description_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235\npython_derived_from_recipe_hash: 1f29c2e7526303b05483a2b3993137828ee85ea1f0c6fde8f20df526993e5119\n---\n\n# Description\n\nOne 12-bar vocal chorus of the blues — the basic repeating unit of\nthe song. AAB lyric arc: a four-bar phrase that sets up the line,\nthe same phrase repeated for weight, then the four-bar answer that\nresolves it. Sung over the harmonic frame from [[form]]. Twelve\nbars in 12/8, slow blues feel, around 70 BPM with an eighth-note\ntriplet swing.\n\nThe phrases lean weary and sparse — lots of rest space, sighing\nthrough the line — with the answer landing more firmly on the\ntonic at the end.\n\n## Inputs\n\n(none)\n\n# Recipe\n\nLet form_score = Call [[form]].\nLet phrase_a1 = Call [[vocal_phrase_a]].\nLet phrase_a2 = Call [[vocal_phrase_a]].\nLet phrase_b = Call [[vocal_phrase_b]].\nLet vocal_line = Call [[sequence_list]] with sections=[phrase_a1, phrase_a2, phrase_b].\nReturn Call [[voices_list]] with sections=[form_score, vocal_line].\n\n# Python\n\n```python\ndef compute(context):\n    # v0.7.0: form / vocal_phrase_a / vocal_phrase_b are now library\n    # notes in forge.music.lib; called directly instead of via\n    # context.compute.\n    form_score = form()\n    phrase_a = vocal_phrase_a()\n    phrase_b = vocal_phrase_b()\n\n    vocal_line = sequence(repeat(phrase_a, 2), phrase_b)\n    return voices(form_score, vocal_line)\n```\n\n# Dependencies\n\n*Synced from Python. Edit the Python and regenerate, or run \"Forge: Sync edges\" to refresh.*\n\n[[form]] [[vocal_phrase_a]] [[vocal_phrase_b]] [[sequence_list]] [[voices_list]]\n",
+   "old_python": "def compute(context):\n    # v0.7.0: form / vocal_phrase_a / vocal_phrase_b are now library\n    # notes in forge.music.lib; called directly instead of via\n    # context.compute.\n    form_score = form()\n    phrase_a = vocal_phrase_a()\n    phrase_b = vocal_phrase_b()\n\n    vocal_line = sequence(repeat(phrase_a, 2), phrase_b)\n    return voices(form_score, vocal_line)",
+   "recipe": "Let form_score = Call [[form]].\nLet phrase_a1 = Call [[vocal_phrase_a]].\nLet phrase_a2 = Call [[vocal_phrase_a]].\nLet phrase_b = Call [[vocal_phrase_b]].\nLet vocal_line = Call [[sequence_list]] with sections=[phrase_a1, phrase_a2, phrase_b].\nReturn Call [[voices_list]] with sections=[form_score, vocal_line].",
+   "verdict": "identical"
+  },
+  "music-theory/slow_burn/slow_burn": {
+   "new": {
+    "1": {
+     "digest": "0fd56cd7255fda34",
+     "notes": 715,
+     "staves": 9
+    },
+    "2": {
+     "digest": "a40184813ddffce0",
+     "notes": 715,
+     "staves": 9
+    }
+   },
+   "new_python": "def compute(context):\n  chorus1_drums = drum_chorus(profile='sparse')\n  chorus2_drums = drum_chorus(profile='standard')\n  solo_drums = drum_chorus(profile='driving')\n  chorus3_drums = drum_chorus(profile='standard')\n  chorus1_vocal = chorus()\n  chorus2_vocal = chorus()\n  chorus3_vocal = chorus()\n  solo_line = solo_chorus()\n  chorus1 = voices_list(sections=[chorus1_vocal, chorus1_drums])\n  chorus2 = voices_list(sections=[chorus2_vocal, chorus2_drums])\n  solo = voices_list(sections=[solo_line, solo_drums])\n  chorus3 = voices_list(sections=[chorus3_vocal, chorus3_drums])\n  return sequence_list(sections=[chorus1, chorus2, solo, chorus3])\n",
+   "old": {
+    "1": {
+     "digest": "913a00298e472c21",
+     "notes": 715,
+     "staves": 9
+    },
+    "2": {
+     "digest": "ff31548021fb77dc",
+     "notes": 715,
+     "staves": 9
+    }
+   },
+   "old_depends_on_seed": true,
+   "old_note": "---\ntype: action\ndescription_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5\nrecipe_hash: 3f18b5c22678746253c19270e23e511ec41acd4d2ccb7c31c6414317f7ac8c03\npython_hash: 8773dd28d4fc2f99f5c161f7c4a9a3adc923b3aa7ed2e7c4118d06bb1571a7d2\nrecipe_derived_from_source_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5\npython_derived_from_source_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5\nsource_facet: synced\nrecipe_derived_from_description_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5\n---\n\n# Description\n\nSlow Burn — a slow E blues, four 12-bar choruses, vocal lead with drums underneath.\nThe first chorus introduces the lyric; the second repeats with more\nweight; the third opens to an instrumental solo on guitar; the fourth\ncomes back changed. Around 70 BPM, eighth-note triplet feel.\n\nThe drum arc shapes the dynamics: sparse for the intro, building\nthrough standard for the second vocal, driving under the solo, then\nback to standard for the closing chorus.\n\n## Inputs\n\n(none)\n\n# Recipe\n\nLet chorus1_drums = Call [[drum_chorus]] with profile=\"sparse\".\nLet chorus2_drums = Call [[drum_chorus]] with profile=\"standard\".\nLet solo_drums = Call [[drum_chorus]] with profile=\"driving\".\nLet chorus3_drums = Call [[drum_chorus]] with profile=\"standard\".\n\nLet chorus1_vocal = Call [[chorus]].\nLet chorus2_vocal = Call [[chorus]].\nLet chorus3_vocal = Call [[chorus]].\nLet solo_line = Call [[solo_chorus]].\n\nLet chorus1 = Call [[voices_list]] with sections=[chorus1_vocal, chorus1_drums].\nLet chorus2 = Call [[voices_list]] with sections=[chorus2_vocal, chorus2_drums].\nLet solo = Call [[voices_list]] with sections=[solo_line, solo_drums].\nLet chorus3 = Call [[voices_list]] with sections=[chorus3_vocal, chorus3_drums].\n\nReturn Call [[sequence_list]] with sections=[chorus1, chorus2, solo, chorus3].\n\n# Python\n\n```python\ndef compute(context):\n    # Section profiles shape the song's drum arc:\n    # intro (sparse) → fuller chorus (standard) → solo (driving) → return (standard).\n    # v0.7.0: drum_chorus is now a library note in forge.music.lib;\n    # called directly instead of via context.compute.\n    chorus1_drums = drum_chorus(profile='sparse')\n    chorus2_drums = drum_chorus(profile='standard')\n    solo_drums    = drum_chorus(profile='driving')\n    chorus3_drums = drum_chorus(profile='standard')\n\n    chorus1 = voices(context.compute(\"chorus\"),       chorus1_drums)\n    chorus2 = voices(context.compute(\"chorus\"),       chorus2_drums)\n    solo    = voices(context.compute(\"solo_chorus\"),  solo_drums)\n    chorus3 = voices(context.compute(\"chorus\"),       chorus3_drums)\n\n    return sequence(chorus1, chorus2, solo, chorus3)\n```\n\n# Dependencies\n\n*Synced from Python. Edit the Python and regenerate, or run \"Forge: Sync edges\" to refresh.*\n\n[[chorus]] [[solo_chorus]] [[drum_chorus]] [[voices_list]] [[sequence_list]]\n",
+   "old_python": "def compute(context):\n    # Section profiles shape the song's drum arc:\n    # intro (sparse) → fuller chorus (standard) → solo (driving) → return (standard).\n    # v0.7.0: drum_chorus is now a library note in forge.music.lib;\n    # called directly instead of via context.compute.\n    chorus1_drums = drum_chorus(profile='sparse')\n    chorus2_drums = drum_chorus(profile='standard')\n    solo_drums    = drum_chorus(profile='driving')\n    chorus3_drums = drum_chorus(profile='standard')\n\n    chorus1 = voices(context.compute(\"chorus\"),       chorus1_drums)\n    chorus2 = voices(context.compute(\"chorus\"),       chorus2_drums)\n    solo    = voices(context.compute(\"solo_chorus\"),  solo_drums)\n    chorus3 = voices(context.compute(\"chorus\"),       chorus3_drums)\n\n    return sequence(chorus1, chorus2, solo, chorus3)",
+   "recipe": "Let chorus1_drums = Call [[drum_chorus]] with profile=\"sparse\".\nLet chorus2_drums = Call [[drum_chorus]] with profile=\"standard\".\nLet solo_drums = Call [[drum_chorus]] with profile=\"driving\".\nLet chorus3_drums = Call [[drum_chorus]] with profile=\"standard\".\n\nLet chorus1_vocal = Call [[chorus]].\nLet chorus2_vocal = Call [[chorus]].\nLet chorus3_vocal = Call [[chorus]].\nLet solo_line = Call [[solo_chorus]].\n\nLet chorus1 = Call [[voices_list]] with sections=[chorus1_vocal, chorus1_drums].\nLet chorus2 = Call [[voices_list]] with sections=[chorus2_vocal, chorus2_drums].\nLet solo = Call [[voices_list]] with sections=[solo_line, solo_drums].\nLet chorus3 = Call [[voices_list]] with sections=[chorus3_vocal, chorus3_drums].\n\nReturn Call [[sequence_list]] with sections=[chorus1, chorus2, solo, chorus3].",
+   "verdict": "same-structure"
+  },
+  "music-theory/slow_burn/solo_chorus": {
+   "new": {
+    "1": {
+     "digest": "ef8aff7d8206e9a5",
+     "notes": 120,
+     "staves": 2
+    },
+    "2": {
+     "digest": "c636871d912783d1",
+     "notes": 120,
+     "staves": 2
+    }
+   },
+   "new_python": "def compute(context):\n  harmonic_frame = form()\n  solo_line = guitar_solo_chorus()\n  return voices_list(sections=[harmonic_frame, solo_line])\n",
+   "old": {
+    "1": {
+     "digest": "ef8aff7d8206e9a5",
+     "notes": 120,
+     "staves": 2
+    },
+    "2": {
+     "digest": "c636871d912783d1",
+     "notes": 120,
+     "staves": 2
+    }
+   },
+   "old_depends_on_seed": true,
+   "old_note": "---\ntype: action\ndescription_hash: e3b8959cd6a325b60ad7e498b92e956a8df49897c7599db8bce8e8bc37766621\nrecipe_hash: 922910256aaa5942de8598c45fb4e0ae53a96acc22dd39d0f4ad00a8ed39e6b2\npython_hash: 28f734b84e38334bf3b3ade17db0a46a75411fd9cdb9634ea11aa210fe28ce3b\nrecipe_derived_from_source_hash: e3b8959cd6a325b60ad7e498b92e956a8df49897c7599db8bce8e8bc37766621\npython_derived_from_source_hash: e3b8959cd6a325b60ad7e498b92e956a8df49897c7599db8bce8e8bc37766621\nsource_facet: synced\nrecipe_derived_from_description_hash: e3b8959cd6a325b60ad7e498b92e956a8df49897c7599db8bce8e8bc37766621\npython_derived_from_recipe_hash: 922910256aaa5942de8598c45fb4e0ae53a96acc22dd39d0f4ad00a8ed39e6b2\n---\n\n# Description\n\nThe instrumental chorus — 12 bars, no vocal. The electric guitar\ntakes the lead in minor pentatonic with blue notes; the harmonic\nframe from [[form]] continues underneath. The moment the song\nstops singing about the feeling and just shows it, sitting between\nthe second and third vocal choruses. 12/8, eighth-note triplet\nfeel, around 70 BPM. Denser than the vocal choruses — the\nemotional arc going up rather than across.\n\n## Inputs\n\n(none)\n\n# Recipe\n\nLet harmonic_frame = Call [[form]].\nLet solo_line = Call [[guitar_solo_chorus]].\nReturn Call [[voices_list]] with sections=[harmonic_frame, solo_line].\n\n# Python\n\n```python\ndef compute(context):\n    # v0.7.0: form / guitar_solo_chorus are now library notes in\n    # forge.music.lib; called directly instead of via context.compute.\n    harmonic_frame = form()\n    solo_line = guitar_solo_chorus()\n    return voices(harmonic_frame, solo_line)\n```\n\n# Dependencies\n\n*Synced from Python. Edit the Python and regenerate, or run \"Forge: Sync edges\" to refresh.*\n\n[[form]] [[guitar_solo_chorus]] [[voices_list]]\n",
+   "old_python": "def compute(context):\n    # v0.7.0: form / guitar_solo_chorus are now library notes in\n    # forge.music.lib; called directly instead of via context.compute.\n    harmonic_frame = form()\n    solo_line = guitar_solo_chorus()\n    return voices(harmonic_frame, solo_line)",
+   "recipe": "Let harmonic_frame = Call [[form]].\nLet solo_line = Call [[guitar_solo_chorus]].\nReturn Call [[voices_list]] with sections=[harmonic_frame, solo_line].",
+   "verdict": "identical"
+  }
+ },
+ "seeds": [
+  1,
+  2
+ ],
+ "vault_shas": {
+  "forge-moda": "b5d9487b344941d728e4ec156d637c8765ed4e3a",
+  "forge-tutorial": "9c45448d6437d49d1c62b540170a40dfeef904fe",
+  "music-core": "015c9dd9c8e7299df7a17e13fb2f1140dd487e16",
+  "music-theory": "baf108d7104e04f1fab639070902ff05d75898e3"
+ }
+}

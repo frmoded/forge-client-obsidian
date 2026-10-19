@@ -8,6 +8,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { loadWidget, ROCK, skip, widgetHtml, widgetScript, type Harness } from './test-support/rhythm-widget-harness.ts';
+import { readVaultFile } from './test-support/vault-source.ts';
 
 const load = (mode?: string) => ({ type: 'forge-rhythm-load', data: ROCK, noteName: 'rhythm_pattern_test', ...(mode ? { mode } : {}) });
 function pureCore(): any {
@@ -77,7 +78,7 @@ test('the only question the confirm bar can still ask is about the meter or a ro
 });
 
 test('rhythm_box.md no longer promises the removed buttons', () => {
-  const candidates = [path.resolve(import.meta.dirname, '..', '..', 'music-theory', 'music_instruments', 'rhythm_box.md'), path.resolve(import.meta.dirname, '..', 'assets', 'vaults', 'music-theory', 'music_instruments', 'rhythm_box.md')];
-  const md = process.env.RHYTHM_BOX_DOC_FILE ? fs.readFileSync(process.env.RHYTHM_BOX_DOC_FILE, 'utf8') : fs.readFileSync(candidates.find((f) => fs.existsSync(f))!, 'utf8');
+  const md = process.env.RHYTHM_BOX_DOC_FILE ? fs.readFileSync(process.env.RHYTHM_BOX_DOC_FILE, 'utf8') : readVaultFile('music-theory', 'music_instruments/rhythm_box.md');
+  assert.ok(md !== null, 'rhythm_box.md is in neither the sibling vault nor the bundle');
   assert.doesNotMatch(md, /Export JSON|\*\*Random\*\*|\*\*Clear\*\*|⋯/);
 });

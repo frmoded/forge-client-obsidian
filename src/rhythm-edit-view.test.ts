@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { RHYTHM_BOX_WIDGET_PATH } from './rhythm-edit-core.ts';
+import { resolveVaultFile } from './test-support/vault-source.ts';
 
 const read = (rel: string) => fs.readFileSync(path.resolve(process.cwd(), rel), 'utf-8');
 const view = read('src/rhythm-edit-view.ts');
@@ -167,7 +168,7 @@ test('availability: the command and both menu items are gated on isRhythmEditCan
 
 test('the widget path the view loads is where the music-theory vault keeps it', () => {
   assert.equal(RHYTHM_BOX_WIDGET_PATH, 'music_instruments/resources/html/rhythm_box.html');
-  const found = ['../music-theory', 'assets/vaults/music-theory'].some((base) => fs.existsSync(path.resolve(process.cwd(), base, RHYTHM_BOX_WIDGET_PATH)));
+  const found = resolveVaultFile('music-theory', RHYTHM_BOX_WIDGET_PATH);     // sibling or bundle; if both have it and differ this THROWS, naming both (vault-source.ts)
   assert.ok(found, 'rhythm_box.html exists at that path in the source vault or the bundled copy');
 });
 

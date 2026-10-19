@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { listVaultDir, readVaultFile } from './test-support/vault-source.ts';
 
 const SRC = import.meta.dirname;
 const ROOT = path.resolve(SRC, '..');
@@ -47,13 +48,10 @@ test('the HOST never reads into a widget frame: only contentWindow.postMessage a
 /** Things an opaque origin removes: web storage, cookies, and any reach into the embedding window beyond postMessage. */
 const ORIGIN_BOUND = /\b(localStorage|sessionStorage|indexedDB|document\.cookie|caches\.|window\.top\b|top\.document|parent\.document|parent\.require|window\.parent\.(?!postMessage|\w*\s*!==)|opener\b)/;
 
+const WIDGET_DIR = 'music_instruments/resources/html';
 function widgetFiles(): { name: string; text: string }[] {
-  const dirs = [
-    path.resolve(ROOT, '../music-theory/music_instruments/resources/html'),
-    path.join(ROOT, 'assets/vaults/music-theory/music_instruments/resources/html'),
-  ];
-  const dir = dirs.find((d) => fs.existsSync(d))!;
-  return fs.readdirSync(dir).filter((f) => f.endsWith('.html')).map((f) => ({ name: f, text: fs.readFileSync(path.join(dir, f), 'utf8') }));
+  // the sibling's listing, else the bundle's; each file read through vault-source.ts, so a sibling and a bundle that DISAGREE about a widget throw, naming both
+  return listVaultDir('music-theory', WIDGET_DIR, { cwd: ROOT }).filter((f) => f.endsWith('.html')).map((f) => ({ name: f, text: readVaultFile('music-theory', `${WIDGET_DIR}/${f}`, { cwd: ROOT })! }));
 }
 
 test('NON-VACUITY: the detector fires on each origin-bound API it names', () => {

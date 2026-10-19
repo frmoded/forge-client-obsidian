@@ -127,8 +127,9 @@ test('NON-VACUITY — the empty-SHA english_hash remnant is flagged on Run (the 
 test('every note on the read-only ratchet exists in the bundle — a typo fails here, not only at build time', () => {
   const list = fs.readFileSync(path.join(ROOT, 'scripts/open-time-readonly.txt'), 'utf8')
     .split(/\r?\n/).map((l) => l.replace(/#.*$/, '').trim()).filter(Boolean);
-  // 24 since drain 2026-10-19-1530: five notes whose Python the real engine would still rewrite were taken off it until they are re-derived (Phase B).
-  assert.ok(list.length >= 24, `the ratchet should carry the derived + library-gated clean notes, has ${list.length}`);
+  // 24 since drain 2026-10-19-1530: five notes whose Python the real engine would still rewrite were taken off it until they are re-derived; 29 since drain
+  // 2026-10-20-1100 (Phase B) put those five back after re-deriving them at the source.
+  assert.ok(list.length >= 29, `the ratchet should carry the derived + library-gated clean notes, has ${list.length}`);
   const missing = list.filter((rel) => !fs.existsSync(path.join(ROOT, 'assets/vaults', rel)));
   assert.deepEqual(missing, []);
 });

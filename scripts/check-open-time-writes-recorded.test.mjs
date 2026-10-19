@@ -22,6 +22,9 @@ const HELLO = 'forge-tutorial/01-hello/hello_world';
 const TRIAD = 'music-theory/exercises/build_triad';
 const cli = (...args) => spawnSync(process.execPath, ['--no-warnings', '--experimental-strip-types', CLI, ...args], { encoding: 'utf8' });
 const noteOf = (rel) => RECORDING.notes[rel].note;
+// Drain 2026-10-20-1100: build_triad was re-derived (Phase B), so the recording's `note` is now clean. The "a note whose Python is not what the engine produces" exemplar
+// is therefore the PINNED pre-Phase-B bytes (music-theory baf108d: `def compute(context):` — the signature lacks the inputs), never the moving recording.
+const NOT_DERIVED_TRIAD = fs.readFileSync(path.join(ROOT, 'test', 'fixtures', 'vault', 'shipped_not_derived_build_triad_signature_lacks_inputs.md'), 'utf8');
 function vaultNamed(name, files) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'otwr-'));
   const root = path.join(base, name);
@@ -79,11 +82,13 @@ test('a note whose Recipe changed since it was recorded is reported and its reco
 
 test('auditNote with the ENGINE\'s Python: hello_world is clean, build_triad is not (its Python is not what the engine produces)', async () => {
   assert.deepEqual(await auditNote(noteOf(HELLO), { libraryGated: true, enginePython: RECORDING.notes[HELLO].python }), { applies: true, open: [], run: [] });
-  const triad = await auditNote(noteOf(TRIAD), { libraryGated: true, enginePython: RECORDING.notes[TRIAD].python });
+  const triad = await auditNote(NOT_DERIVED_TRIAD, { libraryGated: true, enginePython: RECORDING.notes[TRIAD].python });
   assert.equal(triad.run.length, 1);
   assert.match(triad.run[0], /engine/i);
   // the OLD model — the note's own Python — called the same note clean: the blind spot this mode closes
-  assert.deepEqual(await auditNote(noteOf(TRIAD), { libraryGated: true }), { applies: true, open: [], run: [] });
+  assert.deepEqual(await auditNote(NOT_DERIVED_TRIAD, { libraryGated: true }), { applies: true, open: [], run: [] });
+  // and the re-derived build_triad (what ships now) is clean under the engine's Python: the gate agrees with the fix
+  assert.deepEqual(await auditNote(noteOf(TRIAD), { libraryGated: true, enginePython: RECORDING.notes[TRIAD].python }), { applies: true, open: [], run: [] });
 });
 
 test('auditNote without a recording is the old model, unchanged (the fallback is explicit, not silent: see auditVault.unrecorded)', async () => {
@@ -92,14 +97,14 @@ test('auditNote without a recording is the old model, unchanged (the fallback is
 
 test('auditVault in recorded mode: only the not-derived note writes; a note with no recording is modelled the old way AND listed as unrecorded', async () => {
   const unrecorded = noteOf(HELLO).replace('hello_world', 'hello_worlds'); // same bytes under a name the recording does not know
-  const dir = vaultNamed('music-theory', { 'exercises/build_triad.md': noteOf(TRIAD), 'exercises/orphan.md': unrecorded });
+  const dir = vaultNamed('music-theory', { 'exercises/build_triad.md': NOT_DERIVED_TRIAD, 'exercises/orphan.md': unrecorded });
   const r = await auditVault(dir, { libraryGated: true, recording: RECORDING });
   assert.deepEqual(r.writing.map((w) => w.path), ['exercises/build_triad.md']);
   assert.deepEqual(r.unrecorded, ['exercises/orphan.md']);
 });
 
 test('CLI: a REQUIRED note the engine would rewrite fails the gate with the engine named; with --no-recording the old model passes it', () => {
-  const dir = vaultNamed('music-theory', { 'exercises/build_triad.md': noteOf(TRIAD) });
+  const dir = vaultNamed('music-theory', { 'exercises/build_triad.md': NOT_DERIVED_TRIAD });
   const withRec = cli('--require', TRIAD + '.md', '--recording', path.join(ROOT, 'test', 'fixtures', 'engine-transpile', 'shipped-notes.json'), dir);
   assert.equal(withRec.status, 1, withRec.stdout + withRec.stderr);
   assert.match(withRec.stderr, /WRITES\s+music-theory\/exercises\/build_triad\.md/);

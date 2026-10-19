@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { readVaultFile } from './test-support/vault-source.ts';
 import {
   RHYTHM_CHANNELS,
   RhythmNoteSession,
@@ -28,13 +29,12 @@ const ROOT = process.cwd();
 /** Beat-as-data Phase 7: the five world-rhythm notes (read from the SOURCE vault; the bundled copy gains them only after the driver's vault sync). */
 const PHASE7_NOTES = ['rhythm_pattern_tresillo', 'rhythm_pattern_hemiola', 'rhythm_pattern_bell_12_8', 'rhythm_pattern_clave_son_3_2', 'rhythm_pattern_tha_dhi_gi_na_thom'];
 
-/** A rhythm-data note from the music-theory vault: the SOURCE checkout if present, else the bundled copy. */
+/** A rhythm-data note from the music-theory vault: the SOURCE checkout if present, else the bundled copy — and if both have it and differ, the test FAILS naming both
+ *  (test-support/vault-source.ts, drain 2026-10-20-1100). */
 function vaultNote(name: string): string {
-  for (const base of ['../music-theory/rhythm_data', 'assets/vaults/music-theory/rhythm_data']) {
-    const file = path.resolve(ROOT, base, `${name}.md`);
-    if (fs.existsSync(file)) return fs.readFileSync(file, 'utf-8');
-  }
-  throw new Error(`rhythm_data/${name}.md not found in the source vault or the bundled copy`);
+  const text = readVaultFile('music-theory', `rhythm_data/${name}.md`, { cwd: ROOT });
+  if (text === null) throw new Error(`rhythm_data/${name}.md not found in the source vault or the bundled copy`);
+  return text;
 }
 
 const rock = (): RhythmData => ({

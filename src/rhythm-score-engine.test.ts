@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { WHEELS_PRESENT, engine, compute } from './test-support/real-rhythm-engine.ts';
+import { readVaultFile } from './test-support/vault-source.ts';
 
 const test = (name: string, fn: () => Promise<void>) =>
   baseTest(name, { skip: WHEELS_PRESENT ? false : 'music wheels not fetched — run: npm run fetch-music-wheels', timeout: 300_000 }, fn);
@@ -86,12 +87,10 @@ test('real Verovio (node): the MusicXML renders to SVG with three staves (skips 
 // ---- Beat-as-data Phase 7: two of the five world-rhythm notes through the REAL engine (the same compute path the Score view uses) -----
 
 function sourceNote(name: string): { data: any; skipReason?: string } {
-  for (const base of ['../music-theory/rhythm_data', 'assets/vaults/music-theory/rhythm_data']) {
-    const file = path.resolve(process.cwd(), base, `${name}.md`);
-    if (fs.existsSync(file)) {
-      const m = /```json\n([\s\S]*?)\n```/.exec(fs.readFileSync(file, 'utf-8'))!;
-      return { data: JSON.parse(m[1]) };
-    }
+  const text = readVaultFile('music-theory', `rhythm_data/${name}.md`);     // sibling or bundle; if both have it and differ this THROWS, naming both (vault-source.ts)
+  if (text !== null) {
+    const m = /```json\n([\s\S]*?)\n```/.exec(text)!;
+    return { data: JSON.parse(m[1]) };
   }
   return { data: null, skipReason: `${name}.md is in neither the source vault nor the bundled copy (the bundled copy gains it after the driver's vault sync)` };
 }

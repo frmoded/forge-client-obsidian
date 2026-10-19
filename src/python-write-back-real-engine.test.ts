@@ -81,33 +81,26 @@ test('replaceOrInsertPythonHeading is idempotent on real engine output, and inse
  *  does change them — a REAL difference, which the plugin is right to persist. Found by this test's real-engine view of the library (drain
  *  2026-10-19-0900); fixing them means re-deriving the Python at the source (a transpile), which that drain's restamp tool never does.
  *  A RATCHET: a note may leave this list (when it is re-derived), never join it — a new offender fails the test below, and a listed note
- *  that no longer offends fails it too, so the list can only shrink. (Until drain 2026-10-19-1530 five of them were on
- *  scripts/open-time-readonly.txt, claiming "pressing Run writes nothing" — a claim the gate's old Run model could not see to be false; the gate
- *  now models Run with the recorded engine output and the ratchet was corrected.) */
-const NOT_DERIVED: Record<string, { why: string }> = {
-  'forge-tutorial/05-conditionals/weather': { why: 'stored Python is the stub `return None`' },
-  'music-theory/exercises/build_seventh_chord': { why: 'stored signature lacks the inputs the engine now emits' },
-  'music-theory/exercises/build_triad': { why: 'stored signature lacks the inputs the engine now emits' },
-  'music-theory/exercises/chord_progression': { why: 'stored signature lacks the inputs the engine now emits' },
-  'music-theory/exercises/guitar_play_smoke': { why: 'stored Python lacks the Recipe\'s default argument (Python older than its Recipe)' },
-  'music-theory/exercises/piano_play_smoke': { why: 'stored signature lacks the inputs the engine now emits' },
-  'music-theory/exercises/scale_construction_a_minor_piano': { why: 'stored Python is the stub `return None`' },
-  'music-theory/exercises/scale_construction_f_major_piano': { why: 'stored Python is the stub `return None`' },
-  'music-theory/exercises/scale_construction_g_major_piano': { why: 'stored Python is the stub `return None`' },
-  'music-theory/percussion/loom': { why: 'hand-written Python (comments, different structure) under a Recipe' },
-  'music-theory/slow_burn/chorus': { why: 'hand-written Python (comments, different structure) under a Recipe' },
-  'music-theory/slow_burn/slow_burn': { why: 'hand-written Python (comments, different structure) under a Recipe' },
-  'music-theory/slow_burn/solo_chorus': { why: 'hand-written Python (comments, different structure) under a Recipe' },
-};
+ *  that no longer offends fails it too, so the list can only shrink.
+ *  EMPTY since drain 2026-10-20-1100 (Phase B of 2026-10-19-1530): the thirteen it named were re-derived at the source — nine by the approved patches,
+ *  four hand-written ones by scripts/rederive-library-note.mjs — and the recording was re-recorded from the new vault HEADs. It stays as the place a
+ *  future offender must be named (and explained) to be tolerated at all. */
+const NOT_DERIVED: Record<string, { why: string }> = {};
 
 /** The notes among `offenders` that are not on the named list — what the ratchet test below fails on. */
-function unexplainedOffenders(offenders: string[]): string[] {
-  return offenders.filter((r) => !(r in NOT_DERIVED));
+function unexplainedOffenders(offenders: string[], known: Record<string, { why: string }> = NOT_DERIVED): string[] {
+  return offenders.filter((r) => !(r in known));
 }
 
 test('the ratchet itself bites: a note that is not on the list is reported, a listed one is not', () => {
-  assert.deepEqual(unexplainedOffenders(['forge-tutorial/01-hello/hello_world', 'music-theory/percussion/loom']), ['forge-tutorial/01-hello/hello_world']);
-  assert.deepEqual(unexplainedOffenders([]), []);
+  const known = { 'music-theory/percussion/loom': { why: 'example' } };
+  assert.deepEqual(unexplainedOffenders(['forge-tutorial/01-hello/hello_world', 'music-theory/percussion/loom'], known), ['forge-tutorial/01-hello/hello_world']);
+  assert.deepEqual(unexplainedOffenders([], known), []);
+  assert.deepEqual(unexplainedOffenders(['music-theory/percussion/loom']), ['music-theory/percussion/loom'], 'with the list EMPTY, nothing is tolerated');
+});
+
+test('the list is EMPTY: every shipped note is derived (Phase B of the 1530 re-derive drain)', () => {
+  assert.deepEqual(Object.keys(NOT_DERIVED), []);
 });
 
 test('EVERY recorded shipped note: a hammer click with the real engine Python writes nothing — except the named not-yet-derived ones (a ratchet)', async () => {
@@ -125,6 +118,15 @@ test('EVERY recorded shipped note: a hammer click with the real engine Python wr
   unexplained.push(...unexplainedOffenders(offenders).map((r) => `${r}: would write (${where[r]})`));
   assert.deepEqual(unexplained, [], 'a new offender: either the writer regressed or a note shipped not fully derived');
   assert.deepEqual(Object.keys(NOT_DERIVED).filter((r) => !offenders.includes(r)), [], 'listed as not derived but a click no longer writes it: remove it from NOT_DERIVED');
+});
+
+test('NON-VACUITY: the survey CAN fail — the pinned hand-written slow_burn/chorus (as it shipped before Phase B) IS written by a hammer click', async () => {
+  const cmp = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '..', 'test', 'fixtures', 'engine-transpile', 'rederive-comparison.json'), 'utf8')) as {
+    notes: Record<string, { old_note: string; new_python: string }>;
+  };
+  const e = cmp.notes['music-theory/slow_burn/chorus'];
+  const plan = planPythonWriteBack(e.old_note, await inputFor(e.old_note, e.new_python), { library: true });
+  assert.equal(plan.write, true, 'a library note whose Python is hand-written is rewritten by a click: what the EMPTY list now forbids');
 });
 
 test('the named not-yet-derived notes really DO differ from the engine (non-vacuity: the list is not covering for a whitespace bug)', () => {

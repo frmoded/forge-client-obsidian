@@ -9,6 +9,7 @@
     "typecheck:warn": "node scripts/typecheck-warn.mjs",
     "lint": "node scripts/lint-backtick-trap.mjs",
     "dev": "npm run build -- --watch",
+    "pretest": "node scripts/test-preflight.mjs",
     "test": "node --test src/*.test.ts scripts/*.test.mjs",
     "build-manifest": "node scripts/build-manifest.mjs",
     "setup-assets": "node scripts/setup-assets.mjs",

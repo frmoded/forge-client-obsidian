@@ -11,11 +11,12 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { loadWidget, skip, type Harness } from './test-support/rhythm-widget-harness.ts';
+import { readVaultFile } from './test-support/vault-source.ts';
 import { MSG_LOAD, MSG_READY, MSG_RESET, RhythmNoteSession, contentFingerprint, formatRhythmJson, modifyRecovery, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
 import { createRhythmEmbedSession, shouldRerenderAfterModify } from './rhythm-embed-core.ts';
 
-const NOTE_PATH = path.resolve(import.meta.dirname, '..', 'assets', 'vaults', 'music-theory', 'rhythm_data', 'rhythm_pattern_tresillo.md');
-const TRESILLO_TEXT = fs.readFileSync(NOTE_PATH, 'utf8');
+const TRESILLO_TEXT = readVaultFile('music-theory', 'rhythm_data/rhythm_pattern_tresillo.md')!;     // sibling or bundle; both present and different THROWS, naming both (vault-source.ts)
+assert.ok(TRESILLO_TEXT !== null, 'the shipped tresillo note must exist in the sibling vault or the bundle');
 const parsed = readRhythmNote(TRESILLO_TEXT);
 assert.ok(parsed.ok, 'the shipped tresillo note must be valid rhythm data');
 const TRESILLO: RhythmData = (parsed as { ok: true; value: { data: RhythmData } }).value.data;

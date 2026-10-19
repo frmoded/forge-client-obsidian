@@ -1,22 +1,22 @@
 // Shared harness for tests that drive the Rhythm Box widget page in happy-dom (Phase 8 and later). The Phase 5-7 file
 // (rhythm-box-widget.test.ts) keeps its own copy of the same small helper, unmodified; new tests use this one.
 //
-// The widget is read from the SOURCE vault checkout (../music-theory) when present, else the bundled copy. With neither, `skip` is the
-// reason string for node:test's `{ skip }` option.
+// The widget is read from the SOURCE vault checkout (../music-theory) when present, else the bundled copy — and when BOTH exist and differ the import FAILS, naming
+// both paths (test-support/vault-source.ts; drain 2026-10-20-1100): which of two checkouts a test read used to decide its result without saying so. With neither,
+// `skip` is the reason string for node:test's `{ skip }` option.
 import fs from 'node:fs';
 import path from 'node:path';
 import { Window } from 'happy-dom';
+import { resolveVaultFile } from './vault-source.ts';
 
 const WIDGET_REL = 'music_instruments/resources/html/rhythm_box.html';
-// RHYTHM_BOX_WIDGET_FILE: an explicit widget file (a clean worktree of the source vault) — takes precedence, so a change to the widget can be
-// tested before the sibling checkout has pulled it. Unset, the lookup is exactly what it always was.
-const CANDIDATES = [
-  ...(process.env.RHYTHM_BOX_WIDGET_FILE ? [path.resolve(process.env.RHYTHM_BOX_WIDGET_FILE)] : []),
-  path.resolve(process.cwd(), '../music-theory', WIDGET_REL),
-  path.resolve(process.cwd(), 'assets/vaults/music-theory', WIDGET_REL),
-];
-export const WIDGET_FILE = CANDIDATES.find((f) => fs.existsSync(f));
-export const skip: string | false = WIDGET_FILE ? false : 'rhythm_box.html found in neither ../music-theory nor the bundled music-theory vault';
+// RHYTHM_BOX_WIDGET_FILE: an explicit widget file (a clean worktree of the source vault) — takes precedence and is not compared with anything, so a change to the
+// widget can be tested before the sibling checkout has pulled it. Unset, sibling and bundle must agree (or only one exist).
+const OVERRIDE = process.env.RHYTHM_BOX_WIDGET_FILE ? path.resolve(process.env.RHYTHM_BOX_WIDGET_FILE) : undefined;
+export const WIDGET_FILE = resolveVaultFile('music-theory', WIDGET_REL, { override: OVERRIDE })?.path;
+export const skip: string | false = WIDGET_FILE ? false : (OVERRIDE
+  ? `RHYTHM_BOX_WIDGET_FILE names a file that does not exist: ${OVERRIDE}`
+  : 'rhythm_box.html found in neither ../music-theory nor the bundled music-theory vault');
 export const widgetHtml = WIDGET_FILE ? fs.readFileSync(WIDGET_FILE, 'utf-8') : '';
 export const widgetScript = (/<script>([\s\S]*?)<\/script>/.exec(widgetHtml) ?? [])[1] ?? '';
 
