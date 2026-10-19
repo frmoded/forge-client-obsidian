@@ -8,8 +8,9 @@
 # here would still have been rewritten by a real Run, because the Python they shipped was not what the engine produces: exercises/build_triad,
 # exercises/chord_progression, exercises/piano_play_smoke (stored signature lacked the inputs the engine emits) and slow_burn/chorus,
 # slow_burn/solo_chorus (hand-written Python). Drain 2026-10-20-1100 (Phase B) re-derived them at the source and they are back here.
-# Candidates that are now clean but were never listed (so not a pin yet): exercises/build_seventh_chord, exercises/guitar_play_smoke,
-# exercises/scale_construction_{a_minor,f_major,g_major}_piano, percussion/loom, slow_burn/slow_burn, and forge-tutorial/05-conditionals/weather.
+# Drain 2026-10-21-0900 — the eight notes that were clean but unlisted (build_seventh_chord, guitar_play_smoke, scale_construction_{a_minor,f_major,g_major}_piano, loom, slow_burn, weather)
+# are pinned: the ratchet is COMPLETE — scripts/open-time-readonly-complete.test.mjs fails for any shipped note the recorded-engine gate calls clean that is not on this list.
+# melodic_line_demo and rhythmic_line_demo are pinned on the weaker verdict (the engine cannot transpile them here: a slot needs the LLM); that is a named exception, not a precedent.
 forge-tutorial/01-hello/hello_world.md
 forge-tutorial/02-variables/fix_me.md
 forge-tutorial/02-variables/greeting.md
@@ -19,17 +20,24 @@ forge-tutorial/03-functions/function_inputs.md
 forge-tutorial/04-composition/describe_it.md
 forge-tutorial/04-composition/excited_word.md
 forge-tutorial/05-conditionals/mood.md
+forge-tutorial/05-conditionals/weather.md
 forge-tutorial/07-data/show_colors.md
 forge-tutorial/08-recursion/factorial.md
 forge-tutorial/08-recursion/show_factorial.md
+music-theory/exercises/build_seventh_chord.md
 music-theory/exercises/build_triad.md
 music-theory/exercises/chord_progression.md
 music-theory/exercises/chord_stream_demo.md
+music-theory/exercises/guitar_play_smoke.md
 music-theory/exercises/melodic_line_demo.md
 music-theory/exercises/octave_up.md
 music-theory/exercises/piano_play_smoke.md
 music-theory/exercises/rhythmic_line_demo.md
+music-theory/exercises/scale_construction_a_minor_piano.md
+music-theory/exercises/scale_construction_f_major_piano.md
+music-theory/exercises/scale_construction_g_major_piano.md
 music-theory/exercises/scale_quality_quiz.md
+music-theory/percussion/loom.md
 music-theory/percussion/murmuration.md
 music-theory/rhythm_data/rhythm_accented.md
 music-theory/rhythm_data/rhythm_extended_building.md
@@ -38,4 +46,5 @@ music-theory/rhythm_data/rhythm_extended_ghost.md
 music-theory/rhythm_data/rhythm_multiplex.md
 music-theory/rhythm_data/rhythm_sequence.md
 music-theory/slow_burn/chorus.md
+music-theory/slow_burn/slow_burn.md
 music-theory/slow_burn/solo_chorus.md

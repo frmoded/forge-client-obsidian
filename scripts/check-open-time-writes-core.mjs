@@ -142,3 +142,18 @@ export async function auditVault(dir, { libraryGated = false, recording = null }
 export function parseRequiredList(text) {
   return text.split(/\r?\n/).map((l) => l.replace(/#.*$/, "").trim()).filter(Boolean);
 }
+
+/** Drain 2026-10-21-0900 — is the read-only ratchet COMPLETE? Pure: `clean` = the audited notes a Run would not write, `unrecorded` = the notes the engine's recording does not cover (modelled
+ *  from their own Python — a weaker verdict), `listed` = the ratchet. `unpinnedOnPurpose` = clean notes deliberately left off (named, with reasons, by the caller); `unrecordedPinned` = the
+ *  unrecorded notes that are pinned by a named decision.
+ *    missing                         clean AND recorded, not pinned, not excused — pin it
+ *    pinnedButNotClean               pinned but the gate says a Run would write it (also failed by the gate itself)
+ *    unrecordedPinnedWithoutDecision pinned on the strength of the weak model, with no decision naming it */
+export function ratchetGaps({ clean, unrecorded, listed, unpinnedOnPurpose, unrecordedPinned }) {
+  const cleanSet = new Set(clean), unrec = new Set(unrecorded), pinned = new Set(listed), excused = new Set(unpinnedOnPurpose), named = new Set(unrecordedPinned);
+  return {
+    missing: clean.filter((n) => !unrec.has(n) && !pinned.has(n) && !excused.has(n)).sort(),
+    pinnedButNotClean: listed.filter((n) => !cleanSet.has(n)).sort(),
+    unrecordedPinnedWithoutDecision: listed.filter((n) => unrec.has(n) && cleanSet.has(n) && !named.has(n)).sort(),
+  };
+}
