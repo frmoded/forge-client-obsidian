@@ -32,24 +32,26 @@ const choose = (h: Harness, id: string, value: string) => { const sel = h.el(id)
 const optionValues = (h: Harness, id: string) => [...(h.el(id) as HTMLSelectElement).options].map((o) => o.value);
 
 // ======================================================================================================================
-// 1. Add instrument in circle mode — the SAME control, menu and path as the grid's
+// 1. Add instrument in circle mode — the SAME control, menu and path as the grid's (drain 2026-10-20-0900: now literally ONE control, first in the toolbar both views share)
 // ======================================================================================================================
 
-test('circle: an Add-instrument control sits in the circle toolbar and offers exactly what the grid\'s offers', { skip }, async () => {
+test('circle: the Add-instrument control is on screen in Circle (it is the ONE control of the shared toolbar) and offers the channels not shown yet', { skip }, async () => {
   const h = await editing();
+  const gridMenu = optionValues(h, 'addInstrument');
   await toCircle(h);
-  const circleSel = h.el('addInstrumentCircle');
-  assert.equal(circleSel.tagName, 'SELECT');
-  assert.ok(h.el('circleView').contains(circleSel), 'it lives in the circle view');
-  assert.ok(circleSel.getAttribute('aria-label'), 'labelled');
-  assert.deepEqual(optionValues(h, 'addInstrumentCircle'), optionValues(h, 'addInstrument'), 'same menu, same instruments, same order');
-  assert.deepEqual(optionValues(h, 'addInstrumentCircle').slice(0, 2), ['', 'bell'], 'the inert prompt, then the channels not shown yet');
+  const sel = h.el('addInstrument');
+  assert.equal(sel.tagName, 'SELECT');
+  assert.ok(h.el('rhythmTools').contains(sel), 'it lives in the shared toolbar');
+  assert.ok(h.el('circleView').contains(sel) === false && sel.hidden === false, 'outside both views, so both show it');
+  assert.ok(sel.getAttribute('aria-label'), 'labelled');
+  assert.deepEqual(optionValues(h, 'addInstrument'), gridMenu, 'same menu in both views, same order');
+  assert.deepEqual(optionValues(h, 'addInstrument').slice(0, 2), ['', 'bell'], 'the inert prompt, then the channels not shown yet');
 });
 
-test('circle: choosing an instrument adds a RING through the one save path — and saves what the grid\'s control saves', async () => {
+test('circle: choosing an instrument adds a RING through the one save path — and saves what choosing it in Grid saves', async () => {
   const hc = await editing();
   await toCircle(hc);
-  choose(hc, 'addInstrumentCircle', 'bell');
+  choose(hc, 'addInstrument', 'bell');
   assert.equal(types(hc, 'forge-rhythm-save').length, 1, 'ONE save — commitChange via applyWholePatternChange');
   assert.equal(hc.el('confirmBar').hidden, true, 'the grid asks nothing for an add, so the circle asks nothing');
   assert.deepEqual(Object.keys(lastSave(hc).channels), ['kick', 'snare', 'hihat', 'bell']);
@@ -58,14 +60,14 @@ test('circle: choosing an instrument adds a RING through the one save path — a
   const hg = await editing();
   choose(hg, 'addInstrument', 'bell');
   assert.deepEqual(lastSave(hc), lastSave(hg), 'byte-for-byte the same note data as the grid\'s control');
-  assert.equal((hc.el('addInstrumentCircle') as HTMLSelectElement).value, '', 'the control returns to its prompt');
-  assert.ok(!optionValues(hc, 'addInstrumentCircle').includes('bell'), 'and no longer offers what is now shown');
+  assert.equal((hc.el('addInstrument') as HTMLSelectElement).value, '', 'the control returns to its prompt');
+  assert.ok(!optionValues(hc, 'addInstrument').includes('bell'), 'and no longer offers what is now shown');
 });
 
 test('circle: in a playground the same control is local — `edited`, never a save', { skip }, async () => {
   const h = await playground();
   await toCircle(h);
-  choose(h, 'addInstrumentCircle', 'claves');
+  choose(h, 'addInstrument', 'claves');
   assert.equal(types(h, 'forge-rhythm-save').length, 0);
   assert.equal(types(h, 'forge-rhythm-edited').length, 1);
   assert.equal(h.doc.querySelectorAll('#circle circle.dot[data-channel="claves"]').length, 16);
@@ -74,7 +76,7 @@ test('circle: in a playground the same control is local — `edited`, never a sa
 test('circle: at the 4-ring limit the control is DISABLED with an explanation — not hidden, not a silent no-op', { skip }, async () => {
   const h = await editing(FOUR());
   await toCircle(h);
-  const sel = h.el('addInstrumentCircle') as HTMLSelectElement;
+  const sel = h.el('addInstrument') as HTMLSelectElement;
   assert.equal(sel.disabled, true);
   assert.match(sel.title, /4 instruments/i, 'the tooltip says why');
   assert.match(h.el('viewMsg').textContent ?? '', /4 instruments/i, 'and the reason is on screen, not only in a tooltip');
@@ -85,15 +87,15 @@ test('circle: at the 4-ring limit the control is DISABLED with an explanation �
 test('circle: the control becomes available again when the circle has room (a ring removed in the grid), and disabled again at 4', { skip }, async () => {
   const h = await editing(THREE());
   await toCircle(h);
-  const sel = h.el('addInstrumentCircle') as HTMLSelectElement;
+  const sel = h.el('addInstrument') as HTMLSelectElement;
   assert.equal(sel.disabled, false, '3 rings: room for one more');
-  choose(h, 'addInstrumentCircle', 'bell');
-  assert.equal((h.el('addInstrumentCircle') as HTMLSelectElement).disabled, true, 'the 4th ring fills it');
+  choose(h, 'addInstrument', 'bell');
+  assert.equal((h.el('addInstrument') as HTMLSelectElement).disabled, true, 'the 4th ring fills it');
   h.el('bViewGrid').click();
   (h.doc.querySelector('[data-remove="bell"]') as HTMLElement).click();     // the new row has no hits, so nothing to confirm
   await new Promise((r) => setTimeout(r, 5));
   await toCircle(h);
-  assert.equal((h.el('addInstrumentCircle') as HTMLSelectElement).disabled, false);
+  assert.equal((h.el('addInstrument') as HTMLSelectElement).disabled, false);
 });
 
 test('the grid\'s own Add-instrument still works exactly as before', { skip }, async () => {
@@ -104,10 +106,12 @@ test('the grid\'s own Add-instrument still works exactly as before', { skip }, a
   assert.deepEqual(Object.keys(lastSave(h).channels).length, 5);
 });
 
-test('add-instrument is source-pinned: both controls call ONE handler, which ends in applyWholePatternChange', { skip }, () => {
+// Pins the MECHANISM (one control, one handler, which ends in applyWholePatternChange); if the add path moves this SHOULD go red — reassess, don't just rewrite.
+test('add-instrument is source-pinned: the ONE control calls one handler, which ends in applyWholePatternChange (and there is no second control)', { skip }, () => {
   assert.match(widgetScript, /function onAddInstrument\(sel\)[\s\S]*?applyWholePatternChange\(\{ kind: "addrow"/);
   assert.match(widgetScript, /\$\("addInstrument"\)\.addEventListener\("change", function \(e\) \{ onAddInstrument\(e\.target\); \}\)/);
-  assert.match(widgetScript, /\$\("addInstrumentCircle"\)\.addEventListener\("change", function \(e\) \{ onAddInstrument\(e\.target\); \}\)/);
+  assert.equal((widgetScript.match(/onAddInstrument\(e\.target\)/g) ?? []).length, 1, 'exactly one listener calls it');
+  assert.doesNotMatch(widgetHtml, /addInstrumentCircle/, 'the circle\'s own copy is gone');
 });
 
 // ======================================================================================================================
@@ -148,17 +152,20 @@ test('the rendered circle uses that size: viewBox and CSS width follow the ring 
   const svg = h.el('circle');
   assert.equal(svg.getAttribute('viewBox'), `0 0 ${w.circleSizeFor(16, 3)} ${w.circleSizeFor(16, 3)}`);
   assert.equal((svg as unknown as HTMLElement).style.width, `${w.circleSizeFor(16, 3)}px`);
-  choose(h, 'addInstrumentCircle', 'bell');
+  choose(h, 'addInstrument', 'bell');
   assert.equal(svg.getAttribute('viewBox'), `0 0 ${w.circleSizeFor(16, 4)} ${w.circleSizeFor(16, 4)}`, 'a 4th ring grows the circle');
 });
 
-test('compact: every control that is meant to stay is still there (Random, Clear, Export JSON and the widget-side Open note were removed on purpose, drain 2026-10-19-1500)', { skip }, () => {
+test('compact: every control that is meant to stay is still there (Random, Clear, Export JSON and the widget-side Open note were removed on purpose, drain 2026-10-19-1500; Tap tempo, drain 2026-10-20-0900)', { skip }, () => {
   for (const id of ['hostBar', 'hostEditing', 'hostNote', 'playgroundLabel', 'loadMsg', 'saveMsg', 'bReload', 'bReset', 'confirmBar',
-    'confirmText', 'confirmOk', 'confirmCancel', 'bPlay', 'bBpmDown', 'bpmVal', 'bBpmUp', 'bTap', 'stepPos', 'swing', 'swingVal', 'volume',
-    'volumeVal', 'timeSig', 'viewSwitch', 'bViewGrid', 'bViewCircle', 'viewMsg', 'gridView', 'grid', 'addInstrument', 'circleView', 'bRotLeft',
-    'bRotRight', 'bMirror', 'bMirrorGrid', 'bShape', 'ringLegend', 'circle']) {
+    'confirmText', 'confirmOk', 'confirmCancel', 'bPlay', 'bBpmDown', 'bpmVal', 'bBpmUp', 'stepPos', 'swing', 'swingVal', 'volume',
+    'volumeVal', 'timeSig', 'viewSwitch', 'bViewGrid', 'bViewCircle', 'viewMsg', 'gridView', 'grid', 'rhythmTools', 'addInstrument', 'transformTools',
+    'circleExtras', 'bRingOut', 'bRingIn', 'bShape', 'ringLegend', 'circleView', 'circle']) {
     assert.ok(new RegExp(`id="${id}"`).test(widgetHtml), `#${id}`);
   }
+  // Drain 2026-10-20-0900: Tap tempo and the grid's own Mirror / the circle's own Add instrument were removed on purpose; the five transforms are GENERATED
+  // (rhythm-box-toolbar.test.ts pins them in the live DOM), so they are not in the static markup.
+  for (const id of ['bTap', 'bMirrorGrid', 'addInstrumentCircle']) assert.ok(!new RegExp(`id="${id}"`).test(widgetHtml), `#${id} is gone`);
   assert.equal((widgetHtml.match(/data-bank="[A-D]"/g) ?? []).length, 4, 'the four banks');
 });
 
@@ -167,7 +174,7 @@ test('compact: time signature and the view switch live in the transport row (one
   const transport = h.doc.querySelector('.transport') as HTMLElement;
   assert.ok(transport.contains(h.el('timeSig')), 'time signature');
   assert.ok(transport.contains(h.el('viewSwitch')), 'Grid | Circle');
-  assert.ok(transport.contains(h.el('bPlay')) && transport.contains(h.el('bTap')));
+  assert.ok(transport.contains(h.el('bPlay')) && transport.contains(h.el('bBpmUp')) && transport.contains(h.el('bBpmDown')));
 });
 
 test('compact: Swing and Volume share one row, and the long swing caption is a tooltip + description, not a paragraph block', { skip }, async () => {
@@ -189,15 +196,17 @@ test('compact: Swing and Volume share one row, and the long swing caption is a t
 
 // (drain 2026-10-19-1500: 'compact: Random, Clear and Export JSON sit behind ONE "more" menu' deleted with the menu; rhythm-box-removed-controls.test.ts pins their absence.)
 
-test('compact: the circle toolbar is icon buttons with tooltips and aria-labels — short visible text, full names for assistive tech', { skip }, () => {
-  for (const [id, label] of [['bRotLeft', /left/i], ['bRotRight', /right/i], ['bMirror', /mirror/i], ['bShape', /shape/i]] as const) {
-    const m = new RegExp(`<button[^>]*id="${id}"[^>]*>([^<]*)</button>`).exec(widgetHtml);
-    assert.ok(m, id);
-    const visible = m![1].trim().replace(/&[a-z0-9#]+;/gi, '*');        // an HTML entity is one glyph
-    assert.ok(visible.length <= 3, `${id}: visible text "${m![1]}" is an icon, not a word`);
-    assert.match(m![0], label);
-    assert.match(m![0], /aria-label="[^"]+"/, `${id} keeps a full accessible name`);
-    assert.match(m![0], /title="[^"]+"/, `${id} has a tooltip`);
+test('compact: the toolbar is icon buttons with tooltips and aria-labels — short visible text, full names for assistive tech', { skip }, async () => {
+  const h = await editing();
+  await toCircle(h);                                   // so the circle-only extras are on screen too
+  for (const [id, label] of [['bRotLeft', /left/i], ['bRotRight', /right/i], ['bMirror', /mirror/i], ['bRingRotLeft', /counter-clockwise/i],
+    ['bRingRotRight', /clockwise/i], ['bRingOut', /outward/i], ['bRingIn', /inward/i], ['bShape', /shape/i]] as const) {
+    const b = h.el(id);
+    assert.ok(b, id);
+    const visible = (b.textContent ?? '').trim();
+    assert.ok(visible.length <= 3, `${id}: visible text "${visible}" is an icon, not a word`);
+    assert.match(b.getAttribute('title') ?? '', label, `${id} has a tooltip`);
+    assert.match(b.getAttribute('aria-label') ?? '', label, `${id} keeps a full accessible name`);
   }
 });
 

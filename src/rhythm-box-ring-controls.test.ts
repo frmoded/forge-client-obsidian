@@ -41,6 +41,8 @@ async function circle(d: unknown, mode?: string): Promise<Harness> {
 }
 async function pick(h: Harness, ch: string) { h.doc.querySelector(`#ringLegend .ring-pick[data-ring="${ch}"]`).click(); await tick(); }
 const press = async (h: Harness, id: string) => { h.el(id).click(); await tick(); };
+/** Is the element on screen: no ancestor (or itself) carries `hidden`. */
+const shown = (el: any): boolean => { for (let e = el; e && e.tagName !== 'BODY'; e = e.parentElement) if (e.hidden) return false; return true; };
 
 // ---- the pure core -------------------------------------------------------------------------------------------------------------
 
@@ -68,15 +70,17 @@ test('rotating ONE channel with rotatePattern(pattern, [ch], ...) leaves the oth
 
 // ---- the buttons: labels, enabled state ------------------------------------------------------------------------------------------
 
-test('the four ring buttons exist in the CIRCLE toolbar only, are icons with a tooltip and an aria-label that NAME the selected ring', { skip }, async () => {
+// Drain 2026-10-20-0900: the two Rotate buttons are in the toolbar BOTH views share (the grid has a selected row now: click its name); Move ring out / in
+// stay circle-only extras, after the five. All four are icons whose tooltip and aria-label NAME the selected instrument.
+test('the Rotate buttons are in the shared toolbar (both views); Move ring out / in are circle-only extras; all four are icons that NAME the selected instrument', { skip }, async () => {
   const h = await circle(ROCK);
   for (const id of ['bRingRotLeft', 'bRingRotRight', 'bRingOut', 'bRingIn']) {
     const b = h.el(id);
     assert.ok(b, id);
-    assert.ok(h.el('circleView').contains(b), `${id} lives in the circle view`);
-    assert.ok(h.doc.querySelector('.circle-tools').contains(b), `${id} rides in the same toolbar row`);
+    assert.ok(h.el('rhythmTools').contains(b), `${id} rides in the one toolbar row`);
     assert.ok(b.getAttribute('title') && b.getAttribute('aria-label'), id);
     assert.ok(b.textContent.trim().length <= 2, `${id} is an icon, not a word`);
+    assert.ok(shown(b), `${id} is on screen in Circle`);
   }
   assert.match(h.el('bRingRotLeft').getAttribute('aria-label'), /Kick/, 'the default selection is the first ring');
   assert.match(h.el('bRingOut').getAttribute('title'), /Kick/);
@@ -85,7 +89,9 @@ test('the four ring buttons exist in the CIRCLE toolbar only, are icons with a t
     assert.match(h.el(id).getAttribute('aria-label'), /Hi-hat/, `${id} now names the Hi-hat ring`);
     assert.match(h.el(id).getAttribute('title'), /Hi-hat/);
   }
-  assert.equal(h.el('gridView').contains(h.el('bRingOut')), false, 'nothing of this in the grid view (no selected row there)');
+  h.el('bViewGrid').click(); await tick();
+  assert.ok(shown(h.el('bRingRotLeft')) && shown(h.el('bRingRotRight')), 'Rotate is in Grid too (the grid selects a row by its name)');
+  assert.equal(shown(h.el('bRingOut')) || shown(h.el('bRingIn')), false, 'Move ring out / in is circle-only: nothing to move in a grid');
 });
 
 test('Move is disabled where it cannot move: the outermost ring cannot go out, the innermost cannot go in, a single ring can do neither', { skip }, async () => {
@@ -242,11 +248,13 @@ test('standalone (no note loaded) the ring buttons work on the three default row
   assert.equal(h.posted.length, 0);
 });
 
-test('mechanism pin: the ring buttons are wired through ONE data path (commitChange), rotate only the selected channel, and reorder via moveRing', { skip }, () => {
-  assert.match(widgetScript, /function rotateRing\(by\) \{[\s\S]*?rotatePattern\(patterns\[bank\], \[ch\], steps, by\)[\s\S]*?commitChange\(\);/);
+// Pins the MECHANISM (Rotate is a generated TRANSFORM_TOOLS button -> runTransform -> applyTransform with [selected] -> commitChange; Move is wired by hand
+// through moveRing); if the paths move this SHOULD go red — reassess, don't just rewrite.
+test('mechanism pin: Rotate goes through runTransform (the one data path) and turns only the selected channel; Move reorders via moveRing', { skip }, () => {
+  assert.match(widgetScript, /function runTransform\(id\) \{[\s\S]*?applyTransform\(id, patterns\[bank\], rows, steps, selectedRow\(\)\)[\s\S]*?commitChange\(\);/);
+  assert.match(widgetScript, /return rotatePattern\(pattern, \[selected\], steps, id === "rotateCw" \? 1 : -1\);/);
   assert.match(widgetScript, /function moveSelectedRing\(dir\) \{[\s\S]*?moveRing\(rows, ch, dir\)[\s\S]*?commitChange\(\);/);
-  assert.match(widgetScript, /\$\("bRingRotLeft"\)\.addEventListener\("click", function \(\) \{ rotateRing\(-1\); \}\)/);
-  assert.match(widgetScript, /\$\("bRingRotRight"\)\.addEventListener\("click", function \(\) \{ rotateRing\(1\); \}\)/);
   assert.match(widgetScript, /\$\("bRingOut"\)\.addEventListener\("click", function \(\) \{ moveSelectedRing\(-1\); \}\)/);
   assert.match(widgetScript, /\$\("bRingIn"\)\.addEventListener\("click", function \(\) \{ moveSelectedRing\(1\); \}\)/);
+  assert.doesNotMatch(widgetScript, /function rotateRing\(/, 'no second Rotate path beside runTransform');
 });

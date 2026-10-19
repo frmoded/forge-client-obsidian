@@ -81,17 +81,18 @@ test('parser: heightExplicit says whether the author wrote a height line (the vi
 test('embedHeightFor: the default height follows what is IN the note — instruments for the grid, rings for the circle', () => {
   const grid = [1, 2, 3, 4].map((n) => embedHeightFor(null, n));
   const circle = [1, 2, 3, 4].map((n) => embedHeightFor('circle', n));
-  assert.deepEqual(grid, [300, 330, 360, 390]);
-  assert.deepEqual(circle, [510, 570, 650, 720]);
+  // drain 2026-10-20-0900: re-measured after Reset / "not saved" moved into the host toolbar and Tap tempo went (widget body at 460 px: grid 184/214/244/274, circle 432/484/536/610) + 16-20 px of slack
+  assert.deepEqual(grid, [200, 230, 260, 290]);
+  assert.deepEqual(circle, [450, 500, 550, 630]);
   for (const series of [grid, circle]) assert.ok(series.every((v, i) => i === 0 || v > series[i - 1]), 'monotone: more instruments, more room');
   assert.equal(embedHeightFor('grid', 3), embedHeightFor(null, 3), 'grid is the default view');
-  assert.equal(embedHeightFor('grid', 6), 390 + 2 * 30, 'the grid has no instrument limit: one more row, a little more room');
+  assert.equal(embedHeightFor('grid', 6), 290 + 2 * 30, 'the grid has no instrument limit: one more row, a little more room');
   assert.equal(embedHeightFor('circle', 5), embedHeightFor('grid', 5), 'five instruments: the circle falls back to the grid, so the grid\'s room');
 });
 
 test('embedHeightFor: the fixed defaults are the 4-instrument worst case, and an unknown count gets them', () => {
-  assert.equal(DEFAULT_RHYTHM_EMBED_HEIGHT_PX, 390);
-  assert.equal(DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, 720);
+  assert.equal(DEFAULT_RHYTHM_EMBED_HEIGHT_PX, 290);
+  assert.equal(DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, 630);
   assert.equal(embedHeightFor(null, 0), DEFAULT_RHYTHM_EMBED_HEIGHT_PX);
   assert.equal(embedHeightFor('circle', 0), DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX);
   assert.ok(DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX < 960, 'less than the 960 that was clipping nothing but wasting half the space');

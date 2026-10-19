@@ -1682,6 +1682,15 @@
   overflow: hidden;
 }
 
+/* Drain 2026-10-20-0900 §2 — no margin of its own inside Live Preview. Obsidian's hover frame on a code-block widget sets `overflow: hidden` on
+   `.cm-embed-block`, which makes it a block-formatting context: the embed's bottom margin (16px) stops collapsing out of the block and shows up INSIDE the
+   frame as a white strip under the embed, on hover only (the block's first-child margin is already zeroed by `.markdown-rendered > :first-child`, and
+   `.embed-actions`, hidden below, keeps ours from being the last child). Live Preview spaces its own lines; Reading view has no frame and keeps the
+   margin above. Measured in real Chromium with Obsidian 1.14.4's app.css: the hover gap was 16px at every size, now 0. */
+.cm-embed-block .forge-rhythm-embed {
+  margin: 0;
+}
+
 .forge-rhythm-embed-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -1691,9 +1700,30 @@
   border-bottom: 1px solid var(--background-modifier-border);
 }
 
+.forge-rhythm-embed-lead {
+  /* Drain 2026-10-20-0900 — title + "Updated from note" pill in ONE item with a zero basis: a flex line breaks on its items' hypothetical sizes, so the long
+     parts must not count; the row wraps only if the BUTTONS cannot fit. Inside, the title gives way first, the pill second. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .forge-rhythm-embed-title {
   font-weight: 600;
-  margin-right: auto;
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Drain 2026-10-20-0900 §1 — the playground's "not saved" reminder, next to Reset in the same row: small and muted (its tooltip and accessible name carry the whole sentence). */
+.forge-rhythm-embed-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .forge-rhythm-embed-status {
@@ -1705,6 +1735,12 @@
 /* Drain 2026-10-19-1500 — "Updated from note": a small accent-outlined pill IN the toolbar row (so showing it never moves the widget), legible
    but calm. It is timed by attention (updated-label-core.ts), so it is on screen for 4 s of being seen. */
 .forge-rhythm-embed-updated {
+  /* Drain 2026-10-20-0900 — in a narrow pane the pill is clipped (ellipsis) after the title, never wrapped: showing it must not move the widget. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 2px 10px;
   font-size: 12px;
   line-height: 1.4;

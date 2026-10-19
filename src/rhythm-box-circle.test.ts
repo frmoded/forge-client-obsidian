@@ -474,7 +474,7 @@ test('8-step 4/4 plays at eighth-note speed: a step lasts 0.25 s at 120 BPM', { 
 });
 
 test('the circle is source-pinned to the single data path: no postMessage of its own, edits end in commitChange()', { skip }, () => {
-  assert.match(widgetScript, /function rotate\(by\)[\s\S]*?commitChange\(\)/);
+  assert.match(widgetScript, /function runTransform\(id\)[\s\S]*?commitChange\(\)/);         // shift / mirror / rotate: the five generated controls
   assert.match(widgetScript, /function toggleStep\(ch, s\)[\s\S]*?commitChange\(\)/);
   const circleRegion = /function renderCircle\([\s\S]*?\n  \}\n/.exec(widgetScript)?.[0] ?? '';
   assert.ok(circleRegion.length > 100, 'renderCircle exists');

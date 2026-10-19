@@ -89,11 +89,14 @@ export type RhythmHostMode = 'edit' | 'playground';
  *  first load, never persists it, and ignores anything but these two strings. */
 export type RhythmWidgetView = 'grid' | 'circle';
 
-/** `autoHeight: true` asks the widget to measure itself and post `resize` (widget-auto-height-core.ts); absent otherwise, so every older shape is unchanged. */
-export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null, autoHeight = false) {
+/** `autoHeight: true` asks the widget to measure itself and post `resize` (widget-auto-height-core.ts); absent otherwise, so every older shape is unchanged.
+ *  `resetInHost: true` (drain 2026-10-20-0900) says the HOST's toolbar owns the playground's Reset and its "not saved" reminder, so the widget need not draw
+ *  its own; absent, the widget draws them as it always did (an older plugin, or any host that does not say). */
+export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null, autoHeight = false, resetInHost = false) {
   const base = mode === 'playground' ? { type: MSG_LOAD, data, noteName, mode } : { type: MSG_LOAD, data, noteName };
   const withView = view === null ? base : { ...base, view };
-  return autoHeight ? { ...withView, autoHeight: true as const } : withView;
+  const withHeight = autoHeight ? { ...withView, autoHeight: true as const } : withView;
+  return resetInHost ? { ...withHeight, resetInHost: true as const } : withHeight;
 }
 
 export function buildRequestDataMessage() {

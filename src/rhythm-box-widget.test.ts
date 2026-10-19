@@ -303,14 +303,7 @@ test('autosave: every pattern-data action posts exactly one save — tempo up/do
   // (Random and Clear were data actions that asked first; drain 2026-10-19-1500 removed them. The confirmed meter / remove-row actions are covered below.)
 });
 
-test('autosave: tap tempo saves when it COMMITS a tempo change, not on the first tap', { skip }, async () => {
-  const h = await loadedHost();
-  let t = 0;
-  Object.defineProperty(h.win.performance, 'now', { value: () => t, configurable: true });
-  assert.equal(await savesPosted(h, () => { t = 0; h.el('bTap').click(); }), 0, 'one tap is not a tempo yet');
-  assert.equal(await savesPosted(h, () => { t = 500; h.el('bTap').click(); }), 1, 'the second tap commits 120 BPM');
-  assert.equal(lastSave(h).data.tempo_bpm, 120);
-});
+// (drain 2026-10-20-0900: 'autosave: tap tempo saves when it COMMITS a tempo change, not on the first tap' deleted with Tap tempo; rhythm-box-toolbar.test.ts pins its absence.)
 
 test('autosave: a tempo button at its limit changes nothing and saves nothing', { skip }, async () => {
   const d = rock(); d.tempo_bpm = 240;
@@ -355,7 +348,7 @@ test('autosave: the actions that are NOT data changes never save — play, mute,
 
 // (drain 2026-10-19-1500: 'autosave: the payload equals the Export JSON for the same state' deleted with Export JSON.)
 
-test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and exactly eight places call it', { skip }, () => {
+test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and exactly six places call it', { skip }, () => {
   const posts = [...SCRIPT.matchAll(/type: "forge-rhythm-save"/g)];
   assert.equal(posts.length, 1, 'exactly one place posts a save intent');
   assert.match(SCRIPT, /function commitChange\(\) \{[\s\S]*?type: "forge-rhythm-save"/);
@@ -365,7 +358,9 @@ test('autosave: "which actions save" is auditable — one commitChange() posts t
   // drain 2026-10-18-1800: +1 — Mirror (reverse the rhythm in time) is the same kind of edit as Rotate, through the same one door. This pins the
   // drain 2026-10-18-1800: +2 — the per-ring controls (rotate the selected ring, move the selected ring) go through the same one door.
   // MECHANISM (how many call sites there are); the property — every data change saves through commitChange — is pinned per action elsewhere.
-  assert.equal(callers, 8, 'cell toggle, tempo (changeBpm), swing, the confirmed whole-pattern change (time signature / remove row), rotate, mirror, rotate ring, move ring');
+  // drain 2026-10-20-0900: -2 — shift, mirror and rotate-the-selected-instrument are ONE generated set of controls and ONE call site (runTransform), which is the
+  // door's only transform caller: 8 -> 6. Still every data change saves through commitChange.
+  assert.equal(callers, 6, 'cell toggle, tempo (changeBpm), swing, the confirmed whole-pattern change (time signature / remove row), the five transforms (runTransform), move ring');
   assert.match(noComments, /function applyWholePatternChange\(action\) \{[\s\S]*?\n    commitChange\(\);\n  \}/);
 });
 

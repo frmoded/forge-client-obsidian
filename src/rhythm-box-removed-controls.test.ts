@@ -49,7 +49,7 @@ test('the dead code went with the buttons: no Random weights, no randomizer, no 
 
 test('NON-VACUITY: Reset (playground), Reload from note, Mirror, the rotate buttons and the Add instrument menu are all still on the page', { skip }, async () => {
   const h = await mounted('playground');
-  for (const id of ['bReset', 'bReload', 'bMirrorGrid', 'bRotLeft', 'bRotRight', 'addInstrument', 'bPlay']) assert.ok(h.el(id), id);
+  for (const id of ['bReset', 'bReload', 'bMirror', 'bRotLeft', 'bRotRight', 'bRingRotLeft', 'bRingRotRight', 'addInstrument', 'bPlay']) assert.ok(h.el(id), id);   // drain 2026-10-20-0900: one Mirror, in the shared toolbar
 });
 
 test('the meter-change confirm bar survives: changing the time signature in a note still asks first, and Cancel keeps the pattern', { skip }, async () => {

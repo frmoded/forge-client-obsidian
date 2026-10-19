@@ -23,6 +23,7 @@ import { resolveWidgetFile } from './bundled-widget-lookup.ts';
 import { RHYTHM_BOX_WIDGET_PATH, readRhythmNote } from './rhythm-edit-core.ts';
 import {
   RHYTHM_EMBED_LANGUAGE,
+  embedToolbarItems,
   UPDATED_FROM_NOTE_LABEL,
   UPDATED_FROM_NOTE_MS,
   createPlaybackCoordinator,
@@ -186,16 +187,25 @@ class RhythmEmbed extends MarkdownRenderChild {
       this.containerEl.empty();
       this.containerEl.addClass('forge-rhythm-embed');
       const bar = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-toolbar' });
-      bar.createSpan({ cls: 'forge-rhythm-embed-title', text: title });
+      // Drain 2026-10-20-0900 — the title and the pill share ONE `lead` item (zero flex basis), so only the buttons decide whether the row wraps.
+      const lead = bar.createDiv({ cls: 'forge-rhythm-embed-lead' });
+      lead.createSpan({ cls: 'forge-rhythm-embed-title', text: title, attr: { title } });
       // Drain 2026-10-19-1500 — the label lives IN the toolbar row (no layout shift), is a polite live region, and is timed by attention.
       this.releaseUpdatedLabel();
-      this.updatedEl = bar.createSpan({ cls: 'forge-rhythm-embed-updated forge-rhythm-embed-hidden', text: UPDATED_FROM_NOTE_LABEL, attr: { role: 'status', 'aria-live': 'polite' } });
+      this.updatedEl = lead.createSpan({ cls: 'forge-rhythm-embed-updated forge-rhythm-embed-hidden', text: UPDATED_FROM_NOTE_LABEL, attr: { role: 'status', 'aria-live': 'polite' } });
       this.startUpdatedLabel(this.updatedEl);
-      const openBtn = bar.createEl('button', { text: 'Open note', attr: { title: 'Open this rhythm in its own tab, where changes are saved' } });
-      openBtn.addEventListener('click', () => { this.hooks.openNote(this.file); });
-      if (musicEdition.id === 'music') {
-        this.scoreBtn = bar.createEl('button', { text: 'Score', attr: { title: 'Engrave the rhythm as it is on screen right now' } });
-        this.scoreBtn.addEventListener('click', () => { void this.toggleScore(); });
+      // Drain 2026-10-20-0900 §1 — ONE row: Open note, Score (music edition), Reset and the small "not saved" reminder, all from the model in
+      // rhythm-embed-core.ts (the words and tooltips are pinned there). Reset and the reminder used to be drawn inside the iframe, as a second row.
+      this.scoreBtn = null;
+      for (const item of embedToolbarItems({ music: musicEdition.id === 'music' })) {
+        if (item.kind === 'hint') {
+          bar.createSpan({ cls: 'forge-rhythm-embed-hint', text: item.text, attr: { role: 'note', title: item.title, 'aria-label': item.ariaLabel ?? item.title } });
+          continue;
+        }
+        const btn = bar.createEl('button', { text: item.text, attr: { title: item.title } });
+        if (item.id === 'open-note') btn.addEventListener('click', () => { this.hooks.openNote(this.file); });
+        else if (item.id === 'score') { this.scoreBtn = btn; btn.addEventListener('click', () => { void this.toggleScore(); }); }
+        else if (item.id === 'reset') btn.addEventListener('click', () => { void this.resetPlayground(); });
       }
       this.statusEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-status' });
       this.bodyEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-body' });
@@ -205,6 +215,7 @@ class RhythmEmbed extends MarkdownRenderChild {
         title,
         view: options.view,
         autoHeight: !options.heightExplicit,
+        resetInHost: true,                               // the toolbar above draws Reset and "not saved"; the widget omits its own (an older widget ignores this)
         readNote: () => this.app.vault.read(this.file),
         post: (message) => { this.iframe?.contentWindow?.postMessage(message, '*'); },
         openNote: () => { if (this.file) this.hooks.openNote(this.file); },
@@ -267,6 +278,26 @@ class RhythmEmbed extends MarkdownRenderChild {
     return pane?.clientHeight || window.innerHeight;
   }
 
+  /** Drain 2026-10-20-0900 §1 — the Reset button. If the Score is showing it is put away first (it engraved the very state being discarded), then the note is
+   *  re-read and sent as a fresh load: the same path as the widget's own Reset used to take. Nothing is written. */
+  private async resetPlayground(): Promise<void> {
+    const session = this.session;
+    if (!session) return;
+    if (this.scoreHost) this.showBeatBox();
+    this.statusEl?.setText('');
+    await session.reset();
+  }
+
+  /** The Score is showing: put it away and show the Beat Box (the iframe was only hidden, so the student's edits are still there). */
+  private showBeatBox(): void {
+    if (!this.scoreHost) return;
+    musicEdition.stopPlayers(this.scoreHost, (m, e) => console.error(m, e));
+    this.scoreHost.remove();
+    this.scoreHost = null;
+    this.iframe?.toggleClass('forge-rhythm-embed-hidden', false);
+    this.scoreBtn?.setText('Score');
+  }
+
   /** Beat Box <-> engraved score of the CURRENT playground state (music edition). The iframe is kept (hidden), never rebuilt, so the
    *  student's edits survive a look at the score. Nothing is written. */
   private async toggleScore(): Promise<void> {
@@ -276,11 +307,7 @@ class RhythmEmbed extends MarkdownRenderChild {
     if (!session || !iframe || !btn) return;
     this.statusEl?.setText('');
     if (this.scoreHost) {                                // score showing -> back to the grid
-      musicEdition.stopPlayers(this.scoreHost, (m, e) => console.error(m, e));
-      this.scoreHost.remove();
-      this.scoreHost = null;
-      iframe.toggleClass('forge-rhythm-embed-hidden', false);
-      btn.setText('Score');
+      this.showBeatBox();
       return;
     }
     session.stop();                                      // the grid's audio must not run under the score

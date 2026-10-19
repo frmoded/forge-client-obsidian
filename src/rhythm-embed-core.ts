@@ -18,15 +18,17 @@ import { produceScoreFromData, type ScoreOutcome } from './rhythm-score-core.ts'
 /** The default height of a Beat Box embed, grid view, with FOUR instruments — the worst case; a note with fewer gets less (`embedHeightFor`).
  *  Drain 2026-10-15-2230: measured in real Chromium at a 460 px pane (a wider pane is shorter), after the compact layout. Before it, the grid
  *  needed 488-602 px for 1-4 instruments and this was 420, so every playground embed scrolled inside its frame. */
-export const DEFAULT_RHYTHM_EMBED_HEIGHT_PX = 390;
+export const DEFAULT_RHYTHM_EMBED_HEIGHT_PX = 290;
 /** The same for `view: circle` with four rings (the circle's limit). Was 960 — a fixed 460 px square plus a tall toolbar whatever the note held. */
-export const DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX = 720;
+export const DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX = 630;
 
 // Measured heights at a 460 px pane, rounded UP with 10-20 px of slack (fonts differ in Obsidian's Electron), by instrument count:
-//   grid   1: 290  2: 320  3: 350  4: 380   (+30 per row beyond four — the grid has no instrument limit)
-//   circle 1: 502  2: 554  3: 636  4: 710   (the circle is sized by its ring count; more than four falls back to the grid)
-const GRID_BY_INSTRUMENTS = [300, 330, 360, 390];
-const CIRCLE_BY_RINGS = [510, 570, 650, 720];
+//   grid   1: 184  2: 214  3: 244  4: 274   (+30 per row beyond four — the grid has no instrument limit)
+//   circle 1: 432  2: 484  3: 536  4: 610   (the circle is sized by its ring count; more than four falls back to the grid)
+// Drain 2026-10-20-0900: re-measured (they were 290-380 / 502-710 at Iteration 78): Reset, the "not saved" reminder and the note name left the iframe for the host's
+// toolbar (the host bar's two rows are gone), the five transforms and Add instrument share one row, Tap tempo is gone, and a hidden host bar no longer takes a stray row.
+const GRID_BY_INSTRUMENTS = [200, 230, 260, 290];
+const CIRCLE_BY_RINGS = [450, 500, 550, 630];
 const GRID_ROW_PX = 30;
 
 /** The default height for an embed that gave no `height:` line, from what is IN the note. An unknown count (0) gets the worst case. */
@@ -171,6 +173,35 @@ export function createPlaybackCoordinator(): PlaybackCoordinator {
   };
 }
 
+// ---- the toolbar (drain 2026-10-20-0900 §1) -----------------------------------------------------------------------------------------
+
+/** The playground's reminder, in the toolbar row beside Reset: two words, with the whole sentence as its tooltip and accessible name. */
+export const PLAYGROUND_HINT_TEXT = 'not saved';
+export const PLAYGROUND_HINT_TITLE = 'Playground \u2014 edits are not saved. Reset puts the rhythm back as it is in the note; Open note opens the real thing, where changes are saved.';
+
+export interface EmbedToolbarItem {
+  id: 'open-note' | 'score' | 'reset' | 'hint';
+  kind: 'button' | 'hint';
+  text: string;
+  title: string;
+  /** Present when the visible text is not the whole accessible name. */
+  ariaLabel?: string;
+}
+
+/** The ONE row's items, left to right (the title and the "Updated from note" pill come first, from the view): Open note, Score (music edition only),
+ *  Reset, then the hint. The view builds its DOM from this and nothing else, so the words and tooltips cannot differ from what the tests pin. */
+export function embedToolbarItems(opts: { music: boolean }): EmbedToolbarItem[] {
+  const items: EmbedToolbarItem[] = [
+    { id: 'open-note', kind: 'button', text: 'Open note', title: 'Open this rhythm in its own tab, where changes are saved' },
+  ];
+  if (opts.music) items.push({ id: 'score', kind: 'button', text: 'Score', title: 'Engrave the rhythm as it is on screen right now' });
+  items.push(
+    { id: 'reset', kind: 'button', text: 'Reset', title: 'Put the rhythm back exactly as it is in the note' },
+    { id: 'hint', kind: 'hint', text: PLAYGROUND_HINT_TEXT, title: PLAYGROUND_HINT_TITLE, ariaLabel: PLAYGROUND_HINT_TITLE },
+  );
+  return items;
+}
+
 // ---- error wording (g) --------------------------------------------------------------------------------------------------
 
 export const noteNotFoundMessage = (target: string) => `Rhythm embed: note not found: ${target}`;
@@ -189,6 +220,8 @@ export interface EmbedSessionDeps {
   view?: RhythmWidgetView | null;
   /** True when the widget should size the iframe to its content (the block gave no `height:`): rides on every load as `autoHeight: true`. */
   autoHeight?: boolean;
+  /** True when the host's toolbar draws the playground's Reset and "not saved" reminder (the widget then omits its own): rides on every load as `resetInHost: true`. */
+  resetInHost?: boolean;
   /** The data note's CURRENT saved text. The ONLY thing an embed ever asks the vault for — there is no write counterpart. */
   readNote(): Promise<string>;
   /** Post a message to this embed's widget iframe. */
@@ -209,6 +242,8 @@ export interface EmbedSessionDeps {
 
 export interface RhythmEmbedSession {
   onWidgetMessage(raw: unknown): Promise<void>;
+  /** The host's Reset button: re-read the note and send a fresh load — the same path as the widget's own Reset message. */
+  reset(): Promise<void>;
   /** The vault reported a modify of the data note. */
   onNoteModified(): Promise<void>;
   isDirty(): boolean;
@@ -245,7 +280,7 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
     }
     loadedFingerprint = contentFingerprint(text);
     dirty = false;
-    post(buildLoadMessage(note.value.data, deps.noteName, 'playground', deps.view ?? null, deps.autoHeight === true) as Record<string, unknown>);
+    post(buildLoadMessage(note.value.data, deps.noteName, 'playground', deps.view ?? null, deps.autoHeight === true, deps.resetInHost === true) as Record<string, unknown>);
     return true;
   }
 
@@ -268,6 +303,11 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
         case 'ignored':
           return;
       }
+    },
+
+    async reset() {
+      if (disposed) return;
+      await loadNote();
     },
 
     async onNoteModified() {

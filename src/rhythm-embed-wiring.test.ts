@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { embedToolbarItems } from './rhythm-embed-core.ts';
+
 const read = (rel: string) => fs.readFileSync(path.resolve(process.cwd(), rel), 'utf-8');
 const code = (src: string) => src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
 const view = code(read('src/rhythm-embed-view.ts'));
@@ -136,7 +138,8 @@ test('every error is inline and never throws out of the processor', () => {
 test('mechanism pin: the embed view shows "Updated from note" in the toolbar, times it by attention, and tears every listener down', () => {
   const view = fs.readFileSync(path.resolve(import.meta.dirname, 'rhythm-embed-view.ts'), 'utf8');
   assert.match(view, /showUpdated: \(\) => \{ this\.flashUpdated\(\); \}/);
-  assert.match(view, /this\.updatedEl = bar\.createSpan\(\{ cls: 'forge-rhythm-embed-updated forge-rhythm-embed-hidden', text: UPDATED_FROM_NOTE_LABEL, attr: \{ role: 'status', 'aria-live': 'polite' \} \}\)/, 'in the toolbar row, a polite live region');
+  // drain 2026-10-20-0900: the pill rides in the toolbar's `lead` item (with the title), which is IN the toolbar row — still no layout shift, now also in a narrow pane
+  assert.match(view, /this\.updatedEl = lead\.createSpan\(\{ cls: 'forge-rhythm-embed-updated forge-rhythm-embed-hidden', text: UPDATED_FROM_NOTE_LABEL, attr: \{ role: 'status', 'aria-live': 'polite' \} \}\)/, 'in the toolbar row, a polite live region');
   assert.match(view, /createUpdatedLabel\(\{\s*ms: UPDATED_FROM_NOTE_MS,/);
   assert.match(view, /isAttentive: \(\) => isLabelAttentive\(\{ windowFocused: document\.hasFocus\(\), pageVisible: document\.visibilityState === 'visible', onScreen: this\.onScreen \}\)/);
   assert.match(view, /new IntersectionObserver\(/);
@@ -155,11 +158,17 @@ test('mechanism pin: the embed view shows "Updated from note" in the toolbar, ti
 // Drain 2026-10-19-1500 §2 — ONE "Open note" per embed: the host toolbar's (outside the iframe, so it works even when the widget errors).
 // The widget's own button is gone; an OLDER widget file (a vault not yet updated) may still post `forge-rhythm-open-note`, so the host keeps
 // answering it rather than silently dropping a click.
+// Drain 2026-10-20-0900 §1 — pins the MECHANISM (the toolbar is built from embedToolbarItems, which holds exactly one 'open-note' item, wired to
+// the opener); the words moved out of the view into the model. If the toolbar is built another way this SHOULD go red — reassess, don't just rewrite.
 test('mechanism pin: the embed has exactly ONE Open note in its toolbar, wired to the plugin\'s opener; an older widget\'s message is still answered', () => {
   const view = fs.readFileSync(path.resolve(import.meta.dirname, 'rhythm-embed-view.ts'), 'utf8');
   const toolbar = view.slice(view.indexOf("const bar = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-toolbar' })"));
-  assert.equal((toolbar.slice(0, toolbar.indexOf('this.statusEl')).match(/text: 'Open note'/g) ?? []).length, 1, 'one Open note button in the toolbar');
-  assert.match(toolbar, /openBtn\.addEventListener\('click', \(\) => \{ this\.hooks\.openNote\(this\.file\); \}\);/);
+  const section = toolbar.slice(0, toolbar.indexOf('this.statusEl'));
+  assert.match(section, /for \(const item of embedToolbarItems\(/, 'the toolbar is built from the model');
+  assert.equal((section.match(/text: 'Open note'/g) ?? []).length, 0, 'no second, hand-written Open note beside the model');
+  assert.match(section, /item\.id === 'open-note'\) btn\.addEventListener\('click', \(\) => \{ this\.hooks\.openNote\(this\.file\); \}\);/);
+  assert.equal(embedToolbarItems({ music: true }).filter((i) => i.id === 'open-note').length, 1, 'exactly one Open note item in the model');
+  assert.equal(embedToolbarItems({ music: false }).filter((i) => i.id === 'open-note').length, 1);
   const core = fs.readFileSync(path.resolve(import.meta.dirname, 'rhythm-embed-core.ts'), 'utf8');
   assert.match(core, /case 'open-note': deps\.openNote\(\); return;/, 'the session still answers the message an older widget posts');
 });

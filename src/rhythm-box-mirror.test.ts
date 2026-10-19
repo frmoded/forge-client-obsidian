@@ -40,7 +40,8 @@ async function editing(d: unknown, view?: 'circle'): Promise<Harness> {
   if (view) { h.el('bViewCircle').click(); await new Promise((r) => setTimeout(r, 5)); }
   return h;
 }
-const mirrorBtn = (view: 'grid' | 'circle') => (view === 'circle' ? 'bMirror' : 'bMirrorGrid');
+// Drain 2026-10-20-0900: ONE Mirror button, in the toolbar both views share (it used to be two: the circle's and one beside the grid's Add instrument).
+const mirrorBtn = (_view: 'grid' | 'circle') => 'bMirror';
 const reversed = (d: RhythmData): RhythmData => ({
   ...d, channels: Object.fromEntries(Object.entries(d.channels).map(([ch, row]) => [ch, [...(row as unknown[])].reverse()])),
 });
@@ -103,7 +104,7 @@ test('Mirror turns EVERY shown channel together and keeps a velocity with its hi
   const rock = JSON.parse(JSON.stringify(ROCK)) as RhythmData;
   (rock.channels.snare as unknown[])[4] = 110;
   const h = await editing(rock);
-  h.el('bMirrorGrid').click();
+  h.el('bMirror').click();
   const saved = lastSave(h);
   assert.deepEqual(hitsOf(saved.channels.kick), [7, 15]);
   assert.deepEqual(hitsOf(saved.channels.snare), [3, 11]);
@@ -114,32 +115,33 @@ test('Mirror turns EVERY shown channel together and keeps a velocity with its hi
 test('Mirror in a playground is local: `edited`, never a save', { skip }, async () => {
   const h = await loadWidget(true);
   await h.send(load(SON, 'playground'));
-  h.el('bMirrorGrid').click();
+  h.el('bMirror').click();
   assert.equal(types(h, 'forge-rhythm-save').length, 0);
   assert.equal(types(h, 'forge-rhythm-edited').length, 1);
 });
 
-test('the Mirror buttons are labelled and focusable; the two rotate-by-a-beat buttons are GONE; the one-step rotate stays', { skip }, async () => {
+test('the Mirror button is labelled and focusable, in the toolbar both views share; the two rotate-by-a-beat buttons are GONE; the one-step shifts stay', { skip }, async () => {
   const h = await editing(SON, 'circle');
-  for (const id of ['bMirror', 'bMirrorGrid']) {
-    const el = h.el(id);
-    assert.equal(el.tagName, 'BUTTON', id);
-    assert.equal(el.getAttribute('aria-label'), 'Mirror (reverse the rhythm in time)');
-    assert.match(el.title, /Mirror/);
-    assert.match(el.title, /reverse the rhythm in time/i);
-    assert.ok(el.tabIndex >= 0 && !el.disabled);
-    assert.ok(el.textContent.trim().length <= 3, `${id}: an icon, not a word`);
-  }
-  assert.ok(h.el('circleView').contains(h.el('bMirror')), 'in the circle toolbar');
-  assert.ok(h.el('gridView').contains(h.el('bMirrorGrid')), 'and next to the grid');
-  assert.equal(h.doc.getElementById('bBeatLeft'), null);
-  assert.equal(h.doc.getElementById('bBeatRight'), null);
+  const el = h.el('bMirror');
+  assert.equal(el.tagName, 'BUTTON');
+  assert.equal(el.getAttribute('aria-label'), 'Mirror (reverse the rhythm in time)');
+  assert.match(el.title, /Mirror/);
+  assert.match(el.title, /reverse the rhythm in time/i);
+  assert.ok(el.tabIndex >= 0 && !el.disabled);
+  assert.ok(el.textContent.trim().length <= 3, 'bMirror: an icon, not a word');
+  assert.ok(h.el('rhythmTools').contains(el), 'in the shared toolbar (so in Grid and in Circle)');
+  assert.ok(h.el('bMirrorGrid') === null, 'the second, grid-only copy is gone');
+  assert.ok(h.doc.getElementById('bBeatLeft') === null);
+  assert.ok(h.doc.getElementById('bBeatRight') === null);
   assert.equal(/Right a beat|Left a beat|rotate.*by a beat/i.test(widgetHtml), false, 'no trace of the beat buttons in the widget');
-  assert.ok(h.el('bRotLeft') && h.el('bRotRight'), 'the one-step rotate is still there');
+  assert.ok(h.el('bRotLeft') && h.el('bRotRight'), 'the one-step shift is still there');
 });
 
-test('Mirror is source-pinned to the one data path: both buttons call one mirror(), which ends in commitChange()', { skip }, () => {
-  assert.match(widgetScript, /function mirror\(\)[\s\S]*?mirrorPattern\(patterns\[bank\], rows, steps\)[\s\S]*?commitChange\(\)/);
-  assert.match(widgetScript, /\$\("bMirror"\)\.addEventListener\("click", mirror\)/);
-  assert.match(widgetScript, /\$\("bMirrorGrid"\)\.addEventListener\("click", mirror\)/);
+// Pins the MECHANISM (the generated Mirror button -> runTransform -> applyTransform('mirror') -> mirrorPattern, ending in commitChange); if the
+// transform path moves this SHOULD go red — reassess, don't just rewrite.
+test('Mirror is source-pinned to the one data path: the generated button calls runTransform, which uses mirrorPattern and ends in commitChange()', { skip }, () => {
+  assert.match(widgetScript, /function runTransform\(id\)[\s\S]*?applyTransform\(id, patterns\[bank\], rows, steps, selectedRow\(\)\)[\s\S]*?commitChange\(\)/);
+  assert.match(widgetScript, /if \(id === "mirror"\) return mirrorPattern\(pattern, rows, steps\);/);
+  assert.match(widgetScript, /b\.addEventListener\("click", function \(\) \{ runTransform\(t\.id\); \}\)/);
+  assert.equal((widgetScript.match(/mirrorPattern\(/g) ?? []).length, 2, 'defined once, called once (no second Mirror path)');
 });
