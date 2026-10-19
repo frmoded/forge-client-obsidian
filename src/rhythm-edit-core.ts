@@ -202,6 +202,18 @@ export function validateRhythmData(raw: unknown): Validation<RhythmData> {
   return { ok: true, value: { time_signature: raw.time_signature, steps, group_size: groupSize, swing_pct: swing, tempo_bpm: tempo, channels: out } };
 }
 
+// ---- one comparison: is this the same rhythm? (drain 2026-10-20-2100) ---------------------------------------------------------------
+
+/** Are two rhythm data the same music? Both must be valid rhythm data (anything else is never equal — a caller that gets `false` for a widget's answer says "not saved"). Compared as the
+ *  canonical json the Beat Box writes (`formatRhythmJson`: fixed key order, the channels IN THEIR ORDER — the order of the instruments is data), with a rest written 0 read as `false` and an
+ *  omitted swing as 0. A velocity is NOT a plain hit. The embed's "not saved" state is this function applied to (the note as loaded, the widget as it is now). */
+export function rhythmDataEqual(a: unknown, b: unknown): boolean {
+  const va = validateRhythmData(a), vb = validateRhythmData(b);
+  if (va.ok === false || vb.ok === false) return false;
+  const canon = (d: RhythmData) => formatRhythmJson({ ...d, channels: Object.fromEntries(Object.entries(d.channels).map(([k, row]) => [k, row.map((v) => (v === 0 ? false : v))])) });
+  return canon(va.value) === canon(vb.value);
+}
+
 // ---- the pretty-printer ----------------------------------------------------------------------------------------
 
 /** The json block as every shipped rhythm-data note has it (and as the widget's own Export JSON writes it): 2-space indent, the six

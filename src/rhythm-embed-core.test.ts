@@ -295,15 +295,23 @@ test('session: a forge-rhythm-save from the iframe is IGNORED — nothing is wri
   assert.equal(session.isDirty(), false, 'a save is not even an edit');
 });
 
-test('session: Open note and playing are forwarded to the host; edited marks the playground dirty', async () => {
-  const { session, log } = makeSession();
+// Drain 2026-10-20-2100: "dirty" is no longer a flag set by an `edited` message — an edit makes the session ASK the widget for its data and compare it with the loaded note
+// (rhythm-embed-dirty.test.ts has the full behaviour); this test keeps the forwarding of Open note / playing and the first step of that.
+test('session: Open note and playing are forwarded to the host; an edit asks the widget for its data and a differing answer makes the playground dirty', async () => {
+  const { session, log, posted } = makeSession();
   await session.onWidgetMessage({ type: MSG_OPEN_NOTE });
   assert.equal(log.opened, 1);
   await session.onWidgetMessage({ type: MSG_PLAYING, playing: true });
   await session.onWidgetMessage({ type: MSG_PLAYING, playing: false });
   assert.deepEqual(log.playing, [true, false]);
   assert.equal(session.isDirty(), false);
+  await session.onWidgetMessage({ type: MSG_READY });
+  posted.length = 0;
   await session.onWidgetMessage({ type: MSG_EDITED });
+  assert.deepEqual(posted, [{ type: MSG_REQUEST_DATA }], 'an edit asks the widget what it holds now');
+  assert.equal(session.isDirty(), false, 'asking is not knowing');
+  await session.onWidgetMessage({ type: MSG_CURRENT_DATA, data: { ...TRESILLO, tempo_bpm: 60 } });
+  await Promise.resolve(); await Promise.resolve();
   assert.equal(session.isDirty(), true);
 });
 
@@ -335,6 +343,8 @@ test('session: the note changes on disk WITH local edits -> the embed shows the 
   const { session, posted, log, setText } = makeSession();
   await session.onWidgetMessage({ type: MSG_READY });
   await session.onWidgetMessage({ type: MSG_EDITED });
+  await session.onWidgetMessage({ type: MSG_CURRENT_DATA, data: { ...TRESILLO, tempo_bpm: 60 } });     // the experiment: the widget holds a different tempo
+  await Promise.resolve(); await Promise.resolve();
   assert.equal(session.isDirty(), true);
   posted.length = 0;
   setText(noteText({ ...TRESILLO, tempo_bpm: 140 }));

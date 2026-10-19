@@ -1726,6 +1726,17 @@
   white-space: nowrap;
 }
 
+/* Drain 2026-10-20-2100 — "not saved" is a STATE: shown only while the embed differs from the note. Hidden with `visibility`, not `display`, so it keeps its room and the row does not shift
+   when it appears or goes. A disabled Reset (nothing to reset) is dimmed, not hidden, for the same reason. */
+.forge-rhythm-embed-hint.forge-rhythm-embed-quiet {
+  visibility: hidden;
+}
+
+.forge-rhythm-embed-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .forge-rhythm-embed-status {
   padding: 4px 10px;
   font-size: 12px;

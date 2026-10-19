@@ -24,6 +24,7 @@ import { RHYTHM_BOX_WIDGET_PATH, readRhythmNote } from './rhythm-edit-core.ts';
 import {
   RHYTHM_EMBED_LANGUAGE,
   embedToolbarItems,
+  embedToolbarState,
   UPDATED_FROM_NOTE_LABEL,
   UPDATED_FROM_NOTE_MS,
   createPlaybackCoordinator,
@@ -72,6 +73,9 @@ class RhythmEmbed extends MarkdownRenderChild {
   private screenObserver: IntersectionObserver | null = null;
   private readonly onAttention = (): void => { this.updatedLabel?.attentionChanged(); };
   private scoreBtn: HTMLButtonElement | null = null;
+  /** Drain 2026-10-20-2100 — Reset and the "not saved" hint are a STATE (pristine / dirty), applied from the session's comparison (applyDirty). */
+  private resetBtn: HTMLButtonElement | null = null;
+  private hintEl: HTMLElement | null = null;
   private scoreHost: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
   private unloaded = false;
@@ -197,16 +201,19 @@ class RhythmEmbed extends MarkdownRenderChild {
       // Drain 2026-10-20-0900 §1 — ONE row: Open note, Score (music edition), Reset and the small "not saved" reminder, all from the model in
       // rhythm-embed-core.ts (the words and tooltips are pinned there). Reset and the reminder used to be drawn inside the iframe, as a second row.
       this.scoreBtn = null;
+      this.resetBtn = null;
+      this.hintEl = null;
       for (const item of embedToolbarItems({ music: musicEdition.id === 'music' })) {
         if (item.kind === 'hint') {
-          bar.createSpan({ cls: 'forge-rhythm-embed-hint', text: item.text, attr: { role: 'note', title: item.title, 'aria-label': item.ariaLabel ?? item.title } });
+          this.hintEl = bar.createSpan({ cls: 'forge-rhythm-embed-hint', text: item.text, attr: { role: 'note', title: item.title, 'aria-label': item.ariaLabel ?? item.title } });
           continue;
         }
-        const btn = bar.createEl('button', { text: item.text, attr: { title: item.title } });
+        const btn = bar.createEl('button', { text: item.text, attr: { title: item.title, ...(item.ariaLabel ? { 'aria-label': item.ariaLabel } : {}) } });
         if (item.id === 'open-note') btn.addEventListener('click', () => { this.hooks.openNote(this.file); });
         else if (item.id === 'score') { this.scoreBtn = btn; btn.addEventListener('click', () => { void this.toggleScore(); }); }
-        else if (item.id === 'reset') btn.addEventListener('click', () => { void this.resetPlayground(); });
+        else if (item.id === 'reset') { this.resetBtn = btn; btn.addEventListener('click', () => { void this.resetPlayground(); }); }
       }
+      this.applyDirty(false);                              // pristine until the first edit: no hint, Reset quiet, from the first paint
       this.statusEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-status' });
       this.bodyEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-body' });
 
@@ -221,6 +228,7 @@ class RhythmEmbed extends MarkdownRenderChild {
         openNote: () => { if (this.file) this.hooks.openNote(this.file); },
         onPlaying: (playing) => coordinator.setPlaying(this.id, playing),
         showUpdated: () => { this.flashUpdated(); },
+        onDirtyChange: (dirty) => { this.applyDirty(dirty); },
         showError: (message) => { this.showError(message, true); },
         computeScore: computeRhythmScoreViaEngine,
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
@@ -276,6 +284,22 @@ class RhythmEmbed extends MarkdownRenderChild {
   private paneHeight(): number {
     const pane = this.containerEl.closest('.markdown-preview-view, .cm-scroller, .view-content') as HTMLElement | null;
     return pane?.clientHeight || window.innerHeight;
+  }
+
+  /** Drain 2026-10-20-2100 — show or hide "not saved" and enable or disable Reset. The hint is made quiet with `visibility` (it keeps its room: the row does not shift), a disabled Reset is dimmed. */
+  private applyDirty(dirty: boolean): void {
+    const state = embedToolbarState(dirty);
+    if (this.hintEl) {
+      this.hintEl.toggleClass('forge-rhythm-embed-quiet', state.hintHidden);
+      this.hintEl.setAttribute('title', state.hintTitle);
+      this.hintEl.setAttribute('aria-label', state.hintAriaLabel);
+      this.hintEl.setAttribute('aria-hidden', state.hintHidden ? 'true' : 'false');
+    }
+    if (this.resetBtn) {
+      this.resetBtn.disabled = state.resetDisabled;
+      this.resetBtn.setAttribute('title', state.resetTitle);
+      this.resetBtn.setAttribute('aria-label', state.resetAriaLabel);
+    }
   }
 
   /** Drain 2026-10-20-0900 §1 — the Reset button. If the Score is showing it is put away first (it engraved the very state being discarded), then the note is

@@ -37,7 +37,7 @@ test('toolbar model: the hint is the short words "not saved"; the full sentence 
   assert.equal(hint.title, PLAYGROUND_HINT_TITLE);
   assert.equal(hint.ariaLabel, PLAYGROUND_HINT_TITLE);
   assert.match(PLAYGROUND_HINT_TITLE, /not saved/i);
-  assert.match(PLAYGROUND_HINT_TITLE, /reset/i, 'the sentence says what Reset does');
+  assert.match(PLAYGROUND_HINT_TITLE, /Open note/, 'the sentence says where to edit for real (drain 2026-10-20-2100 wording)');
   assert.ok(PLAYGROUND_HINT_TITLE.length > PLAYGROUND_HINT_TEXT.length * 4, 'the tooltip carries the sentence the label no longer does');
 });
 
@@ -46,7 +46,7 @@ test('toolbar model: Reset is a button named Reset with a tooltip saying what it
   const byId = Object.fromEntries(items.map((i) => [i.id, i]));
   assert.equal(byId['reset'].kind, 'button');
   assert.equal(byId['reset'].text, 'Reset');
-  assert.match(byId['reset'].title, /as it is in the note/i);
+  assert.match(byId['reset'].title, /nothing to reset/i, 'the model starts pristine; the state is embedToolbarState (rhythm-embed-dirty.test.ts)');
   assert.equal(byId['open-note'].text, 'Open note');
   assert.equal(byId['score'].text, 'Score');
   for (const i of items) assert.ok(i.title.length > 0, `${i.id} has a tooltip`);
@@ -99,6 +99,8 @@ test('session.reset(): the playground is clean afterwards, and it is NOT an "Upd
   const { session, log } = makeSession({ resetInHost: true });
   await session.onWidgetMessage({ type: MSG_READY });
   await session.onWidgetMessage({ type: 'forge-rhythm-edited' });
+  await session.onWidgetMessage({ type: 'forge-rhythm-current-data', data: { ...TRESILLO, tempo_bpm: 60 } });
+  await Promise.resolve(); await Promise.resolve();
   assert.equal(session.isDirty(), true);
   await session.reset();
   assert.equal(session.isDirty(), false);
@@ -135,7 +137,7 @@ test('mechanism pin: the embed view builds its toolbar from the model, tells the
   assert.match(v, /embedToolbarItems\(\{ music: musicEdition\.id === 'music' \}\)/, 'the buttons come from ONE model');
   assert.match(v, /resetInHost: true/, 'the session tells the widget');
   assert.match(v, /session\.reset\(\)|this\.session\??\.reset\(\)/, 'Reset is the session\'s reset, not a hand-built load');
-  assert.match(v, /else if \(item\.id === 'reset'\) btn\.addEventListener\('click', \(\) => \{ void this\.resetPlayground\(\); \}\);/, 'and the Reset BUTTON is wired to it (not to another handler)');
+  assert.match(v, /else if \(item\.id === 'reset'\) \{ this\.resetBtn = btn; btn\.addEventListener\('click', \(\) => \{ void this\.resetPlayground\(\); \}\); \}/, 'and the Reset BUTTON is wired to it (not to another handler)');
   assert.match(v, /else if \(item\.id === 'score'\) \{ this\.scoreBtn = btn; btn\.addEventListener\('click', \(\) => \{ void this\.toggleScore\(\); \}\); \}/, 'Score still toggles the score');
   const bar = v.slice(v.indexOf("const bar = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-toolbar' })"));
   assert.doesNotMatch(bar.slice(0, bar.indexOf('this.statusEl')), /text: 'Open note'|text: 'Reset'|text: 'Score'/, 'no hand-written button words beside the model (the model owns them)');

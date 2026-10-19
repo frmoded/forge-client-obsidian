@@ -143,6 +143,14 @@ function embedSession(initial: string) {
   return { session, posted, log, setText: (t: string) => { text = t; }, loads: () => posted.filter((m) => m.type === MSG_LOAD) };
 }
 
+/** Drain 2026-10-20-2100: "dirty" is COMPUTED — an edit makes the session ask the widget for its data and compare it with the loaded note — so a test that wants a dirty embed
+ *  plays the widget's part: the `edited` message, then the answer to the request for its data (here: the same note at another tempo). */
+async function makeDirty(e: ReturnType<typeof embedSession>) {
+  await e.session.onWidgetMessage({ type: 'forge-rhythm-edited' });
+  await e.session.onWidgetMessage({ type: 'forge-rhythm-current-data', data: { ...TRESILLO, tempo_bpm: TRESILLO.tempo_bpm + 20 } });
+  await Promise.resolve(); await Promise.resolve();
+}
+
 test('(b) a CLEAN embed follows the note both ways: edited on disk -> reloads; restored on disk -> reloads again', async () => {
   const e = embedSession(TRESILLO_TEXT);
   await e.session.onWidgetMessage({ type: MSG_READY });
@@ -158,7 +166,7 @@ test('(b) a CLEAN embed follows the note both ways: edited on disk -> reloads; r
 test('(b) a DIRTY embed: the note changes on disk -> the embed shows the NEW note at once (driver\'s rule), says so, and is clean again', async () => {
   const e = embedSession(TRESILLO_TEXT);
   await e.session.onWidgetMessage({ type: MSG_READY });
-  await e.session.onWidgetMessage({ type: 'forge-rhythm-edited' });
+  await makeDirty(e);
   assert.equal(e.session.isDirty(), true);
   e.setText(textOf(TRESILLO_34)); await e.session.onNoteModified();
   assert.equal(e.loads().length, 2, 'the new note is sent over the experiment');
@@ -185,7 +193,7 @@ test('(b) a DIRTY embed whose note is RESTORED (`git checkout`, Restore to last 
 test('(b) a modify event that left the text as it was changes nothing, even for a dirty embed (the experiment survives a mere touch)', async () => {
   const e = embedSession(TRESILLO_TEXT);
   await e.session.onWidgetMessage({ type: MSG_READY });
-  await e.session.onWidgetMessage({ type: 'forge-rhythm-edited' });
+  await makeDirty(e);
   await e.session.onNoteModified();
   assert.equal(e.loads().length, 1);
   assert.equal(e.log.updated, 0);

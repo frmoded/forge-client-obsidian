@@ -10,7 +10,7 @@
 
 import { parseHeightPx } from './html-embed-view-core.ts';
 import {
-  buildLoadMessage, buildRequestDataMessage, buildStopMessage, contentFingerprint, parseEmbedWidgetMessage, readRhythmNote,
+  buildLoadMessage, buildRequestDataMessage, buildStopMessage, contentFingerprint, parseEmbedWidgetMessage, readRhythmNote, rhythmDataEqual,
   type RhythmData, type RhythmWidgetView,
 } from './rhythm-edit-core.ts';
 import { produceScoreFromData, type ScoreOutcome } from './rhythm-score-core.ts';
@@ -175,9 +175,30 @@ export function createPlaybackCoordinator(): PlaybackCoordinator {
 
 // ---- the toolbar (drain 2026-10-20-0900 §1) -----------------------------------------------------------------------------------------
 
-/** The playground's reminder, in the toolbar row beside Reset: two words, with the whole sentence as its tooltip and accessible name. */
+/** The playground's reminder, in the toolbar row beside Reset: two words, with the whole sentence as its tooltip and accessible name. Drain 2026-10-20-2100: it is a STATE — shown only while the
+ *  embed differs from the note (embedToolbarState). */
 export const PLAYGROUND_HINT_TEXT = 'not saved';
-export const PLAYGROUND_HINT_TITLE = 'Playground \u2014 edits are not saved. Reset puts the rhythm back as it is in the note; Open note opens the real thing, where changes are saved.';
+export const PLAYGROUND_SENTENCE = 'This embed is a playground: edits are not saved to the note; Open note to edit it.';
+export const PLAYGROUND_HINT_TITLE = PLAYGROUND_SENTENCE;
+
+/** What the hint and Reset look like in each state. Pristine (the embed shows the note as it is): the hint is hidden and Reset is disabled; dirty: the hint shows and Reset works. The sentence is
+ *  in the tooltip AND the accessible name of both, in both states; the Reset tooltip says what Reset will do NOW. The accessible name of Reset starts with its visible word. */
+export function embedToolbarState(dirty: boolean): {
+  hintHidden: boolean; resetDisabled: boolean; hintTitle: string; hintAriaLabel: string; resetTitle: string; resetAriaLabel: string;
+} {
+  return {
+    hintHidden: !dirty,
+    resetDisabled: !dirty,
+    hintTitle: PLAYGROUND_SENTENCE,
+    hintAriaLabel: PLAYGROUND_SENTENCE,
+    resetTitle: dirty
+      ? `Reset: put the rhythm back exactly as it is in the note. ${PLAYGROUND_SENTENCE}`
+      : `Nothing to reset: this embed shows the note as it is. ${PLAYGROUND_SENTENCE}`,
+    resetAriaLabel: dirty
+      ? `Reset \u2014 put the rhythm back as it is in the note. ${PLAYGROUND_SENTENCE}`
+      : `Reset \u2014 nothing to reset yet. ${PLAYGROUND_SENTENCE}`,
+  };
+}
 
 export interface EmbedToolbarItem {
   id: 'open-note' | 'score' | 'reset' | 'hint';
@@ -196,7 +217,7 @@ export function embedToolbarItems(opts: { music: boolean }): EmbedToolbarItem[] 
   ];
   if (opts.music) items.push({ id: 'score', kind: 'button', text: 'Score', title: 'Engrave the rhythm as it is on screen right now' });
   items.push(
-    { id: 'reset', kind: 'button', text: 'Reset', title: 'Put the rhythm back exactly as it is in the note' },
+    { id: 'reset', kind: 'button', text: 'Reset', title: embedToolbarState(false).resetTitle, ariaLabel: embedToolbarState(false).resetAriaLabel },
     { id: 'hint', kind: 'hint', text: PLAYGROUND_HINT_TEXT, title: PLAYGROUND_HINT_TITLE, ariaLabel: PLAYGROUND_HINT_TITLE },
   );
   return items;
@@ -234,6 +255,9 @@ export interface EmbedSessionDeps {
   showUpdated(): void;
   /** Replace the widget with an inline error. */
   showError(message: string): void;
+  /** Drain 2026-10-20-2100 — the embed became pristine / dirty (its data equals the note as loaded, or differs): the view shows or hides "not saved" and enables or disables Reset.
+   *  Called with `false` on every load (first load, Reset, "Updated from note") and whenever a check changes the answer. */
+  onDirtyChange?(dirty: boolean): void;
   /** Engine: `rhythm_data_to_stream` -> tagged MusicXML. Absent when there is no engine (the Score toggle then reports an error). */
   computeScore?(data: RhythmData, title: string): Promise<unknown>;
   setTimer(fn: () => void, ms: number): unknown;
@@ -259,6 +283,8 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
   let disposed = false;
   let dirty = false;
   let loadedFingerprint = '';
+  /** The note as last loaded — the baseline "pristine" is measured against. */
+  let loadedData: RhythmData | null = null;
   const pending: Array<{ resolve(v: unknown): void; reject(e: Error): void; timer: unknown }> = [];
 
   const post = (m: Record<string, unknown>) => { if (!disposed) deps.post(m); };
@@ -279,9 +305,49 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
       return false;
     }
     loadedFingerprint = contentFingerprint(text);
+    loadedData = note.value.data;
     dirty = false;
+    deps.onDirtyChange?.(false);                                      // a load is pristine by definition: first load, Reset, and "Updated from note" all come through here
     post(buildLoadMessage(note.value.data, deps.noteName, 'playground', deps.view ?? null, deps.autoHeight === true, deps.resetInHost === true) as Record<string, unknown>);
     return true;
+  }
+
+  /** Ask the widget for its current data (resolves with it; rejects on the 2 s timeout or when the embed is removed). */
+  function requestData(): Promise<unknown> {
+    return new Promise<unknown>((resolve, reject) => {
+      const entry = { resolve, reject, timer: null as unknown };
+      entry.timer = deps.setTimer(() => {
+        const i = pending.indexOf(entry);
+        if (i >= 0) pending.splice(i, 1);
+        reject(new Error('the widget did not answer'));
+      }, DATA_REQUEST_TIMEOUT_MS);
+      pending.push(entry);
+      post(buildRequestDataMessage());
+    });
+  }
+
+  /** Dirty = the widget's CURRENT data differs from the note as loaded — compared, not remembered (rhythmDataEqual), so an edit undone by hand is pristine again. An edit asks the widget for its
+   *  data; a burst of edits (a slider) coalesces into the check in flight plus one more at the end, and the last answer decides. If the widget cannot answer, or answers with nothing, we cannot
+   *  prove the embed matches the note, so it is called dirty. */
+  let checking = false;
+  let again = false;
+  async function checkDirty(): Promise<void> {
+    if (checking) { again = true; return; }
+    checking = true;
+    try {
+      do {
+        again = false;
+        const baseline = loadedData;
+        if (disposed || baseline === null) return;
+        let current: unknown = null;
+        try { current = await requestData(); } catch { current = null; }
+        if (disposed || loadedData !== baseline) continue;            // the note was (re)loaded meanwhile: that load already said "pristine"
+        const next = !rhythmDataEqual(baseline, current);
+        if (next !== dirty) { dirty = next; deps.onDirtyChange?.(dirty); }
+      } while (again);
+    } finally {
+      checking = false;
+    }
   }
 
   return {
@@ -290,7 +356,7 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
       const msg = parseEmbedWidgetMessage(raw);
       switch (msg.kind) {
         case 'ready': await loadNote(); return;
-        case 'edited': dirty = true; return;
+        case 'edited': void checkDirty(); return;
         case 'reset': await loadNote(); return;      // also picks up a note that changed while the student had local edits
         case 'open-note': deps.openNote(); return;
         case 'playing': deps.onPlaying(msg.playing); return;
@@ -320,20 +386,7 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
 
     isDirty: () => dirty,
 
-    requestCurrentData() {
-      return new Promise<unknown>((resolve, reject) => {
-        const entry = {
-          resolve, reject, timer: null as unknown,
-        };
-        entry.timer = deps.setTimer(() => {
-          const i = pending.indexOf(entry);
-          if (i >= 0) pending.splice(i, 1);
-          reject(new Error('the widget did not answer'));
-        }, DATA_REQUEST_TIMEOUT_MS);
-        pending.push(entry);
-        post(buildRequestDataMessage());
-      });
-    },
+    requestCurrentData() { return requestData(); },
 
     async currentScore() {
       let data: unknown;
