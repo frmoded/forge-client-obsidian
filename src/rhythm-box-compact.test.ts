@@ -156,7 +156,7 @@ test('compact: no control was removed — every id the widget had is still there
   for (const id of ['hostBar', 'hostEditing', 'hostNote', 'playgroundLabel', 'loadMsg', 'saveMsg', 'bReload', 'bReset', 'bOpenNote', 'confirmBar',
     'confirmText', 'confirmOk', 'confirmCancel', 'bPlay', 'bBpmDown', 'bpmVal', 'bBpmUp', 'bTap', 'stepPos', 'swing', 'swingVal', 'volume',
     'volumeVal', 'timeSig', 'viewSwitch', 'bViewGrid', 'bViewCircle', 'viewMsg', 'gridView', 'grid', 'addInstrument', 'circleView', 'bRotLeft',
-    'bRotRight', 'bBeatLeft', 'bBeatRight', 'bShape', 'ringLegend', 'circle', 'bRandom', 'bClear', 'bExport', 'exportMsg', 'exportFallback']) {
+    'bRotRight', 'bMirror', 'bMirrorGrid', 'bShape', 'ringLegend', 'circle', 'bRandom', 'bClear', 'bExport', 'exportMsg', 'exportFallback']) {
     assert.ok(new RegExp(`id="${id}"`).test(widgetHtml), `#${id}`);
   }
   assert.equal((widgetHtml.match(/data-bank="[A-D]"/g) ?? []).length, 4, 'the four banks');
@@ -204,7 +204,7 @@ test('compact: Random, Clear and Export JSON sit behind ONE "more" menu (still r
 });
 
 test('compact: the circle toolbar is icon buttons with tooltips and aria-labels — short visible text, full names for assistive tech', { skip }, () => {
-  for (const [id, label] of [['bRotLeft', /left/i], ['bRotRight', /right/i], ['bBeatLeft', /left.*beat/i], ['bBeatRight', /right.*beat/i], ['bShape', /shape/i]] as const) {
+  for (const [id, label] of [['bRotLeft', /left/i], ['bRotRight', /right/i], ['bMirror', /mirror/i], ['bShape', /shape/i]] as const) {
     const m = new RegExp(`<button[^>]*id="${id}"[^>]*>([^<]*)</button>`).exec(widgetHtml);
     assert.ok(m, id);
     const visible = m![1].trim().replace(/&[a-z0-9#]+;/gi, '*');        // an HTML entity is one glyph

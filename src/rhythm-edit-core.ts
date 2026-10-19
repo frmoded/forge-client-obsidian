@@ -89,9 +89,11 @@ export type RhythmHostMode = 'edit' | 'playground';
  *  first load, never persists it, and ignores anything but these two strings. */
 export type RhythmWidgetView = 'grid' | 'circle';
 
-export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null) {
+/** `autoHeight: true` asks the widget to measure itself and post `resize` (widget-auto-height-core.ts); absent otherwise, so every older shape is unchanged. */
+export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null, autoHeight = false) {
   const base = mode === 'playground' ? { type: MSG_LOAD, data, noteName, mode } : { type: MSG_LOAD, data, noteName };
-  return view === null ? base : { ...base, view };
+  const withView = view === null ? base : { ...base, view };
+  return autoHeight ? { ...withView, autoHeight: true as const } : withView;
 }
 
 export function buildRequestDataMessage() {
@@ -356,6 +358,13 @@ export type ModifyVerdict = 'ignore' | 'reload' | 'conflict';
  *              promise resolves — is recognised as ours.
  *  commit() makes expected the new baseline after a successful write; rollback() forgets it after a failed one.
  */
+/** A vault `modify` event for the Beat Box tab's note. With a widget and a session it is CLASSIFIED (own write / reload / conflict). Without them —
+ *  the note was invalid when the tab opened (no session) or a refusal replaced the widget (no iframe) — there is nothing to reload INTO, so the tab
+ *  REMOUNTS: a note that is rhythm data again gets its Beat Box back (a refusal never was a dead end, but `sendLoad` returned early without an iframe). */
+export function modifyRecovery(state: { hasSession: boolean; hasIframe: boolean }): 'classify' | 'remount' {
+  return state.hasSession && state.hasIframe ? 'classify' : 'remount';
+}
+
 export class RhythmNoteSession {
   private baseline: string;
   private expected: string | null = null;

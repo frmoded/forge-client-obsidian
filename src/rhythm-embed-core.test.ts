@@ -13,7 +13,7 @@ import {
   parseWidgetMessage, type RhythmData,
 } from './rhythm-edit-core.ts';
 import {
-  DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, DEFAULT_RHYTHM_EMBED_HEIGHT_PX, createPlaybackCoordinator, embedHeightFor, createRhythmEmbedSession, decideEmbedFreshness, parseRhythmEmbedSource,
+  DEFAULT_RHYTHM_EMBED_CIRCLE_HEIGHT_PX, DEFAULT_RHYTHM_EMBED_HEIGHT_PX, createPlaybackCoordinator, embedHeightFor, createRhythmEmbedSession, decideEmbedFreshness, UPDATED_FROM_NOTE_LABEL, UPDATED_FROM_NOTE_MS, parseRhythmEmbedSource,
   widgetMissingMessage,
 } from './rhythm-embed-core.ts';
 
@@ -182,11 +182,16 @@ test('protocol: the Beat Box view\'s own parser is UNCHANGED — the new message
 
 // ---- freshness ----------------------------------------------------------------------------------------------------------
 
-test('freshness: unchanged -> ignore; changed + no local edits -> reload; changed + local edits -> tell, never clobber', () => {
-  assert.equal(decideEmbedFreshness({ dirty: false, loadedFingerprint: 'a', currentFingerprint: 'a' }), 'ignore');
-  assert.equal(decideEmbedFreshness({ dirty: true, loadedFingerprint: 'a', currentFingerprint: 'a' }), 'ignore');
-  assert.equal(decideEmbedFreshness({ dirty: false, loadedFingerprint: 'a', currentFingerprint: 'b' }), 'reload');
-  assert.equal(decideEmbedFreshness({ dirty: true, loadedFingerprint: 'a', currentFingerprint: 'b' }), 'stale-notice');
+// Drain 2026-10-18-1800 (driver clarification, replacing Phase 8's rule "a dirty embed keeps the experiment and only warns"): when the data note
+// changes on disk by ANY route, every open embed shows the note as it now is — an unsaved playground experiment is ephemeral by design.
+test('freshness: unchanged -> ignore (even with local edits); changed -> reload, WITH or WITHOUT local edits', () => {
+  assert.equal(decideEmbedFreshness({ loadedFingerprint: 'a', currentFingerprint: 'a' }), 'ignore');
+  assert.equal(decideEmbedFreshness({ loadedFingerprint: 'a', currentFingerprint: 'b' }), 'reload');
+});
+
+test('the "Updated from note" label: the driver\'s words, shown for a few seconds (brief, not a permanent banner)', () => {
+  assert.equal(UPDATED_FROM_NOTE_LABEL, 'Updated from note');
+  assert.ok(UPDATED_FROM_NOTE_MS >= 2000 && UPDATED_FROM_NOTE_MS <= 8000, `${UPDATED_FROM_NOTE_MS} ms`);
 });
 
 // ---- one sound at a time ------------------------------------------------------------------------------------------------
@@ -234,7 +239,7 @@ test('coordinator: unload of a player silences it; a removed embed is never sign
 function makeSession(over: { text?: () => string; computeScore?: (d: RhythmData, t: string) => Promise<unknown> } = {}) {
   let text = noteText();
   const posted: any[] = [];
-  const log = { errors: [] as string[], stale: [] as boolean[], opened: 0, playing: [] as boolean[], timers: [] as Array<() => void> };
+  const log = { errors: [] as string[], updated: 0, opened: 0, playing: [] as boolean[], timers: [] as Array<() => void> };
   const session = createRhythmEmbedSession({
     noteName: 'rhythm_pattern_tresillo',
     title: 'The tresillo',
@@ -242,7 +247,7 @@ function makeSession(over: { text?: () => string; computeScore?: (d: RhythmData,
     post: (m) => { posted.push(m); },
     openNote: () => { log.opened++; },
     onPlaying: (p) => { log.playing.push(p); },
-    setStale: (s) => { log.stale.push(s); },
+    showUpdated: () => { log.updated++; },
     showError: (m) => { log.errors.push(m); },
     computeScore: over.computeScore,
     setTimer: (fn) => { log.timers.push(fn); return log.timers.length; },
@@ -261,7 +266,7 @@ test('session: a view option rides on the load (the widget applies it once); no 
   let posted: any[] = [];
   const mk = (view?: 'circle' | 'grid' | null) => createRhythmEmbedSession({
     noteName: 'n', title: 'n', view, readNote: async () => noteText(), post: (m) => { posted.push(m); }, openNote: () => {},
-    onPlaying: () => {}, setStale: () => {}, showError: () => {}, setTimer: () => 0, clearTimer: () => {},
+    onPlaying: () => {}, showUpdated: () => {}, showError: () => {}, setTimer: () => 0, clearTimer: () => {},
   });
   await mk('circle').onWidgetMessage({ type: MSG_READY });
   assert.deepEqual(posted, [{ type: MSG_LOAD, data: TRESILLO, noteName: 'n', mode: 'playground', view: 'circle' }]);
@@ -312,20 +317,35 @@ test('session: the note changes on disk with NO local edits -> the embed reloads
   assert.equal(posted[0].mode, 'playground');
 });
 
-test('session: the note changes on disk WITH local edits -> a notice, no load sent (never clobbered); Reset then reloads the new data', async () => {
+test('session: a reload caused by the note changing says so ("Updated from note"); the first load and a Reset do not', async () => {
+  const { session, posted, log, setText } = makeSession();
+  await session.onWidgetMessage({ type: MSG_READY });
+  await session.onWidgetMessage({ type: MSG_RESET });
+  assert.equal(log.updated, 0, 'ready / Reset are the student\'s own doing');
+  setText(noteText({ ...TRESILLO, tempo_bpm: 140 }));
+  await session.onNoteModified();
+  assert.equal(log.updated, 1);
+  await session.onNoteModified();                                    // the same text again: nothing happened
+  assert.equal(log.updated, 1);
+  assert.equal(posted.length, 3);
+});
+
+test('session: the note changes on disk WITH local edits -> the embed shows the NOTE (the experiment is ephemeral), and says so', async () => {
   const { session, posted, log, setText } = makeSession();
   await session.onWidgetMessage({ type: MSG_READY });
   await session.onWidgetMessage({ type: MSG_EDITED });
+  assert.equal(session.isDirty(), true);
   posted.length = 0;
   setText(noteText({ ...TRESILLO, tempo_bpm: 140 }));
   await session.onNoteModified();
-  assert.deepEqual(posted, [], 'the playground keeps what the student is doing');
-  assert.deepEqual(log.stale, [true]);
-  await session.onWidgetMessage({ type: MSG_RESET });
-  assert.equal(session.isDirty(), false);
-  assert.equal(posted.length, 1, 'Reset picks up the changed note');
+  assert.equal(posted.length, 1, 'the new data is sent over the stale experiment');
   assert.equal(posted[0].data.tempo_bpm, 140);
-  assert.deepEqual(log.stale, [true, false]);
+  assert.equal(log.updated, 1);
+  assert.equal(session.isDirty(), false, 'the embed is back in step with the note');
+  await session.onWidgetMessage({ type: MSG_RESET });
+  assert.equal(posted.length, 2, 'Reset still reads the note as it is on disk now');
+  assert.equal(posted[1].data.tempo_bpm, 140);
+  assert.equal(log.updated, 1, 'Reset is not an "Updated from note"');
 });
 
 test('session: a modify event that did not change the note is ignored', async () => {
@@ -395,7 +415,7 @@ test('error wording: a missing widget reuses the lookup\'s own message (what was
 test('the session\'s dependency bag has no write function: nothing in it can modify a note', () => {
   const { session } = makeSession();
   assert.ok(session);
-  // The contract is structural: EmbedSessionDeps lists readNote/post/openNote/onPlaying/setStale/showError/computeScore/timers only.
+  // The contract is structural: EmbedSessionDeps lists readNote/post/openNote/onPlaying/showUpdated/showError/computeScore/timers only.
   // The source pin in rhythm-embed-wiring.test.ts additionally checks the Obsidian glue for any vault write API.
   assert.equal(contentFingerprint('a') === contentFingerprint('a'), true);
 });

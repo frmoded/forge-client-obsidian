@@ -114,7 +114,10 @@ test('unload cleans up: listener removed, session disposed, blob URL revoked, sc
 });
 
 test('freshness: modify events for the DATA note go to the session (never to a write)', () => {
-  assert.match(view, /this\.registerEvent\(this\.app\.vault\.on\('modify', \(f\) => \{\s*if \(this\.file && f\.path === this\.file\.path\) void this\.session\?\.onNoteModified\(\);/);
+  // pins the MECHANISM (the handler's shape). Drain 2026-10-18-1800 added the error-state branch in front of it: an embed with no session
+  // (showing an inline error) re-renders instead; a live embed still hands the event to its session, as before.
+  assert.match(view, /this\.registerEvent\(this\.app\.vault\.on\('modify', \(f\) => \{\s*if \(!this\.file \|\| f\.path !== this\.file\.path\) return;[\s\S]*?else void this\.session\?\.onNoteModified\(\);/);
+  assert.ok(!/this\.session!?\.(write|save|process)/.test(view), 'and no write is reachable from the session');
 });
 
 test('Open note goes through the plugin\'s own Beat Box opener (new tab unless the note is already open; default Beat Box view)', () => {
@@ -126,4 +129,16 @@ test('every error is inline and never throws out of the processor', () => {
   assert.match(view, /private showError\(message: string/);
   assert.match(view, /catch \(e\) \{[\s\S]*?this\.showError\(/);
   assert.match(view, /forge-rhythm-embed-error/);
+});
+
+// Drain 2026-10-18-1800 (driver clarification): a changed note reloads the embed even over local edits, and the embed says so for a few seconds.
+test('mechanism pin: the embed view shows the "Updated from note" label briefly, hides it again, and cancels the timer on unload', () => {
+  const view = fs.readFileSync(path.resolve(import.meta.dirname, 'rhythm-embed-view.ts'), 'utf8');
+  assert.match(view, /showUpdated: \(\) => \{ this\.flashUpdated\(\); \}/);
+  assert.match(view, /text: UPDATED_FROM_NOTE_LABEL/);
+  assert.match(view, /window\.setTimeout\(\(\) => \{[\s\S]*?toggleClass\('forge-rhythm-embed-hidden', true\)[\s\S]*?\}, UPDATED_FROM_NOTE_MS\)/, 'the timer callback hides the label again');
+  assert.match(view, /this\.unloaded = true;\s*if \(this\.updatedTimer !== null\) \{ window\.clearTimeout\(this\.updatedTimer\)/);
+  assert.doesNotMatch(view, /setStale|staleEl|forge-rhythm-embed-stale/, 'the Phase 8 warning is gone');
+  const css = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'styles.css'), 'utf8');
+  assert.match(css, /\.forge-rhythm-embed-updated \{/);
 });

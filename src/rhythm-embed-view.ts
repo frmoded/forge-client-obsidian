@@ -16,16 +16,21 @@
 
 import { MarkdownRenderChild, TFile, type App, type MarkdownPostProcessorContext, type Plugin } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
+import { attachAutoHeight } from './widget-auto-height.ts';
+import { parseWidgetResize, type AutoHeightController } from './widget-auto-height-core.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
 import { RHYTHM_BOX_WIDGET_PATH, readRhythmNote } from './rhythm-edit-core.ts';
 import {
   RHYTHM_EMBED_LANGUAGE,
+  UPDATED_FROM_NOTE_LABEL,
+  UPDATED_FROM_NOTE_MS,
   createPlaybackCoordinator,
   createRhythmEmbedSession,
   noteNotFoundMessage,
   notRhythmMessage,
   embedHeightFor,
   parseRhythmEmbedSource,
+  shouldRerenderAfterModify,
   widgetMissingMessage,
   type RhythmEmbedSession,
 } from './rhythm-embed-core.ts';
@@ -58,15 +63,22 @@ class RhythmEmbed extends MarkdownRenderChild {
   private iframe: HTMLIFrameElement | null = null;
   private blobUrl: string | null = null;
   private bodyEl!: HTMLElement;
-  private staleEl: HTMLElement | null = null;
+  private updatedEl: HTMLElement | null = null;
+  private updatedTimer: number | null = null;
   private scoreBtn: HTMLButtonElement | null = null;
   private scoreHost: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
   private unloaded = false;
+  /** True while an inline error is shown in place of the widget (the session is gone): a later modify of the note re-renders. */
+  private inErrorState = false;
+  /** Drain 2026-10-18-1800 — sizes the iframe to the widget's content; null when the block gave an explicit `height:` (used as written). */
+  private autoHeight: AutoHeightController | null = null;
 
   private readonly onMessage = (ev: MessageEvent): void => {
     // Only OUR iframe may talk to this embed (the widget makes the mirror check on its side).
     if (!this.iframe || ev.source !== this.iframe.contentWindow) return;
+    const px = parseWidgetResize(ev.data);
+    if (px !== null) { this.autoHeight?.request(px); return; }
     void this.session?.onWidgetMessage(ev.data);
   };
 
@@ -85,13 +97,17 @@ class RhythmEmbed extends MarkdownRenderChild {
     coordinator.register(this.id, () => this.session?.stop());
     // The data note changed on disk (the Beat Box tab autosaving, a hand edit, a sync): reload only if the playground has no local edits.
     this.registerEvent(this.app.vault.on('modify', (f) => {
-      if (this.file && f.path === this.file.path) void this.session?.onNoteModified();
+      if (!this.file || f.path !== this.file.path) return;
+      // Drain 2026-10-18-1800 — an embed in its error state has no session to hand this to; the note may be valid again (restored, fixed).
+      if (shouldRerenderAfterModify({ hasSession: this.session !== null, inErrorState: this.inErrorState, unloaded: this.unloaded })) void this.render();
+      else void this.session?.onNoteModified();
     }));
     void this.render();
   }
 
   onunload(): void {
     this.unloaded = true;
+    if (this.updatedTimer !== null) { window.clearTimeout(this.updatedTimer); this.updatedTimer = null; }
     window.removeEventListener('message', this.onMessage);
     coordinator.unregister(this.id);
     this.session?.dispose();
@@ -101,6 +117,8 @@ class RhythmEmbed extends MarkdownRenderChild {
   }
 
   private releaseIframe(): void {
+    this.autoHeight?.dispose();
+    this.autoHeight = null;
     if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
     this.blobUrl = null;
     this.iframe = null;
@@ -109,6 +127,7 @@ class RhythmEmbed extends MarkdownRenderChild {
   /** An inline error in place of the widget — never thrown, never breaks the rest of the page. `openNote` offers the way out for a
    *  note that exists but is not (valid) rhythm data, so it can be fixed in its own tab. */
   private showError(message: string, openNote = false): void {
+    this.inErrorState = true;
     this.session?.dispose();
     this.session = null;
     this.releaseIframe();
@@ -124,6 +143,7 @@ class RhythmEmbed extends MarkdownRenderChild {
   }
 
   private async render(): Promise<void> {
+    this.inErrorState = false;
     try {
       const parsed = parseRhythmEmbedSource(this.source);
       if (parsed.ok === false) {
@@ -162,19 +182,20 @@ class RhythmEmbed extends MarkdownRenderChild {
         this.scoreBtn.addEventListener('click', () => { void this.toggleScore(); });
       }
       this.statusEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-status' });
-      this.staleEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-stale', text: 'The note changed — press Reset to load it.' });
-      this.staleEl.toggleClass('forge-rhythm-embed-hidden', true);
+      this.updatedEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-updated', text: UPDATED_FROM_NOTE_LABEL });
+      this.updatedEl.toggleClass('forge-rhythm-embed-hidden', true);
       this.bodyEl = this.containerEl.createDiv({ cls: 'forge-rhythm-embed-body' });
 
       this.session = createRhythmEmbedSession({
         noteName: this.file.basename,
         title,
         view: options.view,
+        autoHeight: !options.heightExplicit,
         readNote: () => this.app.vault.read(this.file),
         post: (message) => { this.iframe?.contentWindow?.postMessage(message, '*'); },
         openNote: () => { if (this.file) this.hooks.openNote(this.file); },
         onPlaying: (playing) => coordinator.setPlaying(this.id, playing),
-        setStale: (show) => { this.staleEl?.toggleClass('forge-rhythm-embed-hidden', !show); },
+        showUpdated: () => { this.flashUpdated(); },
         showError: (message) => { this.showError(message, true); },
         computeScore: computeRhythmScoreViaEngine,
         setTimer: (fn, ms) => window.setTimeout(fn, ms),
@@ -186,9 +207,28 @@ class RhythmEmbed extends MarkdownRenderChild {
       const { iframe, blobUrl } = createSandboxedWidgetIframe(this.bodyEl, widget.html, `${heightPx}px`);
       this.iframe = iframe;
       this.blobUrl = blobUrl;
+      // Drain 2026-10-18-1800 — without an explicit `height:` the widget measures itself and the iframe follows (the height above is the first paint).
+      this.autoHeight = options.heightExplicit ? null : attachAutoHeight(iframe, { initial: heightPx, paneHeight: () => this.paneHeight() });
     } catch (e) {
       this.showError(`Rhythm embed: ${(e as Error)?.message ?? e}`);
     }
+  }
+
+  /** Drain 2026-10-18-1800 — the embed was reloaded because the note changed on disk: say so for a few seconds, then go quiet. */
+  private flashUpdated(): void {
+    if (!this.updatedEl) return;
+    this.updatedEl.toggleClass('forge-rhythm-embed-hidden', false);
+    if (this.updatedTimer !== null) window.clearTimeout(this.updatedTimer);
+    this.updatedTimer = window.setTimeout(() => {
+      this.updatedTimer = null;
+      this.updatedEl?.toggleClass('forge-rhythm-embed-hidden', true);
+    }, UPDATED_FROM_NOTE_MS);
+  }
+
+  /** The visible height of the pane this embed sits in (Reading view or Live Preview scroller); the window's when it cannot be found. */
+  private paneHeight(): number {
+    const pane = this.containerEl.closest('.markdown-preview-view, .cm-scroller, .view-content') as HTMLElement | null;
+    return pane?.clientHeight || window.innerHeight;
   }
 
   /** Beat Box <-> engraved score of the CURRENT playground state (music edition). The iframe is kept (hidden), never rebuilt, so the

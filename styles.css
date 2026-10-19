@@ -1648,7 +1648,8 @@
 /* Beat-as-data Phase 5: the pane that hosts the Rhythm Box widget for "Edit rhythm in Rhythm Box" — the widget fills it edge to edge. */
 .forge-rhythm-edit-view {
   padding: 0;
-  overflow: hidden;
+  overflow-y: auto;          /* drain 2026-10-18-1800: the widget sizes its iframe to its content (min-height 100%); a tall rhythm scrolls the PANE, not an inner frame */
+  overflow-x: hidden;
 }
 
 .forge-html-embed-error {
@@ -1696,13 +1697,13 @@
 }
 
 .forge-rhythm-embed-status,
-.forge-rhythm-embed-stale {
+.forge-rhythm-embed-updated {
   padding: 4px 10px;
   font-size: 12px;
   color: var(--text-muted);
 }
 
-.forge-rhythm-embed-stale {
+.forge-rhythm-embed-updated {
   background: var(--background-modifier-hover);
 }
 
@@ -1721,4 +1722,18 @@
 .forge-rhythm-embed-error p {
   margin: 0 0 6px;
   white-space: pre-wrap;
+}
+
+/* Drain 2026-10-18-1800 §3 — no "</>" ("Edit this block") button on a `forge-rhythm` block.
+   Obsidian's Live Preview wraps a custom code-block language's output in `div.cm-preview-code-block.cm-embed-block.cm-lang-<language>` and, on hover,
+   shows `div.embed-actions > .edit-block-button` (the lucide-code-2 icon) in its top-right corner. The icon invites students to edit the block source
+   (a link and a few option lines), which is not what the embed is for; the block is still editable by moving the cursor into it, and "Open note" is
+   in the embed's own toolbar. Names verified against the INSTALLED Obsidian (scripts/verify-obsidian-embed-classes.mjs): the button is added only by
+   Live Preview editor widgets — Reading view has none — so the `.block-language-forge-rhythm` selectors are a harmless safety net. Scoped to this
+   language on purpose: every other code block keeps its button. */
+.cm-preview-code-block.cm-lang-forge-rhythm .embed-actions,
+.cm-preview-code-block.cm-lang-forge-rhythm .edit-block-button,
+.block-language-forge-rhythm .embed-actions,
+.block-language-forge-rhythm .edit-block-button {
+  display: none;
 }

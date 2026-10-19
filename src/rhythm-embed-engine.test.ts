@@ -32,7 +32,7 @@ test('real engine + real widget: a playground edit (unsaved) is what the Score t
     post: (m) => { toWidget(JSON.parse(JSON.stringify(m))); },
     openNote: () => {},
     onPlaying: () => {},
-    setStale: () => {},
+    showUpdated: () => {},
     showError: (m) => { throw new Error(m); },
     computeScore: async (data, title) => compute(py, data, title),
     setTimer: (fn, ms) => setTimeout(fn, ms),

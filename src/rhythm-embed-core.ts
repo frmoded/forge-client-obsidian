@@ -107,13 +107,27 @@ export function parseRhythmEmbedSource(source: string): RhythmEmbedParse {
 
 // ---- freshness ----------------------------------------------------------------------------------------------------------
 
-export type EmbedFreshness = 'ignore' | 'reload' | 'stale-notice';
+export type EmbedFreshness = 'ignore' | 'reload';
 
-/** The data note changed on disk while the embed is up. Reload ONLY when the playground holds no local edits; with edits, say so and
- *  keep them (Reset then reloads). A modify event that did not change the text is nothing. */
-export function decideEmbedFreshness(input: { dirty: boolean; loadedFingerprint: string; currentFingerprint: string }): EmbedFreshness {
-  if (input.currentFingerprint === input.loadedFingerprint) return 'ignore';
-  return input.dirty ? 'stale-notice' : 'reload';
+/** The label an embed shows, briefly, when it was reloaded because the data note changed on disk, and how long it stays. */
+export const UPDATED_FROM_NOTE_LABEL = 'Updated from note';
+export const UPDATED_FROM_NOTE_MS = 4000;
+
+/** The data note changed on disk while the embed is up (the Beat Box tab autosaving, Restore to last commit, `git checkout`, an external editor,
+ *  a sync). Drain 2026-10-18-1800, the driver's rule: by ANY route the embed shows the note as it now is — an unsaved playground experiment is
+ *  ephemeral by design and is replaced (the view says "Updated from note"), where Phase 8 used to keep it and only warn. A modify event that did
+ *  not change the text is nothing: a mere touch must not throw an experiment away. */
+export function decideEmbedFreshness(input: { loadedFingerprint: string; currentFingerprint: string }): EmbedFreshness {
+  return input.currentFingerprint === input.loadedFingerprint ? 'ignore' : 'reload';
+}
+
+// ---- recovering from an error state -------------------------------------------------------------------------------------------
+
+/** A vault `modify` event for the embed's note. A live embed hands it to its session; an embed that is showing an inline ERROR has no session
+ *  (showError disposes it), so before this decision existed a note that was briefly invalid and then restored stayed an error until the page
+ *  re-rendered. Re-render exactly when the embed is in its error state and still on the page. */
+export function shouldRerenderAfterModify(state: { hasSession: boolean; inErrorState: boolean; unloaded: boolean }): boolean {
+  return !state.unloaded && !state.hasSession && state.inErrorState;
 }
 
 // ---- one sound at a time ------------------------------------------------------------------------------------------------
@@ -173,6 +187,8 @@ export interface EmbedSessionDeps {
   title: string;
   /** The `view:` option, handed to the widget with every load (it applies it once). Absent/null = the widget's default. */
   view?: RhythmWidgetView | null;
+  /** True when the widget should size the iframe to its content (the block gave no `height:`): rides on every load as `autoHeight: true`. */
+  autoHeight?: boolean;
   /** The data note's CURRENT saved text. The ONLY thing an embed ever asks the vault for — there is no write counterpart. */
   readNote(): Promise<string>;
   /** Post a message to this embed's widget iframe. */
@@ -181,8 +197,8 @@ export interface EmbedSessionDeps {
   openNote(): void;
   /** Tell the plugin-level coordinator this embed started / stopped playing. */
   onPlaying(playing: boolean): void;
-  /** Show / hide the "the note changed — Reset to reload" notice. */
-  setStale(show: boolean): void;
+  /** The embed was just reloaded because the note changed on disk: show the brief "Updated from note" label (the view hides it again). */
+  showUpdated(): void;
   /** Replace the widget with an inline error. */
   showError(message: string): void;
   /** Engine: `rhythm_data_to_stream` -> tagged MusicXML. Absent when there is no engine (the Score toggle then reports an error). */
@@ -208,35 +224,29 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
   let disposed = false;
   let dirty = false;
   let loadedFingerprint = '';
-  let staleShown = false;
   const pending: Array<{ resolve(v: unknown): void; reject(e: Error): void; timer: unknown }> = [];
 
   const post = (m: Record<string, unknown>) => { if (!disposed) deps.post(m); };
-  const setStale = (show: boolean) => {
-    if (staleShown === show) return;
-    staleShown = show;
-    deps.setStale(show);
-  };
 
   /** Read the saved note and send it as a playground load. An invalid note is an inline error, never a load. */
-  async function loadNote(): Promise<void> {
+  async function loadNote(): Promise<boolean> {
     let text: string;
     try {
       text = await deps.readNote();
     } catch (e) {
       deps.showError(notRhythmMessage(`could not read the note (${(e as Error)?.message ?? e})`));
-      return;
+      return false;
     }
-    if (disposed) return;
+    if (disposed) return false;
     const note = readRhythmNote(text);
     if (note.ok === false) {
       deps.showError(notRhythmMessage(note.message));
-      return;
+      return false;
     }
     loadedFingerprint = contentFingerprint(text);
     dirty = false;
-    setStale(false);
-    post(buildLoadMessage(note.value.data, deps.noteName, 'playground', deps.view ?? null) as Record<string, unknown>);
+    post(buildLoadMessage(note.value.data, deps.noteName, 'playground', deps.view ?? null, deps.autoHeight === true) as Record<string, unknown>);
+    return true;
   }
 
   return {
@@ -264,9 +274,8 @@ export function createRhythmEmbedSession(deps: EmbedSessionDeps): RhythmEmbedSes
       if (disposed) return;
       let text: string;
       try { text = await deps.readNote(); } catch { return; }
-      const verdict = decideEmbedFreshness({ dirty, loadedFingerprint, currentFingerprint: contentFingerprint(text) });
-      if (verdict === 'reload') await loadNote();
-      else if (verdict === 'stale-notice') setStale(true);
+      const verdict = decideEmbedFreshness({ loadedFingerprint, currentFingerprint: contentFingerprint(text) });
+      if (verdict === 'reload' && await loadNote()) deps.showUpdated();
     },
 
     isDirty: () => dirty,

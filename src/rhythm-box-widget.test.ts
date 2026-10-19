@@ -378,14 +378,17 @@ test('autosave: the payload equals the Export JSON for the same state', { skip }
   assert.deepEqual(JSON.parse(copied), lastSave(h).data);
 });
 
-test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and exactly five places call it', { skip }, () => {
+test('autosave: "which actions save" is auditable — one commitChange() posts the intent, and exactly eight places call it', { skip }, () => {
   const posts = [...SCRIPT.matchAll(/type: "forge-rhythm-save"/g)];
   assert.equal(posts.length, 1, 'exactly one place posts a save intent');
   assert.match(SCRIPT, /function commitChange\(\) \{[\s\S]*?type: "forge-rhythm-save"/);
   const noComments = SCRIPT.replace(/\/\/.*$/gm, '');
   const callers = [...noComments.matchAll(/commitChange\(\)/g)].length - 1;      // minus the definition
   // drain 2026-10-14-1200: +1 — Rotate (the Circle view's turn-the-whole-pattern buttons) is a normal edit, so it goes through the same one door.
-  assert.equal(callers, 5, 'cell toggle, tempo (changeBpm), swing, the confirmed whole-pattern change (Random / Clear / time signature), and rotate');
+  // drain 2026-10-18-1800: +1 — Mirror (reverse the rhythm in time) is the same kind of edit as Rotate, through the same one door. This pins the
+  // drain 2026-10-18-1800: +2 — the per-ring controls (rotate the selected ring, move the selected ring) go through the same one door.
+  // MECHANISM (how many call sites there are); the property — every data change saves through commitChange — is pinned per action elsewhere.
+  assert.equal(callers, 8, 'cell toggle, tempo (changeBpm), swing, the confirmed whole-pattern change (Random / Clear / time signature), rotate, mirror, rotate ring, move ring');
   assert.match(noComments, /function applyWholePatternChange\(action\) \{[\s\S]*?\n    commitChange\(\);\n  \}/);
 });
 

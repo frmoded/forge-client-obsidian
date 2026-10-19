@@ -21,6 +21,8 @@
 
 import { EditableFileView, MarkdownView, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
+import { attachAutoHeight } from './widget-auto-height.ts';
+import { parseWidgetResize, type AutoHeightController } from './widget-auto-height-core.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
 import { registerRhythmEmbed } from './rhythm-embed-view.ts';
 import { createAutosavePipeline, type AutosavePipeline, type SaveOutcome } from './rhythm-autosave-core.ts';
@@ -35,6 +37,7 @@ import {
   RHYTHM_BOX_WIDGET_PATH,
   RHYTHM_EDIT_VIEW_TYPE,
   RhythmNoteSession,
+  modifyRecovery,
   buildLoadMessage,
   buildStatusMessage,
   isRhythmEditCandidate,
@@ -65,10 +68,14 @@ export class RhythmEditView extends EditableFileView {
   private blobUrl: string | null = null;
   private session: RhythmNoteSession | null = null;
   private pipeline: AutosavePipeline | null = null;
+  /** Drain 2026-10-18-1800 — sizes the iframe to the widget's content (never below the pane: the iframe has min-height 100%). */
+  private autoHeight: AutoHeightController | null = null;
 
   private readonly onMessage = (ev: MessageEvent): void => {
     // Only OUR iframe may talk to us. (The widget makes the mirror check: it accepts only its embedding window.)
     if (!this.iframe || ev.source !== this.iframe.contentWindow) return;
+    const px = parseWidgetResize(ev.data);
+    if (px !== null) { this.autoHeight?.request(px); return; }
     const msg = parseWidgetMessage(ev.data);
     if (msg.kind === 'ignored') return;
     if (msg.kind === 'malformed') {
@@ -160,6 +167,8 @@ export class RhythmEditView extends EditableFileView {
   }
 
   private releaseIframe(): void {
+    this.autoHeight?.dispose();
+    this.autoHeight = null;
     if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
     this.blobUrl = null;
     this.iframe = null;
@@ -195,13 +204,22 @@ export class RhythmEditView extends EditableFileView {
     this.releaseIframe();
     this.contentEl.empty();
     const { iframe, blobUrl } = createSandboxedWidgetIframe(this.contentEl, html, '100%');
+    iframe.style.minHeight = '100%';              // a short rhythm still fills the pane; a tall one grows the iframe and the PANE scrolls (styles.css)
     this.iframe = iframe;
     this.blobUrl = blobUrl;
+    this.autoHeight = attachAutoHeight(iframe, { initial: 0, paneHeight: () => this.contentEl.clientHeight || window.innerHeight });
   }
 
   /** Answer the widget's `ready` (and a reload): re-read the note fresh, take its text as the new baseline, and send the pattern. */
   private async sendLoad(): Promise<void> {
-    if (!this.file || !this.session) return;
+    if (!this.file) return;
+    // Drain 2026-10-18-1800 — no widget (a refusal dropped it) or no session (the note was invalid when the tab opened): there is nothing to load
+    // INTO, so rebuild the tab for the note as it is now. A note that is rhythm data again gets its Beat Box back; one that is not is refused again.
+    if (!this.iframe) {
+      await this.mount(this.file);
+      return;
+    }
+    if (!this.session) return;
     const text = await this.app.vault.read(this.file);
     const note = readRhythmNote(text);
     if (note.ok === false) {
@@ -210,7 +228,7 @@ export class RhythmEditView extends EditableFileView {
     }
     if (!this.iframe) return;
     this.session.rebaseline(text);
-    this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename), '*');
+    this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename, 'edit', null, true), '*');
   }
 
   /** "Reload from note": drop the halt and any error, then load what is on disk now. */
@@ -223,7 +241,12 @@ export class RhythmEditView extends EditableFileView {
     const file = this.file;
     const session = this.session;
     const pipeline = this.pipeline;
-    if (!file || !session || !pipeline) return;
+    if (!file) return;
+    if (modifyRecovery({ hasSession: session !== null, hasIframe: this.iframe !== null }) === 'remount') {
+      await this.mount(file);
+      return;
+    }
+    if (!session || !pipeline) return;
     const verdict = session.classifyModify(await this.app.vault.read(file), pipeline.busy());
     if (verdict === 'reload') await this.sendLoad();
     else if (verdict === 'conflict') pipeline.halt(EXTERNAL_CHANGE_MESSAGE);
