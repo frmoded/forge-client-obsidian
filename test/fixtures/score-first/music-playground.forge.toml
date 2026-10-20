@@ -1,0 +1,20 @@
+name = "music-playground"
+version = "0.0.1"
+description = "A score-first percussion playground: you make bars, the score is the thing on screen."
+domains = ["music"]
+
+# The score is the star here. This one constant tells the Forge plugin to behave score-first in THIS vault
+# (a "New bar" command, the engraved score right under the Beat Box) and to behave exactly as always in every
+# other vault. It is a constant of the vault, not a setting: nothing in the plugin writes it or flips it.
+# It must stay ABOVE the [imports] table below: in TOML every key after a [table] header belongs to that
+# table, so a `profile` under [imports] would silently stop being the vault's profile.
+profile = "score_first"
+
+# Cross-vault imports (spec: forge/docs/specs/vault-imports.md). The percussion primitives live in music-core,
+# the sibling checkout next to this vault (~/projects/music-core). The plugin mounts the import when the vault
+# opens (desktop only; edits to music-core need a close-and-reopen of this vault).
+#
+# Must stay LAST in this file, for the reason above.
+
+[imports]
+music-core = { local = "../music-core" }

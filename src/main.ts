@@ -103,6 +103,7 @@ import { decideModaDispatchOutcome } from './moda-dispatch-outcome-core.ts';
 import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
 import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts';
+import { registerScoreFirst } from './score-first.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import {
   readExpandedState,
@@ -772,6 +773,8 @@ export default class ForgePlugin extends Plugin {
       createNewNote: () => { void this.createNewSnippet(); },
       toggleEdgesPanel: () => { void this.toggleEdgesView(); },
     });
+    // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
+    registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve() });
 
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per

@@ -33,6 +33,10 @@ import { RhythmScoreView } from './rhythm-score-view.ts';
 import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts';
 import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsFor, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
+import { isScoreFirstVault } from './vault-profile-core.ts';
+import { scorePanelPlan, widgetFillsPane, type ScorePanelPlan } from './score-first-core.ts';
+import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
+import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
 import {
   RHYTHM_BOX_WIDGET_PATH,
   RHYTHM_EDIT_VIEW_TYPE,
@@ -70,6 +74,9 @@ export class RhythmEditView extends EditableFileView {
   private pipeline: AutosavePipeline | null = null;
   /** Drain 2026-10-18-1800 — sizes the iframe to the widget's content (never below the pane: the iframe has min-height 100%). */
   private autoHeight: AutoHeightController | null = null;
+  /** score_first_experiment M1 (drain 2026-10-21-1100) — the live Score under the widget. Present ONLY in a score-first vault (vault-profile-core.ts); everywhere else all three stay null
+   *  and the tab is exactly what it was. */
+  private scoreArea: ScoreArea | null = null;
 
   private readonly onMessage = (ev: MessageEvent): void => {
     // Only OUR iframe may talk to us. (The widget makes the mirror check: it accepts only its embedding window.)
@@ -91,6 +98,7 @@ export class RhythmEditView extends EditableFileView {
       return;
     }
     this.pipeline?.submit(msg.data);
+    this.scoreArea?.update(msg.data);           // the score follows the widget's data (debounced), not the saved note
   };
 
   constructor(leaf: WorkspaceLeaf, private readonly hooks: RhythmEditHooks) {
@@ -166,7 +174,13 @@ export class RhythmEditView extends EditableFileView {
     await this.reloadFromNote();
   }
 
+  private releaseScore(): void {
+    this.scoreArea?.dispose();
+    this.scoreArea = null;
+  }
+
   private releaseIframe(): void {
+    this.releaseScore();
     this.autoHeight?.dispose();
     this.autoHeight = null;
     if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
@@ -201,13 +215,31 @@ export class RhythmEditView extends EditableFileView {
       write: (payload) => this.writeNote(file, payload),
       onStatus: (s) => { this.iframe?.contentWindow?.postMessage(buildStatusMessage(s), '*'); },
     });
+    // score_first_experiment M1: ONE question decides whether this tab differs from what it always was — is this a score-first vault? ('none' = no.)
+    const plan: ScorePanelPlan = scorePanelPlan({ scoreFirst: await isScoreFirstVault(this.app.vault), edition: musicEdition.id });
     this.releaseIframe();
     this.contentEl.empty();
     const { iframe, blobUrl } = createSandboxedWidgetIframe(this.contentEl, html, '100%');
-    iframe.style.minHeight = '100%';              // a short rhythm still fills the pane; a tall one grows the iframe and the PANE scrolls (styles.css)
+    if (widgetFillsPane(plan)) iframe.style.minHeight = '100%';   // a short rhythm still fills the pane; a tall one grows the iframe and the PANE scrolls (styles.css)
     this.iframe = iframe;
     this.blobUrl = blobUrl;
     this.autoHeight = attachAutoHeight(iframe, { initial: 0, paneHeight: () => this.contentEl.clientHeight || window.innerHeight });
+    this.mountScore(plan, file, note.value.data);
+  }
+
+  /** Score-first vaults only: the Score under the grid / circle (music edition), or the lean edition's one line. Plan 'none' attaches nothing (live-score-dom.ts#attachScoreArea). */
+  private mountScore(plan: ScorePanelPlan, file: TFile, data: unknown): void {
+    this.scoreArea = attachScoreArea(this.contentEl, plan, {
+      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename),
+      stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
+      compute: computeRhythmScoreViaEngine,
+      title: file.basename,
+      setTimer: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer: (h) => window.clearTimeout(h as number),
+      now: () => performance.now(),
+      onTiming: (t) => console.debug(`Forge: live score ${t.outcome} in ${Math.round(t.totalMs)} ms (engine ${Math.round(t.engineMs)} ms)`),
+    });
+    this.scoreArea?.showNow(data);
   }
 
   /** Answer the widget's `ready` (and a reload): re-read the note fresh, take its text as the new baseline, and send the pattern. */
@@ -229,6 +261,7 @@ export class RhythmEditView extends EditableFileView {
     if (!this.iframe) return;
     this.session.rebaseline(text);
     this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename, 'edit', null, true), '*');
+    this.scoreArea?.showNow(note.value.data);   // a (re)load from the note: the score shows the same data the widget was just given
   }
 
   /** "Reload from note": drop the halt and any error, then load what is on disk now. */

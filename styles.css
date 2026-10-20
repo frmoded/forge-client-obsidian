@@ -1652,6 +1652,39 @@
   overflow-x: hidden;
 }
 
+/* score_first_experiment M1 (drain 2026-10-21-1100): the live Score under the Beat Box, in a score-first vault only (live-score-dom.ts). A hairline separates it from the widget; the
+   one status line (progress, a refusal, an engine error) is quiet and takes no room when empty. The lean edition's single explanatory line shares the look. */
+.forge-rhythm-edit-score {
+  position: relative;
+  border-top: 1px solid var(--background-modifier-border);
+  padding: 8px 12px 16px;
+}
+
+/* The next engraving is built here, laid out at the panel's width but invisible, and swapped in when it is ready (live-score-dom.ts) — so an edit never shows a blank score. */
+.forge-rhythm-score-host-pending {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 8px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.forge-rhythm-edit-score-status {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  padding-bottom: 4px;
+}
+
+.forge-rhythm-edit-score-status:empty {
+  display: none;
+}
+
+.forge-rhythm-edit-score-lean {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
 .forge-html-embed-error {
   margin: 8px 0 16px;
   padding: 12px 14px;
