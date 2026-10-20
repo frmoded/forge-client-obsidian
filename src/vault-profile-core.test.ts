@@ -106,7 +106,7 @@ test('nothing in the plugin can WRITE the key: no source file but this core and 
   const offenders: string[] = [];
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.ts') && !x.endsWith('.test.ts') && !x.endsWith('.generated.ts'))) {
     const code = fs.readFileSync(path.join(dir, f), 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
-    if (/profile\s*=\s*"score_first"|PROFILE_SCORE_FIRST|PROFILE_KEY/.test(code) && f !== 'vault-profile-core.ts') offenders.push(f);
+    if (/profile\s*=\s*"score_first"|PROFILE_SCORE_FIRST|PROFILE_KEY/.test(code) && f !== 'vault-profile-core.ts' && f !== 'source-vault-core.ts') offenders.push(f);   // source-vault-core.ts only SAYS the key in a log phrase (skipWhy); it reads it through isScoreFirstToml
     if (/writeProfile|setProfile|toggleProfile|score_first['"]\s*:\s*/.test(code)) offenders.push(`${f} (writer)`);
   }
   assert.deepEqual(offenders, [], 'only vault-profile-core.ts knows the key');

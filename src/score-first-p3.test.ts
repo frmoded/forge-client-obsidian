@@ -72,13 +72,13 @@ test('a score-first vault is otherwise an ordinary vault to every other forge.to
   assert.equal(isSourceVault(without, new Set(BUNDLED_VAULT_NAMES)), isSourceVault(toml, new Set(BUNDLED_VAULT_NAMES)));
 });
 
-test('MECHANISM PIN: the profile question is asked from exactly two places — the Beat Box tab and the "New bar" registration; the Forge output panel, the toolbar and the commands never ask it', () => {
+test('MECHANISM PIN: the profile question is asked from exactly three places — the Beat Box tab, the "New bar" registration and the extraction gate (source-vault-core.ts, used by welcome.ts); the Forge output panel, the toolbar and the commands never ask it', () => {
   const askers = fs.readdirSync(SRC)
     .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts'))
     .filter((f) => /from ['"]\.\/(vault-profile-core|score-first-core|score-first|live-score-core|live-score-dom)\.ts['"]/.test(code(f)))
     .sort();
   // main.ts only registers; the cores/dom import each other.
-  assert.deepEqual(askers, ['live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'rhythm-edit-view.ts', 'score-first.ts'].sort());
+  assert.deepEqual(askers, ['live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'rhythm-edit-view.ts', 'score-first.ts', 'source-vault-core.ts'].sort());   // + the extraction gate (drain 2026-10-21-2200)
   for (const f of ['output-view.ts', 'forge-action.ts', 'edges.ts', 'modal.ts', 'welcome.ts', 'chips.ts', 'rhythm-embed-view.ts', 'rhythm-score-view.ts']) {
     if (fs.existsSync(path.join(SRC, f))) assert.ok(!/vault-profile-core|score-first|isScoreFirstVault/.test(code(f)), `${f} does not know about profiles`);
   }
@@ -118,7 +118,7 @@ test('MECHANISM PIN: the Beat Box tab feeds the Score area from the widget\'s ed
 
 test('the profile is a constant: no setting, command, menu item or modal anywhere mentions it', () => {
   const offenders = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts'))
-    .filter((f) => /score_first|scoreFirst/i.test(code(f)) && !['vault-profile-core.ts', 'score-first-core.ts', 'score-first.ts', 'rhythm-edit-view.ts', 'live-score-core.ts', 'live-score-dom.ts', 'main.ts'].includes(f));
+    .filter((f) => /score_first|scoreFirst/i.test(code(f)) && !['vault-profile-core.ts', 'score-first-core.ts', 'score-first.ts', 'rhythm-edit-view.ts', 'live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'source-vault-core.ts'].includes(f));
   assert.deepEqual(offenders, []);
   const settingsFiles = fs.readdirSync(SRC).filter((f) => /setting/i.test(f) && f.endsWith('.ts') && !f.endsWith('.test.ts'));
   for (const f of settingsFiles) assert.ok(!/profile/i.test(code(f).replace(/openRhythmNotesInBeatBox/g, '')), `${f} has no profile setting`);

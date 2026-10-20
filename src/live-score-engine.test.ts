@@ -100,3 +100,34 @@ _pg_reg.scan('/pg/music-playground')
   const loaded = py.runPython('list(_pg_reg.loaded_vaults())').toJs() as string[];
   assert.ok(loaded.includes('music-core'), `music-core is indexed through the import: ${loaded.join(',')}`);
 });
+
+// Drain 2026-10-21-2200 (decision 5): the REAL playground tree, with NO extracted libraries in it (a score-first vault skips extraction), resolves music-core through [imports] alone.
+import fs from 'node:fs';
+import path from 'node:path';
+const REAL_PG = path.resolve(import.meta.dirname, '../../music-playground');
+const REAL_MC = path.resolve(import.meta.dirname, '../../music-core');
+const realSkip = skip || (fs.existsSync(path.join(REAL_PG, 'forge.toml')) && fs.existsSync(path.join(REAL_MC, 'forge.toml')) ? false : `${REAL_PG} / ${REAL_MC} not checked out here`);
+baseTest('the REAL music-playground tree (no extracted libraries) + the real music-core: music-core is indexed through [imports] alone, no errors, pitched_line resolves', { skip: realSkip, timeout: 300_000 }, async () => {
+  const py = await engine();
+  const put = (src: string, dest: string) => {
+    for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+      if (e.name.startsWith('.')) continue;                                   // the engine's own walks skip dot-dirs; so does the plugin's mount (shouldMountImportFile)
+      const s = path.join(src, e.name); const d = `${dest}/${e.name}`;
+      if (e.isDirectory()) put(s, d);
+      else if (e.name === 'forge.toml' || e.name.endsWith('.md')) { py.runPython(`import os\nos.makedirs(${JSON.stringify(path.posix.dirname(d))}, exist_ok=True)`); py.FS.writeFile(d, fs.readFileSync(s, 'utf8')); }
+    }
+  };
+  put(REAL_PG, '/real/music-playground');
+  put(REAL_MC, '/real/music-core');                                            // where "../music-core" resolves from the vault
+  py.runPython(`
+import os
+from forge.core.snippet_registry import SnippetRegistry
+_real_reg = SnippetRegistry()
+_real_reg.scan('/real/music-playground')
+`);
+  assert.deepEqual(py.runPython('list(_real_reg.errors)').toJs(), []);
+  const loaded = py.runPython('list(_real_reg.loaded_vaults())').toJs() as string[];
+  assert.ok(loaded.includes('music-core'), loaded.join(','));
+  assert.equal(py.runPython("_real_reg.get_bare('pitched_line')['snippet_id']"), 'music-core/pitched_line');
+  assert.equal(py.runPython("os.path.exists('/real/music-playground/music-core')"), false, 'and no extracted copy exists in the vault');
+});

@@ -77,3 +77,25 @@ export function isSourceVault(
   }
   return null;
 }
+
+// score_first_experiment (drain 2026-10-21-2200, driver decision 5) — a score-first vault gets NO bundled-library extraction and no Welcome.md, exactly like a library's own source
+// repo: its libraries arrive through `[imports]` (music-core), and `bars/ phrases/ kits/ notebook/` stay the whole vault. Every extraction gate in welcome.ts already asks ONE
+// question (`detectSourceVault` -> `shouldSkipBundledExtract` / `shouldCreateLegacyWelcomeMd`), so the profile joins that question here instead of adding a second gate somewhere.
+// A vault without the key is untouched: for it this returns exactly what `isSourceVault` returned.
+import { isScoreFirstToml } from './vault-profile-core.ts';
+
+/** The "skip subject" a score-first vault carries where a source vault carries its library name. Never equal to a real vault name (it has a space). */
+export const SCORE_FIRST_SKIP = 'profile score_first';
+
+/** Why extraction is skipped, or null (extract as always). A bundled library's own source repo wins (its name is the more specific fact); else a score-first profile. */
+export function extractionSkipFor(sourceVaultName: string | null, rootTomlBody: string | null): string | null {
+  if (sourceVaultName !== null) return sourceVaultName;
+  return isScoreFirstToml(rootTomlBody) ? SCORE_FIRST_SKIP : null;
+}
+
+/** The fragment the "skipping …" log lines use. */
+export function skipWhy(skip: string): string {
+  return skip === SCORE_FIRST_SKIP
+    ? 'the vault declares profile = "score_first" (its libraries come through [imports])'
+    : `vault root declares itself as source repo for ${skip}`;
+}

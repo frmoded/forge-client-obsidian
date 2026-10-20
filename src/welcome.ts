@@ -21,7 +21,7 @@ import {
 import { BUNDLED_ASSETS_CONTENT_ID } from './bundled-assets.generated.ts';
 import { isReservedDirName } from './vault-mount-exclusions-core.ts';
 import { ensureWelcomeFiles } from './welcome-files-core.ts';
-import { isSourceVault, shouldSkipBundledExtract } from './source-vault-core.ts';
+import { extractionSkipFor, isSourceVault, shouldSkipBundledExtract, skipWhy } from './source-vault-core.ts';
 import { shouldCreateLegacyWelcomeMd } from './welcome-legacy-gate-core.ts';
 import { classifyWelcomeShape, shouldRefreshWelcome } from './welcome-shape-classifier-core.ts';
 import {
@@ -62,7 +62,8 @@ async function detectSourceVault(adapter: DataAdapter, pluginDir: string): Promi
     try {
       listed = (await adapter.list(bundledVaultsRoot(pluginDir)))?.folders ?? [];
     } catch { /* an unreadable bundle dir still leaves every edition's names */ }
-    return isSourceVault(body, sourceVaultNames(listed));
+    // Drain 2026-10-21-2200: one question for every extraction gate — a library's own source repo, OR a score-first vault (profile = "score_first").
+    return extractionSkipFor(isSourceVault(body, sourceVaultNames(listed)), body);
   } catch (e) {
     console.error('Forge: detectSourceVault read failed', e);
     return null;
@@ -189,8 +190,7 @@ export async function runFirstRunCheck(app: App, pluginDir: string): Promise<voi
         }
       } else {
         console.log(
-          `Forge: skipping legacy Welcome.md create — vault root ` +
-          `declares itself as source repo for ${sourceVaultName}`,
+          `Forge: skipping legacy Welcome.md create — ${skipWhy(sourceVaultName!)}`,
         );
       }
 
@@ -216,8 +216,7 @@ export async function runFirstRunCheck(app: App, pluginDir: string): Promise<voi
     // not first-Forge-click introductions.
     if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
-        `Forge: skipping welcome.md extraction — vault root declares ` +
-        `itself as source repo for ${sourceVaultName}`,
+        `Forge: skipping welcome.md extraction — ${skipWhy(sourceVaultName!)}`,
       );
     } else {
       try {
@@ -293,8 +292,7 @@ export async function runFirstRunCheck(app: App, pluginDir: string): Promise<voi
     let libraryPass: LibraryPassSummary = { leftEdited: {}, keptEdited: {}, removed: {} };
     if (shouldSkipBundledExtract(sourceVaultName)) {
       console.log(
-        `Forge: skipping bundled-vault extraction — vault root declares ` +
-        `itself as source repo for ${sourceVaultName}`,
+        `Forge: skipping bundled-vault extraction — ${skipWhy(sourceVaultName!)}`,
       );
     } else {
       libraryPass = await ensureAllBundledVaults(app, pluginDir);
@@ -623,7 +621,7 @@ export async function ensureBundledFor(domain: string, app: App, pluginDir: stri
   const sourceVaultName = await detectSourceVault(app.vault.adapter, pluginDir);
   if (shouldSkipBundledExtract(sourceVaultName)) {
     console.log(
-      `Forge: ensureBundledFor('${domain}') — skipped: vault root declares itself the source repo for ${sourceVaultName}`,
+      `Forge: ensureBundledFor('${domain}') — skipped: ${skipWhy(sourceVaultName!)}`,
     );
     return;
   }
