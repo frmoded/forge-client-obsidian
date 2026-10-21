@@ -67,7 +67,7 @@ test('mechanism pin (Beat Box tab): the tab asks for auto-height, never shrinks 
   const v = src('rhythm-edit-view.ts');
   assert.match(v, /parseWidgetResize\(ev\.data\)/);
   assert.match(v, /this\.autoHeight\?\.request\(/);
-  assert.match(v, /buildLoadMessage\(note\.value\.data, this\.file\.basename, 'edit', null, true\)/);
+  assert.match(v, /buildLoadMessage\(note\.value\.data, this\.file\.basename, 'edit', null, true, false, this\.hoverLink\)/);
   assert.match(v, /attachAutoHeight\(iframe,/);
   assert.match(v, /iframe\.style\.minHeight = '100%'/, 'a short rhythm still fills the pane (no stripe of a different background)');
   assert.match(v, /this\.autoHeight\?\.dispose\(\)/);

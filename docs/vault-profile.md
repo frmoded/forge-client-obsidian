@@ -29,6 +29,13 @@ music-core = { local = "../music-core" }
 - **New bar** — a command (palette) and a ribbon button, present **only** in a score-first vault. It makes `bars/bar_001.md`, `bar_002.md`, … (a rhythm data note with the same starter as *New Forge note → Rhythm (Beat Box)*: 4/4, 16 steps, kick on 1 and 3, snare on 2 and 4) and opens it in the Beat Box.
 - **Score underneath** — in the Beat Box tab of a rhythm note, the engraved score of the **current** data sits right under the grid / circle and redraws (debounced) after every edit. Read-only; it never writes. In the lean edition, which has no score, one line says so instead.
 
+## Inspecting the Score (music edition; milestone M3, single bar)
+
+- **Click an engraved note** — it is pinned and the **Inspector** under the Score shows its lineage: the hit (channel, step, beat, velocity if authored), then the note it came from, with an **Open note** button. Esc or a click on empty space lets go; the arrow keys walk the notes in step order. (Clicking a note still also plays from it — the Score's existing click-to-play.)
+- **Hover-link, both ways** — hovering an engraved note outlines its step in the Beat Box (grid or circle); hovering a grid step / ring cell lights the engraved note. Highlights are classes and outlines only: nothing moves.
+- **How it works** — the engine's MusicXML gets a deterministic `<note id="a_<channel>_<step>">` on every hit before Verovio draws it (Verovio keeps the id), verified against the data: if the Score's hits are not exactly the data's, the map is refused and the Inspector says why. A ring that is not one note value is drawn as tied notes; the tail carries `…_t1` and the same provenance. The Kit view is mapped only when its fold is time-faithful (it is not for every bar; the multi-staff view always is).
+- **Off elsewhere** — the widget's hover-link is inert unless the host's load message says `hoverLink: true`, which only the score-first Beat Box tab sends.
+
 ## Where the code is
 
 | What | File |
@@ -37,4 +44,6 @@ music-core = { local = "../music-core" }
 | Decisions: bar names, the New bar action, what the tab shows | `src/score-first-core.ts` |
 | The live Score controller (debounce, single-flight, messages) | `src/live-score-core.ts` |
 | The Score area's DOM (keeps the old score until the new one arrives) | `src/live-score-dom.ts` |
+| Provenance map (ids through Verovio, verified against the data) | `src/provenance-core.ts` |
+| The generic inspector layer (hover, pin, keys, enlarged targets) / the Score's panel | `src/artifact-inspector-core.ts`, `src/score-inspector.ts` |
 | Obsidian glue | `src/score-first.ts` (New bar), `src/rhythm-edit-view.ts` (the tab) |

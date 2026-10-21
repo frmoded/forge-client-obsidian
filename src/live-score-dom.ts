@@ -15,6 +15,8 @@
 import { createLiveScore, type LiveScore, type LiveScoreTiming, type LiveScoreView } from './live-score-core.ts';
 import { LEAN_SCORE_NOTE, type ScorePanelPlan } from './score-first-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
+import { attachProvenance, type ProvenanceResult, type RhythmDataLike } from './provenance-core.ts';
+import { createScoreInspector, type GridTarget, type ScoreInspector, type ScoreInspectorPorts } from './score-inspector.ts';
 
 export const SCORE_PANEL_CLASS = 'forge-rhythm-edit-score';
 export const SCORE_STATUS_CLASS = 'forge-rhythm-edit-score-status';
@@ -29,6 +31,10 @@ export interface ScorePanelDeps {
   renderInto(host: HTMLElement, payload: Record<string, unknown>): boolean;
   /** Silence any player inside `host` (called before a score is replaced or the panel goes). */
   stopPlayers(host: HTMLElement): void;
+  /** A score has just become THE score (swapped in; the map arrives with the very payload that was rendered into `host`). */
+  onShown?(host: HTMLElement, payload: Record<string, unknown>): void;
+  /** `host` is about to go (replaced, cleared, panel disposed). */
+  onHidden?(host: HTMLElement): void;
   /** Timers for the "ready" timeout (the page's own by default). */
   setTimer?(fn: () => void, ms: number): unknown;
   clearTimer?(handle: unknown): void;
@@ -36,6 +42,8 @@ export interface ScorePanelDeps {
 
 export interface ScorePanel {
   readonly el: HTMLElement;
+  /** Where the inspector goes: always the LAST child of the panel, so engravings (inserted before it) stay above it. */
+  readonly slot: HTMLElement;
   readonly view: LiveScoreView;
   dispose(): void;
 }
@@ -52,6 +60,9 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   statusEl.className = SCORE_STATUS_CLASS;
   statusEl.setAttribute('aria-live', 'polite');
   el.appendChild(statusEl);
+  const slot = doc.createElement('div');
+  slot.className = 'forge-rhythm-inspector-slot';
+  el.appendChild(slot);
   parent.appendChild(el);
   let current: HTMLElement | null = null;
   let pending: { host: HTMLElement; cancel: () => void } | null = null;
@@ -64,17 +75,19 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   };
   const removeCurrent = () => {
     if (!current) return;
+    deps.onHidden?.(current);
     deps.stopPlayers(current);
     current.remove();
     current = null;
   };
   /** The new host becomes THE score: revealed, and the old one silenced and removed in the same tick. */
-  const swapIn = (next: HTMLElement) => {
+  const swapIn = (next: HTMLElement, payload: Record<string, unknown>) => {
     pending = null;
     next.classList.remove(SCORE_HOST_PENDING_CLASS);
     const old = current;
     current = next;
-    if (old) { deps.stopPlayers(old); old.remove(); }
+    if (old) { deps.onHidden?.(old); deps.stopPlayers(old); old.remove(); }
+    deps.onShown?.(next, payload);                     // the map and the engraving arrive together
   };
 
   const view: LiveScoreView = {
@@ -83,7 +96,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
       dropPending();                                   // a newer score supersedes one that has not shown yet
       const next = doc.createElement('div');
       next.className = current ? `${SCORE_HOST_CLASS} ${SCORE_HOST_PENDING_CLASS}` : SCORE_HOST_CLASS;   // nothing to keep on screen for a FIRST score
-      el.appendChild(next);
+      el.insertBefore(next, slot);
       let ok = false;
       try {
         ok = deps.renderInto(next, payload);
@@ -91,12 +104,12 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
         if (!ok) next.remove();                        // unavailable renderer, or it threw: the old score (if any) stays
       }
       if (!ok) return false;
-      if (!current || next.querySelector('svg')) { swapIn(next); return true; }
+      if (!current || next.querySelector('svg')) { swapIn(next, payload); return true; }
       // Fire-and-forget renderer: wait for the engraving, then swap.
       const MO = (doc.defaultView as (Window & { MutationObserver?: typeof MutationObserver }) | null)?.MutationObserver;
-      const observer = typeof MO === 'function' ? new MO(() => { if (next.querySelector('svg')) { cancel(); swapIn(next); } }) : null;
+      const observer = typeof MO === 'function' ? new MO(() => { if (next.querySelector('svg')) { cancel(); swapIn(next, payload); } }) : null;
       observer?.observe(next, { childList: true, subtree: true });
-      const timer = setTimer(() => { cancel(); swapIn(next); }, READY_TIMEOUT_MS);
+      const timer = setTimer(() => { cancel(); swapIn(next, payload); }, READY_TIMEOUT_MS);
       const cancel = () => { observer?.disconnect(); clearTimer(timer); };
       pending = { host: next, cancel };
       return true;
@@ -106,6 +119,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
 
   return {
     el,
+    slot,
     view,
     dispose() {
       dropPending();
@@ -131,11 +145,17 @@ export interface ScoreArea {
   update(data: unknown): void;
   /** Draw this bar now (open, reload from the note). A no-op in the lean edition. */
   showNow(data: unknown): void;
+  /** The pointer is over a Beat Box grid step (`null` = left): light the engraved note. A no-op without an inspector. */
+  gridHover(target: GridTarget | null): void;
   dispose(): void;
 }
 
 export interface ScoreAreaPorts extends ScorePanelDeps {
   compute(data: RhythmData, title: string): Promise<unknown>;
+  /** score_first M3: present = the Score gets its provenance map and the inspector (hover, pin, lineage, hover-link). Absent = the Score is exactly the M1 Score. */
+  inspector?: ScoreInspectorPorts;
+  /** Optional: report how long the provenance map took to build (ms). */
+  onProvenanceMs?(ms: number): void;
   title: string;
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
@@ -149,11 +169,31 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   if (plan === 'none') return null;
   if (plan === 'lean-note') {
     const note = mountLeanNote(parent, LEAN_SCORE_NOTE);
-    return { update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
+    return { update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, gridHover() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
   }
-  const panel = mountScorePanel(parent, ports);
+  // The provenance map travels WITH the payload it was built for: compute() attaches ids to the MusicXML and remembers the map by payload identity; the panel hands the very
+  // payload back when that engraving becomes the shown one, so the map and the SVG are swapped in together (never a map for a score that is not on screen).
+  const results = new WeakMap<object, ProvenanceResult>();
+  let inspector: ScoreInspector | null = null;
+  const compute: ScoreAreaPorts['compute'] = ports.inspector
+    ? async (data, title) => {
+      const raw = await ports.compute(data, title);
+      if (typeof raw !== 'object' || raw === null) return raw;
+      const t0 = performance.now();
+      const r = attachProvenance(ports.inspector!.noteId, data as unknown as RhythmDataLike, raw as Record<string, unknown>);
+      ports.onProvenanceMs?.(performance.now() - t0);
+      results.set(r.payload, r);
+      return r.payload;
+    }
+    : ports.compute;
+  const panel = mountScorePanel(parent, {
+    ...ports,
+    onShown: (host, payload) => { const r = results.get(payload); if (r && inspector) inspector.onShown(host, r); ports.onShown?.(host, payload); },
+    onHidden: (host) => { inspector?.onHidden(host); ports.onHidden?.(host); },
+  });
+  if (ports.inspector) inspector = createScoreInspector(panel.slot, ports.inspector);
   const live: LiveScore = createLiveScore({
-    compute: ports.compute,
+    compute,
     view: panel.view,
     title: ports.title,
     setTimer: ports.setTimer,
@@ -164,6 +204,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   return {
     update: (data) => live.update(data),
     showNow: (data) => live.showNow(data),
-    dispose() { live.dispose(); panel.dispose(); },
+    gridHover: (target) => inspector?.gridHover(target),
+    dispose() { live.dispose(); inspector?.dispose(); panel.dispose(); },
   };
 }

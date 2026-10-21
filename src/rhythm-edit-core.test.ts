@@ -8,9 +8,12 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { readVaultFile } from './test-support/vault-source.ts';
 import {
+  MSG_HIGHLIGHT,
+  MSG_HOVER,
   RHYTHM_CHANNELS,
   RhythmNoteSession,
   applySave,
+  buildHighlightMessage,
   buildLoadMessage,
   buildStatusMessage,
   buildSaveResultMessage,
@@ -456,4 +459,17 @@ test('Phase 7: each of the five notes is a readable rhythm note with the channel
       assert.deepEqual(Object.keys(r.value.data.channels), expect[name][1], name);
     }
   }
+});
+
+test('score_first M3: hover/highlight messages — the parse accepts a hover with a string+integer step or a null/null leave, refuses the rest; the load carries hoverLink only when asked', () => {
+  assert.deepEqual(parseWidgetMessage({ type: MSG_HOVER, channel: 'kick', step: 3 }), { kind: 'hover', channel: 'kick', step: 3 });
+  assert.deepEqual(parseWidgetMessage({ type: MSG_HOVER, channel: null, step: null }), { kind: 'hover', channel: null, step: null });
+  for (const bad of [{ channel: 'kick' }, { channel: 'kick', step: -1 }, { channel: 'kick', step: 1.5 }, { channel: 7, step: 1 }, { channel: 'kick', step: '1' }]) {
+    assert.equal(parseWidgetMessage({ type: MSG_HOVER, ...bad }).kind, 'malformed', JSON.stringify(bad));
+  }
+  assert.deepEqual(buildHighlightMessage({ channel: 'snare', step: 4 }), { type: MSG_HIGHLIGHT, channel: 'snare', step: 4 });
+  assert.deepEqual(buildHighlightMessage(null), { type: MSG_HIGHLIGHT, channel: null, step: null });
+  const plain = buildLoadMessage({ a: 1 } as never, 'n');
+  assert.ok(!('hoverLink' in plain), 'the default load message has no hoverLink key — every older shape is unchanged');
+  assert.equal((buildLoadMessage({ a: 1 } as never, 'n', 'edit', null, false, false, true) as any).hoverLink, true);
 });

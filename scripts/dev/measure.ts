@@ -110,10 +110,103 @@ async function scenario(name: string, bundle: string, toml: string | null, width
 
 out.scoreFirstMusic700 = await scenario('scorefirst-music-700', 'harness-music.js', PLAYGROUND_TOML, 700, 800);
 out.scoreFirstMusic460 = await scenario('scorefirst-music-460', 'harness-music.js', PLAYGROUND_TOML, 460, 800);
+
+// ---- M3 (drain 2026-10-21-1230): the inspector + hover-link, with real pointer movement and real key events, in the real view ----
+async function inspectorScenario(name: string, bundle: string, toml: string, width = 700, height = 800) {
+  const p = await openPage({ dir: here, width: width + 40, height: height + 60, pageHtml: page(bundle, width, height), routes });
+  const res: any = { name, steps: {} as any };
+  const key = (k: string, code: number) => p.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code: k, windowsVirtualKeyCode: code }).then(() => p.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code: k, windowsVirtualKeyCode: code }));
+  const hotIds = () => p.ev(`[...document.querySelectorAll('.forge-artifact-hot')].map(e=>e.id).sort()`);
+  const pinnedIds = () => p.ev(`[...document.querySelectorAll('.forge-artifact-pinned')].map(e=>e.id).sort()`);
+  const widgetHot = async () => { const n = await p.findNode((_n: any, a: any) => a.class && /\blink-hot\b/.test(a.class)); return n ? await p.attrs(n.nodeId).then((a: any) => `${a['data-channel']}:${a['data-step']}`) : null; };
+  const inspectorText = () => p.ev(`(document.querySelector('.forge-inspector-body')||{}).textContent||''`);
+  const rects = () => p.ev(`(() => { const r = (e) => e ? (({x,y,width,height}) => ({x,y,width,height}))(e.getBoundingClientRect()) : null; const pane = document.getElementById('pane'); return { iframe: r(pane.querySelector('iframe')), host: r(pane.querySelector('.forge-rhythm-score-host')), inspector: r(pane.querySelector('.forge-inspector')) }; })()`);
+  const centerOf = (id: string) => p.ev(`(() => { const g = document.getElementById(${JSON.stringify(id)}); if (!g) return null; const e = g.querySelector('.notehead') || g; const b = e.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; })()`);
+  try {
+    await p.ev(`window.__mountTab(document.getElementById('pane'), { note: ${JSON.stringify(NOTE)}, widget: ${JSON.stringify(widget)}, toml: ${JSON.stringify(toml)} })`);
+    for (let w = 0; w < 15000; w += 100) { if (await p.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    await sleep(500);
+    res.engravedIds = await p.ev(`[...document.querySelectorAll('.forge-rhythm-score-host g.note[id]')].map(e=>e.id).sort()`);
+    res.hint = await inspectorText();
+    res.debugNotes = await p.ev(`['a_kick_0','a_snare_4','a_kick_8','a_snare_12'].map((id) => { const g = document.getElementById(id); const nh = g.querySelector('.notehead'); const rr = (e) => e ? (({x,y,width,height}) => ({x:Math.round(x),y:Math.round(y),w:Math.round(width),h:Math.round(height)}))(e.getBoundingClientRect()) : null; const b = (nh||g).getBoundingClientRect(); const hit = document.elementFromPoint(b.x + b.width/2, b.y + b.height/2); return { id, g: rr(g), nh: rr(nh), hit: hit && (hit.tagName + '#' + hit.id + '.' + (hit.getAttribute('class')||'')), inG: !!(hit && g.contains(hit)) }; })`);
+    res.debugHitboxes = await p.ev(`(() => { const rs = [...document.querySelectorAll('.forge-artifact-hitbox')]; const r = rs[0]; const b = r && r.getBoundingClientRect(); const cs = r && getComputedStyle(r); return { n: rs.length, first: r && r.outerHTML, box: b && [Math.round(b.x), Math.round(b.y), Math.round(b.width), Math.round(b.height)], pe: cs && cs.pointerEvents, stroke: cs && cs.stroke, strokeWidth: cs && cs.strokeWidth, opacity: cs && cs.opacity, fillOpacity: cs && cs.fillOpacity, outline: cs && cs.outline, filter: cs && cs.filter, sheets: r && [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch { return []; } }).filter((ru) => ru.selectorText && r.matches(ru.selectorText) && /stroke|fill|opacity/.test(ru.cssText)).map((ru) => ru.cssText.slice(0, 160)), fill: cs && cs.fill, display: cs && cs.display, parentBox: r && (b2 => [Math.round(b2.x), Math.round(b2.y), Math.round(b2.width), Math.round(b2.height)])(r.parentElement.getBoundingClientRect()) }; })()`);
+    const r0 = await rects();
+    // 1. engraved note -> grid step
+    await p.hover(5, 5);                                 // the first pointer event of a headless page only 'enters' the window
+    const sn = await centerOf('a_snare_4'); await p.hover(sn.x, sn.y);
+    res.steps.hoverEngravedSnare4 = { hot: await hotIds(), widgetOutline: await widgetHot(), pointTarget: await p.ev(`(() => { let e = document.elementFromPoint(${sn.x}, ${sn.y}); const c = []; while (e && c.length < 5) { c.push((e.tagName||'') + '#' + (e.id||'') + '.' + (e.getAttribute && e.getAttribute('class')||'')); e = e.parentElement; } return c; })()`) };
+    const r1 = await rects();
+    if (SHOTS) await p.shot(path.join(SHOTS, `${name}-hover-note.png`), { x: 0, y: 0, width: width + 40, height: height + 20 });
+    // 1b. the enlarged target: 2 px to the right of the notehead's own box is still the note
+    const pad = await p.ev(`(() => { const b = document.getElementById('a_kick_0').querySelector('.notehead').getBoundingClientRect(); return { x: b.x + b.width + 2, y: b.y + b.height / 2 }; })()`);
+    await p.hover(2, 2); await p.hover(pad.x, pad.y);
+    res.steps.hoverJustOutsideKick0Head = { hot: await hotIds(), widgetOutline: await widgetHot() };
+    // 2. grid step -> engraved note
+    await p.hover(2, 2); res.steps.pointerAway = { hot: await hotIds(), widgetOutline: await widgetHot() };
+    const cell = await p.findNode((_n: any, a: any) => a.class && /\bstep\b/.test(a.class) && a['data-channel'] === 'kick' && a['data-step'] === '8');
+    const cc = await p.boxCenter(cell.nodeId); await p.hover(cc.x, cc.y);
+    res.steps.hoverGridKick8 = { hot: await hotIds() };
+    const r2 = await rects();
+    if (SHOTS) await p.shot(path.join(SHOTS, `${name}-hover-grid.png`), { x: 0, y: 0, width: width + 40, height: height + 20 });
+    await p.hover(2, 2);
+    // 3. click -> pin + lineage, keys
+    const s12 = await centerOf('a_snare_12'); await p.click(s12.x, s12.y); await sleep(150);
+    res.steps.clickSnare12 = { pinned: await pinnedIds(), text: await inspectorText(), openNoteButton: await p.ev(`!!document.querySelector('.forge-inspector-open')`) };
+    const r3 = await rects();
+    if (SHOTS) await p.shot(path.join(SHOTS, `${name}-pinned.png`), { x: 0, y: 0, width: width + 40, height: height + 20 });
+    await key('ArrowRight', 39); await sleep(100);
+    res.steps.arrowRight = { pinned: await pinnedIds(), text: await inspectorText() };
+    await key('ArrowLeft', 37); await key('ArrowLeft', 37); await sleep(100);
+    res.steps.arrowLeftTwice = { pinned: await pinnedIds() };
+    await key('Escape', 27); await sleep(100);
+    res.steps.escape = { pinned: await pinnedIds(), text: await inspectorText() };
+    // 4. an edit replaces the engraving AND the map together
+    await p.click(s12.x, s12.y); await sleep(100);
+    const marks = await p.ev('window.__timings.length');
+    const k2 = await p.findNode((_n: any, a: any) => a.class && /\bstep\b/.test(a.class) && a['data-channel'] === 'kick' && a['data-step'] === '2');
+    const kc = await p.boxCenter(k2.nodeId); await p.click(kc.x, kc.y);
+    for (let w = 0; w < 5000; w += 50) { if ((await p.ev(`!!document.getElementById('a_kick_2')`))) break; await sleep(50); }
+    await sleep(300);
+    res.steps.afterEditKick2 = { engravedIds: await p.ev(`[...document.querySelectorAll('.forge-rhythm-score-host g.note[id]')].map(e=>e.id).sort()`), pinned: await pinnedIds(), text: await inspectorText(), hosts: await p.ev(`document.querySelectorAll('.forge-rhythm-score-host').length`) };
+    res.provenanceTimings = (await p.ev('window.__timings.slice()')).filter((t: string) => /provenance/.test(t));
+    res.liveTimingsAfterEdit = (await p.ev('window.__timings.slice()')).slice(marks);
+    const grid2 = await p.findNode((_n: any, a: any) => a.class && /\bstep\b/.test(a.class) && a['data-channel'] === 'kick' && a['data-step'] === '2');
+    res.steps.afterEditGridCellOn = grid2 ? await p.attrs(grid2.nodeId).then((a: any) => /\bon\b/.test(a.class)) : null;
+    // layout: hovering and pinning move nothing (iframe and score host do not change box)
+    const same = (a: any, b: any) => JSON.stringify(a.iframe) === JSON.stringify(b.iframe) && JSON.stringify(a.host) === JSON.stringify(b.host);
+    res.noLayoutShift = { hoverNote: same(r0, r1), hoverGrid: same(r0, r2), pinned: same(r0, r3), rects: { r0, r3 } };
+    res.errors = await p.ev('window.__errors.slice()');
+  } finally { p.close(); }
+  return res;
+}
+out.inspectorMusic700 = await inspectorScenario('inspector-music-700', 'harness-music.js', PLAYGROUND_TOML, 700, 800);
+out.inspectorMusic460 = await inspectorScenario('inspector-music-460', 'harness-music.js', PLAYGROUND_TOML, 460, 800);
+if (process.env.ONLY_INSPECTOR) { fs.writeFileSync(OUT, JSON.stringify({ inspectorMusic700: out.inspectorMusic700, inspectorMusic460: out.inspectorMusic460 }, null, 1)); console.log('only-inspector'); process.exit(0); }
+/** Just the opened tab's DOM (no edits): enough to show a vault without the profile key gets the same tab as before. */
+async function p3Tab(bundle: string, toml: string | null) {
+  const p = await openPage({ dir: here, width: 740, height: 860, pageHtml: page(bundle, 700, 800), routes });
+  try {
+    await p.ev(`window.__mountTab(document.getElementById('pane'), { note: ${JSON.stringify(NOTE)}, widget: ${JSON.stringify(widget)}, toml: ${JSON.stringify(toml)} })`);
+    await sleep(1800);
+    return { paneHtml: (await p.ev(`document.getElementById('pane').outerHTML`)).replace(/blob:http:\/\/127\.0\.0\.1:\d+\/[0-9a-f-]+/g, 'blob:X').replace(/srcdoc="[^"]*"/g, 'srcdoc=""') as string };
+  } finally { p.close(); }
+}
+// P3 per vault: each vault's REAL forge.toml (no profile key) gives a tab identical to the commit before this drain's.
+const VAULT_TOMLS: Record<string, string | null> = {};
+for (const v of ['music-theory', 'music-core', 'forge-tutorial', 'forge-moda']) { try { VAULT_TOMLS[v] = fs.readFileSync(new URL(`../../../${v}/forge.toml`, import.meta.url), 'utf8'); } catch { VAULT_TOMLS[v] = null; } }
+
 out.normalMusic = await scenario('normal-music-700', 'harness-music.js', null, 700, 800);
 if (fs.existsSync(path.join(here, 'harness-lean.js'))) out.scoreFirstLean = await scenario('scorefirst-lean-700', 'harness-lean.js', PLAYGROUND_TOML, 700, 800);
 if (fs.existsSync(path.join(here, 'harness-before.js'))) out.normalBefore = await scenario('normal-before-700', 'harness-before.js', null, 700, 800);
 if (out.normalBefore) out.normalIdenticalToBefore = out.normalBefore.paneHtml === out.normalMusic.paneHtml;
+if (out.normalBefore) {
+  out.p3PerVault = {};
+  for (const [v, toml] of Object.entries(VAULT_TOMLS)) {
+    const now = await p3Tab('harness-music.js', toml);
+    const was = await p3Tab('harness-before.js', toml);
+    out.p3PerVault[v] = { tomlRead: toml !== null, hasProfileKey: /^\s*profile\s*=/m.test(toml ?? ''), identicalToBefore: now.paneHtml === was.paneHtml, paneHtmlLength: now.paneHtml.length, scoreHostsInTab: (now.paneHtml.match(/forge-rhythm-score-host/g) || []).length };
+  }
+}
 for (const k of Object.keys(out)) if (out[k]?.paneHtml) out[k].paneHtmlLength = out[k].paneHtml.length;
 const dump = JSON.parse(JSON.stringify(out, (k, v) => (k === 'paneHtml' ? undefined : v)));
 fs.writeFileSync(OUT, JSON.stringify(dump, null, 1)); console.log(JSON.stringify(dump, null, 1));

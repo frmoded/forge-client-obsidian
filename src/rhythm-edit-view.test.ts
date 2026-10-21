@@ -94,7 +94,7 @@ test('external changes: the view listens to vault modify for ITS note, classifie
 test('messages to the widget are built only by the core\'s builders', () => {
   const body = code(view);
   const posts = [...body.matchAll(/postMessage\(([^,)]+)/g)].map((m) => m[1].trim());
-  assert.deepEqual(posts.sort(), ['buildLoadMessage(note.value.data', 'buildStatusMessage(s'].sort());
+  assert.deepEqual(posts.sort(), ['buildHighlightMessage(target', 'buildLoadMessage(note.value.data', 'buildStatusMessage(s'].sort());
 });
 
 test('a note that stops matching shows the refusal message with an "Open as JSON" button — the pane is never left stuck or silently closed', () => {

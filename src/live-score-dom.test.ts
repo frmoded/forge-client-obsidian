@@ -277,3 +277,82 @@ test('the renderer sees a FIRST score in its final, visible state, and a replace
   assert.equal(seen[0], SCORE_HOST_CLASS, 'first: plain');
   assert.equal(seen[1], `${SCORE_HOST_CLASS} ${SCORE_HOST_PENDING_CLASS}`, 'second: pending while it renders');
 });
+
+// ---- score_first M3 (drain 2026-10-21-1230): the Score area with the inspector — the map and the engraving arrive together, and leave together ----
+const KICK_BAR = { time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 100, channels: { kick: [true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false] } };
+const kickXml = (tag: string) => `<score-partwise><!--${tag}--><part id="P1"><measure number="1"><attributes><divisions>4</divisions></attributes><note><pitch><step>F</step><octave>4</octave></pitch><duration>8</duration></note><note><pitch><step>F</step><octave>4</octave></pitch><duration>8</duration></note></measure></part></score-partwise>`;
+/** a stand-in for Verovio's behaviour that matters here: every `<note id="x">` of the MusicXML becomes `<g class="note" id="x">` in the SVG. */
+function inspectorPorts(over: Partial<ScoreAreaPorts> = {}) {
+  const opened: string[] = []; const posted: any[] = []; const shown: string[] = [];
+  const base = ports({
+    compute: async (_d, title) => ({ type: 'musicxml', multi_staff_content: kickXml(String(title)), content: 'x' }),
+    renderInto: (host, payload) => {
+      const doc = host.ownerDocument; const svg = doc.createElement('svg');
+      for (const m of String(payload.multi_staff_content).matchAll(/<note id="([^"]+)"/g)) { const g = doc.createElement('g'); g.setAttribute('class', 'note'); g.id = m[1]; svg.appendChild(g); }
+      host.appendChild(svg); shown.push(host.querySelectorAll('g.note').length + ' notes'); return true;
+    },
+    inspector: { noteId: 'bars/bar_001', openNote: (n) => opened.push(n), postHighlight: (t) => posted.push(t) },
+    ...over,
+  });
+  return { ...base, opened, posted, shown };
+}
+
+test('M3: the inspector slot is the LAST child of the panel, engravings stay above it, and a hint shows once the first score is on screen', async () => {
+  const { tab } = page(); const { p } = inspectorPorts();
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(KICK_BAR); await flush();
+  const panel = tab.querySelector(`.${SCORE_PANEL_CLASS}`)!;
+  assert.equal((panel.lastElementChild as HTMLElement).className, 'forge-rhythm-inspector-slot');
+  assert.ok(panel.querySelector(`.${SCORE_HOST_CLASS}`)!.compareDocumentPosition(panel.lastElementChild!) & 4, 'the engraving precedes the slot');
+  assert.match(panel.textContent ?? '', /Click an engraved note/);
+  area.dispose();
+});
+
+test('M3: the ids the engraving carries are the ids the map knows — clicking an engraved note shows ITS hit, and "Open note" asks to open the note', async () => {
+  const { tab, doc } = page(); const { p, opened } = inspectorPorts();
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(KICK_BAR); await flush();
+  const g = doc.getElementById('a_kick_8')!; assert.ok(g, 'the engraved note of kick step 8 carries its id');
+  g.dispatchEvent(new (tab.ownerDocument.defaultView as any).MouseEvent('click', { bubbles: true }));
+  assert.match(tab.textContent ?? '', /kick — step 9 \(beat 3\)/);
+  (tab.querySelector('.forge-inspector-open') as HTMLButtonElement).click();
+  assert.deepEqual(opened, ['bars/bar_001']);
+  area.gridHover({ channel: 'kick', step: 0 });
+  assert.ok(doc.getElementById('a_kick_0')!.classList.contains('forge-artifact-hot'), 'the grid step lights the engraved note');
+  area.dispose();
+});
+
+test('M3: a NEW score replaces the old engraving and its map together — the pin of the old score is gone, and the old host no longer reacts', async () => {
+  const { tab, doc } = page(); const { p, timers } = inspectorPorts();
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(KICK_BAR); await flush();
+  const old = doc.getElementById('a_kick_0')!;
+  old.dispatchEvent(new (tab.ownerDocument.defaultView as any).MouseEvent('click', { bubbles: true }));
+  assert.match(tab.textContent ?? '', /kick — step 1/);
+  area.update({ ...KICK_BAR }); timers.forEach((f) => f()); await flush();
+  assert.equal(tab.querySelectorAll(`.${SCORE_HOST_CLASS}`).length, 1, 'one engraving on screen');
+  assert.ok(!old.isConnected, 'the old engraving was removed');
+  assert.doesNotMatch(tab.textContent ?? '', /kick — step 1/, 'the old pin is gone with it');
+  assert.match(tab.textContent ?? '', /Click an engraved note/);
+  area.dispose();
+});
+
+test('M3: a score the map cannot be built for (the data does not match the engraving) is still shown, with the reason, and nothing to click', async () => {
+  const { tab } = page(); const { p } = inspectorPorts();
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow({ ...KICK_BAR, channels: { kick: [true, true, false, false, false, false, false, false, true, false, false, false, false, false, false, false] } }); await flush();
+  assert.equal(tab.querySelectorAll(`.${SCORE_HOST_CLASS}`).length, 1, 'the Score is on screen');
+  assert.match(tab.textContent ?? '', /could not be mapped to its note, so it cannot be inspected/);
+  assert.equal(tab.querySelectorAll('g.note[id]').length, 0, 'an unverified engraving carries no ids');
+  area.dispose();
+});
+
+test('M3: without an inspector port the Score is exactly the M1 Score — no slot content, no ids on the engraving', async () => {
+  const { tab } = page(); const { p } = inspectorPorts({ inspector: undefined });
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(KICK_BAR); await flush();
+  assert.equal(tab.querySelector('.forge-inspector'), null);
+  assert.equal(tab.querySelectorAll('g.note[id]').length, 0);
+  area.gridHover({ channel: 'kick', step: 0 });                       // a no-op, never throws
+  area.dispose();
+});

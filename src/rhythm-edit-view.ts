@@ -43,6 +43,7 @@ import {
   RhythmNoteSession,
   modifyRecovery,
   buildLoadMessage,
+  buildHighlightMessage,
   buildStatusMessage,
   isRhythmEditCandidate,
   parseWidgetMessage,
@@ -77,6 +78,8 @@ export class RhythmEditView extends EditableFileView {
   /** score_first_experiment M1 (drain 2026-10-21-1100) — the live Score under the widget. Present ONLY in a score-first vault (vault-profile-core.ts); everywhere else all three stay null
    *  and the tab is exactly what it was. */
   private scoreArea: ScoreArea | null = null;
+  /** score_first M3: this tab's widget is asked to report hovered steps and to light the step the Score names (the load message says `hoverLink: true`). False everywhere else. */
+  private hoverLink = false;
 
   private readonly onMessage = (ev: MessageEvent): void => {
     // Only OUR iframe may talk to us. (The widget makes the mirror check: it accepts only its embedding window.)
@@ -95,6 +98,10 @@ export class RhythmEditView extends EditableFileView {
     }
     if (msg.kind === 'reload') {
       void this.reloadFromNote();
+      return;
+    }
+    if (msg.kind === 'hover') {                 // hover-link: only a widget that was asked for it sends this
+      this.scoreArea?.gridHover(msg.channel === null || msg.step === null ? null : { channel: msg.channel, step: msg.step });
       return;
     }
     this.pipeline?.submit(msg.data);
@@ -224,6 +231,7 @@ export class RhythmEditView extends EditableFileView {
     this.iframe = iframe;
     this.blobUrl = blobUrl;
     this.autoHeight = attachAutoHeight(iframe, { initial: 0, paneHeight: () => this.contentEl.clientHeight || window.innerHeight });
+    this.hoverLink = plan === 'score';
     this.mountScore(plan, file, note.value.data);
   }
 
@@ -238,6 +246,19 @@ export class RhythmEditView extends EditableFileView {
       clearTimer: (h) => window.clearTimeout(h as number),
       now: () => performance.now(),
       onTiming: (t) => console.debug(`Forge: live score ${t.outcome} in ${Math.round(t.totalMs)} ms (engine ${Math.round(t.engineMs)} ms)`),
+      // score_first M3: the Score is a map of the note (provenance, hover-link, inspector). `plan` is 'score' only in a score-first vault, music edition.
+      inspector: plan === 'score' ? {
+        noteId: file.path.replace(/\.md$/, ''),
+        openNote: (noteId) => {
+          // This tab IS the note a single bar's lineage names: "Open note" shows its source (the JSON view — the same as the header's "Open as JSON"). Another note (extend and mix,
+          // later) opens through the plugin's own opener.
+          if (noteId === file.path.replace(/\.md$/, '')) { void this.switchMode('json'); return; }
+          const f = this.app.vault.getAbstractFileByPath(`${noteId}.md`);
+          if (f instanceof TFile) void openRhythmEditor(this.app, f, this.hooks, null);
+        },
+        postHighlight: (target) => { this.iframe?.contentWindow?.postMessage(buildHighlightMessage(target), '*'); },
+      } : undefined,
+      onProvenanceMs: (ms) => console.debug(`Forge: provenance map built in ${(Math.round(ms * 10) / 10).toFixed(1)} ms`),
     });
     this.scoreArea?.showNow(data);
   }
@@ -260,7 +281,7 @@ export class RhythmEditView extends EditableFileView {
     }
     if (!this.iframe) return;
     this.session.rebaseline(text);
-    this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename, 'edit', null, true), '*');
+    this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename, 'edit', null, true, false, this.hoverLink), '*');
     this.scoreArea?.showNow(note.value.data);   // a (re)load from the note: the score shows the same data the widget was just given
   }
 

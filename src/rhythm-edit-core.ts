@@ -51,6 +51,8 @@ export const MSG_STATUS = 'forge-rhythm-status';           // plugin -> widget: 
 export const MSG_REQUEST_DATA = 'forge-rhythm-request-data';   // plugin -> widget: "send me your CURRENT data" (a read of widget state, not a save)
 export const MSG_CURRENT_DATA = 'forge-rhythm-current-data';   // widget -> plugin: the answer, `{data}`
 export const MSG_STOP = 'forge-rhythm-stop';                   // plugin -> widget: stop playing now
+export const MSG_HOVER = 'forge-rhythm-hover';                 // widget -> plugin (the score tab's hover-link only): the pointer is over this grid step / ring cell, or `channel: null` = left
+export const MSG_HIGHLIGHT = 'forge-rhythm-highlight';           // plugin -> widget (the score tab's hover-link only): light this grid step / ring cell, or `channel: null` = clear
 export const MSG_PLAYING = 'forge-rhythm-playing';             // widget -> plugin: `{playing: boolean}` (playground only)
 export const MSG_OPEN_NOTE = 'forge-rhythm-open-note';         // widget -> plugin: the "Open note" button (playground only)
 export const MSG_EDITED = 'forge-rhythm-edited';               // widget -> plugin: a local edit happened (no data; playground only)
@@ -60,6 +62,7 @@ export type WidgetMessage =
   | { kind: 'ready' }
   | { kind: 'reload' }
   | { kind: 'save'; data: unknown }
+  | { kind: 'hover'; channel: string | null; step: number | null }   // hover-link: only ever sent by a widget whose load said `hoverLink: true`
   | { kind: 'malformed'; reason: string }   // claims to be ours but unusable: dropped with a console warning, never written
   | { kind: 'ignored' };                    // not a message we know: dropped silently
 
@@ -72,6 +75,11 @@ export function parseWidgetMessage(raw: unknown): WidgetMessage {
   if (!isPlainObject(raw)) return { kind: 'ignored' };
   if (raw.type === MSG_READY) return { kind: 'ready' };
   if (raw.type === MSG_RELOAD) return { kind: 'reload' };
+  if (raw.type === MSG_HOVER) {
+    if (raw.channel === null) return { kind: 'hover', channel: null, step: null };
+    if (typeof raw.channel === 'string' && typeof raw.step === 'number' && Number.isInteger(raw.step) && raw.step >= 0) return { kind: 'hover', channel: raw.channel, step: raw.step };
+    return { kind: 'malformed', reason: 'a hover message without a channel and an integer step' };
+  }
   if (raw.type === MSG_SAVE) {
     if (isPlainObject(raw.data)) return { kind: 'save', data: raw.data };
     return { kind: 'malformed', reason: 'a save message without a data object' };
@@ -92,11 +100,18 @@ export type RhythmWidgetView = 'grid' | 'circle';
 /** `autoHeight: true` asks the widget to measure itself and post `resize` (widget-auto-height-core.ts); absent otherwise, so every older shape is unchanged.
  *  `resetInHost: true` (drain 2026-10-20-0900) says the HOST's toolbar owns the playground's Reset and its "not saved" reminder, so the widget need not draw
  *  its own; absent, the widget draws them as it always did (an older plugin, or any host that does not say). */
-export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null, autoHeight = false, resetInHost = false) {
+export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null, autoHeight = false, resetInHost = false, hoverLink = false) {
   const base = mode === 'playground' ? { type: MSG_LOAD, data, noteName, mode } : { type: MSG_LOAD, data, noteName };
   const withView = view === null ? base : { ...base, view };
   const withHeight = autoHeight ? { ...withView, autoHeight: true as const } : withView;
-  return resetInHost ? { ...withHeight, resetInHost: true as const } : withHeight;
+  const withReset = resetInHost ? { ...withHeight, resetInHost: true as const } : withHeight;
+  // `hoverLink: true` (M3, drain 2026-10-21-1230): the widget then reports hovered steps and honours highlight messages. Absent otherwise, so every older shape is unchanged.
+  return hoverLink ? { ...withReset, hoverLink: true as const } : withReset;
+}
+
+/** Host -> widget: light the grid step / ring cell (channel, step), or clear with `null`. Ignored by a widget whose load did not ask for hover-link. */
+export function buildHighlightMessage(target: { channel: string; step: number } | null) {
+  return target === null ? { type: MSG_HIGHLIGHT, channel: null, step: null } : { type: MSG_HIGHLIGHT, channel: target.channel, step: target.step };
 }
 
 export function buildRequestDataMessage() {

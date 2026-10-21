@@ -1829,3 +1829,41 @@
 .block-language-forge-rhythm .edit-block-button {
   display: none;
 }
+
+/* score_first M3 (drain 2026-10-21-1230): provenance highlights on the engraved Score and the inspector under it. Classes only (the Artifact Inspector recolours, never resizes), so
+   hovering and pinning can never shift the layout. The interaction layer sets them on the engraved note's element in the Score's SVG. */
+.forge-rhythm-score-host g.note.forge-artifact-hot,
+.forge-rhythm-score-host g.note.forge-artifact-pinned {
+  color: var(--interactive-accent);
+}
+.forge-rhythm-score-host g.note.forge-artifact-hot *,
+.forge-rhythm-score-host g.note.forge-artifact-pinned * {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent);
+}
+.forge-rhythm-score-host g.note.forge-artifact-pinned {
+  filter: drop-shadow(0 0 3px var(--interactive-accent));
+}
+.forge-rhythm-score-host g.note { cursor: pointer; }
+.forge-rhythm-score-host g.note .forge-artifact-hitbox { fill: transparent !important; stroke: none !important; }   /* never painted: beats the recolour rules above and Verovio's own `#id rect { stroke: currentcolor }` */
+.forge-rhythm-score-host:focus-visible { outline: 1px solid var(--interactive-accent); outline-offset: -1px; }
+
+.forge-inspector {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  font-size: var(--font-ui-smaller);
+  min-height: 4.5em;
+}
+.forge-inspector-title { font-weight: 600; margin-bottom: 4px; }
+.forge-inspector-body { color: var(--text-muted); }
+.forge-inspector-lineage { margin: 0; padding-left: 1.2em; color: var(--text-normal); }
+.forge-inspector-lineage li { margin: 2px 0; }
+.forge-inspector-open { margin-left: 8px; font-size: var(--font-ui-smaller); }
+.forge-inspector-notes { margin-top: 6px; }
+.forge-inspector-notes-title { color: var(--text-muted); }
+.forge-inspector-notes ul { margin: 2px 0 0; padding-left: 1.2em; }
+.forge-inspector-note:hover { color: var(--interactive-accent); }
+.forge-inspector-quiet { margin-top: 4px; color: var(--text-faint); }
+.forge-inspector-quiet:empty { display: none; }
