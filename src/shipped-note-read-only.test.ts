@@ -128,8 +128,8 @@ test('every note on the read-only ratchet exists in the bundle — a typo fails 
   const list = fs.readFileSync(path.join(ROOT, 'scripts/open-time-readonly.txt'), 'utf8')
     .split(/\r?\n/).map((l) => l.replace(/#.*$/, '').trim()).filter(Boolean);
   // 24 since drain 2026-10-19-1530: five notes whose Python the real engine would still rewrite were taken off it until they are re-derived; 29 since drain
-  // 2026-10-20-1100 (Phase B) put those five back after re-deriving them at the source; 37 since drain 2026-10-21-0900 pinned the eight clean ones left off.
-  assert.ok(list.length >= 37, `the ratchet should carry the derived + library-gated clean notes, has ${list.length}`);
+  // 2026-10-20-1100 (Phase B) put those five back after re-deriving them at the source; 37 since drain 2026-10-21-0900 pinned the eight clean ones left off; 73 since drain 2026-10-21-1200 backfilled the missing # Python on 36 slot-free notes.
+  assert.ok(list.length >= 73, `the ratchet should carry the derived + library-gated clean notes, has ${list.length}`);
   const missing = list.filter((rel) => !fs.existsSync(path.join(ROOT, 'assets/vaults', rel)));
   assert.deepEqual(missing, []);
 });

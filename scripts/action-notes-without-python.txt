@@ -1,0 +1,10 @@
+# Action notes that ship WITHOUT a `# Python` section, each with the reason. Format: <vault>/<path inside the vault>.md | <one-line reason>
+# Gate: scripts/action-notes-have-python.test.mjs — every `type: action` note in the bundled vaults has a `# Python` section OR is named here, and every entry here
+# must really lack one (a stale entry fails). Drain 2026-10-21-1200 backfilled the missing facet on every slot-free note the real engine can transpile; these are what is left.
+forge-tutorial/06-loops/countdown.md | a tutorial teaching note shipped bare ON PURPOSE (no stamps at all): the driver's decision of drain 2026-10-21-0900 ("countdown stays unstamped"); the scripts/open-time-readonly-complete.test.mjs pin says the same
+music-core/pitched_line.md | slot-bearing ({{ }} Recipe, 2 slots) with no # Slots cache: the Python needs /resolve-slot (an LLM call), a driver decision
+forge-moda/slot_demo.md | slot-bearing ({{ }} Recipe) with no # Slots cache: the Python needs /resolve-slot (an LLM call), a driver decision
+music-theory/exercises/chord_inversions.md | slot-bearing ({{ }} Recipe) with no # Slots cache: the Python needs /resolve-slot (an LLM call), a driver decision
+music-theory/exercises/complete_this_scale_challenge.md | slot-bearing ({{ }} Recipe) with no # Slots cache: the Python needs /resolve-slot (an LLM call), a driver decision
+music-theory/exercises/complete_this_scale_submit.md | slot-bearing ({{ }} Recipe) with no # Slots cache: the Python needs /resolve-slot (an LLM call), a driver decision
+music-theory/exercises/slash_chord.md | slot-bearing ({{ }} Recipe) with no # Slots cache: the Python needs /resolve-slot (an LLM call), a driver decision

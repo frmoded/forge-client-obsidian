@@ -11,6 +11,33 @@
 # Drain 2026-10-21-0900 — the eight notes that were clean but unlisted (build_seventh_chord, guitar_play_smoke, scale_construction_{a_minor,f_major,g_major}_piano, loom, slow_burn, weather)
 # are pinned: the ratchet is COMPLETE — scripts/open-time-readonly-complete.test.mjs fails for any shipped note the recorded-engine gate calls clean that is not on this list.
 # melodic_line_demo and rhythmic_line_demo are pinned on the weaker verdict (the engine cannot transpile them here: a slot needs the LLM); that is a named exception, not a precedent.
+# Drain 2026-10-21-1200 — the missing # Python facet was backfilled on 36 slot-free action notes (music-theory 2, music-core 9, forge-moda 25) from the real engine's recorded transpile
+# (scripts/rederive-library-note.mjs), so they ship fully derived and join the ratchet. The notes that still ship no # Python are named, with a reason each, in scripts/action-notes-without-python.txt.
+forge-moda/ask_all_particles.md
+forge-moda/ask_water_particles.md
+forge-moda/bounce_off_particle.md
+forge-moda/bounce_off_wall.md
+forge-moda/go.md
+forge-moda/if_particle_then_bounce.md
+forge-moda/if_temp_high_set_speed.md
+forge-moda/if_temp_low_set_speed.md
+forge-moda/if_temp_medium_set_speed.md
+forge-moda/if_temp_zero_set_speed.md
+forge-moda/if_wall_then_bounce.md
+forge-moda/interact.md
+forge-moda/move.md
+forge-moda/on_mouse_click.md
+forge-moda/set_ink_mass.md
+forge-moda/set_ink_speed.md
+forge-moda/set_speed_high.md
+forge-moda/set_speed_low.md
+forge-moda/set_speed_medium.md
+forge-moda/set_speed_zero.md
+forge-moda/set_water_mass.md
+forge-moda/set_water_speed.md
+forge-moda/setup.md
+forge-moda/simulation.md
+forge-moda/speed_for_temperature.md
 forge-tutorial/01-hello/hello_world.md
 forge-tutorial/02-variables/fix_me.md
 forge-tutorial/02-variables/greeting.md
@@ -24,11 +51,22 @@ forge-tutorial/05-conditionals/weather.md
 forge-tutorial/07-data/show_colors.md
 forge-tutorial/08-recursion/factorial.md
 forge-tutorial/08-recursion/show_factorial.md
+music-core/percussion_lab/companions.md
+music-core/percussion_lab/dispersing.md
+music-core/percussion_lab/gathering.md
+music-core/percussion_lab/peak.md
+music-core/percussion_lab/resting.md
+music-core/percussion_lab/solitary.md
+music-core/percussion_lab/swarming.md
+music-core/percussion_lab/threading.md
+music-core/percussion_lab/wake.md
 music-theory/exercises/build_seventh_chord.md
 music-theory/exercises/build_triad.md
 music-theory/exercises/chord_progression.md
 music-theory/exercises/chord_stream_demo.md
+music-theory/exercises/construct_c_major_piano.md
 music-theory/exercises/guitar_play_smoke.md
+music-theory/exercises/loudness_demo.md
 music-theory/exercises/melodic_line_demo.md
 music-theory/exercises/octave_up.md
 music-theory/exercises/piano_play_smoke.md
