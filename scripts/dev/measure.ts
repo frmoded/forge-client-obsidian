@@ -182,6 +182,80 @@ async function inspectorScenario(name: string, bundle: string, toml: string, wid
 out.inspectorMusic700 = await inspectorScenario('inspector-music-700', 'harness-music.js', PLAYGROUND_TOML, 700, 800);
 out.inspectorMusic460 = await inspectorScenario('inspector-music-460', 'harness-music.js', PLAYGROUND_TOML, 460, 800);
 
+
+// ---- M4 (drain 2026-10-21-2010): the Forge output panel in a stand-in workspace (real forgeNotice + real ForgeOutputView), and what the Score shows instead ----
+const labPage = (bundle: string, withPane: boolean) => `<!doctype html><html><head><meta charset=utf-8><link rel=stylesheet href="app.css"><link rel=stylesheet href="plugin-styles.css"><style>body{margin:0}</style></head><body class="theme-light mod-macos">
+${withPane ? `<div class="workspace-leaf-content" data-type="forge-rhythm-edit" style="width:700px;height:620px;display:flex;flex-direction:column;border:1px solid #ccc"><div class="view-header" style="height:36px"></div><div class="view-content forge-rhythm-edit-view" id="pane" style="flex:1 1 0;min-height:0"></div></div>` : ''}
+<div id="lab" style="width:700px"></div>
+<script>window.__errors=[];const _e=console.error;console.error=(...a)=>{window.__errors.push(a.map(x=>x&&x.stack||String(x)).join(' '));_e(...a)};window.addEventListener('error',e=>window.__errors.push('unhandled '+e.message))</script>
+<script src="${bundle}"></script></body></html>`;
+
+/** P3: a vault that is not score-first. The panel opens on a message exactly as in the previous commit's build; the sidebar's HTML after each message is identical. */
+async function panelP3(bundle: string) {
+  const p = await openPage({ dir: here, width: 760, height: 700, pageHtml: labPage(bundle, false), routes });
+  const res: any = { bundle, steps: [] as any[] };
+  try {
+    await p.ev(`window.__lab = window.__panelLab.build(document.getElementById('lab')); true`);
+    res.before = { onScreen: await p.ev('window.__lab.panelOnScreen()') };
+    for (const [text, kind] of [['Forge: hello from a run', 'info'], ['Compute failed — boom', 'error'], ['Forge: done', 'success']]) {
+      await p.ev(`window.__lab.notice(${JSON.stringify(text)}, ${JSON.stringify(kind)})`);
+      res.steps.push({ text, onScreen: await p.ev('window.__lab.panelOnScreen()'), panelText: await p.ev('window.__lab.panelText()'), sidebarHtml: await p.ev('window.__lab.sidebarHtml()') });
+    }
+    res.errors = await p.ev('window.__errors.slice()');
+  } finally { p.close(); }
+  return res;
+}
+
+/** The score-first flows: the Beat Box tab with the panel lab beside it. Nothing here may open the panel by itself. */
+async function m4Scenario() {
+  const p = await openPage({ dir: here, width: 760, height: 900, pageHtml: labPage('harness-m4.js', true), routes });
+  const res: any = { steps: {} as any };
+  const vis = () => p.ev('window.__lab.panelOnScreen()');
+  const line = () => p.ev(`(document.querySelector('.forge-rhythm-score-message')||{}).textContent||''`);
+  const lineIsError = () => p.ev(`!!document.querySelector('.forge-rhythm-score-message.is-error')`);
+  const status = () => p.ev(`(document.querySelector('.forge-rhythm-edit-score-status')||{}).textContent||''`);
+  const logLabel = () => p.ev(`(document.querySelector('.forge-rhythm-forge-log')||{}).textContent||''`);
+  try {
+    await p.ev(`window.__messageDelivery.setScoreFirst(true); window.__lab = window.__panelLab.build(document.getElementById('lab')); window.__messageDelivery.setOpenLog(() => { void window.__lab.openPanelByGesture(); }); true`);
+    await p.ev(`window.__mountTab(document.getElementById('pane'), { note: ${JSON.stringify(NOTE)}, widget: ${JSON.stringify(widget)}, toml: ${JSON.stringify(PLAYGROUND_TOML)} })`);
+    for (let w = 0; w < 15000; w += 100) { if (await p.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    await sleep(500);
+    res.steps.opened = { panelOnScreen: await vis(), logButton: await logLabel(), messageLine: await line() };
+    // an edit (a real click in the widget) draws a new score; the panel stays closed
+    const cell = await p.findNode((_n: any, a: any) => a.class && /\bstep\b/.test(a.class) && a['data-channel'] === 'kick' && a['data-step'] === '2');
+    const cc = await p.boxCenter(cell.nodeId); await p.click(cc.x, cc.y); await sleep(1200);
+    res.steps.afterEdit = { panelOnScreen: await vis(), status: await status() };
+    // a Score error: data the engine refuses (a channel with the wrong number of steps) goes through the Score's own path
+    await p.ev(`window.__view.scoreArea.showNow({ time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 100, channels: { kick: [true, false] } })`);
+    await sleep(1500);
+    res.steps.scoreError = { panelOnScreen: await vis(), status: await status() };
+    // messages that used to open the panel: an LLM progress line, an error, a success
+    await p.ev(`window.__lab.notice('Forge: /generate needed 3 attempts to produce parseable output.', 'info')`);
+    res.steps.llmLine = { panelOnScreen: await vis(), line: await line(), isError: await lineIsError(), logButton: await logLabel() };
+    await p.ev(`window.__lab.notice('Compute failed — boom', 'error')`);
+    res.steps.errorLine = { panelOnScreen: await vis(), line: await line(), isError: await lineIsError(), logButton: await logLabel() };
+    await p.ev(`window.__lab.notice('Forge: some ordinary info line', 'info')`);
+    res.steps.plainInfo = { panelOnScreen: await vis(), line: await line(), logButton: await logLabel() };
+    if (SHOTS) await p.shot(path.join(SHOTS, 'm4-error-line.png'), { x: 0, y: 0, width: 760, height: 700 });
+    // the error line waits for the next successful draw: an edit
+    await p.click(cc.x, cc.y); await sleep(1500);
+    res.steps.afterNextDraw = { panelOnScreen: await vis(), line: await line(), isError: await lineIsError() };
+    // a transient line goes by itself
+    await p.ev(`window.__lab.notice('Forge: synced 3 dependencies.', 'success')`);
+    res.steps.successLine = { line: await line() };
+    await sleep(6600);
+    res.steps.successLineLater = { line: await line() };
+    // "Forge log (N)" opens the panel, which then holds EVERY message, in order
+    res.steps.beforeLogClick = { panelOnScreen: await vis(), logButton: await logLabel() };
+    const btn = await p.findNode((_n: any, a: any) => a.class && /forge-rhythm-forge-log/.test(a.class));
+    const bc = await p.boxCenter(btn.nodeId); await p.click(bc.x, bc.y); await sleep(500);
+    res.steps.afterLogClick = { panelOnScreen: await vis(), panelText: await p.ev('window.__lab.panelText()'), logButton: await logLabel() };
+    if (SHOTS) await p.shot(path.join(SHOTS, 'm4-after-log-click.png'), { x: 0, y: 0, width: 760, height: 900 });
+    res.errors = (await p.ev('window.__errors.slice()')).filter((e: string) => !/resume|AudioContext|SoundFont|is not a constructor/.test(e));
+  } finally { p.close(); }
+  return res;
+}
+
 // ---- the Kit view of bar_004 (drain 2026-10-21-1930): the engine's Kit fold is time-faithful, and the M3 inspector maps it ----
 const BAR4 = JSON.parse(fs.readFileSync(new URL('../../test/fixtures/provenance/bars.json', import.meta.url), 'utf8')).bar_004;
 const NOTE_BAR4 = `---\ntype: data\ncontent_type: json\ndescription: "bar_004"\n---\n\n\`\`\`json\n${JSON.stringify(BAR4, null, 2)}\n\`\`\`\n`;
@@ -223,7 +297,10 @@ async function kitScenario(name: string, width = 700, height = 800) {
   return res;
 }
 out.kitBar4 = await kitScenario('kit-bar4-700', 700, 800);
-if (process.env.ONLY_INSPECTOR) { fs.writeFileSync(OUT, JSON.stringify({ inspectorMusic700: out.inspectorMusic700, inspectorMusic460: out.inspectorMusic460, kitBar4: out.kitBar4 }, null, 1)); console.log('only-inspector'); process.exit(0); }
+out.m4Flows = await m4Scenario();
+out.panelP3Now = await panelP3('harness-panel.js');
+if (fs.existsSync(path.join(here, 'harness-panel-before.js'))) { out.panelP3Before = await panelP3('harness-panel-before.js'); out.panelIdenticalToBefore = JSON.stringify(out.panelP3Now.steps) === JSON.stringify(out.panelP3Before.steps) && JSON.stringify(out.panelP3Now.before) === JSON.stringify(out.panelP3Before.before); }
+if (process.env.ONLY_INSPECTOR) { fs.writeFileSync(OUT, JSON.stringify({ inspectorMusic700: out.inspectorMusic700, inspectorMusic460: out.inspectorMusic460, kitBar4: out.kitBar4, m4Flows: out.m4Flows, panelP3Now: out.panelP3Now, panelP3Before: out.panelP3Before, panelIdenticalToBefore: out.panelIdenticalToBefore }, null, 1)); console.log('only-inspector'); process.exit(0); }
 /** Just the opened tab's DOM (no edits): enough to show a vault without the profile key gets the same tab as before. */
 async function p3Tab(bundle: string, toml: string | null) {
   const p = await openPage({ dir: here, width: 740, height: 860, pageHtml: page(bundle, 700, 800), routes });

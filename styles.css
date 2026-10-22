@@ -1867,3 +1867,11 @@
 .forge-inspector-note:hover { color: var(--interactive-accent); }
 .forge-inspector-quiet { margin-top: 4px; color: var(--text-faint); }
 .forge-inspector-quiet:empty { display: none; }
+
+/* score_first M4 (drain 2026-10-21-2010): what used to pop the Forge output panel open is shown on the Score. Only exists in a score-first vault's Beat Box tab. */
+.forge-rhythm-score-message { min-height: 0; padding: 2px 4px; font-size: var(--font-ui-small); color: var(--text-muted); }
+.forge-rhythm-score-message:empty { display: none; }
+.forge-rhythm-score-message.is-error { color: var(--text-error); }
+.forge-rhythm-forge-log { display: block; margin: 2px 4px 2px auto; padding: 0 6px; font-size: var(--font-ui-smaller); color: var(--text-faint); background: transparent; border: none; box-shadow: none; cursor: pointer; }
+.forge-rhythm-forge-log:hover { color: var(--text-muted); }
+.forge-rhythm-forge-log:focus-visible { outline: 1px solid var(--interactive-accent); }

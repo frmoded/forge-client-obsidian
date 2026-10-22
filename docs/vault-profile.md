@@ -36,6 +36,12 @@ music-core = { local = "../music-core" }
 - **How it works** — the engine's MusicXML gets a deterministic `<note id="a_<channel>_<step>">` on every hit before Verovio draws it (Verovio keeps the id), verified against the data: if the Score's hits are not exactly the data's, the map is refused and the Inspector says why. A ring that is not one note value is drawn as tied notes; the tail carries `…_t1` and the same provenance. The Kit view is mapped the same way and only when it verifies against the data (since forge `ecdecaf` the engine's Kit fold is time-faithful: simultaneous hand hits are one chord, a note ends at its voice's next onset; before that, a bar with two overlapping hand channels such as `bar_004` ran long and was refused). The Kit view's tied tails get ids of their own and are in the map too.
 - **Off elsewhere** — the widget's hover-link is inert unless the host's load message says `hoverLink: true`, which only the score-first Beat Box tab sends.
 
+## Communication on the score (music edition; milestone M4)
+
+- **The Forge output panel stops opening by itself** in a score-first vault: a message or a run does not open, reveal or expand it (so the screen stays with the score). Every message still reaches it — now if it exists, or the moment it is first opened — because it is the truth log. A person's own gesture ("Open Forge panel", "Forge log (N)") opens it exactly as everywhere else.
+- **On the Score, under the status line:** a message line (an error stays until the next successful draw; success, LLM and out-of-date lines last a few seconds) and a quiet **Forge log (N)** button (N = messages that arrived since the panel was last open).
+- **Where the decision lives:** `src/score-first-messages-core.ts` (`routeMessage`: outside a score-first vault it answers "reveal" for everything; the shared delivery state), applied at the two choke points `forgeNotice` (`src/forge-notice.ts`) and `ForgePlugin.getOutputView` / `forgeOutput` (`src/main.ts`), shown by `src/score-messages-dom.ts`. The flag is published by `score-first.ts` from the profile answer; no other file reads the profile.
+
 ## Where the code is
 
 | What | File |

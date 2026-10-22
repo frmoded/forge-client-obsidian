@@ -7,6 +7,7 @@
 import { Notice, TFile, type Plugin } from 'obsidian';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, newBarAvailable } from './score-first-core.ts';
+import { messageDelivery } from './score-first-messages-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -19,7 +20,10 @@ export interface ScoreFirstHooks {
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {
   const app = plugin.app;
   let scoreFirst = false;
-  const refresh = async () => { scoreFirst = await isScoreFirstVault(app.vault); };
+  // M4 (drain 2026-10-21-2010): the same answer tells the message router whether this vault keeps the Forge output panel closed. Asked at registration too (not only when the workspace is
+  // ready), so the first messages of a session already follow the vault's profile.
+  const refresh = async () => { scoreFirst = await isScoreFirstVault(app.vault); messageDelivery.setScoreFirst(scoreFirst); };
+  void refresh();
 
   const createBar = (): Promise<unknown> => createNewBar<TFile>({
     folderExists: () => app.vault.getAbstractFileByPath(BAR_FOLDER) !== null,

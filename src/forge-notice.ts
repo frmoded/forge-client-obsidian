@@ -20,6 +20,7 @@
 import type { App } from 'obsidian';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
 import { GENERIC_ATTRIBUTION } from './output-entry-meta-core.ts';
+import { classifyMessageSource, messageDelivery, routeMessage } from './score-first-messages-core.ts';
 
 export async function forgeNotice(
   app: App,
@@ -27,6 +28,12 @@ export async function forgeNotice(
   kind: 'info' | 'error' | 'success' = 'info',
   snippetId: string = GENERIC_ATTRIBUTION,
 ): Promise<void> {
+  // score_first M4 (drain 2026-10-21-2010): in a score-first vault the panel does not open by itself. Everything below this block is what every OTHER vault has always run,
+  // unchanged: `isScoreFirst()` is false there, so this block is skipped.
+  if (messageDelivery.isScoreFirst()) {
+    deliverSilently(app, text, kind, snippetId);
+    return;
+  }
   try {
     let leaf = app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
     if (!leaf) {
@@ -49,6 +56,20 @@ export async function forgeNotice(
   } catch (e) {
     console.error('forgeNotice failed; message dropped:', text, e);
   }
+}
+
+/** Score-first delivery: append to the panel only if it already exists (no open, no reveal, no sidebar expand), otherwise keep the entry until the panel is first opened; and put a
+ *  top-ranked message on the Score. The router decides; this function only performs. */
+function deliverSilently(app: App, text: string, kind: 'info' | 'error' | 'success', snippetId: string): void {
+  const route = routeMessage({ scoreFirst: true, kind, source: classifyMessageSource(text) });
+  try {
+    const view = app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0]?.view;
+    if (view instanceof ForgeOutputView) view.appendMessage(snippetId, text, kind);
+    else messageDelivery.stash((sink) => { sink.appendMessage(snippetId, text, kind); });
+  } catch (e) {
+    console.error('forgeNotice (score-first) failed; message dropped:', text, e);
+  }
+  if (route.score) messageDelivery.postToScore({ text, kind, line: route.score });
 }
 
 /** Heuristic kind: 'error' if message text suggests failure. */

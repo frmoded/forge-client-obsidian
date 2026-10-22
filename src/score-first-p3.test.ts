@@ -80,7 +80,8 @@ test('MECHANISM PIN: the profile question is asked from exactly three places —
   // main.ts only registers; the cores/dom import each other.
   assert.deepEqual(askers, ['live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'rhythm-edit-view.ts', 'score-first.ts', 'source-vault-core.ts'].sort());   // + the extraction gate (drain 2026-10-21-2200)
   for (const f of ['output-view.ts', 'forge-action.ts', 'edges.ts', 'modal.ts', 'welcome.ts', 'chips.ts', 'rhythm-embed-view.ts', 'rhythm-score-view.ts']) {
-    if (fs.existsSync(path.join(SRC, f))) assert.ok(!/vault-profile-core|score-first|isScoreFirstVault/.test(code(f)), `${f} does not know about profiles`);
+    // M4 (drain 2026-10-21-2010), deliberate: the panel may READ the published flag (`messageDelivery.isScoreFirst()` from score-first-messages-core.ts); it still never reads the profile.
+    if (fs.existsSync(path.join(SRC, f))) assert.ok(!/vault-profile-core|score-first|isScoreFirstVault/.test(code(f).replace(/score-first-messages-core|messageDelivery\.isScoreFirst\(\)/g, '')), `${f} does not know about profiles`);
   }
   assert.match(code('main.ts'), /registerScoreFirst\(this, /);
   assert.ok(!/isScoreFirstVault|vault-profile-core/.test(code('main.ts')), 'main.ts does not ask the question itself');
@@ -118,7 +119,9 @@ test('MECHANISM PIN: the Beat Box tab feeds the Score area from the widget\'s ed
 
 test('the profile is a constant: no setting, command, menu item or modal anywhere mentions it', () => {
   const offenders = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts'))
-    .filter((f) => /score_first|scoreFirst/i.test(code(f)) && !['vault-profile-core.ts', 'score-first-core.ts', 'score-first.ts', 'rhythm-edit-view.ts', 'live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'source-vault-core.ts'].includes(f));
+    .filter((f) => /score_first|scoreFirst/i.test(code(f)) && !['vault-profile-core.ts', 'score-first-core.ts', 'score-first.ts', 'rhythm-edit-view.ts', 'live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'source-vault-core.ts',
+      // M4 (drain 2026-10-21-2010), deliberate: the message router, its two choke points and the Score's message DOM. They read the flag score-first.ts publishes; none reads the profile.
+      'score-first-messages-core.ts', 'score-messages-dom.ts', 'forge-notice.ts', 'output-view.ts'].includes(f));
   assert.deepEqual(offenders, []);
   const settingsFiles = fs.readdirSync(SRC).filter((f) => /setting/i.test(f) && f.endsWith('.ts') && !f.endsWith('.test.ts'));
   for (const f of settingsFiles) assert.ok(!/profile/i.test(code(f).replace(/openRhythmNotesInBeatBox/g, '')), `${f} has no profile setting`);
@@ -129,4 +132,11 @@ test('the profile is a constant: no setting, command, menu item or modal anywher
 test('the fixture is the playground vault\'s own forge.toml', { skip: fs.existsSync(SIBLING) ? false : `${SIBLING} is not checked out here` }, () => {
   assert.equal(fs.readFileSync(FIXTURE, 'utf8'), fs.readFileSync(SIBLING, 'utf8'));
   assert.equal(isScoreFirstToml(fs.readFileSync(SIBLING, 'utf8')), true);
+});
+
+test('MECHANISM PIN (M4): the message router\'s flag is set from ONE place — score-first.ts, from the profile answer — and read only through messageDelivery.isScoreFirst()', () => {
+  const setters = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts') && /\.setScoreFirst\(/.test(code(f))).sort();
+  assert.deepEqual(setters, ['score-first.ts'], 'only the file that asks the profile question publishes the answer');
+  assert.match(code('score-first.ts'), /messageDelivery\.setScoreFirst\(scoreFirst\)/);
+  for (const f of ['forge-notice.ts', 'output-view.ts', 'main.ts']) assert.ok(/messageDelivery\.isScoreFirst\(\)/.test(code(f)), `${f} consults the published flag`);
 });

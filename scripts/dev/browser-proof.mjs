@@ -41,12 +41,15 @@ fs.copyFileSync(path.join(REPO, 'styles.css'), path.join(out, 'plugin-styles.css
 const bundle = (file, env) => run('node', [path.join(here, 'browser/build.mjs')], { OUT: path.join(out, file), ...env });
 bundle('harness-music.js', { EDITION: 'music' });
 bundle('harness-lean.js', { EDITION: 'lean' });
+bundle('harness-panel.js', { EDITION: 'music', ENTRY: 'entry-panel.ts' });   // M4: the Forge output panel in a stand-in workspace (this tree)
+bundle('harness-m4.js', { EDITION: 'music', ENTRY: 'entry-m4.ts' });         // M4: Beat Box tab + panel + the shared message state
 if (before) {
   const wt = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-proof-before-'));
   fs.rmSync(wt, { recursive: true });
   run('git', ['worktree', 'add', '--detach', wt, before]);
   try {
     bundle('harness-before.js', { EDITION: 'music', CLIENT: wt });
+    bundle('harness-panel-before.js', { EDITION: 'music', CLIENT: wt, ENTRY: 'entry-panel.ts' });
   } finally {
     spawnSync('git', ['worktree', 'remove', '--force', wt], { cwd: REPO, stdio: 'inherit' });
     spawnSync('git', ['worktree', 'prune'], { cwd: REPO });

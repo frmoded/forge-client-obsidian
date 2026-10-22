@@ -16,6 +16,7 @@ import { createLiveScore, type LiveScore, type LiveScoreTiming, type LiveScoreVi
 import { LEAN_SCORE_NOTE, type ScorePanelPlan } from './score-first-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import { attachProvenance, type ProvenanceResult, type RhythmDataLike } from './provenance-core.ts';
+import { mountScoreMessages, type ScoreMessagePorts, type ScoreMessages } from './score-messages-dom.ts';
 import { createScoreInspector, type GridTarget, type ScoreInspector, type ScoreInspectorPorts } from './score-inspector.ts';
 
 export const SCORE_PANEL_CLASS = 'forge-rhythm-edit-score';
@@ -156,6 +157,8 @@ export interface ScoreAreaPorts extends ScorePanelDeps {
   inspector?: ScoreInspectorPorts;
   /** Optional: report how long the provenance map took to build (ms). */
   onProvenanceMs?(ms: number): void;
+  /** score_first M4: present = the panel shows the message line and the "Forge log (N)" button (the output panel stays closed; see score-first-messages-core.ts). Absent = neither exists. */
+  messages?: ScoreMessagePorts;
   title: string;
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
@@ -186,12 +189,14 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
       return r.payload;
     }
     : ports.compute;
+  let messages: ScoreMessages | null = null;
   const panel = mountScorePanel(parent, {
     ...ports,
-    onShown: (host, payload) => { const r = results.get(payload); if (r && inspector) inspector.onShown(host, r); ports.onShown?.(host, payload); },
+    onShown: (host, payload) => { messages?.drawSucceeded(); const r = results.get(payload); if (r && inspector) inspector.onShown(host, r); ports.onShown?.(host, payload); },
     onHidden: (host) => { inspector?.onHidden(host); ports.onHidden?.(host); },
   });
   if (ports.inspector) inspector = createScoreInspector(panel.slot, ports.inspector);
+  if (ports.messages) messages = mountScoreMessages(panel.el.firstElementChild as HTMLElement, ports.messages, { setTimer: ports.setTimer, clearTimer: ports.clearTimer });
   const live: LiveScore = createLiveScore({
     compute,
     view: panel.view,
@@ -205,6 +210,6 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     update: (data) => live.update(data),
     showNow: (data) => live.showNow(data),
     gridHover: (target) => inspector?.gridHover(target),
-    dispose() { live.dispose(); inspector?.dispose(); panel.dispose(); },
+    dispose() { live.dispose(); inspector?.dispose(); messages?.dispose(); panel.dispose(); },
   };
 }

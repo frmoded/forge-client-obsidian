@@ -34,6 +34,7 @@ import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts'
 import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsFor, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
+import { messageDelivery } from './score-first-messages-core.ts';
 import { scorePanelPlan, widgetFillsPane, type ScorePanelPlan } from './score-first-core.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
@@ -259,6 +260,7 @@ export class RhythmEditView extends EditableFileView {
         postHighlight: (target) => { this.iframe?.contentWindow?.postMessage(buildHighlightMessage(target), '*'); },
       } : undefined,
       onProvenanceMs: (ms) => console.debug(`Forge: provenance map built in ${(Math.round(ms * 10) / 10).toFixed(1)} ms`),
+      messages: messageDelivery,                   // M4: the message line and "Forge log (N)" (this is the score panel, so only a score-first vault gets here)
     });
     this.scoreArea?.showNow(data);
   }

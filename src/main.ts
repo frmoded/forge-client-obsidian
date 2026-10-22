@@ -104,6 +104,7 @@ import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
 import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts';
 import { registerScoreFirst } from './score-first.ts';
+import { classifyMessageSource, messageDelivery, routeMessage } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import {
   readExpandedState,
@@ -775,6 +776,8 @@ export default class ForgePlugin extends Plugin {
     });
     // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
     registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve() });
+    // score_first M4: "Forge log (N)" on the Score opens the panel the way the "Open Forge panel" command does (a person's own gesture).
+    messageDelivery.setOpenLog(() => { void this.getOutputView({ userInitiated: true }); });
 
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
@@ -1332,7 +1335,7 @@ export default class ForgePlugin extends Plugin {
     this.addCommand({
       id: 'open-forge-panel',
       name: 'Open Forge panel',
-      callback: () => { void this.getOutputView(); },
+      callback: () => { void this.getOutputView({ userInitiated: true }); },
     });
 
     this.addCommand({
@@ -5905,6 +5908,11 @@ export default class ForgePlugin extends Plugin {
     try {
       const view = await this.getOutputView();
       view.appendMessage(snippetId, text, kind);
+      // score_first M4: a top-ranked message also goes on the Score (the router decides; outside a score-first vault this is skipped).
+      if (messageDelivery.isScoreFirst()) {
+        const route = routeMessage({ scoreFirst: true, kind, source: classifyMessageSource(text) });
+        if (route.score) messageDelivery.postToScore({ text, kind, line: route.score });
+      }
     } catch (e) {
       // Output panel unavailable — log + bail silently per driver:
       // no toasts even when the panel is missing.
@@ -6269,7 +6277,15 @@ export default class ForgePlugin extends Plugin {
     return candidate;
   }
 
-  private async getOutputView(): Promise<ForgeOutputView> {
+  private async getOutputView(opts?: { userInitiated?: boolean }): Promise<ForgeOutputView> {
+    // score_first M4 (drain 2026-10-21-2010): in a score-first vault a run or a message does not open, reveal or expand the panel; the caller gets the panel if it already exists, or a
+    // sink that keeps its calls until the panel is first opened. A person's own gesture (the "Open Forge panel" command, "Forge log (N)") passes userInitiated and takes the path below,
+    // which is the one every other vault has always taken, unchanged.
+    if (messageDelivery.isScoreFirst() && !opts?.userInitiated) {
+      const open = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0]?.view;
+      return open instanceof ForgeOutputView ? open : (messageDelivery.bufferedSink() as unknown as ForgeOutputView);
+    }
+
     // v0.2.10: Obsidian sometimes parks a DeferredView placeholder on
     // the leaf right after setViewState resolves — the real view's
     // onload() hasn't run yet, so `leaf.view as ForgeOutputView` is a
