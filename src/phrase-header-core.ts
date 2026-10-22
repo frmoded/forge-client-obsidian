@@ -50,3 +50,31 @@ export function createPhraseHeaderSync<V extends HeaderView>(deps: PhraseHeaderD
     },
   };
 }
+
+// ---- drain 2026-10-22-2105 — "Open phrase as Score" (the palette command) must act on the tab that SHOWS the phrase -----------------------------------------------------------------------
+// The driver, in the real Obsidian: the phrase opened from the explorer as text, and the command did not bring the Score back. `openPhraseHere` took `workspace.getLeaf(false)`, "an existing leaf
+// which can be navigated" — Obsidian's choice, not necessarily the tab that shows the note (the Beat Box's own commands, which work, take the ACTIVE MARKDOWN VIEW's leaf). This is that rule, pure.
+
+export interface LeafCandidate<L> { path: string | null | undefined; leaf: L }
+
+export interface PhraseTargetInput<L> {
+  scoreFirst: boolean;
+  /** The active markdown view (`getActiveViewOfType(MarkdownView)`) with the note it shows, or null when the focus is in something else (the explorer, a sidebar panel). */
+  activeMarkdown: LeafCandidate<L> | null;
+  /** Every markdown tab and the note it shows. */
+  markdownLeaves: ReadonlyArray<LeafCandidate<L>>;
+  /** `getActiveFile()`. */
+  activePath: string | null | undefined;
+}
+
+/** Which phrase, and which tab to switch to its Score — or null (the command is not offered). The phrase is the one the person is looking at (the active markdown view's note, else the active file);
+ *  the tab is the one showing it (the active markdown view's own leaf, else any markdown tab on that note), and `null` (the caller then asks Obsidian's `getLeaf(false)`, only when it runs) when no tab does. */
+export function choosePhraseTarget<L>(input: PhraseTargetInput<L>): { path: string; leaf: L | null } | null {
+  if (input.scoreFirst !== true) return null;
+  const fromView = input.activeMarkdown && isPhrasePath(input.activeMarkdown.path) ? input.activeMarkdown : null;
+  const path = fromView ? (fromView.path as string) : isPhrasePath(input.activePath) && !input.activeMarkdown ? (input.activePath as string) : null;
+  if (path === null) return null;
+  if (fromView) return { path, leaf: fromView.leaf };
+  const showing = input.markdownLeaves.find((c) => c.path === path);
+  return { path, leaf: showing ? showing.leaf : null };   // null: no tab shows it — the caller asks Obsidian for a leaf (`getLeaf(false)`) ONLY when it runs: that call can CREATE a leaf, so it must never happen while the palette merely asks "is this offered?"
+}

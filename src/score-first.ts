@@ -4,14 +4,14 @@
 // person can see: no "New bar" command and no ribbon button are registered. The vault's profile is a constant, so both are added once, when the workspace is ready; a forge.toml
 // edited mid-session to ADD the profile takes effect on the next load.
 
-import { MarkdownView, Notice, TFile, type Plugin } from 'obsidian';
+import { MarkdownView, Notice, TFile, type Plugin, type WorkspaceLeaf } from 'obsidian';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewPhrase, isPhrasePath, newPhraseAvailable } from './phrase-core.ts';
-import { PhraseView, openPhrase, openPhraseHere, openPhraseInLeaf } from './phrase-view.ts';
-import { createPhraseHeaderSync } from './phrase-header-core.ts';
+import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
+import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -115,9 +115,23 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         id: OPEN_PHRASE_COMMAND_ID,
         name: OPEN_PHRASE_COMMAND_NAME,
         checkCallback: (checking: boolean) => {
-          const file = app.workspace.getActiveFile();
-          if (!scoreFirst || !file || !isPhrasePath(file.path)) return false;
-          if (!checking) void openPhraseHere(app, file);
+          // 2105: act on the tab that SHOWS the phrase (the active markdown view's leaf, as the Beat Box's commands do), and never fail silently (a `void` on a rejected promise is invisible).
+          const active = app.workspace.getActiveViewOfType(MarkdownView);
+          const target = choosePhraseTarget<WorkspaceLeaf>({
+            scoreFirst,
+            activeMarkdown: active ? { path: active.file?.path, leaf: active.leaf } : null,
+            markdownLeaves: app.workspace.getLeavesOfType('markdown').map((l) => ({ path: l.view instanceof MarkdownView ? l.view.file?.path : null, leaf: l })),
+            activePath: app.workspace.getActiveFile()?.path ?? null,
+          });
+          if (!target) return false;
+          if (!checking) {
+            const file = app.vault.getAbstractFileByPath(target.path);
+            if (!(file instanceof TFile)) { new Notice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${target.path} is not in this vault.`); return true; }
+            openPhraseInLeaf(app, target.leaf ?? app.workspace.getLeaf(false), file).catch((e) => {
+              console.error('Open phrase as Score failed', e);
+              new Notice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+            });
+          }
           return true;
         },
       });

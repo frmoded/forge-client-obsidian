@@ -103,6 +103,8 @@ for (const edition of ['lean', 'music'] as const) {
     assert.deepEqual(states.map((s) => [s.how, s.state.type, s.state.state.file]), [['new-tab', PHRASE_VIEW_TYPE, 'phrases/phrase_001.md']]);
     // "Open phrase as Score" on a phrase note: the same tab.
     (app.workspace as any).getActiveFile = () => ({ path: 'phrases/phrase_001.md' });
+    const phraseFile = Object.assign(new real.TFile(), { path: 'phrases/phrase_001.md', extension: 'md', basename: 'phrase_001' });
+    (app.vault as any).getAbstractFileByPath = (p: string) => (p === 'phrases/phrase_001.md' ? phraseFile : null);   // the active file is a real file of the vault, as in Obsidian
     states.length = 0;
     plugin.commands.get(OPEN_PHRASE)!.checkCallback!(false);
     await tick();
@@ -178,5 +180,71 @@ for (const edition of ['lean', 'music'] as const) {
     assert.ok(bar.titles.some((t) => /Open as Beat Box/.test(t)), 'non-vacuity: the rhythm buttons really are there for a bar');
     const phraseNamedNoteElsewhere = await headerFor(TUTORIAL_TOML, 'phrases/phrase_001.md');
     assert.deepEqual(phraseNamedNoteElsewhere.titles, barElsewhere.titles, 'outside a score-first vault a note named like a phrase is just a note: the same buttons a bar gets');
+  });
+}
+
+// ---- drain 2026-10-22-2105: the COMMAND acts on the tab that shows the phrase, and a failure is never silent ------------------------------------------------------------------------------------
+for (const edition of ['lean', 'music'] as const) {
+  let real: RealPlugin;
+  before(async () => { real ??= await bundleRealPlugin(ROOT, edition); });
+  /** A score-first vault with TWO main-area leaves: `shows` (a markdown tab on the phrase, the one the person clicked from the explorer) and `other` (what getLeaf(false) returns here: another tab). */
+  async function runCommand(opts: { activeView: 'markdown' | 'none'; setViewStateThrows?: boolean; fileMissing?: boolean }) {
+    real ??= await bundleRealPlugin(ROOT, edition);
+    const states: Array<{ leaf: string; state: any }> = [];
+    const path = 'phrases/phrase_001.md';
+    const mk = (name: string, throws = false) => ({ name, setViewState: async (s: any) => { if (throws) throw new Error('boom: setViewState failed'); states.push({ leaf: name, state: s }); }, getRoot: () => null });
+    const shows: any = mk('shows', opts.setViewStateThrows); const other: any = mk('other');
+    const view = new real.MarkdownView(); view.file = { path, extension: 'md' }; view.leaf = shows; shows.view = view;
+    const el = (globalThis as any).document.createElement('div'); el.removeClass = () => {}; el.addClass = () => {}; view.containerEl = el;
+    view.addAction = () => { const a: any = (globalThis as any).document.createElement('div'); a.addClass = () => {}; a.removeClass = () => {}; return a; };
+    const a = appFor(SCORE_FIRST_TOML, path); const app: any = a.app;
+    const tfile = Object.assign(new real.TFile(), { path, extension: 'md', basename: 'phrase_001' });
+    app.vault.getAbstractFileByPath = (p: string) => (p === path && !opts.fileMissing ? tfile : null);
+    app.workspace.getActiveViewOfType = (cls: unknown) => (opts.activeView === 'markdown' && cls === real.MarkdownView ? view : null);
+    app.workspace.getLeavesOfType = (t: string) => (t === 'markdown' ? [other, shows] : []);
+    let getLeafCalls = 0;
+    app.workspace.getLeaf = () => { getLeafCalls++; return other; };   // Obsidian's getLeaf(false): NOT necessarily the tab that shows the note, and it can CREATE a leaf
+    app.workspace.revealLeaf = () => {};
+    app.metadataCache = { on: () => ({}), getFileCache: () => ({ frontmatter: { type: 'data', content_type: 'json' } }) };
+    const plugin = await loadRealOnload(real, app);
+    await tick();
+    const notices: unknown[] = []; (globalThis as any).__shimConstructed = [];
+    const saved = { error: console.error }; console.error = () => {};
+    try { plugin.commands.get(OPEN_PHRASE)!.checkCallback!(false); await tick(); } finally { console.error = saved.error; }
+    for (const [n, args] of (globalThis as any).__shimConstructed ?? []) if (n === 'Notice') notices.push(args[0]);
+    real.messageDelivery.setScoreFirst(false);
+    const before = getLeafCalls;
+    const offered = plugin.commands.get(OPEN_PHRASE)!.checkCallback!(true);        // the palette asking "is this offered?"
+    return { states, notices, offered, leafCallsWhileAsking: getLeafCalls - before, leafCallsInTotal: getLeafCalls };
+  }
+
+  test(`[${edition}] "Open phrase as Score" switches the tab that SHOWS the phrase (the active markdown view's leaf), not the leaf getLeaf(false) returns`, async () => {
+    const r = await runCommand({ activeView: 'markdown' });
+    assert.deepEqual(r.states.map((s) => [s.leaf, s.state.type, s.state.state.file]), [['shows', PHRASE_VIEW_TYPE, 'phrases/phrase_001.md']]);
+    assert.equal(r.offered, true);
+    assert.equal(r.leafCallsInTotal, 0, 'a tab shows the phrase, so Obsidian is never asked for a leaf');
+  });
+
+  test(`[${edition}] merely ASKING whether the command is offered never calls getLeaf (it can create a leaf)`, async () => {
+    const r = await runCommand({ activeView: 'none' });
+    assert.equal(r.leafCallsWhileAsking, 0);
+  });
+
+  test(`[${edition}] with the focus somewhere that is not a markdown view (the explorer), it still finds the tab that shows the active file`, async () => {
+    const r = await runCommand({ activeView: 'none' });
+    assert.deepEqual(r.states.map((s) => s.leaf), ['shows']);
+  });
+
+  test(`[${edition}] a phrase that is not in the vault is a Notice naming it, not nothing`, async () => {
+    const r = await runCommand({ activeView: 'markdown', fileMissing: true });
+    assert.deepEqual(r.states, []);
+    assert.equal(r.notices.length, 1);
+    assert.match(String(r.notices[0]), /^Open phrase as Score failed: phrases\/phrase_001\.md is not in this vault\.$/);
+  });
+
+  test(`[${edition}] a failure is NEVER silent: when switching the tab throws, one Notice names the command and the reason`, async () => {
+    const r = await runCommand({ activeView: 'markdown', setViewStateThrows: true });
+    assert.equal(r.notices.length, 1, JSON.stringify(r.notices));
+    assert.match(String(r.notices[0]), /^Open phrase as Score failed: boom: setViewState failed/);
   });
 }

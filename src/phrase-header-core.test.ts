@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { PHRASE_HEADER_ICON, PHRASE_HEADER_TITLE, createPhraseHeaderSync, rhythmHeaderApplies, wantsPhraseHeader } from './phrase-header-core.ts';
+import { PHRASE_HEADER_ICON, PHRASE_HEADER_TITLE, choosePhraseTarget, createPhraseHeaderSync, rhythmHeaderApplies, wantsPhraseHeader } from './phrase-header-core.ts';
 
 function view(path: string | null) {
   const made: Array<{ icon: string; title: string; cb: () => void; removed: boolean; remove(): void }> = [];
@@ -72,4 +72,40 @@ test('the rhythm note buttons (Beat Box / Score) do not appear on a phrase in a 
   assert.equal(rhythmHeaderApplies(true, true, 'bars/bar_001.md'), true);
   assert.equal(rhythmHeaderApplies(false, true, 'bars/bar_001.md'), false, 'a non-candidate is still not');
   assert.equal(rhythmHeaderApplies(true, true, null), true);
+});
+
+// ---- drain 2026-10-22-2105: "Open phrase as Score" must act on the tab that SHOWS the phrase, not on whatever getLeaf(false) returns ------------------------------------------------------------
+const L = (name: string) => ({ name });
+test('the command targets the active markdown view\'s own leaf when it shows a phrase (the Beat Box commands\' rule), never the fallback', () => {
+  const own = L('own'); const other = L('other'); const fallback = L('fallback');
+  const t = choosePhraseTarget({ scoreFirst: true, activeMarkdown: { path: 'phrases/phrase_001.md', leaf: own }, markdownLeaves: [{ path: 'phrases/phrase_001.md', leaf: other }], activePath: 'phrases/phrase_001.md', });
+  assert.deepEqual(t, { path: 'phrases/phrase_001.md', leaf: own });
+});
+
+test('when the active leaf is not a markdown view (the file explorer, the Forge panel) but the active FILE is a phrase, the markdown tab showing that file is the target', () => {
+  const shows = L('shows'); const fallback = L('fallback');
+  const t = choosePhraseTarget({ scoreFirst: true, activeMarkdown: null, markdownLeaves: [{ path: 'bars/bar_001.md', leaf: L('x') }, { path: 'phrases/phrase_002.md', leaf: shows }], activePath: 'phrases/phrase_002.md', });
+  assert.deepEqual(t, { path: 'phrases/phrase_002.md', leaf: shows });
+});
+
+test('the path comes from the active markdown view first (it is what the person is looking at), then from the active file', () => {
+  const t = choosePhraseTarget({ scoreFirst: true, activeMarkdown: { path: 'phrases/phrase_003.md', leaf: L('a') }, markdownLeaves: [], activePath: 'phrases/phrase_001.md' });
+  assert.equal(t?.path, 'phrases/phrase_003.md');
+  const u = choosePhraseTarget({ scoreFirst: true, activeMarkdown: null, markdownLeaves: [], activePath: 'phrases/phrase_004.md' });
+  assert.equal(u?.path, 'phrases/phrase_004.md');
+});
+
+test('only as a last resort, and only for a phrase that is the active file, is there no tab (null leaf: no tab shows it)', () => {
+  const t = choosePhraseTarget({ scoreFirst: true, activeMarkdown: null, markdownLeaves: [], activePath: 'phrases/phrase_001.md', });
+  assert.deepEqual(t, { path: 'phrases/phrase_001.md', leaf: null }, 'null: the caller asks Obsidian for a leaf only when it RUNS (getLeaf(false) can create one)');
+});
+
+test('nothing to act on: not score-first, not a phrase, no active file — null (so the command is not offered)', () => {
+  const base = { activeMarkdown: null, markdownLeaves: [] };
+  assert.equal(choosePhraseTarget({ ...base, scoreFirst: false, activePath: 'phrases/phrase_001.md' }), null, 'P3');
+  assert.equal(choosePhraseTarget({ ...base, scoreFirst: true, activePath: 'bars/bar_001.md' }), null);
+  assert.equal(choosePhraseTarget({ ...base, scoreFirst: true, activePath: 'phrases/README.md' }), null);
+  assert.equal(choosePhraseTarget({ ...base, scoreFirst: true, activePath: null }), null);
+  assert.equal(choosePhraseTarget({ scoreFirst: true, activeMarkdown: { path: 'bars/bar_001.md', leaf: L('a') }, markdownLeaves: [], activePath: null }), null);
+  assert.equal(choosePhraseTarget({ scoreFirst: true, activeMarkdown: { path: 'bars/bar_001.md', leaf: L('a') }, markdownLeaves: [], activePath: 'phrases/phrase_001.md' }), null, 'the tab the person is looking at shows a bar: the command is not offered, whatever the active file says');
 });

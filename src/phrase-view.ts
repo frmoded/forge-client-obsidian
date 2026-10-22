@@ -112,10 +112,3 @@ export async function openPhraseInLeaf(app: App, leaf: WorkspaceLeaf, file: TFil
   await leaf.setViewState({ type: PHRASE_VIEW_TYPE, active: true, state: { file: file.path } });
   app.workspace.revealLeaf(leaf);
 }
-
-/** The phrase tab for the note the person is ON (the "Open phrase as Score" command): the same leaf switches from the note's text to the Score, the way the bar's tabs switch. */
-export async function openPhraseHere(app: App, file: TFile): Promise<void> {
-  const leaf = app.workspace.getLeaf(false);
-  await leaf.setViewState({ type: PHRASE_VIEW_TYPE, active: true, state: { file: file.path } });
-  app.workspace.revealLeaf(leaf);
-}
