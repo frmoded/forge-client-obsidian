@@ -118,9 +118,10 @@ test('toggle: every mode switch changes the note\'s OWN leaf through ONE helper 
   assert.ok(!/setViewState/.test(scoreSrc));
 });
 
+// drain 2026-10-22-2200, deliberate: the click handler first refuses a phrase in a score-first vault BY NAME (phrase-registration.test.ts drives it); the rest is what it was.
 test('toggle: the mode buttons on the markdown view switch view.leaf (the note\'s own tab); the command passes the active markdown leaf', () => {
   const body = code(view);
-  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
+  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(file && wantsPhraseHeader\(messageDelivery\.isScoreFirst\(\), file\.path\)\) \{ new Notice\([^\n]*\); return; \}\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
   assert.match(body, /void openRhythmEditor\(app, file, hooks, app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf\)/);
 });
 

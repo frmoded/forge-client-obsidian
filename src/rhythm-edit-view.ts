@@ -19,7 +19,7 @@
 // warning and never written. A write is validated BEFORE it happens, made with one atomic `vault.process`, replaces ONLY the
 // note's json block, and is refused if the note changed on disk since the baseline or if it is marked `read_only: true` (D7).
 
-import { EditableFileView, MarkdownView, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
+import { EditableFileView, MarkdownView, Notice, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
 import { attachAutoHeight } from './widget-auto-height.ts';
 import { parseWidgetResize, type AutoHeightController } from './widget-auto-height-core.ts';
@@ -35,7 +35,7 @@ import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsF
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
-import { rhythmHeaderApplies } from './phrase-header-core.ts';
+import { rhythmHeaderApplies, wantsPhraseHeader } from './phrase-header-core.ts';
 import { scorePanelPlan, widgetFillsPane, type ScorePanelPlan } from './score-first-core.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
@@ -496,6 +496,9 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
         // addAction PREPENDS: add right-to-left so the rendered order is the table's order
         const els = [...headerActionsFor('json', edition)].reverse().map((a) => view.addAction(a.icon, a.title, () => {
           const file = view.file;
+          // 2200: a button that outlived the profile answer (it was added while the answer was still unknown) must not send a phrase down the rhythm path and fail with "missing time signature":
+          // in a score-first vault a phrase is not a bar, and it says so by name.
+          if (file && wantsPhraseHeader(messageDelivery.isScoreFirst(), file.path)) { new Notice('This is a phrase, not a bar: the Beat Box cannot open it. Use the "Open as Score" button of the phrase (or Cmd+P, "Open phrase as Score").'); return; }
           if (isCandidateFile(app, file)) void switchLeafToMode(app, view.leaf, file, 'json', a.mode, hooks);
         }));
         headerActions.set(view, els);
@@ -510,6 +513,9 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
   plugin.registerEvent(app.workspace.on('layout-change', syncHeaderActions));
   plugin.registerEvent(app.metadataCache.on('changed', syncHeaderActions));
   app.workspace.onLayoutReady(syncHeaderActions);
+  // 2200: the profile answer arrives AFTER load (asynchronously). A markdown tab whose sync ran before it keeps whatever that sync decided until some workspace event happens; re-decide the moment the
+  // answer changes, so a phrase's text tab never keeps the rhythm buttons.
+  plugin.register(messageDelivery.onScoreFirst(() => syncHeaderActions()));
 
   // "Restore to last commit" cooperates with open Beat Boxes (restore-hold-core.ts): hold autosave, checkout, reload from disk.
   plugin.register(registerRestoreParticipants(() => {

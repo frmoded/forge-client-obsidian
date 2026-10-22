@@ -93,3 +93,23 @@ test('P3 audit: for EVERY vault the plugin ships, the vault\'s real forge.toml y
   assert.equal(playground, true);
   assert.equal(routeMessage({ scoreFirst: playground, kind: 'info', source: 'notice' }).panel, 'panel-silent');
 });
+
+// ---- drain 2026-10-22-2200: things that depend on the profile answer must hear WHEN it arrives (it is set asynchronously after load) ---------------------------------------------------------
+import { MessageDelivery as MD2 } from './score-first-messages-core.ts';
+
+test('onScoreFirst: listeners are told when the answer CHANGES (not on a repeat), can be removed, and one that throws does not stop the others', () => {
+  const d = new MD2();
+  const seen: boolean[] = []; const other: boolean[] = [];
+  const off = d.onScoreFirst((on) => { seen.push(on); });
+  d.onScoreFirst(() => { throw new Error('a listener failing'); });
+  d.onScoreFirst((on) => { other.push(on); });
+  const saved = console.error; console.error = () => {};
+  try {
+    d.setScoreFirst(false);                       // the default: no change, no call
+    d.setScoreFirst(true); d.setScoreFirst(true); // one change
+    assert.deepEqual(seen, [true]); assert.deepEqual(other, [true], 'a throwing listener does not stop the next');
+    off(); d.setScoreFirst(false);
+    assert.deepEqual(seen, [true], 'removed');
+    assert.deepEqual(other, [true, false]);
+  } finally { console.error = saved; }
+});

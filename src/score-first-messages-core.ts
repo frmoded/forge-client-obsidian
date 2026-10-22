@@ -58,7 +58,18 @@ export class MessageDelivery {
   private scoreListeners = new Set<(m: ScoreMessage) => void>();
   private openLog: (() => void) | null = null;
 
-  setScoreFirst(on: boolean): void { this.scoreFirst = on; }
+  /** The profile answer is read asynchronously after load, so anything that depends on it (the header buttons of a markdown tab) may first run while it is still the default (false). Those listen here
+   *  and re-decide the moment the answer CHANGES (drain 2026-10-22-2200). A listener that throws is logged and does not stop the others. */
+  private scoreFirstListeners = new Set<(on: boolean) => void>();
+  setScoreFirst(on: boolean): void {
+    const changed = this.scoreFirst !== on;
+    this.scoreFirst = on;
+    if (!changed) return;
+    for (const f of [...this.scoreFirstListeners]) {
+      try { f(on); } catch (e) { console.error('MessageDelivery.setScoreFirst: a listener failed', e); }
+    }
+  }
+  onScoreFirst(f: (on: boolean) => void): () => void { this.scoreFirstListeners.add(f); return () => { this.scoreFirstListeners.delete(f); }; }
   isScoreFirst(): boolean { return this.scoreFirst; }
 
   // --- the unread counter behind "Forge log (N)": messages that reached the panel while it was not being looked at

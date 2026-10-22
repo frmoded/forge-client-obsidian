@@ -37,6 +37,7 @@ function appFor(toml: string | null, active: string | null) {
   };
 }
 
+const FIXTURE_BAR = path.join(ROOT, 'test/fixtures/score-first/bar_005.md');
 const TUTORIAL_TOML = 'name = "forge-tutorial"\nversion = "0.1.0"\ndescription = "x"\ndomains = []\n';
 const MUSIC_THEORY_TOML = 'name = "music-theory"\nversion = "0.1.0"\ndescription = "x"\ndomains = ["music"]\n';
 
@@ -153,8 +154,9 @@ for (const edition of ['lean', 'music'] as const) {
     if (opts.startPath) view.file = { path, extension: 'md' };               // the tab navigates to the note under test after load: only an EVENT can notice
     for (const name of opts.only ? [opts.only] : ['file-open', 'active-leaf-change', 'layout-change']) handlers.get(name)?.forEach((f) => f());
     await tick();
-    real.messageDelivery.setScoreFirst(false);
-    return { titles: actions.filter((x) => !x.removed).map((x) => `${x.icon}:${x.title}`), actions, states };
+    const titles = actions.filter((x) => !x.removed).map((x) => `${x.icon}:${x.title}`);
+    real.messageDelivery.setScoreFirst(false);       // reset AFTER reading: the answer changing re-syncs the header (2200), which is exactly what must not leak into the next test
+    return { titles, actions, states };
   }
 
   test(`[${edition}] THE WAY BACK: a phrase shown as text in a score-first vault has ONE "Open as Score" in its header, and clicking it switches THAT tab to the phrase view`, async () => {
@@ -246,5 +248,78 @@ for (const edition of ['lean', 'music'] as const) {
     const r = await runCommand({ activeView: 'markdown', setViewStateThrows: true });
     assert.equal(r.notices.length, 1, JSON.stringify(r.notices));
     assert.match(String(r.notices[0]), /^Open phrase as Score failed: boom: setViewState failed/);
+  });
+}
+
+// ---- drain 2026-10-22-2200: the ORDER that left the Beat Box's "Open as Score" on a phrase: the rhythm header sync ran while the profile answer was still unknown, and the answer arrived later ---------
+for (const edition of ['lean', 'music'] as const) {
+  let real: RealPlugin;
+  before(async () => { real ??= await bundleRealPlugin(ROOT, edition); });
+  /** A score-first vault with a markdown tab on the phrase. `answerUnknown()` puts the shared answer back to "not known yet" (false) and fires a workspace event, the way a restored tab or a plugin reload
+   *  makes the rhythm sync run before the profile read finishes; `answerArrives()` is the profile read finishing. NO workspace event follows it: that is the point. */
+  async function lateProfile(path = 'phrases/phrase_001.md') {
+    real ??= await bundleRealPlugin(ROOT, edition);
+    const actions: any[] = []; const states: any[] = [];
+    const handlers = new Map<string, Array<() => void>>();
+    const view = new real.MarkdownView(); view.file = { path, extension: 'md' };
+    const mkEl = () => { const a: any = (globalThis as any).document.createElement('div'); a.addClass = (c: string) => a.classList.add(c); a.removeClass = (c: string) => a.classList.remove(c); a.setText = (t: string) => { a.textContent = t; }; return a; };
+    view.containerEl = mkEl();
+    view.addAction = (icon: string, title: string, cb: () => void) => { const a = mkEl(); Object.assign(a, { icon, title, cb, removed: false }); const r = a.remove.bind(a); a.remove = () => { a.removed = true; r(); }; actions.push(a); return a; };
+    view.leaf = { setViewState: async (s: any) => { states.push(s); }, view, getRoot: () => null };
+    const a = appFor(SCORE_FIRST_TOML, path); const app: any = a.app;
+    app.workspace.on = (name: string, cb: () => void) => { (handlers.get(name) ?? handlers.set(name, []).get(name)!).push(cb); return {}; };
+    app.workspace.getLeavesOfType = (t: string) => (t === 'markdown' ? [view.leaf] : []);
+    app.workspace.revealLeaf = () => {};
+    const tfile = Object.assign(new real.TFile(), { path, extension: 'md', basename: 'phrase_001' });
+    app.vault.getAbstractFileByPath = (p: string) => (p === path ? tfile : null);
+    app.vault.read = async () => fs.readFileSync(path.startsWith('bars/') ? FIXTURE_BAR : '/dev/null', 'utf8');
+    app.metadataCache = { on: () => ({}), getFileCache: () => ({ frontmatter: { type: 'data', content_type: 'json' } }) };
+    await loadRealOnload(real, app);
+    await tick();
+    const live = () => actions.filter((x) => !x.removed).map((x) => `${x.icon}:${x.title}`);
+    return {
+      live, actions, states,
+      answerUnknown: async () => { real.messageDelivery.setScoreFirst(false); handlers.get('layout-change')?.forEach((f) => f()); await tick(); },
+      answerArrives: async () => { real.messageDelivery.setScoreFirst(true); await tick(); },
+      cleanup: () => real.messageDelivery.setScoreFirst(false),
+    };
+  }
+
+  test(`[${edition}] BEFORE the profile answer a candidate tab gets the rhythm buttons (today's behaviour everywhere); the moment the answer arrives, with NO workspace event, a phrase's text tab has exactly ONE "Open as Score", the phrase one`, async () => {
+    const t = await lateProfile();
+    await t.answerUnknown();
+    assert.ok(t.live().some((x) => /Open as Beat Box/.test(x)), `non-vacuity: while the answer is unknown the rhythm buttons are on the tab: ${t.live().join(' | ')}`);
+    await t.answerArrives();
+    assert.deepEqual(t.live().filter((x) => /Open as Score/.test(x)), ['list-music:Open as Score'], `exactly one, after the answer: ${t.live().join(' | ')}`);
+    assert.ok(!t.live().some((x) => /Beat Box/.test(x)), 'and no Beat Box button on a phrase');
+    t.cleanup();
+  });
+
+  test(`[${edition}] P3: on a BAR in a score-first vault the Beat Box button is never refused: it switches the tab to the Beat Box (and no "phrase, not a bar" Notice)`, async () => {
+    const t = await lateProfile('bars/bar_005.md');
+    await t.answerArrives();
+    const btn = t.actions.find((x) => !x.removed && x.title === 'Open as Beat Box');
+    assert.ok(btn, 'the rhythm button is on a bar');
+    (globalThis as any).__shimConstructed = [];
+    btn.cb(); await tick();
+    const notices = ((globalThis as any).__shimConstructed ?? []).filter((c: any[]) => c[0] === 'Notice');
+    assert.deepEqual(notices, [], 'no Notice');
+    assert.equal(t.states.length, 1, 'the tab was switched');
+    t.cleanup();
+  });
+
+  test(`[${edition}] belt and braces: a stale rhythm button clicked on a phrase in a score-first vault refuses by NAME ("this is a phrase, not a bar") and switches nothing`, async () => {
+    const t = await lateProfile();
+    await t.answerUnknown();
+    const stale = t.actions.find((x) => !x.removed && x.title === 'Open as Beat Box');          // the rhythm sync's button (both editions have it), not the phrase's own
+    assert.ok(stale, 'a rhythm button exists while the answer is unknown');
+    await t.answerArrives();
+    (globalThis as any).__shimConstructed = [];
+    stale.cb(); await tick();
+    const notices = ((globalThis as any).__shimConstructed ?? []).filter((c: any[]) => c[0] === 'Notice').map((c: any[]) => String(c[1][0]));
+    assert.equal(notices.length, 1, JSON.stringify(notices));
+    assert.match(notices[0], /this is a phrase, not a bar/i);
+    assert.deepEqual(t.states, [], 'nothing was switched');
+    t.cleanup();
   });
 }
