@@ -164,3 +164,23 @@ test('REAL ENGINE (2100): the fill rule the strip states is what extend_rhythm d
   assert.deepEqual(filled('repeat_with_fills', 1), [1]);
   assert.deepEqual(filled('building', 8), []); assert.deepEqual(filled('ghost_notes', 8), []);
 });
+
+test('REAL ENGINE (2100): the other two style notes are true — building: the hi-hat is quarters in bar 1, eighths in bar 2, sixteenths from bar 3; ghost_notes: quiet snare notes on steps that are not the seed\'s own hits, 3 mod 4 in the first bar and 1 mod 4 in the second', async () => {
+  const py = await engine();
+  const bar = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(BAR_005)![1]);
+  const run = (style: string): any[] => {
+    py.globals.set('_seed', JSON.stringify(bar));
+    return JSON.parse(py.runPython(`import json\nfrom forge.music.lib import extend_rhythm\njson.dumps(extend_rhythm(json.loads(_seed), bars=4, style="${style}"))`) as string);
+  };
+  const hits = (cells: unknown[]) => cells.map((v, i) => (v === true || (typeof v === 'number' && v > 0) ? i : -1)).filter((i) => i >= 0);
+  const b = run('building');
+  assert.deepEqual(hits(b[0].channels.hihat), [0, 4, 8, 12]);
+  assert.deepEqual(hits(b[1].channels.hihat), [0, 2, 4, 6, 8, 10, 12, 14]);
+  assert.equal(hits(b[2].channels.hihat).length, 16); assert.equal(hits(b[3].channels.hihat).length, 16);
+  const g = run('ghost_notes');
+  const seedSnare = bar.channels.snare as unknown[]; const seedKick = bar.channels.kick as unknown[];
+  const seedHit = (i: number) => seedSnare[i] === true || seedKick[i] === true || (typeof seedSnare[i] === 'number' && (seedSnare[i] as number) > 0);
+  const added = (bi: number) => hits(g[bi].channels.snare).filter((i) => g[bi].channels.snare[i] === 36);
+  assert.ok(added(0).length > 0 && added(0).every((i) => i % 4 === 3 && !seedHit(i)), `bar 1 ghosts: ${added(0)}`);
+  assert.ok(added(1).length > 0 && added(1).every((i) => i % 4 === 1 && !seedHit(i)), `bar 2 ghosts: ${added(1)}`);
+});
