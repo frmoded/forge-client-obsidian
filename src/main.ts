@@ -135,7 +135,7 @@ import { invalidateLibraryVaultCache } from './edges.ts';
 import { ForgeSettings, DEFAULT_SETTINGS, ForgeSettingTab } from './settings.ts';
 import { sectionPlugin, readOnlyFacetFilter } from './facet.ts';
 import { ForgeSnippetModal, ForgeFreezeModal, ForgeGenerationModal } from './modal.ts';
-import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, setPyodideHost, resolveSlotsAlpha } from './server.ts';
+import { computeSnippet, connectVault, generateSnippetAlpha, freezeEdge, syncDependencies, setPyodideHost, resolveSlotsAlpha, hasInProcessEngine } from './server.ts';
 import { connectWithRetry } from './auto-connect-retry-core.ts';
 import {
   computeAutoConnectBanner,
@@ -1611,6 +1611,13 @@ export default class ForgePlugin extends Plugin {
   public async _autoConnectOnLoad(): Promise<void> {
     const serverUrl = this.settings.serverUrl;
     const vaultPath = (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+    // Drain 2026-10-22-1930 — start-up never contacts the HTTP engine (`serverUrl`). With the in-process engine wired the connect below is local; with none wired (a dev workflow
+    // against a hand-run uvicorn) there is nothing to connect locally, and the HTTP engine is contacted lazily, by the first operation that needs it (computeSnippetWithArgs
+    // calls connectVault before every compute, and a refused engine is its own "Connect failed" notice there).
+    if (!hasInProcessEngine()) {
+      console.info(`Forge: no in-process engine wired; ${serverUrl} is contacted only when an operation needs it.`);
+      return;
+    }
     const result = await connectWithRetry(
       () => connectVault(serverUrl, vaultPath),
       { maxAttempts: 3, backoffMs: 1000 },
@@ -1619,27 +1626,7 @@ export default class ForgePlugin extends Plugin {
       // Cache the inventory so downstream compute paths can skip the
       // in-line connect round-trip on first use.
       this.snippetInventory = result.value?.snippets ?? {};
-      // Drain 2450 — banner reflects engine-HTTP reachability. When
-      // connectVault ran the Pyodide path AND the HTTP /connect
-      // side-effect failed, the banner degrades from green success to
-      // yellow warning that names the actual failure mode ("Sync
-      // edges will fail until the engine responds") — banner-vs-
-      // reality gap closed.
-      const banner = computeAutoConnectBanner({
-        serverUrl,
-        attempts: result.attempts,
-        engineHttpStatus: result.value?.engine_http_status,
-        engineHttpError: result.value?.engine_http_error,
-      });
-      // The banner is computed ONCE, here at onload (frozen at setup: a later engine start does not re-post anything).
-      // Drain 2026-10-22-1700: the degraded-but-harmless warning ("Pyodide only ... nothing you can do from the panel needs it") is NOT posted to the Forge panel any
-      // more — it was one red line at every start that carried no action. It goes to the console at info level, so a developer still sees it. The success line and the
-      // terminal-failure banner below are unchanged.
-      if (!banner.panel) {
-        console.info(banner.message);
-      } else {
-        void this.forgeOutput(banner.message, 'success');
-      }
+      void this.forgeOutput(computeAutoConnectBanner({ serverUrl, attempts: result.attempts }).message, 'success');
     } else {
       const detail = result.error instanceof Error
         ? result.error.message
@@ -6432,7 +6419,10 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       console.error('Forge Connect Error:', e);
       const detail = e instanceof Error ? e.message : String(e);
-      this.notice(errorPrefix ? `${errorPrefix}: connect failed — ${detail}` : prefixed('Connect failed — check console.'));
+      // Drain 2026-10-22-1930 — this is the ONE place the HTTP engine is asked for, lazily, and only when no in-process engine is wired (a dev workflow). A refusal here is said plainly,
+      // naming the engine and the note, in the primary surface (a notice containing "failed" is routed red to the Forge panel).
+      const why = `the engine at ${this.settings.serverUrl} did not answer, so ${snippetId} could not run (${detail}).`;
+      this.notice(errorPrefix ? `${errorPrefix}: connect failed — ${why}` : prefixed(`connect failed — ${why}`));
       return;
     }
 

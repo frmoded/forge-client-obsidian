@@ -1,78 +1,27 @@
-// Drain 2450 — compute the auto-connect banner text + kind from the
-// ConnectResponse. Pure so the L60 caller-integration test can
-// exercise every state without Obsidian in the loop.
+// Drain 2450 — the auto-connect banner text, pure so the caller-integration test can exercise it without Obsidian in the loop.
 //
-// Bug 1 shape after drain 2030: `_autoConnectOnLoad` always said
-// "Forge: vault auto-connected to <url>." even when connectVault
-// short-circuited to Pyodide and the engine's VaultSessionManager
-// never received the vault_path. Cohort users then hit Sync edges
-// and got HTTP 400 "vault not connected" — banner-vs-reality gap.
-//
-// Fix (drain 2450): server.ts::connectVault now attaches an
-// `engine_http_status` field. This core translates that field into
-// the banner shape the auto-connect helper renders.
+// Drain 2026-10-22-1930: the degraded branch ("auto-connected (Pyodide only) ... Engine at <url> is unreachable") is GONE together with the thing that produced it. Start-up no longer sends
+// any request to the HTTP engine (`serverUrl`), so there is no engine-reachability signal to translate: `connectVault` returns the in-process inventory and nothing else. What remains is the green
+// success line (unchanged) and the terminal-failure banner (unchanged).
 
 export type BannerKind = 'success' | 'warning' | 'error';
 
 export interface BannerSignal {
   message: string;
   kind: BannerKind;
-  /** Does the line belong in the Forge panel? (drain 2026-10-22-1700) The green success line does. The degraded-but-harmless "Pyodide only" line does NOT: it says itself that nothing
-   *  the panel does needs the engine, so it carried no action and taught people to ignore red lines; it goes to the console (info level) only. */
-  panel: boolean;
 }
 
 export interface BannerInputs {
   serverUrl: string;
   attempts: number;
-  /** Whatever connectVault stashed into `engine_http_status`.
-   *  `undefined` is treated as `'ok'` for back-compat with any pre-
-   *  drain-2450 callers that produce a ConnectResponse without the
-   *  field. */
-  engineHttpStatus?: 'ok' | 'unreachable' | 'error' | 'not_attempted';
-  engineHttpError?: string;
 }
 
-/** Success-path banner. Called from `_autoConnectOnLoad` after
- *  `connectVault` resolved with `ok: true`. Encodes:
- *
- *  - engineHttpStatus is 'ok' or 'not_attempted' or absent
- *    → green "vault auto-connected" line.
- *  - engineHttpStatus is 'unreachable' or 'error'
- *    → WARNING line (console only, `panel: false`): Pyodide-only connected; engine unreachable.
- *      As of drain 2026-08-27-1500, NOTHING the cohort workflow
- *      exercises fails: sync_dependencies went local too.
- *
- *  Drain 2026-08-27-1310 (Gate Z) — this warning named three operations
- *  and was wrong about two. `canonicalize` is gone (retired this drain:
- *  zero call sites, and the hosted service never exposed the endpoint).
- *  `freeze` has routed through Pyodide since v0.2.30 — freezeEdge checks
- *  `_pyodideHost` first and the HTTP call is a dev-mode-only fallback, so
- *  it does NOT fail when the engine is unreachable. Naming working
- *  operations as broken teaches users to ignore the banner.
- */
+/** Success-path banner. Called from `_autoConnectOnLoad` after `connectVault` resolved. */
 export function computeAutoConnectBanner(inputs: BannerInputs): BannerSignal {
   const suffix = inputs.attempts === 1 ? '' : ` (after ${inputs.attempts} attempts)`;
-  const status = inputs.engineHttpStatus ?? 'ok';
-  if (status === 'ok' || status === 'not_attempted') {
-    return {
-      message: `Forge: vault auto-connected to ${inputs.serverUrl}${suffix}.`,
-      kind: 'success',
-      panel: true,
-    };
-  }
-  // Degraded — Pyodide compute path works, HTTP engine endpoints don't.
-  const detail = inputs.engineHttpError
-    ? ` (${inputs.engineHttpError})`
-    : '';
   return {
-    message:
-      `Forge: vault auto-connected (Pyodide only)${suffix}. Engine at `
-      + `${inputs.serverUrl} is unreachable${detail}. Nothing you can do `
-      + `from the panel needs it — Run, Forge, Freeze and Sync edges all `
-      + `work without it.`,
-    kind: 'warning',
-    panel: false,
+    message: `Forge: vault auto-connected to ${inputs.serverUrl}${suffix}.`,
+    kind: 'success',
   };
 }
 

@@ -21,6 +21,11 @@ export interface RealPlugin {
   mountScoreMessages: typeof import('../score-messages-dom.ts').mountScoreMessages;
   /** server.ts's host wiring (so a test can put a fake Pyodide host behind the real `connectVault`). */
   setPyodideHost: typeof import('../server.ts').setPyodideHost;
+  /** The real server.ts operations (so a test can drive each against a fake Pyodide host and a closed engine port). */
+  connectVault: typeof import('../server.ts').connectVault;
+  computeSnippet: typeof import('../server.ts').computeSnippet;
+  freezeEdge: typeof import('../server.ts').freezeEdge;
+  syncDependencies: typeof import('../server.ts').syncDependencies;
 }
 
 function obsidianNames(): string[] {
@@ -44,7 +49,7 @@ export async function bundleRealPlugin(client: string = ROOT, edition: 'lean' | 
   fs.writeFileSync(shim, obsidianNames().map((n) => (/^[A-Z]/.test(n) ? `export class ${n} { constructor(...a) { this.args = a; (globalThis.__shimConstructed ??= []).push(['${n}', a]); } }` : `export const ${n} = (...a) => (globalThis.__shimFns?.['${n}'] ?? (() => undefined))(...a);`)).join('\n'));
   const entry = path.join(tmp, 'entry.ts');
   const src = path.join(client, 'src');
-  fs.writeFileSync(entry, `export { default as ForgePlugin } from ${JSON.stringify(path.join(src, 'main.ts'))};\nexport { ForgeOutputView } from ${JSON.stringify(path.join(src, 'output-view.ts'))};\nexport { forgeNotice } from ${JSON.stringify(path.join(src, 'forge-notice.ts'))};\n${fs.existsSync(path.join(src, 'score-first-messages-core.ts')) ? `export { messageDelivery } from ${JSON.stringify(path.join(src, 'score-first-messages-core.ts'))};\nexport { mountScoreMessages } from ${JSON.stringify(path.join(src, 'score-messages-dom.ts'))};\n` : ''}export { setPyodideHost } from ${JSON.stringify(path.join(src, 'server.ts'))};\n`);   // an earlier checkout (a worktree of 1300d14) has no such file
+  fs.writeFileSync(entry, `export { default as ForgePlugin } from ${JSON.stringify(path.join(src, 'main.ts'))};\nexport { ForgeOutputView } from ${JSON.stringify(path.join(src, 'output-view.ts'))};\nexport { forgeNotice } from ${JSON.stringify(path.join(src, 'forge-notice.ts'))};\n${fs.existsSync(path.join(src, 'score-first-messages-core.ts')) ? `export { messageDelivery } from ${JSON.stringify(path.join(src, 'score-first-messages-core.ts'))};\nexport { mountScoreMessages } from ${JSON.stringify(path.join(src, 'score-messages-dom.ts'))};\n` : ''}export { setPyodideHost, connectVault, computeSnippet, freezeEdge, syncDependencies } from ${JSON.stringify(path.join(src, 'server.ts'))};\n`);   // an earlier checkout (a worktree of 1300d14) has no such file
   const out = await build({
     entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error',
     // The music edition is the same redirect scripts/build-main.mjs makes: the ONE module the rest of the plugin imports the edition from points at music-edition.full.ts (default: the committed lean one).
