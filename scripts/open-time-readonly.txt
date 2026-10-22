@@ -48,6 +48,7 @@ forge-tutorial/04-composition/describe_it.md
 forge-tutorial/04-composition/excited_word.md
 forge-tutorial/05-conditionals/mood.md
 forge-tutorial/05-conditionals/weather.md
+forge-tutorial/06-loops/countdown.md
 forge-tutorial/07-data/show_colors.md
 forge-tutorial/08-recursion/factorial.md
 forge-tutorial/08-recursion/show_factorial.md

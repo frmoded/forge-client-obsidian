@@ -68,21 +68,21 @@ test('every pinned note is clean (the gate says so too), and the only pinned not
   assert.deepEqual(UNRECORDED_PINNED.filter((n) => !LISTED.includes(n)), [], 'the named exceptions are really on the ratchet');
 });
 
-test('the eight notes Iteration 88 left off are pinned, and the ratchet has the count it should (37 + the 36 backfilled in drain 2026-10-21-1200 = 73)', () => {
+test('the eight notes Iteration 88 left off are pinned, and the ratchet has the count it should (37 + the 36 backfilled in drain 2026-10-21-1200 + countdown in drain 2026-10-22-1520 = 74)', () => {
   for (const n of [
     'music-theory/exercises/build_seventh_chord.md', 'music-theory/exercises/guitar_play_smoke.md', 'music-theory/exercises/scale_construction_a_minor_piano.md',
     'music-theory/exercises/scale_construction_f_major_piano.md', 'music-theory/exercises/scale_construction_g_major_piano.md', 'music-theory/percussion/loom.md',
     'music-theory/slow_burn/slow_burn.md', 'forge-tutorial/05-conditionals/weather.md',
   ]) assert.ok(LISTED.includes(n), n);
-  assert.equal(LISTED.length, 73);
+  assert.equal(LISTED.length, 74);
   for (const n of ['music-core/percussion_lab/peak.md', 'forge-moda/simulation.md', 'music-theory/exercises/loudness_demo.md']) assert.ok(LISTED.includes(n), `${n} (backfilled in drain 2026-10-21-1200)`);
   assert.equal(new Set(LISTED).size, LISTED.length, 'no duplicates');
-  assert.ok(!LISTED.includes('forge-tutorial/06-loops/countdown.md'), 'countdown stays unpinned: it ships no # Python, so a first Run adds one (the driver\'s decision)');
+  assert.ok(LISTED.includes('forge-tutorial/06-loops/countdown.md'), 'countdown is pinned: it ships the real engine-derived # Python, so opening it and running it write nothing (the driver\'s decision of 2026-10-22, Iteration 504 option A; it was the one deliberate exception before)');
 });
 
-test('NON-VACUITY: the audit really finds clean notes, and the notes that ship no # Python are NOT clean (so they cannot be pinned by accident)', async () => {
+test('NON-VACUITY: the audit really finds clean notes (countdown among them), and the notes that ship no # Python are NOT clean (so they cannot be pinned by accident)', async () => {
   const { clean } = await auditBundle();
-  assert.ok(clean.length >= 73, `the audit found ${clean.length} clean notes`);
-  assert.ok(!clean.includes('forge-tutorial/06-loops/countdown.md'));
+  assert.ok(clean.length >= 74, `the audit found ${clean.length} clean notes`);
+  assert.ok(clean.includes('forge-tutorial/06-loops/countdown.md'), 'countdown is clean: opening it and running it write nothing');
   assert.ok(!clean.includes('music-theory/exercises/slash_chord.md'), 'a slot-bearing note with no # Python and no # Slots cache is still not clean');
 });

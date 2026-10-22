@@ -91,7 +91,17 @@ const EXPECTED: Record<string, string | null> = {
                                                        // real repo, drain
                                                        // 2026-09-14-0620 §7(b)) — not
                                                        // a regression
-  '06-loops/countdown.md':              null,          // unstamped
+  '06-loops/countdown.md':              'synced',      // ships the real engine-derived # Python with honest
+                                                       // lineage stamps (drain 2026-10-22-1520, driver decision
+                                                       // Iteration 504 option A). `synced`: all three facets
+                                                       // agree and nobody hand-edited one, which is what the
+                                                       // restamp fixed point elects for a note whose Python is
+                                                       // the engine's transpile of its Recipe (the same value
+                                                       // the 26 notes of drain 2026-10-21-1200 got; weather.md is
+                                                       // `recipe` only because its Python is an approved hand
+                                                       // patch). It was null (deliberately bare) before: opening
+                                                       // a bare note made the plugin stamp it and insert a
+                                                       // `return None` stub that Run printed nothing from
   '07-data/show_colors.md':             'description',
   '08-recursion/factorial.md':          'description',
   '08-recursion/show_factorial.md':     'recipe',      // drifted to `recipe` via

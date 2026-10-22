@@ -178,6 +178,7 @@
    "recipe": "Let temperature = 72.\nIf temperature > 80:\n  Return \"It's hot.\".\nOtherwise:\n  Return \"It's pleasant.\"."
   },
   "forge-tutorial/06-loops/countdown": {
+   "note": "---\ntype: action\npython_hash: c5e9cacd139497b7a7bc8c1d14be45dfe38aaf8650873e3da66666102a9721b7\ndescription_hash: cc518a38c4f10f938a78576dc1af67a53582424fc0a793b793528dbc7d4e51e2\nrecipe_hash: 8176284eaa172a840f743a463aadba5656a4c6e021d44a9ba3e13ad905acfad0\nrecipe_derived_from_source_hash: cc518a38c4f10f938a78576dc1af67a53582424fc0a793b793528dbc7d4e51e2\npython_derived_from_source_hash: cc518a38c4f10f938a78576dc1af67a53582424fc0a793b793528dbc7d4e51e2\nsource_facet: synced\nrecipe_derived_from_description_hash: cc518a38c4f10f938a78576dc1af67a53582424fc0a793b793528dbc7d4e51e2\npython_derived_from_recipe_hash: 8176284eaa172a840f743a463aadba5656a4c6e021d44a9ba3e13ad905acfad0\n---\n\n# Description\n\nDoes the same thing once for each item in a list: here a countdown from 3, ending with Liftoff!\n\n# Recipe\n\nFor each number in [3, 2, 1]:\n  [[print]] number.\n[[print]] \"Liftoff!\".\n\n# Python\n\n```python\ndef compute(context):\n  for number in [3, 2, 1]:\n    print(number)\n  print('Liftoff!')\n```\n",
    "python": "def compute(context):\n  for number in [3, 2, 1]:\n    print(number)\n  print('Liftoff!')\n",
    "recipe": "For each number in [3, 2, 1]:\n  [[print]] number.\n[[print]] \"Liftoff!\"."
   },
@@ -376,7 +377,7 @@
  },
  "vault_shas": {
   "forge-moda": "933f41bfb723123f70546359c6913df96b6a2f2a",
-  "forge-tutorial": "b1bdedb9758afd0f587aeb60658f876df09fbaf3",
+  "forge-tutorial": "2e9e777cc4809122429968dd5ad4e27a8dca8556",
   "music-core": "80d816a2eafe19128b56ace7551e5fbb3bbc5970",
   "music-theory": "e42e54b556937c1f6ce7c9d915f0e6b4e598fd00"
  }

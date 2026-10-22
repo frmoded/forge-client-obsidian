@@ -1,0 +1,13 @@
+---
+type: action
+---
+
+# Description
+
+Does the same thing once for each item in a list: here a countdown from 3, ending with Liftoff!
+
+# Recipe
+
+For each number in [3, 2, 1]:
+  [[print]] number.
+[[print]] "Liftoff!".
