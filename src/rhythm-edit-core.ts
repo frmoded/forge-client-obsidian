@@ -258,7 +258,7 @@ interface ParsedNote {
 }
 
 /** Leading `---` frontmatter -> its top-level scalar fields and where the body begins. Null when there is none. */
-function parseFrontmatter(text: string): ParsedNote | null {
+export function parseFrontmatter(text: string): ParsedNote | null {
   const m = /^---(\r?\n)([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/.exec(text);
   if (!m) return null;
   const fields: Record<string, string> = {};
@@ -297,7 +297,7 @@ export function extractJsonBlock(text: string): ({ ok: true } & JsonBlock) | { o
 }
 
 /** Why this note cannot be edited, or null if it can: a data note, content_type json, not read_only (constitution D7). */
-function editabilityProblem(fields: Record<string, string>): string | null {
+export function editabilityProblem(fields: Record<string, string>): string | null {
   if (fields.type !== 'data') return `This is not a data note (type: ${fields.type ?? 'missing'}).`;
   if (fields.content_type !== 'json') return `This data note's content_type is ${fields.content_type ?? 'missing'}, not json.`;
   if (fields.read_only === 'true') return 'This note is marked read_only: true, so it will not be edited (constitution D7). Remove that line to edit it.';

@@ -42,6 +42,12 @@ music-core = { local = "../music-core" }
 - **On the Score, under the status line:** a message line (an error stays until the next successful draw; success, LLM and out-of-date lines last a few seconds) and a quiet **Forge log (N)** button (N = messages that arrived since the panel was last open).
 - **Where the decision lives:** `src/score-first-messages-core.ts` (`routeMessage`: outside a score-first vault it answers "reveal" for everything; the shared delivery state), applied at the two choke points `forgeNotice` (`src/forge-notice.ts`) and `ForgePlugin.getOutputView` / `forgeOutput` (`src/main.ts`), shown by `src/score-messages-dom.ts`. The flag is published by `score-first.ts` from the profile answer; no other file reads the profile.
 
+## Phrases (music edition; milestone M5)
+
+- A **phrase** is a data note in `phrases/` holding only `{kind: "extend", source, bars, style, tempo_change_pct}` (never bars). Its Score is derived: the source bar (`bars/<source>.md`) goes through the engine's `extend_rhythm` (the bar stretched to `bars` bars, the tempo stepping once per bar by `tempo_change_pct` over the run) and `rhythm_bars_to_stream` (each bar keeps its own tempo mark).
+- **Commands (score-first vaults only; absent everywhere else, both editions):** `New phrase from this bar` (offered while the active note is in `bars/`; makes the next `phrases/phrase_NNN.md` with bars 4, `repeat_with_fills`, 0 % and opens it) and `Open phrase as Score` (offered on a `phrases/phrase_NNN.md`; switches that tab). The phrase tab has three controls (Bars 1-64, Style, Tempo change -90..+100 %); a control writes the note's json block, a modify of the phrase or of its source bar redraws (the same debounced live Score as the Beat Box tab: one render in flight). A missing or invalid source is a refusal line on the Score, never a panel message.
+- **Where the code is:** `src/phrase-core.ts` (parse, validate, clamp, names, the commands' decisions, the Score of a phrase), `src/phrase-dom.ts` (the control strip and the freshness rules, plain DOM), `src/phrase-view.ts` (the Obsidian tab), `src/phrase-engine.ts` + `_forge_rhythm_phrase_payload` in `src/pyodide-host.ts` (the engine call). Registered from `src/score-first.ts` after the profile answer is yes.
+
 ## Where the code is
 
 | What | File |

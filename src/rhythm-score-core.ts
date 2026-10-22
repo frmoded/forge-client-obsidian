@@ -27,7 +27,7 @@ function isMusicXmlPayload(v: unknown): v is Record<string, unknown> {
 }
 
 /** Engine call + payload check, shared by the note-based score (above) and the playground's data-based one (Phase 8) — ONE pipeline. */
-async function computeScore(compute: ScoreDeps['compute'], data: RhythmData, title: string): Promise<ScoreOutcome> {
+export async function computeScore(compute: ScoreDeps['compute'], data: RhythmData, title: string): Promise<ScoreOutcome> {
   let result: unknown;
   try {
     result = await compute(data, title);

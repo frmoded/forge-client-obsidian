@@ -1875,3 +1875,29 @@
 .forge-rhythm-forge-log { display: block; margin: 2px 4px 2px auto; padding: 0 6px; font-size: var(--font-ui-smaller); color: var(--text-faint); background: transparent; border: none; box-shadow: none; cursor: pointer; }
 .forge-rhythm-forge-log:hover { color: var(--text-muted); }
 .forge-rhythm-forge-log:focus-visible { outline: 1px solid var(--interactive-accent); }
+
+/* score_first M5 — the phrase tab: a control strip (bars, style, tempo change) above the live Score. Only a score-first vault ever opens it. */
+.forge-phrase-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  padding: 8px 4px 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.forge-phrase-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.forge-phrase-bars,
+.forge-phrase-pct {
+  width: 5.5em;
+}
+.forge-phrase-status {
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
+}
+.forge-phrase-status:empty {
+  display: none;
+}

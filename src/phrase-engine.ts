@@ -1,0 +1,11 @@
+// score_first M5 — the ONE place the plugin asks the engine for a phrase's Score: `computePhraseScore` on the Pyodide host (plugin-side Python composing extend_rhythm, rhythm_bars_to_stream and
+// serialize_result). The sibling of rhythm-score-engine.ts, which does the same for a single bar.
+import type { RhythmData } from './rhythm-edit-core.ts';
+import type { PhraseParams } from './phrase-core.ts';
+import { getPyodideHost } from './pyodide-host.ts';
+
+export async function computePhraseScoreViaEngine(data: RhythmData, params: PhraseParams, title: string): Promise<unknown> {
+  const host = getPyodideHost();
+  if (!host) throw new Error('the engine is not available');
+  return (await host.getInstance()).computePhraseScore(data, params, title);
+}

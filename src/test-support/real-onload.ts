@@ -18,13 +18,17 @@ export interface LoadedPlugin {
   /** Own state: set `target.app` etc. here. */
   target: any;
   /** Every `addCommand({ id, name, callback })` onload made, by id. */
-  commands: Map<string, { callback?: () => unknown; name?: string }>;
+  commands: Map<string, { callback?: () => unknown; checkCallback?: (checking: boolean) => boolean; name?: string }>;
+  /** Every `registerView(type, factory)` onload (and the layout-ready work it scheduled) made, by view type. */
+  views: Map<string, (leaf: unknown) => unknown>;
 }
 
 export async function loadRealOnload(real: RealPlugin, app: any): Promise<LoadedPlugin> {
   const target: any = Object.create(real.ForgePlugin.prototype);
-  const commands = new Map<string, { callback?: () => unknown; name?: string }>();
+  const commands = new Map<string, { callback?: () => unknown; checkCallback?: (checking: boolean) => boolean; name?: string }>();
+  const views = new Map<string, (leaf: unknown) => unknown>();
   target.addCommand = (c: any) => { commands.set(c.id, c); return c; };
+  target.registerView = (type: string, factory: (leaf: unknown) => unknown) => { views.set(type, factory); };
   target.loadData = async () => ({});
   target.app = app;
   const self: any = new Proxy(target, {
@@ -34,5 +38,5 @@ export async function loadRealOnload(real: RealPlugin, app: any): Promise<Loaded
   const saved = { log: console.log, error: console.error, warn: console.warn, info: console.info, debug: console.debug };
   console.log = console.error = console.warn = console.info = console.debug = () => {};
   try { await real.ForgePlugin.prototype.onload.call(self); } finally { Object.assign(console, saved); }
-  return { self, target, commands };
+  return { self, target, commands, views };
 }

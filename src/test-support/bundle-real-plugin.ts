@@ -35,8 +35,8 @@ function obsidianNames(): string[] {
   return [...names].sort();
 }
 
-/** Bundle `src` (or another checkout's `src`, e.g. a worktree of an earlier commit) and import it. `client` defaults to this repo. */
-export async function bundleRealPlugin(client: string = ROOT): Promise<RealPlugin> {
+/** Bundle `src` (or another checkout's `src`, e.g. a worktree of an earlier commit) and import it. `client` defaults to this repo; `edition` to the committed lean one. */
+export async function bundleRealPlugin(client: string = ROOT, edition: 'lean' | 'music' = 'lean'): Promise<RealPlugin> {
   const require = createRequire(path.join(ROOT, 'package.json'));
   const { build } = require('esbuild');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'real-plugin-'));
@@ -47,6 +47,8 @@ export async function bundleRealPlugin(client: string = ROOT): Promise<RealPlugi
   fs.writeFileSync(entry, `export { default as ForgePlugin } from ${JSON.stringify(path.join(src, 'main.ts'))};\nexport { ForgeOutputView } from ${JSON.stringify(path.join(src, 'output-view.ts'))};\nexport { forgeNotice } from ${JSON.stringify(path.join(src, 'forge-notice.ts'))};\n${fs.existsSync(path.join(src, 'score-first-messages-core.ts')) ? `export { messageDelivery } from ${JSON.stringify(path.join(src, 'score-first-messages-core.ts'))};\nexport { mountScoreMessages } from ${JSON.stringify(path.join(src, 'score-messages-dom.ts'))};\n` : ''}export { setPyodideHost } from ${JSON.stringify(path.join(src, 'server.ts'))};\n`);   // an earlier checkout (a worktree of 1300d14) has no such file
   const out = await build({
     entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error',
+    // The music edition is the same redirect scripts/build-main.mjs makes: the ONE module the rest of the plugin imports the edition from points at music-edition.full.ts (default: the committed lean one).
+    plugins: edition === 'music' ? [{ name: 'real-plugin-music-edition', setup: (b: any) => { b.onResolve({ filter: /(^|\/)music-edition-selected(\.ts)?$/ }, () => ({ path: path.join(client, 'src', 'music-edition.full.ts') })); b.onResolve({ filter: /(^|\/)edition-selected(\.ts)?$/ }, () => ({ path: path.join(client, 'src', 'edition-selected.music.ts') })); } }] : [],
     alias: { obsidian: shim }, loader: { '.wasm': 'binary' }, nodePaths: [path.join(ROOT, 'node_modules')], define: { 'process.env.NODE_ENV': '"production"' },
   });
   const file = path.join(tmp, 'bundle.mjs');

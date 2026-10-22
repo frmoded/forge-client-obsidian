@@ -6,7 +6,7 @@
 // `rhythm_data_to_stream` through the injected `compute`, checks the MusicXML payload) and `createScoreScheduler` (debounce, ONE render in flight, the latest request queued
 // behind it — so rapid edits never queue renders, they collapse into at most one waiting). It READS the widget's current data, never the saved note, and writes nothing.
 
-import { produceScoreFromData, createScoreScheduler, type ScoreScheduler } from './rhythm-score-core.ts';
+import { produceScoreFromData, createScoreScheduler, type ScoreOutcome, type ScoreScheduler } from './rhythm-score-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import { SCORE_RENDERING_TEXT } from './score-first-core.ts';
 
@@ -31,7 +31,11 @@ export interface LiveScoreTiming {
 }
 
 export interface LiveScoreDeps {
-  compute(data: RhythmData, title: string): Promise<unknown>;
+  /** The engine step for a bar: validated rhythm data in, tagged MusicXML out. Required unless `produce` is given. */
+  compute?(data: RhythmData, title: string): Promise<unknown>;
+  /** score_first M5: replaces the whole "data -> outcome" step, for a surface whose data is not a bar (a phrase: parameters in, the Score of the extended bar out). The debounce, the ONE render
+   *  in flight, the superseding rule and the drawing are exactly the bar's. Absent = `produceScoreFromData(compute, …)`, i.e. the Score of a bar, as before. */
+  produce?(data: unknown, title: string): Promise<ScoreOutcome>;
   view: LiveScoreView;
   /** Title of the engraving (the note's name). */
   title: string;
@@ -56,6 +60,8 @@ function safeKey(data: unknown): string | null {
 }
 
 export function createLiveScore(deps: LiveScoreDeps): LiveScore {
+  if (typeof deps.produce !== 'function' && typeof deps.compute !== 'function') throw new Error('createLiveScore: needs `compute` (a bar) or `produce` (anything else)');
+  const produce: (data: unknown, title: string) => Promise<ScoreOutcome> = deps.produce ?? ((data, title) => produceScoreFromData(deps.compute!, data, title));
   let latest: unknown = undefined;
   let hasData = false;
   let drawn = false;                 // a score is on screen (so "Rendering score…" is only shown for the FIRST draw — an edit keeps the old score until the new one is ready)
@@ -78,7 +84,7 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
       const t0 = timed ? deps.now!() : 0;
       if (!drawn) deps.view.status(SCORE_RENDERING_TEXT);
       const e0 = timed ? deps.now!() : 0;
-      const outcome = await produceScoreFromData(deps.compute, latest, deps.title);
+      const outcome = await produce(latest, deps.title);
       const engineMs = timed ? deps.now!() - e0 : 0;
       if (disposed || mine !== seq) { report(t0, engineMs, 'superseded'); return; }   // a newer render started, or the tab moved on: draw nothing
       if (outcome.kind !== 'score') {

@@ -52,3 +52,14 @@ export function compute(py: any, data: unknown, title: string): any {
   return out;
 }
 
+
+/** score_first M5: the phrase helper the host runs (`_forge_rhythm_phrase_payload`), same shape as `compute`. */
+export function computePhrase(py: any, data: unknown, params: unknown, title: string): any {
+  py.globals.set('_d', JSON.stringify(data));
+  py.globals.set('_p', JSON.stringify(params));
+  py.globals.set('_t', title);
+  const proxy = py.runPython('_forge_rhythm_phrase_payload(_d, _p, _t)');
+  const out = proxy.toJs({ dict_converter: Object.fromEntries });
+  proxy.destroy?.();
+  return out;
+}

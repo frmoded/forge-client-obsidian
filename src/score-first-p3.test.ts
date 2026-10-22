@@ -78,7 +78,10 @@ test('MECHANISM PIN: the profile question is asked from exactly three places —
     .filter((f) => /from ['"]\.\/(vault-profile-core|score-first-core|score-first|live-score-core|live-score-dom)\.ts['"]/.test(code(f)))
     .sort();
   // main.ts only registers; the cores/dom import each other.
-  assert.deepEqual(askers, ['live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'rhythm-edit-view.ts', 'score-first.ts', 'source-vault-core.ts'].sort());   // + the extraction gate (drain 2026-10-21-2200)
+  // + the extraction gate (drain 2026-10-21-2200). + the phrase tab (M5, drain 2026-10-22-1850), deliberate: phrase-dom.ts reuses the live Score area and phrase-view.ts the Score panel's plan and message
+  // line; NEITHER reads the profile — score-first.ts asks once, registers the phrase view and commands only after the answer is yes, and hands the view its plan.
+  assert.deepEqual(askers, ['live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'phrase-dom.ts', 'phrase-view.ts', 'rhythm-edit-view.ts', 'score-first.ts', 'source-vault-core.ts'].sort());
+  for (const f of ['phrase-dom.ts', 'phrase-view.ts', 'phrase-core.ts']) assert.ok(!/isScoreFirstVault|vault-profile-core/.test(code(f)), `${f} never asks the profile question`);
   for (const f of ['output-view.ts', 'forge-action.ts', 'edges.ts', 'modal.ts', 'welcome.ts', 'chips.ts', 'rhythm-embed-view.ts', 'rhythm-score-view.ts']) {
     // M4 (drain 2026-10-21-2010), deliberate: the panel may READ the published flag (`messageDelivery.isScoreFirst()` from score-first-messages-core.ts); it still never reads the profile.
     if (fs.existsSync(path.join(SRC, f))) assert.ok(!/vault-profile-core|score-first|isScoreFirstVault/.test(code(f).replace(/score-first-messages-core|messageDelivery\.isScoreFirst\(\)/g, '')), `${f} does not know about profiles`);
@@ -103,7 +106,12 @@ test('MECHANISM PIN: "New bar" (command and ribbon) is registered only AFTER the
   assert.ok(body.indexOf('plugin.addCommand(') > check, 'the command is registered after the gate');
   assert.ok(body.indexOf('plugin.addRibbonIcon(') > check, 'the ribbon button is registered after the gate');
   assert.match(body, /scoreFirst = await isScoreFirstVault\(app\.vault\)/, 'the answer comes from the one profile reader');
-  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 1);
+  // M5 (drain 2026-10-22-1850), deliberate: three commands now — "New bar" and the two phrase commands — and the phrase view type; every one of them after the SAME gate.
+  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 3);
+  assert.equal((body.match(/plugin\.registerView\(/g) ?? []).length, 1);
+  const lastAddCommand = body.lastIndexOf('plugin.addCommand(');
+  assert.ok(body.indexOf('plugin.registerView(') > check && lastAddCommand > check, 'the phrase view and commands are registered after the gate');
+  for (const id of ['NEW_PHRASE_COMMAND_ID', 'OPEN_PHRASE_COMMAND_ID']) assert.ok(body.indexOf(`id: ${id}`) > check, `${id} is registered after the gate`);
   assert.equal((body.match(/plugin\.addRibbonIcon\(/g) ?? []).length, 1);
   assert.ok(!/setSetting|saveSettings|loadData|saveData|processFrontMatter/.test(body), 'no setting, no switch');
 });
@@ -121,7 +129,9 @@ test('the profile is a constant: no setting, command, menu item or modal anywher
   const offenders = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts'))
     .filter((f) => /score_first|scoreFirst/i.test(code(f)) && !['vault-profile-core.ts', 'score-first-core.ts', 'score-first.ts', 'rhythm-edit-view.ts', 'live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'source-vault-core.ts',
       // M4 (drain 2026-10-21-2010), deliberate: the message router, its two choke points and the Score's message DOM. They read the flag score-first.ts publishes; none reads the profile.
-      'score-first-messages-core.ts', 'score-messages-dom.ts', 'forge-notice.ts', 'output-view.ts'].includes(f));
+      'score-first-messages-core.ts', 'score-messages-dom.ts', 'forge-notice.ts', 'output-view.ts',
+      // M5 (drain 2026-10-22-1850), deliberate: the phrase core, a pure core like score-first-core.ts — it takes the gate's answer as an INPUT (`newPhraseAvailable`) and never reads the profile.
+      'phrase-core.ts'].includes(f));
   assert.deepEqual(offenders, []);
   const settingsFiles = fs.readdirSync(SRC).filter((f) => /setting/i.test(f) && f.endsWith('.ts') && !f.endsWith('.test.ts'));
   for (const f of settingsFiles) assert.ok(!/profile/i.test(code(f).replace(/openRhythmNotesInBeatBox/g, '')), `${f} has no profile setting`);

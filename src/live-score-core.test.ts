@@ -262,3 +262,48 @@ test('the controller reads no note and writes nothing: it has no vault, no file 
   const dom = fs.readFileSync(path.join(import.meta.dirname, 'live-score-dom.ts'), 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
   assert.ok(!/vault|\.process\(|\.modify\(|\.create\(|writeFile|adapter|from 'obsidian'/.test(dom));
 });
+
+// score_first M5 (drain 2026-10-22-1850): a phrase reuses THIS scheduler (debounce, one render in flight, the latest request queued) with its own "data -> outcome" step injected, instead of a
+// second scheduler. Without `produce` nothing changes (every test above is that case).
+test('an injected `produce` replaces the data -> score step: the SAME debounce, one render in flight and superseding apply', async () => {
+  const calls: unknown[] = [];
+  const pending: Array<(o: unknown) => void> = [];
+  let now = 0;
+  const timers: Array<{ id: number; at: number; fn: () => void }> = [];
+  let nextId = 1;
+  const drawn: string[] = [];
+  const statuses: string[] = [];
+  const live = createLiveScore({
+    produce: (data) => { calls.push(data); return new Promise((resolve) => { pending.push(resolve as (o: unknown) => void); }) as never; },
+    view: { status: (t) => statuses.push(t), draw: (p) => { drawn.push(p.content as string); return true; }, clear: () => {} },
+    title: 'phrase_001',
+    setTimer: (fn, ms) => { const id = nextId++; timers.push({ id, at: now + ms, fn }); return id; },
+    clearTimer: (h) => { const i = timers.findIndex((t) => t.id === h); if (i >= 0) timers.splice(i, 1); },
+  });
+  const flush = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+  const advance = async (ms: number) => { now += ms; for (;;) { const due = timers.find((t) => t.at <= now); if (!due) break; timers.splice(timers.indexOf(due), 1); due.fn(); } await flush(); };
+  live.update({ bars: 4 });
+  live.update({ bars: 5 });
+  live.update({ bars: 6 });
+  await advance(LIVE_SCORE_DEBOUNCE_MS);
+  assert.deepEqual(calls, [{ bars: 6 }], 'three rapid edits cost ONE produce call, with the latest data');
+  live.update({ bars: 7 });
+  await advance(LIVE_SCORE_DEBOUNCE_MS);
+  assert.equal(calls.length, 1, 'one render in flight: the next waits behind it');
+  pending.shift()!({ kind: 'score', payload: PAYLOAD('six') });
+  await flush();
+  assert.equal(calls.length, 2, 'the queued request runs when the first finishes');
+  pending.shift()!({ kind: 'score', payload: PAYLOAD('seven') });
+  await flush();
+  assert.deepEqual(drawn.map((d) => /six|seven/.exec(d)![0]), ['six', 'seven']);
+  live.update({ bars: 8 });
+  await advance(LIVE_SCORE_DEBOUNCE_MS);
+  pending.shift()!({ kind: 'refusal', message: 'Phrase: the source bar_009 was not found' });
+  await flush();
+  assert.equal(statuses.at(-1), 'Phrase: the source bar_009 was not found', 'a refusal from produce is the status line, as for a bar');
+  live.dispose();
+});
+
+test('createLiveScore needs either `compute` or `produce`: with neither it refuses at creation, naming itself', () => {
+  assert.throws(() => createLiveScore({ view: { status() {}, draw: () => true, clear() {} }, title: 't', setTimer: () => 0, clearTimer: () => {} } as never), /createLiveScore: .*compute.*produce/);
+});

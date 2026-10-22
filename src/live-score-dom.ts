@@ -12,7 +12,7 @@
 // happens when an <svg> shows up in it (or after READY_TIMEOUT_MS, so a renderer that never produces one cannot freeze the old score forever): the old host's player is silenced
 // and the old host removed in the same tick the new one is revealed. A newer draw while one is pending replaces the pending one.
 
-import { createLiveScore, type LiveScore, type LiveScoreTiming, type LiveScoreView } from './live-score-core.ts';
+import { createLiveScore, type LiveScore, type LiveScoreDeps, type LiveScoreTiming, type LiveScoreView } from './live-score-core.ts';
 import { LEAN_SCORE_NOTE, type ScorePanelPlan } from './score-first-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import { attachProvenance, type ProvenanceResult, type RhythmDataLike } from './provenance-core.ts';
@@ -152,7 +152,10 @@ export interface ScoreArea {
 }
 
 export interface ScoreAreaPorts extends ScorePanelDeps {
-  compute(data: RhythmData, title: string): Promise<unknown>;
+  /** The engine step for a bar. Required unless `produce` is given. */
+  compute?(data: RhythmData, title: string): Promise<unknown>;
+  /** score_first M5: replaces the data -> score step for a surface whose data is not a bar (the phrase view: the phrase note's text in, the extended bar's Score out). Same scheduler, same panel. */
+  produce?: LiveScoreDeps['produce'];
   /** score_first M3: present = the Score gets its provenance map and the inspector (hover, pin, lineage, hover-link). Absent = the Score is exactly the M1 Score. */
   inspector?: ScoreInspectorPorts;
   /** Optional: report how long the provenance map took to build (ms). */
@@ -180,7 +183,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   let inspector: ScoreInspector | null = null;
   const compute: ScoreAreaPorts['compute'] = ports.inspector
     ? async (data, title) => {
-      const raw = await ports.compute(data, title);
+      const raw = await ports.compute!(data, title);
       if (typeof raw !== 'object' || raw === null) return raw;
       const t0 = performance.now();
       const r = attachProvenance(ports.inspector!.noteId, data as unknown as RhythmDataLike, raw as Record<string, unknown>);
@@ -199,6 +202,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   if (ports.messages) messages = mountScoreMessages(panel.el.firstElementChild as HTMLElement, ports.messages, { setTimer: ports.setTimer, clearTimer: ports.clearTimer });
   const live: LiveScore = createLiveScore({
     compute,
+    produce: ports.produce,
     view: panel.view,
     title: ports.title,
     setTimer: ports.setTimer,
