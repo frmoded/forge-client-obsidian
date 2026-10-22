@@ -2,6 +2,8 @@
 // async; we kick it off only when a MusicXML result arrives, then reuse the
 // toolkit for subsequent renders.
 
+import { pageWidthFor } from './host-width-core.ts';
+
 let toolkitPromise: Promise<any> | null = null;
 
 async function getToolkit(): Promise<any> {
@@ -22,7 +24,7 @@ async function getToolkit(): Promise<any> {
 }
 
 function applyOptions(toolkit: any, hostWidthPx?: number) {
-  const targetWidth = hostWidthPx && hostWidthPx > 0 ? hostWidthPx * 5 : 2100;
+  const targetWidth = pageWidthFor(hostWidthPx);   // M6 rider: a host that has not been laid out (16 px) used to ask for pageWidth 80, which Verovio refuses (minimum 100)
   toolkit.setOptions({
     adjustPageHeight: true,
     breaks: 'auto',

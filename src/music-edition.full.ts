@@ -20,6 +20,7 @@ import {
   type ScoreViewModeStorage,
 } from './view-mode-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
+import { waitForWidth } from './host-width-core.ts';
 import { registerWidget } from './input-widget-core.ts';
 import { pianoWidget } from './input-widget-piano.ts';
 import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
@@ -317,7 +318,8 @@ function renderMusicXML(
       // construction.
       const sameXml = midiSourceXml === undefined || midiSourceXml === musicxml;
       const midiXml = midiSourceXml ?? musicxml;
-      const displayRender = await renderMusicXMLAndMIDI(musicxml, host.clientWidth);
+      // M6 rider: a host that has not been laid out yet (a background tab, a pane still opening) measures a few pixels; engrave for the width it will be shown at, not for that.
+      const displayRender = await renderMusicXMLAndMIDI(musicxml, await waitForWidth(host));
       const svg = displayRender.svg;
       let midiBase64: string;
       let midiTotalMs: number;

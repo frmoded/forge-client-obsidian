@@ -12,6 +12,9 @@
 // controller with a `produce` step of its own — no second scheduler: debounce, one render in flight, the latest request queued.
 
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
+import type { ScoreInspectorPorts } from './score-inspector.ts';
+import type { ProvenanceResult } from './provenance-core.ts';
+import { PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
   PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, clampPhraseBars, clampPhrasePct, phraseSourcePath, producePhraseNote, readPhraseNote,
@@ -31,7 +34,7 @@ export interface PhraseControls {
   dispose(): void;
 }
 
-export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch: Patch): void }): PhraseControls {
+export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch: Patch): void; openSource?(source: string): void }): PhraseControls {
   const doc = parent.ownerDocument;
   const el = doc.createElement('div');
   el.className = PHRASE_CONTROLS_CLASS;
@@ -51,8 +54,13 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
   const sourceWrap = doc.createElement('span');
   sourceWrap.className = 'forge-phrase-field';
   sourceWrap.appendChild(doc.createTextNode('Source '));
-  const sourceEl = doc.createElement('span');
+  // M6: with `openSource` the source bar's name is a link to that bar ("which parent" from this end); without it, plain text as before.
+  const sourceEl = doc.createElement(ports.openSource ? 'button' : 'span');
   sourceEl.className = 'forge-phrase-source';
+  if (ports.openSource) {
+    (sourceEl as HTMLButtonElement).type = 'button';
+    sourceEl.addEventListener('click', () => { const name = sourceEl.textContent ?? ''; if (name) ports.openSource!(name); });
+  }
   sourceWrap.appendChild(sourceEl);
   el.appendChild(sourceWrap);
 
@@ -100,6 +108,7 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
       const off = params === null;
       bars.disabled = style.disabled = pct.disabled = off;
       sourceEl.textContent = params ? params.source : '';
+      if (ports.openSource) { (sourceEl as HTMLButtonElement).disabled = params === null; if (params) sourceEl.setAttribute('aria-label', `Open ${params.source}`); }
       if (params) revert();
     },
     setStatus(text) { statusEl.textContent = text; },
@@ -107,7 +116,17 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
   };
 }
 
+/** M6: present = the phrase's Score is inspectable (click a bar: its lineage; the phrase bracket; the source link). Absent = exactly the M5 tab. */
+export interface PhraseInspectorPorts {
+  /** Open a note by its lineage id (`phrases/phrase_001`, `bars/bar_005`): the plugin's own openers. */
+  openNote(noteId: string): void;
+}
+
+export const PHRASE_BRACKET_CLASS = 'forge-phrase-bracket';
+export const PHRASE_INSPECTOR_HINT = 'Click a bar to see where it came from. Arrow keys move between bars; Esc lets go.';
+
 export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'produce' | 'inspector'> {
+  inspector?: PhraseInspectorPorts;
   /** The phrase note's path. */
   path: string;
   plan: ScorePanelPlan;
@@ -128,18 +147,77 @@ export interface PhraseHandle {
 
 type NoteText = string | { unreadable: string };
 
+function phraseSourceNote(source: string): string {
+  return `bars/${source}`;
+}
+
+/** The map of a phrase's Score: parse the phrase the Score was rendered for, put the bar ids on the engine's MusicXML, and tie each id to the phrase, its source and its tempo. Never throws. */
+function annotateForPhrase(path: string, note: NoteText, payload: Record<string, unknown>): ProvenanceResult {
+  const none = (problem: string): ProvenanceResult => ({ payload, map: {}, problems: [problem], kitProblems: [] });
+  const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
+  if (!parsed || parsed.ok === false) return none('the phrase could not be read');
+  const multiKey = typeof payload.multi_staff_content === 'string' ? 'multi_staff_content' : typeof payload.content === 'string' ? 'content' : null;
+  if (multiKey === null) return none('the Score payload carries no MusicXML');
+  let r;
+  try {
+    r = annotatePhraseXml(payload[multiKey] as string, typeof payload.kit_content === 'string' ? payload.kit_content : null, parsed.value.bars, PHRASE_BAR_SCOPE);
+  } catch (e) {
+    console.error('annotateForPhrase failed', e);
+    return none(`the bars could not be tied to the phrase (${(e as Error)?.message ?? e})`);
+  }
+  if (r.ok === false) return none(r.problems[0]);
+  const next: Record<string, unknown> = { ...payload, [multiKey]: r.multiXml };
+  if (r.kitXml !== null) next.kit_content = r.kitXml;
+  return { payload: next, map: phraseProvenance(phraseNoteId(path), parsed.value, r.bars), problems: [], kitProblems: r.kitProblems };
+}
+
+/** The bracket: hovering or focusing it lights every bar the phrase made; leaving clears; a click (or Enter / Space) opens the phrase note. */
+function wireBracket(el: HTMLElement, current: () => PhraseParams | null, area: () => ScoreArea | null, open: () => void): void {
+  const ids = () => { const p = current(); return p ? Array.from({ length: p.bars }, (_, i) => phraseBarId(PHRASE_BAR_SCOPE, i + 1)) : []; };
+  el.addEventListener('mouseenter', () => area()?.lightAll(ids()));
+  el.addEventListener('mouseleave', () => area()?.lightAll([]));
+  el.addEventListener('focus', () => area()?.lightAll(ids()));
+  el.addEventListener('blur', () => area()?.lightAll([]));
+  el.addEventListener('click', open);
+  el.addEventListener('keydown', (e) => { const k = (e as KeyboardEvent).key; if (k === 'Enter' || k === ' ') { e.preventDefault(); open(); } });
+}
+
 export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): PhraseHandle {
   let current: PhraseParams | null = null;
   let last: NoteText = { unreadable: 'not read yet' };
   let seq = 0;
   let disposed = false;
 
-  const controls = mountPhraseControls(parent, { onChange: (patch) => { void commit(patch); } });
-  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const insp = ports.inspector;
+  const controls = mountPhraseControls(parent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
+  // The bracket over every bar made by this phrase note (hover lights them all, a click opens the phrase). Built before the Score so it sits between the strip and the engraving.
+  let bracket: HTMLElement | null = null;
+  if (insp) {
+    const doc = parent.ownerDocument;
+    bracket = doc.createElement('div');
+    bracket.className = PHRASE_BRACKET_CLASS;
+    bracket.setAttribute('role', 'button');
+    bracket.setAttribute('tabindex', '0');
+    bracket.style.display = 'none';
+    parent.appendChild(bracket);
+  }
+  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const inspectorPorts: ScoreInspectorPorts | undefined = insp ? {
+    noteId: phraseNoteId(ports.path),
+    openNote: insp.openNote,
+    annotate: (note, payload) => annotateForPhrase(ports.path, note as NoteText, payload),
+    lineage: phraseLineageOf,
+    hint: PHRASE_INSPECTOR_HINT,
+    enlargeTargets: null,                          // no hit rectangle: it would sit over the noteheads and take the Score's click-to-play; a click on any drawn part of a bar (a notehead, a staff line) selects the BAR
+    previewOnHover: true,
+    kitNote: 'Kit view: not mapped for this phrase (use the multi-staff view to inspect).',
+  } : undefined;
   const area: ScoreArea | null = attachScoreArea(parent, plan, {
     ...areaPorts,
+    inspector: inspectorPorts,
     produce: (note, title) => producePhraseNote({ readNote: ports.readNote, compute: ports.compute }, note as NoteText, title),
   });
+  if (bracket) wireBracket(bracket, () => current, () => area, () => insp!.openNote(phraseNoteId(ports.path)));
 
   const readText = async (): Promise<NoteText> => {
     try { return await ports.readNote(ports.path); } catch (e) { return { unreadable: (e as Error)?.message ?? String(e) }; }
@@ -149,6 +227,14 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     const parsed = typeof text === 'string' ? readPhraseNote(text) : null;
     current = parsed && parsed.ok ? parsed.value : null;
     controls.set(current);
+    if (bracket) {
+      bracket.style.display = current ? '' : 'none';
+      if (current) {
+        const name = phraseNoteId(ports.path).split('/').pop() ?? '';
+        bracket.textContent = `${name} · ${current.bars} bar${current.bars === 1 ? '' : 's'}`;
+        bracket.setAttribute('aria-label', `Open ${name} (hover to light its ${current.bars} bar${current.bars === 1 ? '' : 's'})`);
+      }
+    }
   };
 
   async function commit(patch: Patch): Promise<void> {
@@ -189,6 +275,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     dispose() {
       disposed = true;
       area?.dispose();
+      bracket?.remove();
       controls.dispose();
     },
   };

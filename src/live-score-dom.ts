@@ -148,6 +148,8 @@ export interface ScoreArea {
   showNow(data: unknown): void;
   /** The pointer is over a Beat Box grid step (`null` = left): light the engraved note. A no-op without an inspector. */
   gridHover(target: GridTarget | null): void;
+  /** M6: light these elements of the shown Score from outside (the phrase bracket); `[]` clears. A no-op without an inspector. */
+  lightAll(ids: readonly string[]): void;
   dispose(): void;
 }
 
@@ -175,23 +177,32 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   if (plan === 'none') return null;
   if (plan === 'lean-note') {
     const note = mountLeanNote(parent, LEAN_SCORE_NOTE);
-    return { update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, gridHover() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
+    return { update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, gridHover() { /* no score in the lean edition */ }, lightAll() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
   }
   // The provenance map travels WITH the payload it was built for: compute() attaches ids to the MusicXML and remembers the map by payload identity; the panel hands the very
   // payload back when that engraving becomes the shown one, so the map and the SVG are swapped in together (never a map for a score that is not on screen).
   const results = new WeakMap<object, ProvenanceResult>();
   let inspector: ScoreInspector | null = null;
-  const compute: ScoreAreaPorts['compute'] = ports.inspector
-    ? async (data, title) => {
-      const raw = await ports.compute!(data, title);
-      if (typeof raw !== 'object' || raw === null) return raw;
-      const t0 = performance.now();
-      const r = attachProvenance(ports.inspector!.noteId, data as unknown as RhythmDataLike, raw as Record<string, unknown>);
-      ports.onProvenanceMs?.(performance.now() - t0);
-      results.set(r.payload, r);
-      return r.payload;
-    }
+  // The map is built from the data and the payload: a bar's hits by default; a phrase (M6) brings its own `annotate` (the bars of the extended Score).
+  const withProvenance = (data: unknown, raw: unknown): unknown => {
+    if (typeof raw !== 'object' || raw === null) return raw;
+    const t0 = performance.now();
+    const r = ports.inspector!.annotate
+      ? ports.inspector!.annotate(data, raw as Record<string, unknown>)
+      : attachProvenance(ports.inspector!.noteId, data as unknown as RhythmDataLike, raw as Record<string, unknown>);
+    ports.onProvenanceMs?.(performance.now() - t0);
+    results.set(r.payload, r);
+    return r.payload;
+  };
+  const compute: ScoreAreaPorts['compute'] = ports.inspector && ports.compute
+    ? async (data, title) => withProvenance(data, await ports.compute!(data, title))
     : ports.compute;
+  const produce: ScoreAreaPorts['produce'] = ports.inspector && ports.produce
+    ? async (data, title) => {
+      const outcome = await ports.produce!(data, title);
+      return outcome.kind === 'score' ? { kind: 'score', payload: withProvenance(data, outcome.payload) as Record<string, unknown> } : outcome;
+    }
+    : ports.produce;
   let messages: ScoreMessages | null = null;
   const panel = mountScorePanel(parent, {
     ...ports,
@@ -202,7 +213,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   if (ports.messages) messages = mountScoreMessages(panel.el.firstElementChild as HTMLElement, ports.messages, { setTimer: ports.setTimer, clearTimer: ports.clearTimer });
   const live: LiveScore = createLiveScore({
     compute,
-    produce: ports.produce,
+    produce,
     view: panel.view,
     title: ports.title,
     setTimer: ports.setTimer,
@@ -214,6 +225,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     update: (data) => live.update(data),
     showNow: (data) => live.showNow(data),
     gridHover: (target) => inspector?.gridHover(target),
+    lightAll: (ids) => inspector?.lightAll(ids),
     dispose() { live.dispose(); inspector?.dispose(); messages?.dispose(); panel.dispose(); },
   };
 }

@@ -48,6 +48,13 @@ music-core = { local = "../music-core" }
 - **Commands (score-first vaults only; absent everywhere else, both editions):** `New phrase from this bar` (offered while the active note is in `bars/`; makes the next `phrases/phrase_NNN.md` with bars 4, `repeat_with_fills`, 0 % and opens it) and `Open phrase as Score` (offered on a `phrases/phrase_NNN.md`; switches that tab). The phrase tab has three controls (Bars 1-64, Style, Tempo change -90..+100 %); a control writes the note's json block, a modify of the phrase or of its source bar redraws (the same debounced live Score as the Beat Box tab: one render in flight). A missing or invalid source is a refusal line on the Score, never a panel message.
 - **Where the code is:** `src/phrase-core.ts` (parse, validate, clamp, names, the commands' decisions, the Score of a phrase), `src/phrase-dom.ts` (the control strip and the freshness rules, plain DOM), `src/phrase-view.ts` (the Obsidian tab), `src/phrase-engine.ts` + `_forge_rhythm_phrase_payload` in `src/pyodide-host.ts` (the engine call). Registered from `src/score-first.ts` after the profile answer is yes.
 
+## Navigating a phrase (music edition; milestone M6)
+
+- **Every bar of a phrase's Score answers "which note, which parameter, which parent":** each engraved bar is a measure group whose id the plugin put on the engine's MusicXML (the first part's measures; Verovio keeps them). Clicking a bar (or the arrow keys, Esc to let go) pins it and the inspector shows `bar 5 of 8 | made by phrase_001 (extend, slowing 20 %, style repeat_with_fills) | from bar_005 | tempo 89`; the tempo is read from the engine's own `<sound tempo>` for that bar, not recomputed. The phrase and the source bar are links (**Open note**); hovering an entry lights the bars it covers; hovering a bar with nothing pinned previews its stack.
+- **The bracket** above the Score (`phrase_001 · 8 bars`) lights every bar the phrase made and opens the phrase note; the source name in the strip opens the bar.
+- **It is the bar inspector, reused:** `score-inspector.ts` takes optional phrase options (lineage, order, hint, preview) that are absent for the Beat Box tab; the Beat Box tab's DOM and behaviour are pinned unchanged. The pure part is `src/phrase-lineage-core.ts`.
+- **Not done:** opening a phrase from the file explorer still needs the two commands (the Beat Box's automatic default-view swap was not taken: its event order cannot be proven without the real Obsidian).
+
 ## Where the code is
 
 | What | File |

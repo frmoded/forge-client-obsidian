@@ -43,6 +43,7 @@ const PATH = 'phrases/phrase_001.md';
       if (out.__error) throw new Error(out.__error);
       return out.payload;
     },
+    inspector: { openNote: (id) => { ((window as any).__opened ??= []).push(id); } },   // M6: the lineage links, the bracket and the source link report which note they would open
     renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, 'phrase_001'),
     stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
     setTimer: (fn, ms) => window.setTimeout(fn, ms),

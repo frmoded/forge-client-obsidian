@@ -1901,3 +1901,34 @@
 .forge-phrase-status:empty {
   display: none;
 }
+
+/* score_first M6 — navigation through an extend: the phrase tab's bars are the inspectable elements (each engraved bar is a measure group with an id). A bar is recoloured the way a note is
+   (classes only, nothing shifts) and has no hit rectangle of its own, so a click on a notehead still plays it and still selects its bar. Scoped to the phrase tab: the bar's Beat Box tab
+   keeps exactly the rules above. */
+.forge-phrase-view .forge-rhythm-score-host g.measure { cursor: pointer; }
+.forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-hot,
+.forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-pinned { color: var(--interactive-accent); }
+.forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-hot *,
+.forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-pinned * { fill: var(--interactive-accent); stroke: var(--interactive-accent); }
+.forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-pinned { filter: drop-shadow(0 0 3px var(--interactive-accent)); }
+/* the bracket over every bar made by the phrase note */
+.forge-phrase-bracket {
+  display: block;
+  margin: 8px 4px 0;
+  padding: 1px 8px 0;
+  text-align: center;
+  border: 2px solid var(--interactive-accent);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}
+.forge-phrase-bracket:hover,
+.forge-phrase-bracket:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  outline: none;
+}
+button.forge-phrase-source { cursor: pointer; background: none; border: none; box-shadow: none; padding: 0 2px; color: var(--text-accent); text-decoration: underline; }
+.forge-inspector-preview { opacity: 0.75; font-style: italic; }

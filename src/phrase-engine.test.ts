@@ -11,6 +11,7 @@ import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhyth
 import { createLiveScore } from './live-score-core.ts';
 import { mountScorePanel } from './live-score-dom.ts';
 import { producePhrase, type PhraseParams } from './phrase-core.ts';
+import { annotatePhraseXml, phraseLineageOf, phraseProvenance } from './phrase-lineage-core.ts';
 
 const skip = WHEELS_PRESENT ? false : 'music wheels not fetched — run: npm run fetch-music-wheels';
 const test = (name: string, fn: () => Promise<void>) => baseTest(name, { skip, timeout: 300_000 }, fn);
@@ -128,4 +129,22 @@ test('END TO END (real engine, fake canvas): the live Score scheduler draws the 
   assert.equal(drawn.length, 3);
   assert.equal(status(), '');
   live.dispose(); panel.dispose();
+});
+
+test('REAL ENGINE (M6): every bar of the real 8-bar payload gets an id in BOTH views, and the tempo of each bar is the engine\'s own (100 ... 80); the stack of bar 5 is the prompt\'s example', async () => {
+  const py = await engine();
+  const out = await producePhrase(deps(py), PHRASE, 'phrase_001');
+  assert.equal(out.kind, 'score');
+  if (out.kind !== 'score') return;
+  const r = annotatePhraseXml(out.payload.multi_staff_content as string, out.payload.kit_content as string, 8);
+  assert.equal(r.ok, true, r.ok ? '' : r.problems.join('; '));
+  if (r.ok === false) return;
+  assert.deepEqual(r.bars.map((b) => b.tempo), [100, 97, 94, 91, 89, 86, 83, 80], 'read from the engine\'s <sound tempo>, not computed here');
+  assert.deepEqual(r.kitProblems, [], 'the Kit view is tied too');
+  for (const xml of [r.multiXml, r.kitXml!]) {
+    const first = /<part\b[^>]*>([\s\S]*?)<\/part>/.exec(xml)![1];
+    assert.deepEqual([...first.matchAll(/<measure\b[^>]*\bid="(ph_bar_\d+)"/g)].map((m) => m[1]), [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `ph_bar_${n}`));
+  }
+  const map = phraseProvenance('phrases/phrase_001', PHRASE, r.bars);
+  assert.deepEqual(phraseLineageOf(map.ph_bar_5).map((e) => e.text), ['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 89']);
 });

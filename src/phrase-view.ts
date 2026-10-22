@@ -13,7 +13,7 @@ import { messageDelivery } from './score-first-messages-core.ts';
 export class PhraseView extends EditableFileView {
   private handle: PhraseHandle | null = null;
 
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan) {
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void) {
     super(leaf);
     this.addAction('code', 'Open as JSON', () => { void this.openAsJson(); });
   }
@@ -35,6 +35,7 @@ export class PhraseView extends EditableFileView {
       path: file.path,
       title: file.basename,
       plan: this.plan,
+      inspector: { openNote: this.openNote },          // M6: click a bar for its lineage; the bracket; the source link — each opens a note through the plugin's own openers
       readNote: async (p) => {
         const f = this.app.vault.getAbstractFileByPath(p);
         if (!(f instanceof TFile)) throw new Error('File not found');

@@ -28,7 +28,7 @@ const routes = {
 const page = `<!doctype html><html><head><meta charset=utf-8><link rel=stylesheet href="app.css"><link rel=stylesheet href="plugin-styles.css"><style>body{margin:0}</style></head><body class="theme-light mod-macos">
 <div class="workspace-leaf-content" data-type="forge-phrase" style="width:760px;height:700px;display:flex;flex-direction:column;border:1px solid #ccc"><div class="view-header" style="height:36px"></div>
 <div class="view-content forge-phrase-view" id="pane" style="flex:1 1 0;min-height:0;overflow:auto"></div></div>
-<script>window.__errors=[];const _e=console.error;console.error=(...a)=>{window.__errors.push(a.map(x=>x&&x.stack||String(x)).join(' ').slice(0,300));_e(...a)}</script>
+<script>window.__errors=[];const _e=console.error;console.error=(...a)=>{window.__errors.push(a.map(x=>x&&x.stack||String(x)).join(' ').slice(0,300));_e(...a)};for(const k of ['log','warn']){const o=console[k];console[k]=(...a)=>{const t=a.map(String).join(' ');if(/out of bounds|pageWidth/i.test(t))window.__errors.push(t.slice(0,300));o(...a)}}</script>
 <script src="harness-phrase.js"></script></body></html>`;
 
 const out: any = {};
@@ -59,6 +59,40 @@ try {
   const payload = computePhrase(py, bar.value.data, { bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20 }, 'phrase_001');
   out.verovio = await p.ev(`(async () => { const r = await window.__verovio(${JSON.stringify(payload.multi_staff_content)}, 700); const tm = r.timeMap; return { entries: tm.length, lastMs: tm.length ? tm[tm.length - 1].ms : 0, firstMs: tm.length ? tm[0].ms : 0, msList: [...new Set(tm.map((e) => Math.round(e.ms)))].slice(0, 80) }; })()`);
   await p.shot(path.join(SHOTS, 'phrase-8bars-minus20.png'), { x: 0, y: 0, width: 800, height: 520 });
+  // ---- M6: navigation through the phrase, on the real DOM with real pointer events -----------------------------------------------------------------------------------------------------------
+  const rect = (sel: string) => p.ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); if (!e) return null; e.scrollIntoView({ block: 'center', inline: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+  const texts = () => p.ev(`[...document.querySelectorAll('.forge-inspector-lineage > li > span')].map((s) => s.textContent)`);
+  const hot = () => p.ev(`[...document.querySelectorAll('g.measure.forge-artifact-hot')].map((g) => g.id)`);
+  out.m6 = {};
+  out.m6.measureIds = await p.ev(`[...document.querySelectorAll('.forge-rhythm-score-host svg g.measure')].map((g) => g.id)`);
+  const note5 = await rect('#ph_bar_5 .notehead');
+  await p.click(note5.x, note5.y); await sleep(300);
+  out.m6.stackBar5 = await texts();
+  out.m6.pinned = await p.ev(`document.querySelector('#ph_bar_5')?.classList.contains('forge-artifact-pinned')`);
+  await p.shot(path.join(SHOTS, 'phrase-bar5-stack.png'), { x: 0, y: 0, width: 800, height: 700 });
+  out.m6.linkLabels = await p.ev(`[...document.querySelectorAll('.forge-inspector-lineage button.forge-inspector-open')].map((b) => b.getAttribute('aria-label'))`);
+  const link1 = await rect('.forge-inspector-lineage li:nth-child(2) button'); await p.click(link1.x, link1.y); await sleep(150);
+  const link2 = await rect('.forge-inspector-lineage li:nth-child(3) button'); await p.click(link2.x, link2.y); await sleep(150);
+  out.m6.opened = await p.ev('window.__opened.slice()');
+  const li3 = await rect('.forge-inspector-lineage li:nth-child(3)'); await p.hover(li3.x, li3.y); await sleep(200);
+  out.m6.hotOnSourceEntry = (await hot()).length;
+  await p.shot(path.join(SHOTS, 'phrase-fan-source.png'), { x: 0, y: 0, width: 800, height: 700 });
+  const li1 = await rect('.forge-inspector-lineage li:nth-child(1)'); await p.hover(li1.x, li1.y); await sleep(200);
+  out.m6.hotOnBarEntry = await hot();
+  await p.hover(5, 690); await sleep(150);
+  out.m6.hotAfterLeave = (await hot()).length;
+  const br = await rect('.forge-phrase-bracket'); await p.hover(br.x, br.y); await sleep(200);
+  out.m6.hotOnBracket = (await hot()).length;
+  out.m6.bracketText = await p.ev(`document.querySelector('.forge-phrase-bracket').textContent`);
+  await p.click(br.x, br.y); await sleep(150);
+  const src = await rect('.forge-phrase-source'); await p.click(src.x, src.y); await sleep(150);
+  out.m6.openedAfterBracketAndSource = await p.ev('window.__opened.slice()');
+  // hover a bar with nothing pinned shows its stack as a preview
+  await p.ev(`document.querySelector('#ph_bar_5').dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }))`);
+  await p.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host'); e.focus(); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`);
+  const note2 = await rect('#ph_bar_2 .notehead'); await p.hover(note2.x, note2.y); await sleep(200);
+  out.m6.previewBar2 = await texts();
+  out.m6.previewIsMarked = await p.ev(`!!document.querySelector('.forge-inspector-lineage.forge-inspector-preview')`);
   // A control edit in the real DOM: bars 4, pct 0 -> the Score follows; and the written JSON.
   out.edit = await p.ev(`(async () => { const b = document.querySelector('.forge-phrase-bars'); b.value = '4'; b.dispatchEvent(new Event('change', { bubbles: true })); await new Promise((r) => setTimeout(r, 2500)); return { json: window.__files.get('phrases/phrase_001.md').match(/\`\`\`json\\n([\\s\\S]*?)\\n\`\`\`/)[1], measureGroups: document.querySelector('.forge-rhythm-score-host svg')?.querySelectorAll('g.measure').length, tempoTexts: [...document.querySelector('.forge-rhythm-score-host svg').querySelectorAll('g.tempo')].map((g) => g.textContent.replace(/\\s+/g, ' ').trim()) }; })()`);
   // The source bar edited under the phrase: tempo 100 -> 120.
@@ -66,6 +100,20 @@ try {
   await p.shot(path.join(SHOTS, 'phrase-after-edits.png'), { x: 0, y: 0, width: 800, height: 520 });
   out.errorsAfter = await p.ev('window.__errors.slice()');
 } finally { p.close(); }
+// ---- M6 rider: a host that has not been laid out. (1) Verovio asked for a 16 px host must not refuse pageWidth; (2) a phrase mounted into a HIDDEN pane waits, then engraves when the pane shows ---------
+const p2 = await openPage({ dir: here, width: 800, height: 600, pageHtml: page, routes });
+try {
+  await p2.ev(`(async () => { const r = await window.__verovio(${JSON.stringify((computePhrase(py, bar.value.data, { bars: 2, style: 'repeat_with_fills', tempo_change_pct: 0 }, 'p') as any).multi_staff_content)}, 16); window.__tiny = r.svg.length; })()`);
+  out.rider = { tinyHostSvgLength: await p2.ev('window.__tiny'), tinyHostErrors: await p2.ev('window.__errors.slice()') };
+  await p2.ev(`document.getElementById('pane').style.display = 'none'; window.__mountPhrase(document.getElementById('pane'), { phrase: ${JSON.stringify(phraseText({ bars: 2, tempo_change_pct: 0 }))}, bar: ${JSON.stringify(BAR)} })`);
+  await sleep(700);
+  out.rider.svgWhileHidden = await p2.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`);
+  out.rider.errorsWhileHidden = await p2.ev('window.__errors.slice()');
+  await p2.ev(`document.getElementById('pane').style.display = ''`);
+  for (let w = 0; w < 6000; w += 100) { if (await p2.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+  out.rider.svgAfterShown = await p2.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`);
+  out.rider.errorsAfterShown = await p2.ev('window.__errors.slice()');
+} finally { p2.close(); }
 // The verdicts (a measurement that cannot fail proves nothing): the player's tempo changes and Verovio's bar starts must sit at the engine's bar starts, within 5 ms; 8 bars; a mark per bar and part.
 const near = (a: number, b: number) => Math.abs(a - b) <= 0.005;
 const tempi: number[] = out.expected.tempi; const starts: number[] = out.expected.barStartsSec;
@@ -80,6 +128,14 @@ out.verdicts = {
   controlEditWroteTheJson: /"bars": 4/.test(out.edit?.json ?? '') && out.edit?.measureGroups === 4,
   sourceEditRedrew: out.sourceEdit?.tempoTexts?.[0]?.endsWith('= 120') && out.sourceEdit?.hosts === 1,
   noConsoleErrors: (out.errors?.length ?? 1) === 0 && (out.errorsAfter?.length ?? 1) === 0,
+  m6_everyBarIsAMeasureWithAnId: JSON.stringify(out.m6?.measureIds) === JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8].map((n) => `ph_bar_${n}`)),
+  m6_clickingANoteheadSelectsItsBarAndShowsTheStack: out.m6?.pinned === true && JSON.stringify(out.m6?.stackBar5) === JSON.stringify(['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 89']),
+  m6_theLinksOpenThePhraseAndTheBar: JSON.stringify(out.m6?.opened) === JSON.stringify(['phrases/phrase_001', 'bars/bar_005']) && JSON.stringify(out.m6?.linkLabels) === JSON.stringify(['Open phrase_001', 'Open bar_005']),
+  m6_theFanLightsAllBarsOrOne: out.m6?.hotOnSourceEntry === 8 && JSON.stringify(out.m6?.hotOnBarEntry) === JSON.stringify(['ph_bar_5']) && out.m6?.hotAfterLeave === 0,
+  m6_theBracketLightsAllBarsAndOpensThePhraseAndTheSourceLinkOpensTheBar: out.m6?.hotOnBracket === 8 && out.m6?.bracketText === 'phrase_001 · 8 bars' && JSON.stringify(out.m6?.openedAfterBracketAndSource) === JSON.stringify(['phrases/phrase_001', 'bars/bar_005', 'phrases/phrase_001', 'bars/bar_005']),
+  m6_hoveringABarWithNothingPinnedPreviewsItsStack: out.m6?.previewIsMarked === true && out.m6?.previewBar2?.[0] === 'bar 2 of 8',
+  rider_aTinyHostNoLongerMakesVerovioRefusePageWidth: (out.rider?.tinyHostSvgLength ?? 0) > 0 && (out.rider?.tinyHostErrors?.length ?? 1) === 0,
+  rider_aHiddenPaneWaitsThenEngravesWhenShown: out.rider?.svgWhileHidden === false && out.rider?.svgAfterShown === true && (out.rider?.errorsWhileHidden?.length ?? 1) === 0 && (out.rider?.errorsAfterShown?.length ?? 1) === 0,
 };
 fs.writeFileSync(path.join(here, 'phrase-measurements.json'), JSON.stringify(out, null, 1));
 console.log(JSON.stringify(out.verdicts, null, 1));

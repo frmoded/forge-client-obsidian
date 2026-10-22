@@ -8,8 +8,9 @@
 //   * clicking pins the note: the panel shows its lineage stack (the hit, then the note it came from, with an "Open note" action); Esc unpins; the arrow keys walk the notes;
 //   * "Notes in this score" lists the distinct notes (one today); hovering one lights all its engraved notes.
 // If the map could not be built, the panel says why (never a guess); if only the Kit view is unmapped, one quiet line says so.
-import { attachArtifactInspector, lineageOf, notesInMap, orderByStepThenChannel, type ArtifactInspector, type InspectorEntry } from './artifact-inspector-core.ts';
-import { CANONICAL_CHANNELS, hitId, type ProvenanceResult } from './provenance-core.ts';
+import { attachArtifactInspector, lineageOf, notesInMap, orderByStepThenChannel, type ArtifactInspector, type InspectorEntry, type LineageEntry } from './artifact-inspector-core.ts';
+import { barsCoveredBy } from './phrase-lineage-core.ts';
+import { CANONICAL_CHANNELS, hitId, type Provenance, type ProvenanceMap, type ProvenanceResult } from './provenance-core.ts';
 
 export const INSPECTOR_CLASS = 'forge-inspector';
 export const INSPECTOR_HINT = 'Click an engraved note to see where it came from. Arrow keys move between notes; Esc lets go.';
@@ -21,8 +22,23 @@ export interface ScoreInspectorPorts {
   noteId: string;
   /** "Open note": open that note's file (the plugin's own opener). */
   openNote(noteId: string): void;
-  /** Engraved note hovered -> light the grid step (`null` clears). */
-  postHighlight(target: GridTarget | null): void;
+  /** Engraved note hovered -> light the grid step (`null` clears). Absent (a phrase has no grid) = nothing is told. */
+  postHighlight?(target: GridTarget | null): void;
+  // score_first M6 (drain 2026-10-22-1950): the phrase tab reuses THIS inspector for bars. Every option below is absent for the bar's tab, which is exactly what it was.
+  /** How the map is built from what was rendered (the data handed to the Score, and the engine's payload). Default: a bar's hits (`attachProvenance`). */
+  annotate?(data: unknown, payload: Record<string, unknown>): ProvenanceResult;
+  /** The lineage stack of a pinned element. Default: `lineageOf` (a hit, then its note). */
+  lineage?(prov: Provenance): LineageEntry[];
+  /** The arrow-key order. Default: by step, then channel. */
+  order?(map: ProvenanceMap): string[];
+  /** The one-line hint when nothing is pinned. Default: the engraved-note hint. */
+  hint?: string;
+  /** The pointer target of each element: `null` = none added (a bar is its own target). Default: the note-sized enlargement. */
+  enlargeTargets?: { x: number; y: number } | null;
+  /** Hovering an element with nothing pinned SHOWS its lineage stack (and leaving restores the hint). */
+  previewOnHover?: boolean;
+  /** The quiet line when only the Kit view is unmapped. */
+  kitNote?: string;
 }
 
 export interface ScoreInspector {
@@ -30,6 +46,8 @@ export interface ScoreInspector {
   onHidden(host: HTMLElement): void;
   /** The pointer is over a grid step / ring cell in the Beat Box (`null` = it left): light the engraved note. */
   gridHover(target: GridTarget | null): void;
+  /** M6: light these elements from outside (the phrase bracket); `[]` clears. */
+  lightAll(ids: readonly string[]): void;
   dispose(): void;
 }
 
@@ -48,25 +66,37 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
 
   let current: { host: HTMLElement; layer: ArtifactInspector; result: ProvenanceResult } | null = null;
 
+  const hint = ports.hint ?? INSPECTOR_HINT;
   const showHint = (text: string) => { body.textContent = text; };
-  showHint(INSPECTOR_HINT);
+  showHint(hint);
 
-  function renderPinned(entry: InspectorEntry | null) {
+  /** Render a stack. `preview` = it is only what the pointer is over (nothing pinned): the same stack, marked, and its hover-link is left off. */
+  function renderStack(entry: InspectorEntry, preview: boolean) {
     body.textContent = '';
-    if (entry === null) { showHint(INSPECTOR_HINT); return; }
-    const list = doc.createElement('ol'); list.className = 'forge-inspector-lineage';
-    for (const l of lineageOf(entry.prov)) {
+    const list = doc.createElement('ol'); list.className = preview ? 'forge-inspector-lineage forge-inspector-preview' : 'forge-inspector-lineage';
+    for (const l of (ports.lineage ?? lineageOf)(entry.prov)) {
       const li = doc.createElement('li'); li.className = `forge-inspector-${l.kind}`;
       const span = doc.createElement('span'); span.textContent = l.text; li.appendChild(span);
       if (l.kind === 'note' && l.noteId) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-inspector-open'; b.textContent = 'Open note';
+        if (l.openLabel) b.setAttribute('aria-label', l.openLabel);
         const id = l.noteId;
         b.addEventListener('click', () => ports.openNote(id));
         li.appendChild(b);
       }
+      if (l.covers !== undefined && !preview) {
+        // the hover-link of a stack entry: it lights the bars it covers (never calls back into the inspector's own onHover, so there is no echo)
+        const covers = l.covers; const pinnedId = entry.id;
+        li.addEventListener('mouseenter', () => current?.layer.highlightAll(barsCoveredBy(current.result.map, pinnedId, covers)));
+        li.addEventListener('mouseleave', () => current?.layer.highlightAll([]));
+      }
       list.appendChild(li);
     }
     body.appendChild(list);
+  }
+  function renderPinned(entry: InspectorEntry | null) {
+    if (entry === null) { showHint(hint); return; }
+    renderStack(entry, false);
   }
 
   function renderNotes(result: ProvenanceResult | null) {
@@ -99,15 +129,17 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         showHint(`This score could not be mapped to its note, so it cannot be inspected (${result.problems[0]}).`);
         return;
       }
-      if (result.kitProblems.length > 0) quiet.textContent = 'Kit view: not mapped for this bar (use the multi-staff view to inspect).';
-      showHint(INSPECTOR_HINT);
+      if (result.kitProblems.length > 0) quiet.textContent = ports.kitNote ?? 'Kit view: not mapped for this bar (use the multi-staff view to inspect).';
+      showHint(hint);
       const map = result.map;
       const layer = attachArtifactInspector({
         root: host,
         map,
-        order: orderByStepThenChannel(map, CANONICAL_CHANNELS),
-        enlargeTargets: { x: 0.35, y: 0.15 },
+        order: ports.order ? ports.order(map) : orderByStepThenChannel(map, CANONICAL_CHANNELS),
+        enlargeTargets: ports.enlargeTargets === undefined ? { x: 0.35, y: 0.15 } : ports.enlargeTargets ?? undefined,
         onHover: (e) => {
+          if (ports.previewOnHover && !layer.pinnedId()) { if (e) renderStack(e, true); else showHint(hint); }
+          if (!ports.postHighlight) return;
           const p = e?.prov.params;
           ports.postHighlight(p && typeof p.channel === 'string' && typeof p.step === 'number' ? { channel: p.channel, step: p.step } : null);
         },
@@ -118,6 +150,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
     onHidden(host) {
       if (current && current.host === host) detach();
     },
+    lightAll(ids) { current?.layer.highlightAll(ids); },
     gridHover(target) {
       if (!current) return;
       if (target === null) { current.layer.highlight(null); return; }

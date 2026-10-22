@@ -170,7 +170,16 @@ export function orderByStepThenChannel(map: ProvenanceMap, channelOrder: readonl
 }
 
 /** One line of the lineage stack. */
-export interface LineageEntry { kind: 'hit' | 'note'; text: string; noteId?: string }
+export interface LineageEntry {
+  /** 'hit' and 'note' are the bar inspector's; 'bar' and 'tempo' are a phrase's (M6). The kind is a CSS class (`forge-inspector-<kind>`). */
+  kind: 'hit' | 'note' | 'bar' | 'tempo';
+  text: string;
+  noteId?: string;
+  /** M6: the link's accessible name (the bar inspector's "Open note" buttons have none: its DOM is unchanged). */
+  openLabel?: string;
+  /** M6: what hovering this entry lights — the pinned element only, or every element of the map. Absent = nothing (the bar inspector). */
+  covers?: 'self' | 'all';
+}
 
 /** The lineage of a pinned element, outermost-meaningful first: the hit itself, then the note it came from. (Parents of extend/mix notes slot in between later.) */
 export function lineageOf(prov: Provenance): LineageEntry[] {

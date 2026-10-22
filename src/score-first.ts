@@ -76,7 +76,13 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // M5: the phrase tab (a control strip over a live Score) and its two commands. The view type is registered here, after the gate, so no other vault knows it exists. Both commands still ask
       // the live answer when offered, like "New bar".
       const plan = scorePanelPlan({ scoreFirst: true, edition: musicEdition.id });
-      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan));
+      // M6: a lineage link names a note by its path without .md. A phrase opens as a phrase tab, a bar in the Beat Box; a note that is not there is a Notice naming it (the person just clicked it).
+      const openNote = (noteId: string) => {
+        const file = app.vault.getAbstractFileByPath(`${noteId}.md`);
+        if (!(file instanceof TFile)) { new Notice(`Could not open ${noteId}: that note is not in this vault.`); return; }
+        void (noteId.startsWith(`${PHRASE_FOLDER}/`) ? openPhrase(app, file) : hooks.openRhythmNote(file));
+      };
+      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote));
       plugin.addCommand({
         id: NEW_PHRASE_COMMAND_ID,
         name: NEW_PHRASE_COMMAND_NAME,
