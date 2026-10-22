@@ -23,6 +23,14 @@ const SOURCE_NAME = /^[A-Za-z0-9_-]+$/;
 export const PHRASE_STYLES = ['repeat_with_fills', 'building', 'ghost_notes'] as const;
 export type PhraseStyle = typeof PHRASE_STYLES[number];
 
+/** What each style does, in plain words, for the strip next to the style's name (drain 2026-10-22-2100: the driver noticed bar 4 differs and nothing said why). Each is what `extend_rhythm` really does
+ *  (forge/music/lib.py docstring; a real-engine test in phrase-engine.test.ts pins the fill rule), not a paraphrase of what its name suggests. */
+export const PHRASE_STYLE_NOTES: Record<PhraseStyle, string> = {
+  repeat_with_fills: '(every bar repeats the bar, with a fill in the last beat of every 4th bar; the last bar gets one too unless the bar before it already has one)',
+  building: '(the hi-hat gets busier: quarters in bar 1, eighths in bar 2, sixteenths from bar 3)',
+  ghost_notes: '(every bar repeats the bar, with quiet snare notes added between the beats, never where the bar already hits)',
+};
+
 export const PHRASE_BARS_MIN = 1;
 export const PHRASE_BARS_MAX = 64;
 export const PHRASE_PCT_MIN = -90;

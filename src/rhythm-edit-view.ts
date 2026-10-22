@@ -35,6 +35,7 @@ import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsF
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
+import { rhythmHeaderApplies } from './phrase-header-core.ts';
 import { scorePanelPlan, widgetFillsPane, type ScorePanelPlan } from './score-first-core.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
@@ -488,7 +489,8 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
     for (const leaf of app.workspace.getLeavesOfType('markdown')) {
       const view = leaf.view;
       if (!(view instanceof MarkdownView)) continue;
-      const want = isCandidateFile(app, view.file);
+      // 2100: not on a phrase in a score-first vault (its own "Open as Score" is there, see score-first.ts); everywhere else the candidate answer, unchanged.
+      const want = rhythmHeaderApplies(isCandidateFile(app, view.file), messageDelivery.isScoreFirst(), view.file?.path);
       const have = headerActions.get(view);
       if (want && !have) {
         // addAction PREPENDS: add right-to-left so the rendered order is the table's order

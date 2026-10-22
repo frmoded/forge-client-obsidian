@@ -126,7 +126,8 @@ test('toggle: the mode buttons on the markdown view switch view.leaf (the note\'
 
 test('header actions appear only for matching notes: added when the note is a candidate, removed when it is not, re-synced on every relevant event', () => {
   const body = code(view);
-  assert.match(body, /const want = isCandidateFile\(app, view\.file\);\s*const have = headerActions\.get\(view\);\s*if \(want && !have\) \{/);
+  // drain 2026-10-22-2100, deliberate: the candidate answer now goes through `rhythmHeaderApplies`, which is the candidate answer EXCEPT for a phrase note in a score-first vault (phrase-header-core.test.ts pins it).
+  assert.match(body, /const want = rhythmHeaderApplies\(isCandidateFile\(app, view\.file\), messageDelivery\.isScoreFirst\(\), view\.file\?\.path\);\s*const have = headerActions\.get\(view\);\s*if \(want && !have\) \{/);
   assert.match(body, /\} else if \(!want && have\) \{\s*have\.forEach\(\(el\) => el\.remove\(\)\);\s*headerActions\.delete\(view\);/);
   for (const ev of ["'file-open'", "'active-leaf-change'", "'layout-change'"]) assert.ok(body.includes(`app.workspace.on(${ev}, syncHeaderActions)`), ev);
   assert.ok(body.includes("app.metadataCache.on('changed', syncHeaderActions)"));

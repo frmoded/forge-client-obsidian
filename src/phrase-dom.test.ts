@@ -219,3 +219,30 @@ test('dispose: the Score and the controls go, any player is silenced, and a late
   assert.equal(r.drawn.length, before);
   r.handle.noteModified('bars/bar_005.md');           // after dispose: ignored, never throws
 });
+
+test('the style is said in plain words next to its name: the note follows the phrase on load, the select at once, and goes back to the note\'s own style when a write is refused', async () => {
+  const { PHRASE_STYLE_NOTES } = await import('./phrase-core.ts');
+  const r = rig();
+  await r.handle.load(); await flush();
+  assert.equal(r.q('.forge-phrase-style-note').textContent, PHRASE_STYLE_NOTES.repeat_with_fills);
+  assert.match(r.q('.forge-phrase-style-note').textContent, /fill in the last beat of every 4th bar/);
+  await r.set('.forge-phrase-style', 'building');
+  assert.equal(r.q('.forge-phrase-style-note').textContent, PHRASE_STYLE_NOTES.building);
+  r.setWrite({ ok: false, message: 'Not saved: read_only' });
+  await r.set('.forge-phrase-style', 'ghost_notes');
+  assert.equal(r.q('.forge-phrase-style').value, 'building', 'the refused change goes back to the style the note has');
+  assert.equal(r.q('.forge-phrase-style-note').textContent, PHRASE_STYLE_NOTES.building, 'and so does the note');
+  const bad = rig({ phrase: phraseText({ bars: 99 }) });
+  await bad.handle.load(); await flush();
+  assert.equal(bad.q('.forge-phrase-style-note').textContent, '', 'an invalid phrase says nothing');
+  // AT ONCE: read synchronously, before any write or reload could have run
+  const quick = rig();
+  await quick.handle.load(); await flush();
+  const sel = quick.q('.forge-phrase-style'); sel.value = 'ghost_notes';
+  sel.dispatchEvent(new (quick.parent.ownerDocument.defaultView.Event)('change', { bubbles: true }));
+  assert.equal(quick.q('.forge-phrase-style-note').textContent, PHRASE_STYLE_NOTES.ghost_notes, 'follows the select in the same tick');
+  // a valid phrase that becomes invalid by a hand edit stops saying anything
+  quick.files.set(PHRASE_PATH, phraseText({ bars: 99 }));
+  quick.handle.noteModified(PHRASE_PATH); await flush();
+  assert.equal(quick.q('.forge-phrase-style-note').textContent, '');
+});

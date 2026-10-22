@@ -78,7 +78,7 @@ test('STARTUP (the reported case): the real onload and its auto-connect, in-proc
   attempts.length = 0;                                                       // whatever onload's own start-up did is cleared; the explicit run below is measured on its own
   const r = await quiet(async () => { await plugin.target._autoConnectOnLoad(); await new Promise((res) => setTimeout(res, 50)); });
   assert.deepEqual(attempts, [], `startup contacted the engine: ${JSON.stringify(attempts)}`);
-  assert.deepEqual(panel, [[`Forge: vault auto-connected to ${serverUrl}.`, 'success']]);
+  assert.deepEqual(panel, [['Forge: vault connected.', 'success']]);
   assert.deepEqual(notices, []);
   assert.ok(!r.lines.some((l) => /unreachable|ERR_CONNECTION_REFUSED/.test(l)), `a console line still names the engine: ${r.lines.join(' | ')}`);
 });

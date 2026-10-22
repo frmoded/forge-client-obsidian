@@ -17,7 +17,7 @@ import type { ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
-  PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, clampPhraseBars, clampPhrasePct, phraseSourcePath, producePhraseNote, readPhraseNote,
+  PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampPhraseBars, clampPhrasePct, phraseSourcePath, producePhraseNote, readPhraseNote,
   type PhraseParams, type PhraseScoreDeps,
 } from './phrase-core.ts';
 
@@ -74,6 +74,11 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
   style.setAttribute('aria-label', 'Style');
   for (const s of PHRASE_STYLES) { const o = doc.createElement('option'); o.value = s; o.textContent = s.replace(/_/g, ' '); style.appendChild(o); }
   field('Style', style);
+  // What the chosen style does, in plain words (2100). It follows the select at once and the note's own style on every reload.
+  const styleNote = doc.createElement('span');
+  styleNote.className = 'forge-phrase-style-note';
+  el.appendChild(styleNote);
+  const showStyleNote = (s: string) => { styleNote.textContent = (PHRASE_STYLE_NOTES as Record<string, string>)[s] ?? ''; };
 
   const pct = doc.createElement('input');
   pct.type = 'number'; pct.className = 'forge-phrase-pct'; pct.min = String(PHRASE_PCT_MIN); pct.max = String(PHRASE_PCT_MAX); pct.step = '1';
@@ -99,7 +104,7 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
   };
   bars.addEventListener('change', onNumber(bars, (n) => ({ bars: clampPhraseBars(n) })));
   pct.addEventListener('change', onNumber(pct, (n) => ({ tempo_change_pct: clampPhrasePct(n) })));
-  style.addEventListener('change', () => ports.onChange({ style: style.value as PhraseParams['style'] }));
+  style.addEventListener('change', () => { showStyleNote(style.value); ports.onChange({ style: style.value as PhraseParams['style'] }); });
 
   return {
     el,
@@ -110,6 +115,7 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
       sourceEl.textContent = params ? params.source : '';
       if (ports.openSource) { (sourceEl as HTMLButtonElement).disabled = params === null; if (params) sourceEl.setAttribute('aria-label', `Open ${params.source}`); }
       if (params) revert();
+      showStyleNote(params ? params.style : '');
     },
     setStatus(text) { statusEl.textContent = text; },
     dispose() { el.remove(); },

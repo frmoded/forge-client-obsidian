@@ -148,3 +148,19 @@ test('REAL ENGINE (M6): every bar of the real 8-bar payload gets an id in BOTH v
   const map = phraseProvenance('phrases/phrase_001', PHRASE, r.bars);
   assert.deepEqual(phraseLineageOf(map.ph_bar_5).map((e) => e.text), ['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 89']);
 });
+
+test('REAL ENGINE (2100): the fill rule the strip states is what extend_rhythm does — a fill in the last beat of every 4th bar, and in the last bar unless the bar before it was filled; building and ghost_notes never put a fill there', async () => {
+  const py = await engine();
+  const bar = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(BAR_005)![1]);
+  const filled = (style: string, bars: number): number[] => {
+    py.globals.set('_seed', JSON.stringify(bar));
+    const out = py.runPython(`import json\nfrom forge.music.lib import extend_rhythm\njson.dumps(extend_rhythm(json.loads(_seed), bars=${bars}, style="${style}"))`) as string;
+    return (JSON.parse(out) as Array<{ channels: { snare: unknown[] } }>).map((b, i) => (JSON.stringify(b.channels.snare.slice(12, 16)) === '[64,80,96,112]' ? i + 1 : 0)).filter(Boolean);
+  };
+  assert.deepEqual(filled('repeat_with_fills', 4), [4]);
+  assert.deepEqual(filled('repeat_with_fills', 8), [4, 8]);
+  assert.deepEqual(filled('repeat_with_fills', 5), [4], 'bar 5 is the last bar but follows a filled bar: no fill');
+  assert.deepEqual(filled('repeat_with_fills', 6), [4, 6], 'the last bar gets one when the bar before it was not filled');
+  assert.deepEqual(filled('repeat_with_fills', 1), [1]);
+  assert.deepEqual(filled('building', 8), []); assert.deepEqual(filled('ghost_notes', 8), []);
+});

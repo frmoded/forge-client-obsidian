@@ -1,8 +1,8 @@
 // Drain 2026-10-22-1700, revised by drain 2026-10-22-1930 — the REAL `_autoConnectOnLoad` (real onload wiring, real `connectVault` over a fake Pyodide host, real `connectWithRetry`, real banner core),
 // recording every panel line, notice and request it makes. The question: what does a person see in the Forge panel at every Obsidian start, and does start-up touch the HTTP engine?
-//   in-process engine wired, connect ok -> the one green "vault auto-connected" line, NO request to serverUrl (engine-http-lazy.test.ts measures that against a really closed port)
+//   in-process engine wired, connect ok -> the one green "Forge: vault connected." line, NO request to serverUrl (engine-http-lazy.test.ts measures that against a really closed port)
 //   no in-process engine (a dev workflow) -> nothing posted and no request: the HTTP engine is contacted when an operation first needs it
-//   connectVault failing -> the terminal failure: a notice AND a red panel line, unchanged
+//   connectVault failing -> the terminal failure: a notice AND a red panel line (2100: they say what failed)
 // (The cases where the engine's HTTP /connect was unreachable or non-2xx are gone: start-up no longer sends that request. They used to leave one console line each; the new test pins that none does.)
 // Lifecycle: the banner is computed ONCE, at onload (frozen at setup, as before).
 import assert from 'node:assert/strict';
@@ -45,9 +45,9 @@ async function run(mode: 'ok' | 'noPyodide' | 'inventoryThrows') {
   return { panel, notices, info, errors, requests };
 }
 
-test('UNCHANGED: a connected in-process engine posts the one green success line to the panel (exactly the old message and kind), no notice, no request, nothing at info level', async () => {
+test('a connected in-process engine posts the one green success line to the panel (`Forge: vault connected.`, no URL), no notice, no request, nothing at info level', async () => {
   const r = await run('ok');
-  assert.deepEqual(r.panel, [['Forge: vault auto-connected to http://localhost:8000.', 'success']]);
+  assert.deepEqual(r.panel, [['Forge: vault connected.', 'success']]);
   assert.deepEqual(r.notices, []); assert.deepEqual(r.info, []); assert.deepEqual(r.requests, []);
 });
 
@@ -58,10 +58,10 @@ test('no in-process engine (dev workflow): start-up posts NOTHING, sends NO requ
   assert.deepEqual(r.info, ['Forge: no in-process engine wired; http://localhost:8000 is contacted only when an operation needs it.']);
 });
 
-test('UNCHANGED: a terminal connect failure (3 attempts) still posts the notice AND the red panel line — a real failure is never hidden', async () => {
+test('a terminal connect failure (3 attempts) still posts the notice AND the red panel line, now saying what failed — a real failure is never hidden', async () => {
   const r = await run('inventoryThrows');
   assert.equal(r.notices.length, 1, JSON.stringify(r.notices));
-  assert.match(r.notices[0], /^Forge: vault auto-connect failed after 3 attempts — check that the engine is running \(see Forge panel for details\)\.$/);
-  assert.deepEqual(r.panel, [['Forge auto-connect: http://localhost:8000 — inventory exploded', 'error']]);
+  assert.equal(r.notices[0], 'Forge: vault connect failed after 3 attempts: inventory exploded (details in the Forge panel).');
+  assert.deepEqual(r.panel, [['Forge: vault connect failed after 3 attempts: inventory exploded', 'error']]);
   assert.deepEqual(r.info, []); assert.deepEqual(r.requests, []);
 });

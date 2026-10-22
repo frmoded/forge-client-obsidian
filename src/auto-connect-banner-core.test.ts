@@ -1,5 +1,5 @@
-// Drain 2450 — banner text pure-core tests. Drain 2026-10-22-1930: the degraded ("Pyodide only ... engine unreachable") branch was removed with the start-up HTTP request that produced it,
-// so its tests are gone; what remains pins the green success line and the terminal-failure banner, both unchanged.
+// Drain 2450 — banner text pure-core tests. Drain 2026-10-22-1930 removed the degraded branch; drain 2026-10-22-2100 reworded the two lines that remain: the success line names no URL (the HTTP
+// server is no longer contacted) and the terminal-failure banner says what failed instead of "check that the engine is running".
 
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
@@ -9,36 +9,38 @@ import {
 } from './auto-connect-banner-core.ts';
 
 describe('computeAutoConnectBanner', () => {
-  it('a first-attempt connect is the green success line, exactly the old message and kind', () => {
-    assert.deepEqual(
-      computeAutoConnectBanner({ serverUrl: 'http://localhost:8000', attempts: 1 }),
-      { message: 'Forge: vault auto-connected to http://localhost:8000.', kind: 'success' },
-    );
+  it('a first-attempt connect is "Forge: vault connected." — no URL', () => {
+    assert.deepEqual(computeAutoConnectBanner({ attempts: 1 }), { message: 'Forge: vault connected.', kind: 'success' });
   });
 
   it('multi-attempt success mentions the attempt count', () => {
-    const b = computeAutoConnectBanner({ serverUrl: 'http://localhost:8000', attempts: 3 });
-    assert.equal(b.kind, 'success');
-    assert.equal(b.message, 'Forge: vault auto-connected to http://localhost:8000 (after 3 attempts).');
+    assert.equal(computeAutoConnectBanner({ attempts: 3 }).message, 'Forge: vault connected (after 3 attempts).');
   });
 
-  it('there is no engine-reachability input and no warning kind produced any more: whatever else is passed, the line is the success line', () => {
-    const b = computeAutoConnectBanner({ serverUrl: 'http://localhost:8000', attempts: 1, engineHttpStatus: 'unreachable', engineHttpError: 'ECONNREFUSED' } as never);
-    assert.equal(b.kind, 'success');
-    assert.doesNotMatch(b.message, /Pyodide only|unreachable|ECONNREFUSED/);
+  it('it never names a server, whatever else is passed in', () => {
+    const b = computeAutoConnectBanner({ attempts: 1, serverUrl: 'http://localhost:8000', engineHttpStatus: 'unreachable' } as never);
+    assert.doesNotMatch(b.message, /localhost|http|Pyodide only|unreachable|auto-connected/);
   });
 });
 
-describe('computeAutoConnectFailureBanner (drain 2450)', () => {
-  it('produces the retryable-exhausted notice + panel pair', () => {
-    const b = computeAutoConnectFailureBanner(
-      'http://localhost:8000',
-      3,
-      'ECONNREFUSED',
-    );
-    assert.match(b.notice, /failed after 3 attempts/);
-    assert.match(b.notice, /engine is running/);
-    assert.match(b.panel, /http:\/\/localhost:8000/);
-    assert.match(b.panel, /ECONNREFUSED/);
+describe('computeAutoConnectFailureBanner', () => {
+  it('says WHAT failed, in a notice that still contains "failed" (the word that routes it red into the Forge panel), and the full reason in the panel', () => {
+    const b = computeAutoConnectFailureBanner(3, 'Forge runtime is not hydrated: the binary assets are missing.\nsecond line of a traceback');
+    assert.equal(b.notice, 'Forge: vault connect failed after 3 attempts: Forge runtime is not hydrated: the binary assets are missing. (details in the Forge panel).');
+    assert.equal(b.panel, 'Forge: vault connect failed after 3 attempts: Forge runtime is not hydrated: the binary assets are missing.\nsecond line of a traceback');
+    assert.match(b.notice, /failed/);
+  });
+
+  it('no longer tells anyone to start an engine, and names no URL', () => {
+    const b = computeAutoConnectFailureBanner(3, 'inventory exploded');
+    for (const t of [b.notice, b.panel]) assert.doesNotMatch(t, /engine is running|localhost|http:/);
+  });
+
+  it('one attempt reads "1 attempt"; a long reason is shortened in the notice only', () => {
+    assert.match(computeAutoConnectFailureBanner(1, 'x').notice, /after 1 attempt:/);
+    const long = 'y'.repeat(300);
+    const b = computeAutoConnectFailureBanner(3, long);
+    assert.ok(b.notice.length < 240 && b.notice.includes('...'));
+    assert.ok(b.panel.includes(long));
   });
 });

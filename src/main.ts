@@ -1626,14 +1626,12 @@ export default class ForgePlugin extends Plugin {
       // Cache the inventory so downstream compute paths can skip the
       // in-line connect round-trip on first use.
       this.snippetInventory = result.value?.snippets ?? {};
-      void this.forgeOutput(computeAutoConnectBanner({ serverUrl, attempts: result.attempts }).message, 'success');
+      void this.forgeOutput(computeAutoConnectBanner({ attempts: result.attempts }).message, 'success');
     } else {
       const detail = result.error instanceof Error
         ? result.error.message
         : String(result.error);
-      const failure = computeAutoConnectFailureBanner(
-        serverUrl, result.attempts, detail,
-      );
+      const failure = computeAutoConnectFailureBanner(result.attempts, detail);
       // Terminal failure — surface via notice() (routes red through
       // forgeOutput because the message contains "failed").
       this.notice(failure.notice);

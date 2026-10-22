@@ -4,13 +4,14 @@
 // person can see: no "New bar" command and no ribbon button are registered. The vault's profile is a constant, so both are added once, when the workspace is ready; a forge.toml
 // edited mid-session to ADD the profile takes effect on the next load.
 
-import { Notice, TFile, type Plugin } from 'obsidian';
+import { MarkdownView, Notice, TFile, type Plugin } from 'obsidian';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewPhrase, isPhrasePath, newPhraseAvailable } from './phrase-core.ts';
-import { PhraseView, openPhrase, openPhraseHere } from './phrase-view.ts';
+import { PhraseView, openPhrase, openPhraseHere, openPhraseInLeaf } from './phrase-view.ts';
+import { createPhraseHeaderSync } from './phrase-header-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -92,6 +93,24 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return true;
         },
       });
+      // 2100: the way back. A phrase shown as text (a markdown tab) carries "Open as Score" in its header, for exactly as long as it shows a phrase. A markdown view is reused when its tab
+      // navigates, so the set is re-synced on every event that can change the answer (the same events the Beat Box's header buttons use).
+      const headers = createPhraseHeaderSync<MarkdownView>({
+        isScoreFirst: () => scoreFirst,
+        open: (view, path) => {
+          const file = app.vault.getAbstractFileByPath(path);
+          if (file instanceof TFile) void openPhraseInLeaf(app, view.leaf, file);
+        },
+      });
+      const syncHeaders = () => {
+        const views: MarkdownView[] = [];
+        for (const leaf of app.workspace.getLeavesOfType('markdown')) if (leaf.view instanceof MarkdownView) views.push(leaf.view);
+        headers.sync(views);
+      };
+      plugin.registerEvent(app.workspace.on('file-open', syncHeaders));
+      plugin.registerEvent(app.workspace.on('active-leaf-change', syncHeaders));
+      plugin.registerEvent(app.workspace.on('layout-change', syncHeaders));
+      syncHeaders();
       plugin.addCommand({
         id: OPEN_PHRASE_COMMAND_ID,
         name: OPEN_PHRASE_COMMAND_NAME,
