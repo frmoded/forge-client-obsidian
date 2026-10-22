@@ -1631,13 +1631,12 @@ export default class ForgePlugin extends Plugin {
         engineHttpStatus: result.value?.engine_http_status,
         engineHttpError: result.value?.engine_http_error,
       });
-      // For the warning kind, route through notice() so it also
-      // renders red-ish (the "failed"/"error"/"could not" heuristic in
-      // notice() doesn't fire — the message text says "unreachable"
-      // and "will fail" — so use forgeOutput directly with 'error'
-      // for red styling on warnings too).
-      if (banner.kind === 'warning') {
-        void this.forgeOutput(banner.message, 'error');
+      // The banner is computed ONCE, here at onload (frozen at setup: a later engine start does not re-post anything).
+      // Drain 2026-10-22-1700: the degraded-but-harmless warning ("Pyodide only ... nothing you can do from the panel needs it") is NOT posted to the Forge panel any
+      // more — it was one red line at every start that carried no action. It goes to the console at info level, so a developer still sees it. The success line and the
+      // terminal-failure banner below are unchanged.
+      if (!banner.panel) {
+        console.info(banner.message);
       } else {
         void this.forgeOutput(banner.message, 'success');
       }

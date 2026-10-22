@@ -90,6 +90,27 @@ describe('computeAutoConnectBanner (drain 2450)', () => {
   });
 });
 
+describe('which banner goes to the Forge panel (drain 2026-10-22-1700)', () => {
+  const base = { serverUrl: 'http://localhost:8000', attempts: 1 } as const;
+  it('ok, not_attempted and an absent status: the green line, in the panel, exactly the old message and kind', () => {
+    for (const engineHttpStatus of ['ok', 'not_attempted', undefined] as const) {
+      assert.deepEqual(computeAutoConnectBanner({ ...base, engineHttpStatus }), { message: 'Forge: vault auto-connected to http://localhost:8000.', kind: 'success', panel: true }, String(engineHttpStatus));
+    }
+  });
+  it('unreachable and error: the degraded-but-harmless line keeps its text and kind but is NOT for the panel (console only)', () => {
+    for (const engineHttpStatus of ['unreachable', 'error'] as const) {
+      const b = computeAutoConnectBanner({ ...base, engineHttpStatus, engineHttpError: 'X' });
+      assert.equal(b.panel, false, engineHttpStatus);
+      assert.equal(b.kind, 'warning');
+      assert.match(b.message, /^Forge: vault auto-connected \(Pyodide only\)\. Engine at http:\/\/localhost:8000 is unreachable \(X\)\. Nothing you can do from the panel needs it/);
+    }
+  });
+  it('the multi-attempt suffix does not change where a line goes', () => {
+    assert.equal(computeAutoConnectBanner({ ...base, attempts: 3, engineHttpStatus: 'ok' }).panel, true);
+    assert.equal(computeAutoConnectBanner({ ...base, attempts: 3, engineHttpStatus: 'unreachable' }).panel, false);
+  });
+});
+
 describe('computeAutoConnectFailureBanner (drain 2450)', () => {
   it('produces the retryable-exhausted notice + panel pair', () => {
     const b = computeAutoConnectFailureBanner(

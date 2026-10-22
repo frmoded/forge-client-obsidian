@@ -17,6 +17,9 @@ export type BannerKind = 'success' | 'warning' | 'error';
 export interface BannerSignal {
   message: string;
   kind: BannerKind;
+  /** Does the line belong in the Forge panel? (drain 2026-10-22-1700) The green success line does. The degraded-but-harmless "Pyodide only" line does NOT: it says itself that nothing
+   *  the panel does needs the engine, so it carried no action and taught people to ignore red lines; it goes to the console (info level) only. */
+  panel: boolean;
 }
 
 export interface BannerInputs {
@@ -36,7 +39,7 @@ export interface BannerInputs {
  *  - engineHttpStatus is 'ok' or 'not_attempted' or absent
  *    → green "vault auto-connected" line.
  *  - engineHttpStatus is 'unreachable' or 'error'
- *    → WARNING line: Pyodide-only connected; engine unreachable.
+ *    → WARNING line (console only, `panel: false`): Pyodide-only connected; engine unreachable.
  *      As of drain 2026-08-27-1500, NOTHING the cohort workflow
  *      exercises fails: sync_dependencies went local too.
  *
@@ -55,6 +58,7 @@ export function computeAutoConnectBanner(inputs: BannerInputs): BannerSignal {
     return {
       message: `Forge: vault auto-connected to ${inputs.serverUrl}${suffix}.`,
       kind: 'success',
+      panel: true,
     };
   }
   // Degraded — Pyodide compute path works, HTTP engine endpoints don't.
@@ -68,6 +72,7 @@ export function computeAutoConnectBanner(inputs: BannerInputs): BannerSignal {
       + `from the panel needs it — Run, Forge, Freeze and Sync edges all `
       + `work without it.`,
     kind: 'warning',
+    panel: false,
   };
 }
 
