@@ -43,7 +43,7 @@ export function mountScoreMessages(anchor: HTMLElement, ports: ScoreMessagePorts
     button.title = 'Open the Forge panel (everything the plugin said is there)';
   };
   paintCount(ports.unreadCount());
-  button.addEventListener('click', () => ports.openForgeLog());
+  button.addEventListener('click', () => { console.log('[forge-log] Forge log button clicked'); ports.openForgeLog(); });
 
   const offMessage = ports.onScoreMessage((m) => {
     clearLine();                                        // a newer message replaces the one on show

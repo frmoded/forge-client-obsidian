@@ -93,7 +93,10 @@ export class MessageDelivery {
 
   // --- "Forge log (N)" opens the panel: the plugin registers how
   setOpenLog(f: (() => void) | null): void { this.openLog = f; }
-  openForgeLog(): void { this.openLog?.(); }
+  openForgeLog(): void {
+    if (!this.openLog) { console.error('[forge-log] openForgeLog: no handler registered (the plugin never called setOpenLog); the click cannot open the panel'); return; }
+    this.openLog();
+  }
 }
 
 /** The one instance the plugin's choke points and the Score panel share. */

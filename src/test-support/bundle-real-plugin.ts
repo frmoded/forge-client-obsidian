@@ -17,6 +17,8 @@ export interface RealPlugin {
   forgeNotice: (app: any, text: string, kind?: 'info' | 'error' | 'success', snippetId?: string) => Promise<void>;
   /** The bundle's own instance of the shared delivery state (the test's import of the same file would be a different module instance). */
   messageDelivery: import('../score-first-messages-core.ts').MessageDelivery;
+  /** The Score panel's message DOM, from the SAME bundle (so it talks to the bundle's `messageDelivery`). */
+  mountScoreMessages: typeof import('../score-messages-dom.ts').mountScoreMessages;
 }
 
 function obsidianNames(): string[] {
@@ -37,10 +39,10 @@ export async function bundleRealPlugin(client: string = ROOT): Promise<RealPlugi
   const { build } = require('esbuild');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'real-plugin-'));
   const shim = path.join(tmp, 'obsidian-shim.js');
-  fs.writeFileSync(shim, obsidianNames().map((n) => (/^[A-Z]/.test(n) ? `export class ${n} { constructor(...a) { this.args = a; } }` : `export const ${n} = () => undefined;`)).join('\n'));
+  fs.writeFileSync(shim, obsidianNames().map((n) => (/^[A-Z]/.test(n) ? `export class ${n} { constructor(...a) { this.args = a; (globalThis.__shimConstructed ??= []).push(['${n}', a]); } }` : `export const ${n} = () => undefined;`)).join('\n'));
   const entry = path.join(tmp, 'entry.ts');
   const src = path.join(client, 'src');
-  fs.writeFileSync(entry, `export { default as ForgePlugin } from ${JSON.stringify(path.join(src, 'main.ts'))};\nexport { ForgeOutputView } from ${JSON.stringify(path.join(src, 'output-view.ts'))};\nexport { forgeNotice } from ${JSON.stringify(path.join(src, 'forge-notice.ts'))};\nexport { messageDelivery } from ${JSON.stringify(path.join(src, 'score-first-messages-core.ts'))};\n`);
+  fs.writeFileSync(entry, `export { default as ForgePlugin } from ${JSON.stringify(path.join(src, 'main.ts'))};\nexport { ForgeOutputView } from ${JSON.stringify(path.join(src, 'output-view.ts'))};\nexport { forgeNotice } from ${JSON.stringify(path.join(src, 'forge-notice.ts'))};\n${fs.existsSync(path.join(src, 'score-first-messages-core.ts')) ? `export { messageDelivery } from ${JSON.stringify(path.join(src, 'score-first-messages-core.ts'))};\nexport { mountScoreMessages } from ${JSON.stringify(path.join(src, 'score-messages-dom.ts'))};\n` : ''}`);   // an earlier checkout (a worktree of 1300d14) has no such file
   const out = await build({
     entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error',
     alias: { obsidian: shim }, loader: { '.wasm': 'binary' }, nodePaths: [path.join(ROOT, 'node_modules')], define: { 'process.env.NODE_ENV': '"production"' },

@@ -2,7 +2,8 @@
 import type { RealPlugin } from './bundle-real-plugin.ts';
 
 export type Kind = 'none' | 'collapsed' | 'expanded';
-export function world(real: RealPlugin, kind: Kind) {
+/** `collapsedSidebar`: the right sidebar a NEW leaf would land in is collapsed (the existing-panel kinds already model it with 'collapsed'). */
+export function world(real: RealPlugin, kind: Kind, opts: { collapsedSidebar?: boolean } = {}) {
   const calls: string[] = [];
   const view = Object.create(real.ForgeOutputView.prototype);
   view.appendMessage = (id: string, text: string, k: string) => calls.push(`view.appendMessage(${id},${text},${k})`);
@@ -14,7 +15,7 @@ export function world(real: RealPlugin, kind: Kind) {
     };
     return leaf;
   };
-  const root: any = { collapsed: kind === 'collapsed', expand: () => calls.push('root.expand') };
+  const root: any = { collapsed: kind === 'collapsed' || opts.collapsedSidebar === true, expand: () => { calls.push('root.expand'); root.collapsed = false; } };
   const existing = mk(root); existing.view = view;
   const fresh = mk(root); fresh.view = { getViewType: () => 'empty' };
   const ws: any = {

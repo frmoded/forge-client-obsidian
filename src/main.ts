@@ -777,7 +777,7 @@ export default class ForgePlugin extends Plugin {
     // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
     registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve() });
     // score_first M4: "Forge log (N)" on the Score opens the panel the way the "Open Forge panel" command does (a person's own gesture).
-    messageDelivery.setOpenLog(() => { void this.getOutputView({ userInitiated: true }); });
+    messageDelivery.setOpenLog(() => { void this.openForgePanelByGesture('Forge log (N) button'); });
 
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
@@ -1335,7 +1335,7 @@ export default class ForgePlugin extends Plugin {
     this.addCommand({
       id: 'open-forge-panel',
       name: 'Open Forge panel',
-      callback: () => { void this.getOutputView({ userInitiated: true }); },
+      callback: () => { void this.openForgePanelByGesture('command: Open Forge panel'); },
     });
 
     this.addCommand({
@@ -2514,7 +2514,12 @@ export default class ForgePlugin extends Plugin {
       if (landing.openPanel) {
         // Same call the F1 command makes. Creates the leaf when the
         // panel is closed; returns the existing view when it is open.
-        await this.getOutputView();
+        // userInitiated (score_first drain 2026-10-22-1610): every call
+        // here follows the person's own hammer click (forgeSnippet has no
+        // other caller), and Run lives only in this panel, so in a
+        // score-first vault it must open instead of being kept silent.
+        // Elsewhere the flag changes nothing.
+        await this.getOutputView({ userInitiated: true });
       }
       if (landing.primeStrip) {
         // Pass the file EXPLICITLY. `refreshForgePanelStrip` treats a
@@ -6277,6 +6282,20 @@ export default class ForgePlugin extends Plugin {
     return candidate;
   }
 
+  /** A person's own gesture that must show the Forge panel ("Open Forge panel", "Forge log (N)"). Never silent: it logs its steps, and if the panel cannot be opened it says so in the
+   *  console AND in a Notice (the click used to be `void this.getOutputView(...)`: a rejection vanished and the click looked dead). */
+  private async openForgePanelByGesture(origin: string): Promise<void> {
+    console.log(`[forge-log] openForgePanelByGesture: ${origin}`);
+    try {
+      await this.getOutputView({ userInitiated: true });
+      console.log(`[forge-log] openForgePanelByGesture: panel ready (${origin})`);
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error(`openForgePanelByGesture (${origin}): could not open the Forge panel`, e);
+      new Notice(`Forge: could not open the Forge panel (${detail}). See the console for [forge-log] lines.`);
+    }
+  }
+
   private async getOutputView(opts?: { userInitiated?: boolean }): Promise<ForgeOutputView> {
     // score_first M4 (drain 2026-10-21-2010): in a score-first vault a run or a message does not open, reveal or expand the panel; the caller gets the panel if it already exists, or a
     // sink that keeps its calls until the panel is first opened. A person's own gesture (the "Open Forge panel" command, "Forge log (N)") passes userInitiated and takes the path below,
@@ -6285,6 +6304,9 @@ export default class ForgePlugin extends Plugin {
       const open = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0]?.view;
       return open instanceof ForgeOutputView ? open : (messageDelivery.bufferedSink() as unknown as ForgeOutputView);
     }
+    // [forge-log] lines (drain 2026-10-22-1610): only on a person's gesture, so the driver can see which step a click reaches in the real Obsidian.
+    const gesture = opts?.userInitiated === true;
+    if (gesture) console.log(`[forge-log] getOutputView: userInitiated=true scoreFirst=${messageDelivery.isScoreFirst()}`);
 
     // v0.2.10: Obsidian sometimes parks a DeferredView placeholder on
     // the leaf right after setViewState resolves — the real view's
@@ -6326,6 +6348,7 @@ export default class ForgePlugin extends Plugin {
     };
 
     const existing = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0];
+    if (gesture) console.log(`[forge-log] getOutputView: ${existing ? 'a panel leaf already exists' : 'no panel yet'}`);
     if (existing) {
       // v0.2.11: also reveal when the leaf already exists. Without
       // this, an existing output leaf parked in the right sidebar
@@ -6346,6 +6369,7 @@ export default class ForgePlugin extends Plugin {
         root.expand();
       }
       this.app.workspace.revealLeaf(existing);
+      if (gesture) console.log('[forge-log] getOutputView: revealLeaf(existing) done');
       return withStrip(existing);
     }
 
@@ -6354,7 +6378,17 @@ export default class ForgePlugin extends Plugin {
     // already occupies the right leaf used to evict it in place.
     const leaf = this.pickRightLeaf(OUTPUT_VIEW_TYPE);
     await leaf.setViewState({ type: OUTPUT_VIEW_TYPE, active: true });
+    if (gesture) console.log('[forge-log] getOutputView: setViewState done');
+    // score_first only (drain 2026-10-22-1610, hardening for a hypothesis the real Obsidian has to confirm): a leaf created for a person's gesture in a COLLAPSED sidebar was
+    // never seen — `revealLeaf` alone does not unfold a collapsed split in some versions (the existing-panel branch above has always expanded first). Every other vault
+    // keeps the old creation path exactly (no getRoot call, no expand).
+    if (gesture && messageDelivery.isScoreFirst()) {
+      const root = leaf.getRoot() as unknown as { collapsed?: boolean; expand?: () => void };
+      console.log(`[forge-log] getOutputView: sidebar collapsed=${root?.collapsed === true}`);
+      if (root?.collapsed && typeof root.expand === 'function') root.expand();
+    }
     this.app.workspace.revealLeaf(leaf);
+    if (gesture) console.log('[forge-log] getOutputView: revealLeaf(new leaf) done');
     return withStrip(leaf);
   }
 

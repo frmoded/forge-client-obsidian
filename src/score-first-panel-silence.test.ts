@@ -39,7 +39,8 @@ test('getOutputView, a panel in an open sidebar: the same — returned as it is,
 test('a PERSON\'S gesture ("Open Forge panel", "Forge log (N)") takes the old path exactly: expand, reveal, and the same call order as outside a score-first vault', async () => {
   scoreFirst();
   const none = world(real, 'none'); await runGetOutputView(real, none, [{ userInitiated: true }]);
-  assert.deepEqual(none.calls, ['ws.getLeavesOfType(forge-output)', 'ws.getRightLeaf(false)', 'leaf.setViewState(forge-output,active=true)', 'ws.revealLeaf(fresh)', 'plugin.refreshForgePanelStrip', 'returned the panel view']);
+  // (drain 2026-10-22-1610: in a score-first vault a gesture that CREATES the panel also looks at its sidebar and unfolds it when collapsed — the one extra `leaf.getRoot`; collapsed: see score-first-forge-log-open.test.ts)
+  assert.deepEqual(none.calls, ['ws.getLeavesOfType(forge-output)', 'ws.getRightLeaf(false)', 'leaf.setViewState(forge-output,active=true)', 'leaf.getRoot', 'ws.revealLeaf(fresh)', 'plugin.refreshForgePanelStrip', 'returned the panel view']);
   const collapsed = world(real, 'collapsed'); await runGetOutputView(real, collapsed, [{ userInitiated: true }]);
   assert.deepEqual(collapsed.calls, ['ws.getLeavesOfType(forge-output)', 'leaf.getRoot', 'root.expand', 'ws.revealLeaf(existing)', 'plugin.refreshForgePanelStrip', 'returned the panel view']);
 });
@@ -96,6 +97,7 @@ test('MECHANISM PIN: the panel replays what it kept and starts "Forge log (N)" f
   assert.match(body, /if \(messageDelivery\.isScoreFirst\(\)\) \{\s*messageDelivery\.drain\(this\);\s*messageDelivery\.markOpened\(\);\s*this\.registerEvent\(this\.app\.workspace\.on\('active-leaf-change'/);
   assert.match(body, /if \(messageDelivery\.isScoreFirst\(\) && !\(this\.containerEl as unknown as \{ isShown\?: \(\) => boolean \}\)\.isShown\?\.\(\)\) messageDelivery\.bump\(\);/);
   const main = fs.readFileSync(path.join(process.cwd(), 'src/main.ts'), 'utf8');
-  assert.match(main, /callback: \(\) => \{ void this\.getOutputView\(\{ userInitiated: true \}\); \},/, 'the "Open Forge panel" command is a person\'s gesture');
-  assert.match(main, /messageDelivery\.setOpenLog\(\(\) => \{ void this\.getOutputView\(\{ userInitiated: true \}\); \}\);/, '"Forge log (N)" is a person\'s gesture too');
+  // MECHANISM text pins, kept only as a cheap tripwire: the BEHAVIOUR of both gestures is tested on the real onload wiring in score-first-forge-log-open.test.ts.
+  assert.match(main, /callback: \(\) => \{ void this\.openForgePanelByGesture\('command: Open Forge panel'\); \},/, 'the "Open Forge panel" command is a person\'s gesture');
+  assert.match(main, /messageDelivery\.setOpenLog\(\(\) => \{ void this\.openForgePanelByGesture\('Forge log \(N\) button'\); \}\);/, '"Forge log (N)" is a person\'s gesture too');
 });
