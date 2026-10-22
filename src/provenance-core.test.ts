@@ -154,6 +154,18 @@ test('the Kit view: one part, two voices, channels told apart by notehead positi
   if (bad.ok) assert.equal(bad.hits.length, 4, 'the multi-staff map is unaffected by a bad Kit view');
 });
 
+test('the Kit view may tie a note where the multi-staff view does not (it ends a note at its voice\'s next onset): the Kit tail is in the map too, with the same provenance', () => {
+  const d = data({ kick: cells([0, 8]) });
+  const multi = score(part('P1', [voice('F4', [0, 8])]));                                              // two half notes: no ties
+  const kit = score(part('K', [[{ dur: 5, pitch: 'F4' }, { dur: 3, pitch: 'F4', tieStop: true }, { dur: 8, pitch: 'F4' }]]));
+  const r = attachProvenance('n', d, { multi_staff_content: multi, kit_content: kit });
+  assert.deepEqual(r.problems, []); assert.deepEqual(r.kitProblems, []);
+  assert.deepEqual(Object.keys(r.map).sort(), ['a_kick_0', 'a_kick_0_t1', 'a_kick_8']);
+  assert.deepEqual(r.map.a_kick_0_t1.params, { channel: 'kick', step: 0, beat: 'beat 1', tiedFrom: 'a_kick_0' });
+  assert.deepEqual([...(r.payload.kit_content as string).matchAll(/<note id="([^"]+)"/g)].map((m) => m[1]), ['a_kick_0', 'a_kick_0_t1', 'a_kick_8']);
+  assert.ok(!/id="a_kick_0_t1"/.test(r.payload.multi_staff_content as string), 'the multi-staff view has no such note');
+});
+
 test('provenanceFor + hitId: the id is scope_channel_step, an XML NCName', () => {
   assert.equal(hitId('a', 'conga_high', 7), 'a_conga_high_7');
   assert.match(hitId('a', 'conga_high', 7), /^[A-Za-z_][\w.-]*$/);

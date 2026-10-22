@@ -45,27 +45,34 @@ test('every fixture bar: the map is built, its hits are EXACTLY the data\'s, and
   }
 });
 
-test('the Kit view: mapped when it can be verified, and REFUSED with a reason (never guessed) when the engine\'s Kit fold is not time-faithful; the multi-staff map is unaffected either way', async () => {
+test('the Kit view: every bar of the fixtures maps now that the engine\'s Kit fold is time-faithful (drain 2026-10-21-1930); every id the Kit view carries is in the map, and every hit is in the Kit view', async () => {
   const py = await engine();
   const tk = await verovio();
-  const mapped: string[] = [], refused: string[] = [];
   for (const [name, data] of Object.entries(BARS)) {
     const payload = compute(py, data, name);
     const r = attachProvenance(`bars/${name}`, data, payload);
-    assert.equal(r.problems.length, 0, name);
-    if (r.kitProblems.length === 0) {
-      mapped.push(name);
-      tk.loadData(r.payload.kit_content as string);
-      const ids = svgNoteIds(tk.renderToSVG(1));
-      assert.deepEqual([...ids].sort(), Object.keys(r.map).sort(), `${name}: the Kit view carries the same ids`);
-    } else {
-      refused.push(name);
-      assert.match(r.kitProblems[0], /Kit view's hits|matches no channel|off the step grid|share the notehead/, name);
-      assert.equal(r.payload.kit_content, payload.kit_content, `${name}: an unmapped Kit XML is left exactly as the engine made it`);
-    }
+    assert.deepEqual(r.problems, [], name);
+    assert.deepEqual(r.kitProblems, [], `${name}: the Kit view verifies against the data (before the engine fix bar_004, swung, two_on_one_step and all_seven were refused here)`);
+    tk.loadData(r.payload.kit_content as string);
+    const ids = svgNoteIds(tk.renderToSVG(1));
+    assert.equal(new Set(ids).size, ids.length, `${name}: no id appears twice in the Kit view`);
+    for (const id of ids) assert.ok(id in r.map, `${name}: Kit element ${id} is in the map`);
+    const heads = Object.keys(r.map).filter((k) => r.map[k].params.tiedFrom === undefined).sort();
+    assert.deepEqual(ids.filter((id) => !(r.map[id].params.tiedFrom)).sort(), heads, `${name}: every hit is engraved in the Kit view exactly once`);
   }
-  assert.ok(mapped.includes('bar_001') && mapped.includes('bar_002') && mapped.includes('bar_003'), `the two-channel playground bars map in the Kit view too (mapped: ${mapped.join(', ')})`);
-  assert.ok(refused.includes('bar_004'), `bar_004's Kit fold is not time-faithful and must be refused (refused: ${refused.join(', ')})`);
+});
+
+test('an unverifiable Kit view is still REFUSED with a reason and left exactly as the engine made it (the pure test builds one); the multi-staff map is unaffected', async () => {
+  const py = await engine();
+  const data = BARS.bar_004;
+  const payload = compute(py, data, 'k');
+  // a Kit view from ANOTHER bar: right shape, wrong hits
+  const other = compute(py, BARS.bar_001, 'o');
+  const r = attachProvenance('n', data, { ...payload, kit_content: other.kit_content });
+  assert.deepEqual(r.problems, []);
+  assert.ok(r.kitProblems.length > 0, 'refused');
+  assert.equal(r.payload.kit_content, other.kit_content, 'untouched');
+  assert.ok(Object.keys(r.map).length > 0, 'the multi-staff map still works');
 });
 
 test('swing is not engraved (the engine draws the straight grid), so a swung bar maps exactly like its straight twin', async () => {

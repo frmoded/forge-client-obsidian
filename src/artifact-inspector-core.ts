@@ -38,12 +38,12 @@ export interface ArtifactInspector {
 
 export const HITBOX_CLASS = 'forge-artifact-hitbox';
 
-function addHitAreas(root: HTMLElement, ids: readonly string[], pad: { x: number; y: number }, done: Set<string>): Element[] {
+function addHitAreas(root: HTMLElement, ids: readonly string[], pad: { x: number; y: number }): Element[] {
   const made: Element[] = [];
   for (const id of ids) {
-    if (done.has(id)) continue;
     const g = elementFor(root, id) as unknown as SVGGraphicsElement | null;
-    if (!g || typeof g.getBBox !== 'function') continue;                 // not an SVG graphics element (or a DOM without layout): nothing to enlarge
+    if (!g || typeof g.getBBox !== 'function') continue;   // not an SVG graphics element (or a DOM without layout): nothing to enlarge
+    if (Array.from(g.children).some((c) => c.getAttribute('class') === HITBOX_CLASS)) continue;   // this very element already has its target
     try {
       const b = g.getBBox();
       if (!(b.width > 0 && b.height > 0)) continue;
@@ -52,7 +52,7 @@ function addHitAreas(root: HTMLElement, ids: readonly string[], pad: { x: number
       r.setAttribute('x', String(b.x - b.width * pad.x)); r.setAttribute('y', String(b.y - b.height * pad.y));
       r.setAttribute('width', String(b.width * (1 + 2 * pad.x))); r.setAttribute('height', String(b.height * (1 + 2 * pad.y)));
       r.setAttribute('fill', 'transparent'); r.setAttribute('stroke', 'none'); r.setAttribute('pointer-events', 'all');
-      g.appendChild(r); made.push(r); done.add(id);
+      g.appendChild(r); made.push(r);
     } catch { /* an element that cannot be measured keeps its own shape as its target */ }
   }
   return made;
@@ -123,13 +123,14 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     setPinned(order[to]);
     opts.onHover(entry(order[to]));
   };
-  // The engraving may not be in the DOM yet when this attaches (the renderer is fire-and-forget): grow the targets now for what is there, and again as the SVG arrives.
+  // The engraving may not be in the DOM yet when this attaches (the renderer is fire-and-forget), and the Score's own Kit / Multi-staff toggle REPLACES the SVG inside the same host:
+  // grow the targets for what is there now, and again whenever the content changes (an element that already has its target is skipped, so our own additions end the loop).
   const hitAreas: Element[] = [];
-  const grown = new Set<string>();
-  const growTargets = () => { if (opts.enlargeTargets) hitAreas.push(...addHitAreas(root, Object.keys(map), opts.enlargeTargets, grown)); };
+  const growTargets = () => { if (opts.enlargeTargets) hitAreas.push(...addHitAreas(root, Object.keys(map), opts.enlargeTargets)); };
+  const reapplyMarks = () => { hot.forEach((x) => mark(x, HOT_CLASS, true)); mark(pinned, PINNED_CLASS, true); };   // a replaced SVG has new elements with the same ids
   growTargets();
   const MO = (root.ownerDocument.defaultView as (Window & { MutationObserver?: typeof MutationObserver }) | null)?.MutationObserver;
-  const arrival = opts.enlargeTargets && grown.size < Object.keys(map).length && typeof MO === 'function' ? new MO(() => { growTargets(); if (grown.size >= Object.keys(map).length) arrival?.disconnect(); }) : null;
+  const arrival = typeof MO === 'function' ? new MO(() => { growTargets(); reapplyMarks(); }) : null;
   arrival?.observe(root, { childList: true, subtree: true });
   if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '0');
   root.addEventListener('mouseover', onOver);

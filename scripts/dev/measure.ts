@@ -181,7 +181,49 @@ async function inspectorScenario(name: string, bundle: string, toml: string, wid
 }
 out.inspectorMusic700 = await inspectorScenario('inspector-music-700', 'harness-music.js', PLAYGROUND_TOML, 700, 800);
 out.inspectorMusic460 = await inspectorScenario('inspector-music-460', 'harness-music.js', PLAYGROUND_TOML, 460, 800);
-if (process.env.ONLY_INSPECTOR) { fs.writeFileSync(OUT, JSON.stringify({ inspectorMusic700: out.inspectorMusic700, inspectorMusic460: out.inspectorMusic460 }, null, 1)); console.log('only-inspector'); process.exit(0); }
+
+// ---- the Kit view of bar_004 (drain 2026-10-21-1930): the engine's Kit fold is time-faithful, and the M3 inspector maps it ----
+const BAR4 = JSON.parse(fs.readFileSync(new URL('../../test/fixtures/provenance/bars.json', import.meta.url), 'utf8')).bar_004;
+const NOTE_BAR4 = `---\ntype: data\ncontent_type: json\ndescription: "bar_004"\n---\n\n\`\`\`json\n${JSON.stringify(BAR4, null, 2)}\n\`\`\`\n`;
+async function kitScenario(name: string, width = 700, height = 800) {
+  const p = await openPage({ dir: here, width: width + 40, height: height + 60, pageHtml: page('harness-music.js', width, height), routes });
+  const res: any = { name, steps: {} as any };
+  const ids = () => p.ev(`[...document.querySelectorAll('.forge-rhythm-score-host g.note[id]')].map(e=>e.id).sort()`);
+  const hotIds = () => p.ev(`[...document.querySelectorAll('.forge-artifact-hot')].map(e=>e.id).sort()`);
+  const pinnedIds = () => p.ev(`[...document.querySelectorAll('.forge-artifact-pinned')].map(e=>e.id).sort()`);
+  const widgetHot = async () => { const n = await p.findNode((_n: any, a: any) => a.class && /\blink-hot\b/.test(a.class)); return n ? await p.attrs(n.nodeId).then((a: any) => `${a['data-channel']}:${a['data-step']}`) : null; };
+  const centerOf = (id: string) => p.ev(`(() => { const g = document.getElementById(${JSON.stringify(id)}); if (!g) return null; const e = g.querySelector('.notehead') || g; const b = e.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; })()`);
+  try {
+    await p.ev(`window.__mountTab(document.getElementById('pane'), { note: ${JSON.stringify(NOTE_BAR4)}, widget: ${JSON.stringify(widget)}, toml: ${JSON.stringify(PLAYGROUND_TOML)} })`);
+    for (let w = 0; w < 15000; w += 100) { if (await p.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    await sleep(500);
+    res.multiStaffIds = await ids();
+    const toggle = await p.findNode((_n: any, a: any) => a.class && /forge-kit-toggle/.test(a.class));
+    const tc = await p.boxCenter(toggle.nodeId); await p.hover(5, 5); await p.click(tc.x, tc.y);
+    for (let w = 0; w < 8000; w += 100) { const cur = await ids(); if (JSON.stringify(cur) !== JSON.stringify(res.multiStaffIds)) break; await sleep(100); }
+    await sleep(600);
+    res.kitIds = await ids();
+    res.toggleLabelAfter = await p.ev(`document.querySelector('.forge-kit-toggle').textContent`);
+    res.hitboxesInKit = await p.ev(`document.querySelectorAll('.forge-rhythm-score-host .forge-artifact-hitbox').length`);
+    res.kitSvgHeight = await p.ev(`Math.round(document.querySelector('.forge-rhythm-score-host svg').getBoundingClientRect().height)`);
+    if (SHOTS) await p.shot(path.join(SHOTS, `${name}-kit.png`), { x: 0, y: 0, width: width + 40, height: height + 20 });
+    // a Kit note: the snare+bell chord at step 8 (bell is the top head), hover then click
+    const bell8 = await centerOf('a_bell_8');
+    await p.hover(2, 2); await p.hover(bell8.x, bell8.y);
+    res.steps.hoverKitBell8 = { hot: await hotIds(), widgetOutline: await widgetHot() };
+    await p.click(bell8.x, bell8.y); await sleep(150);
+    res.steps.clickKitBell8 = { pinned: await pinnedIds(), inspector: await p.ev(`(document.querySelector('.forge-inspector-body')||{}).textContent||''`) };
+    const sn = await centerOf('a_snare_8');
+    await p.hover(2, 2); await p.hover(sn.x, sn.y);
+    res.steps.hoverKitSnare8 = { hot: await hotIds(), widgetOutline: await widgetHot() };
+    if (SHOTS) await p.shot(path.join(SHOTS, `${name}-kit-pinned.png`), { x: 0, y: 0, width: width + 40, height: height + 20 });
+    res.quietKitLine = await p.ev(`(document.querySelector('.forge-inspector-quiet')||{}).textContent||''`);
+    res.errors = (await p.ev('window.__errors.slice()')).filter((e: string) => !/resume/.test(e));
+  } finally { p.close(); }
+  return res;
+}
+out.kitBar4 = await kitScenario('kit-bar4-700', 700, 800);
+if (process.env.ONLY_INSPECTOR) { fs.writeFileSync(OUT, JSON.stringify({ inspectorMusic700: out.inspectorMusic700, inspectorMusic460: out.inspectorMusic460, kitBar4: out.kitBar4 }, null, 1)); console.log('only-inspector'); process.exit(0); }
 /** Just the opened tab's DOM (no edits): enough to show a vault without the profile key gets the same tab as before. */
 async function p3Tab(bundle: string, toml: string | null) {
   const p = await openPage({ dir: here, width: 740, height: 860, pageHtml: page(bundle, 700, 800), routes });

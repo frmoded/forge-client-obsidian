@@ -212,7 +212,8 @@ export function annotateRhythmXml(multiXml: string, kitXml: string | null, data:
     else {
       const kitIds = new Map<XmlNote, string>();
       const perChannel = new Map<string, number[]>();
-      const lastHead = new Map<string, { id: string; tails: number }>();
+      const lastHead = new Map<string, { id: string; tails: number; step: number }>();
+      const kitTails: AnnotatedHit[] = [];             // tails the Kit view draws that the multi-staff view does not (it ends a note at the voice's next onset, so its tie splits differ)
       for (const n of kit[0].notes.filter((x) => !x.rest).sort((a, b) => a.onset - b.onset)) {
         const channel = n.pitch ? signature.get(n.pitch) : undefined;
         const step = n.onset / div;
@@ -220,13 +221,15 @@ export function annotateRhythmXml(multiXml: string, kitXml: string | null, data:
         if (n.tieStop) {
           const head = lastHead.get(channel);
           if (!head) { kitProblems.push(`a Kit tie tail on ${channel} has no head`); continue; }
-          kitIds.set(n, `${head.id}_t${++head.tails}`);
+          const tailId = `${head.id}_t${++head.tails}`;
+          kitIds.set(n, tailId);
+          kitTails.push({ id: tailId, channel, step: head.step, tiedFrom: head.id });
           continue;
         }
         if (!Number.isInteger(step)) { kitProblems.push(`a Kit note is off the step grid (${step})`); continue; }
         const id = hitId(scope, channel, step);
         kitIds.set(n, id);
-        lastHead.set(channel, { id, tails: 0 });
+        lastHead.set(channel, { id, tails: 0, step });
         (perChannel.get(channel) ?? perChannel.set(channel, []).get(channel)!).push(step);
       }
       for (const channel of present) {
@@ -234,7 +237,11 @@ export function annotateRhythmXml(multiXml: string, kitXml: string | null, data:
         const expected = hitSteps(data.channels[channel]);
         if (got.length !== expected.length || got.some((st, k) => st !== expected[k])) kitProblems.push(`${channel}: the Kit view's hits [${got.join(',')}] are not the data's [${expected.join(',')}]`);
       }
-      if (kitProblems.length === 0) kitOut = insertIds(kitXml, kit[0].notes, kitIds);
+      if (kitProblems.length === 0) {
+        kitOut = insertIds(kitXml, kit[0].notes, kitIds);
+        const known = new Set(hits.map((h) => h.id));
+        for (const t of kitTails) if (!known.has(t.id)) hits.push(t);        // every id the Kit view carries is in the map
+      }
     }
   }
   return { ok: true, multiXml: insertIds(multiXml, multi.flatMap((p) => p.notes), multiIds), kitXml: kitOut, hits, kitProblems };

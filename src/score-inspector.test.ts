@@ -102,6 +102,21 @@ test('enlarged targets for an engraving that arrives LATE (the renderer is fire-
   layer.dispose();
 });
 
+test('the Score\'s own Kit / Multi-staff toggle REPLACES the SVG in the same host: the new elements get their targets, and a pinned or lit id is re-applied to its new element', async () => {
+  const d = dom();
+  const withBox = (id: string) => { const g = d.doc.createElementNS('http://www.w3.org/2000/svg', 'g'); g.setAttribute('id', id); g.setAttribute('class', 'note'); (g as any).getBBox = () => ({ x: 0, y: 0, width: 4, height: 8 }); return g; };
+  for (const id of Object.keys(MAP)) (d.el(id) as any).getBBox = () => ({ x: 0, y: 0, width: 4, height: 8 });
+  const layer = attachArtifactInspector({ root: d.host, map: MAP, enlargeTargets: { x: 0.5, y: 0.1 }, onHover: () => {}, onPin: () => {} });
+  layer.pin('a_snare_4'); layer.highlight('a_kick_0');
+  const svg = d.host.querySelector('svg')!; svg.textContent = '';
+  for (const id of Object.keys(MAP)) svg.appendChild(withBox(id));                                      // the toggle: same ids, brand-new elements
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(d.host.querySelectorAll(`.${HITBOX_CLASS}`).length, Object.keys(MAP).length, 'every new element has its enlarged target');
+  assert.ok(d.el('a_snare_4').classList.contains(PINNED_CLASS), 'the pin survives the swap');
+  assert.ok(d.el('a_kick_0').classList.contains(HOT_CLASS), 'so does a highlight');
+  layer.dispose();
+});
+
 test('lineage: the hit (with its beat and velocity), then the note; a tied tail says so; notesInMap groups ids by note', () => {
   assert.deepEqual(lineageOf(MAP.a_kick_8).map((l) => l.text), ['kick — step 9 (beat 3), velocity 90', 'bars/bar_001']);
   assert.match(lineageOf(MAP.a_kick_0_t1)[0].text, /tied continuation/);
