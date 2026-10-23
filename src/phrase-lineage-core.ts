@@ -7,7 +7,7 @@
 // The tempo of a bar is READ from the engine's own `<sound tempo>` in that bar, never recomputed here (no second copy of the stepping formula in TypeScript to drift from forge/music/lib.py).
 import type { Provenance, ProvenanceMap } from './provenance-core.ts';
 import type { LineageEntry } from './artifact-inspector-core.ts';
-import type { PhraseParams } from './phrase-core.ts';
+import type { ExtendPhrase } from './phrase-core.ts';
 
 /** Keeps a phrase's bar ids apart from the ids of notes (`a_…`, M3) should both ever share a document. */
 export const PHRASE_BAR_SCOPE = 'ph';
@@ -86,7 +86,7 @@ export function annotatePhraseXml(multiXml: string, kitXml: string | null, expec
 }
 
 /** element id -> provenance, one entry per bar. The phrase note is the note that made every bar; the parameters carry what the stack prints. */
-export function phraseProvenance(phraseNote: string, params: PhraseParams, bars: readonly PhraseBarInfo[]): ProvenanceMap {
+export function phraseProvenance(phraseNote: string, params: ExtendPhrase, bars: readonly PhraseBarInfo[]): ProvenanceMap {
   const map: ProvenanceMap = {};
   for (const b of bars) {
     map[b.id] = {

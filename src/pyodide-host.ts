@@ -1511,17 +1511,22 @@ def _forge_rhythm_score_payload(data_json: str, title: str):
     return serialize_result(score, {"snippet_id": title, "meta": {"title": title}})
 
 def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
-    """M5 (phrases) - a PHRASE: one bar's rhythm data + the phrase's parameters -> tagged MusicXML payload of the extended bars.
+    """M5 (phrases) - a PHRASE: the bar data + the phrase's parameters -> tagged MusicXML payload of the phrase's bars.
 
-    Plugin-side glue, NOT an engine function: it only composes three existing engine entry points, extend_rhythm (the bar stretched into
-    bars bars in the given style, with the tempo stepping by tempo_change_pct over the run), rhythm_bars_to_stream (the bars joined, each bar
-    keeping its own tempo mark) and serialize_result. Never touches the vault: both inputs come in as strings, the payload goes out as a
-    dict. Raises on a seed the engine refuses (extend_rhythm's own ValueError) so the plugin can show it."""
+    Plugin-side glue, NOT an engine function: it only composes existing engine entry points. An EXTEND phrase (data is one bar's rhythm data):
+    extend_rhythm (the bar stretched into bars bars in the given style, with the tempo stepping by tempo_change_pct over the run). A MIX
+    phrase (M7, data is an object holding the two bars as a and b): mix_rhythm (one bar that is a weighted mix of them). Then
+    rhythm_bars_to_stream (the bars joined, each bar keeping its own tempo mark) and serialize_result. Never touches the vault: both inputs
+    come in as strings, the payload goes out as a dict. Raises on data the engine refuses (extend_rhythm's or mix_rhythm's own ValueError) so the
+    plugin can show it."""
     import json as _json
-    from forge.music.lib import extend_rhythm, rhythm_bars_to_stream
+    from forge.music.lib import extend_rhythm, mix_rhythm, rhythm_bars_to_stream
     data = _json.loads(data_json)
     p = _json.loads(params_json)
-    bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
+    if p.get("kind") == "mix":
+        bars = [mix_rhythm(data["a"], data["b"], weight=p["weight"], threshold=p["threshold"], ghost=p["ghost"])]
+    else:
+        bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
     score = rhythm_bars_to_stream(bars)
     return serialize_result(score, {"snippet_id": title, "meta": {"title": title}})
 
@@ -2119,7 +2124,8 @@ _forge_resolve_action_code(
     return this._unwrap(proxy);
   }
 
-  /** score_first M5 — the engine's Score for a phrase: the source bar's data stretched by `extend_rhythm` and joined by `rhythm_bars_to_stream` (per-bar tempo). Pure compute: nothing is written. Throws with the engine's own message. */
+  /** score_first M5 — the engine's Score for a phrase: the source bar's data stretched by `extend_rhythm` and joined by `rhythm_bars_to_stream` (per-bar tempo). M7: for a mix, `data` is `{ a, b }` and the bar is
+   *  `mix_rhythm`'s. Pure compute: nothing is written. Throws with the engine's own message. */
   async computePhraseScore(data: unknown, params: unknown, title: string): Promise<unknown> {
     this.pyodide.globals.set("_forge_phrase_data_json", JSON.stringify(data));
     this.pyodide.globals.set("_forge_phrase_params_json", JSON.stringify(params));

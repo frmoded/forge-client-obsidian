@@ -107,11 +107,12 @@ test('MECHANISM PIN: "New bar" (command and ribbon) is registered only AFTER the
   assert.ok(body.indexOf('plugin.addRibbonIcon(') > check, 'the ribbon button is registered after the gate');
   assert.match(body, /scoreFirst = await isScoreFirstVault\(app\.vault\)/, 'the answer comes from the one profile reader');
   // M5 (drain 2026-10-22-1850), deliberate: three commands now — "New bar" and the two phrase commands — and the phrase view type; every one of them after the SAME gate.
-  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 3);
+  // M7 Phase A (drain 2026-10-22-2330), deliberate: four — "New mix from this bar" joins them, registered after the same gate.
+  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 4);
   assert.equal((body.match(/plugin\.registerView\(/g) ?? []).length, 1);
   const lastAddCommand = body.lastIndexOf('plugin.addCommand(');
   assert.ok(body.indexOf('plugin.registerView(') > check && lastAddCommand > check, 'the phrase view and commands are registered after the gate');
-  for (const id of ['NEW_PHRASE_COMMAND_ID', 'OPEN_PHRASE_COMMAND_ID']) assert.ok(body.indexOf(`id: ${id}`) > check, `${id} is registered after the gate`);
+  for (const id of ['NEW_PHRASE_COMMAND_ID', 'OPEN_PHRASE_COMMAND_ID', 'NEW_MIX_COMMAND_ID']) assert.ok(body.indexOf(`id: ${id}`) > check, `${id} is registered after the gate`);
   assert.equal((body.match(/plugin\.addRibbonIcon\(/g) ?? []).length, 1);
   assert.ok(!/setSetting|saveSettings|loadData|saveData|processFrontMatter/.test(body), 'no setting, no switch');
 });

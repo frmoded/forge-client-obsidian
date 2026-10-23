@@ -167,6 +167,8 @@ export interface ScoreAreaPorts extends ScorePanelDeps {
   title: string;
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
+  /** How long after the last change the Score is redrawn. Absent = the live Score's own (LIVE_SCORE_DEBOUNCE_MS). The mix tab asks for a shorter one: it is dragged, not clicked. */
+  debounceMs?: number;
   now?: () => number;
   onTiming?(t: LiveScoreTiming): void;
 }
@@ -218,6 +220,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     title: ports.title,
     setTimer: ports.setTimer,
     clearTimer: ports.clearTimer,
+    debounceMs: ports.debounceMs,
     now: ports.now,
     onTiming: ports.onTiming,
   });

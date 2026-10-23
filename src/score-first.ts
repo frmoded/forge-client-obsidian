@@ -9,7 +9,7 @@ import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
-import { PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewPhrase, isPhrasePath, newPhraseAvailable } from './phrase-core.ts';
+import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, createNewPhrase, isPhrasePath, newMixAvailable, newPhraseAvailable } from './phrase-core.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
@@ -21,6 +21,9 @@ export const NEW_PHRASE_COMMAND_ID = 'new-phrase-from-bar';
 export const NEW_PHRASE_COMMAND_NAME = 'New phrase from this bar';
 export const OPEN_PHRASE_COMMAND_ID = 'open-phrase-as-score';
 export const OPEN_PHRASE_COMMAND_NAME = 'Open phrase as Score';
+// score_first M7 Phase A (drain 2026-10-22-2330): a mix of two bars is a phrase too. Same gate, same place.
+export const NEW_MIX_COMMAND_ID = 'new-mix-from-bar';
+export const NEW_MIX_COMMAND_NAME = 'New mix from this bar';
 
 export interface ScoreFirstHooks {
   /** Open a rhythm note in the Beat Box (the plugin's own opener: a tab already showing the note is reused, else a new tab). */
@@ -62,6 +65,19 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     isAlreadyExists: isFileExistsError,
   });
 
+  const createMix = (): Promise<unknown> => createNewMix<TFile>({
+    activePath,
+    folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
+    createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
+    listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
+    listBarBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${BAR_FOLDER_NAME}/`)).map((f) => f.basename),
+    exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
+    create: (p, content) => app.vault.create(p, content),
+    open: (file) => openPhrase(app, file),
+    notify: (message) => { new Notice(message); },
+    isAlreadyExists: isFileExistsError,
+  });
+
   // The profile is a constant of the vault, so the command and the ribbon button are added ONCE, when the workspace is ready (the adapter is up) — and only if this vault is
   // score-first. In any other vault they are not registered at all: not in the palette, not in Settings -> Hotkeys, not in the ribbon. The command still asks the live answer
   // when run, so a forge.toml that stops declaring the profile mid-session turns it off at once.
@@ -95,6 +111,15 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         checkCallback: (checking: boolean) => {
           if (!newPhraseAvailable({ scoreFirst, activePath: activePath() })) return false;
           if (!checking) void createPhrase();
+          return true;
+        },
+      });
+      plugin.addCommand({
+        id: NEW_MIX_COMMAND_ID,
+        name: NEW_MIX_COMMAND_NAME,
+        checkCallback: (checking: boolean) => {
+          if (!newMixAvailable({ scoreFirst, activePath: activePath() })) return false;
+          if (!checking) void createMix();
           return true;
         },
       });

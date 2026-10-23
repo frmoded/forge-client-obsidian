@@ -154,6 +154,87 @@ async function renderedStudy(withStyles: boolean) {
 async function p_shot(q: any, name: string) { await q.shot(path.join(SHOTS, name), { x: 0, y: 0, width: 800, height: 700 }); }
 out.rendered = { with: await renderedStudy(true), without: await renderedStudy(false) };
 
+// ---- drain 2026-10-22-2330 (M7 Phase A): the MIX tab in real Chrome — the strip, the engrave latency of the Weight slider (single jump and a 20-step scrub of 40 ms steps, an 0.8 s drag), coalescing, and rendered PIXELS (a hash of the Score region at
+// each weight; never class names). Real engine behind /phrase, real Verovio, real DevTools-protocol pointer events for the slider.
+const BAR6 = fs.readFileSync(new URL('../../test/fixtures/score-first/bar_006.md', import.meta.url), 'utf8');
+const mixText = (m: object = {}) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify({ kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.5, threshold: 0.5, ghost: false, ...m }, null, 2)}\n\`\`\`\n`;
+async function mixStudy() {
+  const q = await openPage({ dir: here, width: 800, height: 800, pageHtml: page, routes });
+  const res: any = {};
+  try {
+    const t0 = performance.now();
+    await q.ev(`window.__mountPhrase(document.getElementById('pane'), { phrase: ${JSON.stringify(mixText())}, bar: ${JSON.stringify(BAR)}, bars: { bar_006: ${JSON.stringify(BAR6)} }, path: 'phrases/phrase_002.md', name: 'phrase_002' })`);
+    for (let w = 0; w < 20000; w += 100) { if (await q.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    res.firstScoreMs = Math.round(performance.now() - t0);
+    await sleep(1200);
+    res.errors = await q.ev('window.__errors.slice()');
+    res.dom = await q.ev(`(() => { const g = (s) => document.querySelector(s); const o = (s) => [...g(s).querySelectorAll('option')].map((x) => x.value); return {
+      a: g('.forge-mix-a')?.value, b: g('.forge-mix-b')?.value, aOptions: o('.forge-mix-a'), bOptions: o('.forge-mix-b'),
+      weight: g('.forge-mix-weight')?.value, weightShown: g('.forge-mix-weight-value')?.textContent, weightType: g('.forge-mix-weight')?.type, weightStep: g('.forge-mix-weight')?.step,
+      threshold: g('.forge-mix-threshold')?.value, ghost: g('.forge-mix-ghost')?.checked, sentence: g('.forge-mix-sentence')?.textContent,
+      inspector: !!g('.forge-inspector'), bracket: !!g('.forge-phrase-bracket'), sourceLink: !!g('.forge-phrase-source'), extendBars: !!g('.forge-phrase-bars'),
+      measureGroups: document.querySelector('.forge-rhythm-score-host svg')?.querySelectorAll('g.measure').length }; })()`);
+    await q.shot(path.join(SHOTS, 'mix-initial.png'), { x: 0, y: 0, width: 800, height: 520 });
+    // a swap = the OLD engraving host leaves the panel (the new one was revealed in the same tick): the moment the person SEES the new Score
+    await q.ev(`(() => { window.__swaps = []; const panel = document.querySelector('.forge-rhythm-edit-score'); new MutationObserver((ms) => { for (const m of ms) for (const n of m.removedNodes) if (n.classList && n.classList.contains('forge-rhythm-score-host')) window.__swaps.push(performance.now()); }).observe(panel, { childList: true }); })()`);
+    const setControl = (sel: string, value: string | boolean, type = 'input') => q.ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); ${typeof value === 'boolean' ? 'e.checked = ' + value : 'e.value = ' + JSON.stringify(value)}; window.__tInput = performance.now(); e.dispatchEvent(new Event(${JSON.stringify(type)}, { bubbles: true })); return window.__tInput; })()`);
+    const settle = async () => { let n = -1, still = 0; for (let w = 0; w < 15000 && still < 5; w += 100) { await sleep(100); const m = await q.ev('(window.__timings || []).length + ":" + (window.__swaps || []).length'); if (m === n) still++; else { still = 0; n = m as any; } } };
+    const hashScore = async () => {
+      const c = await q.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host'); const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, width: r.width, height: Math.min(r.height, 300) }; })()`);
+      const r = await q.send('Page.captureScreenshot', { format: 'png', clip: { ...c, scale: 1 } });
+      return crypto.createHash('md5').update(r.result.data).digest('hex');
+    };
+    const written = () => q.ev(`window.__files.get('phrases/phrase_002.md').match(/\`\`\`json\\n([\\s\\S]*?)\\n\`\`\`/)[1]`).then((t: any) => JSON.parse(t));
+    // (1) the rendered Score at weight 1, 0.5 (the tie), 0.45, 0 — by pixels
+    res.hash = {};
+    for (const w of [1, 0.5, 0.45, 0]) { await setControl('.forge-mix-weight', String(w)); await settle(); res.hash['w' + w] = await hashScore(); await q.shot(path.join(SHOTS, `mix-weight-${w}.png`), { x: 0, y: 0, width: 800, height: 520 }); }
+    res.sentenceAt0 = await q.ev(`document.querySelector('.forge-mix-sentence').textContent`);
+    await setControl('.forge-mix-weight', '0.4'); await settle(); res.hash.w04 = await hashScore();
+    await setControl('.forge-mix-ghost', true, 'change'); await settle(); res.hash.w04ghost = await hashScore();
+    await q.shot(path.join(SHOTS, 'mix-ghost-0.4.png'), { x: 0, y: 0, width: 800, height: 520 });
+    res.sentenceGhost = await q.ev(`document.querySelector('.forge-mix-sentence').textContent`);
+    await setControl('.forge-mix-ghost', false, 'change'); await settle(); res.hash.w04ghostOff = await hashScore();
+    // (2) latency of ONE jump of the slider (1.0 -> 0.4): input event -> the new Score is on screen
+    await setControl('.forge-mix-weight', '1'); await settle();
+    res.single = [];
+    for (const target of ['0.4', '0.9', '0.4', '0.9', '0.4']) {
+      await q.ev('window.__timings = []; window.__swaps = []');
+      const tIn = await setControl('.forge-mix-weight', target);
+      await settle();
+      const tm = await q.ev('window.__timings.slice()'); const sw = await q.ev('window.__swaps.slice()');
+      res.single.push({ to: target, renders: tm.length, engineMs: tm.map((t: any) => Math.round(t.engineMs)), totalMs: tm.map((t: any) => Math.round(t.totalMs)), inputToSwapMs: sw.length ? Math.round(sw[sw.length - 1] - (tIn as number)) : null });
+    }
+    // (3) a scrub: 20 input events 40 ms apart (a drag of 0.8 s from 1.00 to 0.05) — how many Scores were engraved, and is the LAST one the last value
+    await setControl('.forge-mix-weight', '1'); await settle();
+    await q.ev('window.__timings = []; window.__swaps = []');
+    const scrub = await q.ev(`(async () => { const e = document.querySelector('.forge-mix-weight'); let t = 0; for (let i = 0; i <= 19; i++) { e.value = String(Math.round((1 - i * 0.05) * 100) / 100); t = performance.now(); e.dispatchEvent(new Event('input', { bubbles: true })); await new Promise((r) => setTimeout(r, 40)); } return { tLast: t, shownNumber: document.querySelector('.forge-mix-weight-value').textContent }; })()`);
+    await settle();
+    const tmS = await q.ev('window.__timings.slice()'); const swS = await q.ev('window.__swaps.slice()');
+    res.scrub = { inputs: 20, rendersEngraved: tmS.length, swaps: swS.length, engineMs: tmS.map((t: any) => Math.round(t.engineMs)), lastInputToLastSwapMs: swS.length ? Math.round(swS[swS.length - 1] - scrub.tLast) : null, numberShownAtEnd: scrub.shownNumber, writtenWeight: (await written()).weight, hashAfter: await hashScore() };
+    // (4) a REAL pointer on the slider (DevTools-protocol mouse events): press on the track's left end, then drag to the right end — the value and the Score follow
+    const sl = await q.ev(`(() => { const e = document.querySelector('.forge-mix-weight'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x0: r.left + 1, x1: r.right - 1, y: r.top + r.height / 2 }; })()`);
+    await q.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: sl.x0, y: sl.y });
+    await q.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: sl.x0, y: sl.y, button: 'left', clickCount: 1 });
+    await q.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: sl.x0, y: sl.y, button: 'left', clickCount: 1 });
+    await settle();
+    res.pointerLeft = { value: await q.ev(`document.querySelector('.forge-mix-weight').value`), written: (await written()).weight, hash: await hashScore() };
+    await q.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: sl.x1, y: sl.y });
+    await q.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: sl.x1, y: sl.y, button: 'left', clickCount: 1 });
+    await q.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: sl.x1, y: sl.y, button: 'left', clickCount: 1 });
+    await settle();
+    res.pointerRight = { value: await q.ev(`document.querySelector('.forge-mix-weight').value`), written: (await written()).weight, hash: await hashScore() };
+    await q.shot(path.join(SHOTS, 'mix-after-pointer.png'), { x: 0, y: 0, width: 800, height: 520 });
+    // (5) hand-edited JSON through the very same path: weight 0.8 -> slider + Score; weight 3 -> a refusal line naming weight
+    await q.ev(`window.__edit('phrases/phrase_002.md', ${JSON.stringify(mixText({ weight: 0.8 }))})`); await settle();
+    res.edit08 = await q.ev(`({ slider: document.querySelector('.forge-mix-weight').value, shown: document.querySelector('.forge-mix-weight-value').textContent })`);
+    await q.ev(`window.__edit('phrases/phrase_002.md', ${JSON.stringify(mixText({ weight: 3 }))})`); await settle();
+    res.edit3 = await q.ev(`({ status: document.querySelector('.forge-rhythm-edit-score-status').textContent, disabled: document.querySelector('.forge-mix-weight').disabled })`);
+    res.errorsAfter = await q.ev('window.__errors.slice()');
+  } finally { q.close(); }
+  return res;
+}
+out.mix = await mixStudy();
+
 // The verdicts (a measurement that cannot fail proves nothing): the player's tempo changes and Verovio's bar starts must sit at the engine's bar starts, within 5 ms; 8 bars; a mark per bar and part.
 const near = (a: number, b: number) => Math.abs(a - b) <= 0.005;
 const tempi: number[] = out.expected.tempi; const starts: number[] = out.expected.barStartsSec;
@@ -180,6 +261,19 @@ out.verdicts = {
   m6_theFanLightsAllBarsOrOne: out.m6?.hotOnSourceEntry === 8 && JSON.stringify(out.m6?.hotOnBarEntry) === JSON.stringify(['ph_bar_5']) && out.m6?.hotAfterLeave === 0,
   m6_theBracketLightsAllBarsAndOpensThePhraseAndTheSourceLinkOpensTheBar: out.m6?.hotOnBracket === 8 && out.m6?.bracketText === 'phrase_001 · 8 bars' && JSON.stringify(out.m6?.openedAfterBracketAndSource) === JSON.stringify(['phrases/phrase_001', 'bars/bar_005', 'phrases/phrase_001', 'bars/bar_005']),
   m6_hoveringABarWithNothingPinnedPreviewsItsStack: out.m6?.previewIsMarked === true && out.m6?.previewBar2?.[0] === 'bar 2 of 8',
+  mix_theStripIsTheMixStripWithTwoBarListsAndTheValuesOfTheNote: out.mix?.dom?.a === 'bar_005' && out.mix.dom.b === 'bar_006' && JSON.stringify(out.mix.dom.aOptions) === JSON.stringify(['bar_005', 'bar_006']) && out.mix.dom.weight === '0.5' && out.mix.dom.weightShown === '0.50' && out.mix.dom.weightType === 'range' && out.mix.dom.weightStep === '0.05' && out.mix.dom.threshold === '0.5' && out.mix.dom.ghost === false && /^Mix of bar_005 and bar_006: 50 % bar_005;/.test(out.mix.dom.sentence ?? ''),
+  mix_oneBarEngraved: out.mix?.dom?.measureGroups === 1,
+  mix_noInspectorNoBracketNoSourceLinkNoExtendStrip: out.mix?.dom?.inspector === false && out.mix.dom.bracket === false && out.mix.dom.sourceLink === false && out.mix.dom.extendBars === false,
+  mix_rendered_weight1AndWeight0LookDifferent: !!out.mix?.hash?.w1 && out.mix.hash.w1 !== out.mix.hash.w0,
+  mix_rendered_atTheTieTheUnionOfTheseTwoBarsLooksLikeBar005: out.mix?.hash?.['w0.5'] === out.mix?.hash?.w1,
+  mix_rendered_justUnderTheThresholdLooksLikeBar006: !!out.mix?.hash?.w0 && out.mix.hash['w0.45'] === out.mix.hash.w0,
+  mix_rendered_ghostNotesChangeTheScoreAndUntickingGivesItBack: !!out.mix?.hash?.w04 && out.mix.hash.w04ghost !== out.mix.hash.w04 && out.mix.hash.w04ghostOff === out.mix.hash.w04,
+  mix_theSentenceFollowsTheControls: /^Mix of bar_005 and bar_006: 0 % bar_005;/.test(out.mix?.sentenceAt0 ?? '') && /Ghost notes/.test(out.mix?.sentenceGhost ?? ''),
+  mix_theScoreFollowsTheDragWhileItIsGoingNotOnlyAtTheEnd: (out.mix?.scrub?.rendersEngraved ?? 0) >= 2 && (out.mix?.scrub?.swaps ?? 0) >= 2,
+  mix_scrubIsCoalescedAndEndsOnTheLastValue: (out.mix?.scrub?.rendersEngraved ?? 99) < 20 && out.mix?.scrub?.numberShownAtEnd === '0.05' && out.mix?.scrub?.writtenWeight === 0.05 && out.mix?.scrub?.hashAfter === out.mix?.hash?.w0,
+  mix_aRealPointerOnTheSliderMovesTheValueTheNoteAndTheScore: out.mix?.pointerLeft?.value === '0' && out.mix.pointerLeft.written === 0 && out.mix.pointerLeft.hash === out.mix.hash.w0 && out.mix?.pointerRight?.value === '1' && out.mix.pointerRight.written === 1 && out.mix.pointerRight.hash === out.mix.hash.w1,
+  mix_aHandEditedWeightMovesTheSliderAndAWeightOf3IsARefusalNamingWeight: out.mix?.edit08?.slider === '0.8' && out.mix.edit08.shown === '0.80' && /weight/.test(out.mix?.edit3?.status ?? '') && out.mix?.edit3?.disabled === true,
+  mix_noConsoleErrors: (out.mix?.errors?.length ?? 1) === 0 && (out.mix?.errorsAfter?.length ?? 1) === 0,
   rider_aTinyHostNoLongerMakesVerovioRefusePageWidth: (out.rider?.tinyHostSvgLength ?? 0) > 0 && (out.rider?.tinyHostErrors?.length ?? 1) === 0,
   rider_aHiddenPaneWaitsThenEngravesWhenShown: out.rider?.svgWhileHidden === false && out.rider?.svgAfterShown === true && (out.rider?.errorsWhileHidden?.length ?? 1) === 0 && (out.rider?.errorsAfterShown?.length ?? 1) === 0,
 };

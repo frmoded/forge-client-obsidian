@@ -1,8 +1,10 @@
-// score_first M5 (drain 2026-10-22-1850) — phrases: a bar stretched into n bars, with an optional ritardando or accelerando.
+// score_first M5 (drain 2026-10-22-1850) — phrases: a bar stretched into n bars, with an optional ritardando or accelerando. M7 Phase A (drain 2026-10-22-2330) adds the second kind, a MIX.
 //
 // A phrase is a DATA NOTE in `phrases/` that holds only parameters, never bars:
 //   { "kind": "extend", "source": "bar_005", "bars": 8, "style": "repeat_with_fills", "tempo_change_pct": -20 }
-// The Score it shows is DERIVED (P4, P6): the source bar's data note goes through the engine's `extend_rhythm` and `rhythm_bars_to_stream`. Nothing here is stored but those five fields.
+//   { "kind": "mix", "a": "bar_005", "b": "bar_006", "weight": 0.5, "threshold": 0.5, "ghost": false }
+// The Score it shows is DERIVED (P4, P6): an extend's source bar goes through the engine's `extend_rhythm` and `rhythm_bars_to_stream`; a mix's two bars go through `mix_rhythm` (one bar that is a
+// weighted mix of them) and the same `rhythm_bars_to_stream`. Nothing here is stored but those fields.
 //
 // Pure core (no obsidian, no engine): parse + validate (defaults, refuse), the clamps the control strip uses, the note's text and its rewrite, the next free name, the "New phrase from this
 // bar" decision and its action with the vault injected, and the Score of a phrase with the engine injected. The gate (score-first vault or not) is an INPUT here; it is read in one place,
@@ -14,9 +16,11 @@ import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 export const PHRASE_FOLDER = 'phrases';
 export const PHRASE_VIEW_TYPE = 'forge-phrase';
 const BAR_FOLDER = 'bars';                       // the same folder score-first-core.ts names; kept here so this file stays free of the profile gate's module
+export const BAR_FOLDER_NAME = BAR_FOLDER;
 const BAR_PATH = /^bars\/(bar_\d+)\.md$/;
 const PHRASE_PATH = /^phrases\/phrase_\d+\.md$/;
 const PHRASE_NAME = /^phrase_(\d+)$/;
+const BAR_NAME = /^bar_(\d+)$/;
 const SOURCE_NAME = /^[A-Za-z0-9_-]+$/;
 
 /** The three styles `extend_rhythm` knows (`_RHYTHM_EXTEND_STYLES` in forge/music/lib.py). */
@@ -37,7 +41,7 @@ export const PHRASE_PCT_MIN = -90;
 export const PHRASE_PCT_MAX = 100;
 export const PHRASE_DEFAULTS = { bars: 4, style: 'repeat_with_fills' as PhraseStyle, tempo_change_pct: 0 };
 
-export interface PhraseParams {
+export interface ExtendPhrase {
   kind: 'extend';
   source: string;
   bars: number;
@@ -45,7 +49,25 @@ export interface PhraseParams {
   tempo_change_pct: number;
 }
 
-const KEYS = ['kind', 'source', 'bars', 'style', 'tempo_change_pct'] as const;
+/** A bar as a weighted mix of two bars (`mix_rhythm` in forge/music/lib.py). `weight` is the weight of `a` (1 = all a, 0 = all b); a hit is placed where the weights reach `threshold`. */
+export interface MixPhrase {
+  kind: 'mix';
+  a: string;
+  b: string;
+  weight: number;
+  threshold: number;
+  ghost: boolean;
+}
+
+export type PhraseParams = ExtendPhrase | MixPhrase;
+
+/** The two bars a mix reads, as the engine gets them. */
+export interface MixBars { a: RhythmData; b: RhythmData }
+
+export const MIX_DEFAULTS = { weight: 0.5, threshold: 0.5, ghost: false };
+
+export const PHRASE_KEYS = ['kind', 'source', 'bars', 'style', 'tempo_change_pct'] as const;
+export const MIX_KEYS = ['kind', 'a', 'b', 'weight', 'threshold', 'ghost'] as const;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -56,10 +78,11 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 export function validatePhrase(raw: unknown): Validation<PhraseParams> {
   const bad = (message: string): Validation<PhraseParams> => ({ ok: false, message });
   if (!isPlainObject(raw)) return bad('The phrase must be an object.');
+  if (raw.kind === 'mix') return validateMix(raw);
+  if (raw.kind !== 'extend') return bad(`kind must be "extend" or "mix", got ${JSON.stringify(raw.kind)}.`);
   for (const key of Object.keys(raw)) {
-    if (!(KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a phrase holds only ${KEYS.join(', ')}).`);
+    if (!(PHRASE_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a phrase holds only ${PHRASE_KEYS.join(', ')}).`);
   }
-  if (raw.kind !== 'extend') return bad(`kind must be "extend", got ${JSON.stringify(raw.kind)}.`);
   const source = raw.source;
   if (typeof source !== 'string' || !SOURCE_NAME.test(source)) {
     return bad(`source must be the name of a bar in ${BAR_FOLDER}/ (letters, digits, _ and -; no folder, no .md), got ${JSON.stringify(source)}.`);
@@ -79,6 +102,32 @@ export function validatePhrase(raw: unknown): Validation<PhraseParams> {
   return { ok: true, value: { kind: 'extend', source, bars, style: style as PhraseStyle, tempo_change_pct: pct } };
 }
 
+function barNameProblem(field: string, v: unknown): string | null {
+  return typeof v === 'string' && SOURCE_NAME.test(v) ? null : `${field} must be the name of a bar in ${BAR_FOLDER}/ (letters, digits, _ and -; no folder, no .md), got ${JSON.stringify(v)}.`;
+}
+
+function validateMix(raw: Record<string, unknown>): Validation<PhraseParams> {
+  const bad = (message: string): Validation<PhraseParams> => ({ ok: false, message });
+  for (const key of Object.keys(raw)) {
+    if (!(MIX_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a mix holds only ${MIX_KEYS.join(', ')}).`);
+  }
+  for (const field of ['a', 'b'] as const) {
+    const problem = barNameProblem(field, raw[field]);
+    if (problem) return bad(problem);
+  }
+  const unit = (field: 'weight' | 'threshold'): number | string => {
+    const v = raw[field] === undefined ? MIX_DEFAULTS[field] : raw[field];
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : `${field} must be a number from 0 to 1, got ${JSON.stringify(raw[field])}.`;
+  };
+  const weight = unit('weight');
+  if (typeof weight === 'string') return bad(weight);
+  const threshold = unit('threshold');
+  if (typeof threshold === 'string') return bad(threshold);
+  const ghost = raw.ghost === undefined ? MIX_DEFAULTS.ghost : raw.ghost;
+  if (typeof ghost !== 'boolean') return bad(`ghost must be true or false, got ${JSON.stringify(raw.ghost)}.`);
+  return { ok: true, value: { kind: 'mix', a: raw.a as string, b: raw.b as string, weight, threshold, ghost } };
+}
+
 /** What the control strip writes: bars as a whole number in range, the percentage in range. Anything that is not a number is the default. */
 export function clampPhraseBars(n: number): number {
   if (typeof n !== 'number' || Number.isNaN(n)) return PHRASE_DEFAULTS.bars;
@@ -87,6 +136,33 @@ export function clampPhraseBars(n: number): number {
 export function clampPhrasePct(n: number): number {
   if (typeof n !== 'number' || Number.isNaN(n)) return PHRASE_DEFAULTS.tempo_change_pct;
   return Math.min(PHRASE_PCT_MAX, Math.max(PHRASE_PCT_MIN, n));
+}
+
+/** The `kind` a phrase note says it is, even when the rest of it is wrong (a mix with weight 3 is still a mix, and its strip should say what is wrong with it). `null` = it does not say. */
+export function readPhraseKind(text: string): PhraseParams['kind'] | null {
+  const fm = parseFrontmatter(text);
+  if (!fm) return null;
+  const block = extractJsonBlock(text);
+  if (block.ok === false) return null;
+  try {
+    const kind = (JSON.parse(text.slice(block.contentStart, block.contentEnd)) as { kind?: unknown } | null)?.kind;
+    return kind === 'mix' || kind === 'extend' ? kind : null;
+  } catch {
+    return null;
+  }
+}
+
+/** What the mix sliders write: into 0..1 and to two decimals (so a note never holds 0.30000000000000004). Anything that is not a number is the default. */
+export function clampMixUnit(n: number): number {
+  if (typeof n !== 'number' || Number.isNaN(n)) return MIX_DEFAULTS.weight;
+  return Math.round(Math.min(1, Math.max(0, n)) * 100) / 100;
+}
+
+/** The one line under the mix strip: what the current settings do, in plain words, with the numbers that are on the sliders. */
+export function mixSentence(p: MixPhrase): string {
+  const bars = p.a === p.b ? `${p.a} and itself` : `${p.a} and ${p.b}`;
+  const base = `Mix of ${bars}: ${Math.round(p.weight * 100)} % ${p.a}; a hit appears where the weights say it should (threshold ${p.threshold.toFixed(2)}).`;
+  return p.ghost ? `${base} Ghost notes: quiet extra hits where the weights come close.` : base;
 }
 
 /** A phrase note's text -> its parameters. The note must be an editable (not read_only) `type: data`, `content_type: json` note holding exactly one json block. */
@@ -108,6 +184,18 @@ export function readPhraseNote(text: string): Validation<PhraseParams> {
 
 /** The block's text, field order as in the design. */
 export function formatPhraseJson(p: PhraseParams): string {
+  if (p.kind === 'mix') {
+    return [
+      '{',
+      `  "kind": "mix",`,
+      `  "a": ${JSON.stringify(p.a)},`,
+      `  "b": ${JSON.stringify(p.b)},`,
+      `  "weight": ${p.weight},`,
+      `  "threshold": ${p.threshold},`,
+      `  "ghost": ${p.ghost}`,
+      '}',
+    ].join('\n');
+  }
   return [
     '{',
     `  "kind": ${JSON.stringify(p.kind)},`,
@@ -134,12 +222,29 @@ export function applyPhraseWrite(currentText: string, p: PhraseParams): { ok: tr
 
 /** The starter content of a new phrase: the defaults, the source named. The description is a double-quoted scalar (a JSON string is a YAML one). */
 export function phraseNoteContent(name: string, source: string): string {
-  const p: PhraseParams = { kind: 'extend', source, ...PHRASE_DEFAULTS };
+  const p: ExtendPhrase = { kind: 'extend', source, ...PHRASE_DEFAULTS };
   return [
     '---',
     'type: data',
     'content_type: json',
     `description: ${JSON.stringify(`${name} — ${source} stretched into a longer phrase. Parameters only; the Score is derived from the bar.`)}`,
+    '---',
+    '',
+    '```json',
+    formatPhraseJson(p),
+    '```',
+    '',
+  ].join('\n');
+}
+
+/** The starter content of a new mix: the defaults, the two bars named. */
+export function mixNoteContent(name: string, a: string, b: string): string {
+  const p: MixPhrase = { kind: 'mix', a, b, ...MIX_DEFAULTS };
+  return [
+    '---',
+    'type: data',
+    'content_type: json',
+    `description: ${JSON.stringify(`${name} — a mix of ${a} and ${b}. Parameters only; the Score is derived from the two bars.`)}`,
     '---',
     '',
     '```json',
@@ -171,6 +276,10 @@ export function nextPhraseName(existingBasenames: Iterable<string>): string {
 export function isPhrasePath(path: string | null | undefined): boolean {
   return typeof path === 'string' && PHRASE_PATH.test(path);
 }
+/** Is this path a bar (`bars/bar_NNN.md`, directly in the folder)? */
+export function isBarPath(path: string | null | undefined): boolean {
+  return sourceBarName(path) !== null;
+}
 /** The bar's name when `path` is a bar (`bars/bar_NNN.md`, directly in the folder), else null. */
 export function sourceBarName(path: string | null | undefined): string | null {
   if (typeof path !== 'string') return null;
@@ -183,20 +292,41 @@ export function newPhraseAvailable(input: { scoreFirst: boolean; activePath: str
   return input.scoreFirst === true && sourceBarName(input.activePath) !== null;
 }
 
-export type NewPhrasePlan = { ok: true; name: string; path: string; content: string } | { ok: false; message: string };
+export type NewPhrasePlan = { ok: true; name: string; path: string; content: string; notice?: string } | { ok: false; message: string };
 
-export function planNewPhrase(input: { activePath: string | null | undefined; existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewPhrasePlan {
-  const source = sourceBarName(input.activePath);
-  if (source === null) return { ok: false, message: `New phrase: open a bar from ${BAR_FOLDER}/ first (the note you are on is not a bar).` };
+/** The first free `phrase_NNN` (from a listing and an existence check), with its content made by `content(name)`. The one name-picking rule for every kind of phrase. */
+function planPhraseNote(input: { existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }, content: (name: string) => string): NewPhrasePlan {
   const taken = new Set(input.existingBasenames);
   const attempts = input.attempts ?? 3;
   for (let i = 0; i < attempts; i++) {
     const name = nextPhraseName(taken);
     const path = phrasePath(name);
-    if (!input.exists(path)) return { ok: true, name, path, content: phraseNoteContent(name, source) };
+    if (!input.exists(path)) return { ok: true, name, path, content: content(name) };
     taken.add(name);
   }
   return { ok: false, message: `Could not find a free phrase name in ${PHRASE_FOLDER}/ — try again.` };
+}
+
+export function planNewPhrase(input: { activePath: string | null | undefined; existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewPhrasePlan {
+  const source = sourceBarName(input.activePath);
+  if (source === null) return { ok: false, message: `New phrase: open a bar from ${BAR_FOLDER}/ first (the note you are on is not a bar).` };
+  return planPhraseNote(input, (name) => phraseNoteContent(name, source));
+}
+
+/** Is "New mix from this bar" offered? Under exactly the conditions of "New phrase from this bar": a score-first vault, and the active file is a bar. */
+export function newMixAvailable(input: { scoreFirst: boolean; activePath: string | null | undefined }): boolean {
+  return newPhraseAvailable(input);
+}
+
+/** "New mix from this bar": `a` is the bar you are on, `b` the first OTHER bar by number (or the same bar, with a notice saying there is only one). */
+export function planNewMix(input: { activePath: string | null | undefined; existingBasenames: Iterable<string>; exists: (path: string) => boolean; barBasenames: Iterable<string>; attempts?: number }): NewPhrasePlan {
+  const a = sourceBarName(input.activePath);
+  if (a === null) return { ok: false, message: `New mix: open a bar from ${BAR_FOLDER}/ first (the note you are on is not a bar).` };
+  const others = [...input.barBasenames].filter((n) => BAR_NAME.test(n) && n !== a).sort((x, y) => Number(BAR_NAME.exec(x)![1]) - Number(BAR_NAME.exec(y)![1]));
+  const b = others.length > 0 ? others[0] : a;
+  const plan = planPhraseNote(input, (name) => mixNoteContent(name, a, b));
+  if (plan.ok && b === a) return { ...plan, notice: `There is only one bar in ${BAR_FOLDER}/ (${a}), so this mix is ${a} with itself. Make another bar, then pick it in the b list.` };
+  return plan;
 }
 
 export interface NewPhrasePorts<F> {
@@ -216,18 +346,23 @@ export interface NewPhrasePorts<F> {
 
 export type NewPhraseResult = { ok: true; path: string } | { ok: false; message: string };
 
-/** The whole "New phrase from this bar" action with the vault and the UI injected (same shape as `createNewBar`): make `phrases/` if missing, pick the next free name from a FRESH listing,
- *  create the note, open it. Every failure is a notice naming the reason, plus a `console.error` naming this function for a caught error. */
-export async function createNewPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewPhraseResult> {
+export interface NewMixPorts<F> extends NewPhrasePorts<F> {
+  /** Basenames in `bars/` right now. */
+  listBarBasenames(): string[];
+}
+
+/** The create-and-open loop shared by every kind of new phrase: make `phrases/` if missing, pick the next free name from a FRESH listing, create the note, open it. Every failure is a notice
+ *  naming the reason, plus a `console.error` naming `fn` for a caught error. `plan` is asked with the live listing on every attempt. */
+async function createPhraseNote<F>(ports: NewPhrasePorts<F>, how: { fn: string; noun: string; plan(existingBasenames: string[], exists: (path: string) => boolean): NewPhrasePlan }): Promise<NewPhraseResult> {
   const fail = (message: string): NewPhraseResult => { ports.notify(message); return { ok: false, message }; };
   try {
-    const first = planNewPhrase({ activePath: ports.activePath(), existingBasenames: [], exists: () => false });
+    const first = how.plan([], () => false);
     if (first.ok === false) return fail(first.message);               // not on a bar: say so before touching the vault
     if (!ports.folderExists()) {
       try { await ports.createFolder(); } catch (e) { if (!ports.isAlreadyExists(e)) throw e; }
     }
     for (let attempt = 0; attempt < 3; attempt++) {
-      const plan = planNewPhrase({ activePath: ports.activePath(), existingBasenames: ports.listPhraseBasenames(), exists: (p) => ports.exists(p) });
+      const plan = how.plan(ports.listPhraseBasenames(), (p) => ports.exists(p));
       if (plan.ok === false) return fail(plan.message);
       let file: F;
       try {
@@ -236,21 +371,37 @@ export async function createNewPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewP
         if (ports.isAlreadyExists(e)) continue;
         throw e;
       }
+      if (plan.notice) ports.notify(plan.notice);
       await ports.open(file);
       return { ok: true, path: plan.path };
     }
-    return fail('Could not make a new phrase: the name kept being taken. Try again.');
+    return fail(`Could not make a new ${how.noun}: the name kept being taken. Try again.`);
   } catch (e) {
-    console.error('createNewPhrase failed', e);
-    return fail(`Could not make a new phrase: ${(e as Error)?.message ?? e}`);
+    console.error(`${how.fn} failed`, e);
+    return fail(`Could not make a new ${how.noun}: ${(e as Error)?.message ?? e}`);
   }
+}
+
+/** The whole "New phrase from this bar" action with the vault and the UI injected (same shape as `createNewBar`). */
+export function createNewPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewPhraseResult> {
+  return createPhraseNote(ports, { fn: 'createNewPhrase', noun: 'phrase', plan: (existingBasenames, exists) => planNewPhrase({ activePath: ports.activePath(), existingBasenames, exists }) });
+}
+
+/** The whole "New mix from this bar" action: the same loop, the note is a mix of this bar and the first other one. */
+export function createNewMix<F>(ports: NewMixPorts<F>): Promise<NewPhraseResult> {
+  return createPhraseNote(ports, {
+    fn: 'createNewMix',
+    noun: 'mix',
+    plan: (existingBasenames, exists) => planNewMix({ activePath: ports.activePath(), existingBasenames, exists, barBasenames: ports.listBarBasenames() }),
+  });
 }
 
 export interface PhraseScoreDeps {
   /** The text of a vault note by path (fresh on every call). Rejects when the note is not there. */
   readNote(path: string): Promise<string>;
-  /** Engine: `extend_rhythm` + `rhythm_bars_to_stream` on the source bar's data with the phrase's parameters, as a tagged MusicXML payload. */
-  compute(data: RhythmData, params: PhraseParams, title: string): Promise<unknown>;
+  /** Engine: `extend_rhythm` + `rhythm_bars_to_stream` on the source bar's data with the phrase's parameters, as a tagged MusicXML payload. For a MIX the data is the two bars (`{ a, b }`) and the
+   *  engine runs `mix_rhythm` + `rhythm_bars_to_stream`. */
+  compute(data: RhythmData | MixBars, params: PhraseParams, title: string): Promise<unknown>;
 }
 
 /** The Score of a phrase, from the phrase's parameters (already parsed JSON): validate them, read the source bar FRESH from the vault, ask the engine. A phrase that is wrong or whose source is
@@ -259,6 +410,7 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
   const valid = validatePhrase(raw);
   if (valid.ok === false) return { kind: 'refusal', message: `Phrase: ${valid.message}` };
   const params = valid.value;
+  if (params.kind === 'mix') return produceMix(deps, params, title);
   const path = phraseSourcePath(params.source);
   let text: string;
   try {
@@ -269,6 +421,46 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
   const bar = readRhythmNote(text);
   if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the source ${params.source} is not usable: ${bar.message}` };
   return computeScore((data, t) => deps.compute(data, params, t), bar.value.data, title);
+}
+
+/** The engine's own `mix_rhythm: …` line out of an error: Pyodide hands a Python ValueError over as the whole traceback, whose last line is `ValueError: mix_rhythm: …`. `null` = not a mix_rhythm refusal. */
+export function mixRhythmRefusal(message: string): string | null {
+  const m = /(?:^|\n)(?:ValueError: )?(mix_rhythm: [^\n]*?)\s*$/.exec(message.trim());
+  return m ? m[1] : null;
+}
+
+/** The Score of a mix: both bars read FRESH (one read per distinct bar), then the engine. A missing or unusable bar is a refusal naming which one (a or b). The engine's own `mix_rhythm` ValueError
+ *  (two bars on different grids) is a refusal line too — the person's data, not a fault — while any other engine failure stays an error. */
+async function produceMix(deps: PhraseScoreDeps, params: MixPhrase, title: string): Promise<ScoreOutcome> {
+  const reads = new Map<string, string>();
+  const bars = {} as Record<'a' | 'b', RhythmData>;
+  for (const side of ['a', 'b'] as const) {
+    const name = params[side];
+    const path = phraseSourcePath(name);
+    let text = reads.get(path);
+    if (text === undefined) {
+      try {
+        text = await deps.readNote(path);
+      } catch (e) {
+        return { kind: 'refusal', message: `Phrase: the bar for ${side}, ${name} (${path}), was not found or could not be read (${(e as Error)?.message ?? e}).` };
+      }
+      reads.set(path, text);
+    }
+    const bar = readRhythmNote(text);
+    if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the bar for ${side}, ${name}, is not usable: ${bar.message}` };
+    bars[side] = bar.value.data;
+  }
+  let refused: string | null = null;
+  const outcome = await computeScore(async (_data, t) => {
+    try {
+      return await deps.compute({ a: bars.a, b: bars.b }, params, t);
+    } catch (e) {
+      const line = mixRhythmRefusal((e as Error)?.message ?? String(e));
+      if (line !== null) { refused = line; return null; }
+      throw e;
+    }
+  }, bars.a, title);
+  return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : outcome;
 }
 
 /** What the phrase view hands the live Score: the phrase note's current TEXT (or why it could not be read). The Score parses it itself, so a note that is not valid is the SAME kind of

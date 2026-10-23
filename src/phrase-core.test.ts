@@ -30,7 +30,7 @@ test('refused, each naming the field: not an object, wrong kind, missing/odd sou
     [null, /must be an object/],
     [[], /must be an object/],
     [{ source: 'bar_001' }, /kind/],
-    [{ kind: 'mix', source: 'bar_001' }, /kind.*"extend"/],
+    [{ kind: 'loop', source: 'bar_001' }, /kind.*"extend"/],   // M7: 'mix' is a kind now (phrase-mix-core.test.ts); any other is still refused
     [{ kind: 'extend' }, /source/],
     [{ kind: 'extend', source: '' }, /source/],
     [{ kind: 'extend', source: 'bars/bar_001' }, /source/],

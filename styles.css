@@ -1941,3 +1941,21 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   font-size: var(--font-ui-smaller);
 }
 .forge-phrase-status { order: 10; }
+
+/* score_first M7 Phase A — the mix strip: two bar dropdowns, Weight and Threshold sliders that show their number, Ghost notes, and the plain-words sentence on its own line. Only a score-first vault ever opens it. */
+.forge-mix-controls .forge-mix-weight,
+.forge-mix-controls .forge-mix-threshold {
+  width: 9em;
+}
+.forge-mix-weight-value,
+.forge-mix-threshold-value {
+  min-width: 2.6em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.forge-mix-sentence {
+  order: 9;
+  flex: 1 0 100%;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}

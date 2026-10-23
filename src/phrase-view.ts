@@ -5,7 +5,7 @@
 import { EditableFileView, TFile, type App, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
-import { PHRASE_VIEW_TYPE, applyPhraseWrite } from './phrase-core.ts';
+import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
@@ -32,10 +32,14 @@ export class PhraseView extends EditableFileView {
   async onLoadFile(file: TFile): Promise<void> {
     await super.onLoadFile(file);
     this.release();
+    // The note's text first, so the surface drawn is the right one for its kind (a mix gets the mix strip at once, not the extend strip for a moment). Unreadable = the default surface; load() says why.
+    const initial = await this.app.vault.read(file).catch(() => undefined);
     this.handle = mountPhrase(this.contentEl, {
       path: file.path,
       title: file.basename,
       plan: this.plan,
+      initial,
+      listBars: () => this.app.vault.getFiles().filter((f) => isBarPath(f.path)).map((f) => f.basename),
       inspector: { openNote: this.openNote },          // M6: click a bar for its lineage; the bracket; the source link — each opens a note through the plugin's own openers
       readNote: async (p) => {
         const f = this.app.vault.getAbstractFileByPath(p);

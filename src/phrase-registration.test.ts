@@ -1,6 +1,6 @@
-// score_first M5 (drain 2026-10-22-1850) — P3 for the phrase surface, proved on the REAL wiring: the real `ForgePlugin.prototype.onload` from the real bundle (both editions), against a vault whose
+// score_first M5 (drain 2026-10-22-1850; M7 Phase A 2026-10-22-2330 adds "New mix from this bar") — P3 for the phrase surface, proved on the REAL wiring: the real `ForgePlugin.prototype.onload` from the real bundle (both editions), against a vault whose
 // forge.toml does or does not declare `profile = "score_first"`.
-//   * score-first vault: "New phrase from this bar" and "Open phrase as Score" exist and are offered ONLY on a bar / a phrase; the phrase view type is registered.
+//   * score-first vault: "New phrase from this bar", "New mix from this bar" and "Open phrase as Score" exist and are offered ONLY on a bar / a phrase; the phrase view type is registered.
 //   * every other vault (the tutorial's forge.toml, music-theory's, none at all): NEITHER command, NO phrase view, and nothing touches `phrases/` or `bars/`.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,6 +16,7 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml'), 'utf8');
 const NEW_PHRASE = 'new-phrase-from-bar';
 const OPEN_PHRASE = 'open-phrase-as-score';
+const NEW_MIX = 'new-mix-from-bar';
 const tick = () => new Promise((r) => setTimeout(r, 60));
 
 function appFor(toml: string | null, active: string | null) {
@@ -61,15 +62,19 @@ for (const edition of ['lean', 'music'] as const) {
     const onBar = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
     assert.equal(onBar.plugin.commands.get(NEW_PHRASE)?.name, 'New phrase from this bar');
     assert.equal(onBar.plugin.commands.get(OPEN_PHRASE)?.name, 'Open phrase as Score');
+    assert.equal(onBar.plugin.commands.get(NEW_MIX)?.name, 'New mix from this bar');
     assert.ok(onBar.plugin.views.has(PHRASE_VIEW_TYPE), 'the phrase view type is registered');
     assert.equal(offered(onBar.plugin, NEW_PHRASE), true, 'on a bar: "New phrase from this bar" is offered');
+    assert.equal(offered(onBar.plugin, NEW_MIX), true, 'on a bar: "New mix from this bar" is offered');
     assert.equal(offered(onBar.plugin, OPEN_PHRASE), false, 'on a bar: "Open phrase as Score" is not');
     const onPhrase = await load(SCORE_FIRST_TOML, 'phrases/phrase_001.md');
     assert.equal(offered(onPhrase.plugin, NEW_PHRASE), false);
+    assert.equal(offered(onPhrase.plugin, NEW_MIX), false, 'on a phrase: no new mix');
     assert.equal(offered(onPhrase.plugin, OPEN_PHRASE), true);
     for (const active of [null, 'percussion_lab/peak.md', 'bars/README.md', 'phrases/README.md']) {
       const other = await load(SCORE_FIRST_TOML, active);
       assert.equal(offered(other.plugin, NEW_PHRASE), false, `${active}: not a bar`);
+      assert.equal(offered(other.plugin, NEW_MIX), false, `${active}: not a bar, no new mix`);
       assert.equal(offered(other.plugin, OPEN_PHRASE), false, `${active}: not a phrase`);
     }
   });
@@ -79,9 +84,11 @@ for (const edition of ['lean', 'music'] as const) {
       const { plugin, touched } = await load(toml, 'bars/bar_005.md');
       assert.equal(plugin.commands.has(NEW_PHRASE), false);
       assert.equal(plugin.commands.has(OPEN_PHRASE), false);
+      assert.equal(plugin.commands.has(NEW_MIX), false, 'P3: "New mix from this bar" is absent here too');
       assert.equal(plugin.views.has(PHRASE_VIEW_TYPE), false);
       assert.deepEqual(touched.filter((t) => /bars|phrases/.test(t)), [], 'no phrases/ handling runs');
-      assert.ok(![...plugin.commands.keys()].some((k) => /phrase/i.test(k)), 'no command mentions a phrase');
+      assert.ok(![...plugin.commands.keys()].some((k) => /phrase|mix/i.test(k)), 'no command mentions a phrase or a mix');
+      assert.ok(![...plugin.commands.values()].some((c) => /phrase|mix/i.test(String(c.name))), 'no command is NAMED for a phrase or a mix');
     });
   }
 
@@ -112,9 +119,39 @@ for (const edition of ['lean', 'music'] as const) {
     assert.deepEqual(states.map((s) => [s.how, s.state.type, s.state.state.file]), [['this-tab', PHRASE_VIEW_TYPE, 'phrases/phrase_001.md']]);
   });
 
+  test(`[${edition}] running "New mix from this bar" on the real wiring: it creates phrases/phrase_001.md as a mix of THIS bar and the first other bar, and opens it in a phrase tab; with one bar it says so`, async () => {
+    const { plugin, app } = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
+    const created: Array<{ path: string; content: string }> = []; const folders: string[] = []; const states: Array<{ how: string; state: any }> = [];
+    const leaf = (how: string) => ({ setViewState: async (state: any) => { states.push({ how, state }); } });
+    const file = (p: string) => ({ path: p, basename: path.basename(p, '.md') });
+    let bars = ['bars/bar_005.md', 'bars/bar_006.md', 'bars/bar_002.md', 'bars/README.md'];
+    Object.assign(app.vault, {
+      getFiles: () => bars.map(file),
+      createFolder: async (p: string) => { folders.push(p); },
+      create: async (p: string, content: string) => { created.push({ path: p, content }); return file(p); },
+    });
+    Object.assign(app.workspace, { getLeaf: (newTab: boolean) => leaf(newTab ? 'new-tab' : 'this-tab'), revealLeaf: () => {} });
+    plugin.commands.get(NEW_MIX)!.checkCallback!(false);
+    await tick();
+    assert.deepEqual(folders, ['phrases']);
+    assert.equal(created.length, 1);
+    assert.equal(created[0].path, 'phrases/phrase_001.md');
+    assert.match(created[0].content, /"kind": "mix",\n  "a": "bar_005",\n  "b": "bar_002",\n  "weight": 0.5,\n  "threshold": 0.5,\n  "ghost": false/);
+    assert.deepEqual(states.map((s) => [s.how, s.state.type, s.state.state.file]), [['new-tab', PHRASE_VIEW_TYPE, 'phrases/phrase_001.md']]);
+    // only one bar: the same bar twice, and a Notice (the stub Notice records its message)
+    bars = ['bars/bar_005.md']; created.length = 0; states.length = 0;
+    const notices = () => ((globalThis as any).__shimConstructed ?? []).filter((c: any) => c[0] === 'Notice').map((c: any) => String(c[1][0]));
+    const before = notices().length;
+    plugin.commands.get(NEW_MIX)!.checkCallback!(false);
+    await tick();
+    assert.match(created[0].content, /"a": "bar_005",\n  "b": "bar_005"/);
+    assert.ok(notices().slice(before).some((n: string) => /only one bar/i.test(n)), 'a Notice says there is only one bar');
+  });
+
   test(`[${edition}] non-vacuity: the same onload in a score-first vault DOES register them (so the P3 assertions above can fail)`, async () => {
     const { plugin } = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
     assert.equal(plugin.commands.has(NEW_PHRASE), true);
+    assert.equal(plugin.commands.has(NEW_MIX), true);
   });
 }
 

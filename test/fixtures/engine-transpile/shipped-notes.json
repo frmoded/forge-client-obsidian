@@ -1,6 +1,6 @@
 {
- "engine_bundle_digest": "b541f9ddf377869e57cff73573f417f8303575c1b943033456883fc4144f57ba",
- "engine_sha": "eab2bebd240d93689313bdb12797d423738638b9",
+ "engine_bundle_digest": "5eafa88291a987885441d3f01babb526e1bde800e6433fadea95d246a110bf44",
+ "engine_sha": "2a636ae75147a2bb4e5a9e586563d0aa7cfafdca",
  "notes": {
   "forge-moda/ask_all_particles": {
    "note": "---\ntype: action\nrole: leaf\ndescription: \"Block 10 — control: tell every particle to move, wall-bounce, and interact.\"\npython_hash: 89d6a2a98fbccb4fe5b82f7e669c9ae80023428fda16c83f665f3609ea8e8ed7\ndescription_hash: 4b773bad47937ad40eb2e0c225bab46f87ce7d521aa10d4ac6c1151111208320\nrecipe_hash: 1a711c56943e1277de0825a7bced70eec5eaed056de00061c99d74d2eb5da0f2\nrecipe_derived_from_source_hash: 4b773bad47937ad40eb2e0c225bab46f87ce7d521aa10d4ac6c1151111208320\npython_derived_from_source_hash: 4b773bad47937ad40eb2e0c225bab46f87ce7d521aa10d4ac6c1151111208320\nsource_facet: synced\nrecipe_derived_from_description_hash: 4b773bad47937ad40eb2e0c225bab46f87ce7d521aa10d4ac6c1151111208320\npython_derived_from_recipe_hash: 1a711c56943e1277de0825a7bced70eec5eaed056de00061c99d74d2eb5da0f2\n---\n\n# Description\n\nTell every particle to do its per-tick work in order:\n\n1. [[move]] forward one tick along its heading.\n2. [[if_wall_then_bounce]] — reflect off any wall it crossed.\n3. [[interact]] — collide with any particle within range.\n\n## Inputs\n\n- state — current ParticleState\n- dt — time step in seconds\n\n# Recipe\n\nLet state = Call [[move]] with state=state, dt=dt.\nLet state = Call [[if_wall_then_bounce]] with state=state.\nLet state = Call [[interact]] with state=state.\nReturn state.\n\n# Python\n\n```python\ndef compute(context, state, dt):\n  state = move(state=state, dt=dt)\n  state = if_wall_then_bounce(state=state)\n  state = interact(state=state)\n  return state\n```\n",
@@ -173,7 +173,7 @@
    "recipe": "Input style: 'cheerful' | 'formal' | 'sleepy' = \"cheerful\".\nIf style == \"cheerful\":\n  Return \"Hey hey hey!!!\".\nIf style == \"formal\":\n  Return \"Good day to you.\".\nReturn \"...zzz...\"."
   },
   "forge-tutorial/05-conditionals/weather": {
-   "note": "---\ntype: action\ndescription_hash: 26980ddb766f4afb51793fd94e980ccc090cc745b36e8657e85e1ec22a4a354f\nrecipe_hash: d2913a48e5244d390091652aa8a093c63f61bff65e9ae2c5f3ad8dcaeb00b9a2\npython_hash: e93fced355617ea05436f03785e210e3a5000cd7116fcb4f0d3360ab246f7ee9\nrecipe_derived_from_source_hash: 26980ddb766f4afb51793fd94e980ccc090cc745b36e8657e85e1ec22a4a354f\nsource_facet: recipe\nrecipe_derived_from_description_hash: 26980ddb766f4afb51793fd94e980ccc090cc745b36e8657e85e1ec22a4a354f\npython_derived_from_source_hash: d2913a48e5244d390091652aa8a093c63f61bff65e9ae2c5f3ad8dcaeb00b9a2\npython_derived_from_recipe_hash: d2913a48e5244d390091652aa8a093c63f61bff65e9ae2c5f3ad8dcaeb00b9a2\n---\n\n# Description\n\nChooses what to say based on a value.\n\n# Recipe\n\nLet temperature = 72.\nIf temperature > 80:\n  Return \"It's hot.\".\nOtherwise:\n  Return \"It's pleasant.\".\n\n# Python\n\n```python\ndef compute(context):\n  temperature = 72\n  if (temperature > 80):\n    return \"It's hot.\"\n  else:\n    return \"It's pleasant.\"\n```\n",
+   "note": "---\ntype: action\ndescription_hash: d302c620b35ee6d18a7395bae088a7e4511245dc719e3f3576fd4359d437774f\nrecipe_hash: d2913a48e5244d390091652aa8a093c63f61bff65e9ae2c5f3ad8dcaeb00b9a2\npython_hash: e93fced355617ea05436f03785e210e3a5000cd7116fcb4f0d3360ab246f7ee9\nrecipe_derived_from_source_hash: 26980ddb766f4afb51793fd94e980ccc090cc745b36e8657e85e1ec22a4a354f\nsource_facet: recipe\nrecipe_derived_from_description_hash: 26980ddb766f4afb51793fd94e980ccc090cc745b36e8657e85e1ec22a4a354f\npython_derived_from_source_hash: d2913a48e5244d390091652aa8a093c63f61bff65e9ae2c5f3ad8dcaeb00b9a2\npython_derived_from_recipe_hash: d2913a48e5244d390091652aa8a093c63f61bff65e9ae2c5f3ad8dcaeb00b9a2\n---\n\n# Description\n\nSets the temperature to 72. Returns \"It's hot.\" if the temperature is above 80, and \"It's pleasant.\" otherwise.\n\n# Recipe\n\nLet temperature = 72.\nIf temperature > 80:\n  Return \"It's hot.\".\nOtherwise:\n  Return \"It's pleasant.\".\n\n# Python\n\n```python\ndef compute(context):\n  temperature = 72\n  if (temperature > 80):\n    return \"It's hot.\"\n  else:\n    return \"It's pleasant.\"\n```\n",
    "python": "def compute(context):\n  temperature = 72\n  if (temperature > 80):\n    return \"It's hot.\"\n  else:\n    return \"It's pleasant.\"\n",
    "recipe": "Let temperature = 72.\nIf temperature > 80:\n  Return \"It's hot.\".\nOtherwise:\n  Return \"It's pleasant.\"."
   },
@@ -377,7 +377,7 @@
  },
  "vault_shas": {
   "forge-moda": "933f41bfb723123f70546359c6913df96b6a2f2a",
-  "forge-tutorial": "2e9e777cc4809122429968dd5ad4e27a8dca8556",
+  "forge-tutorial": "872fe1396aed3dac0df61aace870815f3751eab4",
   "music-core": "80d816a2eafe19128b56ace7551e5fbb3bbc5970",
   "music-theory": "e42e54b556937c1f6ce7c9d915f0e6b4e598fd00"
  }

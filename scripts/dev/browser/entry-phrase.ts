@@ -21,13 +21,19 @@ proto.removeClass = function (c: string) { this.classList.remove(c); };
 proto.toggleClass = function (c: string, on: boolean) { this.classList.toggle(c, !!on); };
 proto.setText = function (t: string) { this.textContent = t; };
 
-const PATH = 'phrases/phrase_001.md';
-(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; plan?: 'score' | 'lean-note' }) => {
+(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; plan?: 'score' | 'lean-note'; path?: string; bars?: Record<string, string>; name?: string }) => {
+  const PATH = opts.path ?? 'phrases/phrase_001.md';
+  const NAME = opts.name ?? 'phrase_001';
   const files = new Map<string, string>([[PATH, opts.phrase], ['bars/bar_005.md', opts.bar]]);
+  for (const [n, t] of Object.entries(opts.bars ?? {})) files.set(`bars/${n}.md`, t);       // M7: more bars (a mix reads two)
   (window as any).__files = files;
   let handle: any;
   handle = mountPhrase(parent, {
-    path: PATH, title: 'phrase_001', plan: opts.plan ?? 'score',
+    path: PATH, title: NAME, plan: opts.plan ?? 'score',
+    initial: opts.phrase,                                          // M7: the first surface is the right one for the note's kind
+    listBars: () => [...files.keys()].filter((k) => /^bars\/bar_\d+\.md$/.test(k)).map((k) => k.slice(5, -3)).sort(),
+    now: () => performance.now(),
+    onTiming: (t) => { ((window as any).__timings ??= []).push({ ...t, at: performance.now() }); },   // M7: every render's engine ms and total ms, and WHEN it finished
     readNote: async (p) => { const t = files.get(p); if (t === undefined) throw new Error('File not found'); return t; },
     writePhrase: async (params) => {
       const { applyPhraseWrite } = await import('@client/phrase-core.ts');
@@ -44,7 +50,7 @@ const PATH = 'phrases/phrase_001.md';
       return out.payload;
     },
     inspector: { openNote: (id) => { ((window as any).__opened ??= []).push(id); } },   // M6: the lineage links, the bracket and the source link report which note they would open
-    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, 'phrase_001'),
+    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME),
     stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (h) => window.clearTimeout(h as number),
