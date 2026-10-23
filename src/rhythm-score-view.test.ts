@@ -29,7 +29,7 @@ test('renders from the SAVED note: the only read of note text in the Score view 
 
 test('reuse, not duplication: the Score view renders through the music-edition seam and imports no Verovio / MIDI-player code', () => {
   assert.match(score, /import \{ musicEdition \} from '\.\/music-edition-selected\.ts';/);
-  assert.match(score, /musicEdition\.renderTaggedMusicXML\(host, outcome\.payload, file\.basename\)/);
+  assert.match(score, /musicEdition\.renderTaggedMusicXML\(host, outcome\.payload, file\.basename, \{ clickToPlay: scoreClickPlays \}\)/);   // 2026-10-23-0030: the click policy rides along
   assert.ok(!/from '\.\/verovio\.ts'|from 'verovio'|html-midi-player|music-edition\.full|midi-player-teardown/.test(score));
 });
 

@@ -1903,7 +1903,7 @@
 }
 
 /* score_first M6 — navigation through an extend: the phrase tab's bars are the inspectable elements (each engraved bar is a measure group with an id). A bar is recoloured the way a note is
-   (classes only, nothing shifts) and has no hit rectangle of its own, so a click on a notehead still plays it and still selects its bar. Scoped to the phrase tab: the bar's Beat Box tab
+   (classes only, nothing shifts) and has no hit rectangle of its own, so a click on a notehead selects its bar (and, since 2026-10-23, does not play it: score-click-policy.ts). Scoped to the phrase tab: the bar's Beat Box tab
    keeps exactly the rules above. */
 .forge-phrase-view .forge-rhythm-score-host g.measure { cursor: pointer; }
 .forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-hot,

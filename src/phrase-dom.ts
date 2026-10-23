@@ -372,7 +372,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       annotate: (note, payload) => annotateForPhrase(ports.path, note as NoteText, payload),
       lineage: phraseLineageOf,
       hint: PHRASE_INSPECTOR_HINT,
-      enlargeTargets: null,                          // no hit rectangle: it would sit over the noteheads and take the Score's click-to-play; a click on any drawn part of a bar (a notehead, a staff line) selects the BAR
+      enlargeTargets: null,                          // no hit rectangle: it would sit over the noteheads and take the Score's click; a click on any drawn part of a bar (a notehead, a staff line) selects the BAR
       previewOnHover: true,
       band: true,                                    // 2300: the class recolour alone was not visible in the real Obsidian; the band does not depend on the stylesheet or the theme
       kitNote: 'Kit view: not mapped for this phrase (use the multi-staff view to inspect).',

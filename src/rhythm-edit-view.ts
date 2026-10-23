@@ -29,6 +29,7 @@ import { createAutosavePipeline, type AutosavePipeline, type SaveOutcome } from 
 import { createDefaultViewController, type LeafInfo, type LeafLocation, type SwapTarget } from './rhythm-default-view-core.ts';
 import { registerRestoreParticipants } from './restore-hold-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
+import { scoreClickPlays } from './score-click-policy.ts';
 import { RhythmScoreView } from './rhythm-score-view.ts';
 import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts';
 import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsFor, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
@@ -241,7 +242,7 @@ export class RhythmEditView extends EditableFileView {
   /** Score-first vaults only: the Score under the grid / circle (music edition), or the lean edition's one line. Plan 'none' attaches nothing (live-score-dom.ts#attachScoreArea). */
   private mountScore(plan: ScorePanelPlan, file: TFile, data: unknown): void {
     this.scoreArea = attachScoreArea(this.contentEl, plan, {
-      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename),
+      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays }),
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       compute: computeRhythmScoreViaEngine,
       title: file.basename,

@@ -3,6 +3,8 @@
 import { mountPhrase } from '@client/phrase-dom.ts';
 import { musicEdition } from '@client/music-edition.full.ts';        // the music edition itself (the build's ./music-edition-selected redirect only catches relative imports)
 import { renderMusicXMLAndMIDI } from '@client/verovio.ts';
+import { messageDelivery } from '@client/score-first-messages-core.ts';
+import { scoreClickPlays } from '@client/score-click-policy.ts';
 
 const proto: any = HTMLElement.prototype;         // the Obsidian DOM helpers the music edition's renderer uses
 const apply = (el: HTMLElement, o: any) => {
@@ -50,7 +52,7 @@ proto.setText = function (t: string) { this.textContent = t; };
       return out.payload;
     },
     inspector: { openNote: (id) => { ((window as any).__opened ??= []).push(id); } },   // M6: the lineage links, the bracket and the source link report which note they would open
-    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME),
+    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME, { clickToPlay: scoreClickPlays }),
     stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (h) => window.clearTimeout(h as number),
@@ -60,3 +62,13 @@ proto.setText = function (t: string) { this.textContent = t; };
 };
 (window as any).__edit = (path: string, text: string) => { (window as any).__files.set(path, text); (window as any).__phrase.noteModified(path); };
 (window as any).__verovio = renderMusicXMLAndMIDI;
+// 2026-10-23-0030: the published profile flag (what score-first.ts sets in the plugin) and a spy on the Score's <midi-player>: how many times anything called its start(), and where it sits in time.
+(window as any).__setScoreFirst = (on: boolean) => messageDelivery.setScoreFirst(on);
+(window as any).__spyPlayer = () => {
+  const p: any = document.querySelector('midi-player');
+  if (!p) return false;
+  p.__starts = 0;
+  const orig = p.start.bind(p);
+  p.start = (...a: unknown[]) => { p.__starts++; try { return orig(...a); } catch { return undefined; } };
+  return true;
+};

@@ -57,6 +57,10 @@ music-core = { local = "../music-core" }
 - **Lighting (2300):** a lit bar gets a translucent band inside it (inline-styled, behind its drawing, never hit-testable; stronger for a pin than a hover) and the other bars are dimmed while one is pinned, so it shows whatever the stylesheet or theme does; the CSS recolour stays as a second cue. Option `band` of the artifact inspector; the bar's Beat Box tab does not use it.
 - **Not done:** opening a phrase from the file explorer still needs the two commands (the Beat Box's automatic default-view swap was not taken: its event order cannot be proven without the real Obsidian).
 
+## Clicking a note does not play (music edition, score-first vaults; 2026-10-23)
+
+- In a score-first vault a click on an engraved note only selects (the inspector pins its bar / lights the note); it no longer starts the whole score playing. Sound is the Score's own Play control. **Every other vault is unchanged:** a click on a note still jumps the player to it and starts it. The one answer is `scoreClickPlays()` in `src/score-click-policy.ts` (the published profile flag, asked at the click); every surface that engraves a Score hands it to `renderTaggedMusicXML(…, { clickToPlay })` (the Beat Box tab, the phrase and mix tabs, the read-only Score view, the embed, the Forge output panel), and the handler itself is `src/score-click-play-dom.ts`.
+
 ## Mixing two bars (music edition; milestone M7, Phase A)
 
 - A **mix** is a phrase with `"kind": "mix"`: `{"kind":"mix","a":"bar_005","b":"bar_006","weight":0.5,"threshold":0.5,"ghost":false}`. Same folder, same `phrases/phrase_NNN.md` name, same `Open phrase as Score`, header **Open as Score** and tab restore as an extend. Hand-edited JSON that is wrong is refused naming the field (`weight` 3 is a refusal line on the Score, no crash).

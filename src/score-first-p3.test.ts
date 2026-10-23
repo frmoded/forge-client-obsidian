@@ -133,7 +133,9 @@ test('the profile is a constant: no setting, command, menu item or modal anywher
       'score-first-messages-core.ts', 'score-messages-dom.ts', 'forge-notice.ts', 'output-view.ts',
       // M5 (drain 2026-10-22-1850), deliberate: the phrase core, a pure core like score-first-core.ts — it takes the gate's answer as an INPUT (`newPhraseAvailable`) and never reads the profile.
       // 2100, deliberate: phrase-header-core.ts is the same kind of pure core (which note gets the header button; it receives the gate's answer and never reads the profile).
-      'phrase-core.ts', 'phrase-header-core.ts'].includes(f));
+      'phrase-core.ts', 'phrase-header-core.ts',
+      // 2026-10-23-0030, deliberate: score-click-policy.ts is the one answer to "does a click on a note play?"; like the M4 files above it READS the flag score-first.ts publishes (messageDelivery.isScoreFirst()) and never the profile.
+      'score-click-policy.ts'].includes(f));
   assert.deepEqual(offenders, []);
   const settingsFiles = fs.readdirSync(SRC).filter((f) => /setting/i.test(f) && f.endsWith('.ts') && !f.endsWith('.test.ts'));
   for (const f of settingsFiles) assert.ok(!/profile/i.test(code(f).replace(/openRhythmNotesInBeatBox/g, '')), `${f} has no profile setting`);

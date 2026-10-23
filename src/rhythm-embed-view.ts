@@ -38,6 +38,7 @@ import {
   type RhythmEmbedSession,
 } from './rhythm-embed-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
+import { scoreClickPlays } from './score-click-policy.ts';
 import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
 
 export interface RhythmEmbedHooks {
@@ -342,7 +343,7 @@ class RhythmEmbed extends MarkdownRenderChild {
       return;
     }
     const host = this.bodyEl.createDiv({ cls: 'forge-rhythm-score-host' });
-    if (!musicEdition.renderTaggedMusicXML(host, outcome.payload, this.file.basename)) {
+    if (!musicEdition.renderTaggedMusicXML(host, outcome.payload, this.file.basename, { clickToPlay: scoreClickPlays })) {
       host.remove();
       this.statusEl?.setText('The score needs the music edition of the plugin.');
       return;

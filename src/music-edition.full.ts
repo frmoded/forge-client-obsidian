@@ -26,7 +26,8 @@ import { pianoWidget } from './input-widget-piano.ts';
 import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
 import { chordBuilderWidget } from './input-widget-chord-builder.ts';
 import { parseSvgMarkup } from './svg-markup-core.ts';
-import type { MusicEdition } from './music-edition.ts';
+import type { MusicEdition, RenderOptions } from './music-edition.ts';
+import { attachClickToPlay } from './score-click-play-dom.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -187,6 +188,7 @@ function renderMusicXMLWithToggle(
   kitXml: string,
   snippetId: string,
   engineMidiBase64: string | null = null,
+  opts: RenderOptions = {},
 ) {
   const storage = scoreViewModeStorage();
   // v0.2.226 — default to drum-kit for percussion-domain snippets
@@ -273,9 +275,9 @@ function renderMusicXMLWithToggle(
     // back to per-mode render (legacy v0.2.151+ behaviour) so the
     // user still gets audio.
     if (m === 'kit') {
-      renderMusicXML(scoreHost, kitXml, snippetId, multiStaffXml, shared ?? undefined, zoomBarHost);
+      renderMusicXML(scoreHost, kitXml, snippetId, multiStaffXml, shared ?? undefined, zoomBarHost, opts);
     } else {
-      renderMusicXML(scoreHost, multiStaffXml, snippetId, undefined, shared ?? undefined, zoomBarHost);
+      renderMusicXML(scoreHost, multiStaffXml, snippetId, undefined, shared ?? undefined, zoomBarHost, opts);
     }
   };
   renderInto(mode);
@@ -294,6 +296,7 @@ function renderMusicXML(
   midiSourceXml?: string,
   sharedMidi?: { midiBase64: string; totalMs: number; source?: string },
   externalZoomBar?: HTMLElement,
+  opts: RenderOptions = {},
 ) {
   const host = entry.createDiv({ cls: 'forge-output-musicxml' });
   host.setText('Rendering score…');
@@ -471,18 +474,18 @@ function renderMusicXML(
       });
 
       if (player) {
-        scoreWrap.addEventListener('click', async (ev) => {
-          const target = ev.target as Element | null;
-          const noteEl = target?.closest('.note') as Element | null;
-          if (!noteEl?.id) return;
-          try {
+        // 2026-10-23-0030 — the click handler is score-click-play-dom.ts; `opts.clickToPlay` (score-click-policy.ts) is asked at every click, and a score-first vault answers no.
+        attachClickToPlay(scoreWrap, player, {
+          allowed: opts.clickToPlay,
+          onError: (e) => { console.error('Forge: click-to-play failed', e); },
+          timeFor: async (noteId) => {
             // v0.2.152 — click-to-play in split-render mode: the
             // click target lives in the DISPLAY SVG (kit) but the
             // player is on the MIDI XML (multi-staff) timeline.
             // Query the display XML for the clicked note's time,
             // then scale to MIDI-XML wall clock.
             const queryXml = sameXml ? midiXml : musicxml;
-            const ms = await getTimeForElement(queryXml, noteEl.id);
+            const ms = await getTimeForElement(queryXml, noteId);
             const scaledMs = sameXml
               ? ms
               : ms * (
@@ -490,11 +493,8 @@ function renderMusicXML(
                     ? (midiRender.timeMap[midiRender.timeMap.length - 1].ms
                        / Math.max(1, displayRender.timeMap[displayRender.timeMap.length - 1].ms))
                     : 1);
-            player.currentTime = scaledMs / 1000;
-            player.start();
-          } catch (e) {
-            console.error('Forge: click-to-play failed', e);
-          }
+            return scaledMs / 1000;
+          },
         });
 
         attachScoreFollower(scoreWrap, player, timeMap);
@@ -653,7 +653,7 @@ export const musicEdition: MusicEdition = {
     renderMusicXML(entry, musicxml, snippetId);
     return true;
   },
-  renderTaggedMusicXML(entry, result, snippetId) {
+  renderTaggedMusicXML(entry, result, snippetId, opts) {
     // v0.2.150 — dual-XML opt-in. When the engine emits both multi-staff + kit MusicXML
     // (percussion piece), render with the toggle toolbar. Otherwise fall back to the single-XML
     // path (legacy snippets + non-percussion music).
@@ -669,9 +669,9 @@ export const musicEdition: MusicEdition = {
       const engineMidi = typeof r.multi_staff_midi_base64 === 'string'
         ? r.multi_staff_midi_base64
         : null;
-      renderMusicXMLWithToggle(entry, r.multi_staff_content, r.kit_content, snippetId, engineMidi);
+      renderMusicXMLWithToggle(entry, r.multi_staff_content, r.kit_content, snippetId, engineMidi, opts);
     } else {
-      renderMusicXML(entry, r.content as string, snippetId);
+      renderMusicXML(entry, r.content as string, snippetId, undefined, undefined, undefined, opts);
     }
     return true;
   },

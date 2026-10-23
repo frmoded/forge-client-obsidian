@@ -235,6 +235,39 @@ async function mixStudy() {
 }
 out.mix = await mixStudy();
 
+// ---- drain 2026-10-23-0030: a click on an engraved note must not start the whole score in a score-first vault. REAL pointer events on a real notehead in real Chrome; a spy on the Score's <midi-player>.start();
+// the pin (the inspector's bar selection) must still happen; the control (a vault that is not score-first) must still play. The player's own Play button needs audio and is the driver's D3.
+async function clickStudy(kind: 'extend' | 'mix') {
+  const q = await openPage({ dir: here, width: 800, height: 800, pageHtml: page, routes });
+  const res: any = { kind };
+  try {
+    const mixOpts = kind === 'mix' ? `, bars: { bar_006: ${JSON.stringify(BAR6)} }, path: 'phrases/phrase_002.md', name: 'phrase_002'` : '';
+    const text = kind === 'mix' ? mixText() : phraseText({});
+    await q.ev(`window.__mountPhrase(document.getElementById('pane'), { phrase: ${JSON.stringify(text)}, bar: ${JSON.stringify(BAR)}${mixOpts} })`);
+    for (let w = 0; w < 20000; w += 100) { if (await q.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    await sleep(1500);                                              // the MIDI player builds its note sequence
+    res.spy = await q.ev('window.__spyPlayer()');
+    const noteXY = () => q.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host g.note .notehead') || document.querySelector('.forge-rhythm-score-host .notehead'); e.scrollIntoView({ block: 'center', inline: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    const state = () => q.ev(`(() => { const p = document.querySelector('midi-player'); return { starts: p.__starts, currentTime: p.currentTime, pinned: document.querySelectorAll('g.measure.forge-artifact-pinned').length, stack: [...document.querySelectorAll('.forge-inspector-lineage > li > span')].map((s) => s.textContent)[0] ?? null }; })()`);
+    res.before = await state();
+    // score-first ON (what score-first.ts publishes in the plugin): the click must not play
+    await q.ev('window.__setScoreFirst(true)');
+    let xy = await noteXY();
+    await q.click(xy.x, xy.y); await sleep(800);
+    res.scoreFirstClick = await state();
+    // a second click on the same note: still nothing
+    xy = await noteXY(); await q.click(xy.x, xy.y); await sleep(800);
+    res.scoreFirstClickAgain = await state();
+    // CONTROL: the flag OFF (any other vault): the same click plays
+    await q.ev('window.__setScoreFirst(false)');
+    xy = await noteXY(); await q.click(xy.x, xy.y); await sleep(1200);
+    res.controlClick = await state();
+    res.errors = await q.ev('window.__errors.slice()');
+  } finally { q.close(); }
+  return res;
+}
+out.click = { extend: await clickStudy('extend'), mix: await clickStudy('mix') };
+
 // The verdicts (a measurement that cannot fail proves nothing): the player's tempo changes and Verovio's bar starts must sit at the engine's bar starts, within 5 ms; 8 bars; a mark per bar and part.
 const near = (a: number, b: number) => Math.abs(a - b) <= 0.005;
 const tempi: number[] = out.expected.tempi; const starts: number[] = out.expected.barStartsSec;
@@ -274,6 +307,10 @@ out.verdicts = {
   mix_aRealPointerOnTheSliderMovesTheValueTheNoteAndTheScore: out.mix?.pointerLeft?.value === '0' && out.mix.pointerLeft.written === 0 && out.mix.pointerLeft.hash === out.mix.hash.w0 && out.mix?.pointerRight?.value === '1' && out.mix.pointerRight.written === 1 && out.mix.pointerRight.hash === out.mix.hash.w1,
   mix_aHandEditedWeightMovesTheSliderAndAWeightOf3IsARefusalNamingWeight: out.mix?.edit08?.slider === '0.8' && out.mix.edit08.shown === '0.80' && /weight/.test(out.mix?.edit3?.status ?? '') && out.mix?.edit3?.disabled === true,
   mix_noConsoleErrors: (out.mix?.errors?.length ?? 1) === 0 && (out.mix?.errorsAfter?.length ?? 1) === 0,
+  click_scoreFirstClickOnAPhraseNoteStartsNothingAndMovesNothing: ['extend', 'mix'].every((k) => { const c = out.click?.[k]; return c?.spy === true && c.scoreFirstClick?.starts === 0 && c.scoreFirstClickAgain?.starts === 0 && c.scoreFirstClick.currentTime === c.before.currentTime && c.scoreFirstClickAgain.currentTime === c.before.currentTime; }),
+  click_theBarStillPinsWhenAnExtendNoteIsClickedInScoreFirst: out.click?.extend?.scoreFirstClick?.pinned === 1 && /^bar \d+ of 8$/.test(out.click?.extend?.scoreFirstClick?.stack ?? ''),
+  click_controlTheSameClickPlaysWhenNotScoreFirst: ['extend', 'mix'].every((k) => { const c = out.click?.[k]; return c?.controlClick?.starts === (c.scoreFirstClickAgain?.starts ?? -9) + 1; }),   // exactly one more start() (headless Chrome ignores a player.currentTime assignment, so the time is not asserted for the control)
+  click_noConsoleErrors: ['extend', 'mix'].every((k) => (out.click?.[k]?.errors?.length ?? 1) === 0),
   rider_aTinyHostNoLongerMakesVerovioRefusePageWidth: (out.rider?.tinyHostSvgLength ?? 0) > 0 && (out.rider?.tinyHostErrors?.length ?? 1) === 0,
   rider_aHiddenPaneWaitsThenEngravesWhenShown: out.rider?.svgWhileHidden === false && out.rider?.svgAfterShown === true && (out.rider?.errorsWhileHidden?.length ?? 1) === 0 && (out.rider?.errorsAfterShown?.length ?? 1) === 0,
 };

@@ -4,6 +4,7 @@
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.
 import { EditableFileView, TFile, type App, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
+import { scoreClickPlays } from './score-click-policy.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
 import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
@@ -61,7 +62,7 @@ export class PhraseView extends EditableFileView {
         return refusal === null ? { ok: true } : { ok: false, message: refusal };
       },
       compute: computePhraseScoreViaEngine,
-      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename),
+      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays }),
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       setTimer: (fn, ms) => window.setTimeout(fn, ms),
       clearTimer: (h) => window.clearTimeout(h as number),

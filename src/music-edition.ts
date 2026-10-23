@@ -15,6 +15,12 @@
 //
 // This file is types only: no runtime code, nothing to bundle.
 
+/** Per-render options. Absent = what every surface did before. */
+export interface RenderOptions {
+  /** Asked at every click on an engraved note: false = the click does not start playback (the Score's own Play control still does). Absent = a click plays. A score-first vault says no (score-click-policy.ts). */
+  clickToPlay?: () => boolean;
+}
+
 export interface MusicEdition {
   readonly id: 'lean' | 'music';
 
@@ -37,5 +43,6 @@ export interface MusicEdition {
     entry: HTMLElement,
     result: Record<string, unknown>,
     snippetId: string,
+    opts?: RenderOptions,
   ): boolean;
 }

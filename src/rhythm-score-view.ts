@@ -10,6 +10,7 @@
 
 import { EditableFileView, type TFile, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
+import { scoreClickPlays } from './score-click-policy.ts';
 import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
 import { produceScore, createScoreScheduler, type ScoreScheduler } from './rhythm-score-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE, MODE_ACTIONS, headerActionsFor, type RhythmMode } from './rhythm-mode-core.ts';
@@ -101,7 +102,7 @@ export class RhythmScoreView extends EditableFileView {
       return;
     }
     const host = this.contentEl.createDiv({ cls: 'forge-rhythm-score-host' });
-    if (!musicEdition.renderTaggedMusicXML(host, outcome.payload, file.basename)) {
+    if (!musicEdition.renderTaggedMusicXML(host, outcome.payload, file.basename, { clickToPlay: scoreClickPlays })) {
       this.panel('The score view needs the music edition of the plugin.', true);
       return;
     }

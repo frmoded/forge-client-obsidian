@@ -9,6 +9,7 @@ import {
 import { clampStripFraction, stripFractionFromDrag, stripFlexBasis, DEFAULT_STRIP_FRACTION } from './forge-panel-split-core.ts';
 import { shouldRenderEntryMeta } from './output-entry-meta-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
+import { scoreClickPlays } from './score-click-policy.ts';
 import { ForgeSaveDataModal } from './modal.ts';
 import { dataTemplate } from './new-note-core.ts';
 import { forgeNotice } from './forge-notice.ts';
@@ -521,7 +522,7 @@ export class ForgeOutputView extends ItemView {
         case 'musicxml':
           // Score rendering (Verovio, dual-XML percussion toggle) is a music-edition feature;
           // the lean edition shows the payload source as plain text.
-          if (!musicEdition.renderTaggedMusicXML(entry, result as Record<string, unknown>, snippetId)) {
+          if (!musicEdition.renderTaggedMusicXML(entry, result as Record<string, unknown>, snippetId, { clickToPlay: scoreClickPlays })) {
             this.renderText(entry, String((result as { content?: unknown }).content ?? ''));
           }
           return;
