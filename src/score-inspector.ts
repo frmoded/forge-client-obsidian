@@ -33,6 +33,8 @@ export interface ScoreInspectorPorts {
   order?(map: ProvenanceMap): string[];
   /** M8 (mix): a redraw (the Weight slider moved) keeps the pin: the same element if the new engraving still has it, else the map's first element (the bar). Absent = a redraw forgets the pin, as it always did. */
   keepPin?: boolean;
+  /** M9: a stack line of kind `action` (a button: "Edit this bar", "Revert to generated") was pressed on the pinned element. Absent = such lines are not shown. */
+  onAction?(action: { id: 'fork' | 'revert'; barNumber: number }, entry: InspectorEntry): void;
   /** M8 (mix): which elements get an enlarged click target (default: all). */
   enlargeIds?(map: ProvenanceMap): string[];
   /** M8 (mix): a cue painted from the whole state on every change of the pin (the colours by parent). `host` is the engraving's host, `pinnedId` null when nothing is pinned. */
@@ -85,6 +87,15 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
     const list = doc.createElement('ol'); list.className = preview ? 'forge-inspector-lineage forge-inspector-preview' : 'forge-inspector-lineage';
     for (const l of (ports.lineage ?? lineageOf)(entry.prov)) {
       const li = doc.createElement('li'); li.className = `forge-inspector-${l.kind}`;
+      if (l.kind === 'action') {
+        // M9: a button on the PINNED bar only (a hover preview is only a preview), and only where the surface handles it
+        if (preview || !l.action || !ports.onAction) continue;
+        const action = l.action;
+        const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-inspector-action-button'; b.textContent = l.text;
+        b.addEventListener('click', () => ports.onAction!(action, entry));
+        li.appendChild(b); list.appendChild(li);
+        continue;
+      }
       if (l.kind === 'legend' && l.legend) {
         // M8: coloured marks with their meaning; the colours are INLINE so a theme cannot take them away
         const span = doc.createElement('span');

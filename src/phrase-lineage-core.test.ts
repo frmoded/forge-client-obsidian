@@ -90,16 +90,16 @@ test('describeTempoChange: slowing, speeding up, none; a fractional percentage i
 test('THE STACK (the prompt\'s own example): bar 5 of 8 | made by phrase_001 (extend, slowing 20 %, style repeat_with_fills) | from bar_005 | tempo 92', () => {
   const map = phraseProvenance('phrases/phrase_001', { ...PARAMS, bars: 8 }, [...Array(8)].map((_, i) => ({ id: `ph_bar_${i + 1}`, index: i + 1, tempo: i === 4 ? 92 : 100 })));
   const stack = phraseLineageOf(map.ph_bar_5);
-  assert.deepEqual(stack.map((e) => e.text), ['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 92']);
-  assert.deepEqual(stack.map((e) => e.noteId), [undefined, 'phrases/phrase_001', 'bars/bar_005', undefined], 'the phrase and the source bar are the two links');
-  assert.deepEqual(stack.map((e) => e.kind), ['bar', 'note', 'note', 'tempo']);
-  assert.deepEqual(stack.map((e) => e.openLabel), [undefined, 'Open phrase_001', 'Open bar_005', undefined], 'each link has its own accessible name');
-  assert.deepEqual(stack.map((e) => e.covers), ['self', 'all', 'all', 'self'], 'hovering an entry lights the bars it covers: this bar, or every bar of the phrase');
+  assert.deepEqual(stack.map((e) => e.text), ['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 92', 'Edit this bar']);   // M9 (drain 2026-10-23-0330), deliberate: a generated bar's stack ends with the Edit this bar action; the four lines above are the M6 stack, unchanged
+  assert.deepEqual(stack.map((e) => e.noteId), [undefined, 'phrases/phrase_001', 'bars/bar_005', undefined, undefined], 'the phrase and the source bar are the two links');
+  assert.deepEqual(stack.map((e) => e.kind), ['bar', 'note', 'note', 'tempo', 'action']);
+  assert.deepEqual(stack.map((e) => e.openLabel), [undefined, 'Open phrase_001', 'Open bar_005', undefined, undefined], 'each link has its own accessible name');
+  assert.deepEqual(stack.map((e) => e.covers), ['self', 'all', 'all', 'self', undefined], 'hovering an entry lights the bars it covers: this bar, or every bar of the phrase');
 });
 
 test('the stack never invents: no tempo in the engine\'s output means no tempo entry; an entry of another role is not a phrase bar', () => {
   const stack = phraseLineageOf({ noteId: 'phrases/phrase_001', role: 'phrase-bar', params: { bar: 2, bars: 4, tempo: null, source: 'bar_005', style: 'building', tempo_change_pct: 0 } });
-  assert.deepEqual(stack.map((e) => e.text), ['bar 2 of 4', 'made by phrase_001 (extend, no tempo change, style building)', 'from bar_005']);
+  assert.deepEqual(stack.map((e) => e.text), ['bar 2 of 4', 'made by phrase_001 (extend, no tempo change, style building)', 'from bar_005', 'Edit this bar']);   // M9: the action is the one added line
   const other = phraseLineageOf({ noteId: 'bars/bar_001', role: 'hit', params: {} });
   assert.deepEqual(other.map((e) => e.text), ['hit', 'bars/bar_001']);
 });

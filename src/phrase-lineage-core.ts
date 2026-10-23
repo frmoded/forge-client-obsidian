@@ -92,7 +92,7 @@ export function phraseProvenance(phraseNote: string, params: ExtendPhrase, bars:
     map[b.id] = {
       noteId: phraseNote,
       role: PHRASE_BAR_ROLE,
-      params: { bar: b.index, bars: params.bars, tempo: b.tempo, source: params.source, style: params.style, tempo_change_pct: params.tempo_change_pct },
+      params: { bar: b.index, bars: params.bars, tempo: b.tempo, source: params.source, style: params.style, tempo_change_pct: params.tempo_change_pct, ...(params.overrides?.[String(b.index)] ? { fork: params.overrides[String(b.index)] } : {}) },
     };
   }
   return map;
@@ -110,12 +110,24 @@ export function phraseLineageOf(prov: Provenance): LineageEntry[] {
   const p = prov.params;
   const name = prov.noteId.split('/').pop() ?? prov.noteId;
   const source = String(p.source);
+  if (typeof p.fork === 'string') {
+    // M9: a forked bar — edited by hand in its own note; its tempo is that note's own
+    const forkName = p.fork.split('/').pop() ?? p.fork;
+    const forked: LineageEntry[] = [
+      { kind: 'bar', text: `bar ${String(p.bar)} of ${String(p.bars)}`, covers: 'self' },
+      { kind: 'note', text: `forked: edited in ${forkName} (was made by ${name}, ${String(p.style)})`, noteId: p.fork, openLabel: `Open ${forkName}` },
+    ];
+    if (typeof p.tempo === 'number') forked.push({ kind: 'tempo', text: `tempo ${p.tempo} (the fork's own)`, covers: 'self' });
+    forked.push({ kind: 'action', text: 'Revert to generated', action: { id: 'revert', barNumber: Number(p.bar) } });
+    return forked;
+  }
   const out: LineageEntry[] = [
     { kind: 'bar', text: `bar ${String(p.bar)} of ${String(p.bars)}`, covers: 'self' },
     { kind: 'note', text: `made by ${name} (extend, ${describeTempoChange(Number(p.tempo_change_pct))}, style ${String(p.style)})`, noteId: prov.noteId, openLabel: `Open ${name}`, covers: 'all' },
     { kind: 'note', text: `from ${source}`, noteId: phraseSourceNoteId(source), openLabel: `Open ${source}`, covers: 'all' },
   ];
   if (typeof p.tempo === 'number') out.push({ kind: 'tempo', text: `tempo ${p.tempo}`, covers: 'self' });
+  out.push({ kind: 'action', text: 'Edit this bar', action: { id: 'fork', barNumber: Number(p.bar) } });
   return out;
 }
 

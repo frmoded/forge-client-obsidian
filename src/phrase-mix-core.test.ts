@@ -75,8 +75,9 @@ test('the extend phrase is untouched: the same value back, the same refusal text
   const FULL = { kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20 };
   assert.deepEqual(validatePhrase(FULL), { ok: true, value: FULL });
   assert.deepEqual(validatePhrase({ kind: 'extend', source: 'bar_001' }), { ok: true, value: { kind: 'extend', source: 'bar_001', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 } });
-  assert.deepEqual(validatePhrase({ ...FULL, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a phrase holds only kind, source, bars, style, tempo_change_pct).' });
-  assert.deepEqual([...PHRASE_KEYS], ['kind', 'source', 'bars', 'style', 'tempo_change_pct']);
+  // M9 (drain 2026-10-23-0330), deliberate: `overrides` is a field of an extend now, so the refusal text lists it and PHRASE_KEYS has it
+  assert.deepEqual(validatePhrase({ ...FULL, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a phrase holds only kind, source, bars, style, tempo_change_pct, overrides).' });
+  assert.deepEqual([...PHRASE_KEYS], ['kind', 'source', 'bars', 'style', 'tempo_change_pct', 'overrides']);
   const mixedUp = validatePhrase({ ...FULL, weight: 0.5 });
   assert.equal(mixedUp.ok, false);
   if (mixedUp.ok === false) assert.match(mixedUp.message, /weight/);

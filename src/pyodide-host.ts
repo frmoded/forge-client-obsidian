@@ -1527,11 +1527,17 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
         bars = [mix_rhythm(data["a"], data["b"], weight=p["weight"], threshold=p["threshold"], ghost=p["ghost"])]
     else:
         bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
+        # M9 (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number (the TS side has already checked its grid). Its tempo is its own.
+        for number, forked in p.get("override_bars", {}).items():
+            bars[int(number) - 1] = forked
     score = rhythm_bars_to_stream(bars)
     out = serialize_result(score, {"snippet_id": title, "meta": {"title": title}})
     if p.get("kind") == "mix":
         # M8: the engine's own mixed bar rides along, so the plugin ties each engraved hit to what the ENGINE returned (never to a copy of the rule)
         out["mixed_bar"] = bars[0]
+    else:
+        # M9: the bars as they are in the Score, so "Edit this bar" writes exactly the generated bar into its own note
+        out["bars_data"] = bars
     return out
 
 # ---- Moda live-loop helpers (Phase 2) ---------------------------

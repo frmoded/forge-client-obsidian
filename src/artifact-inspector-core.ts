@@ -219,10 +219,12 @@ export function orderByStepThenChannel(map: ProvenanceMap, channelOrder: readonl
 /** One line of the lineage stack. */
 export interface LineageEntry {
   /** 'hit' and 'note' are the bar inspector's; 'bar' and 'tempo' are a phrase's (M6). The kind is a CSS class (`forge-inspector-<kind>`). */
-  kind: 'hit' | 'note' | 'bar' | 'tempo' | 'legend';
+  kind: 'hit' | 'note' | 'bar' | 'tempo' | 'legend' | 'action';
   text: string;
   /** M8: a legend line — coloured marks with their meaning (the mix's three kinds of hit). Rendered as inline-styled spans; `text` is the plain-text form. */
   legend?: ReadonlyArray<{ mark: string; colour: string; text: string }>;
+  /** M9: an action line — a button (`text` is its label) that asks the surface to do something with the pinned bar (fork it, revert it). Not shown in a hover preview. */
+  action?: { id: 'fork' | 'revert'; barNumber: number };
   noteId?: string;
   /** M6: the link's accessible name (the bar inspector's "Open note" buttons have none: its DOM is unchanged). */
   openLabel?: string;

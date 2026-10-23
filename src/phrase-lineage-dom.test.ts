@@ -52,7 +52,7 @@ function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) 
   const q = (sel: string) => parent.querySelector(sel) as any;
   const qa = (sel: string) => [...parent.querySelectorAll(sel)] as any[];
   const fire = (el: any, type: string, init: any = {}) => el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, ...init }));
-  const stack = () => qa('.forge-inspector-lineage > li').map((li) => li.querySelector('span').textContent);
+  const stack = () => qa('.forge-inspector-lineage > li').filter((li) => li.querySelector('span')).map((li) => li.querySelector('span').textContent);   // M9: an action line is a button, not a text line
   return { handle, parent, files, opened, q, qa, fire, stack, advance, win, status: () => q('.forge-rhythm-edit-score-status').textContent as string };
 }
 

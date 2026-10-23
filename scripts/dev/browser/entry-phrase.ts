@@ -51,7 +51,15 @@ proto.setText = function (t: string) { this.textContent = t; };
       if (out.__error) throw new Error(out.__error);
       return out.payload;
     },
-    inspector: { openNote: (id) => { ((window as any).__opened ??= []).push(id); } },   // M6: the lineage links, the bracket and the source link report which note they would open
+    inspector: { openNote: (id) => { ((window as any).__opened ??= []).push(id); } },
+    // M9: the vault side of "Edit this bar" (the harness's files map is the vault)
+    fork: {
+      listBarBasenames: () => [...files.keys()].filter((k) => /^bars\/bar_\d+\.md$/.test(k)).map((k) => k.slice(5, -3)),
+      exists: (p) => files.has(p),
+      create: async (p, content) => { files.set(p, content); return { path: p }; },
+      notify: (m) => { ((window as any).__notices ??= []).push(m); },
+      isAlreadyExists: () => false,
+    },   // M6: the lineage links, the bracket and the source link report which note they would open
     renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME, { clickToPlay: scoreClickPlays }),
     stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
     setTimer: (fn, ms) => window.setTimeout(fn, ms),

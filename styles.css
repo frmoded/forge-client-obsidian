@@ -1959,3 +1959,11 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
+
+/* score_first M9 — the Edit this bar / Revert to generated button in a phrase's Inspector */
+.forge-inspector-action button.forge-inspector-action-button {
+  margin-top: 2px;
+  padding: 1px 10px;
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}

@@ -2,13 +2,13 @@
 // phrase-core.ts, the DOM and its freshness in phrase-dom.ts, both unit-tested without Obsidian). It is registered, and opened, ONLY in a score-first vault (score-first.ts).
 //
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.
-import { EditableFileView, TFile, type App, type WorkspaceLeaf } from 'obsidian';
+import { EditableFileView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
 import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
-import type { ScorePanelPlan } from './score-first-core.ts';
+import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { headerResync } from './header-resync.ts';
 
@@ -44,6 +44,14 @@ export class PhraseView extends EditableFileView {
       plan: this.plan,
       initial,
       listBars: () => this.app.vault.getFiles().filter((f) => isBarPath(f.path)).map((f) => f.basename),
+      // M9 (fork on edit): the vault side of "Edit this bar". The fork note is created here; the phrase's JSON is rewritten by writePhrase below; nothing is ever deleted.
+      fork: {
+        listBarBasenames: () => this.app.vault.getFiles().filter((f) => isBarPath(f.path)).map((f) => f.basename),
+        exists: (p) => this.app.vault.getAbstractFileByPath(p) !== null,
+        create: (p, content) => this.app.vault.create(p, content),
+        notify: (message) => { new Notice(message); },
+        isAlreadyExists: isFileExistsError,
+      },
       inspector: { openNote: this.openNote },          // M6: click a bar for its lineage; the bracket; the source link — each opens a note through the plugin's own openers
       readNote: async (p) => {
         const f = this.app.vault.getAbstractFileByPath(p);

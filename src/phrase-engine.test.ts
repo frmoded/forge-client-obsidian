@@ -146,7 +146,7 @@ test('REAL ENGINE (M6): every bar of the real 8-bar payload gets an id in BOTH v
     assert.deepEqual([...first.matchAll(/<measure\b[^>]*\bid="(ph_bar_\d+)"/g)].map((m) => m[1]), [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `ph_bar_${n}`));
   }
   const map = phraseProvenance('phrases/phrase_001', PHRASE, r.bars);
-  assert.deepEqual(phraseLineageOf(map.ph_bar_5).map((e) => e.text), ['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 89']);
+  assert.deepEqual(phraseLineageOf(map.ph_bar_5).map((e) => e.text), ['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 89', 'Edit this bar']);   // M9, deliberate: the Edit this bar action is the one added line
 });
 
 test('REAL ENGINE (2100): the fill rule the strip states is what extend_rhythm does — a fill in the last beat of every 4th bar, and in the last bar unless the bar before it was filled; building and ghost_notes never put a fill there', async () => {

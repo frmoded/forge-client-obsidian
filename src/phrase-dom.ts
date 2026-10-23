@@ -20,6 +20,8 @@ import type { ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import { MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
 import { paintMixHits } from './mix-hits-dom.ts';
+import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.ts';
+import type { RhythmData } from './rhythm-edit-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
   PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampPhraseBars, clampPhrasePct, mixSentence, mixTraceInspector, phraseSourcePath, producePhraseNote,
@@ -270,6 +272,9 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   /** Rewrite the phrase note's json block (one atomic read-modify-write on the vault side). */
   writePhrase(params: PhraseParams): Promise<{ ok: true } | { ok: false; message: string }>;
   compute: PhraseScoreDeps['compute'];
+  /** M9 (fork on edit): the vault side of "Edit this bar" (create the fork note, list `bars/`, tell the person). Absent = the extend inspector offers no Edit this bar / Revert to generated. The phrase write and
+   *  the opener are the ports above (`writePhrase`, `inspector.openNote`). */
+  fork?: Pick<ForkPorts<unknown>, 'listBarBasenames' | 'exists' | 'create' | 'notify' | 'isAlreadyExists'>;
   /** M7: the names of the bars in `bars/` (fresh on every call), for the mix dropdowns. Absent = a mix's dropdowns list only its own two bars. */
   listBars?(): string[];
   /** M7: the phrase note's text when the caller already has it, so the FIRST surface drawn is the right one for its `kind` (no extend strip flashing before a mix). Absent = the extend surface until `load()`. */
@@ -349,9 +354,10 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   // next one is the LATEST ask, with every field changed since the one before it.
   let want: PhraseParams | null = null;
   let writing = false;
+  let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, listBars: _list, initial: _initial, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, listBars: _list, initial: _initial, fork: _fork, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
@@ -382,7 +388,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     const inspectorPorts: ScoreInspectorPorts | undefined = insp && k === 'extend' ? {
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
-      annotate: (note, payload) => annotateForPhrase(ports.path, note as NoteText, payload),
+      annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForPhrase(ports.path, note as NoteText, payload); },
+      onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
       lineage: phraseLineageOf,
       hint: PHRASE_INSPECTOR_HINT,
       enlargeTargets: null,                          // no hit rectangle: it would sit over the noteheads and take the Score's click; a click on any drawn part of a bar (a notehead, a staff line) selects the BAR
@@ -443,6 +450,22 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     }
   };
 
+  /** M9: "Edit this bar" / "Revert to generated" pressed on the pinned bar of an extend phrase. The vault is the `fork` port; the phrase write and the opener are the tab's own. */
+  async function runForkAction(action: { id: 'fork' | 'revert'; barNumber: number }): Promise<void> {
+    if (!current || current.kind !== 'extend' || !ports.fork || !insp) return;
+    const f = ports.fork;
+    const forkPorts: ForkPorts<unknown> = { ...f, writePhrase: (p) => ports.writePhrase(p), open: (id) => insp.openNote(id), trace: (line) => console.info(line) };
+    if (action.id === 'revert') {
+      const r = await revertThisBar(forkPorts, { params: current, barNumber: action.barNumber });
+      if (r.ok) current = r.params;                                          // the vault's modify event for this write brings the Score
+      return;
+    }
+    const data = barsData?.[action.barNumber - 1];
+    if (!data) { f.notify(`Edit this bar: the Score has no data for bar ${action.barNumber} yet (wait for it to draw).`); return; }
+    const r = await editThisBar(forkPorts, { params: current, barNumber: action.barNumber, phraseNoteId: phraseNoteId(ports.path), barData: data });
+    if (r.ok) current = r.params;
+  }
+
   async function commit(patch: Patch | MixPatch): Promise<void> {
     const base = want ?? current;
     if (!base || disposed) return;
@@ -488,7 +511,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         });
         return;
       }
-      const made = current === null ? [] : current.kind === 'mix' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : [phraseSourcePath(current.source)];
+      // the notes this phrase is made of: a mix's two bars; an extend's source bar and (M9) every fork note named in its overrides
+      const made = current === null ? [] : current.kind === 'mix' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : [phraseSourcePath(current.source), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)];
       if (made.includes(path)) area?.update(last);                       // a bar this phrase is made of changed: the Score is read fresh by the next render
     },
     dispose() {

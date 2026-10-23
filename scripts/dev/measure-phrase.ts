@@ -342,6 +342,64 @@ async function mixNavStudy() {
 }
 out.m8 = await mixNavStudy();
 
+// ---- drain 2026-10-23-0330 (M9): fork on edit in real Chrome with real pointer events. The fair comparisons: forking WITHOUT editing leaves every bar identical; editing the fork changes only that bar (the
+// bar before it is untouched); Revert to generated restores the original Score. Pixels are counted as in M8 (pixels differing by 100+ in a channel: re-render noise is 0).
+async function forkStudy() {
+  const q = await openPage({ dir: here, width: 800, height: 900, pageHtml: page, routes });
+  const res: any = {};
+  try {
+    await q.ev(`window.__mountPhrase(document.getElementById('pane'), { phrase: ${JSON.stringify(phraseText({}))}, bar: ${JSON.stringify(BAR)} })`);
+    for (let w = 0; w < 20000; w += 100) { if (await q.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    await sleep(1500);
+    const settle = async () => { let n = -1, still = 0; for (let w = 0; w < 15000 && still < 4; w += 100) { await sleep(100); const m = await q.ev('(window.__timings || []).length'); if (m === n) still++; else { still = 0; n = m as any; } } };
+    const away = async () => { await q.hover(5, 890); await sleep(150); };
+    const xy = (sel: string) => q.ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'center', inline: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    const stack = () => q.ev(`[...document.querySelectorAll('.forge-inspector-lineage > li')].map((li) => (li.querySelector('span') || li.querySelector('button')).textContent)`);
+    const files = () => q.ev(`(() => { const f = window.__files; const fence = String.fromCharCode(96).repeat(3); const body = (t) => (t ? t.split(fence + 'json\\n')[1].split('\\n' + fence)[0] : null); const ph = body(f.get('phrases/phrase_001.md')); return { keys: [...f.keys()], phrase: ph ? JSON.parse(ph) : null, bar6: f.get('bars/bar_006.md') ?? null }; })()`);
+    // a clip of one bar, always at the rectangle it had in the baseline (so two states are compared pixel for pixel); blur and scroll to the top first (a focus ring or a scroll offset alone changes pixels)
+    const rects: Record<number, any> = {};
+    const clip = async (n: number, name: string, fresh = false) => {
+      await q.ev(`document.activeElement && document.activeElement.blur && document.activeElement.blur(); document.getElementById('pane').scrollTop = 0`); await sleep(100);
+      if (fresh || !rects[n]) rects[n] = await q.ev(`(() => { const r = document.querySelector('#ph_bar_${n}').getBoundingClientRect(); return { x: Math.floor(r.left), y: Math.floor(r.top) - 20, width: Math.ceil(r.width), height: Math.ceil(r.height) + 40 }; })()`);
+      const c = rects[n]; const r = await q.send('Page.captureScreenshot', { format: 'png', clip: { ...c, scale: 1 } });
+      fs.writeFileSync(path.join(SHOTS, `m9-${name}.png`), Buffer.from(r.result.data, 'base64'));
+    };
+    const BARS = [1, 2, 3];
+    res.visible = await q.ev(`[1, 2, 3, 4].map((n) => { const r = document.querySelector('#ph_bar_' + n).getBoundingClientRect(); const v = document.querySelector('.forge-output-score').getBoundingClientRect(); return r.left >= v.left && r.right <= v.right; })`);
+    // baseline: after ONE identical re-render (the first render after mount differs from later ones by a few anti-aliased pixels)
+    await q.ev(`window.__edit('phrases/phrase_001.md', ${JSON.stringify(phraseText({}))})`); await settle(); await sleep(400); await away();
+    for (const n of BARS) await clip(n, `b${n}-base`, true);
+    // (1) a real click on a notehead of bar 2, then on the Edit this bar button
+    let p = await xy('#ph_bar_2 .notehead'); await q.click(p.x, p.y); await sleep(500);
+    res.stackBefore = await stack();
+    if (!(await q.ev(`!!document.querySelector('.forge-inspector-action-button')`))) { res.noButton = true; res.errors = await q.ev('window.__errors.slice()'); return res; }   // no button: every verdict below is false, not a crash
+    p = await xy('.forge-inspector-action-button'); res.buttonLabel = await q.ev(`document.querySelector('.forge-inspector-action-button').textContent`);
+    await q.click(p.x, p.y); await sleep(600); await settle(); await sleep(400);
+    const afterFork = await files();
+    res.fork = { keys: afterFork.keys.filter((k: string) => k.startsWith('bars/')), overrides: afterFork.phrase?.overrides, forkedFrom: (afterFork.bar6 ?? '').includes('\nforked_from: "phrases/phrase_001 bar 2"\n'), opened: await q.ev('window.__opened.slice()'), notices: await q.ev('(window.__notices || []).slice()') };
+    await away(); for (const n of BARS) await clip(n, `b${n}-fork`);
+    // (2) edit the fork note by hand (a kick on step 2 and its own tempo): the Score follows the fork note's modify event
+    const forkText = afterFork.bar6 as string;
+    const fence = String.fromCharCode(96).repeat(3); const inner = forkText.split(fence + 'json\n')[1].split('\n' + fence)[0]; const d = JSON.parse(inner); d.channels.kick[1] = true; d.tempo_bpm = 140;
+    await q.ev(`window.__edit('bars/bar_006.md', ${JSON.stringify(forkText.replace(inner, JSON.stringify(d, null, 2)))})`); await settle(); await sleep(400); await away();
+    for (const n of BARS) await clip(n, `b${n}-edit`);
+    res.tempiAfterEdit = await q.ev(`[...document.querySelector('.forge-rhythm-score-host svg').querySelectorAll('g.tempo')].map((g) => Number(g.textContent.replace(/\\D+/g, '')))`);
+    // (3) the forked bar's stack, then Revert to generated with a real click
+    p = await xy('#ph_bar_2 .notehead'); await q.click(p.x, p.y); await sleep(500);
+    res.stackForked = await stack();
+    if (!(await q.ev(`!!document.querySelector('.forge-inspector-action-button')`))) { res.noRevert = true; res.errors = await q.ev('window.__errors.slice()'); return res; }
+    p = await xy('.forge-inspector-action-button'); await q.click(p.x, p.y); await sleep(600); await settle(); await sleep(400);
+    const afterRevert = await files();
+    res.revert = { overrides: afterRevert.phrase?.overrides ?? null, forkNoteStays: afterRevert.keys.includes('bars/bar_006.md'), phraseKeys: Object.keys(afterRevert.phrase ?? {}) };
+    await away(); for (const n of BARS) await clip(n, `b${n}-rev`);
+    res.errors = await q.ev('window.__errors.slice()');
+    const f = (n: number, a: string, b: string) => strongDiff(path.join(SHOTS, `m9-b${n}-${a}.png`), path.join(SHOTS, `m9-b${n}-${b}.png`));
+    res.strong = { fork_vs_base: BARS.map((n) => f(n, 'base', 'fork')), edit_vs_fork: BARS.map((n) => f(n, 'fork', 'edit')), rev_vs_base: BARS.map((n) => f(n, 'base', 'rev')) };
+  } finally { q.close(); }
+  return res;
+}
+out.m9 = await forkStudy();
+
 // The verdicts (a measurement that cannot fail proves nothing): the player's tempo changes and Verovio's bar starts must sit at the engine's bar starts, within 5 ms; 8 bars; a mark per bar and part.
 const near = (a: number, b: number) => Math.abs(a - b) <= 0.005;
 const tempi: number[] = out.expected.tempi; const starts: number[] = out.expected.barStartsSec;
@@ -399,6 +457,14 @@ out.verdicts = {
   m8_belowTheThresholdThePinFallsBackToTheBar: JSON.stringify(out.m8?.belowThreshold?.pinned) === JSON.stringify(['ph_bar_1']) && /^made by phrase_002 \(mix, 40 % bar_005/.test(out.m8?.belowThreshold?.stack?.[0] ?? ''),
   m8_arrowsDoNothing: JSON.stringify(out.m8?.arrows?.before) === JSON.stringify(out.m8?.arrows?.after),
   m8_noConsoleErrors: (out.m8?.errors?.length ?? 1) === 0,
+  m9_theButtonIsThereOnAGeneratedBar: out.m9?.buttonLabel === 'Edit this bar' && JSON.stringify(out.m9?.stackBefore) === JSON.stringify(['bar 2 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 97', 'Edit this bar']),
+  m9_editThisBarWroteTheForkNoteThePhraseAndOpenedTheBeatBox: JSON.stringify(out.m9?.fork?.keys) === JSON.stringify(['bars/bar_005.md', 'bars/bar_006.md']) && JSON.stringify(out.m9?.fork?.overrides) === JSON.stringify({ '2': 'bars/bar_006' }) && out.m9?.fork?.forkedFrom === true && JSON.stringify(out.m9?.fork?.opened) === JSON.stringify(['bars/bar_006']) && (out.m9?.fork?.notices ?? ['x']).length === 0,
+  m9_rendered_forkingWithoutEditingChangesNoBar: (out.m9?.strong?.fork_vs_base ?? [-1]).every((n: number) => n === 0),
+  m9_rendered_editingTheForkChangesThatBar: (out.m9?.strong?.edit_vs_fork?.[1] ?? 0) >= 10,   // NOT "and no other bar": the staff is justified, so a bar with an extra note and a wider tempo mark makes its neighbours reflow (bar 1: 191 px); that the other bars' DATA are untouched is proven against the real engine in phrase-fork-engine.test.ts
+  m9_theForkedBarPlaysAtTheForksOwnTempo: (out.m9?.tempiAfterEdit ?? []).filter((_: number, i: number) => i % 2 === 0).slice(0, 3).join(',') === '100,140,94',
+  m9_aForkedBarsStackSaysSoAndOffersRevert: JSON.stringify(out.m9?.stackForked) === JSON.stringify(['bar 2 of 8', 'forked: edited in bar_006 (was made by phrase_001, repeat_with_fills)', "tempo 140 (the fork's own)", 'Revert to generated']),
+  m9_rendered_revertToGeneratedRestoresTheOriginalScore: (out.m9?.strong?.rev_vs_base ?? [-1]).every((n: number) => n === 0) && out.m9?.revert?.overrides === null && out.m9?.revert?.forkNoteStays === true && !(out.m9?.revert?.phraseKeys ?? []).includes('overrides'),
+  m9_noConsoleErrors: (out.m9?.errors?.length ?? 1) === 0,
   rider_aTinyHostNoLongerMakesVerovioRefusePageWidth: (out.rider?.tinyHostSvgLength ?? 0) > 0 && (out.rider?.tinyHostErrors?.length ?? 1) === 0,
   rider_aHiddenPaneWaitsThenEngravesWhenShown: out.rider?.svgWhileHidden === false && out.rider?.svgAfterShown === true && (out.rider?.errorsWhileHidden?.length ?? 1) === 0 && (out.rider?.errorsAfterShown?.length ?? 1) === 0,
 };

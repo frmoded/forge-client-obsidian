@@ -48,6 +48,8 @@ export interface ExtendPhrase {
   bars: number;
   style: PhraseStyle;
   tempo_change_pct: number;
+  /** M9 (fork on edit): bar number (1-based, as a string key) -> the bar note that stands in for that generated bar (`bars/bar_NNN`, no .md). Absent = every bar is generated. */
+  overrides?: Record<string, string>;
 }
 
 /** A bar as a weighted mix of two bars (`mix_rhythm` in forge/music/lib.py). `weight` is the weight of `a` (1 = all a, 0 = all b); a hit is placed where the weights reach `threshold`. */
@@ -67,7 +69,8 @@ export interface MixBars { a: RhythmData; b: RhythmData }
 
 export const MIX_DEFAULTS = { weight: 0.5, threshold: 0.5, ghost: false };
 
-export const PHRASE_KEYS = ['kind', 'source', 'bars', 'style', 'tempo_change_pct'] as const;
+export const PHRASE_KEYS = ['kind', 'source', 'bars', 'style', 'tempo_change_pct', 'overrides'] as const;
+const OVERRIDE_NOTE = /^bars\/bar_\d+$/;
 export const MIX_KEYS = ['kind', 'a', 'b', 'weight', 'threshold', 'ghost'] as const;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -100,7 +103,25 @@ export function validatePhrase(raw: unknown): Validation<PhraseParams> {
   if (typeof pct !== 'number' || !Number.isFinite(pct) || pct < PHRASE_PCT_MIN || pct > PHRASE_PCT_MAX) {
     return bad(`tempo_change_pct must be a number from ${PHRASE_PCT_MIN} to ${PHRASE_PCT_MAX}, got ${JSON.stringify(raw.tempo_change_pct)}.`);
   }
-  return { ok: true, value: { kind: 'extend', source, bars, style: style as PhraseStyle, tempo_change_pct: pct } };
+  const overrides = validateOverrides(raw.overrides, bars);
+  if (typeof overrides === 'string') return bad(overrides);
+  return { ok: true, value: { kind: 'extend', source, bars, style: style as PhraseStyle, tempo_change_pct: pct, ...(overrides ? { overrides } : {}) } };
+}
+
+/** M9: `overrides` is {"<bar number>": "bars/bar_NNN"}; the keys are whole bar numbers of THIS phrase, the values bar note paths. `{}` is no override. Returns the cleaned map (keys in numeric order), undefined for none, or a refusal. */
+function validateOverrides(raw: unknown, bars: number): Record<string, string> | undefined | string {
+  if (raw === undefined) return undefined;
+  if (!isPlainObject(raw)) return `overrides must be an object of bar number to bar note, like {"3": "bars/bar_009"}, got ${JSON.stringify(raw)}.`;
+  const keys = Object.keys(raw);
+  if (keys.length === 0) return undefined;
+  const out: Record<string, string> = {};
+  for (const key of keys.sort((x, y) => Number(x) - Number(y))) {
+    if (!/^[1-9]\d*$/.test(key) || Number(key) > bars) return `overrides: "${key}" is not a bar of this phrase (bars 1 to ${bars}).`;
+    const v = raw[key];
+    if (typeof v !== 'string' || !OVERRIDE_NOTE.test(v)) return `overrides: bar ${key} must name a bar note like bars/bar_009 (no .md), got ${JSON.stringify(v)}.`;
+    out[key] = v;
+  }
+  return out;
 }
 
 function barNameProblem(field: string, v: unknown): string | null {
@@ -203,7 +224,8 @@ export function formatPhraseJson(p: PhraseParams): string {
     `  "source": ${JSON.stringify(p.source)},`,
     `  "bars": ${p.bars},`,
     `  "style": ${JSON.stringify(p.style)},`,
-    `  "tempo_change_pct": ${p.tempo_change_pct}`,
+    `  "tempo_change_pct": ${p.tempo_change_pct}${p.overrides ? ',' : ''}`,
+    ...(p.overrides ? ['  "overrides": {', ...Object.keys(p.overrides).sort((x, y) => Number(x) - Number(y)).map((k, i, all) => `    ${JSON.stringify(k)}: ${JSON.stringify(p.overrides![k])}${i < all.length - 1 ? ',' : ''}`), '  }'] : []),
     '}',
   ].join('\n');
 }
@@ -421,7 +443,41 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
   }
   const bar = readRhythmNote(text);
   if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the source ${params.source} is not usable: ${bar.message}` };
-  return computeScore((data, t) => deps.compute(data, params, t), bar.value.data, title);
+  if (!params.overrides) return computeScore((data, t) => deps.compute(data, params, t), bar.value.data, title);
+  // M9: forked bars. The fork notes are read FRESH (a bar edited in the Beat Box is what the phrase shows), checked against the source's grid, and handed to the engine as `override_bars`; the engine
+  // glue lays each over the generated bar of that number. A phrase without overrides never reaches this line, so its engine call is exactly what it was.
+  const forks = await readForks(deps, params, bar.value.data);
+  if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
+  const withForks = { ...params, override_bars: forks } as PhraseParams;
+  return computeScore((data, t) => deps.compute(data, withForks, t), bar.value.data, title);
+}
+
+/** The data of every fork note of a phrase, by bar number, or the reason one cannot be used (naming the bar and the note). Each distinct note is read once. */
+async function readForks(deps: PhraseScoreDeps, params: ExtendPhrase, source: RhythmData): Promise<Record<string, RhythmData> | string> {
+  const out: Record<string, RhythmData> = {};
+  const reads = new Map<string, RhythmData>();
+  for (const [n, noteId] of Object.entries(params.overrides ?? {})) {
+    let data = reads.get(noteId);
+    if (data === undefined) {
+      const path = `${noteId}.md`;
+      let text: string;
+      try {
+        text = await deps.readNote(path);
+      } catch (e) {
+        return `bar ${n} is forked to ${noteId} (${path}) but that note was not found or could not be read (${(e as Error)?.message ?? e}).`;
+      }
+      const read = readRhythmNote(text);
+      if (read.ok === false) return `bar ${n} is forked to ${noteId} but that note is not usable: ${read.message}`;
+      data = read.value.data;
+      reads.set(noteId, data);
+    }
+    const differs = (['time_signature', 'steps', 'group_size'] as const).filter((f) => data![f] !== source[f]);
+    if (differs.length > 0) {
+      return `bar ${n} (${noteId}) differs from the source ${params.source} in ${differs.join(' and ')} (it has ${data.time_signature}, ${data.steps} steps, group ${data.group_size}; the phrase has ${source.time_signature}, ${source.steps} steps, group ${source.group_size}).`;
+    }
+    out[n] = data;
+  }
+  return out;
 }
 
 /** Evidence lines for the mix path in the REAL Obsidian (2026-10-23-0130): the value a mix carries can only be lost at one of three hand-offs — what was written, what the Score re-read from the note, what the engine returned — and
