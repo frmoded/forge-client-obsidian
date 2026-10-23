@@ -35,3 +35,11 @@ test('the policy module reads only the published flag, never the profile', () =>
   assert.match(policy, /messageDelivery\.isScoreFirst\(\)/);
   assert.ok(!/vault-profile-core|isScoreFirstVault/.test(policy));
 });
+
+test('the policy reaches the click handler on EVERY render path: the single score, and the kit and multi-staff views of a percussion score', () => {
+  const full = code('music-edition.full.ts');
+  assert.match(full, /renderMusicXML\(entry, r\.content as string, snippetId, undefined, undefined, undefined, opts\)/, 'single-XML score');
+  assert.match(full, /renderMusicXML\(scoreHost, kitXml, snippetId, multiStaffXml, shared \?\? undefined, zoomBarHost, opts\)/, 'kit view');
+  assert.match(full, /renderMusicXML\(scoreHost, multiStaffXml, snippetId, undefined, shared \?\? undefined, zoomBarHost, opts\)/, 'multi-staff view');
+  assert.match(full, /opts: RenderOptions = \{\},\n\) \{\n  const host = entry\.createDiv\(\{ cls: 'forge-output-musicxml' \}\);/, 'the inner renderer takes the options');
+});

@@ -21,7 +21,9 @@ function rig(opts: { allowed?: () => boolean; timeFor?: (id: string) => Promise<
     onError: (e) => { errors.push(e); },
   });
   const seen: string[] = [];
-  wrap.addEventListener('click', (e: any) => { seen.push((e.target as any).id); });      // stands in for the inspector's pin listener
+  // stands in for the inspector's pin listener: on the same element (stopImmediatePropagation would hide it) AND on an ancestor (stopPropagation would hide it)
+  wrap.addEventListener('click', (e: any) => { seen.push('wrap:' + (e.target as any).id); });
+  win.document.body.addEventListener('click', (e: any) => { seen.push('body:' + (e.target as any).id); });
   const click = async (sel: string) => { wrap.querySelector(sel).dispatchEvent(new win.MouseEvent('click', { bubbles: true })); for (let i = 0; i < 20; i++) await Promise.resolve(); };
   return { wrap, player, lookups, errors, seen, click };
 }
@@ -46,7 +48,7 @@ test('NOT allowed (score-first): a click on a notehead starts nothing, moves not
 test('NOT allowed: the click still reaches the other listeners (the inspector pins the bar from the same click)', async () => {
   const r = rig({ allowed: () => false });
   await r.click('#h1');
-  assert.deepEqual(r.seen, ['h1']);
+  assert.deepEqual(r.seen, ['wrap:h1', 'body:h1']);
 });
 
 test('the question is asked at EVERY click, so the answer can change while the Score is on screen (the profile flag is published after the first render)', async () => {
