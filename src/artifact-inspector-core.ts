@@ -31,6 +31,10 @@ export interface ArtifactInspectorOptions {
    *  names. With this on, a lit element gets a translucent rectangle INSIDE it (first child, behind its drawing, `pointer-events: none`) painted with INLINE style and a literal fallback colour — lighter
    *  for hover, stronger for a pin — and while an element is pinned every other element is dimmed (inline `opacity`). Absent (the bar's Beat Box tab): nothing is inserted or dimmed. */
   band?: boolean;
+  /** M8 (mix): which elements get an enlarged target. Absent = every mapped element (the bar inspector). A mix enlarges its HITS only: a rectangle over the whole bar would sit on top of the noteheads. */
+  enlargeIds?: readonly string[];
+  /** M8 (mix): called on every repaint with the pinned id (or null), so a surface can paint its own cue (colours by parent) from the whole state. Absent = nothing. */
+  decorate?(pinnedId: string | null): void;
 }
 
 export interface ArtifactInspector {
@@ -114,7 +118,11 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     } catch { /* an element that cannot be measured keeps the class recolour only */ }
   };
   // the band's own insertions are DOM mutations the arrival observer below would see and answer with another repaint, forever: after painting, drop the records our own edits made
-  const repaint = () => { if (opts.band) { Object.keys(map).forEach(paintBand); arrival?.takeRecords(); } };
+  const repaint = () => {
+    if (opts.band) Object.keys(map).forEach(paintBand);
+    opts.decorate?.(pinned);
+    if (opts.band || opts.decorate) arrival?.takeRecords();
+  };
   const setHotAll = (ids: readonly string[]) => {
     if (ids.length === hot.length && ids.every((x, i) => x === hot[i])) return;
     hot.forEach((x) => mark(x, HOT_CLASS, false));
@@ -164,7 +172,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   // The engraving may not be in the DOM yet when this attaches (the renderer is fire-and-forget), and the Score's own Kit / Multi-staff toggle REPLACES the SVG inside the same host:
   // grow the targets for what is there now, and again whenever the content changes (an element that already has its target is skipped, so our own additions end the loop).
   const hitAreas: Element[] = [];
-  const growTargets = () => { if (opts.enlargeTargets) hitAreas.push(...addHitAreas(root, Object.keys(map), opts.enlargeTargets)); };
+  const growTargets = () => { if (opts.enlargeTargets) hitAreas.push(...addHitAreas(root, opts.enlargeIds ?? Object.keys(map), opts.enlargeTargets)); };
   const reapplyMarks = () => { hot.forEach((x) => mark(x, HOT_CLASS, true)); mark(pinned, PINNED_CLASS, true); repaint(); };   // a replaced SVG has new elements with the same ids
   growTargets();
   const MO = (root.ownerDocument.defaultView as (Window & { MutationObserver?: typeof MutationObserver }) | null)?.MutationObserver;
@@ -211,8 +219,10 @@ export function orderByStepThenChannel(map: ProvenanceMap, channelOrder: readonl
 /** One line of the lineage stack. */
 export interface LineageEntry {
   /** 'hit' and 'note' are the bar inspector's; 'bar' and 'tempo' are a phrase's (M6). The kind is a CSS class (`forge-inspector-<kind>`). */
-  kind: 'hit' | 'note' | 'bar' | 'tempo';
+  kind: 'hit' | 'note' | 'bar' | 'tempo' | 'legend';
   text: string;
+  /** M8: a legend line — coloured marks with their meaning (the mix's three kinds of hit). Rendered as inline-styled spans; `text` is the plain-text form. */
+  legend?: ReadonlyArray<{ mark: string; colour: string; text: string }>;
   noteId?: string;
   /** M6: the link's accessible name (the bar inspector's "Open note" buttons have none: its DOM is unchanged). */
   openLabel?: string;

@@ -142,3 +142,80 @@ test('REAL ENGINE: ghost notes ARE in what the engine returns — bar_005 + bar_
   assert.equal(await line(false), '[forge-mix] engine asked weight=0.4 threshold=0.5 ghost=false -> notes: multi-staff 5, kit 5');
   assert.equal(await line(true), '[forge-mix] engine asked weight=0.4 threshold=0.5 ghost=true -> notes: multi-staff 9, kit 9');
 });
+
+// ---- M8 (drain 2026-10-23-0230): navigation through a mix, on the REAL engine ----------------------------------------------------------------------------------------------------------------
+
+import { annotateMixPayload, mixHitsFromEngine, MIX_BAR_ID, type MixParams } from './mix-lineage-core.ts';
+import type { RhythmDataLike } from './provenance-core.ts';
+
+const asLike = (d: unknown) => d as RhythmDataLike;
+const richA = { time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 20, tempo_bpm: 96, channels: {
+  kick: [true, false, 100, false, false, false, 64, false, true, false, false, 127, false, false, false, false],
+  snare: [false, false, false, false, 110, false, false, 36, false, false, false, false, true, false, 80, false],
+  hihat: [true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false] } };
+const richB = { time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 40, tempo_bpm: 120, channels: {
+  kick: [true, false, false, 70, false, false, 64, false, false, false, 90, false, false, false, false, false],
+  snare: [false, false, false, false, 100, false, false, false, false, true, false, false, true, false, false, false],
+  bell: [false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true] } };
+
+test('REAL ENGINE: the payload of a mix carries the engine\'s own mixed bar (so the hit ids are verified against what the engine returned, not against a copy of the rule)', async () => {
+  const py = await engine();
+  const params: MixParams = { a: 'bar_005', b: 'bar_006', weight: 0.4, threshold: 0.5, ghost: true };
+  const payload = computePhrase(py, { a: dataOf('bar_005'), b: dataOf('bar_006') }, { kind: 'mix', ...params }, 'phrase_002');
+  assert.deepEqual(payload.mixed_bar.channels.kick, [true, false, 36, 36, false, false, 36, false, true, false, false, false, false, false, false, false]);
+  const extend = computePhrase(py, dataOf('bar_005'), { kind: 'extend', source: 'bar_005', bars: 2, style: 'repeat_with_fills', tempo_change_pct: 0 }, 'phrase_001');
+  assert.equal('mixed_bar' in extend, false, 'an extend payload is untouched');
+});
+
+test('REAL ENGINE: annotateMixPayload ties the real engraved ids to the real mixed bar — bar id, one id per hit in both views — and the provenance says where each hit came from', async () => {
+  const py = await engine();
+  const a = dataOf('bar_005'), b = dataOf('bar_006');
+  for (const ghost of [false, true]) {
+    const params: MixParams = { a: 'bar_005', b: 'bar_006', weight: 0.4, threshold: 0.5, ghost };
+    const raw = computePhrase(py, { a, b }, { kind: 'mix', ...params }, 'phrase_002');
+    const r = annotateMixPayload('phrases/phrase_002', params, { ...raw, forge_mix: { a, b } });
+    assert.deepEqual(r.problems, [], `ghost ${ghost}`);
+    assert.deepEqual(r.kitProblems, [], `ghost ${ghost}: the Kit view is tied too`);
+    const hitIds = Object.keys(r.map).filter((id) => id !== MIX_BAR_ID);
+    assert.equal(hitIds.length, ghost ? 8 : 4);
+    for (const key of ['multi_staff_content', 'kit_content'] as const) {
+      const xml = r.payload[key] as string;
+      assert.match(xml, /<measure [^>]*id="ph_bar_1"/, `${key}: the bar`);
+      for (const id of hitIds.filter((h) => !h.includes('_t'))) assert.ok(xml.includes(`id="${id}"`), `${key}: ${id}`);
+    }
+    assert.equal(r.map.mx_kick_0.params.kind, 'both');
+    if (ghost) { assert.equal(r.map.mx_kick_2.params.kind, 'ghost-a'); assert.equal(r.map.mx_kick_2.params.velocity, 36); }
+    else assert.equal(r.map.mx_kick_2, undefined);
+  }
+});
+
+test('REAL ENGINE, drift guard: over weights 0..1 (step 0.05), four thresholds, ghost on and off, on bar_005/bar_006 AND on a richer pair (int velocities, three channels each, swing, tempo), the TS copy of the rule agrees with the engine on every hit — position, ghost-ness and the velocity the engine wrote', async () => {
+  const py = await engine();
+  const pairs: Array<[string, unknown, unknown]> = [['bar_005/bar_006', dataOf('bar_005'), dataOf('bar_006')], ['rich pair', richA, richB], ['bar with itself', dataOf('bar_005'), dataOf('bar_005')]];
+  let checked = 0;
+  for (const [name, a, b] of pairs) {
+    for (let k = 0; k <= 20; k++) {
+      const weight = k / 20;
+      for (const threshold of [0.25, 0.5, 0.75, 1]) {
+        for (const ghost of [false, true]) {
+          const params: MixParams = { a: 'x', b: 'y', weight, threshold, ghost };
+          const mixed = engineMix(py, a, b, weight, threshold, ghost);
+          const r = mixHitsFromEngine(asLike(a), asLike(b), params, asLike(mixed));
+          assert.equal(r.ok, true, `${name} weight ${weight} threshold ${threshold} ghost ${ghost}: ${r.ok ? '' : r.problems.join('; ')}`);
+          checked++;
+        }
+      }
+    }
+  }
+  assert.equal(checked, 3 * 21 * 4 * 2);
+});
+
+test('REAL ENGINE: through the plugin\'s own path (producePhraseNote) the payload reaches the Score with the parents attached, and a mismatch is still the engine\'s refusal line', async () => {
+  const py = await engine();
+  const note = (obj: object) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify(obj, null, 2)}\n\`\`\`\n`;
+  const out = await producePhraseNote(deps(py), note({ ...MIX, weight: 0.4, ghost: true }), 'phrase_002');
+  assert.equal(out.kind, 'score');
+  if (out.kind !== 'score') return;
+  assert.deepEqual(Object.keys(out.payload.forge_mix as object).sort(), ['a', 'b']);
+  assert.ok(out.payload.mixed_bar);
+});

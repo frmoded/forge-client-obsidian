@@ -12,6 +12,7 @@
 
 import { editabilityProblem, extractJsonBlock, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
+import type { ProvenanceMap } from './provenance-core.ts';
 
 export const PHRASE_FOLDER = 'phrases';
 export const PHRASE_VIEW_TYPE = 'forge-phrase';
@@ -445,6 +446,13 @@ export function mixTraceEngine(p: PhraseParams, payload: unknown): string | null
   return `${head} notes: single score ${notes(r.content)}`;
 }
 
+/** M8: the mix Inspector's evidence line — the bar and how many hits it tied to the two bars, or why it could not map the Score (the same reason the Inspector shows). */
+export function mixTraceInspector(problems: readonly string[], map: ProvenanceMap): string {
+  if (problems.length > 0) return `[forge-mix] inspector could not map the Score: ${problems[0]}`;
+  const hits = Object.values(map).filter((p) => p.role === 'mix-hit').length;
+  return `[forge-mix] inspector mapped the bar and ${hits} hit${hits === 1 ? '' : 's'}`;
+}
+
 /** The engine's own `mix_rhythm: …` line out of an error: Pyodide hands a Python ValueError over as the whole traceback, whose last line is `ValueError: mix_rhythm: …`. `null` = not a mix_rhythm refusal. */
 export function mixRhythmRefusal(message: string): string | null {
   const m = /(?:^|\n)(?:ValueError: )?(mix_rhythm: [^\n]*?)\s*$/.exec(message.trim());
@@ -482,7 +490,9 @@ async function produceMix(deps: PhraseScoreDeps, params: MixPhrase, title: strin
       throw e;
     }
   }, bars.a, title);
-  return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : outcome;
+  if (refused !== null) return { kind: 'refusal', message: `Phrase: ${refused}` };
+  // M8: the Score's inspector derives each hit's parents from the two bars it was made of; they travel with the payload (the renderer ignores the extra key)
+  return outcome.kind === 'score' ? { kind: 'score', payload: { ...outcome.payload, forge_mix: { a: bars.a, b: bars.b } } } : outcome;
 }
 
 /** What the phrase view hands the live Score: the phrase note's current TEXT (or why it could not be read). The Score parses it itself, so a note that is not valid is the SAME kind of

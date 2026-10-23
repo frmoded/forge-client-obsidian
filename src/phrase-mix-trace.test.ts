@@ -48,3 +48,21 @@ test('MECHANISM PIN: the phrase tab prints the three lines — after a successfu
   assert.match(view, /trace\(mixTraceEngine\(params, payload\)\);/);
   assert.match(view, /if \(line\) console\.info\(line\)/);
 });
+
+// ---- M8 (drain 2026-10-23-0230): the Inspector's own evidence line (operating card section 9: evidence ships with the feature) ----------------------------------------------------------------
+
+import { mixTraceInspector } from './phrase-core.ts';
+
+test('inspector: one line saying the bar and how many hits were mapped, or the reason the Score could not be mapped', () => {
+  const map = { ph_bar_1: { noteId: 'phrases/phrase_002', role: 'mix-bar', params: {} }, mx_kick_0: { noteId: 'phrases/phrase_002', role: 'mix-hit', params: {} }, mx_kick_8: { noteId: 'phrases/phrase_002', role: 'mix-hit', params: {} } };
+  assert.equal(mixTraceInspector([], map), '[forge-mix] inspector mapped the bar and 2 hits');
+  assert.equal(mixTraceInspector([], { ph_bar_1: map.ph_bar_1, mx_kick_0: map.mx_kick_0 }), '[forge-mix] inspector mapped the bar and 1 hit');
+  assert.equal(mixTraceInspector(['the engine did not return the mixed bar'], {}), '[forge-mix] inspector could not map the Score: the engine did not return the mixed bar');
+});
+
+test('MECHANISM PIN: the tab prints the inspector line from annotateForMix', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const tab = fs.readFileSync(path.join(import.meta.dirname, 'phrase-dom.ts'), 'utf8');
+  assert.match(tab, /console\.info\(mixTraceInspector\(result\.problems, result\.map\)\);/);
+});

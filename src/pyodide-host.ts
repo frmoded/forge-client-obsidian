@@ -1528,7 +1528,11 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     else:
         bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
     score = rhythm_bars_to_stream(bars)
-    return serialize_result(score, {"snippet_id": title, "meta": {"title": title}})
+    out = serialize_result(score, {"snippet_id": title, "meta": {"title": title}})
+    if p.get("kind") == "mix":
+        # M8: the engine's own mixed bar rides along, so the plugin ties each engraved hit to what the ENGINE returned (never to a copy of the rule)
+        out["mixed_bar"] = bars[0]
+    return out
 
 # ---- Moda live-loop helpers (Phase 2) ---------------------------
 # State lives in Python globals between engine-request calls.

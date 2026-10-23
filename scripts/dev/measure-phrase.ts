@@ -4,6 +4,7 @@
 // WALL-CLOCK ONLY. The real engine runs in Node behind /phrase; everything else is real Chrome: the phrase DOM, Verovio, html-midi-player's note sequence. Audio is NOT played (headless): what is
 // measured is what the player schedules — the NoteSequence it is given (the very object `renderTaggedMusicXML` hands the <midi-player>) — and Verovio's own timeMap for the same XML.
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { engine, computePhrase } from '../../src/test-support/real-rhythm-engine.ts';
@@ -268,6 +269,79 @@ async function clickStudy(kind: 'extend' | 'mix') {
 }
 out.click = { extend: await clickStudy('extend'), mix: await clickStudy('mix') };
 
+// ---- drain 2026-10-23-0230 (M8): navigation through a mix, in real Chrome with real pointer events. The pixel claim is made FAIRLY: bar_007 is bar_006 plus ONE extra kick, so the same engraved hit
+// (kick, step 3) is "bar_005 only" against bar_006 and "both bars" against bar_007, with an IDENTICAL layout; pinned, the two must render differently; unpinned, identically (a stability control).
+const BAR7 = (() => { const m = BAR6.match(/\`\`\`json\n([\s\S]*?)\n\`\`\`/)!; const d = JSON.parse(m[1]); d.channels.kick[2] = true; return BAR6.replace(m[1], JSON.stringify(d, null, 2)); })();
+/** How many pixels of two same-size PNG clips differ by at least `min` in some channel (macOS `sips` converts them to BMP). Re-rendering and re-styling leave a noise floor of a few anti-aliased pixels with a
+ *  channel difference of at most ~31 (measured); a colour cue differs by far more (blue vs purple: 194), so counting STRONG differences separates the two exactly. -1 = the clips differ in size. */
+function strongDiff(fileA: string, fileB: string, min = 100): number {
+  const bmp = (f: string) => { const out = f.replace(/\.png$/, '.bmp'); execFileSync('sips', ['-s', 'format', 'bmp', f, '--out', out], { stdio: 'ignore' }); const b = fs.readFileSync(out); return { b, off: b.readUInt32LE(10), w: b.readInt32LE(18), h: Math.abs(b.readInt32LE(22)), bpp: b.readUInt16LE(28) }; };
+  const A = bmp(fileA), B = bmp(fileB);
+  if (A.w !== B.w || A.h !== B.h) return -1;
+  const row = Math.floor((A.bpp * A.w + 31) / 32) * 4;
+  let n = 0;
+  for (let y = 0; y < A.h; y++) for (let x = 0; x < A.w; x++) { const o = A.off + y * row + x * (A.bpp / 8); let d = 0; for (let k = 0; k < 3; k++) d = Math.max(d, Math.abs(A.b[o + k] - B.b[o + k])); if (d >= min) n++; }
+  return n;
+}
+async function mixNavStudy() {
+  const q = await openPage({ dir: here, width: 800, height: 900, pageHtml: page, routes });
+  const res: any = {};
+  try {
+    await q.ev(`window.__mountPhrase(document.getElementById('pane'), { phrase: ${JSON.stringify(mixText({ weight: 0.7 }))}, bar: ${JSON.stringify(BAR)}, bars: { bar_006: ${JSON.stringify(BAR6)}, bar_007: ${JSON.stringify(BAR7)} }, path: 'phrases/phrase_002.md', name: 'phrase_002' })`);
+    for (let w = 0; w < 20000; w += 100) { if (await q.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    await sleep(1500);
+    const settle = async () => { let n = -1, still = 0; for (let w = 0; w < 15000 && still < 4; w += 100) { await sleep(100); const m = await q.ev('(window.__timings || []).length'); if (m === n) still++; else { still = 0; n = m as any; } } };
+    // blur first: clicking focuses the Score host (tabindex 0) and the focus ring ALONE changes the pixels — the first version of this check passed with the painter switched off for exactly that reason
+    const hash = async (name?: string) => { await q.ev(`document.activeElement && document.activeElement.blur && document.activeElement.blur()`); await sleep(100); const c = await q.ev(`(() => { document.getElementById('pane').scrollTop = 0; const notes = [...document.querySelectorAll('.forge-rhythm-score-host g.note[id^=mx_] .notehead')].map((g) => g.getBoundingClientRect()); const x0 = Math.floor(Math.min(...notes.map((r) => r.left))) - 30, y0 = Math.floor(Math.min(...notes.map((r) => r.top))) - 30, x1 = Math.ceil(Math.max(...notes.map((r) => r.right))) + 30, y1 = Math.ceil(Math.max(...notes.map((r) => r.bottom))) + 30; return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 }; })()`); const r = await q.send('Page.captureScreenshot', { format: 'png', clip: { ...c, scale: 1 } }); if (name) fs.writeFileSync(path.join(SHOTS, name), Buffer.from(r.result.data, 'base64')); return crypto.createHash('md5').update(r.result.data).digest('hex'); };   // the region of the NOTEHEADS (their boxes + 30 px, a size that does not depend on the marks the cue adds): what the colour cue changes. Not the whole host (the MIDI player beside it is a live widget) and not the whole SVG (two separate Verovio renders differ by a few anti-aliased pixels elsewhere in the staff: measured, 89 pixels, max channel difference 31)
+    const xy = (sel: string) => q.ev(`(() => { const e = document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({ block: 'center', inline: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    const stack = () => q.ev(`[...document.querySelectorAll('.forge-inspector-lineage > li > span')].map((s) => s.textContent)`);
+    const pinned = () => q.ev(`[...document.querySelectorAll('.forge-rhythm-score-host g.forge-artifact-pinned')].map((g) => g.id)`);
+    const away = async () => { await q.hover(5, 880); await sleep(150); };
+    res.dom = await q.ev(`({ inspector: !!document.querySelector('.forge-inspector'), body: document.querySelector('.forge-inspector-body')?.textContent, bracket: !!document.querySelector('.forge-phrase-bracket'), source: !!document.querySelector('.forge-phrase-source'), measureId: !!document.querySelector('#ph_bar_1'), hitIds: [...document.querySelectorAll('.forge-rhythm-score-host g.note[id^=mx_]')].map((g) => g.id) })`);
+    const mark = (m: string) => console.log('[m8]', new Date().toISOString().slice(11, 19), m);
+    mark('mounted'); await q.ev(`window.__edit('phrases/phrase_002.md', ${JSON.stringify(mixText({ weight: 0.7 }))})`); await settle(); await sleep(400);   // one identical re-render: the very first render after mount differs from every later one by a few anti-aliased pixels (measured: 89 px, max channel difference 31), so every comparison below is between re-renders
+    await away(); res.u1 = await hash('m8-u1-clip.png'); mark('u1 hashed');
+    // (1) a real click on the a-only notehead (kick, step 3): the hit's line over the bar's stack
+    let p = await xy('#mx_kick_2 .notehead'); await q.click(p.x, p.y); await sleep(500); mark('clicked'); await settle(); mark('settled after click');
+    res.hitStack = await stack(); res.hitPinned = await pinned();
+    res.legend = await q.ev(`[...document.querySelectorAll('.forge-inspector-legend-mark')].map((m) => ({ mark: m.textContent, style: m.getAttribute('style') }))`);
+    res.links = await q.ev(`[...document.querySelectorAll('.forge-inspector-lineage button.forge-inspector-open')].map((b) => b.getAttribute('aria-label'))`);
+    res.marks = await q.ev(`document.querySelectorAll('.forge-mix-mark').length`);
+    res.fills = await q.ev(`Object.fromEntries(['mx_kick_0', 'mx_kick_2', 'mx_snare_4'].map((id) => [id, getComputedStyle(document.querySelector('#' + id + ' .notehead')).fill]))`);
+    await away(); res.p1 = await hash('m8-p1-clip.png'); mark('p1 hashed');
+    await q.shot(path.join(SHOTS, 'm8-pinned-hit.png'), { x: 0, y: 0, width: 800, height: 700 });
+    // (2) the same hit, now "both bars" (b = bar_007 has that kick too), SAME layout: a hand edit of the phrase; the pin must survive the redraw
+    await q.ev(`window.__edit('phrases/phrase_002.md', ${JSON.stringify(mixText({ weight: 0.7, b: 'bar_007' }))})`); await settle(); await sleep(400);
+    mark('edited b'); res.hitStackBoth = await stack(); res.pinnedAfterEdit = await pinned(); await away(); res.p2 = await hash('m8-p2-clip.png'); mark('p2 hashed');
+    await q.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+    await q.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host'); e.focus(); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`); await sleep(300);
+    res.afterEsc = { pinned: await pinned(), marks: await q.ev(`document.querySelectorAll('.forge-mix-mark').length`), stack: await stack() }; await away(); res.u2 = await hash('m8-u2-clip.png'); await q.shot(path.join(SHOTS, 'm8-u2.png'), { x: 0, y: 0, width: 800, height: 700 });
+    // (3) back to bar_006; pin the BAR (a click on the staff, not a note); then the Weight slider with the pin on: it must stay pinned and the stack follow; latency from input to the stack saying so
+    await q.ev(`window.__edit('phrases/phrase_002.md', ${JSON.stringify(mixText({ weight: 0.7 }))})`); await settle(); await sleep(300);
+    p = await xy('#mx_kick_2 .notehead'); await q.click(p.x, p.y); await sleep(400);
+    mark('esc + u2 done'); res.latency = [];
+    for (const [value, pct] of [['0.6', 60], ['0.8', 80], ['0.6', 60], ['0.8', 80], ['0.6', 60]] as Array<[string, number]>) {
+      const ms = await q.ev(`(async () => { const e = document.querySelector('.forge-mix-weight'); const t0 = performance.now(); e.value = '${value}'; e.dispatchEvent(new Event('input', { bubbles: true })); while (performance.now() - t0 < 5000) { const t = document.querySelector('.forge-inspector-lineage')?.textContent ?? ''; if (t.includes('${pct} % bar_005')) return performance.now() - t0; await new Promise((r) => setTimeout(r, 2)); } return -1; })()`);
+      await settle(); res.latency.push({ weight: value, stackFollowedMs: Math.round(ms as number), pinned: await pinned(), first: (await stack())[0] });
+    }
+    // (4) below the threshold the pinned hit is gone: the pin falls back to the BAR, the Inspector is never empty
+    await q.ev(`(() => { const e = document.querySelector('.forge-mix-weight'); e.value = '0.4'; e.dispatchEvent(new Event('input', { bubbles: true })); })()`); await settle(); await sleep(300);
+    res.belowThreshold = { pinned: await pinned(), stack: await stack() };
+    // (5) arrows do nothing and do not throw; the Open note links open the phrase and each parent
+    const before = await pinned();
+    await q.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host'); for (const k of ['ArrowRight', 'ArrowLeft', 'ArrowDown']) e.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })); })()`);
+    res.arrows = { before, after: await pinned() };
+    await q.ev('window.__opened = []');
+    for (const i of [1, 2, 3]) { const b = await xy(`.forge-inspector-lineage li:nth-child(${i}) button.forge-inspector-open`); await q.click(b.x, b.y); await sleep(150); }
+    res.opened = await q.ev('window.__opened.slice()');
+    res.errors = await q.ev('window.__errors.slice()');
+    const clip = (n: string) => path.join(SHOTS, `m8-${n}-clip.png`);
+    res.strong = { noise_u1_u2: strongDiff(clip('u1'), clip('u2')), cue_u1_p1: strongDiff(clip('u1'), clip('p1')), cue_u2_p2: strongDiff(clip('u2'), clip('p2')), aOnly_vs_both_p1_p2: strongDiff(clip('p1'), clip('p2')) };
+  } finally { q.close(); }
+  return res;
+}
+out.m8 = await mixNavStudy();
+
 // The verdicts (a measurement that cannot fail proves nothing): the player's tempo changes and Verovio's bar starts must sit at the engine's bar starts, within 5 ms; 8 bars; a mark per bar and part.
 const near = (a: number, b: number) => Math.abs(a - b) <= 0.005;
 const tempi: number[] = out.expected.tempi; const starts: number[] = out.expected.barStartsSec;
@@ -296,7 +370,7 @@ out.verdicts = {
   m6_hoveringABarWithNothingPinnedPreviewsItsStack: out.m6?.previewIsMarked === true && out.m6?.previewBar2?.[0] === 'bar 2 of 8',
   mix_theStripIsTheMixStripWithTwoBarListsAndTheValuesOfTheNote: out.mix?.dom?.a === 'bar_005' && out.mix.dom.b === 'bar_006' && JSON.stringify(out.mix.dom.aOptions) === JSON.stringify(['bar_005', 'bar_006']) && out.mix.dom.weight === '0.5' && out.mix.dom.weightShown === '0.50' && out.mix.dom.weightType === 'range' && out.mix.dom.weightStep === '0.05' && out.mix.dom.threshold === '0.5' && out.mix.dom.ghost === false && /^Mix of bar_005 and bar_006: 50 % bar_005;/.test(out.mix.dom.sentence ?? ''),
   mix_oneBarEngraved: out.mix?.dom?.measureGroups === 1,
-  mix_noInspectorNoBracketNoSourceLinkNoExtendStrip: out.mix?.dom?.inspector === false && out.mix.dom.bracket === false && out.mix.dom.sourceLink === false && out.mix.dom.extendBars === false,
+  mix_hasTheInspectorButNoBracketNoSourceLinkNoExtendStrip: out.mix?.dom?.inspector === true && out.mix.dom.bracket === false && out.mix.dom.sourceLink === false && out.mix.dom.extendBars === false,   // M8 reversed the M7 "no inspector"
   mix_rendered_weight1AndWeight0LookDifferent: !!out.mix?.hash?.w1 && out.mix.hash.w1 !== out.mix.hash.w0,
   mix_rendered_atTheTieTheUnionOfTheseTwoBarsLooksLikeBar005: out.mix?.hash?.['w0.5'] === out.mix?.hash?.w1,
   mix_rendered_justUnderTheThresholdLooksLikeBar006: !!out.mix?.hash?.w0 && out.mix.hash['w0.45'] === out.mix.hash.w0,
@@ -311,6 +385,20 @@ out.verdicts = {
   click_theBarStillPinsWhenAnExtendNoteIsClickedInScoreFirst: out.click?.extend?.scoreFirstClick?.pinned === 1 && /^bar \d+ of 8$/.test(out.click?.extend?.scoreFirstClick?.stack ?? ''),
   click_controlTheSameClickPlaysWhenNotScoreFirst: ['extend', 'mix'].every((k) => { const c = out.click?.[k]; return c?.controlClick?.starts === (c.scoreFirstClickAgain?.starts ?? -9) + 1; }),   // exactly one more start() (headless Chrome ignores a player.currentTime assignment, so the time is not asserted for the control)
   click_noConsoleErrors: ['extend', 'mix'].every((k) => (out.click?.[k]?.errors?.length ?? 1) === 0),
+  m8_theMixScoreIsMapped: out.m8?.dom?.inspector === true && !/could not be mapped/.test(out.m8.dom.body ?? '') && out.m8.dom.measureId === true && out.m8.dom.hitIds?.length === 8 && out.m8.dom.bracket === false && out.m8.dom.source === false,
+  m8_clickingTheANoteheadPinsThatHitAndShowsItsLineOverTheBarsStack: JSON.stringify(out.m8?.hitPinned) === JSON.stringify(['mx_kick_2']) && JSON.stringify(out.m8?.hitStack) === JSON.stringify(['this hit: from bar_005 only, velocity 90', 'made by phrase_002 (mix, 70 % bar_005 / 30 % bar_006, threshold 0.50)', 'from bar_005 (70 %)', 'from bar_006 (30 %)', '▲ only bar_005 · ■ only bar_006 · ● both bars']),
+  m8_theThreeOpenNoteLinksAreThere: JSON.stringify(out.m8?.links) === JSON.stringify(['Open phrase_002', 'Open bar_005', 'Open bar_006']) && JSON.stringify(out.m8?.opened) === JSON.stringify(['phrases/phrase_002', 'bars/bar_005', 'bars/bar_006']),
+  m8_theLegendCarriesInlineColours: out.m8?.legend?.length === 3 && out.m8.legend.every((l: any) => /color:\s*#[0-9a-f]{6}/i.test(l.style ?? '')),
+  m8_pinnedNoteheadsArePaintedByParentInRealPixels: out.m8?.marks === 8 && out.m8?.fills?.mx_kick_2 === 'rgb(27, 110, 194)' && out.m8.fills.mx_kick_0 === 'rgb(106, 61, 154)' && out.m8.fills.mx_kick_2 !== out.m8.fills.mx_kick_0,
+  m8_rendered_pinningPaintsTheNoteheads: (out.m8?.strong?.cue_u1_p1 ?? 0) >= 300 && (out.m8?.strong?.cue_u2_p2 ?? 0) >= 300,   // the stylesheet alone gives the ONE pinned note an accent (79 strong pixels with the painter off); painting every notehead of the bar is 629-643
+  m8_rendered_anAOnlyHitAndABothHitLookDifferentWhilePinned: (out.m8?.strong?.aOnly_vs_both_p1_p2 ?? 0) >= 10,
+  m8_rendered_stabilityControl_unpinnedRendersDifferOnlyByNoise: out.m8?.strong?.noise_u1_u2 === 0,   // no pixel differs by 100+ (the noise floor is 89 pixels at most 31)
+  m8_theSamePinSurvivesTheRedrawAndTheLineNowSaysBoth: JSON.stringify(out.m8?.pinnedAfterEdit) === JSON.stringify(['mx_kick_2']) && out.m8?.hitStackBoth?.[0] === 'this hit: from both bars, velocity 90',
+  m8_escLetsGoAndClearsTheColours: out.m8?.afterEsc?.pinned?.length === 0 && out.m8.afterEsc.marks === 0 && out.m8.afterEsc.stack?.length === 0,
+  m8_movingTheWeightKeepsThePinAndTheStackFollows: (out.m8?.latency ?? []).length === 5 && out.m8.latency.every((l: any) => l.stackFollowedMs > 0 && JSON.stringify(l.pinned) === JSON.stringify(['mx_kick_2']) && /^this hit: from bar_005 only/.test(l.first ?? '')),
+  m8_belowTheThresholdThePinFallsBackToTheBar: JSON.stringify(out.m8?.belowThreshold?.pinned) === JSON.stringify(['ph_bar_1']) && /^made by phrase_002 \(mix, 40 % bar_005/.test(out.m8?.belowThreshold?.stack?.[0] ?? ''),
+  m8_arrowsDoNothing: JSON.stringify(out.m8?.arrows?.before) === JSON.stringify(out.m8?.arrows?.after),
+  m8_noConsoleErrors: (out.m8?.errors?.length ?? 1) === 0,
   rider_aTinyHostNoLongerMakesVerovioRefusePageWidth: (out.rider?.tinyHostSvgLength ?? 0) > 0 && (out.rider?.tinyHostErrors?.length ?? 1) === 0,
   rider_aHiddenPaneWaitsThenEngravesWhenShown: out.rider?.svgWhileHidden === false && out.rider?.svgAfterShown === true && (out.rider?.errorsWhileHidden?.length ?? 1) === 0 && (out.rider?.errorsAfterShown?.length ?? 1) === 0,
 };

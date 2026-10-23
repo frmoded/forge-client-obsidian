@@ -107,14 +107,17 @@ test('both dropdowns list the bars in bars/ (and the phrase\'s own bars even if 
   assert.equal(gone.q('.forge-mix-b').value, 'bar_002', 'a bar that is not listed (deleted?) is still what the select shows');
 });
 
-test('a mix has NO lineage inspector, no bracket and no source link (M8), and the extend strip is gone', async () => {
+// M8 (drain 2026-10-23-0230) REVERSES the M7 pin "a mix has no inspector": a mix has one now (the pure and DOM halves are in mix-lineage-core.test.ts and mix-inspector.test.ts, real engine and real Chrome beside
+// them). It still has no bracket and no source link (they are the extend's), and the extend strip is still gone. This rig's fake engine returns no mixed bar, so the inspector says it cannot map the Score.
+test('a mix has an Inspector (M8) but no bracket, no source link and no extend strip', async () => {
   const r = rig({ initial: true });
   await r.handle.load(); await flush();
-  assert.equal(r.q('.forge-inspector'), null);
-  assert.equal(r.q('.forge-phrase-bracket'), null);
-  assert.equal(r.q('.forge-phrase-source'), null);
-  assert.equal(r.q('.forge-phrase-bars'), null);
-  assert.equal(r.q('.forge-phrase-style'), null);
+  assert.ok(r.q('.forge-inspector') !== null, 'the mix tab has the Inspector');
+  assert.match(r.q('.forge-inspector').textContent, /could not be mapped.*did not return the mixed bar/, 'with a fake engine that returns no mixed bar it says why, never a guess');
+  assert.ok(r.q('.forge-phrase-bracket') === null);
+  assert.ok(r.q('.forge-phrase-source') === null);
+  assert.ok(r.q('.forge-phrase-bars') === null);
+  assert.ok(r.q('.forge-phrase-style') === null);
   assert.equal(r.parent.querySelectorAll('.forge-phrase-controls').length, 1);
   assert.deepEqual(r.opened, []);
 });
@@ -228,7 +231,7 @@ test('a write the note refuses puts the controls back and says why; nothing is d
   assert.equal(r.q('.forge-mix-weight-value').textContent, '0.50');
 });
 
-test('an extend phrase that is hand-edited into a mix swaps the strip (and loses the inspector and the bracket); editing it back restores the extend strip', async () => {
+test('an extend phrase that is hand-edited into a mix swaps the strip and the inspector (and loses the bracket); editing it back restores the extend strip, its inspector and its bracket', async () => {
   const r = rig({ phrase: extendText() });
   await r.handle.load(); await flush();
   assert.ok(r.q('.forge-phrase-bars'), 'extend strip first');
@@ -236,19 +239,21 @@ test('an extend phrase that is hand-edited into a mix swaps the strip (and loses
   assert.ok(r.q('.forge-inspector'));
   r.files.set(PHRASE_PATH, mixText());
   r.handle.noteModified(PHRASE_PATH); await flush(); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await r.advance(MIX_SCORE_DEBOUNCE_MS);
-  assert.equal(r.q('.forge-phrase-bars'), null);
+  assert.ok(r.q('.forge-phrase-bars') === null);
   assert.ok(r.q('.forge-mix-weight'));
-  assert.equal(r.q('.forge-phrase-bracket'), null);
-  assert.equal(r.q('.forge-inspector'), null);
+  assert.ok(r.q('.forge-phrase-bracket') === null);
+  assert.equal(r.parent.querySelectorAll('.forge-inspector').length, 1, 'one Inspector: the mix\'s, not the extend\'s and not both');
+  assert.match(r.q('.forge-inspector-body').textContent, /Click the bar or a note to see where it came from\. Esc lets go\.|could not be mapped/);
   assert.equal(r.parent.querySelectorAll('.forge-phrase-controls').length, 1);
   assert.equal(r.parent.querySelectorAll('.forge-rhythm-edit-score').length, 1, 'one Score panel, not two');
   assert.match(r.drawn.at(-1)!, /bar_005:bar_006:0.5/);
   r.files.set(PHRASE_PATH, extendText({ bars: 2 }));
   r.handle.noteModified(PHRASE_PATH); await flush(); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await r.advance(MIX_SCORE_DEBOUNCE_MS);
   assert.ok(r.q('.forge-phrase-bars'));
-  assert.equal(r.q('.forge-mix-weight'), null);
+  assert.ok(r.q('.forge-mix-weight') === null);
   assert.ok(r.q('.forge-phrase-bracket'));
-  assert.ok(r.q('.forge-inspector'));
+  assert.equal(r.parent.querySelectorAll('.forge-inspector').length, 1);
+  assert.match(r.q('.forge-inspector-body').textContent, /Click a bar to see where it came from|could not be mapped/, 'the extend\'s inspector (this rig\'s fake Score cannot be mapped; the real one is in phrase-lineage-dom.test.ts and real Chrome)');
   assert.equal(r.parent.querySelectorAll('.forge-rhythm-edit-score').length, 1);
   assert.equal(r.drawn.at(-1), '<score-partwise>extend:2</score-partwise>');
 });

@@ -31,6 +31,12 @@ export interface ScoreInspectorPorts {
   lineage?(prov: Provenance): LineageEntry[];
   /** The arrow-key order. Default: by step, then channel. */
   order?(map: ProvenanceMap): string[];
+  /** M8 (mix): a redraw (the Weight slider moved) keeps the pin: the same element if the new engraving still has it, else the map's first element (the bar). Absent = a redraw forgets the pin, as it always did. */
+  keepPin?: boolean;
+  /** M8 (mix): which elements get an enlarged click target (default: all). */
+  enlargeIds?(map: ProvenanceMap): string[];
+  /** M8 (mix): a cue painted from the whole state on every change of the pin (the colours by parent). `host` is the engraving's host, `pinnedId` null when nothing is pinned. */
+  decorate?(host: HTMLElement, map: ProvenanceMap, pinnedId: string | null): void;
   /** The one-line hint when nothing is pinned. Default: the engraved-note hint. */
   hint?: string;
   /** The pointer target of each element: `null` = none added (a bar is its own target). Default: the note-sized enlargement. */
@@ -67,6 +73,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
   slot.appendChild(root);
 
   let current: { host: HTMLElement; layer: ArtifactInspector; result: ProvenanceResult } | null = null;
+  let lastPinned: string | null = null;                   // what was pinned when the Score was last redrawn (used only with `keepPin`)
 
   const hint = ports.hint ?? INSPECTOR_HINT;
   const showHint = (text: string) => { body.textContent = text; };
@@ -78,6 +85,17 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
     const list = doc.createElement('ol'); list.className = preview ? 'forge-inspector-lineage forge-inspector-preview' : 'forge-inspector-lineage';
     for (const l of (ports.lineage ?? lineageOf)(entry.prov)) {
       const li = doc.createElement('li'); li.className = `forge-inspector-${l.kind}`;
+      if (l.kind === 'legend' && l.legend) {
+        // M8: coloured marks with their meaning; the colours are INLINE so a theme cannot take them away
+        const span = doc.createElement('span');
+        l.legend.forEach((item, i) => {
+          if (i > 0) span.appendChild(doc.createTextNode(' · '));
+          const mark = doc.createElement('span'); mark.className = 'forge-inspector-legend-mark'; mark.textContent = item.mark; mark.setAttribute('style', `color: ${item.colour}; font-weight: bold;`);
+          span.appendChild(mark); span.appendChild(doc.createTextNode(` ${item.text}`));
+        });
+        li.appendChild(span); list.appendChild(li);
+        continue;
+      }
       const span = doc.createElement('span'); span.textContent = l.text; li.appendChild(span);
       if (l.kind === 'note' && l.noteId) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-inspector-open'; b.textContent = 'Open note';
@@ -124,6 +142,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
 
   return {
     onShown(host, result) {
+      const wasPinned = ports.keepPin ? lastPinned : null;
       detach();
       renderNotes(result);
       quiet.textContent = '';
@@ -139,6 +158,8 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         map,
         order: ports.order ? ports.order(map) : orderByStepThenChannel(map, CANONICAL_CHANNELS),
         enlargeTargets: ports.enlargeTargets === undefined ? { x: 0.35, y: 0.15 } : ports.enlargeTargets ?? undefined,
+        enlargeIds: ports.enlargeIds ? ports.enlargeIds(map) : undefined,
+        decorate: ports.decorate ? (pinnedId) => ports.decorate!(host, map, pinnedId) : undefined,
         band: ports.band === true,
         onHover: (e) => {
           if (ports.previewOnHover && !layer.pinnedId()) { if (e) renderStack(e, true); else showHint(hint); }
@@ -146,9 +167,13 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
           const p = e?.prov.params;
           ports.postHighlight(p && typeof p.channel === 'string' && typeof p.step === 'number' ? { channel: p.channel, step: p.step } : null);
         },
-        onPin: renderPinned,
+        onPin: (e) => { lastPinned = e ? e.id : null; renderPinned(e); },
       });
       current = { host, layer, result };
+      if (wasPinned !== null) {
+        const id = Object.prototype.hasOwnProperty.call(map, wasPinned) ? wasPinned : Object.keys(map)[0];
+        if (id !== undefined) layer.pin(id);               // pins on the NEW engraving and re-renders the stack from the NEW map
+      }
     },
     onHidden(host) {
       if (current && current.host === host) detach();

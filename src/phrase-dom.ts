@@ -18,9 +18,11 @@ import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-sco
 import type { ScoreInspectorPorts } from './score-inspector.ts';
 import type { ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
+import { MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
+import { paintMixHits } from './mix-hits-dom.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
-  PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampPhraseBars, clampPhrasePct, mixSentence, phraseSourcePath, producePhraseNote,
+  PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampPhraseBars, clampPhrasePct, mixSentence, mixTraceInspector, phraseSourcePath, producePhraseNote,
   readPhraseKind, readPhraseNote,
   type ExtendPhrase, type MixPhrase, type PhraseParams, type PhraseScoreDeps,
 } from './phrase-core.ts';
@@ -254,6 +256,8 @@ export interface PhraseInspectorPorts {
 }
 
 export const PHRASE_BRACKET_CLASS = 'forge-phrase-bracket';
+/** M8: a mix has one bar, so there is nothing to walk between with the arrow keys; Esc lets go. */
+export const MIX_INSPECTOR_HINT = 'Click the bar or a note to see where it came from. Esc lets go.';
 export const PHRASE_INSPECTOR_HINT = 'Click a bar to see where it came from. Arrow keys move between bars; Esc lets go.';
 
 export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'produce' | 'inspector'> {
@@ -306,6 +310,15 @@ function annotateForPhrase(path: string, note: NoteText, payload: Record<string,
   const next: Record<string, unknown> = { ...payload, [multiKey]: r.multiXml };
   if (r.kitXml !== null) next.kit_content = r.kitXml;
   return { payload: next, map: phraseProvenance(phraseNoteId(path), extend, r.bars), problems: [], kitProblems: r.kitProblems };
+}
+
+/** The map of a MIX's Score (M8): the bar and every hit, each tied to the two bars it was made of. Never throws. */
+function annotateForMix(path: string, note: NoteText, payload: Record<string, unknown>): ProvenanceResult {
+  const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
+  if (!parsed || parsed.ok === false || parsed.value.kind !== 'mix') return { payload, map: {}, problems: ['the mix could not be read'], kitProblems: [] };
+  const result = annotateMixPayload(phraseNoteId(path), parsed.value, payload);
+  console.info(mixTraceInspector(result.problems, result.map));          // evidence ships with the feature: a mix that cannot be inspected says why, in the console too
+  return result;
 }
 
 /** The bracket: hovering or focusing it lights every bar the phrase made; leaving clears; a click (or Enter / Space) opens the phrase note. */
@@ -376,6 +389,20 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       previewOnHover: true,
       band: true,                                    // 2300: the class recolour alone was not visible in the real Obsidian; the band does not depend on the stylesheet or the theme
       kitNote: 'Kit view: not mapped for this phrase (use the multi-staff view to inspect).',
+    } : insp && k === 'mix' ? {
+      // M8: the mix's one bar and each of its hits, tied to the two bars they came from. Clicking a notehead pins THAT hit, clicking the staff the bar; a redraw (the Weight slider) keeps the pin; the
+      // pinned bar's noteheads are painted by parent. No bracket and no source link (they are the extend's); arrows have nowhere to go.
+      noteId: phraseNoteId(ports.path),
+      openNote: insp.openNote,
+      annotate: (note, payload) => annotateForMix(ports.path, note as NoteText, payload),
+      lineage: mixLineageOf,
+      hint: MIX_INSPECTOR_HINT,
+      order: () => [],
+      keepPin: true,
+      previewOnHover: true,
+      enlargeIds: (map) => Object.keys(map).filter((id) => map[id].role === MIX_HIT_ROLE),
+      decorate: paintMixHits,
+      kitNote: 'Kit view: not mapped for this mix (use the multi-staff view to inspect).',
     } : undefined;
     area = attachScoreArea(parent, plan, {
       ...areaPorts,
