@@ -9,6 +9,7 @@ import { PHRASE_VIEW_TYPE, applyPhraseWrite } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
+import { headerResync } from './header-resync.ts';
 
 export class PhraseView extends EditableFileView {
   private handle: PhraseHandle | null = null;
@@ -94,6 +95,10 @@ export class PhraseView extends EditableFileView {
     const file = this.file;
     if (!file) return;
     await this.leaf.setViewState({ type: 'markdown', active: true, state: { file: file.path } });
+    // The new markdown view may get no workspace event after its file is loaded (setViewState is not an "open"), so ask the header syncs directly, now and again once it has settled.
+    headerResync.request('open-as-json');
+    window.setTimeout(() => headerResync.request('open-as-json+150ms'), 150);
+    window.setTimeout(() => headerResync.request('open-as-json+600ms'), 600);
   }
 }
 

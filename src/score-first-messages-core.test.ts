@@ -113,3 +113,14 @@ test('onScoreFirst: listeners are told when the answer CHANGES (not on a repeat)
     assert.deepEqual(other, [true, false]);
   } finally { console.error = saved; }
 });
+
+test('hasBeenScoreFirst is sticky (drain 2026-10-22-2200): once the vault was seen as score-first it stays, while isScoreFirst() follows the live answer; a vault never seen as score-first never is', () => {
+  const d = new MD2();
+  assert.equal(d.hasBeenScoreFirst(), false);
+  d.setScoreFirst(false); assert.equal(d.hasBeenScoreFirst(), false, 'never seen: still false');
+  d.setScoreFirst(true); assert.equal(d.hasBeenScoreFirst(), true);
+  d.setScoreFirst(false);
+  assert.equal(d.isScoreFirst(), false, 'the live answer still turns off at once');
+  assert.equal(d.hasBeenScoreFirst(), true, 'the sticky one does not');
+  d.resetForTests(); assert.equal(d.hasBeenScoreFirst(), false);
+});

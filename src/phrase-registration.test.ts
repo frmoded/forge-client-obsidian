@@ -52,7 +52,7 @@ for (const edition of ['lean', 'music'] as const) {
     const a = appFor(toml, active);
     const plugin: LoadedPlugin = await loadRealOnload(real, a.app);
     await tick();
-    real.messageDelivery.setScoreFirst(false);
+    real.messageDelivery.resetForTests();
     return { plugin, touched: a.touched, app: a.app };
   };
   const offered = (p: LoadedPlugin, id: string) => p.commands.get(id)?.checkCallback?.(true) ?? false;
@@ -155,7 +155,7 @@ for (const edition of ['lean', 'music'] as const) {
     for (const name of opts.only ? [opts.only] : ['file-open', 'active-leaf-change', 'layout-change']) handlers.get(name)?.forEach((f) => f());
     await tick();
     const titles = actions.filter((x) => !x.removed).map((x) => `${x.icon}:${x.title}`);
-    real.messageDelivery.setScoreFirst(false);       // reset AFTER reading: the answer changing re-syncs the header (2200), which is exactly what must not leak into the next test
+    real.messageDelivery.resetForTests();       // reset AFTER reading: the answer changing re-syncs the header (2200), which is exactly what must not leak into the next test
     return { titles, actions, states };
   }
 
@@ -214,7 +214,7 @@ for (const edition of ['lean', 'music'] as const) {
     const saved = { error: console.error }; console.error = () => {};
     try { plugin.commands.get(OPEN_PHRASE)!.checkCallback!(false); await tick(); } finally { console.error = saved.error; }
     for (const [n, args] of (globalThis as any).__shimConstructed ?? []) if (n === 'Notice') notices.push(args[0]);
-    real.messageDelivery.setScoreFirst(false);
+    real.messageDelivery.resetForTests();
     const before = getLeafCalls;
     const offered = plugin.commands.get(OPEN_PHRASE)!.checkCallback!(true);        // the palette asking "is this offered?"
     return { states, notices, offered, leafCallsWhileAsking: getLeafCalls - before, leafCallsInTotal: getLeafCalls };
@@ -251,39 +251,52 @@ for (const edition of ['lean', 'music'] as const) {
   });
 }
 
+/** A markdown tab on `path` in a score-first vault (real onload) with its header buttons recorded; see the tests below. */
+async function lateProfileFor(real: RealPlugin, path = 'phrases/phrase_001.md') {
+  const actions: any[] = []; const states: any[] = [];
+  const handlers = new Map<string, Array<() => void>>(); const metaHandlers = new Map<string, Array<() => void>>(); const vaultHandlers = new Map<string, Array<(f: any) => void>>(); const profileReadable = { on: true };
+  const view = new real.MarkdownView(); view.file = { path, extension: 'md' };
+  const mkEl = () => { const a: any = (globalThis as any).document.createElement('div'); a.addClass = (c: string) => a.classList.add(c); a.removeClass = (c: string) => a.classList.remove(c); a.setText = (t: string) => { a.textContent = t; }; return a; };
+  view.containerEl = mkEl();
+  view.addAction = (icon: string, title: string, cb: () => void) => { const a = mkEl(); Object.assign(a, { icon, title, cb, removed: false }); const r = a.remove.bind(a); a.remove = () => { a.removed = true; r(); }; actions.push(a); return a; };
+  view.leaf = { setViewState: async (s: any) => { states.push(s); }, view, getRoot: () => null };
+  const a = appFor(SCORE_FIRST_TOML, path); const app: any = a.app;
+  app.workspace.on = (name: string, cb: () => void) => { (handlers.get(name) ?? handlers.set(name, []).get(name)!).push(cb); return {}; };
+  app.vault.on = (name: string, cb: (f: any) => void) => { (vaultHandlers.get(name) ?? vaultHandlers.set(name, []).get(name)!).push(cb); return {}; };
+  app.vault.adapter = { exists: async (p: string) => p === 'forge.toml' && profileReadable.on, read: async (p: string) => (p === 'forge.toml' && profileReadable.on ? SCORE_FIRST_TOML : '') };   // the profile read can be made to come back empty (mid-write / unreadable)
+  app.workspace.getLeavesOfType = (t: string) => (t === 'markdown' ? [view.leaf] : []);
+  app.workspace.revealLeaf = () => {};
+  const tfile = Object.assign(new real.TFile(), { path, extension: 'md', basename: 'phrase_001' });
+  app.vault.getAbstractFileByPath = (p: string) => (p === path ? tfile : null);
+  app.vault.read = async () => fs.readFileSync(path.startsWith('bars/') ? FIXTURE_BAR : '/dev/null', 'utf8');
+  app.metadataCache = { on: (name: string, cb: () => void) => { (metaHandlers.get(name) ?? metaHandlers.set(name, []).get(name)!).push(cb); return {}; }, getFileCache: () => ({ frontmatter: { type: 'data', content_type: 'json' } }) };
+  await loadRealOnload(real, app);
+  await tick();
+  const live = () => actions.filter((x) => !x.removed).map((x) => `${x.icon}:${x.title}`);
+  return {
+    live, actions, states,
+    answerUnknown: async () => { real.messageDelivery.resetForTests(); handlers.get('layout-change')?.forEach((f) => f()); await tick(); },
+    answerFlipsFalseLater: async () => {          // the REAL path: forge.toml reads back without the profile (mid-write, a read error) -> refresh() answers false for BOTH the shared flag and score-first.ts's own variable
+        profileReadable.on = false;
+        vaultHandlers.get('modify')?.forEach((f) => f({ path: 'forge.toml' }));
+        await tick();
+        handlers.get('layout-change')?.forEach((f) => f()); await tick();
+      },
+    silentlyNavigateTo: (p: string) => { view.file = { path: p, extension: 'md' }; },
+    fire: async (kind: 'workspace' | 'metadata', name: string) => { (kind === 'workspace' ? handlers : metaHandlers).get(name)?.forEach((f) => f()); await tick(); },
+    answerArrives: async () => { real.messageDelivery.setScoreFirst(true); await tick(); },
+    cleanup: () => real.messageDelivery.setScoreFirst(false),
+  };
+}
+
+
 // ---- drain 2026-10-22-2200: the ORDER that left the Beat Box's "Open as Score" on a phrase: the rhythm header sync ran while the profile answer was still unknown, and the answer arrived later ---------
 for (const edition of ['lean', 'music'] as const) {
   let real: RealPlugin;
   before(async () => { real ??= await bundleRealPlugin(ROOT, edition); });
   /** A score-first vault with a markdown tab on the phrase. `answerUnknown()` puts the shared answer back to "not known yet" (false) and fires a workspace event, the way a restored tab or a plugin reload
    *  makes the rhythm sync run before the profile read finishes; `answerArrives()` is the profile read finishing. NO workspace event follows it: that is the point. */
-  async function lateProfile(path = 'phrases/phrase_001.md') {
-    real ??= await bundleRealPlugin(ROOT, edition);
-    const actions: any[] = []; const states: any[] = [];
-    const handlers = new Map<string, Array<() => void>>();
-    const view = new real.MarkdownView(); view.file = { path, extension: 'md' };
-    const mkEl = () => { const a: any = (globalThis as any).document.createElement('div'); a.addClass = (c: string) => a.classList.add(c); a.removeClass = (c: string) => a.classList.remove(c); a.setText = (t: string) => { a.textContent = t; }; return a; };
-    view.containerEl = mkEl();
-    view.addAction = (icon: string, title: string, cb: () => void) => { const a = mkEl(); Object.assign(a, { icon, title, cb, removed: false }); const r = a.remove.bind(a); a.remove = () => { a.removed = true; r(); }; actions.push(a); return a; };
-    view.leaf = { setViewState: async (s: any) => { states.push(s); }, view, getRoot: () => null };
-    const a = appFor(SCORE_FIRST_TOML, path); const app: any = a.app;
-    app.workspace.on = (name: string, cb: () => void) => { (handlers.get(name) ?? handlers.set(name, []).get(name)!).push(cb); return {}; };
-    app.workspace.getLeavesOfType = (t: string) => (t === 'markdown' ? [view.leaf] : []);
-    app.workspace.revealLeaf = () => {};
-    const tfile = Object.assign(new real.TFile(), { path, extension: 'md', basename: 'phrase_001' });
-    app.vault.getAbstractFileByPath = (p: string) => (p === path ? tfile : null);
-    app.vault.read = async () => fs.readFileSync(path.startsWith('bars/') ? FIXTURE_BAR : '/dev/null', 'utf8');
-    app.metadataCache = { on: () => ({}), getFileCache: () => ({ frontmatter: { type: 'data', content_type: 'json' } }) };
-    await loadRealOnload(real, app);
-    await tick();
-    const live = () => actions.filter((x) => !x.removed).map((x) => `${x.icon}:${x.title}`);
-    return {
-      live, actions, states,
-      answerUnknown: async () => { real.messageDelivery.setScoreFirst(false); handlers.get('layout-change')?.forEach((f) => f()); await tick(); },
-      answerArrives: async () => { real.messageDelivery.setScoreFirst(true); await tick(); },
-      cleanup: () => real.messageDelivery.setScoreFirst(false),
-    };
-  }
+  const lateProfile = (path?: string) => lateProfileFor(real, path);
 
   test(`[${edition}] BEFORE the profile answer a candidate tab gets the rhythm buttons (today's behaviour everywhere); the moment the answer arrives, with NO workspace event, a phrase's text tab has exactly ONE "Open as Score", the phrase one`, async () => {
     const t = await lateProfile();
@@ -323,3 +336,65 @@ for (const edition of ['lean', 'music'] as const) {
     t.cleanup();
   });
 }
+
+// ---- drain 2026-10-22-2200 (second round): the driver saw the Beat Box pair on a phrase's text tab and NOT the phrase's own ---------------------------------------------------------------------------
+for (const edition of ['lean', 'music'] as const) {
+  let real: RealPlugin;
+  before(async () => { real ??= await bundleRealPlugin(ROOT, edition); });
+  async function tab(startPath?: string) {
+    real ??= await bundleRealPlugin(ROOT, edition);
+    return lateProfileFor(real, startPath);
+  }
+  const oneScoreOnly = (live: string[]) => {
+    assert.deepEqual(live.filter((x) => /Open as Score/.test(x)), ['list-music:Open as Score'], live.join(' | '));
+    assert.ok(!live.some((x) => /Beat Box/.test(x)), `no Beat Box button: ${live.join(' | ')}`);
+  };
+
+  test(`[${edition}] a later answer of "false" (a failed or mid-write re-read of forge.toml) does NOT flip a phrase's text tab: still exactly the phrase's button, never the Beat Box pair`, async () => {
+    const t = await tab();
+    oneScoreOnly(t.live());                           // the normal state after load
+    await t.answerFlipsFalseLater();
+    oneScoreOnly(t.live());
+    t.cleanup();
+  });
+
+  test(`[${edition}] a stale rhythm button clicked AFTER the live answer flipped to false still refuses a phrase by name (the refusal uses the sticky answer, like the header)`, async () => {
+    const t = await tab();
+    await t.answerUnknown();                              // rhythm buttons are added while the answer is unknown
+    const stale = t.actions.find((x) => !x.removed && x.title === 'Open as Beat Box');
+    assert.ok(stale, 'a rhythm button exists');
+    await t.answerArrives();                              // sticky is now true
+    await t.answerFlipsFalseLater();                      // the live answer goes false (an unreadable forge.toml)
+    (globalThis as any).__shimConstructed = [];
+    stale.cb(); await tick();
+    const notices = ((globalThis as any).__shimConstructed ?? []).filter((c: any[]) => c[0] === 'Notice').map((c: any[]) => String(c[1][0]));
+    assert.equal(notices.length, 1, JSON.stringify(notices));
+    assert.match(notices[0], /this is a phrase, not a bar/i);
+    assert.deepEqual(t.states, []);
+    t.cleanup();
+  });
+
+  test(`[${edition}] "Open as JSON" asks the header syncs directly: a tab that became a phrase with NO workspace event gets the phrase button and loses the rhythm pair at once`, async () => {
+    const t = await tab('bars/bar_005.md');           // the tab shows a bar first (rhythm buttons), the way a reused view would
+    assert.ok(t.live().some((x) => /Open as Beat Box/.test(x)), 'non-vacuity: the bar has the rhythm buttons');
+    t.silentlyNavigateTo('phrases/phrase_001.md');    // setViewState: no file-open, no active-leaf-change
+    assert.ok(t.live().some((x) => /Open as Beat Box/.test(x)), 'non-vacuity: nothing has re-decided yet');
+    real.headerResync.request('open-as-json');
+    oneScoreOnly(t.live());
+    t.cleanup();
+  });
+
+  test(`[${edition}] the metadata cache's "changed" event alone re-decides the phrase's button too (the rhythm sync always listened to it; the phrase's did not)`, async () => {
+    const t = await tab('bars/bar_005.md');
+    t.silentlyNavigateTo('phrases/phrase_001.md');
+    await t.fire('metadata', 'changed');
+    oneScoreOnly(t.live());
+    t.cleanup();
+  });
+}
+
+test('MECHANISM PIN (the Obsidian-coupled half cannot run headless): the phrase tab\'s "Open as JSON" asks the header syncs directly, right after the view switch and again once the view has settled', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'src/phrase-view.ts'), 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  const body = src.slice(src.indexOf('private async openAsJson'));
+  assert.match(body, /await this\.leaf\.setViewState\(\{ type: 'markdown'[^\n]*\);\s*headerResync\.request\('open-as-json'\);\s*window\.setTimeout\(\(\) => headerResync\.request\('open-as-json\+150ms'\), 150\);\s*window\.setTimeout\(\(\) => headerResync\.request\('open-as-json\+600ms'\), 600\);/);
+});

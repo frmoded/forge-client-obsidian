@@ -61,9 +61,17 @@ export class MessageDelivery {
   /** The profile answer is read asynchronously after load, so anything that depends on it (the header buttons of a markdown tab) may first run while it is still the default (false). Those listen here
    *  and re-decide the moment the answer CHANGES (drain 2026-10-22-2200). A listener that throws is logged and does not stop the others. */
   private scoreFirstListeners = new Set<(on: boolean) => void>();
+  /** Once this vault has been seen as score-first in this session, always: the profile is a constant of the vault, and a later re-read that fails (a file mid-write, a read error) answers `false`
+   *  through `isScoreFirst()` — which would put the Beat Box's buttons back on a phrase and take the phrase's own away. Cosmetic decisions that must not flicker with that (the header buttons) ask
+   *  here; the live `isScoreFirst()` stays for everything that documents "turns off at once". */
+  private everScoreFirst = false;
+  hasBeenScoreFirst(): boolean { return this.everScoreFirst || this.scoreFirst; }
+  /** Tests only: forget everything (the bundle is shared between tests). */
+  resetForTests(): void { this.scoreFirst = false; this.everScoreFirst = false; }
   setScoreFirst(on: boolean): void {
     const changed = this.scoreFirst !== on;
     this.scoreFirst = on;
+    if (on) this.everScoreFirst = true;
     if (!changed) return;
     for (const f of [...this.scoreFirstListeners]) {
       try { f(on); } catch (e) { console.error('MessageDelivery.setScoreFirst: a listener failed', e); }

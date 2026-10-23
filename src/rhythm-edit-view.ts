@@ -36,6 +36,7 @@ import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { rhythmHeaderApplies, wantsPhraseHeader } from './phrase-header-core.ts';
+import { headerResync } from './header-resync.ts';
 import { scorePanelPlan, widgetFillsPane, type ScorePanelPlan } from './score-first-core.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
@@ -490,7 +491,7 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
       const view = leaf.view;
       if (!(view instanceof MarkdownView)) continue;
       // 2100: not on a phrase in a score-first vault (its own "Open as Score" is there, see score-first.ts); everywhere else the candidate answer, unchanged.
-      const want = rhythmHeaderApplies(isCandidateFile(app, view.file), messageDelivery.isScoreFirst(), view.file?.path);
+      const want = rhythmHeaderApplies(isCandidateFile(app, view.file), messageDelivery.hasBeenScoreFirst(), view.file?.path);
       const have = headerActions.get(view);
       if (want && !have) {
         // addAction PREPENDS: add right-to-left so the rendered order is the table's order
@@ -498,7 +499,7 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
           const file = view.file;
           // 2200: a button that outlived the profile answer (it was added while the answer was still unknown) must not send a phrase down the rhythm path and fail with "missing time signature":
           // in a score-first vault a phrase is not a bar, and it says so by name.
-          if (file && wantsPhraseHeader(messageDelivery.isScoreFirst(), file.path)) { new Notice('This is a phrase, not a bar: the Beat Box cannot open it. Use the "Open as Score" button of the phrase (or Cmd+P, "Open phrase as Score").'); return; }
+          if (file && wantsPhraseHeader(messageDelivery.hasBeenScoreFirst(), file.path)) { new Notice('This is a phrase, not a bar: the Beat Box cannot open it. Use the "Open as Score" button of the phrase (or Cmd+P, "Open phrase as Score").'); return; }
           if (isCandidateFile(app, file)) void switchLeafToMode(app, view.leaf, file, 'json', a.mode, hooks);
         }));
         headerActions.set(view, els);
@@ -516,6 +517,7 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
   // 2200: the profile answer arrives AFTER load (asynchronously). A markdown tab whose sync ran before it keeps whatever that sync decided until some workspace event happens; re-decide the moment the
   // answer changes, so a phrase's text tab never keeps the rhythm buttons.
   plugin.register(messageDelivery.onScoreFirst(() => syncHeaderActions()));
+  plugin.register(headerResync.subscribe(() => syncHeaderActions()));          // 2200 (second round): "Open as JSON" and friends ask for a re-decide directly, not through an event that may not come
 
   // "Restore to last commit" cooperates with open Beat Boxes (restore-hold-core.ts): hold autosave, checkout, reload from disk.
   plugin.register(registerRestoreParticipants(() => {

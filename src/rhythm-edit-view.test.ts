@@ -121,14 +121,14 @@ test('toggle: every mode switch changes the note\'s OWN leaf through ONE helper 
 // drain 2026-10-22-2200, deliberate: the click handler first refuses a phrase in a score-first vault BY NAME (phrase-registration.test.ts drives it); the rest is what it was.
 test('toggle: the mode buttons on the markdown view switch view.leaf (the note\'s own tab); the command passes the active markdown leaf', () => {
   const body = code(view);
-  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(file && wantsPhraseHeader\(messageDelivery\.isScoreFirst\(\), file\.path\)\) \{ new Notice\([^\n]*\); return; \}\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
+  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(file && wantsPhraseHeader\(messageDelivery\.hasBeenScoreFirst\(\), file\.path\)\) \{ new Notice\([^\n]*\); return; \}\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
   assert.match(body, /void openRhythmEditor\(app, file, hooks, app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf\)/);
 });
 
 test('header actions appear only for matching notes: added when the note is a candidate, removed when it is not, re-synced on every relevant event', () => {
   const body = code(view);
   // drain 2026-10-22-2100, deliberate: the candidate answer now goes through `rhythmHeaderApplies`, which is the candidate answer EXCEPT for a phrase note in a score-first vault (phrase-header-core.test.ts pins it).
-  assert.match(body, /const want = rhythmHeaderApplies\(isCandidateFile\(app, view\.file\), messageDelivery\.isScoreFirst\(\), view\.file\?\.path\);\s*const have = headerActions\.get\(view\);\s*if \(want && !have\) \{/);
+  assert.match(body, /const want = rhythmHeaderApplies\(isCandidateFile\(app, view\.file\), messageDelivery\.hasBeenScoreFirst\(\), view\.file\?\.path\);\s*const have = headerActions\.get\(view\);\s*if \(want && !have\) \{/);
   assert.match(body, /\} else if \(!want && have\) \{\s*have\.forEach\(\(el\) => el\.remove\(\)\);\s*headerActions\.delete\(view\);/);
   for (const ev of ["'file-open'", "'active-leaf-change'", "'layout-change'"]) assert.ok(body.includes(`app.workspace.on(${ev}, syncHeaderActions)`), ev);
   assert.ok(body.includes("app.metadataCache.on('changed', syncHeaderActions)"));

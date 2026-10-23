@@ -12,6 +12,7 @@ import { musicEdition } from './music-edition-selected.ts';
 import { PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewPhrase, isPhrasePath, newPhraseAvailable } from './phrase-core.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
+import { headerResync } from './header-resync.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -31,7 +32,11 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
   let scoreFirst = false;
   // M4 (drain 2026-10-21-2010): the same answer tells the message router whether this vault keeps the Forge output panel closed. Asked at registration too (not only when the workspace is
   // ready), so the first messages of a session already follow the vault's profile.
-  const refresh = async () => { scoreFirst = await isScoreFirstVault(app.vault); messageDelivery.setScoreFirst(scoreFirst); };
+  const refresh = async () => {
+    scoreFirst = await isScoreFirstVault(app.vault);
+    messageDelivery.setScoreFirst(scoreFirst);
+    console.info(`[forge-profile] refresh: score_first=${scoreFirst}`);                // a permanent evidence line: a report that a score-first behaviour is missing arrives with the answer the plugin had
+  };
   void refresh();
 
   const createBar = (): Promise<unknown> => createNewBar<TFile>({
@@ -96,21 +101,27 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2100: the way back. A phrase shown as text (a markdown tab) carries "Open as Score" in its header, for exactly as long as it shows a phrase. A markdown view is reused when its tab
       // navigates, so the set is re-synced on every event that can change the answer (the same events the Beat Box's header buttons use).
       const headers = createPhraseHeaderSync<MarkdownView>({
-        isScoreFirst: () => scoreFirst,
+        isScoreFirst: () => scoreFirst || messageDelivery.hasBeenScoreFirst(),      // this code only runs after the gate said yes; a later failed re-read must not take the button away
         open: (view, path) => {
           const file = app.vault.getAbstractFileByPath(path);
           if (file instanceof TFile) void openPhraseInLeaf(app, view.leaf, file);
         },
       });
-      const syncHeaders = () => {
+      const syncHeaders = (reason = 'event') => {
         const views: MarkdownView[] = [];
         for (const leaf of app.workspace.getLeavesOfType('markdown')) if (leaf.view instanceof MarkdownView) views.push(leaf.view);
         headers.sync(views);
+        const shown = views.filter((v) => isPhrasePath(v.file?.path)).length;
+        if (shown > 0) console.info(`[forge-header] phrase text tabs: ${shown}; header sync (${reason}); score-first now=${scoreFirst} ever=${messageDelivery.hasBeenScoreFirst()}`);
       };
-      plugin.registerEvent(app.workspace.on('file-open', syncHeaders));
-      plugin.registerEvent(app.workspace.on('active-leaf-change', syncHeaders));
-      plugin.registerEvent(app.workspace.on('layout-change', syncHeaders));
-      syncHeaders();
+      plugin.registerEvent(app.workspace.on('file-open', () => syncHeaders('file-open')));
+      plugin.registerEvent(app.workspace.on('active-leaf-change', () => syncHeaders('active-leaf-change')));
+      plugin.registerEvent(app.workspace.on('layout-change', () => syncHeaders('layout-change')));
+      // the rhythm sync also listens to the metadata cache (a file's cache arriving after its tab did): the phrase's must too, or the two see different moments
+      plugin.registerEvent(app.metadataCache.on('changed', () => syncHeaders('metadata-changed')));
+      plugin.register(headerResync.subscribe((reason) => syncHeaders(reason)));
+      plugin.register(messageDelivery.onScoreFirst(() => syncHeaders('profile-answer')));
+      syncHeaders('registered');
       plugin.addCommand({
         id: OPEN_PHRASE_COMMAND_ID,
         name: OPEN_PHRASE_COMMAND_NAME,
