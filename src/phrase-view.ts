@@ -18,7 +18,8 @@ const trace = (line: string | null): void => { if (line) console.info(line); };
 export class PhraseView extends EditableFileView {
   private handle: PhraseHandle | null = null;
 
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void) {
+  /** `chooseJson` (2026-10-23-0630): told BEFORE the tab switches to the note's text, so the default-view router leaves that choice alone (score-first.ts). */
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void, private readonly chooseJson?: (leaf: WorkspaceLeaf, path: string) => void) {
     super(leaf);
     this.addAction('code', 'Open as JSON', () => { void this.openAsJson(); });
   }
@@ -117,6 +118,7 @@ export class PhraseView extends EditableFileView {
   private async openAsJson(): Promise<void> {
     const file = this.file;
     if (!file) return;
+    this.chooseJson?.(this.leaf, file.path);
     await this.leaf.setViewState({ type: 'markdown', active: true, state: { file: file.path } });
     // The new markdown view may get no workspace event after its file is loaded (setViewState is not an "open"), so ask the header syncs directly, now and again once it has settled.
     headerResync.request('open-as-json');

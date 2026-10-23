@@ -94,3 +94,16 @@ music-core = { local = "../music-core" }
 | Provenance map (ids through Verovio, verified against the data) | `src/provenance-core.ts` |
 | The generic inspector layer (hover, pin, keys, enlarged targets) / the Score's panel | `src/artifact-inspector-core.ts`, `src/score-inspector.ts` |
 | Obsidian glue | `src/score-first.ts` (New bar), `src/rhythm-edit-view.ts` (the tab) |
+
+## A phrase note opens as its Score by default (2026-10-23-0630)
+
+In a score-first vault, a `phrases/phrase_NNN.md` note that comes to show as text in a main-area or sidebar tab (explorer click, wikilink, quick switcher, `Open note`) is switched, in that same tab, to its phrase tab. The tab is
+switched with `popstate` (kept out of the navigation history). Evidence line, printed once per outcome: `[forge-phrase] routed <path> -> score|json (reason)`.
+
+- **Only phrase notes** (`isPhrasePath`): not bars, not `phrases/README.md`, not anything else. **Only score-first vaults**: the router is created inside the profile gate, so any other vault has no router at all (P3), and it asks the live
+  profile answer at every event.
+- **Open as JSON stays JSON.** The phrase tab marks its leaf (`chooseJson`) BEFORE it switches the tab to the note's text; the mark belongs to that leaf and that file and ends when the leaf shows another file. `Open as Score`
+  (header button, command) clears it. The +150 / +600 ms header re-syncs and every workspace event find the mark and leave the tab alone.
+- **A tab restored with the layout keeps its text.** The tabs that exist when the router is registered are a baseline (read from each leaf's saved view state, so a background tab that has not loaded yet counts); such a tab is
+  routed only after its leaf shows another file.
+- Pure rules in `src/phrase-default-view-core.ts` (`decidePhraseRoute`, `createPhraseRouter`); wiring in `score-first.ts`. The Beat Box has its own, older mechanism for bars (`rhythm-default-view-core.ts`); the two do not share state.

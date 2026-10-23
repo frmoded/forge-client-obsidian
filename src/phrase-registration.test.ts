@@ -32,7 +32,7 @@ function appFor(toml: string | null, active: string | null) {
         create: async (...a: unknown[]) => { note('create')(...a); }, createFolder: async (...a: unknown[]) => { note('createFolder')(...a); },
         configDir: '.obsidian',
       },
-      workspace: { onLayoutReady: (cb: () => void) => { cb(); }, on: () => ({}), getLeavesOfType: () => [], getActiveViewOfType: () => null, getActiveFile: () => (active === null ? null : { path: active }) },
+      workspace: { onLayoutReady: (cb: () => void) => { cb(); }, iterateAllLeaves: () => {}, on: () => ({}), getLeavesOfType: () => [], getActiveViewOfType: () => null, getActiveFile: () => (active === null ? null : { path: active }) },
       metadataCache: { on: () => ({}) }, plugins: {},
     },
   };

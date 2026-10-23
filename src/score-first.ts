@@ -4,7 +4,7 @@
 // person can see: no "New bar" command and no ribbon button are registered. The vault's profile is a constant, so both are added once, when the workspace is ready; a forge.toml
 // edited mid-session to ADD the profile takes effect on the next load.
 
-import { MarkdownView, Notice, TFile, type Plugin, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, TFile, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
@@ -13,6 +13,7 @@ import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, createN
 import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
+import { createPhraseRouter } from './phrase-default-view-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -104,7 +105,42 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         if (!(file instanceof TFile)) { new Notice(`Could not open ${noteId}: that note is not in this vault.`); return; }
         void (noteId.startsWith(`${PHRASE_FOLDER}/`) ? openPhrase(app, file) : hooks.openRhythmNote(file));
       };
-      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote));
+      // 2026-10-23-0630: a phrase note opens as its Score by default. Created only here, after the gate, so a vault that is not score-first has no router at all. The person's Open as JSON is a mark on
+      // the leaf (set before the tab switches), cleared again by Open as Score; the tabs that exist now (restored with the layout) keep their text until their leaf navigates.
+      const router = createPhraseRouter<WorkspaceLeaf>({
+        scoreFirst: () => scoreFirst,
+        describe: (leaf) => {
+          if (!leaf.view) return null;
+          const root = leaf.getRoot();
+          const location = root === app.workspace.rootSplit ? 'main' : root === app.workspace.leftSplit || root === app.workspace.rightSplit ? 'sidebar' : 'other';
+          const isPlainMarkdownView = leaf.view instanceof MarkdownView;
+          return { location, isPlainMarkdownView, filePath: isPlainMarkdownView ? (leaf.view as MarkdownView).file?.path ?? null : null };
+        },
+        // popstate (an internal flag of setViewState, as in the Beat Box swap) keeps the swap out of the leaf's history, so Back does not land on text that is swapped again
+        swapTo: async (leaf, path) => {
+          const active = app.workspace.getActiveViewOfType(MarkdownView)?.leaf === leaf;
+          await leaf.setViewState({ type: PHRASE_VIEW_TYPE, active, state: { file: path }, popstate: true } as ViewState);
+        },
+        isSwapped: (leaf) => leaf.view.getViewType() === PHRASE_VIEW_TYPE,
+        sleep: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
+        trace: (line) => { console.info(line); },
+      });
+      const baseline: Array<[WorkspaceLeaf, string]> = [];
+      app.workspace.iterateAllLeaves((leaf) => {
+        const s = leaf.getViewState();
+        const f = (s.state as { file?: unknown } | undefined)?.file;
+        if (s.type === 'markdown' && typeof f === 'string') baseline.push([leaf, f]);
+      });
+      router.restore(baseline);
+      const routeAll = () => {
+        for (const leaf of app.workspace.getLeavesOfType('markdown')) router.evaluate(leaf).catch((e) => console.warn('[forge-phrase] default-view pass failed:', e));
+      };
+      plugin.registerEvent(app.workspace.on('file-open', routeAll));
+      plugin.registerEvent(app.workspace.on('active-leaf-change', routeAll));
+      plugin.registerEvent(app.workspace.on('layout-change', routeAll));
+      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown')));
+      // Open as Score is the person asking for the Score again: forget an earlier Open as JSON on that leaf
+      const openScore = (leaf: WorkspaceLeaf, file: TFile) => { router.setMark(leaf, file.path, null); return openPhraseInLeaf(app, leaf, file); };
       plugin.addCommand({
         id: NEW_PHRASE_COMMAND_ID,
         name: NEW_PHRASE_COMMAND_NAME,
@@ -129,7 +165,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         isScoreFirst: () => scoreFirst || messageDelivery.hasBeenScoreFirst(),      // this code only runs after the gate said yes; a later failed re-read must not take the button away
         open: (view, path) => {
           const file = app.vault.getAbstractFileByPath(path);
-          if (file instanceof TFile) void openPhraseInLeaf(app, view.leaf, file);
+          if (file instanceof TFile) void openScore(view.leaf, file);
         },
       });
       const syncHeaders = (reason = 'event') => {
@@ -163,7 +199,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           if (!checking) {
             const file = app.vault.getAbstractFileByPath(target.path);
             if (!(file instanceof TFile)) { new Notice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${target.path} is not in this vault.`); return true; }
-            openPhraseInLeaf(app, target.leaf ?? app.workspace.getLeaf(false), file).catch((e) => {
+            openScore(target.leaf ?? app.workspace.getLeaf(false), file).catch((e) => {
               console.error('Open phrase as Score failed', e);
               new Notice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
             });
