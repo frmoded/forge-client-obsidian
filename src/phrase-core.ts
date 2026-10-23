@@ -423,6 +423,28 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
   return computeScore((data, t) => deps.compute(data, params, t), bar.value.data, title);
 }
 
+/** Evidence lines for the mix path in the REAL Obsidian (2026-10-23-0130): the value a mix carries can only be lost at one of three hand-offs — what was written, what the Score re-read from the note, what the engine returned — and
+ *  each prints one `[forge-mix]` line with what it saw. Pure formatters (the view prints them); an extend phrase prints nothing. */
+const mixFields = (p: MixPhrase): string => `weight=${p.weight} threshold=${p.threshold} ghost=${p.ghost}`;
+export function mixTraceWritten(p: PhraseParams): string | null {
+  return p.kind === 'mix' ? `[forge-mix] wrote a=${p.a} b=${p.b} ${mixFields(p)}` : null;
+}
+export function mixTraceRead(text: string): string | null {
+  if (readPhraseKind(text) !== 'mix') return null;
+  const read = readPhraseNote(text);
+  if (read.ok === false) return `[forge-mix] Score read a mix note that is not valid: ${read.message}`;
+  return read.value.kind === 'mix' ? `[forge-mix] Score read a=${read.value.a} b=${read.value.b} ${mixFields(read.value)}` : null;
+}
+export function mixTraceEngine(p: PhraseParams, payload: unknown): string | null {
+  if (p.kind !== 'mix') return null;
+  const head = `[forge-mix] engine asked ${mixFields(p)} ->`;
+  if (typeof payload !== 'object' || payload === null) return `${head} no payload`;
+  const r = payload as Record<string, unknown>;
+  const notes = (xml: unknown): number => (typeof xml === 'string' ? (xml.match(/<note[ >\/]/g) ?? []).length : 0);
+  if (typeof r.multi_staff_content === 'string' && typeof r.kit_content === 'string') return `${head} notes: multi-staff ${notes(r.multi_staff_content)}, kit ${notes(r.kit_content)}`;
+  return `${head} notes: single score ${notes(r.content)}`;
+}
+
 /** The engine's own `mix_rhythm: …` line out of an error: Pyodide hands a Python ValueError over as the whole traceback, whose last line is `ValueError: mix_rhythm: …`. `null` = not a mix_rhythm refusal. */
 export function mixRhythmRefusal(message: string): string | null {
   const m = /(?:^|\n)(?:ValueError: )?(mix_rhythm: [^\n]*?)\s*$/.exec(message.trim());

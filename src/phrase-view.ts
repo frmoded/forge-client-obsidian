@@ -6,11 +6,14 @@ import { EditableFileView, TFile, type App, type WorkspaceLeaf } from 'obsidian'
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
-import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath } from './phrase-core.ts';
+import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { headerResync } from './header-resync.ts';
+
+/** One `[forge-mix]` evidence line (nothing for an extend phrase): where a mix's values were seen on their way from the control to the engraving. */
+const trace = (line: string | null): void => { if (line) console.info(line); };
 
 export class PhraseView extends EditableFileView {
   private handle: PhraseHandle | null = null;
@@ -45,7 +48,9 @@ export class PhraseView extends EditableFileView {
       readNote: async (p) => {
         const f = this.app.vault.getAbstractFileByPath(p);
         if (!(f instanceof TFile)) throw new Error('File not found');
-        return this.app.vault.read(f);
+        const text = await this.app.vault.read(f);
+        if (p === file.path) trace(mixTraceRead(text));
+        return text;
       },
       writePhrase: async (params) => {
         let refusal: string | null = null;
@@ -59,9 +64,14 @@ export class PhraseView extends EditableFileView {
           console.error('PhraseView: could not write the phrase', e);
           return { ok: false, message: `Not saved: ${(e as Error)?.message ?? e}` };
         }
+        if (refusal === null) trace(mixTraceWritten(params));
         return refusal === null ? { ok: true } : { ok: false, message: refusal };
       },
-      compute: computePhraseScoreViaEngine,
+      compute: async (data, params, title) => {
+        const payload = await computePhraseScoreViaEngine(data, params, title);
+        trace(mixTraceEngine(params, payload));
+        return payload;
+      },
       renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays }),
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       setTimer: (fn, ms) => window.setTimeout(fn, ms),

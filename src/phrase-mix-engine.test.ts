@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhythm-engine.ts';
-import { producePhrase, producePhraseNote, type MixPhrase, type PhraseParams } from './phrase-core.ts';
+import { mixTraceEngine, producePhrase, producePhraseNote, type MixPhrase, type PhraseParams } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 
 const skip = WHEELS_PRESENT ? false : 'music wheels not fetched — run: npm run fetch-music-wheels';
@@ -131,4 +131,14 @@ test('REAL ENGINE: the extend phrase is unchanged by the mix glue (the same 8 ba
     assert.equal((part.match(/<measure /g) ?? []).length, 8);
     assert.deepEqual([...part.matchAll(/<sound tempo="([^"]+)"/g)].map((m) => Number(m[1])), [100, 97, 94, 91, 89, 86, 83, 80]);
   }
+});
+
+test('REAL ENGINE: ghost notes ARE in what the engine returns — bar_005 + bar_006 at weight 0.40: 4 more notes with Ghost on, in both engraved views, and the [forge-mix] engine line says so (2026-10-23-0130)', async () => {
+  const py = await engine();
+  const line = async (ghost: boolean) => {
+    const params: MixPhrase = { ...MIX, weight: 0.4, ghost };
+    return mixTraceEngine(params, computePhrase(py, { a: dataOf('bar_005'), b: dataOf('bar_006') }, params, 'phrase_002'));
+  };
+  assert.equal(await line(false), '[forge-mix] engine asked weight=0.4 threshold=0.5 ghost=false -> notes: multi-staff 5, kit 5');
+  assert.equal(await line(true), '[forge-mix] engine asked weight=0.4 threshold=0.5 ghost=true -> notes: multi-staff 9, kit 9');
 });
