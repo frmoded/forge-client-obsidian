@@ -54,6 +54,7 @@ music-core = { local = "../music-core" }
 - **The bracket** above the Score (`phrase_001 · 8 bars`) lights every bar the phrase made and opens the phrase note; the source name in the strip opens the bar.
 - **It is the bar inspector, reused:** `score-inspector.ts` takes optional phrase options (lineage, order, hint, preview) that are absent for the Beat Box tab; the Beat Box tab's DOM and behaviour are pinned unchanged. The pure part is `src/phrase-lineage-core.ts`.
 - **The way back from JSON (2100):** while a phrase note is shown as text in a score-first vault, its tab header carries **Open as Score** (the Beat Box's own label; `src/phrase-header-core.ts`, wired in `score-first.ts`); the rhythm note buttons are not shown on a phrase there. The phrase strip also says in plain words what the chosen style does (`PHRASE_STYLE_NOTES`; the fill rule is pinned against the real engine).
+- **Lighting (2300):** a lit bar gets a translucent band inside it (inline-styled, behind its drawing, never hit-testable; stronger for a pin than a hover) and the other bars are dimmed while one is pinned, so it shows whatever the stylesheet or theme does; the CSS recolour stays as a second cue. Option `band` of the artifact inspector; the bar's Beat Box tab does not use it.
 - **Not done:** opening a phrase from the file explorer still needs the two commands (the Beat Box's automatic default-view swap was not taken: its event order cannot be proven without the real Obsidian).
 
 ## Where the code is

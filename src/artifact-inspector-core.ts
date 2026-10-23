@@ -10,6 +10,8 @@
 import type { Provenance, ProvenanceMap } from './provenance-core.ts';
 
 export const HOT_CLASS = 'forge-artifact-hot';
+/** The band (see `ArtifactInspectorOptions.band`). */
+export const BAND_CLASS = 'forge-artifact-band';
 export const PINNED_CLASS = 'forge-artifact-pinned';
 
 export interface InspectorEntry { id: string; prov: Provenance }
@@ -25,6 +27,10 @@ export interface ArtifactInspectorOptions {
   /** Grow each element's pointer target: an invisible rect (class `forge-artifact-hitbox`) of the element's bounding box, widened by `x` and heightened by `y` as fractions of it. A drawn
    *  notehead is ~9 px wide, and a pointer in the middle of an SVG glyph can still miss it; the rect lives INSIDE the element, so events map to it exactly as to the glyph. */
   enlargeTargets?: { x: number; y: number };
+  /** drain 2026-10-22-2300: a cue that does NOT depend on the stylesheet or the theme. The class recolour (CSS) was not visible in the driver's real Obsidian and the headless proof only asserted class
+   *  names. With this on, a lit element gets a translucent rectangle INSIDE it (first child, behind its drawing, `pointer-events: none`) painted with INLINE style and a literal fallback colour — lighter
+   *  for hover, stronger for a pin — and while an element is pinned every other element is dimmed (inline `opacity`). Absent (the bar's Beat Box tab): nothing is inserted or dimmed. */
+  band?: boolean;
 }
 
 export interface ArtifactInspector {
@@ -79,11 +85,42 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   let pinned: string | null = null;
   const entry = (id: string): InspectorEntry => ({ id, prov: map[id] });
   const mark = (id: string | null, cls: string, on: boolean) => { if (id !== null) elementFor(root, id)?.classList.toggle(cls, on); };
+  // ---- the band (opts.band): repainted from the whole state after every change, so it can never go stale ----
+  let arrival: MutationObserver | null = null;
+  const ACCENT = '#7c5cff';                               // the fallback when the theme defines no --interactive-accent
+  const DIM = '0.45';
+  const paintBand = (id: string) => {
+    const el = elementFor(root, id) as unknown as (SVGGraphicsElement & HTMLElement) | null;
+    if (!el) return;
+    Array.from(el.children).filter((c) => c.getAttribute('class') === BAND_CLASS).forEach((c) => c.remove());
+    const isPinned = pinned === id; const isHot = hot.includes(id);
+    el.style.opacity = pinned !== null && !isPinned && !isHot ? DIM : '';
+    if (!isPinned && !isHot) return;
+    if (typeof el.getBBox !== 'function') return;
+    try {
+      const b = el.getBBox();
+      if (!(b.width > 0 && b.height > 0)) return;
+      const r = el.ownerDocument.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      const colour = `var(--interactive-accent, ${ACCENT})`;
+      r.setAttribute('class', BAND_CLASS);
+      r.setAttribute('x', String(b.x)); r.setAttribute('y', String(b.y)); r.setAttribute('width', String(b.width)); r.setAttribute('height', String(b.height));
+      r.setAttribute('pointer-events', 'none');
+      r.setAttribute('fill', ACCENT);                     // presentation attributes as the floor, inline style (which can use the theme colour) on top
+      r.setAttribute('fill-opacity', isPinned ? '0.32' : '0.16');
+      r.setAttribute('stroke', isPinned ? ACCENT : 'none');
+      r.setAttribute('stroke-width', isPinned ? '4' : '0');
+      r.setAttribute('style', `fill: ${colour}; fill-opacity: ${isPinned ? '0.32' : '0.16'}; stroke: ${isPinned ? colour : 'none'}; stroke-width: ${isPinned ? 4 : 0}px; pointer-events: none;`);
+      el.insertBefore(r, el.firstChild);
+    } catch { /* an element that cannot be measured keeps the class recolour only */ }
+  };
+  // the band's own insertions are DOM mutations the arrival observer below would see and answer with another repaint, forever: after painting, drop the records our own edits made
+  const repaint = () => { if (opts.band) { Object.keys(map).forEach(paintBand); arrival?.takeRecords(); } };
   const setHotAll = (ids: readonly string[]) => {
     if (ids.length === hot.length && ids.every((x, i) => x === hot[i])) return;
     hot.forEach((x) => mark(x, HOT_CLASS, false));
     hot = [...ids];
     hot.forEach((x) => mark(x, HOT_CLASS, true));
+    repaint();
   };
   const setHot = (id: string | null) => setHotAll(id === null ? [] : [id]);
   const setPinned = (id: string | null) => {
@@ -91,6 +128,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     mark(pinned, PINNED_CLASS, false);
     pinned = id;
     mark(pinned, PINNED_CLASS, true);
+    repaint();
     opts.onPin(pinned === null ? null : entry(pinned));
   };
 
@@ -127,10 +165,10 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   // grow the targets for what is there now, and again whenever the content changes (an element that already has its target is skipped, so our own additions end the loop).
   const hitAreas: Element[] = [];
   const growTargets = () => { if (opts.enlargeTargets) hitAreas.push(...addHitAreas(root, Object.keys(map), opts.enlargeTargets)); };
-  const reapplyMarks = () => { hot.forEach((x) => mark(x, HOT_CLASS, true)); mark(pinned, PINNED_CLASS, true); };   // a replaced SVG has new elements with the same ids
+  const reapplyMarks = () => { hot.forEach((x) => mark(x, HOT_CLASS, true)); mark(pinned, PINNED_CLASS, true); repaint(); };   // a replaced SVG has new elements with the same ids
   growTargets();
   const MO = (root.ownerDocument.defaultView as (Window & { MutationObserver?: typeof MutationObserver }) | null)?.MutationObserver;
-  const arrival = typeof MO === 'function' ? new MO(() => { growTargets(); reapplyMarks(); }) : null;
+  arrival = typeof MO === 'function' ? new MO(() => { growTargets(); reapplyMarks(); }) : null;
   arrival?.observe(root, { childList: true, subtree: true });
   if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '0');
   root.addEventListener('mouseover', onOver);
@@ -154,6 +192,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
       mark(pinned, PINNED_CLASS, false);
       hot = [];
       pinned = null;
+      repaint();                                          // nothing lit, nothing pinned: every band and every dim goes
     },
   };
 }

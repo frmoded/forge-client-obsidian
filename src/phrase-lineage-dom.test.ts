@@ -39,6 +39,7 @@ function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) 
       const first = /<part id="P1">([\s\S]*?)<\/part>/.exec(xml)![1];
       const ids = [...first.matchAll(/<measure number="\d+"(?: id="([^"]+)")?>/g)].map((m) => m[1] ?? '');
       host.innerHTML = `<svg>${ids.map((id) => `<g class="measure"${id ? ` id="${id}"` : ''}><g class="note" id="n_${id}"></g></g>`).join('')}</svg>`;
+      host.querySelectorAll('g.measure').forEach((g: any, i: number) => { g.getBBox = () => ({ x: 100 * i, y: 0, width: 90, height: 50 }); });   // a drawn measure has a box
       return true;
     },
     stopPlayers: () => {},
@@ -231,4 +232,39 @@ test('P3: the BAR inspector (no phrase options) is exactly what it was: its hint
   lis[1].dispatchEvent(new win.MouseEvent('mouseenter'));
   assert.equal(host.querySelectorAll('.forge-artifact-hot').length, hotBefore, 'no hover-link on the bar\'s entries');
   button.click(); assert.deepEqual(opened, ['bars/bar_001']);
+});
+
+
+test('2300: the phrase tab lights bars with the BAND (visible whatever the stylesheet or theme does): a pin, a hover and the fan each put a band in the right bars, and the others are dimmed while one is pinned', async () => {
+  const r = rig();
+  await r.handle.load(); await flush();
+  const bands = () => r.qa('.forge-artifact-band').map((b: any) => b.parentElement.id);
+  r.fire(r.q('#ph_bar_3'), 'mouseover');
+  assert.deepEqual(bands(), ['ph_bar_3'], 'hover');
+  r.fire(r.q('#n_ph_bar_3'), 'click');
+  assert.deepEqual(bands(), ['ph_bar_3'], 'pin');
+  assert.equal(r.q('#ph_bar_1').style.opacity, '0.45');
+  assert.equal(r.q('#ph_bar_3').style.opacity, '');
+  const lis = r.qa('.forge-inspector-lineage > li');
+  r.fire(lis[2], 'mouseenter');
+  assert.equal(bands().length, 8, 'the fan: every bar');
+  r.fire(lis[2], 'mouseleave');
+  assert.deepEqual(bands(), ['ph_bar_3']);
+  const b = r.q('.forge-phrase-bracket'); r.fire(b, 'mouseenter');
+  assert.equal(bands().length, 8, 'the bracket');
+});
+
+test('2300 P3: the BAR inspector (no band option) inserts no band and dims nothing', async () => {
+  const { createScoreInspector } = await import('./score-inspector.ts');
+  const win: any = new Window({ url: 'http://localhost/' });
+  const doc = win.document; const slot = doc.createElement('div'); const host = doc.createElement('div'); doc.body.append(slot, host);
+  host.innerHTML = '<svg><g class="note" id="a_kick_0"></g><g class="note" id="a_snare_4"></g></svg>';
+  host.querySelectorAll('g').forEach((g: any) => { g.getBBox = () => ({ x: 0, y: 0, width: 10, height: 10 }); });
+  const insp = createScoreInspector(slot, { noteId: 'bars/bar_001', openNote: () => {}, postHighlight: () => {} });
+  const map = { a_kick_0: { noteId: 'bars/bar_001', role: 'hit', params: { channel: 'kick', step: 0, beat: 'beat 1' } }, a_snare_4: { noteId: 'bars/bar_001', role: 'hit', params: { channel: 'snare', step: 4, beat: 'beat 2' } } };
+  insp.onShown(host, { payload: {}, map, problems: [], kitProblems: [] });
+  host.querySelector('#a_kick_0').dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
+  host.querySelector('#a_kick_0').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  assert.equal(host.querySelectorAll('.forge-artifact-band').length, 0);
+  assert.equal((host.querySelector('#a_snare_4') as any).style.opacity, '');
 });

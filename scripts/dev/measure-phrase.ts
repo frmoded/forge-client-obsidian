@@ -4,6 +4,7 @@
 // WALL-CLOCK ONLY. The real engine runs in Node behind /phrase; everything else is real Chrome: the phrase DOM, Verovio, html-midi-player's note sequence. Audio is NOT played (headless): what is
 // measured is what the player schedules — the NoteSequence it is given (the very object `renderTaggedMusicXML` hands the <midi-player>) — and Verovio's own timeMap for the same XML.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { engine, computePhrase } from '../../src/test-support/real-rhythm-engine.ts';
 import { readRhythmNote } from '../../src/rhythm-edit-core.ts';
@@ -114,6 +115,45 @@ try {
   out.rider.svgAfterShown = await p2.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`);
   out.rider.errorsAfterShown = await p2.ev('window.__errors.slice()');
 } finally { p2.close(); }
+// ---- drain 2026-10-22-2300: does a lit bar LOOK different? Rendered pixels, not class names. Measured twice: with the plugin's stylesheet and WITHOUT it (the band must not depend on it) -------------
+async function renderedStudy(withStyles: boolean) {
+  const html = withStyles ? page : page.replace('<link rel=stylesheet href="plugin-styles.css">', '');
+  const q = await openPage({ dir: here, width: 800, height: 800, pageHtml: html, routes });
+  const res: any = { withStyles };
+  try {
+    await q.ev(`window.__mountPhrase(document.getElementById('pane'), { phrase: ${JSON.stringify(phraseText({}))}, bar: ${JSON.stringify(BAR)} })`);
+    for (let w = 0; w < 20000; w += 100) { if (await q.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
+    await sleep(1200);
+    // a clip of the VISIBLE part of a bar, from the page's own layout
+    const clipOf = (id: string) => q.ev(`(() => { const e = document.querySelector('#${id}'); const box = document.querySelector('.forge-output-score') || document.body; const r = e.getBoundingClientRect(); const v = box.getBoundingClientRect(); const x0 = Math.max(r.left, v.left), x1 = Math.min(r.right, v.right), y0 = Math.max(r.top, v.top), y1 = Math.min(r.bottom, v.bottom); return x1 - x0 > 8 && y1 - y0 > 8 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null; })()`);
+    const hashOf = async (id: string) => { const c = await clipOf(id); if (!c) return null; const r = await q.send('Page.captureScreenshot', { format: 'png', clip: { ...c, scale: 1 } }); return crypto.createHash('md5').update(r.result.data).digest('hex'); };
+    const state = async () => ({ b1: await hashOf('ph_bar_1'), b2: await hashOf('ph_bar_2'), b3: await hashOf('ph_bar_3') });
+    await q.hover(5, 790); await sleep(150);
+    const base = await state();
+    const nh = await q.ev(`(() => { const e = document.querySelector('#ph_bar_3 .notehead'); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    await q.hover(nh.x, nh.y); await sleep(250);
+    const hot = await state();
+    res.hotClasses = await q.ev(`document.querySelector('#ph_bar_3').getAttribute('class')`);
+    await q.click(nh.x, nh.y); await sleep(250);
+    await q.hover(5, 790); await sleep(250);                    // the pointer leaves: what remains is the PIN
+    const pinned = await state();
+    res.pinnedClasses = await q.ev(`document.querySelector('#ph_bar_3').getAttribute('class')`);
+    res.computed = await q.ev(`(() => { const g = document.querySelector('#ph_bar_3'); const nh = g.querySelector('.notehead use, .notehead'); const line = g.querySelector('.staff path'); const band = g.querySelector('.forge-artifact-band'); const o = document.querySelector('#ph_bar_1'); const cs = (e) => e ? getComputedStyle(e) : null; return { noteheadFill: cs(nh)?.fill, staffStroke: cs(line)?.stroke, accentVar: getComputedStyle(document.body).getPropertyValue('--interactive-accent').trim(), band: band ? { fill: cs(band).fill, fillOpacity: cs(band).fillOpacity, w: band.getBoundingClientRect().width, h: band.getBoundingClientRect().height } : null, neighbourOpacity: o ? getComputedStyle(o).opacity : null, firstChildIsBand: g.firstElementChild === band }; })()`);
+    res.base = base; res.hot = hot; res.pinned = pinned;
+    await p_shot(q, `rendered-${withStyles ? 'with' : 'without'}-styles-pinned.png`);
+    await q.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host'); e.focus(); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`); await sleep(250);
+    res.afterEsc = await state();
+    const br = await q.ev(`(() => { const r = document.querySelector('.forge-phrase-bracket').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+    await q.hover(br.x, br.y); await sleep(250);
+    res.fan = await state();
+    res.bandsInFan = await q.ev(`document.querySelectorAll('.forge-artifact-band').length`);
+    await p_shot(q, `rendered-${withStyles ? 'with' : 'without'}-styles-fan.png`);
+  } finally { q.close(); }
+  return res;
+}
+async function p_shot(q: any, name: string) { await q.shot(path.join(SHOTS, name), { x: 0, y: 0, width: 800, height: 700 }); }
+out.rendered = { with: await renderedStudy(true), without: await renderedStudy(false) };
+
 // The verdicts (a measurement that cannot fail proves nothing): the player's tempo changes and Verovio's bar starts must sit at the engine's bar starts, within 5 ms; 8 bars; a mark per bar and part.
 const near = (a: number, b: number) => Math.abs(a - b) <= 0.005;
 const tempi: number[] = out.expected.tempi; const starts: number[] = out.expected.barStartsSec;
@@ -127,6 +167,12 @@ out.verdicts = {
   verovioBarStartsMatch: starts.slice(1).every((s) => [...verovioMs].some((ms) => Math.abs(ms / 1000 - s) <= 0.005)),
   controlEditWroteTheJson: /"bars": 4/.test(out.edit?.json ?? '') && out.edit?.measureGroups === 4,
   sourceEditRedrew: out.sourceEdit?.tempoTexts?.[0]?.endsWith('= 120') && out.sourceEdit?.hosts === 1,
+  band_aHoveredBarLooksDifferent: ['with', 'without'].every((k) => out.rendered?.[k]?.hot?.b3 && out.rendered[k].hot.b3 !== out.rendered[k].base.b3),
+  band_aPinnedBarLooksDifferentFromUnlitAndFromHovered: ['with', 'without'].every((k) => { const r = out.rendered?.[k]; return r?.pinned?.b3 && r.pinned.b3 !== r.base.b3 && r.pinned.b3 !== r.hot.b3; }),
+  band_theOtherBarsAreDimmedWhileOneIsPinned: ['with', 'without'].every((k) => { const r = out.rendered?.[k]; return r?.pinned?.b2 && r.pinned.b2 !== r.base.b2 && r.computed?.neighbourOpacity === '0.45'; }),
+  band_escClearsEverything: ['with', 'without'].every((k) => { const r = out.rendered?.[k]; return r?.afterEsc?.b3 === r?.base?.b3 && r?.afterEsc?.b2 === r?.base?.b2; }),
+  band_theFanLightsEveryVisibleBar: ['with', 'without'].every((k) => { const r = out.rendered?.[k]; return r?.fan?.b1 && r.fan.b1 !== r.base.b1 && r.fan.b2 !== r.base.b2 && r.fan.b3 !== r.base.b3 && r.bandsInFan === 8; }),
+  band_doesNotDependOnTheStylesheet: out.rendered?.without?.computed?.band?.fillOpacity === '0.32' && !/forge-artifact-pinned/.test('') && out.rendered?.without?.computed?.firstChildIsBand === true,
   noConsoleErrors: (out.errors?.length ?? 1) === 0 && (out.errorsAfter?.length ?? 1) === 0,
   m6_everyBarIsAMeasureWithAnId: JSON.stringify(out.m6?.measureIds) === JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8].map((n) => `ph_bar_${n}`)),
   m6_clickingANoteheadSelectsItsBarAndShowsTheStack: out.m6?.pinned === true && JSON.stringify(out.m6?.stackBar5) === JSON.stringify(['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 89']),

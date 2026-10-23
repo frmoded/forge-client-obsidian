@@ -35,6 +35,8 @@ export interface ScoreInspectorPorts {
   hint?: string;
   /** The pointer target of each element: `null` = none added (a bar is its own target). Default: the note-sized enlargement. */
   enlargeTargets?: { x: number; y: number } | null;
+  /** drain 2026-10-22-2300: light elements with a stylesheet-independent band and dim the rest while one is pinned (artifact-inspector-core `band`). */
+  band?: boolean;
   /** Hovering an element with nothing pinned SHOWS its lineage stack (and leaving restores the hint). */
   previewOnHover?: boolean;
   /** The quiet line when only the Kit view is unmapped. */
@@ -137,6 +139,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         map,
         order: ports.order ? ports.order(map) : orderByStepThenChannel(map, CANONICAL_CHANNELS),
         enlargeTargets: ports.enlargeTargets === undefined ? { x: 0.35, y: 0.15 } : ports.enlargeTargets ?? undefined,
+        band: ports.band === true,
         onHover: (e) => {
           if (ports.previewOnHover && !layer.pinnedId()) { if (e) renderStack(e, true); else showHint(hint); }
           if (!ports.postHighlight) return;
