@@ -18,7 +18,7 @@ const PHRASE = 'phrases/phrase_001.md';
 const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
 
 /** A vault with ONE main-area leaf. `restored` = the file that leaf showed when the plugin loaded (the layout), `shows` = what it shows from then on. `dropSwaps` = setViewState calls Obsidian ignores. */
-async function world(real: RealPlugin, toml: string | null, opts: { restored: string | null; restoredType?: string; dropSwaps?: number }) {
+async function world(real: RealPlugin, toml: string | null, opts: { restored: string | null; restoredType?: string; dropSwaps?: number; holder?: { kind: 'score' | 'text'; file: string }; backHistory?: number; siblings?: number }) {
   const states: any[] = []; const handlers = new Map<string, Array<() => void>>();
   const rootSplit = {}; const leftSplit = {}; const popout = {}; let root: object = rootSplit;
   const vaultHandlers = new Map<string, Array<(f: any) => void>>(); const profile = { on: true };
@@ -32,9 +32,25 @@ async function world(real: RealPlugin, toml: string | null, opts: { restored: st
       else if (s.type === 'markdown') leaf.view = markdownOn(s.state.file);
     },
     getRoot: () => root,
-    getViewState: () => (opts.restored ? { type: opts.restoredType ?? 'markdown', state: { file: opts.restored } } : { type: 'empty', state: {} }),
+    // what the layout saved when the plugin loaded; afterwards what the leaf shows NOW (as Obsidian's getViewState does), so a leaf that opens the phrase reports the phrase
+    getViewState: () => {
+      if (ready && leaf.view?.file?.path) return { type: leaf.view.getViewType(), state: { file: leaf.view.file.path } };
+      return opts.restored ? { type: opts.restoredType ?? 'markdown', state: { file: opts.restored } } : { type: 'empty', state: {} };
+    },
   };
+  let ready = false;
   leaf.view = opts.restored ? markdownOn(opts.restored) : { getViewType: () => 'empty' };
+  // 2026-10-24-0900 (one tab per phrase): this leaf's history and pane, and a SECOND leaf that already shows a phrase (its Score, or its text)
+  const log = { backs: 0, detached: false, activated: [] as any[] };
+  leaf.history = { backHistory: new Array(opts.backHistory ?? 0).fill({}), back: async () => { log.backs++; leaf.view = markdownOn('notes/previous.md'); } };
+  leaf.detach = () => { log.detached = true; leaf.view = { getViewType: () => 'empty' }; };
+  leaf.parent = { children: new Array(opts.siblings ?? 2).fill({}) };
+  const holderLeaf: any = opts.holder ? {
+    getRoot: () => rootSplit, setViewState: async () => {},
+    getViewState: () => ({ type: opts.holder!.kind === 'score' ? PHRASE_VIEW_TYPE : 'markdown', state: { file: opts.holder!.file } }),
+    view: opts.holder.kind === 'score' ? { getViewType: () => PHRASE_VIEW_TYPE, file: { path: opts.holder.file } } : null,
+  } : null;
+  if (holderLeaf && opts.holder!.kind === 'text') { const v = new real.MarkdownView(); v.file = { path: opts.holder!.file, extension: 'md' }; v.leaf = holderLeaf; v.containerEl = el(); v.getViewType = () => 'markdown'; v.addAction = () => el(); holderLeaf.view = v; }
   const tfile = Object.assign(new real.TFile(), { path: PHRASE, extension: 'md', basename: 'phrase_001' });
   const toml0 = toml;
   const app: any = {
@@ -46,19 +62,21 @@ async function world(real: RealPlugin, toml: string | null, opts: { restored: st
       rootSplit, leftSplit, rightSplit: {},
       onLayoutReady: (cb: () => void) => { cb(); },
       on: (name: string, cb: () => void) => { (handlers.get(name) ?? handlers.set(name, []).get(name)!).push(cb); return {}; },
-      getLeavesOfType: (t: string) => (t === 'markdown' && leaf.view.getViewType() === 'markdown' ? [leaf] : []),
-      iterateAllLeaves: (cb: (l: any) => void) => { cb(leaf); },
+      getLeavesOfType: (t: string) => (t === 'markdown' ? [leaf, holderLeaf].filter((l) => l && l.view.getViewType() === 'markdown') : []),
+      iterateAllLeaves: (cb: (l: any) => void) => { cb(leaf); if (holderLeaf) cb(holderLeaf); },
+      setActiveLeaf: (l: any) => { log.activated.push(l); },
       getActiveViewOfType: (cls: unknown) => (cls === real.MarkdownView && leaf.view.getViewType() === 'markdown' ? leaf.view : null),
       getActiveFile: () => null, revealLeaf: () => {},
     },
     metadataCache: { on: () => ({}), getFileCache: () => ({ frontmatter: { type: 'data', content_type: 'json' } }) }, plugins: {},
   };
   const plugin = await loadRealOnload(real, app);
+  ready = true;
   await tick();
   const lines: string[] = [];
   const saved = console.info; console.info = (...a: unknown[]) => { if (String(a[0]).startsWith('[forge-phrase]')) lines.push(String(a[0])); };
   return {
-    plugin, leaf, states, lines, tfile,
+    plugin, leaf, states, lines, tfile, holderLeaf, log,
     showText: (file: string) => { leaf.view = markdownOn(file); },
     /** a background tab whose view has not loaded yet (Obsidian's deferred view): it reports the markdown type but is not a MarkdownView */
     showDeferred: (file: string) => { leaf.view = { getViewType: () => 'markdown', file: { path: file } }; },
@@ -206,11 +224,73 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(w.states, []);
     } finally { w.done(); }
   });
+
+  // ---- 2026-10-24-0900: one tab per phrase ---------------------------------------------------------------------------------------------------------------------------------------------------
+  for (const kind of ['score', 'text'] as const) {
+    test(`[${edition}] (a/b) a phrase already open in another tab (${kind === 'score' ? 'its Score' : 'its JSON text'}) is focused there; the tab that opened it again is closed (a fresh tab), nothing is opened beside it`, async () => {
+      const w = await world(real, SCORE_FIRST_TOML, { restored: 'notes/old.md', holder: { kind, file: PHRASE }, siblings: 2 });
+      try {
+        w.showText(PHRASE); await w.fire('file-open', 'active-leaf-change');
+        assert.deepEqual(w.log.activated, [w.holderLeaf], 'the existing tab is focused');
+        assert.equal(w.log.detached, true, 'the tab that just opened it is closed');
+        assert.deepEqual(w.states, [], 'no second Score');
+        assert.deepEqual(w.lines.filter((l) => /reused/.test(l)), [`[forge-phrase] reused ${PHRASE} (focused existing tab)`], `one reuse line: ${w.lines.join(' | ')}`);
+        assert.ok(!w.lines.some((l) => /-> score/.test(l)), 'and no Score was routed');
+      } finally { w.done(); }
+    });
+  }
+
+  test(`[${edition}] a tab that had something else before goes BACK to it (it is not closed) while the existing phrase tab is focused`, async () => {
+    const w = await world(real, SCORE_FIRST_TOML, { restored: 'notes/old.md', holder: { kind: 'score', file: PHRASE }, backHistory: 1 });
+    try {
+      w.showText(PHRASE); await w.fire('file-open');
+      assert.equal(w.log.backs, 1);
+      assert.equal(w.log.detached, false);
+      assert.equal(w.leaf.view.file.path, 'notes/previous.md');
+      assert.deepEqual(w.log.activated, [w.holderLeaf]);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] (c) a DIFFERENT phrase still gets its own tab`, async () => {
+    const w = await world(real, SCORE_FIRST_TOML, { restored: 'notes/old.md', holder: { kind: 'score', file: PHRASE } });
+    try {
+      w.showText('phrases/phrase_002.md'); await w.fire('file-open');
+      assert.equal(w.states.length, 1);
+      assert.deepEqual(w.states[0].state, { file: 'phrases/phrase_002.md' });
+      assert.deepEqual(w.log.activated, []);
+      assert.equal(w.log.detached, false);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] the only tab of its pane with nothing to go back to cannot give way: it shows the Score itself (a second tab, as before), the existing tab keeps the focus it had`, async () => {
+    const w = await world(real, SCORE_FIRST_TOML, { restored: 'notes/old.md', holder: { kind: 'score', file: PHRASE }, siblings: 1 });
+    try {
+      w.showText(PHRASE); await w.fire('file-open');
+      assert.equal(w.states.length, 1);
+      assert.equal(w.leaf.view.getViewType(), PHRASE_VIEW_TYPE);
+      assert.deepEqual(w.log.activated, []);
+      assert.equal(w.log.detached, false);
+    } finally { w.done(); }
+  });
+
+  for (const [name, toml] of [['tutorial', TUTORIAL_TOML], ['no forge.toml', null]] as const) {
+    test(`[${edition}] (d) P3: in a vault that is not score-first (${name}) nothing is focused, closed or moved, whatever tabs show`, async () => {
+      const w = await world(real, toml, { restored: 'notes/old.md', holder: { kind: 'text', file: PHRASE } });
+      try {
+        w.showText(PHRASE); await w.fire('file-open', 'active-leaf-change', 'layout-change');
+        assert.deepEqual(w.states, []);
+        assert.deepEqual(w.log.activated, []);
+        assert.equal(w.log.detached, false);
+        assert.equal(w.log.backs, 0);
+        assert.deepEqual(w.lines, []);
+      } finally { w.done(); }
+    });
+  }
 }
 
 test('MECHANISM PIN: the router is created after the profile gate; Open as Score forgets the JSON choice; Open as JSON tells the router before it switches the tab', () => {
   const sf = fs.readFileSync(path.join(ROOT, 'src/score-first.ts'), 'utf8');
-  assert.ok(sf.indexOf('createPhraseRouter<') > sf.indexOf('registerView') - 2500 && sf.indexOf('createPhraseRouter<') < sf.indexOf('plugin.registerView(PHRASE_VIEW_TYPE'), 'created before the view factory that uses it');
+  assert.ok(sf.indexOf('createPhraseRouter<') > sf.indexOf('const plan = scorePanelPlan') && sf.indexOf('createPhraseRouter<') < sf.indexOf('plugin.registerView(PHRASE_VIEW_TYPE'), 'created inside the gate, before the view factory that uses it');
   assert.match(sf, /const openScore = \(leaf: WorkspaceLeaf, file: TFile\) => \{ router\.setMark\(leaf, file\.path, null\); return openPhraseInLeaf\(app, leaf, file\); \}/);
   assert.equal((sf.match(/openPhraseInLeaf\(/g) ?? []).length, 1, 'the only caller is openScore');
   const pv = fs.readFileSync(path.join(ROOT, 'src/phrase-view.ts'), 'utf8');

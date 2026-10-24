@@ -16,6 +16,8 @@ function rig(opts: { scoreFirst?: boolean } = {}) {
   let scoreFirst = opts.scoreFirst ?? true;
   let dropSwaps = 0;                                         // Obsidian silently drops a setViewState while the leaf is busy
   const swapped = new Set<Leaf>();
+  // 2026-10-24-0900: one tab per phrase. `holders` = the leaf that already shows a phrase (as its Score or as text); focus / dismiss are recorded.
+  const holders = new Map<string, Leaf>(); const focused: Leaf[] = []; const dismissed: Leaf[] = []; let dismissOk: boolean | 'throws' = true;
   const router = createPhraseRouter<Leaf>({
     scoreFirst: () => scoreFirst,
     describe: (leaf) => { const s = shows.get(leaf); return s ? { location: 'main', isPlainMarkdownView: !swapped.has(leaf), filePath: null, ...s } as PhraseLeafInfo : null; },
@@ -23,8 +25,11 @@ function rig(opts: { scoreFirst?: boolean } = {}) {
     isSwapped: (leaf) => swapped.has(leaf),
     sleep: async () => {},
     trace: (l) => { lines.push(l); },
+    findOpen: (leaf, p) => { const h = holders.get(p); return h && h !== leaf ? h : null; },
+    focus: (leaf) => { focused.push(leaf); },
+    dismiss: async (leaf) => { dismissed.push(leaf); if (dismissOk === 'throws') throw new Error('boom'); return dismissOk; },
   });
-  return { router, shows, swaps, lines, swapped, setScoreFirst: (v: boolean) => { scoreFirst = v; }, dropNext: (n: number) => { dropSwaps = n; } };
+  return { router, shows, swaps, lines, swapped, holders, focused, dismissed, setDismiss: (v: boolean | 'throws') => { dismissOk = v; }, setScoreFirst: (v: boolean) => { scoreFirst = v; }, dropNext: (n: number) => { dropSwaps = n; } };
 }
 const open = (r: ReturnType<typeof rig>, leaf: Leaf, filePath: string | null, extra: Partial<PhraseLeafInfo> = {}) => { r.swapped.delete(leaf); r.shows.set(leaf, { filePath, ...extra }); };
 
@@ -185,4 +190,74 @@ test('decidePhraseRoute is an allow-list: every positive condition at once, and 
   assert.equal(no({ mark: 'markdown' }).reason, 'chosen-json');
   assert.equal(no({ restoredPath: 'phrases/phrase_007.md' }).reason, 'layout-restore');
   assert.equal(no({ restoredPath: 'phrases/phrase_006.md' }).swap, true, 'a snapshot of ANOTHER file does not protect this one');
+});
+
+// ---- 2026-10-24-0900: one tab per phrase ------------------------------------------------------------------------------------------------------------------------------------------------------------
+test('(a) a phrase that is already open in another tab (its Score) is FOCUSED there; the tab that just opened it is dismissed, not swapped to a second Score; one evidence line', async () => {
+  const r = rig(); const first = leafOf('first'); const second = leafOf('second');
+  open(r, second, 'phrases/phrase_001.md'); r.holders.set('phrases/phrase_001.md', first);
+  assert.equal(await r.router.evaluate(second), 'reused');
+  assert.deepEqual(r.focused, [first]);
+  assert.deepEqual(r.dismissed, [second]);
+  assert.deepEqual(r.swaps, [], 'no second Score');
+  assert.deepEqual(r.lines, ['[forge-phrase] reused phrases/phrase_001.md (focused existing tab)']);
+});
+
+test('(b) the holder may be the phrase shown as JSON text (the same check: any other tab showing the phrase): focused, nothing opened beside it', async () => {
+  const r = rig(); const jsonTab = leafOf('json'); const fresh = leafOf('fresh');
+  open(r, jsonTab, 'phrases/phrase_001.md'); r.router.setMark(jsonTab, 'phrases/phrase_001.md', 'markdown');
+  r.holders.set('phrases/phrase_001.md', jsonTab);
+  open(r, fresh, 'phrases/phrase_001.md');
+  assert.equal(await r.router.evaluate(fresh), 'reused');
+  assert.equal(await r.router.evaluate(jsonTab), 'chosen-json', 'and the JSON tab itself is left alone');
+  assert.deepEqual(r.focused, [jsonTab]);
+  assert.deepEqual(r.swaps, []);
+});
+
+test('(c) a DIFFERENT phrase has no holder: it opens its own Score tab as before', async () => {
+  const r = rig(); const first = leafOf('first'); const second = leafOf('second');
+  r.holders.set('phrases/phrase_001.md', first);
+  open(r, second, 'phrases/phrase_002.md');
+  assert.equal(await r.router.evaluate(second), 'score');
+  assert.deepEqual(r.focused, []);
+  assert.deepEqual(r.dismissed, []);
+  assert.equal(r.swaps.length, 1);
+});
+
+test('a tab that cannot be dismissed (the only tab of its pane, nothing to go back to) falls back to showing the Score: no loop, no repeated focus', async () => {
+  const r = rig(); const first = leafOf('first'); const second = leafOf('second');
+  open(r, second, 'phrases/phrase_001.md'); r.holders.set('phrases/phrase_001.md', first); r.setDismiss(false);
+  assert.equal(await r.router.evaluate(second), 'score');
+  assert.equal(r.swaps.length, 1);
+  assert.deepEqual(r.focused, [], 'the focus did not move');
+  assert.equal(await r.router.evaluate(second), 'not-markdown-view');
+  assert.equal(r.dismissed.length, 1, 'asked once');
+  assert.deepEqual(r.lines, ['[forge-phrase] routed phrases/phrase_001.md -> score (a new open in a score-first vault)'], 'and it does not claim a reuse');
+});
+
+test('a dismiss that throws also falls back to the Score (never a stuck text tab)', async () => {
+  const r = rig(); const first = leafOf('first'); const second = leafOf('second');
+  open(r, second, 'phrases/phrase_001.md'); r.holders.set('phrases/phrase_001.md', first); r.setDismiss('throws');
+  assert.equal(await r.router.evaluate(second), 'score');
+  assert.equal(r.swaps.length, 1);
+  assert.deepEqual(r.focused, []);
+});
+
+test('the holder is looked for only on a NEW open: a JSON choice, a restored tab and a non-phrase never ask (and never focus anything)', async () => {
+  const r = rig(); const other = leafOf('other'); const a = leafOf('a'); const b = leafOf('b'); const c = leafOf('c');
+  r.holders.set('phrases/phrase_001.md', other); r.holders.set('notes/x.md', other);
+  open(r, a, 'phrases/phrase_001.md'); r.router.setMark(a, 'phrases/phrase_001.md', 'markdown');
+  open(r, b, 'phrases/phrase_001.md'); r.router.restore([[b, 'phrases/phrase_001.md']]);
+  open(r, c, 'notes/x.md');
+  assert.deepEqual([await r.router.evaluate(a), await r.router.evaluate(b), await r.router.evaluate(c)], ['chosen-json', 'layout-restore', 'not-a-phrase']);
+  assert.deepEqual(r.focused, []); assert.deepEqual(r.dismissed, []);
+});
+
+test('two events at once for the same reused open focus once (the in-progress guard covers the dismissal)', async () => {
+  const r = rig(); const first = leafOf('first'); const second = leafOf('second');
+  open(r, second, 'phrases/phrase_001.md'); r.holders.set('phrases/phrase_001.md', first);
+  const results = await Promise.all([r.router.evaluate(second), r.router.evaluate(second), r.router.evaluate(second)]);
+  assert.equal(results.filter((x) => x === 'reused').length, 1);
+  assert.equal(r.focused.length, 1);
+  assert.equal(r.dismissed.length, 1);
 });

@@ -124,6 +124,26 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         isSwapped: (leaf) => leaf.view.getViewType() === PHRASE_VIEW_TYPE,
         sleep: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
         trace: (line) => { console.info(line); },
+        // one tab per phrase (2026-10-24-0900). Obsidian's explorer / link / quick switcher open a file with getLeaf(false).openFile(): they navigate the current tab and never look for a tab that already shows the note.
+        // A leaf "shows" the phrase when its saved view state says so (a Score, or the note as markdown text; a background tab that has not loaded yet answers the same way).
+        findOpen: (self, path) => {
+          let found: WorkspaceLeaf | null = null;
+          app.workspace.iterateAllLeaves((l) => {
+            if (found || l === self) return;
+            const s = l.getViewState();
+            if ((s.type === PHRASE_VIEW_TYPE || s.type === 'markdown') && (s.state as { file?: unknown } | undefined)?.file === path) found = l;
+          });
+          return found;
+        },
+        focus: (leaf) => { app.workspace.setActiveLeaf(leaf, { focus: true }); },
+        // The same two moves Obsidian itself makes for a tab whose file was deleted (FileView.onDelete): back to what the tab showed, or, when there is nothing to go back to, close it if its pane has other tabs.
+        dismiss: async (leaf) => {
+          const history = (leaf as unknown as { history?: { backHistory: unknown[]; back(): Promise<void> } }).history;
+          if (history && history.backHistory.length > 0) { await history.back(); return true; }
+          const siblings = (leaf.parent as unknown as { children?: unknown[] } | null)?.children;
+          if (siblings && siblings.length > 1) { leaf.detach(); return true; }
+          return false;
+        },
       });
       const baseline: Array<[WorkspaceLeaf, string]> = [];
       app.workspace.iterateAllLeaves((leaf) => {

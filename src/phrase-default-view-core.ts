@@ -54,9 +54,15 @@ export interface PhraseRouterPorts<L> {
   isSwapped(leaf: L): boolean;
   sleep(ms: number): Promise<void>;
   trace(line: string): void;
+  /** 2026-10-24-0900 (one tab per phrase): ANOTHER leaf that already shows this phrase, as its Score or as text (JSON); null when there is none. */
+  findOpen(leaf: L, path: string): L | null;
+  /** Bring that leaf to the front, focused. */
+  focus(leaf: L): void | Promise<void>;
+  /** Get the leaf that just opened the phrase out of the way (back to what it showed, or closed if it was a fresh tab). false = it could not be (the only tab of its pane): the caller shows the Score there instead. */
+  dismiss(leaf: L): Promise<boolean>;
 }
 
-export type PhraseRouteResult = PhraseRouteReason | 'swap-failed' | 'navigated-away';
+export type PhraseRouteResult = PhraseRouteReason | 'reused' | 'swap-failed' | 'navigated-away';
 
 export interface PhraseRouter<L> {
   evaluate(leaf: L): Promise<PhraseRouteResult>;
@@ -113,6 +119,18 @@ export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>
       const target = path as string;
       swapping.add(leaf);
       try {
+        // one tab per phrase: a phrase that is already open somewhere is focused THERE, and this leaf (which just opened it as text) gives way. If it cannot give way, it shows the Score as before.
+        const holder = ports.findOpen(leaf, target);
+        if (holder !== null) {
+          let gaveWay = false;
+          try { gaveWay = await ports.dismiss(leaf); } catch { gaveWay = false; }    // first: a leaf that cannot give way must not have moved the focus
+          if (gaveWay) {
+            try { await ports.focus(holder); } catch { /* the tab is gone from here either way; the evidence line still says what happened */ }
+            said.delete(leaf);
+            ports.trace(`[forge-phrase] reused ${target} (focused existing tab)`);
+            return 'reused';
+          }
+        }
         await ports.swapTo(leaf, target);
         for (const delay of PHRASE_SWAP_RETRY_DELAYS_MS) {
           if (ports.isSwapped(leaf)) break;

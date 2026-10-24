@@ -107,3 +107,11 @@ switched with `popstate` (kept out of the navigation history). Evidence line, pr
 - **A tab restored with the layout keeps its text.** The tabs that exist when the router is registered are a baseline (read from each leaf's saved view state, so a background tab that has not loaded yet counts); such a tab is
   routed only after its leaf shows another file.
 - Pure rules in `src/phrase-default-view-core.ts` (`decidePhraseRoute`, `createPhraseRouter`); wiring in `score-first.ts`. The Beat Box has its own, older mechanism for bars (`rhythm-default-view-core.ts`); the two do not share state.
+
+### One tab per phrase (2026-10-24-0900)
+
+Obsidian's explorer, links and quick switcher open a note with `getLeaf(false).openFile(file)`: they navigate the current tab and never look for a tab that already shows the note (read from Obsidian 1.14.5's `app.js`;
+a custom view such as the phrase tab is not accepted for `.md`, so the clicked tab first becomes markdown text). So the router, when a leaf has just opened a phrase as text and ANOTHER leaf already shows that phrase (its Score, or
+its note as text, which includes the tab left on `Open as JSON`), focuses that tab and dismisses the clicked one: back to what it showed, or closed when it was a fresh tab (the two moves Obsidian itself makes in
+`FileView.onDelete`). A tab that cannot give way (the only tab of its pane, nothing to go back to) shows the Score as before: a second tab, never a loop. Two different phrases still get two tabs. The explicit `Open phrase as Score`
+command and the `Open as Score` header button are unchanged. Evidence line: `[forge-phrase] reused <path> (focused existing tab)`.
