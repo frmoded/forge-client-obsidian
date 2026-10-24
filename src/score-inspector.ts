@@ -49,6 +49,12 @@ export interface ScoreInspectorPorts {
   previewOnHover?: boolean;
   /** The quiet line when only the Kit view is unmapped. */
   kitNote?: string;
+  /** 2026-10-24-1100: elements with these roles (the phrase's bars) are ALSO selected by their box: a click on the unpainted part of a bar pins it (artifact-inspector-core `pointIds`). Absent = the old rule. */
+  pointRoles?: readonly string[];
+  /** 2026-10-24-1100: one `[forge-pin] click …` evidence line per click. Absent = nothing is printed. */
+  trace?(line: string): void;
+  /** The `bar N` of that line for a pinned element. Default: the id. */
+  pinLabel?(id: string, prov: Provenance): string;
 }
 
 export interface ScoreInspector {
@@ -172,6 +178,9 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         enlargeIds: ports.enlargeIds ? ports.enlargeIds(map) : undefined,
         decorate: ports.decorate ? (pinnedId) => ports.decorate!(host, map, pinnedId) : undefined,
         band: ports.band === true,
+        pointIds: ports.pointRoles ? Object.keys(map).filter((id) => ports.pointRoles!.includes(map[id].role)) : undefined,
+        trace: ports.trace,
+        pinLabel: ports.pinLabel ? (id) => ports.pinLabel!(id, map[id]) : undefined,
         onHover: (e) => {
           if (ports.previewOnHover && !layer.pinnedId()) { if (e) renderStack(e, true); else showHint(hint); }
           if (!ports.postHighlight) return;

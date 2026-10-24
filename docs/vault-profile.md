@@ -115,3 +115,11 @@ a custom view such as the phrase tab is not accepted for `.md`, so the clicked t
 its note as text, which includes the tab left on `Open as JSON`), focuses that tab and dismisses the clicked one: back to what it showed, or closed when it was a fresh tab (the two moves Obsidian itself makes in
 `FileView.onDelete`). A tab that cannot give way (the only tab of its pane, nothing to go back to) shows the Score as before: a second tab, never a loop. Two different phrases still get two tabs. The explicit `Open phrase as Score`
 command and the `Open as Score` header button are unchanged. Evidence line: `[forge-phrase] reused <path> (focused existing tab)`.
+
+### Pinning a bar by clicking anywhere in it (2026-10-24-1100)
+
+A click pinned a bar only when its target was a drawn part of that bar. The Score's SVG paints only its marks (staff lines, noteheads, stems, text); the space between staff lines, or a pixel beside a small notehead, belongs to
+the `<svg>` root, so a click there had no bar above it and counted as "empty space", which UNPINS. Measured in real Chrome with real pointer events: every drawn part pinned, every empty point inside a bar did not (0 of 15 in an
+extend tab, 0 of 3 in a mix tab). The phrase and mix inspectors now also select a bar by its BOX: a click whose target is under no mapped element but whose point is inside the box of a bar pins that bar (the smallest box wins; a
+drawn part still pins its own bar first; a mapped note still pins itself). A click outside every bar, and Esc, still let go. Other surfaces name no such elements and are unchanged. Evidence line, one per click:
+`[forge-pin] click <element kind> -> bar N|none (reason)`. Ghost notes are drawn whether or not anything is pinned (8 noteheads with Ghost on at weight 0.4, 4 with it off, pinned or not); pinning only colours them by parent.

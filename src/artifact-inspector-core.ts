@@ -35,6 +35,13 @@ export interface ArtifactInspectorOptions {
   enlargeIds?: readonly string[];
   /** M8 (mix): called on every repaint with the pinned id (or null), so a surface can paint its own cue (colours by parent) from the whole state. Absent = nothing. */
   decorate?(pinnedId: string | null): void;
+  /** 2026-10-24-1100: the elements (bars) that are also selected by their BOX. A click whose target is under no mapped element but whose point is inside the box of one of these pins it (the smallest box wins);
+   *  without this, a click on the unpainted part of a bar (empty staff, just off a small notehead) counted as empty space and unpinned. Absent = the old rule for every other surface. */
+  pointIds?: readonly string[];
+  /** 2026-10-24-1100: one evidence line per click, `[forge-pin] click <element kind> -> bar N|none (reason)`. Absent = nothing is printed. */
+  trace?(line: string): void;
+  /** The `bar N` of the evidence line for a pinned id. Default: the id. */
+  pinLabel?(id: string): string;
 }
 
 export interface ArtifactInspector {
@@ -47,6 +54,19 @@ export interface ArtifactInspector {
 }
 
 export const HITBOX_CLASS = 'forge-artifact-hitbox';
+
+/** What was clicked, for the evidence line: the nearest drawn part with a known class, the svg root as "empty", else the element's tag. */
+export function clickKind(target: EventTarget | null): string {
+  let el = (target as Node | null)?.nodeType === 1 ? (target as Element) : null;
+  if (!el) return 'none';
+  const KINDS = ['notehead', 'stem', 'beam', 'flag', 'rest', 'dots', 'accid', 'barLine', 'clef', 'keySig', 'meterSig', 'tempo', 'dir', 'ledgerLines', 'staff', 'measure'];
+  const first = el;
+  for (; el; el = el.parentElement) {
+    const hit = KINDS.find((k) => el!.classList?.contains(k));
+    if (hit) return hit;
+  }
+  return first.tagName.toLowerCase() === 'svg' ? 'empty' : first.tagName.toLowerCase();
+}
 
 function addHitAreas(root: HTMLElement, ids: readonly string[], pad: { x: number; y: number }): Element[] {
   const made: Element[] = [];
@@ -153,9 +173,27 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     setHot(null);
     opts.onHover(null);
   };
+  /** The point-selectable element whose box holds the click point, the smallest box winning (boxes of neighbouring bars may overlap a little). */
+  const boxAt = (e: Event): Element | null => {
+    const m = e as MouseEvent;
+    if (!opts.pointIds || typeof m.clientX !== 'number' || typeof m.clientY !== 'number') return null;
+    let best: Element | null = null; let bestArea = Infinity;
+    for (const id of opts.pointIds) {
+      if (!Object.prototype.hasOwnProperty.call(map, id)) continue;
+      const el = elementFor(root, id);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (!(m.clientX >= r.left && m.clientX <= r.right && m.clientY >= r.top && m.clientY <= r.bottom)) continue;
+      const area = (r.right - r.left) * (r.bottom - r.top);
+      if (area < bestArea) { best = el; bestArea = area; }
+    }
+    return best;
+  };
   const onClick = (e: Event) => {
-    const el = mappedAncestor(root, map, e.target);
-    setPinned(el ? el.id : null);                          // a click on empty space inside the root unpins
+    const drawn = mappedAncestor(root, map, e.target);
+    const el = drawn ?? boxAt(e);                         // the unpainted part of a bar has the svg root as its target: the point decides
+    setPinned(el ? el.id : null);                          // a click on empty space inside the root (and in no bar's box) unpins
+    opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ${el ? (opts.pinLabel ? opts.pinLabel(el.id) : el.id) : 'none'} (${drawn ? 'on the bar' : el ? "inside the bar's box" : 'not on a bar'})`);
   };
   const onKey = (e: Event) => {
     const k = (e as KeyboardEvent).key;

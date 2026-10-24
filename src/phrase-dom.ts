@@ -17,8 +17,8 @@
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import type { ScoreInspectorPorts } from './score-inspector.ts';
 import type { ProvenanceResult } from './provenance-core.ts';
-import { PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
-import { MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
+import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
+import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
 import { paintMixHits } from './mix-hits-dom.ts';
 import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
@@ -393,6 +393,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       lineage: phraseLineageOf,
       hint: PHRASE_INSPECTOR_HINT,
       enlargeTargets: null,                          // no hit rectangle: it would sit over the noteheads and take the Score's click; a click on any drawn part of a bar (a notehead, a staff line) selects the BAR
+      pointRoles: [PHRASE_BAR_ROLE],                 // 1100: ... and so does a click on the UNPAINTED part of a bar (empty staff, just off a small notehead): the bar's box decides
+      trace: (line) => { console.info(line); },
+      pinLabel: (id, prov) => (typeof prov.params.bar === 'number' ? `bar ${prov.params.bar}` : id),
       previewOnHover: true,
       band: true,                                    // 2300: the class recolour alone was not visible in the real Obsidian; the band does not depend on the stylesheet or the theme
       kitNote: 'Kit view: not mapped for this phrase (use the multi-staff view to inspect).',
@@ -408,6 +411,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       keepPin: true,
       previewOnHover: true,
       enlargeIds: (map) => Object.keys(map).filter((id) => map[id].role === MIX_HIT_ROLE),
+      pointRoles: [MIX_BAR_ROLE],                    // 1100: a click on the empty staff shows the bar's stack (a note, drawn or enlarged, still pins itself first)
+      trace: (line) => { console.info(line); },
+      pinLabel: (id, prov) => (prov.role === MIX_BAR_ROLE ? 'bar 1' : id),
       decorate: paintMixHits,
       kitNote: 'Kit view: not mapped for this mix (use the multi-staff view to inspect).',
     } : undefined;
