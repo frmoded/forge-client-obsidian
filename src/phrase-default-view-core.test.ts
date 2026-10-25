@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createPhraseRouter, decidePhraseRoute, type PhraseLeafInfo, type PhraseRouteInput } from './phrase-default-view-core.ts';
+import { createPhraseRouter, decidePhraseRoute, type DismissResult, type PhraseLeafInfo, type PhraseRouteInput } from './phrase-default-view-core.ts';
 
 const leafOf = (id: string) => ({ id });
 type Leaf = ReturnType<typeof leafOf>;
@@ -17,7 +17,7 @@ function rig(opts: { scoreFirst?: boolean } = {}) {
   let dropSwaps = 0;                                         // Obsidian silently drops a setViewState while the leaf is busy
   const swapped = new Set<Leaf>();
   // 2026-10-24-0900: one tab per phrase. `holders` = the leaf that already shows a phrase (as its Score or as text); focus / dismiss are recorded.
-  const holders = new Map<string, Leaf>(); const focused: Leaf[] = []; const dismissed: Leaf[] = []; let dismissOk: boolean | 'throws' = true;
+  const holders = new Map<string, Leaf>(); const focused: Leaf[] = []; const dismissed: Leaf[] = []; let dismissOk: DismissResult | null | 'throws' = { kind: 'restored', other: 'notes/previous.md' };
   const router = createPhraseRouter<Leaf>({
     scoreFirst: () => scoreFirst,
     describe: (leaf) => { const s = shows.get(leaf); return s ? { location: 'main', isPlainMarkdownView: !swapped.has(leaf), filePath: null, ...s } as PhraseLeafInfo : null; },
@@ -29,7 +29,7 @@ function rig(opts: { scoreFirst?: boolean } = {}) {
     focus: (leaf) => { focused.push(leaf); },
     dismiss: async (leaf) => { dismissed.push(leaf); if (dismissOk === 'throws') throw new Error('boom'); return dismissOk; },
   });
-  return { router, shows, swaps, lines, swapped, holders, focused, dismissed, setDismiss: (v: boolean | 'throws') => { dismissOk = v; }, setScoreFirst: (v: boolean) => { scoreFirst = v; }, dropNext: (n: number) => { dropSwaps = n; } };
+  return { router, shows, swaps, lines, swapped, holders, focused, dismissed, setDismiss: (v: DismissResult | null | 'throws') => { dismissOk = v; }, setScoreFirst: (v: boolean) => { scoreFirst = v; }, dropNext: (n: number) => { dropSwaps = n; } };
 }
 const open = (r: ReturnType<typeof rig>, leaf: Leaf, filePath: string | null, extra: Partial<PhraseLeafInfo> = {}) => { r.swapped.delete(leaf); r.shows.set(leaf, { filePath, ...extra }); };
 
@@ -200,7 +200,19 @@ test('(a) a phrase that is already open in another tab (its Score) is FOCUSED th
   assert.deepEqual(r.focused, [first]);
   assert.deepEqual(r.dismissed, [second]);
   assert.deepEqual(r.swaps, [], 'no second Score');
-  assert.deepEqual(r.lines, ['[forge-phrase] reused phrases/phrase_001.md (focused existing tab)']);
+  assert.deepEqual(r.lines, ['[forge-phrase] reused phrases/phrase_001.md (focused existing tab; restored notes/previous.md in the clicked tab)']);
+});
+
+test('(2026-10-25-0800) the evidence line says WHAT the clicked tab got: its previous note, "its previous view" when that was not a note, or that the new tab was closed', async () => {
+  const run = async (result: DismissResult) => {
+    const r = rig(); const first = leafOf('first'); const second = leafOf('second');
+    open(r, second, 'phrases/phrase_001.md'); r.holders.set('phrases/phrase_001.md', first); r.setDismiss(result);
+    assert.equal(await r.router.evaluate(second), 'reused');
+    return r.lines;
+  };
+  assert.deepEqual(await run({ kind: 'restored', other: 'phrases/phrase_002.md' }), ['[forge-phrase] reused phrases/phrase_001.md (focused existing tab; restored phrases/phrase_002.md in the clicked tab)']);
+  assert.deepEqual(await run({ kind: 'restored', other: null }), ['[forge-phrase] reused phrases/phrase_001.md (focused existing tab; restored its previous view in the clicked tab)']);
+  assert.deepEqual(await run({ kind: 'closed' }), ['[forge-phrase] reused phrases/phrase_001.md (focused existing tab; closed the new tab)']);
 });
 
 test('(b) the holder may be the phrase shown as JSON text (the same check: any other tab showing the phrase): focused, nothing opened beside it', async () => {
@@ -226,7 +238,7 @@ test('(c) a DIFFERENT phrase has no holder: it opens its own Score tab as before
 
 test('a tab that cannot be dismissed (the only tab of its pane, nothing to go back to) falls back to showing the Score: no loop, no repeated focus', async () => {
   const r = rig(); const first = leafOf('first'); const second = leafOf('second');
-  open(r, second, 'phrases/phrase_001.md'); r.holders.set('phrases/phrase_001.md', first); r.setDismiss(false);
+  open(r, second, 'phrases/phrase_001.md'); r.holders.set('phrases/phrase_001.md', first); r.setDismiss(null);
   assert.equal(await r.router.evaluate(second), 'score');
   assert.equal(r.swaps.length, 1);
   assert.deepEqual(r.focused, [], 'the focus did not move');

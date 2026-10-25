@@ -116,6 +116,16 @@ its note as text, which includes the tab left on `Open as JSON`), focuses that t
 `FileView.onDelete`). A tab that cannot give way (the only tab of its pane, nothing to go back to) shows the Score as before: a second tab, never a loop. Two different phrases still get two tabs. The explicit `Open phrase as Score`
 command and the `Open as Score` header button are unchanged. Evidence line: `[forge-phrase] reused <path> (focused existing tab)`.
 
+#### The clicked tab is put back, never lost (2026-10-25-0800)
+
+The 0900 dismissal went wrong when the person clicked a phrase in the explorer while another tab showed the phrase they were reading: the clicked tab lost its view (or was closed). Cause, read from Obsidian 1.14.5's `app.js`:
+`setViewState` records the replaced view in `leaf.history` only at its END, while `file-open` (our trigger) fires inside it and the leaf is `working`, so the back stack was still empty and "nothing to go back to" closed the
+person's tab (Obsidian then logged a `RangeError` from `saveHistory`). Now the plugin records what every tab showed on every workspace event (`trackLeaves`), waits for the leaf to be idle (Obsidian ignores `setViewState` on a
+busy leaf), puts the recorded view back with `setViewState(..., { active: false, popstate: true })`, checks it landed, and retries a few times. A tab is closed only when it was made by the gesture itself (never seen before) and has
+siblings. A phrase that was showing as JSON text stays text. If the restore never lands the tab shows the Score (a second tab), never closed. Evidence line:
+`[forge-phrase] reused <path> (focused existing tab; restored <other> in the clicked tab)`. The fork's `Open note` and the lineage links reuse an already-open bar tab (its Beat Box, Score view or text) or phrase tab the same way
+(`[forge-phrase] reused <path> (focused existing tab)`). Obsidian's own explorer rule (it replaces the active tab) is not ours to change.
+
 ### Pinning a bar by clicking anywhere in it (2026-10-24-1100)
 
 A click pinned a bar only when its target was a drawn part of that bar. The Score's SVG paints only its marks (staff lines, noteheads, stems, text); the space between staff lines, or a pixel beside a small notehead, belongs to

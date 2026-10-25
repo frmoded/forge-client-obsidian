@@ -58,9 +58,14 @@ export interface PhraseRouterPorts<L> {
   findOpen(leaf: L, path: string): L | null;
   /** Bring that leaf to the front, focused. */
   focus(leaf: L): void | Promise<void>;
-  /** Get the leaf that just opened the phrase out of the way (back to what it showed, or closed if it was a fresh tab). false = it could not be (the only tab of its pane): the caller shows the Score there instead. */
-  dismiss(leaf: L): Promise<boolean>;
+  /** Get the leaf that just opened the phrase out of the way: put it back to the view it had (never closing a tab the person had), or close it when the gesture itself just made it. null = it could not be (nothing to restore it to, or the
+   *  restore did not land): the caller shows the Score there instead, so no tab is ever lost. */
+  dismiss(leaf: L): Promise<DismissResult | null>;
 }
+
+/** What `dismiss` did with the leaf that just opened a phrase another tab already shows (2026-10-25-0800): it put the tab back to what it showed (`other` = that note's path, null when it was not a note), or closed it because
+ *  the gesture itself had just made it (a leaf never seen before this open). Never anything else: a leaf the person had is never closed. */
+export type DismissResult = { kind: 'restored'; other: string | null } | { kind: 'closed' };
 
 export type PhraseRouteResult = PhraseRouteReason | 'reused' | 'swap-failed' | 'navigated-away';
 
@@ -122,12 +127,14 @@ export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>
         // one tab per phrase: a phrase that is already open somewhere is focused THERE, and this leaf (which just opened it as text) gives way. If it cannot give way, it shows the Score as before.
         const holder = ports.findOpen(leaf, target);
         if (holder !== null) {
-          let gaveWay = false;
-          try { gaveWay = await ports.dismiss(leaf); } catch { gaveWay = false; }    // first: a leaf that cannot give way must not have moved the focus
-          if (gaveWay) {
+          let gave: DismissResult | null = null;
+          try { gave = await ports.dismiss(leaf); } catch { gave = null; }          // first: a leaf that cannot give way must not have moved the focus
+          if (gave) {
             try { await ports.focus(holder); } catch { /* the tab is gone from here either way; the evidence line still says what happened */ }
             said.delete(leaf);
-            ports.trace(`[forge-phrase] reused ${target} (focused existing tab)`);
+            ports.trace(gave.kind === 'closed'
+              ? `[forge-phrase] reused ${target} (focused existing tab; closed the new tab)`
+              : `[forge-phrase] reused ${target} (focused existing tab; restored ${gave.other ?? 'its previous view'} in the clicked tab)`);
             return 'reused';
           }
         }

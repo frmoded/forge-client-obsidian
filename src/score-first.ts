@@ -14,6 +14,8 @@ import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
 import { createPhraseRouter } from './phrase-default-view-core.ts';
+import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
+import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -119,7 +121,16 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       const openNote = (noteId: string) => {
         const file = app.vault.getAbstractFileByPath(`${noteId}.md`);
         if (!(file instanceof TFile)) { new Notice(`Could not open ${noteId}: that note is not in this vault.`); return; }
-        void (noteId.startsWith(`${PHRASE_FOLDER}/`) ? openPhrase(app, file) : hooks.openRhythmNote(file));
+        if (noteId.startsWith(`${PHRASE_FOLDER}/`)) { void openPhrase(app, file); return; }
+        // 2026-10-25-0800: a bar that is already open in a tab (its Beat Box, its Score or its text) is focused THERE, as a phrase is; only otherwise is it opened (the fork's "Open note" used to open a second tab of a bar already open)
+        let open: WorkspaceLeaf | null = null;
+        app.workspace.iterateAllLeaves((l) => {
+          if (open) return;
+          const s = l.getViewState();
+          if ((s.type === 'markdown' || s.type === RHYTHM_EDIT_VIEW_TYPE || s.type === RHYTHM_SCORE_VIEW_TYPE) && (s.state as { file?: unknown } | undefined)?.file === file.path) open = l;
+        });
+        if (open) { app.workspace.setActiveLeaf(open, { focus: true }); console.info(`[forge-phrase] reused ${file.path} (focused existing tab)`); return; }
+        void hooks.openRhythmNote(file);
       };
       // 2026-10-23-0630: a phrase note opens as its Score by default. Created only here, after the gate, so a vault that is not score-first has no router at all. The person's Open as JSON is a mark on
       // the leaf (set before the tab switches), cleared again by Open as Score; the tabs that exist now (restored with the layout) keep their text until their leaf navigates.
@@ -152,15 +163,45 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return found;
         },
         focus: (leaf) => { app.workspace.setActiveLeaf(leaf, { focus: true }); },
-        // The same two moves Obsidian itself makes for a tab whose file was deleted (FileView.onDelete): back to what the tab showed, or, when there is nothing to go back to, close it if its pane has other tabs.
+        // 2026-10-25-0800: the leaf that just opened the phrase is PUT BACK to the view it had, and never closed unless the gesture itself made it. Not Obsidian's own history: setViewState records the replaced view in
+        // `leaf.history` only at its END, while `file-open` (our trigger) fires inside it, so the back stack is still empty here (measured in Obsidian 1.14.5's app.js) and the old "nothing to go back to -> detach" closed the
+        // person's tab in the middle of its own load (Obsidian then logs a RangeError from saveHistory). So the view the leaf had is recorded by us, on every workspace event (trackLeaves), and restored with setViewState
+        // once the leaf is idle (a busy leaf silently drops setViewState and history.go only raises a "tab busy" notice), verified, and retried.
         dismiss: async (leaf) => {
-          const history = (leaf as unknown as { history?: { backHistory: unknown[]; back(): Promise<void> } }).history;
-          if (history && history.backHistory.length > 0) { await history.back(); return true; }
-          const siblings = (leaf.parent as unknown as { children?: unknown[] } | null)?.children;
-          if (siblings && siblings.length > 1) { leaf.detach(); return true; }
-          return false;
+          const before = beforeState.get(leaf);
+          await idle(leaf);
+          if (before === undefined || before === null) {                   // a leaf never seen before this open: the gesture made it (a new tab)
+            const siblings = (leaf.parent as unknown as { children?: unknown[] } | null)?.children;
+            if (siblings && siblings.length > 1) { leaf.detach(); return { kind: 'closed' as const }; }
+            return null;
+          }
+          const file = (before.state as { file?: unknown } | undefined)?.file;
+          if (before.type === 'markdown' && typeof file === 'string' && isPhrasePath(file)) router.setMark(leaf, file, 'markdown');   // a phrase that was showing as text stays text (the choice was dropped when the leaf moved on)
+          for (let attempt = 0; attempt < 4; attempt++) {
+            await leaf.setViewState({ type: before.type, state: before.state, active: false, popstate: true } as ViewState);
+            if (stateKey(leaf.getViewState()) === stateKey(before)) return { kind: 'restored' as const, other: typeof file === 'string' ? file : null };
+            await new Promise<void>((resolve) => { window.setTimeout(resolve, 60 * (attempt + 1)); });
+            await idle(leaf);
+          }
+          return null;
         },
       });
+      // The view every leaf showed before its CURRENT one, kept by us (see dismiss). A leaf first seen at the state it opens the phrase in has no "before": it was made by this very gesture.
+      const lastState = new WeakMap<WorkspaceLeaf, ViewState>();
+      const beforeState = new WeakMap<WorkspaceLeaf, ViewState | null>();
+      const stateKey = (s: ViewState): string => `${s.type}|${String((s.state as { file?: unknown } | undefined)?.file ?? '')}`;
+      const trackLeaves = () => app.workspace.iterateAllLeaves((leaf) => {
+        const s = leaf.getViewState();
+        const last = lastState.get(leaf);
+        if (last !== undefined && stateKey(last) === stateKey(s)) return;
+        beforeState.set(leaf, last ?? null);
+        lastState.set(leaf, { type: s.type, state: s.state } as ViewState);
+      });
+      /** Wait (up to ~1 s) until the leaf is not in the middle of changing its view: Obsidian ignores setViewState and history.go on a leaf that is `working`. */
+      const idle = async (leaf: WorkspaceLeaf): Promise<void> => {
+        for (let i = 0; i < 50 && (leaf as unknown as { working?: boolean }).working === true; i++) await new Promise<void>((resolve) => { window.setTimeout(resolve, 20); });
+      };
+      trackLeaves();
       const baseline: Array<[WorkspaceLeaf, string]> = [];
       app.workspace.iterateAllLeaves((leaf) => {
         const s = leaf.getViewState();
@@ -169,6 +210,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       });
       router.restore(baseline);
       const routeAll = () => {
+        trackLeaves();                                                      // first: what every tab showed before this event is what a duplicate open puts back
         for (const leaf of app.workspace.getLeavesOfType('markdown')) router.evaluate(leaf).catch((e) => console.warn('[forge-phrase] default-view pass failed:', e));
       };
       plugin.registerEvent(app.workspace.on('file-open', routeAll));

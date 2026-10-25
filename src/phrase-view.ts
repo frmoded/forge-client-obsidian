@@ -2,7 +2,7 @@
 // phrase-core.ts, the DOM and its freshness in phrase-dom.ts, both unit-tested without Obsidian). It is registered, and opened, ONLY in a score-first vault (score-first.ts).
 //
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.
-import { EditableFileView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
+import { EditableFileView, MarkdownView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
@@ -132,6 +132,10 @@ export class PhraseView extends EditableFileView {
 export async function openPhrase(app: App, file: TFile): Promise<void> {
   for (const leaf of app.workspace.getLeavesOfType(PHRASE_VIEW_TYPE)) {
     if (leaf.view instanceof PhraseView && leaf.view.file?.path === file.path) { app.workspace.revealLeaf(leaf); return; }
+  }
+  // 2026-10-25-0800: a phrase open as its JSON text (Open as JSON) is open too: focus that tab, do not open a Score beside it
+  for (const leaf of app.workspace.getLeavesOfType('markdown')) {
+    if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) { app.workspace.revealLeaf(leaf); return; }
   }
   const leaf = app.workspace.getLeaf(true);
   await leaf.setViewState({ type: PHRASE_VIEW_TYPE, active: true, state: { file: file.path } });
