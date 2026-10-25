@@ -11,6 +11,7 @@ import path from 'node:path';
 
 import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhythm-engine.ts';
 import { morphEditCount, morphTraceEngine, producePhrase, type MorphPhrase, type PhraseParams } from './phrase-core.ts';
+import { annotateMorphPayload, morphLineageOf, morphStateOf, type MorphEdit } from './morph-lineage-core.ts';
 import { readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
 
 const skip = WHEELS_PRESENT ? false : 'music wheels not fetched — run: npm run fetch-music-wheels';
@@ -19,6 +20,8 @@ const FIXTURES = path.resolve(import.meta.dirname, '../test/fixtures/score-first
 const BARS: Record<string, string> = {
   bar_005: fs.readFileSync(path.join(FIXTURES, 'bar_005.md'), 'utf8'),
   bar_006: fs.readFileSync(path.join(FIXTURES, 'bar_006.md'), 'utf8'),
+  bar_007: fs.readFileSync(path.join(FIXTURES, 'bar_007.md'), 'utf8'),     // M7c Phase B: the demo pair (made through createNewBar + the Beat Box's save path)
+  bar_008: fs.readFileSync(path.join(FIXTURES, 'bar_008.md'), 'utf8'),
 };
 const dataOf = (name: string): RhythmData => { const r = readRhythmNote(BARS[name]); if (r.ok === false) throw new Error(r.message); return r.value.data; };
 const MORPH: MorphPhrase = { kind: 'morph', a: 'bar_005', b: 'bar_006', bars: 5, order: 'musical', seed: 0 };
@@ -93,7 +96,8 @@ test('the Score of a 5-bar morph: one measure per bar, the engine\'s morph_info 
   const tempi = [...payload.multi_staff_content.matchAll(/<sound tempo="([\d.]+)"/g)].map((m: RegExpMatchArray) => Number(m[1]));
   assert.ok(tempi.length >= 1);
   assert.equal(morphTraceEngine(MORPH, payload), '[forge-morph] engine asked a=bar_005 b=bar_006 bars=5 order=musical seed=0 -> bars 5, d 4');
-  assert.equal(payload.mixed_bar, undefined); assert.equal(payload.bars_data, undefined);
+  assert.equal(payload.mixed_bar, undefined);
+  assert.ok(Array.isArray(payload.bars_data) && payload.bars_data.length === 5, 'Phase B: the engine\'s own bars ride along (the Inspector ties every bar and hit to them)');
 });
 
 test('an atomic morph draws the noteheads one at a time: bar k+1 has exactly one notehead fewer than bar k (a pure removal path)', async () => {
@@ -168,4 +172,91 @@ test('PARITY: morphEditCount (the TypeScript rule behind Atomic and the Position
   }
   assert.equal(pairs, made.length * made.length);
   assert.ok(pairs >= 256);
+});
+
+// ---- M7c Phase B (drain 2026-10-24-1230): the Inspector's map on the REAL engine's Score --------------------------------------------------------------------------------------------------------------------------
+
+const NOTE = 'phrases/phrase_004';
+async function mapOf(py: any, params: MorphPhrase, bars: Record<string, string> = BARS) {
+  const d = { readNote: async (p: string) => { const t = bars[p.replace(/^bars\//, '').replace(/\.md$/, '')]; if (t === undefined) throw new Error('File not found'); return t; }, compute: async (data: any, prm: PhraseParams, title: string) => computePhrase(py, data, prm, title) };
+  const out = await producePhrase(d, params, 'phrase_004');
+  assert.equal(out.kind, 'score', JSON.stringify(out));
+  const payload = (out as { payload: Record<string, unknown> }).payload;
+  return { payload, ...annotateMorphPayload(NOTE, params, payload) };
+}
+const texts = (map: any, id: string) => morphLineageOf(map[id]).map((l) => l.text);
+
+test('PHASE B on the real engine: the 5-bar atomic bar_005 -> bar_006 Score is tied bar by bar and hit by hit: 5 bars + 30 hits, every id on a note of the engraved MusicXML, no problems', async () => {
+  const py = await engine();
+  const r = await mapOf(py, MORPH);
+  assert.deepEqual(r.problems, []);
+  assert.deepEqual(Object.keys(r.map).filter((k) => k.startsWith('ph_')), ['ph_bar_1', 'ph_bar_2', 'ph_bar_3', 'ph_bar_4', 'ph_bar_5']);
+  assert.equal(Object.keys(r.map).filter((k) => k.startsWith('mo')).length, 30);
+  const xml = r.payload.multi_staff_content as string;
+  const annotated = (r as any).payload.multi_staff_content as string;
+  void xml;
+  for (const id of Object.keys(r.map)) assert.ok(annotated.includes(`id="${id}"`) || id.startsWith('ph_'), id);
+  assert.deepEqual(r.kitProblems.length > 0 ? r.kitProblems : ['none'], ['the hits of a morph are not tied in the Kit view']);
+  assert.match((r.payload.kit_content as string), /id="ph_bar_5"/, 'the Kit view still pins a bar');
+  assert.deepEqual(texts(r.map, 'ph_bar_3'), [
+    'bar 3 of 5', 'made by phrase_004 (morph bar_005 -> bar_006, musical order)', 'step 2 of 4 single-hit changes applied', 'from bar_005', 'from bar_006', 'tempo 100', 'removed kick at step 3',
+    '▲ only bar_005 (not changed yet) · ■ only bar_006 (already changed) · ● both bars', 'Edit this bar',
+  ]);
+  assert.equal(texts(r.map, 'mo2_kick_2')[0], 'this hit: from bar_005 only (removed in bar 3)');
+  assert.equal(texts(r.map, 'mo5_kick_8')[0], 'this hit: from both bars');
+  assert.equal((r.map.ph_bar_1.params.tempo as number), 100);
+});
+
+test('PHASE B: the demo pair bar_007 -> bar_008 is 16 single-hit changes; the atomic 17-bar Score is tied, each bar differs from the last by exactly one hit, and every change is named in order', async () => {
+  const py = await engine();
+  assert.equal(morphEditCount(dataOf('bar_007'), dataOf('bar_008')), 16);
+  const r = await mapOf(py, { ...MORPH, a: 'bar_007', b: 'bar_008', bars: 17 });
+  assert.deepEqual(r.problems, []);
+  const edits = (r.payload.morph_info as any).edits as MorphEdit[];
+  assert.equal(edits.length, 16);
+  const drawn = r.payload.bars_data as any[];
+  for (let i = 0; i < 17; i++) assert.equal(morphStateOf(dataOf('bar_007'), edits, drawn[i]), i, `bar ${i + 1} is step ${i}`);
+  assert.equal(r.map.ph_bar_1.params.edit, 'unchanged: this is bar_007');
+  assert.equal(r.map.ph_bar_17.params.edit, `${edits[15].kind === 'add' ? 'added' : 'removed'} ${edits[15].channel} at step ${edits[15].step + 1}; this is bar_008`);
+  for (let i = 2; i <= 16; i++) assert.match(r.map[`ph_bar_${i}`].params.edit as string, /^(added|removed) [a-z_]+ at step \d+$/);
+  const hitsPerBar = Array.from({ length: 17 }, (_, i) => Object.values(r.map).filter((p) => p.role === 'morph-hit' && p.params.bar === i + 1 && p.params.tiedFrom === undefined).length);   // heads: a tied continuation is the same hit drawn again
+  assert.deepEqual(hitsPerBar.slice(1).map((n, i) => Math.abs(n - hitsPerBar[i])), Array(16).fill(1), 'one hit more or fewer each step');
+  assert.equal(hitsPerBar[0], 12, 'rock: 2 kick + 2 snare + 8 hi-hat'); assert.equal(hitsPerBar[16], 14, 'afro-cuban: 3 + 4 + 5 + 2');
+});
+
+test('PHASE B: a non-atomic morph (7 bars of 16 changes) and the other orders tie just as well; a hit says the bar its change lands in', async () => {
+  const py = await engine();
+  for (const over of [{ bars: 7 }, { order: 'seeded' as const, seed: 4 }, { order: 'by_channel' as const }, { bars: 2 }]) {
+    const r = await mapOf(py, { ...MORPH, a: 'bar_007', b: 'bar_008', bars: 17, ...over });
+    assert.deepEqual(r.problems, [], JSON.stringify(over));
+  }
+  const r = await mapOf(py, { ...MORPH, a: 'bar_007', b: 'bar_008', bars: 7 });
+  const oneChange = Object.values(r.map).find((p) => p.role === 'morph-hit' && p.params.kind === 'a')!;
+  assert.match(morphLineageOf(oneChange)[0].text, /^this hit: from bar_007 only \(removed in bar [2-7]\)$/);
+});
+
+test('PHASE B: one bar at a position is tied too, and the position is the step', async () => {
+  const py = await engine();
+  for (const position of [0, 3, 4]) {
+    const r = await mapOf(py, { ...MORPH, bars: 1, position });
+    assert.deepEqual(r.problems, []);
+    assert.equal(r.map.ph_bar_1.params.state, position);
+  }
+});
+
+test('PHASE B: a forked bar through the real engine: bars_data carries the fork, morph_generated the original; the fork is a map entry without hits; the other bars read exactly as without the fork', async () => {
+  const py = await engine();
+  const plain = await mapOf(py, MORPH);
+  const forkNote = BARS.bar_006.replace('"tempo_bpm": 100', '"tempo_bpm": 77');
+  const withFork = await mapOf(py, { ...MORPH, overrides: { '3': 'bars/bar_009' } }, { ...BARS, bar_009: forkNote });
+  assert.deepEqual(withFork.problems, []);
+  assert.equal(withFork.map.ph_bar_3.params.fork, 'bars/bar_009');
+  assert.equal(withFork.map.ph_bar_3.params.tempo, 77, 'the fork\'s own tempo');
+  assert.equal(Object.keys(withFork.map).some((k) => k.startsWith('mo3_')), false);
+  assert.ok(Array.isArray(withFork.payload.morph_generated) && (withFork.payload.morph_generated as unknown[]).length === 5);
+  assert.deepEqual(texts(withFork.map, 'ph_bar_4'), texts(plain.map, 'ph_bar_4'), 'bar 4 reads as before the fork');
+  assert.deepEqual(texts(withFork.map, 'ph_bar_2'), texts(plain.map, 'ph_bar_2'));
+  assert.deepEqual(texts(withFork.map, 'mo4_kick_0'), texts(plain.map, 'mo4_kick_0'));
+  assert.equal(plain.payload.morph_generated, undefined, 'without a fork nothing extra rides along');
+  assert.deepEqual(texts(withFork.map, 'ph_bar_3'), ['bar 3 of 5', 'forked: edited in bar_009 (was made by phrase_004, morph bar_005 -> bar_006, musical order)', "tempo 77 (the fork's own)", 'Revert to generated']);
 });

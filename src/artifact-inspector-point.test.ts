@@ -152,12 +152,13 @@ test('through the panel: a surface that names the bar role pins by box and print
   assert.deepEqual(withNote.pinned(), ['ph_bar_2'], 'a note is not chosen by its box');
 });
 
-test('MECHANISM PIN: both phrase surfaces (extend and mix) opt in by role and print the evidence line; nothing else in the plugin names pointRoles', () => {
+test('MECHANISM PIN: the phrase surfaces (extend, mix and — M7c Phase B, deliberate — morph) opt in by role and print the evidence line; nothing else in the plugin names pointRoles', () => {
   const src = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), 'utf8');
   const dom = src('phrase-dom.ts');
   assert.match(dom, /pointRoles: \[PHRASE_BAR_ROLE\]/);
   assert.match(dom, /pointRoles: \[MIX_BAR_ROLE\]/);
-  assert.equal((dom.match(/trace: \(line\) => \{ console\.info\(line\); \}/g) ?? []).length, 2, 'the line is printed by both phrase surfaces');
+  assert.match(dom, /pointRoles: \[MORPH_BAR_ROLE\]/);
+  assert.equal((dom.match(/trace: \(line\) => \{ console\.info\(line\); \}/g) ?? []).length, 3, 'the line is printed by all three phrase surfaces');
   const users = fs.readdirSync(import.meta.dirname).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && /pointRoles/.test(src(f))).sort();
   assert.deepEqual(users, ['phrase-dom.ts', 'score-inspector.ts']);
 });

@@ -134,3 +134,18 @@ the same in CPython and Pyodide), `by_channel`. Tempo and swing slide linearly, 
 at most 64), Order, Seed (only for `seeded`) and a Position slider (only while Bars is 1: `k of d changes`), and one sentence: `Morph from bar_005 to bar_006 in 5 bars: 4 single-hit changes (musical order).` The number of
 changes `d` is the one rule mirrored in TypeScript (`morphEditCount`); a real-engine sweep pins it to the engine's own `d`. No Inspector yet (the next prompt). Evidence lines (Info): `[forge-morph] wrote …` and
 `[forge-morph] engine asked … -> bars N, d D`.
+
+## Navigation through a morph, fork on a morph bar, and the demo bars (2026-10-24-1230, M7c Phase B)
+
+A morph's Score is inspectable the way an extend's and a mix's are. **Click a bar** (a drawn part, or anywhere in its box: Iteration 123) or arrow to it: `bar 3 of 5`, `made by phrase_004 (morph bar_005 -> bar_006, musical order)`,
+`step 2 of 4 single-hit changes applied`, `from bar_005` and `from bar_006` (each an **Open** link), `tempo N`, then the change that made THIS bar from the previous one (`removed kick at step 3`; steps are numbered from 1 as in the
+Beat Box; the first bar says `unchanged: this is bar_005`, the last ends `; this is bar_006`, a bar that repeats the previous state says `no change from the previous bar`), the legend, **Edit this bar**. **Click a notehead** to pin that hit:
+`this hit: from both bars` / `from bar_005 only (removed in bar 4)` / `from bar_006 only (added in bar 3)` over its bar's stack; the pinned bar's noteheads are painted by where the hit came from (the mix's blue triangle, orange square,
+purple circle, inline-styled).
+
+How it is derived (never from the engraving, never from a second copy of the engine's rules): the glue returns the engine's own bars (`bars_data`) and the edits in the order it applied them (`morph_info`); bar `i` is state `k` when
+bar a with its first `k` edits has exactly bar `i`'s hits (the edits touch distinct cells, so at most one `k` fits); a bar that fits no `k` is a refusal naming it. Every notehead of every generated bar gets an id with the bar in its scope
+(`mo3_kick_2`), checked against that bar's data; the Kit view carries the bar ids only. **Edit this bar** on a morph bar forks it exactly as an extend's (M9): `bars/bar_NNN.md` with `forked_from: "phrases/phrase_00N bar 3"`, THEN the
+phrase's `overrides`, THEN the Beat Box opens it; **Revert to generated** removes the override and nothing is deleted. A forked bar keeps its place on the path (the glue also returns `morph_generated`, the bars before the forks were laid
+in), so its neighbours' sentences do not change; the fork's own hits are not mapped (the bar pins). The demo pair `bars/bar_007.md` (a straight rock groove) and `bars/bar_008.md` (an afro-cuban feel, son clave 3-2) differ in 16
+cells and are made by `scripts/dev/make-demo-bars.ts` through `createNewBar` and the Beat Box's save path, never hand-authored. Evidence line: `[forge-morph] inspector mapped 5 bars and 30 hits` (or why it could not map).

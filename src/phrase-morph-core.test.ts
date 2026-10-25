@@ -51,10 +51,10 @@ test('hand-edited morph JSON that is wrong is refused naming the field (never co
   assert.match(refusal({ bars: 1, position: -1 }), /^position must be a whole number, 0 or more, got -1\.$/);
   assert.match(refusal({ bars: 1, position: 0.5 }), /^position must be a whole number/);
   assert.match(refusal({ bars: 3, position: 1 }), /^position only applies when bars is 1\.$/);
-  assert.match(refusal({ speed: 3 }), /^Unexpected field "speed" \(a morph holds only kind, a, b, bars, order, seed, position\)\.$/);
+  assert.match(refusal({ speed: 3 }), /^Unexpected field "speed" \(a morph holds only kind, a, b, bars, order, seed, position, overrides\)\.$/);
   assert.match(refusal({ a: 'bars/bar_005' }), /^a must be the name of a bar/);
   assert.match(refusal({ b: undefined }), /^b must be the name of a bar/);
-  assert.deepEqual([...MORPH_KEYS], ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position']);
+  assert.deepEqual([...MORPH_KEYS], ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position', 'overrides']);
   assert.deepEqual([...MORPH_ORDERS], ['musical', 'seeded', 'by_channel']);
 });
 
@@ -215,6 +215,22 @@ test('a missing or unusable bar is a refusal naming which one (a or b) and why',
   const bad = await producePhrase(deps({ files: { 'bars/bar_005.md': 'not a note' } }).deps, MORPH, 't');
   assert.equal(bad.kind, 'refusal');
   assert.match((bad as { message: string }).message, /^Phrase: the bar for a, bar_005, is not usable: /);
+});
+
+test('a fork note is read FRESH, checked against bar a\'s grid (not bar b\'s), and handed to the engine as override_bars', async () => {
+  const twelve: RhythmData = { time_signature: '4/4', steps: 12, group_size: 4, swing_pct: 0, tempo_bpm: 100, channels: { kick: Array.from({ length: 12 }, (_, i) => i === 0 || i === 3) } };
+  const fork16 = bar({ kick: [0, 1, 8] });
+  const d = deps({ files: { 'bars/bar_009.md': barText(fork16), 'bars/bar_012.md': barText(twelve), 'bars/bar_007.md': barText(twelve) } });
+  const ok = await producePhrase(d.deps, { ...MORPH, overrides: { '3': 'bars/bar_009' } }, 't');
+  assert.equal(ok.kind, 'score');
+  assert.deepEqual((d.calls[0].params as unknown as { override_bars: Record<string, unknown> }).override_bars['3'], fork16);
+  assert.ok(d.reads.includes('bars/bar_009.md'));
+  // bar a is 16 steps, bar b (here bar_007) and the fork are 12: the fork matches b's grid but not a's, and a's is the one that counts
+  const odd = deps({ files: { 'bars/bar_007.md': barText(twelve), 'bars/bar_012.md': barText(twelve) } });
+  const refused = await producePhrase(odd.deps, { ...MORPH, b: 'bar_007', overrides: { '3': 'bars/bar_012' } }, 't');
+  assert.equal(refused.kind, 'refusal');
+  assert.match((refused as { message: string }).message, /^Phrase: bar 3 \(bars\/bar_012\) differs from bar a bar_005 in steps \(it has 4\/4, 12 steps, group 4; the phrase has 4\/4, 16 steps, group 4\)\.$/);
+  assert.equal(odd.calls.length, 0, 'the engine is never asked');
 });
 
 test('the engine\'s own morph_rhythm refusal (a position past the last change, two grids) is a refusal line; any other engine failure stays an error', async () => {

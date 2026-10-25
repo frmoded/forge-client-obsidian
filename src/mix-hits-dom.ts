@@ -46,7 +46,7 @@ export function paintMixHits(root: HTMLElement, map: ProvenanceMap, pinnedId: st
   }
 }
 
-function markFor(doc: Document, parent: 'a' | 'b' | 'both', colour: string, ghost: boolean, bb: { x: number; y: number; width: number; height: number }): Element {
+export function markFor(doc: Document, parent: 'a' | 'b' | 'both', colour: string, ghost: boolean, bb: { x: number; y: number; width: number; height: number }): Element {
   const NS = 'http://www.w3.org/2000/svg';
   const s = bb.width * 0.7;                                         // the mark's size follows the notehead's
   const cx = bb.x - s * 0.7, cy = bb.y + bb.height / 2;             // just left of the notehead (a stem and a beam go up and to the right)

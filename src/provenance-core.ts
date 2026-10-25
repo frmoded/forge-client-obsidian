@@ -55,7 +55,9 @@ export function hitSteps(cells: ReadonlyArray<unknown>): number[] {
   return out;
 }
 
-interface XmlNote {
+export interface XmlNote {
+  /** M7c (drain 2026-10-24-1230): the 0-based index of the measure this note is in, so a Score of several bars can be tied bar by bar. */
+  measure: number;
   tagStart: number;         // index of `<note` in the xml
   tagEnd: number;           // index just past the `>` of the opening tag
   rest: boolean;
@@ -65,7 +67,7 @@ interface XmlNote {
   tieStop: boolean;         // the TAIL of a tied hit: the engine splits a ring that is not one note value (e.g. 10 steps = half + eighth) into tied notes
 }
 
-interface XmlPart { notes: XmlNote[]; divisions: number; measures: number }
+export interface XmlPart { notes: XmlNote[]; divisions: number; measures: number }
 
 const PART_RE = /<part\s+id="[^"]*"\s*>([\s\S]*?)<\/part>/g;
 const MEASURE_RE = /<measure\b[^>]*>([\s\S]*?)<\/measure>/g;
@@ -103,6 +105,7 @@ export function scanParts(xml: string): XmlPart[] | null {
           ?? /<unpitched>\s*<display-step>([A-G])<\/display-step>\s*<display-octave>(-?\d+)<\/display-octave>/.exec(body);
         const tagStart = mStart + tm.index;
         part.notes.push({
+          measure: part.measures - 1,
           tagStart,
           tagEnd: tagStart + '<note'.length + attrs.length + 1,
           rest,
@@ -131,7 +134,7 @@ export function hitId(scope: string, channel: string, step: number): string {
   return `${scope}_${channel}_${step}`;
 }
 
-function stepDivisions(data: RhythmDataLike, divisions: number): number | null {
+export function stepDivisions(data: RhythmDataLike, divisions: number): number | null {
   const m = /^(\d+)\s*\/\s*(\d+)$/.exec(data.time_signature.trim());
   if (!m) return null;
   const barQuarter = (Number(m[1]) * 4) / Number(m[2]);
@@ -139,7 +142,7 @@ function stepDivisions(data: RhythmDataLike, divisions: number): number | null {
   return Number.isFinite(d) && d > 0 ? d : null;
 }
 
-function insertIds(xml: string, notes: XmlNote[], ids: Map<XmlNote, string>): string {
+export function insertIds(xml: string, notes: XmlNote[], ids: Map<XmlNote, string>): string {
   // apply right to left so earlier indices stay valid
   const todo = [...ids.entries()].sort((a, b) => b[0].tagStart - a[0].tagStart);
   let out = xml;

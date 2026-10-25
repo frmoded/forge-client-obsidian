@@ -20,6 +20,8 @@ import type { ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
 import { paintMixHits } from './mix-hits-dom.ts';
+import { MORPH_BAR_ROLE, MORPH_HIT_ROLE, annotateMorphPayload, morphLineageOf, morphTraceInspector } from './morph-lineage-core.ts';
+import { paintMorphHits } from './morph-hits-dom.ts';
 import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
@@ -421,6 +423,8 @@ export const PHRASE_BRACKET_CLASS = 'forge-phrase-bracket';
 /** M8: a mix has one bar, so there is nothing to walk between with the arrow keys; Esc lets go. */
 export const MIX_INSPECTOR_HINT = 'Click the bar or a note to see where it came from. Esc lets go.';
 export const PHRASE_INSPECTOR_HINT = 'Click a bar to see where it came from. Arrow keys move between bars; Esc lets go.';
+/** M7c Phase B: a morph's bars and each of its hits. */
+export const MORPH_INSPECTOR_HINT = 'Click a bar or a note to see where it came from. Arrow keys move between bars; Esc lets go.';
 
 export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'produce' | 'inspector'> {
   inspector?: PhraseInspectorPorts;
@@ -483,6 +487,15 @@ function annotateForMix(path: string, note: NoteText, payload: Record<string, un
   if (!parsed || parsed.ok === false || parsed.value.kind !== 'mix') return { payload, map: {}, problems: ['the mix could not be read'], kitProblems: [] };
   const result = annotateMixPayload(phraseNoteId(path), parsed.value, payload);
   console.info(mixTraceInspector(result.problems, result.map));          // evidence ships with the feature: a mix that cannot be inspected says why, in the console too
+  return result;
+}
+
+/** The map of a MORPH's Score (M7c Phase B): every bar and every hit of every generated bar, tied to the path between the two bars. Never throws. */
+function annotateForMorph(path: string, note: NoteText, payload: Record<string, unknown>): ProvenanceResult {
+  const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
+  if (!parsed || parsed.ok === false || parsed.value.kind !== 'morph') return { payload, map: {}, problems: ['the morph could not be read'], kitProblems: [] };
+  const result = annotateMorphPayload(phraseNoteId(path), parsed.value, payload);
+  console.info(morphTraceInspector(result.problems, result.map));        // evidence ships with the feature: a morph that cannot be inspected says why, in the console too
   return result;
 }
 
@@ -591,6 +604,24 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       pinLabel: (id, prov) => (prov.role === MIX_BAR_ROLE ? 'bar 1' : id),
       decorate: paintMixHits,
       kitNote: 'Kit view: not mapped for this mix (use the multi-staff view to inspect).',
+    } : insp && k === 'morph' ? {
+      // M7c Phase B: every bar of the path and each of its hits, tied to the two bars and the single-hit changes between them. Clicking a notehead pins THAT hit, a click anywhere else in a bar pins the BAR; arrows walk the
+      // bars; a redraw (a control moved) keeps the pin; the pinned bar's noteheads are painted by where the hit came from. "Edit this bar" forks a bar exactly as an extend's. No bracket, no source link.
+      noteId: phraseNoteId(ports.path),
+      openNote: insp.openNote,
+      annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForMorph(ports.path, note as NoteText, payload); },
+      onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
+      lineage: morphLineageOf,
+      hint: MORPH_INSPECTOR_HINT,
+      order: (map) => Object.keys(map).filter((id) => map[id].role === MORPH_BAR_ROLE).sort((x, y) => Number(map[x].params.bar) - Number(map[y].params.bar)),
+      keepPin: true,
+      previewOnHover: true,
+      enlargeIds: (map) => Object.keys(map).filter((id) => map[id].role === MORPH_HIT_ROLE),
+      pointRoles: [MORPH_BAR_ROLE],                  // a click anywhere inside a bar's box pins it (Iteration 123)
+      trace: (line) => { console.info(line); },
+      pinLabel: (id, prov) => (prov.role === MORPH_BAR_ROLE ? `bar ${String(prov.params.bar)}` : `bar ${String(prov.params.bar)}, ${String(prov.params.channel)} step ${Number(prov.params.step) + 1}`),
+      decorate: paintMorphHits,
+      kitNote: 'Kit view: not mapped for this morph (use the multi-staff view to inspect).',
     } : undefined;
     area = attachScoreArea(parent, plan, {
       ...areaPorts,
@@ -631,9 +662,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     }
   };
 
-  /** M9: "Edit this bar" / "Revert to generated" pressed on the pinned bar of an extend phrase. The vault is the `fork` port; the phrase write and the opener are the tab's own. */
+  /** M9: "Edit this bar" / "Revert to generated" pressed on the pinned bar of an extend phrase (M7c Phase B: or of a morph). The vault is the `fork` port; the phrase write and the opener are the tab's own. */
   async function runForkAction(action: { id: 'fork' | 'revert'; barNumber: number }): Promise<void> {
-    if (!current || current.kind !== 'extend' || !ports.fork || !insp) return;
+    if (!current || (current.kind !== 'extend' && current.kind !== 'morph') || !ports.fork || !insp) return;
     const f = ports.fork;
     const forkPorts: ForkPorts<unknown> = { ...f, writePhrase: (p) => ports.writePhrase(p), open: (id) => insp.openNote(id), trace: (line) => console.info(line) };
     if (action.id === 'revert') {
@@ -694,7 +725,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         return;
       }
       // the notes this phrase is made of: a mix's two bars; an extend's source bar and (M9) every fork note named in its overrides
-      const made = current === null ? [] : current.kind === 'mix' || current.kind === 'morph' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : [phraseSourcePath(current.source), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)];
+      const made = current === null ? [] : current.kind === 'mix' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : current.kind === 'morph' ? [phraseSourcePath(current.a), phraseSourcePath(current.b), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)] : [phraseSourcePath(current.source), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)];
       if (made.includes(path)) area?.update(last);                       // a bar this phrase is made of changed: the Score is read fresh by the next render
     },
     dispose() {

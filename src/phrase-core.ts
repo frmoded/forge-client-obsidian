@@ -75,12 +75,14 @@ export interface MorphPhrase {
   seed: number;
   /** Only when bars = 1. */
   position?: number;
+  /** M7c Phase B (fork on edit, as an extend's): bar number (1-based, as a string key) -> the bar note that stands in for that morph bar (`bars/bar_NNN`, no .md). Absent = every bar is generated. */
+  overrides?: Record<string, string>;
 }
 
 export const MORPH_ORDERS = ['musical', 'seeded', 'by_channel'] as const;
 export type MorphOrder = typeof MORPH_ORDERS[number];
 export const MORPH_DEFAULTS = { bars: 5, order: 'musical' as MorphOrder, seed: 0 };
-export const MORPH_KEYS = ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position'] as const;
+export const MORPH_KEYS = ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position', 'overrides'] as const;
 
 export type PhraseParams = ExtendPhrase | MixPhrase | MorphPhrase;
 
@@ -197,7 +199,9 @@ function validateMorph(raw: Record<string, unknown>): Validation<PhraseParams> {
   } else if (position !== undefined) {
     return bad('position only applies when bars is 1.');
   }
-  return { ok: true, value: { kind: 'morph', a: raw.a as string, b: raw.b as string, bars, order: order as MorphOrder, seed, ...(bars === 1 ? { position: position as number } : {}) } };
+  const overrides = validateOverrides(raw.overrides, bars);
+  if (typeof overrides === 'string') return bad(overrides);
+  return { ok: true, value: { kind: 'morph', a: raw.a as string, b: raw.b as string, bars, order: order as MorphOrder, seed, ...(bars === 1 ? { position: position as number } : {}), ...(overrides ? { overrides } : {}) } };
 }
 
 /** What the morph strip writes: the position only while bars = 1 (0 when it was not there), never otherwise. Pure; the strip and the write both go through it, so a note never holds a position it ignores. */
@@ -267,9 +271,13 @@ export function mixSentence(p: MixPhrase): string {
 }
 
 const ORDER_WORDS: Record<MorphOrder, string> = { musical: 'musical order', seeded: 'seeded order', by_channel: 'by-channel order' };
+/** The order in plain words, as the sentence and the Inspector both say it: "musical order", "seeded order, seed 3", "by-channel order". */
+export function morphOrderWords(p: Pick<MorphPhrase, 'order' | 'seed'>): string {
+  return p.order === 'seeded' ? `${ORDER_WORDS.seeded}, seed ${p.seed}` : ORDER_WORDS[p.order];
+}
 /** The one line under the morph strip, with the numbers that are on the controls. `d` = the number of single-hit changes between the two bars, `null` while it is not known yet (then the line leaves it out). */
 export function morphSentence(p: MorphPhrase, d: number | null): string {
-  const order = p.order === 'seeded' ? `${ORDER_WORDS.seeded}, seed ${p.seed}` : ORDER_WORDS[p.order];
+  const order = morphOrderWords(p);
   const changes = (n: number): string => `${n} single-hit change${n === 1 ? '' : 's'}`;
   const from = `Morph from ${p.a} to ${p.b}`;
   if (p.bars === 1) {
@@ -319,8 +327,9 @@ export function formatPhraseJson(p: PhraseParams): string {
       `  "b": ${JSON.stringify(p.b)},`,
       `  "bars": ${p.bars},`,
       `  "order": ${JSON.stringify(p.order)},`,
-      `  "seed": ${p.seed}${p.position !== undefined ? ',' : ''}`,
-      ...(p.position !== undefined ? [`  "position": ${p.position}`] : []),
+      `  "seed": ${p.seed}${p.position !== undefined || p.overrides ? ',' : ''}`,
+      ...(p.position !== undefined ? [`  "position": ${p.position}${p.overrides ? ',' : ''}`] : []),
+      ...(p.overrides ? ['  "overrides": {', ...Object.keys(p.overrides).sort((x, y) => Number(x) - Number(y)).map((k, i, all) => `    ${JSON.stringify(k)}: ${JSON.stringify(p.overrides![k])}${i < all.length - 1 ? ',' : ''}`), '  }'] : []),
       '}',
     ].join('\n');
   }
@@ -595,17 +604,17 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
   if (!params.overrides) return computeScore((data, t) => deps.compute(data, params, t), bar.value.data, title);
   // M9: forked bars. The fork notes are read FRESH (a bar edited in the Beat Box is what the phrase shows), checked against the source's grid, and handed to the engine as `override_bars`; the engine
   // glue lays each over the generated bar of that number. A phrase without overrides never reaches this line, so its engine call is exactly what it was.
-  const forks = await readForks(deps, params, bar.value.data);
+  const forks = await readForks(deps, params.overrides, bar.value.data, `the source ${params.source}`);
   if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
   const withForks = { ...params, override_bars: forks } as PhraseParams;
   return computeScore((data, t) => deps.compute(data, withForks, t), bar.value.data, title);
 }
 
 /** The data of every fork note of a phrase, by bar number, or the reason one cannot be used (naming the bar and the note). Each distinct note is read once. */
-async function readForks(deps: PhraseScoreDeps, params: ExtendPhrase, source: RhythmData): Promise<Record<string, RhythmData> | string> {
+async function readForks(deps: PhraseScoreDeps, overrides: Record<string, string> | undefined, source: RhythmData, sourceLabel: string): Promise<Record<string, RhythmData> | string> {
   const out: Record<string, RhythmData> = {};
   const reads = new Map<string, RhythmData>();
-  for (const [n, noteId] of Object.entries(params.overrides ?? {})) {
+  for (const [n, noteId] of Object.entries(overrides ?? {})) {
     let data = reads.get(noteId);
     if (data === undefined) {
       const path = `${noteId}.md`;
@@ -622,7 +631,7 @@ async function readForks(deps: PhraseScoreDeps, params: ExtendPhrase, source: Rh
     }
     const differs = (['time_signature', 'steps', 'group_size'] as const).filter((f) => data![f] !== source[f]);
     if (differs.length > 0) {
-      return `bar ${n} (${noteId}) differs from the source ${params.source} in ${differs.join(' and ')} (it has ${data.time_signature}, ${data.steps} steps, group ${data.group_size}; the phrase has ${source.time_signature}, ${source.steps} steps, group ${source.group_size}).`;
+      return `bar ${n} (${noteId}) differs from ${sourceLabel} in ${differs.join(' and ')} (it has ${data.time_signature}, ${data.steps} steps, group ${data.group_size}; the phrase has ${source.time_signature}, ${source.steps} steps, group ${source.group_size}).`;
     }
     out[n] = data;
   }
@@ -692,10 +701,17 @@ async function produceMorph(deps: PhraseScoreDeps, params: MorphPhrase, title: s
     if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the bar for ${side}, ${name}, is not usable: ${bar.message}` };
     bars[side] = bar.value.data;
   }
+  // Phase B (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number. Read FRESH, checked against bar a's grid, handed to the engine as `override_bars`.
+  let asked: PhraseParams = params;
+  if (params.overrides) {
+    const forks = await readForks(deps, params.overrides, bars.a, `bar a ${params.a}`);
+    if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
+    asked = { ...params, override_bars: forks } as PhraseParams;
+  }
   let refused: string | null = null;
   const outcome = await computeScore(async (_data, t) => {
     try {
-      return await deps.compute({ a: bars.a, b: bars.b }, params, t);
+      return await deps.compute({ a: bars.a, b: bars.b }, asked, t);
     } catch (e) {
       const line = morphRhythmRefusal((e as Error)?.message ?? String(e));
       if (line !== null) { refused = line; return null; }
@@ -703,7 +719,8 @@ async function produceMorph(deps: PhraseScoreDeps, params: MorphPhrase, title: s
     }
   }, bars.a, title);
   if (refused !== null) return { kind: 'refusal', message: `Phrase: ${refused}` };
-  return outcome;
+  // M7c Phase B: the Inspector derives every bar's state and every hit's parents from the two bars it was made of; they travel with the payload (the renderer ignores the extra key)
+  return outcome.kind === 'score' ? { kind: 'score', payload: { ...outcome.payload, forge_morph: { a: bars.a, b: bars.b } } } : outcome;
 }
 
 /** M8: the mix Inspector's evidence line — the bar and how many hits it tied to the two bars, or why it could not map the Score (the same reason the Inspector shows). */

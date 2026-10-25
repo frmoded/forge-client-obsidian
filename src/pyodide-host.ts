@@ -1529,6 +1529,10 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     elif p.get("kind") == "morph":
         made = morph_rhythm(data["a"], data["b"], bars=p["bars"], order=p["order"], seed=p["seed"], position=p.get("position"))
         bars = [made] if p["bars"] == 1 else made
+        # M7c Phase B (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number (the TS side has already checked its grid). Its tempo is its own.
+        generated = list(bars)
+        for number, forked in p.get("override_bars", {}).items():
+            bars[int(number) - 1] = forked
     else:
         bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
         # M9 (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number (the TS side has already checked its grid). Its tempo is its own.
@@ -1543,6 +1547,11 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
         # M7c: the number of single-hit changes (d), the edits in the order they are applied, and how many bars were drawn (the plugin's evidence line and, in the next prompt, the Inspector read them)
         info = morph_rhythm_info(data["a"], data["b"], order=p["order"], seed=p["seed"])
         out["morph_info"] = {"d": info["d"], "edits": info["edits"], "bars": len(bars)}
+        # the bars as they are in the Score (forks laid in): the Inspector ties every bar and hit to what the ENGINE returned, and "Edit this bar" writes exactly the generated bar into its own note
+        out["bars_data"] = bars
+        if p.get("override_bars"):
+            # the bars the morph drew BEFORE the forks were laid in: a forked slot keeps its place on the path, so its neighbours' "the change that made this bar" stays what it was
+            out["morph_generated"] = generated
     else:
         # M9: the bars as they are in the Score, so "Edit this bar" writes exactly the generated bar into its own note
         out["bars_data"] = bars
