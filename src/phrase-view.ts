@@ -6,7 +6,7 @@ import { EditableFileView, Notice, TFile, type App, type WorkspaceLeaf } from 'o
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
-import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten } from './phrase-core.ts';
+import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
@@ -73,12 +73,13 @@ export class PhraseView extends EditableFileView {
           console.error('PhraseView: could not write the phrase', e);
           return { ok: false, message: `Not saved: ${(e as Error)?.message ?? e}` };
         }
-        if (refusal === null) trace(mixTraceWritten(params));
+        if (refusal === null) { trace(mixTraceWritten(params)); trace(morphTraceWritten(params)); }
         return refusal === null ? { ok: true } : { ok: false, message: refusal };
       },
       compute: async (data, params, title) => {
         const payload = await computePhraseScoreViaEngine(data, params, title);
         trace(mixTraceEngine(params, payload));
+        trace(morphTraceEngine(params, payload));
         return payload;
       },
       renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays }),

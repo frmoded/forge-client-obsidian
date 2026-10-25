@@ -1515,16 +1515,20 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
 
     Plugin-side glue, NOT an engine function: it only composes existing engine entry points. An EXTEND phrase (data is one bar's rhythm data):
     extend_rhythm (the bar stretched into bars bars in the given style, with the tempo stepping by tempo_change_pct over the run). A MIX
-    phrase (M7, data is an object holding the two bars as a and b): mix_rhythm (one bar that is a weighted mix of them). Then
-    rhythm_bars_to_stream (the bars joined, each bar keeping its own tempo mark) and serialize_result. Never touches the vault: both inputs
-    come in as strings, the payload goes out as a dict. Raises on data the engine refuses (extend_rhythm's or mix_rhythm's own ValueError) so the
-    plugin can show it."""
+    phrase (M7, data is an object holding the two bars as a and b): mix_rhythm (one bar that is a weighted mix of them). A MORPH phrase (M7c,
+    data holds the two bars as a and b): morph_rhythm (bars bars along an ordered path of single-hit edits from a to b; bars = 1 takes a
+    position). Then rhythm_bars_to_stream (the bars joined, each bar keeping its own tempo mark) and serialize_result. Never touches the
+    vault: both inputs come in as strings, the payload goes out as a dict. Raises on data the engine refuses (extend_rhythm's, mix_rhythm's or
+    morph_rhythm's own ValueError) so the plugin can show it."""
     import json as _json
-    from forge.music.lib import extend_rhythm, mix_rhythm, rhythm_bars_to_stream
+    from forge.music.lib import extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream
     data = _json.loads(data_json)
     p = _json.loads(params_json)
     if p.get("kind") == "mix":
         bars = [mix_rhythm(data["a"], data["b"], weight=p["weight"], threshold=p["threshold"], ghost=p["ghost"])]
+    elif p.get("kind") == "morph":
+        made = morph_rhythm(data["a"], data["b"], bars=p["bars"], order=p["order"], seed=p["seed"], position=p.get("position"))
+        bars = [made] if p["bars"] == 1 else made
     else:
         bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
         # M9 (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number (the TS side has already checked its grid). Its tempo is its own.
@@ -1535,6 +1539,10 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     if p.get("kind") == "mix":
         # M8: the engine's own mixed bar rides along, so the plugin ties each engraved hit to what the ENGINE returned (never to a copy of the rule)
         out["mixed_bar"] = bars[0]
+    elif p.get("kind") == "morph":
+        # M7c: the number of single-hit changes (d), the edits in the order they are applied, and how many bars were drawn (the plugin's evidence line and, in the next prompt, the Inspector read them)
+        info = morph_rhythm_info(data["a"], data["b"], order=p["order"], seed=p["seed"])
+        out["morph_info"] = {"d": info["d"], "edits": info["edits"], "bars": len(bars)}
     else:
         # M9: the bars as they are in the Score, so "Edit this bar" writes exactly the generated bar into its own note
         out["bars_data"] = bars

@@ -24,10 +24,11 @@ import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.t
 import type { RhythmData } from './rhythm-edit-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
-  PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampPhraseBars, clampPhrasePct, mixSentence, mixTraceInspector, phraseSourcePath, producePhraseNote,
-  readPhraseKind, readPhraseNote,
-  type ExtendPhrase, type MixPhrase, type PhraseParams, type PhraseScoreDeps,
+  MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampMorphPosition, clampMorphSeed, clampPhraseBars, clampPhrasePct, mixSentence, mixTraceInspector,
+  morphEditCount, morphSentence, normalizeMorph, phraseSourcePath, producePhraseNote, readPhraseKind, readPhraseNote,
+  type ExtendPhrase, type MixPhrase, type MorphPhrase, type PhraseParams, type PhraseScoreDeps,
 } from './phrase-core.ts';
+import { readRhythmNote } from './rhythm-edit-core.ts';
 
 export const PHRASE_CONTROLS_CLASS = 'forge-phrase-controls';
 /** The mix tab is dragged, not clicked, so its Score does not wait for the person to stop (a trailing debounce restarts on every input: nothing would redraw until the drag paused). 0 = the first change draws
@@ -36,6 +37,7 @@ export const MIX_SCORE_DEBOUNCE_MS = 0;
 
 type Patch = Partial<Pick<ExtendPhrase, 'bars' | 'style' | 'tempo_change_pct'>>;
 type MixPatch = Partial<Pick<MixPhrase, 'a' | 'b' | 'weight' | 'threshold' | 'ghost'>>;
+type MorphPatch = Partial<Pick<MorphPhrase, 'a' | 'b' | 'bars' | 'order' | 'seed' | 'position'>>;
 
 export interface PhraseControls {
   readonly el: HTMLElement;
@@ -251,6 +253,164 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   };
 }
 
+export interface MorphControls {
+  readonly el: HTMLElement;
+  /** Show these parameters (enabled), or `null` = the morph is not valid: the controls are disabled. Never fires `onChange`. */
+  set(params: MorphPhrase | null): void;
+  setStatus(text: string): void;
+  dispose(): void;
+}
+
+const ORDER_LABELS: Record<string, string> = { musical: 'musical', seeded: 'seeded', by_channel: 'by channel' };
+
+/** The morph strip (M7c Phase A): Bar a and Bar b (every `bars/bar_*.md`), Bars (1..64) with an **Atomic** button that sets Bars to the number of single-hit changes + 1, Order (musical, seeded, by channel), Seed (only
+ *  for the seeded order), a Position slider (only while Bars is 1: one stop per state of the path, labelled `k of d changes`) and one sentence in plain words. `changes(a, b)` is how many single-hit changes lie between
+ *  two bars (null = it could not be told); the strip asks it again whenever a bar changes and keeps the Position inside 0..d. A number is written on `change`, a slider on every `input` (the caller coalesces writes). */
+export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch: MorphPatch): void; listBars(): string[]; changes(a: string, b: string): Promise<number | null> }, before: Node | null = null): MorphControls {
+  const doc = parent.ownerDocument;
+  const el = doc.createElement('div');
+  el.className = `${PHRASE_CONTROLS_CLASS} forge-morph-controls`;
+  el.setAttribute('role', 'group');
+  el.setAttribute('aria-label', 'Morph');
+
+  const field = (label: string, ...controls: HTMLElement[]): HTMLElement => {
+    const wrap = doc.createElement('label');
+    wrap.className = 'forge-phrase-field';
+    const text = doc.createElement('span');
+    text.textContent = label;
+    wrap.appendChild(text);
+    for (const c of controls) wrap.appendChild(c);
+    el.appendChild(wrap);
+    return wrap;
+  };
+  const select = (cls: string, label: string): HTMLSelectElement => {
+    const sel = doc.createElement('select');
+    sel.className = cls;
+    sel.setAttribute('aria-label', label);
+    return sel;
+  };
+  const number = (cls: string, label: string, min: number, max?: number): HTMLInputElement => {
+    const input = doc.createElement('input');
+    input.type = 'number'; input.className = cls; input.min = String(min); input.step = '1';
+    if (max !== undefined) input.max = String(max);
+    input.setAttribute('aria-label', label);
+    return input;
+  };
+
+  const a = select('forge-morph-a', 'Bar a: where the morph starts');
+  field('Bar a', a);
+  const b = select('forge-morph-b', 'Bar b: where the morph ends');
+  field('Bar b', b);
+  const bars = number('forge-morph-bars', 'Bars: how many bars the morph is drawn in', PHRASE_BARS_MIN, PHRASE_BARS_MAX);
+  const atomic = doc.createElement('button');
+  atomic.type = 'button'; atomic.className = 'forge-morph-atomic'; atomic.textContent = 'Atomic';
+  atomic.title = 'Set Bars to the number of single-hit changes + 1, so every bar differs from the one before by exactly one hit';
+  atomic.setAttribute('aria-label', 'Atomic: one bar per single-hit change');
+  field('Bars', bars, atomic);
+  const order = select('forge-morph-order', 'Order of the single-hit changes');
+  for (const o of MORPH_ORDERS) { const opt = doc.createElement('option'); opt.value = o; opt.textContent = ORDER_LABELS[o]; order.appendChild(opt); }
+  field('Order', order);
+  const seed = number('forge-morph-seed', 'Seed: shuffles the changes (seeded order only)', 0);
+  field('Seed', seed);
+  const position = doc.createElement('input');
+  position.type = 'range'; position.className = 'forge-morph-position'; position.min = '0'; position.step = '1'; position.max = '0';
+  position.setAttribute('aria-label', 'Position: how many single-hit changes this one bar has had');
+  const positionValue = doc.createElement('span');
+  positionValue.className = 'forge-morph-position-value';
+  const positionField = field('Position', position, positionValue);
+
+  const sentence = doc.createElement('div');
+  sentence.className = 'forge-morph-sentence';
+  sentence.setAttribute('aria-live', 'polite');
+  el.appendChild(sentence);
+  const statusEl = doc.createElement('span');
+  statusEl.className = 'forge-phrase-status';
+  statusEl.setAttribute('role', 'status');
+  el.appendChild(statusEl);
+  parent.insertBefore(el, before);
+
+  let live: MorphPhrase | null = null;            // what the controls show right now (ahead of the note while the person is dragging)
+  let known: number | null = null;                // the number of single-hit changes between live.a and live.b, once asked
+  let ask = 0;
+  const fill = (sel: HTMLSelectElement, current: string): void => {
+    const names = Array.from(new Set([...ports.listBars(), current].filter((n) => n !== ''))).sort();
+    sel.textContent = '';
+    for (const n of names) { const o = doc.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); }
+    sel.value = current;
+  };
+  const paint = (p: MorphPhrase): void => {
+    bars.value = String(p.bars);
+    order.value = p.order;
+    seed.value = String(p.seed);
+    seed.disabled = p.order !== 'seeded';
+    positionField.style.display = p.bars === 1 ? '' : 'none';
+    const at = p.position ?? 0;
+    position.max = String(known ?? Math.max(at, 0));
+    position.value = String(at);
+    positionValue.textContent = known === null ? String(at) : `${at} of ${known} change${known === 1 ? '' : 's'}`;
+    sentence.textContent = morphSentence(p, known);
+  };
+  const emit = (patch: MorphPatch): void => {
+    if (!live) return;
+    const next = normalizeMorph({ ...live, ...patch });
+    const changed = (['a', 'b', 'bars', 'order', 'seed', 'position'] as const).some((k) => live![k] !== next[k]);
+    live = next;
+    paint(next);
+    if (changed) ports.onChange(patch);
+  };
+  /** How many changes lie between the two bars, again; the Position stays inside 0..d. */
+  const refresh = (): void => {
+    if (!live) return;
+    const mine = ++ask;
+    const { a: from, b: to } = live;
+    void ports.changes(from, to).then((d) => {
+      if (mine !== ask || !live || live.a !== from || live.b !== to) return;
+      known = d;
+      paint(live);
+      if (d !== null && live.bars === 1 && (live.position ?? 0) > d) emit({ position: clampMorphPosition(live.position ?? 0, d) });
+    });
+  };
+  const onNumber = (input: HTMLInputElement, make: (n: number) => MorphPatch) => () => {
+    const n = Number.parseFloat(input.value);
+    if (!Number.isFinite(n) || !live) { if (live) paint(live); return; }
+    emit(make(n));
+  };
+  bars.addEventListener('change', onNumber(bars, (n) => ({ bars: clampPhraseBars(n) })));
+  seed.addEventListener('change', onNumber(seed, (n) => ({ seed: clampMorphSeed(n) })));
+  const onPosition = onNumber(position, (n) => ({ position: clampMorphPosition(n, known ?? Number.MAX_SAFE_INTEGER) }));
+  position.addEventListener('input', onPosition);
+  position.addEventListener('change', onPosition);
+  order.addEventListener('change', () => emit({ order: order.value as MorphPhrase['order'] }));
+  a.addEventListener('change', () => { emit({ a: a.value }); refresh(); });
+  b.addEventListener('change', () => { emit({ b: b.value }); refresh(); });
+  atomic.addEventListener('click', () => {
+    if (!live) return;
+    const from = live.a; const to = live.b;
+    void ports.changes(from, to).then((d) => {
+      if (d === null || !live || live.a !== from || live.b !== to) return;
+      known = d;
+      emit({ bars: clampPhraseBars(d + 1) });
+    });
+  });
+  for (const sel of [a, b]) {
+    const refill = () => { if (live) fill(sel, sel === a ? live.a : live.b); };
+    sel.addEventListener('focus', refill);
+    sel.addEventListener('mousedown', refill);
+  }
+
+  return {
+    el,
+    set(params) {
+      live = params;
+      const off = params === null;
+      a.disabled = b.disabled = bars.disabled = atomic.disabled = order.disabled = position.disabled = off;
+      if (params) { fill(a, params.a); fill(b, params.b); seed.disabled = params.order !== 'seeded'; paint(params); refresh(); } else { seed.disabled = true; sentence.textContent = ''; }
+    },
+    setStatus(text) { statusEl.textContent = text; },
+    dispose() { ask++; el.remove(); },
+  };
+}
+
 /** M6: present = the phrase's Score is inspectable (click a bar: its lineage; the phrase bracket; the source link). Absent = exactly the M5 tab. */
 export interface PhraseInspectorPorts {
   /** Open a note by its lineage id (`phrases/phrase_001`, `bars/bar_005`): the plugin's own openers. */
@@ -365,9 +525,24 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let area: ScoreArea | null = null;
 
   /** Build the surface of one kind: its strip, (extend only) the bracket and the inspector, and the live Score. Everything is appended in that order, so after `teardown()` a rebuild lands in the same places. */
+  /** How many single-hit changes lie between two bars, read FRESH from the vault; null = a bar could not be read or is not rhythm data (the Score says why). */
+  const morphChanges = async (x: string, y: string): Promise<number | null> => {
+    try {
+      const ra = readRhythmNote(await ports.readNote(phraseSourcePath(x)));
+      const rb = readRhythmNote(await ports.readNote(phraseSourcePath(y)));
+      if (ra.ok === false || rb.ok === false) return null;
+      if (ra.value.data.steps !== rb.value.data.steps) return null;
+      return morphEditCount(ra.value.data, rb.value.data);
+    } catch {
+      return null;
+    }
+  };
   const build = (k: PhraseParams['kind']): void => {
     kind = k;
-    if (k === 'mix') {
+    if (k === 'morph') {
+      const morph = mountMorphControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
+      strip = { el: morph.el, set: (params) => morph.set(params && params.kind === 'morph' ? params : null), setStatus: (t) => morph.setStatus(t), dispose: () => morph.dispose() };
+    } else if (k === 'mix') {
       const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [] });
       strip = { el: mix.el, set: (params) => mix.set(params && params.kind === 'mix' ? params : null), setStatus: (t) => mix.setStatus(t), dispose: () => mix.dispose() };
     } else {
@@ -420,7 +595,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     area = attachScoreArea(parent, plan, {
       ...areaPorts,
       inspector: inspectorPorts,
-      debounceMs: k === 'mix' ? MIX_SCORE_DEBOUNCE_MS : undefined,
+      debounceMs: k === 'mix' || k === 'morph' ? MIX_SCORE_DEBOUNCE_MS : undefined,           // a mix and a morph are dragged (sliders): the first change draws at once, later ones collapse into one draw
       produce: (note, title) => producePhraseNote({ readNote: ports.readNote, compute: ports.compute }, note as NoteText, title),
     });
     if (bracket) wireBracket(bracket, () => (current && current.kind === 'extend' ? current : null), () => area, () => insp!.openNote(phraseNoteId(ports.path)));
@@ -472,10 +647,11 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     if (r.ok) current = r.params;
   }
 
-  async function commit(patch: Patch | MixPatch): Promise<void> {
+  async function commit(patch: Patch | MixPatch | MorphPatch): Promise<void> {
     const base = want ?? current;
     if (!base || disposed) return;
-    want = { ...base, ...patch } as PhraseParams;
+    const merged = { ...base, ...patch } as PhraseParams;
+    want = merged.kind === 'morph' ? normalizeMorph(merged) : merged;          // a morph holds a position only while Bars is 1
     if (writing) return;                                                 // the running write loop picks up `want` when it is done
     writing = true;
     try {
@@ -518,7 +694,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         return;
       }
       // the notes this phrase is made of: a mix's two bars; an extend's source bar and (M9) every fork note named in its overrides
-      const made = current === null ? [] : current.kind === 'mix' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : [phraseSourcePath(current.source), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)];
+      const made = current === null ? [] : current.kind === 'mix' || current.kind === 'morph' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : [phraseSourcePath(current.source), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)];
       if (made.includes(path)) area?.update(last);                       // a bar this phrase is made of changed: the Score is read fresh by the next render
     },
     dispose() {

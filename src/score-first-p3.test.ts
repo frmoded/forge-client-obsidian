@@ -108,7 +108,8 @@ test('MECHANISM PIN: "New bar" (command and ribbon) is registered only AFTER the
   assert.match(body, /scoreFirst = await isScoreFirstVault\(app\.vault\)/, 'the answer comes from the one profile reader');
   // M5 (drain 2026-10-22-1850), deliberate: three commands now — "New bar" and the two phrase commands — and the phrase view type; every one of them after the SAME gate.
   // M7 Phase A (drain 2026-10-22-2330), deliberate: four — "New mix from this bar" joins them, registered after the same gate.
-  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 4);
+  // M7c Phase A (drain 2026-10-24-1200), deliberate: five — "New morph from this bar" joins them, registered after the same gate.
+  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 5);
   assert.equal((body.match(/plugin\.registerView\(/g) ?? []).length, 1);
   const lastAddCommand = body.lastIndexOf('plugin.addCommand(');
   assert.ok(body.indexOf('plugin.registerView(') > check && lastAddCommand > check, 'the phrase view and commands are registered after the gate');

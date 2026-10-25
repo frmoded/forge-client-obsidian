@@ -123,3 +123,14 @@ the `<svg>` root, so a click there had no bar above it and counted as "empty spa
 extend tab, 0 of 3 in a mix tab). The phrase and mix inspectors now also select a bar by its BOX: a click whose target is under no mapped element but whose point is inside the box of a bar pins that bar (the smallest box wins; a
 drawn part still pins its own bar first; a mapped note still pins itself). A click outside every bar, and Esc, still let go. Other surfaces name no such elements and are unchanged. Evidence line, one per click:
 `[forge-pin] click <element kind> -> bar N|none (reason)`. Ghost notes are drawn whether or not anything is pinned (8 noteheads with Ghost on at weight 0.4, 4 with it off, pinned or not); pinning only colours them by parent.
+
+## A morph: n bars along an ordered path of single-hit edits (2026-10-24-1200, M7c Phase A)
+
+`phrases/phrase_NNN.md` can hold `{ "kind": "morph", "a": "bar_005", "b": "bar_006", "bars": 5, "order": "musical", "seed": 0 }` (with `"position": k` when `bars` is 1). It is a third phrase kind next to the extend and the mix; the mix
+(the weighted vote) is untouched. The engine is `morph_rhythm(a, b, bars, order, seed, position)` and `morph_rhythm_info(a, b, order, seed)` in `forge/music/lib.py`: the cells that differ between the two bars are `d` single-hit
+edits (a hit in `a` only = remove, in `b` only = add; a hit in both keeps `a`'s velocity); state `k` is `a` with the first `k` edits applied; bar `i` of `n` is state `round-half-up(i * d / (n - 1))`, so `bars = d + 1` is *atomic*
+(each bar one hit from the last). Orders: `musical` (default: removals and additions each weakest metric position first, interleaved in proportion, strong beats last), `seeded` (a shuffle driven by `seed` through a pure integer hash,
+the same in CPython and Pyodide), `by_channel`. Tempo and swing slide linearly, half up. The tab (`New morph from this bar`, same gate as `New mix from this bar`) has Bar a, Bar b, Bars with an **Atomic** button (Bars = d + 1,
+at most 64), Order, Seed (only for `seeded`) and a Position slider (only while Bars is 1: `k of d changes`), and one sentence: `Morph from bar_005 to bar_006 in 5 bars: 4 single-hit changes (musical order).` The number of
+changes `d` is the one rule mirrored in TypeScript (`morphEditCount`); a real-engine sweep pins it to the engine's own `d`. No Inspector yet (the next prompt). Evidence lines (Info): `[forge-morph] wrote …` and
+`[forge-morph] engine asked … -> bars N, d D`.

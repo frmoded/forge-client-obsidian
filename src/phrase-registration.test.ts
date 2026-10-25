@@ -17,6 +17,7 @@ const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-fi
 const NEW_PHRASE = 'new-phrase-from-bar';
 const OPEN_PHRASE = 'open-phrase-as-score';
 const NEW_MIX = 'new-mix-from-bar';
+const NEW_MORPH = 'new-morph-from-bar';
 const tick = () => new Promise((r) => setTimeout(r, 60));
 
 function appFor(toml: string | null, active: string | null) {
@@ -63,6 +64,8 @@ for (const edition of ['lean', 'music'] as const) {
     assert.equal(onBar.plugin.commands.get(NEW_PHRASE)?.name, 'New phrase from this bar');
     assert.equal(onBar.plugin.commands.get(OPEN_PHRASE)?.name, 'Open phrase as Score');
     assert.equal(onBar.plugin.commands.get(NEW_MIX)?.name, 'New mix from this bar');
+    assert.equal(onBar.plugin.commands.get(NEW_MORPH)?.name, 'New morph from this bar');
+    assert.equal(offered(onBar.plugin, NEW_MORPH), true, 'on a bar: "New morph from this bar" is offered');
     assert.ok(onBar.plugin.views.has(PHRASE_VIEW_TYPE), 'the phrase view type is registered');
     assert.equal(offered(onBar.plugin, NEW_PHRASE), true, 'on a bar: "New phrase from this bar" is offered');
     assert.equal(offered(onBar.plugin, NEW_MIX), true, 'on a bar: "New mix from this bar" is offered');
@@ -70,11 +73,13 @@ for (const edition of ['lean', 'music'] as const) {
     const onPhrase = await load(SCORE_FIRST_TOML, 'phrases/phrase_001.md');
     assert.equal(offered(onPhrase.plugin, NEW_PHRASE), false);
     assert.equal(offered(onPhrase.plugin, NEW_MIX), false, 'on a phrase: no new mix');
+    assert.equal(offered(onPhrase.plugin, NEW_MORPH), false, 'on a phrase: no new morph');
     assert.equal(offered(onPhrase.plugin, OPEN_PHRASE), true);
     for (const active of [null, 'percussion_lab/peak.md', 'bars/README.md', 'phrases/README.md']) {
       const other = await load(SCORE_FIRST_TOML, active);
       assert.equal(offered(other.plugin, NEW_PHRASE), false, `${active}: not a bar`);
       assert.equal(offered(other.plugin, NEW_MIX), false, `${active}: not a bar, no new mix`);
+      assert.equal(offered(other.plugin, NEW_MORPH), false, `${active}: not a bar, no new morph`);
       assert.equal(offered(other.plugin, OPEN_PHRASE), false, `${active}: not a phrase`);
     }
   });
@@ -85,10 +90,11 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(plugin.commands.has(NEW_PHRASE), false);
       assert.equal(plugin.commands.has(OPEN_PHRASE), false);
       assert.equal(plugin.commands.has(NEW_MIX), false, 'P3: "New mix from this bar" is absent here too');
+      assert.equal(plugin.commands.has(NEW_MORPH), false, 'P3: "New morph from this bar" is absent here too');
       assert.equal(plugin.views.has(PHRASE_VIEW_TYPE), false);
       assert.deepEqual(touched.filter((t) => /bars|phrases/.test(t)), [], 'no phrases/ handling runs');
-      assert.ok(![...plugin.commands.keys()].some((k) => /phrase|mix/i.test(k)), 'no command mentions a phrase or a mix');
-      assert.ok(![...plugin.commands.values()].some((c) => /phrase|mix/i.test(String(c.name))), 'no command is NAMED for a phrase or a mix');
+      assert.ok(![...plugin.commands.keys()].some((k) => /phrase|mix|morph/i.test(k)), 'no command mentions a phrase, a mix or a morph');
+      assert.ok(![...plugin.commands.values()].some((c) => /phrase|mix|morph/i.test(String(c.name))), 'no command is NAMED for a phrase, a mix or a morph');
     });
   }
 
@@ -148,10 +154,39 @@ for (const edition of ['lean', 'music'] as const) {
     assert.ok(notices().slice(before).some((n: string) => /only one bar/i.test(n)), 'a Notice says there is only one bar');
   });
 
+  test(`[${edition}] running "New morph from this bar" on the real wiring: it creates phrases/phrase_001.md as a morph from THIS bar to the first other bar (5 bars, musical order, seed 0), and opens it in a phrase tab; with one bar it says so`, async () => {
+    const { plugin, app } = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
+    const created: Array<{ path: string; content: string }> = []; const folders: string[] = []; const states: Array<{ how: string; state: any }> = [];
+    const leaf = (how: string) => ({ setViewState: async (state: any) => { states.push({ how, state }); } });
+    const file = (p: string) => ({ path: p, basename: path.basename(p, '.md') });
+    let bars = ['bars/bar_005.md', 'bars/bar_006.md', 'bars/bar_002.md', 'bars/README.md'];
+    Object.assign(app.vault, {
+      getFiles: () => bars.map(file),
+      createFolder: async (p: string) => { folders.push(p); },
+      create: async (p: string, content: string) => { created.push({ path: p, content }); return file(p); },
+    });
+    Object.assign(app.workspace, { getLeaf: (newTab: boolean) => leaf(newTab ? 'new-tab' : 'this-tab'), revealLeaf: () => {} });
+    plugin.commands.get(NEW_MORPH)!.checkCallback!(false);
+    await tick();
+    assert.deepEqual(folders, ['phrases']);
+    assert.equal(created.length, 1);
+    assert.equal(created[0].path, 'phrases/phrase_001.md');
+    assert.match(created[0].content, /"kind": "morph",\n  "a": "bar_005",\n  "b": "bar_002",\n  "bars": 5,\n  "order": "musical",\n  "seed": 0\n/);
+    assert.deepEqual(states.map((s) => [s.how, s.state.type, s.state.state.file]), [['new-tab', PHRASE_VIEW_TYPE, 'phrases/phrase_001.md']]);
+    bars = ['bars/bar_005.md']; created.length = 0; states.length = 0;
+    const notices = () => ((globalThis as any).__shimConstructed ?? []).filter((c: any) => c[0] === 'Notice').map((c: any) => String(c[1][0]));
+    const before = notices().length;
+    plugin.commands.get(NEW_MORPH)!.checkCallback!(false);
+    await tick();
+    assert.match(created[0].content, /"a": "bar_005",\n  "b": "bar_005"/);
+    assert.ok(notices().slice(before).some((n: string) => /only one bar/i.test(n)), 'a Notice says there is only one bar');
+  });
+
   test(`[${edition}] non-vacuity: the same onload in a score-first vault DOES register them (so the P3 assertions above can fail)`, async () => {
     const { plugin } = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
     assert.equal(plugin.commands.has(NEW_PHRASE), true);
     assert.equal(plugin.commands.has(NEW_MIX), true);
+    assert.equal(plugin.commands.has(NEW_MORPH), true);
   });
 }
 

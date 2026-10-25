@@ -1960,6 +1960,25 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   font-size: var(--font-ui-smaller);
 }
 
+/* score_first M7c Phase A — the morph strip: two bar dropdowns, Bars with its Atomic button, Order, Seed (only for the seeded order), a Position slider (only while Bars is 1) and the sentence on its own line. */
+.forge-morph-controls .forge-morph-bars,
+.forge-morph-controls .forge-morph-seed {
+  width: 5em;
+}
+.forge-morph-controls .forge-morph-position {
+  width: 9em;
+}
+.forge-morph-position-value {
+  min-width: 6.5em;
+  font-variant-numeric: tabular-nums;
+}
+.forge-morph-sentence {
+  order: 9;
+  flex: 1 0 100%;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
 /* score_first M9 — the Edit this bar / Revert to generated button in a phrase's Inspector */
 .forge-inspector-action button.forge-inspector-action-button {
   margin-top: 2px;

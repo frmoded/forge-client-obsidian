@@ -1,8 +1,10 @@
-// score_first M5 (drain 2026-10-22-1850) — phrases: a bar stretched into n bars, with an optional ritardando or accelerando. M7 Phase A (drain 2026-10-22-2330) adds the second kind, a MIX.
+// score_first M5 (drain 2026-10-22-1850) — phrases: a bar stretched into n bars, with an optional ritardando or accelerando. M7 Phase A (drain 2026-10-22-2330) adds the second kind, a MIX; M7c Phase A
+// (drain 2026-10-24-1200) the third, a MORPH.
 //
 // A phrase is a DATA NOTE in `phrases/` that holds only parameters, never bars:
 //   { "kind": "extend", "source": "bar_005", "bars": 8, "style": "repeat_with_fills", "tempo_change_pct": -20 }
 //   { "kind": "mix", "a": "bar_005", "b": "bar_006", "weight": 0.5, "threshold": 0.5, "ghost": false }
+//   { "kind": "morph", "a": "bar_005", "b": "bar_006", "bars": 5, "order": "musical", "seed": 0 }          (bars = 1 also holds a "position")
 // The Score it shows is DERIVED (P4, P6): an extend's source bar goes through the engine's `extend_rhythm` and `rhythm_bars_to_stream`; a mix's two bars go through `mix_rhythm` (one bar that is a
 // weighted mix of them) and the same `rhythm_bars_to_stream`. Nothing here is stored but those fields.
 //
@@ -62,7 +64,25 @@ export interface MixPhrase {
   ghost: boolean;
 }
 
-export type PhraseParams = ExtendPhrase | MixPhrase;
+/** A morph (M7c): `bars` bars along an ordered path of single-hit edits from bar `a` to bar `b` (`morph_rhythm` in forge/music/lib.py). `order` is the order of the edits, `seed` drives "seeded"; with bars = 1 the
+ *  `position` (0..d) picks which state of the path is the one bar. */
+export interface MorphPhrase {
+  kind: 'morph';
+  a: string;
+  b: string;
+  bars: number;
+  order: MorphOrder;
+  seed: number;
+  /** Only when bars = 1. */
+  position?: number;
+}
+
+export const MORPH_ORDERS = ['musical', 'seeded', 'by_channel'] as const;
+export type MorphOrder = typeof MORPH_ORDERS[number];
+export const MORPH_DEFAULTS = { bars: 5, order: 'musical' as MorphOrder, seed: 0 };
+export const MORPH_KEYS = ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position'] as const;
+
+export type PhraseParams = ExtendPhrase | MixPhrase | MorphPhrase;
 
 /** The two bars a mix reads, as the engine gets them. */
 export interface MixBars { a: RhythmData; b: RhythmData }
@@ -83,7 +103,8 @@ export function validatePhrase(raw: unknown): Validation<PhraseParams> {
   const bad = (message: string): Validation<PhraseParams> => ({ ok: false, message });
   if (!isPlainObject(raw)) return bad('The phrase must be an object.');
   if (raw.kind === 'mix') return validateMix(raw);
-  if (raw.kind !== 'extend') return bad(`kind must be "extend" or "mix", got ${JSON.stringify(raw.kind)}.`);
+  if (raw.kind === 'morph') return validateMorph(raw);
+  if (raw.kind !== 'extend') return bad(`kind must be "extend", "mix" or "morph", got ${JSON.stringify(raw.kind)}.`);
   for (const key of Object.keys(raw)) {
     if (!(PHRASE_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a phrase holds only ${PHRASE_KEYS.join(', ')}).`);
   }
@@ -150,6 +171,64 @@ function validateMix(raw: Record<string, unknown>): Validation<PhraseParams> {
   return { ok: true, value: { kind: 'mix', a: raw.a as string, b: raw.b as string, weight, threshold, ghost } };
 }
 
+function validateMorph(raw: Record<string, unknown>): Validation<PhraseParams> {
+  const bad = (message: string): Validation<PhraseParams> => ({ ok: false, message });
+  for (const key of Object.keys(raw)) {
+    if (!(MORPH_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a morph holds only ${MORPH_KEYS.join(', ')}).`);
+  }
+  for (const field of ['a', 'b'] as const) {
+    const problem = barNameProblem(field, raw[field]);
+    if (problem) return bad(problem);
+  }
+  const bars = raw.bars === undefined ? MORPH_DEFAULTS.bars : raw.bars;
+  if (typeof bars !== 'number' || !Number.isInteger(bars) || bars < PHRASE_BARS_MIN || bars > PHRASE_BARS_MAX) {
+    return bad(`bars must be a whole number from ${PHRASE_BARS_MIN} to ${PHRASE_BARS_MAX}, got ${JSON.stringify(raw.bars)}.`);
+  }
+  const order = raw.order === undefined ? MORPH_DEFAULTS.order : raw.order;
+  if (typeof order !== 'string' || !(MORPH_ORDERS as readonly string[]).includes(order)) {
+    return bad(`order must be one of ${MORPH_ORDERS.join(', ')}, got ${JSON.stringify(raw.order)}.`);
+  }
+  const seed = raw.seed === undefined ? MORPH_DEFAULTS.seed : raw.seed;
+  if (typeof seed !== 'number' || !Number.isSafeInteger(seed) || seed < 0) return bad(`seed must be a whole number, 0 or more, got ${JSON.stringify(raw.seed)}.`);
+  const position = raw.position;
+  if (bars === 1) {
+    if (position === undefined) return bad('position is needed when bars is 1 (a whole number from 0 up to the number of single-hit changes).');
+    if (typeof position !== 'number' || !Number.isSafeInteger(position) || position < 0) return bad(`position must be a whole number, 0 or more, got ${JSON.stringify(position)}.`);
+  } else if (position !== undefined) {
+    return bad('position only applies when bars is 1.');
+  }
+  return { ok: true, value: { kind: 'morph', a: raw.a as string, b: raw.b as string, bars, order: order as MorphOrder, seed, ...(bars === 1 ? { position: position as number } : {}) } };
+}
+
+/** What the morph strip writes: the position only while bars = 1 (0 when it was not there), never otherwise. Pure; the strip and the write both go through it, so a note never holds a position it ignores. */
+export function normalizeMorph(p: MorphPhrase): MorphPhrase {
+  const { position, ...rest } = p;
+  return p.bars === 1 ? { ...rest, position: position ?? 0 } : rest;
+}
+/** The seed the strip writes: a whole number, 0 or more. Anything that is not a number is 0. */
+export function clampMorphSeed(n: number): number {
+  if (typeof n !== 'number' || Number.isNaN(n)) return MORPH_DEFAULTS.seed;
+  return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.round(n)));
+}
+/** The position the strip writes: a whole number from 0 to the number of changes (`d`). */
+export function clampMorphPosition(n: number, d: number): number {
+  if (typeof n !== 'number' || Number.isNaN(n)) return 0;
+  return Math.min(Math.max(0, Math.round(d)), Math.max(0, Math.round(n)));
+}
+
+/** How many single-hit edits turn bar `a` into bar `b`: the cells (channel, step) that have a hit in exactly one of them. The ENGINE decides the order and applies them (`morph_rhythm_info`); this count is
+ *  the one rule mirrored here (so "Atomic" and the Position slider need no engine call), and a real-engine sweep (phrase-morph-engine.test.ts) pins it to the engine's own `d`. */
+export function morphEditCount(a: RhythmData, b: RhythmData): number {
+  const hit = (v: unknown): boolean => v !== false && v !== 0 && v !== null && v !== undefined;
+  const names = Array.from(new Set([...Object.keys(a.channels), ...Object.keys(b.channels)]));
+  let d = 0;
+  for (const name of names) {
+    const ra = a.channels[name] as unknown[] | undefined; const rb = b.channels[name] as unknown[] | undefined;
+    for (let i = 0; i < a.steps; i++) if (hit(ra?.[i]) !== hit(rb?.[i])) d++;
+  }
+  return d;
+}
+
 /** What the control strip writes: bars as a whole number in range, the percentage in range. Anything that is not a number is the default. */
 export function clampPhraseBars(n: number): number {
   if (typeof n !== 'number' || Number.isNaN(n)) return PHRASE_DEFAULTS.bars;
@@ -168,7 +247,7 @@ export function readPhraseKind(text: string): PhraseParams['kind'] | null {
   if (block.ok === false) return null;
   try {
     const kind = (JSON.parse(text.slice(block.contentStart, block.contentEnd)) as { kind?: unknown } | null)?.kind;
-    return kind === 'mix' || kind === 'extend' ? kind : null;
+    return kind === 'mix' || kind === 'extend' || kind === 'morph' ? kind : null;
   } catch {
     return null;
   }
@@ -185,6 +264,20 @@ export function mixSentence(p: MixPhrase): string {
   const bars = p.a === p.b ? `${p.a} and itself` : `${p.a} and ${p.b}`;
   const base = `Mix of ${bars}: ${Math.round(p.weight * 100)} % ${p.a}; a hit appears where the weights say it should (threshold ${p.threshold.toFixed(2)}).`;
   return p.ghost ? `${base} Ghost notes: quiet extra hits where the weights come close.` : base;
+}
+
+const ORDER_WORDS: Record<MorphOrder, string> = { musical: 'musical order', seeded: 'seeded order', by_channel: 'by-channel order' };
+/** The one line under the morph strip, with the numbers that are on the controls. `d` = the number of single-hit changes between the two bars, `null` while it is not known yet (then the line leaves it out). */
+export function morphSentence(p: MorphPhrase, d: number | null): string {
+  const order = p.order === 'seeded' ? `${ORDER_WORDS.seeded}, seed ${p.seed}` : ORDER_WORDS[p.order];
+  const changes = (n: number): string => `${n} single-hit change${n === 1 ? '' : 's'}`;
+  const from = `Morph from ${p.a} to ${p.b}`;
+  if (p.bars === 1) {
+    const at = p.position ?? 0;
+    return d === null ? `${from}: one bar, at step ${at} (${order}).` : `${from}: one bar, after ${at} of ${changes(d)} (${order}).`;
+  }
+  const bars = `${p.bars} bars`;
+  return d === null ? `${from} in ${bars} (${order}).` : `${from} in ${bars}: ${changes(d)} (${order}).`;
 }
 
 /** A phrase note's text -> its parameters. The note must be an editable (not read_only) `type: data`, `content_type: json` note holding exactly one json block. */
@@ -215,6 +308,19 @@ export function formatPhraseJson(p: PhraseParams): string {
       `  "weight": ${p.weight},`,
       `  "threshold": ${p.threshold},`,
       `  "ghost": ${p.ghost}`,
+      '}',
+    ].join('\n');
+  }
+  if (p.kind === 'morph') {
+    return [
+      '{',
+      `  "kind": "morph",`,
+      `  "a": ${JSON.stringify(p.a)},`,
+      `  "b": ${JSON.stringify(p.b)},`,
+      `  "bars": ${p.bars},`,
+      `  "order": ${JSON.stringify(p.order)},`,
+      `  "seed": ${p.seed}${p.position !== undefined ? ',' : ''}`,
+      ...(p.position !== undefined ? [`  "position": ${p.position}`] : []),
       '}',
     ].join('\n');
   }
@@ -268,6 +374,23 @@ export function mixNoteContent(name: string, a: string, b: string): string {
     'type: data',
     'content_type: json',
     `description: ${JSON.stringify(`${name} — a mix of ${a} and ${b}. Parameters only; the Score is derived from the two bars.`)}`,
+    '---',
+    '',
+    '```json',
+    formatPhraseJson(p),
+    '```',
+    '',
+  ].join('\n');
+}
+
+/** The starter content of a new morph: the defaults, the two bars named. */
+export function morphNoteContent(name: string, a: string, b: string): string {
+  const p: MorphPhrase = { kind: 'morph', a, b, ...MORPH_DEFAULTS };
+  return [
+    '---',
+    'type: data',
+    'content_type: json',
+    `description: ${JSON.stringify(`${name} — a morph from ${a} to ${b}, one single-hit change at a time. Parameters only; the Score is derived from the two bars.`)}`,
     '---',
     '',
     '```json',
@@ -352,6 +475,22 @@ export function planNewMix(input: { activePath: string | null | undefined; exist
   return plan;
 }
 
+/** Is "New morph from this bar" offered? Under exactly the conditions of "New mix from this bar": a score-first vault, and the active file is a bar. */
+export function newMorphAvailable(input: { scoreFirst: boolean; activePath: string | null | undefined }): boolean {
+  return newPhraseAvailable(input);
+}
+
+/** "New morph from this bar": `a` is the bar you are on, `b` the first OTHER bar by number (or the same bar, with a notice saying there is only one). */
+export function planNewMorph(input: { activePath: string | null | undefined; existingBasenames: Iterable<string>; exists: (path: string) => boolean; barBasenames: Iterable<string>; attempts?: number }): NewPhrasePlan {
+  const a = sourceBarName(input.activePath);
+  if (a === null) return { ok: false, message: `New morph: open a bar from ${BAR_FOLDER}/ first (the note you are on is not a bar).` };
+  const others = [...input.barBasenames].filter((n) => BAR_NAME.test(n) && n !== a).sort((x, y) => Number(BAR_NAME.exec(x)![1]) - Number(BAR_NAME.exec(y)![1]));
+  const b = others.length > 0 ? others[0] : a;
+  const plan = planPhraseNote(input, (name) => morphNoteContent(name, a, b));
+  if (plan.ok && b === a) return { ...plan, notice: `There is only one bar in ${BAR_FOLDER}/ (${a}), so this morph is ${a} to itself. Make another bar, then pick it in the b list.` };
+  return plan;
+}
+
 export interface NewPhrasePorts<F> {
   /** The path of the note the person is on right now. */
   activePath(): string | null;
@@ -410,6 +549,15 @@ export function createNewPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewPhraseR
   return createPhraseNote(ports, { fn: 'createNewPhrase', noun: 'phrase', plan: (existingBasenames, exists) => planNewPhrase({ activePath: ports.activePath(), existingBasenames, exists }) });
 }
 
+/** The whole "New morph from this bar" action: the same loop, the note is a morph from this bar to the first other one. */
+export function createNewMorph<F>(ports: NewMixPorts<F>): Promise<NewPhraseResult> {
+  return createPhraseNote(ports, {
+    fn: 'createNewMorph',
+    noun: 'morph',
+    plan: (existingBasenames, exists) => planNewMorph({ activePath: ports.activePath(), existingBasenames, exists, barBasenames: ports.listBarBasenames() }),
+  });
+}
+
 /** The whole "New mix from this bar" action: the same loop, the note is a mix of this bar and the first other one. */
 export function createNewMix<F>(ports: NewMixPorts<F>): Promise<NewPhraseResult> {
   return createPhraseNote(ports, {
@@ -434,6 +582,7 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
   if (valid.ok === false) return { kind: 'refusal', message: `Phrase: ${valid.message}` };
   const params = valid.value;
   if (params.kind === 'mix') return produceMix(deps, params, title);
+  if (params.kind === 'morph') return produceMorph(deps, params, title);
   const path = phraseSourcePath(params.source);
   let text: string;
   try {
@@ -500,6 +649,61 @@ export function mixTraceEngine(p: PhraseParams, payload: unknown): string | null
   const notes = (xml: unknown): number => (typeof xml === 'string' ? (xml.match(/<note[ >\/]/g) ?? []).length : 0);
   if (typeof r.multi_staff_content === 'string' && typeof r.kit_content === 'string') return `${head} notes: multi-staff ${notes(r.multi_staff_content)}, kit ${notes(r.kit_content)}`;
   return `${head} notes: single score ${notes(r.content)}`;
+}
+
+/** Evidence lines for the morph (M7c): what was written, and what the engine returned. The Score is the bars along the path, so the engine line says how many bars were drawn and how many single-hit changes (d) lie between a and b. */
+const morphFields = (p: MorphPhrase): string => `a=${p.a} b=${p.b} bars=${p.bars} order=${p.order} seed=${p.seed}${p.position !== undefined ? ` position=${p.position}` : ''}`;
+export function morphTraceWritten(p: PhraseParams): string | null {
+  return p.kind === 'morph' ? `[forge-morph] wrote ${morphFields(p)}` : null;
+}
+export function morphTraceEngine(p: PhraseParams, payload: unknown): string | null {
+  if (p.kind !== 'morph') return null;
+  const head = `[forge-morph] engine asked ${morphFields(p)} ->`;
+  const info = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>).morph_info : null;
+  if (typeof info !== 'object' || info === null) return `${head} no morph info`;
+  const i = info as Record<string, unknown>;
+  return `${head} bars ${typeof i.bars === 'number' ? i.bars : '?'}, d ${typeof i.d === 'number' ? i.d : '?'}`;
+}
+
+/** The engine's own `morph_rhythm: …` line out of an error (Pyodide hands a Python ValueError over as the whole traceback, whose last line is `ValueError: morph_rhythm: …`). `null` = not a morph_rhythm refusal. */
+export function morphRhythmRefusal(message: string): string | null {
+  const m = /(?:^|\n)(?:ValueError: )?(morph_rhythm: [^\n]*?)\s*$/.exec(message.trim());
+  return m ? m[1] : null;
+}
+
+/** The Score of a morph: both bars read FRESH (one read per distinct bar), then the engine's `morph_rhythm` + `rhythm_bars_to_stream`. A missing or unusable bar is a refusal naming which one (a or b); the engine's own
+ *  `morph_rhythm` ValueError (two bars on different grids, a position past the last change) is a refusal line too — the person's data, not a fault. */
+async function produceMorph(deps: PhraseScoreDeps, params: MorphPhrase, title: string): Promise<ScoreOutcome> {
+  const reads = new Map<string, string>();
+  const bars = {} as Record<'a' | 'b', RhythmData>;
+  for (const side of ['a', 'b'] as const) {
+    const name = params[side];
+    const path = phraseSourcePath(name);
+    let text = reads.get(path);
+    if (text === undefined) {
+      try {
+        text = await deps.readNote(path);
+      } catch (e) {
+        return { kind: 'refusal', message: `Phrase: the bar for ${side}, ${name} (${path}), was not found or could not be read (${(e as Error)?.message ?? e}).` };
+      }
+      reads.set(path, text);
+    }
+    const bar = readRhythmNote(text);
+    if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the bar for ${side}, ${name}, is not usable: ${bar.message}` };
+    bars[side] = bar.value.data;
+  }
+  let refused: string | null = null;
+  const outcome = await computeScore(async (_data, t) => {
+    try {
+      return await deps.compute({ a: bars.a, b: bars.b }, params, t);
+    } catch (e) {
+      const line = morphRhythmRefusal((e as Error)?.message ?? String(e));
+      if (line !== null) { refused = line; return null; }
+      throw e;
+    }
+  }, bars.a, title);
+  if (refused !== null) return { kind: 'refusal', message: `Phrase: ${refused}` };
+  return outcome;
 }
 
 /** M8: the mix Inspector's evidence line — the bar and how many hits it tied to the two bars, or why it could not map the Score (the same reason the Inspector shows). */

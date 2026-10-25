@@ -43,9 +43,11 @@ test('MECHANISM PIN: the phrase tab prints the three lines — after a successfu
   const fs = await import('node:fs');
   const path = await import('node:path');
   const view = fs.readFileSync(path.join(import.meta.dirname, 'phrase-view.ts'), 'utf8');
-  assert.match(view, /if \(refusal === null\) trace\(mixTraceWritten\(params\)\);/);
+  // M7c Phase A (drain 2026-10-24-1200), deliberate: the write path prints the morph's line beside the mix's (each formatter is null for the other kinds)
+  assert.match(view, /if \(refusal === null\) \{ trace\(mixTraceWritten\(params\)\); trace\(morphTraceWritten\(params\)\); \}/);
   assert.match(view, /if \(p === file\.path\) trace\(mixTraceRead\(text\)\);/);
   assert.match(view, /trace\(mixTraceEngine\(params, payload\)\);/);
+  assert.match(view, /trace\(morphTraceEngine\(params, payload\)\);/);
   assert.match(view, /if \(line\) console\.info\(line\)/);
 });
 
