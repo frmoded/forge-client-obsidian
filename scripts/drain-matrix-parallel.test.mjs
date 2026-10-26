@@ -102,7 +102,7 @@ test('the music edition, the lean edition and the forge pytest leg run AT THE SA
     assert.match(r.out, /== client legs: music and lean at the same time/);
     assert.match(r.out, /music: tests 3, pass 3, fail 0, skipped 0/);
     assert.match(r.out, /lean: tests 3, pass 3, fail 0, skipped 0/);
-    assert.match(r.out, /forge: pytest tests\/music: passed 1, failed 0, errors 0, skipped 0 \(ceiling 40\)/);
+    assert.match(r.out, /forge: pytest tests\/music: passed 1, failed 0, errors 0, skipped 0 \(ceiling 10\)/);
     assert.match(r.out, /Engine-bundle drift check: clean/);
     assert.match(r.out, /Bundled-vault bump check passed/);
     assert.match(r.out, /MATRIX GREEN: both editions, 0 failed, 0 skipped, forge pytest green/);

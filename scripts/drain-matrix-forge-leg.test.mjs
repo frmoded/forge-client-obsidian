@@ -66,7 +66,7 @@ test('--forge-only on a green forge: the leg runs the committed tests, prints th
     const r = matrix(p, ['--forge-only']);
     assert.equal(r.status, 0, r.out + r.err);
     assert.match(r.out, /forge pytest: tests\/music \(forced by --forge\)/);
-    assert.match(r.out, /forge: pytest tests\/music: passed 1, failed 0, errors 0, skipped 0 \(ceiling 40\)/);
+    assert.match(r.out, /forge: pytest tests\/music: passed 1, failed 0, errors 0, skipped 0 \(ceiling 10\)/);
     assert.match(r.out, /FORGE LEG GREEN/);
   } finally { p.done(); }
 });
