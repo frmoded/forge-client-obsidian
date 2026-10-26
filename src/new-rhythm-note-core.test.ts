@@ -268,7 +268,7 @@ test('mechanism pin: the plugin gives the dialog the Beat Box opener (registerRh
   assert.match(main, /this\.rhythmEdit = registerRhythmEdit\(this, \{/);
   assert.match(main, /openRhythmNote: \(file, leaf\) => this\.rhythmEdit\?\.openRhythmNote\(file, leaf\) \?\? Promise\.resolve\(\)/);
   const view = read('rhythm-edit-view.ts');
-  assert.match(view, /return \{ openRhythmNote: \(file: TFile, from\?: WorkspaceLeaf \| null\) => openRhythmEditor\(app, file, hooks, from\) \};/);
+  assert.match(view, /return \{ openRhythmNote: \(file: TFile, from\?: WorkspaceLeaf \| null\) => openRhythmEditor\(app, file, hooks, from\), markAsText: /);   // 2026-10-26-1250 (M12), deliberate: the handle also carries markAsText
 });
 
 test('the binary branch is untouched by the choice: a rhythm choice never reaches submitBinary', () => {
