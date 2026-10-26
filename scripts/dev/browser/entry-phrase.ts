@@ -5,6 +5,7 @@ import { musicEdition } from '@client/music-edition.full.ts';        // the musi
 import { renderMusicXMLAndMIDI } from '@client/verovio.ts';
 import { messageDelivery } from '@client/score-first-messages-core.ts';
 import { scoreClickPlays } from '@client/score-click-policy.ts';
+import { SCORE_ZOOM_LEVELS, createZoomMemory } from '@client/zoom-memory-core.ts';
 
 const proto: any = HTMLElement.prototype;         // the Obsidian DOM helpers the music edition's renderer uses
 const apply = (el: HTMLElement, o: any) => {
@@ -23,7 +24,9 @@ proto.removeClass = function (c: string) { this.classList.remove(c); };
 proto.toggleClass = function (c: string, on: boolean) { this.classList.toggle(c, !!on); };
 proto.setText = function (t: string) { this.textContent = t; };
 
-(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; plan?: 'score' | 'lean-note'; path?: string; bars?: Record<string, string>; name?: string }) => {
+(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; plan?: 'score' | 'lean-note'; path?: string; bars?: Record<string, string>; name?: string; noZoomMemory?: boolean }) => {
+  // 2026-10-26-1100: the zoom a tab keeps across its redraws, as the phrase view gives it; `noZoomMemory` is the red run (every redraw back to 100%, as before)
+  const zoom = opts.noZoomMemory ? undefined : createZoomMemory(SCORE_ZOOM_LEVELS, 1.0);
   const PATH = opts.path ?? 'phrases/phrase_001.md';
   const NAME = opts.name ?? 'phrase_001';
   const files = new Map<string, string>([[PATH, opts.phrase], ['bars/bar_005.md', opts.bar]]);
@@ -60,7 +63,7 @@ proto.setText = function (t: string) { this.textContent = t; };
       notify: (m) => { ((window as any).__notices ??= []).push(m); },
       isAlreadyExists: () => false,
     },   // M6: the lineage links, the bracket and the source link report which note they would open
-    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME, { clickToPlay: scoreClickPlays }),
+    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME, { clickToPlay: scoreClickPlays, zoom, trace: (line) => { ((window as any).__follower ??= []).push(line); } }),
     stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (h) => window.clearTimeout(h as number),

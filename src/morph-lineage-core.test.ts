@@ -266,12 +266,12 @@ test('the stack of a bar: its place, who made it, its step, the two bars (links)
   const { map } = mapFor();
   assert.deepEqual(texts('ph_bar_3', map), [
     'bar 3 of 5', 'made by phrase_004 (morph bar_005 -> bar_006, musical order)', 'step 2 of 4 single-hit changes applied', 'from bar_005', 'from bar_006', 'tempo 110', 'removed kick at step 3',
-    '▲ only bar_005 (not changed yet) · ■ only bar_006 (already changed) · ● both bars', 'Edit this bar',
+    '▲ only bar_005 (not changed yet) · ■ only bar_006 (already changed) · ● both bars · # steps count from 1: step 1 is the first position of the bar', 'Edit this bar',
   ]);
   const stack = morphLineageOf(map.ph_bar_3);
   assert.deepEqual(stack.filter((l) => l.noteId).map((l) => [l.noteId, l.openLabel]), [['phrases/phrase_004', 'Open phrase_004'], ['bars/bar_005', 'Open bar_005'], ['bars/bar_006', 'Open bar_006']]);
   assert.deepEqual(stack.find((l) => l.action)?.action, { id: 'fork', barNumber: 3 });
-  assert.equal(stack.find((l) => l.kind === 'legend')?.legend?.length, 3);
+  assert.equal(stack.find((l) => l.kind === 'legend')?.legend?.length, 4);   // 2026-10-26-1100: three marks and the steps-count-from-1 item
   assert.deepEqual(stack.filter((l) => l.covers).map((l) => [l.text.slice(0, 12), l.covers]), [['bar 3 of 5', 'self'], ['made by phra', 'all'], ['step 2 of 4 ', 'self'], ['tempo 110', 'self'], ['removed kick', 'self']]);
   assert.equal(texts('ph_bar_1', map)[6], 'unchanged: this is bar_005');
   assert.equal(texts('ph_bar_5', map)[6], 'removed snare at step 7; this is bar_006');
@@ -315,9 +315,10 @@ test('a forked bar\'s stack: forked, who made it, the fork\'s own tempo, Revert 
   assert.equal(texts('ph_bar_1', same.map)[3], 'from bar_005 (both ends of the morph)');
 });
 
-test('the legend: three marks with the colours of the mix, in the morph\'s words', () => {
+test('the legend: three marks with the colours of the mix, in the morph\'s words, and (2026-10-26-1100, deliberate) a fourth item saying steps count from 1', () => {
   const l = morphLegend('bar_005', 'bar_006');
-  assert.deepEqual(l.legend?.map((x) => [x.mark, x.colour]), [['▲', '#1b6ec2'], ['■', '#d9730d'], ['●', '#6a3d9a']]);
+  assert.deepEqual(l.legend?.slice(0, 3).map((x) => [x.mark, x.colour]), [['▲', '#1b6ec2'], ['■', '#d9730d'], ['●', '#6a3d9a']]);
+  assert.equal(l.legend?.length, 4);
   assert.equal(l.kind, 'legend');
 });
 

@@ -208,6 +208,8 @@ export function morphLegend(a: string, b: string): LineageEntry {
     { mark: MORPH_MARKS.a, colour: MORPH_COLOURS.a, text: `only ${a} (not changed yet)` },
     { mark: MORPH_MARKS.b, colour: MORPH_COLOURS.b, text: `only ${b} (already changed)` },
     { mark: MORPH_MARKS.both, colour: MORPH_COLOURS.both, text: 'both bars' },
+    // 2026-10-26-1100: the named changes count grid positions from 1 and the Beat Box shows no numbers, so the legend (which every stack carries) says so once
+    { mark: '#', colour: '#666666', text: 'steps count from 1: step 1 is the first position of the bar' },
   ];
   return { kind: 'legend', text: legend.map((l) => `${l.mark} ${l.text}`).join(' · '), legend };
 }

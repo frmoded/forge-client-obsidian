@@ -148,12 +148,36 @@ function validateOverrides(raw: unknown, bars: number): Record<string, string> |
   if (keys.length === 0) return undefined;
   const out: Record<string, string> = {};
   for (const key of keys.sort((x, y) => Number(x) - Number(y))) {
-    if (!/^[1-9]\d*$/.test(key) || Number(key) > bars) return `overrides: "${key}" is not a bar of this phrase (bars 1 to ${bars}).`;
+    if (!/^[1-9]\d*$/.test(key)) return `overrides: "${key}" is not a bar of this phrase (bars 1 to ${bars}).`;
+    // 2026-10-26-1100: the way out is in the line (the person lowered Bars below a fork: raise it again, or let the fork go)
+    if (Number(key) > bars) return `overrides: "${key}" is not a bar of this phrase (bars 1 to ${bars}); raise Bars, or remove the override with Revert to generated.`;
     const v = raw[key];
     if (typeof v !== 'string' || !OVERRIDE_NOTE.test(v)) return `overrides: bar ${key} must name a bar note like bars/bar_009 (no .md), got ${JSON.stringify(v)}.`;
     out[key] = v;
   }
   return out;
+}
+
+/** The trap of 2026-10-26-1100: a phrase whose ONLY problem is a fork on a bar past Bars (the person lowered Bars below it) can be fixed from the strip by raising Bars, so the strip must stay live for it. Returns the phrase
+ *  WITHOUT the faulty overrides (what the strip shows), the phrase WITH them (what every write keeps: raising Bars loses no fork) and the refusal line; \`null\` for everything else (a valid phrase, another problem, another kind). */
+export function salvageOverrideRefusal(text: string): { shown: ExtendPhrase | MorphPhrase; keep: ExtendPhrase | MorphPhrase; message: string } | null {
+  const block = extractJsonBlock(text);
+  if (block.ok === false || !parseFrontmatter(text)) return null;
+  let raw: unknown;
+  try { raw = JSON.parse(text.slice(block.contentStart, block.contentEnd)); } catch { return null; }
+  if (!isPlainObject(raw) || (raw.kind !== 'extend' && raw.kind !== 'morph') || !isPlainObject(raw.overrides)) return null;
+  const refused = validatePhrase(raw);
+  if (refused.ok === true) return null;
+  if (!/^overrides: "[1-9]\d*" is not a bar of this phrase \(bars 1 to \d+\); raise Bars/.test(refused.message)) return null;
+  const { overrides, ...rest } = raw;
+  const without = validatePhrase(rest);
+  if (without.ok === false || (without.value.kind !== 'extend' && without.value.kind !== 'morph')) return null;
+  const kept: Record<string, string> = {};
+  for (const key of Object.keys(overrides).sort((x, y) => Number(x) - Number(y))) {
+    if (!/^[1-9]\d*$/.test(key) || typeof overrides[key] !== 'string' || !OVERRIDE_NOTE.test(overrides[key] as string)) return null;      // another problem hides behind the first: raising Bars alone would not fix it
+    kept[key] = overrides[key] as string;
+  }
+  return { shown: without.value, keep: { ...without.value, overrides: kept }, message: refused.message };
 }
 
 function barNameProblem(field: string, v: unknown): string | null {

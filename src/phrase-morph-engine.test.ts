@@ -200,7 +200,7 @@ test('PHASE B on the real engine: the 5-bar atomic bar_005 -> bar_006 Score is t
   assert.match((r.payload.kit_content as string), /id="ph_bar_5"/, 'the Kit view still pins a bar');
   assert.deepEqual(texts(r.map, 'ph_bar_3'), [
     'bar 3 of 5', 'made by phrase_004 (morph bar_005 -> bar_006, musical order)', 'step 2 of 4 single-hit changes applied', 'from bar_005', 'from bar_006', 'tempo 100', 'removed kick at step 3',
-    '▲ only bar_005 (not changed yet) · ■ only bar_006 (already changed) · ● both bars', 'Edit this bar',
+    '▲ only bar_005 (not changed yet) · ■ only bar_006 (already changed) · ● both bars · # steps count from 1: step 1 is the first position of the bar', 'Edit this bar',
   ]);
   assert.equal(texts(r.map, 'mo2_kick_2')[0], 'this hit: from bar_005 only (removed in bar 3)');
   assert.equal(texts(r.map, 'mo5_kick_8')[0], 'this hit: from both bars');

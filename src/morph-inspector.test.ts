@@ -102,7 +102,7 @@ function rig(opts: { phrase?: string; createThrows?: string; writeResult?: { ok:
 
 const pinBar = (r: ReturnType<typeof rig>, n: number) => r.fire(r.q(`#sl_${n}`), 'click');
 const button = (r: ReturnType<typeof rig>) => r.q('.forge-inspector-action-button');
-const LEGEND = '▲ only bar_005 (not changed yet) · ■ only bar_006 (already changed) · ● both bars';
+const LEGEND = '▲ only bar_005 (not changed yet) · ■ only bar_006 (already changed) · ● both bars · # steps count from 1: step 1 is the first position of the bar';   // 2026-10-26-1100, deliberate: the legend says once that steps count from 1
 
 test('clicking a bar of a 5-bar atomic morph shows its stack: place, who made it, step, the two bars, the tempo, the named change, the legend, Edit this bar — for every bar', async () => {
   const r = rig();
@@ -304,7 +304,7 @@ test('refusals: a fork that cannot be created changes nothing and says why; a fo
 test('a morph with a fork note in its JSON refuses an override for a bar it does not have', async () => {
   const r = rig({ phrase: morphText({ overrides: { '9': 'bars/bar_009' } }) });
   await r.handle.load(); await r.settle();
-  assert.match(r.q('.forge-rhythm-edit-score-status').textContent, /^Phrase: overrides: "9" is not a bar of this phrase \(bars 1 to 5\)\./);
+  assert.match(r.q('.forge-rhythm-edit-score-status').textContent, /^Phrase: overrides: "9" is not a bar of this phrase \(bars 1 to 5\); raise Bars, or remove the override with Revert to generated\./);   // 2026-10-26-1100, deliberate: the line names the way out
   r.done();
 });
 
@@ -318,5 +318,66 @@ test('the bar a fork was made from is read FRESH: editing the fork note redraws 
   assert.equal(r.computes.length, before + 1);
   pinBar(r, 3);
   assert.match(r.stack()[2], /tempo 150 \(the fork's own\)/);
+  r.done();
+});
+
+// ---- 2026-10-26-1100 (CCQA smoke 5): the refusal trap ---------------------------------------------------------------------------------------------------------------------------------------------------
+
+const change = (r: ReturnType<typeof rig>, sel: string, value: string) => { const el = r.q(sel); el.value = value; el.dispatchEvent(new r.win.Event('change', { bubbles: true })); };
+const status = (r: ReturnType<typeof rig>) => r.q('.forge-rhythm-edit-score-status').textContent as string;
+
+test('THE TRAP: with a fork on bar 3, lowering Bars to 2 is a refusal that names the way out, the Bars field (and the strip) stays enabled, the stale Inspector with its live Revert is cleared, and raising Bars brings the Score back with the fork kept', async () => {
+  const fork = barNote({ ...DATA_A, tempo_bpm: 140, channels: rows({ kick: [0, 1], snare: [4] }) });
+  const r = rig({ phrase: morphText({ overrides: { '3': 'bars/bar_009' } }), files: { 'bars/bar_009.md': fork } });
+  await r.handle.load(); await r.settle();
+  pinBar(r, 3);
+  assert.ok(r.stack().includes('Revert to generated'), 'precondition: the pinned fork bar offers Revert');
+  change(r, '.forge-morph-bars', '2'); await r.settle();
+  assert.match(status(r), /^Phrase: overrides: "3" is not a bar of this phrase \(bars 1 to 2\); raise Bars, or remove the override with Revert to generated\./);
+  for (const sel of ['.forge-morph-bars', '.forge-morph-a', '.forge-morph-b', '.forge-morph-order', '.forge-morph-atomic']) assert.equal(r.q(sel).disabled, false, `${sel} stays enabled: it can fix the cause or is harmless`);
+  assert.equal(r.q('.forge-morph-bars').value, '2', 'the strip shows what the note says');
+  assert.equal(r.qa('.forge-inspector-lineage').length, 0, 'no stale stack under a refusal');
+  assert.equal(r.qa('.forge-inspector-action-button').length, 0, 'no live "Revert to generated" under a refusal');
+  assert.match(r.q('.forge-inspector-body').textContent, /^Click a bar or a note/, 'the Inspector is back at its hint');
+  assert.equal(r.qa('.forge-inspector-notes li').length, 0, 'and its "Notes in this score" list is gone');
+  assert.equal(r.pinned().length, 0);
+  // the way out: raise Bars
+  change(r, '.forge-morph-bars', '5'); await r.settle();
+  assert.equal(status(r), '', 'the refusal is gone');
+  assert.match(r.files.get(PATH)!, /"3": "bars\/bar_009"/, 'raising Bars lost no fork');
+  assert.ok(r.q('#ph_bar_3'), 'the Score is drawn again');
+  pinBar(r, 3);
+  assert.ok(r.stack().includes('Revert to generated'), 'and the fork bar offers Revert again');
+  r.done();
+});
+
+test('the trap is only for what the strip can fix: a morph with a Bars the strip cannot make valid keeps every control disabled as before', async () => {
+  const r = rig({ phrase: morphText({ bars: 99 }) });
+  await r.handle.load(); await r.settle();
+  assert.match(status(r), /bars must be a whole number from 1 to 64/);
+  assert.equal(r.q('.forge-morph-bars').disabled, true);
+  r.done();
+});
+
+test('the other controls stay live in the trap and write through the kept phrase: changing Order while the fork refusal stands keeps the override in the note', async () => {
+  const r = rig({ phrase: morphText({ bars: 2, overrides: { '3': 'bars/bar_009' } }) });
+  await r.handle.load(); await r.settle();
+  assert.match(status(r), /raise Bars/);
+  change(r, '.forge-morph-order', 'by_channel'); await r.settle();
+  assert.match(r.files.get(PATH)!, /"order": "by_channel"/);
+  assert.match(r.files.get(PATH)!, /"3": "bars\/bar_009"/);
+  assert.match(status(r), /raise Bars/, 'still the same refusal');
+  r.done();
+});
+
+test('(3) every stack carries the legend line that says steps count from 1, once', async () => {
+  const r = rig();
+  await r.handle.load(); await r.settle();
+  pinBar(r, 2);
+  const legend = r.stack().filter((t) => /steps count from 1/.test(t));
+  assert.equal(legend.length, 1);
+  assert.match(legend[0], /^▲ only bar_005 \(not changed yet\) · ■ only bar_006 \(already changed\) · ● both bars · # steps count from 1: step 1 is the first position of the bar$/);
+  r.fire(r.q('#mo2_kick_2'), 'click');                                      // a hit's stack carries it too
+  assert.equal(r.stack().filter((t) => /steps count from 1/.test(t)).length, 1);
   r.done();
 });

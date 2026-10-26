@@ -187,3 +187,21 @@ test('a new score replaces the old one (onShown again), a hidden host detaches, 
   assert.equal(second.host.querySelectorAll(`.${HOT_CLASS}`).length, 0, 'hidden: gridHover is a no-op');
   p.insp.dispose(); assert.equal(p.slot.querySelector('.forge-inspector'), null);
 });
+
+test('2026-10-26-1100: a Score that is hidden and NOT replaced (a refusal) leaves the Inspector at its hint: no stale stack, no live action, no notes list', () => {
+  const p = panel(); p.insp.onShown(p.d.host, p.result);
+  p.d.fire(p.d.el('a_kick_0'), 'click');
+  assert.ok(p.slot.querySelector('.forge-inspector-lineage'), 'precondition: a stack is showing');
+  p.insp.onHidden(p.d.host);
+  assert.equal(p.slot.querySelector('.forge-inspector-lineage'), null, 'the stack is gone');
+  assert.equal(p.slot.querySelectorAll('.forge-inspector-notes li').length, 0, 'and the notes list');
+  assert.ok(p.text().includes(INSPECTOR_HINT), 'the hint is back');
+});
+
+test('2026-10-26-1100: hiding a host that is not the current one changes nothing (a late hide of an old Score must not clear the new one)', () => {
+  const p = panel(); p.insp.onShown(p.d.host, p.result);
+  p.d.fire(p.d.el('a_kick_0'), 'click');
+  const other = dom(); p.slot.ownerDocument.body.appendChild(other.host);
+  p.insp.onHidden(other.host);
+  assert.ok(p.slot.querySelector('.forge-inspector-lineage'), 'the stack of the current Score is still there');
+});

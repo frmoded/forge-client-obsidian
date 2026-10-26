@@ -27,7 +27,7 @@ import type { RhythmData } from './rhythm-edit-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
   MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampMorphPosition, clampMorphSeed, clampPhraseBars, clampPhrasePct, mixSentence, mixTraceInspector,
-  morphEditCount, morphSentence, normalizeMix, normalizeMorph, pathStopOf, pathWeightFor, phraseSourcePath, producePhraseNote, readPhraseKind, readPhraseNote,
+  morphEditCount, morphSentence, normalizeMix, normalizeMorph, pathStopOf, pathWeightFor, phraseSourcePath, salvageOverrideRefusal, producePhraseNote, readPhraseKind, readPhraseNote,
   type ExtendPhrase, type MixPhrase, type MorphPhrase, type PhraseParams, type PhraseScoreDeps,
 } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
@@ -725,13 +725,16 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   const apply = (text: NoteText): void => {
     last = text;
     const parsed = typeof text === 'string' ? readPhraseNote(text) : null;
-    current = parsed && parsed.ok ? parsed.value : null;
+    // 2026-10-26-1100: a phrase refused ONLY because a fork lies past Bars can be fixed from the strip, so the strip stays live for it: it shows the phrase without that fork, and every write carries the fork along (raising Bars
+    // loses nothing). Any other refusal is what it was: every control disabled and the Score says why.
+    const salvage = parsed && parsed.ok === false && typeof text === 'string' ? salvageOverrideRefusal(text) : null;
+    current = parsed && parsed.ok ? parsed.value : salvage ? salvage.keep : null;
     // The surface follows what the note SAYS it is, even when the rest of it is wrong (a mix with weight 3 still gets the mix strip, disabled, and the Score says what is wrong).
     const says = typeof text === 'string' ? readPhraseKind(text) : null;
     if (says !== null && says !== kind) { teardown(); build(says); }
-    if (!writing && want === null) strip.set(current);                  // while a drag's writes are in flight the sliders stay where the person has them
+    if (!writing && want === null) strip.set(salvage ? salvage.shown : current);                  // while a drag's writes are in flight the sliders stay where the person has them
     if (bracket) {
-      const ext = current && current.kind === 'extend' ? current : null;
+      const ext = current && current.kind === 'extend' && !salvage ? current : null;
       bracket.style.display = ext ? '' : 'none';
       if (ext) {
         const name = phraseNoteId(ports.path).split('/').pop() ?? '';

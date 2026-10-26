@@ -14,7 +14,8 @@ test('every caller of renderTaggedMusicXML passes the click-to-play policy: the 
   for (const f of callers) {
     const calls = code(f).match(/\.renderTaggedMusicXML\([^;]*\)/g) ?? [];
     assert.ok(calls.length > 0);
-    for (const c of calls) assert.match(c, /\{\s*clickToPlay:\s*scoreClickPlays\s*\}/, `${f}: ${c}`);
+    // 2026-10-26-1100, deliberate: a surface may pass more options after the policy (the phrase tab passes its zoom memory and the follower's trace); the POLICY must still be there
+    for (const c of calls) assert.match(c, /\{\s*clickToPlay:\s*scoreClickPlays\s*(,[^}]*)?\}/, `${f}: ${c}`);
     assert.match(code(f), /import \{ scoreClickPlays \} from '\.\/score-click-policy\.ts'/, `${f} imports the one policy`);
   }
 });

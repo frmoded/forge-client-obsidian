@@ -19,6 +19,10 @@
 export interface RenderOptions {
   /** Asked at every click on an engraved note: false = the click does not start playback (the Score's own Play control still does). Absent = a click plays. A score-first vault says no (score-click-policy.ts). */
   clickToPlay?: () => boolean;
+  /** 2026-10-26-1100: the zoom a tab's Score is shown at, remembered across redraws (zoom-memory-core.ts). Absent = every render starts at 100%, as before. */
+  zoom?: { get(): number; set(index: number): void; reset(): void };
+  /** 2026-10-26-1100: where the playback follower's evidence lines go (score-follower-trace-core.ts). Absent = it says nothing. */
+  trace?: (line: string) => void;
 }
 
 export interface MusicEdition {

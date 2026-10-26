@@ -28,6 +28,8 @@ import { chordBuilderWidget } from './input-widget-chord-builder.ts';
 import { parseSvgMarkup } from './svg-markup-core.ts';
 import type { MusicEdition, RenderOptions } from './music-edition.ts';
 import { attachClickToPlay } from './score-click-play-dom.ts';
+import { SCORE_ZOOM_LEVELS } from './zoom-memory-core.ts';
+import { followerEvidence } from './score-follower-trace-core.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -403,8 +405,9 @@ function renderMusicXML(
       } else {
         zoomBar = host.createDiv({ cls: 'forge-zoom-bar' });
       }
-      const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
-      let zoomIdx = ZOOM_LEVELS.indexOf(1.0);
+      const ZOOM_LEVELS = SCORE_ZOOM_LEVELS;
+      // 2026-10-26-1100: a tab that keeps a zoom memory gets its Score back at the zoom the person chose (every redraw used to start again at 100%)
+      let zoomIdx = opts.zoom ? opts.zoom.get() : ZOOM_LEVELS.indexOf(1.0);
       const zoomOutBtn = zoomBar.createEl('button', {
         text: '−',
         cls: 'forge-zoom-button',
@@ -463,13 +466,14 @@ function renderMusicXML(
       };
       applyZoom();
       zoomOutBtn.addEventListener('click', () => {
-        if (zoomIdx > 0) { zoomIdx -= 1; applyZoom(); }
+        if (zoomIdx > 0) { zoomIdx -= 1; opts.zoom?.set(zoomIdx); applyZoom(); }
       });
       zoomInBtn.addEventListener('click', () => {
-        if (zoomIdx < ZOOM_LEVELS.length - 1) { zoomIdx += 1; applyZoom(); }
+        if (zoomIdx < ZOOM_LEVELS.length - 1) { zoomIdx += 1; opts.zoom?.set(zoomIdx); applyZoom(); }
       });
       zoomLabel.addEventListener('click', () => {
         zoomIdx = ZOOM_LEVELS.indexOf(1.0);
+        opts.zoom?.reset();
         applyZoom();
       });
 
@@ -497,7 +501,7 @@ function renderMusicXML(
           },
         });
 
-        attachScoreFollower(scoreWrap, player, timeMap);
+        attachScoreFollower(scoreWrap, player, timeMap, opts.trace);
       }
     } catch (e) {
       console.error('Forge: Verovio render failed', e);
@@ -577,9 +581,13 @@ function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string
   return bar;
 }
 
-function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeBucket[]): void {
+function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeBucket[], trace?: (line: string) => void): void {
   let highlighted: Element[] = [];
   let timer: number | null = null;
+  let startedSaid = false;
+  const onScreen = (id: string): boolean => scoreWrap.querySelector(`#${CSS.escape(id)}`) !== null;
+  // 2026-10-26-1100: evidence for a surface that asks for it (the phrase tab): what the time map knows against what is on screen, and, at the first Play, what the player's clock says (score-follower-trace-core.ts)
+  trace?.(followerEvidence({ buckets: timeMap, found: onScreen }));
 
   const clearHighlights = () => {
     for (const el of highlighted) el.classList.remove('is-playing');
@@ -620,6 +628,10 @@ function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeB
   };
 
   const start = () => {
+    if (!startedSaid) {
+      startedSaid = true;
+      trace?.(followerEvidence({ buckets: timeMap, found: onScreen, start: { currentSec: (player.currentTime ?? 0) as number, leadInSecs: PLAYBACK_LEAD_IN_SECS } }));
+    }
     if (timer === null) timer = window.setInterval(highlight, 33);
   };
   const stop = () => {

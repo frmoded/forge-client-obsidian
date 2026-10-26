@@ -196,7 +196,12 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
       }
     },
     onHidden(host) {
-      if (current && current.host === host) detach();
+      if (!current || current.host !== host) return;
+      detach();
+      // 2026-10-26-1100: a Score that is hidden WITHOUT a new one arriving (a refusal) leaves nothing of itself behind: no stale stack with live buttons (Revert to generated under a refusal), no notes list. When a new Score
+      // does arrive (the usual redraw) onShown draws all of it again in the same tick, and \`lastPinned\` is kept for \`keepPin\`.
+      body.textContent = ''; notes.textContent = ''; quiet.textContent = '';
+      showHint(hint);
     },
     lightAll(ids) { current?.layer.highlightAll(ids); },
     gridHover(target) {

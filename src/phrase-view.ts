@@ -11,12 +11,15 @@ import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { headerResync } from './header-resync.ts';
+import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
 
 /** One `[forge-mix]` evidence line (nothing for an extend phrase): where a mix's values were seen on their way from the control to the engraving. */
 const trace = (line: string | null): void => { if (line) console.info(line); };
 
 export class PhraseView extends EditableFileView {
   private handle: PhraseHandle | null = null;
+  /** 2026-10-26-1100: the zoom the person chose on this tab's Score, kept across its redraws (a Weight step, a Bars change, a fork) instead of starting again at 100%. One per tab. */
+  private readonly zoom = createZoomMemory(SCORE_ZOOM_LEVELS, 1.0);
 
   /** `chooseJson` (2026-10-23-0630): told BEFORE the tab switches to the note's text, so the default-view router leaves that choice alone (score-first.ts). `morphThis` (2026-10-25-1000): the **Morph this mix**
    *  button of a mix's strip asks for "Turn this mix into a morph" on this view's own note (score-first.ts). */
@@ -87,7 +90,7 @@ export class PhraseView extends EditableFileView {
         trace(morphTraceEngine(params, payload));
         return payload;
       },
-      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays }),
+      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays, zoom: this.zoom, trace: (line) => console.info(line) }),
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       setTimer: (fn, ms) => window.setTimeout(fn, ms),
       clearTimer: (h) => window.clearTimeout(h as number),

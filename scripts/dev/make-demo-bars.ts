@@ -9,6 +9,12 @@ import { createNewBar } from '../../src/score-first-core.ts';
 import { applySave, contentFingerprint, readRhythmNote, type RhythmData } from '../../src/rhythm-edit-core.ts';
 import { morphEditCount } from '../../src/phrase-core.ts';
 
+// 2026-10-26-1100: what each demo bar IS, in words (CCQA smoke 5 found both still reading the starter's "kick on beats 1 and 3, snare on 2 and 4"). The Beat Box's save rewrites only the json block, so a description set once stays.
+const DESCRIBE: Record<string, string> = {
+  'straight rock groove': 'a straight rock groove: kick on beats 1 and 3, snare on 2 and 4, closed hi-hat on every eighth note, 100 BPM',
+  'afro-cuban feel (son clave 3-2)': 'an afro-cuban feel: a tumbao kick (steps 1, 7 and 11), closed hi-hat on the quarter notes, son clave 3-2 on the claves, low conga on 2 and 4, no snare, 120 BPM',
+};
+
 const vault = process.argv[2];
 if (!vault || !fs.existsSync(path.join(vault, 'forge.toml'))) { console.error('usage: node scripts/dev/make-demo-bars.ts <vault dir with a forge.toml>'); process.exit(2); }
 
@@ -22,6 +28,31 @@ const DEMO: Array<{ what: string; tempo: number; channels: Record<string, boolea
 ];
 
 const barsDir = path.join(vault, 'bars');
+
+// `--describe`: rewrite ONLY the `description:` line of the two demo bars already in the vault (found by their cells, never by a number), checking that every other byte is unchanged. Nothing is created.
+if (process.argv.includes('--describe')) {
+  const names = fs.readdirSync(barsDir).filter((f) => /^bar_\d+\.md$/.test(f));
+  let fixed = 0;
+  for (const demo of DEMO) {
+    const hit = names.find((f) => {
+      const note = readRhythmNote(fs.readFileSync(path.join(barsDir, f), 'utf8'));
+      return note.ok && note.value.data.tempo_bpm === demo.tempo && JSON.stringify(Object.fromEntries(Object.entries(note.value.data.channels).map(([c, r]) => [c, (r as unknown[]).map(Boolean)]))) === JSON.stringify(demo.channels);
+    });
+    if (!hit) { console.error(`no bar in ${barsDir} has the cells of the ${demo.what}: run without --describe first`); process.exit(1); }
+    const file = path.join(barsDir, hit);
+    const before = fs.readFileSync(file, 'utf8');
+    const name = hit.replace(/\.md$/, '');
+    const line = `description: ${JSON.stringify(`${name} — a one-bar rhythm for the Beat Box: ${DESCRIBE[demo.what]}.`)}`;
+    const after = before.replace(/^description: .*$/m, () => line);
+    if (after === before) { console.log(`${hit}: already says it`); continue; }
+    if (after.replace(line, '') !== before.replace(/^description: .*$/m, '')) { console.error(`${hit}: the rewrite would change more than the description`); process.exit(1); }
+    fs.writeFileSync(file, after);
+    fixed++;
+    console.log(`${hit}: description now "${line.slice(13)}`);
+  }
+  console.log(`${fixed} description(s) rewritten; the json blocks are untouched`);
+  process.exit(0);
+}
 const taken = (): string[] => {
   const all: string[] = [];
   const walk = (d: string) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { if (e.name === '.git' || e.name === 'node_modules') continue; const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else all.push(e.name); } };
