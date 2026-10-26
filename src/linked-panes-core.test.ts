@@ -130,28 +130,29 @@ test('the command again while the pair exists FOCUSES it: no third pane is made'
   assert.deepEqual(w.focused, [w.score]);
 });
 
-test('closing the notes pane, the Score, or both: sweep drops the pair with one line naming which, never throws, and a pin afterwards does nothing; the command makes a fresh pair', async () => {
+test('closing the notes pane, the Score, or both: a strict sweep drops the pair with one line naming which, never throws, and a pin afterwards does nothing; the command makes a fresh pair', async () => {
   const w = world();
   await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
   const notes = [...w.alive].find((l) => l.id.startsWith('notes'))!;
   w.alive.delete(notes);
   w.lines.length = 0;
-  w.linker.sweep();
-  w.linker.sweep();
-  assert.deepEqual(w.lines, ['[forge-panes] pair closed (notes pane)'], 'once');
+  w.linker.sweep(true);
+  w.linker.sweep(true);
+  assert.equal(w.lines.length, 1, 'once');
+  assert.match(w.lines[0]!, /^\[forge-panes\] pair closed \(notes pane; reason: leaf missing from iterateAllLeaves asked by the command #\d+\)$/);
   await w.linker.pinned(w.score, { noteId: 'bars/bar_005', reason: 'pinned bar 1' });
   assert.equal(w.lines.length, 1);
   assert.equal(await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md'), 'opened');
   w.alive.delete(w.score);
   w.lines.length = 0;
-  w.linker.sweep();
-  assert.deepEqual(w.lines, ['[forge-panes] pair closed (score pane)']);
+  w.linker.sweep(true);
+  assert.match(w.lines.join('|'), /^\[forge-panes\] pair closed \(score pane; reason: leaf missing/);
   const again = world();
   await again.linker.open(again.score, 'a.md', 'a.md');
   again.alive.clear();
   again.lines.length = 0;
-  again.linker.sweep();
-  assert.deepEqual(again.lines, ['[forge-panes] pair closed (both panes)']);
+  again.linker.sweep(true);
+  assert.match(again.lines.join('|'), /^\[forge-panes\] pair closed \(both panes; reason: leaf missing/);
 });
 
 test('a pane that cannot be made, or a note that cannot be shown, is a line and a result, never a throw, and leaves no half pair behind', async () => {

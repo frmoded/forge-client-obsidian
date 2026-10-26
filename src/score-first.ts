@@ -17,6 +17,7 @@ import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core
 import { headerResync } from './header-resync.ts';
 import { createPhraseRouter } from './phrase-default-view-core.ts';
 import { createPaneLinker, openPairAvailable, type PairSource } from './linked-panes-core.ts';
+import { collectLeaves } from './workspace-leaves-core.ts';
 import { usedByChips } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
@@ -267,9 +268,9 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2026-10-26-1250 (M12, the two-pane spike): the notes pane beside a Score is a markdown leaf in READING view that follows the bar pinned in the Score. We keep our OWN pairing record (linked-panes-core.ts) rather
       // than Obsidian's linked-tab group: `setGroupMember`/`setGroup` exist in the typings, but a group syncs scroll between notes, and nothing says it behaves for a custom view. The notes leaf is marked "text" for BOTH
       // default-view routers (phrase and Beat Box) before every navigation, or they would swap the note into a Score / an editor.
-      const liveLeaves = (): Set<WorkspaceLeaf> => { const all = new Set<WorkspaceLeaf>(); app.workspace.iterateAllLeaves((l) => all.add(l)); return all; };
+      const liveLeaves = (): Set<WorkspaceLeaf> => collectLeaves<WorkspaceLeaf>((each) => app.workspace.iterateAllLeaves(each));   // never `(l) => set.add(l)`: a truthy return stops Obsidian's walk (workspace-leaves-core.ts)
       const showReadOnly = async (leaf: WorkspaceLeaf, path: string): Promise<void> => {
-        router.setMark(leaf, path, 'markdown');
+        router.setMark(leaf, path, 'markdown', 'plugin');
         hooks.markRhythmText?.(leaf, path);
         await leaf.setViewState({ type: 'markdown', active: false, state: { file: path, mode: 'preview' } } as ViewState);
       };
@@ -280,6 +281,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         focus: (leaf) => { app.workspace.setActiveLeaf(leaf, { focus: true }); },
         trace: (line) => { console.info(line); },
         pathOf: (leaf) => { const f = (leaf.getViewState().state as { file?: unknown } | undefined)?.file; return typeof f === 'string' ? f : null; },
+        leafCount: () => liveLeaves().size,
+        idOf: (leaf) => String((leaf as unknown as { id?: unknown }).id ?? '?'),
       });
       plugin.registerEvent(app.workspace.on('layout-change', () => linker.sweep()));
       // 2026-10-26-1270 (M13): when the workspace says something moved, see whether the PERSON navigated a notes pane (a wikilink click in the Recipe, a backlink): the Score lights the bars that note contributed. A show we made

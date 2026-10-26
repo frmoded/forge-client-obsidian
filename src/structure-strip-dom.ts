@@ -32,7 +32,17 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
   if (before && before.parentNode === parent) parent.insertBefore(el, before); else parent.appendChild(el);
 
   let emphasised: string | null = null;
-  const paint = () => el.querySelectorAll<HTMLElement>(`.${STRIP_CHIP_CLASS}`).forEach((b) => b.classList.toggle(STRIP_CHIP_ON_CLASS, emphasised !== null && b.dataset.note === emphasised));
+  // 2026-10-26-1545 (S5): the emphasis is INLINE-styled, as the M6 band cue is (the class alone showed nothing: this plugin has no rule for it): bold and an accent outline.
+  const paint = () => el.querySelectorAll<HTMLElement>(`.${STRIP_CHIP_CLASS}`).forEach((b) => {
+    const on = emphasised !== null && b.dataset.note === emphasised;
+    b.classList.toggle(STRIP_CHIP_ON_CLASS, on);
+    b.style.fontWeight = on ? '700' : '';
+    // longhands, not the `outline` shorthand: happy-dom (the test DOM) drops a shorthand that holds var(), the real browser does not care
+    b.style.outlineWidth = on ? '2px' : '';
+    b.style.outlineStyle = on ? 'solid' : '';
+    b.style.outlineColor = on ? 'var(--interactive-accent, #7c3aed)' : '';
+    b.style.outlineOffset = on ? '1px' : '';
+  });
 
   return {
     el,

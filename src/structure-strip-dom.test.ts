@@ -48,6 +48,19 @@ test('emphasis marks the chip of that note (and survives a redraw of the same ch
   r.h.emphasise(null); assert.deepEqual(on(), []);
 });
 
+test('S5: the emphasised chip is VISIBLY different (bold + accent outline, inline), and only that one; clearing removes it', () => {
+  const r = rig();
+  r.h.set(chipsFor('phrase_004', MORPH));
+  r.h.emphasise('bars/bar_008');
+  const styled = () => r.buttons().filter((b) => b.style.fontWeight === '700' && b.style.outlineStyle === 'solid' && b.style.outlineWidth === '2px').map((b) => b.dataset.note);
+  assert.deepEqual(styled(), ['bars/bar_008']);
+  r.h.set(chipsFor('phrase_004', { ...MORPH, bars: 5 }));
+  assert.deepEqual(styled(), ['bars/bar_008'], 'survives a redraw');
+  r.h.emphasise(null);
+  assert.deepEqual(styled(), []);
+  assert.ok(r.buttons().every((b) => b.style.fontWeight === '' && b.style.outlineStyle === '' && b.style.outlineWidth === ''), 'nothing left behind');
+});
+
 test('no chips = hidden; a redraw replaces the old chips; dispose removes the strip; a bar tab\'s strip is "used by:" and the phrases', () => {
   const r = rig();
   r.h.set([]);

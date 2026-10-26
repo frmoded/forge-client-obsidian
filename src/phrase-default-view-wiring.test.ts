@@ -69,7 +69,7 @@ async function world(real: RealPlugin, toml: string | null, opts: { restored: st
       onLayoutReady: (cb: () => void) => { cb(); },
       on: (name: string, cb: () => void) => { (handlers.get(name) ?? handlers.set(name, []).get(name)!).push(cb); return {}; },
       getLeavesOfType: (t: string) => ([leaf, holderLeaf, ...otherLeaves].filter((l) => l && (l !== leaf || visible) && l.view?.getViewType() === t)),
-      iterateAllLeaves: (cb: (l: any) => void) => { if (visible) cb(leaf); if (holderLeaf) cb(holderLeaf); otherLeaves.forEach(cb); },
+      iterateAllLeaves: (cb: (l: any) => unknown) => { for (const l of [...(visible ? [leaf] : []), ...(holderLeaf ? [holderLeaf] : []), ...otherLeaves]) if (cb(l)) break; },   // Obsidian's walk stops on a truthy return (app.js 1.14.5)
       setActiveLeaf: (l: any) => { log.activated.push(l); },
       getActiveViewOfType: (cls: unknown) => (cls === real.MarkdownView && leaf.view.getViewType() === 'markdown' ? leaf.view : null),
       getActiveFile: () => null, revealLeaf: (l: any) => { log.revealed.push(l); },

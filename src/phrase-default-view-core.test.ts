@@ -57,6 +57,20 @@ test('(c) Open as JSON stays JSON: the mark holds across every re-sync (the +150
   assert.deepEqual(r.lines, ['[forge-phrase] routed phrases/phrase_001.md -> json (the person chose Open as JSON)'], 'one evidence line, not six');
 });
 
+test('2026-10-26-1545: a mark the PLUGIN set (the pair\'s notes pane) keeps the leaf as text but the evidence line does not say a person chose it', async () => {
+  const r = rig(); const leaf = leafOf('c3');
+  open(r, leaf, 'phrases/phrase_001.md');
+  r.router.setMark(leaf, 'phrases/phrase_001.md', 'markdown', 'plugin');
+  for (let i = 0; i < 3; i++) assert.equal(await r.router.evaluate(leaf), 'chosen-json');
+  assert.deepEqual(r.swaps, []);
+  assert.deepEqual(r.lines, ['[forge-phrase] routed phrases/phrase_001.md -> json (the pair notes pane shows it as text)']);
+  const p = rig(); const mine = leafOf('c4');
+  open(p, mine, 'phrases/phrase_001.md');
+  p.router.setMark(mine, 'phrases/phrase_001.md', 'markdown');
+  await p.router.evaluate(mine);
+  assert.deepEqual(p.lines, ['[forge-phrase] routed phrases/phrase_001.md -> json (the person chose Open as JSON)'], 'a person\'s own choice still says so');
+});
+
 test('the JSON choice lasts until the leaf navigates elsewhere: another note drops the mark, and coming back to the phrase is a new open that routes to the Score', async () => {
   const r = rig(); const leaf = leafOf('c2');
   open(r, leaf, 'phrases/phrase_001.md');

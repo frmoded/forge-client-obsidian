@@ -11,6 +11,7 @@ import { Window } from 'happy-dom';
 
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
+import { PAIR_SETTLE_MS } from './linked-panes-core.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 
@@ -57,7 +58,8 @@ for (const edition of ['lean', 'music'] as const) {
       workspace: {
         rootSplit: {}, leftSplit: {}, rightSplit: {},
         onLayoutReady: (cb: () => void) => { cb(); },
-        iterateAllLeaves: (cb: (l: any) => void) => { [...leaves].forEach(cb); },
+        // Obsidian's walk (app.js 1.14.5): a callback that returns something truthy STOPS it. The earlier `forEach(cb)` hid the 2026-10-26-1545 incident (the pair closed itself).
+        iterateAllLeaves: (cb: (l: any) => unknown) => { for (const l of [...leaves]) if (cb(l)) break; },
         on: (name: string, cb: () => void) => { (log.handlers.get(name) ?? log.handlers.set(name, []).get(name)!).push(cb); return {}; },
         getLeavesOfType: () => [], getActiveFile: () => null,
         getActiveViewOfType: (cls: unknown) => (cls === real.PhraseView ? active.phrase ?? null : cls === real.MarkdownView ? active.text ?? null : null),
@@ -181,14 +183,19 @@ for (const edition of ['lean', 'music'] as const) {
       await w.run();
       const notes = [...w.leaves].find((l) => l !== score && l !== other)!;
       const otherStates = other.states.length;
+      await w.layoutChange(); await w.layoutChange();
+      assert.deepEqual(w.log.lines.slice(1), [], 'layout-changes with both panes on screen close nothing (the 1545 incident)');
       w.leaves.delete(notes); await w.layoutChange(); await w.layoutChange();
-      assert.deepEqual(w.log.lines.slice(1), ['[forge-panes] pair closed (notes pane)']);
+      assert.deepEqual(w.log.lines.slice(1), [], 'one look is not enough');
+      await tick(PAIR_SETTLE_MS + 120);
+      assert.equal(w.log.lines.slice(1).length, 1);
+      assert.match(w.log.lines[1]!, /^\[forge-panes\] pair closed \(notes pane; reason: leaf missing from iterateAllLeaves on layout-change #\d+, leaves=\d+, leafId=/);
       view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 1' }); await tick();
       await w.run();
       assert.equal(w.log.splits.length, 2, 'a fresh pair');
       const notes2 = [...w.leaves].find((l) => l !== score && l !== other)!;
-      w.leaves.delete(score); await w.layoutChange();
-      assert.equal(w.log.lines.at(-1), '[forge-panes] pair closed (score pane)');
+      w.leaves.delete(score); await w.layoutChange(); await tick(PAIR_SETTLE_MS + 120);
+      assert.match(w.log.lines.at(-1)!, /^\[forge-panes\] pair closed \(score pane; reason: leaf missing/);
       assert.ok(w.leaves.has(notes2) && w.leaves.has(other), 'no other tab was closed');
       assert.equal(other.states.length, otherStates, 'no other tab was touched');
       assert.deepEqual(w.log.errors, []);
@@ -258,7 +265,8 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] MECHANISM PIN (if the design moves this SHOULD go red — reassess, do not just rewrite): the notes leaf is marked as text for BOTH default-view routers before every navigation, and the PhraseView hands its pin to the plugin with its own leaf`, () => {
     const sf = code('score-first.ts');
-    assert.match(sf, /router\.setMark\(leaf, path, 'markdown'\);\s*\n\s*hooks\.markRhythmText\?\.\(leaf, path\);\s*\n\s*await leaf\.setViewState\(/);
+    // 2026-10-26-1545: the mark now says WHO set it ('plugin'), so the evidence line does not claim a person chose Open as JSON; the mechanism (mark both routers before the navigation) is unchanged
+    assert.match(sf, /router\.setMark\(leaf, path, 'markdown', 'plugin'\);\s*\n\s*hooks\.markRhythmText\?\.\(leaf, path\);\s*\n\s*await leaf\.setViewState\(/);
     assert.match(sf, /createLeafBySplit\(score, 'vertical', false\)/);
     assert.match(sf, /\(l, pin\) => \{ void linker\.pinned\(l, pin\); \}, structureHooks\)\);/);
     assert.match(code('phrase-view.ts'), /onPin: this\.onPin \? \(pin\) => \{ this\.onPin!\(this\.leaf, pin\); \} : undefined/);

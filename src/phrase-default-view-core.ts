@@ -22,6 +22,8 @@ export interface PhraseRouteInput {
   filePath: string | null;
   /** The person's choice for THIS leaf and THIS file ('markdown' = Open as JSON), or null. */
   mark: 'markdown' | null;
+  /** Who set the mark: the person (Open as JSON) or the plugin (the pair's notes pane is text on purpose). Only the evidence line differs. */
+  markBy?: 'person' | 'plugin';
   /** The file this leaf showed when the router was registered (a tab restored with the layout), if it still shows it. */
   restoredPath: string | null;
 }
@@ -72,7 +74,7 @@ export type PhraseRouteResult = PhraseRouteReason | 'reused' | 'swap-failed' | '
 export interface PhraseRouter<L> {
   evaluate(leaf: L): Promise<PhraseRouteResult>;
   /** The person's choice for this leaf and file; it ends when the leaf shows another file. */
-  setMark(leaf: L, path: string, mark: 'markdown' | null): void;
+  setMark(leaf: L, path: string, mark: 'markdown' | null, by?: 'person' | 'plugin'): void;
   /** The tabs that existed when the router was registered: they keep showing their text until their leaf navigates. */
   restore(pairs: ReadonlyArray<readonly [L, string]>): void;
 }
@@ -81,9 +83,10 @@ const JSON_WHY: Partial<Record<PhraseRouteReason, string>> = {
   'chosen-json': 'the person chose Open as JSON',
   'layout-restore': 'a tab restored with the layout',
 };
+const PLUGIN_JSON_WHY = 'the pair notes pane shows it as text';       // 2026-10-26-1545: the plugin set this mark (showReadOnly), nobody chose it
 
 export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>): PhraseRouter<L> {
-  const marks = new Map<L, { path: string; mark: 'markdown' }>();
+  const marks = new Map<L, { path: string; mark: 'markdown'; by: 'person' | 'plugin' }>();
   const restored = new Map<L, string>();
   const swapping = new Set<L>();
   const said = new Map<L, string>();                       // one evidence line per (leaf, outcome, file): events repeat, the line does not
@@ -95,7 +98,7 @@ export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>
   };
 
   return {
-    setMark(leaf, path, mark) { if (mark) marks.set(leaf, { path, mark }); else marks.delete(leaf); },
+    setMark(leaf, path, mark, by = 'person') { if (mark) marks.set(leaf, { path, mark, by }); else marks.delete(leaf); },
     restore(pairs) { for (const [leaf, path] of pairs) restored.set(leaf, path); },
     async evaluate(leaf) {
       if (!ports.scoreFirst()) return 'not-score-first';
@@ -117,7 +120,7 @@ export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>
         restoredPath: restored.get(leaf) ?? null,
       });
       if (!d.swap) {
-        const why = JSON_WHY[d.reason];
+        const why = d.reason === 'chosen-json' && marks.get(leaf)?.by === 'plugin' ? PLUGIN_JSON_WHY : JSON_WHY[d.reason];
         if (why && path) say(leaf, `${d.reason}|${path}`, `[forge-phrase] routed ${path} -> json (${why})`);
         return d.reason;
       }
