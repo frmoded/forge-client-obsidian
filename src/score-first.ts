@@ -9,7 +9,8 @@ import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
-import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable } from './phrase-core.ts';
+import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
+import { morphChangesViaEngine } from './phrase-engine.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
@@ -30,6 +31,9 @@ export const NEW_MIX_COMMAND_NAME = 'New mix from this bar';
 // score_first M7c Phase A (drain 2026-10-24-1200): a morph from this bar to another is a phrase too. Same gate, same place.
 export const NEW_MORPH_COMMAND_ID = 'new-morph-from-bar';
 export const NEW_MORPH_COMMAND_NAME = 'New morph from this bar';
+// score_first (drain 2026-10-25-1000): a mix has only about two visible states; its morph has the path. One gesture from the first to the second: offered ONLY while the active tab shows a mix phrase.
+export const TURN_MIX_COMMAND_ID = 'turn-mix-into-morph';
+export const TURN_MIX_COMMAND_NAME = 'Turn this mix into a morph';
 
 export interface ScoreFirstHooks {
   /** Open a rhythm note in the Beat Box (the plugin's own opener: a tab already showing the note is reused, else a new tab). */
@@ -96,6 +100,38 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     notify: (message) => { new Notice(message); },
     isAlreadyExists: isFileExistsError,
   });
+
+  // 2026-10-25-1000 "Turn this mix into a morph": the note it acts on is named by the caller BEFORE any await (the active view's own file, or the strip button's own tab: never re-read from a getter later). It never
+  // rejects: every failure is one Notice naming why (turnMixIntoMorph), and anything unexpected is a console.error plus a Notice, never a silent promise.
+  const turnMix = (file: TFile): Promise<void> => {
+    const path = file.path;
+    return turnMixIntoMorph<TFile>({
+      activePath: () => path,
+      folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
+      createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
+      listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
+      exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
+      create: (p, content) => app.vault.create(p, content),
+      open: (created) => openPhrase(app, created),
+      notify: (message) => { new Notice(message); },
+      isAlreadyExists: isFileExistsError,
+      readNote: async (p) => {
+        const f = app.vault.getAbstractFileByPath(p);
+        if (!(f instanceof TFile)) throw new Error('File not found');
+        return app.vault.read(f);
+      },
+      changes: (a, b, order, seed) => morphChangesViaEngine(a, b, order, seed),
+      trace: (line) => { console.info(line); },
+    }).then(() => undefined, (e) => { console.error('turnMix: unexpected failure', e); new Notice(`Could not turn this mix into a morph: ${(e as Error)?.message ?? e}`); });
+  };
+  // The phrase the person is on, from the ACTIVE VIEW (not from a leaf lookup): a phrase tab (its Score) or a phrase's own text tab, with the kind it says it is. null = not on a phrase.
+  const activePhrase = (): { kind: PhraseParams['kind'] | null; file: TFile } | null => {
+    const tab = app.workspace.getActiveViewOfType(PhraseView);
+    if (tab?.file) return { kind: tab.phraseKind(), file: tab.file };
+    const text = app.workspace.getActiveViewOfType(MarkdownView);
+    if (text?.file && isPhrasePath(text.file.path)) return { kind: readPhraseKind(text.editor?.getValue() ?? text.data ?? ''), file: text.file };
+    return null;
+  };
 
   // The profile is a constant of the vault, so the command and the ribbon button are added ONCE, when the workspace is ready (the adapter is up) — and only if this vault is
   // score-first. In any other vault they are not registered at all: not in the palette, not in Settings -> Hotkeys, not in the ribbon. The command still asks the live answer
@@ -216,7 +252,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       plugin.registerEvent(app.workspace.on('file-open', routeAll));
       plugin.registerEvent(app.workspace.on('active-leaf-change', routeAll));
       plugin.registerEvent(app.workspace.on('layout-change', routeAll));
-      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown')));
+      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }));
       // Open as Score is the person asking for the Score again: forget an earlier Open as JSON on that leaf
       const openScore = (leaf: WorkspaceLeaf, file: TFile) => { router.setMark(leaf, file.path, null); return openPhraseInLeaf(app, leaf, file); };
       plugin.addCommand({
@@ -234,6 +270,16 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         checkCallback: (checking: boolean) => {
           if (!newMixAvailable({ scoreFirst, activePath: activePath() })) return false;
           if (!checking) void createMix();
+          return true;
+        },
+      });
+      plugin.addCommand({
+        id: TURN_MIX_COMMAND_ID,
+        name: TURN_MIX_COMMAND_NAME,
+        checkCallback: (checking: boolean) => {
+          const active = activePhrase();
+          if (!turnMixIntoMorphAvailable({ scoreFirst, kind: active?.kind })) return false;
+          if (!checking && active) void turnMix(active.file);
           return true;
         },
       });

@@ -392,14 +392,14 @@ export function mixNoteContent(name: string, a: string, b: string): string {
   ].join('\n');
 }
 
-/** The starter content of a new morph: the defaults, the two bars named. */
-export function morphNoteContent(name: string, a: string, b: string): string {
-  const p: MorphPhrase = { kind: 'morph', a, b, ...MORPH_DEFAULTS };
+/** The starter content of a new morph: the defaults, the two bars named. `from` (the mix it was made from, "Turn this mix into a morph") is named in the description; `bars` replaces the default. */
+export function morphNoteContent(name: string, a: string, b: string, made: { from?: string; bars?: number } = {}): string {
+  const p: MorphPhrase = { kind: 'morph', a, b, ...MORPH_DEFAULTS, ...(made.bars !== undefined ? { bars: made.bars } : {}) };
   return [
     '---',
     'type: data',
     'content_type: json',
-    `description: ${JSON.stringify(`${name} — a morph from ${a} to ${b}, one single-hit change at a time. Parameters only; the Score is derived from the two bars.`)}`,
+    `description: ${JSON.stringify(`${name} — a morph from ${a} to ${b}, one single-hit change at a time${made.from ? ` (made from the mix ${made.from})` : ''}. Parameters only; the Score is derived from the two bars.`)}`,
     '---',
     '',
     '```json',
@@ -574,6 +574,90 @@ export function createNewMix<F>(ports: NewMixPorts<F>): Promise<NewPhraseResult>
     noun: 'mix',
     plan: (existingBasenames, exists) => planNewMix({ activePath: ports.activePath(), existingBasenames, exists, barBasenames: ports.listBarBasenames() }),
   });
+}
+
+// ---- "Turn this mix into a morph" (drain 2026-10-25-1000) -------------------------------------------------------------------------------------------------------------------------------------
+// A mix is a weighted vote with about two visible states; the morph has the granular path (one single-hit change per bar). This is the one gesture from the first to the second: it makes the next free
+// `phrases/phrase_NNN.md` of kind "morph" with the mix's two bars, musical order, seed 0 and Bars = d + 1 (the Atomic rule), and opens it. The mix is only READ, never written.
+
+/** Is "Turn this mix into a morph" offered? In a score-first vault, and only while the active tab shows a mix phrase (its Score tab or its text). Everywhere else it does not exist for the person. */
+export function turnMixIntoMorphAvailable(input: { scoreFirst: boolean; kind: PhraseParams['kind'] | null | undefined }): boolean {
+  return input.scoreFirst === true && input.kind === 'mix';
+}
+
+/** The Bars of the morph made from a mix whose bars are `d` single-hit changes apart: d + 1 (every bar one hit from the last: the Atomic rule), at most 64; 5 (the morph's default) when there is nothing to morph. */
+export function morphBarsFor(d: number): number {
+  if (!Number.isFinite(d) || d <= 0) return MORPH_DEFAULTS.bars;
+  return Math.min(PHRASE_BARS_MAX, Math.round(d) + 1);
+}
+
+/** The new morph note for a mix: its `a` and `b`, musical order, seed 0, `bars` from `d`; the next free name. The mix's vote settings (weight, threshold, ghost) are not carried. */
+export function planMorphFromMix(input: { mixName: string; mix: MixPhrase; d: number; existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewPhrasePlan {
+  return planPhraseNote(input, (name) => morphNoteContent(name, input.mix.a, input.mix.b, { from: input.mixName, bars: morphBarsFor(input.d) }));
+}
+
+export interface TurnMixPorts<F> extends NewPhrasePorts<F> {
+  /** A vault note's text by path, FRESH on every call (the mix note and its two bars). Rejects when the note is not there. */
+  readNote(path: string): Promise<string>;
+  /** The ENGINE's count of the single-hit changes between two bars (`morph_rhythm_info`): never a copy of its rule. Rejects when the engine cannot be asked or refuses the pair. */
+  changes(a: RhythmData, b: RhythmData, order: MorphOrder, seed: number): Promise<number>;
+  /** The evidence line. */
+  trace?(line: string): void;
+}
+
+const TURN_FAIL = 'Could not turn this mix into a morph';
+
+/** "Turn this mix into a morph" with the vault, the engine and the UI injected. `activePath()` is the mix note's path (the caller names it: the active tab's, or the button's own tab's). Every failure is ONE Notice
+ *  naming the reason (and a `console.error` naming this function for a caught error); nothing is created, opened or traced for a turn that did not happen. */
+export async function turnMixIntoMorph<F>(ports: TurnMixPorts<F>): Promise<NewPhraseResult> {
+  const refuse = (message: string): NewPhraseResult => { ports.notify(message); return { ok: false, message }; };
+  const path = ports.activePath();
+  if (typeof path !== 'string' || !isPhrasePath(path)) return refuse('Turn this mix into a morph: open a mix phrase first (the note you are on is not a phrase).');
+  const mixName = path.slice(PHRASE_FOLDER.length + 1).replace(/\.md$/, '');
+  let mix: MixPhrase;
+  let dataA: RhythmData; let dataB: RhythmData;
+  try {
+    let text: string;
+    try { text = await ports.readNote(path); } catch (e) { console.error('turnMixIntoMorph: could not read the mix', e); return refuse(`${TURN_FAIL}: the mix ${mixName} (${path}) could not be read (${(e as Error)?.message ?? e}).`); }
+    const read = readPhraseNote(text);
+    if (read.ok === false) {
+      const kind = readPhraseKind(text);
+      return refuse(kind !== null && kind !== 'mix' ? `Turn this mix into a morph: ${mixName} is a ${kind} phrase, not a mix.` : `Turn this mix into a morph: ${mixName} is not usable: ${read.message}`);
+    }
+    if (read.value.kind !== 'mix') return refuse(`Turn this mix into a morph: ${mixName} is a ${read.value.kind} phrase, not a mix.`);
+    mix = read.value;
+    const bar = async (name: string): Promise<RhythmData | string> => {
+      const barPath = phraseSourcePath(name);
+      let barText: string;
+      try { barText = await ports.readNote(barPath); } catch (e) { return `the bar ${name} (${barPath}) was not found or could not be read (${(e as Error)?.message ?? e}).`; }
+      const r = readRhythmNote(barText);
+      return r.ok === false ? `the bar ${name} is not usable: ${r.message}` : r.value.data;
+    };
+    const a = await bar(mix.a); const b = await bar(mix.b);
+    if (typeof a === 'string') return refuse(`${TURN_FAIL}: ${a}`);
+    if (typeof b === 'string') return refuse(`${TURN_FAIL}: ${b}`);
+    dataA = a; dataB = b;
+  } catch (e) {
+    console.error('turnMixIntoMorph failed', e);
+    return refuse(`${TURN_FAIL}: ${(e as Error)?.message ?? e}`);
+  }
+  let d: number;
+  try {
+    d = await ports.changes(dataA, dataB, MORPH_DEFAULTS.order, MORPH_DEFAULTS.seed);
+  } catch (e) {
+    console.error('turnMixIntoMorph: the engine could not count the changes', e);
+    const msg = String((e as Error)?.message ?? e);
+    const engineSays = /morph_rhythm\w*: [^\n]*/.exec(msg)?.[0].replace(/\s+$/, '');
+    return refuse(`${TURN_FAIL}: ${engineSays ?? `the engine could not be asked (${msg.split('\n')[0]})`}`);
+  }
+  if (typeof d !== 'number' || !Number.isFinite(d) || d < 0) return refuse(`${TURN_FAIL}: the engine did not say how many changes lie between ${mix.a} and ${mix.b}.`);
+  const made = await createPhraseNote(ports, {
+    fn: 'turnMixIntoMorph',
+    noun: 'morph',
+    plan: (existingBasenames, exists) => planMorphFromMix({ mixName, mix, d, existingBasenames, exists }),
+  });
+  if (made.ok) ports.trace?.(`[forge-morph] turned ${mixName} (mix) into ${made.path.slice(PHRASE_FOLDER.length + 1).replace(/\.md$/, '')} (morph, bars ${morphBarsFor(d)}, d ${d})`);
+  return made;
 }
 
 export interface PhraseScoreDeps {

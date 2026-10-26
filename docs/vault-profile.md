@@ -159,3 +159,12 @@ bar a with its first `k` edits has exactly bar `i`'s hits (the edits touch disti
 phrase's `overrides`, THEN the Beat Box opens it; **Revert to generated** removes the override and nothing is deleted. A forked bar keeps its place on the path (the glue also returns `morph_generated`, the bars before the forks were laid
 in), so its neighbours' sentences do not change; the fork's own hits are not mapped (the bar pins). The demo pair `bars/bar_007.md` (a straight rock groove) and `bars/bar_008.md` (an afro-cuban feel, son clave 3-2) differ in 16
 cells and are made by `scripts/dev/make-demo-bars.ts` through `createNewBar` and the Beat Box's save path, never hand-authored. Evidence line: `[forge-morph] inspector mapped 5 bars and 30 hits` (or why it could not map).
+
+## Turning a mix into a morph (2026-10-25-1000)
+
+A mix is a weighted vote: a hit has only three possible scores (in both bars, only a, only b), so one threshold gives about two visible states. The morph (above) has the granular path. **Turn this mix into a morph** is the one gesture
+from the first to the second: Cmd+P **Turn this mix into a morph**, or the **Morph this mix** button in the mix tab's control strip. It makes the next free `phrases/phrase_NNN.md` of `kind: "morph"` with the mix's `a` and `b`, `order: "musical"`,
+`seed: 0` and `bars` = d + 1 (capped at 64; d = 0 gives the morph's default 5) and opens it as a Score. `d` is the ENGINE's count (`morph_rhythm_info`, through the plugin glue `_forge_morph_changes`), never a copy of its rule; the mix's weight, threshold and ghost
+are not carried; the original mix note is only read, never written. The command is offered only while the active tab shows a mix phrase (its Score tab or its JSON text), in a score-first vault, and acts on the active VIEW's own note (the button on that tab's own note), never on a leaf lookup.
+Every refusal is one Notice naming why (not on a mix, the mix or a bar cannot be read or is not usable, the engine is not ready or refuses the pair), a caught error is a `console.error` naming `turnMixIntoMorph`, and nothing is created for a turn that did not happen.
+Evidence line: `[forge-morph] turned phrase_002 (mix) into phrase_00N (morph, bars B, d D)`. Code: `turnMixIntoMorph`, `planMorphFromMix`, `morphBarsFor` and `turnMixIntoMorphAvailable` in `phrase-core.ts` (pure, ports injected), the button in `mountMixControls` (`phrase-dom.ts`), the command and the host call in `score-first.ts` and `phrase-engine.ts`.

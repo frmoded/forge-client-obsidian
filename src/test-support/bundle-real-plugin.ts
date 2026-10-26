@@ -23,6 +23,9 @@ export interface RealPlugin {
   /** The stand-in `MarkdownView` class the bundle's own `instanceof MarkdownView` checks use (a test builds a view with `new real.MarkdownView()`). */
   MarkdownView: new () => any;
   TFile: new () => any;
+  /** The bundle's own `PhraseView` class and the engine-host singleton (2026-10-25-1000: the "Turn this mix into a morph" wiring asks the ACTIVE view and the engine). Absent in an earlier checkout that has no phrase view. */
+  PhraseView: new (leaf: any, ...rest: any[]) => any;
+  setPyodideHostSingleton: (host: unknown) => void;
   /** The header re-sync bus (header-resync.ts) from the SAME bundle. */
   headerResync: typeof import('../header-resync.ts').headerResync;
   setPyodideHost: typeof import('../server.ts').setPyodideHost;
@@ -54,7 +57,7 @@ export async function bundleRealPlugin(client: string = ROOT, edition: 'lean' | 
   fs.writeFileSync(shim, obsidianNames().map((n) => (/^[A-Z]/.test(n) ? `export class ${n} { constructor(...a) { this.args = a; (globalThis.__shimConstructed ??= []).push(['${n}', a]); } }` : `export const ${n} = (...a) => (globalThis.__shimFns?.['${n}'] ?? (() => undefined))(...a);`)).join('\n'));
   const entry = path.join(tmp, 'entry.ts');
   const src = path.join(client, 'src');
-  fs.writeFileSync(entry, `export { default as ForgePlugin } from ${JSON.stringify(path.join(src, 'main.ts'))};\nexport { ForgeOutputView } from ${JSON.stringify(path.join(src, 'output-view.ts'))};\nexport { forgeNotice } from ${JSON.stringify(path.join(src, 'forge-notice.ts'))};\n${fs.existsSync(path.join(src, 'score-first-messages-core.ts')) ? `export { messageDelivery } from ${JSON.stringify(path.join(src, 'score-first-messages-core.ts'))};\nexport { mountScoreMessages } from ${JSON.stringify(path.join(src, 'score-messages-dom.ts'))};\n` : ''}export { MarkdownView, TFile } from 'obsidian';\nexport { headerResync } from ${JSON.stringify(path.join(src, 'header-resync.ts'))};\nexport { setPyodideHost, connectVault, computeSnippet, freezeEdge, syncDependencies } from ${JSON.stringify(path.join(src, 'server.ts'))};\n`);   // an earlier checkout (a worktree of 1300d14) has no such file
+  fs.writeFileSync(entry, `export { default as ForgePlugin } from ${JSON.stringify(path.join(src, 'main.ts'))};\nexport { ForgeOutputView } from ${JSON.stringify(path.join(src, 'output-view.ts'))};\nexport { forgeNotice } from ${JSON.stringify(path.join(src, 'forge-notice.ts'))};\n${fs.existsSync(path.join(src, 'score-first-messages-core.ts')) ? `export { messageDelivery } from ${JSON.stringify(path.join(src, 'score-first-messages-core.ts'))};\nexport { mountScoreMessages } from ${JSON.stringify(path.join(src, 'score-messages-dom.ts'))};\n` : ''}export { MarkdownView, TFile } from 'obsidian';\n${fs.existsSync(path.join(src, 'phrase-view.ts')) ? `export { PhraseView } from ${JSON.stringify(path.join(src, 'phrase-view.ts'))};\nexport { setPyodideHostSingleton } from ${JSON.stringify(path.join(src, 'pyodide-host.ts'))};\n` : ''}export { headerResync } from ${JSON.stringify(path.join(src, 'header-resync.ts'))};\nexport { setPyodideHost, connectVault, computeSnippet, freezeEdge, syncDependencies } from ${JSON.stringify(path.join(src, 'server.ts'))};\n`);   // an earlier checkout (a worktree of 1300d14) has no such file
   const out = await build({
     entryPoints: [entry], bundle: true, format: 'esm', platform: 'node', write: false, logLevel: 'error',
     // The music edition is the same redirect scripts/build-main.mjs makes: the ONE module the rest of the plugin imports the edition from points at music-edition.full.ts (default: the committed lean one).

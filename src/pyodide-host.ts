@@ -1557,6 +1557,15 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
         out["bars_data"] = bars
     return out
 
+def _forge_morph_changes(data_json: str, order: str, seed: int):
+    """Turn this mix into a morph (2026-10-25-1000) - how many single-hit changes lie between two bars: the ENGINE's own count (morph_rhythm_info's d)
+    for the bars a and b (data holds them as a and b), in the given order and seed. Plugin-side glue, NOT an engine function: it only asks one existing
+    entry point, so the plugin never keeps a second copy of the rule. Raises the engine's own ValueError for bars on different grids."""
+    import json as _json
+    from forge.music.lib import morph_rhythm_info
+    data = _json.loads(data_json)
+    return int(morph_rhythm_info(data["a"], data["b"], order=order, seed=seed)["d"])
+
 # ---- Moda live-loop helpers (Phase 2) ---------------------------
 # State lives in Python globals between engine-request calls.
 #
@@ -1878,6 +1887,8 @@ export interface PyodideHostInstance {
   computeRhythmScore(data: unknown, title: string): Promise<unknown>;
   /** score_first M5: the Score of a phrase (a bar's data + `{bars, style, tempo_change_pct}`), extended by the engine. Pure compute, writes nothing. */
   computePhraseScore(data: unknown, params: unknown, title: string): Promise<unknown>;
+  /** 2026-10-25-1000: the engine's count of single-hit changes between two bars (`morph_rhythm_info`'s d), for "Turn this mix into a morph". */
+  morphChanges(a: unknown, b: unknown, order: string, seed: number): Promise<number>;
   /** v0.2.17: sync a single user-vault file change into MEMFS so the
    *  next compute sees the new content. Call after every disk write
    *  to a user-vault file (writeGeneratedCode, manual editor saves
@@ -2159,6 +2170,13 @@ _forge_resolve_action_code(
     this.pyodide.globals.set("_forge_phrase_title", title);
     const proxy = this.pyodide.runPython(`_forge_rhythm_phrase_payload(_forge_phrase_data_json, _forge_phrase_params_json, _forge_phrase_title)`);
     return this._unwrap(proxy);
+  }
+
+  async morphChanges(a: unknown, b: unknown, order: string, seed: number): Promise<number> {
+    this.pyodide.globals.set("_forge_morph_data_json", JSON.stringify({ a, b }));
+    this.pyodide.globals.set("_forge_morph_order", order);
+    this.pyodide.globals.set("_forge_morph_seed", seed);
+    return Number(this.pyodide.runPython(`_forge_morph_changes(_forge_morph_data_json, _forge_morph_order, _forge_morph_seed)`));
   }
 
   async getCallableInventory(): Promise<VaultNoteInput[]> {

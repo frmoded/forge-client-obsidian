@@ -109,11 +109,12 @@ test('MECHANISM PIN: "New bar" (command and ribbon) is registered only AFTER the
   // M5 (drain 2026-10-22-1850), deliberate: three commands now — "New bar" and the two phrase commands — and the phrase view type; every one of them after the SAME gate.
   // M7 Phase A (drain 2026-10-22-2330), deliberate: four — "New mix from this bar" joins them, registered after the same gate.
   // M7c Phase A (drain 2026-10-24-1200), deliberate: five — "New morph from this bar" joins them, registered after the same gate.
-  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 5);
+  // 2026-10-25-1000, deliberate: six — "Turn this mix into a morph" joins them, registered after the same gate.
+  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 6);
   assert.equal((body.match(/plugin\.registerView\(/g) ?? []).length, 1);
   const lastAddCommand = body.lastIndexOf('plugin.addCommand(');
   assert.ok(body.indexOf('plugin.registerView(') > check && lastAddCommand > check, 'the phrase view and commands are registered after the gate');
-  for (const id of ['NEW_PHRASE_COMMAND_ID', 'OPEN_PHRASE_COMMAND_ID', 'NEW_MIX_COMMAND_ID']) assert.ok(body.indexOf(`id: ${id}`) > check, `${id} is registered after the gate`);
+  for (const id of ['NEW_PHRASE_COMMAND_ID', 'OPEN_PHRASE_COMMAND_ID', 'NEW_MIX_COMMAND_ID', 'NEW_MORPH_COMMAND_ID', 'TURN_MIX_COMMAND_ID']) assert.ok(body.indexOf(`id: ${id}`) > check, `${id} is registered after the gate`);
   assert.equal((body.match(/plugin\.addRibbonIcon\(/g) ?? []).length, 1);
   assert.ok(!/setSetting|saveSettings|loadData|saveData|processFrontMatter/.test(body), 'no setting, no switch');
 });

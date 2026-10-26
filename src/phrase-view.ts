@@ -6,7 +6,7 @@ import { EditableFileView, MarkdownView, Notice, TFile, type App, type Workspace
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
-import { PHRASE_VIEW_TYPE, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
+import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
@@ -18,13 +18,17 @@ const trace = (line: string | null): void => { if (line) console.info(line); };
 export class PhraseView extends EditableFileView {
   private handle: PhraseHandle | null = null;
 
-  /** `chooseJson` (2026-10-23-0630): told BEFORE the tab switches to the note's text, so the default-view router leaves that choice alone (score-first.ts). */
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void, private readonly chooseJson?: (leaf: WorkspaceLeaf, path: string) => void) {
+  /** `chooseJson` (2026-10-23-0630): told BEFORE the tab switches to the note's text, so the default-view router leaves that choice alone (score-first.ts). `morphThis` (2026-10-25-1000): the **Morph this mix**
+   *  button of a mix's strip asks for "Turn this mix into a morph" on this view's own note (score-first.ts). */
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void, private readonly chooseJson?: (leaf: WorkspaceLeaf, path: string) => void, private readonly morphThis?: (file: TFile) => void) {
     super(leaf);
     this.addAction('code', 'Open as JSON', () => { void this.openAsJson(); });
   }
 
   getViewType(): string { return PHRASE_VIEW_TYPE; }
+
+  /** The kind of phrase this tab shows right now (`null` before its note is loaded). The "Turn this mix into a morph" command asks it, synchronously, when the palette is opened. */
+  phraseKind(): PhraseParams['kind'] | null { return this.handle?.kind() ?? null; }
   getIcon(): string { return 'music'; }
 
   async onOpen(): Promise<void> {
@@ -53,6 +57,7 @@ export class PhraseView extends EditableFileView {
         notify: (message) => { new Notice(message); },
         isAlreadyExists: isFileExistsError,
       },
+      turnIntoMorph: this.morphThis ? () => { this.morphThis!(file); } : undefined,     // 2026-10-25-1000: the strip's **Morph this mix** button (a mix only)
       inspector: { openNote: this.openNote },          // M6: click a bar for its lineage; the bracket; the source link — each opens a note through the plugin's own openers
       readNote: async (p) => {
         const f = this.app.vault.getAbstractFileByPath(p);

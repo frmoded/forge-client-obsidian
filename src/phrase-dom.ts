@@ -148,7 +148,7 @@ export interface MixControls {
 
 /** The mix strip (M7 Phase A): two bar dropdowns (every `bars/bar_*.md`), Weight and Threshold sliders 0..1 in steps of 0.05 that show their number, a Ghost notes checkbox, and a sentence saying what
  *  the settings do. A slider reports every `input` (the number and the sentence follow the thumb at once; the caller coalesces the writes), a dropdown or the checkbox its `change`. */
-export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: MixPatch): void; listBars(): string[] }, before: Node | null = null): MixControls {
+export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: MixPatch): void; listBars(): string[]; morph?(): void }, before: Node | null = null): MixControls {
   const doc = parent.ownerDocument;
   const el = doc.createElement('div');
   el.className = `${PHRASE_CONTROLS_CLASS} forge-mix-controls`;
@@ -191,6 +191,16 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   ghost.type = 'checkbox'; ghost.className = 'forge-mix-ghost';
   ghost.setAttribute('aria-label', 'Ghost notes');
   field('Ghost notes', ghost);
+  // 2026-10-25-1000: the way to this mix's morph (the path of single-hit changes). Only when the caller gives the action; it writes nothing itself (the action makes a NEW phrase note).
+  const morph = ports.morph ? doc.createElement('button') : null;
+  if (morph && ports.morph) {
+    const ask = ports.morph;
+    morph.type = 'button'; morph.className = 'forge-mix-morph'; morph.textContent = 'Morph this mix';
+    morph.title = 'Make a new morph phrase from these two bars: a path of single-hit changes, one per bar, instead of a vote';
+    morph.setAttribute('aria-label', 'Morph this mix: make a new morph phrase from these two bars');
+    morph.addEventListener('click', () => { if (!morph.disabled) ask(); });
+    el.appendChild(morph);
+  }
 
   const sentence = doc.createElement('div');
   sentence.className = 'forge-mix-sentence';
@@ -248,6 +258,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
       live = params;
       const off = params === null;
       a.disabled = b.disabled = weight.input.disabled = threshold.input.disabled = ghost.disabled = off;
+      if (morph) morph.disabled = off;
       if (params) { fill(a, params.a); fill(b, params.b); paint(params); } else { sentence.textContent = ''; }
     },
     setStatus(text) { statusEl.textContent = text; },
@@ -441,6 +452,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   fork?: Pick<ForkPorts<unknown>, 'listBarBasenames' | 'exists' | 'create' | 'notify' | 'isAlreadyExists'>;
   /** M7: the names of the bars in `bars/` (fresh on every call), for the mix dropdowns. Absent = a mix's dropdowns list only its own two bars. */
   listBars?(): string[];
+  /** 2026-10-25-1000: "Turn this mix into a morph". Present = the mix strip has a **Morph this mix** button that asks for it; absent = no button (the strip as it was). */
+  turnIntoMorph?(): void;
   /** M7: the phrase note's text when the caller already has it, so the FIRST surface drawn is the right one for its `kind` (no extend strip flashing before a mix). Absent = the extend surface until `load()`. */
   initial?: string;
 }
@@ -448,6 +461,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
 export interface PhraseHandle {
   /** Read the phrase note and show it (the first draw is immediate). */
   load(): Promise<void>;
+  /** The kind of phrase on screen right now (what the strip and the Score are for). The "Turn this mix into a morph" command asks it, synchronously, to know whether it is offered. */
+  kind(): PhraseParams['kind'];
   /** The vault's `modify` event for any note: the phrase note reloads; its source bar redraws; anything else is ignored. */
   noteModified(path: string): void;
   dispose(): void;
@@ -530,7 +545,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, listBars: _list, initial: _initial, fork: _fork, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
@@ -556,7 +571,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       const morph = mountMorphControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
       strip = { el: morph.el, set: (params) => morph.set(params && params.kind === 'morph' ? params : null), setStatus: (t) => morph.setStatus(t), dispose: () => morph.dispose() };
     } else if (k === 'mix') {
-      const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [] });
+      const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph });
       strip = { el: mix.el, set: (params) => mix.set(params && params.kind === 'mix' ? params : null), setStatus: (t) => mix.setStatus(t), dispose: () => mix.dispose() };
     } else {
       const controls = mountPhraseControls(parent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
@@ -706,6 +721,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   }
 
   return {
+    kind: () => kind,
     async load() {
       const mine = ++seq;
       const text = await readText();

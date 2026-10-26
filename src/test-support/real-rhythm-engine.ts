@@ -63,3 +63,11 @@ export function computePhrase(py: any, data: unknown, params: unknown, title: st
   proxy.destroy?.();
   return out;
 }
+
+/** 2026-10-25-1000: the glue the host runs to count a morph's single-hit changes (`_forge_morph_changes`), same shape as `computePhrase`. */
+export function morphChanges(py: any, data: unknown, order = 'musical', seed = 0): number {
+  py.globals.set('_d', JSON.stringify(data));
+  py.globals.set('_o', order);
+  py.globals.set('_s', seed);
+  return Number(py.runPython('_forge_morph_changes(_d, _o, _s)'));
+}
