@@ -22,7 +22,8 @@ test('a full mix validates and comes back as is; only kind, a and b are required
   assert.deepEqual(validatePhrase(MIX), { ok: true, value: MIX });
   assert.deepEqual(validatePhrase({ kind: 'mix', a: 'bar_001', b: 'bar_002' }), { ok: true, value: { kind: 'mix', a: 'bar_001', b: 'bar_002', weight: 0.5, threshold: 0.5, ghost: false } });
   assert.deepEqual(MIX_DEFAULTS, { weight: 0.5, threshold: 0.5, ghost: false });
-  assert.deepEqual([...MIX_KEYS], ['kind', 'a', 'b', 'weight', 'threshold', 'ghost']);
+  // 2026-10-26-0900, deliberate: a mix may carry mode, order and seed (path mode); a note that has none reads back exactly as above (phrase-mix-path-core.test.ts)
+  assert.deepEqual([...MIX_KEYS], ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed']);
 });
 
 test('the same bar twice is a valid mix (the command falls back to it when there is only one bar)', () => {
@@ -81,7 +82,7 @@ test('the extend phrase is untouched: the same value back, the same refusal text
   const mixedUp = validatePhrase({ ...FULL, weight: 0.5 });
   assert.equal(mixedUp.ok, false);
   if (mixedUp.ok === false) assert.match(mixedUp.message, /weight/);
-  assert.deepEqual(validatePhrase({ ...MIX, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a mix holds only kind, a, b, weight, threshold, ghost).' });
+  assert.deepEqual(validatePhrase({ ...MIX, swing: 3 }), { ok: false, message: 'Unexpected field "swing" (a mix holds only kind, a, b, weight, threshold, ghost, mode, order, seed).' });   // 2026-10-26-0900, deliberate: mode, order, seed
 });
 
 // ---- the note -------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -127,9 +128,9 @@ test('the extend note\'s starter text is byte-for-byte what M5 wrote', () => {
   );
 });
 
-test('mixNoteContent: a data/json note whose block is the defaults + the two bars, valid to read back', () => {
+test('mixNoteContent: a data/json note whose block is a PATH mix of the two bars (2026-10-26-0900, deliberate: new mixes are path mixes, explicit in the JSON, starting at weight 1), valid to read back', () => {
   const text = mixNoteContent('phrase_002', 'bar_005', 'bar_006');
-  assert.deepEqual(readPhraseNote(text), { ok: true, value: MIX });
+  assert.deepEqual(readPhraseNote(text), { ok: true, value: { ...MIX, weight: 1, mode: 'path', order: 'musical', seed: 0 } });
   assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*bar_005.*bar_006.*"\n---\n\n```json\n/);
   assert.ok(text.endsWith('```\n'));
 });
@@ -173,7 +174,7 @@ test('planNewMix: a is the bar you are on, b the first OTHER bar by number; the 
   assert.equal(ok.ok, true);
   if (ok.ok) {
     assert.equal(ok.path, 'phrases/phrase_002.md');
-    assert.deepEqual(readPhraseNote(ok.content), { ok: true, value: { ...MIX, a: 'bar_005', b: 'bar_002' } });
+    assert.deepEqual(readPhraseNote(ok.content), { ok: true, value: { ...MIX, a: 'bar_005', b: 'bar_002', weight: 1, mode: 'path', order: 'musical', seed: 0 } });   // 2026-10-26-0900, deliberate: a new mix is a path mix
     assert.equal(ok.notice, undefined);
   }
   const after = planNewMix({ activePath: 'bars/bar_001.md', existingBasenames: [], exists: () => false, barBasenames: ['bar_001', 'bar_005', 'bar_006'] });
@@ -184,7 +185,7 @@ test('planNewMix with only one bar: b is the same bar and there is a notice sayi
   const one = planNewMix({ activePath: 'bars/bar_005.md', existingBasenames: [], exists: () => false, barBasenames: ['bar_005'] });
   assert.equal(one.ok, true);
   if (one.ok) {
-    assert.deepEqual(readPhraseNote(one.content), { ok: true, value: { ...MIX, a: 'bar_005', b: 'bar_005' } });
+    assert.deepEqual(readPhraseNote(one.content), { ok: true, value: { ...MIX, a: 'bar_005', b: 'bar_005', weight: 1, mode: 'path', order: 'musical', seed: 0 } });
     assert.match(one.notice ?? '', /only one bar/i);
     assert.match(one.notice ?? '', /bar_005/);
   }

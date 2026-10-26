@@ -142,7 +142,8 @@ for (const edition of ['lean', 'music'] as const) {
     assert.deepEqual(folders, ['phrases']);
     assert.equal(created.length, 1);
     assert.equal(created[0].path, 'phrases/phrase_001.md');
-    assert.match(created[0].content, /"kind": "mix",\n  "a": "bar_005",\n  "b": "bar_002",\n  "weight": 0.5,\n  "threshold": 0.5,\n  "ghost": false/);
+    // 2026-10-26-0900, deliberate: a new mix is a path mix, explicit in its JSON, starting at weight 1 (all bar a)
+    assert.match(created[0].content, /"kind": "mix",\n  "a": "bar_005",\n  "b": "bar_002",\n  "weight": 1,\n  "threshold": 0.5,\n  "ghost": false,\n  "mode": "path",\n  "order": "musical",\n  "seed": 0/);
     assert.deepEqual(states.map((s) => [s.how, s.state.type, s.state.state.file]), [['new-tab', PHRASE_VIEW_TYPE, 'phrases/phrase_001.md']]);
     // only one bar: the same bar twice, and a Notice (the stub Notice records its message)
     bars = ['bars/bar_005.md']; created.length = 0; states.length = 0;

@@ -1510,6 +1510,18 @@ def _forge_rhythm_score_payload(data_json: str, title: str):
     score = rhythm_data_to_stream(data)
     return serialize_result(score, {"snippet_id": title, "meta": {"title": title}})
 
+def _forge_mix_path(a, b, weight, order, seed):
+    """A mix in PATH mode (2026-10-26-0900): the ONE bar that is state k of the morph from bar a to bar b, k = round-half-up((1 - weight) * d) single-hit changes
+    applied (weight 1 = bar a, weight 0 = bar b), asked of the SAME engine entry points the morph uses (morph_rhythm with bars = 1 and position = k; d from
+    morph_rhythm_info). Plugin-side glue, NOT an engine function: no second copy of the morph's rules. The weight is taken in millionths as an integer, so a
+    weight like 0.45 is exact (the TypeScript side computes the same rule: pathStopOf in phrase-core.ts). Returns (the bar, morph_rhythm_info's answer, k)."""
+    from forge.music.lib import morph_rhythm, morph_rhythm_info
+    info = morph_rhythm_info(a, b, order=order, seed=seed)
+    d = info["d"]
+    k = ((1000000 - int(round(weight * 1000000))) * d + 500000) // 1000000
+    k = max(0, min(d, k))
+    return morph_rhythm(a, b, bars=1, order=order, seed=seed, position=k), info, k
+
 def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     """M5 (phrases) - a PHRASE: the bar data + the phrase's parameters -> tagged MusicXML payload of the phrase's bars.
 
@@ -1524,7 +1536,11 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     from forge.music.lib import extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream
     data = _json.loads(data_json)
     p = _json.loads(params_json)
-    if p.get("kind") == "mix":
+    if p.get("kind") == "mix" and p.get("mode") == "path":
+        # 2026-10-26-0900: the Weight walks the morph's single-hit steps (threshold and ghost are ignored): one bar, state k of the path
+        path_bar, path_info, path_k = _forge_mix_path(data["a"], data["b"], p["weight"], p.get("order", "musical"), p.get("seed", 0))
+        bars = [path_bar]
+    elif p.get("kind") == "mix":
         bars = [mix_rhythm(data["a"], data["b"], weight=p["weight"], threshold=p["threshold"], ghost=p["ghost"])]
     elif p.get("kind") == "morph":
         made = morph_rhythm(data["a"], data["b"], bars=p["bars"], order=p["order"], seed=p["seed"], position=p.get("position"))
@@ -1543,6 +1559,10 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     if p.get("kind") == "mix":
         # M8: the engine's own mixed bar rides along, so the plugin ties each engraved hit to what the ENGINE returned (never to a copy of the rule)
         out["mixed_bar"] = bars[0]
+        if p.get("mode") == "path":
+            # the path's own facts: how many changes lie between the bars (d), the edits in order, and which state this bar is (k): the Inspector ties each hit to the change that adds or removes it
+            out["morph_info"] = {"d": path_info["d"], "edits": path_info["edits"], "bars": 1}
+            out["path_state"] = {"d": path_info["d"], "k": path_k}
     elif p.get("kind") == "morph":
         # M7c: the number of single-hit changes (d), the edits in the order they are applied, and how many bars were drawn (the plugin's evidence line and, in the next prompt, the Inspector read them)
         info = morph_rhythm_info(data["a"], data["b"], order=p["order"], seed=p["seed"])

@@ -27,10 +27,13 @@ const EPSILON = 1e-9;
 /** The velocity of a plain `true` hit (`_RHYTHM_DEFAULT_VELOCITY`). */
 const DEFAULT_VELOCITY = 90;
 
-export interface MixParams { a: string; b: string; weight: number; threshold: number; ghost: boolean }
+export interface MixParams { a: string; b: string; weight: number; threshold: number; ghost: boolean; mode?: 'vote' | 'path'; order?: string; seed?: number }
 export type MixHitKind = 'a' | 'b' | 'both' | 'ghost-a' | 'ghost-b';
-export interface MixHit { channel: string; step: number; kind: MixHitKind; v: number }
+/** `changeAt` (path mode only): the 1-based number of the single-hit change that removes (kind a) or adds (kind b) this hit; `v` (the vote's score) is 0 for a path hit, which has none. */
+export interface MixHit { channel: string; step: number; kind: MixHitKind; v: number; changeAt?: number }
 export interface MixHitWithVelocity extends MixHit { velocity: number }
+/** One of the morph's ordered single-hit changes, as the engine returns them. */
+export interface PathEdit { kind: 'add' | 'remove'; channel: string; step: number }
 
 const isHit = (cell: unknown): boolean => cell === true || (typeof cell === 'number' && Number.isInteger(cell) && cell > 0);
 
@@ -78,6 +81,45 @@ export function mixHitsFromEngine(a: RhythmDataLike, b: RhythmDataLike, params: 
   return problems.length > 0 ? { ok: false, problems } : { ok: true, hits };
 }
 
+/** PATH mode (2026-10-26-0900): the hits of stop `k` of the morph from bar a to bar b, from the two parent bars and the morph's ORDERED edits alone: bar a with its first k edits applied. A hit in both bars is `both`; a hit
+ *  only in a is still there because the change that removes it comes later (`changeAt` = that change, 1-based); a hit only in b is there because the change that adds it has been applied (`changeAt`). Channels in the engine's
+ *  union order, steps ascending. */
+export function classifyPathHits(a: RhythmDataLike, b: RhythmDataLike, edits: readonly PathEdit[], k: number): MixHit[] {
+  const channels = [...Object.keys(a.channels), ...Object.keys(b.channels).filter((c) => !Object.prototype.hasOwnProperty.call(a.channels, c))];
+  const at = (kind: 'add' | 'remove', channel: string, step: number): number => edits.findIndex((e) => e.kind === kind && e.channel === channel && e.step === step) + 1;   // 1-based; 0 = no such change
+  const out: MixHit[] = [];
+  for (const channel of channels) {
+    const ra = a.channels[channel] ?? [];
+    const rb = b.channels[channel] ?? [];
+    for (let step = 0; step < Math.max(ra.length, rb.length); step++) {
+      const inA = isHit(ra[step]);
+      const inB = isHit(rb[step]);
+      if (inA && inB) { out.push({ channel, step, kind: 'both', v: 0 }); continue; }
+      if (inA) { const n = at('remove', channel, step); if (n === 0 || n > k) out.push({ channel, step, kind: 'a', v: 0, changeAt: n }); continue; }
+      if (inB) { const n = at('add', channel, step); if (n !== 0 && n <= k) out.push({ channel, step, kind: 'b', v: 0, changeAt: n }); }
+    }
+  }
+  return out;
+}
+
+/** The path rule's hits, checked against the bar the ENGINE drew at that stop; each hit then carries the engine's own velocity. A hit the rule places that the engine did not draw (or the reverse) is a refusal naming it. */
+export function pathHitsFromEngine(a: RhythmDataLike, b: RhythmDataLike, edits: readonly PathEdit[], k: number, drawn: RhythmDataLike): MixHitsResult {
+  const predicted = classifyPathHits(a, b, edits, k);
+  const problems: string[] = [];
+  const key = (channel: string, step: number) => `${channel}:${step}`;
+  const predictedKeys = new Set(predicted.map((h) => key(h.channel, h.step)));
+  const hits: MixHitWithVelocity[] = [];
+  for (const h of predicted) {
+    const cell = drawn.channels[h.channel]?.[h.step];
+    if (!isHit(cell)) { problems.push(`${h.channel} step ${h.step + 1}: the path places a hit the engine did not draw`); continue; }
+    hits.push({ ...h, velocity: cell === true ? DEFAULT_VELOCITY : (cell as number) });
+  }
+  for (const [channel, cells] of Object.entries(drawn.channels)) {
+    cells.forEach((cell, step) => { if (isHit(cell) && !predictedKeys.has(key(channel, step))) problems.push(`${channel} step ${step + 1}: the engine drew a hit the path does not place`); });
+  }
+  return problems.length > 0 ? { ok: false, problems } : { ok: true, hits };
+}
+
 export function mixPercents(weight: number): { a: number; b: number } {
   return { a: Math.round(weight * 100), b: Math.round((1 - weight) * 100) };
 }
@@ -107,13 +149,23 @@ export function annotateMixPayload(phraseNote: string, params: MixParams, payloa
   const multiKey = typeof payload.multi_staff_content === 'string' ? 'multi_staff_content' : typeof payload.content === 'string' ? 'content' : null;
   if (multiKey === null) return none('the Score payload carries no MusicXML');
   try {
-    const checked = mixHitsFromEngine(parents.a, parents.b, params, payload.mixed_bar);
+    // 2026-10-26-0900: a PATH mix is tied to the morph's edits and the stop the engine returned, not to the vote's rule
+    let path: { d: number; k: number } | undefined;
+    let checked: MixHitsResult;
+    if (params.mode === 'path') {
+      const state = payload.path_state as { d?: unknown; k?: unknown } | undefined;
+      const info = payload.morph_info as { d?: unknown; edits?: unknown } | undefined;
+      if (!state || typeof state.d !== 'number' || typeof state.k !== 'number' || !info || !Array.isArray(info.edits)) return none('the engine did not return the path\'s state (path_state and morph_info)');
+      if (info.d !== state.d || info.edits.length !== state.d) return none(`the path's state does not match its edits (${state.d} changes against ${info.edits.length})`);
+      path = { d: state.d, k: state.k };
+      checked = pathHitsFromEngine(parents.a, parents.b, info.edits as PathEdit[], state.k, payload.mixed_bar);
+    } else checked = mixHitsFromEngine(parents.a, parents.b, params, payload.mixed_bar);
     if (checked.ok === false) return none(checked.problems[0]);
     const tied = annotateMixXml(payload[multiKey] as string, typeof payload.kit_content === 'string' ? payload.kit_content : null, payload.mixed_bar);
     if (tied.ok === false) return none(tied.problems[0]);
     const next: Record<string, unknown> = { ...payload, [multiKey]: tied.multiXml };
     if (tied.kitXml !== null) next.kit_content = tied.kitXml;
-    return { payload: next, map: mixProvenance(phraseNote, params, tied.hits, checked.hits, tied.bar.tempo), problems: [], kitProblems: tied.kitProblems };
+    return { payload: next, map: mixProvenance(phraseNote, params, tied.hits, checked.hits, tied.bar.tempo, path), problems: [], kitProblems: tied.kitProblems };
   } catch (e) {
     console.error('annotateMixPayload failed', e);
     return none(`the mix could not be tied to its bars (${(e as Error)?.message ?? e})`);
@@ -121,13 +173,14 @@ export function annotateMixPayload(phraseNote: string, params: MixParams, payloa
 }
 
 /** element id -> provenance: the bar first (so it is the map's first element), then every engraved hit. A tied tail carries its head's provenance. */
-export function mixProvenance(phraseNote: string, params: MixParams, annotated: ReadonlyArray<{ id: string; channel: string; step: number; tiedFrom?: string }>, hits: readonly MixHitWithVelocity[], tempo: number | null): ProvenanceMap {
-  const mix = { a: params.a, b: params.b, weight: params.weight, threshold: params.threshold, ghost: params.ghost };
+export function mixProvenance(phraseNote: string, params: MixParams, annotated: ReadonlyArray<{ id: string; channel: string; step: number; tiedFrom?: string }>, hits: readonly MixHitWithVelocity[], tempo: number | null, path?: { d: number; k: number }): ProvenanceMap {
+  // a vote mix's params are exactly what they were; a path mix adds its mode, order, seed and the stop (k of d) it shows
+  const mix = { a: params.a, b: params.b, weight: params.weight, threshold: params.threshold, ghost: params.ghost, ...(path ? { mode: 'path', order: params.order ?? 'musical', seed: params.seed ?? 0, d: path.d, k: path.k } : {}) };
   const map: ProvenanceMap = { [MIX_BAR_ID]: { noteId: phraseNote, role: MIX_BAR_ROLE, params: { ...mix, tempo } } };
   for (const h of annotated) {
     const hit = hits.find((x) => x.channel === h.channel && x.step === h.step);
     if (!hit) continue;
-    const p: Record<string, unknown> = { ...mix, channel: h.channel, step: h.step, kind: hit.kind, v: hit.v, velocity: hit.velocity };
+    const p: Record<string, unknown> = { ...mix, channel: h.channel, step: h.step, kind: hit.kind, ...(path ? {} : { v: hit.v }), velocity: hit.velocity, ...(hit.changeAt ? { changeAt: hit.changeAt } : {}) };
     if (h.tiedFrom !== undefined) p.tiedFrom = h.tiedFrom;
     map[h.id] = { noteId: phraseNote, role: MIX_HIT_ROLE, params: p };
   }
@@ -135,13 +188,13 @@ export function mixProvenance(phraseNote: string, params: MixParams, annotated: 
 }
 
 /** The legend line: what the three marks and colours on the pinned Score mean. */
-export function mixLegend(p: MixParams): LineageEntry {
+export function mixLegend(p: MixParams): LineageEntry {   // a path mix has no ghosts, whatever the note keeps in `ghost`
   const legend: Array<{ mark: string; colour: string; text: string }> = [
     { mark: MIX_MARKS.a, colour: MIX_COLOURS.a, text: `only ${p.a}` },
     { mark: MIX_MARKS.b, colour: MIX_COLOURS.b, text: `only ${p.b}` },
     { mark: MIX_MARKS.both, colour: MIX_COLOURS.both, text: 'both bars' },
   ];
-  if (p.ghost) legend.push({ mark: '△', colour: '#666666', text: 'hollow = a ghost hit' });
+  if (p.ghost && p.mode !== 'path') legend.push({ mark: '△', colour: '#666666', text: 'hollow = a ghost hit' });
   return { kind: 'legend', text: legend.map((l) => `${l.mark} ${l.text}`).join(' · '), legend };
 }
 
@@ -149,6 +202,11 @@ function hitLine(p: Record<string, unknown>): string {
   const a = String(p.a), b = String(p.b);
   const kind = String(p.kind) as MixHitKind;
   const tail = p.tiedFrom !== undefined ? ' — tied continuation' : '';
+  if (p.mode === 'path') {
+    // the path's truth: where the hit came from and the change that removes (a only) or added (b only) it; no vote score, no threshold
+    if (kind === 'both') return `this hit: from both bars, velocity ${String(p.velocity)}${tail}`;
+    return `this hit: from ${kind === 'a' ? a : b} only (${kind === 'a' ? 'removed' : 'added'} at change ${String(p.changeAt)}), velocity ${String(p.velocity)}${tail}`;
+  }
   const threshold = Number(p.threshold).toFixed(2);
   if (kind === 'ghost-a') return `ghost: only ${a} has it (v ${Number(p.v).toFixed(2)}, below threshold ${threshold})${tail}`;
   if (kind === 'ghost-b') return `ghost: only ${b} has it (v ${Number(p.v).toFixed(2)}, below threshold ${threshold})${tail}`;
@@ -163,9 +221,19 @@ export function mixLineageOf(prov: Provenance): LineageEntry[] {
   const a = String(p.a), b = String(p.b);
   const name = phraseNoteId(prov.noteId).split('/').pop() ?? prov.noteId;
   const pct = mixPercents(Number(p.weight));
-  const params: MixParams = { a, b, weight: Number(p.weight), threshold: Number(p.threshold), ghost: p.ghost === true };
+  const params: MixParams = { a, b, weight: Number(p.weight), threshold: Number(p.threshold), ghost: p.ghost === true, ...(p.mode === 'path' ? { mode: 'path' as const } : {}) };
   const out: LineageEntry[] = [];
   if (prov.role === MIX_HIT_ROLE) out.push({ kind: 'hit', text: hitLine(p) });
+  if (p.mode === 'path') {
+    out.push({ kind: 'note', text: `made by ${name} (mix, path, ${String(p.k)} of ${String(p.d)} changes)`, noteId: prov.noteId, openLabel: `Open ${name}`, covers: 'all' });
+    if (a === b) out.push({ kind: 'note', text: `from ${a} (both sides of the mix)`, noteId: phraseSourceNoteId(a), openLabel: `Open ${a}` });
+    else {
+      out.push({ kind: 'note', text: `from ${a}`, noteId: phraseSourceNoteId(a), openLabel: `Open ${a}` });
+      out.push({ kind: 'note', text: `from ${b}`, noteId: phraseSourceNoteId(b), openLabel: `Open ${b}` });
+    }
+    out.push(mixLegend(params));
+    return out;
+  }
   out.push({ kind: 'note', text: `made by ${name} (mix, ${pct.a} % ${a} / ${pct.b} % ${b}, threshold ${params.threshold.toFixed(2)})`, noteId: prov.noteId, openLabel: `Open ${name}`, covers: 'all' });
   if (a === b) out.push({ kind: 'note', text: `from ${a} (both sides of the mix)`, noteId: phraseSourceNoteId(a), openLabel: `Open ${a}` });
   else {

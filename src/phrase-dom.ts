@@ -27,7 +27,7 @@ import type { RhythmData } from './rhythm-edit-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
   MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampMorphPosition, clampMorphSeed, clampPhraseBars, clampPhrasePct, mixSentence, mixTraceInspector,
-  morphEditCount, morphSentence, normalizeMorph, phraseSourcePath, producePhraseNote, readPhraseKind, readPhraseNote,
+  morphEditCount, morphSentence, normalizeMix, normalizeMorph, pathStopOf, pathWeightFor, phraseSourcePath, producePhraseNote, readPhraseKind, readPhraseNote,
   type ExtendPhrase, type MixPhrase, type MorphPhrase, type PhraseParams, type PhraseScoreDeps,
 } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
@@ -38,7 +38,7 @@ export const PHRASE_CONTROLS_CLASS = 'forge-phrase-controls';
 export const MIX_SCORE_DEBOUNCE_MS = 0;
 
 type Patch = Partial<Pick<ExtendPhrase, 'bars' | 'style' | 'tempo_change_pct'>>;
-type MixPatch = Partial<Pick<MixPhrase, 'a' | 'b' | 'weight' | 'threshold' | 'ghost'>>;
+type MixPatch = Partial<Pick<MixPhrase, 'a' | 'b' | 'weight' | 'threshold' | 'ghost' | 'mode' | 'order' | 'seed'>>;
 type MorphPatch = Partial<Pick<MorphPhrase, 'a' | 'b' | 'bars' | 'order' | 'seed' | 'position'>>;
 
 export interface PhraseControls {
@@ -147,15 +147,19 @@ export interface MixControls {
 }
 
 /** The mix strip (M7 Phase A): two bar dropdowns (every `bars/bar_*.md`), Weight and Threshold sliders 0..1 in steps of 0.05 that show their number, a Ghost notes checkbox, and a sentence saying what
- *  the settings do. A slider reports every `input` (the number and the sentence follow the thumb at once; the caller coalesces the writes), a dropdown or the checkbox its `change`. */
-export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: MixPatch): void; listBars(): string[]; morph?(): void }, before: Node | null = null): MixControls {
+ *  the settings do. A slider reports every `input` (the number and the sentence follow the thumb at once; the caller coalesces the writes), a dropdown or the checkbox its `change`.
+ *
+ *  2026-10-26-0900: a **Mode** select (Vote, Path). In PATH mode the Weight slider walks the morph's single-hit steps: one stop per change (step 1/d, snapping on input, labelled `k of d changes`), Order and Seed appear
+ *  (as the morph's), and Threshold and Ghost notes are greyed with a one-line note (kept in the note, ignored). `changes(a, b)` is how many single-hit changes lie between two bars (null = it could not be told); it is
+ *  asked only in path mode, again whenever a bar changes. In vote mode the strip is what it was. */
+export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: MixPatch): void; listBars(): string[]; morph?(): void; changes?(a: string, b: string): Promise<number | null> }, before: Node | null = null): MixControls {
   const doc = parent.ownerDocument;
   const el = doc.createElement('div');
   el.className = `${PHRASE_CONTROLS_CLASS} forge-mix-controls`;
   el.setAttribute('role', 'group');
   el.setAttribute('aria-label', 'Mix');
 
-  const field = (label: string, ...controls: HTMLElement[]): void => {
+  const field = (label: string, ...controls: HTMLElement[]): HTMLElement => {
     const wrap = doc.createElement('label');
     wrap.className = 'forge-phrase-field';
     const text = doc.createElement('span');
@@ -163,6 +167,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
     wrap.appendChild(text);
     for (const c of controls) wrap.appendChild(c);
     el.appendChild(wrap);
+    return wrap;
   };
   const barSelect = (cls: string, label: string): HTMLSelectElement => {
     const sel = doc.createElement('select');
@@ -183,14 +188,26 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   field('Bar a', a);
   const b = barSelect('forge-mix-b', 'Bar b');
   field('Bar b', b);
+  const mode = barSelect('forge-mix-mode', 'Mode: Vote is a weighted vote of the two bars, Path walks the single-hit changes from bar a to bar b');
+  for (const [value, label] of [['vote', 'Vote'], ['path', 'Path']] as const) { const o = doc.createElement('option'); o.value = value; o.textContent = label; mode.appendChild(o); }
+  field('Mode', mode);
   const weight = slider('forge-mix-weight', 'Weight of bar a: 1 is all bar a, 0 is all bar b');
-  field('Weight', weight.input, weight.value);
+  const changesLabel = doc.createElement('span');
+  changesLabel.className = 'forge-mix-weight-changes';
+  field('Weight', weight.input, weight.value, changesLabel);
   const threshold = slider('forge-mix-threshold', 'Threshold: how much weight a hit needs to appear');
   field('Threshold', threshold.input, threshold.value);
   const ghost = doc.createElement('input');
   ghost.type = 'checkbox'; ghost.className = 'forge-mix-ghost';
   ghost.setAttribute('aria-label', 'Ghost notes');
   field('Ghost notes', ghost);
+  const order = barSelect('forge-mix-order', 'Order of the single-hit changes (path mode)');
+  for (const o of MORPH_ORDERS) { const opt = doc.createElement('option'); opt.value = o; opt.textContent = MIX_ORDER_LABELS[o]; order.appendChild(opt); }
+  const orderField = field('Order', order);
+  const seed = doc.createElement('input');
+  seed.type = 'number'; seed.className = 'forge-mix-seed'; seed.min = '0'; seed.step = '1';
+  seed.setAttribute('aria-label', 'Seed: shuffles the changes (seeded order only)');
+  const seedField = field('Seed', seed);
   // 2026-10-25-1000: the way to this mix's morph (the path of single-hit changes). Only when the caller gives the action; it writes nothing itself (the action makes a NEW phrase note).
   const morph = ports.morph ? doc.createElement('button') : null;
   if (morph && ports.morph) {
@@ -202,6 +219,10 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
     el.appendChild(morph);
   }
 
+  const pathNote = doc.createElement('div');
+  pathNote.className = 'forge-mix-path-note';
+  pathNote.textContent = 'Threshold and Ghost notes are not used in path mode (they stay in the note for Vote).';
+  el.appendChild(pathNote);
   const sentence = doc.createElement('div');
   sentence.className = 'forge-mix-sentence';
   sentence.setAttribute('aria-live', 'polite');
@@ -213,6 +234,8 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   parent.insertBefore(el, before);
 
   let live: MixPhrase | null = null;              // what the controls show right now (ahead of the note while the person is dragging)
+  let known: number | null = null;                // path mode: the number of single-hit changes between live.a and live.b, once asked
+  let ask = 0;
   const fill = (sel: HTMLSelectElement, current: string): void => {
     const names = Array.from(new Set([...ports.listBars(), current].filter((n) => n !== ''))).sort();
     sel.textContent = '';
@@ -220,36 +243,74 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
     sel.value = current;
   };
   const paint = (p: MixPhrase): void => {
+    const path = p.mode === 'path';
+    mode.value = p.mode ?? 'vote';
+    weight.input.step = path && known !== null ? String(known > 0 ? 1 / known : 1) : '0.05';
     weight.input.value = String(p.weight); weight.value.textContent = p.weight.toFixed(2);
+    changesLabel.style.display = path && known !== null ? '' : 'none';
+    if (path && known !== null) changesLabel.textContent = `${pathStopOf(p.weight, known)} of ${known} change${known === 1 ? '' : 's'}`;
     threshold.input.value = String(p.threshold); threshold.value.textContent = p.threshold.toFixed(2);
     ghost.checked = p.ghost;
-    sentence.textContent = mixSentence(p);
+    threshold.input.disabled = ghost.disabled = path;
+    pathNote.style.display = path ? '' : 'none';
+    orderField.style.display = seedField.style.display = path ? '' : 'none';
+    order.value = p.order ?? 'musical';
+    seed.value = String(p.seed ?? 0);
+    seed.disabled = (p.order ?? 'musical') !== 'seeded';
+    sentence.textContent = mixSentence(p, known);
   };
   const emit = (patch: MixPatch): void => {
     if (!live) return;
-    const next = { ...live, ...patch };
-    const changed = (Object.keys(patch) as Array<keyof MixPatch>).some((k) => live![k] !== next[k]);
+    const next = normalizeMix({ ...live, ...patch });
+    const changed = (['a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed'] as const).some((k) => k in patch && live![k] !== next[k]);
+    const modeChanged = (live.mode === 'path') !== (next.mode === 'path');
     live = next;
     paint(next);
     if (changed) ports.onChange(patch);
+    if (modeChanged) refresh();
   };
-  const onSlider = (input: HTMLInputElement, field: 'weight' | 'threshold') => () => {
-    const n = Number.parseFloat(input.value);
+  /** Path mode: how many changes lie between the two bars, again (nothing is asked in vote mode). */
+  const refresh = (): void => {
+    if (!live || live.mode !== 'path' || !ports.changes) { known = null; if (live) paint(live); return; }
+    const mine = ++ask;
+    const { a: from, b: to } = live;
+    void ports.changes(from, to).then((d) => {
+      if (mine !== ask || !live || live.mode !== 'path' || live.a !== from || live.b !== to) return;
+      known = d;
+      paint(live);
+    });
+  };
+  const onWeight = () => {
+    const n = Number.parseFloat(weight.input.value);
     if (!Number.isFinite(n) || !live) { if (live) paint(live); return; }
-    emit({ [field]: clampMixUnit(n) });
+    // path mode with the number of changes known: the slider SNAPS to a stop and writes that stop's weight; otherwise (and in vote mode) the weight as the person set it
+    if (live.mode === 'path' && known !== null) emit({ weight: pathWeightFor(pathStopOf(n, known), known) });
+    else emit({ weight: clampMixUnit(n) });
   };
-  weight.input.addEventListener('input', onSlider(weight.input, 'weight'));
-  weight.input.addEventListener('change', onSlider(weight.input, 'weight'));
-  threshold.input.addEventListener('input', onSlider(threshold.input, 'threshold'));
-  threshold.input.addEventListener('change', onSlider(threshold.input, 'threshold'));
+  weight.input.addEventListener('input', onWeight);
+  weight.input.addEventListener('change', onWeight);
+  const onThreshold = () => {
+    const n = Number.parseFloat(threshold.input.value);
+    if (!Number.isFinite(n) || !live) { if (live) paint(live); return; }
+    emit({ threshold: clampMixUnit(n) });
+  };
+  threshold.input.addEventListener('input', onThreshold);
+  threshold.input.addEventListener('change', onThreshold);
   ghost.addEventListener('change', () => emit({ ghost: ghost.checked }));
-  a.addEventListener('change', () => emit({ a: a.value }));
-  b.addEventListener('change', () => emit({ b: b.value }));
+  mode.addEventListener('change', () => emit({ mode: mode.value === 'path' ? 'path' : 'vote' }));
+  order.addEventListener('change', () => emit({ order: order.value as MixPhrase['order'] }));
+  seed.addEventListener('change', () => {
+    const n = Number.parseFloat(seed.value);
+    if (!Number.isFinite(n) || !live) { if (live) paint(live); return; }
+    emit({ seed: clampMorphSeed(n) });
+  });
+  a.addEventListener('change', () => { emit({ a: a.value }); refresh(); });
+  b.addEventListener('change', () => { emit({ b: b.value }); refresh(); });
   // a bar made after the strip was shown appears in the lists the next time one is opened
   for (const sel of [a, b]) {
-    const refresh = () => { if (live) fill(sel, sel === a ? live.a : live.b); };
-    sel.addEventListener('focus', refresh);
-    sel.addEventListener('mousedown', refresh);
+    const refill = () => { if (live) fill(sel, sel === a ? live.a : live.b); };
+    sel.addEventListener('focus', refill);
+    sel.addEventListener('mousedown', refill);
   }
 
   return {
@@ -257,14 +318,17 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
     set(params) {
       live = params;
       const off = params === null;
-      a.disabled = b.disabled = weight.input.disabled = threshold.input.disabled = ghost.disabled = off;
+      a.disabled = b.disabled = mode.disabled = weight.input.disabled = threshold.input.disabled = ghost.disabled = order.disabled = off;
+      if (off) seed.disabled = true;
       if (morph) morph.disabled = off;
-      if (params) { fill(a, params.a); fill(b, params.b); paint(params); } else { sentence.textContent = ''; }
+      if (params) { fill(a, params.a); fill(b, params.b); paint(params); refresh(); } else { sentence.textContent = ''; }
     },
     setStatus(text) { statusEl.textContent = text; },
     dispose() { el.remove(); },
   };
 }
+
+const MIX_ORDER_LABELS: Record<string, string> = { musical: 'musical', seeded: 'seeded', by_channel: 'by channel' };
 
 export interface MorphControls {
   readonly el: HTMLElement;
@@ -571,7 +635,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       const morph = mountMorphControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
       strip = { el: morph.el, set: (params) => morph.set(params && params.kind === 'morph' ? params : null), setStatus: (t) => morph.setStatus(t), dispose: () => morph.dispose() };
     } else if (k === 'mix') {
-      const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph });
+      const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph, changes: morphChanges });
       strip = { el: mix.el, set: (params) => mix.set(params && params.kind === 'mix' ? params : null), setStatus: (t) => mix.setStatus(t), dispose: () => mix.dispose() };
     } else {
       const controls = mountPhraseControls(parent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
@@ -697,7 +761,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     const base = want ?? current;
     if (!base || disposed) return;
     const merged = { ...base, ...patch } as PhraseParams;
-    want = merged.kind === 'morph' ? normalizeMorph(merged) : merged;          // a morph holds a position only while Bars is 1
+    want = merged.kind === 'morph' ? normalizeMorph(merged) : merged.kind === 'mix' ? normalizeMix(merged) : merged;          // a morph holds a position only while Bars is 1; a mix holds order and seed only in path mode
     if (writing) return;                                                 // the running write loop picks up `want` when it is done
     writing = true;
     try {

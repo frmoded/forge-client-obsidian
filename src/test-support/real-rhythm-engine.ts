@@ -71,3 +71,9 @@ export function morphChanges(py: any, data: unknown, order = 'musical', seed = 0
   py.globals.set('_s', seed);
   return Number(py.runPython('_forge_morph_changes(_d, _o, _s)'));
 }
+
+/** 2026-10-26-0900: the helper behind a PATH mix (`_forge_mix_path`): the one bar at the stop a weight lands on, the morph's own answer (d, the edits in order) and the stop k. */
+export function mixPath(py: any, a: unknown, b: unknown, weight: number, order = 'musical', seed = 0): { bar: any; d: number; edits: Array<{ kind: string; channel: string; step: number }>; k: number } {
+  py.globals.set('_a', JSON.stringify(a)); py.globals.set('_b', JSON.stringify(b)); py.globals.set('_w', weight); py.globals.set('_o', order); py.globals.set('_s', seed);
+  return JSON.parse(py.runPython('import json as _j\n_r = _forge_mix_path(_j.loads(_a), _j.loads(_b), _w, _o, _s)\n_j.dumps({"bar": _r[0], "d": _r[1]["d"], "edits": _r[1]["edits"], "k": _r[2]})'));
+}

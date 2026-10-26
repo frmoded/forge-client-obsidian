@@ -62,7 +62,16 @@ export interface MixPhrase {
   weight: number;
   threshold: number;
   ghost: boolean;
+  /** 2026-10-26-0900: "vote" (the weighted vote above; absent = vote, byte-identical to a mix note that never had the field) or "path": the Weight slider walks the morph's single-hit steps between a and b (`threshold` and
+   *  `ghost` are then ignored but kept). */
+  mode?: MixMode;
+  /** Only in path mode: the order of the single-hit changes, as the morph's (default musical). */
+  order?: MorphOrder;
+  /** Only in path mode (seeded order). */
+  seed?: number;
 }
+export const MIX_MODES = ['vote', 'path'] as const;
+export type MixMode = typeof MIX_MODES[number];
 
 /** A morph (M7c): `bars` bars along an ordered path of single-hit edits from bar `a` to bar `b` (`morph_rhythm` in forge/music/lib.py). `order` is the order of the edits, `seed` drives "seeded"; with bars = 1 the
  *  `position` (0..d) picks which state of the path is the one bar. */
@@ -93,7 +102,7 @@ export const MIX_DEFAULTS = { weight: 0.5, threshold: 0.5, ghost: false };
 
 export const PHRASE_KEYS = ['kind', 'source', 'bars', 'style', 'tempo_change_pct', 'overrides'] as const;
 const OVERRIDE_NOTE = /^bars\/bar_\d+$/;
-export const MIX_KEYS = ['kind', 'a', 'b', 'weight', 'threshold', 'ghost'] as const;
+export const MIX_KEYS = ['kind', 'a', 'b', 'weight', 'threshold', 'ghost', 'mode', 'order', 'seed'] as const;
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -170,7 +179,19 @@ function validateMix(raw: Record<string, unknown>): Validation<PhraseParams> {
   if (typeof threshold === 'string') return bad(threshold);
   const ghost = raw.ghost === undefined ? MIX_DEFAULTS.ghost : raw.ghost;
   if (typeof ghost !== 'boolean') return bad(`ghost must be true or false, got ${JSON.stringify(raw.ghost)}.`);
-  return { ok: true, value: { kind: 'mix', a: raw.a as string, b: raw.b as string, weight, threshold, ghost } };
+  // 2026-10-26-0900: the mode. Absent = a vote mix and the value carries no new field (a mix note that never had one reads back exactly as before); order and seed belong to path mode only.
+  const mode = raw.mode;
+  if (mode !== undefined && mode !== 'vote' && mode !== 'path') return bad(`mode must be "vote" or "path", got ${JSON.stringify(raw.mode)}.`);
+  const base = { kind: 'mix' as const, a: raw.a as string, b: raw.b as string, weight, threshold, ghost };
+  if (mode !== 'path') {
+    for (const field of ['order', 'seed'] as const) if (raw[field] !== undefined) return bad(`${field} only applies in path mode (set "mode": "path").`);
+    return { ok: true, value: mode === 'vote' ? { ...base, mode: 'vote' } : base };
+  }
+  const order = raw.order === undefined ? MORPH_DEFAULTS.order : raw.order;
+  if (typeof order !== 'string' || !(MORPH_ORDERS as readonly string[]).includes(order)) return bad(`order must be one of ${MORPH_ORDERS.join(', ')}, got ${JSON.stringify(raw.order)}.`);
+  const seed = raw.seed === undefined ? MORPH_DEFAULTS.seed : raw.seed;
+  if (typeof seed !== 'number' || !Number.isSafeInteger(seed) || seed < 0) return bad(`seed must be a whole number, 0 or more, got ${JSON.stringify(raw.seed)}.`);
+  return { ok: true, value: { ...base, mode: 'path', order: order as MorphOrder, seed } };
 }
 
 function validateMorph(raw: Record<string, unknown>): Validation<PhraseParams> {
@@ -263,9 +284,35 @@ export function clampMixUnit(n: number): number {
   return Math.round(Math.min(1, Math.max(0, n)) * 100) / 100;
 }
 
-/** The one line under the mix strip: what the current settings do, in plain words, with the numbers that are on the sliders. */
-export function mixSentence(p: MixPhrase): string {
+/** The stop of the path a weight shows (2026-10-26-0900): k = round-half-up((1 - weight) * d) single-hit changes applied, weight 1 = bar a (k = 0), weight 0 = bar b (k = d). Integer arithmetic on the weight in millionths, so a
+ *  weight like 0.45 is exact (1 - 0.45 is 0.5499999999999999 in floats). The plugin's engine glue (`_forge_mix_path` in pyodide-host.ts) computes the SAME rule; a real-engine sweep pins the two together. */
+export function pathStopOf(weight: number, d: number): number {
+  if (!(d > 0) || typeof weight !== 'number' || Number.isNaN(weight)) return 0;
+  const w = Math.round(Math.min(1, Math.max(0, weight)) * 1e6);
+  return Math.min(Math.round(d), Math.max(0, Math.floor(((1e6 - w) * Math.round(d) + 5e5) / 1e6)));
+}
+/** The weight a stop writes: 1 - j/d to FOUR decimals (so a note never holds 0.30000000000000004, and every stop of a path of up to hundreds of changes lands back on itself: two decimals would lose stops past d = 100). */
+export function pathWeightFor(stop: number, d: number): number {
+  if (!(d > 0)) return 1;
+  const j = Math.min(Math.round(d), Math.max(0, Math.round(stop)));
+  return Number((1 - j / Math.round(d)).toFixed(4));
+}
+/** What the mix strip writes when the mode changes: path mode carries its order and seed (the morph's defaults when it had none), vote mode carries neither; a mix with no mode stays one with no mode. */
+export function normalizeMix(p: MixPhrase): MixPhrase {
+  const { order, seed, ...rest } = p;
+  return p.mode === 'path' ? { ...rest, mode: 'path', order: order ?? MORPH_DEFAULTS.order, seed: seed ?? MORPH_DEFAULTS.seed } : rest;
+}
+
+/** The one line under the mix strip: what the current settings do, in plain words, with the numbers that are on the sliders. In path mode `d` (the number of single-hit changes between the two bars, `null`/absent while it
+ *  is not known yet) names the stop the Weight shows. */
+export function mixSentence(p: MixPhrase, d?: number | null): string {
   const bars = p.a === p.b ? `${p.a} and itself` : `${p.a} and ${p.b}`;
+  if (p.mode === 'path') {
+    const order = morphOrderWords({ order: p.order ?? MORPH_DEFAULTS.order, seed: p.seed ?? MORPH_DEFAULTS.seed });
+    if (d === undefined || d === null) return `Mix of ${bars}, path (${order}).`;
+    const base = `Mix of ${bars}, path: ${pathStopOf(p.weight, d)} of ${d} single-hit change${d === 1 ? '' : 's'} (${order}).`;
+    return d === 0 ? `${base.slice(0, -1)}; the two bars are the same, so there is nothing to walk.` : base;
+  }
   const base = `Mix of ${bars}: ${Math.round(p.weight * 100)} % ${p.a}; a hit appears where the weights say it should (threshold ${p.threshold.toFixed(2)}).`;
   return p.ghost ? `${base} Ghost notes: quiet extra hits where the weights come close.` : base;
 }
@@ -315,7 +362,9 @@ export function formatPhraseJson(p: PhraseParams): string {
       `  "b": ${JSON.stringify(p.b)},`,
       `  "weight": ${p.weight},`,
       `  "threshold": ${p.threshold},`,
-      `  "ghost": ${p.ghost}`,
+      `  "ghost": ${p.ghost}${p.mode !== undefined ? ',' : ''}`,
+      ...(p.mode !== undefined ? [`  "mode": ${JSON.stringify(p.mode)}${p.mode === 'path' ? ',' : ''}`] : []),
+      ...(p.mode === 'path' ? [`  "order": ${JSON.stringify(p.order ?? MORPH_DEFAULTS.order)},`, `  "seed": ${p.seed ?? MORPH_DEFAULTS.seed}`] : []),
       '}',
     ].join('\n');
   }
@@ -375,14 +424,15 @@ export function phraseNoteContent(name: string, source: string): string {
   ].join('\n');
 }
 
-/** The starter content of a new mix: the defaults, the two bars named. */
+/** The starter content of a new mix (2026-10-26-0900): a PATH mix, explicit in its JSON (mode, order, seed), starting at weight 1 = all of bar a (stop 0, a stop for any d); threshold and ghost take the vote's defaults (kept, ignored in
+ *  path mode, there when the person switches to Vote). */
 export function mixNoteContent(name: string, a: string, b: string): string {
-  const p: MixPhrase = { kind: 'mix', a, b, ...MIX_DEFAULTS };
+  const p: MixPhrase = { kind: 'mix', a, b, ...MIX_DEFAULTS, weight: 1, mode: 'path', order: MORPH_DEFAULTS.order, seed: MORPH_DEFAULTS.seed };
   return [
     '---',
     'type: data',
     'content_type: json',
-    `description: ${JSON.stringify(`${name} — a mix of ${a} and ${b}. Parameters only; the Score is derived from the two bars.`)}`,
+    `description: ${JSON.stringify(`${name} — a mix of ${a} and ${b}, as a path of single-hit changes: the Weight slider walks from ${a} to ${b} one hit at a time (Mode: Vote gives the weighted vote instead). Parameters only; the Score is derived from the two bars.`)}`,
     '---',
     '',
     '```json',
@@ -724,7 +774,7 @@ async function readForks(deps: PhraseScoreDeps, overrides: Record<string, string
 
 /** Evidence lines for the mix path in the REAL Obsidian (2026-10-23-0130): the value a mix carries can only be lost at one of three hand-offs — what was written, what the Score re-read from the note, what the engine returned — and
  *  each prints one `[forge-mix]` line with what it saw. Pure formatters (the view prints them); an extend phrase prints nothing. */
-const mixFields = (p: MixPhrase): string => `weight=${p.weight} threshold=${p.threshold} ghost=${p.ghost}`;
+const mixFields = (p: MixPhrase): string => `weight=${p.weight} threshold=${p.threshold} ghost=${p.ghost}${p.mode === 'path' ? ` mode=path order=${p.order ?? MORPH_DEFAULTS.order} seed=${p.seed ?? MORPH_DEFAULTS.seed}` : p.mode === 'vote' ? ' mode=vote' : ''}`;
 export function mixTraceWritten(p: PhraseParams): string | null {
   return p.kind === 'mix' ? `[forge-mix] wrote a=${p.a} b=${p.b} ${mixFields(p)}` : null;
 }
@@ -740,8 +790,12 @@ export function mixTraceEngine(p: PhraseParams, payload: unknown): string | null
   if (typeof payload !== 'object' || payload === null) return `${head} no payload`;
   const r = payload as Record<string, unknown>;
   const notes = (xml: unknown): number => (typeof xml === 'string' ? (xml.match(/<note[ >\/]/g) ?? []).length : 0);
-  if (typeof r.multi_staff_content === 'string' && typeof r.kit_content === 'string') return `${head} notes: multi-staff ${notes(r.multi_staff_content)}, kit ${notes(r.kit_content)}`;
-  return `${head} notes: single score ${notes(r.content)}`;
+  const path = p.mode !== 'path' ? '' : (() => {
+    const st = r.path_state as { d?: unknown; k?: unknown } | undefined;
+    return st && typeof st.d === 'number' && typeof st.k === 'number' ? `, path ${st.k} of ${st.d} changes` : ', no path state';
+  })();
+  if (typeof r.multi_staff_content === 'string' && typeof r.kit_content === 'string') return `${head} notes: multi-staff ${notes(r.multi_staff_content)}, kit ${notes(r.kit_content)}${path}`;
+  return `${head} notes: single score ${notes(r.content)}${path}`;
 }
 
 /** Evidence lines for the morph (M7c): what was written, and what the engine returned. The Score is the bars along the path, so the engine line says how many bars were drawn and how many single-hit changes (d) lie between a and b. */
@@ -846,7 +900,9 @@ async function produceMix(deps: PhraseScoreDeps, params: MixPhrase, title: strin
     try {
       return await deps.compute({ a: bars.a, b: bars.b }, params, t);
     } catch (e) {
-      const line = mixRhythmRefusal((e as Error)?.message ?? String(e));
+      // a vote mix is refused by mix_rhythm, a PATH mix (2026-10-26-0900) by the morph's own functions: both are the person's data (two bars on different grids), not a fault
+      const msg = (e as Error)?.message ?? String(e);
+      const line = mixRhythmRefusal(msg) ?? morphRhythmRefusal(msg);
       if (line !== null) { refused = line; return null; }
       throw e;
     }

@@ -1959,6 +1959,21 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
+/* 2026-10-26-0900 — path mode: the stop the Weight shows (`k of d changes`), Order and Seed, and the one-line note under the greyed Threshold and Ghost notes */
+.forge-mix-weight-changes {
+  min-width: 6.5em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.forge-mix-controls .forge-mix-seed {
+  width: 5em;
+}
+.forge-mix-path-note {
+  order: 8;
+  flex: 1 0 100%;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+}
 
 /* score_first M7c Phase A — the morph strip: two bar dropdowns, Bars with its Atomic button, Order, Seed (only for the seeded order), a Position slider (only while Bars is 1) and the sentence on its own line. */
 .forge-morph-controls .forge-morph-bars,
