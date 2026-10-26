@@ -12,7 +12,8 @@
 // bar" decision and its action with the vault injected, and the Score of a phrase with the engine injected. The gate (score-first vault or not) is an INPUT here; it is read in one place,
 // score-first.ts, like every other score-first decision.
 
-import { editabilityProblem, extractJsonBlock, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
+import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
+import { extractPhraseJsonBlock, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
 
@@ -161,7 +162,7 @@ function validateOverrides(raw: unknown, bars: number): Record<string, string> |
 /** The trap of 2026-10-26-1100: a phrase whose ONLY problem is a fork on a bar past Bars (the person lowered Bars below it) can be fixed from the strip by raising Bars, so the strip must stay live for it. Returns the phrase
  *  WITHOUT the faulty overrides (what the strip shows), the phrase WITH them (what every write keeps: raising Bars loses no fork) and the refusal line; \`null\` for everything else (a valid phrase, another problem, another kind). */
 export function salvageOverrideRefusal(text: string): { shown: ExtendPhrase | MorphPhrase; keep: ExtendPhrase | MorphPhrase; message: string } | null {
-  const block = extractJsonBlock(text);
+  const block = extractPhraseJsonBlock(text);
   if (block.ok === false || !parseFrontmatter(text)) return null;
   let raw: unknown;
   try { raw = JSON.parse(text.slice(block.contentStart, block.contentEnd)); } catch { return null; }
@@ -292,7 +293,7 @@ export function clampPhrasePct(n: number): number {
 export function readPhraseKind(text: string): PhraseParams['kind'] | null {
   const fm = parseFrontmatter(text);
   if (!fm) return null;
-  const block = extractJsonBlock(text);
+  const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return null;
   try {
     const kind = (JSON.parse(text.slice(block.contentStart, block.contentEnd)) as { kind?: unknown } | null)?.kind;
@@ -365,7 +366,7 @@ export function readPhraseNote(text: string): Validation<PhraseParams> {
   if (!fm) return { ok: false, message: 'The note has no frontmatter, so it is not a data note.' };
   const problem = editabilityProblem(fm.fields);
   if (problem) return { ok: false, message: problem };
-  const block = extractJsonBlock(text);
+  const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
   let parsed: unknown;
   try {
@@ -420,67 +421,48 @@ export function formatPhraseJson(p: PhraseParams): string {
 
 /** A control-strip edit, as a pure rewrite of the note's CURRENT text: only the json block's content changes, every other byte (frontmatter, line endings) is kept. Refused for a note that
  *  is not an editable data note (including `read_only: true`, constitution D7). The caller runs it inside one atomic read-modify-write. */
-export function applyPhraseWrite(currentText: string, p: PhraseParams): { ok: true; text: string } | { ok: false; message: string } {
+export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: string): { ok: true; text: string } | { ok: false; message: string } {
   const fm = parseFrontmatter(currentText);
   if (!fm) return { ok: false, message: 'Not saved: the note has no frontmatter, so it is not a data note.' };
   const problem = editabilityProblem(fm.fields);
   if (problem) return { ok: false, message: `Not saved: ${problem}` };
-  const block = extractJsonBlock(currentText);
+  const block = extractPhraseJsonBlock(currentText);
   if (block.ok === false) return { ok: false, message: `Not saved: ${block.message}` };
   const json = formatPhraseJson(p).replace(/\n/g, block.eol);
-  return { ok: true, text: currentText.slice(0, block.contentStart) + json + currentText.slice(block.contentEnd) };
+  const text = currentText.slice(0, block.contentStart) + json + currentText.slice(block.contentEnd);
+  // 2026-10-26-1260: with the note's name, the derived parts (description, links, Description / Recipe / Bars made) are regenerated from the params just written, so they never disagree with the json. Without it: the fence only, as before.
+  if (name === undefined) return { ok: true, text };
+  const again = extractPhraseJsonBlock(text);
+  return { ok: true, text: again.ok ? renderPhraseNote(text, name, p, again.fenceStart) : text };
 }
 
-/** The starter content of a new phrase: the defaults, the source named. The description is a double-quoted scalar (a JSON string is a YAML one). */
+/** "Refresh note links" on one phrase note: its derived parts regenerated from its json (the fence and its trailing bytes untouched). Idempotent: `changed` is false when nothing differs. Refuses a note it cannot read, with the reason. */
+export function refreshPhraseNoteText(text: string, name: string): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+  const read = readPhraseNote(text);
+  if (read.ok === false) return { ok: false, message: read.message };
+  const block = extractPhraseJsonBlock(text);
+  if (block.ok === false) return { ok: false, message: block.message };
+  const next = renderPhraseNote(text, name, read.value, block.fenceStart);
+  return { ok: true, text: next, changed: next !== text };
+}
+
+/** The starter content of a new phrase: the defaults, the source named. Its description, links and derived sections come from the json (phrase-notes-core.ts); the description is a double-quoted scalar (a JSON string is a YAML one). */
 export function phraseNoteContent(name: string, source: string): string {
   const p: ExtendPhrase = { kind: 'extend', source, ...PHRASE_DEFAULTS };
-  return [
-    '---',
-    'type: data',
-    'content_type: json',
-    `description: ${JSON.stringify(`${name} — ${source} stretched into a longer phrase. Parameters only; the Score is derived from the bar.`)}`,
-    '---',
-    '',
-    '```json',
-    formatPhraseJson(p),
-    '```',
-    '',
-  ].join('\n');
+  return newPhraseNote(name, p, formatPhraseJson(p));
 }
 
 /** The starter content of a new mix (2026-10-26-0900): a PATH mix, explicit in its JSON (mode, order, seed), starting at weight 1 = all of bar a (stop 0, a stop for any d); threshold and ghost take the vote's defaults (kept, ignored in
  *  path mode, there when the person switches to Vote). */
 export function mixNoteContent(name: string, a: string, b: string): string {
   const p: MixPhrase = { kind: 'mix', a, b, ...MIX_DEFAULTS, weight: 1, mode: 'path', order: MORPH_DEFAULTS.order, seed: MORPH_DEFAULTS.seed };
-  return [
-    '---',
-    'type: data',
-    'content_type: json',
-    `description: ${JSON.stringify(`${name} — a mix of ${a} and ${b}, as a path of single-hit changes: the Weight slider walks from ${a} to ${b} one hit at a time (Mode: Vote gives the weighted vote instead). Parameters only; the Score is derived from the two bars.`)}`,
-    '---',
-    '',
-    '```json',
-    formatPhraseJson(p),
-    '```',
-    '',
-  ].join('\n');
+  return newPhraseNote(name, p, formatPhraseJson(p));
 }
 
-/** The starter content of a new morph: the defaults, the two bars named. `from` (the mix it was made from, "Turn this mix into a morph") is named in the description; `bars` replaces the default. */
+/** The starter content of a new morph: the defaults, the two bars named. `bars` replaces the default. `from` (the mix it was made from, "Turn this mix into a morph") is a `made_from` wikilink property (the graph ties the morph to its mix); the description is derived from the json alone (2026-10-26-1260). */
 export function morphNoteContent(name: string, a: string, b: string, made: { from?: string; bars?: number } = {}): string {
   const p: MorphPhrase = { kind: 'morph', a, b, ...MORPH_DEFAULTS, ...(made.bars !== undefined ? { bars: made.bars } : {}) };
-  return [
-    '---',
-    'type: data',
-    'content_type: json',
-    `description: ${JSON.stringify(`${name} — a morph from ${a} to ${b}, one single-hit change at a time${made.from ? ` (made from the mix ${made.from})` : ''}. Parameters only; the Score is derived from the two bars.`)}`,
-    '---',
-    '',
-    '```json',
-    formatPhraseJson(p),
-    '```',
-    '',
-  ].join('\n');
+  return newPhraseNote(name, p, formatPhraseJson(p), made.from ? [`made_from: ${JSON.stringify(`[[${made.from}]]`)}`] : []);
 }
 
 export function phraseName(n: number): string {

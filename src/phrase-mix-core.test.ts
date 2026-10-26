@@ -120,10 +120,11 @@ test('applyPhraseWrite rewrites only the json block of a mix note: frontmatter a
   assert.equal(ro.ok, false);
 });
 
-test('the extend note\'s starter text is byte-for-byte what M5 wrote', () => {
+test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026-10-26-1260, deliberate) the derived description, links and sections above the fence', () => {
   assert.equal(
     phraseNoteContent('phrase_001', 'bar_005'),
-    '---\ntype: data\ncontent_type: json\ndescription: "phrase_001 — bar_005 stretched into a longer phrase. Parameters only; the Score is derived from the bar."\n---\n\n```json\n'
+    '---\ntype: data\ncontent_type: json\ndescription: "phrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change."\nlinks:\n  - "[[bar_005]]"\n---\n\n'
+      + '<!-- derived from the json below; edit the controls, not this text -->\n\n## Description\n\nphrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change.\n\n## Recipe\n\nextend_rhythm([[bar_005]], bars=4, style="repeat_with_fills", tempo_change_pct=0)\n\n```json\n'
       + '{\n  "kind": "extend",\n  "source": "bar_005",\n  "bars": 4,\n  "style": "repeat_with_fills",\n  "tempo_change_pct": 0\n}\n```\n',
   );
 });
@@ -131,7 +132,7 @@ test('the extend note\'s starter text is byte-for-byte what M5 wrote', () => {
 test('mixNoteContent: a data/json note whose block is a PATH mix of the two bars (2026-10-26-0900, deliberate: new mixes are path mixes, explicit in the JSON, starting at weight 1), valid to read back', () => {
   const text = mixNoteContent('phrase_002', 'bar_005', 'bar_006');
   assert.deepEqual(readPhraseNote(text), { ok: true, value: { ...MIX, weight: 1, mode: 'path', order: 'musical', seed: 0 } });
-  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*bar_005.*bar_006.*"\n---\n\n```json\n/);
+  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*\[\[bar_005\]\].*\[\[bar_006\]\].*"\nlinks:\n  - "\[\[bar_005\]\]"\n  - "\[\[bar_006\]\]"\n---\n\n<!-- derived[\s\S]*\n```json\n/);
   assert.ok(text.endsWith('```\n'));
 });
 

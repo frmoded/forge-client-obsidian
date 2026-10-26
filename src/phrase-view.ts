@@ -75,7 +75,7 @@ export class PhraseView extends EditableFileView {
         let refusal: string | null = null;
         try {
           await this.app.vault.process(file, (text) => {
-            const w = applyPhraseWrite(text, params);
+            const w = applyPhraseWrite(text, params, file.basename);       // 2026-10-26-1260: the derived description, links and sections follow the json
             if (w.ok === false) { refusal = w.message; return text; }
             return w.text;
           });

@@ -98,7 +98,7 @@ test('EDIT THIS BAR: bar 3\'s generated data is written as the next bar note, th
   const fork = readRhythmNote(r.files.get('bars/bar_007.md')!);
   assert.equal(fork.ok, true);
   if (fork.ok) { assert.equal(fork.value.data.channels.kick[3], true, 'bar 3\'s own data (its kick is on step 3)'); assert.equal(fork.value.data.tempo_bpm, 94); }
-  assert.match(r.files.get('bars/bar_007.md')!, /\nforked_from: "phrases\/phrase_001 bar 3"\n/);
+  assert.match(r.files.get('bars/bar_007.md')!, /\nforked_from: "\[\[phrase_001\]\]"\nforked_bar: 3\n/);
   assert.deepEqual(r.writes.map((w) => w.overrides), [{ '3': 'bars/bar_007' }]);
   assert.deepEqual(r.opened, ['bars/bar_007']);
   assert.deepEqual((readPhraseNote(r.files.get(PATH)!) as { value: ExtendPhrase }).value.overrides, { '3': 'bars/bar_007' });

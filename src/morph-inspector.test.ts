@@ -244,7 +244,7 @@ test('Edit this bar on a morph bar: the fork note is written FIRST (the bar\'s o
   await r.settle();
   assert.deepEqual(r.log.filter((l) => !/^open phrases/.test(l)).slice(0, 3), ['create bars/bar_007.md', 'write phrase', 'open bars/bar_007'], 'write order');
   const fork = r.files.get('bars/bar_007.md')!;
-  assert.match(fork, /^forked_from: "phrases\/phrase_004 bar 3"$/m);
+  assert.match(fork, /^forked_from: "\[\[phrase_004\]\]"\nforked_bar: 3$/m);
   assert.match(fork, /"tempo_bpm": 110/, 'the generated bar\'s own tempo');
   assert.deepEqual(JSON.parse(/```json\n([\s\S]*?)\n```/.exec(fork)![1]).channels.kick.map((v: boolean, i: number) => (v ? i : -1)).filter((i: number) => i >= 0), [0, 6, 8], 'bar 3 is state 2: kick 0 6 8');
   assert.match(r.files.get(PATH)!, /"overrides": \{\n    "3": "bars\/bar_007"\n  \}/);

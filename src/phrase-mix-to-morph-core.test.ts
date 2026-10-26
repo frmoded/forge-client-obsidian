@@ -77,8 +77,8 @@ test('the plan: a morph note with the mix\'s a and b, musical order, seed 0 and 
   const r = readPhraseNote(plan.content);
   assert.equal(r.ok, true);
   assert.deepEqual(r.ok && r.value, { kind: 'morph', a: 'bar_005', b: 'bar_001', bars: 5, order: 'musical', seed: 0 });
-  assert.match(plan.content, /phrase_003 — a morph from bar_005 to bar_001/);
-  assert.match(plan.content, /phrase_002/);
+  assert.match(plan.content, /phrase_003 — a morph from \[\[bar_005\]\] to \[\[bar_001\]\]/);
+  assert.match(plan.content, /^made_from: "\[\[phrase_002\]\]"$/m, 'the mix it was made from is a wikilink property');
   assert.doesNotMatch(plan.content, /weight|threshold|ghost/, 'the mix\'s vote settings are not carried');
 });
 

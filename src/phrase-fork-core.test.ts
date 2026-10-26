@@ -63,7 +63,7 @@ test('the fork note is an ordinary rhythm data note the Beat Box opens, holding 
   const data = bar([0, 3, 8]);
   const text = forkNoteContent('bar_009', 'phrases/phrase_001', 3, data);
   assert.match(text, /^---\ntype: data\ncontent_type: json\n/);
-  assert.match(text, /\nforked_from: "phrases\/phrase_001 bar 3"\n/);
+  assert.match(text, /\nforked_from: "\[\[phrase_001\]\]"\nforked_bar: 3\n/);
   assert.match(text, /\ndescription: ".*bar_009.*phrase_001.*bar 3.*"\n/);
   const read = readRhythmNote(text);
   assert.equal(read.ok, true, read.ok ? '' : read.message);
@@ -79,7 +79,7 @@ test('the Beat Box\'s own save (applySave) keeps the lineage line: only the json
   if (!read.ok) return;
   const saved = applySave(text, read.value.fingerprint, bar([0, 4, 8]));
   assert.equal(saved.ok, true);
-  if (saved.ok) { assert.match(saved.text, /\nforked_from: "phrases\/phrase_001 bar 3"\n/); assert.equal((readRhythmNote(saved.text) as { value: { data: RhythmData } }).value.data.channels.kick[4], true); }
+  if (saved.ok) { assert.match(saved.text, /\nforked_from: "\[\[phrase_001\]\]"\nforked_bar: 3\n/); assert.equal((readRhythmNote(saved.text) as { value: { data: RhythmData } }).value.data.channels.kick[4], true); }
 });
 
 // ---- the Score of a phrase with overrides ----------------------------------------------------------------------------------------------------------------------------------------------

@@ -22,12 +22,14 @@ function nextBarName(existing: Iterable<string>): string {
 /** The fork note: an ordinary rhythm data note the Beat Box opens (its body must be exactly one json block, so the lineage line is a FRONTMATTER field — the Beat Box's save rewrites only the json block and keeps
  *  every other byte, so the line survives edits). */
 export function forkNoteContent(name: string, phraseNoteId: string, barNumber: number, data: RhythmData): string {
+  const phraseName = phraseNoteId.split('/').pop() ?? phraseNoteId;
   return [
     '---',
     'type: data',
     'content_type: json',
-    `description: ${JSON.stringify(`${name} — forked from ${phraseNoteId} bar ${barNumber} to edit by hand. The phrase shows this bar instead of the generated one.`)}`,
-    `forked_from: ${JSON.stringify(`${phraseNoteId} bar ${barNumber}`)}`,
+    `description: ${JSON.stringify(`${name} — forked from [[${phraseName}]] bar ${barNumber} to edit by hand. The phrase shows this bar instead of the generated one.`)}`,
+    `forked_from: ${JSON.stringify(`[[${phraseName}]]`)}`,           // 2026-10-26-1260: a property whose WHOLE value is a wikilink is what Obsidian indexes (measured in app.js 1.12.7: frontmatterLinks), so backlinks and the graph tie the fork to its phrase
+    `forked_bar: ${barNumber}`,
     '---',
     '',
     '```json',

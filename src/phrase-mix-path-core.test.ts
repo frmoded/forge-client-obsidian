@@ -80,7 +80,7 @@ test('a NEW mix is a path mix, explicit in its JSON (mode, order, seed), startin
   const text = mixNoteContent('phrase_002', 'bar_005', 'bar_001');
   assert.match(text, /"mode": "path",\n  "order": "musical",\n  "seed": 0\n}/);
   assert.deepEqual(readPhraseNote(text), { ok: true, value: { kind: 'mix', a: 'bar_005', b: 'bar_001', weight: 1, threshold: MIX_DEFAULTS.threshold, ghost: MIX_DEFAULTS.ghost, mode: 'path', order: 'musical', seed: 0 } });
-  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*bar_005.*bar_001.*path.*"\n---\n\n```json\n/);
+  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*\[\[bar_005\]\].*\[\[bar_001\]\].*path.*"\nlinks:\n[\s\S]*---\n\n<!-- derived[\s\S]*\n```json\n/);
   assert.deepEqual(MIX_DEFAULTS, { weight: 0.5, threshold: 0.5, ghost: false });
   assert.deepEqual(validatePhrase({ kind: 'mix', a: 'bar_001', b: 'bar_002' }), { ok: true, value: { kind: 'mix', a: 'bar_001', b: 'bar_002', weight: 0.5, threshold: 0.5, ghost: false } });
 });

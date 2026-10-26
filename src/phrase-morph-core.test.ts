@@ -140,7 +140,7 @@ test('the new morph morphs from the active bar to the first OTHER bar, with the 
   assert.equal(p.path, 'phrases/phrase_004.md');
   assert.equal(p.notice, undefined);
   assert.deepEqual(readPhraseNote(p.content), { ok: true, value: { kind: 'morph', a: 'bar_007', b: 'bar_005', bars: 5, order: 'musical', seed: 0 } });
-  assert.match(p.content, /^description: ".*phrase_004 — a morph from bar_007 to bar_005/m);
+  assert.match(p.content, /^description: ".*phrase_004 — a morph from \[\[bar_007\]\] to \[\[bar_005\]\]/m);
   assert.equal(p.content, morphNoteContent('phrase_004', 'bar_007', 'bar_005'));
 });
 

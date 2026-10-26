@@ -9,6 +9,7 @@ import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
+import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-core.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { morphChangesViaEngine } from './phrase-engine.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
@@ -38,6 +39,9 @@ export const TURN_MIX_COMMAND_NAME = 'Turn this mix into a morph';
 // score_first M12 (drain 2026-10-26-1250): the two-pane spike. Same gate, same place; offered on a phrase tab, a phrase's JSON text tab or a bar's Beat Box tab.
 export const OPEN_PAIR_COMMAND_ID = 'open-score-with-notes';
 export const OPEN_PAIR_COMMAND_NAME = 'Open Score with notes';
+// score_first M7b (a) (drain 2026-10-26-1260): phrase and bar notes read as notes (Description, Recipe, wikilinks). This command brings every phrase and bar note of the vault up to date; the plugin's own writes keep them in step.
+export const REFRESH_LINKS_COMMAND_ID = 'refresh-note-links';
+export const REFRESH_LINKS_COMMAND_NAME = 'Refresh note links';
 
 export interface ScoreFirstHooks {
   /** Open a rhythm note in the Beat Box (the plugin's own opener: a tab already showing the note is reused, else a new tab). */
@@ -307,6 +311,32 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           const target = pairTarget();
           if (!openPairAvailable({ scoreFirst, kind: target?.kind ?? null })) return false;
           if (!checking && target) void openPair(target);
+          return true;
+        },
+      });
+      // 1260: idempotent over every `phrases/phrase_NNN.md` and `bars/bar_NNN.md` (never README.md): a note that is already current is not written; one that cannot be read is named in the Notice; nothing ever throws.
+      const refreshLinks = async (): Promise<void> => {
+        try {
+          const named = (f: TFile) => ({ path: f.path, name: f.basename });
+          const summary = await refreshNoteLinks({
+            phrases: () => app.vault.getFiles().filter((f) => isPhrasePath(f.path)).map(named),
+            bars: () => app.vault.getFiles().filter((f) => isBarPath(f.path)).map(named),
+            read: async (p) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); return app.vault.read(f); },
+            process: async (p, fn) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); await app.vault.process(f, fn); },
+          });
+          console.info(refreshLine(summary));
+          new Notice(refreshNotice(summary));
+        } catch (e) {
+          console.error('Refresh note links failed', e);
+          new Notice(`${REFRESH_LINKS_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+        }
+      };
+      plugin.addCommand({
+        id: REFRESH_LINKS_COMMAND_ID,
+        name: REFRESH_LINKS_COMMAND_NAME,
+        checkCallback: (checking: boolean) => {
+          if (!scoreFirst) return false;
+          if (!checking) void refreshLinks();
           return true;
         },
       });
