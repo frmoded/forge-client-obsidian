@@ -17,6 +17,8 @@
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import type { ScoreInspectorPorts } from './score-inspector.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
+import { barsContributedBy, chipsFor, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
+import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import type { ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
@@ -497,6 +499,15 @@ export interface PhraseInspectorPorts {
   onPin?(pin: PinnedNote | null): void;
 }
 
+/** 2026-10-26-1270 (M13): the structure strip above the Score. Present = the tab has the strip; absent = no strip at all (the tab as it was). */
+export interface PhraseStructurePorts {
+  /** A chip was clicked: send the notes pane of this Score's pair to that note. false = there is no pair (the tab then opens the note with the inspector's opener). */
+  goto(noteId: string): Promise<boolean>;
+  /** Be told the note path when the PERSON navigates this Score's notes pane. Returns the way to stop. */
+  onNotesNavigated(fn: (path: string) => void): () => void;
+  trace?(line: string): void;
+}
+
 export const PHRASE_BRACKET_CLASS = 'forge-phrase-bracket';
 /** M8: a mix has one bar, so there is nothing to walk between with the arrow keys; Esc lets go. */
 export const MIX_INSPECTOR_HINT = 'Click the bar or a note to see where it came from. Esc lets go.';
@@ -506,6 +517,8 @@ export const MORPH_INSPECTOR_HINT = 'Click a bar or a note to see where it came 
 
 export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'produce' | 'inspector'> {
   inspector?: PhraseInspectorPorts;
+  /** 2026-10-26-1270 (M13): the structure strip (chips above the Score, two-way highlight with the notes pane). */
+  structure?: PhraseStructurePorts;
   /** The phrase note's path. */
   path: string;
   plan: ScorePanelPlan;
@@ -612,12 +625,25 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
   let bracket: HTMLElement | null = null;
   let area: ScoreArea | null = null;
+  // 2026-10-26-1270 (M13): the strip, and the bars the notes pane's note lit (kept across a chip hover coming and going, until the next navigation)
+  const phraseName = (ports.path.split('/').pop() ?? ports.path).replace(/\.md$/, '');
+  let structureStrip: StripHandle | null = null;
+  let notesLit: number[] = [];
+  const noteName = (noteId: string): string => (noteId.split('/').pop() ?? noteId).replace(/\.md$/, '');
+  const barsOfChip = (chip: Chip): number[] => (current === null ? [] : barsContributedBy(current, noteName(chip.noteId), chip.kind === 'phrase' ? noteName(chip.noteId) : undefined));
+  const showLit = (bars: readonly number[]): void => { area?.lightAll(litBarIds(bars)); };
+  const stopListening = ports.structure?.onNotesNavigated((path) => {
+    const name = noteName(path);
+    notesLit = current === null || !(path.startsWith('bars/') || path.startsWith('phrases/')) ? [] : barsContributedBy(current, name, path.startsWith('phrases/') ? phraseName : undefined);
+    showLit(notesLit);
+    ports.structure?.trace?.(litEvidence(path, notesLit));
+  });
 
   /** Build the surface of one kind: its strip, (extend only) the bracket and the inspector, and the live Score. Everything is appended in that order, so after `teardown()` a rebuild lands in the same places. */
   /** How many single-hit changes lie between two bars, read FRESH from the vault; null = a bar could not be read or is not rhythm data (the Score says why). */
@@ -658,7 +684,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     const inspectorPorts: ScoreInspectorPorts | undefined = insp && k === 'extend' ? {
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
-      onPinned: insp.onPin ? (e) => { insp.onPin!(e ? pinnedNoteFor(e.prov) : null); } : undefined,
+      onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
       annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForPhrase(ports.path, note as NoteText, payload); },
       onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
       lineage: phraseLineageOf,
@@ -675,7 +701,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       // pinned bar's noteheads are painted by parent. No bracket and no source link (they are the extend's); arrows have nowhere to go.
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
-      onPinned: insp.onPin ? (e) => { insp.onPin!(e ? pinnedNoteFor(e.prov) : null); } : undefined,
+      onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
       annotate: (note, payload) => annotateForMix(ports.path, note as NoteText, payload),
       lineage: mixLineageOf,
       hint: MIX_INSPECTOR_HINT,
@@ -693,7 +719,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       // bars; a redraw (a control moved) keeps the pin; the pinned bar's noteheads are painted by where the hit came from. "Edit this bar" forks a bar exactly as an extend's. No bracket, no source link.
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
-      onPinned: insp.onPin ? (e) => { insp.onPin!(e ? pinnedNoteFor(e.prov) : null); } : undefined,
+      onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
       annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForMorph(ports.path, note as NoteText, payload); },
       onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
       lineage: morphLineageOf,
@@ -708,6 +734,10 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       decorate: paintMorphHits,
       kitNote: 'Kit view: not mapped for this morph (use the multi-staff view to inspect).',
     } : undefined;
+    structureStrip = ports.structure ? mountStructureStrip(parent, {
+      onHover: (chip) => { showLit(chip ? barsOfChip(chip) : notesLit); },
+      onClick: (chip) => { void ports.structure!.goto(chip.noteId).catch(() => false).then((handled) => { if (!handled) insp?.openNote(chip.noteId); }); },
+    }) : null;
     area = attachScoreArea(parent, plan, {
       ...areaPorts,
       inspector: inspectorPorts,
@@ -717,6 +747,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     if (bracket) wireBracket(bracket, () => (current && current.kind === 'extend' ? current : null), () => area, () => insp!.openNote(phraseNoteId(ports.path)));
   };
   const teardown = (): void => {
+    structureStrip?.dispose();
+    structureStrip = null;
     area?.dispose();
     area = null;
     bracket?.remove();
@@ -739,6 +771,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     const says = typeof text === 'string' ? readPhraseKind(text) : null;
     if (says !== null && says !== kind) { teardown(); build(says); }
     if (!writing && want === null) strip.set(salvage ? salvage.shown : current);                  // while a drag's writes are in flight the sliders stay where the person has them
+    structureStrip?.set(current ? chipsFor(phraseName, current) : []);
     if (bracket) {
       const ext = current && current.kind === 'extend' && !salvage ? current : null;
       bracket.style.display = ext ? '' : 'none';
@@ -819,6 +852,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     },
     dispose() {
       disposed = true;
+      stopListening?.();
       teardown();
     },
   };

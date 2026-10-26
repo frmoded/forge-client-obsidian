@@ -38,7 +38,7 @@ for (const edition of ['lean', 'music'] as const) {
     const leaves = new Set<any>();
     const log = { splits: [] as unknown[][], activated: [] as any[], errors: [] as unknown[][], lines: [] as string[], handlers: new Map<string, Array<() => void>>() };
     const makeLeaf = (type = 'empty', file?: string) => {
-      const leaf: any = { states: [] as any[], view: { getViewType: () => type, file: file ? tf(file) : undefined } };
+      const leaf: any = { states: [] as any[], view: { getViewType: () => type, file: file ? tf(file) : undefined, contentEl: (() => { const el = (globalThis as any).document.createElement('div'); el.appendChild((globalThis as any).document.createElement('span')); return el; })() } };
       leaf.setViewState = async (s: any) => { leaf.states.push(s); leaf.view = { getViewType: () => s.type, file: s.state?.file ? tf(s.state.file) : undefined }; };
       leaf.getViewState = () => ({ type: leaf.view.getViewType(), state: leaf.view.file ? { file: leaf.view.file.path } : {} });
       leaf.getRoot = () => ({});
@@ -47,6 +47,7 @@ for (const edition of ['lean', 'music'] as const) {
     };
     let active: { phrase?: any; text?: any } = {};
     let recent: any = null;
+    const resolvedLinks: Record<string, Record<string, number>> = {};
     const app: any = {
       vault: {
         adapter: { exists: async (p: string) => p === 'forge.toml' && toml !== null, read: async (p: string) => (p === 'forge.toml' && toml !== null ? toml : '') },
@@ -64,19 +65,20 @@ for (const edition of ['lean', 'music'] as const) {
         createLeafBySplit: (score: any, direction: string, before: boolean) => { log.splits.push([score, direction, before]); return makeLeaf(); },
         setActiveLeaf: (l: any) => { log.activated.push(l); }, revealLeaf: () => {}, getLeaf: () => makeLeaf(),
       },
-      metadataCache: { on: () => ({}) }, plugins: {},
+      metadataCache: { resolvedLinks, on: (name: string, cb: () => void) => { (log.handlers.get(`mc:${name}`) ?? log.handlers.set(`mc:${name}`, []).get(`mc:${name}`)!).push(cb); return {}; } }, plugins: {},
     };
     const plugin = await loadRealOnload(real, app);
     await tick();
     (Object.prototype as any).addAction = function () { return { remove() {} }; };       // the stand-in view base has no addAction
     const savedInfo = console.info, savedError = console.error;
-    console.info = (...a: unknown[]) => { if (String(a[0]).startsWith('[forge-panes]')) log.lines.push(String(a[0])); };
+    console.info = (...a: unknown[]) => { if (/^\[forge-(panes|strip)\]/.test(String(a[0]))) log.lines.push(String(a[0])); };
     console.error = (...a: unknown[]) => { log.errors.push(a); };
     /** A phrase tab in `leaf`: the REAL PhraseView built by the registered factory. */
     const phraseTab = (leaf: any, file = PHRASE) => { const v: any = plugin.views.get(PHRASE_VIEW_TYPE)!(leaf); v.file = tf(file); v.leaf = leaf; leaf.view = v; v.getViewType = () => PHRASE_VIEW_TYPE; return v; };
     const textTab = (leaf: any, file: string) => { const v: any = new real.MarkdownView(); v.file = tf(file); v.leaf = leaf; return v; };
     return {
-      plugin, app, leaves, log, makeLeaf, phraseTab, textTab,
+      plugin, app, leaves, log, makeLeaf, phraseTab, textTab, resolvedLinks,
+      fire: async (...names: string[]) => { for (const n of names) log.handlers.get(n)?.forEach((f) => f()); await tick(); },
       setActive: (a: typeof active) => { active = a; },
       setRecent: (l: any) => { recent = l; },
       offered: () => plugin.commands.get(PAIR)?.checkCallback?.(true) ?? false,
@@ -193,11 +195,72 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
+  test(`[${edition}] the strip's hooks on the REAL PhraseView: a chip click sends the pair's notes pane to that note (a missing note is ONE Notice, handled); without a pair the answer is false; the person navigating the notes pane is heard once, the Score's own show is not echoed`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const savedConstructed = (globalThis as any).__shimConstructed; (globalThis as any).__shimConstructed = [];
+    try {
+      const score = w.makeLeaf(); const view = w.phraseTab(score); w.setActive({ phrase: view });
+      assert.equal(typeof view.structure?.goto, 'function', 'the view was given the strip hooks');
+      assert.equal(await view.structure.goto(score, 'bars/bar_008'), false, 'no pair yet: the tab opens the note itself');
+      await w.run();
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      assert.equal(await view.structure.goto(score, 'bars/bar_008'), true);
+      assert.equal(notes.states.at(-1).state.file, 'bars/bar_008.md');
+      assert.equal(await view.structure.goto(score, 'notes/missing'), true, 'a note that is not there is handled with a Notice');
+      const notices = ((globalThis as any).__shimConstructed as Array<[string, unknown[]]>).filter(([n]) => n === 'Notice').map(([, a]) => String(a[0]));
+      assert.deepEqual(notices, ['Could not open notes/missing: that note is not in this vault.']);
+      assert.equal(notes.states.at(-1).state.file, 'bars/bar_008.md', 'the pane stayed where it was');
+      const heard: string[] = [];
+      view.structure.onNotesNavigated(score, (p: string) => heard.push(p));
+      await w.fire('file-open', 'active-leaf-change', 'layout-change');
+      assert.deepEqual(heard, [], 'the Score moved the pane: no echo');
+      notes.view = { getViewType: () => 'markdown', file: Object.assign(new real.TFile(), { path: 'bars/bar_007.md', extension: 'md', basename: 'bar_007' }) };   // the person clicked [[bar_007]] in the Recipe
+      await w.fire('file-open'); await w.fire('layout-change');
+      assert.deepEqual(heard, ['bars/bar_007.md'], 'heard once');
+      assert.deepEqual(w.log.errors, []);
+    } finally { (globalThis as any).__shimConstructed = savedConstructed; w.done(); }
+  });
+
+  test(`[${edition}] a bar's tab (Beat Box) shows the phrases that use it as chips above it, from the resolved links; a click opens that phrase; no phrase = no chips; it is not added twice`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const bar = w.makeLeaf(RHYTHM_EDIT_VIEW_TYPE, 'bars/bar_005.md');
+      w.resolvedLinks['phrases/phrase_003.md'] = { 'bars/bar_005.md': 1, 'bars/bar_001.md': 1 };
+      w.resolvedLinks['phrases/phrase_001.md'] = { 'bars/bar_005.md': 1 };
+      w.resolvedLinks['notes/other.md'] = { 'bars/bar_005.md': 1 };
+      await w.fire('layout-change');
+      const host = bar.view.contentEl;
+      assert.deepEqual([...host.querySelectorAll('.forge-structure-strip')].map((s: any) => s.textContent), ['used by:phrase_001phrase_003'], 'one strip');
+      assert.equal(host.firstElementChild, host.querySelector('.forge-structure-strip'), 'above the view');
+      await w.fire('layout-change', 'file-open');
+      assert.equal(host.querySelectorAll('.forge-structure-strip').length, 1, 'not added twice');
+      assert.deepEqual(w.log.lines.filter((l) => l.startsWith('[forge-strip]')), ['[forge-strip] bar_005 used by phrase_001, phrase_003'], 'one evidence line, said when the answer changed');
+      host.querySelectorAll('button')[1].click(); await tick();
+      assert.equal(w.log.splits.length, 0);
+      const opened = [...w.leaves].flatMap((l) => l.states).filter((s: any) => s.type === PHRASE_VIEW_TYPE).map((s: any) => s.state.file);
+      assert.deepEqual(opened, ['phrases/phrase_003.md'], 'the chip opens that phrase as a Score');
+      const other = w.makeLeaf(RHYTHM_EDIT_VIEW_TYPE, 'bars/bar_099.md');
+      await w.fire('layout-change');
+      assert.equal(other.view.contentEl.querySelector('button'), null, 'a bar no phrase uses has no chips');
+      assert.deepEqual(w.log.errors, []);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] P3 — a vault that is not score-first: a bar's tab gets no strip, the workspace events do nothing`, async () => {
+    const w = await world(TUTORIAL_TOML);
+    try {
+      const bar = w.makeLeaf(RHYTHM_EDIT_VIEW_TYPE, 'bars/bar_005.md');
+      w.resolvedLinks['phrases/phrase_001.md'] = { 'bars/bar_005.md': 1 };
+      await w.fire('layout-change', 'file-open', 'active-leaf-change');
+      assert.equal(bar.view.contentEl.querySelector('.forge-structure-strip'), null);
+    } finally { w.done(); }
+  });
+
   test(`[${edition}] MECHANISM PIN (if the design moves this SHOULD go red — reassess, do not just rewrite): the notes leaf is marked as text for BOTH default-view routers before every navigation, and the PhraseView hands its pin to the plugin with its own leaf`, () => {
     const sf = code('score-first.ts');
     assert.match(sf, /router\.setMark\(leaf, path, 'markdown'\);\s*\n\s*hooks\.markRhythmText\?\.\(leaf, path\);\s*\n\s*await leaf\.setViewState\(/);
     assert.match(sf, /createLeafBySplit\(score, 'vertical', false\)/);
-    assert.match(sf, /\(l, pin\) => \{ void linker\.pinned\(l, pin\); \}\)\);/);
+    assert.match(sf, /\(l, pin\) => \{ void linker\.pinned\(l, pin\); \}, structureHooks\)\);/);
     assert.match(code('phrase-view.ts'), /onPin: this\.onPin \? \(pin\) => \{ this\.onPin!\(this\.leaf, pin\); \} : undefined/);
     assert.match(code('main.ts'), /markRhythmText: \(leaf, path\) => \{ this\.rhythmEdit\?\.markAsText\(leaf, path\); \}/);
   });

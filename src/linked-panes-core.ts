@@ -70,6 +70,8 @@ export interface PaneLinkerPorts<L> {
   alive(leaf: L): boolean;
   focus(leaf: L): void;
   trace(line: string): void;
+  /** The note path the pane shows right now, or null (no file, not loaded). Read when the workspace says something moved, to see whether the PERSON navigated the notes pane. */
+  pathOf(leaf: L): string | null;
 }
 
 export interface PaneLinker<L> {
@@ -79,6 +81,12 @@ export interface PaneLinker<L> {
   pinned(score: L, pin: PinnedNote | null): Promise<void>;
   /** A pane may have closed (layout change): drop every pair that lost one, saying which. Idempotent. */
   sweep(): void;
+  /** 2026-10-26-1270: a structure chip was clicked on this Score: the notes pane goes to that note. false = this Score has no pair (the caller opens the note itself). */
+  navigate(score: L, noteId: string): Promise<boolean>;
+  /** The workspace said something moved: if the PERSON navigated a notes pane (a wikilink click, a backlink), tell that pair's listeners the new path, once. A navigation the Score caused is never echoed back. */
+  checkNotes(): void;
+  /** Be told when the person navigates this Score's notes pane. Returns the way to stop. */
+  onNotesNavigated(score: L, fn: (path: string) => void): () => void;
 }
 
 interface Pair<L> { notes: L; scorePath: string; home: string; shown: string; want: string; reason: string; busy: boolean; running: Promise<void> }
@@ -87,6 +95,7 @@ const message = (e: unknown): string => (e as Error)?.message ?? String(e);
 
 export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): PaneLinker<L> {
   const pairs = new Map<L, Pair<L>>();
+  const listeners = new Map<L, Set<(path: string) => void>>();
 
   /** One show at a time per pair, and always toward the LAST thing asked: a run of rapid pins is one navigation to the last of them. */
   const settle = (pair: Pair<L>): Promise<void> => {
@@ -123,11 +132,35 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
       pair.reason = pin ? pin.reason : 'released';
       await settle(pair);
     },
+    async navigate(score, noteId) {
+      const pair = pairs.get(score);
+      if (!pair) return false;
+      pair.want = `${noteId}.md`;
+      pair.reason = 'structure chip';
+      await settle(pair);
+      return true;
+    },
+    checkNotes() {
+      for (const [score, pair] of pairs) {
+        if (pair.busy || !ports.alive(pair.notes)) continue;      // the cause is tagged by `busy`: the events a show of ours fires (inside it) are ours, not the person's
+        const now = ports.pathOf(pair.notes);
+        if (now === null || now === pair.shown) continue;
+        pair.shown = now; pair.want = now; pair.reason = 'navigated in the pane';
+        ports.trace(`[forge-panes] notes pane -> ${now} (reason: navigated in the pane)`);
+        for (const fn of [...(listeners.get(score) ?? [])]) { try { fn(now); } catch { /* a listener's failure is not the pane's */ } }
+      }
+    },
+    onNotesNavigated(score, fn) {
+      const set = listeners.get(score) ?? listeners.set(score, new Set()).get(score)!;
+      set.add(fn);
+      return () => { set.delete(fn); };
+    },
     sweep() {
       for (const [score, pair] of [...pairs]) {
         const scoreAlive = ports.alive(score), notesAlive = ports.alive(pair.notes);
         if (scoreAlive && notesAlive) continue;
         pairs.delete(score);
+        listeners.delete(score);
         ports.trace(`[forge-panes] pair closed (${!scoreAlive && !notesAlive ? 'both panes' : !notesAlive ? 'notes pane' : 'score pane'})`);
       }
     },

@@ -12,11 +12,13 @@ import { musicEdition } from './music-edition-selected.ts';
 import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-core.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { morphChangesViaEngine } from './phrase-engine.ts';
-import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
+import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
 import { createPhraseRouter } from './phrase-default-view-core.ts';
 import { createPaneLinker, openPairAvailable, type PairSource } from './linked-panes-core.ts';
+import { usedByChips } from './structure-strip-core.ts';
+import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 
@@ -277,9 +279,52 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         alive: (leaf) => liveLeaves().has(leaf),
         focus: (leaf) => { app.workspace.setActiveLeaf(leaf, { focus: true }); },
         trace: (line) => { console.info(line); },
+        pathOf: (leaf) => { const f = (leaf.getViewState().state as { file?: unknown } | undefined)?.file; return typeof f === 'string' ? f : null; },
       });
       plugin.registerEvent(app.workspace.on('layout-change', () => linker.sweep()));
-      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }));
+      // 2026-10-26-1270 (M13): when the workspace says something moved, see whether the PERSON navigated a notes pane (a wikilink click in the Recipe, a backlink): the Score lights the bars that note contributed. A show we made
+      // ourselves is tagged and never echoed back (linked-panes-core.ts).
+      const onWorkspaceMoved = (fn: () => void) => { plugin.registerEvent(app.workspace.on('file-open', fn)); plugin.registerEvent(app.workspace.on('active-leaf-change', fn)); plugin.registerEvent(app.workspace.on('layout-change', fn)); };
+      onWorkspaceMoved(() => linker.checkNotes());
+      // A chip of the strip was clicked: the pair's notes pane goes there; a note that is not in the vault is ONE Notice naming it (and counts as handled, so the tab does not also try to open it).
+      const structureHooks: PhraseStructureHooks = {
+        goto: async (leaf, noteId) => {
+          if (!(app.vault.getAbstractFileByPath(`${noteId}.md`) instanceof TFile)) { new Notice(`Could not open ${noteId}: that note is not in this vault.`); return true; }
+          return linker.navigate(leaf, noteId);
+        },
+        onNotesNavigated: (leaf, fn) => linker.onNotesNavigated(leaf, fn),
+      };
+      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }, structureHooks));
+      // 2026-10-26-1270: a bar's tab (its Beat Box or its Score) shows the phrases that use it, as chips above it, from the vault's resolved links (the `links:` of 1260 are what makes them resolve). The strip is added to the view's
+      // content element on every event that can change the answer and put back if the view redrew without it; clicking a chip opens that phrase. Only in a score-first vault (this code runs after the gate).
+      const barStrips = new WeakMap<HTMLElement, { handle: StripHandle; key: string }>();
+      const syncBarStrips = () => {
+        const resolved = (app.metadataCache as unknown as { resolvedLinks?: Record<string, Record<string, number>> }).resolvedLinks ?? {};
+        app.workspace.iterateAllLeaves((leaf) => {
+          const type = leaf.view?.getViewType();
+          if (type !== RHYTHM_EDIT_VIEW_TYPE && type !== RHYTHM_SCORE_VIEW_TYPE) return;
+          const file = (leaf.view as unknown as { file?: TFile | null }).file;
+          const host = (leaf.view as unknown as { contentEl?: HTMLElement }).contentEl;
+          if (!host || !file || !isBarPath(file.path)) return;
+          const chips = usedByChips(file.basename, resolved);
+          const key = chips.map((c) => c.noteId).join('|');
+          let entry = barStrips.get(host);
+          if (!entry || !host.contains(entry.handle.el)) {
+            entry?.handle.dispose();
+            entry = { handle: mountStructureStrip(host, { onHover: () => {}, onClick: (chip) => { openNote(chip.noteId); } }, host.firstChild as Element | null), key: '\0' };
+            barStrips.set(host, entry);
+          }
+          if (entry.key !== key) {
+            entry.handle.set(chips);
+            entry.key = key;
+            if (chips.length > 0) console.info(`[forge-strip] ${file.basename} used by ${chips.map((c) => c.text).join(', ')}`);
+          }
+        });
+      };
+      onWorkspaceMoved(() => syncBarStrips());
+      plugin.registerEvent(app.metadataCache.on('resolved', () => syncBarStrips()));
+      plugin.registerEvent(app.metadataCache.on('changed', () => syncBarStrips()));
+      syncBarStrips();
       // Open as Score is the person asking for the Score again: forget an earlier Open as JSON on that leaf
       const openScore = (leaf: WorkspaceLeaf, file: TFile) => { router.setMark(leaf, file.path, null); return openPhraseInLeaf(app, leaf, file); };
       // The tab the command acts on comes from the ACTIVE VIEW (never a leaf lookup), as the other palette commands do. A bar's tab is its Beat Box (or its Score): the most recent leaf, which is the one the palette was opened from.

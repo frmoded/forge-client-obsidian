@@ -1,0 +1,93 @@
+// score_first M13 / design 4.12 phase C (drain 2026-10-26-1270, DEMO profile) — the structure strip above the Score. Pure: chips naming the notes behind what is drawn (lineage order), the bars each note contributed to, the
+// chips of a bar's tab (the phrases that use it). The "which note made bar n" rule is the SAME rule a pin sends the notes pane by (linked-panes-core.ts pinnedNoteFor): structure-strip-core.test.ts cross-checks them for every
+// kind, so the two cannot drift apart. Runtime imports from phrase-core.ts are types only.
+import type { PhraseParams } from './phrase-core.ts';
+import { phraseBarId, PHRASE_BAR_SCOPE } from './phrase-lineage-core.ts';
+
+export interface Chip {
+  /** What the chip says (without the brackets of `stripText`). */
+  text: string;
+  /** The note it opens (a lineage id: `bars/bar_007`, `phrases/phrase_004`). */
+  noteId: string;
+  kind: 'bar' | 'phrase' | 'fork';
+}
+
+const baseName = (noteId: string): string => noteId.split('/').pop() ?? noteId;
+const forks = (p: PhraseParams): Array<{ bar: number; note: string }> => {
+  const o = p.kind === 'extend' || p.kind === 'morph' ? p.overrides : undefined;
+  return Object.keys(o ?? {}).sort((x, y) => Number(x) - Number(y)).map((k) => ({ bar: Number(k), note: baseName(o![k]) }));
+};
+
+/** How many bars the Score of this phrase has: an extend's or a morph's Bars; a mix is one bar. */
+export function barCount(p: PhraseParams): number {
+  return p.kind === 'mix' ? 1 : p.bars;
+}
+
+/** The bar note that made bar `bar` of this phrase (a name like `bar_007`): its fork note if forked; an extend: the source; a morph: a at or before the middle bar ((bars + 1) / 2), else b; a mix (one bar): a when the weight is at least half. */
+export function barParent(p: PhraseParams, bar: number): string | null {
+  if (p.kind === 'extend' || p.kind === 'morph') {
+    const fork = p.overrides?.[String(bar)];
+    if (fork) return baseName(fork);
+  }
+  if (p.kind === 'extend') return p.source;
+  if (p.kind === 'morph') return bar <= (p.bars + 1) / 2 ? p.a : p.b;
+  return p.weight >= 0.5 ? p.a : p.b;
+}
+
+/** The bars (1-based) a note contributed to: for the phrase's own name every bar; for a bar note the bars `barParent` gives it; a note that took no part: none. */
+export function barsContributedBy(p: PhraseParams, noteName: string, phraseName?: string): number[] {
+  const n = barCount(p);
+  const all = Array.from({ length: n }, (_, i) => i + 1);
+  if (phraseName !== undefined && noteName === phraseName) return all;
+  return all.filter((bar) => barParent(p, bar) === noteName);
+}
+
+/** The element ids of those bars in the drawn Score (bar n of any phrase kind is `ph_bar_n`). */
+export function litBarIds(bars: readonly number[]): string[] {
+  return bars.map((n) => phraseBarId(PHRASE_BAR_SCOPE, n));
+}
+
+/** The chips of a phrase tab, left to right in lineage order. */
+export function chipsFor(name: string, p: PhraseParams): Chip[] {
+  const bar = (b: string): Chip => ({ text: b, noteId: `bars/${b}`, kind: 'bar' });
+  const phrase = (what: string): Chip => ({ text: `${name} ${what}`, noteId: `phrases/${name}`, kind: 'phrase' });
+  let chips: Chip[];
+  if (p.kind === 'extend') chips = [bar(p.source), phrase(`extend ${p.bars} bars`)];
+  else if (p.kind === 'morph') chips = [bar(p.a), phrase(`morph, ${p.bars} bars`), ...(p.b === p.a ? [] : [bar(p.b)])];
+  else chips = [bar(p.a), ...(p.b === p.a ? [] : [bar(p.b)]), phrase(`mix, ${p.mode === 'path' ? 'path' : 'vote'}`)];
+  return [...chips, ...forks(p).map((f): Chip => ({ text: `${f.note} fork of bar ${f.bar}`, noteId: `bars/${f.note}`, kind: 'fork' }))];
+}
+
+export type StripToken = Chip | '->' | 'used by:';
+
+/**
+ * The strip as tokens, left to right: the sources, an arrow, the phrase chip, an arrow and the bar it ends on (a morph's b), then the fork chips; a bar tab's chips (all phrases) follow `used by:`. The DOM draws these tokens
+ * and `stripText` prints them, so what is on screen is what the tests pin.
+ */
+export function stripTokens(chips: readonly Chip[]): StripToken[] {
+  if (chips.length === 0) return [];
+  if (chips.every((c) => c.kind === 'phrase')) return ['used by:', ...chips];
+  const at = chips.findIndex((c) => c.kind === 'phrase');
+  const rest = chips.slice(at + 1);
+  const ends = rest.filter((c) => c.kind === 'bar'), forkChips = rest.filter((c) => c.kind === 'fork');
+  return [...chips.slice(0, at), '->', chips[at], ...(ends.length ? ['->' as const, ...ends] : []), ...forkChips];
+}
+
+/** The text of a strip: `[bar_007] -> [phrase_004 morph, 17 bars] -> [bar_008] [bar_009 fork of bar 9]`; a bar tab's: `used by: [phrase_001] [phrase_003]`. */
+export function stripText(chips: readonly Chip[]): string {
+  return stripTokens(chips).map((t) => (typeof t === 'string' ? t : `[${t.text}]`)).join(' ');
+}
+
+/** The chips of a bar's tab: the phrases of the vault that read this bar, from the vault's resolved links (`metadataCache.resolvedLinks`: source path -> target path -> count), in name order. */
+export function usedByChips(barName: string, resolved: Record<string, Record<string, number>>): Chip[] {
+  const target = `bars/${barName}.md`;
+  return Object.keys(resolved)
+    .filter((src) => /^phrases\/phrase_\d+\.md$/.test(src) && (resolved[src][target] ?? 0) > 0)
+    .sort()
+    .map((src): Chip => { const name = baseName(src).replace(/\.md$/, ''); return { text: name, noteId: `phrases/${name}`, kind: 'phrase' }; });
+}
+
+/** The evidence line when the notes pane went to `path` and the Score lit `bars`. */
+export function litEvidence(path: string, bars: readonly number[]): string {
+  return `[forge-strip] note pane -> ${path} lights bars ${bars.length === 0 ? 'none' : bars.join(', ')}`;
+}

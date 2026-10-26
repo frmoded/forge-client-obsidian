@@ -66,16 +66,18 @@ function world() {
   const focused: Leaf[] = [];
   const opened: Array<{ score: Leaf; path: string }> = [];
   const fail = { show: false, open: false };
+  let hook: (() => void) | null = null;
   let n = 0;
   const ports: PaneLinkerPorts<Leaf> = {
     openBeside: async (score, path) => { if (fail.open) throw new Error('no room'); const l = { id: `notes-${++n}` }; alive.add(l); shown.set(l, path); opened.push({ score, path }); return l; },
-    show: async (notes, path) => { if (fail.show) throw new Error('busy'); await Promise.resolve(); shown.set(notes, path); },
+    show: async (notes, path) => { if (fail.show) throw new Error('busy'); await Promise.resolve(); shown.set(notes, path); hook?.(); },
     alive: (l) => alive.has(l),
     focus: (l) => { focused.push(l); },
     trace: (line) => { lines.push(line); },
+    pathOf: (l) => shown.get(l) ?? null,
   };
   const score: Leaf = { id: 'score' }; alive.add(score);
-  return { linker: createPaneLinker<Leaf>(ports), lines, alive, shown, focused, opened, fail, score };
+  return { linker: createPaneLinker<Leaf>(ports), lines, alive, shown, focused, opened, fail, score, onShow: (fn: () => void) => { hook = fn; } };
 }
 
 test('open: the notes pane is made beside the Score showing the home note, one evidence line says both paths', async () => {
@@ -173,4 +175,65 @@ test('two Scores, two pairs: each pin follows its own pair', async () => {
   await w.linker.pinned(second, { noteId: 'bars/bar_007', reason: 'pinned bar 1' });
   assert.equal(w.shown.get(n2), 'bars/bar_007.md');
   assert.equal(w.shown.get(n1), 'phrases/phrase_001.md');
+});
+
+// ---- M13 (drain 2026-10-26-1270): the strip talks to the pair ------------------------------------------------------------------------------------------------------------------------------
+
+test('navigate (a chip was clicked): the notes pane goes to that note and the answer is true; without a pair the answer is false and nothing happens', async () => {
+  const w = world();
+  assert.equal(await w.linker.navigate(w.score, 'bars/bar_008'), false);
+  await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
+  const notes = [...w.alive].find((l) => l.id.startsWith('notes'))!;
+  w.lines.length = 0;
+  assert.equal(await w.linker.navigate(w.score, 'bars/bar_008'), true);
+  assert.equal(w.shown.get(notes), 'bars/bar_008.md');
+  assert.deepEqual(w.lines, ['[forge-panes] notes pane -> bars/bar_008.md (reason: structure chip)']);
+});
+
+test('the person navigates the notes pane (a wikilink click): checkNotes tells the listeners the new path ONCE, and a Score-caused show is never echoed back (the cause is tagged)', async () => {
+  const w = world();
+  await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
+  const notes = [...w.alive].find((l) => l.id.startsWith('notes'))!;
+  const heard: string[] = [];
+  const off = w.linker.onNotesNavigated(w.score, (path) => heard.push(path));
+  w.linker.checkNotes();
+  assert.deepEqual(heard, [], 'nothing moved');
+  await w.linker.pinned(w.score, { noteId: 'bars/bar_005', reason: 'pinned bar 2' });
+  await w.linker.navigate(w.score, 'bars/bar_008');
+  w.linker.checkNotes();
+  assert.deepEqual(heard, [], 'the Score moved the pane: not an echo');
+  w.shown.set(notes, 'bars/bar_007.md');                     // the person clicked [[bar_007]] in the Recipe
+  w.linker.checkNotes(); w.linker.checkNotes();
+  assert.deepEqual(heard, ['bars/bar_007.md'], 'once');
+  assert.match(w.lines.at(-1)!, /^\[forge-panes\] notes pane -> bars\/bar_007\.md \(reason: navigated in the pane\)$/);
+  await w.linker.pinned(w.score, { noteId: 'bars/bar_007', reason: 'pinned bar 4' });
+  assert.equal(w.shown.get(notes), 'bars/bar_007.md');
+  w.shown.set(notes, 'phrases/phrase_001.md'); w.linker.checkNotes();
+  assert.deepEqual(heard, ['bars/bar_007.md', 'phrases/phrase_001.md']);
+  off();
+  w.shown.set(notes, 'bars/bar_005.md'); w.linker.checkNotes();
+  assert.equal(heard.length, 2, 'unsubscribed');
+});
+
+test('a pane that has no path (a view that shows no file) or is gone says nothing; no pair = checkNotes does nothing', async () => {
+  const w = world();
+  w.linker.checkNotes();
+  await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
+  const notes = [...w.alive].find((l) => l.id.startsWith('notes'))!;
+  const heard: string[] = [];
+  w.linker.onNotesNavigated(w.score, (p) => heard.push(p));
+  w.shown.delete(notes); w.linker.checkNotes();
+  w.alive.delete(notes); w.linker.checkNotes();
+  assert.deepEqual(heard, []);
+});
+
+test('an event fired INSIDE the Score\'s own show (Obsidian fires file-open while it navigates) is the Score\'s, not the person\'s: nothing is heard', async () => {
+  const w = world();
+  await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
+  const heard: string[] = [];
+  w.linker.onNotesNavigated(w.score, (p) => heard.push(p));
+  w.onShow(() => w.linker.checkNotes());
+  await w.linker.pinned(w.score, { noteId: 'bars/bar_005', reason: 'pinned bar 2' });
+  await w.linker.navigate(w.score, 'bars/bar_008');
+  assert.deepEqual(heard, []);
 });

@@ -9,6 +9,12 @@ import { computePhraseScoreViaEngine } from './phrase-engine.ts';
 import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import type { PinnedNote } from './linked-panes-core.ts';
+
+/** 2026-10-26-1270 (M13): what the structure strip of a phrase tab asks of the plugin, per Score leaf (score-first.ts): send the pair's notes pane to a note, and hear when the person navigates it. */
+export interface PhraseStructureHooks {
+  goto(leaf: WorkspaceLeaf, noteId: string): Promise<boolean>;
+  onNotesNavigated(leaf: WorkspaceLeaf, fn: (path: string) => void): () => void;
+}
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { headerResync } from './header-resync.ts';
@@ -25,7 +31,7 @@ export class PhraseView extends EditableFileView {
   /** `chooseJson` (2026-10-23-0630): told BEFORE the tab switches to the note's text, so the default-view router leaves that choice alone (score-first.ts). `morphThis` (2026-10-25-1000): the **Morph this mix**
    *  button of a mix's strip asks for "Turn this mix into a morph" on this view's own note (score-first.ts). `onPin` (2026-10-26-1250, M12): the note that made the bar the person pinned, or null when the pin is
    *  gone, for the notes pane beside this Score (linked-panes-core.ts). */
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void, private readonly chooseJson?: (leaf: WorkspaceLeaf, path: string) => void, private readonly morphThis?: (file: TFile) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void) {
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void, private readonly chooseJson?: (leaf: WorkspaceLeaf, path: string) => void, private readonly morphThis?: (file: TFile) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void, private readonly structure?: PhraseStructureHooks) {
     super(leaf);
     this.addAction('code', 'Open as JSON', () => { void this.openAsJson(); });
   }
@@ -63,6 +69,7 @@ export class PhraseView extends EditableFileView {
         isAlreadyExists: isFileExistsError,
       },
       turnIntoMorph: this.morphThis ? () => { this.morphThis!(file); } : undefined,     // 2026-10-25-1000: the strip's **Morph this mix** button (a mix only)
+      structure: this.structure ? { goto: (id) => this.structure!.goto(this.leaf, id), onNotesNavigated: (fn) => this.structure!.onNotesNavigated(this.leaf, fn), trace: (line) => { console.info(line); } } : undefined,       // 2026-10-26-1270: the strip above the Score
       inspector: { openNote: this.openNote, onPin: this.onPin ? (pin) => { this.onPin!(this.leaf, pin); } : undefined },          // M6: click a bar for its lineage; the bracket; the source link — each opens a note through the plugin's own openers
       readNote: async (p) => {
         const f = this.app.vault.getAbstractFileByPath(p);

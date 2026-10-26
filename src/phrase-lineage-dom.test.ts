@@ -21,13 +21,14 @@ const xmlFor = (bars: number, tempi: number[] = TEMPI) => {
   return `<score-partwise>${part(1)}${part(2)}</score-partwise>`;
 };
 
-function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) => string; inspector?: boolean } = {}) {
+function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) => string; inspector?: boolean; structure?: boolean; gotoHandled?: boolean } = {}) {
   const win: any = new Window({ url: 'http://localhost/' });
   const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
   const files = new Map<string, string>([[PATH, opts.phrase ?? phraseText()]]);
   if (opts.bar !== null) files.set('bars/bar_005.md', opts.bar ?? BAR);
   const opened: string[] = [];
   const pins: Array<unknown> = [];
+  const gotos: string[] = []; const traces: string[] = []; let navFn: ((path: string) => void) | null = null;
   let now = 0; const timers: Array<{ id: number; at: number; fn: () => void }> = []; let nextId = 1;
   const ports: PhraseMountPorts = {
     path: PATH, title: 'phrase_001', plan: 'score',
@@ -47,6 +48,7 @@ function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) 
     setTimer: (fn, ms) => { const id = nextId++; timers.push({ id, at: now + ms, fn }); return id; },
     clearTimer: (h) => { const i = timers.findIndex((t) => t.id === h); if (i >= 0) timers.splice(i, 1); },
     inspector: opts.inspector === false ? undefined : { openNote: (id) => { opened.push(id); }, onPin: (p) => { pins.push(p); } },
+    structure: opts.structure ? { goto: async (id) => { gotos.push(id); return opts.gotoHandled ?? true; }, onNotesNavigated: (fn) => { navFn = fn; return () => { navFn = null; }; }, trace: (line) => { traces.push(line); } } : undefined,
   };
   const handle = mountPhrase(parent, ports);
   const advance = async (ms: number) => { now += ms; for (;;) { const due = timers.filter((t) => t.at <= now).sort((a, b) => a.at - b.at)[0]; if (!due) break; timers.splice(timers.indexOf(due), 1); due.fn(); } await flush(); };
@@ -54,7 +56,7 @@ function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) 
   const qa = (sel: string) => [...parent.querySelectorAll(sel)] as any[];
   const fire = (el: any, type: string, init: any = {}) => el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, ...init }));
   const stack = () => qa('.forge-inspector-lineage > li').filter((li) => li.querySelector('span')).map((li) => li.querySelector('span').textContent);   // M9: an action line is a button, not a text line
-  return { handle, parent, files, opened, pins, q, qa, fire, stack, advance, win, status: () => q('.forge-rhythm-edit-score-status').textContent as string };
+  return { handle, parent, files, opened, pins, gotos, traces, navigate: (path: string) => navFn?.(path), q, qa, fire, stack, advance, win, status: () => q('.forge-rhythm-edit-score-status').textContent as string };
 }
 
 test('every bar of the Score is a measure with an id the map knows: ph_bar_1 .. ph_bar_8', async () => {
@@ -301,4 +303,77 @@ test('M12: without the onPin port the tab is exactly what it was (the pin works,
   await r.handle.load(); await flush();
   r.fire(r.q('#ph_bar_3'), 'click');
   assert.equal(r.stack()[0], 'bar 3 of 8');
+});
+
+// ---- M13 (drain 2026-10-26-1270): the structure strip above the Score ------------------------------------------------------------------------------------------------------------------------
+
+const hotBars = (r: any) => r.qa('g.measure.forge-artifact-hot').map((g: any) => g.id);
+const chipTexts = (r: any) => r.qa('.forge-structure-strip button').map((b: any) => b.textContent);
+
+test('M13: with the structure port the phrase tab has a strip ABOVE the Score naming bar_005 -> phrase_001 extend 8 bars; without the port there is no strip at all (the tab is what it was)', async () => {
+  const r = rig({ structure: true });
+  await r.handle.load(); await flush();
+  assert.deepEqual(chipTexts(r), ['bar_005', 'phrase_001 extend 8 bars']);
+  const strip = r.q('.forge-structure-strip'), score = r.q('.forge-rhythm-score-host');
+  assert.ok(strip.compareDocumentPosition(score) & 4, 'the strip comes before the Score in the DOM');
+  const plain = rig();
+  await plain.handle.load(); await flush();
+  assert.equal(plain.q('.forge-structure-strip'), null);
+});
+
+test('M13: hovering the source chip lights the bars it contributed to (all eight of an extend), the phrase chip lights all; leaving clears; keyboard focus does the same', async () => {
+  const r = rig({ structure: true });
+  await r.handle.load(); await flush();
+  const [src, phrase] = r.qa('.forge-structure-strip button');
+  r.fire(src, 'mouseenter'); assert.equal(hotBars(r).length, 8);
+  r.fire(src, 'mouseleave'); assert.deepEqual(hotBars(r), []);
+  r.fire(phrase, 'mouseenter'); assert.equal(hotBars(r).length, 8);
+  r.fire(phrase, 'mouseleave'); assert.deepEqual(hotBars(r), []);
+  src.dispatchEvent(new r.win.Event('focus')); assert.equal(hotBars(r).length, 8);
+  src.dispatchEvent(new r.win.Event('blur')); assert.deepEqual(hotBars(r), []);
+});
+
+test('M13: a chip click goes to the notes pane (goto); with no pair (goto answers false) the plugin\'s own opener opens the note', async () => {
+  const r = rig({ structure: true });
+  await r.handle.load(); await flush();
+  r.qa('.forge-structure-strip button')[0].click(); await flush();
+  assert.deepEqual(r.gotos, ['bars/bar_005']); assert.deepEqual(r.opened, []);
+  const none = rig({ structure: true, gotoHandled: false });
+  await none.handle.load(); await flush();
+  none.qa('.forge-structure-strip button')[1].click(); await flush();
+  assert.deepEqual(none.opened, ['phrases/phrase_001']);
+});
+
+test('M13: the notes pane navigated by the person lights the bars that note contributed and KEEPS them lit (hover on and off a chip does not clear them) until the next navigation; a stranger note clears; one evidence line each', async () => {
+  const r = rig({ structure: true });
+  await r.handle.load(); await flush();
+  r.navigate('bars/bar_005.md');
+  assert.equal(hotBars(r).length, 8);
+  const [src] = r.qa('.forge-structure-strip button');
+  r.fire(src, 'mouseenter'); r.fire(src, 'mouseleave');
+  assert.equal(hotBars(r).length, 8, 'still lit after a hover came and went');
+  r.navigate('notes/other.md'); assert.deepEqual(hotBars(r), []);
+  r.navigate('phrases/phrase_001.md'); assert.equal(hotBars(r).length, 8, 'this phrase\'s own note lights all of its bars');
+  r.navigate('phrases/phrase_009.md'); assert.deepEqual(hotBars(r), [], 'another phrase lights nothing here');
+  assert.deepEqual(r.traces, [
+    '[forge-strip] note pane -> bars/bar_005.md lights bars 1, 2, 3, 4, 5, 6, 7, 8', '[forge-strip] note pane -> notes/other.md lights bars none',
+    '[forge-strip] note pane -> phrases/phrase_001.md lights bars 1, 2, 3, 4, 5, 6, 7, 8', '[forge-strip] note pane -> phrases/phrase_009.md lights bars none',
+  ]);
+});
+
+test('M13: pinning a bar emphasises the chip of the note that made it; Esc clears it', async () => {
+  const r = rig({ structure: true });
+  await r.handle.load(); await flush();
+  const on = () => r.qa('.forge-structure-chip-on').map((b: any) => b.dataset.note);
+  r.fire(r.q('#ph_bar_3'), 'click'); assert.deepEqual(on(), ['bars/bar_005']);
+  r.q('.forge-rhythm-score-host').dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.deepEqual(on(), []);
+});
+
+test('M13: the strip follows the note: a new Bars count in the json is a new chip text', async () => {
+  const r = rig({ structure: true });
+  await r.handle.load(); await flush();
+  r.files.set(PATH, phraseText({ bars: 4 } as any));
+  await r.handle.noteModified(PATH); await r.advance(1500);
+  assert.deepEqual(chipTexts(r), ['bar_005', 'phrase_001 extend 4 bars']);
 });
