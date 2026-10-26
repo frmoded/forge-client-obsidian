@@ -6,13 +6,21 @@
 #          KEEP=1 bash scripts/drain-matrix.sh         # leave the worktrees in place for inspection
 #          --forge | --no-forge | --auto (default)     # the forge-pytest leg: always / never / only when the drain touched forge Python (see below)
 #          --forge-only                                # run ONLY the forge-pytest leg (no client sync, build or tests): the quick check for an engine-only drain
+#          --serial                                    # run the legs one after the other (the pre-2026-10-26 behaviour; for a machine that cannot take three at once)
 #
 # What it does: worktrees (detached, committed state only) of forge-client-obsidian, music-theory, forge-tutorial, forge-moda, music-core, forge and music-playground
-# next to each other; links node_modules, forge/.venv and the music wheels into them; then, in the client worktree,
-#   sync-bundled-vault --all + sync-engine-bundle  ->  the existing prebuild gates (engine drift, description hashes, open-time writes)  ->  the bundled-vault bump check
-#   ->  build + `npm test` for the MUSIC edition, build + `npm test` for the LEAN edition.
+# next to each other; links node_modules, forge/.venv and the music wheels into them; then THREE LEGS AT THE SAME TIME (drain 2026-10-26-1300; the machine has the cores):
+#   the MUSIC leg, in the client worktree:  sync-bundled-vault --all + sync-engine-bundle  ->  the existing prebuild gates (engine drift, description hashes, open-time writes)
+#                                           ->  the bundled-vault bump check  ->  build + `npm test` for the MUSIC edition;
+#   the LEAN leg, in a SECOND client worktree (lean/forge-client-obsidian, its siblings symlinked to the first set): the same sync, then build + `npm test` for the LEAN edition
+#                                           (the explicit gates run and the bump check are edition-independent and run once, in the music leg, as they did when the legs were serial; `npm run build` also runs the package's prebuild hook, the same gates, in every build);
+#   the FORGE leg: `pytest tests/music` (below), whenever its rule says it runs.
+# Why two client worktrees: a build writes main.js and the generated sources into its tree, so two editions cannot share one. Why the tests are not split: the two editions run the SAME
+# test files (3820 each on 2026-10-26) and several read build output, so the split is not clean; both editions run in full, concurrently.
 # It FAILS (non-zero exit, a red line saying why) when: a repo is missing, a wheel is missing, a step fails, a test run does not print its summary, any test fails,
-# or ANY test is skipped (a skipped test is not a passing test). It also WARNS when a repo has uncommitted changes (the matrix does not see them).
+# or ANY test is skipped (a skipped test is not a passing test). It also WARNS when a repo has uncommitted changes (the matrix does not see them). A failed step in one leg does not
+# stop the others (they are already running); the matrix waits for all of them, prints each failure's log tail, and exits non-zero. The exit status is the status of the whole matrix:
+# the push of a drain stays conditional on it.
 #
 # The forge-pytest leg (drain 2026-10-25-1030): `pytest tests/music -q` in the clean forge worktree (the venv is the real forge/.venv, but the leg first CHECKS that `forge` is imported from the worktree and not from the
 # main checkout, so what runs is the committed tree). Why: the client legs never ran forge's own tests, so three red byte-exact tests were carried as "identical on a clean HEAD" through two drains.
@@ -26,13 +34,14 @@ set -euo pipefail
 
 PROJECTS="${PROJECTS:-$HOME/projects}"
 REPOS=(forge-client-obsidian music-theory forge-tutorial forge-moda music-core forge music-playground)
-FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD
+FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD; SERIAL=0
 for arg in "$@"; do
   case "$arg" in
     --forge) FORGE_MODE=on ;;
     --no-forge) FORGE_MODE=off ;;
     --forge-only) FORGE_ONLY=1; [ "$FORGE_MODE" = auto ] && FORGE_MODE=on ;;      # the quick check runs the leg; follow it with --auto to let the change decide (the test uses that)
     --auto) FORGE_MODE=auto ;;
+    --serial) SERIAL=1 ;;
     --*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) CLIENT_REF="$arg" ;;
   esac
@@ -41,6 +50,7 @@ FORGE_PYTEST_SKIP_MAX="${FORGE_PYTEST_SKIP_MAX:-40}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/drain-matrix.XXXXXX")"
 LOGDIR="${LOGDIR:-$WORK/logs}"
 mkdir -p "$LOGDIR"
+LEAN="$WORK/lean"
 T0=$(date +%s)
 red()   { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -49,13 +59,15 @@ fail()  { red "FAIL: $*"; FAILED=1; }
 die()   { red "FAIL: $*"; cleanup; exit 1; }
 cleanup() {
   [ "${KEEP:-0}" = "1" ] && { echo "worktrees kept in $WORK"; return; }
+  rm -f "$LEAN/forge-client-obsidian/node_modules" "$LEAN/forge-client-obsidian/assets/wheels" 2>/dev/null || true
+  [ -d "$LEAN/forge-client-obsidian" ] && { git -C "$PROJECTS/forge-client-obsidian" worktree remove --force "$LEAN/forge-client-obsidian" >/dev/null 2>&1 || true; }
   for r in "${REPOS[@]}"; do
     [ -d "$WORK/$r" ] || continue
     rm -f "$WORK/$r/node_modules" "$WORK/$r/.venv" "$WORK/$r/assets/wheels" 2>/dev/null || true
     git -C "$PROJECTS/$r" worktree remove --force "$WORK/$r" >/dev/null 2>&1 || true
     git -C "$PROJECTS/$r" worktree prune >/dev/null 2>&1 || true
   done
-  rm -rf "$WORK" 2>/dev/null || true
+  rm -rf "$LEAN" "$WORK" 2>/dev/null || true
 }
 step() { echo; echo "== $* ($(( $(date +%s) - T0 ))s)"; }
 
@@ -86,53 +98,34 @@ if [ "$FORGE_ONLY" = "0" ]; then
   ln -s "$CLIENT/node_modules" "$WORK/forge-client-obsidian/node_modules"
   mkdir -p "$WORK/forge-client-obsidian/assets"
   ln -s "$WHEELS" "$WORK/forge-client-obsidian/assets/wheels"
+  # the lean leg's own client worktree; the sibling repos it reads through ../ are links to the worktrees above, so both editions test the same commits
+  mkdir -p "$LEAN"
+  git -C "$CLIENT" worktree add --detach "$LEAN/forge-client-obsidian" "$CLIENT_REF" >/dev/null 2>&1 || die "cannot create the lean worktree of forge-client-obsidian at $CLIENT_REF"
+  for r in "${REPOS[@]}"; do [ "$r" = forge-client-obsidian ] || ln -s "$WORK/$r" "$LEAN/$r"; done
+  ln -s "$CLIENT/node_modules" "$LEAN/forge-client-obsidian/node_modules"
+  mkdir -p "$LEAN/forge-client-obsidian/assets"
+  ln -s "$WHEELS" "$LEAN/forge-client-obsidian/assets/wheels"
 fi
-cd "$WORK/forge-client-obsidian"
-
-run() {  # run <logname> <command...> : log it, fail loudly with the tail of the log
-  local name="$1"; shift
-  if ! "$@" >"$LOGDIR/$name.log" 2>&1; then
-    red "---- tail of $LOGDIR/$name.log"; tail -25 "$LOGDIR/$name.log" >&2
-    die "step '$name' failed"
-  fi
-}
 
 declare -a SUMMARY
 
-# ---- 2. sync + gates --------------------------------------------------------------------------------------------------------------------------------------------------
-if [ "$FORGE_ONLY" = "0" ]; then
-step "sync bundled vaults + engine"
-run sync bash -c 'FORGE_EDITION=music node scripts/sync-bundled-vault.mjs --all && node scripts/sync-engine-bundle.mjs'
-step "prebuild gates"
-run gates bash -c 'FORGE_EDITION=music npm run prebuild'
-grep -E "Engine-bundle drift check|check-bundled-description-hashes:|check-open-time-writes:" "$LOGDIR/gates.log" | cut -c1-200 || die "the gates printed no verdicts"
-run bump bash -c 'FORGE_EDITION=music node scripts/check-bundled-vault-bump.mjs'
-tail -1 "$LOGDIR/bump.log"
-fi
-
-# ---- 3. build + test, both editions --------------------------------------------------------------------------------------------------------------------------------
-for ed in music lean; do
-  [ "$FORGE_ONLY" = "1" ] && break
-  step "build + npm test: $ed edition"
-  run "build-$ed" bash -c "FORGE_EDITION=$ed npm run build"
-  if ! npm test >"$LOGDIR/test-$ed.log" 2>&1; then :; fi        # a failing suite is judged from its summary below, with the failing names printed
-  tests=$(grep -E '^ℹ tests ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
-  pass=$(grep -E '^ℹ pass ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
-  failn=$(grep -E '^ℹ fail ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
-  skipped=$(grep -E '^ℹ skipped ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
-  if [ -z "$tests" ] || [ -z "$failn" ] || [ -z "$skipped" ]; then
-    red "---- tail of $LOGDIR/test-$ed.log"; tail -25 "$LOGDIR/test-$ed.log" >&2
-    fail "$ed: the test run printed no summary (it did less than asked)"; SUMMARY+=("$ed: NO SUMMARY"); continue
+# ---- 2. the legs --------------------------------------------------------------------------------------------------------------------------------------------------------
+edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and bump check in the music leg) + build + npm test; a failed step leaves $LOGDIR/leg-<ed>.failed naming it
+  local ed="$1" dir="$2" t0; t0=$(date +%s)
+  local lg="$LOGDIR/leg-$ed"
+  leg_step() { local name="$1"; shift; if ! "$@" >"$LOGDIR/$name.log" 2>&1; then echo "$name" >"$lg.failed"; return 1; fi; }
+  cd "$dir"
+  local sync=sync; [ "$ed" = music ] || sync="sync-$ed"
+  leg_step "$sync" bash -c 'FORGE_EDITION=music node scripts/sync-bundled-vault.mjs --all && node scripts/sync-engine-bundle.mjs' || return 0
+  if [ "$ed" = music ]; then
+    leg_step gates bash -c 'FORGE_EDITION=music npm run prebuild' || return 0
+    leg_step bump bash -c 'FORGE_EDITION=music node scripts/check-bundled-vault-bump.mjs' || return 0
   fi
-  SUMMARY+=("$ed: tests $tests, pass $pass, fail $failn, skipped $skipped")
-  echo "  tests $tests / pass $pass / fail $failn / skipped $skipped"
-  if [ "$failn" != "0" ]; then fail "$ed: $failn test(s) failed"; grep -E '^✖' "$LOGDIR/test-$ed.log" | sort -u | head -15 >&2; fi
-  if [ "$skipped" != "0" ]; then
-    fail "$ed: $skipped test(s) SKIPPED (a skipped test is not a passing test)"; grep -E '^﹣' "$LOGDIR/test-$ed.log" | cut -c1-200 | head -10 >&2
-  fi
-done
+  leg_step "build-$ed" bash -c "FORGE_EDITION=$ed npm run build" || return 0
+  npm test >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
+  echo $(( $(date +%s) - t0 )) >"$lg.secs"
+}
 
-# ---- 3b. forge pytest (drain 2026-10-25-1030) ---------------------------------------------------------------------------------------------------------------------
 forge_touched() {   # the committed, unpushed change in forge that makes the leg run (empty = none); "?" = cannot tell
   if ! git -C "$PROJECTS/forge" rev-parse --verify -q origin/main >/dev/null 2>&1; then echo "?"; return 0; fi
   git -C "$PROJECTS/forge" diff --name-only origin/main...HEAD -- ':(glob)forge/**/*.py' ':(glob)tests/**' 2>/dev/null || true
@@ -147,17 +140,72 @@ case "$FORGE_MODE" in
     elif [ -n "$touched" ]; then run_forge_leg=1; forge_why="forge changed $(printf '%s\n' "$touched" | wc -l | tr -d ' ') file(s) under forge/**/*.py or tests/** since origin/main"
     else forge_why="no committed change under forge/**/*.py or tests/** since origin/main"; fi ;;
 esac
+forge_wrong_tree=""
+forge_leg() {      # the pytest run itself (the verdict is read from its log afterwards, below)
+  local t0; t0=$(date +%s)
+  set +e
+  (cd "$WORK/forge" && .venv/bin/python -m pytest tests/music -q -rfEs -p no:cacheprovider) >"$LOGDIR/forge-pytest.log" 2>&1
+  echo $? >"$LOGDIR/forge-pytest.rc"
+  set -e
+  echo $(( $(date +%s) - t0 )) >"$LOGDIR/leg-forge.secs"
+}
+
+pids=()
+if [ "$FORGE_ONLY" = "0" ]; then
+  if [ "$SERIAL" = "1" ]; then step "client legs, one after the other (--serial)"; else step "client legs: music and lean at the same time"; fi
+  if [ "$SERIAL" = "1" ]; then (edition_leg music "$WORK/forge-client-obsidian"); (edition_leg lean "$LEAN/forge-client-obsidian")
+  else
+    edition_leg music "$WORK/forge-client-obsidian" & pids+=($!)
+    edition_leg lean "$LEAN/forge-client-obsidian" & pids+=($!)
+  fi
+fi
 if [ "$run_forge_leg" = "1" ]; then
   step "forge pytest: tests/music ($forge_why)"
   forge_wt="$(cd "$WORK/forge" && pwd -P)"
   imported="$(cd "$WORK/forge" && .venv/bin/python -c 'import forge, os; print(os.path.dirname(os.path.dirname(os.path.realpath(forge.__file__))))' 2>/dev/null || echo "?")"
   if [ "$imported" != "$forge_wt" ]; then
-    fail "forge: the venv imports forge from '$imported', not from the committed worktree '$forge_wt': the leg would test the wrong tree"; SUMMARY+=("forge: pytest NOT RUN (wrong tree)")
+    forge_wrong_tree="$imported"
+  elif [ "$SERIAL" = "1" ] || [ "$FORGE_ONLY" = "1" ]; then forge_leg
+  else forge_leg & pids+=($!)
+  fi
+fi
+for p in "${pids[@]:-}"; do [ -n "$p" ] && { wait "$p" || true; }; done
+
+# ---- 3. what the legs said ----------------------------------------------------------------------------------------------------------------------------------------
+for ed in music lean; do
+  [ "$FORGE_ONLY" = "1" ] && break
+  step "result: $ed edition ($(cat "$LOGDIR/leg-$ed.secs" 2>/dev/null || echo '?') s in its own leg)"
+  if [ -f "$LOGDIR/leg-$ed.failed" ]; then
+    name="$(cat "$LOGDIR/leg-$ed.failed")"
+    red "---- tail of $LOGDIR/$name.log"; tail -25 "$LOGDIR/$name.log" >&2
+    fail "$ed: step '$name' failed"; SUMMARY+=("$ed: step '$name' FAILED"); continue
+  fi
+  if [ "$ed" = music ]; then
+    grep -E "Engine-bundle drift check|check-bundled-description-hashes:|check-open-time-writes:" "$LOGDIR/gates.log" | cut -c1-200 || { fail "the gates printed no verdicts"; }
+    tail -1 "$LOGDIR/bump.log"
+  fi
+  tests=$(grep -E '^ℹ tests ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
+  pass=$(grep -E '^ℹ pass ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
+  failn=$(grep -E '^ℹ fail ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
+  skipped=$(grep -E '^ℹ skipped ' "$LOGDIR/test-$ed.log" | tail -1 | awk '{print $3}')
+  if [ -z "$tests" ] || [ -z "$failn" ] || [ -z "$skipped" ]; then
+    red "---- tail of $LOGDIR/test-$ed.log"; tail -25 "$LOGDIR/test-$ed.log" >&2
+    fail "$ed: the test run printed no summary (it did less than asked)"; SUMMARY+=("$ed: NO SUMMARY"); continue
+  fi
+  SUMMARY+=("$ed: tests $tests, pass $pass, fail $failn, skipped $skipped")
+  echo "  tests $tests / pass $pass / fail $failn / skipped $skipped"
+  if [ "$failn" != "0" ]; then fail "$ed: $failn test(s) failed"; { grep -E '^✖' "$LOGDIR/test-$ed.log" || true; } | sort -u | head -15 >&2; fi
+  if [ "$skipped" != "0" ]; then
+    fail "$ed: $skipped test(s) SKIPPED (a skipped test is not a passing test)"; { grep -E '^﹣' "$LOGDIR/test-$ed.log" || true; } | cut -c1-200 | head -10 >&2
+  fi
+done
+
+# ---- 3b. forge pytest verdict (drain 2026-10-25-1030) -------------------------------------------------------------------------------------------------------------
+if [ "$run_forge_leg" = "1" ]; then
+  if [ -n "$forge_wrong_tree" ]; then
+    fail "forge: the venv imports forge from '$forge_wrong_tree', not from the committed worktree '$forge_wt': the leg would test the wrong tree"; SUMMARY+=("forge: pytest NOT RUN (wrong tree)")
   else
-    set +e
-    (cd "$WORK/forge" && .venv/bin/python -m pytest tests/music -q -rfEs -p no:cacheprovider) >"$LOGDIR/forge-pytest.log" 2>&1
-    pyrc=$?
-    set -e
+    pyrc="$(cat "$LOGDIR/forge-pytest.rc" 2>/dev/null || echo 1)"
     pysum="$(grep -E ' in [0-9.]+s' "$LOGDIR/forge-pytest.log" | tail -1 || true)"
     count() { printf '%s' "$pysum" | grep -oE "[0-9]+ $1" | head -1 | awk '{print $1}' || true; }
     py_pass="$(count passed)"; py_fail="$(count failed)"; py_err="$(count 'errors?')"; py_skip="$(count skipped)"
