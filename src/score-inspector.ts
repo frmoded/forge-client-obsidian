@@ -55,6 +55,8 @@ export interface ScoreInspectorPorts {
   trace?(line: string): void;
   /** The `bar N` of that line for a pinned element. Default: the id. */
   pinLabel?(id: string, prov: Provenance): string;
+  /** 2026-10-26-1250 (M12): the pin changed (an element pinned, `null` = released, or forgotten by a redraw). The phrase tab turns it into "which note made this bar" for the notes pane beside the Score. Absent = nothing is told. */
+  onPinned?(entry: InspectorEntry | null): void;
 }
 
 export interface ScoreInspector {
@@ -187,13 +189,14 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
           const p = e?.prov.params;
           ports.postHighlight(p && typeof p.channel === 'string' && typeof p.step === 'number' ? { channel: p.channel, step: p.step } : null);
         },
-        onPin: (e) => { lastPinned = e ? e.id : null; renderPinned(e); },
+        onPin: (e) => { lastPinned = e ? e.id : null; renderPinned(e); ports.onPinned?.(e); },
       });
       current = { host, layer, result };
       if (wasPinned !== null) {
         const id = Object.prototype.hasOwnProperty.call(map, wasPinned) ? wasPinned : Object.keys(map)[0];
-        if (id !== undefined) layer.pin(id);               // pins on the NEW engraving and re-renders the stack from the NEW map
+        if (id !== undefined) { layer.pin(id); return; }   // pins on the NEW engraving and re-renders the stack from the NEW map (onPin told the pin)
       }
+      if (lastPinned !== null) { lastPinned = null; ports.onPinned?.(null); }   // a redraw that does not carry the pin forgets it: the one who followed it is told it is gone
     },
     onHidden(host) {
       if (!current || current.host !== host) return;

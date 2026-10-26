@@ -27,6 +27,7 @@ function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) 
   const files = new Map<string, string>([[PATH, opts.phrase ?? phraseText()]]);
   if (opts.bar !== null) files.set('bars/bar_005.md', opts.bar ?? BAR);
   const opened: string[] = [];
+  const pins: Array<unknown> = [];
   let now = 0; const timers: Array<{ id: number; at: number; fn: () => void }> = []; let nextId = 1;
   const ports: PhraseMountPorts = {
     path: PATH, title: 'phrase_001', plan: 'score',
@@ -45,7 +46,7 @@ function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) 
     stopPlayers: () => {},
     setTimer: (fn, ms) => { const id = nextId++; timers.push({ id, at: now + ms, fn }); return id; },
     clearTimer: (h) => { const i = timers.findIndex((t) => t.id === h); if (i >= 0) timers.splice(i, 1); },
-    inspector: opts.inspector === false ? undefined : { openNote: (id) => { opened.push(id); } },
+    inspector: opts.inspector === false ? undefined : { openNote: (id) => { opened.push(id); }, onPin: (p) => { pins.push(p); } },
   };
   const handle = mountPhrase(parent, ports);
   const advance = async (ms: number) => { now += ms; for (;;) { const due = timers.filter((t) => t.at <= now).sort((a, b) => a.at - b.at)[0]; if (!due) break; timers.splice(timers.indexOf(due), 1); due.fn(); } await flush(); };
@@ -53,7 +54,7 @@ function rig(opts: { phrase?: string; bar?: string | null; xml?: (bars: number) 
   const qa = (sel: string) => [...parent.querySelectorAll(sel)] as any[];
   const fire = (el: any, type: string, init: any = {}) => el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, ...init }));
   const stack = () => qa('.forge-inspector-lineage > li').filter((li) => li.querySelector('span')).map((li) => li.querySelector('span').textContent);   // M9: an action line is a button, not a text line
-  return { handle, parent, files, opened, q, qa, fire, stack, advance, win, status: () => q('.forge-rhythm-edit-score-status').textContent as string };
+  return { handle, parent, files, opened, pins, q, qa, fire, stack, advance, win, status: () => q('.forge-rhythm-edit-score-status').textContent as string };
 }
 
 test('every bar of the Score is a measure with an id the map knows: ph_bar_1 .. ph_bar_8', async () => {
@@ -267,4 +268,37 @@ test('2300 P3: the BAR inspector (no band option) inserts no band and dims nothi
   host.querySelector('#a_kick_0').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
   assert.equal(host.querySelectorAll('.forge-artifact-band').length, 0);
   assert.equal((host.querySelector('#a_snare_4') as any).style.opacity, '');
+});
+
+// ---- M12 (drain 2026-10-26-1250): the pin is told to the tab, so a notes pane can follow it ---------------------------------------------------------------------------------------------------
+
+test('M12: pinning a bar tells the tab which note made it (the source bar of an extend, "pinned bar N"); Esc tells it the pin is gone (null)', async () => {
+  const r = rig();
+  await r.handle.load(); await flush();
+  assert.deepEqual(r.pins, [], 'a Score drawn with nothing pinned says nothing new');
+  r.fire(r.q('#n_ph_bar_5'), 'click');
+  assert.deepEqual(r.pins, [{ noteId: 'bars/bar_005', reason: 'pinned bar 5' }]);
+  r.fire(r.q('#ph_bar_2'), 'click');
+  assert.deepEqual(r.pins.at(-1), { noteId: 'bars/bar_005', reason: 'pinned bar 2' });
+  r.q('.forge-rhythm-score-host').dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(r.pins.at(-1), null, 'released');
+  r.q('.forge-rhythm-score-host').dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  assert.deepEqual(r.pins.at(-1), { noteId: 'bars/bar_005', reason: 'pinned bar 1' }, 'the arrow keys walk the pin: the notes pane follows');
+});
+
+test('M12: a redraw that forgets the pin (an extend redraws without keeping it) tells the tab the pin is gone, so the notes pane goes home instead of staying on a bar that is no longer pinned', async () => {
+  const r = rig();
+  await r.handle.load(); await flush();
+  r.fire(r.q('#ph_bar_3'), 'click');
+  const before = r.pins.length;
+  await r.handle.noteModified('bars/bar_005.md'); await r.advance(1500);
+  assert.equal(r.pins.length > before, true, 'the redraw said something');
+  assert.equal(r.pins.at(-1), null);
+});
+
+test('M12: without the onPin port the tab is exactly what it was (the pin works, nothing is told)', async () => {
+  const r = rig({ inspector: true });
+  await r.handle.load(); await flush();
+  r.fire(r.q('#ph_bar_3'), 'click');
+  assert.equal(r.stack()[0], 'bar 3 of 8');
 });

@@ -9,12 +9,13 @@ import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
-import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
+import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { morphChangesViaEngine } from './phrase-engine.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf } from './phrase-view.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
 import { createPhraseRouter } from './phrase-default-view-core.ts';
+import { createPaneLinker, openPairAvailable, type PairSource } from './linked-panes-core.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 
@@ -34,10 +35,15 @@ export const NEW_MORPH_COMMAND_NAME = 'New morph from this bar';
 // score_first (drain 2026-10-25-1000): a mix has only about two visible states; its morph has the path. One gesture from the first to the second: offered ONLY while the active tab shows a mix phrase.
 export const TURN_MIX_COMMAND_ID = 'turn-mix-into-morph';
 export const TURN_MIX_COMMAND_NAME = 'Turn this mix into a morph';
+// score_first M12 (drain 2026-10-26-1250): the two-pane spike. Same gate, same place; offered on a phrase tab, a phrase's JSON text tab or a bar's Beat Box tab.
+export const OPEN_PAIR_COMMAND_ID = 'open-score-with-notes';
+export const OPEN_PAIR_COMMAND_NAME = 'Open Score with notes';
 
 export interface ScoreFirstHooks {
   /** Open a rhythm note in the Beat Box (the plugin's own opener: a tab already showing the note is reused, else a new tab). */
   openRhythmNote(file: TFile): Promise<void>;
+  /** 2026-10-26-1250 (M12): keep this leaf showing this (bar) note as text, so the Beat Box default view does not swap the notes pane into an editor. Absent = nothing is marked. */
+  markRhythmText?(leaf: WorkspaceLeaf, path: string): void;
 }
 
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {
@@ -252,9 +258,58 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       plugin.registerEvent(app.workspace.on('file-open', routeAll));
       plugin.registerEvent(app.workspace.on('active-leaf-change', routeAll));
       plugin.registerEvent(app.workspace.on('layout-change', routeAll));
-      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }));
+      // 2026-10-26-1250 (M12, the two-pane spike): the notes pane beside a Score is a markdown leaf in READING view that follows the bar pinned in the Score. We keep our OWN pairing record (linked-panes-core.ts) rather
+      // than Obsidian's linked-tab group: `setGroupMember`/`setGroup` exist in the typings, but a group syncs scroll between notes, and nothing says it behaves for a custom view. The notes leaf is marked "text" for BOTH
+      // default-view routers (phrase and Beat Box) before every navigation, or they would swap the note into a Score / an editor.
+      const liveLeaves = (): Set<WorkspaceLeaf> => { const all = new Set<WorkspaceLeaf>(); app.workspace.iterateAllLeaves((l) => all.add(l)); return all; };
+      const showReadOnly = async (leaf: WorkspaceLeaf, path: string): Promise<void> => {
+        router.setMark(leaf, path, 'markdown');
+        hooks.markRhythmText?.(leaf, path);
+        await leaf.setViewState({ type: 'markdown', active: false, state: { file: path, mode: 'preview' } } as ViewState);
+      };
+      const linker = createPaneLinker<WorkspaceLeaf>({
+        openBeside: async (score, path) => { const notes = app.workspace.createLeafBySplit(score, 'vertical', false); await showReadOnly(notes, path); return notes; },
+        show: showReadOnly,
+        alive: (leaf) => liveLeaves().has(leaf),
+        focus: (leaf) => { app.workspace.setActiveLeaf(leaf, { focus: true }); },
+        trace: (line) => { console.info(line); },
+      });
+      plugin.registerEvent(app.workspace.on('layout-change', () => linker.sweep()));
+      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }));
       // Open as Score is the person asking for the Score again: forget an earlier Open as JSON on that leaf
       const openScore = (leaf: WorkspaceLeaf, file: TFile) => { router.setMark(leaf, file.path, null); return openPhraseInLeaf(app, leaf, file); };
+      // The tab the command acts on comes from the ACTIVE VIEW (never a leaf lookup), as the other palette commands do. A bar's tab is its Beat Box (or its Score): the most recent leaf, which is the one the palette was opened from.
+      const pairTarget = (): { kind: PairSource; leaf: WorkspaceLeaf; file: TFile } | null => {
+        const tab = app.workspace.getActiveViewOfType(PhraseView);
+        if (tab?.file) return { kind: 'phrase', leaf: tab.leaf, file: tab.file };
+        const text = app.workspace.getActiveViewOfType(MarkdownView);
+        if (text?.file && isPhrasePath(text.file.path)) return { kind: 'phrase-text', leaf: text.leaf, file: text.file };
+        const recent = app.workspace.getMostRecentLeaf();
+        const type = recent?.view?.getViewType();
+        const file = (recent?.view as { file?: TFile | null } | undefined)?.file;
+        if (recent && (type === RHYTHM_EDIT_VIEW_TYPE || type === RHYTHM_SCORE_VIEW_TYPE) && file && isBarPath(file.path)) return { kind: 'bar', leaf: recent, file };
+        return null;
+      };
+      const openPair = async (target: { kind: PairSource; leaf: WorkspaceLeaf; file: TFile }): Promise<void> => {
+        try {
+          if (target.kind === 'phrase-text') await openScore(target.leaf, target.file);        // the Score in this very tab first, then the pair
+          const result = await linker.open(target.leaf, target.file.path, target.file.path);
+          if (result === 'failed') new Notice(`${OPEN_PAIR_COMMAND_NAME} failed: the notes pane could not be opened (see the console).`);
+        } catch (e) {
+          console.error('Open Score with notes failed', e);
+          new Notice(`${OPEN_PAIR_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+        }
+      };
+      plugin.addCommand({
+        id: OPEN_PAIR_COMMAND_ID,
+        name: OPEN_PAIR_COMMAND_NAME,
+        checkCallback: (checking: boolean) => {
+          const target = pairTarget();
+          if (!openPairAvailable({ scoreFirst, kind: target?.kind ?? null })) return false;
+          if (!checking && target) void openPair(target);
+          return true;
+        },
+      });
       plugin.addCommand({
         id: NEW_PHRASE_COMMAND_ID,
         name: NEW_PHRASE_COMMAND_NAME,

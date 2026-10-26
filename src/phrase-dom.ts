@@ -16,6 +16,7 @@
 
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import type { ScoreInspectorPorts } from './score-inspector.ts';
+import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import type { ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
@@ -492,6 +493,8 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
 export interface PhraseInspectorPorts {
   /** Open a note by its lineage id (`phrases/phrase_001`, `bars/bar_005`): the plugin's own openers. */
   openNote(noteId: string): void;
+  /** 2026-10-26-1250 (M12): the note that made the pinned bar (`pinnedNoteFor`), or `null` when the pin is released or forgotten. Absent = nothing is told. */
+  onPin?(pin: PinnedNote | null): void;
 }
 
 export const PHRASE_BRACKET_CLASS = 'forge-phrase-bracket';
@@ -655,6 +658,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     const inspectorPorts: ScoreInspectorPorts | undefined = insp && k === 'extend' ? {
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
+      onPinned: insp.onPin ? (e) => { insp.onPin!(e ? pinnedNoteFor(e.prov) : null); } : undefined,
       annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForPhrase(ports.path, note as NoteText, payload); },
       onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
       lineage: phraseLineageOf,
@@ -671,6 +675,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       // pinned bar's noteheads are painted by parent. No bracket and no source link (they are the extend's); arrows have nowhere to go.
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
+      onPinned: insp.onPin ? (e) => { insp.onPin!(e ? pinnedNoteFor(e.prov) : null); } : undefined,
       annotate: (note, payload) => annotateForMix(ports.path, note as NoteText, payload),
       lineage: mixLineageOf,
       hint: MIX_INSPECTOR_HINT,
@@ -688,6 +693,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       // bars; a redraw (a control moved) keeps the pin; the pinned bar's noteheads are painted by where the hit came from. "Edit this bar" forks a bar exactly as an extend's. No bracket, no source link.
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
+      onPinned: insp.onPin ? (e) => { insp.onPin!(e ? pinnedNoteFor(e.prov) : null); } : undefined,
       annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForMorph(ports.path, note as NoteText, payload); },
       onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
       lineage: morphLineageOf,
