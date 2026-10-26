@@ -5,6 +5,9 @@
   "main": "main.js",
   "scripts": {
     "build": "node scripts/lint-backtick-trap.mjs && node scripts/check-edition-assets.mjs && node scripts/inline-plugin-version.mjs && node scripts/build-manifest.mjs && node scripts/build-asset-manifest.mjs && node scripts/inline-bundled-assets.mjs && npm run typecheck && node scripts/build-main.mjs && node scripts/copy-assets.mjs",
+    "build:music": "FORGE_EDITION=music npm run build",
+    "check-installable-build": "node scripts/check-installable-build.mjs",
+    "install-local": "bash scripts/install-local.sh",
     "typecheck": "tsc --noEmit",
     "typecheck:warn": "node scripts/typecheck-warn.mjs",
     "lint": "node scripts/lint-backtick-trap.mjs",

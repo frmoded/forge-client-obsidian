@@ -87,6 +87,8 @@ export interface DefaultViewDeps<K extends object> {
   /** Is the leaf now showing `target`? */
   isSwapped(leaf: K, target: SwapTarget): boolean;
   sleep(ms: number): Promise<void>;
+  /** 2026-10-26-1700: one evidence line per (leaf, file, outcome): `[forge-rhythm] routed <path> -> beatbox|score|text (reason)`. Optional: the tests that do not read it pass nothing. */
+  trace?(line: string): void;
 }
 
 /** Waits between swap attempts: one try, then three retries with growing delays (a leaf that is busy is busy for milliseconds). */
@@ -95,14 +97,32 @@ export const SWAP_RETRY_DELAYS_MS: readonly number[] = [60, 180, 500];
 export interface DefaultViewController<K extends object> {
   evaluate(leaf: K): Promise<DefaultViewReason>;
   /** An explicit mode choice for this leaf + file: JSON → 'markdown', Score → 'score', Beat Box → null (clears). */
-  setMark(leaf: K, path: string, mark: ModeMark | null): void;
+  setMark(leaf: K, path: string, mark: ModeMark | null, by?: 'person' | 'plugin'): void;
 }
 
 export function createDefaultViewController<K extends object>(deps: DefaultViewDeps<K>): DefaultViewController<K> {
   const marks = new ModeMarks<K>();
   const swapping = new WeakSet<K>();
+  const markBy = new WeakMap<K, 'person' | 'plugin'>();          // who set the leaf's mark: only the evidence line differs
+  const said = new WeakMap<K, string>();
+  const lastTarget = new WeakMap<K, SwapTarget>();
 
   async function evaluate(leaf: K): Promise<DefaultViewReason> {
+    const reason = await decide(leaf);
+    if (deps.trace) {
+      const info = deps.describe(leaf);
+      const path = info?.filePath ?? '';
+      const line = reason === 'swap' ? `routed ${path} -> ${lastTarget.get(leaf) ?? 'beatbox'} (${lastTarget.get(leaf) === 'score' ? 'this tab last chose the Score' : 'a rhythm note opens in the Beat Box by default'})`
+        : reason === 'prefer-markdown' ? `routed ${path} -> text (${markBy.get(leaf) === 'plugin' ? 'the pair notes pane shows it as text' : 'the person chose Open as JSON'})`
+        : reason === 'invalid-rhythm' ? `routed ${path} -> text (the note is not valid rhythm data)`
+        : reason === 'swap-failed' ? `could not route ${path} -> beatbox (the tab did not switch)`
+        : null;
+      if (line && path && said.get(leaf) !== line) { said.set(leaf, line); deps.trace(`[forge-rhythm] ${line}`); }
+    }
+    return reason;
+  }
+
+  async function decide(leaf: K): Promise<DefaultViewReason> {
     const info = deps.describe(leaf);
     if (!info) return 'not-markdown-view';
     const input = (bodyIsRhythm: boolean | null, current: LeafInfo): DefaultViewInput => ({
@@ -125,6 +145,7 @@ export function createDefaultViewController<K extends object>(deps: DefaultViewD
     if (!second.swap) return second.reason;
 
     const target = second.target as SwapTarget;
+    lastTarget.set(leaf, target);
     swapping.add(leaf);
     try {
       await deps.swapTo(leaf, path, target);
@@ -143,6 +164,6 @@ export function createDefaultViewController<K extends object>(deps: DefaultViewD
 
   return {
     evaluate,
-    setMark: (leaf, path, mark) => { if (mark === null) marks.clear(leaf); else marks.set(leaf, path, mark); },
+    setMark: (leaf, path, mark, by = 'person') => { if (mark === null) { marks.clear(leaf); markBy.delete(leaf); } else { marks.set(leaf, path, mark); markBy.set(leaf, by); } },
   };
 }

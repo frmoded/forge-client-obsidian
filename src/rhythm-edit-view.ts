@@ -424,6 +424,7 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
     },
     isSwapped: (leaf, target: SwapTarget) => leaf.view.getViewType() === VIEW_TYPE_BY_MODE[target],
     sleep: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
+    trace: (line) => { console.info(line); },
   });
   const evaluateAllLeaves = () => {
     for (const leaf of app.workspace.getLeavesOfType('markdown')) {
@@ -543,5 +544,5 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
       if (leaf.view instanceof RhythmScoreView) leaf.view.stopAudio();
     }
   });
-  return { openRhythmNote: (file: TFile, from?: WorkspaceLeaf | null) => openRhythmEditor(app, file, hooks, from), markAsText: (leaf: WorkspaceLeaf, path: string) => defaultView.setMark(leaf, path, 'markdown') };
+  return { openRhythmNote: (file: TFile, from?: WorkspaceLeaf | null) => openRhythmEditor(app, file, hooks, from), markAsText: (leaf: WorkspaceLeaf, path: string) => defaultView.setMark(leaf, path, 'markdown', 'plugin') };
 }

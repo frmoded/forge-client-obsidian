@@ -106,6 +106,7 @@ import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts
 import { registerScoreFirst } from './score-first.ts';
 import { classifyMessageSource, messageDelivery, routeMessage } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
+import { EDITION } from './edition-selected.ts';
 import {
   readExpandedState,
   writeExpandedState,
@@ -624,7 +625,7 @@ export default class ForgePlugin extends Plugin {
     // yellow/highlighted in DevTools instead of mixing in with the
     // ~1000 routine console.log lines an Obsidian session generates.
     console.warn(
-      `%c FORGE CLIENT v${this.manifest.version} LOADED `,
+      `%c FORGE CLIENT v${this.manifest.version} LOADED (edition: ${EDITION}) `,
       'background: #4caf50; color: white; padding: 6px 10px; font-weight: bold; font-size: 13px;',
     );
 

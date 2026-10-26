@@ -31,6 +31,9 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Re-exported: scripts/build-main.test.mjs (Phase 1) imports these from here.
 export { EDITIONS, resolveEdition };
 
+/** The first line of every main.js this script writes. */
+export function editionStamp(edition) { return `/* forge-edition: ${edition} */`; }
+
 export function editionPlugin(edition) {
   return {
     name: "forge-music-edition",
@@ -72,6 +75,8 @@ export async function buildMain({ edition, outfile = path.join(ROOT, "main.js"),
     external: ["obsidian", "@codemirror/view", "@codemirror/state", "@codemirror/language"],
     format: "cjs",
     outfile,
+    // 2026-10-26-1700: the edition is the first line of main.js, greppable by anyone and by scripts/check-installable-build.mjs. The lean build in the repo root was once copied into the music vault.
+    banner: { js: editionStamp(ed) },
     plugins: stubInlinedAssets ? [editionPlugin(ed), stubInlinedAssetsPlugin()] : [editionPlugin(ed)],
     logLevel: "info",
   });

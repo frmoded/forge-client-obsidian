@@ -284,3 +284,67 @@ test('the Score mark is scoped to leaf + file: another note on that leaf opens t
   assert.equal(await c.evaluate(leaf), 'swap');
   assert.deepEqual(st.targets, ['beatbox']);
 });
+
+// ---- 2026-10-26-1700 (DEMO blocker): the pair's notes pane and bars opened from the explorer ----------------------------------------------------------------------------------
+// The real order: a notes pane (leaf N) is marked text by the PLUGIN for bar_005; the person then opens bar_007 from the explorer (a different leaf, or the notes leaf itself); later the pair closes. A mark is
+// keyed by (leaf, path): it holds only for THAT leaf showing THAT file. The bar the person opens elsewhere, or in the same leaf after it moved on, routes to the Beat Box. Evidence lines say which.
+function multiRig() {
+  const lines: string[] = [];
+  type L = { name: string; file: string; viewType: string };
+  const mk = (name: string, file: string): L => ({ name, file, viewType: 'markdown' });
+  const info = (l: L): LeafInfo => ({ location: 'main', viewType: l.viewType, isPlainMarkdownView: l.viewType === 'markdown', filePath: l.file, extension: 'md', frontmatterIsCandidate: true });
+  const c = createDefaultViewController<L>({
+    settingOn: () => true,
+    describe: (l) => info(l),
+    readBodyIsRhythm: async () => true,
+    edition: 'music',
+    swapTo: async (l) => { l.viewType = 'forge-rhythm-edit'; },
+    isSwapped: (l) => l.viewType === 'forge-rhythm-edit',
+    sleep: async () => {},
+    trace: (line) => { lines.push(line); },
+  });
+  return { c, lines, mk };
+}
+
+test('2026-10-26-1700: a bar opened in ANOTHER leaf routes to the Beat Box while the notes pane keeps ITS bar as text (marks are per leaf + file)', async () => {
+  const { c, lines, mk } = multiRig();
+  const notes = mk('notes', 'bars/bar_005.md'), other = mk('other', 'bars/bar_007.md');
+  c.setMark(notes, 'bars/bar_005.md', 'markdown', 'plugin');
+  assert.equal(await c.evaluate(notes), 'prefer-markdown');
+  assert.equal(await c.evaluate(other), 'swap');
+  assert.equal(other.viewType, 'forge-rhythm-edit');
+  assert.deepEqual(lines, [
+    '[forge-rhythm] routed bars/bar_005.md -> text (the pair notes pane shows it as text)',
+    '[forge-rhythm] routed bars/bar_007.md -> beatbox (a rhythm note opens in the Beat Box by default)',
+  ]);
+});
+
+test('2026-10-26-1700: the notes leaf itself navigates to bar_007 (explorer click with the notes pane active): the mark for bar_005 is dropped and the Beat Box opens; after the pair closed, a plain markdown leaf has no marks', async () => {
+  const { c, mk } = multiRig();
+  const notes = mk('notes', 'bars/bar_005.md');
+  c.setMark(notes, 'bars/bar_005.md', 'markdown', 'plugin');
+  assert.equal(await c.evaluate(notes), 'prefer-markdown');
+  notes.file = 'bars/bar_007.md';
+  assert.equal(await c.evaluate(notes), 'swap', 'another file in the same leaf: the mark was for bar_005 only');
+  const restored = mk('restored', 'bars/bar_005.md');                       // a leftover reading-view leaf restored from a saved layout: nothing marked it
+  assert.equal(await c.evaluate(restored), 'swap');
+});
+
+test('2026-10-26-1700: a PERSON\'s Open as JSON still says so and sticks; clearing it (Open as Beat Box) routes the leaf again', async () => {
+  const { c, lines, mk } = multiRig();
+  const leaf = mk('tab', 'bars/bar_007.md');
+  c.setMark(leaf, 'bars/bar_007.md', 'markdown');
+  assert.equal(await c.evaluate(leaf), 'prefer-markdown');
+  assert.equal(await c.evaluate(leaf), 'prefer-markdown');
+  assert.deepEqual(lines, ['[forge-rhythm] routed bars/bar_007.md -> text (the person chose Open as JSON)'], 'one line, not two');
+  c.setMark(leaf, 'bars/bar_007.md', null);
+  assert.equal(await c.evaluate(leaf), 'swap');
+});
+
+test('2026-10-26-1700 (L40: the button was already there): a bar shown as text in a score-first vault carries "Open as Beat Box", in BOTH editions; a phrase does not', async () => {
+  const { headerActionsFor } = await import('./rhythm-mode-core.ts');
+  const { rhythmHeaderApplies } = await import('./phrase-header-core.ts');
+  for (const edition of ['lean', 'music'] as const) assert.ok(headerActionsFor('json', edition).some((a) => a.title === 'Open as Beat Box'), edition);
+  assert.equal(rhythmHeaderApplies(true, true, 'bars/bar_007.md'), true, 'a bar (a rhythm data candidate) in a score-first vault');
+  assert.equal(rhythmHeaderApplies(true, true, 'phrases/phrase_001.md'), false, 'a phrase has its own Open as Score');
+});
