@@ -111,6 +111,8 @@ test('auto mode: the leg runs only when the committed, unpushed change touches f
     assert.equal(r.status, 0, r.out + r.err);
     assert.match(r.out, /forge pytest: not run \(no committed change under forge\/\*\*\/\*\.py or tests\/\*\* since origin\/main\)/, 'nothing changed');
     assert.doesNotMatch(r.out, /passed \d+/);
+    assert.match(r.out, /FORGE LEG NOT RUN/);
+    assert.doesNotMatch(r.out, /GREEN/, 'a leg that did not run is not green');
     write(p.forge, 'README.md', '# forge, edited\n'); commit(p.forge, 'docs only', 'README.md');
     r = auto();
     assert.match(r.out, /not run/, 'a README change is not forge Python');

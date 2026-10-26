@@ -188,7 +188,9 @@ echo; echo "==== drain-matrix summary ($(( $(date +%s) - T0 ))s) ===="
 for l in "${SUMMARY[@]}"; do echo "  $l"; done
 echo "  logs: $LOGDIR"
 if [ "$FAILED" = "0" ]; then
-  if [ "$FORGE_ONLY" = "1" ]; then green "FORGE LEG GREEN (--forge-only: the client legs were not run)"; else green "MATRIX GREEN: both editions, 0 failed, 0 skipped$([ "$run_forge_leg" = "1" ] && echo ", forge pytest green")"; fi
+  if [ "$FORGE_ONLY" = "1" ]; then
+    if [ "$run_forge_leg" = "1" ]; then green "FORGE LEG GREEN (--forge-only: the client legs were not run)"; else echo "FORGE LEG NOT RUN ($forge_why; --forge-only: the client legs were not run either): nothing was tested"; fi
+  else green "MATRIX GREEN: both editions, 0 failed, 0 skipped$([ "$run_forge_leg" = "1" ] && echo ", forge pytest green")"; fi
 else red "MATRIX RED"; fi
 if [ "${KEEP:-0}" != "1" ]; then
   mkdir -p "${LOGKEEP:-/tmp}/drain-matrix-logs" && cp -R "$LOGDIR"/. "${LOGKEEP:-/tmp}/drain-matrix-logs/" 2>/dev/null && echo "  logs copied to ${LOGKEEP:-/tmp}/drain-matrix-logs"
