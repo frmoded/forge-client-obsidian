@@ -9,6 +9,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+// the ceiling the script ships with is READ from the script (2026-10-27-0900 lowered it 10 -> 7; a copy here went stale at once): the property is "the line reports the ceiling in force", not its spelling
+const DEFAULT_CEILING = /FORGE_PYTEST_SKIP_MAX:-(\d+)/.exec(fs.readFileSync(new URL('./drain-matrix.sh', import.meta.url), 'utf8'))[1];
 const SCRIPT = path.resolve(import.meta.dirname, 'drain-matrix.sh');
 const REAL_VENV = path.join(os.homedir(), 'projects', 'forge', '.venv');
 const skip = fs.existsSync(path.join(REAL_VENV, 'bin', 'python')) ? false : 'forge/.venv is not there (the matrix needs the engine\'s Python env)';
@@ -66,7 +68,7 @@ test('--forge-only on a green forge: the leg runs the committed tests, prints th
     const r = matrix(p, ['--forge-only']);
     assert.equal(r.status, 0, r.out + r.err);
     assert.match(r.out, /forge pytest: tests\/music \(forced by --forge\)/);
-    assert.match(r.out, /forge: pytest tests\/music: passed 1, failed 0, errors 0, skipped 0 \(ceiling 10\)/);
+    assert.match(r.out, new RegExp(`forge: pytest tests/music: passed 1, failed 0, errors 0, skipped 0 \\(ceiling ${DEFAULT_CEILING}\\)`));
     assert.match(r.out, /FORGE LEG GREEN/);
   } finally { p.done(); }
 });

@@ -26,8 +26,8 @@
 # main checkout, so what runs is the committed tree). Why: the client legs never ran forge's own tests, so three red byte-exact tests were carried as "identical on a clean HEAD" through two drains.
 #   * auto (default): the leg runs when the COMMITTED, not-yet-pushed change in forge (`git diff --name-only origin/main...HEAD`, the local remote-tracking ref: no fetch) touches `forge/**/*.py` or `tests/**`;
 #     when forge has no origin/main to compare against it cannot tell, so it runs. --forge forces it, --no-forge skips it.
-#   * it FAILS the matrix (exit non-zero) on: a failed or errored test, a pytest exit code other than 0, no summary line, no test passed, or MORE skips than FORGE_PYTEST_SKIP_MAX (default 10, the skips tests/music
-#     has since drain 2026-10-26-1330 (was 40: tests of the retired forge-music vault); a ratchet, so a NEW skip cannot hide behind a green line; lower it when skips are fixed). Skip reasons are printed when the ceiling is crossed.
+#   * it FAILS the matrix (exit non-zero) on: a failed or errored test, a pytest exit code other than 0, no summary line, no test passed, or MORE skips than FORGE_PYTEST_SKIP_MAX (default 7, the skips tests/music
+#     has since drain 2026-10-27-0900 (was 40, then 10: the seven left are percussion-lab tests that need Python >= 3.10); a ratchet, so a NEW skip cannot hide behind a green line; lower it when skips are fixed). Skip reasons are printed when the ceiling is crossed.
 #   * the push of a drain that ran this leg stays conditional on the matrix's exit status.
 # Output: one summary table at the end; full logs under $LOGDIR (default: <worktrees>/logs).
 set -euo pipefail
@@ -46,7 +46,7 @@ for arg in "$@"; do
     *) CLIENT_REF="$arg" ;;
   esac
 done
-FORGE_PYTEST_SKIP_MAX="${FORGE_PYTEST_SKIP_MAX:-10}"
+FORGE_PYTEST_SKIP_MAX="${FORGE_PYTEST_SKIP_MAX:-7}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/drain-matrix.XXXXXX")"
 LOGDIR="${LOGDIR:-$WORK/logs}"
 mkdir -p "$LOGDIR"
