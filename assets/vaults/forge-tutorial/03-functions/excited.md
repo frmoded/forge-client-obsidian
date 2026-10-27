@@ -30,5 +30,4 @@ Return word + "!".
 ```python
 def compute(context, word: str = 'hooray'):
   return (word + '!')
-
 ```

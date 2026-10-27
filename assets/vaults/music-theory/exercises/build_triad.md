@@ -6,12 +6,12 @@ inputs:
 recipe_version: 2
 description_hash: 4c235cd4b75e7b1019bf0f6fc3afa6e5526eb219ff9cbdfc7908c3df002e1787
 recipe_hash: 60477bb0782299226042fc241fa09170cc17374d05f5ff86cf4aa2cb07e93baa
-python_hash: e930a101b558521050f956d41c2e91ccaac17e6b5dd6078ace8739111c683ff7
+python_hash: eb625e01fbbcabc0a21b76ea8c3f823e46ea08d5879e7b54402fc1bdb12f750f
 recipe_derived_from_source_hash: 4c235cd4b75e7b1019bf0f6fc3afa6e5526eb219ff9cbdfc7908c3df002e1787
 source_facet: recipe
 recipe_derived_from_description_hash: 4c235cd4b75e7b1019bf0f6fc3afa6e5526eb219ff9cbdfc7908c3df002e1787
 python_derived_from_recipe_hash: 60477bb0782299226042fc241fa09170cc17374d05f5ff86cf4aa2cb07e93baa
-python_derived_from_source_hash: 4c235cd4b75e7b1019bf0f6fc3afa6e5526eb219ff9cbdfc7908c3df002e1787
+python_derived_from_source_hash: 60477bb0782299226042fc241fa09170cc17374d05f5ff86cf4aa2cb07e93baa
 ---
 
 # Description
@@ -30,6 +30,6 @@ Return Call [[build_triad_chord]] with tonic=tonic, quality=quality.
 # Python
 
 ```python
-def compute(context):
+def compute(context, tonic, quality):
   return build_triad_chord(tonic=tonic, quality=quality)
 ```

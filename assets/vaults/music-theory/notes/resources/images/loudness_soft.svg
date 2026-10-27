@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 300" width="620" height="300" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="300" fill="#FDFCFA"/>
+<line x1="64" y1="180" x2="520" y2="180" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="142" x2="520" y2="142" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="66" x2="520" y2="66" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="28" x2="520" y2="28" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="20" x2="64" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="197.7" y1="20" x2="197.7" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="331.4" y1="20" x2="331.4" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="465.2" y1="20" x2="465.2" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="104" x2="520" y2="104" stroke="#A69B91" stroke-width="1"/>
+<line x1="64" y1="20" x2="64" y2="188" stroke="#666666" stroke-width="1"/>
+<line x1="64" y1="188" x2="520" y2="188" stroke="#666666" stroke-width="1"/>
+<text x="56" y="184" font-size="10.5" fill="#555555" text-anchor="end">−1</text>
+<text x="56" y="108" font-size="10.5" fill="#555555" text-anchor="end">0</text>
+<text x="56" y="32" font-size="10.5" fill="#555555" text-anchor="end">1</text>
+<line x1="64" y1="188" x2="64" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="64" y="206" font-size="10.5" fill="#555555" text-anchor="middle">0</text>
+<line x1="197.7" y1="188" x2="197.7" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="197.7" y="206" font-size="10.5" fill="#555555" text-anchor="middle">2</text>
+<line x1="331.4" y1="188" x2="331.4" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="331.4" y="206" font-size="10.5" fill="#555555" text-anchor="middle">4</text>
+<line x1="465.2" y1="188" x2="465.2" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="465.2" y="206" font-size="10.5" fill="#555555" text-anchor="middle">6</text>
+<text x="292" y="224" font-size="11" fill="#555555" text-anchor="middle">Time (ms)</text>
+<text x="16" y="104" font-size="11" fill="#555555" text-anchor="middle" transform="rotate(-90 16 104)">Amplitude (arb. units)</text>
+<path d="M64,104 L70.3,98.1 L76.7,92.6 L83,87.9 L89.3,84.3 L95.7,82 L102,81.2 L108.3,82 L114.7,84.3 L121,87.9 L127.3,92.6 L133.7,98.1 L140,104 L146.3,109.9 L152.7,115.4 L159,120.1 L165.3,123.8 L171.7,126 L178,126.8 L184.3,126 L190.7,123.7 L197,120.1 L203.3,115.4 L209.7,109.9 L216,104 L222.3,98.1 L228.7,92.6 L235,87.8 L241.3,84.2 L247.7,82 L254,81.2 L260.3,82 L266.7,84.3 L273,87.9 L279.3,92.6 L285.7,98.2 L292,104.1 L298.3,110 L304.7,115.5 L311,120.2 L317.3,123.8 L323.7,126 L330,126.8 L336.3,126 L342.7,123.7 L349,120.1 L355.3,115.3 L361.7,109.8 L368,103.9 L374.3,98 L380.7,92.5 L387,87.8 L393.3,84.2 L399.7,82 L406,81.2 L412.3,82 L418.7,84.3 L425,87.9 L431.3,92.7 L437.7,98.2 L444,104.1 L450.3,110 L456.7,115.5 L463,120.2 L469.3,123.8 L475.7,126 L482,126.8 L488.3,126 L494.7,123.7 L501,120 L507.3,115.3 L513.7,109.8 L520,103.9" fill="none" stroke="#2B2B2B" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="528" y="107.9" font-size="11" fill="#2B2B2B" text-anchor="start">440 Hz</text>
+<text x="64" y="262" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">Soft: small amplitude</text>
+<text x="64" y="281" font-size="12" fill="#555555" text-anchor="start">The same 440 Hz tone, scaled down: same shape, smaller height</text>
+</svg>

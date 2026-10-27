@@ -26,5 +26,4 @@ Return result.
 def compute(context):
   result = excited()
   return result
-
 ```

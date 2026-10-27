@@ -1,12 +1,13 @@
 name = "music-core"
-version = "0.3.5"
+version = "0.3.7"
 description = "Composition-authoring surface for the Forge music domain."
 domains = ["music"]
 
 # Cross-vault imports (spec: forge/docs/specs/vault-imports.md).
 # Phase 4 in-vault cross-linking was SKIPPED per driver adjudication
-# 2026-08-06 [2](b) — music-core and music-theory ship as two separate
-# Obsidian vaults with no [imports] between them. The block below stays
+# 2026-08-06 [2](b) and REVERSED on 2026-08-09 for the other direction:
+# music-theory (and music-playground) now import music-core through
+# [imports]. music-core itself imports nothing; the block below stays
 # commented-out spec-following scaffolding (drain 2026-08-03-1500).
 #
 # Must stay LAST in this file: in TOML every key after a [table] header

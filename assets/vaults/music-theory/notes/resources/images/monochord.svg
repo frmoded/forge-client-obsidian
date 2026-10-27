@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 250" width="620" height="250" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="250" fill="#FDFCFA"/>
+<rect x="40" y="62" width="540" height="50" fill="#F2F2EC" stroke="#A69B91" stroke-width="1"/>
+<line x1="49" y1="87" x2="571" y2="87" stroke="#2B2B2B" stroke-width="2"/>
+<rect x="46" y="72" width="6" height="30" fill="#666666"/>
+<rect x="568" y="72" width="6" height="30" fill="#666666"/>
+<line x1="310" y1="50" x2="310" y2="122" stroke="#2B2B2B" stroke-width="2" stroke-dasharray="5,3"/>
+<rect x="307" y="112" width="6" height="16" fill="#2B2B2B"/>
+<line x1="397" y1="50" x2="397" y2="122" stroke="#B39373" stroke-width="2" stroke-dasharray="5,3"/>
+<rect x="394" y="112" width="6" height="16" fill="#B39373"/>
+<text x="310" y="42" font-size="12" fill="#2B2B2B" text-anchor="middle">1/2 — octave (2:1)</text>
+<text x="397" y="146" font-size="12" fill="#B39373" text-anchor="middle">2/3 — fifth (3:2)</text>
+<text x="49" y="134" font-size="11" fill="#555555" text-anchor="start">fixed bridge</text>
+<text x="571" y="134" font-size="11" fill="#555555" text-anchor="end">fixed bridge</text>
+<text x="40" y="196" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">Monochord: one string, a movable bridge</text>
+<text x="40" y="215" font-size="12" fill="#555555" text-anchor="start">Ratios read straight off the length: 1/2 gives the octave, 2/3 the fifth</text>
+</svg>

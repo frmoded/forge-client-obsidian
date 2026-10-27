@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 300" width="620" height="300" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="300" fill="#FDFCFA"/>
+<line x1="64" y1="180" x2="520" y2="180" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="142" x2="520" y2="142" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="66" x2="520" y2="66" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="28" x2="520" y2="28" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="20" x2="64" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="178" y1="20" x2="178" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="292" y1="20" x2="292" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="406" y1="20" x2="406" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="520" y1="20" x2="520" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="104" x2="520" y2="104" stroke="#A69B91" stroke-width="1"/>
+<line x1="64" y1="20" x2="64" y2="188" stroke="#666666" stroke-width="1"/>
+<line x1="64" y1="188" x2="520" y2="188" stroke="#666666" stroke-width="1"/>
+<text x="56" y="184" font-size="10.5" fill="#555555" text-anchor="end">−2</text>
+<text x="56" y="146" font-size="10.5" fill="#555555" text-anchor="end">−1</text>
+<text x="56" y="108" font-size="10.5" fill="#555555" text-anchor="end">0</text>
+<text x="56" y="70" font-size="10.5" fill="#555555" text-anchor="end">1</text>
+<text x="56" y="32" font-size="10.5" fill="#555555" text-anchor="end">2</text>
+<line x1="64" y1="188" x2="64" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="64" y="206" font-size="10.5" fill="#555555" text-anchor="middle">0°</text>
+<line x1="178" y1="188" x2="178" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="178" y="206" font-size="10.5" fill="#555555" text-anchor="middle">360°</text>
+<line x1="292" y1="188" x2="292" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="292" y="206" font-size="10.5" fill="#555555" text-anchor="middle">720°</text>
+<line x1="406" y1="188" x2="406" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="406" y="206" font-size="10.5" fill="#555555" text-anchor="middle">1080°</text>
+<line x1="520" y1="188" x2="520" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="520" y="206" font-size="10.5" fill="#555555" text-anchor="middle">1440°</text>
+<text x="292" y="224" font-size="11" fill="#555555" text-anchor="middle">Phase of C4 (degrees)</text>
+<text x="16" y="104" font-size="11" fill="#555555" text-anchor="middle" transform="rotate(-90 16 104)">Amplitude (arb. units)</text>
+<path d="M64,104 L68.6,80.6 L73.1,59.7 L77.7,43.6 L82.2,34 L86.8,31.7 L91.4,36.8 L95.9,48.4 L100.5,64.9 L105,84.2 L109.6,104 L114.2,122.1 L118.7,136.6 L123.3,146.1 L127.8,150.1 L132.4,148.7 L137,142.7 L141.5,133.6 L146.1,123 L150.6,112.6 L155.2,104 L159.8,98.2 L164.3,95.6 L168.9,96.3 L173.4,99.5 L178,104 L182.6,108.5 L187.1,111.7 L191.7,112.4 L196.2,109.8 L200.8,104 L205.4,95.4 L209.9,85 L214.5,74.4 L219,65.3 L223.6,59.3 L228.2,57.9 L232.7,61.9 L237.3,71.4 L241.8,85.9 L246.4,104 L251,123.8 L255.5,143.1 L260.1,159.6 L264.6,171.2 L269.2,176.3 L273.8,174 L278.3,164.4 L282.9,148.3 L287.4,127.4 L292,104 L296.6,80.6 L301.1,59.7 L305.7,43.6 L310.2,34 L314.8,31.7 L319.4,36.8 L323.9,48.4 L328.5,64.9 L333,84.2 L337.6,104 L342.2,122.1 L346.7,136.6 L351.3,146.1 L355.8,150.1 L360.4,148.7 L365,142.7 L369.5,133.6 L374.1,123 L378.6,112.6 L383.2,104 L387.8,98.2 L392.3,95.6 L396.9,96.3 L401.4,99.5 L406,104 L410.6,108.5 L415.1,111.7 L419.7,112.4 L424.2,109.8 L428.8,104 L433.4,95.4 L437.9,85 L442.5,74.4 L447,65.3 L451.6,59.3 L456.2,57.9 L460.7,61.9 L465.3,71.4 L469.8,85.9 L474.4,104 L479,123.8 L483.5,143.1 L488.1,159.6 L492.6,171.2 L497.2,176.3 L501.8,174 L506.3,164.4 L510.9,148.3 L515.4,127.4 L520,104" fill="none" stroke="#64748B" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="528" y="108" font-size="11" fill="#64748B" text-anchor="start">C4 + G4</text>
+<text x="64" y="262" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">C4 + G4 combined (3:2)</text>
+<text x="64" y="281" font-size="12" fill="#555555" text-anchor="start">No beating: 2 cycles of C4 line up with 3 cycles of G4</text>
+</svg>

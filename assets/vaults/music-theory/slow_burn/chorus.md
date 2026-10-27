@@ -1,5 +1,13 @@
 ---
 type: action
+description_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235
+recipe_hash: 1f29c2e7526303b05483a2b3993137828ee85ea1f0c6fde8f20df526993e5119
+python_hash: 517901fc9c363daef4c49ce6165d389c0e086a028465e9e9a9fdc1a18680adde
+recipe_derived_from_source_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235
+python_derived_from_source_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235
+source_facet: synced
+recipe_derived_from_description_hash: 60d69be29dcc358d5013b4257c78fec5d1739fd51b26e5e93a6d3628663a9235
+python_derived_from_recipe_hash: 1f29c2e7526303b05483a2b3993137828ee85ea1f0c6fde8f20df526993e5119
 ---
 
 # Description
@@ -32,15 +40,12 @@ Return Call [[voices_list]] with sections=[form_score, vocal_line].
 
 ```python
 def compute(context):
-    # v0.7.0: form / vocal_phrase_a / vocal_phrase_b are now library
-    # notes in forge.music.lib; called directly instead of via
-    # context.compute.
-    form_score = form()
-    phrase_a = vocal_phrase_a()
-    phrase_b = vocal_phrase_b()
-
-    vocal_line = sequence(repeat(phrase_a, 2), phrase_b)
-    return voices(form_score, vocal_line)
+  form_score = form()
+  phrase_a1 = vocal_phrase_a()
+  phrase_a2 = vocal_phrase_a()
+  phrase_b = vocal_phrase_b()
+  vocal_line = sequence_list(sections=[phrase_a1, phrase_a2, phrase_b])
+  return voices_list(sections=[form_score, vocal_line])
 ```
 
 # Dependencies

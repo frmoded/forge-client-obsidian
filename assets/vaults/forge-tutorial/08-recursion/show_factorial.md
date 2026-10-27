@@ -26,5 +26,4 @@ Return r.
 def compute(context):
   r = factorial(n=7)
   return r
-
 ```

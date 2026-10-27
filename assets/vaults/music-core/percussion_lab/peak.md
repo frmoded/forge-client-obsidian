@@ -4,10 +4,10 @@ inputs: [bars, kick_velocity, snare_velocity, hihat_velocity, hihat_offsets, oha
 source_facet: description
 description_hash: 01ba027ecd12cc61f2ad7077db4217d039afa4b0a3db93ecb44aaa1e60a53cac
 recipe_hash: 43755e3d370c21ff51a933465680897e58a088326139b183f800f848881d1262
-python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+python_hash: fc841a20b9daa4305aee03aa8deb3455bb8af450a03b6b817fc342ca73460f1d
 recipe_derived_from_description_hash: 01ba027ecd12cc61f2ad7077db4217d039afa4b0a3db93ecb44aaa1e60a53cac
 recipe_derived_from_source_hash: 01ba027ecd12cc61f2ad7077db4217d039afa4b0a3db93ecb44aaa1e60a53cac
-python_derived_from_recipe_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+python_derived_from_recipe_hash: 43755e3d370c21ff51a933465680897e58a088326139b183f800f848881d1262
 python_derived_from_source_hash: 01ba027ecd12cc61f2ad7077db4217d039afa4b0a3db93ecb44aaa1e60a53cac
 recipe_version: 5
 ---
@@ -42,3 +42,17 @@ Let ltp = Call [[play_at_offsets]] with instrument=[[low_tom]], offsets=[0, 1, 2
 Let mtp = Call [[play_at_offsets]] with instrument=[[mid_tom]], offsets=[0.5, 1.5, 2.5, 3.5], duration=0.25, bars=bars, velocity=mtom_velocity.
 Let crp = Call [[play_at_offsets]] with instrument=[[crash_cymbal]], offsets=[[0], [], [0], []], duration=0.25, bars=bars, velocity=crash_velocity.
 Return Call [[voices_canonical]] with kp=kp, sp=sp, chp=chp, ohp=ohp, ltp=ltp, mtp=mtp, crp=crp.
+
+# Python
+
+```python
+def compute(context, bars: int = 4, kick_velocity: int | str = 'accent', snare_velocity: int | str = 'accent', hihat_velocity: int | str = 'accent', hihat_offsets: list = [], ohat_velocity: int | str = 'accent', ltom_velocity: int | str = 'accent', mtom_velocity: int | str = 'accent', crash_velocity: int | str = 'accent'):
+  kp = play_at_offsets(instrument=kick(), offsets=[0, 1, 2, 3], duration=0.25, bars=bars, velocity=kick_velocity, mark_dynamics=True)
+  sp = play_at_offsets(instrument=snare(), offsets=[0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3, 3.25, 3.5, 3.75], duration=0.25, bars=bars, velocity=snare_velocity)
+  chp = play_at_offsets(instrument=closed_hihat(), offsets=hihat_offsets, duration=0.25, bars=bars, velocity=hihat_velocity)
+  ohp = play_at_offsets(instrument=open_hihat(), offsets=[0, 1, 2, 3], duration=0.25, bars=bars, velocity=ohat_velocity)
+  ltp = play_at_offsets(instrument=low_tom(), offsets=[0, 1, 2, 3], duration=0.25, bars=bars, velocity=ltom_velocity)
+  mtp = play_at_offsets(instrument=mid_tom(), offsets=[0.5, 1.5, 2.5, 3.5], duration=0.25, bars=bars, velocity=mtom_velocity)
+  crp = play_at_offsets(instrument=crash_cymbal(), offsets=[[0], [], [0], []], duration=0.25, bars=bars, velocity=crash_velocity)
+  return voices_canonical(kp=kp, sp=sp, chp=chp, ohp=ohp, ltp=ltp, mtp=mtp, crp=crp)
+```

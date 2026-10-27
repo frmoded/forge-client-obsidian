@@ -28,7 +28,10 @@ const write = (root, rel, text) => { fs.mkdirSync(path.dirname(path.join(root, r
 const STUBS = {
   'package.json': JSON.stringify({ name: 'fake-client', scripts: { prebuild: 'node scripts/gates.mjs', build: 'node scripts/build.mjs', test: 'node scripts/test.mjs' } }),
   '.gitignore': 'node_modules\nassets/wheels\n.edition\n',
-  'scripts/sync-bundled-vault.mjs': 'process.exit(0);\n',
+  'scripts/sync-bundled-vault.mjs': [
+    "import fs from 'node:fs';",
+    "if (process.env.LAG_BUNDLE) { fs.mkdirSync('assets/vaults/x', { recursive: true }); fs.writeFileSync('assets/vaults/x/n.md', 'the source vault moved on'); }",   // the sync CHANGES the committed bundle = the bundle lags the sources
+  ].join('\n') + '\n',
   'scripts/sync-engine-bundle.mjs': 'process.exit(0);\n',
   'scripts/check-bundled-vault-bump.mjs': "console.log('✓ Bundled-vault bump check passed (stub)');\n",
   'scripts/gates.mjs': [
@@ -160,5 +163,19 @@ test('failing tests and SKIPPED tests in one edition are each a RED matrix, per 
     assert.notEqual(skipped.status, 0, skipped.out + skipped.err);
     assert.match(skipped.err, /FAIL: lean: 1 test\(s\) SKIPPED \(a skipped test is not a passing test\)/);
     assert.match(skipped.out, /music: tests 3, pass 3, fail 0, skipped 0/);
+  } finally { p.done(); }
+});
+
+// 2026-10-27-0930: after the sync, the COMMITTED bundle (assets/vaults) must equal the source vaults. A vault drain that bumps a forge.toml commits the client sync in the same drain (cc-operating-card.md); the matrix says so when it does not.
+test('the committed bundle lags the source vaults (the sync changes assets/vaults in the clean worktree): the matrix is RED naming the step "bundle-lag", the changed paths and the fix; an up-to-date bundle is green', { skip }, () => {
+  const p = projects();
+  try {
+    const lag = matrix(p, ['--no-forge'], { LAG_BUNDLE: '1' });
+    assert.notEqual(lag.status, 0, lag.out + lag.err);
+    assert.match(lag.err, /FAIL: music: step 'bundle-lag' failed/);
+    assert.match(lag.out + lag.err, /assets\/vaults\/x\/n\.md/, 'the changed path is printed');
+    assert.match(lag.out + lag.err, /npm run sync-bundled-vaults/, 'and the fix');
+    const ok = matrix(p, ['--no-forge']);
+    assert.equal(ok.status, 0, ok.out + ok.err);
   } finally { p.done(); }
 });

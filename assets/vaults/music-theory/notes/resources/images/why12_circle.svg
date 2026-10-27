@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 330" width="620" height="330" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="330" fill="#FDFCFA"/>
+<circle cx="310" cy="140" r="96" fill="none" stroke="#A69B91" stroke-width="1.2"/>
+<line x1="310" y1="49" x2="310" y2="39" stroke="#666666" stroke-width="1"/>
+<line x1="355.5" y1="61.2" x2="360.5" y2="52.5" stroke="#666666" stroke-width="1"/>
+<line x1="388.8" y1="94.5" x2="397.5" y2="89.5" stroke="#666666" stroke-width="1"/>
+<line x1="401" y1="140" x2="411" y2="140" stroke="#666666" stroke-width="1"/>
+<line x1="388.8" y1="185.5" x2="397.5" y2="190.5" stroke="#666666" stroke-width="1"/>
+<line x1="355.5" y1="218.8" x2="360.5" y2="227.5" stroke="#666666" stroke-width="1"/>
+<line x1="310" y1="231" x2="310" y2="241" stroke="#666666" stroke-width="1"/>
+<line x1="264.5" y1="218.8" x2="259.5" y2="227.5" stroke="#666666" stroke-width="1"/>
+<line x1="231.2" y1="185.5" x2="222.5" y2="190.5" stroke="#666666" stroke-width="1"/>
+<line x1="219" y1="140" x2="209" y2="140" stroke="#666666" stroke-width="1"/>
+<line x1="231.2" y1="94.5" x2="222.5" y2="89.5" stroke="#666666" stroke-width="1"/>
+<line x1="264.5" y1="61.2" x2="259.5" y2="52.5" stroke="#666666" stroke-width="1"/>
+<circle cx="310" cy="44" r="4.5" fill="#2B2B2B"/>
+<text x="310" y="24" font-size="12" fill="#2B2B2B" text-anchor="middle">C</text>
+<circle cx="363.8" cy="60.5" r="4.5" fill="#2B2B2B"/>
+<text x="370" y="40.1" font-size="12" fill="#2B2B2B" text-anchor="middle">B</text>
+<circle cx="394.1" cy="93.7" r="4.5" fill="#2B2B2B"/>
+<text x="413.9" y="84" font-size="12" fill="#2B2B2B" text-anchor="middle">B♭</text>
+<circle cx="405.6" cy="148.9" r="4.5" fill="#2B2B2B"/>
+<text x="430" y="144" font-size="12" fill="#2B2B2B" text-anchor="middle">A</text>
+<circle cx="391.1" cy="191.3" r="4.5" fill="#2B2B2B"/>
+<text x="413.9" y="204" font-size="12" fill="#2B2B2B" text-anchor="middle">A♭</text>
+<circle cx="348.4" cy="228" r="4.5" fill="#2B2B2B"/>
+<text x="370" y="247.9" font-size="12" fill="#2B2B2B" text-anchor="middle">G</text>
+<circle cx="304.1" cy="235.8" r="4.5" fill="#2B2B2B"/>
+<text x="310" y="264" font-size="12" fill="#2B2B2B" text-anchor="middle">G♭</text>
+<circle cx="261.2" cy="222.6" r="4.5" fill="#2B2B2B"/>
+<text x="250" y="247.9" font-size="12" fill="#2B2B2B" text-anchor="middle">F</text>
+<circle cx="223.2" cy="181" r="4.5" fill="#2B2B2B"/>
+<text x="206.1" y="204" font-size="12" fill="#2B2B2B" text-anchor="middle">E</text>
+<circle cx="214" cy="137.1" r="4.5" fill="#2B2B2B"/>
+<text x="190" y="144" font-size="12" fill="#2B2B2B" text-anchor="middle">E♭</text>
+<circle cx="232.2" cy="83.8" r="4.5" fill="#2B2B2B"/>
+<text x="206.1" y="84" font-size="12" fill="#2B2B2B" text-anchor="middle">D</text>
+<circle cx="266.3" cy="54.5" r="4.5" fill="#2B2B2B"/>
+<text x="250" y="40.1" font-size="12" fill="#2B2B2B" text-anchor="middle">D♭</text>
+<circle cx="321.8" cy="44.7" r="3.5" fill="#B39373"/>
+<line x1="323.8" y1="40.7" x2="413.8" y2="20" stroke="#B39373" stroke-width="1"/>
+<text x="417.8" y="24" font-size="11" fill="#B39373" text-anchor="start">13th step: the Pythagorean comma</text>
+<text x="64" y="292" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">Twelve fifths on the pitch-class circle</text>
+<text x="64" y="311" font-size="12" fill="#555555" text-anchor="start">A near-perfect twelve-fold spiral: the 13th step is the tiny gap that never closes</text>
+</svg>

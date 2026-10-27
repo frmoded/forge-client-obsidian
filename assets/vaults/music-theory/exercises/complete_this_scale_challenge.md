@@ -16,19 +16,6 @@ recipe_version: 1
 
 Press **Run** to hear the first four notes of a C major scale. Your task: work out the four notes that complete the octave — then check yourself in [[exercises/complete_this_scale_submit]]. New to scales? Start with [[scales/Scales]].
 
-<div style="
-  display:flex;
-  justify-content:space-between;
-  font-size:12px;
-  color:#666666;
-  border-top:1px solid #F2F2EC;
-  padding:6px 2px;
-  margin:10px 0;
-">
-<span>&uarr; <a class="internal-link" data-href="Scales" href="Scales" style="color:#1963D1;">Scales</a></span>
-<span><a class="internal-link" data-href="complete_this_scale_submit" href="complete_this_scale_submit" style="color:#1963D1;">complete_this_scale_submit</a> &rarr;</span>
-</div>
-
 # Recipe
 
 Let true_tonic = "C".

@@ -4,10 +4,10 @@ inputs: [bars, velocity]
 source_facet: description
 description_hash: ff4f50ccd1a7dc0477b0fa9a22bca658f89d18bf5c30c02c9192f7f4b87ac137
 recipe_hash: bca68851d5dc31407b28461c9fd6d9d050d1ccacb92119c1fe31de7528dac969
-python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+python_hash: ab994d68ec49e2abd755e1a516bd8aff102bb9e288d7823d176c7c76d78e810f
 recipe_derived_from_description_hash: ff4f50ccd1a7dc0477b0fa9a22bca658f89d18bf5c30c02c9192f7f4b87ac137
 recipe_derived_from_source_hash: ff4f50ccd1a7dc0477b0fa9a22bca658f89d18bf5c30c02c9192f7f4b87ac137
-python_derived_from_recipe_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+python_derived_from_recipe_hash: bca68851d5dc31407b28461c9fd6d9d050d1ccacb92119c1fe31de7528dac969
 python_derived_from_source_hash: ff4f50ccd1a7dc0477b0fa9a22bca658f89d18bf5c30c02c9192f7f4b87ac137
 recipe_version: 4
 ---
@@ -27,3 +27,11 @@ Input bars: int = 4.
 Input velocity: int = 70.
 Let kp = Call [[play_at_offsets]] with instrument=[[kick]], offsets=[0, 2], duration=0.25, bars=bars, velocity=velocity, mark_dynamics=True.
 Return Call [[voices_canonical]] with kp=kp.
+
+# Python
+
+```python
+def compute(context, bars: int = 4, velocity: int = 70):
+  kp = play_at_offsets(instrument=kick(), offsets=[0, 2], duration=0.25, bars=bars, velocity=velocity, mark_dynamics=True)
+  return voices_canonical(kp=kp)
+```

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 270" width="620" height="270" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="270" fill="#FDFCFA"/>
+<line x1="64" y1="70" x2="64" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="105" y1="70" x2="105" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="146" y1="70" x2="146" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="187" y1="70" x2="187" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="228" y1="70" x2="228" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="269" y1="70" x2="269" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="310" y1="70" x2="310" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="351" y1="70" x2="351" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="392" y1="70" x2="392" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="433" y1="70" x2="433" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="474" y1="70" x2="474" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="515" y1="70" x2="515" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="556" y1="70" x2="556" y2="104" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="100" x2="556" y2="100" stroke="#666666" stroke-width="1"/>
+<line x1="64" y1="96" x2="64" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="64" y="158" font-size="10.5" fill="#555555" text-anchor="middle">0</text>
+<line x1="105" y1="96" x2="105" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="105" y="158" font-size="10.5" fill="#555555" text-anchor="middle">1</text>
+<line x1="146" y1="96" x2="146" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="146" y="158" font-size="10.5" fill="#555555" text-anchor="middle">2</text>
+<line x1="187" y1="96" x2="187" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="187" y="158" font-size="10.5" fill="#555555" text-anchor="middle">3</text>
+<line x1="228" y1="96" x2="228" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="228" y="158" font-size="10.5" fill="#555555" text-anchor="middle">4</text>
+<line x1="269" y1="96" x2="269" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="269" y="158" font-size="10.5" fill="#555555" text-anchor="middle">5</text>
+<line x1="310" y1="96" x2="310" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="310" y="158" font-size="10.5" fill="#555555" text-anchor="middle">6</text>
+<line x1="351" y1="96" x2="351" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="351" y="158" font-size="10.5" fill="#555555" text-anchor="middle">7</text>
+<line x1="392" y1="96" x2="392" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="392" y="158" font-size="10.5" fill="#555555" text-anchor="middle">8</text>
+<line x1="433" y1="96" x2="433" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="433" y="158" font-size="10.5" fill="#555555" text-anchor="middle">9</text>
+<line x1="474" y1="96" x2="474" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="474" y="158" font-size="10.5" fill="#555555" text-anchor="middle">10</text>
+<line x1="515" y1="96" x2="515" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="515" y="158" font-size="10.5" fill="#555555" text-anchor="middle">11</text>
+<line x1="556" y1="96" x2="556" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="556" y="158" font-size="10.5" fill="#555555" text-anchor="middle">12</text>
+<circle cx="64" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="64" y1="94" x2="64" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="64" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">C</text>
+<circle cx="110.6" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="110.6" y1="106" x2="110.6" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="110.6" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">B</text>
+<circle cx="147.6" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="147.6" y1="94" x2="147.6" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="147.6" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">B♭</text>
+<circle cx="194.2" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="194.2" y1="106" x2="194.2" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="194.2" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">A</text>
+<circle cx="231.2" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="231.2" y1="94" x2="231.2" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="231.2" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">A♭</text>
+<circle cx="277.8" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="277.8" y1="106" x2="277.8" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="277.8" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">G</text>
+<circle cx="314.8" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="314.8" y1="94" x2="314.8" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="314.8" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">G♭</text>
+<circle cx="351.8" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="351.8" y1="106" x2="351.8" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="351.8" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">F</text>
+<circle cx="398.4" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="398.4" y1="94" x2="398.4" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="398.4" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">E</text>
+<circle cx="435.4" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="435.4" y1="106" x2="435.4" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="435.4" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">E♭</text>
+<circle cx="482" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="482" y1="94" x2="482" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="482" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">D</text>
+<circle cx="519" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="519" y1="106" x2="519" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="519" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">D♭</text>
+<circle cx="73.6" cy="100" r="3.5" fill="#B39373"/>
+<line x1="73.6" y1="94" x2="73.6" y2="60" stroke="#B39373" stroke-width="1"/>
+<text x="77.6" y="56" font-size="11" fill="#B39373" text-anchor="start">13th step: the Pythagorean comma</text>
+<text x="310" y="178" font-size="11" fill="#555555" text-anchor="middle">Pitch position (semitones below C, from log₂ of folded length)</text>
+<text x="64" y="226" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">The same twelve notes, by pitch position</text>
+<text x="64" y="245" font-size="12" fill="#555555" text-anchor="start">Each pure fifth lands slightly sharp of its equal-tempered slot — that drift is the comma</text>
+</svg>

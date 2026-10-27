@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 262" width="620" height="262" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="262" fill="#FDFCFA"/>
+<rect x="64" y="34" width="60" height="140" fill="#F8C54B" stroke="#666666" stroke-width="1"/>
+<rect x="124" y="34" width="60" height="140" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="184" y="34" width="60" height="140" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="244" y="34" width="60" height="140" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="304" y="34" width="60" height="140" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="364" y="34" width="60" height="140" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="424" y="34" width="60" height="140" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="106" y="34" width="36" height="86.8" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="166" y="34" width="36" height="86.8" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="286" y="34" width="36" height="86.8" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="346" y="34" width="36" height="86.8" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="406" y="34" width="36" height="86.8" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<text x="94" y="162" font-size="13" fill="#2B2B2B" text-anchor="middle">C</text>
+<text x="154" y="162" font-size="13" fill="#2B2B2B" text-anchor="middle">D</text>
+<text x="214" y="162" font-size="13" fill="#2B2B2B" text-anchor="middle">E</text>
+<text x="274" y="162" font-size="13" fill="#2B2B2B" text-anchor="middle">F</text>
+<text x="334" y="162" font-size="13" fill="#2B2B2B" text-anchor="middle">G</text>
+<text x="394" y="162" font-size="13" fill="#2B2B2B" text-anchor="middle">A</text>
+<text x="454" y="162" font-size="13" fill="#2B2B2B" text-anchor="middle">B</text>
+<text x="124" y="26" font-size="10.5" fill="#555555" text-anchor="middle">C♯/D♭</text>
+<text x="184" y="26" font-size="10.5" fill="#555555" text-anchor="middle">D♯/E♭</text>
+<text x="304" y="26" font-size="10.5" fill="#555555" text-anchor="middle">F♯/G♭</text>
+<text x="364" y="26" font-size="10.5" fill="#555555" text-anchor="middle">G♯/A♭</text>
+<text x="424" y="26" font-size="10.5" fill="#555555" text-anchor="middle">A♯/B♭</text>
+<text x="64" y="220" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">One octave of piano keys, C to B</text>
+<text x="64" y="239" font-size="12" fill="#555555" text-anchor="start">Seven white keys and five black keys; the pattern repeats every octave</text>
+</svg>

@@ -4,10 +4,10 @@ inputs: [bars, kick_velocity, snare_velocity, hihat_velocity, ohat_velocity, lto
 source_facet: description
 description_hash: 1faf036d728edb5324b7a46a8b96afeaee163005011007e11ce6f712946d4588
 recipe_hash: d8de927d620b68138205f7056e798c51416599fe5643acb6f48dc24a942ae8e2
-python_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+python_hash: 8ddd3b6cea3f273d38adf21a38763825ee6b96eae248fa08444e868727c6b7db
 recipe_derived_from_description_hash: 1faf036d728edb5324b7a46a8b96afeaee163005011007e11ce6f712946d4588
 recipe_derived_from_source_hash: 1faf036d728edb5324b7a46a8b96afeaee163005011007e11ce6f712946d4588
-python_derived_from_recipe_hash: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+python_derived_from_recipe_hash: d8de927d620b68138205f7056e798c51416599fe5643acb6f48dc24a942ae8e2
 python_derived_from_source_hash: 1faf036d728edb5324b7a46a8b96afeaee163005011007e11ce6f712946d4588
 recipe_version: 4
 ---
@@ -39,3 +39,16 @@ Let ohp = Call [[play_at_offsets]] with instrument=[[open_hihat]], offsets=[0], 
 Let ltp = Call [[play_at_offsets]] with instrument=[[low_tom]], offsets=[1], duration=0.25, bars=bars, velocity=ltom_velocity.
 Let mtp = Call [[play_at_offsets]] with instrument=[[mid_tom]], offsets=[1.5], duration=0.25, bars=bars, velocity=mtom_velocity.
 Return Call [[voices_canonical]] with kp=kp, sp=sp, chp=chp, ohp=ohp, ltp=ltp, mtp=mtp.
+
+# Python
+
+```python
+def compute(context, bars: int = 4, kick_velocity: int | str = 'decrescendo', snare_velocity: int | str = 'decrescendo', hihat_velocity: int | str = 'decrescendo', ohat_velocity: int | str = 'decrescendo', ltom_velocity: int | str = 'decrescendo', mtom_velocity: int | str = 'decrescendo'):
+  kp = play_at_offsets(instrument=kick(), offsets=[[0, 2, 3.5], [0, 2], [0, 2], [0]], duration=0.25, bars=bars, velocity=kick_velocity, mark_dynamics=True)
+  sp = play_at_offsets(instrument=snare(), offsets=[1, 3], duration=0.25, bars=bars, velocity=snare_velocity)
+  chp = play_at_offsets(instrument=closed_hihat(), offsets=[0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5], duration=0.25, bars=bars, velocity=hihat_velocity)
+  ohp = play_at_offsets(instrument=open_hihat(), offsets=[0], duration=0.25, bars=bars, velocity=ohat_velocity)
+  ltp = play_at_offsets(instrument=low_tom(), offsets=[1], duration=0.25, bars=bars, velocity=ltom_velocity)
+  mtp = play_at_offsets(instrument=mid_tom(), offsets=[1.5], duration=0.25, bars=bars, velocity=mtom_velocity)
+  return voices_canonical(kp=kp, sp=sp, chp=chp, ohp=ohp, ltp=ltp, mtp=mtp)
+```

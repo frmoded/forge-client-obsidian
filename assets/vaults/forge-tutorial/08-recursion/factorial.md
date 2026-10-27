@@ -39,5 +39,4 @@ def compute(context, n: int = 5):
   n_minus_1 = (n - 1)
   sub = factorial(n=n_minus_1)
   return (n * sub)
-
 ```

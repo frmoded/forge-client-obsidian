@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monochord</title>
+<style>
+  /* Palette: forge_music_theory_style_guide.md, "Color scheme" (revised 2026-09-25). */
+  :root {
+    --paper: #FDFCFA;   /* Vault Background (Paper) */
+    --ink: #2B2B2B;     /* Title Text */
+    --muted: #555555;   /* Body Text / Plot Labels */
+    --axis: #666666;    /* Axis Lines / Strong Ticks */
+    --grid: #F2F2EC;    /* Faint Gridlines / Fine Ticks */
+    --left: #2B2B2B;    /* Primary Signal / Input 1: the left segment */
+    --right: #B39373;   /* Secondary Signal / Input 2: the right segment */
+    --right-text: #7A644E; /* --right darkened for legible TEXT on the paper background */
+    --derived: #64748B; /* Combined / Derived Series: the ratio */
+    --accent: #D72027;  /* Primary Accent: the movable bridge, the one interactive focal point */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--muted);
+    padding: 8px 10px 14px;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 660px; margin: 0 auto; }
+  svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+  #track { touch-action: none; cursor: pointer; }
+  #bridge { cursor: ew-resize; }
+  #bridge:focus { outline: none; }
+  /* Plain :focus (not :focus-visible): a mouse click focuses the bridge too, and
+     :focus-visible would hide the highlight exactly when the user clicked it. */
+  #bridge:focus .grip { stroke: var(--ink); stroke-width: 3; }
+  .seglabel { cursor: pointer; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 12px; }
+  button {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: #fff; border: 1px solid var(--axis); border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; min-height: 40px;
+  }
+  button:hover { border-color: var(--ink); }
+  button:active { background: var(--grid); }
+  /* 2026-09-29: driver replaced the earlier per-segment button/readout color-coding (left/right/
+     both each in their own hue) with two flat colors instead — one shared color for every button,
+     a different shared color for every readout, group-vs-group rather than segment-vs-segment.
+     All four buttons already share border weight/radius/padding/font via the base `button` rule
+     above; this just makes border-color and text color explicit and identical too, so `#bO`
+     (which previously fell through to the default --axis border) reads the same as the other three. */
+  button { border-color: var(--ink); color: var(--ink); }
+  .readout { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  @media (max-width: 480px) { .readout { grid-template-columns: repeat(2, 1fr); } }
+  .stat { border-top: 2px solid var(--grid); padding-top: 6px; }
+  .stat .k { font-size: 11px; color: var(--muted); }
+  /* All four readouts (including the previously-unstyled Bridge position) share one color,
+     --derived, distinct from the buttons' --ink -- group-level contrast, not per-segment. */
+  .stat .v { font-size: 20px; font-weight: 600; color: var(--derived); font-variant-numeric: tabular-nums; }
+  .stat .s { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<svg id="svg" viewBox="0 0 620 130" role="img" aria-label="Monochord: a string with a movable bridge">
+  <!-- fixed end posts -->
+  <rect x="36" y="28" width="8" height="28" rx="2" fill="#666666"/>
+  <rect x="576" y="28" width="8" height="28" rx="2" fill="#666666"/>
+
+  <!-- the two string segments, drawn to scale -->
+  <line id="segL" x1="40" y1="42" x2="300" y2="42" stroke="#2B2B2B" stroke-width="3" stroke-linecap="round"/>
+  <line id="segR" x1="300" y1="42" x2="580" y2="42" stroke="#B39373" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- segment brackets (to scale) -->
+  <line id="brL" x1="40" y1="94" x2="300" y2="94" stroke="#2B2B2B" stroke-width="2"/>
+  <line id="brR" x1="300" y1="94" x2="580" y2="94" stroke="#B39373" stroke-width="2"/>
+
+  <!-- fixed-position segment labels; click to pluck -->
+  <g id="lblL" class="seglabel" role="button" tabindex="0" aria-label="Pluck the left segment">
+    <text id="lblLtxt" x="40" y="118" text-anchor="start" font-size="12" fill="#2B2B2B">Left segment</text>
+  </g>
+  <g id="lblR" class="seglabel" role="button" tabindex="0" aria-label="Pluck the right segment">
+    <text id="lblRtxt" x="580" y="118" text-anchor="end" font-size="12" fill="#7A644E">Right segment</text>
+  </g>
+
+  <!-- click-to-position track: a generous invisible strip over the string -->
+  <rect id="track" x="30" y="12" width="560" height="60" fill="transparent"/>
+
+  <!-- the movable bridge -->
+  <g id="bridge" tabindex="0" role="slider" aria-label="Movable bridge"
+     aria-valuemin="0" aria-valuemax="1" aria-valuenow="0.6">
+    <rect id="hit" x="290" y="10" width="24" height="76" fill="transparent"/>
+    <line id="bar" x1="300" y1="22" x2="300" y2="64" stroke="#D72027" stroke-width="3" stroke-linecap="round"/>
+    <path id="grip" class="grip" d="M 300 64 L 292 78 L 308 78 Z" fill="#D72027" stroke="#D72027" stroke-linejoin="round"/>
+  </g>
+
+</svg>
+
+<div class="controls">
+  <button id="bL">Pluck left</button>
+  <button id="bR">Pluck right</button>
+  <button id="bB">Pluck both</button>
+  <button id="bO" title="The whole string, open, at the base pitch">Pluck open string</button>
+</div>
+
+<div class="readout">
+  <div class="stat"><div class="k">Bridge position</div><div class="v" id="vPos">0.600</div><div class="s">of the full string</div></div>
+  <div class="stat"><div class="k">Left length</div><div class="v" id="vL">0.600</div><div class="s" id="sL"></div></div>
+  <div class="stat"><div class="k">Right length</div><div class="v" id="vR">0.400</div><div class="s" id="sR"></div></div>
+  <div class="stat"><div class="k">Ratio left : right</div><div class="v" id="vQ">3 : 2</div><div class="s" id="sQ"></div></div>
+</div>
+
+</div>
+<script>
+(function () {
+  "use strict";
+
+  // --- pure math (no DOM) ------------------------------------------------
+  // The full string sounds at BASE_HZ. Choice: A2 = 110 Hz — a low, comfortable
+  // pitch that is easy to do arithmetic with. Change this one constant to move
+  // every pitch in the gadget.
+  var BASE_HZ = 110;
+  // Bridge positions live on a grid of GRID steps. 21000 = lcm(840, 1000): 840 =
+  // lcm(1..8), so every ratio built from small integers (1:1, 2:1, 3:2, 4:3, 5:4,
+  // 5:3, 8:5, ...) lands EXACTLY on a grid point and reduces to lowest terms, and
+  // 1000 divides it, so the 0.001 arrow-key step (STEP_FINE = 21 grid units) is
+  // exact too. The grid is finer than a pixel, so dragging still feels continuous.
+  var GRID = 21000;
+  var STEP_FINE = GRID / 1000;         // 0.001 of the string
+  var STEP_COARSE = GRID / 20;         // 0.05 of the string (Shift)
+  // The bridge may sit anywhere from the left end (k = 0, left segment has zero
+  // length) to the right end (k = GRID, right segment has zero length).
+  var MIN_K = 0, MAX_K = GRID;
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = a % b; a = b; b = t; } return a; }
+  function clampK(k) { return Math.max(MIN_K, Math.min(MAX_K, k)); }
+  function positionToK(p) { return clampK(Math.round(p * GRID)); }
+  function reduceRatio(k) { var l = k, r = GRID - k, g = gcd(l, r); return [l / g, r / g]; }
+  // Standard monochord physics: pitch is inversely proportional to length.
+  // A zero-length segment gives Infinity (JS division), which the readout shows as ∞.
+  function segmentHz(fraction) { return BASE_HZ / fraction; }
+  function hzText(hz) { return isFinite(hz) ? Math.round(hz) + " Hz" : "∞ Hz"; }
+  // --- end pure math -----------------------------------------------------
+
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { GRID: GRID, STEP_FINE: STEP_FINE, STEP_COARSE: STEP_COARSE, MIN_K: MIN_K, MAX_K: MAX_K, BASE_HZ: BASE_HZ, positionToK: positionToK, reduceRatio: reduceRatio, segmentHz: segmentHz, gcd: gcd };
+    return;
+  }
+
+  var X0 = 40, X1 = 580, W = X1 - X0;
+  var $ = function (id) { return document.getElementById(id); };
+  var svg = $("svg"), k = positionToK(0.6);
+
+  function fmt(n, d) { return n.toFixed(d); }
+  function render() {
+    var p = k / GRID, q = 1 - p, x = X0 + W * p, rr = reduceRatio(k);
+    $("segL").setAttribute("x2", x); $("segR").setAttribute("x1", x);
+    $("brL").setAttribute("x2", x);  $("brR").setAttribute("x1", x);
+    $("bar").setAttribute("x1", x);  $("bar").setAttribute("x2", x);
+    $("grip").setAttribute("d", "M " + x + " 64 L " + (x - 8) + " 78 L " + (x + 8) + " 78 Z");
+    $("hit").setAttribute("x", x - 12);
+    $("bridge").setAttribute("aria-valuenow", fmt(p, 3));
+    $("vPos").textContent = fmt(p, 3);
+    $("vL").textContent = fmt(p, 3);
+    $("vR").textContent = fmt(q, 3);
+    $("sL").textContent = hzText(segmentHz(p));
+    $("sR").textContent = hzText(segmentHz(q));
+    $("vQ").textContent = rr[0] + " : " + rr[1];
+    $("sQ").textContent = "= " + (q === 0 ? "∞" : fmt(p / q, 3)) + " : 1";
+    $("lblLtxt").textContent = "Left segment · " + fmt(p, 3) + " · " + hzText(segmentHz(p)) + "  ▶";
+    $("lblRtxt").textContent = "▶  " + hzText(segmentHz(q)) + " · " + fmt(q, 3) + " · Right segment";
+  }
+
+  function setFromClientX(cx) {
+    var r = svg.getBoundingClientRect();
+    var sx = (cx - r.left) * (620 / r.width);          // client px -> viewBox units
+    k = positionToK((sx - X0) / W);
+    render();
+  }
+
+  // pointer (mouse + touch + pen): drag the bridge, or click/tap the track
+  var dragging = false;
+  // pointerdown's preventDefault() (needed so a drag does not select text) also
+  // cancels the browser's own focus-on-click, so hand focus to the bridge
+  // explicitly — otherwise keyboard nudging only works after Tab-ing to it.
+  function down(e) {
+    dragging = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    setFromClientX(e.clientX);
+    e.preventDefault();
+    try { $("bridge").focus({ preventScroll: true }); } catch (_) {}
+  }
+  function move(e) { if (dragging) setFromClientX(e.clientX); }
+  function up(e) { dragging = false; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {} }
+  ["track", "bridge"].forEach(function (id) {
+    var el = $(id);
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  });
+  // Listen on the document, not just the bridge: the widget lives in an iframe, so
+  // any keydown that reaches this document means the user is working in the widget
+  // (they clicked the bridge, the string, a Pluck button ...). Arrows have no other
+  // job here.
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    var step = e.shiftKey ? STEP_COARSE : STEP_FINE, d = 0;
+    if (e.key === "ArrowLeft") d = -step;
+    else if (e.key === "ArrowRight") d = step;
+    else return;
+    k = clampK(k + d); render(); e.preventDefault();
+  });
+
+  // --- Web Audio: OscillatorNode pluck ----------------------------------
+  var ctx = null, wave = null;
+  function audio() {
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      // a plucked-string-ish spectrum: a few harmonics falling off as 1/n
+      var re = new Float32Array(7), im = new Float32Array(7);
+      for (var n = 1; n < 7; n++) im[n] = 1 / (n * n);
+      wave = ctx.createPeriodicWave(re, im);
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function pluck(hz, when) {
+    // A zero-length segment (Infinity Hz) or one above the audible range makes no
+    // sound; a non-finite frequency would throw in the oscillator.
+    if (!isFinite(hz) || hz > 20000) return;
+    var c = audio(); if (!c) return;
+    var t0 = c.currentTime + (when || 0);
+    var o = c.createOscillator(), g = c.createGain();
+    o.setPeriodicWave(wave); o.frequency.value = hz;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.28, t0 + 0.01);   // quick attack
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 4.4);  // ring out
+    o.connect(g); g.connect(c.destination);
+    o.start(t0); o.stop(t0 + 4.6);
+  }
+  function hzL() { return segmentHz(k / GRID); }
+  function hzR() { return segmentHz(1 - k / GRID); }
+  function act(id, fn) {
+    var el = $(id);
+    el.addEventListener("click", fn);
+    if (el.tagName.toLowerCase() !== "button") {       // real <button>s already turn Enter/Space into a click
+      el.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { fn(); e.preventDefault(); } });
+    }
+  }
+  act("bL", function () { pluck(hzL()); });
+  act("bR", function () { pluck(hzR()); });
+  act("bB", function () { pluck(hzL()); pluck(hzR()); });
+  act("bO", function () { pluck(BASE_HZ); });
+  act("lblL", function () { pluck(hzL()); });
+  act("lblR", function () { pluck(hzR()); });
+
+  render();
+})();
+</script>
+</body>
+</html>

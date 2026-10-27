@@ -1,5 +1,5 @@
 name = "music-theory"
-version = "0.11.20"
+version = "0.11.48"
 description = "Forge vault for music theory pedagogy: exercises, quizzes, and worked compositions."
 domains = ["music"]
 
@@ -9,10 +9,12 @@ domains = ["music"]
 # snippet_registry (forge 0.1.6+) indexes music-core's notes under the
 # `music-core` namespace when scanning this vault, so Recipes here can
 # `Call [[note-in-music-core]]`. Local-path form only; the target is
-# the on-disk sibling checkout. NOTE: in the Obsidian plugin runtime
-# the sibling is outside the Pyodide MEMFS mount, so the plugin
-# logs-and-skips this import until the plugin-side mount drain lands —
-# headless (engine / forge-mcp) consumers resolve it today.
+# the on-disk sibling checkout. In the Obsidian plugin runtime the
+# plugin mounts the sibling into the engine's MEMFS when the vault
+# opens (Phase 4b, drain 2026-08-10-1430; desktop only; edits to
+# music-core need a close-and-reopen of this vault), so the import
+# resolves there too, as it does for headless (engine / forge-mcp)
+# consumers.
 #
 # Must stay LAST in this file: in TOML every key after a [table] header
 # belongs to that table, so a [imports] section placed above `name` /

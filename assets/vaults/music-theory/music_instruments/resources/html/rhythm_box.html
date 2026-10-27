@@ -26,16 +26,16 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     color: var(--muted);
-    padding: 8px 10px 14px;
+    padding: 6px 8px 8px;
     -webkit-text-size-adjust: 100%;
   }
   .wrap { max-width: 720px; margin: 0 auto; }
   .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .transport { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .transport { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-bottom: 6px; }
   button {
     font: inherit; font-size: 13px; color: var(--ink);
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
-    padding: 8px 12px; cursor: pointer; min-height: 40px;
+    padding: 5px 10px; cursor: pointer; min-height: 32px;
   }
   button:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
@@ -43,42 +43,60 @@
   button.play { border-color: var(--derived); color: var(--derived); font-weight: 600; min-width: 76px; }
   button.play.playing { background: var(--derived); color: #fff; }
   .bpm { display: flex; align-items: center; gap: 4px; border: 1px solid var(--axis); border-radius: 6px; padding: 2px; }
-  .bpm button { border: none; min-width: 34px; min-height: 34px; padding: 4px; }
+  .bpm button { border: none; min-width: 30px; min-height: 28px; padding: 2px; }
   .bpm .val { min-width: 54px; text-align: center; font-variant-numeric: tabular-nums; font-size: 14px; color: var(--ink); }
   .step-pos { min-width: 62px; text-align: center; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); }
-  .sliders { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 10px; align-items: center; }
+  .sliders { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 6px; align-items: center; }
+  .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .slider-field { display: flex; align-items: center; gap: 6px; font-size: 12px; }
   .slider-field-wrap { display: flex; flex-direction: column; gap: 2px; }
   .swing-caption { margin: 0; font-size: 11px; color: var(--muted); max-width: 320px; }
-  .slider-field input[type="range"] { width: 110px; }
-  .banks { display: flex; gap: 4px; margin-bottom: 10px; align-items: center; }
-  .banks button { min-width: 36px; min-height: 34px; padding: 4px 8px; }
-  .export-msg { font-size: 12px; color: var(--muted); min-height: 16px; }
-  .export-fallback { width: 100%; height: 150px; margin-top: 8px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 6px; }
+  .slider-field input[type="range"] { width: 96px; }
+  .banks { display: flex; gap: 4px; margin-bottom: 6px; align-items: center; }
+  .banks[hidden] { display: none; }
+  .banks button { min-width: 36px; min-height: 30px; padding: 3px 8px; }
+  .banks button[hidden] { display: none; }
   .banks button.active { background: var(--highlight); border-color: var(--ink); font-weight: 600; }
   #timeSig {
-    font: inherit; font-size: 13px; color: var(--ink); margin-left: 10px;
+    font: inherit; font-size: 13px; color: var(--ink);
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
-    padding: 8px 12px; cursor: pointer; min-height: 34px;
+    padding: 4px 8px; cursor: pointer; min-height: 32px;
   }
   #timeSig:hover { border-color: var(--ink); }
   .grid-wrap { min-width: 620px; }
-  .channel-row { display: grid; grid-template-columns: 110px repeat(16, 1fr); gap: 3px; align-items: center; margin-bottom: 4px; }
+  .channel-row { display: grid; grid-template-columns: 110px repeat(16, 1fr); gap: 3px; align-items: center; margin-bottom: 2px; }
   .channel-label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
-  .channel-label .name { flex: 1; }
   .mini-btn {
     min-width: 22px; min-height: 22px; padding: 0; font-size: 10px; border-radius: 4px;
     border: 1px solid var(--axis); background: #fff; color: var(--muted); line-height: 1;
   }
+  .mini-btn.remove { color: var(--muted); }
+  .mini-btn.remove:disabled { opacity: 0.35; cursor: default; }
+  /* ONE toolbar for both views (drain 2026-10-20-0900): Add instrument first, then the five transforms (shift left / right, mirror, rotate counter-clockwise /
+     clockwise), then, in Circle only, the extras. It sits above the views, so it is the same row in Grid and in Circle. */
+  .rhythm-tools { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 2px 0 4px; font-size: 13px; }
+  .rhythm-tools[hidden], .tool-group[hidden] { display: none; }
+  .tool-group { display: inline-flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; }
+  .rhythm-tools button { min-width: 34px; padding: 3px 8px; font-size: 15px; line-height: 1.1; }
+  .rhythm-tools button.ring-pick { min-width: 0; font-size: 12px; line-height: normal; }
+  .rhythm-tools select { font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 6px; min-height: 32px; }
+  .rhythm-tools select:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* The grid's row selector (the circle's is the ring chips): the instrument's name is a button; the selected one is highlighted like a chip. */
+  .channel-label .row-pick { flex: 1; min-width: 0; min-height: 24px; padding: 1px 6px; font-size: 12px; text-align: left; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 4px; }
+  .channel-label .row-pick:hover { border-color: var(--axis); }
+  .channel-label .row-pick[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); color: var(--ink); font-weight: 600; }
   .mini-btn.on.mute { background: var(--right-text); color: #fff; border-color: var(--right-text); }
   .mini-btn.on.solo { background: var(--accent); color: #fff; border-color: var(--accent); }
   .step {
-    min-height: 34px; border: 1px solid var(--grid); border-radius: 4px; background: #fff;
+    min-height: 28px; border: 1px solid var(--grid); border-radius: 4px; background: #fff;
     cursor: pointer; padding: 0; position: relative;
     transition: transform 150ms ease-out;   /* smooths the swing-preview nudge as the slider moves */
   }
   .step:hover { border-color: var(--axis); }
   .step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* Hover-link (drain 2026-10-21-1230): only ever present when the host asked for it (`hoverLink: true`) — an outline, so it never moves anything. */
+  .step.link-hot { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .cell.link-hot .dot { stroke: var(--accent); stroke-width: 3; }
   .step.on { background: var(--right); border-color: var(--right-text); }
   .step.beat-start { border-left: 2px solid var(--zero); }
   .step.playing::after {
@@ -88,18 +106,79 @@
        invisible, the same class of bug the piano/guitar/lute button-border fix caught earlier
        this session. This desaturated red keeps "red = position marker" recognizable (distinct
        from the gold/tan/slate "on" colors below) while dropping saturation, at 5.04:1 contrast. */
-    content: ""; position: absolute; inset: -3px; border: 2px solid #B54A50; border-radius: 6px; pointer-events: none;
+    content: ""; position: absolute; inset: -2px; border: 1.5px solid rgba(181, 74, 80, 0.8); border-radius: 6px; pointer-events: none;
   }
   /* Was var(--left) #2B2B2B (near-black, same value as Title Text) -- driver: "same but less so".
      var(--muted) #555555 (already used for Body Text) is visibly softer while staying clearly
      "on" against the paper background (7.27:1) and against the other two channels' on-colors. */
   .step[data-channel="kick"].on { background: var(--muted); border-color: var(--ink); }
   .step[data-channel="hihat"].on { background: var(--derived); border-color: #4b5a70; }
-  .bottom-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+  /* Beat-as-data Phase 5: a cell holding a velocity >= 100 (e.g. from accent_mask) is drawn with a double ring so the accents
+     are visible. Shown on top of the channel colour, so it reads on kick, snare and hi-hat alike. */
+  .step.on.accent { box-shadow: inset 0 0 0 2px #fff, inset 0 0 0 4px var(--ink); }
+  /* Host mode only (the widget was opened by the plugin's "Open as Beat Box"): note name + autosave indicator. Hidden standalone. */
+  .host-bar { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin-bottom: 6px; font-size: 13px; color: var(--ink); }
+  .host-bar .note { font-weight: 600; }
+  #bReload { background: var(--highlight); border-color: var(--ink); font-weight: 600; }
+  .confirm-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; padding: 6px 10px; font-size: 13px; border: 1px solid var(--ink); border-radius: 6px; background: var(--highlight); }
+  .host-bar[hidden], .confirm-bar[hidden], #bReload[hidden] { display: none; }   /* an author `display` beats the browser's [hidden]; .host-bar[hidden] was missing, so the bar showed a stray "Editing" row before any load (drain 2026-10-20-0900) */
+  .host-msg { font-size: 12px; color: var(--muted); min-height: 16px; }
+  .host-msg.error { color: #B54A50; }
+  .host-bar [hidden] { display: none; }
+  /* Phase 8, playground mode (the plugin's `forge-rhythm` embed): a label and Reset replace the autosave controls (Open note is the host toolbar's). Since drain
+     2026-10-20-0900 a host that says `resetInHost` draws Reset and the "not saved" reminder in ITS toolbar row and this whole bar is hidden; an older host gets them here. */
+  .host-bar .playground-label { font-weight: 600; }
+  /* Circle mode (rhythm necklace): a second drawing of the SAME data. Colours are the grid's own (kick = --muted, hi-hat = --derived,
+     the rest = --right), so a channel reads the same in both views. */
+  .view-switch { display: inline-flex; border: 1px solid var(--axis); border-radius: 6px; overflow: hidden; }
+  .view-switch button { border: none; border-radius: 0; min-width: 60px; min-height: 30px; padding: 3px 10px; }
+  .view-switch button + button { border-left: 1px solid var(--axis); }
+  .view-switch button[aria-pressed="true"] { background: var(--highlight); font-weight: 600; }
+  .view-msg { font-size: 12px; color: var(--muted); min-height: 16px; }
+  .circle-view[hidden], .grid-view[hidden] { display: none; }
+  .ring-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ring-legend .ring-pick { min-height: 26px; padding: 2px 8px; font-size: 12px; min-width: 0; }
+  .ring-legend .ring-pick[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); font-weight: 600; }
+  button[aria-pressed="true"].shape-toggle { background: var(--grid); border-color: var(--ink); }
+  /* The width is set by the script to what the ring count needs (circleSizeFor), so the viewBox units are CSS pixels and the targets are real
+     pixels; max-width keeps it inside a narrow pane, where it scales down as before. */
+  svg.circle-svg { display: block; max-width: 100%; height: auto; margin: 0 auto; touch-action: manipulation; }
+  svg.circle-svg .dot { stroke-width: 1.5; }
+  svg.circle-svg .dot.rest { fill: #fff; stroke: var(--axis); }
+  svg.circle-svg .dot.hit { fill: var(--right); stroke: var(--right-text); }
+  svg.circle-svg .dot.hit.ch-kick { fill: var(--muted); stroke: var(--ink); }
+  svg.circle-svg .dot.hit.ch-hihat { fill: var(--derived); stroke: #4b5a70; }
+  svg.circle-svg .dot.accent { stroke-width: 3; stroke: var(--ink); }
+  /* The active dot: a lighter ring and a soft warm tint — it reads, but no longer shouts over the shape. */
+  svg.circle-svg .dot.playing { stroke: rgba(181, 74, 80, 0.7); stroke-width: 2; fill-opacity: 0.85; filter: drop-shadow(0 0 3px rgba(181, 74, 80, 0.45)); }
+  svg.circle-svg .target { fill: transparent; stroke: none; cursor: pointer; }
+  svg.circle-svg .cell:focus { outline: none; }
+  svg.circle-svg .cell:focus-visible .dot, svg.circle-svg .cell.focused .dot { stroke: var(--accent); stroke-width: 3; }
+  svg.circle-svg .ring-guide { fill: none; stroke: var(--grid); stroke-width: 1; }
+  svg.circle-svg .tick { stroke: var(--zero); stroke-width: 2; stroke-linecap: round; }
+  svg.circle-svg .step-label { font-size: 10px; fill: var(--muted); text-anchor: middle; dominant-baseline: middle; font-variant-numeric: tabular-nums; }
+  svg.circle-svg .shape { fill: rgba(179, 147, 115, 0.18); stroke: var(--right-text); stroke-width: 2; stroke-linejoin: round; pointer-events: none; }
+  /* A hairline, not a spoke: thin and translucent. It is drawn last (on top) but never takes a click and no longer hides a dot or the shape. */
+  svg.circle-svg .playhead { stroke: #B54A50; stroke-width: 1; opacity: 0.45; stroke-linecap: round; pointer-events: none; }
+  svg.circle-svg .playhead[data-step=""] { visibility: hidden; }
 </style>
 </head>
 <body>
 <div class="wrap">
+
+<div class="host-bar" id="hostBar" hidden>
+  <span id="hostEditing">Editing</span> <span class="note" id="hostNote"></span>
+  <span class="host-msg playground-label" id="playgroundLabel" hidden>Playground &mdash; edits are not saved</span>
+  <span class="host-msg" id="loadMsg" role="status" aria-live="polite"></span>
+  <span class="host-msg" id="saveMsg" role="status" aria-live="polite"></span>
+  <button id="bReload" hidden title="Discard what is on screen and load the note as it is on disk now">Reload from note</button>
+  <button id="bReset" hidden title="Put the rhythm back exactly as it is in the note">Reset</button>
+</div>
+<div class="confirm-bar" id="confirmBar" role="alertdialog" aria-label="Confirm change to the note" hidden>
+  <span id="confirmText"></span>
+  <button id="confirmOk">Continue</button>
+  <button id="confirmCancel">Cancel</button>
+</div>
 
 <div class="transport">
   <button class="play" id="bPlay" title="Start or stop the sequencer" aria-pressed="false">Play</button>
@@ -108,18 +187,28 @@
     <span class="val" id="bpmVal">120 BPM</span>
     <button id="bBpmUp" title="Increase BPM" aria-label="Increase BPM">+</button>
   </div>
-  <button id="bTap" title="Tap a few times to set the tempo">Tap tempo</button>
   <span class="step-pos" id="stepPos" aria-live="polite">-- / 16</span>
+  <select id="timeSig" aria-label="Time signature" title="Switching time signature stops playback and clears all four pattern banks (a 4/4 pattern has no meaningful 3/4 equivalent to preserve). Applies to every bank, not just the current one.">
+    <option value="4/4" selected>4/4</option>
+    <option value="4/4@8">4/4 (eighth notes)</option>
+    <option value="3/4">3/4 (waltz)</option>
+    <option value="12/8">12/8</option>
+    <option value="6/8">6/8</option>
+    <option value="5/4">5/4</option>
+  </select>
+  <div class="view-switch" id="viewSwitch" role="group" aria-label="View">
+    <button type="button" id="bViewGrid" aria-pressed="true" title="Show the pattern as a step grid">Grid</button>
+    <button type="button" id="bViewCircle" aria-pressed="false" title="Show the same pattern as a circle (a rhythm necklace)">Circle</button>
+  </div>
+  <span class="view-msg" id="viewMsg" role="status" aria-live="polite"></span>
 </div>
 
 <div class="sliders">
-  <div class="slider-field-wrap">
-    <label class="slider-field">Swing
-      <input type="range" id="swing" min="0" max="100" value="0" aria-label="Swing amount">
-      <span id="swingVal">0%</span>
-    </label>
-    <p class="swing-caption">Delays every off-beat 16th note &mdash; try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells below nudge right as a preview, even while stopped.</p>
-  </div>
+  <label class="slider-field" title="Swing: delays every off-beat 16th note. Try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells nudge right as a preview, even while stopped.">Swing
+    <input type="range" id="swing" min="0" max="100" value="0" aria-label="Swing amount" aria-describedby="swingCaption" title="Swing: delays every off-beat 16th note. Try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells nudge right as a preview, even while stopped.">
+    <span id="swingVal">0%</span>
+  </label>
+  <p class="swing-caption sr-only" id="swingCaption">Delays every off-beat 16th note &mdash; try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells below nudge right as a preview, even while stopped.</p>
   <label class="slider-field">Volume
     <input type="range" id="volume" min="0" max="100" value="80" aria-label="Volume">
     <span id="volumeVal">80%</span>
@@ -131,106 +220,97 @@
   <button data-bank="B">B</button>
   <button data-bank="C">C</button>
   <button data-bank="D">D</button>
-  <select id="timeSig" aria-label="Time signature" title="Switching time signature stops playback and clears all four pattern banks (a 4/4 pattern has no meaningful 3/4 equivalent to preserve). Applies to every bank, not just the current one.">
-    <option value="4/4" selected>4/4</option>
-    <option value="3/4">3/4 (waltz)</option>
-  </select>
 </div>
 
+<div class="rhythm-tools" id="rhythmTools" role="toolbar" aria-label="Rhythm tools">
+  <select id="addInstrument" aria-label="Add instrument" title="Add a row for another instrument (bell, claves, congas)"></select>
+  <span class="tool-group" id="transformTools" role="group" aria-label="Transform the pattern"></span>
+  <span class="tool-group" id="circleExtras" role="group" aria-label="Circle tools" hidden>
+    <button type="button" id="bRingOut" title="Move this ring outward (one place toward the outer edge)" aria-label="Move this ring outward">&#8593;</button>
+    <button type="button" id="bRingIn" title="Move this ring inward (one place toward the center)" aria-label="Move this ring inward">&#8595;</button>
+    <button type="button" id="bShape" class="shape-toggle" aria-pressed="true" title="Show shape: draw the polygon through the selected ring's hits" aria-label="Show shape">&#9651;</button>
+    <span class="ring-legend" id="ringLegend" role="group" aria-label="Pick a ring (its hits make the shape)"></span>
+  </span>
+</div>
+
+<div class="grid-view" id="gridView">
 <div class="scroller">
   <div class="grid-wrap" id="grid" role="group" aria-label="16-step pattern grid, kick, snare, hi-hat"></div>
 </div>
-
-<div class="bottom-row">
-  <button id="bRandom" title="Fill the current pattern with a musically biased random beat">Random</button>
-  <button id="bClear" title="Empty the current pattern">Clear</button>
-  <button id="bExport" title="Copy this bank's pattern (plus time signature, swing and tempo) as JSON, ready to paste into a data note">Export JSON</button>
-  <span class="export-msg" id="exportMsg" role="status" aria-live="polite"></span>
 </div>
-<textarea id="exportFallback" class="export-fallback" readonly hidden aria-label="Pattern JSON (select all and copy)"></textarea>
+
+<div class="circle-view" id="circleView" hidden>
+  <svg class="circle-svg" id="circle" role="group" aria-label="Rhythm circle" viewBox="0 0 460 460" tabindex="-1"></svg>
+</div>
+
 
 </div>
 <script>
 // --- pure math (no DOM) -- BEGIN pure-core -------------------------------------------------
 var STEPS = 16;                                  // default (4/4) step count; a parameter everywhere it matters
 var GROUP_SIZE = 4;                              // 16th notes per beat, same for every signature this ship supports
-var CHANNELS = ["kick", "snare", "hihat"];
+// Every channel the widget knows — exactly the engine's `_RHYTHM_CHANNEL_INSTRUMENTS` keys (a parity test reads them from the bundled
+// lib.py). A note shows one row per channel IT contains; DEFAULT_ROWS is what the standalone widget (no note) starts with.
+var CHANNELS = ["kick", "snare", "hihat", "bell", "claves", "conga_high", "conga_low"];
+var DEFAULT_ROWS = ["kick", "snare", "hihat"];
 var BANKS = ["A", "B", "C", "D"];
 var MIN_BPM = 40, MAX_BPM = 240;
-// Exactly two signatures, per the driver's explicit scope (no UI for arbitrary beats-per-bar).
-// `steps = beatsPerBar * subdivision`, `groupSize = subdivision` — the grid and every pure
-// function below are written generically against these two numbers, not against 16/12 directly,
-// so a third signature later is a new TIME_SIGNATURES entry, not a parallel set of functions.
+// A fixed menu of signatures (no UI for arbitrary beats-per-bar). `steps = beatsPerBar * subdivision`, `groupSize = subdivision` — the
+// grid and every pure function below are written generically against these numbers, so another signature is a new entry here, not a
+// parallel set of functions. `stepQl` is how long ONE step lasts in quarter notes (what the engine's bar length / steps works out to,
+// and what playback speed needs): a sixteenth = 0.25 in the simple meters, an eighth = 0.5 in the compound ones (12/8, 6/8).
+// The engine proves each of these (tests/music/test_rhythm_world_vocabulary.py): 12/8 = 12 steps / group 3, 6/8 = 6 / 3, 5/4 = 20 / 4.
 var TIME_SIGNATURES = {
-  "4/4": { label: "4/4", beatsPerBar: 4, subdivision: 4, steps: 16, groupSize: 4 },
-  "3/4": { label: "3/4 (waltz)", beatsPerBar: 3, subdivision: 4, steps: 12, groupSize: 4 }
+  "4/4": { label: "4/4", beatsPerBar: 4, subdivision: 4, steps: 16, groupSize: 4, stepQl: 0.25 },
+  "3/4": { label: "3/4 (waltz)", beatsPerBar: 3, subdivision: 4, steps: 12, groupSize: 4, stepQl: 0.25 },
+  "12/8": { label: "12/8", beatsPerBar: 4, subdivision: 3, steps: 12, groupSize: 3, stepQl: 0.5 },
+  "6/8": { label: "6/8", beatsPerBar: 2, subdivision: 3, steps: 6, groupSize: 3, stepQl: 0.5 },
+  "5/4": { label: "5/4", beatsPerBar: 5, subdivision: 4, steps: 20, groupSize: 4, stepQl: 0.25 }
 };
 
+// Eighth-note resolution (drain 2026-10-14-1200): 4/4 may ALSO be written as 8 steps (one step = an eighth, 0.5 quarter) in groups of 2 (a
+// beat) or 4 (a half bar). The engine already scores it (step = bar / steps); only this widget refused it. Nothing else gains a second grid.
+// A note keeps the group_size it was written with — it is carried in state and written back, not replaced by the menu default.
+var EIGHTH_GRIDS = { "4/4": { steps: 8, groupSizes: [2, 4], stepQl: 0.5 } };
+// The meter menu: its VALUE is a grid key, not a time_signature (4/4 appears twice: sixteenth and eighth resolution). `timeSig` in state
+// stays the data's own time_signature string.
+var MENU_GRIDS = {
+  "4/4": { timeSig: "4/4", steps: 16, groupSize: 4, stepQl: 0.25, label: "4/4" },
+  "4/4@8": { timeSig: "4/4", steps: 8, groupSize: 2, stepQl: 0.5, label: "4/4 (eighth notes)" },
+  "3/4": { timeSig: "3/4", steps: 12, groupSize: 4, stepQl: 0.25, label: "3/4 (waltz)" },
+  "12/8": { timeSig: "12/8", steps: 12, groupSize: 3, stepQl: 0.5, label: "12/8" },
+  "6/8": { timeSig: "6/8", steps: 6, groupSize: 3, stepQl: 0.5, label: "6/8" },
+  "5/4": { timeSig: "5/4", steps: 20, groupSize: 4, stepQl: 0.25, label: "5/4" }
+};
+// The grid a (time_signature, steps, group_size) triple means, or null when this widget cannot save it back unchanged.
+function resolveGrid(sigKey, steps, groupSize) {
+  if (!Object.prototype.hasOwnProperty.call(TIME_SIGNATURES, sigKey)) return null;
+  var sig = TIME_SIGNATURES[sigKey];
+  if (steps === sig.steps && groupSize === sig.groupSize) return { steps: sig.steps, groupSize: sig.groupSize, stepQl: sig.stepQl };
+  var alt = EIGHTH_GRIDS[sigKey];
+  if (alt && steps === alt.steps && alt.groupSizes.indexOf(groupSize) >= 0) return { steps: alt.steps, groupSize: groupSize, stepQl: alt.stepQl };
+  return null;
+}
+// The menu key for the grid a note is in (so the select shows what is in force after a load).
+function menuKeyFor(sigKey, steps) {
+  var alt = EIGHTH_GRIDS[sigKey];
+  return alt && steps === alt.steps ? sigKey + "@8" : sigKey;
+}
+
 function clampBpm(bpm) { return Math.max(MIN_BPM, Math.min(MAX_BPM, bpm)); }
-// One 16th note, in seconds, at a given BPM (BPM is quarter notes per minute; a 16th is 1/4 of that).
-function stepSeconds(bpm) { return 60 / bpm / 4; }
+// One step, in seconds, at a given BPM (BPM is quarter notes per minute). `stepQl` = the step's length in quarter notes: 0.25 (a 16th,
+// the default — every simple meter) or 0.5 (an eighth — the compound meters 12/8 and 6/8).
+function stepSeconds(bpm, stepQl) { return 60 / bpm * (stepQl == null ? 0.25 : stepQl); }
 
 // Standard swing: delay every SECOND 16th of each eighth-note pair (steps 1,3,5,... 0-indexed —
 // the "off" 16th) by a fraction of one 16th-note's duration. 0% = straight grid; 100% = the off
 // 16th sits halfway to the NEXT 16th (a gentle, non-extreme swing feel; some DAWs push further
 // toward a full triplet feel at 100% — this implementation caps at +0.5 step, a defensible,
 // commonly-used middle ground, stated explicitly here rather than left ambiguous).
-function swingOffsetSeconds(bpm, swingPct, stepIndex) {
+function swingOffsetSeconds(bpm, swingPct, stepIndex, stepQl) {
   var pct = Math.max(0, Math.min(100, swingPct));
   if (stepIndex % 2 === 0) return 0;                 // only the "off" 16th of each pair swings
-  return (pct / 100) * 0.5 * stepSeconds(bpm);
-}
-
-// Tap tempo: push a new tap timestamp (ms) onto a rolling history, discarding it (starting a
-// fresh run) if the gap since the last tap is too large to be the same tempo. Keeps at most
-// `maxTaps` most recent taps so a long tapping session doesn't drift on stale early taps.
-function pushTap(history, t, maxTaps, resetGapMs) {
-  maxTaps = maxTaps || 8; resetGapMs = resetGapMs == null ? 2000 : resetGapMs;
-  var h = history.slice();
-  if (h.length && (t - h[h.length - 1]) > resetGapMs) h = [];
-  h.push(t);
-  if (h.length > maxTaps) h = h.slice(h.length - maxTaps);
-  return h;
-}
-// BPM from the average interval between consecutive taps in the history; null if fewer than 2
-// taps (not enough to measure an interval yet).
-function bpmFromTapHistory(history) {
-  if (history.length < 2) return null;
-  var sum = 0;
-  for (var i = 1; i < history.length; i++) sum += history[i] - history[i - 1];
-  var avgMs = sum / (history.length - 1);
-  if (avgMs <= 0) return null;
-  return clampBpm(60000 / avgMs);
-}
-
-// Random-pattern bias: how likely each channel is to sound on a given step, so "Random" produces
-// a recognizable beat rather than noise. `groupSize` = 16th notes per beat (always 4 in this
-// ship, but read from the signature, not hardcoded): a DOWNBEAT is the first 16th of any beat
-// (step % groupSize === 0); a BACKBEAT generalizes "beat 2 and 4" to "every other beat starting
-// from the second one" (floor(step/groupSize) is odd) — for 4/4 that's beats 2 AND 4 (steps 4
-// and 12, exactly the original hardcoded pair); for 3/4 it's beat 2 only (step 4), the one
-// mid-bar accent a waltz actually wants. The hi-hat's density pattern doesn't depend on bar
-// length at all, so it's untouched. Kick's non-downbeat weight is likewise bar-length-independent.
-function channelStepWeight(channel, step, groupSize) {
-  groupSize = groupSize == null ? GROUP_SIZE : groupSize;
-  var onDownbeat = step % groupSize === 0;
-  var onBackbeat = onDownbeat && Math.floor(step / groupSize) % 2 === 1;
-  if (channel === "kick") return onDownbeat ? 0.85 : (step % 2 === 0 ? 0.25 : 0.08);
-  if (channel === "snare") return onBackbeat ? 0.9 : (step % groupSize === 2 ? 0.15 : 0.05);
-  if (channel === "hihat") return step % 2 === 0 ? 0.85 : 0.55;
-  return 0;
-}
-// `rng` is injectable (defaults to Math.random) so this is deterministically testable: pass a
-// fixed sequence of "random" values and the resulting pattern is exactly predictable.
-function randomizePattern(rng, steps, groupSize) {
-  rng = rng || Math.random;
-  steps = steps == null ? STEPS : steps;
-  var pattern = {};
-  CHANNELS.forEach(function (ch) {
-    pattern[ch] = [];
-    for (var s = 0; s < steps; s++) pattern[ch].push(rng() < channelStepWeight(ch, s, groupSize));
-  });
-  return pattern;
+  return (pct / 100) * 0.5 * stepSeconds(bpm, stepQl);
 }
 
 function emptyPattern(steps) {
@@ -255,18 +335,18 @@ function isChannelAudible(channel, muted, soloed) {
 // This function touches no audio/DOM at all, so the actual "does it drift" question is answered
 // by this function's own arithmetic, not by timers — a real driver ear-check still matters for
 // perceived feel, but the SCHEDULING MATH itself is fully unit-testable.
-function advanceScheduler(state, now, bpm, swingPct, scheduleAheadTime, steps) {
+function advanceScheduler(state, now, bpm, swingPct, scheduleAheadTime, steps, stepQl) {
   steps = steps == null ? STEPS : steps;
   var events = [];
   var currentStep = state.currentStep, nextNoteTime = state.nextNoteTime;
   while (nextNoteTime < now + scheduleAheadTime) {
     events.push({ step: currentStep, time: nextNoteTime });
-    var dur = stepSeconds(bpm);
+    var dur = stepSeconds(bpm, stepQl);
     var nextStep = (currentStep + 1) % steps;
     nextNoteTime += dur;
     // The swing offset for the UPCOMING step is added on top of its nominal grid time, then
     // subtracted back off before the step after that, so swing does not accumulate drift.
-    nextNoteTime += swingOffsetSeconds(bpm, swingPct, nextStep) - swingOffsetSeconds(bpm, swingPct, currentStep);
+    nextNoteTime += swingOffsetSeconds(bpm, swingPct, nextStep, stepQl) - swingOffsetSeconds(bpm, swingPct, currentStep, stepQl);
     currentStep = nextStep;
   }
   return { events: events, state: { currentStep: currentStep, nextNoteTime: nextNoteTime } };
@@ -282,56 +362,258 @@ function swingVisualPx(swingPct, stepIndex) {
   if (stepIndex % 2 === 0) return 0;                  // only the "off" 16th nudges, same convention as swingOffsetSeconds
   return (pct / 100) * 6;                              // capped at 6px — a preview, not a ruler
 }
+// --- Circle mode (rhythm necklace): pure geometry, rotation, polygon ---------------------------------------------------------
+// A second DISPLAY of the same data. N steps are N equally spaced points, step 0 at 12 o'clock, going CLOCKWISE; one concentric ring per
+// channel, the first channel outermost. Everything here is arithmetic: the DOM half only draws what this returns.
+var CIRCLE_MAX_RINGS = 4;                          // beyond this the rings are not legible: the widget says so and keeps Grid
+var CIRCLE_LABELS_MAX_STEPS = 16;                  // step numbers are drawn up to this many steps, hidden when crowded
+var CIRCLE_SIZE = 460;                             // the default / largest viewBox edge (an embed is ~460 px wide)
+var CIRCLE_INNER_MIN = 56;                         // the innermost ring is never tighter than this (a polygon needs some room)
+var CIRCLE_TARGET_MIN = 13;                        // target radius the smallest circle still guarantees (26 px, over the 24 px floor)
+var CIRCLE_RING_STEP = 26;                         // the least gap between rings that keeps those targets from touching
+var CIRCLE_MAX_TARGET = 14, CIRCLE_TICK_BAND = 10, CIRCLE_EDGE = 8;
+function circleLabelBand(steps) { return steps <= CIRCLE_LABELS_MAX_STEPS ? 22 : 0; }
+// The innermost ring's radius that gives every step on it a CIRCLE_TARGET_MIN target without two touching its neighbour.
+function circleInnerFloor(steps) { return Math.max(CIRCLE_INNER_MIN, CIRCLE_TARGET_MIN / Math.sin(Math.PI / steps)); }
+// The smallest square (CSS px == viewBox units) a circle of `rings` rings of `steps` steps needs for >= 24 px hit targets that never overlap,
+// capped at CIRCLE_SIZE. It used to be a fixed 460 square whatever was in it; one ring needs about half of that.
+function circleSizeFor(steps, rings) {
+  rings = Math.max(1, Math.min(CIRCLE_MAX_RINGS, rings | 0));
+  var outer = circleInnerFloor(steps) + (rings - 1) * CIRCLE_RING_STEP;
+  var edge = CIRCLE_EDGE + circleLabelBand(steps) + CIRCLE_TICK_BAND + CIRCLE_MAX_TARGET;
+  return Math.min(CIRCLE_SIZE, Math.ceil(2 * (outer + edge)));
+}
+function circleGeometry(steps, ringCount, size) {
+  size = size || CIRCLE_SIZE;
+  ringCount = Math.max(1, ringCount | 0);
+  var cx = size / 2, cy = size / 2;
+  var labelBand = circleLabelBand(steps);                         // room outside the outer ring for the step numbers
+  var tickBand = CIRCLE_TICK_BAND;                                // room outside the outer ring for the group-start ticks
+  var maxTarget = CIRCLE_MAX_TARGET;                              // a 28 px hit target: comfortably over the 24 px floor
+  var outer = size / 2 - CIRCLE_EDGE - labelBand - tickBand - maxTarget;    // the outermost ring's radius
+  // The inner ring sits at its floor (or, for very many steps, no deeper than 80% of the way in); rings share what is left, at most 38 apart.
+  var innerFloor = Math.min(circleInnerFloor(steps), outer * 0.8);
+  var ringGap = ringCount > 1 ? Math.min(38, (outer - innerFloor) / (ringCount - 1)) : 0;
+  var ringRadii = [];
+  for (var r = 0; r < ringCount; r++) ringRadii.push(outer - r * ringGap);
+  var inner = ringRadii[ringCount - 1];
+  // The target is as large as it can be without two targets touching: limited by the neighbour chord on the INNERMOST ring and by the
+  // gap between rings. For N <= 16 and up to 4 rings at the default size that is always >= 12 px (a 24 px target).
+  var chord = 2 * inner * Math.sin(Math.PI / steps);
+  var targetRadius = Math.min(maxTarget, chord / 2, ringCount > 1 ? ringGap / 2 : maxTarget);
+  var dotRadius = Math.max(2, Math.min(9, targetRadius * 0.62));
+  var points = [];
+  for (var ri = 0; ri < ringCount; ri++) {
+    var ring = [];
+    for (var i = 0; i < steps; i++) {
+      var a = (2 * Math.PI * i) / steps;                          // 0 = 12 o'clock, increasing clockwise
+      ring.push({ x: cx + ringRadii[ri] * Math.sin(a), y: cy - ringRadii[ri] * Math.cos(a) });
+    }
+    points.push(ring);
+  }
+  return {
+    size: size, cx: cx, cy: cy, steps: steps, ringRadii: ringRadii, points: points,
+    targetRadius: targetRadius, dotRadius: dotRadius, groupDotRadius: dotRadius * 1.3,
+    labels: { visible: steps <= CIRCLE_LABELS_MAX_STEPS, radius: outer + maxTarget + tickBand + 8 },
+    tick: { from: outer + targetRadius + 2, to: outer + targetRadius + 2 + tickBand },
+    angle: function (step) { return (2 * Math.PI * step) / steps; }
+  };
+}
+// Mirror: reverse every SHOWN channel in time within the bar (step i -> N-1-i). Velocities and rests move with their cells; a short row is
+// read as rests past its end; channels that are not rows of the note are carried through untouched. A copy, and its own inverse.
+function mirrorPattern(pattern, rows, steps) {
+  var out = {};
+  Object.keys(pattern).forEach(function (ch) { out[ch] = pattern[ch].slice(); });
+  rows.forEach(function (ch) {
+    var src = pattern[ch] || [], row = new Array(steps);
+    for (var i = 0; i < steps; i++) row[i] = normalizeCell(src[steps - 1 - i]);
+    out[ch] = row;
+  });
+  return out;
+}
+// Rotate every SHOWN channel by one step, wrapping: dir +1 = right (a hit moves one step later), -1 = left. A copy; channels that are not
+// rows of the note are carried through untouched, and cells go through normalizeCell so velocities survive and 0 reads as a rest.
+function rotatePattern(pattern, rows, steps, dir) {
+  var out = {};
+  Object.keys(pattern).forEach(function (ch) { out[ch] = pattern[ch].slice(); });
+  rows.forEach(function (ch) {
+    var src = pattern[ch] || [], row = new Array(steps);
+    for (var i = 0; i < steps; i++) {
+      var from = (((i - dir) % steps) + steps) % steps;
+      row[i] = normalizeCell(src[from]);
+    }
+    out[ch] = row;
+  });
+  return out;
+}
+// The transform toolbar (drain 2026-10-20-0900): ONE definition, so Grid and Circle cannot drift. Five controls, in this order, shown in BOTH views:
+//   shift left / shift right  — EVERY instrument one step earlier / later (wrapping)        scope "all"
+//   mirror                    — EVERY instrument reversed in time within the bar              scope "all"
+//   rotate counter-clockwise / clockwise — ONLY the selected instrument, one step earlier / later   scope "selected"
+// `domId` is the element id the page gives the generated button (the ids earlier drains' tests use). `{who}` in a "selected" control's text is the
+// selected instrument's name. One noun for both views: "instrument" (not "ring" or "row").
+var TRANSFORM_TOOLS = [
+  { id: "shiftLeft", domId: "bRotLeft", icon: "\u2039", scope: "all",
+    title: "Shift left: move every instrument one step earlier (wraps around)", label: "Shift all instruments left one step" },
+  { id: "shiftRight", domId: "bRotRight", icon: "\u203a", scope: "all",
+    title: "Shift right: move every instrument one step later (wraps around)", label: "Shift all instruments right one step" },
+  { id: "mirror", domId: "bMirror", icon: "\u21c6", scope: "all",
+    title: "Mirror: reverse the rhythm in time within the bar (the last step becomes the first). Press again to undo.", label: "Mirror (reverse the rhythm in time)" },
+  { id: "rotateCcw", domId: "bRingRotLeft", icon: "\u21ba", scope: "selected",
+    title: "Rotate {who} counter-clockwise: one step earlier, only this instrument (wraps around)", label: "Rotate {who} counter-clockwise one step" },
+  { id: "rotateCw", domId: "bRingRotRight", icon: "\u21bb", scope: "selected",
+    title: "Rotate {who} clockwise: one step later, only this instrument (wraps around)", label: "Rotate {who} clockwise one step" }
+];
+// The tooltip and the accessible name of one control, naming the selected instrument where the control acts on it.
+function transformToolText(tool, who) {
+  var name = who || "the selected instrument";
+  return { title: tool.title.split("{who}").join(name), label: tool.label.split("{who}").join(name) };
+}
+// The new pattern after one transform. A copy; an unknown id, or a "selected" transform whose selection is not one of the rows, changes nothing.
+function applyTransform(id, pattern, rows, steps, selected) {
+  if (id === "shiftLeft") return rotatePattern(pattern, rows, steps, -1);
+  if (id === "shiftRight") return rotatePattern(pattern, rows, steps, 1);
+  if (id === "mirror") return mirrorPattern(pattern, rows, steps);
+  if (id === "rotateCcw" || id === "rotateCw") {
+    if (rows.indexOf(selected) < 0) return rotatePattern(pattern, [], steps, 0);
+    return rotatePattern(pattern, [selected], steps, id === "rotateCw" ? 1 : -1);
+  }
+  return rotatePattern(pattern, [], steps, 0);
+}
+// The selected instrument: the chosen one if it is still a row, else the first row (undefined when there are none). One state for Grid and Circle.
+function selectedRowOf(rows, chosen) {
+  return rows.indexOf(chosen) >= 0 ? chosen : rows[0];
+}
+// The polygon's vertices: the ring's hits, in step order.
+function polygonPoints(geometry, ring, row) {
+  var pts = [];
+  (row || []).forEach(function (v, i) { if (cellOn(v) && geometry.points[ring] && geometry.points[ring][i]) pts.push(geometry.points[ring][i]); });
+  return pts;
+}
+
 // Rhythm-data export (Beat-as-data Phase 0): serialize one bank's pattern + the widget's live
 // time signature / swing / tempo into the JSON shape the engine's `rhythm_data_to_stream` reads.
 // Field names mirror this file's own state exactly (TIME_SIGNATURES entry -> time_signature/steps/
 // group_size; swingPct -> swing_pct; bpm -> tempo_bpm; pattern -> channels), so this is a direct
 // serialization, not a reshaping. Channel arrays stay on ONE line each (valid JSON either way) so a
 // pasted note reads like a grid instead of 16 lines per channel.
-function buildRhythmData(timeSigKey, swingPct, bpm, pattern) {
+// Beat-as-data Phase 5: a cell is false (rest) | true (a hit at the default velocity) | an int 1-127 (a hit at that MIDI
+// velocity, as written by accent_mask / hand-edited rhythm data). The cell used to be coerced with `!!v`, which would have
+// flattened every velocity to `true` on a load -> edit -> save round trip; ints are now preserved untouched.
+var ACCENT_THRESHOLD = 100;                      // mirrors the engine's _RHYTHM_ACCENT_THRESHOLD (forge/music/lib.py)
+function normalizeCell(v) {
+  if (v === true) return true;
+  if (typeof v === "number" && isFinite(v) && Math.floor(v) === v && v >= 1 && v <= 127) return v;
+  return false;                                  // false, 0, null, undefined, anything else: a rest
+}
+function cellOn(v) { return normalizeCell(v) !== false; }
+// A click toggles an int cell to a rest and an empty cell to a PLAIN hit (never an invented velocity).
+function toggleCell(v) { return normalizeCell(v) === false ? true : false; }
+function isAccentedCell(v) { var n = normalizeCell(v); return typeof n === "number" && n >= ACCENT_THRESHOLD; }
+// `rows` = the channels to write, in order (a note's own channels, so a load -> save with no edit is byte-identical); default: the
+// three standalone rows.
+// `grid` ({steps, groupSize}) = the grid the note is in; omitted, the signature's own default (what every pre-eighth-note caller meant).
+function buildRhythmData(timeSigKey, swingPct, bpm, pattern, rows, grid) {
   var sig = TIME_SIGNATURES[timeSigKey];
+  var nSteps = grid ? grid.steps : sig.steps, group = grid ? grid.groupSize : sig.groupSize;
   var channels = {};
-  CHANNELS.forEach(function (ch) {
-    var row = new Array(sig.steps).fill(false);
-    (pattern[ch] || []).slice(0, sig.steps).forEach(function (v, i) { row[i] = !!v; });
+  (rows || DEFAULT_ROWS).forEach(function (ch) {
+    var row = new Array(nSteps).fill(false);
+    (pattern[ch] || []).slice(0, nSteps).forEach(function (v, i) { row[i] = normalizeCell(v); });
     channels[ch] = row;
   });
-  return { time_signature: timeSigKey, steps: sig.steps, group_size: sig.groupSize,
+  return { time_signature: timeSigKey, steps: nSteps, group_size: group,
            swing_pct: swingPct, tempo_bpm: Math.round(bpm), channels: channels };
 }
-function rhythmDataJson(data) {
-  var lines = [
-    '  "time_signature": ' + JSON.stringify(data.time_signature) + ',',
-    '  "steps": ' + data.steps + ',',
-    '  "group_size": ' + data.group_size + ',',
-    '  "swing_pct": ' + data.swing_pct + ',',
-    '  "tempo_bpm": ' + data.tempo_bpm + ',',
-    '  "channels": {'
-  ];
-  var names = Object.keys(data.channels);
-  names.forEach(function (ch, i) {
-    lines.push('    ' + JSON.stringify(ch) + ': ' + JSON.stringify(data.channels[ch]).replace(/,/g, ', ') + (i < names.length - 1 ? ',' : ''));
+// Validate rhythm data arriving from the host (the plugin's "Edit rhythm in Rhythm Box"). Anything this widget could not SAVE BACK
+// unchanged is refused here with a message, rather than loaded and silently altered on the next Save: an unsupported time
+// signature / grid, a tempo or swing it cannot represent exactly, an unknown channel, a step that is not false/0/true/int 1-127.
+function parseRhythmLoad(data) {
+  function bad(message) { return { ok: false, message: message }; }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return bad("The rhythm data must be an object.");
+  var sigKey = data.time_signature;
+  if (typeof sigKey !== "string" || !Object.prototype.hasOwnProperty.call(TIME_SIGNATURES, sigKey)) {
+    var keys = Object.keys(TIME_SIGNATURES);
+    return bad("The Rhythm Box supports " + keys.slice(0, -1).join(", ") + " and " + keys[keys.length - 1] + ", not " + JSON.stringify(sigKey) + ".");
+  }
+  var sig = TIME_SIGNATURES[sigKey];
+  var grid = resolveGrid(sigKey, data.steps, data.group_size);
+  if (!grid) {
+    var alt = EIGHTH_GRIDS[sigKey];
+    return bad(sigKey + " here means " + sig.steps + " steps in groups of " + sig.groupSize
+      + (alt ? " (or " + alt.steps + " steps in groups of " + alt.groupSizes.join(" or ") + ")" : "")
+      + "; this pattern has " + data.steps + " steps in groups of " + data.group_size + ".");
+  }
+  var swing = data.swing_pct === undefined ? 0 : data.swing_pct;
+  if (typeof swing !== "number" || Math.floor(swing) !== swing || swing < 0 || swing > 100) {
+    return bad("swing_pct must be a whole number from 0 to 100 (got " + JSON.stringify(data.swing_pct) + ").");
+  }
+  var tempo = data.tempo_bpm;
+  if (typeof tempo !== "number" || Math.floor(tempo) !== tempo || tempo < MIN_BPM || tempo > MAX_BPM) {
+    return bad("tempo_bpm must be a whole number from " + MIN_BPM + " to " + MAX_BPM + " BPM (got " + JSON.stringify(tempo) + ").");
+  }
+  var chans = data.channels;
+  if (!chans || typeof chans !== "object" || Array.isArray(chans)) return bad("channels must be an object.");
+  var pattern = emptyPattern(grid.steps), failure = null;
+  var rows = Object.keys(chans);                  // the note's own channels, in its order: one grid row each
+  if (rows.length === 0) return bad("channels must not be empty.");
+  rows.forEach(function (name) {
+    if (failure) return;
+    if (CHANNELS.indexOf(name) < 0) { failure = bad("Unknown channel " + JSON.stringify(name) + " (the Rhythm Box has " + CHANNELS.join(", ") + ")."); return; }
+    var row = chans[name];
+    if (!Array.isArray(row) || row.length !== grid.steps) { failure = bad("Channel " + name + " must be a list of " + grid.steps + " steps."); return; }
+    row.forEach(function (v, i) {
+      if (failure) return;
+      var ok = v === true || v === false || v === 0 || normalizeCell(v) !== false;
+      if (!ok) { failure = bad("Channel " + name + " step " + i + " is " + JSON.stringify(v) + " (expected false, true, or a velocity 1-127)."); return; }
+      pattern[name][i] = normalizeCell(v);
+    });
   });
-  lines.push('  }');
-  return '{\n' + lines.join('\n') + '\n}';
+  if (failure) return failure;
+  return { ok: true, state: { timeSig: sigKey, steps: grid.steps, groupSize: grid.groupSize, stepQl: grid.stepQl, swingPct: swing, bpm: tempo, pattern: pattern, rows: rows } };
+}
+// Ring order (drain 2026-10-18-1800): `rows` is the order of the note's `channels` keys, the first ring OUTERMOST. Moving a ring swaps it with its
+// neighbour: dir -1 = outward (one place earlier), +1 = inward (one place later). At an end, or for a channel that is not a row, the order is
+// unchanged. Always a copy.
+function moveRing(rows, ch, dir) {
+  var i = rows.indexOf(ch), j = i + dir, out = rows.slice();
+  if (i < 0 || j < 0 || j >= rows.length) return out;
+  out[i] = rows[j]; out[j] = rows[i];
+  return out;
+}
+// Auto-height (drain 2026-10-18-1800): the height to tell the host, in whole pixels (rounded UP so the last pixel is never cut), or null when
+// there is nothing to say — junk, or a change of one pixel or less from what was last posted (sub-pixel / rounding wobble).
+function autoHeightPlan(content, lastPosted) {
+  if (typeof content !== "number" || !isFinite(content) || content <= 0) return null;
+  var h = Math.ceil(content);
+  if (typeof lastPosted === "number" && Math.abs(h - lastPosted) <= 1) return null;
+  return h;
 }
 // --- pure math -- END pure-core -------------------------------------------------------------
 
 if (typeof document === "undefined") {           // node test harness
   module.exports = {
     STEPS: STEPS, GROUP_SIZE: GROUP_SIZE, TIME_SIGNATURES: TIME_SIGNATURES,
-    CHANNELS: CHANNELS, BANKS: BANKS, MIN_BPM: MIN_BPM, MAX_BPM: MAX_BPM,
+    CHANNELS: CHANNELS, DEFAULT_ROWS: DEFAULT_ROWS, BANKS: BANKS, MIN_BPM: MIN_BPM, MAX_BPM: MAX_BPM,
     clampBpm: clampBpm, stepSeconds: stepSeconds, swingOffsetSeconds: swingOffsetSeconds, swingVisualPx: swingVisualPx,
-    pushTap: pushTap, bpmFromTapHistory: bpmFromTapHistory,
-    channelStepWeight: channelStepWeight, randomizePattern: randomizePattern, emptyPattern: emptyPattern,
+    emptyPattern: emptyPattern,
     isChannelAudible: isChannelAudible, advanceScheduler: advanceScheduler,
-    buildRhythmData: buildRhythmData, rhythmDataJson: rhythmDataJson
+    buildRhythmData: buildRhythmData,
+    ACCENT_THRESHOLD: ACCENT_THRESHOLD, normalizeCell: normalizeCell, cellOn: cellOn, toggleCell: toggleCell,
+    isAccentedCell: isAccentedCell, parseRhythmLoad: parseRhythmLoad,
+    EIGHTH_GRIDS: EIGHTH_GRIDS, MENU_GRIDS: MENU_GRIDS, resolveGrid: resolveGrid, menuKeyFor: menuKeyFor,
+    CIRCLE_MAX_RINGS: CIRCLE_MAX_RINGS, CIRCLE_SIZE: CIRCLE_SIZE, circleGeometry: circleGeometry, circleSizeFor: circleSizeFor,
+    rotatePattern: rotatePattern, mirrorPattern: mirrorPattern, polygonPoints: polygonPoints,
+    TRANSFORM_TOOLS: TRANSFORM_TOOLS, transformToolText: transformToolText, applyTransform: applyTransform, selectedRowOf: selectedRowOf,
+    moveRing: moveRing, autoHeightPlan: autoHeightPlan
   };
 } else {
 (function () {
   "use strict";
   var $ = function (id) { return document.getElementById(id); };
-  var CHANNEL_LABEL = { kick: "Kick", snare: "Snare", hihat: "Hi-hat" };
+  var CHANNEL_LABEL = { kick: "Kick", snare: "Snare", hihat: "Hi-hat", bell: "Bell", claves: "Claves", conga_high: "High Conga", conga_low: "Low Conga" };
+  // The rows on screen, in order: a loaded note's own channels (in ITS order), or the three standalone defaults.
+  var rows = DEFAULT_ROWS.slice();
 
   // --- state --------------------------------------------------------------------------------
   var bpm = 120;
@@ -340,9 +622,11 @@ if (typeof document === "undefined") {           // node test harness
   var bank = "A";
   var timeSig = "4/4";
   var steps = TIME_SIGNATURES[timeSig].steps, groupSize = TIME_SIGNATURES[timeSig].groupSize;
+  var gridStepQl = TIME_SIGNATURES[timeSig].stepQl;     // how long ONE step lasts in quarter notes (0.25 sixteenth, 0.5 eighth)
   var patterns = {}; BANKS.forEach(function (b) { patterns[b] = emptyPattern(steps); });
+  // View (Grid | Circle) lives in WIDGET STATE ONLY — never in the note, never in a save payload. Grid is the default.
+  var viewMode = "grid", viewInit = false, showShape = true, selectedChannel = null, focusedCell = null;   // selectedChannel: the instrument the rotate buttons turn and the circle draws the shape of — ONE state for both views
   var muted = new Set(), soloed = new Set();
-  var tapHistory = [];
   var playing = false;
   var currentStep = -1;                // for the visual indicator only
   var schedulerState = { currentStep: 0, nextNoteTime: 0 };
@@ -357,20 +641,29 @@ if (typeof document === "undefined") {           // node test harness
   function buildGrid() {
     gridEl.innerHTML = "";
     stepEls = {};
-    gridEl.setAttribute("aria-label", steps + "-step pattern grid (" + timeSig + "), kick, snare, hi-hat");
-    CHANNELS.forEach(function (ch) {
+    gridEl.setAttribute("aria-label", steps + "-step pattern grid (" + timeSig + "), " + rows.map(function (c) { return CHANNEL_LABEL[c]; }).join(", "));
+    rows.forEach(function (ch) {
       var row = document.createElement("div");
       row.className = "channel-row";
-      row.style.gridTemplateColumns = "110px repeat(" + steps + ", 1fr)";
+      row.style.gridTemplateColumns = "150px repeat(" + steps + ", 1fr)";
       var label = document.createElement("div");
       label.className = "channel-label";
-      var nameSpan = document.createElement("span");
-      nameSpan.className = "name"; nameSpan.textContent = CHANNEL_LABEL[ch];
+      // The instrument's name is the row's SELECTOR (the circle's is the ring chips): the rotate buttons turn the selected one only.
+      var nameBtn = document.createElement("button");
+      nameBtn.type = "button"; nameBtn.className = "name row-pick"; nameBtn.textContent = CHANNEL_LABEL[ch];
+      nameBtn.setAttribute("data-row", ch); nameBtn.setAttribute("aria-pressed", "false");
+      nameBtn.title = "Select " + CHANNEL_LABEL[ch] + ": the rotate buttons turn only the selected instrument";
+      nameBtn.addEventListener("click", function () { selectChannel(ch); });
       var mBtn = document.createElement("button");
       mBtn.className = "mini-btn mute"; mBtn.textContent = "M"; mBtn.setAttribute("aria-label", "Mute " + CHANNEL_LABEL[ch]); mBtn.setAttribute("aria-pressed", "false");
       var sBtn = document.createElement("button");
       sBtn.className = "mini-btn solo"; sBtn.textContent = "S"; sBtn.setAttribute("aria-label", "Solo " + CHANNEL_LABEL[ch]); sBtn.setAttribute("aria-pressed", "false");
-      label.appendChild(nameSpan); label.appendChild(mBtn); label.appendChild(sBtn);
+      var rBtn = document.createElement("button");
+      rBtn.className = "mini-btn remove"; rBtn.textContent = "\u00d7"; rBtn.setAttribute("data-remove", ch);
+      rBtn.setAttribute("aria-label", "Remove " + CHANNEL_LABEL[ch] + " row"); rBtn.title = "Remove this instrument row";
+      rBtn.disabled = rows.length <= 1;                // a note must keep at least one channel
+      rBtn.addEventListener("click", function () { requestRemoveRow(ch); });
+      label.appendChild(nameBtn); label.appendChild(mBtn); label.appendChild(sBtn); label.appendChild(rBtn);
       row.appendChild(label);
       stepEls[ch] = [];
       for (var s = 0; s < steps; s++) {
@@ -392,17 +685,75 @@ if (typeof document === "undefined") {           // node test harness
       gridEl.appendChild(row);
       row.setAttribute("data-mute-btn-" + ch, "");
     });
+    renderAddInstrument();
+  }
+  // "Add instrument": the channels not shown yet (in the engine's order). The first option is the inert prompt. ONE control, first in the toolbar, in
+  // both views (it used to be two, one per view).
+  var CIRCLE_FULL_MSG = "Circle shows up to 4 instruments \u2014 use Grid to add more.";
+  function renderAddInstrument() {
+    var sel = $("addInstrument");
+    sel.innerHTML = "";
+    var prompt = document.createElement("option"); prompt.value = ""; prompt.textContent = "Add instrument\u2026";
+    sel.appendChild(prompt);
+    CHANNELS.forEach(function (ch) {
+      if (rows.indexOf(ch) >= 0) return;
+      var o = document.createElement("option"); o.value = ch; o.textContent = CHANNEL_LABEL[ch];
+      sel.appendChild(o);
+    });
+    sel.value = "";
+    sel.hidden = rows.length >= CHANNELS.length;
+    // At the circle's ring limit the control is DISABLED IN CIRCLE (and says why), not hidden and not a silent no-op; the grid has no limit.
+    var full = viewMode === "circle" && rows.length >= CIRCLE_MAX_RINGS;
+    sel.disabled = full;
+    sel.title = full ? CIRCLE_FULL_MSG : "Add a row for another instrument (bell, claves, congas)";
   }
   buildGrid();
 
   function toggleStep(ch, s) {
-    patterns[bank][ch][s] = !patterns[bank][ch][s];
+    patterns[bank][ch][s] = toggleCell(patterns[bank][ch][s]);     // ints are preserved on untouched cells; a click clears or sets a plain hit
     renderGrid();
+    commitChange();
   }
   function toggleMute(ch) { if (muted.has(ch)) muted.delete(ch); else muted.add(ch); renderMuteSolo(); }
   function toggleSolo(ch) { if (soloed.has(ch)) soloed.delete(ch); else soloed.add(ch); renderMuteSolo(); }
+  // --- rows: one per instrument in the note ---------------------------------------------------------------------------------
+  // Adding or removing a row is a DATA change (the note's `channels` keys change), so both end in commitChange() through
+  // applyWholePatternChange — the single save path. Removing a row that has hits asks first when a note is being edited.
+  function rowHasHits(ch) {
+    return (patterns[bank][ch] || []).some(function (v) { return cellOn(v); });
+  }
+  function addRow(ch) {
+    if (CHANNELS.indexOf(ch) < 0 || rows.indexOf(ch) >= 0) return false;
+    rows.push(ch);
+    BANKS.forEach(function (b) { patterns[b][ch] = new Array(steps).fill(false); });
+    buildGrid(); renderGrid(); renderMuteSolo(); renderPlayhead(); renderSwingPreview(); syncView();
+    return true;
+  }
+  function removeRow(ch) {
+    if (rows.length <= 1 || rows.indexOf(ch) < 0) return false;
+    rows = rows.filter(function (c) { return c !== ch; });
+    BANKS.forEach(function (b) { patterns[b][ch] = new Array(steps).fill(false); });
+    muted.delete(ch); soloed.delete(ch);
+    buildGrid(); renderGrid(); renderMuteSolo(); renderPlayhead(); renderSwingPreview(); syncView();
+    return true;
+  }
+  function requestRemoveRow(ch) {
+    if (rows.length <= 1) return;
+    var action = { kind: "removerow", channel: ch };
+    if (hostWindow() && hostLoaded && rowHasHits(ch)) {
+      askConfirm(action, "Remove the " + CHANNEL_LABEL[ch] + " row? Its hits are removed from the note.", "Remove");
+      return;
+    }
+    applyWholePatternChange(action);
+  }
+  function onAddInstrument(sel) {
+    var ch = sel.value;
+    if (ch) applyWholePatternChange({ kind: "addrow", channel: ch });
+    renderAddInstrument();
+  }
+  $("addInstrument").addEventListener("change", function (e) { onAddInstrument(e.target); });
   function renderMuteSolo() {
-    CHANNELS.forEach(function (ch) {
+    rows.forEach(function (ch) {
       var row = gridEl.querySelector('[data-mute-btn-' + ch + ']');
       var mBtn = row.querySelector(".mini-btn.mute"), sBtn = row.querySelector(".mini-btn.solo");
       mBtn.classList.toggle("on", muted.has(ch)); mBtn.setAttribute("aria-pressed", muted.has(ch) ? "true" : "false");
@@ -410,24 +761,268 @@ if (typeof document === "undefined") {           // node test harness
     });
   }
   function renderGrid() {
-    CHANNELS.forEach(function (ch) {
+    rows.forEach(function (ch) {
       for (var s = 0; s < steps; s++) {
-        var on = patterns[bank][ch][s];
+        var cell = patterns[bank][ch][s], on = cellOn(cell), accented = isAccentedCell(cell);
         stepEls[ch][s].classList.toggle("on", on);
+        stepEls[ch][s].classList.toggle("accent", accented);
         stepEls[ch][s].setAttribute("aria-pressed", on ? "true" : "false");
+        var vel = typeof normalizeCell(cell) === "number" ? " (velocity " + cell + (accented ? ", accent" : "") + ")" : "";
+        stepEls[ch][s].setAttribute("aria-label", CHANNEL_LABEL[ch] + " step " + (s + 1) + vel);
       }
     });
+    if (viewMode === "circle") renderCircle();
   }
   function renderPlayhead() {
-    CHANNELS.forEach(function (ch) {
+    rows.forEach(function (ch) {
       for (var s = 0; s < steps; s++) stepEls[ch][s].classList.toggle("playing", playing && s === currentStep);
     });
     $("stepPos").textContent = playing && currentStep >= 0 ? (currentStep + 1) + " / " + steps : "-- / " + steps;
+    if (viewMode === "circle") renderCirclePlayhead();
   }
+
+  // --- Circle view -------------------------------------------------------------------------------------------------------
+  // Drawing only: geometry comes from circleGeometry(), every edit goes through toggleStep() / runTransform() and so through commitChange() —
+  // the single data-change path (confirm bars, "not saved" playground, autosave all unchanged). The circle posts nothing of its own.
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(name, attrs) {
+    var el = document.createElementNS(SVGNS, name);
+    Object.keys(attrs || {}).forEach(function (k) { el.setAttribute(k, attrs[k]); });
+    return el;
+  }
+  var cellEls = [];                                // cellEls[ringIndex][step] -> the <g class="cell">
+  var circleEl = $("circle");
+  // The selected instrument — ONE state for both views: a row's name in Grid, a ring chip in Circle. Falls back to the first row (selectedRowOf).
+  function selectedRow() { return selectedRowOf(rows, selectedChannel); }
+  function selectChannel(ch) {
+    selectedChannel = ch;
+    renderSelection();
+    if (viewMode === "circle") renderCircle();         // the shape follows the selection
+  }
+  // Selection is not data: nothing is posted, nothing is saved.
+  function renderSelection() {
+    var chosen = selectedRow();
+    Array.prototype.forEach.call(gridEl.querySelectorAll(".row-pick"), function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-row") === chosen ? "true" : "false"); });
+    syncTools();
+  }
+  function renderCircle() {
+    var g = circleGeometry(steps, rows.length, circleSizeFor(steps, rows.length));
+    var hadFocus = !!(document.activeElement && circleEl.contains(document.activeElement));
+    circleEl.innerHTML = "";
+    cellEls = [];
+    circleEl.setAttribute("viewBox", "0 0 " + g.size + " " + g.size);
+    circleEl.style.width = g.size + "px";                // viewBox units are CSS px: the circle is exactly as big as its ring count needs
+    circleEl.setAttribute("aria-label", "Rhythm circle, " + steps + " steps (" + timeSig + "), " + rows.map(function (c) { return CHANNEL_LABEL[c]; }).join(", ") + ". Arrow keys move, Space toggles a hit.");
+    // faint ring guides, outermost first
+    g.ringRadii.forEach(function (r) { circleEl.appendChild(svgEl("circle", { "class": "ring-guide", cx: g.cx, cy: g.cy, r: r })); });
+    // group-start ticks, outside the outer ring
+    for (var s = 0; s < steps; s += groupSize) {
+      var a = g.angle(s);
+      circleEl.appendChild(svgEl("line", {
+        "class": "tick",
+        x1: g.cx + g.tick.from * Math.sin(a), y1: g.cy - g.tick.from * Math.cos(a),
+        x2: g.cx + g.tick.to * Math.sin(a), y2: g.cy - g.tick.to * Math.cos(a)
+      }));
+    }
+    // step numbers, only while there is room
+    if (g.labels.visible) {
+      for (var n = 0; n < steps; n++) {
+        var an = g.angle(n);
+        var t = svgEl("text", { "class": "step-label", "data-step": n, x: g.cx + g.labels.radius * Math.sin(an), y: g.cy - g.labels.radius * Math.cos(an) });
+        t.textContent = String(n + 1);
+        circleEl.appendChild(t);
+      }
+    }
+    // the polygon through the selected ring's hits (under the dots)
+    var ringName = selectedRow(), ringIndex = rows.indexOf(ringName);
+    if (showShape && ringIndex >= 0) {
+      var pts = polygonPoints(g, ringIndex, patterns[bank][ringName]);
+      if (pts.length >= 2) {
+        circleEl.appendChild(svgEl("polygon", {
+          "class": "shape", "data-ring": ringName,
+          points: pts.map(function (p) { return p.x.toFixed(1) + "," + p.y.toFixed(1); }).join(" ")
+        }));
+      }
+    }
+    // the dots: one <g class="cell"> per (ring, step) — a big transparent target and the visible dot
+    rows.forEach(function (ch, ri) {
+      cellEls[ri] = [];
+      for (var st = 0; st < steps; st++) {
+        var pt = g.points[ri][st], cell = patterns[bank][ch][st], on = cellOn(cell), accented = isAccentedCell(cell);
+        var grp = svgEl("g", {
+          "class": "cell", "data-channel": ch, "data-step": st, role: "button", tabindex: "-1",
+          "aria-pressed": on ? "true" : "false",
+          "aria-label": CHANNEL_LABEL[ch] + " step " + (st + 1) + (on ? ", hit" : ", rest")
+        });
+        grp.appendChild(svgEl("circle", { "class": "target", cx: pt.x, cy: pt.y, r: g.targetRadius }));
+        var isStart = st % groupSize === 0;
+        grp.appendChild(svgEl("circle", {
+          "class": "dot ch-" + ch + (on ? " hit" : " rest") + (accented ? " accent" : "") + (isStart ? " group-start" : ""),
+          "data-channel": ch, "data-step": st, cx: pt.x, cy: pt.y, r: isStart ? g.groupDotRadius : g.dotRadius
+        }));
+        (function (ch, st) {
+          grp.addEventListener("click", function () { focusedCell = { ring: rows.indexOf(ch), step: st }; toggleStep(ch, st); });
+          grp.addEventListener("focus", function () { focusedCell = { ring: rows.indexOf(ch), step: st }; });
+        })(ch, st);
+        circleEl.appendChild(grp);
+        cellEls[ri][st] = grp;
+      }
+    });
+    // the playhead (hidden until playing), on top
+    circleEl.appendChild(svgEl("line", {
+      "class": "playhead", id: "playhead", "data-step": "",
+      x1: g.cx, y1: g.cy, x2: g.cx, y2: g.cy - (g.ringRadii[0] + g.targetRadius)
+    }));
+    circleEl._geometry = g;
+    renderRingLegend();
+    renderCirclePlayhead();
+    // roving tabindex: ONE tab stop for the whole ring, arrow keys move inside it
+    var f = focusedCell && cellEls[focusedCell.ring] && cellEls[focusedCell.ring][focusedCell.step] ? focusedCell : { ring: 0, step: 0 };
+    if (cellEls[f.ring] && cellEls[f.ring][f.step]) {
+      cellEls[f.ring][f.step].setAttribute("tabindex", "0");
+      if (hadFocus) cellEls[f.ring][f.step].focus();
+    }
+  }
+  // The playhead: a line from the centre through the current step, and that step lit on every ring. The SAME currentStep the grid uses.
+  function renderCirclePlayhead() {
+    var ph = circleEl.querySelector("#playhead"), g = circleEl._geometry;
+    if (!ph || !g) return;
+    var live = playing && currentStep >= 0;
+    ph.setAttribute("data-step", live ? String(currentStep) : "");
+    if (live) {
+      var a = g.angle(currentStep), r = g.ringRadii[0] + g.targetRadius;
+      ph.setAttribute("x2", g.cx + r * Math.sin(a)); ph.setAttribute("y2", g.cy - r * Math.cos(a));
+    }
+    cellEls.forEach(function (ring) {
+      ring.forEach(function (cell, st) {
+        var dot = cell.querySelector(".dot");
+        if (dot) dot.classList.toggle("playing", live && st === currentStep);
+      });
+    });
+  }
+  function renderRingLegend() {
+    var legend = $("ringLegend");
+    legend.innerHTML = "";
+    var chosen = selectedRow();
+    rows.forEach(function (ch) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "ring-pick"; b.setAttribute("data-ring", ch);
+      b.textContent = CHANNEL_LABEL[ch];
+      b.setAttribute("aria-pressed", ch === chosen ? "true" : "false");
+      b.setAttribute("title", "Show the shape of the " + CHANNEL_LABEL[ch] + " ring");
+      b.addEventListener("click", function () { selectChannel(ch); });
+      legend.appendChild(b);
+    });
+    syncTools();
+  }
+  // Keyboard inside the circle: arrows walk the ring / change ring, Space or Enter toggles the focused hit.
+  circleEl.addEventListener("keydown", function (e) {
+    var f = focusedCell;
+    if (!f || !cellEls[f.ring]) return;
+    var n = steps, r = f.ring, s = f.step, key = e.key;
+    if (key === "ArrowRight") s = (s + 1) % n;
+    else if (key === "ArrowLeft") s = (s - 1 + n) % n;
+    else if (key === "ArrowUp") r = Math.max(0, r - 1);           // up = toward the outer ring
+    else if (key === "ArrowDown") r = Math.min(rows.length - 1, r + 1);
+    else if (key === " " || key === "Enter") { e.preventDefault(); toggleStep(rows[r], s); return; }
+    else return;
+    e.preventDefault();
+    cellEls[f.ring][f.step].setAttribute("tabindex", "-1");
+    focusedCell = { ring: r, step: s };
+    cellEls[r][s].setAttribute("tabindex", "0");
+    cellEls[r][s].focus();
+  });
+  // --- the view switch ---------------------------------------------------------------------------------------------------
+  var CIRCLE_LIMIT_MSG = "Circle view shows up to 4 instruments; use Grid";
+  function renderView() {
+    var circle = viewMode === "circle";
+    $("gridView").hidden = circle;
+    $("circleView").hidden = !circle;
+    $("circleExtras").hidden = !circle;                  // Move ring / Shape / the chips: circle-only, AFTER the five, which are always there
+    $("bViewGrid").setAttribute("aria-pressed", circle ? "false" : "true");
+    $("bViewCircle").setAttribute("aria-pressed", circle ? "true" : "false");
+    if (circle) {
+      // exactly at the limit the circle works but cannot take another ring: say so where the disabled Add control is (5+ falls back to Grid)
+      setHostMsg("viewMsg", rows.length >= CIRCLE_MAX_RINGS ? CIRCLE_FULL_MSG : "", false);
+      renderCircle();
+    }
+    renderAddInstrument();                               // its limit (and the reason it shows) depends on the view
+    renderSelection();
+  }
+  // Returns true if the view is now `next`. Circle is refused (Grid kept, with the inline message) when the note has more rings than are legible.
+  function setView(next) {
+    if (next === "circle" && rows.length > CIRCLE_MAX_RINGS) {
+      viewMode = "grid";
+      setHostMsg("viewMsg", CIRCLE_LIMIT_MSG, false);
+      renderView();
+      return false;
+    }
+    viewMode = next;
+    setHostMsg("viewMsg", "", false);
+    renderView();
+    return true;
+  }
+  // After anything that changes the rows or the grid: Circle that has become illegible falls back to Grid; otherwise redraw.
+  function syncView() {
+    if (viewMode === "circle" && rows.length > CIRCLE_MAX_RINGS) setView("grid"); else renderView();
+  }
+  $("bViewGrid").addEventListener("click", function () { setView("grid"); });
+  $("bViewCircle").addEventListener("click", function () { setView("circle"); });
+  $("bShape").addEventListener("click", function () {
+    showShape = !showShape;
+    $("bShape").setAttribute("aria-pressed", showShape ? "true" : "false");
+    if (viewMode === "circle") renderCircle();
+  });
+  // The five transforms (TRANSFORM_TOOLS: shift left / right, mirror, rotate counter-clockwise / clockwise) are GENERATED from the one definition, into the
+  // one toolbar both views share, and all run through runTransform -> commitChange() like a dot (no confirm bar). Shift and mirror act on every instrument; rotate
+  // turns ONLY the selected one. Move ring out / in (circle-only) changes the ring's place in the ring order, which is the order of the note's `channels`
+  // keys (so a save rewrites that order — two swapped lines in the note — and the Score's staves do NOT follow it: the engine keeps its canonical order).
+  // The selection follows the ring it was on.
+  function buildTransformTools() {
+    var host = $("transformTools");
+    TRANSFORM_TOOLS.forEach(function (t) {
+      var b = document.createElement("button");
+      b.type = "button"; b.id = t.domId; b.textContent = t.icon;
+      b.addEventListener("click", function () { runTransform(t.id); });
+      host.appendChild(b);
+    });
+  }
+  function runTransform(id) {
+    var tool = TRANSFORM_TOOLS.filter(function (t) { return t.id === id; })[0];
+    if (!tool || (tool.scope === "selected" && rows.indexOf(selectedRow()) < 0)) return;
+    patterns[bank] = applyTransform(id, patterns[bank], rows, steps, selectedRow());
+    renderGrid();
+    commitChange();
+  }
+  function moveSelectedRing(dir) {
+    var ch = selectedRow(), next = moveRing(rows, ch, dir);
+    if (next.join() === rows.join()) return;
+    selectedChannel = ch; rows = next;
+    buildGrid(); renderGrid(); renderMuteSolo(); renderPlayhead(); renderSwingPreview(); syncView();
+    commitChange();
+  }
+  // Names the selected instrument in the tools' tooltips and labels (the same words in both views), and disables a move that cannot happen (outermost
+  // cannot go out, innermost cannot go in, a lone ring neither).
+  function syncTools() {
+    var ch = selectedRow(), i = rows.indexOf(ch), who = CHANNEL_LABEL[ch];
+    TRANSFORM_TOOLS.forEach(function (t) {
+      var b = $(t.domId), x = transformToolText(t, who);
+      b.setAttribute("title", x.title); b.setAttribute("aria-label", x.label);
+      if (t.scope === "selected") b.disabled = i < 0;
+    });
+    [["bRingOut", "Move the " + (who || "this") + " ring outward (one place toward the outer edge)", "Move the " + (who || "this") + " ring outward"],
+     ["bRingIn", "Move the " + (who || "this") + " ring inward (one place toward the center)", "Move the " + (who || "this") + " ring inward"]
+    ].forEach(function (t) { $(t[0]).setAttribute("title", t[1]); $(t[0]).setAttribute("aria-label", t[2]); });
+    $("bRingOut").disabled = i <= 0;
+    $("bRingIn").disabled = i < 0 || i >= rows.length - 1;
+  }
+  buildTransformTools();
+  $("bRingOut").addEventListener("click", function () { moveSelectedRing(-1); });
+  $("bRingIn").addEventListener("click", function () { moveSelectedRing(1); });
   // Swing preview: nudge the off-beat step cells sideways by swingVisualPx, independent of
   // playback state, so the eye can see the delay grow as the slider moves, even while stopped.
   function renderSwingPreview() {
-    CHANNELS.forEach(function (ch) {
+    rows.forEach(function (ch) {
       for (var s = 0; s < steps; s++) {
         var px = swingVisualPx(swingPct, s);
         stepEls[ch][s].style.transform = px ? "translateX(" + px + "px)" : "";
@@ -437,46 +1032,19 @@ if (typeof document === "undefined") {           // node test harness
 
   // --- transport / bpm / banks ---------------------------------------------------------------
   function setBpm(v) { bpm = clampBpm(v); $("bpmVal").textContent = Math.round(bpm) + " BPM"; }
-  $("bBpmUp").addEventListener("click", function () { setBpm(bpm + 1); });
-  $("bBpmDown").addEventListener("click", function () { setBpm(bpm - 1); });
-  $("bTap").addEventListener("click", function () {
-    tapHistory = pushTap(tapHistory, performance.now());
-    var t = bpmFromTapHistory(tapHistory);
-    if (t != null) setBpm(t);
-  });
-  $("swing").addEventListener("input", function (e) { swingPct = +e.target.value; $("swingVal").textContent = swingPct + "%"; renderSwingPreview(); });
+  // Tempo is pattern data: a button press that actually CHANGES it is committed (autosave); one at its limit is not.
+  function changeBpm(v) { var before = bpm; setBpm(v); if (bpm !== before) commitChange(); }
+  $("bBpmUp").addEventListener("click", function () { changeBpm(bpm + 1); });
+  $("bBpmDown").addEventListener("click", function () { changeBpm(bpm - 1); });
+  $("swing").addEventListener("input", function (e) { swingPct = +e.target.value; $("swingVal").textContent = swingPct + "%"; renderSwingPreview(); commitChange(); });
   $("volume").addEventListener("input", function (e) { volume = (+e.target.value) / 100; $("volumeVal").textContent = e.target.value + "%"; });
   Array.prototype.forEach.call(document.querySelectorAll(".banks button"), function (b) {
     b.addEventListener("click", function () {
+      if (hostWindow()) return;                           // hosted (editing a note): ONE pattern per note, no banks — more variations = more notes
       bank = b.getAttribute("data-bank");                 // switching bank does NOT stop playback;
       Array.prototype.forEach.call(document.querySelectorAll(".banks button"), function (x) { x.classList.toggle("active", x === b); });
       renderGrid();                                        // the scheduler keeps reading `patterns[bank]` from the next step it schedules
     });
-  });
-  $("bRandom").addEventListener("click", function () { patterns[bank] = randomizePattern(null, steps, groupSize); renderGrid(); });
-  $("bClear").addEventListener("click", function () { patterns[bank] = emptyPattern(steps); renderGrid(); });
-  // Export: clipboard first; if the host denies clipboard-write (iframe permissions vary by embedder),
-  // fall back to execCommand("copy") on a hidden-then-selected textarea, and as a last resort show the
-  // JSON in a read-only textarea for a manual select-all/copy. The user always ends with the JSON.
-  var exportMsgTimer = null;
-  function exportMsg(text) {
-    $("exportMsg").textContent = text;
-    clearTimeout(exportMsgTimer);
-    exportMsgTimer = setTimeout(function () { $("exportMsg").textContent = ""; }, 2500);
-  }
-  $("bExport").addEventListener("click", function () {
-    var json = rhythmDataJson(buildRhythmData(timeSig, swingPct, bpm, patterns[bank]));
-    var ta = $("exportFallback");
-    function showManual() { ta.hidden = false; ta.value = json; ta.focus(); ta.select(); exportMsg("Copy blocked here - JSON shown below, press Cmd/Ctrl+C"); }
-    function legacyCopy() {
-      ta.hidden = false; ta.value = json; ta.focus(); ta.select();
-      var ok = false;
-      try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
-      if (ok) { ta.hidden = true; exportMsg("Copied"); } else { showManual(); }
-    }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(json).then(function () { ta.hidden = true; exportMsg("Copied"); }, legacyCopy);
-    } else { legacyCopy(); }
   });
   // Time signature: applies GLOBALLY (one signature for the whole widget, not per-bank — nothing
   // in the request implies mixed meters across banks). Switching stops playback (a mid-flight
@@ -485,15 +1053,55 @@ if (typeof document === "undefined") {           // node test harness
   // toggle) and clears every bank's pattern (a 4/4 pattern has no meaningful mapping onto 3/4's
   // different bar length, so silently truncating/padding would just look broken — clearing and
   // saying so via the select's own tooltip is the honest choice).
-  $("timeSig").addEventListener("change", function (e) {
+  // `next` is a MENU key ("4/4", "4/4@8", "3/4", ...): 4/4 has two grids, so the menu value is not the time_signature string.
+  function applyTimeSig(next) {
     if (playing) stop();
-    timeSig = e.target.value;
-    var sig = TIME_SIGNATURES[timeSig];
-    steps = sig.steps; groupSize = sig.groupSize;
+    var g = MENU_GRIDS[next];
+    timeSig = g.timeSig;
+    steps = g.steps; groupSize = g.groupSize; gridStepQl = g.stepQl;
     BANKS.forEach(function (b) { patterns[b] = emptyPattern(steps); });
     buildGrid();
-    renderGrid(); renderMuteSolo(); renderPlayhead(); renderSwingPreview();
+    renderGrid(); renderMuteSolo(); renderPlayhead(); renderSwingPreview(); syncView();
+  }
+  // Hosted (editing a note), a time-signature change (and removing a row that has hits) rewrites the pattern IN THE NOTE and autosave would write it,
+  // so it asks first — with ONE inline bar (the iframe sandbox blocks the native confirm dialog). Standalone keeps the
+  // immediate behaviour (nothing is written anywhere). Only one question is open at a time: a new one REPLACES the old; any other data
+  // edit (cell, tempo, swing — everything that goes through commitChange) DISMISSES it without applying it; playback actions neither
+  // open nor dismiss it.
+  var pendingConfirm = null;
+  function dismissConfirm() { pendingConfirm = null; $("confirmBar").hidden = true; }
+  function askConfirm(action, text, okLabel) {
+    pendingConfirm = action;
+    $("confirmText").textContent = text;
+    $("confirmOk").textContent = okLabel;
+    $("confirmBar").hidden = false;
+  }
+  function applyWholePatternChange(action) {
+    if (action.kind === "removerow") { if (!removeRow(action.channel)) return; }
+    else if (action.kind === "addrow") { if (!addRow(action.channel)) return; }
+    else if (action.kind === "timesig" && MENU_GRIDS[action.next]) { $("timeSig").value = action.next; applyTimeSig(action.next); }
+    else return;
+    commitChange();
+  }
+  // Only note-editing asks first. A playground (Phase 8) changes nothing anywhere, and Reset undoes it, so it applies at once.
+  function confirmsFirst() { return !!(hostWindow() && hostLoaded && hostMode !== "playground"); }
+  function requestWholePatternChange(action) {
+    if (!confirmsFirst()) { applyWholePatternChange(action); return; }
+    askConfirm(action, "This clears the pattern in the note. Change to " + MENU_GRIDS[action.next].label + "?", "Change");
+  }
+  $("timeSig").addEventListener("change", function (e) {
+    var next = e.target.value;
+    if (!confirmsFirst()) { applyTimeSig(next); return; }
+    if (next === menuKeyFor(timeSig, steps)) { dismissConfirm(); return; }
+    e.target.value = menuKeyFor(timeSig, steps);                        // the select keeps showing what is still in force
+    requestWholePatternChange({ kind: "timesig", next: next });
   });
+  $("confirmOk").addEventListener("click", function () {
+    var action = pendingConfirm;
+    dismissConfirm();
+    if (action) applyWholePatternChange(action);
+  });
+  $("confirmCancel").addEventListener("click", dismissConfirm);
 
   // --- Web Audio: synthesis + lookahead scheduler --------------------------------------------
   var ctx = null;
@@ -534,18 +1142,58 @@ if (typeof document === "undefined") {           // node test harness
     var g = c.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
     noise.connect(hp); hp.connect(g); g.connect(mg); noise.start(t); noise.stop(t + 0.07);
   }
-  var VOICE = { kick: playKick, snare: playSnare, hihat: playHihat };
+  // World-rhythm voices (Phase 7): all synthesised, no samples — recognisably different, none harsh. Gains stay at or below the kick's.
+  function playBell(c, t) {                        // cowbell: two detuned square partials through a band-pass, medium-short decay
+    var mg = masterGain(c);
+    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 760; bp.Q.value = 1.1;
+    var g = c.createGain(); g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    [562, 845].forEach(function (f) {
+      var o = c.createOscillator(); o.type = "square"; o.frequency.value = f;
+      o.connect(bp); o.start(t); o.stop(t + 0.32);
+    });
+    bp.connect(g); g.connect(mg);
+  }
+  function playClaves(c, t) {                      // claves: a short, high, woody click — one sine "tok" plus a tick of filtered noise
+    var mg = masterGain(c);
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(2500, t); o.frequency.exponentialRampToValueAtTime(1900, t + 0.04);
+    g.gain.setValueAtTime(0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    o.connect(g); g.connect(mg); o.start(t); o.stop(t + 0.08);
+    var n = c.createBufferSource(); n.buffer = noiseBuffer(c, 0.02);
+    var hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 3500;
+    var ng = c.createGain(); ng.gain.setValueAtTime(0.15, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    n.connect(hp); hp.connect(ng); ng.connect(mg); n.start(t); n.stop(t + 0.03);
+  }
+  function playCongaHigh(c, t) {                   // muted high conga: a short mid-high pitched thump with a slap of band-passed noise
+    var mg = masterGain(c);
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(420, t); o.frequency.exponentialRampToValueAtTime(330, t + 0.08);
+    g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+    o.connect(g); g.connect(mg); o.start(t); o.stop(t + 0.15);
+    var n = c.createBufferSource(); n.buffer = noiseBuffer(c, 0.03);
+    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1500; bp.Q.value = 0.9;
+    var ng = c.createGain(); ng.gain.setValueAtTime(0.18, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    n.connect(bp); bp.connect(ng); ng.connect(mg); n.start(t); n.stop(t + 0.04);
+  }
+  function playCongaLow(c, t) {                    // low conga: a lower, longer thump
+    var mg = masterGain(c);
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = "sine"; o.frequency.setValueAtTime(230, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.14);
+    g.gain.setValueAtTime(0.85, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    o.connect(g); g.connect(mg); o.start(t); o.stop(t + 0.32);
+  }
+  var VOICE = { kick: playKick, snare: playSnare, hihat: playHihat, bell: playBell, claves: playClaves, conga_high: playCongaHigh, conga_low: playCongaLow };
 
   function scheduleStep(step, time) {
     var c = audio(); if (!c) return;
-    CHANNELS.forEach(function (ch) {
+    rows.forEach(function (ch) {
       if (patterns[bank][ch][step] && isChannelAudible(ch, muted, soloed)) VOICE[ch](c, time);
     });
   }
 
   function schedulerTick() {
     var c = audio(); if (!c) return;
-    var out = advanceScheduler(schedulerState, c.currentTime, bpm, swingPct, SCHEDULE_AHEAD_S, steps);
+    var out = advanceScheduler(schedulerState, c.currentTime, bpm, swingPct, SCHEDULE_AHEAD_S, steps, gridStepQl);
     out.events.forEach(function (ev) {
       scheduleStep(ev.step, ev.time);
       // Update the visual step indicator on its OWN loose timer (setTimeout keyed off the
@@ -564,20 +1212,215 @@ if (typeof document === "undefined") {           // node test harness
     $("bPlay").textContent = "Stop"; $("bPlay").classList.add("playing"); $("bPlay").setAttribute("aria-pressed", "true");
     timerId = setInterval(schedulerTick, LOOKAHEAD_MS);
     schedulerTick();
+    announcePlaying(true);
   }
   function stop() {
     playing = false;
     if (timerId) { clearInterval(timerId); timerId = null; }
     currentStep = -1; renderPlayhead();
     $("bPlay").textContent = "Play"; $("bPlay").classList.remove("playing"); $("bPlay").setAttribute("aria-pressed", "false");
+    announcePlaying(false);
   }
   $("bPlay").addEventListener("click", function () { if (playing) stop(); else start(); });
+
+  // --- host protocol (Beat-as-data Phase 5 + 5b): edit a rhythm data NOTE through this widget ------------------------
+  // Standalone (opened directly, or embedded by an html-embed block) nothing below is visible and behaviour is unchanged: no
+  // messages are posted, no autosave. When the plugin hosts this page it replies to our `ready` with `forge-rhythm-load`; only
+  // THEN does the host bar appear and autosave switch on. Every action that changes pattern data calls commitChange() — the ONE
+  // place a `forge-rhythm-save` is posted (the plugin debounces and writes). Play, mute, solo, volume and bank selection never
+  // call it. The plugin answers with `forge-rhythm-status` (saving / saved / error / conflict / idle). Messages are accepted only
+  // from the embedding window (e.source === window.parent); the plugin makes the mirror check on its side.
+  //
+  // Phase 8 (the plugin's `forge-rhythm` embed) adds a second HOST MODE, chosen by the load message's `mode`: "playground". There the
+  // widget is a toy over a COPY of the note's data: commitChange() posts `forge-rhythm-edited` (no data) and NEVER a save; a
+  // time-signature change applies at once; Reset puts the loaded data back (the host's toolbar owns "Open note", and — when the load says `resetInHost: true` —
+  // "Reset" and the "not saved" reminder too, so this page draws neither); playing / stopping is announced so the host can keep one sound at a time.
+  // Any `mode` other than the exact string "playground" is "edit".
+  var hostNote = "", hostLoaded = false;
+  var hostMode = "edit";             // "edit" | "playground"
+  var resetInHost = false;           // playground only, per load: the HOST's toolbar draws Reset and the "not saved" reminder, so this page draws neither (drain 2026-10-20-0900)
+  var loadedData = null;             // playground: a private copy of the last loaded data, what Reset restores
+  function hostWindow() { return window.parent && window.parent !== window ? window.parent : null; }
+  function postToHost(msg) { var h = hostWindow(); if (h) { try { h.postMessage(msg, "*"); } catch (e) { /* host gone */ } } }
+  function commitChange() {
+    dismissConfirm();                              // any data edit ends a pending time-signature / remove-row question (without applying it)
+    if (!hostWindow() || !hostLoaded) return;      // standalone, or a note that has not loaded (or was refused): never write
+    if (hostMode === "playground") { postToHost({ type: "forge-rhythm-edited" }); return; }   // a playground NEVER saves
+    postToHost({ type: "forge-rhythm-save", data: buildRhythmData(timeSig, swingPct, bpm, patterns[bank], rows, { steps: steps, groupSize: groupSize }) });   // hosted: `bank` is always "A" — the note's one pattern
+  }
+  function announcePlaying(on) {
+    if (hostMode === "playground" && hostLoaded) postToHost({ type: "forge-rhythm-playing", playing: !!on });
+  }
+  // The host bar shows exactly one of the two mode's sets of controls.
+  // `resetInHost` (the exact boolean true, in a playground load only): the host's own toolbar — one row with Open note, Score, Reset and "not saved" — owns those,
+  // so the label, Reset and the note name come off this page and the bar that held them goes with them: one row instead of two. Without the flag (an older
+  // plugin) everything is drawn here as it always was. A refused load still shows its message (applyLoad's error branch shows the bar by itself).
+  function renderHostBar() {
+    var pg = hostMode === "playground";
+    $("hostBar").hidden = resetInHost;
+    $("hostEditing").hidden = pg;
+    $("playgroundLabel").hidden = !pg || resetInHost;
+    $("bReset").hidden = !pg || resetInHost;
+    $("saveMsg").hidden = pg;
+    if (pg) { $("bReload").hidden = true; setHostMsg("saveMsg", "", false); }
+  }
+  function setHostMsg(id, text, isError) {
+    var el = $(id); el.textContent = text; el.classList.toggle("error", !!isError);
+  }
+  // --- auto height (generic: a widget that wants its iframe sized to its content does exactly this) --------------------------------
+  // The host opts in with `autoHeight: true` on the load message (an embed with an explicit `height:` never does). The widget then measures its
+  // BODY — whose height is its content's, not the iframe's, so this cannot feed back on itself — and posts {type: "resize", height}
+  // at most once per animation frame, and only when the plan says the height really changed. The host clamps and rate-limits on its side too.
+  // Standalone (no host window) never gets here: a load message is only accepted from the embedding window.
+  var autoHeightOn = false, lastPostedHeight = null, autoHeightFrame = 0, autoHeightObserver = null;
+  function postHeightNow() {
+    autoHeightFrame = 0;
+    if (!autoHeightOn) return;
+    var h = autoHeightPlan(document.body.getBoundingClientRect().height, lastPostedHeight);
+    if (h === null) return;
+    lastPostedHeight = h;
+    postToHost({ type: "resize", height: h });
+  }
+  function scheduleHeight() {
+    if (!autoHeightOn || autoHeightFrame) return;
+    var raf = window.requestAnimationFrame || function (f) { return setTimeout(f, 16); };
+    autoHeightFrame = raf(postHeightNow);
+  }
+  function setAutoHeight(on) {
+    if (on === autoHeightOn) { if (on) scheduleHeight(); return; }
+    autoHeightOn = on;
+    if (on) {
+      lastPostedHeight = null;
+      if (typeof ResizeObserver === "function" && !autoHeightObserver) {
+        autoHeightObserver = new ResizeObserver(scheduleHeight);
+        autoHeightObserver.observe(document.body);
+      }
+      scheduleHeight();
+    } else if (autoHeightObserver) { autoHeightObserver.disconnect(); autoHeightObserver = null; }
+  }
+  // Hover-link (drain 2026-10-21-1230, score_first M3). A host that says `hoverLink: true` on the load message gets two things: (1) `forge-rhythm-hover`
+  // {channel, step} when the pointer is over a grid step or ring cell, and {channel: null} when it leaves; (2) `forge-rhythm-highlight` {channel, step} from the
+  // host lights that step (an outline, never a layout change), {channel: null} clears it. Without the flag NOTHING here runs: no listener acts, no message is
+  // posted, a highlight message is ignored. (Every other vault's host never sends it.)
+  var hoverLink = false, lastHover = "", linkHot = [];
+  function stepTarget(t) {
+    var el = t && t.closest ? t.closest(".step, .cell") : null;
+    if (!el) return null;
+    var ch = el.getAttribute("data-channel"), st = el.getAttribute("data-step");
+    return ch === null || st === null ? null : { channel: ch, step: Number(st) };
+  }
+  function reportHover(t) {
+    if (!hoverLink) return;
+    var x = stepTarget(t), key = x ? x.channel + ":" + x.step : "";
+    if (key === lastHover) return;
+    lastHover = key;
+    postToHost({ type: "forge-rhythm-hover", channel: x ? x.channel : null, step: x ? x.step : null });
+  }
+  function clearHighlight() {
+    linkHot.forEach(function (el) { el.classList.remove("link-hot"); });
+    linkHot = [];
+  }
+  function applyHighlight(channel, step) {
+    clearHighlight();
+    if (typeof channel !== "string" || typeof step !== "number") return;
+    Array.prototype.forEach.call(document.querySelectorAll(".step, .cell"), function (el) {
+      if (el.getAttribute("data-channel") === channel && Number(el.getAttribute("data-step")) === step) { el.classList.add("link-hot"); linkHot.push(el); }
+    });
+  }
+  function setHoverLink(on) {
+    if (on === hoverLink) return;
+    hoverLink = on;
+    lastHover = "";
+    if (!on) clearHighlight();
+  }
+  document.addEventListener("mouseover", function (e) { reportHover(e.target); });
+  document.addEventListener("mouseout", function (e) { if (!e.relatedTarget) reportHover(null); else reportHover(e.relatedTarget); });
+  function applyLoad(msg) {
+    setAutoHeight(msg.autoHeight === true);          // only the exact true; a later load without it switches it off again. BEFORE the parse: a refused note's message needs room too
+    var r = parseRhythmLoad(msg.data);
+    if (!r.ok) { hostLoaded = false; dismissConfirm(); $("hostBar").hidden = false; setHostMsg("loadMsg", "Could not load this note: " + r.message, true); return; }
+    hostMode = msg.mode === "playground" ? "playground" : "edit";
+    resetInHost = hostMode === "playground" && msg.resetInHost === true;
+    setHoverLink(msg.hoverLink === true);              // only the exact true; a load without it switches the link off again
+    loadedData = hostMode === "playground" ? JSON.parse(JSON.stringify(msg.data)) : null;
+    hostLoaded = true;                                // set BEFORE showLoaded so a stop() inside it is announced consistently
+    showLoaded(r.state);
+    clearHighlight();                                  // a (re)load rebuilds the grid: nothing stays lit
+    // The host may suggest the FIRST view (`view: circle` on a forge-rhythm block). Only the exact strings count, and only once: a later
+    // load (Reset, the note changed on disk) must not undo what the student chose since. Never written to the note.
+    if (!viewInit) {
+      viewInit = true;
+      if (msg.view === "circle" || msg.view === "grid") setView(msg.view);
+    }
+    hostNote = typeof msg.noteName === "string" ? msg.noteName : "";
+    $("hostNote").textContent = hostNote;
+    $("hostBar").hidden = false; $("bReload").hidden = true;
+    renderHostBar();
+    setHostMsg("loadMsg", "", false); setHostMsg("saveMsg", "", false);
+  }
+  // Put a validated state on screen (a load, or a playground's Reset). Never posts a save: loading is not a data change.
+  function showLoaded(state) {
+    if (playing) stop();
+    dismissConfirm();
+    var r = { state: state };
+    timeSig = r.state.timeSig; steps = r.state.steps; groupSize = r.state.groupSize; gridStepQl = r.state.stepQl;
+    $("timeSig").value = menuKeyFor(timeSig, steps);
+    setBpm(r.state.bpm);
+    swingPct = r.state.swingPct; $("swing").value = swingPct; $("swingVal").textContent = swingPct + "%";
+    BANKS.forEach(function (b) { patterns[b] = emptyPattern(steps); });      // the other banks are cleared, as on a time-signature change
+    patterns["A"] = r.state.pattern;
+    rows = r.state.rows.slice();                      // one row per channel in the note, in the note's order
+    bank = "A";
+    Array.prototype.forEach.call(document.querySelectorAll(".banks button"), function (x) { x.classList.toggle("active", x.getAttribute("data-bank") === "A"); });
+    buildGrid(); renderGrid(); renderMuteSolo(); renderPlayhead(); renderSwingPreview(); syncView();
+  }
+  // The autosave indicator. "Saved" and errors both PERSIST (an error until the next successful save replaces it).
+  function showStatus(state, message) {
+    if (hostMode === "playground") return;            // a playground has no autosave indicator, whatever the host says
+    var text = String(message || "");
+    if (state === "saving") setHostMsg("saveMsg", "Saving…", false);
+    else if (state === "saved") setHostMsg("saveMsg", "Saved", false);
+    else if (state === "error") setHostMsg("saveMsg", text || "Not saved", true);
+    else if (state === "conflict") setHostMsg("saveMsg", text || "The note changed on disk — your latest edit was not saved.", true);
+    else if (state === "idle") setHostMsg("saveMsg", "", false);
+    else return;
+    $("bReload").hidden = state !== "conflict";
+  }
+  window.addEventListener("message", function (e) {
+    var h = hostWindow();
+    if (!h || e.source !== h) return;
+    var m = e.data;
+    if (!m || typeof m !== "object") return;
+    if (m.type === "forge-rhythm-load") applyLoad(m);
+    else if (m.type === "forge-rhythm-status") showStatus(m.state, m.message);
+    else if (m.type === "forge-rhythm-save-result") showStatus(m.ok ? "saved" : "error", m.message);     // Phase 5 reply, still understood
+    else if (m.type === "forge-rhythm-request-data") {      // Phase 8: a READ of the current state (what the embed's Score toggle engraves)
+      postToHost({ type: "forge-rhythm-current-data", data: hostLoaded ? buildRhythmData(timeSig, swingPct, bpm, patterns[bank], rows, { steps: steps, groupSize: groupSize }) : null });
+    }
+    else if (m.type === "forge-rhythm-stop") { if (playing) stop(); }
+    else if (m.type === "forge-rhythm-highlight") { if (hoverLink) applyHighlight(m.channel, m.step); }   // ignored unless the load asked for hover-link
+  });
+  $("bReset").addEventListener("click", function () {
+    if (hostMode !== "playground" || !hostLoaded || !loadedData) return;
+    var r = parseRhythmLoad(loadedData);
+    if (r.ok) showLoaded(r.state);
+    postToHost({ type: "forge-rhythm-reset" });         // the host re-reads the note and answers with a fresh load (picks up a changed note)
+  });
+  $("bReload").addEventListener("click", function () { postToHost({ type: "forge-rhythm-reload" }); });
+  // Hosted (editing a note) there are no banks: the note holds one pattern, and a variation is another note. The bank buttons are hidden
+  // from the first paint (before any load) and their handler is inert while hosted. Standalone keeps all four banks, as always.
+  if (hostWindow()) {
+    Array.prototype.forEach.call(document.querySelectorAll(".banks button[data-bank]"), function (b) { b.hidden = true; });
+    document.querySelector(".banks").hidden = true;      // the (now empty) row takes no space
+  }
 
   setBpm(bpm);
   renderGrid();
   renderMuteSolo();
   renderPlayhead();
   renderSwingPreview();
+  renderSelection();
+  postToHost({ type: "forge-rhythm-ready" });
 })();
 }
 </script>

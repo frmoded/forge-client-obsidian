@@ -2,11 +2,12 @@
 type: action
 description_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a
 recipe_hash: 46ddd92c6036542a6c86c7fb450e1a94cfd6961229266bd2f69108fcbcdaaa41
-python_hash: 9468f582204c98a6a46fa3824a25668069cf6bc279670571f33c5889bd6c3d82
+python_hash: d84030898c69b431bfbc602c5218390da78ac771c8d796b51d5408df573b0af0
 recipe_derived_from_source_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a
 python_derived_from_source_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a
 source_facet: synced
 recipe_derived_from_description_hash: 99569444c69c914ff674c16d315a6ea19129e4f9dbde255cd22de689d1bfa37a
+python_derived_from_recipe_hash: 46ddd92c6036542a6c86c7fb450e1a94cfd6961229266bd2f69108fcbcdaaa41
 ---
 
 # Description
@@ -39,21 +40,8 @@ Return Call [[phase_shifter]] with cell=cell, num_voices=4, bars_per_section=4, 
 
 ```python
 def compute(context):
-    # v0.7.0: phase_cell / phase_shifter are now library notes in
-    # forge.music.lib; called directly. phase_shifter's `voices` kwarg
-    # was renamed to `num_voices` to avoid shadowing the lib's voices()
-    # composition chip.
-    cell = phase_cell()
-    return phase_shifter(
-        cell=cell,
-        num_voices=4,
-        bars_per_section=4,
-        total_sections=8,
-        shift_per_section_eighths=1,
-        ts_str='12/8',
-        bpm=96,
-        velocity_profile='human',
-    )
+  cell = phase_cell()
+  return phase_shifter(cell=cell, num_voices=4, bars_per_section=4, total_sections=8, shift_per_section_eighths=1, ts_str='12/8', bpm=96, velocity_profile='human')
 ```
 
 # Dependencies

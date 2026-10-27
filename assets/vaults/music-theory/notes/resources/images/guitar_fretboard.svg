@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 310" width="620" height="310" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="310" fill="#FDFCFA"/>
+<circle cx="191" cy="126" r="4" fill="#A69B91"/>
+<circle cx="267" cy="126" r="4" fill="#A69B91"/>
+<circle cx="343" cy="126" r="4" fill="#A69B91"/>
+<circle cx="419" cy="126" r="4" fill="#A69B91"/>
+<circle cx="533" cy="94" r="4" fill="#A69B91"/>
+<circle cx="533" cy="158" r="4" fill="#A69B91"/>
+<line x1="96" y1="46" x2="552" y2="46" stroke="#666666" stroke-width="1.0"/>
+<line x1="96" y1="78" x2="552" y2="78" stroke="#666666" stroke-width="1.25"/>
+<line x1="96" y1="110" x2="552" y2="110" stroke="#666666" stroke-width="1.5"/>
+<line x1="96" y1="142" x2="552" y2="142" stroke="#666666" stroke-width="1.75"/>
+<line x1="96" y1="174" x2="552" y2="174" stroke="#666666" stroke-width="2.0"/>
+<line x1="96" y1="206" x2="552" y2="206" stroke="#666666" stroke-width="2.25"/>
+<line x1="96" y1="38" x2="96" y2="214" stroke="#2B2B2B" stroke-width="4"/>
+<line x1="134" y1="38" x2="134" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="172" y1="38" x2="172" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="210" y1="38" x2="210" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="248" y1="38" x2="248" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="286" y1="38" x2="286" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="324" y1="38" x2="324" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="362" y1="38" x2="362" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="400" y1="38" x2="400" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="438" y1="38" x2="438" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="476" y1="38" x2="476" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="514" y1="38" x2="514" y2="214" stroke="#A69B91" stroke-width="1"/>
+<line x1="552" y1="38" x2="552" y2="214" stroke="#A69B91" stroke-width="1"/>
+<text x="20" y="50" font-size="11" fill="#555555" text-anchor="middle">1</text>
+<text x="72" y="49.5" font-size="9.5" fill="#2B2B2B" text-anchor="middle" font-weight="600">E4</text>
+<rect x="100" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="115" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">F4</text>
+<rect x="138" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="153" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">F♯4</text>
+<rect x="176" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="191" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">G4</text>
+<rect x="214" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="229" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">G♯4</text>
+<rect x="252" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="267" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">A4</text>
+<rect x="290" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="305" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">A♯4</text>
+<rect x="328" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="343" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">B4</text>
+<rect x="366" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="381" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">C5</text>
+<rect x="404" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="419" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">C♯5</text>
+<rect x="442" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="457" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">D5</text>
+<rect x="480" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="495" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">D♯5</text>
+<rect x="518" y="39" width="30" height="14" fill="#FDFCFA"/>
+<text x="533" y="49.5" font-size="9.5" fill="#555555" text-anchor="middle">E5</text>
+<text x="20" y="82" font-size="11" fill="#555555" text-anchor="middle">2</text>
+<text x="72" y="81.5" font-size="9.5" fill="#2B2B2B" text-anchor="middle" font-weight="600">B3</text>
+<rect x="100" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="115" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">C4</text>
+<rect x="138" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="153" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">C♯4</text>
+<rect x="176" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="191" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">D4</text>
+<rect x="214" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="229" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">D♯4</text>
+<rect x="252" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="267" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">E4</text>
+<rect x="290" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="305" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">F4</text>
+<rect x="328" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="343" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">F♯4</text>
+<rect x="366" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="381" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">G4</text>
+<rect x="404" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="419" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">G♯4</text>
+<rect x="442" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="457" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">A4</text>
+<rect x="480" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="495" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">A♯4</text>
+<rect x="518" y="71" width="30" height="14" fill="#FDFCFA"/>
+<text x="533" y="81.5" font-size="9.5" fill="#555555" text-anchor="middle">B4</text>
+<text x="20" y="114" font-size="11" fill="#555555" text-anchor="middle">3</text>
+<text x="72" y="113.5" font-size="9.5" fill="#2B2B2B" text-anchor="middle" font-weight="600">G3</text>
+<rect x="100" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="115" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">G♯3</text>
+<rect x="138" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="153" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">A3</text>
+<rect x="176" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="191" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">A♯3</text>
+<rect x="214" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="229" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">B3</text>
+<rect x="252" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="267" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">C4</text>
+<rect x="290" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="305" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">C♯4</text>
+<rect x="328" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="343" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">D4</text>
+<rect x="366" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="381" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">D♯4</text>
+<rect x="404" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="419" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">E4</text>
+<rect x="442" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="457" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">F4</text>
+<rect x="480" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="495" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">F♯4</text>
+<rect x="518" y="103" width="30" height="14" fill="#FDFCFA"/>
+<text x="533" y="113.5" font-size="9.5" fill="#555555" text-anchor="middle">G4</text>
+<text x="20" y="146" font-size="11" fill="#555555" text-anchor="middle">4</text>
+<text x="72" y="145.5" font-size="9.5" fill="#2B2B2B" text-anchor="middle" font-weight="600">D3</text>
+<rect x="100" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="115" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">D♯3</text>
+<rect x="138" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="153" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">E3</text>
+<rect x="176" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="191" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">F3</text>
+<rect x="214" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="229" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">F♯3</text>
+<rect x="252" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="267" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">G3</text>
+<rect x="290" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="305" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">G♯3</text>
+<rect x="328" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="343" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">A3</text>
+<rect x="366" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="381" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">A♯3</text>
+<rect x="404" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="419" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">B3</text>
+<rect x="442" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="457" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">C4</text>
+<rect x="480" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="495" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">C♯4</text>
+<rect x="518" y="135" width="30" height="14" fill="#FDFCFA"/>
+<text x="533" y="145.5" font-size="9.5" fill="#555555" text-anchor="middle">D4</text>
+<text x="20" y="178" font-size="11" fill="#555555" text-anchor="middle">5</text>
+<text x="72" y="177.5" font-size="9.5" fill="#2B2B2B" text-anchor="middle" font-weight="600">A2</text>
+<rect x="100" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="115" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">A♯2</text>
+<rect x="138" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="153" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">B2</text>
+<rect x="176" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="191" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">C3</text>
+<rect x="214" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="229" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">C♯3</text>
+<rect x="252" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="267" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">D3</text>
+<rect x="290" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="305" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">D♯3</text>
+<rect x="328" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="343" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">E3</text>
+<rect x="366" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="381" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">F3</text>
+<rect x="404" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="419" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">F♯3</text>
+<rect x="442" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="457" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">G3</text>
+<rect x="480" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="495" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">G♯3</text>
+<rect x="518" y="167" width="30" height="14" fill="#FDFCFA"/>
+<text x="533" y="177.5" font-size="9.5" fill="#555555" text-anchor="middle">A3</text>
+<text x="20" y="210" font-size="11" fill="#555555" text-anchor="middle">6</text>
+<text x="72" y="209.5" font-size="9.5" fill="#2B2B2B" text-anchor="middle" font-weight="600">E2</text>
+<rect x="100" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="115" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">F2</text>
+<rect x="138" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="153" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">F♯2</text>
+<rect x="176" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="191" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">G2</text>
+<rect x="214" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="229" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">G♯2</text>
+<rect x="252" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="267" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">A2</text>
+<rect x="290" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="305" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">A♯2</text>
+<rect x="328" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="343" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">B2</text>
+<rect x="366" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="381" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">C3</text>
+<rect x="404" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="419" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">C♯3</text>
+<rect x="442" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="457" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">D3</text>
+<rect x="480" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="495" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">D♯3</text>
+<rect x="518" y="199" width="30" height="14" fill="#FDFCFA"/>
+<text x="533" y="209.5" font-size="9.5" fill="#555555" text-anchor="middle">E3</text>
+<text x="72" y="234" font-size="10.5" fill="#555555" text-anchor="middle">0</text>
+<text x="115" y="234" font-size="10.5" fill="#555555" text-anchor="middle">1</text>
+<text x="153" y="234" font-size="10.5" fill="#555555" text-anchor="middle">2</text>
+<text x="191" y="234" font-size="10.5" fill="#555555" text-anchor="middle">3</text>
+<text x="229" y="234" font-size="10.5" fill="#555555" text-anchor="middle">4</text>
+<text x="267" y="234" font-size="10.5" fill="#555555" text-anchor="middle">5</text>
+<text x="305" y="234" font-size="10.5" fill="#555555" text-anchor="middle">6</text>
+<text x="343" y="234" font-size="10.5" fill="#555555" text-anchor="middle">7</text>
+<text x="381" y="234" font-size="10.5" fill="#555555" text-anchor="middle">8</text>
+<text x="419" y="234" font-size="10.5" fill="#555555" text-anchor="middle">9</text>
+<text x="457" y="234" font-size="10.5" fill="#555555" text-anchor="middle">10</text>
+<text x="495" y="234" font-size="10.5" fill="#555555" text-anchor="middle">11</text>
+<text x="533" y="234" font-size="10.5" fill="#555555" text-anchor="middle">12</text>
+<text x="20" y="234" font-size="10.5" fill="#555555" text-anchor="middle">fret</text>
+<text x="64" y="268" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">Guitar fretboard: standard tuning</text>
+<text x="64" y="287" font-size="12" fill="#555555" text-anchor="start">Open strings through fret 12; the same pitch class turns up on several strings</text>
+</svg>

@@ -4,6 +4,14 @@ role: root
 featured: true
 forge_action_label: "Run simulation"
 description: "One bounded run of the moda simulator: setup, then 300 ticks of go with scheduled clicks."
+python_hash: 19570ce72d6f3bc773e07b23dbfa442811e69651d0a9639613bb5db1c1be8566
+description_hash: 7d37534f3a809e667b7ec06bfa73982f19fae4f02d6b564ec2854d03559ff8f2
+recipe_hash: 81aff67e08a033efe7c9d8876cea8e67a5222aa94ebb165143e69472c2955dd8
+recipe_derived_from_source_hash: 7d37534f3a809e667b7ec06bfa73982f19fae4f02d6b564ec2854d03559ff8f2
+python_derived_from_source_hash: 7d37534f3a809e667b7ec06bfa73982f19fae4f02d6b564ec2854d03559ff8f2
+source_facet: synced
+recipe_derived_from_description_hash: 7d37534f3a809e667b7ec06bfa73982f19fae4f02d6b564ec2854d03559ff8f2
+python_derived_from_recipe_hash: 81aff67e08a033efe7c9d8876cea8e67a5222aa94ebb165143e69472c2955dd8
 ---
 
 # Description
@@ -47,3 +55,17 @@ For each tick in Call [[tick_range]] with n=300:
 
 Let final = Call [[show_simulation]] with state=state.
 Return final.
+
+# Python
+
+```python
+def compute(context):
+  state = setup()
+  clicks = sample_clicks()
+  clicks_by_tick = group_clicks_by_tick(clicks=clicks)
+  for tick in tick_range(n=300):
+    state = apply_clicks_at_tick(state=state, clicks_by_tick=clicks_by_tick, tick=tick, on_click=on_mouse_click)
+    state = go(state=state, dt=0.0333, temperature='medium')
+  final = show_simulation(state=state)
+  return final
+```

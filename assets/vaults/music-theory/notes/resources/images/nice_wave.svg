@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 300" width="620" height="300" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="300" fill="#FDFCFA"/>
+<line x1="64" y1="180" x2="520" y2="180" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="142" x2="520" y2="142" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="66" x2="520" y2="66" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="28" x2="520" y2="28" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="20" x2="64" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="178" y1="20" x2="178" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="292" y1="20" x2="292" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="406" y1="20" x2="406" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="520" y1="20" x2="520" y2="188" stroke="#F2F2EC" stroke-width="1"/>
+<line x1="64" y1="104" x2="520" y2="104" stroke="#A69B91" stroke-width="1"/>
+<line x1="64" y1="20" x2="64" y2="188" stroke="#666666" stroke-width="1"/>
+<line x1="64" y1="188" x2="520" y2="188" stroke="#666666" stroke-width="1"/>
+<text x="56" y="184" font-size="10.5" fill="#555555" text-anchor="end">−1</text>
+<text x="56" y="108" font-size="10.5" fill="#555555" text-anchor="end">0</text>
+<text x="56" y="32" font-size="10.5" fill="#555555" text-anchor="end">1</text>
+<line x1="64" y1="188" x2="64" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="64" y="206" font-size="10.5" fill="#555555" text-anchor="middle">0°</text>
+<line x1="178" y1="188" x2="178" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="178" y="206" font-size="10.5" fill="#555555" text-anchor="middle">180°</text>
+<line x1="292" y1="188" x2="292" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="292" y="206" font-size="10.5" fill="#555555" text-anchor="middle">360°</text>
+<line x1="406" y1="188" x2="406" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="406" y="206" font-size="10.5" fill="#555555" text-anchor="middle">540°</text>
+<line x1="520" y1="188" x2="520" y2="192" stroke="#666666" stroke-width="1"/>
+<text x="520" y="206" font-size="10.5" fill="#555555" text-anchor="middle">720°</text>
+<text x="292" y="224" font-size="11" fill="#555555" text-anchor="middle">Phase of C4 (degrees)</text>
+<text x="16" y="104" font-size="11" fill="#555555" text-anchor="middle" transform="rotate(-90 16 104)">Amplitude (arb. units)</text>
+<path d="M64,104 L68.6,94.5 L73.1,85.1 L77.7,76 L82.2,67.4 L86.8,59.3 L91.4,52 L95.9,45.4 L100.5,39.8 L105,35.2 L109.6,31.7 L114.2,29.3 L118.7,28.1 L123.3,28.1 L127.8,29.3 L132.4,31.7 L137,35.2 L141.5,39.8 L146.1,45.4 L150.6,52 L155.2,59.3 L159.8,67.4 L164.3,76 L168.9,85.1 L173.4,94.5 L178,104 L182.6,113.5 L187.1,122.9 L191.7,132 L196.2,140.6 L200.8,148.7 L205.4,156 L209.9,162.6 L214.5,168.2 L219,172.8 L223.6,176.3 L228.2,178.7 L232.7,179.9 L237.3,179.9 L241.8,178.7 L246.4,176.3 L251,172.8 L255.5,168.2 L260.1,162.6 L264.6,156 L269.2,148.7 L273.8,140.6 L278.3,132 L282.9,122.9 L287.4,113.5 L292,104 L296.6,94.5 L301.1,85.1 L305.7,76 L310.2,67.4 L314.8,59.3 L319.4,52 L323.9,45.4 L328.5,39.8 L333,35.2 L337.6,31.7 L342.2,29.3 L346.7,28.1 L351.3,28.1 L355.8,29.3 L360.4,31.7 L365,35.2 L369.5,39.8 L374.1,45.4 L378.6,52 L383.2,59.3 L387.8,67.4 L392.3,76 L396.9,85.1 L401.4,94.5 L406,104 L410.6,113.5 L415.1,122.9 L419.7,132 L424.2,140.6 L428.8,148.7 L433.4,156 L437.9,162.6 L442.5,168.2 L447,172.8 L451.6,176.3 L456.2,178.7 L460.7,179.9 L465.3,179.9 L469.8,178.7 L474.4,176.3 L479,172.8 L483.5,168.2 L488.1,162.6 L492.6,156 L497.2,148.7 L501.8,140.6 L506.3,132 L510.9,122.9 L515.4,113.5 L520,104" fill="none" stroke="#2B2B2B" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="528" y="100" font-size="11" fill="#2B2B2B" text-anchor="start">C4</text>
+<path d="M64,104 L68.6,85.1 L73.1,67.4 L77.7,52 L82.2,39.8 L86.8,31.7 L91.4,28.1 L95.9,29.3 L100.5,35.2 L105,45.4 L109.6,59.3 L114.2,76 L118.7,94.5 L123.3,113.5 L127.8,132 L132.4,148.7 L137,162.6 L141.5,172.8 L146.1,178.7 L150.6,179.9 L155.2,176.3 L159.8,168.2 L164.3,156 L168.9,140.6 L173.4,122.9 L178,104 L182.6,85.1 L187.1,67.4 L191.7,52 L196.2,39.8 L200.8,31.7 L205.4,28.1 L209.9,29.3 L214.5,35.2 L219,45.4 L223.6,59.3 L228.2,76 L232.7,94.5 L237.3,113.5 L241.8,132 L246.4,148.7 L251,162.6 L255.5,172.8 L260.1,178.7 L264.6,179.9 L269.2,176.3 L273.8,168.2 L278.3,156 L282.9,140.6 L287.4,122.9 L292,104 L296.6,85.1 L301.1,67.4 L305.7,52 L310.2,39.8 L314.8,31.7 L319.4,28.1 L323.9,29.3 L328.5,35.2 L333,45.4 L337.6,59.3 L342.2,76 L346.7,94.5 L351.3,113.5 L355.8,132 L360.4,148.7 L365,162.6 L369.5,172.8 L374.1,178.7 L378.6,179.9 L383.2,176.3 L387.8,168.2 L392.3,156 L396.9,140.6 L401.4,122.9 L406,104 L410.6,85.1 L415.1,67.4 L419.7,52 L424.2,39.8 L428.8,31.7 L433.4,28.1 L437.9,29.3 L442.5,35.2 L447,45.4 L451.6,59.3 L456.2,76 L460.7,94.5 L465.3,113.5 L469.8,132 L474.4,148.7 L479,162.6 L483.5,172.8 L488.1,178.7 L492.6,179.9 L497.2,176.3 L501.8,168.2 L506.3,156 L510.9,140.6 L515.4,122.9 L520,104" fill="none" stroke="#B39373" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="528" y="116" font-size="11" fill="#B39373" text-anchor="start">C5</text>
+<text x="64" y="262" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">C4 and C5 overlaid</text>
+<text x="64" y="281" font-size="12" fill="#555555" text-anchor="start">A clean 2:1 ratio: every second peak of C5 lines up with a peak of C4</text>
+</svg>

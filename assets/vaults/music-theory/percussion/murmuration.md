@@ -1,12 +1,12 @@
 ---
 type: action
-description_hash: 8aaecfa415bb7256066f21225870611353cd418387b45e6b1dd258eb4f996af3
+description_hash: 5f166c60e7b37e76123f995ff2cae629d24ee5535e5995c3080faa3f1fae9f2f
 recipe_hash: 788c6cce4d86865b1313053e5e7dcd3dd11139f080b9ba86a1adc1476c257df8
 python_hash: 4dbc6dd03755d44539a0328354ccdb1973e3127e17f0ee52e1503aea7cebfbb8
-recipe_derived_from_source_hash: 8aaecfa415bb7256066f21225870611353cd418387b45e6b1dd258eb4f996af3
-python_derived_from_source_hash: 8aaecfa415bb7256066f21225870611353cd418387b45e6b1dd258eb4f996af3
+recipe_derived_from_source_hash: 5f166c60e7b37e76123f995ff2cae629d24ee5535e5995c3080faa3f1fae9f2f
+python_derived_from_source_hash: 5f166c60e7b37e76123f995ff2cae629d24ee5535e5995c3080faa3f1fae9f2f
 source_facet: description
-recipe_derived_from_description_hash: 8aaecfa415bb7256066f21225870611353cd418387b45e6b1dd258eb4f996af3
+recipe_derived_from_description_hash: 5f166c60e7b37e76123f995ff2cae629d24ee5535e5995c3080faa3f1fae9f2f
 python_derived_from_recipe_hash: 788c6cce4d86865b1313053e5e7dcd3dd11139f080b9ba86a1adc1476c257df8
 recipe_version: 5
 ---
@@ -140,5 +140,4 @@ def compute(context):
   s8 = voices_canonical(kp=s8_kp)
   full = sequence_list(sections=[s1, s2, s3, s4, s5, s6, s7, s8])
   return full
-
 ```

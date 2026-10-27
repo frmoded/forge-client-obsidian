@@ -2,6 +2,14 @@
 type: action
 role: root
 description: "Block 9 — go event. One simulation tick; history-dependent per C8 (continues from its own last state)."
+python_hash: c5f2b4b85c58bf27fac8b058098c49262266c3e244a9fb7ab5fd6939a74d1cad
+description_hash: 66de61f6c6a0f5a8641b45481d0c49227b0a6b566e51d233d487f3539a7d863c
+recipe_hash: f2bd42df4f35b516afeff864439fc7bcdb0355c58ccc827db72bd1a64d2e4d75
+recipe_derived_from_source_hash: 66de61f6c6a0f5a8641b45481d0c49227b0a6b566e51d233d487f3539a7d863c
+python_derived_from_source_hash: 66de61f6c6a0f5a8641b45481d0c49227b0a6b566e51d233d487f3539a7d863c
+source_facet: synced
+recipe_derived_from_description_hash: 66de61f6c6a0f5a8641b45481d0c49227b0a6b566e51d233d487f3539a7d863c
+python_derived_from_recipe_hash: f2bd42df4f35b516afeff864439fc7bcdb0355c58ccc827db72bd1a64d2e4d75
 ---
 
 # Description
@@ -38,3 +46,16 @@ If state == None:
 Let state = Call [[ask_all_particles]] with state=state, dt=dt.
 Let state = Call [[ask_water_particles]] with state=state, temperature=temperature.
 Return state.
+
+# Python
+
+```python
+def compute(context, state=None, dt=0.0333, temperature='medium'):
+  if (state == None):
+    state = latest_state(context=context)
+  if (state == None):
+    state = sample_state()
+  state = ask_all_particles(state=state, dt=dt)
+  state = ask_water_particles(state=state, temperature=temperature)
+  return state
+```

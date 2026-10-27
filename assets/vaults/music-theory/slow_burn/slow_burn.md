@@ -2,11 +2,12 @@
 type: action
 description_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5
 recipe_hash: 3f18b5c22678746253c19270e23e511ec41acd4d2ccb7c31c6414317f7ac8c03
-python_hash: 8773dd28d4fc2f99f5c161f7c4a9a3adc923b3aa7ed2e7c4118d06bb1571a7d2
+python_hash: b8c36ac0836ac28f414de64a42f2a7573e264c5527350877af4d6c35be1957c2
 recipe_derived_from_source_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5
 python_derived_from_source_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5
 source_facet: synced
 recipe_derived_from_description_hash: 0f0addbde2ee5a5ee573b576ea2fc2afca9042913772f581cd79dfa37c6837f5
+python_derived_from_recipe_hash: 3f18b5c22678746253c19270e23e511ec41acd4d2ccb7c31c6414317f7ac8c03
 ---
 
 # Description
@@ -47,21 +48,19 @@ Return Call [[sequence_list]] with sections=[chorus1, chorus2, solo, chorus3].
 
 ```python
 def compute(context):
-    # Section profiles shape the song's drum arc:
-    # intro (sparse) → fuller chorus (standard) → solo (driving) → return (standard).
-    # v0.7.0: drum_chorus is now a library note in forge.music.lib;
-    # called directly instead of via context.compute.
-    chorus1_drums = drum_chorus(profile='sparse')
-    chorus2_drums = drum_chorus(profile='standard')
-    solo_drums    = drum_chorus(profile='driving')
-    chorus3_drums = drum_chorus(profile='standard')
-
-    chorus1 = voices(context.compute("chorus"),       chorus1_drums)
-    chorus2 = voices(context.compute("chorus"),       chorus2_drums)
-    solo    = voices(context.compute("solo_chorus"),  solo_drums)
-    chorus3 = voices(context.compute("chorus"),       chorus3_drums)
-
-    return sequence(chorus1, chorus2, solo, chorus3)
+  chorus1_drums = drum_chorus(profile='sparse')
+  chorus2_drums = drum_chorus(profile='standard')
+  solo_drums = drum_chorus(profile='driving')
+  chorus3_drums = drum_chorus(profile='standard')
+  chorus1_vocal = chorus()
+  chorus2_vocal = chorus()
+  chorus3_vocal = chorus()
+  solo_line = solo_chorus()
+  chorus1 = voices_list(sections=[chorus1_vocal, chorus1_drums])
+  chorus2 = voices_list(sections=[chorus2_vocal, chorus2_drums])
+  solo = voices_list(sections=[solo_line, solo_drums])
+  chorus3 = voices_list(sections=[chorus3_vocal, chorus3_drums])
+  return sequence_list(sections=[chorus1, chorus2, solo, chorus3])
 ```
 
 # Dependencies

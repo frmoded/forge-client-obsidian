@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 270" width="620" height="270" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="270" fill="#FDFCFA"/>
+<line x1="64" y1="100" x2="556" y2="100" stroke="#666666" stroke-width="1"/>
+<line x1="64" y1="96" x2="64" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="64" y="158" font-size="10.5" fill="#555555" text-anchor="middle">1.0</text>
+<line x1="180" y1="96" x2="180" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="180" y="158" font-size="10.5" fill="#555555" text-anchor="middle">1.25</text>
+<line x1="296.1" y1="96" x2="296.1" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="296.1" y="158" font-size="10.5" fill="#555555" text-anchor="middle">1.5</text>
+<line x1="412.1" y1="96" x2="412.1" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="412.1" y="158" font-size="10.5" fill="#555555" text-anchor="middle">1.75</text>
+<line x1="528.2" y1="96" x2="528.2" y2="104" stroke="#666666" stroke-width="1"/>
+<text x="528.2" y="158" font-size="10.5" fill="#555555" text-anchor="middle">2.0</text>
+<circle cx="64" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="64" y1="94" x2="64" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="64" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">C</text>
+<circle cx="95.5" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="95.5" y1="106" x2="95.5" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="95.5" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">B</text>
+<circle cx="122" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="122" y1="94" x2="122" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="122" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">B♭</text>
+<circle cx="157.5" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="157.5" y1="106" x2="157.5" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="157.5" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">A</text>
+<circle cx="187.3" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="187.3" y1="94" x2="187.3" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="187.3" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">A♭</text>
+<circle cx="227.1" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="227.1" y1="106" x2="227.1" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="227.1" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">G</text>
+<circle cx="260.7" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="260.7" y1="94" x2="260.7" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="260.7" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">G♭</text>
+<circle cx="296.1" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="296.1" y1="106" x2="296.1" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="296.1" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">F</text>
+<circle cx="343.3" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="343.3" y1="94" x2="343.3" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="343.3" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">E</text>
+<circle cx="383.1" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="383.1" y1="106" x2="383.1" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="383.1" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">E♭</text>
+<circle cx="436.2" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="436.2" y1="94" x2="436.2" y2="86" stroke="#A69B91" stroke-width="1"/>
+<text x="436.2" y="80" font-size="11.5" fill="#2B2B2B" text-anchor="middle">D</text>
+<circle cx="481" cy="100" r="4.5" fill="#2B2B2B"/>
+<line x1="481" y1="106" x2="481" y2="114" stroke="#A69B91" stroke-width="1"/>
+<text x="481" y="128" font-size="11.5" fill="#2B2B2B" text-anchor="middle">D♭</text>
+<circle cx="70.3" cy="100" r="3.5" fill="#B39373"/>
+<line x1="70.3" y1="94" x2="70.3" y2="60" stroke="#B39373" stroke-width="1"/>
+<text x="74.3" y="56" font-size="11" fill="#B39373" text-anchor="start">folded comma</text>
+<circle cx="540.8" cy="100" r="3.5" fill="#64748B"/>
+<line x1="540.8" y1="94" x2="540.8" y2="60" stroke="#64748B" stroke-width="1"/>
+<text x="540.8" y="56" font-size="11" fill="#64748B" text-anchor="end">unfolded comma (≈2.03)</text>
+<text x="310" y="178" font-size="11" fill="#555555" text-anchor="middle">Folded string length — 2.0 is the same pitch, one octave down</text>
+<text x="64" y="226" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">Twelve notes, folded into one octave</text>
+<text x="64" y="245" font-size="12" fill="#555555" text-anchor="start">Each point is a folded string length: together they trace the chromatic scale</text>
+</svg>

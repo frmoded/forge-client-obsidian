@@ -20,19 +20,6 @@ Complete the C major scale you heard in [[exercises/complete_this_scale_challeng
 
 - guess — the four notes you think complete the octave, e.g. ["G4", "A4", "B4", "C5"]
 
-<div style="
-  display:flex;
-  justify-content:space-between;
-  font-size:12px;
-  color:#666666;
-  border-top:1px solid #F2F2EC;
-  padding:6px 2px;
-  margin:10px 0;
-">
-<span>&larr; <a class="internal-link" data-href="complete_this_scale_challenge" href="complete_this_scale_challenge" style="color:#1963D1;">complete_this_scale_challenge</a></span>
-<span>&uarr; <a class="internal-link" data-href="Scales" href="Scales" style="color:#1963D1;">Scales</a></span>
-</div>
-
 # Recipe
 
 Let true_tonic = "C".

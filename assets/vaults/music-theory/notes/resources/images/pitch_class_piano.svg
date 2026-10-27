@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 240" width="620" height="240" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<rect width="620" height="240" fill="#FDFCFA"/>
+<rect x="64" y="24" width="22" height="100" fill="#F8C54B" stroke="#666666" stroke-width="1"/>
+<rect x="86" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="108" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="130" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="152" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="174" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="196" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="218" y="24" width="22" height="100" fill="#F8C54B" stroke="#666666" stroke-width="1"/>
+<rect x="240" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="262" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="284" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="306" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="328" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="350" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="372" y="24" width="22" height="100" fill="#F8C54B" stroke="#666666" stroke-width="1"/>
+<rect x="394" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="416" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="438" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="460" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="482" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="504" y="24" width="22" height="100" fill="#FDFCFA" stroke="#666666" stroke-width="1"/>
+<rect x="79.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="101.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="145.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="167.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="189.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="233.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="255.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="299.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="321.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="343.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="387.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="409.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="453.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="475.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<rect x="497.4" y="24" width="13.2" height="62" fill="#2B2B2B" stroke="#2B2B2B" stroke-width="1"/>
+<text x="75" y="142" font-size="12" fill="#2B2B2B" text-anchor="middle">C3</text>
+<text x="229" y="142" font-size="12" fill="#2B2B2B" text-anchor="middle">C4</text>
+<text x="383" y="142" font-size="12" fill="#2B2B2B" text-anchor="middle">C5</text>
+<text x="64" y="170" font-size="15" fill="#2B2B2B" text-anchor="start" font-weight="600">One pitch class, three octaves</text>
+<text x="64" y="189" font-size="12" fill="#555555" text-anchor="start">The same key, C, in three different registers: C3, C4 and C5</text>
+</svg>

@@ -23,5 +23,4 @@ Return "wonderful".
 ```python
 def compute(context):
   return 'wonderful'
-
 ```
