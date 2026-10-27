@@ -6,7 +6,7 @@ import {
   MIX_DEFAULTS, MORPH_DEFAULTS, PHRASE_DEFAULTS, createNewPhraseFromParams, planNewPhraseFromParams, starterMix, validatePhrase,
   type NewPhrasePorts, type NewPhraseResult, type PhraseParams,
 } from './phrase-core.ts';
-import { phraseDescription, phraseRecipe } from './phrase-notes-core.ts';
+import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
 
 export const PLAN_COMMAND_ID = 'new-phrase-from-sentence';
 export const PLAN_COMMAND_NAME = 'New phrase from a sentence';
@@ -148,7 +148,7 @@ export function createSentencePlanner<F>(ports: SentencePlannerPorts<F>): Senten
       const where = planNewPhraseFromParams({ params: outcome.params, existingBasenames: ports.listPhraseBasenames(), exists: (p) => ports.exists(p) });
       if (where.ok === false) return { ok: false, message: where.message };
       current = { params: outcome.params };
-      return { ok: true, kind: outcome.params.kind, name: where.name, path: where.path, description: phraseDescription(where.name, outcome.params), recipe: phraseRecipe(outcome.params) };
+      return { ok: true, kind: outcome.params.kind, name: where.name, path: where.path, description: phraseDescription(where.name, outcome.params), recipe: phraseRecipeSteps(outcome.params).join('\n') };
     },
     async create() {
       if (current === null) { const message = 'Plan the sentence first.'; ports.notify(message); return { ok: false, message }; }

@@ -1,10 +1,10 @@
 // 2026-10-27-1000 (FULL-profile hardening of what shipped under DEMO): the survivors of the mutation pass over phrase-notes-core.ts, killed with exact-output tests. Every expected text below is what the person reads in a
-// phrase or bar note (Description, Recipe, Bars made, the frontmatter order, the refusals), so a mutant that changes one is a visible regression, not noise.
+// phrase or bar note (Description, Recipe, Python, the frontmatter order, the refusals), so a mutant that changes one is a visible regression, not noise.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { PhraseParams } from './phrase-core.ts';
-import { DERIVED_NOTE, barDescription, derivedSections, extractPhraseJsonBlock, newPhraseNote, phraseDescription, phraseLinks, phraseRecipe, refreshBarNoteText, renderPhraseNote } from './phrase-notes-core.ts';
+import { DERIVED_NOTE, barDescription, derivedSections, extractPhraseJsonBlock, newPhraseNote, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps, refreshBarNoteText, renderPhraseNote } from './phrase-notes-core.ts';
 import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
 
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_005', bars: 8, style: 'building', tempo_change_pct: 0 };
@@ -29,18 +29,20 @@ test('a seeded morph says its seed in the Description, a musical one does not; t
   assert.equal(phraseDescription('p', { ...MORPH, order: 'seeded', seed: 7 }), 'p — a morph from [[bar_007]] to [[bar_008]] in 17 bars, seeded order (seed 7).');
   assert.equal(phraseDescription('p', { ...MORPH, order: 'by_channel', seed: 7 }), 'p — a morph from [[bar_007]] to [[bar_008]] in 17 bars, by_channel order.');
   assert.equal(phraseDescription('p', MORPH), 'p — a morph from [[bar_007]] to [[bar_008]] in 17 bars, musical order.');
-  assert.equal(phraseRecipe({ ...MORPH, bars: 1, position: 0 }), 'morph_rhythm([[bar_007]], [[bar_008]], bars=1, order="musical", seed=0, position=0)');
-  assert.equal(phraseRecipe({ ...MORPH, bars: 1, position: 3 }), 'morph_rhythm([[bar_007]], [[bar_008]], bars=1, order="musical", seed=0, position=3)');
-  assert.equal(phraseRecipe(MORPH), 'morph_rhythm([[bar_007]], [[bar_008]], bars=17, order="musical", seed=0)');
+  assert.ok(phrasePython({ ...MORPH, bars: 1, position: 0 }).includes("morph_rhythm(a=a, b=b, bars=1, order='musical', seed=0, position=0)"));
+  assert.ok(phrasePython({ ...MORPH, bars: 1, position: 3 }).includes("morph_rhythm(a=a, b=b, bars=1, order='musical', seed=0, position=3)"));
+  assert.ok(phrasePython(MORPH).includes("morph_rhythm(a=a, b=b, bars=17, order='musical', seed=0)") && !phrasePython(MORPH).includes('position'));
 });
 
 test('a path mix without an order or a seed reads as musical order and seed 0, in the Description and the Recipe; with them it says them', () => {
   const bare = { kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 1, threshold: 0.5, ghost: false, mode: 'path' } as PhraseParams;
   assert.equal(phraseDescription('p', bare), 'p — a mix of [[bar_005]] and [[bar_006]] as a path of single-hit changes: weight 1 is all of bar_005, 0 is all of bar_006, musical order.');
-  assert.equal(phraseRecipe(bare), 'mix_rhythm([[bar_005]], [[bar_006]], weight=1, mode="path", order="musical", seed=0)');
+  assert.ok(phrasePython(bare).includes("morph_rhythm_info(a=a, b=b, order='musical', seed=0)") && phrasePython(bare).includes("order='musical', seed=0, position=stop"));
+  assert.equal(phraseRecipeSteps(bare)[1], 'Mix them as a path of single-hit changes from the first to the second, in musical order.');
   const full = { ...bare, order: 'seeded', seed: 9 } as PhraseParams;
   assert.equal(phraseDescription('p', full), 'p — a mix of [[bar_005]] and [[bar_006]] as a path of single-hit changes: weight 1 is all of bar_005, 0 is all of bar_006, seeded order.');
-  assert.equal(phraseRecipe(full), 'mix_rhythm([[bar_005]], [[bar_006]], weight=1, mode="path", order="seeded", seed=9)');
+  assert.ok(phrasePython(full).includes("morph_rhythm_info(a=a, b=b, order='seeded', seed=9)") && phrasePython(full).includes("order='seeded', seed=9, position=stop"));
+  assert.equal(phraseRecipeSteps(full)[1], 'Mix them as a path of single-hit changes from the first to the second, in seeded order (seed 9).');
 });
 
 test('a vote mix: the two percentages are rounded and add up, the threshold has two decimals, ghost notes say off or on', () => {
@@ -51,12 +53,12 @@ test('a vote mix: the two percentages are rounded and add up, the threshold has 
   assert.equal(phraseDescription('p', vote(0.333, 0.5, false)), 'p — a mix of [[bar_005]] and [[bar_006]] by vote: 33 % bar_005 / 67 % bar_006, threshold 0.50, ghost notes off.');
 });
 
-test('ONE fork is enough for "Edited by hand", the "Bars made" section and the links; forks come in bar-number order, not text order', () => {
+test('ONE fork is enough for "Edited by hand", the Recipe step, the Python line and the links; forks come in bar-number order, not text order', () => {
   const one: PhraseParams = { ...EXTEND, overrides: { '3': 'bars/bar_009' } };
   assert.equal(phraseDescription('p', one), 'p — [[bar_005]] extended to 8 bars: building, no tempo change. Edited by hand: bar 3 is [[bar_009]].');
   assert.deepEqual(phraseLinks(one), ['bar_005', 'bar_009']);
-  assert.deepEqual(derivedSections('p', one).slice(-4), ['', '## Bars made', '', '- bar 3: [[bar_009]]']);
-  assert.ok(!derivedSections('p', EXTEND).includes('## Bars made'), 'no forks, no section');
+  assert.ok(derivedSections('p', one).includes('Bar 3 is replaced by [[bar_009]].') && derivedSections('p', one).includes('  bars[2] = bar_009()'));
+  assert.ok(!derivedSections('p', EXTEND).some((l) => /is replaced by|bars\[/.test(l)), 'no forks, no fork lines');
   const many: PhraseParams = { ...EXTEND, overrides: { '10': 'bars/bar_012', '2': 'bars/bar_011', '5': 'bars/bar_011' } };
   assert.equal(phraseDescription('p', many), 'p — [[bar_005]] extended to 8 bars: building, no tempo change. Edited by hand: bar 2 is [[bar_011]], bar 5 is [[bar_011]], bar 10 is [[bar_012]].');
   assert.deepEqual(phraseLinks(many), ['bar_005', 'bar_011', 'bar_012'], 'each note once');
@@ -125,7 +127,8 @@ test('a text without frontmatter is returned as it is; a new phrase note is fron
   const text = newPhraseNote('phrase_001', EXTEND, '{"kind": "extend"}');
   assert.equal(text, [
     '---', 'type: data', 'content_type: json', DESC, 'links:', '  - "[[bar_005]]"', '---', '',
-    DERIVED_NOTE, '', '## Description', '', 'phrase_001 — [[bar_005]] extended to 8 bars: building, no tempo change.', '', '## Recipe', '', 'extend_rhythm([[bar_005]], bars=8, style="building", tempo_change_pct=0)', '',
+    DERIVED_NOTE, '', '# Description', '', 'phrase_001 — [[bar_005]] extended to 8 bars: building, no tempo change.', '', '# Recipe', '', 'Take [[bar_005]].', 'Build it up over 8 bars.', '',
+    '# Python', '', '```python', phrasePython(EXTEND), '```', '',
     '```json', '{"kind": "extend"}', '```', '',
   ].join('\n'));
   assert.equal(fenceOf(newPhraseNote('p', EXTEND, '{}', ['made_from: "[[x]]"'])).startsWith('```json'), true);

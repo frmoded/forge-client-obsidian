@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { applyPhraseWrite, formatPhraseJson, mixNoteContent, morphNoteContent, phraseNoteContent, readPhraseKind, readPhraseNote, refreshPhraseNoteText, salvageOverrideRefusal, type PhraseParams } from './phrase-core.ts';
-import { DERIVED_NOTE, barDescription, phraseDescription, phraseLinks, phraseRecipe, refreshBarNoteText } from './phrase-notes-core.ts';
+import { DERIVED_NOTE, barDescription, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps, refreshBarNoteText } from './phrase-notes-core.ts';
 import { forkNoteContent } from './phrase-fork-core.ts';
 import { applySave, formatRhythmJson, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
 
@@ -16,20 +16,23 @@ const PATH: PhraseParams = { kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 1,
 
 // ---- the derived parts, per kind (golden) -----------------------------------------------------------------------------------------------------------------------------------------------
 
-test('Description (the sentence with wikilinks) and Recipe (the call with wikilinks), golden, for each kind', () => {
+// 2026-10-27-1020, deliberate: the Recipe is English steps and the engine call moved to the # Python block (phrase-notes-forge-shape.test.ts holds the per-kind goldens of both).
+test('Description (the sentence with wikilinks) and Recipe (English steps with wikilinks), golden, for each kind; the engine call is in the Python block', () => {
   assert.equal(phraseDescription('phrase_001', EXTEND), 'phrase_001 — [[bar_005]] extended to 8 bars: repeat with fills, slowing 20 %.');
-  assert.equal(phraseRecipe(EXTEND), 'extend_rhythm([[bar_005]], bars=8, style="repeat_with_fills", tempo_change_pct=-20)');
+  assert.deepEqual(phraseRecipeSteps(EXTEND), ['Take [[bar_005]].', 'Repeat it for 8 bars with fills, 20 % slower.']);
+  assert.ok(phrasePython(EXTEND).includes("extend_rhythm(data=base, bars=8, style='repeat_with_fills', tempo_change_pct=-20)"));
   assert.equal(phraseDescription('phrase_004', MORPH), 'phrase_004 — a morph from [[bar_007]] to [[bar_008]] in 17 bars, musical order.');
-  assert.equal(phraseRecipe(MORPH), 'morph_rhythm([[bar_007]], [[bar_008]], bars=17, order="musical", seed=0)');
+  assert.deepEqual(phraseRecipeSteps(MORPH), ['Take [[bar_007]] and [[bar_008]].', 'Morph from the first to the second over 17 bars, in musical order.']);
+  assert.ok(phrasePython(MORPH).includes("morph_rhythm(a=a, b=b, bars=17, order='musical', seed=0)"));
   assert.equal(phraseDescription('phrase_002', VOTE), 'phrase_002 — a mix of [[bar_005]] and [[bar_006]] by vote: 60 % bar_005 / 40 % bar_006, threshold 0.65, ghost notes on.');
-  assert.equal(phraseRecipe(VOTE), 'mix_rhythm([[bar_005]], [[bar_006]], weight=0.6, threshold=0.65, ghost=true)');
+  assert.deepEqual(phraseRecipeSteps(VOTE), ['Take [[bar_005]] and [[bar_006]].', 'Mix them by vote: 60 % [[bar_005]] and 40 % [[bar_006]], threshold 0.65, ghost notes on.']);
+  assert.ok(phrasePython(VOTE).includes('mix_rhythm(a=a, b=b, weight=0.6, threshold=0.65, ghost=True)'));
   assert.equal(phraseDescription('phrase_005', PATH), 'phrase_005 — a mix of [[bar_005]] and [[bar_006]] as a path of single-hit changes: weight 1 is all of bar_005, 0 is all of bar_006, musical order.');
-  assert.equal(phraseRecipe(PATH), 'mix_rhythm([[bar_005]], [[bar_006]], weight=1, mode="path", order="musical", seed=0)');
-  assert.equal(phraseRecipe({ ...EXTEND, tempo_change_pct: 0, style: 'ghost_notes', bars: 1 }), 'extend_rhythm([[bar_005]], bars=1, style="ghost_notes", tempo_change_pct=0)');
-  assert.equal(phraseRecipe({ ...MORPH, bars: 1, position: 3, order: 'seeded', seed: 7 } as PhraseParams), 'morph_rhythm([[bar_007]], [[bar_008]], bars=1, order="seeded", seed=7, position=3)');
+  assert.equal(phraseRecipeSteps(PATH)[1], 'Mix them as a path of single-hit changes from the first to the second, in musical order.');
+  assert.ok(phrasePython({ ...MORPH, bars: 1, position: 3, order: 'seeded', seed: 7 } as PhraseParams).includes("morph_rhythm(a=a, b=b, bars=1, order='seeded', seed=7, position=3)"));
 });
 
-test('forks: the links list gets the fork notes, the description says which bar is edited by hand, and a "Bars made" section lists them (only when there are overrides)', () => {
+test('forks: the links list gets the fork notes, the description says which bar is edited by hand, and each fork is a Recipe step and a Python line (only when there are overrides)', () => {
   const forked: PhraseParams = { ...MORPH, overrides: { '3': 'bars/bar_009', '10': 'bars/bar_010' } } as PhraseParams;
   assert.deepEqual(phraseLinks(forked), ['bar_007', 'bar_008', 'bar_009', 'bar_010']);
   assert.equal(phraseDescription('phrase_004', forked), 'phrase_004 — a morph from [[bar_007]] to [[bar_008]] in 17 bars, musical order. Edited by hand: bar 3 is [[bar_009]], bar 10 is [[bar_010]].');
@@ -37,8 +40,8 @@ test('forks: the links list gets the fork notes, the description says which bar 
   assert.deepEqual(phraseLinks({ ...VOTE, b: 'bar_005' }), ['bar_005'], 'a bar named twice is linked once');
   const text = morphNoteContent('phrase_004', 'bar_007', 'bar_008');
   const written = applyPhraseWrite(text, forked, 'phrase_004');
-  assert.ok(written.ok && written.text.includes('## Bars made\n\n- bar 3: [[bar_009]]\n- bar 10: [[bar_010]]\n'));
-  assert.ok(!morphNoteContent('phrase_004', 'bar_007', 'bar_008').includes('## Bars made'));
+  assert.ok(written.ok && written.text.includes('Bar 3 is replaced by [[bar_009]].\nBar 10 is replaced by [[bar_010]].\n') && written.text.includes('  bars[2] = bar_009()\n  bars[9] = bar_010()\n'));
+  assert.ok(!morphNoteContent('phrase_004', 'bar_007', 'bar_008').includes('is replaced by'));
 });
 
 // ---- the new notes ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -51,8 +54,9 @@ test('a new phrase / mix / morph note: frontmatter with description and links, t
     'links:', '  - "[[bar_007]]"', '  - "[[bar_008]]"',
     '---', '',
     DERIVED_NOTE, '',
-    '## Description', '', 'phrase_004 — a morph from [[bar_007]] to [[bar_008]] in 17 bars, musical order.', '',
-    '## Recipe', '', 'morph_rhythm([[bar_007]], [[bar_008]], bars=17, order="musical", seed=0)', '',
+    '# Description', '', 'phrase_004 — a morph from [[bar_007]] to [[bar_008]] in 17 bars, musical order.', '',
+    '# Recipe', '', 'Take [[bar_007]] and [[bar_008]].', 'Morph from the first to the second over 17 bars, in musical order.', '',
+    '# Python', '', '```python', phrasePython(MORPH), '```', '',
     '```json', formatPhraseJson(MORPH), '```', '',
   ].join('\n'));
   assert.deepEqual((readPhraseNote(morph) as { value: PhraseParams }).value, MORPH);
@@ -62,7 +66,7 @@ test('a new phrase / mix / morph note: frontmatter with description and links, t
   assert.match(extend, /\nlinks:\n {2}- "\[\[bar_005\]\]"\n---\n/);
   const mix = mixNoteContent('phrase_002', 'bar_005', 'bar_006');
   assert.equal((readPhraseNote(mix) as { value: PhraseParams }).value.kind, 'mix');
-  assert.match(mix, /## Recipe\n\nmix_rhythm\(\[\[bar_005\]\], \[\[bar_006\]\], weight=1, mode="path"/);
+  assert.match(mix, /# Recipe\n\nTake \[\[bar_005\]\] and \[\[bar_006\]\]\.\nMix them as a path of single-hit changes/);
   assert.equal(readPhraseKind(mix), 'mix');
 });
 
@@ -93,7 +97,7 @@ test('refresh keeps every other frontmatter line (read_only, anything a person a
   if (!r.ok) return;
   assert.ok(r.text.includes('read_only: false\r\ntags: [demo]\r\n'), 'the person\'s own lines stay');
   assert.ok(!/[^\r]\n/.test(r.text), 'CRLF all the way');
-  const edited = r.text.replace('musical order.\r\n\r\n## Recipe', 'MY OWN WORDS.\r\n\r\n## Recipe').replace('## Recipe\r\n\r\nmorph_rhythm', '## Recipe\r\n\r\nmy_call');
+  const edited = r.text.replace('musical order.\r\n\r\n# Recipe', 'MY OWN WORDS.\r\n\r\n# Recipe').replace('# Recipe\r\n\r\nTake', '# Recipe\r\n\r\nTake my own');
   const back = refreshPhraseNoteText(edited, 'phrase_003');
   assert.ok(back.ok && back.text === r.text, 'regenerated to what it was');
 });
@@ -115,7 +119,8 @@ test('a control-strip write rewrites the fence AND the derived parts: changing a
   assert.ok(w.ok);
   if (!w.ok) return;
   assert.match(w.text, /in 5 bars, musical order\./);
-  assert.match(w.text, /morph_rhythm\(\[\[bar_007\]\], \[\[bar_008\]\], bars=5,/);
+  assert.match(w.text, /Morph from the first to the second over 5 bars, in musical order\./);
+  assert.match(w.text, /morph_rhythm\(a=a, b=b, bars=5, order='musical', seed=0\)/);
   assert.deepEqual((readPhraseNote(w.text) as { value: PhraseParams }).value, { ...MORPH, bars: 5 });
   const same = applyPhraseWrite(w.text, { ...MORPH, bars: 5 }, 'phrase_004');
   assert.ok(same.ok && same.text === w.text, 'writing what is already there changes no byte');
@@ -206,5 +211,5 @@ test('MEASURED in the installed Obsidian 1.12.7 (app.js, dT): a property is a li
   const t = morphNoteContent('phrase_003', 'bar_005', 'bar_001', { from: 'phrase_002' });
   const front = /^---\n([\s\S]*?)\n---/.exec(t)![1];
   for (const m of front.matchAll(/^\s*(?:-|links:|made_from:|forked_from:)\s*"?(\[\[[^\]]+\]\])"?$/gm)) assert.match(m[0], /"\[\[[^\]]+\]\]"$/, 'every property link is a whole quoted value');
-  assert.match(t.slice(t.indexOf('## Description')), /\[\[bar_005\]\]/, 'the body names the bars as real links');
+  assert.match(t.slice(t.indexOf('# Description')), /\[\[bar_005\]\]/, 'the body names the bars as real links');
 });

@@ -124,7 +124,7 @@ test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026
   assert.equal(
     phraseNoteContent('phrase_001', 'bar_005'),
     '---\ntype: data\ncontent_type: json\ndescription: "phrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change."\nlinks:\n  - "[[bar_005]]"\n---\n\n'
-      + '<!-- derived from the json below; edit the controls, not this text -->\n\n## Description\n\nphrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change.\n\n## Recipe\n\nextend_rhythm([[bar_005]], bars=4, style="repeat_with_fills", tempo_change_pct=0)\n\n```json\n'
+      + '<!-- derived from the json below; edit the controls, not this text -->\n\n# Description\n\nphrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change.\n\n# Recipe\n\nTake [[bar_005]].\nRepeat it for 4 bars with fills.\n\n# Python\n\n```python\ndef compute(context):\n  base = bar_005()\n  bars = extend_rhythm(data=base, bars=4, style=\'repeat_with_fills\', tempo_change_pct=0)\n  return rhythm_bars_to_stream(bars=bars)\n```\n\n```json\n'
       + '{\n  "kind": "extend",\n  "source": "bar_005",\n  "bars": 4,\n  "style": "repeat_with_fills",\n  "tempo_change_pct": 0\n}\n```\n',
   );
 });

@@ -42,6 +42,7 @@ export function mountSentencePlan(parent: HTMLElement, ports: SentencePlanDomPor
   preview.style.display = 'none';
   const description = el('p', 'forge-sentence-plan-description');
   const recipe = el('p', 'forge-sentence-plan-recipe');
+  recipe.style.whiteSpace = 'pre-line';                 // one step per line, as the note shows them
   const path = el('p', 'forge-sentence-plan-path');
   preview.append(el('h4', 'forge-sentence-plan-heading', 'Description'), description, el('h4', 'forge-sentence-plan-heading', 'Recipe'), recipe, path);
   root.appendChild(preview);

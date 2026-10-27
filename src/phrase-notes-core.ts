@@ -1,6 +1,6 @@
 // score_first M7b (a) / design 4.12 phase B (drain 2026-10-26-1260, DEMO profile) — phrase and bar notes that READ as notes. Pure, deterministic, derived from the json (no LLM; the json stays the only parsed data):
 //   * a `links:` list in the FRONTMATTER ("[[bar_005]]" strings) and a `description` with [[wikilinks]]: Obsidian indexes links in properties, so backlinks and the graph know which bars a phrase reads;
-//   * for a PHRASE note, derived sections above the json fence (## Description, ## Recipe, ## Bars made), regenerated on every plugin write and by "Refresh note links": a hand edit of them is overwritten;
+//   * for a PHRASE note, derived sections above the json fence in the Forge shape (# Description, # Recipe as English steps, # Python as a fenced block; 2026-10-27-1020), regenerated on every plugin write and by "Refresh note links": a hand edit of them is overwritten;
 //   * for a BAR note, FRONTMATTER only (a description that names the hits and the tempo, a fork's `forked_from` as a wikilink); the body stays exactly one json fence (the Beat Box requires it).
 // Runtime imports from phrase-core.ts are NOT allowed here (phrase-core imports this file): types only.
 import type { PhraseParams } from './phrase-core.ts';
@@ -36,20 +36,64 @@ export function phraseDescription(name: string, p: PhraseParams): string {
   return f.length > 0 ? `${sentence} Edited by hand: ${f.map((x) => `bar ${x.bar} is ${link(x.note)}`).join(', ')}.` : sentence;
 }
 
-/** The engine call the json stands for, as plain text with wikilinks (a code span would hide the links from Obsidian). */
-export function phraseRecipe(p: PhraseParams): string {
-  if (p.kind === 'extend') return `extend_rhythm(${link(p.source)}, bars=${p.bars}, style=${q(p.style)}, tempo_change_pct=${p.tempo_change_pct})`;
-  if (p.kind === 'morph') return `morph_rhythm(${link(p.a)}, ${link(p.b)}, bars=${p.bars}, order=${q(p.order)}, seed=${p.seed}${p.position !== undefined ? `, position=${p.position}` : ''})`;
-  if (p.mode === 'path') return `mix_rhythm(${link(p.a)}, ${link(p.b)}, weight=${p.weight}, mode="path", order=${q(p.order ?? 'musical')}, seed=${p.seed ?? 0})`;
-  return `mix_rhythm(${link(p.a)}, ${link(p.b)}, weight=${p.weight}, threshold=${p.threshold}, ghost=${p.ghost})`;
+const orderWords = (order: string, seed: number | undefined): string => (order === 'seeded' ? `seeded order (seed ${seed ?? 0})` : `${order} order`);
+
+/** The Recipe: what the json asks for as English steps, one per line, the bars as wikilinks (2026-10-27-1020; the same layer a Forge note's # Recipe is). Derived, never read back. A fork override is a step of its own. */
+export function phraseRecipeSteps(p: PhraseParams): string[] {
+  const steps: string[] = [];
+  if (p.kind === 'extend') {
+    const tempo = p.tempo_change_pct < 0 ? `, ${-p.tempo_change_pct} % slower` : p.tempo_change_pct > 0 ? `, ${p.tempo_change_pct} % faster` : '';
+    const how = p.style === 'building' ? `Build it up over ${p.bars} bars` : `Repeat it for ${p.bars} bars with ${p.style === 'ghost_notes' ? 'ghost notes' : 'fills'}`;
+    steps.push(`Take ${link(p.source)}.`, `${how}${tempo}.`);
+  } else if (p.kind === 'morph') {
+    steps.push(`Take ${link(p.a)} and ${link(p.b)}.`,
+      p.bars === 1 ? `Morph from the first to the second and keep the bar at position ${p.position ?? 0}, in ${orderWords(p.order, p.seed)}.` : `Morph from the first to the second over ${p.bars} bars, in ${orderWords(p.order, p.seed)}.`);
+  } else if (p.mode === 'path') {
+    steps.push(`Take ${link(p.a)} and ${link(p.b)}.`, `Mix them as a path of single-hit changes from the first to the second, in ${orderWords(p.order ?? 'musical', p.seed)}.`,
+      `Keep the state at weight ${p.weight} (1 is all of ${link(p.a)}, 0 is all of ${link(p.b)}).`);
+  } else {
+    steps.push(`Take ${link(p.a)} and ${link(p.b)}.`,
+      `Mix them by vote: ${Math.round(p.weight * 100)} % ${link(p.a)} and ${Math.round((1 - p.weight) * 100)} % ${link(p.b)}, threshold ${p.threshold.toFixed(2)}, ghost notes ${p.ghost ? 'on' : 'off'}.`);
+  }
+  for (const f of forks(p)) steps.push(`Bar ${f.bar} is replaced by ${link(f.note)}.`);
+  return steps;
 }
 
-/** The derived body above the fence (no fence, no trailing blank line). */
+const pyStr = (s: string): string => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+/** A bar read the way a Forge note reads a data note: call it by its name (music-theory/rhythm_data/rhythm_extended_fills.md: `base = rhythm_pattern_straight_rock()`). A name that is not a Python identifier goes through globals(). */
+const callNote = (name: string): string => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? `${name}()` : `globals()[${pyStr(name)}]()`);
+
+/** The Python facet: `def compute(context):` calling the engine functions of forge/music/lib.py with the json's own arguments (extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream; signatures grep-verified
+ *  2026-10-27-1020). A vote mix is mix_rhythm; a PATH mix is one bar of the morph path, at the stop pathStopOf gives (the weight in millionths, integer arithmetic, the rule phrase-core.ts and the engine glue share). Forks replace their bar
+ *  by index. Text only: the plugin draws the Score from the json through its own engine glue, never by running this. */
+export function phrasePython(p: PhraseParams): string {
+  const out: string[] = ['def compute(context):'];
+  if (p.kind === 'extend') {
+    out.push(`  base = ${callNote(p.source)}`, `  bars = extend_rhythm(data=base, bars=${p.bars}, style=${pyStr(p.style)}, tempo_change_pct=${p.tempo_change_pct})`);
+  } else if (p.kind === 'morph') {
+    out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`);
+    out.push(p.bars === 1
+      ? `  bars = [morph_rhythm(a=a, b=b, bars=1, order=${pyStr(p.order)}, seed=${p.seed}, position=${p.position ?? 0})]`
+      : `  bars = morph_rhythm(a=a, b=b, bars=${p.bars}, order=${pyStr(p.order)}, seed=${p.seed})`);
+  } else if (p.mode === 'path') {
+    const order = pyStr(p.order ?? 'musical'), seed = p.seed ?? 0;
+    const millionths = Math.round(Math.min(1, Math.max(0, p.weight)) * 1e6);
+    out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`, `  changes = morph_rhythm_info(a=a, b=b, order=${order}, seed=${seed})['d']`,
+      `  stop = min(changes, max(0, ((1000000 - ${millionths}) * changes + 500000) // 1000000))`,
+      `  bar = morph_rhythm(a=a, b=b, bars=1, order=${order}, seed=${seed}, position=stop)`);
+    return [...out, '  return rhythm_bars_to_stream(bars=[bar])'].join('\n');
+  } else {
+    out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`, `  mixed = mix_rhythm(a=a, b=b, weight=${p.weight}, threshold=${p.threshold}, ghost=${p.ghost ? 'True' : 'False'})`);
+    return [...out, '  return rhythm_bars_to_stream(bars=[mixed])'].join('\n');
+  }
+  for (const f of forks(p)) out.push(`  bars[${f.bar - 1}] = ${callNote(f.note)}`);
+  out.push('  return rhythm_bars_to_stream(bars=bars)');
+  return out.join('\n');
+}
+
+/** The derived body above the fence (no json fence, no trailing blank line): the comment, then the three Forge layers. */
 export function derivedSections(name: string, p: PhraseParams): string[] {
-  const out = [DERIVED_NOTE, '', '## Description', '', phraseDescription(name, p), '', '## Recipe', '', phraseRecipe(p)];
-  const f = forks(p);
-  if (f.length > 0) out.push('', '## Bars made', '', ...f.map((x) => `- bar ${x.bar}: ${link(x.note)}`));
-  return out;
+  return [DERIVED_NOTE, '', '# Description', '', phraseDescription(name, p), '', '# Recipe', '', ...phraseRecipeSteps(p), '', '# Python', '', '```python', ...phrasePython(p).split('\n'), '```'];   // one array element per line: the caller joins with the note's own line ending (CRLF too)
 }
 
 // ---- the json fence of a phrase note -------------------------------------------------------------------------------------------------------------------------------------------------

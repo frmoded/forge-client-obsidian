@@ -140,7 +140,7 @@ test('PLAN shows what Create would write (the Description and the Recipe, the na
   assert.deepEqual(view, {
     ok: true, kind: 'extend', name: 'phrase_002', path: 'phrases/phrase_002.md',
     description: 'phrase_002 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change.',
-    recipe: 'extend_rhythm([[bar_005]], bars=4, style="repeat_with_fills", tempo_change_pct=0)',
+    recipe: 'Take [[bar_005]].\nRepeat it for 4 bars with fills.',
   });
   assert.deepEqual(w.created, [], 'Plan writes nothing');
   assert.deepEqual(w.lines, ['[forge-plan] asked "extend bar_005" -> extend']);
@@ -170,7 +170,8 @@ test('CREATE writes the SAME note the controls would write for that kind (byte f
   const w = world({ json: { ok: true, plan: { kind: 'extend', bar: 'bar_005', bars: 8, style: 'building', tempo_change_pct: -10 } } });
   await w.planner.plan('x'); await w.planner.create();
   const text = w.created[0][1];
-  assert.match(text, /extend_rhythm\(\[\[bar_005\]\], bars=8, style="building", tempo_change_pct=-10\)/);
+  assert.match(text, /\nTake \[\[bar_005\]\]\.\nBuild it up over 8 bars, 10 % slower\.\n/);
+  assert.match(text, /extend_rhythm\(data=base, bars=8, style='building', tempo_change_pct=-10\)/);
   const json = JSON.parse(text.slice(text.indexOf('```json') + 8, text.lastIndexOf('```')));
   assert.equal(validatePhrase(json).ok, true);
 });
@@ -217,7 +218,7 @@ test('a newer Plan replaces the plan: Create writes what the LAST successful Pla
   const lines: string[] = [];
   const ports: SentencePlannerPorts<string> = {
     activePath: () => null, folderExists: () => true, createFolder: async () => {}, listPhraseBasenames: () => [], exists: () => false,
-    create: async (p, c) => { lines.push(`${p}|${c.includes('morph_rhythm') ? 'morph' : 'extend'}`); return p; }, open: async () => {}, notify: () => {}, isAlreadyExists: () => false,
+    create: async (p, c) => { lines.push(`${p}|${c.includes('morph_rhythm(') ? 'morph' : 'extend'}`); return p; }, open: async () => {}, notify: () => {}, isAlreadyExists: () => false,
     listBarBasenames: () => BARS, trace: () => {}, ownKey: () => undefined,
     ask: () => new Promise((res) => { answers.push(res); }),
   };

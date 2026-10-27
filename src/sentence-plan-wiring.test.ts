@@ -127,12 +127,13 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(req.headers.Authorization, 'Bearer tok-123');
       assert.deepEqual(JSON.parse(req.body), { sentence: 'extend bar_005 to 8 bars', bars: ['bar_001', 'bar_005'], phrases: ['phrase_001'] });
       assert.equal(w.q('.forge-sentence-plan-path').textContent, 'Create will make phrases/phrase_002.md (a extend).');
-      assert.match(w.q('.forge-sentence-plan-recipe').textContent, /^extend_rhythm\(\[\[bar_005\]\], bars=8, style="repeat_with_fills", tempo_change_pct=0\)$/);
+      assert.equal(w.q('.forge-sentence-plan-recipe').textContent, 'Take [[bar_005]].\nRepeat it for 8 bars with fills.');
       assert.deepEqual(w.created, [], 'Plan writes nothing');
       w.q('.forge-sentence-plan-create').click(); await w.flush();
       assert.equal(w.created.length, 1);
       assert.equal(w.created[0][0], 'phrases/phrase_002.md');
-      assert.match(w.created[0][1], /extend_rhythm\(\[\[bar_005\]\], bars=8,/);
+      assert.match(w.created[0][1], /\n# Recipe\n\nTake \[\[bar_005\]\]\.\nRepeat it for 8 bars with fills\.\n/);
+      assert.match(w.created[0][1], /extend_rhythm\(data=base, bars=8, style='repeat_with_fills', tempo_change_pct=0\)/);
       assert.ok(w.created[0][1].startsWith(phraseNoteContent('phrase_002', 'bar_005').split('\n').slice(0, 3).join('\n')), 'same frontmatter head as the controls\' note');
       assert.deepEqual(w.leaves.flatMap((l) => l.states), [{ type: PHRASE_VIEW_TYPE, active: true, state: { file: 'phrases/phrase_002.md' } }], 'opened as the Score');
       assert.equal(w.modals[0].closed, true);
