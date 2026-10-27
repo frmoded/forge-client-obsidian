@@ -1,6 +1,7 @@
 // WALL-CLOCK ONLY: nothing here uses virtual time (no Emulation.setVirtualTimePolicy, no fake timers); every number a proof reports is a real performance.now() in a real Chrome.
 // Tiny Chrome DevTools helper: serve a directory + a page, drive headless Chrome, evaluate, hover, screenshot.
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import { spawn } from 'node:child_process';
+import { startReaper } from './reaper.mjs';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function openPage({ dir, width = 900, height = 1200, pageHtml, routes = {} }) {
   const srv = http.createServer(async (q, r) => {
@@ -12,6 +13,13 @@ export async function openPage({ dir, width = 900, height = 1200, pageHtml, rout
   await new Promise((ok) => srv.listen(0, '127.0.0.1', ok));
   const port = 9300 + Math.floor(Math.random() * 600); const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-'));
   const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--disable-gpu', '--no-sandbox', '--hide-scrollbars=false', `--user-data-dir=${prof}`, `--remote-debugging-port=${port}`, `--window-size=${width},${height}`, 'about:blank'], { stdio: 'ignore' });
+  // 2026-10-27-0715: Chrome is its own process group (killed whole: its helpers go with it) and is registered with a reaper SIDECAR together with its profile directory, so a script killed with -9, by Ctrl-C or by a closed terminal no longer leaves a
+  // headless Chrome (11 processes, about a gigabyte) and a temp profile behind (measured 2026-10-27). Signals and `exit` are handled here; SIGKILL, which no handler can see, is the sidecar's.
+  const reaper = startReaper(); reaper.add(chrome.pid); reaper.addPath(prof);
+  const killChrome = () => { try { process.kill(-chrome.pid, 'SIGKILL'); } catch { /* gone */ } try { chrome.kill('SIGKILL'); } catch { /* gone */ } };
+  const dropProfile = () => { try { fs.rmSync(prof, { recursive: true, force: true }); } catch { /* the temp dir is cleaned by the system anyway */ } };
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(sig, () => { killChrome(); dropProfile(); process.exit(130); });
+  process.once('exit', killChrome);
   let targets = null; for (let i = 0; i < 60 && !targets; i++) { try { targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); } catch { await sleep(250); } }
   const ws = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl); await new Promise((ok) => ws.addEventListener('open', ok));
   let id = 0; const pending = new Map(); ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
@@ -35,7 +43,7 @@ export async function openPage({ dir, width = 900, height = 1200, pageHtml, rout
     ev, send, sleep,
     hover: async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(150); },
     shot: async (file, clip) => { const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) }); fs.writeFileSync(file, Buffer.from(r.result.data, 'base64')); },
-    close: () => { try { ws.close(); } catch {} chrome.kill('SIGKILL'); srv.close(); try { fs.rmSync(prof, { recursive: true, force: true }); } catch {} },
+    close: () => { try { ws.close(); } catch {} killChrome(); srv.close(); dropProfile(); reaper.remove(chrome.pid); reaper.stop(); },
   };
   return api;
 }

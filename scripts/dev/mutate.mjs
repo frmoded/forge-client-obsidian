@@ -13,7 +13,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
+import { startReaper } from './reaper.mjs';
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, buildMap, selectTests, hashTexts, parseTapSummary,
   orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage,
@@ -194,20 +196,29 @@ function buildBase(root, scratch) {
 const liveGroups = new Set();
 const killGroup = (pid) => { try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ } };
 const killAll = () => { for (const pid of liveGroups) killGroup(pid); };
+// 2026-10-27-0715: a runner killed with -9 (or whose terminal closes) used to leave its `node --test` groups running for ever (a hung mutant at 100% CPU, --test-timeout=0). A signal handler cannot catch SIGKILL, so main() starts a reaper
+// SIDECAR (reaper.mjs: its own session, a pipe on its stdin) that kills every registered group, and removes the scratch directory, when this process is gone for ANY reason. Until main() starts it, registering is a no-op.
+let reaper = { add() {}, remove() {}, addPath() {}, removePath() {}, stop() {} };
+/** What an EARLIER killed run left behind (orphaned test groups, stale scratch directories): scripts/dev/reap.sh, quiet, orphans only (parent pid 1, older than a minute). Never fails the run. */
+const sweepLeftovers = () => { if (process.env.FORGE_REAP !== '1') return;       // OPT-IN: it sweeps shared temp space by name, which nothing should do unasked (run it by hand: bash scripts/dev/reap.sh --dry-run)
+  try { execFileSync('bash', [path.join(path.dirname(fileURLToPath(import.meta.url)), 'reap.sh'), '--quiet'], { stdio: 'ignore', timeout: 30_000 }); } catch { /* a broom that cannot run is not a reason to stop */ } };
+/** NODE_OPTIONS for a test child with a heap cap (a runaway mutant is killed by node at the cap instead of eating the machine); a cap already in NODE_OPTIONS wins. FORGE_TEST_HEAP_MB overrides the 2048. */
+export const withHeapCap = (nodeOptions, mb = Number(process.env.FORGE_TEST_HEAP_MB) || 2048) => (/--max-old-space-size/.test(nodeOptions ?? '') ? nodeOptions : `${nodeOptions ? `${nodeOptions} ` : ''}--max-old-space-size=${mb}`);
 
 /** Start one test file in its own `node --test` process (its own process group, so a hang or a spawned child can be killed whole). Returns { child, promise }. */
 function startOne(cwd, file) {
   // NODE_TEST_CONTEXT is how a test file knows it is a child of a test runner; a tool that runs INSIDE `npm test` (its own tests) must not pass it on, or the runner it starts prints no summary
-  const env = { ...process.env, FORCE_COLOR: '0', NODE_NO_WARNINGS: '1', NO_COLOR: '1' };
+  const env = { ...process.env, FORCE_COLOR: '0', NODE_NO_WARNINGS: '1', NO_COLOR: '1', NODE_OPTIONS: withHeapCap(process.env.NODE_OPTIONS) };
   delete env.NODE_TEST_CONTEXT;
   const t0 = Date.now();
   const child = spawn(process.execPath, ['--test', '--test-reporter=tap', file], { cwd, detached: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
   liveGroups.add(child.pid);
+  reaper.add(child.pid);
   let out = '';
   const take = (d) => { out += d; if (out.length > 300_000) out = out.slice(-200_000); };
   child.stdout.on('data', take); child.stderr.on('data', take);
   const promise = new Promise((resolve) => {
-    const done = (status, signal) => { killGroup(child.pid); liveGroups.delete(child.pid); resolve({ file, status: status ?? (signal ? 1 : 0), signal, secs: (Date.now() - t0) / 1000, output: out, summary: parseTapSummary(out) }); };
+    const done = (status, signal) => { killGroup(child.pid); liveGroups.delete(child.pid); reaper.remove(child.pid); resolve({ file, status: status ?? (signal ? 1 : 0), signal, secs: (Date.now() - t0) / 1000, output: out, summary: parseTapSummary(out) }); };
     child.on('close', done);
     child.on('error', (e) => { out += String(e); done(1, null); });
   });
@@ -318,7 +329,12 @@ export async function main(argv) {
   const scratch = a.scratch ?? fs.mkdtempSync(path.join(os.tmpdir(), 'forge-mutate-'));
   fs.mkdirSync(scratch, { recursive: true });
   const cleanup = () => { if (!a.keep) try { fs.rmSync(scratch, { recursive: true, force: true }); } catch { /* the temp dir is cleaned by the system anyway */ } };
-  for (const sig of ['SIGINT', 'SIGTERM']) process.once(sig, () => { killAll(); cleanup(); process.exit(130); });
+  sweepLeftovers();
+  reaper = startReaper();
+  if (!a.keep) reaper.addPath(scratch);                                    // removed by the sidecar too if this process dies by SIGKILL
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(sig, () => { killAll(); cleanup(); process.exit(130); });
+  process.once('exit', killAll);                                           // any other way out of the process: no group outlives it
+  process.once('uncaughtException', (e) => { console.error(e); killAll(); cleanup(); process.exit(1); });
   try {
     const base = buildBase(root, scratch);
     const durations = loadDurations(root);
@@ -428,7 +444,7 @@ export async function main(argv) {
     if (treeUnchanged && !treeUnchanged.ok) return 3;
     if (baselineRed.length > 0) return 2;
     return s.unexplained > 0 && !a.noFail ? 1 : 0;
-  } finally { cleanup(); }
+  } finally { cleanup(); sweepLeftovers(); }
 }
 
 if (import.meta.url === new URL(process.argv[1], 'file:').href || process.argv[1]?.endsWith('mutate.mjs')) {

@@ -69,6 +69,26 @@ cleanup() {
   done
   rm -rf "$LEAN" "$WORK" 2>/dev/null || true
 }
+# 2026-10-27-0715: an interrupted matrix used to leave work behind (measured: Ctrl-C left 8 registered git worktrees; SIGTERM to the script alone left 21 of its 65 processes running: the legs, `npm test`, node test files).
+# INT / TERM / HUP now stop the legs and everything they started (children first, TERM, then KILL for what ignored it), then run the same cleanup as a normal end, and exit 130. A SIGKILL of the script itself cannot be handled:
+# scripts/dev/reap.sh (called below at the start, and by hand) clears what such a kill leaves.
+pids=()
+kill_tree() { local sig="$1" p="$2" c; for c in $(pgrep -P "$p" 2>/dev/null); do kill_tree "$sig" "$c"; done; kill "-$sig" "$p" 2>/dev/null || true; }
+on_signal() {
+  trap - INT TERM HUP
+  red "interrupted: stopping the legs and removing the worktrees"
+  local p
+  for p in "${pids[@]:-}"; do [ -n "$p" ] && kill_tree TERM "$p"; done
+  sleep 1
+  for p in "${pids[@]:-}"; do [ -n "$p" ] && kill_tree KILL "$p"; done
+  cleanup
+  exit 130
+}
+trap on_signal INT TERM HUP
+REAP="$(cd "$(dirname "$0")" && pwd)/dev/reap.sh"
+# The broom is OPT-IN here (FORGE_REAP=1): it sweeps shared temp space by name, which nothing should do unasked. Run it by hand: bash scripts/dev/reap.sh --dry-run
+reap_leftovers() { [ "${FORGE_REAP:-0}" = "1" ] && [ -f "$REAP" ] && bash "$REAP" --quiet 2>/dev/null || true; }
+reap_leftovers                                   # what an EARLIER killed run left (orphaned test groups, stale worktrees): quiet, orphans only
 step() { echo; echo "== $* ($(( $(date +%s) - T0 ))s)"; }
 
 # ---- 0. preconditions: loud, before anything is built --------------------------------------------------------------------------------------------------------------
@@ -248,4 +268,5 @@ if [ "${KEEP:-0}" != "1" ]; then
   mkdir -p "${LOGKEEP:-/tmp}/drain-matrix-logs" && cp -R "$LOGDIR"/. "${LOGKEEP:-/tmp}/drain-matrix-logs/" 2>/dev/null && echo "  logs copied to ${LOGKEEP:-/tmp}/drain-matrix-logs"
 fi
 cleanup
+reap_leftovers
 exit "$FAILED"
