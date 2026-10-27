@@ -51,6 +51,8 @@ export interface ScoreFirstHooks {
   openRhythmNote(file: TFile): Promise<void>;
   /** 2026-10-26-1250 (M12): keep this leaf showing this (bar) note as text, so the Beat Box default view does not swap the notes pane into an editor. Absent = nothing is marked. */
   markRhythmText?(leaf: WorkspaceLeaf, path: string): void;
+  /** 2026-10-26-1800: hold / release a leaf as reading text for the Beat Box default view (the pair's notes pane). */
+  holdRhythmText?(leaf: WorkspaceLeaf, on: boolean): void;
 }
 
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {
@@ -283,6 +285,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         pathOf: (leaf) => { const f = (leaf.getViewState().state as { file?: unknown } | undefined)?.file; return typeof f === 'string' ? f : null; },
         leafCount: () => liveLeaves().size,
         idOf: (leaf) => String((leaf as unknown as { id?: unknown }).id ?? '?'),
+        isReading: (leaf) => (leaf.getViewState().state as { mode?: unknown } | undefined)?.mode === 'preview',
+        hold: (leaf, on) => { router.hold(leaf, on); hooks.holdRhythmText?.(leaf, on); },      // BOTH default-view routers: a wikilink click in the notes pane must stay a reading view
       });
       plugin.registerEvent(app.workspace.on('layout-change', () => linker.sweep()));
       // 2026-10-26-1270 (M13): when the workspace says something moved, see whether the PERSON navigated a notes pane (a wikilink click in the Recipe, a backlink): the Score lights the bars that note contributed. A show we made

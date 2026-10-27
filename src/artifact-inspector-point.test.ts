@@ -168,3 +168,25 @@ test('the box edges count as inside (all four), one pixel beyond does not', () =
   for (const [x, y] of [[0, 0], [100, 0], [0, 60], [100, 60]]) { r.layer.pin(null); r.click(r.svg, x, y); assert.equal(r.layer.pinnedId(), 'ph_bar_1', `${x},${y}`); }
   for (const [x, y] of [[-1, 30], [101, 30], [50, -1], [50, 61]]) { r.layer.pin('ph_bar_2'); r.click(r.svg, x, y); assert.equal(r.layer.pinnedId(), null, `${x},${y}`); }
 });
+
+// 2026-10-26-1800 (item 1, CCQA smoke 7 finding 2): the Score's player controls (play/pause, the zoom buttons) live INSIDE the inspector root. A click on one used to count as "empty space" and release the pin
+// (`[forge-pin] click midi-player -> none (not on a bar)`), which sent the notes pane home the moment the person pressed play. A click on a control is not a pin gesture: ignored, pin and pane kept.
+test('2026-10-26-1800: a click on the player (play/pause), on a zoom button, or on anything inside either keeps the pin and says why; Esc and a click on empty Score space still let go', () => {
+  const lines: string[] = [];
+  const r = rig({ pointIds: IDS, trace: (l) => lines.push(l) });
+  const doc = r.root.ownerDocument;
+  const player = doc.createElement('midi-player'); r.root.appendChild(player);
+  const inner = doc.createElement('span'); player.appendChild(inner);
+  const bar = doc.createElement('div'); bar.className = 'forge-zoom-bar'; r.root.appendChild(bar);
+  const zoomIn = doc.createElement('button'); zoomIn.className = 'forge-zoom-button'; bar.appendChild(zoomIn);
+  const zoomLabel = doc.createElement('span'); zoomIn.appendChild(zoomLabel);
+  r.layer.pin('ph_bar_2');
+  for (const target of [player, inner, zoomIn, zoomLabel, bar]) { r.click(target, 150, 30); assert.equal(r.layer.pinnedId(), 'ph_bar_2', `a click on ${(target as any).tagName} keeps the pin`); }
+  assert.deepEqual(r.pins, ['ph_bar_2'], 'no release, no re-pin: the notes pane never hears of the click');
+  assert.match(lines[0], /^\[forge-pin\] click midi-player -> ignored \(a player control, the pin is kept\)$/);
+  r.click(r.svg, 150, 200);                                  // empty Score space outside every bar and outside the player: still lets go
+  assert.equal(r.layer.pinnedId(), null);
+  r.layer.pin('ph_bar_3');
+  r.root.dispatchEvent(new (r.root.ownerDocument.defaultView as any).KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(r.layer.pinnedId(), null, 'Esc still releases');
+});

@@ -399,6 +399,8 @@ export interface RhythmEditHandle {
   openRhythmNote(file: TFile, from?: WorkspaceLeaf | null): Promise<void>;
   /** 2026-10-26-1250 (M12): keep this leaf showing this note as TEXT (a person's "Open as JSON"): the Beat Box default view leaves it alone. The notes pane beside a Score shows bar notes this way. */
   markAsText(leaf: WorkspaceLeaf, path: string): void;
+  /** 2026-10-26-1800: hold (or release) a leaf as reading text for the Beat Box default view whatever it navigates to: the pair's notes pane. */
+  holdAsText(leaf: WorkspaceLeaf, on: boolean): void;
 }
 
 export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, 'isDefaultViewEnabled' | 'createNewNote' | 'toggleEdgesPanel'>): RhythmEditHandle {
@@ -544,5 +546,5 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
       if (leaf.view instanceof RhythmScoreView) leaf.view.stopAudio();
     }
   });
-  return { openRhythmNote: (file: TFile, from?: WorkspaceLeaf | null) => openRhythmEditor(app, file, hooks, from), markAsText: (leaf: WorkspaceLeaf, path: string) => defaultView.setMark(leaf, path, 'markdown', 'plugin') };
+  return { openRhythmNote: (file: TFile, from?: WorkspaceLeaf | null) => openRhythmEditor(app, file, hooks, from), markAsText: (leaf: WorkspaceLeaf, path: string) => defaultView.setMark(leaf, path, 'markdown', 'plugin'), holdAsText: (leaf: WorkspaceLeaf, on: boolean) => defaultView.hold(leaf, on) };
 }

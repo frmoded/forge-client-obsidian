@@ -238,3 +238,37 @@ test('an event fired INSIDE the Score\'s own show (Obsidian fires file-open whil
   await w.linker.navigate(w.score, 'bars/bar_008');
   assert.deepEqual(heard, []);
 });
+
+// 2026-10-26-1800 (item 2): a wikilink clicked in the notes pane opens the target as the READING view (the same show the Score uses), the pair and the listeners (the strip's lights) as before; a pane that already
+// reads is not touched; and the notes pane is held for the default-view routers for the life of the pair (released when the pair is dropped).
+test('2026-10-26-1800: a person\'s navigation that left the notes pane in an editing mode is shown again as the reading view, once, without an echo; a pane that already reads is left alone', async () => {
+  const w = world();
+  const modes = new Map<Leaf, 'preview' | 'source'>();
+  const shows: Array<{ leaf: Leaf; path: string }> = [];
+  const held: Array<[Leaf, boolean]> = [];
+  const lines: string[] = [];
+  const alive = new Set<Leaf>(); const shown = new Map<Leaf, string>();
+  const score: Leaf = { id: 'score' }; alive.add(score);
+  const linker = createPaneLinker<Leaf>({
+    openBeside: async (_s, p) => { const l = { id: 'notes' }; alive.add(l); shown.set(l, p); modes.set(l, 'preview'); return l; },
+    show: async (l, p) => { shows.push({ leaf: l, path: p }); shown.set(l, p); modes.set(l, 'preview'); },
+    alive: (l) => alive.has(l), focus: () => {}, trace: (l) => lines.push(l), pathOf: (l) => shown.get(l) ?? null,
+    isReading: (l) => modes.get(l) === 'preview', hold: (l, on) => { held.push([l, on]); },
+  });
+  await linker.open(score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
+  const notes = [...alive].find((l) => l.id === 'notes')!;
+  assert.deepEqual(held, [[notes, true]], 'held from the moment it is made');
+  const heard: string[] = []; linker.onNotesNavigated(score, (p) => heard.push(p));
+  shown.set(notes, 'bars/bar_008.md'); modes.set(notes, 'source');              // the person clicked [[bar_008]] and Obsidian opened it for editing
+  linker.checkNotes(); linker.checkNotes();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(shows, [{ leaf: notes, path: 'bars/bar_008.md' }], 'shown again as reading, once');
+  assert.deepEqual(heard, ['bars/bar_008.md'], 'the strip still hears it once');
+  linker.checkNotes();
+  assert.equal(shows.length, 1, 'the show we made is not the person\'s navigation: no echo, no second show');
+  shown.set(notes, 'bars/bar_009.md');                                          // a link that kept the reading mode
+  linker.checkNotes();
+  assert.equal(shows.length, 1, 'already reading: not touched'); assert.deepEqual(heard, ['bars/bar_008.md', 'bars/bar_009.md']);
+  alive.delete(score); linker.sweep(true);
+  assert.deepEqual(held.at(-1), [notes, false], 'the pair is gone: the pane is an ordinary leaf again');
+});

@@ -53,7 +53,8 @@ export type DefaultViewReason =
   | 'prefer-markdown'
   | 'invalid-rhythm'
   | 'stale'
-  | 'swap-failed';
+  | 'swap-failed'
+  | 'held';
 
 export interface DefaultViewDecision { swap: boolean; reason: DefaultViewReason; target?: SwapTarget }
 
@@ -98,6 +99,8 @@ export interface DefaultViewController<K extends object> {
   evaluate(leaf: K): Promise<DefaultViewReason>;
   /** An explicit mode choice for this leaf + file: JSON → 'markdown', Score → 'score', Beat Box → null (clears). */
   setMark(leaf: K, path: string, mark: ModeMark | null, by?: 'person' | 'plugin'): void;
+  /** 2026-10-26-1800: a HELD leaf (the pair's notes pane) is reading text whatever it navigates to: never swapped, never read, no evidence line. */
+  hold(leaf: K, on: boolean): void;
 }
 
 export function createDefaultViewController<K extends object>(deps: DefaultViewDeps<K>): DefaultViewController<K> {
@@ -106,6 +109,7 @@ export function createDefaultViewController<K extends object>(deps: DefaultViewD
   const markBy = new WeakMap<K, 'person' | 'plugin'>();          // who set the leaf's mark: only the evidence line differs
   const said = new WeakMap<K, string>();
   const lastTarget = new WeakMap<K, SwapTarget>();
+  const held = new WeakSet<K>();
 
   async function evaluate(leaf: K): Promise<DefaultViewReason> {
     const reason = await decide(leaf);
@@ -123,6 +127,7 @@ export function createDefaultViewController<K extends object>(deps: DefaultViewD
   }
 
   async function decide(leaf: K): Promise<DefaultViewReason> {
+    if (held.has(leaf)) return 'held';
     const info = deps.describe(leaf);
     if (!info) return 'not-markdown-view';
     const input = (bodyIsRhythm: boolean | null, current: LeafInfo): DefaultViewInput => ({
@@ -164,6 +169,7 @@ export function createDefaultViewController<K extends object>(deps: DefaultViewD
 
   return {
     evaluate,
+    hold: (leaf, on) => { if (on) held.add(leaf); else held.delete(leaf); },
     setMark: (leaf, path, mark, by = 'person') => { if (mark === null) { marks.clear(leaf); markBy.delete(leaf); } else { marks.set(leaf, path, mark); markBy.set(leaf, by); } },
   };
 }

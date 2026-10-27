@@ -189,7 +189,15 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     }
     return best;
   };
+  // 2026-10-26-1800: the Score's player (play/pause) and zoom buttons sit inside the root. A click on one is not a pin gesture: it must not release the pin (and so send the notes pane home).
+  const CONTROL = 'midi-player, .forge-midi-player, .forge-zoom-bar, .forge-zoom-button, button';
+  const isPlayerControl = (t: EventTarget | null): boolean => {
+    const el = (t as Node | null)?.nodeType === 1 ? (t as Element) : null;
+    const hit = el?.closest?.(CONTROL) ?? null;
+    return hit !== null && hit !== root && root.contains(hit);
+  };
   const onClick = (e: Event) => {
+    if (isPlayerControl(e.target)) { opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (a player control, the pin is kept)`); return; }
     const drawn = mappedAncestor(root, map, e.target);
     const el = drawn ?? boxAt(e);                         // the unpainted part of a bar has the svg root as its target: the point decides
     setPinned(el ? el.id : null);                          // a click on empty space inside the root (and in no bar's box) unpins

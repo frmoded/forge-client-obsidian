@@ -78,6 +78,10 @@ export interface PaneLinkerPorts<L> {
   /** Evidence for the "pair closed" line: how many leaves the workspace lists, and a leaf's id. */
   leafCount?(): number;
   idOf?(leaf: L): string;
+  /** 2026-10-26-1800: does the pane show its note as the READING view? A link the person clicked in the notes pane may open its target for editing: the pair shows it again as the reading view. Absent = never re-shown. */
+  isReading?(leaf: L): boolean;
+  /** 2026-10-26-1800: the notes pane is HELD as reading text for the default-view routers (they would turn a navigated note into its Score / Beat Box) from the moment it is made until the pair is dropped. */
+  hold?(leaf: L, on: boolean): void;
 }
 
 /** A pair is dropped only when a pane is still missing this long after it was first seen missing: one layout-change never closes it. */
@@ -135,6 +139,7 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
       let notes: L;
       try { notes = await ports.openBeside(score, home); } catch (e) { ports.trace(`[forge-panes] could not open the notes pane: ${message(e)}`); return 'failed'; }
       pairs.set(score, { notes, scorePath, home, shown: home, want: home, reason: 'opened', busy: false, running: Promise.resolve(), missingSince: null });
+      try { ports.hold?.(notes, true); } catch (e) { ports.trace(`[forge-panes] could not hold the notes pane: ${message(e)}`); }
       ports.trace(`[forge-panes] opened pair (score ${scorePath}, notes ${home})`);
       return 'opened';
     },
@@ -160,6 +165,14 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
         if (now === null || now === pair.shown) continue;
         pair.shown = now; pair.want = now; pair.reason = 'navigated in the pane';
         ports.trace(`[forge-panes] notes pane -> ${now} (reason: navigated in the pane)`);
+        if (ports.isReading && !ports.isReading(pair.notes)) {            // a link opened for editing: it is the reading view again, and the show is ours (busy), not a second navigation
+          pair.busy = true;
+          pair.running = (async () => {
+            try { await ports.show(pair.notes, now); ports.trace(`[forge-panes] notes pane -> ${now} (reason: kept as the reading view)`); }
+            catch (e) { ports.trace(`[forge-panes] could not keep ${now} as the reading view: ${message(e)}`); }
+            finally { pair.busy = false; }
+          })();
+        }
         for (const fn of [...(listeners.get(score) ?? [])]) { try { fn(now); } catch { /* a listener's failure is not the pane's */ } }
       }
     },
@@ -181,6 +194,7 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
         }
         pairs.delete(score);
         listeners.delete(score);
+        if (notesAlive) { try { ports.hold?.(pair.notes, false); } catch { /* the pane is an ordinary leaf either way */ } }
         const which = !scoreAlive && !notesAlive ? 'both panes' : !notesAlive ? 'notes pane' : 'score pane';
         const gone = !notesAlive ? pair.notes : score;
         const where = strict ? `asked by the command #${n}` : `on layout-change #${n}`;

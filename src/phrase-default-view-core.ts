@@ -29,7 +29,7 @@ export interface PhraseRouteInput {
 }
 
 export type PhraseRouteReason =
-  | 'score' | 'not-score-first' | 'swap-in-progress' | 'not-allowed-location' | 'not-markdown-view' | 'no-file' | 'not-a-phrase' | 'chosen-json' | 'layout-restore';
+  | 'score' | 'not-score-first' | 'swap-in-progress' | 'not-allowed-location' | 'not-markdown-view' | 'no-file' | 'not-a-phrase' | 'chosen-json' | 'layout-restore' | 'held';
 
 export function decidePhraseRoute(i: PhraseRouteInput): { swap: boolean; reason: PhraseRouteReason } {
   const no = (reason: PhraseRouteReason) => ({ swap: false, reason });
@@ -77,6 +77,8 @@ export interface PhraseRouter<L> {
   setMark(leaf: L, path: string, mark: 'markdown' | null, by?: 'person' | 'plugin'): void;
   /** The tabs that existed when the router was registered: they keep showing their text until their leaf navigates. */
   restore(pairs: ReadonlyArray<readonly [L, string]>): void;
+  /** 2026-10-26-1800: a HELD leaf (the pair's notes pane) is reading text whatever it navigates to: never swapped, no evidence line. Released, it is an ordinary leaf again. */
+  hold(leaf: L, on: boolean): void;
 }
 
 const JSON_WHY: Partial<Record<PhraseRouteReason, string>> = {
@@ -89,6 +91,7 @@ export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>
   const marks = new Map<L, { path: string; mark: 'markdown'; by: 'person' | 'plugin' }>();
   const restored = new Map<L, string>();
   const swapping = new Set<L>();
+  const held = new Set<L>();
   const said = new Map<L, string>();                       // one evidence line per (leaf, outcome, file): events repeat, the line does not
 
   const say = (leaf: L, key: string, line: string) => {
@@ -100,8 +103,10 @@ export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>
   return {
     setMark(leaf, path, mark, by = 'person') { if (mark) marks.set(leaf, { path, mark, by }); else marks.delete(leaf); },
     restore(pairs) { for (const [leaf, path] of pairs) restored.set(leaf, path); },
+    hold(leaf, on) { if (on) held.add(leaf); else held.delete(leaf); },
     async evaluate(leaf) {
       if (!ports.scoreFirst()) return 'not-score-first';
+      if (held.has(leaf)) return 'held';
       const info = ports.describe(leaf);
       if (!info) return 'not-markdown-view';
       // a choice and a restore belong to ONE file in ONE leaf: a leaf that shows another file has moved on

@@ -348,3 +348,22 @@ test('2026-10-26-1700 (L40: the button was already there): a bar shown as text i
   assert.equal(rhythmHeaderApplies(true, true, 'bars/bar_007.md'), true, 'a bar (a rhythm data candidate) in a score-first vault');
   assert.equal(rhythmHeaderApplies(true, true, 'phrases/phrase_001.md'), false, 'a phrase has its own Open as Score');
 });
+
+// 2026-10-26-1800 (item 2): the pair's notes pane is HELD as reading text: a wikilink click to another bar must not turn it into that bar's Beat Box. Pins the MECHANISM (a held leaf is never swapped, never reads the
+// body, says nothing); if the design moves this SHOULD go red — reassess, don't just rewrite.
+test('2026-10-26-1800: controller: a HELD leaf (the pair\'s notes pane) shows any rhythm note it navigates to as reading text; releasing it, or a leaf that was never held, swaps as before', async () => {
+  const { c, leaf, state } = rig();
+  const lines: string[] = [];
+  const traced = createDefaultViewController<object>({
+    settingOn: () => true, describe: () => state.info, readBodyIsRhythm: async () => { state.reads++; return true; }, edition: 'music',
+    swapTo: async () => { state.swaps.push('x'); state.info = { ...state.info!, viewType: 'forge-rhythm-edit', isPlainMarkdownView: false }; },
+    isSwapped: () => state.info?.viewType === 'forge-rhythm-edit', sleep: async () => {}, trace: (l) => lines.push(l),
+  });
+  traced.hold(leaf, true);
+  assert.equal(await traced.evaluate(leaf), 'held');
+  assert.equal(state.swaps.length, 0); assert.equal(state.reads, 0, 'not even read'); assert.deepEqual(lines, []);
+  traced.hold(leaf, false);
+  assert.equal(await traced.evaluate(leaf), 'swap', 'released: an ordinary leaf');
+  const fresh = rig();
+  assert.equal(await fresh.c.evaluate(fresh.leaf), 'swap', 'a leaf that was never held');
+});

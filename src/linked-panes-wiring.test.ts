@@ -272,4 +272,12 @@ for (const edition of ['lean', 'music'] as const) {
     assert.match(code('phrase-view.ts'), /onPin: this\.onPin \? \(pin\) => \{ this\.onPin!\(this\.leaf, pin\); \} : undefined/);
     assert.match(code('main.ts'), /markRhythmText: \(leaf, path\) => \{ this\.rhythmEdit\?\.markAsText\(leaf, path\); \}/);
   });
+
+  test(`[${edition}] MECHANISM PIN 2026-10-26-1800 (if the design moves this SHOULD go red — reassess, do not just rewrite): the pair HOLDS its notes pane as reading text for BOTH default-view routers, and shows a link the person opened for editing as the reading view again`, () => {
+    const sf = code('score-first.ts');
+    assert.match(sf, /isReading: \(leaf\) => \(leaf\.getViewState\(\)\.state as \{ mode\?: unknown \} \| undefined\)\?\.mode === 'preview',/);
+    assert.match(sf, /hold: \(leaf, on\) => \{ router\.hold\(leaf, on\); hooks\.holdRhythmText\?\.\(leaf, on\); \},/);
+    assert.match(code('main.ts'), /holdRhythmText: \(leaf, on\) => \{ this\.rhythmEdit\?\.holdAsText\(leaf, on\); \}/);
+    assert.match(code('rhythm-edit-view.ts'), /holdAsText: \(leaf: WorkspaceLeaf, on: boolean\) => defaultView\.hold\(leaf, on\)/);
+  });
 }

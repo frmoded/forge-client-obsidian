@@ -287,3 +287,19 @@ test('two events at once for the same reused open focus once (the in-progress gu
   assert.equal(r.focused.length, 1);
   assert.equal(r.dismissed.length, 1);
 });
+
+// 2026-10-26-1800 (item 2): the notes pane beside a Score is held as reading text for as long as the pair lasts, whatever the person navigates it to (a wikilink click). Pins the MECHANISM (a held leaf is never swapped
+// and says nothing); if the design moves this SHOULD go red — reassess, don't just rewrite.
+test('2026-10-26-1800: a HELD leaf (the pair\'s notes pane) is never swapped to the Score, whatever phrase it navigates to, and prints no evidence line; releasing it brings the router back', async () => {
+  const r = rig(); const leaf = leafOf('notes');
+  r.router.hold(leaf, true);
+  open(r, leaf, 'phrases/phrase_002.md');
+  assert.equal(await r.router.evaluate(leaf), 'held');
+  open(r, leaf, 'phrases/phrase_003.md');
+  assert.equal(await r.router.evaluate(leaf), 'held');
+  assert.deepEqual(r.swaps, []); assert.deepEqual(r.lines, []);
+  r.router.hold(leaf, false);
+  assert.equal(await r.router.evaluate(leaf), 'score', 'a released leaf is an ordinary leaf again');
+  const other = leafOf('explorer'); open(r, other, 'phrases/phrase_002.md');
+  assert.equal(await r.router.evaluate(other), 'score', 'a phrase the person opens from the explorer still opens as the Score');
+});
