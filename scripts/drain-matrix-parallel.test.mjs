@@ -33,6 +33,10 @@ const STUBS = {
     "if (process.env.LAG_BUNDLE) { fs.mkdirSync('assets/vaults/x', { recursive: true }); fs.writeFileSync('assets/vaults/x/n.md', 'the source vault moved on'); }",   // the sync CHANGES the committed bundle = the bundle lags the sources
   ].join('\n') + '\n',
   'scripts/sync-engine-bundle.mjs': 'process.exit(0);\n',
+  'scripts/check-engine-fixtures.mjs': [
+    "if (process.env.STALE_FIXTURES) { console.error('STALE: shipped-notes.json: recorded against another engine bundle'); console.error('check-engine-fixtures: 1 pinned engine fixture(s) stale. Fix: npm run rerecord-engine-fixtures'); process.exit(1); }",
+    "console.log('check-engine-fixtures: ok (stub)');",
+  ].join('\n') + '\n',
   'scripts/check-bundled-vault-bump.mjs': "console.log('✓ Bundled-vault bump check passed (stub)');\n",
   'scripts/gates.mjs': [
     "if (process.env.FAIL_STEP === 'gates') { console.error('the gates are red on purpose'); process.exit(1); }",
@@ -175,6 +179,19 @@ test('the committed bundle lags the source vaults (the sync changes assets/vault
     assert.match(lag.err, /FAIL: music: step 'bundle-lag' failed/);
     assert.match(lag.out + lag.err, /assets\/vaults\/x\/n\.md/, 'the changed path is printed');
     assert.match(lag.out + lag.err, /npm run sync-bundled-vaults/, 'and the fix');
+    const ok = matrix(p, ['--no-forge']);
+    assert.equal(ok.status, 0, ok.out + ok.err);
+  } finally { p.done(); }
+});
+
+// 2026-10-27-0710 §4: after the engine sync, the two pinned engine fixtures must match the bundled engine. A stale one is RED naming the step "fixtures" and the ONE command that fixes it.
+test('a stale pinned engine fixture: the matrix is RED naming the step "fixtures" and `npm run rerecord-engine-fixtures`; fresh fixtures are green', { skip }, () => {
+  const p = projects();
+  try {
+    const stale = matrix(p, ['--no-forge'], { STALE_FIXTURES: '1' });
+    assert.notEqual(stale.status, 0, stale.out + stale.err);
+    assert.match(stale.err, /FAIL: music: step 'fixtures' failed/);
+    assert.match(stale.out + stale.err, /npm run rerecord-engine-fixtures/, 'and the fix is named');
     const ok = matrix(p, ['--no-forge']);
     assert.equal(ok.status, 0, ok.out + ok.err);
   } finally { p.done(); }

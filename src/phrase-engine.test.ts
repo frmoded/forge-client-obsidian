@@ -8,6 +8,7 @@ import path from 'node:path';
 import { Window } from 'happy-dom';
 
 import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhythm-engine.ts';
+import { dirtySiblingReason } from './test-support/dirty-sibling.ts';
 import { createLiveScore } from './live-score-core.ts';
 import { mountScorePanel } from './live-score-dom.ts';
 import { producePhrase, type PhraseParams } from './phrase-core.ts';
@@ -32,7 +33,10 @@ function deps(py: any, text = BAR_005) {
   };
 }
 
-test('the fixture is the playground vault\'s own bar_005 (when it is checked out)', async () => {
+// Strict against the COMMITTED playground bar (the matrix's clean worktree); a live checkout whose bars the plugin refreshed is skipped WITH its reason (a counted skip), never compared and never silently passed.
+baseTest('the fixture is the playground vault\'s own bar_005 (when it is checked out)', async (t) => {
+  const dirty = dirtySiblingReason(path.dirname(SIBLING), 'music-playground/bars');
+  if (dirty !== null) { t.skip(`not comparing: ${dirty}`); return; }
   if (!fs.existsSync(SIBLING)) return;                // not checked out here: the fixture stands in
   assert.equal(fs.readFileSync(SIBLING, 'utf8'), BAR_005);
 });

@@ -12,7 +12,7 @@ import { isInScope } from "../src/engine-bundle-drift-core.ts";
 import { extractRecipeSection } from "../src/v2-note-core.ts";
 
 export const RERECORD_HINT =
-  "re-record with scripts/record-engine-transpile.py (run it with the forge engine's virtualenv python), then commit test/fixtures/engine-transpile/shipped-notes.json";
+  "re-record with `npm run rerecord-engine-fixtures` (it runs scripts/record-engine-transpile.py and compare-rederived-output.py with the forge engine's virtualenv; sync the engine bundle first), then commit test/fixtures/engine-transpile/";
 
 function* walk(dir, base = "") {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {

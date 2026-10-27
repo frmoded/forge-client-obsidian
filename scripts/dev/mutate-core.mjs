@@ -298,8 +298,23 @@ export function summarize(results, equivalent = {}) {
 
 const show = (t) => JSON.stringify(t.length > 100 ? t.slice(0, 97) + '...' : t);
 
-export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], treeUnchanged = null }) {
+/** The message for a mutant in a file the pool has no test for: it says what to do instead of a bare "uncovered". */
+export const noTestMessage = (file) => `0 tests in the pool for ${file}: add \`--glue\` or name the file in a test`;
+
+/**
+ * Each file that failed in the batch is re-run ALONE (one at a time) and only a file that fails alone is red: a file that fails among others and passes alone is load, not a red
+ * baseline (22 of 23 files passed alone and in the matrix when CC first saw this). `runOne(file)` resolves { status } (0 = pass); returns { redAlone, flaky } in the given order.
+ */
+export async function confirmRedAlone(files, runOne) {
+  const redAlone = [], flaky = [];
+  for (const f of files) ((await runOne(f)).status === 0 ? flaky : redAlone).push(f);
+  return { redAlone, flaky };
+}
+
+export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], treeUnchanged = null, baselineRed = [] }) {
   const lines = [];
+  // A red baseline heads the report, loud: the run is printed anyway (a 20-60 minute run is never thrown away) but the kills by these files prove nothing.
+  if (baselineRed.length) lines.push(`BASELINE NOT GREEN: kills by these files are unproven: ${baselineRed.join(', ')}`);
   const mins = Math.floor(wallMs / 60000), secs = Math.round((wallMs % 60000) / 1000);
   lines.push(`mutants: generated ${s.generated} | killed ${s.killed} (by timeout ${s.timeout}) | survived ${s.survived.length} | uncovered ${s.uncovered.length} | equivalent-explained ${s.explained.length} | invalid ${s.invalid.length} | not applicable ${s.notApplicable.length} | not run ${s.notRun.length}`);
   lines.push(`wall time ${mins}m${String(secs).padStart(2, '0')}s with ${jobs} at a time, ${testCount} test file(s) in the pool`);
@@ -307,7 +322,7 @@ export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], t
   if (chromeSkipped.length) lines.push(`not run (they drive Chrome; Chrome studies are never in the pool): ${chromeSkipped.join(', ')}`);
   const where = (r) => `${r.file}:${r.line ?? '?'}`;
   for (const r of s.survived) lines.push(`SURVIVED     ${where(r)} [${r.id}]  ${show(r.from)} -> ${show(r.to)}`);
-  for (const r of s.uncovered) lines.push(`NO TEST      ${where(r)} [${r.id}]  no test file covers ${r.file}`);
+  for (const r of s.uncovered) lines.push(`NO TEST      ${where(r)} [${r.id}]  ${noTestMessage(r.file)}`);
   for (const r of s.notRun) lines.push(`NOT RUN      ${where(r)} [${r.id}]  the selected tests did not pass (skipped or empty), so this proves nothing`);
   for (const r of s.explained) lines.push(`equivalent   ${where(r)} [${r.id}]  ${r.why}`);
   for (const r of s.invalid) lines.push(`invalid      ${where(r)} [${r.id}]  not valid code: ${show(r.from)} -> ${show(r.to)}`);

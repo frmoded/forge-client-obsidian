@@ -10,8 +10,8 @@
 #
 # What it does: worktrees (detached, committed state only) of forge-client-obsidian, music-theory, forge-tutorial, forge-moda, music-core, forge and music-playground
 # next to each other; links node_modules, forge/.venv and the music wheels into them; then THREE LEGS AT THE SAME TIME (drain 2026-10-26-1300; the machine has the cores):
-#   the MUSIC leg, in the client worktree:  sync-bundled-vault --all + sync-engine-bundle  ->  bundle-lag (FAILS when that sync changed the committed assets/vaults: the bundle lags the source vaults, 2026-10-27-0930)  ->  the existing prebuild gates (engine drift, description hashes, open-time writes)
-#                                           ->  the bundled-vault bump check  ->  build + `npm test` for the MUSIC edition;
+#   the MUSIC leg, in the client worktree:  sync-bundled-vault --all + sync-engine-bundle  ->  bundle-lag (FAILS when that sync changed the committed assets/vaults: the bundle lags the source vaults, 2026-10-27-0930)  ->  the pinned-engine-fixtures check (fails naming `npm run rerecord-engine-fixtures`)
+#                                           ->  the existing prebuild gates (engine drift, description hashes, open-time writes)  ->  the bundled-vault bump check  ->  build + `npm test` for the MUSIC edition;
 #   the LEAN leg, in a SECOND client worktree (lean/forge-client-obsidian, its siblings symlinked to the first set): the same sync, then build + `npm test` for the LEAN edition
 #                                           (the explicit gates run and the bump check are edition-independent and run once, in the music leg, as they did when the legs were serial; `npm run build` also runs the package's prebuild hook, the same gates, in every build);
 #   the FORGE leg: `pytest tests/music` (below), whenever its rule says it runs.
@@ -120,6 +120,8 @@ edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and b
   if [ "$ed" = music ]; then
     # 2026-10-27-0930: the sync just ran in a CLEAN worktree of the committed client, so any change it made to assets/vaults is the committed bundle lagging the source vaults. A vault drain that bumps a forge.toml commits the client sync in the same drain.
     leg_step bundle-lag bash -c 'lag=$(git status --porcelain --untracked-files=all -- assets/vaults); if [ -n "$lag" ]; then echo "the COMMITTED bundle (assets/vaults) lags the source vaults; the sync changed:"; echo "$lag" | head -25; echo "fix: npm run sync-bundled-vaults in the client, then commit assets/vaults (the same drain that bumped the forge.toml)"; exit 1; fi' || return 0
+    # 2026-10-27-0710: the two pinned engine fixtures (shipped-notes.json, rederive-comparison.json) must match the engine the sync just bundled; a stale one fails HERE naming `npm run rerecord-engine-fixtures`, not as a generic gate failure two steps later.
+    leg_step fixtures bash -c 'node scripts/check-engine-fixtures.mjs' || return 0
     leg_step gates bash -c 'FORGE_EDITION=music npm run prebuild' || return 0
     leg_step bump bash -c 'FORGE_EDITION=music node scripts/check-bundled-vault-bump.mjs' || return 0
   fi

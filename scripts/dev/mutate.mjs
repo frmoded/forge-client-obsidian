@@ -16,7 +16,7 @@ import crypto from 'node:crypto';
 import { spawn, execFileSync } from 'node:child_process';
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, buildMap, selectTests, hashTexts, parseTapSummary,
-  orderTests, preferFirst, classifyRun, summarize, formatReport, runPool,
+  orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage,
 } from './mutate-core.mjs';
 
 const USAGE = `usage: node scripts/dev/mutate.mjs [--diff <git ref or range>] [--hand <mutants.json>]... [options]
@@ -324,14 +324,27 @@ export async function main(argv) {
     const durations = loadDurations(root);
     const redNames = (r) => r.failed.flatMap((f) => [f.file, ...f.output.split('\n').filter((l) => /^\s*not ok \d+ - /.test(l)).slice(0, 6).map((l) => '    ' + l.trim())]).slice(0, 60).join('\n');
     const unmutated = (files) => runFiles(base, files, { timeoutMs: 15 * 60_000, concurrency: Math.max(2, os.cpus().length - 1), failFast: false });
+    // A file that fails among others is re-run ALONE before it is called red (CC saw 22 of 23 'red' files pass alone and in the matrix): only a file that fails alone is named.
+    const alone = (files) => confirmRedAlone(files, (f) => runFiles(base, [f], { timeoutMs: 15 * 60_000, concurrency: 1, failFast: false }));
+    const flakyNote = (flaky) => (flaky.length ? `mutate: ${flaky.length} file(s) failed in the batch but pass alone (load, not a red baseline): ${flaky.join(', ')}\n` : '');
+    let baselineRed = [];
     if (a.baseline === 'first' && pool.length > 0) {
       const t0 = Date.now();
       const r = await unmutated(pool);
       const sum = r.summary;
-      if (r.status !== 0 || !sum || sum.pass === 0 || sum.fail) {
-        console.error(`mutate: the baseline is not green (the unmutated tests of the pool: ${sum ? `${sum.pass} pass, ${sum.fail} fail, ${sum.skipped} skipped` : 'no summary'}); a mutation run on a red baseline proves nothing\n${redNames(r)}`);
+      let flaky = [];
+      let red = r.status !== 0 || !sum || sum.pass === 0 || sum.fail;
+      if (red && sum && sum.pass > 0 && r.failed.length > 0) {
+        const c = await alone(r.failed.map((f) => f.file));
+        flaky = c.flaky;
+        if (c.redAlone.length === 0) red = false;
+        else r.failed = r.failed.filter((f) => c.redAlone.includes(f.file));
+      }
+      if (red) {
+        console.error(`mutate: the baseline is not green (the unmutated tests of the pool: ${sum ? `${sum.pass} pass, ${sum.fail} fail, ${sum.skipped} skipped` : 'no summary'}); a mutation run on a red baseline proves nothing\n${flakyNote(flaky)}${redNames(r)}`);
         return 2;
       }
+      if (flaky.length) console.error(flakyNote(flaky).trimEnd());
       for (const f of r.files) durations[f.file] = Math.round(f.secs * 10) / 10;
       saveDurations(root, durations);
       console.error(`mutate: baseline green: ${sum.tests} tests, ${sum.pass} pass, ${sum.skipped} skipped (${Math.round((Date.now() - t0) / 1000)} s)`);
@@ -364,7 +377,7 @@ export async function main(argv) {
     };
     await runPool(order, a.jobs, async (i) => {
       const m = runnable[i];
-      if (m.tests.length === 0) { outcomes[i] = 'uncovered'; seconds[i] = 0; done++; console.error(`[${done}/${runnable.length}] uncovered ${m.id}`); return; }
+      if (m.tests.length === 0) { outcomes[i] = 'uncovered'; seconds[i] = 0; done++; console.error(`[${done}/${runnable.length}] uncovered ${m.id}: ${noTestMessage(m.file)}`); return; }
       if (m.heavy) await heavy.take();
       try { const r = await runMutant(m, i, a.timeout); outcomes[i] = r.outcome; seconds[i] = r.secs; killers[i] = r.killers; for (const f of r.files) if (outcomes[i] === 'survived') durations[f.file] = Math.round(f.secs * 10) / 10; } finally { if (m.heavy) heavy.give(); }
       done++;
@@ -387,18 +400,19 @@ export async function main(argv) {
       if (killing.length > 0) {
         const t0 = Date.now();
         const r = await unmutated(killing);
-        const red = new Set(r.failed.map((f) => f.file));
         for (const f of r.files) if (f.status === 0) durations[f.file] = Math.round(f.secs * 10) / 10;
+        const c = r.failed.length > 0 ? await alone(r.failed.map((f) => f.file)) : { redAlone: [], flaky: [] };
+        const red = new Set(c.redAlone);
+        if (c.flaky.length) console.error(flakyNote(c.flaky).trimEnd());
         if (red.size > 0) {
-          console.error(`mutate: the baseline is not green: ${red.size} of the ${killing.length} test file(s) that killed mutants also fail on the UNMUTATED tree, so their kills prove nothing\n${redNames(r)}`);
-          return 2;
-        }
-        console.error(`mutate: baseline after: the ${killing.length} test file(s) that killed mutants pass on the unmutated tree (${Math.round((Date.now() - t0) / 1000)} s)`);
+          // The run is NOT thrown away: the report is printed below under a loud header, and the exit status is 2 (a red baseline is never trusted).
+          baselineRed = [...red].sort();
+          console.error(`mutate: the baseline is not green: ${red.size} of the ${killing.length} test file(s) that killed mutants also fail on the UNMUTATED tree (alone, too), so their kills prove nothing; the report follows anyway\n${redNames({ failed: r.failed.filter((f) => red.has(f.file)) })}`);
+        } else console.error(`mutate: baseline after: the ${killing.length} test file(s) that killed mutants pass on the unmutated tree (${Math.round((Date.now() - t0) / 1000)} s)`);
       }
     }
     saveDurations(root, durations);
-    runnable.forEach((m, i) => { if (outcomes[i] === 'killed' && killers[i].length) kills[m.id] = killers[i]; });
-    saveKills(root, kills);
+    if (baselineRed.length === 0) { runnable.forEach((m, i) => { if (outcomes[i] === 'killed' && killers[i].length) kills[m.id] = killers[i]; }); saveKills(root, kills); }
 
     // 5. the report
     runnable.forEach((m, i) => { m.outcome = outcomes[i]; m.seconds = seconds[i]; });
@@ -409,9 +423,10 @@ export async function main(argv) {
       const after = fingerprint(root);
       treeUnchanged = after.status === before.status && after.hash === before.hash ? { ok: true, files: after.files } : { ok: false, why: after.hash !== before.hash ? 'file bytes differ' : 'git status differs' };
     }
-    console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged }));
+    console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged, baselineRed }));
     if (a.out) fs.writeFileSync(path.resolve(a.out), JSON.stringify({ summary: { generated: s.generated, killed: s.killed, timeout: s.timeout, survived: s.survived.length, uncovered: s.uncovered.length, explained: s.explained.length, invalid: s.invalid.length, notApplicable: s.notApplicable.length, notRun: s.notRun.length, wallMs: Date.now() - started }, results }, null, 2));
     if (treeUnchanged && !treeUnchanged.ok) return 3;
+    if (baselineRed.length > 0) return 2;
     return s.unexplained > 0 && !a.noFail ? 1 : 0;
   } finally { cleanup(); }
 }

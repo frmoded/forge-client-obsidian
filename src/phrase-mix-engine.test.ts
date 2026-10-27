@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhythm-engine.ts';
+import { dirtySiblingReason } from './test-support/dirty-sibling.ts';
 import { mixTraceEngine, producePhrase, producePhraseNote, type MixPhrase, type PhraseParams } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 
@@ -46,7 +47,11 @@ function scoreOfBar(py: any, bar: unknown, title = 'phrase_002'): any {
 // music21 gives every part a fresh random id (P or I + 32 hex digits, for the part and its instrument) on each run; nothing else in the XML is random, so two Scores of the same bars are equal once those ids are made alike.
 const xmlOf = (payload: Record<string, unknown>) => (payload.multi_staff_content as string).replace(/[PI][0-9a-f]{32}/g, 'ID');
 
-test('the fixtures are the playground vault\'s own bars (when it is checked out)', async () => {
+// Strict against the COMMITTED playground bars (the matrix's clean worktree); a live checkout whose bars the plugin has refreshed (untracked or modified files) is skipped WITH its reason, counted as a skip,
+// never compared (it would be red on the driver's machine for a reason that is not a bug) and never silently passed.
+baseTest('the fixtures are the playground vault\'s own bars (when it is checked out)', async (t) => {
+  const dirty = dirtySiblingReason(SIBLINGS, 'music-playground/bars');
+  if (dirty !== null) { t.skip(`not comparing: ${dirty}`); return; }
   for (const name of Object.keys(BARS)) {
     const sibling = path.join(SIBLINGS, `${name}.md`);
     if (!fs.existsSync(sibling)) continue;                 // not checked out here: the fixture stands in

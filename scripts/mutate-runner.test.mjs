@@ -13,7 +13,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, buildMap, selectTests, orderTests, preferFirst, SLOW_SECONDS, parseTapSummary, classifyRun, summarize,
-  formatReport, runPool,
+  formatReport, runPool, confirmRedAlone,
 } from './dev/mutate-core.mjs';
 
 const CLI = path.resolve(import.meta.dirname, 'dev/mutate.mjs');
@@ -249,7 +249,10 @@ test('summarize + formatReport: generated, killed (by timeout counted), survived
   assert.match(text, /wall time 1m23s with 8 at a time, 12 test file\(s\)/);
   assert.match(text, /working tree: unchanged \(git status and 900 file hashes identical/);
   assert.match(text, /SURVIVED {5}src\/a\.ts:3 \[s1\] {2}"a" -> "b"/);
-  assert.match(text, /NO TEST .*no test file covers src\/a\.ts/);
+  assert.match(text, /NO TEST .*0 tests in the pool for src\/a\.ts: add `--glue` or name the file in a test/);
+  assert.doesNotMatch(text, /no test file covers/, 'the old one-line gap message is gone');
+  assert.match(formatReport(s, { wallMs: 1, jobs: 1, testCount: 0, baselineRed: ['src/x.test.ts', 'src/y.test.ts'] }).split('\n')[0], /^BASELINE NOT GREEN: kills by these files are unproven: src\/x\.test\.ts, src\/y\.test\.ts$/, 'a red baseline is the FIRST line of the report, loud');
+  assert.doesNotMatch(text, /BASELINE NOT GREEN/, 'a green baseline prints no header');
   assert.match(text, /equivalent .*unobservable: formatPhraseJson/);
   assert.match(text, /src\/c\.test\.ts/);
   assert.match(formatReport(s, { wallMs: 1, jobs: 1, testCount: 0, treeUnchanged: { ok: false, why: 'file bytes differ' } }), /WORKING TREE CHANGED: file bytes differ/);
@@ -361,13 +364,25 @@ test('a red baseline is never trusted (exit 2): by default the tests that KILLED
     assert.equal(after.status, 2, after.stdout + after.stderr);
     assert.match(after.stderr, /the baseline is not green: 1 of the 1 test file\(s\) that killed mutants also fail on the UNMUTATED tree/);
     assert.match(after.stderr, /src\/lib\.test\.ts/);
-    assert.doesNotMatch(after.stdout, /generated/, 'no report is printed for a run that cannot be trusted');
+    assert.match(after.stdout.split('\n')[0], /^BASELINE NOT GREEN: kills by these files are unproven: src\/lib\.test\.ts$/, 'the report is ALWAYS printed (a 20-60 minute run is never lost), headed by the red files');
+    assert.match(after.stdout, /generated 1 \| killed 1/, 'the full report follows the header');
     const first = mutate(proj, '--hand', hand, '--baseline', 'first');
     assert.equal(first.status, 2);
     assert.match(first.stderr, /the baseline is not green \(the unmutated tests of the pool: .*1 fail/);
     assert.doesNotMatch(first.stderr, /\[1\/1\]/, 'refused before any mutant ran');
     assert.equal(mutate(proj, '--hand', hand, '--baseline', 'sometimes').status, 2);
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('confirmRedAlone: each red file is re-run ALONE, one at a time, and only a file that fails alone is named (a file red in the batch but green alone is load, not a red baseline)', async () => {
+  let running = 0, peak = 0; const calls = [];
+  const runOne = async (f) => { running++; peak = Math.max(peak, running); calls.push(f); await new Promise((r) => setTimeout(r, 5)); running--; return { status: f === 'b.test.ts' ? 1 : 0 }; };
+  const out = await confirmRedAlone(['a.test.ts', 'b.test.ts', 'c.test.ts'], runOne);
+  assert.deepEqual(out.redAlone, ['b.test.ts']);
+  assert.deepEqual(out.flaky, ['a.test.ts', 'c.test.ts'], 'failed in the batch, passed alone: reported as flaky under load, not named red');
+  assert.equal(peak, 1, 'alone means one at a time');
+  assert.deepEqual(calls, ['a.test.ts', 'b.test.ts', 'c.test.ts']);
+  assert.deepEqual(await confirmRedAlone([], runOne), { redAlone: [], flaky: [] });
 });
 
 test('a mutated file no test can see is reported as NO TEST (a gap by itself) and fails the run; a test that skips everything is NOT RUN, not a survivor', () => {
@@ -379,7 +394,8 @@ test('a mutated file no test can see is reported as NO TEST (a gap by itself) an
     fs.writeFileSync(hand, JSON.stringify([['src/untested.ts', 'untested: flipped', '1 < 2', '1 > 2'], ['src/lib.ts', 'clamp: skipped test only', 'if (n < lo) return lo;', 'if (n < lo) return n;'], ['src/other.ts', 'other: plus to minus', '1 + 1', '1 - 1']]));
     const r = mutate(proj, '--hand', hand);
     assert.equal(r.status, 1, r.stdout + r.stderr);
-    assert.match(r.stdout, /NO TEST .*src\/untested\.ts/);
+    assert.match(r.stdout, /NO TEST .*src\/untested\.ts.*0 tests in the pool for src\/untested\.ts: add `--glue` or name the file in a test/);
+    assert.match(r.stderr, /0 tests in the pool for src\/untested\.ts: add `--glue` or name the file in a test/, 'the progress line says it too, not a bare "uncovered"');
     assert.match(r.stdout, /NOT RUN .*clamp: skipped test only/);
     assert.match(r.stdout, /SURVIVED .*other: plus to minus/, 'a test that passes and asserts nothing about the value lets the mutant survive');
     assert.match(r.stdout, /uncovered 1/); assert.match(r.stdout, /not run 1/); assert.match(r.stdout, /survived 1/);
