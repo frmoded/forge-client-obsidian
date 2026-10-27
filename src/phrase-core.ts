@@ -15,6 +15,8 @@
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
 import { extractPhraseJsonBlock, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
+import { TRANSFORM_DEFAULT_GRID, rangeWords } from './phrase-words-core.ts';
+export { rangeWords, selectionWords, transformOpWords } from './phrase-words-core.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
 
 export const PHRASE_FOLDER = 'phrases';
@@ -94,10 +96,32 @@ export type MorphOrder = typeof MORPH_ORDERS[number];
 export const MORPH_DEFAULTS = { bars: 5, order: 'musical' as MorphOrder, seed: 0 };
 export const MORPH_KEYS = ['kind', 'a', 'b', 'bars', 'order', 'seed', 'position', 'overrides'] as const;
 
-export type PhraseParams = ExtendPhrase | MixPhrase | MorphPhrase;
+/** 2026-10-27-1030 (M14 slice 1, design 4.13): a TRANSFORM changes a region of another phrase's bars. `source` is a phrase note id (`phrases/phrase_006`, no .md); `ops` run in order over the bars the source makes
+ *  (`thin_out_bars` / `double_up_bars` in forge/music/lib.py: a 1-based inclusive range of bars and an optional row, i.e. a channel name). Bar numbers are those of the source's bars (a transform keeps their count).
+ *  `overrides` are forks of the DERIVED bars, as an extend's: bar number -> the bar note that stands in for it. */
+export interface TransformPhrase {
+  kind: 'transform';
+  source: string;
+  ops: TransformOp[];
+  overrides?: Record<string, string>;
+}
+export interface ThinOutOp { op: 'thin_out'; first: number; last: number; row?: string; amount: number; keep?: 'seeded'; seed?: number }
+export interface DoubleUpOp { op: 'double_up'; first: number; last: number; row?: string; grid: number }
+export type TransformOp = ThinOutOp | DoubleUpOp;
+export const TRANSFORM_OPS = ['thin_out', 'double_up'] as const;
+export const TRANSFORM_KEEPS = ['downbeat', 'seeded'] as const;
+export const TRANSFORM_DEFAULTS = { amount: 0.5, grid: TRANSFORM_DEFAULT_GRID };
+export const TRANSFORM_OPS_MAX = 16;
+export const TRANSFORM_KEYS = ['kind', 'source', 'ops', 'overrides'] as const;
+const TRANSFORM_SOURCE = /^phrases\/phrase_\d+$/;
+const CHANNEL_NAME = /^[A-Za-z0-9_-]+$/;
+
+export type PhraseParams = ExtendPhrase | MixPhrase | MorphPhrase | TransformPhrase;
 
 /** The two bars a mix reads, as the engine gets them. */
 export interface MixBars { a: RhythmData; b: RhythmData }
+/** The bars a transform changes, as the engine gets them: what its source phrase made. */
+export interface TransformInput { bars: RhythmData[] }
 
 export const MIX_DEFAULTS = { weight: 0.5, threshold: 0.5, ghost: false };
 
@@ -116,7 +140,8 @@ export function validatePhrase(raw: unknown): Validation<PhraseParams> {
   if (!isPlainObject(raw)) return bad('The phrase must be an object.');
   if (raw.kind === 'mix') return validateMix(raw);
   if (raw.kind === 'morph') return validateMorph(raw);
-  if (raw.kind !== 'extend') return bad(`kind must be "extend", "mix" or "morph", got ${JSON.stringify(raw.kind)}.`);
+  if (raw.kind === 'transform') return validateTransform(raw);
+  if (raw.kind !== 'extend') return bad(`kind must be "extend", "mix", "morph" or "transform", got ${JSON.stringify(raw.kind)}.`);
   for (const key of Object.keys(raw)) {
     if (!(PHRASE_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a phrase holds only ${PHRASE_KEYS.join(', ')}).`);
   }
@@ -219,6 +244,62 @@ function validateMix(raw: Record<string, unknown>): Validation<PhraseParams> {
   return { ok: true, value: { ...base, mode: 'path', order: order as MorphOrder, seed } };
 }
 
+function validateTransform(raw: Record<string, unknown>): Validation<PhraseParams> {
+  const bad = (message: string): Validation<PhraseParams> => ({ ok: false, message });
+  for (const key of Object.keys(raw)) {
+    if (!(TRANSFORM_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a transform holds only ${TRANSFORM_KEYS.join(', ')}).`);
+  }
+  if (typeof raw.source !== 'string' || !TRANSFORM_SOURCE.test(raw.source)) {
+    return bad(`source must be a phrase note without .md, like phrases/phrase_006, got ${JSON.stringify(raw.source)}.`);
+  }
+  if (!Array.isArray(raw.ops) || raw.ops.length < 1 || raw.ops.length > TRANSFORM_OPS_MAX) {
+    return bad(`ops must be a list of 1 to ${TRANSFORM_OPS_MAX} operations, got ${Array.isArray(raw.ops) ? `${raw.ops.length}` : JSON.stringify(raw.ops)}.`);
+  }
+  const ops: TransformOp[] = [];
+  for (let i = 0; i < raw.ops.length; i++) {
+    const op = validateTransformOp(raw.ops[i], i);
+    if (typeof op === 'string') return bad(op);
+    ops.push(op);
+  }
+  const overrides = validateOverrides(raw.overrides, Number.MAX_SAFE_INTEGER);
+  if (typeof overrides === 'string') return bad(overrides);
+  return { ok: true, value: { kind: 'transform', source: raw.source, ops, ...(overrides ? { overrides } : {}) } };
+}
+
+function validateTransformOp(raw: unknown, i: number): TransformOp | string {
+  const at = `ops[${i}]`;
+  if (!isPlainObject(raw)) return `${at} must be an object like {"op": "thin_out", "first": 3, "last": 5}, got ${JSON.stringify(raw)}.`;
+  if (raw.op !== 'thin_out' && raw.op !== 'double_up') return `${at}.op must be "thin_out" or "double_up", got ${JSON.stringify(raw.op)}.`;
+  const allowed = raw.op === 'thin_out' ? ['op', 'first', 'last', 'row', 'amount', 'keep', 'seed'] : ['op', 'first', 'last', 'row', 'grid'];
+  for (const key of Object.keys(raw)) {
+    if (allowed.includes(key)) continue;
+    if (raw.op === 'double_up' && (key === 'amount' || key === 'keep' || key === 'seed')) return `${at}: ${key} only applies to thin_out.`;
+    if (raw.op === 'thin_out' && key === 'grid') return `${at}: grid only applies to double_up.`;
+    return `${at}: unexpected field "${key}" (${raw.op} holds only ${allowed.join(', ')}).`;
+  }
+  const whole = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
+  if (!whole(raw.first) || !whole(raw.last) || raw.first < 1 || raw.last < raw.first) {
+    return `${at}: first and last must be whole bar numbers with 1 <= first <= last, got ${JSON.stringify(raw.first)} and ${JSON.stringify(raw.last)}.`;
+  }
+  if (raw.row !== undefined && (typeof raw.row !== 'string' || !CHANNEL_NAME.test(raw.row))) return `${at}.row must be a channel name (letters, digits, _ and -), got ${JSON.stringify(raw.row)}.`;
+  const base = { first: raw.first, last: raw.last, ...(raw.row !== undefined ? { row: raw.row as string } : {}) };
+  if (raw.op === 'double_up') {
+    const grid = raw.grid === undefined ? TRANSFORM_DEFAULTS.grid : raw.grid;
+    if (!whole(grid) || grid < 1) return `${at}.grid must be a whole number, 1 or more, got ${JSON.stringify(raw.grid)}.`;
+    return { op: 'double_up', ...base, grid };
+  }
+  const amount = raw.amount === undefined ? TRANSFORM_DEFAULTS.amount : raw.amount;
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0 || amount > 1) return `${at}.amount must be a number from 0 to 1, got ${JSON.stringify(raw.amount)}.`;
+  if (raw.keep !== undefined && !(TRANSFORM_KEEPS as readonly unknown[]).includes(raw.keep)) return `${at}.keep must be "downbeat" or "seeded", got ${JSON.stringify(raw.keep)}.`;
+  if (raw.keep !== 'seeded') {
+    if (raw.seed !== undefined) return `${at}.seed only applies with keep "seeded".`;
+    return { op: 'thin_out', ...base, amount };
+  }
+  const seed = raw.seed === undefined ? 0 : raw.seed;
+  if (!whole(seed) || seed < 0) return `${at}.seed must be a whole number, 0 or more, got ${JSON.stringify(raw.seed)}.`;
+  return { op: 'thin_out', ...base, amount, keep: 'seeded', seed };
+}
+
 function validateMorph(raw: Record<string, unknown>): Validation<PhraseParams> {
   const bad = (message: string): Validation<PhraseParams> => ({ ok: false, message });
   for (const key of Object.keys(raw)) {
@@ -297,7 +378,7 @@ export function readPhraseKind(text: string): PhraseParams['kind'] | null {
   if (block.ok === false) return null;
   try {
     const kind = (JSON.parse(text.slice(block.contentStart, block.contentEnd)) as { kind?: unknown } | null)?.kind;
-    return kind === 'mix' || kind === 'extend' || kind === 'morph' ? kind : null;
+    return kind === 'mix' || kind === 'extend' || kind === 'morph' || kind === 'transform' ? kind : null;
   } catch {
     return null;
   }
@@ -377,6 +458,18 @@ export function readPhraseNote(text: string): Validation<PhraseParams> {
   return validatePhrase(parsed);
 }
 
+/** One transform op as the json text shows it, on one line: {"op": "thin_out", "first": 3, "last": 5, "row": "kick", "amount": 0.5}. */
+export function formatTransformOp(o: TransformOp): string {
+  const parts = [`"op": ${JSON.stringify(o.op)}`, `"first": ${o.first}`, `"last": ${o.last}`];
+  if (o.row !== undefined) parts.push(`"row": ${JSON.stringify(o.row)}`);
+  if (o.op === 'double_up') parts.push(`"grid": ${o.grid}`);
+  else {
+    parts.push(`"amount": ${o.amount}`);
+    if (o.keep === 'seeded') parts.push(`"keep": "seeded"`, `"seed": ${o.seed ?? 0}`);
+  }
+  return `{${parts.join(', ')}}`;
+}
+
 /** The block's text, field order as in the design. */
 export function formatPhraseJson(p: PhraseParams): string {
   if (p.kind === 'mix') {
@@ -390,6 +483,19 @@ export function formatPhraseJson(p: PhraseParams): string {
       `  "ghost": ${p.ghost}${p.mode !== undefined ? ',' : ''}`,
       ...(p.mode !== undefined ? [`  "mode": ${JSON.stringify(p.mode)}${p.mode === 'path' ? ',' : ''}`] : []),
       ...(p.mode === 'path' ? [`  "order": ${JSON.stringify(p.order ?? MORPH_DEFAULTS.order)},`, `  "seed": ${p.seed ?? MORPH_DEFAULTS.seed}`] : []),
+      '}',
+    ].join('\n');
+  }
+  if (p.kind === 'transform') {
+    const oneOp = formatTransformOp;
+    return [
+      '{',
+      `  "kind": "transform",`,
+      `  "source": ${JSON.stringify(p.source)},`,
+      '  "ops": [',
+      ...p.ops.map((o, i) => `    ${oneOp(o)}${i < p.ops.length - 1 ? ',' : ''}`),
+      `  ]${p.overrides ? ',' : ''}`,
+      ...(p.overrides ? ['  "overrides": {', ...Object.keys(p.overrides).sort((x, y) => Number(x) - Number(y)).map((k, i, all) => `    ${JSON.stringify(k)}: ${JSON.stringify(p.overrides![k])}${i < all.length - 1 ? ',' : ''}`), '  }'] : []),
       '}',
     ].join('\n');
   }
@@ -473,6 +579,18 @@ export function starterMix(a: string, b: string): MixPhrase {
 export function morphNoteContent(name: string, a: string, b: string, made: { from?: string; bars?: number } = {}): string {
   const p: MorphPhrase = { kind: 'morph', a, b, ...MORPH_DEFAULTS, ...(made.bars !== undefined ? { bars: made.bars } : {}) };
   return noteContentFor(name, p, made.from ? [`made_from: ${JSON.stringify(`[[${made.from}]]`)}`] : []);
+}
+
+/** The starter content of a new transform phrase (2026-10-27-1030): the source phrase named, the ops as given. Made by the same note builder as every other kind. */
+export function transformNoteContent(name: string, source: string, ops: TransformOp[]): string {
+  return noteContentFor(name, { kind: 'transform', source, ops });
+}
+
+/** A new transform phrase note for a notebook cell: the value is checked first (a plan that does not validate is never a note), then the next free `phrase_NNN` as for every other kind. */
+export function planNewTransform(input: { source: string; ops: TransformOp[]; existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewPhrasePlan {
+  const valid = validatePhrase({ kind: 'transform', source: input.source, ops: input.ops });
+  if (valid.ok === false) return { ok: false, message: `Notebook: ${valid.message}` };
+  return planNewPhraseFromParams({ params: valid.value, existingBasenames: input.existingBasenames, exists: input.exists, attempts: input.attempts });
 }
 
 export function phraseName(n: number): string {
@@ -741,7 +859,7 @@ export interface PhraseScoreDeps {
   readNote(path: string): Promise<string>;
   /** Engine: `extend_rhythm` + `rhythm_bars_to_stream` on the source bar's data with the phrase's parameters, as a tagged MusicXML payload. For a MIX the data is the two bars (`{ a, b }`) and the
    *  engine runs `mix_rhythm` + `rhythm_bars_to_stream`. */
-  compute(data: RhythmData | MixBars, params: PhraseParams, title: string): Promise<unknown>;
+  compute(data: RhythmData | MixBars | TransformInput, params: PhraseParams, title: string): Promise<unknown>;
 }
 
 /** The Score of a phrase, from the phrase's parameters (already parsed JSON): validate them, read the source bar FRESH from the vault, ask the engine. A phrase that is wrong or whose source is
@@ -749,9 +867,16 @@ export interface PhraseScoreDeps {
 export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: string): Promise<ScoreOutcome> {
   const valid = validatePhrase(raw);
   if (valid.ok === false) return { kind: 'refusal', message: `Phrase: ${valid.message}` };
-  const params = valid.value;
+  return produceValidated(deps, valid.value, title, []);
+}
+
+/** How far a chain of transforms may go (a transform of a transform of ...), and the guard against one that loops back to itself. */
+export const TRANSFORM_DEPTH_MAX = 6;
+
+async function produceValidated(deps: PhraseScoreDeps, params: PhraseParams, title: string, chain: string[]): Promise<ScoreOutcome> {
   if (params.kind === 'mix') return produceMix(deps, params, title);
   if (params.kind === 'morph') return produceMorph(deps, params, title);
+  if (params.kind === 'transform') return produceTransform(deps, params, title, chain);
   const path = phraseSourcePath(params.source);
   let text: string;
   try {
@@ -766,7 +891,7 @@ export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: 
   // glue lays each over the generated bar of that number. A phrase without overrides never reaches this line, so its engine call is exactly what it was.
   const forks = await readForks(deps, params.overrides, bar.value.data, `the source ${params.source}`);
   if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
-  const withForks = { ...params, override_bars: forks } as PhraseParams;
+  const withForks = { ...params, override_bars: forks } as unknown as PhraseParams;
   return computeScore((data, t) => deps.compute(data, withForks, t), bar.value.data, title);
 }
 
@@ -844,6 +969,63 @@ export function morphRhythmRefusal(message: string): string | null {
   return m ? m[1] : null;
 }
 
+/** The engine's own `thin_out_bars: ...` / `double_up_bars: ...` line out of an error (the ValueError of a row a bar does not have, a range past the bars, a bar on another grid). `null` = not a region-transform refusal. */
+export function regionRefusal(message: string): string | null {
+  const m = /(?:^|\n)(?:ValueError: )?((?:thin_out_bars|double_up_bars): [^\n]*?)\s*$/.exec(message.trim());
+  return m ? m[1] : null;
+}
+
+/** The bars a Score payload was drawn from, as the engine laid them out: an extend's, a morph's and a transform's `bars_data`, a mix's one `mixed_bar`. `null` = the payload says none. */
+export function barsOfPayload(payload: Record<string, unknown>): RhythmData[] | null {
+  if (Array.isArray(payload.bars_data) && payload.bars_data.length > 0) return payload.bars_data as RhythmData[];
+  if (payload.mixed_bar && typeof payload.mixed_bar === 'object') return [payload.mixed_bar as RhythmData];
+  return null;
+}
+
+/** The Score of a TRANSFORM (2026-10-27-1030): the source phrase is read FRESH and drawn by the same code that draws every phrase (so a transform of a morph, a mix, an extend or another transform works); the bars it
+ *  made go to the engine with the ops, which change the regions asked for; forks lay over the result. A source that is missing, not a phrase, not drawable, or not as long as an op asks is a refusal naming which. */
+async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, title: string, chain: string[]): Promise<ScoreOutcome> {
+  const name = params.source.replace(/^phrases\//, '');
+  if (chain.includes(params.source) || chain.length >= TRANSFORM_DEPTH_MAX) {
+    return { kind: 'refusal', message: `Phrase: the transform chain through ${name} loops back or is more than ${TRANSFORM_DEPTH_MAX} deep.` };
+  }
+  let text: string;
+  try {
+    text = await deps.readNote(`${params.source}.md`);
+  } catch (e) {
+    return { kind: 'refusal', message: `Phrase: the source phrase ${name} (${params.source}.md) was not found or could not be read (${(e as Error)?.message ?? e}).` };
+  }
+  const source = readPhraseNote(text);
+  if (source.ok === false) return { kind: 'refusal', message: `Phrase: the source phrase ${name} is not usable: ${source.message}` };
+  const made = await produceValidated(deps, source.value, name, [...chain, params.source]);
+  if (made.kind !== 'score') return { kind: 'refusal', message: `Phrase: the source phrase ${name} could not be drawn: ${made.message}` };
+  const bars = barsOfPayload(made.payload);
+  if (bars === null) return { kind: 'refusal', message: `Phrase: the source phrase ${name} gave no bars to change.` };
+  for (let i = 0; i < params.ops.length; i++) {
+    if (params.ops[i].last > bars.length) {
+      return { kind: 'refusal', message: `Phrase: ops[${i}] asks for ${rangeWords(params.ops[i].first, params.ops[i].last)}, but the source phrase ${name} has ${bars.length} bar${bars.length === 1 ? '' : 's'}.` };
+    }
+  }
+  let asked: PhraseParams = params;
+  if (params.overrides) {
+    const forks = await readForks(deps, params.overrides, bars[0], `the source phrase ${name}`);
+    if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
+    asked = { ...params, override_bars: forks } as unknown as PhraseParams;
+  }
+  let refused: string | null = null;
+  const outcome = await computeScore(async (_data, t) => {
+    try {
+      return await deps.compute({ bars }, asked, t);
+    } catch (e) {
+      const line = regionRefusal((e as Error)?.message ?? String(e));
+      if (line !== null) { refused = line; return null; }
+      throw e;
+    }
+  }, bars[0], title);
+  if (refused !== null) return { kind: 'refusal', message: `Phrase: ${refused}` };
+  return outcome;
+}
+
 /** The Score of a morph: both bars read FRESH (one read per distinct bar), then the engine's `morph_rhythm` + `rhythm_bars_to_stream`. A missing or unusable bar is a refusal naming which one (a or b); the engine's own
  *  `morph_rhythm` ValueError (two bars on different grids, a position past the last change) is a refusal line too — the person's data, not a fault. */
 async function produceMorph(deps: PhraseScoreDeps, params: MorphPhrase, title: string): Promise<ScoreOutcome> {
@@ -870,7 +1052,7 @@ async function produceMorph(deps: PhraseScoreDeps, params: MorphPhrase, title: s
   if (params.overrides) {
     const forks = await readForks(deps, params.overrides, bars.a, `bar a ${params.a}`);
     if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
-    asked = { ...params, override_bars: forks } as PhraseParams;
+    asked = { ...params, override_bars: forks } as unknown as PhraseParams;
   }
   let refused: string | null = null;
   const outcome = await computeScore(async (_data, t) => {

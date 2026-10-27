@@ -271,7 +271,7 @@ for (const edition of ['lean', 'music'] as const) {
     // 2026-10-26-1545: the mark now says WHO set it ('plugin'), so the evidence line does not claim a person chose Open as JSON; the mechanism (mark both routers before the navigation) is unchanged
     assert.match(sf, /router\.setMark\(leaf, path, 'markdown', 'plugin'\);\s*\n\s*hooks\.markRhythmText\?\.\(leaf, path\);\s*\n\s*await leaf\.setViewState\(/);
     assert.match(sf, /createLeafBySplit\(score, 'vertical', false\)/);
-    assert.match(sf, /\(l, pin\) => \{ void linker\.pinned\(l, pin\); \}, structureHooks\)\);/);
+    assert.match(sf, /\(l, pin\) => \{ void linker\.pinned\(l, pin\); \}, structureHooks(, notebookFor)?\)\);/);   // 2026-10-27-1030, deliberate: + the notebook's vault ports as the view's last argument; the pin and the strip hooks are what they were
     assert.match(code('phrase-view.ts'), /onPin: this\.onPin \? \(pin\) => \{ this\.onPin!\(this\.leaf, pin\); \} : undefined/);
     assert.match(code('main.ts'), /markRhythmText: \(leaf, path\) => \{ this\.rhythmEdit\?\.markAsText\(leaf, path\); \}/);
   });

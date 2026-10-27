@@ -26,11 +26,13 @@ import { paintMixHits } from './mix-hits-dom.ts';
 import { MORPH_BAR_ROLE, MORPH_HIT_ROLE, annotateMorphPayload, morphLineageOf, morphTraceInspector } from './morph-lineage-core.ts';
 import { paintMorphHits } from './morph-hits-dom.ts';
 import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.ts';
+import { mountTransformStrip } from './phrase-transform-dom.ts';
+import { mountNotebook, type NotebookDomPorts, type NotebookHandle } from './notebook-dom.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
   MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, PHRASE_STYLE_NOTES, clampMixUnit, clampMorphPosition, clampMorphSeed, clampPhraseBars, clampPhrasePct, mixSentence, mixTraceInspector,
-  morphEditCount, morphSentence, normalizeMix, normalizeMorph, pathStopOf, pathWeightFor, phraseSourcePath, salvageOverrideRefusal, producePhraseNote, readPhraseKind, readPhraseNote,
+  morphEditCount, morphSentence, normalizeMix, normalizeMorph, pathStopOf, pathWeightFor, phraseSourcePath, salvageOverrideRefusal, producePhraseNote, barsOfPayload, readPhraseKind, readPhraseNote,
   type ExtendPhrase, type MixPhrase, type MorphPhrase, type PhraseParams, type PhraseScoreDeps,
 } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
@@ -534,6 +536,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   listBars?(): string[];
   /** 2026-10-25-1000: "Turn this mix into a morph". Present = the mix strip has a **Morph this mix** button that asks for it; absent = no button (the strip as it was). */
   turnIntoMorph?(): void;
+  /** 2026-10-27-1030 (M14 slice 1): the notebook below the Score. Present = the tab has one (score-first vaults only, by the caller); absent = the tab is exactly what it was. */
+  notebook?: NotebookDomPorts;
   /** M7: the phrase note's text when the caller already has it, so the FIRST surface drawn is the right one for its `kind` (no extend strip flashing before a mix). Absent = the extend surface until `load()`. */
   initial?: string;
 }
@@ -545,6 +549,8 @@ export interface PhraseHandle {
   kind(): PhraseParams['kind'];
   /** The vault's `modify` event for any note: the phrase note reloads; its source bar redraws; anything else is ignored. */
   noteModified(path: string): void;
+  /** The notes in notebook/ (or the phrases a cell made) changed: read the cells again. A no-op without a notebook. */
+  refreshNotebook(): void;
   dispose(): void;
 }
 
@@ -622,10 +628,12 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   // next one is the LATEST ask, with every field changed since the one before it.
   let want: PhraseParams | null = null;
   let writing = false;
+  let notebookHandle: NotebookHandle | null = null;
+  let scoreBars: RhythmData[] | null = null;     // the bars of the Score on screen (the notebook's boxes and rows; a transform's bar count)
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
@@ -636,7 +644,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let structureStrip: StripHandle | null = null;
   let notesLit: number[] = [];
   const noteName = (noteId: string): string => (noteId.split('/').pop() ?? noteId).replace(/\.md$/, '');
-  const barsOfChip = (chip: Chip): number[] => (current === null ? [] : barsContributedBy(current, noteName(chip.noteId), chip.kind === 'phrase' ? noteName(chip.noteId) : undefined));
+  const barsOfChip = (chip: Chip): number[] => (current === null ? [] : barsContributedBy(current, noteName(chip.noteId), chip.kind === 'phrase' ? noteName(chip.noteId) : undefined, scoreBars?.length));
   const showLit = (bars: readonly number[]): void => { area?.lightAll(litBarIds(bars)); };
   const stopListening = ports.structure?.onNotesNavigated((path) => {
     const name = noteName(path);
@@ -666,6 +674,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     } else if (k === 'mix') {
       const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph, changes: morphChanges });
       strip = { el: mix.el, set: (params) => mix.set(params && params.kind === 'mix' ? params : null), setStatus: (t) => mix.setStatus(t), dispose: () => mix.dispose() };
+    } else if (k === 'transform') {
+      const t = mountTransformStrip(parent, { openSource: insp ? (id) => insp.openNote(id) : undefined });
+      strip = { el: t.el, set: (params) => t.set(params), setStatus: (x) => t.setStatus(x), dispose: () => t.dispose() };
     } else {
       const controls = mountPhraseControls(parent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
       strip = { el: controls.el, set: (params) => controls.set(params && params.kind === 'extend' ? params : null), setStatus: (t) => controls.setStatus(t), dispose: () => controls.dispose() };
@@ -745,8 +756,16 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       ...areaPorts,
       inspector: inspectorPorts,
       debounceMs: k === 'mix' || k === 'morph' ? MIX_SCORE_DEBOUNCE_MS : undefined,           // a mix and a morph are dragged (sliders): the first change draws at once, later ones collapse into one draw
-      produce: (note, title) => producePhraseNote({ readNote: ports.readNote, compute: ports.compute }, note as NoteText, title),
+      produce: async (note, title) => {
+        const out = await producePhraseNote({ readNote: ports.readNote, compute: ports.compute }, note as NoteText, title);
+        if (out.kind === 'score' && !disposed) {
+          const bars = barsOfPayload(out.payload);
+          if (bars !== null) { scoreBars = bars; notebookHandle?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels)))) }); }
+        }
+        return out;
+      },
     });
+    if (ports.notebook) { notebookHandle = mountNotebook(parent, ports.notebook); void notebookHandle.refresh(); }
     if (bracket) wireBracket(bracket, () => (current && current.kind === 'extend' ? current : null), () => area, () => insp!.openNote(phraseNoteId(ports.path)));
   };
   const teardown = (): void => {
@@ -756,6 +775,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     area = null;
     bracket?.remove();
     bracket = null;
+    notebookHandle?.dispose();
+    notebookHandle = null;
     strip.dispose();
   };
   build(kind);
@@ -850,9 +871,11 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         return;
       }
       // the notes this phrase is made of: a mix's two bars; an extend's source bar and (M9) every fork note named in its overrides
-      const made = current === null ? [] : current.kind === 'mix' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : current.kind === 'morph' ? [phraseSourcePath(current.a), phraseSourcePath(current.b), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)] : [phraseSourcePath(current.source), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)];
+      if (path.startsWith('notebook/')) { notebookHandle && void notebookHandle.refresh(); return; }
+      const made = current === null ? [] : current.kind === 'transform' ? [`${current.source}.md`, ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)] : current.kind === 'mix' ? [phraseSourcePath(current.a), phraseSourcePath(current.b)] : current.kind === 'morph' ? [phraseSourcePath(current.a), phraseSourcePath(current.b), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)] : [phraseSourcePath(current.source), ...Object.values(current.overrides ?? {}).map((id) => `${id}.md`)];
       if (made.includes(path)) area?.update(last);                       // a bar this phrase is made of changed: the Score is read fresh by the next render
     },
+    refreshNotebook() { if (!disposed && notebookHandle) void notebookHandle.refresh(); },
     dispose() {
       disposed = true;
       stopListening?.();

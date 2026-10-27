@@ -3,40 +3,46 @@
 // kind, so the two cannot drift apart. Runtime imports from phrase-core.ts are types only.
 import type { PhraseParams } from './phrase-core.ts';
 import { phraseBarId, PHRASE_BAR_SCOPE } from './phrase-lineage-core.ts';
+import { transformOpShort } from './phrase-words-core.ts';
 
 export interface Chip {
   /** What the chip says (without the brackets of `stripText`). */
   text: string;
   /** The note it opens (a lineage id: `bars/bar_007`, `phrases/phrase_004`). */
   noteId: string;
-  kind: 'bar' | 'phrase' | 'fork';
+  /** `source` (2026-10-27-1030): the PHRASE a transform changes (a bar chip names a bar note; this names a phrase note). */
+  kind: 'bar' | 'phrase' | 'fork' | 'source';
 }
 
 const baseName = (noteId: string): string => noteId.split('/').pop() ?? noteId;
 const forks = (p: PhraseParams): Array<{ bar: number; note: string }> => {
-  const o = p.kind === 'extend' || p.kind === 'morph' ? p.overrides : undefined;
+  const o = p.kind === 'extend' || p.kind === 'morph' || p.kind === 'transform' ? p.overrides : undefined;
   return Object.keys(o ?? {}).sort((x, y) => Number(x) - Number(y)).map((k) => ({ bar: Number(k), note: baseName(o![k]) }));
 };
 
-/** How many bars the Score of this phrase has: an extend's or a morph's Bars; a mix is one bar. */
-export function barCount(p: PhraseParams): number {
-  return p.kind === 'mix' ? 1 : p.bars;
+/** How many bars the Score of this phrase has: an extend's or a morph's Bars; a mix is one bar; a transform keeps the count of its source, which the params do not hold, so the caller passes what the Score on screen has
+ *  (`known`); without it, the last bar any op names. */
+export function barCount(p: PhraseParams, known?: number): number {
+  if (p.kind === 'mix') return 1;
+  if (p.kind === 'transform') return known ?? Math.max(...p.ops.map((o) => o.last));
+  return p.bars;
 }
 
 /** The bar note that made bar `bar` of this phrase (a name like `bar_007`): its fork note if forked; an extend: the source; a morph: a at or before the middle bar ((bars + 1) / 2), else b; a mix (one bar): a when the weight is at least half. */
 export function barParent(p: PhraseParams, bar: number): string | null {
-  if (p.kind === 'extend' || p.kind === 'morph') {
+  if (p.kind === 'extend' || p.kind === 'morph' || p.kind === 'transform') {
     const fork = p.overrides?.[String(bar)];
     if (fork) return baseName(fork);
   }
+  if (p.kind === 'transform') return baseName(p.source);
   if (p.kind === 'extend') return p.source;
   if (p.kind === 'morph') return bar <= (p.bars + 1) / 2 ? p.a : p.b;
   return p.weight >= 0.5 ? p.a : p.b;
 }
 
 /** The bars (1-based) a note contributed to: for the phrase's own name every bar; for a bar note the bars `barParent` gives it; a note that took no part: none. */
-export function barsContributedBy(p: PhraseParams, noteName: string, phraseName?: string): number[] {
-  const n = barCount(p);
+export function barsContributedBy(p: PhraseParams, noteName: string, phraseName?: string, known?: number): number[] {
+  const n = barCount(p, known);
   const all = Array.from({ length: n }, (_, i) => i + 1);
   if (phraseName !== undefined && noteName === phraseName) return all;
   return all.filter((bar) => barParent(p, bar) === noteName);
@@ -53,6 +59,7 @@ export function chipsFor(name: string, p: PhraseParams): Chip[] {
   const phrase = (what: string): Chip => ({ text: `${name} ${what}`, noteId: `phrases/${name}`, kind: 'phrase' });
   let chips: Chip[];
   if (p.kind === 'extend') chips = [bar(p.source), phrase(`extend ${p.bars} bars`)];
+  else if (p.kind === 'transform') chips = [{ text: baseName(p.source), noteId: p.source, kind: 'source' }, phrase(`transform, ${p.ops.length === 1 ? transformOpShort(p.ops[0]) : `${p.ops.length} ops`}`)];
   else if (p.kind === 'morph') chips = [bar(p.a), phrase(`morph, ${p.bars} bars`), ...(p.b === p.a ? [] : [bar(p.b)])];
   else chips = [bar(p.a), ...(p.b === p.a ? [] : [bar(p.b)]), phrase(`mix, ${p.mode === 'path' ? 'path' : 'vote'}`)];
   return [...chips, ...forks(p).map((f): Chip => ({ text: `${f.note} fork of bar ${f.bar}`, noteId: `bars/${f.note}`, kind: 'fork' }))];

@@ -54,7 +54,7 @@ export function paramsFromPlan(plan: unknown): { ok: true; value: PhraseParams }
   return checked.ok === false ? { ok: false, message: `The planner's answer is not a valid phrase: ${checked.message}` } : { ok: true, value: checked.value };
 }
 
-const namesOf = (p: PhraseParams): string[] => (p.kind === 'extend' ? [p.source] : [p.a, p.b]);
+const namesOf = (p: PhraseParams): string[] => (p.kind === 'extend' ? [p.source] : p.kind === 'transform' ? [] : [p.a, p.b]);       // a sentence never plans a transform (slice 2); its source is a phrase, not a bar
 
 // ---- the service's answer -------------------------------------------------------------------------------------------------------------------------------------------------------------------
 

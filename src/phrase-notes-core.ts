@@ -4,6 +4,7 @@
 //   * for a BAR note, FRONTMATTER only (a description that names the hits and the tempo, a fork's `forked_from` as a wikilink); the body stays exactly one json fence (the Beat Box requires it).
 // Runtime imports from phrase-core.ts are NOT allowed here (phrase-core imports this file): types only.
 import type { PhraseParams } from './phrase-core.ts';
+import { transformOpWords } from './phrase-words-core.ts';
 import { parseFrontmatter, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
 
 export const DERIVED_NOTE = '<!-- derived from the json below; edit the controls, not this text -->';
@@ -16,19 +17,20 @@ const q = (s: string): string => JSON.stringify(s);
 
 /** The fork notes of a phrase in bar-number order (`overrides` values are note ids like `bars/bar_009`). */
 function forks(p: PhraseParams): Array<{ bar: number; note: string }> {
-  const o = p.kind === 'extend' || p.kind === 'morph' ? p.overrides : undefined;
+  const o = p.kind === 'extend' || p.kind === 'morph' || p.kind === 'transform' ? p.overrides : undefined;
   return Object.keys(o ?? {}).sort((x, y) => Number(x) - Number(y)).map((k) => ({ bar: Number(k), note: baseName(o![k]) }));
 }
 
 /** Every note this phrase reads, once each, in the order the Recipe names them, then the fork notes. */
 export function phraseLinks(p: PhraseParams): string[] {
-  const read = p.kind === 'extend' ? [p.source] : [p.a, p.b];
+  const read = p.kind === 'extend' ? [p.source] : p.kind === 'transform' ? [baseName(p.source)] : [p.a, p.b];
   return [...new Set([...read, ...forks(p).map((f) => f.note)])];
 }
 
 export function phraseDescription(name: string, p: PhraseParams): string {
   let sentence: string;
   if (p.kind === 'extend') sentence = `${name} — ${link(p.source)} extended to ${p.bars} bars: ${words(p.style)}, ${tempoWords(p.tempo_change_pct)}.`;
+  else if (p.kind === 'transform') sentence = `${name} — a transform of ${link(baseName(p.source))}: ${p.ops.map(transformOpWords).join('; ')}.`;
   else if (p.kind === 'morph') sentence = `${name} — a morph from ${link(p.a)} to ${link(p.b)} in ${p.bars} bars, ${p.order} order${p.order === 'seeded' ? ` (seed ${p.seed})` : ''}.`;
   else if (p.mode === 'path') sentence = `${name} — a mix of ${link(p.a)} and ${link(p.b)} as a path of single-hit changes: weight 1 is all of ${p.a}, 0 is all of ${p.b}, ${p.order ?? 'musical'} order.`;
   else sentence = `${name} — a mix of ${link(p.a)} and ${link(p.b)} by vote: ${Math.round(p.weight * 100)} % ${p.a} / ${Math.round((1 - p.weight) * 100)} % ${p.b}, threshold ${p.threshold.toFixed(2)}, ghost notes ${p.ghost ? 'on' : 'off'}.`;
@@ -45,6 +47,8 @@ export function phraseRecipeSteps(p: PhraseParams): string[] {
     const tempo = p.tempo_change_pct < 0 ? `, ${-p.tempo_change_pct} % slower` : p.tempo_change_pct > 0 ? `, ${p.tempo_change_pct} % faster` : '';
     const how = p.style === 'building' ? `Build it up over ${p.bars} bars` : `Repeat it for ${p.bars} bars with ${p.style === 'ghost_notes' ? 'ghost notes' : 'fills'}`;
     steps.push(`Take ${link(p.source)}.`, `${how}${tempo}.`);
+  } else if (p.kind === 'transform') {
+    steps.push(`Take ${link(baseName(p.source))}.`, ...p.ops.map((o) => { const w = transformOpWords(o); return `${w[0].toUpperCase()}${w.slice(1)}.`; }));
   } else if (p.kind === 'morph') {
     steps.push(`Take ${link(p.a)} and ${link(p.b)}.`,
       p.bars === 1 ? `Morph from the first to the second and keep the bar at position ${p.position ?? 0}, in ${orderWords(p.order, p.seed)}.` : `Morph from the first to the second over ${p.bars} bars, in ${orderWords(p.order, p.seed)}.`);
@@ -70,6 +74,14 @@ export function phrasePython(p: PhraseParams): string {
   const out: string[] = ['def compute(context):'];
   if (p.kind === 'extend') {
     out.push(`  base = ${callNote(p.source)}`, `  bars = extend_rhythm(data=base, bars=${p.bars}, style=${pyStr(p.style)}, tempo_change_pct=${p.tempo_change_pct})`);
+  } else if (p.kind === 'transform') {
+    out.push(`  bars = ${callNote(baseName(p.source))}`);
+    for (const o of p.ops) {
+      const row = o.row !== undefined ? `, row=${pyStr(o.row)}` : '';
+      out.push(o.op === 'double_up'
+        ? `  bars = double_up_bars(bars=bars, first=${o.first}, last=${o.last}${row}, grid=${o.grid})`
+        : `  bars = thin_out_bars(bars=bars, first=${o.first}, last=${o.last}${row}, amount=${o.amount}${o.keep === 'seeded' ? `, keep='seeded', seed=${o.seed ?? 0}` : ''})`);
+    }
   } else if (p.kind === 'morph') {
     out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`);
     out.push(p.bars === 1

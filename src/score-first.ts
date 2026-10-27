@@ -24,6 +24,7 @@ import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 import { PLAN_COMMAND_ID, PLAN_COMMAND_NAME, createSentencePlanner, planAvailable, type PlanPayload } from './sentence-plan-core.ts';
 import { SentencePlanModal } from './sentence-plan-modal.ts';
+import { NOTEBOOK_FOLDER, createNotebook } from './notebook-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -327,7 +328,39 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         },
         onNotesNavigated: (leaf, fn) => linker.onNotesNavigated(leaf, fn),
       };
-      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }, structureHooks));
+      // 2026-10-27-1030 (M14 slice 1): the notebook below a phrase's Score. Its vault side lives here; the decisions are in notebook-core.ts. Removing a note closes the tabs that show it FIRST (L12: a trash of an open note can no-op),
+      // then trashes it, then checks it is gone, then falls back to the adapter.
+      const removeNote = async (path: string): Promise<void> => {
+        const f = app.vault.getAbstractFileByPath(path);
+        if (!(f instanceof TFile)) return;
+        for (const leaf of app.workspace.getLeavesOfType(PHRASE_VIEW_TYPE)) if ((leaf.view as { file?: TFile | null }).file?.path === path) leaf.detach();
+        for (const leaf of app.workspace.getLeavesOfType('markdown')) if ((leaf.view as { file?: TFile | null }).file?.path === path) leaf.detach();
+        await app.vault.trash(f, true);
+        if (app.vault.getAbstractFileByPath(path) !== null) await app.vault.adapter.remove(path);
+        if (await app.vault.adapter.exists(path)) throw new Error(`${path} is still there`);
+      };
+      const notebookFor = (file: TFile) => ({
+        notebook: createNotebook<TFile>({
+          sourcePhrase: file.path.replace(/\.md$/, ''),
+          activePath: () => file.path,
+          folderExists: (folder) => app.vault.getAbstractFileByPath(folder) !== null,
+          createFolder: async (folder) => { await app.vault.createFolder(folder); },
+          listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
+          listCellPaths: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${NOTEBOOK_FOLDER}/`)).map((f) => f.path),
+          exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
+          read: async (p) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); return app.vault.read(f); },
+          create: (p, content) => app.vault.create(p, content),
+          write: async (p, content) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); await app.vault.process(f, () => content); },
+          remove: removeNote,
+          open: (f) => openPhrase(app, f),
+          notify: (message) => { new Notice(message); },
+          isAlreadyExists: isFileExistsError,
+          trace: (line) => { console.info(line); },
+        }),
+        trace: (line: string) => { console.info(line); },
+        openPhrase: (path: string) => { const f = app.vault.getAbstractFileByPath(path); if (f instanceof TFile) void openPhrase(app, f); },
+      });
+      plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }, structureHooks, notebookFor));
       // 2026-10-26-1270: a bar's tab (its Beat Box or its Score) shows the phrases that use it, as chips above it, from the vault's resolved links (the `links:` of 1260 are what makes them resolve). The strip is added to the view's
       // content element on every event that can change the answer and put back if the view redrew without it; clicking a chip opens that phrase. Only in a score-first vault (this code runs after the gate).
       const barStrips = new WeakMap<HTMLElement, { handle: StripHandle; key: string }>();

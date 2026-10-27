@@ -58,9 +58,9 @@ test('hand-edited morph JSON that is wrong is refused naming the field (never co
   assert.deepEqual([...MORPH_ORDERS], ['musical', 'seeded', 'by_channel']);
 });
 
-test('the kind refusal names all three kinds; a mix and an extend are read exactly as before', () => {
+test('the kind refusal names all four kinds (2026-10-27-1030, deliberate: + transform); a mix and an extend are read exactly as before', () => {
   const bad = validatePhrase({ kind: 'blend', a: 'x' });
-  assert.deepEqual(bad, { ok: false, message: 'kind must be "extend", "mix" or "morph", got "blend".' });
+  assert.deepEqual(bad, { ok: false, message: 'kind must be "extend", "mix", "morph" or "transform", got "blend".' });
   assert.deepEqual(validatePhrase({ kind: 'mix', a: 'bar_005', b: 'bar_006' }), { ok: true, value: { kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.5, threshold: 0.5, ghost: false } });
   assert.deepEqual(validatePhrase({ kind: 'extend', source: 'bar_005' }), { ok: true, value: { kind: 'extend', source: 'bar_005', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 } });
   assert.equal(formatPhraseJson({ kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.4, threshold: 0.5, ghost: true }), '{\n  "kind": "mix",\n  "a": "bar_005",\n  "b": "bar_006",\n  "weight": 0.4,\n  "threshold": 0.5,\n  "ghost": true\n}');

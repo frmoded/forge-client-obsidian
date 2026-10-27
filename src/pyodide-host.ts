@@ -1527,13 +1527,13 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
 
     Plugin-side glue, NOT an engine function: it only composes existing engine entry points. An EXTEND phrase (data is one bar's rhythm data):
     extend_rhythm (the bar stretched into bars bars in the given style, with the tempo stepping by tempo_change_pct over the run). A MIX
-    phrase (M7, data is an object holding the two bars as a and b): mix_rhythm (one bar that is a weighted mix of them). A MORPH phrase (M7c,
+    phrase (M7, data is an object holding the two bars as a and b): mix_rhythm (one bar that is a weighted mix of them). A TRANSFORM phrase (M14, data holds the bars of another phrase as bars): thin_out_bars / double_up_bars over a region. A MORPH phrase (M7c,
     data holds the two bars as a and b): morph_rhythm (bars bars along an ordered path of single-hit edits from a to b; bars = 1 takes a
     position). Then rhythm_bars_to_stream (the bars joined, each bar keeping its own tempo mark) and serialize_result. Never touches the
     vault: both inputs come in as strings, the payload goes out as a dict. Raises on data the engine refuses (extend_rhythm's, mix_rhythm's or
     morph_rhythm's own ValueError) so the plugin can show it."""
     import json as _json
-    from forge.music.lib import extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream
+    from forge.music.lib import extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream, thin_out_bars, double_up_bars
     data = _json.loads(data_json)
     p = _json.loads(params_json)
     if p.get("kind") == "mix" and p.get("mode") == "path":
@@ -1546,6 +1546,18 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
         made = morph_rhythm(data["a"], data["b"], bars=p["bars"], order=p["order"], seed=p["seed"], position=p.get("position"))
         bars = [made] if p["bars"] == 1 else made
         # M7c Phase B (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number (the TS side has already checked its grid). Its tempo is its own.
+        generated = list(bars)
+        for number, forked in p.get("override_bars", {}).items():
+            bars[int(number) - 1] = forked
+    elif p.get("kind") == "transform":
+        # 2026-10-27-1030 (M14 slice 1): a TRANSFORM of another phrase. data holds the bars that phrase made as bars; each op changes a region of them (thin_out_bars / double_up_bars: a
+        # 1-based inclusive range and an optional row), in order. Forks lie over the result as an extend's do (the TS side has already checked their grid).
+        bars = list(data["bars"])
+        for op in p["ops"]:
+            if op["op"] == "thin_out":
+                bars = thin_out_bars(bars, op["first"], op["last"], row=op.get("row"), keep=op.get("keep", "downbeat"), amount=op["amount"], seed=op.get("seed", 0))
+            else:
+                bars = double_up_bars(bars, op["first"], op["last"], row=op.get("row"), grid=op.get("grid", 16))
         generated = list(bars)
         for number, forked in p.get("override_bars", {}).items():
             bars[int(number) - 1] = forked
@@ -1572,6 +1584,10 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
         if p.get("override_bars"):
             # the bars the morph drew BEFORE the forks were laid in: a forked slot keeps its place on the path, so its neighbours' "the change that made this bar" stays what it was
             out["morph_generated"] = generated
+    elif p.get("kind") == "transform":
+        # the bars as they are in the Score (forks laid in), and the bars the ops made BEFORE the forks went in
+        out["bars_data"] = bars
+        out["transform_generated"] = generated
     else:
         # M9: the bars as they are in the Score, so "Edit this bar" writes exactly the generated bar into its own note
         out["bars_data"] = bars
