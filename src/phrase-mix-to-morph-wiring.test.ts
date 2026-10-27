@@ -9,6 +9,7 @@ import { test, before } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
+import { iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { PHRASE_VIEW_TYPE, readPhraseNote } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
@@ -51,7 +52,7 @@ for (const edition of ['lean', 'music'] as const) {
         createFolder: async (p: string) => { folders.push(p); },
       },
       workspace: {
-        onLayoutReady: (cb: () => void) => { cb(); }, iterateAllLeaves: () => {}, on: () => ({}), getLeavesOfType: () => [], getActiveFile: () => null,
+        onLayoutReady: (cb: () => void) => { cb(); }, iterateAllLeaves: iterateAllLeavesLikeObsidian<unknown>(() => ({})), on: () => ({}), getLeavesOfType: () => [], getActiveFile: () => null,
         getActiveViewOfType: (cls: unknown) => (cls === real.PhraseView ? active.phrase ?? null : cls === real.MarkdownView ? active.text ?? null : null),
         getLeaf: (newTab: boolean) => ({ setViewState: async (state: any) => { states.push({ how: newTab ? 'new-tab' : 'this-tab', state }); } }),
         revealLeaf: () => {},

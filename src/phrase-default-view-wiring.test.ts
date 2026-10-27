@@ -7,6 +7,7 @@ import { test, before } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
+import { installHostClock, iterateAllLeavesLikeObsidian, type HostClock } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 
@@ -15,7 +16,9 @@ const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-fi
 const TUTORIAL_TOML = 'name = "forge-tutorial"\nversion = "0.1.0"\ndescription = "x"\ndomains = []\n';
 const MUSIC_THEORY_TOML = 'name = "music-theory"\nversion = "0.1.0"\ndescription = "x"\ndomains = ["music"]\n';
 const PHRASE = 'phrases/phrase_001.md';
-const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
+// time moves only when the test moves it (test-support/host-workspace.ts); `world` installs the clock and `done` removes it
+let clock: HostClock | null = null;
+const tick = (ms = 60) => clock!.advance(ms);
 
 /** A vault with ONE main-area leaf. `restored` = the file that leaf showed when the plugin loaded (the layout), `shows` = what it shows from then on. `dropSwaps` = setViewState calls Obsidian ignores. */
 async function world(real: RealPlugin, toml: string | null, opts: { restored: string | null; restoredType?: string; dropSwaps?: number; holder?: { kind: 'score' | 'text'; file: string }; backHistory?: number; siblings?: number; born?: boolean; others?: Array<{ type: string; file: string }> }) {
@@ -69,7 +72,7 @@ async function world(real: RealPlugin, toml: string | null, opts: { restored: st
       onLayoutReady: (cb: () => void) => { cb(); },
       on: (name: string, cb: () => void) => { (handlers.get(name) ?? handlers.set(name, []).get(name)!).push(cb); return {}; },
       getLeavesOfType: (t: string) => ([leaf, holderLeaf, ...otherLeaves].filter((l) => l && (l !== leaf || visible) && l.view?.getViewType() === t)),
-      iterateAllLeaves: (cb: (l: any) => unknown) => { for (const l of [...(visible ? [leaf] : []), ...(holderLeaf ? [holderLeaf] : []), ...otherLeaves]) if (cb(l)) break; },   // Obsidian's walk stops on a truthy return (app.js 1.14.5)
+      iterateAllLeaves: iterateAllLeavesLikeObsidian<any>(() => ({ root: [...(visible ? [leaf] : []), ...(holderLeaf ? [holderLeaf] : []), ...otherLeaves] })),   // the shared host-faithful walk (stops on a truthy return)
       setActiveLeaf: (l: any) => { log.activated.push(l); },
       getActiveViewOfType: (cls: unknown) => (cls === real.MarkdownView && leaf.view.getViewType() === 'markdown' ? leaf.view : null),
       getActiveFile: () => null, revealLeaf: (l: any) => { log.revealed.push(l); },
@@ -78,6 +81,8 @@ async function world(real: RealPlugin, toml: string | null, opts: { restored: st
     },
     metadataCache: { on: () => ({}), getFileCache: () => ({ frontmatter: { type: 'data', content_type: 'json' } }) }, plugins: {},
   };
+  clock = installHostClock((globalThis as any).window);
+  const deliver = (name: string) => { if (name === 'layout-change') clock!.deliverAfterSettle(handlers.get(name)); else handlers.get(name)?.forEach((f) => f()); };
   const plugin = await loadRealOnload(real, app);
   ready = true;
   await tick();
@@ -94,7 +99,7 @@ async function world(real: RealPlugin, toml: string | null, opts: { restored: st
       visible = true; leaf.working = true; leaf.view = markdownOn(file);
       const backs = leaf.history.backHistory.length;
       setTimeout(() => { leaf.working = false; leaf.history.backHistory.push({}); }, busyMs);
-      for (const n of ['file-open', 'active-leaf-change', 'layout-change']) handlers.get(n)?.forEach((f) => f());
+      for (const n of ['file-open', 'active-leaf-change', 'layout-change']) deliver(n);
       await tick(busyMs + 400);
       return { backsBefore: backs };
     },
@@ -103,8 +108,8 @@ async function world(real: RealPlugin, toml: string | null, opts: { restored: st
     setRoot: (where: 'main' | 'left' | 'popout') => { root = where === 'main' ? rootSplit : where === 'left' ? leftSplit : popout; },
     /** forge.toml reads back without the profile (mid-write, unreadable): the vault is no longer known to be score-first */
     loseProfile: async () => { profile.on = false; vaultHandlers.get('modify')?.forEach((f) => f({ path: 'forge.toml' })); await tick(); },
-    fire: async (...names: string[]) => { for (const n of names) handlers.get(n)?.forEach((f) => f()); await tick(); },
-    done: () => { console.info = saved; console.error = savedError; real.messageDelivery.setScoreFirst(false); real.messageDelivery.resetForTests(); },
+    fire: async (...names: string[]) => { for (const n of names) deliver(n); await tick(); },
+    done: () => { clock!.restore(); clock = null; console.info = saved; console.error = savedError; real.messageDelivery.setScoreFirst(false); real.messageDelivery.resetForTests(); },
   };
 }
 

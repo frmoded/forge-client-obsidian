@@ -11,7 +11,7 @@ const IDS = [1, 2, 3].map((n) => `ph_bar_${n}`);
 const MAP = Object.fromEntries(IDS.map((id, i) => [id, { noteId: 'phrases/phrase_001', role: 'phrase-bar', params: { bar: i + 1 } }]));
 
 /** Three side-by-side bars, 100 px wide each (box x: 0-100, 110-210, 220-320; y: 0-60). `big` is an extra, larger box that overlaps bar 2 (to prove the smallest box wins). */
-function rig(opts: { pointIds?: readonly string[]; trace?: (l: string) => void; pinLabel?: (id: string) => string; big?: boolean; bigOn?: number } = {}) {
+function rig(opts: { pointIds?: readonly string[]; trace?: (l: string) => void; pinLabel?: (id: string) => string; big?: boolean; bigOn?: number; keepPinOnControls?: boolean } = {}) {
   const win: any = new Window({ url: 'http://localhost/' });
   const doc = win.document;
   const root = doc.createElement('div'); doc.body.appendChild(root);
@@ -22,7 +22,7 @@ function rig(opts: { pointIds?: readonly string[]; trace?: (l: string) => void; 
   bars.forEach((g, i) => { g.getBoundingClientRect = () => box(110 * i, 0, 110 * i + 100, 60); });
   if (opts.big) bars[opts.bigOn ?? 0].getBoundingClientRect = () => box(0, 0, 400, 400);       // one bar's box is huge and covers everything, including the others (bar 1 by default)
   const pins: Array<string | null> = [];
-  const layer = attachArtifactInspector({ root, map: MAP, onHover: () => {}, onPin: (e) => { pins.push(e ? e.id : null); }, pointIds: opts.pointIds, trace: opts.trace, pinLabel: opts.pinLabel } as any);
+  const layer = attachArtifactInspector({ root, map: MAP, onHover: () => {}, onPin: (e) => { pins.push(e ? e.id : null); }, pointIds: opts.pointIds, trace: opts.trace, pinLabel: opts.pinLabel, keepPinOnControls: opts.keepPinOnControls } as any);
   const click = (target: any, x: number, y: number) => target.dispatchEvent(new win.MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
   return { root, svg, bars, layer, pins, click };
 }
@@ -173,7 +173,7 @@ test('the box edges count as inside (all four), one pixel beyond does not', () =
 // (`[forge-pin] click midi-player -> none (not on a bar)`), which sent the notes pane home the moment the person pressed play. A click on a control is not a pin gesture: ignored, pin and pane kept.
 test('2026-10-26-1800: a click on the player (play/pause), on a zoom button, or on anything inside either keeps the pin and says why; Esc and a click on empty Score space still let go', () => {
   const lines: string[] = [];
-  const r = rig({ pointIds: IDS, trace: (l) => lines.push(l) });
+  const r = rig({ pointIds: IDS, trace: (l) => lines.push(l), keepPinOnControls: true });
   const doc = r.root.ownerDocument;
   const player = doc.createElement('midi-player'); r.root.appendChild(player);
   const inner = doc.createElement('span'); player.appendChild(inner);
@@ -189,4 +189,39 @@ test('2026-10-26-1800: a click on the player (play/pause), on a zoom button, or 
   r.layer.pin('ph_bar_3');
   r.root.dispatchEvent(new (r.root.ownerDocument.defaultView as any).KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   assert.equal(r.layer.pinnedId(), null, 'Esc still releases');
+});
+
+// 2026-10-27-1000, P3 for the 1800 rule: the inspector is shared with the bar's Beat Box tab, which exists in EVERY vault. The control rule is opt-in (`keepPinOnControls`, set only by the phrase Score surfaces, which exist only in a
+// score-first vault); a surface that does not ask for it behaves byte-for-byte as before 1800: a click on the player or a button is a click on empty space and lets go.
+test('2026-10-27-1000 P3: without keepPinOnControls a click on the player or on a button inside the root still releases the pin, exactly as before 1800 (the bar inspector of every vault)', () => {
+  const lines: string[] = [];
+  const r = rig({ pointIds: IDS, trace: (l) => lines.push(l) });
+  const doc = r.root.ownerDocument;
+  const player = doc.createElement('midi-player'); r.root.appendChild(player);
+  const button = doc.createElement('button'); r.root.appendChild(button);
+  for (const target of [player, button]) {
+    r.layer.pin('ph_bar_2');
+    r.click(target, 150, 200);
+    assert.equal(r.layer.pinnedId(), null, `a click on ${(target as any).tagName} lets go, as it did`);
+  }
+  assert.deepEqual(lines, ['[forge-pin] click midi-player -> none (not on a bar)', '[forge-pin] click button -> none (not on a bar)'], 'the old evidence lines, none mentioning a control');
+});
+
+// 2026-10-27-1000: the edges of "a control INSIDE the root": the root itself, or a control that merely CONTAINS the root, is not one of the Score's own buttons.
+test('2026-10-27-1000: keepPinOnControls ignores only controls strictly inside the root: a root that is itself a control, or sits inside a button, still lets go on empty space', () => {
+  const r = rig({ pointIds: IDS, keepPinOnControls: true });
+  r.layer.pin('ph_bar_2');
+  r.root.className = 'forge-zoom-bar';                       // the root itself matches the control selector
+  r.click(r.svg, 150, 200);
+  assert.equal(r.layer.pinnedId(), null, 'the root is not a control inside itself');
+  const doc = r.root.ownerDocument;
+  const outer = doc.createElement('button'); doc.body.appendChild(outer); outer.appendChild(r.root);
+  r.root.className = '';
+  r.layer.pin('ph_bar_2');
+  r.click(r.svg, 150, 200);
+  assert.equal(r.layer.pinnedId(), null, 'a button AROUND the root is not one of the Score\'s controls');
+  const inner = doc.createElement('button'); r.root.appendChild(inner);
+  r.layer.pin('ph_bar_2');
+  r.click(inner, 150, 30);
+  assert.equal(r.layer.pinnedId(), 'ph_bar_2', 'a button inside the root is');
 });

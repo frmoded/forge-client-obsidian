@@ -45,6 +45,8 @@ export interface ScoreInspectorPorts {
   enlargeTargets?: { x: number; y: number } | null;
   /** drain 2026-10-22-2300: light elements with a stylesheet-independent band and dim the rest while one is pinned (artifact-inspector-core `band`). */
   band?: boolean;
+  /** 2026-10-26-1800 (opt-in, see artifact-inspector-core `keepPinOnControls`): the Score's player and zoom buttons do not release the pin. */
+  keepPinOnControls?: boolean;
   /** Hovering an element with nothing pinned SHOWS its lineage stack (and leaving restores the hint). */
   previewOnHover?: boolean;
   /** The quiet line when only the Kit view is unmapped. */
@@ -180,6 +182,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         enlargeIds: ports.enlargeIds ? ports.enlargeIds(map) : undefined,
         decorate: ports.decorate ? (pinnedId) => ports.decorate!(host, map, pinnedId) : undefined,
         band: ports.band === true,
+        keepPinOnControls: ports.keepPinOnControls === true,
         pointIds: ports.pointRoles ? Object.keys(map).filter((id) => ports.pointRoles!.includes(map[id].role)) : undefined,
         trace: ports.trace,
         pinLabel: ports.pinLabel ? (id) => ports.pinLabel!(id, map[id]) : undefined,

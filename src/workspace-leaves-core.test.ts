@@ -8,19 +8,9 @@ import { test } from 'node:test';
 
 import { createPaneLinker, PAIR_SETTLE_MS, type PaneLinkerPorts } from './linked-panes-core.ts';
 import { collectLeaves } from './workspace-leaves-core.ts';
+import { obsidianWorkspace } from './test-support/host-workspace.ts';
 
 type Leaf = { id: string };
-type Splits = { root: Leaf[]; left: Leaf[]; right: Leaf[]; floating: Leaf[] };
-
-/** Obsidian's walk, as read from its app.js: each split is walked in order and the walk of THAT split stops when the callback returns something truthy. */
-function obsidianWorkspace(splits: Splits) {
-  return {
-    splits,
-    iterateAllLeaves(callback: (leaf: Leaf) => unknown): void {
-      for (const split of [splits.root, splits.left, splits.right, splits.floating]) for (const leaf of split) if (callback(leaf)) break;
-    },
-  };
-}
 
 const mk = (id: string): Leaf => ({ id });
 

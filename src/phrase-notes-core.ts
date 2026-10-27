@@ -78,11 +78,11 @@ export function extractPhraseJsonBlock(text: string): ({ ok: true } & PhraseJson
 
 // ---- frontmatter assembly --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-interface Front { eol: string; lines: string[]; end: number }
+interface Front { eol: string; lines: string[] }
 
 function splitFront(text: string): Front | null {
   const m = /^---(\r?\n)([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/.exec(text);
-  return m ? { eol: m[1], lines: m[2].split(/\r?\n/), end: m[0].length } : null;
+  return m ? { eol: m[1], lines: m[2].split(/\r?\n/) } : null;
 }
 
 /** The frontmatter lines with `description` and the `links:` block replaced (description where it was, links straight after it), every other line kept as it is. */

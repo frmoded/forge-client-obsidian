@@ -22,6 +22,6 @@ test('the extend tab\'s inspector does NOT get the mix options (its pin, arrows 
   const at = tab.indexOf("insp && k === 'extend' ? {");
   const extend = tab.slice(at, tab.indexOf("} : insp && k === 'mix'", at));
   assert.ok(extend.length > 100);
-  for (const opt of ['keepPin', 'decorate', 'enlargeIds', 'order:']) assert.ok(!extend.includes(opt), `the extend inspector has no ${opt}`);
+  for (const opt of ['keepPin:', 'decorate', 'enlargeIds', 'order:']) assert.ok(!extend.includes(opt), `the extend inspector has no ${opt}`);
   assert.match(extend, /enlargeTargets: null,/);
 });

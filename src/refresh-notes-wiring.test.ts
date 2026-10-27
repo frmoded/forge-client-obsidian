@@ -8,6 +8,7 @@ import { test, before } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
+import { iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { formatPhraseJson } from './phrase-core.ts';
 
@@ -45,7 +46,7 @@ for (const edition of ['lean', 'music'] as const) {
         process: async (f: any, fn: (t: string) => string) => { processed.push(f.path); files.set(f.path, fn(files.get(f.path)!)); },
         create: async () => {}, createFolder: async () => {},
       },
-      workspace: { onLayoutReady: (cb: () => void) => { cb(); }, iterateAllLeaves: () => {}, on: () => ({}), getLeavesOfType: () => [], getActiveFile: () => null, getActiveViewOfType: () => null, getMostRecentLeaf: () => null, revealLeaf: () => {}, getLeaf: () => ({}) },
+      workspace: { onLayoutReady: (cb: () => void) => { cb(); }, iterateAllLeaves: iterateAllLeavesLikeObsidian<unknown>(() => ({})), on: () => ({}), getLeavesOfType: () => [], getActiveFile: () => null, getActiveViewOfType: () => null, getMostRecentLeaf: () => null, revealLeaf: () => {}, getLeaf: () => ({}) },
       metadataCache: { on: () => ({}) }, plugins: {},
     };
     const plugin = await loadRealOnload(real, app);

@@ -377,3 +377,40 @@ test('M13: the strip follows the note: a new Bars count in the json is a new chi
   await r.handle.noteModified(PATH); await r.advance(1500);
   assert.deepEqual(chipTexts(r), ['bar_005', 'phrase_001 extend 4 bars']);
 });
+
+// 2026-10-27-1000 (hardening of the 1800 rule, through the REAL surfaces): the phrase Score keeps a pin when the player or a button inside its host is clicked (the notes pane is never told), and the bar inspector - the same
+// inspector code, shared with every vault - lets go of it exactly as it did before 1800 (P3).
+test('1800 through the phrase tab: pin bar 3, click the player, a zoom button and a plain button inside the Score host: the pin stays and the tab is told nothing more; empty Score space still lets go', async () => {
+  const r = rig();
+  await r.handle.load(); await flush();
+  const host = r.q('.forge-rhythm-score-host');
+  const doc = r.win.document;
+  const player = doc.createElement('midi-player'); host.appendChild(player);
+  const zoom = doc.createElement('button'); zoom.className = 'forge-zoom-button'; host.appendChild(zoom);
+  r.fire(r.q('#ph_bar_3'), 'click');
+  const told = r.pins.length;
+  assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_3']);
+  r.fire(player, 'click'); r.fire(zoom, 'click');
+  assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_3'], 'still pinned');
+  assert.equal(r.pins.length, told, 'the notes pane heard nothing');
+  r.fire(r.q('svg'), 'click', { clientX: 5000, clientY: 5000 });
+  assert.equal(r.pins.at(-1), null, 'a click on empty Score space still lets go');
+});
+
+test('1800 P3 through the bar inspector: a click on a button inside its host releases the pin, as before 1800', async () => {
+  const { createScoreInspector } = await import('./score-inspector.ts');
+  const win: any = new Window({ url: 'http://localhost/' });
+  const doc = win.document;
+  const slot = doc.createElement('div'); const host = doc.createElement('div');
+  doc.body.append(slot, host);
+  host.innerHTML = '<svg><g class="note" id="a_kick_0"></g></svg>';
+  const pinned: Array<string | null> = [];
+  const insp = createScoreInspector(slot, { noteId: 'bars/bar_001', openNote: () => {}, postHighlight: () => {}, onPinned: (e: any) => pinned.push(e ? e.id : null) });
+  const map = { a_kick_0: { noteId: 'bars/bar_001', role: 'hit', params: { channel: 'kick', step: 0, beat: 'beat 1' } } };
+  insp.onShown(host, { payload: {}, map, problems: [], kitProblems: [] });
+  host.querySelector('#a_kick_0').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  assert.deepEqual(pinned, ['a_kick_0']);
+  const button = doc.createElement('button'); host.appendChild(button);
+  button.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  assert.deepEqual(pinned, ['a_kick_0', null], 'the click on a button let go of the pin');
+});

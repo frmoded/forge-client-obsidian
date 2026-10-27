@@ -694,6 +694,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       trace: (line) => { console.info(line); },
       pinLabel: (id, prov) => (typeof prov.params.bar === 'number' ? `bar ${prov.params.bar}` : id),
       previewOnHover: true,
+      keepPinOnControls: true,                       // 2026-10-26-1800: the Score's player and zoom buttons do not release the pin (phrase surfaces only: P3)
       band: true,                                    // 2300: the class recolour alone was not visible in the real Obsidian; the band does not depend on the stylesheet or the theme
       kitNote: 'Kit view: not mapped for this phrase (use the multi-staff view to inspect).',
     } : insp && k === 'mix' ? {
@@ -708,6 +709,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       order: () => [],
       keepPin: true,
       previewOnHover: true,
+      keepPinOnControls: true,                       // 2026-10-26-1800: the Score's player and zoom buttons do not release the pin (phrase surfaces only: P3)
       enlargeIds: (map) => Object.keys(map).filter((id) => map[id].role === MIX_HIT_ROLE),
       pointRoles: [MIX_BAR_ROLE],                    // 1100: a click on the empty staff shows the bar's stack (a note, drawn or enlarged, still pins itself first)
       trace: (line) => { console.info(line); },
@@ -727,6 +729,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       order: (map) => Object.keys(map).filter((id) => map[id].role === MORPH_BAR_ROLE).sort((x, y) => Number(map[x].params.bar) - Number(map[y].params.bar)),
       keepPin: true,
       previewOnHover: true,
+      keepPinOnControls: true,                       // 2026-10-26-1800: the Score's player and zoom buttons do not release the pin (phrase surfaces only: P3)
       enlargeIds: (map) => Object.keys(map).filter((id) => map[id].role === MORPH_HIT_ROLE),
       pointRoles: [MORPH_BAR_ROLE],                  // a click anywhere inside a bar's box pins it (Iteration 123)
       trace: (line) => { console.info(line); },

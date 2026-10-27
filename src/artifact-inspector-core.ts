@@ -42,6 +42,9 @@ export interface ArtifactInspectorOptions {
   trace?(line: string): void;
   /** The `bar N` of the evidence line for a pinned id. Default: the id. */
   pinLabel?(id: string): string;
+  /** 2026-10-26-1800: a click on the Score's player or on any button inside the root is not a pin gesture (the pin is kept, one evidence line). Opt-in, because this inspector is shared with the bar's Beat Box tab of EVERY vault,
+   *  which must behave as before (P3, 2026-10-27-1000): only the phrase Score surfaces, which exist only in a score-first vault, ask for it. Absent = a click on a control is a click on empty space. */
+  keepPinOnControls?: boolean;
 }
 
 export interface ArtifactInspector {
@@ -197,7 +200,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     return hit !== null && hit !== root && root.contains(hit);
   };
   const onClick = (e: Event) => {
-    if (isPlayerControl(e.target)) { opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (a player control, the pin is kept)`); return; }
+    if (opts.keepPinOnControls === true && isPlayerControl(e.target)) { opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (a player control, the pin is kept)`); return; }
     const drawn = mappedAncestor(root, map, e.target);
     const el = drawn ?? boxAt(e);                         // the unpainted part of a bar has the svg root as its target: the point decides
     setPinned(el ? el.id : null);                          // a click on empty space inside the root (and in no bar's box) unpins

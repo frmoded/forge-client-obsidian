@@ -12,6 +12,7 @@ import { Window } from 'happy-dom';
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { PAIR_SETTLE_MS } from './linked-panes-core.ts';
+import { installHostClock, iterateAllLeavesLikeObsidian, type HostClock } from './test-support/host-workspace.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 
@@ -22,19 +23,21 @@ const TUTORIAL_TOML = 'name = "forge-tutorial"\nversion = "0.1.0"\ndescription =
 const MUSIC_THEORY_TOML = 'name = "music-theory"\nversion = "0.1.0"\ndescription = "x"\ndomains = ["music"]\n';
 const PAIR = 'open-score-with-notes';
 const PHRASE = 'phrases/phrase_001.md';
-const tick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
 const SRC = import.meta.dirname;
 const code = (f: string) => fs.readFileSync(path.join(SRC, f), 'utf8').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
 
 for (const edition of ['lean', 'music'] as const) {
   let real: RealPlugin;
+  let win: any;
   before(async () => {
-    const win: any = new Window({ url: 'http://localhost/' });
+    win = new Window({ url: 'http://localhost/' });
     Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
   });
 
   async function world(toml: string | null) {
     real ??= await bundleRealPlugin(ROOT, edition);
+    const clock: HostClock = installHostClock(win);          // time moves only when a test moves it; layout-change arrives after the host's settle (test-support/host-workspace.ts)
+    const tick = (ms = 60) => clock.advance(ms);
     const tf = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
     const leaves = new Set<any>();
     const log = { splits: [] as unknown[][], activated: [] as any[], errors: [] as unknown[][], lines: [] as string[], handlers: new Map<string, Array<() => void>>() };
@@ -46,6 +49,7 @@ for (const edition of ['lean', 'music'] as const) {
       leaves.add(leaf);
       return leaf;
     };
+    const deliver = (name: string) => { if (name === 'layout-change') clock.deliverAfterSettle(log.handlers.get(name)); else log.handlers.get(name)?.forEach((f) => f()); };
     let active: { phrase?: any; text?: any } = {};
     let recent: any = null;
     const resolvedLinks: Record<string, Record<string, number>> = {};
@@ -58,8 +62,7 @@ for (const edition of ['lean', 'music'] as const) {
       workspace: {
         rootSplit: {}, leftSplit: {}, rightSplit: {},
         onLayoutReady: (cb: () => void) => { cb(); },
-        // Obsidian's walk (app.js 1.14.5): a callback that returns something truthy STOPS it. The earlier `forEach(cb)` hid the 2026-10-26-1545 incident (the pair closed itself).
-        iterateAllLeaves: (cb: (l: any) => unknown) => { for (const l of [...leaves]) if (cb(l)) break; },
+        iterateAllLeaves: iterateAllLeavesLikeObsidian<any>(() => ({ root: [...leaves] })),        // the shared host-faithful walk (it stops on a truthy return: the 2026-10-26-1545 incident)
         on: (name: string, cb: () => void) => { (log.handlers.get(name) ?? log.handlers.set(name, []).get(name)!).push(cb); return {}; },
         getLeavesOfType: () => [], getActiveFile: () => null,
         getActiveViewOfType: (cls: unknown) => (cls === real.PhraseView ? active.phrase ?? null : cls === real.MarkdownView ? active.text ?? null : null),
@@ -79,14 +82,14 @@ for (const edition of ['lean', 'music'] as const) {
     const phraseTab = (leaf: any, file = PHRASE) => { const v: any = plugin.views.get(PHRASE_VIEW_TYPE)!(leaf); v.file = tf(file); v.leaf = leaf; leaf.view = v; v.getViewType = () => PHRASE_VIEW_TYPE; return v; };
     const textTab = (leaf: any, file: string) => { const v: any = new real.MarkdownView(); v.file = tf(file); v.leaf = leaf; return v; };
     return {
-      plugin, app, leaves, log, makeLeaf, phraseTab, textTab, resolvedLinks,
-      fire: async (...names: string[]) => { for (const n of names) log.handlers.get(n)?.forEach((f) => f()); await tick(); },
+      plugin, app, leaves, log, makeLeaf, phraseTab, textTab, resolvedLinks, tick, clock,
+      fire: async (...names: string[]) => { for (const n of names) deliver(n); await tick(); },
       setActive: (a: typeof active) => { active = a; },
       setRecent: (l: any) => { recent = l; },
       offered: () => plugin.commands.get(PAIR)?.checkCallback?.(true) ?? false,
       run: async () => { plugin.commands.get(PAIR)!.checkCallback!(false); await tick(); },
-      layoutChange: async () => { log.handlers.get('layout-change')?.forEach((f) => f()); await tick(); },
-      done: () => { console.info = savedInfo; console.error = savedError; delete (Object.prototype as any).addAction; real.messageDelivery.setScoreFirst(false); real.messageDelivery.resetForTests(); },
+      layoutChange: async () => { deliver('layout-change'); await tick(); },
+      done: () => { clock.restore(); console.info = savedInfo; console.error = savedError; delete (Object.prototype as any).addAction; real.messageDelivery.setScoreFirst(false); real.messageDelivery.resetForTests(); },
     };
   }
 
@@ -140,15 +143,15 @@ for (const edition of ['lean', 'music'] as const) {
     try {
       const score = w.makeLeaf(); const view = w.phraseTab(score); w.setActive({ phrase: view });
       assert.equal(typeof view.onPin, 'function', 'the view was given the pin callback');
-      view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 2' }); await tick();
+      view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 2' }); await w.tick();
       assert.deepEqual(w.log.lines, [], 'no pair yet: nothing happens');
       await w.run();
       const notes = [...w.leaves].find((l) => l !== score)!;
-      view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 2' }); await tick();
+      view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 2' }); await w.tick();
       assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'bars/bar_005.md', mode: 'preview' } });
-      view.onPin(score, { noteId: 'bars/bar_009', reason: 'forked' }); await tick();
+      view.onPin(score, { noteId: 'bars/bar_009', reason: 'forked' }); await w.tick();
       assert.equal(notes.states.at(-1).state.file, 'bars/bar_009.md');
-      view.onPin(score, null); await tick();
+      view.onPin(score, null); await w.tick();
       assert.equal(notes.states.at(-1).state.file, PHRASE);
       assert.deepEqual(w.log.lines.slice(1), [
         '[forge-panes] notes pane -> bars/bar_005.md (reason: pinned bar 2)',
@@ -187,14 +190,14 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(w.log.lines.slice(1), [], 'layout-changes with both panes on screen close nothing (the 1545 incident)');
       w.leaves.delete(notes); await w.layoutChange(); await w.layoutChange();
       assert.deepEqual(w.log.lines.slice(1), [], 'one look is not enough');
-      await tick(PAIR_SETTLE_MS + 120);
+      await w.tick(PAIR_SETTLE_MS + 120);
       assert.equal(w.log.lines.slice(1).length, 1);
       assert.match(w.log.lines[1]!, /^\[forge-panes\] pair closed \(notes pane; reason: leaf missing from iterateAllLeaves on layout-change #\d+, leaves=\d+, leafId=/);
-      view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 1' }); await tick();
+      view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 1' }); await w.tick();
       await w.run();
       assert.equal(w.log.splits.length, 2, 'a fresh pair');
       const notes2 = [...w.leaves].find((l) => l !== score && l !== other)!;
-      w.leaves.delete(score); await w.layoutChange(); await tick(PAIR_SETTLE_MS + 120);
+      w.leaves.delete(score); await w.layoutChange(); await w.tick(PAIR_SETTLE_MS + 120);
       assert.match(w.log.lines.at(-1)!, /^\[forge-panes\] pair closed \(score pane; reason: leaf missing/);
       assert.ok(w.leaves.has(notes2) && w.leaves.has(other), 'no other tab was closed');
       assert.equal(other.states.length, otherStates, 'no other tab was touched');
@@ -242,7 +245,7 @@ for (const edition of ['lean', 'music'] as const) {
       await w.fire('layout-change', 'file-open');
       assert.equal(host.querySelectorAll('.forge-structure-strip').length, 1, 'not added twice');
       assert.deepEqual(w.log.lines.filter((l) => l.startsWith('[forge-strip]')), ['[forge-strip] bar_005 used by phrase_001, phrase_003'], 'one evidence line, said when the answer changed');
-      host.querySelectorAll('button')[1].click(); await tick();
+      host.querySelectorAll('button')[1].click(); await w.tick();
       assert.equal(w.log.splits.length, 0);
       const opened = [...w.leaves].flatMap((l) => l.states).filter((s: any) => s.type === PHRASE_VIEW_TYPE).map((s: any) => s.state.file);
       assert.deepEqual(opened, ['phrases/phrase_003.md'], 'the chip opens that phrase as a Score');
