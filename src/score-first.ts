@@ -59,6 +59,8 @@ export interface ScoreFirstHooks {
   /** 2026-10-27-1015 ("New phrase from a sentence"): POST the sentence to the hosted service's /plan with the person's token, and the BYOK key to send (or undefined). Absent = the dialog says the service cannot be reached. */
   askPlan?(payload: PlanPayload): Promise<{ status: number; json: unknown }>;
   ownKey?(): string | undefined;
+  /** 2026-10-27-0720 (the notebook's typed request): the service's /health version, or null. Asked only to tell an old service from a sentence it cannot plan. */
+  serviceVersion?(): Promise<string | null>;
 }
 
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {
@@ -356,6 +358,11 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           notify: (message) => { new Notice(message); },
           isAlreadyExists: isFileExistsError,
           trace: (line) => { console.info(line); },
+          // the typed request (slice 2): the same service call, token and BYOK key as "New phrase from a sentence"; the bar names ride along as for every /plan call
+          ask: (payload) => (hooks.askPlan ? hooks.askPlan(payload) : Promise.resolve({ status: 0, json: { detail: 'planning is not available in this build' } })),
+          ownKey: () => hooks.ownKey?.(),
+          listBarBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${BAR_FOLDER_NAME}/`)).map((f) => f.basename),
+          serviceVersion: () => (hooks.serviceVersion ? hooks.serviceVersion() : Promise.resolve(null)),
         }),
         trace: (line: string) => { console.info(line); },
         openPhrase: (path: string) => { const f = app.vault.getAbstractFileByPath(path); if (f instanceof TFile) void openPhrase(app, f); },

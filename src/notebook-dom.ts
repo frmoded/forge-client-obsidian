@@ -1,6 +1,7 @@
 // 2026-10-27-1030 (M14 slice 1) - the notebook area below the Score: plain DOM, no obsidian import (a happy-dom test mounts the very thing). The UI contract is mockups/m11-notebook-below-the-score.html: bars you click (Shift extends),
-// a row picker, the selection ALWAYS shown as chips, an op with its one number, Run; and below, the cells, each showing exactly what it received, its Recipe, Re-run and Delete cell. The text request box is present but disabled
-// (it needs the sentence service, M7b (b); slice 2). The area sits OUTSIDE the Score's inspector root, so a click here is never a pin gesture (the 1800 rule is kept by where this is mounted, and tested in phrase-notebook-wiring.test.ts).
+// a row picker, the selection ALWAYS shown as chips, an op with its one number, Run; and below, the cells, each showing exactly what it received, its Recipe, Re-run and Delete cell. 2026-10-27-0720 (slice 2): the request box works:
+// type what should happen ("make this half as busy, keep the downbeat") and press Run (or Enter) and the sentence, not the op picker, makes the cell; the picker is dimmed while a sentence is typed, so it is plain which one Run will use.
+// The area sits OUTSIDE the Score's inspector root, so a click here is never a pin gesture (the 1800 rule is kept by where this is mounted, and tested in phrase-notebook-wiring.test.ts).
 import { extendSelection, selectionChip, toggleBar, withRow, type Notebook, type NotebookCell, type Selection } from './notebook-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
 
@@ -19,7 +20,8 @@ export interface NotebookHandle {
   dispose(): void;
 }
 
-const REQUEST_LABEL = 'needs a sentence service (M7b b)';
+const REQUEST_PLACEHOLDER = 'or say it: make this half as busy, keep the downbeat';
+const REQUEST_LABEL = 'What to do with the selected bars, in a sentence';
 const HINT = 'No selection yet: click bars above. The selection is always shown as chips; a cell shows the exact references it received.';
 
 export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): NotebookHandle {
@@ -42,8 +44,8 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   const number = el('input', 'forge-notebook-number'); number.type = 'number';
   const run = el('button', 'forge-notebook-run', 'Run'); run.type = 'button'; run.disabled = true;
   doEl.append(op, numberLabel, number, run);
-  const request = el('input', 'forge-notebook-request'); request.type = 'text'; request.disabled = true;
-  request.setAttribute('placeholder', REQUEST_LABEL); request.setAttribute('aria-label', REQUEST_LABEL);
+  const request = el('input', 'forge-notebook-request');
+  request.setAttribute('placeholder', REQUEST_PLACEHOLDER); request.setAttribute('aria-label', REQUEST_LABEL);
   const hint = el('p', 'forge-notebook-hint', HINT);
   const message = el('div', 'forge-notebook-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   root.append(cellsEl, barsEl, rowsEl, chipsEl, doEl, request, hint, message);
@@ -66,6 +68,8 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   };
   setNumberFor('thin_out');
   op.addEventListener('change', () => setNumberFor(op.value));
+  request.addEventListener('input', () => paint());
+  request.addEventListener('keydown', (e) => { const k = e as KeyboardEvent; if (k.key === 'Enter' && !k.isComposing) { k.preventDefault(); run.click(); } });
 
   const paint = (): void => {
     for (const b of Array.from(barsEl.children) as HTMLElement[]) b.setAttribute('aria-pressed', String(selection.bars.includes(Number(b.textContent))));
@@ -75,6 +79,10 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     if (chip !== null) chipsEl.appendChild(el('span', 'forge-notebook-chip', chip));
     hint.style.display = chip !== null ? 'none' : '';
     run.disabled = busy || chip === null;
+    request.disabled = busy;
+    const typed = request.value.trim() !== '';
+    op.disabled = typed; number.disabled = typed;                       // a typed sentence is what Run will use: the picker is dimmed, not hidden
+    doEl.setAttribute('data-mode', typed ? 'sentence' : 'picker');
     if (chip !== lastChip) { lastChip = chip; ports.trace(`[forge-notebook] selection ${chip ?? 'cleared'}`); }
   };
 
@@ -104,6 +112,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     cell.append(el('small', 'forge-notebook-cell-head', c.role === 'result' ? `cell ${n} · made this phrase from:` : `cell ${n} · received:`));
     cell.appendChild(doc.createTextNode(' '));
     cell.appendChild(el('span', 'forge-notebook-chip', c.selection));
+    if (c.request !== undefined) cell.appendChild(el('div', 'forge-notebook-said', `“${c.request}”`));        // the sentence the cell was made from (text, never markup)
     const recipe = el('div', 'forge-notebook-recipe', c.ops.map((o) => { const w = transformOpWords(o); return `${w[0].toUpperCase()}${w.slice(1)}.`; }).join('\n'));
     recipe.style.whiteSpace = 'pre-line';
     cell.appendChild(recipe);
@@ -141,12 +150,14 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
 
   run.addEventListener('click', () => { void (async () => {
     if (busy || selectionChip(selection) === null) return;
-    busy = true; paint(); say('Running...');
+    const sentence = request.value.trim();
+    const chosen = selection;                                           // what was selected when Run was pressed is what runs, whatever is clicked while the service thinks
+    busy = true; paint(); say(sentence !== '' ? 'Asking...' : 'Running...');
     try {
-      const r = await ports.notebook.run(selection, op.value as 'thin_out' | 'double_up', Number(number.value));
+      const r = sentence !== '' ? await ports.notebook.runRequest(chosen, sentence) : await ports.notebook.run(chosen, op.value as 'thin_out' | 'double_up', Number(number.value));
       if (disposed) return;
       if (r.ok === false) say(r.message, 'alert');
-      else { say(`Made ${(r.cellPath.split('/').pop() ?? '').replace(/\.md$/, '')} and ${r.phrasePath}.`); await refresh(); }
+      else { request.value = ''; say(`Made ${(r.cellPath.split('/').pop() ?? '').replace(/\.md$/, '')} and ${r.phrasePath}.`); await refresh(); }
     } finally { busy = false; if (!disposed) paint(); }
   })(); });
 

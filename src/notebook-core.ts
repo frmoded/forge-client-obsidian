@@ -1,10 +1,14 @@
 // 2026-10-27-1030 (M14 slice 1, design 4.13) - the notebook below the Score, its pure core: no `obsidian` import (the vault, the tab and the Notice are ports). A SELECTION is bars (clicked; Shift extends) and a row, always shown as chips
 // ("bars 3 to 5, kick row"). Run turns the selection and one op into a TRANSFORM phrase (a note in phrases/) and a CELL (a note in notebook/: Description, Recipe, wikilinks, and the ONE json fence that records what the cell
 // received - P4: the cell is a note, the Score stays derived). Re-run writes the same phrase again from the cell (deterministic, no LLM). Delete cell removes the cell and the phrase it made; the source is never touched.
+// 2026-10-27-0720 (slice 2): Run can also take a typed REQUEST (a sentence): the service turns it into the same ops (notebook-request-core.ts), the cell records the sentence as its Description and in its json, and everything after that
+// (the phrase, the cell, Re-run, Delete cell) is the one write path the op picker uses.
 import {
   createNewPhraseFromParams, formatTransformOp, noteContentFor, validatePhrase, type NewPhraseResult, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
+import { askedLine, buildTransformRequest, interpretTransformResponse, oneLine, versionAtLeast, OLD_SERVICE, REQUEST_NEEDS_VERSION, NO_BARS_SELECTED, type TransformOutcome } from './notebook-request-core.ts';
 import { extractPhraseJsonBlock } from './phrase-notes-core.ts';
+import type { PlanPayload } from './sentence-plan-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
 
@@ -59,7 +63,8 @@ export function opsFor(s: Selection, kind: 'thin_out' | 'double_up', number: num
 
 // ---- the cell note --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-export interface NotebookCellData { id: string; source: string; result: string; selection: string; ops: TransformOp[] }
+/** `request`: the sentence the person typed, when the cell was made from one (its Description); absent for a cell made from the op picker. */
+export interface NotebookCellData { id: string; source: string; result: string; selection: string; ops: TransformOp[]; request?: string }
 export interface NotebookCell extends NotebookCellData { path: string; role?: 'source' | 'result' }
 
 const base = (noteId: string): string => noteId.split('/').pop() ?? noteId;
@@ -68,14 +73,17 @@ const capital = (s: string): string => `${s[0].toUpperCase()}${s.slice(1)}`;
 /** A cell as a Forge note (Description, Recipe, wikilinks) with ONE json fence, last: what the cell received and what it made. Derived text above the fence, regenerated from the json. */
 export function cellNoteContent(c: NotebookCellData): string {
   const source = base(c.source), result = base(c.result);
-  const description = `${c.id} — ${c.selection} of [[${source}]]: ${c.ops.map(transformOpWords).join('; ')}. Made [[${result}]].`;
+  const said = c.request === undefined ? undefined : oneLine(c.request);
+  // A typed request IS the cell's Description (quoted in the body, so a sentence that starts with "#" or "-" can never start a heading or a list); an op-picker cell keeps the derived sentence.
+  const description = said !== undefined ? said : `${c.id} — ${c.selection} of [[${source}]]: ${c.ops.map(transformOpWords).join('; ')}. Made [[${result}]].`;
   return [
     '---', 'type: data', 'content_type: json', `description: ${JSON.stringify(description)}`, 'links:', `  - "[[${source}]]"`, `  - "[[${result}]]"`, '---', '',
     '<!-- derived from the json below; edit the controls, not this text -->', '',
-    '# Description', '', description, '',
+    '# Description', '', said !== undefined ? `“${said}”` : description, '',
     '# Recipe', '', `Take [[${source}]].`, ...c.ops.map((o) => `${capital(transformOpWords(o))}.`), `This makes [[${result}]].`, '',
     '```json',
-    '{', '  "kind": "notebook_cell",', `  "source": ${JSON.stringify(c.source)},`, `  "result": ${JSON.stringify(c.result)},`, `  "selection": ${JSON.stringify(c.selection)},`, '  "ops": [',
+    '{', '  "kind": "notebook_cell",', `  "source": ${JSON.stringify(c.source)},`, `  "result": ${JSON.stringify(c.result)},`, `  "selection": ${JSON.stringify(c.selection)},`,
+    ...(said !== undefined ? [`  "request": ${JSON.stringify(said)},`] : []), '  "ops": [',
     ...c.ops.map((o, i) => `    ${formatTransformOp(o)}${i < c.ops.length - 1 ? ',' : ''}`), '  ]', '}',
     '```', '',
   ].join('\n');
@@ -89,15 +97,16 @@ export function readCellNote(text: string, path: string): { ok: true; cell: Note
   if (block.ok === false) return bad(block.message);
   let raw: unknown;
   try { raw = JSON.parse(text.slice(block.contentStart, block.contentEnd)); } catch (e) { return bad(`The json block is not valid JSON: ${(e as Error).message}`); }
-  const o = raw as { kind?: unknown; source?: unknown; result?: unknown; selection?: unknown; ops?: unknown } | null;
+  const o = raw as { kind?: unknown; source?: unknown; result?: unknown; selection?: unknown; ops?: unknown; request?: unknown } | null;
   if (typeof o !== 'object' || o === null || o.kind !== 'notebook_cell') return bad('This is not a notebook cell (kind must be "notebook_cell").');
   if (typeof o.source !== 'string' || !PHRASE_NOTE.test(o.source)) return bad(`source must be a phrase note without .md, like phrases/phrase_006, got ${JSON.stringify(o.source)}.`);
   if (typeof o.result !== 'string' || !PHRASE_NOTE.test(o.result)) return bad(`result must be a phrase note without .md, like phrases/phrase_007, got ${JSON.stringify(o.result)}.`);
   if (typeof o.selection !== 'string') return bad('selection must be a string like "bars 3 to 5, kick row".');
+  if (o.request !== undefined && typeof o.request !== 'string') return bad('request must be the sentence the cell was made from (a string), or absent.');
   const valid = validatePhrase({ kind: 'transform', source: o.source, ops: o.ops });
   if (valid.ok === false) return bad(valid.message);
   const ops = (valid.value as TransformPhrase).ops;
-  return { ok: true, cell: { id: (path.split('/').pop() ?? path).replace(/\.md$/, ''), source: o.source, result: o.result, selection: o.selection, ops, path } };
+  return { ok: true, cell: { id: (path.split('/').pop() ?? path).replace(/\.md$/, ''), source: o.source, result: o.result, selection: o.selection, ops, path, ...(typeof o.request === 'string' ? { request: o.request } : {}) } };
 }
 
 export function planNewCell(input: { existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): { ok: true; id: string; path: string } | { ok: false; message: string } {
@@ -135,19 +144,29 @@ export interface NotebookPorts<F> {
   notify(message: string): void;
   isAlreadyExists(e: unknown): boolean;
   trace(line: string): void;
+  /** 2026-10-27-0720 (the typed request): POST /plan. Rejects when the service cannot be reached; a status of 0 is "no token" (nothing was sent). Absent = asking in a sentence is not available in this build. */
+  ask?(payload: PlanPayload): Promise<{ status: number; json: unknown }>;
+  /** The BYOK key to send, or undefined. */
+  ownKey?(): string | undefined;
+  /** Basenames in `bars/` right now (names ride along as for every /plan call). */
+  listBarBasenames?(): string[];
+  /** The service's /health version, or null when it cannot be read: asked ONLY when an answer is one an old service could also give. */
+  serviceVersion?(): Promise<string | null>;
 }
 
 export type RunResult = { ok: true; cellPath: string; phrasePath: string } | { ok: false; message: string };
 
 export interface Notebook {
   run(selection: Selection, kind: 'thin_out' | 'double_up', number: number): Promise<RunResult>;
+  /** Run with a typed request: ask the service once (the selection's first run, with its row), lay the op it answers over every run of the selection, then write the phrase and the cell exactly as `run` does. Nothing is written on a refusal. */
+  runRequest(selection: Selection, sentence: string): Promise<RunResult>;
   /** The cells of this tab: those that read this phrase (role 'source') and the one that made it (role 'result'), plus the notes in notebook/ that could not be read. */
   cells(): Promise<{ cells: NotebookCell[]; problems: Array<{ path: string; message: string }> }>;
   rerun(cell: NotebookCell): Promise<{ ok: true; phrasePath: string; remade: boolean } | { ok: false; message: string }>;
   deleteCell(cell: NotebookCell): Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
-const MESSAGE_NONE_SELECTED = 'Select some bars first: click them in the bar list, Shift-click to extend.';
+const MESSAGE_NONE_SELECTED = NO_BARS_SELECTED;
 const msg = (e: unknown): string => (e as Error)?.message ?? String(e);
 
 export function createNotebook<F>(ports: NotebookPorts<F>): Notebook {
@@ -155,56 +174,85 @@ export function createNotebook<F>(ports: NotebookPorts<F>): Notebook {
     if (ports.folderExists(folder)) return;
     try { await ports.createFolder(folder); } catch (e) { if (!ports.isAlreadyExists(e)) throw e; }
   };
-  return {
-    async run(selection, kind, number) {
-      const fail = (message: string): RunResult => { ports.notify(message); return { ok: false, message }; };
-      const ops = opsFor(selection, kind, number);
-      if (ops === null) return fail(MESSAGE_NONE_SELECTED);
-      const valid = validatePhrase({ kind: 'transform', source: ports.sourcePhrase, ops });
-      if (valid.ok === false) return fail(`Notebook: ${valid.message}`);
-      const params = valid.value as TransformPhrase;
-      let created: F | undefined;
-      let phrase: NewPhraseResult;
+  /** The one write path of Run: the transform phrase, then the cell (which records what it received, and the sentence when there is one), then the tab. */
+  const runOps = async (selection: Selection, ops: TransformOp[], kind: string, request?: string): Promise<RunResult> => {
+    const fail = (message: string): RunResult => { ports.notify(message); return { ok: false, message }; };
+    const valid = validatePhrase({ kind: 'transform', source: ports.sourcePhrase, ops });
+    if (valid.ok === false) return fail(`Notebook: ${valid.message}`);
+    const params = valid.value as TransformPhrase;
+    let created: F | undefined;
+    let phrase: NewPhraseResult;
+    try {
+      await ensureFolder(NOTEBOOK_FOLDER);
+      phrase = await createNewPhraseFromParams<F>({
+        activePath: ports.activePath,
+        folderExists: () => ports.folderExists('phrases'),
+        createFolder: () => ports.createFolder('phrases'),
+        listPhraseBasenames: ports.listPhraseBasenames,
+        exists: ports.exists,
+        create: async (p, c) => { created = await ports.create(p, c); return created; },
+        open: async () => {},                                   // the tab opens after the cell is written, so a failed cell never leaves a tab on a note that is taken back
+        notify: ports.notify,
+        isAlreadyExists: ports.isAlreadyExists,
+      }, params);
+    } catch (e) {
+      return fail(`Could not make the transform: ${msg(e)}`);
+    }
+    if (phrase.ok === false) return { ok: false, message: phrase.message };
+    const chip = selectionChip(selection) ?? '';
+    let cellPath: string | null = null;
+    let cellError = '';
+    for (let attempt = 0; attempt < 3 && cellPath === null; attempt++) {
+      const names = ports.listCellPaths().map((p) => (p.split('/').pop() ?? p).replace(/\.md$/, ''));
+      const plan = planNewCell({ existingBasenames: names, exists: ports.exists });
+      if (plan.ok === false) { cellError = plan.message; break; }
       try {
-        await ensureFolder(NOTEBOOK_FOLDER);
-        phrase = await createNewPhraseFromParams<F>({
-          activePath: ports.activePath,
-          folderExists: () => ports.folderExists('phrases'),
-          createFolder: () => ports.createFolder('phrases'),
-          listPhraseBasenames: ports.listPhraseBasenames,
-          exists: ports.exists,
-          create: async (p, c) => { created = await ports.create(p, c); return created; },
-          open: async () => {},                                   // the tab opens after the cell is written, so a failed cell never leaves a tab on a note that is taken back
-          notify: ports.notify,
-          isAlreadyExists: ports.isAlreadyExists,
-        }, params);
+        await ports.create(plan.path, cellNoteContent({ id: plan.id, source: ports.sourcePhrase, result: phrase.path.replace(/\.md$/, ''), selection: chip, ops: params.ops, ...(request !== undefined ? { request } : {}) }));
+        cellPath = plan.path;
       } catch (e) {
-        return fail(`Could not make the transform: ${msg(e)}`);
+        if (ports.isAlreadyExists(e)) continue;
+        cellError = msg(e);
+        break;
       }
-      if (phrase.ok === false) return { ok: false, message: phrase.message };
-      const chip = selectionChip(selection) ?? '';
-      let cellPath: string | null = null;
-      let cellError = '';
-      for (let attempt = 0; attempt < 3 && cellPath === null; attempt++) {
-        const names = ports.listCellPaths().map((p) => (p.split('/').pop() ?? p).replace(/\.md$/, ''));
-        const plan = planNewCell({ existingBasenames: names, exists: ports.exists });
-        if (plan.ok === false) { cellError = plan.message; break; }
-        try {
-          await ports.create(plan.path, cellNoteContent({ id: plan.id, source: ports.sourcePhrase, result: phrase.path.replace(/\.md$/, ''), selection: chip, ops: params.ops }));
-          cellPath = plan.path;
-        } catch (e) {
-          if (ports.isAlreadyExists(e)) continue;
-          cellError = msg(e);
-          break;
-        }
+    }
+    if (cellPath === null) {
+      try { await ports.remove(phrase.path); } catch (e) { ports.notify(`The transform ${phrase.path} could not be taken back: ${msg(e)}`); }
+      return fail(`Could not make the cell: ${cellError || 'the name kept being taken'}`);
+    }
+    if (created !== undefined) await ports.open(created);
+    ports.trace(`[forge-notebook] ran ${(cellPath.split('/').pop() ?? '').replace(/\.md$/, '')}: ${chip} -> ${kind} -> ${phrase.path}`);
+    return { ok: true, cellPath, phrasePath: phrase.path };
+  };
+  return {
+    run(selection, kind, number) {
+      const ops = opsFor(selection, kind, number);
+      if (ops === null) { ports.notify(MESSAGE_NONE_SELECTED); return Promise.resolve({ ok: false as const, message: MESSAGE_NONE_SELECTED }); }
+      return runOps(selection, ops, kind);
+    },
+
+    async runRequest(selection, sentence) {
+      const fail = (message: string): RunResult => { ports.notify(message); return { ok: false, message }; };
+      const runs = selectionRuns(selection.bars);
+      if (runs.length === 0) return fail(MESSAGE_NONE_SELECTED);
+      const request = buildTransformRequest({ sentence, source: ports.sourcePhrase, runs, row: selection.row, barNames: ports.listBarBasenames?.() ?? [], phraseNames: ports.listPhraseBasenames(), ownKey: ports.ownKey?.() });
+      if (request.ok === false) { ports.trace(askedLine(sentence, request)); return fail(request.message); }
+      if (ports.ask === undefined) { const outcome = { ok: false as const, message: 'Asking in a sentence is not available in this build.' }; ports.trace(askedLine(sentence, outcome)); return fail(outcome.message); }
+      let answer: TransformOutcome;
+      try {
+        answer = interpretTransformResponse(await ports.ask(request.payload), { source: ports.sourcePhrase, runs, row: selection.row });
+      } catch (e) {
+        answer = { ok: false, message: `Could not reach the transpile service (${msg(e)}). Check your connection and Settings → Forge → Transpile service URL.`, suspectOld: false };
       }
-      if (cellPath === null) {
-        try { await ports.remove(phrase.path); } catch (e) { ports.notify(`The transform ${phrase.path} could not be taken back: ${msg(e)}`); }
-        return fail(`Could not make the cell: ${cellError || 'the name kept being taken'}`);
+      let outcome: TransformOutcome | { ok: false; message: string } = answer;
+      if (answer.ok === false && answer.suspectOld && ports.serviceVersion !== undefined) {
+        // an answer an old service could give too: ask the version before blaming the sentence (an unreadable version is unknown, not old)
+        let version: string | null = null;
+        try { version = await ports.serviceVersion(); } catch { /* unknown is not old */ }
+        if (versionAtLeast(version, REQUEST_NEEDS_VERSION) === false) outcome = { ok: false, message: OLD_SERVICE };
       }
-      if (created !== undefined) await ports.open(created);
-      ports.trace(`[forge-notebook] ran ${(cellPath.split('/').pop() ?? '').replace(/\.md$/, '')}: ${chip} -> ${kind} -> ${phrase.path}`);
-      return { ok: true, cellPath, phrasePath: phrase.path };
+      ports.trace(askedLine(sentence, outcome));
+      if (outcome.ok === false) return fail(outcome.message);
+      return runOps(selection, outcome.ops, outcome.op, oneLine(sentence));
     },
 
     async cells() {

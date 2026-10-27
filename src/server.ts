@@ -252,7 +252,7 @@ export async function generateSnippetAlpha(
 export async function planPhraseAlpha(
   serviceUrl: string,
   token: string,
-  payload: { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string },
+  payload: { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string; selection?: { phrase: string; first: number; last: number; row?: string } },
 ): Promise<{ status: number; json: unknown }> {
   if (!token) {
     return { status: 0, json: { detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.' } };
@@ -270,6 +270,19 @@ export async function planPhraseAlpha(
   let json: unknown = null;
   try { json = res.json; } catch { json = null; }
   return { status: res.status, json };
+}
+
+/** 2026-10-27-0720 — the service's version from GET /health (unauthenticated), or null when it cannot be read. Asked only by the notebook's typed request, and only when an answer is one an OLD service (no `selection` support, before 0.2.41) could also
+ *  give: it decides between "your sentence" and "your service is too old", never the happy path. Never throws. */
+export async function fetchServiceVersion(serviceUrl: string): Promise<string | null> {
+  try {
+    const res = await requestUrl({ url: `${serviceUrl}/health`, method: 'GET', throw: false });
+    if (res.status !== 200) return null;
+    const v = (res.json as { version?: unknown } | null)?.version;
+    return typeof v === 'string' && v !== '' ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 /** v0.2.70 Phase 2 §1.3 — try to extract a SlotCacheMissError payload

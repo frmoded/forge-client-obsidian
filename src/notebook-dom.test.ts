@@ -1,5 +1,6 @@
 // 2026-10-27-1030 (M14 slice 1): the notebook area, the UI contract of mockups/m11-notebook-below-the-score.html in happy-dom: bars you click (Shift extends), a row picker, the selection ALWAYS shown as chips, an op with its one number,
-// Run, and the cells below with exactly what each received, its Recipe, Re-run and Delete cell, plain refusals; the text request box is there but disabled. The core (notebook-core.ts) is a fake here; the event order is a person's.
+// Run, and the cells below with exactly what each received, its Recipe, Re-run and Delete cell, plain refusals; 2026-10-27-0720 (slice 2) the text request box works: a typed sentence is what Run uses (the picker is dimmed), Enter runs, a
+// refusal keeps the sentence, a success clears it. The core (notebook-core.ts) is a fake here; the event order is a person's.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -17,6 +18,7 @@ function rig(opts: { cells?: NotebookCell[]; problems?: Array<{ path: string; me
   const pending: Array<(r: RunResult) => void> = [];
   const nb: Notebook = {
     run: (s: Selection, kind, number) => { calls.push(`run ${JSON.stringify(s)} ${kind} ${number}`); return new Promise((res) => { pending.push(res); }); },
+    runRequest: (s: Selection, sentence) => { calls.push(`ask ${JSON.stringify(s)} ${JSON.stringify(sentence)}`); return new Promise((res) => { pending.push(res); }); },
     cells: async () => ({ cells, problems: opts.problems ?? [] }),
     rerun: async (c) => { calls.push(`rerun ${c.id}`); return { ok: true, phrasePath: `${c.result}.md`, remade: false }; },
     deleteCell: async (c) => { calls.push(`delete ${c.id}`); cells = cells.filter((x) => x.id !== c.id); return { ok: true }; },
@@ -42,9 +44,11 @@ test('what is on the page when it opens: a collapsible Notebook, one box per bar
   assert.deepEqual(r.chips(), []);
   assert.equal(r.q('.forge-notebook-run').disabled, true);
   const request = r.q('.forge-notebook-request');
-  assert.equal(request.disabled, true);
-  assert.equal(request.getAttribute('placeholder'), 'needs a sentence service (M7b b)');
-  assert.equal(request.getAttribute('aria-label'), 'needs a sentence service (M7b b)');
+  assert.equal(request.disabled, false, 'the request box works (slice 2)');
+  assert.equal(request.getAttribute('placeholder'), 'or say it: make this half as busy, keep the downbeat');
+  assert.equal(request.getAttribute('aria-label'), 'What to do with the selected bars, in a sentence');
+  assert.ok(!/needs a sentence service/.test(r.parent.textContent + request.getAttribute('placeholder')), 'the slice 1 placeholder is gone');
+  assert.equal(r.q('.forge-notebook-do').getAttribute('data-mode'), 'picker');
   assert.match(r.q('.forge-notebook-hint').textContent, /^No selection yet: click bars above\./);
   assert.equal(r.q('.forge-notebook-bars').getAttribute('role'), 'group');
 });
@@ -181,4 +185,101 @@ test('dispose takes the notebook out of the page', () => {
   const r = rig();
   r.h.dispose();
   assert.equal(r.parent.querySelector('.forge-notebook'), null);
+});
+
+// ---- slice 2: the request box ----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+const typeInto = (r: ReturnType<typeof rig>, text: string) => { const box = r.q('.forge-notebook-request'); box.value = text; box.dispatchEvent(new win.Event('input', { bubbles: true })); };
+const pickBars = (r: ReturnType<typeof rig>) => { r.click(r.bar(3)); r.click(r.bar(5), { shiftKey: true }); r.click(r.qa('.forge-notebook-rows button').find((b: any) => b.textContent === 'kick')); };
+
+test('a typed sentence is what Run uses: the core is asked with the selection and the trimmed sentence (not the op picker), the picker is dimmed while a sentence is there, the box is off while it works', async () => {
+  const r = rig();
+  pickBars(r);
+  typeInto(r, '  make this half as busy, keep the downbeat ');
+  assert.equal(r.q('.forge-notebook-do').getAttribute('data-mode'), 'sentence');
+  assert.deepEqual([r.q('.forge-notebook-op').disabled, r.q('.forge-notebook-number').disabled], [true, true], 'the picker is dimmed, so it is plain which one Run will use');
+  r.click(r.q('.forge-notebook-run'));
+  assert.deepEqual(r.calls, ['ask {"bars":[3,4,5],"row":"kick"} "make this half as busy, keep the downbeat"']);
+  assert.equal(r.msg(), 'Asking...');
+  assert.equal(r.q('.forge-notebook-request').disabled, true, 'busy');
+  assert.equal(r.q('.forge-notebook-run').disabled, true);
+  r.click(r.q('.forge-notebook-run'));
+  assert.equal(r.calls.length, 1, 'a second press while it asks asks nothing');
+  r.setCells([{ ...CELL, request: 'make this half as busy, keep the downbeat' }]);
+  r.pending[0]({ ok: true, cellPath: 'notebook/cell_001.md', phrasePath: 'phrases/phrase_007.md' }); await r.flush();
+  assert.equal(r.msg(), 'Made cell_001 and phrases/phrase_007.md.');
+  assert.equal(r.q('.forge-notebook-request').value, '', 'a success clears the sentence');
+  assert.equal(r.q('.forge-notebook-request').disabled, false);
+  assert.deepEqual([r.q('.forge-notebook-op').disabled, r.q('.forge-notebook-number').disabled], [false, false], 'the picker is back');
+  assert.equal(r.q('.forge-notebook-do').getAttribute('data-mode'), 'picker');
+  assert.equal(r.q('.forge-notebook-said').textContent, '“make this half as busy, keep the downbeat”', 'the cell shows the sentence it was made from');
+});
+
+test('a refusal ("make it jazzier") is one sentence in the message, the selection and the sentence STAY so it can be changed, and the picker stays dimmed', async () => {
+  const r = rig();
+  pickBars(r);
+  typeInto(r, 'make it jazzier');
+  r.click(r.q('.forge-notebook-run'));
+  r.pending[0]({ ok: false, message: 'I can thin the hits out or double them up; I cannot make a bar jazzier.' }); await r.flush();
+  assert.equal(r.msg(), 'I can thin the hits out or double them up; I cannot make a bar jazzier.');
+  assert.equal(r.q('.forge-notebook-message').getAttribute('role'), 'alert');
+  assert.equal(r.q('.forge-notebook-request').value, 'make it jazzier');
+  assert.deepEqual(r.chips(), ['bars 3 to 5, kick row']);
+  assert.equal(r.q('.forge-notebook-request').disabled, false);
+  assert.equal(r.qa('.forge-notebook-cell').length, 0);
+});
+
+test('no sentence (or only spaces) means the op picker, exactly as in slice 1: run(), not runRequest()', () => {
+  const r = rig();
+  pickBars(r);
+  typeInto(r, '   ');
+  assert.equal(r.q('.forge-notebook-do').getAttribute('data-mode'), 'picker');
+  assert.equal(r.q('.forge-notebook-op').disabled, false);
+  r.click(r.q('.forge-notebook-run'));
+  assert.deepEqual(r.calls, ['run {"bars":[3,4,5],"row":"kick"} thin_out 0.5']);
+  assert.equal(r.msg(), 'Running...');
+});
+
+test('Enter in the request box is Run, when there is a selection; with none, nothing happens (typing before selecting is allowed, Run is what needs bars)', () => {
+  const r = rig();
+  typeInto(r, 'double the hits');
+  const enter = () => r.q('.forge-notebook-request').dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  enter();
+  assert.deepEqual(r.calls, [], 'no bars selected: Run is off, so Enter asks nothing');
+  assert.equal(r.q('.forge-notebook-run').disabled, true);
+  pickBars(r);
+  const press = (init: object) => { const e = new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }); r.q('.forge-notebook-request').dispatchEvent(e); return e; };
+  press({ key: 'a' }); press({ key: 'Escape' });
+  assert.deepEqual(r.calls, [], 'other keys do nothing');
+  press({ key: 'Enter', isComposing: true });
+  assert.deepEqual(r.calls, [], 'an Enter that only commits an input method\'s composition is not Run');
+  const e = press({ key: 'Enter' });
+  assert.equal(e.defaultPrevented, true, 'Enter is Run, not a form submit');
+  assert.deepEqual(r.calls, ['ask {"bars":[3,4,5],"row":"kick"} "double the hits"']);
+});
+
+test('what was selected when Run was pressed is what runs: a bar clicked while the service thinks changes the chip, not the request', async () => {
+  const r = rig();
+  pickBars(r);
+  typeInto(r, 'half as busy');
+  r.click(r.q('.forge-notebook-run'));
+  r.click(r.bar(9));
+  assert.deepEqual(r.chips(), ['bars 3 to 5, 9, kick row']);
+  assert.deepEqual(r.calls, ['ask {"bars":[3,4,5],"row":"kick"} "half as busy"'], 'the request is the selection at the press');
+  r.pending[0]({ ok: false, message: 'no' }); await r.flush();
+});
+
+test('the sentence on a cell is text, never markup: a sentence that looks like HTML is shown as the characters it is', async () => {
+  const r = rig({ cells: [{ ...CELL, request: '<img src=x onerror="alert(1)"> **bold**' }] });
+  await r.h.refresh();
+  const said = r.q('.forge-notebook-said');
+  assert.equal(said.textContent, '“<img src=x onerror="alert(1)"> **bold**”');
+  assert.equal(said.querySelector('img'), null);
+  assert.equal(r.parent.querySelectorAll('img').length, 0);
+});
+
+test('a cell made from the op picker has no sentence line', async () => {
+  const r = rig({ cells: [CELL] });
+  await r.h.refresh();
+  assert.equal(r.q('.forge-notebook-said'), null);
 });

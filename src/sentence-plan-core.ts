@@ -19,7 +19,9 @@ export function planAvailable(input: { scoreFirst: boolean }): boolean {
 
 // ---- the request ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-export interface PlanPayload { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string }
+/** 2026-10-27-0720 (M14 slice 2): `selection` (a phrase, a bar range, an optional row) makes the sentence about THOSE bars; the service (0.2.41+) answers a `transform` plan and never chooses the bars. */
+export interface PlanSelection { phrase: string; first: number; last: number; row?: string }
+export interface PlanPayload { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string; selection?: PlanSelection }
 
 const EMPTY_SENTENCE = 'Say in a sentence what phrase you want, for example: extend bar_005 to 8 bars.';
 const NO_BARS = 'This vault has no bars yet, so there is nothing to build a phrase from. Make a bar in the Beat Box first.';
@@ -68,24 +70,36 @@ const detailText = (json: unknown): string | null => {
   return null;
 };
 
-export function interpretPlanResponse(res: { status: number; json: unknown }, barNames: Iterable<string>): PlanOutcome {
+/** What the service's answer says before there is a plan to read: no token, unreachable, 401, an old service (404), 422, busy, 502, any other status, an answer that is not an object. `null` = a readable 200. `needs` is the service version
+ *  that has the thing being asked (0.2.39 for a sentence about the vault, 0.2.41 for a sentence about selected bars). Shared by the dialog and the notebook, so both say the same sentence for the same trouble. */
+export function planTransportRefusal(res: { status: number; json: unknown }, needs: string): string | null {
   const { status, json } = res;
-  const refuse = (message: string): PlanOutcome => ({ ok: false, message });
   if (status === 0) {
     const d = detailText(json);
-    if (d !== null && d.startsWith('Set your transpile token')) return refuse('Set your transpile token in Settings → Forge → Transpile token before planning a phrase from a sentence.');
-    return refuse(d !== null ? `The transpile service could not be reached (${d}).` : 'The transpile service could not be reached.');
+    if (d !== null && d.startsWith('Set your transpile token')) return 'Set your transpile token in Settings → Forge → Transpile token before planning a phrase from a sentence.';
+    return d !== null ? `The transpile service could not be reached (${d}).` : 'The transpile service could not be reached.';
   }
-  if (status === 401) return refuse('The transpile service did not accept your token. Check Settings → Forge → Transpile token.');
-  if (status === 404) return refuse('This transpile service does not offer planning yet (it needs version 0.2.39 or newer). The person who runs it has to update it.');
-  if (status === 422) return refuse(`The service refused the request. A sentence can be at most ${SENTENCE_MAX} characters.`);
-  if (status === 429 || status === 503) return refuse(BUSY);
-  if (status === 502) { const d = detailText(json); return refuse(d !== null ? `The planner could not answer: ${d}` : 'The planner could not answer.'); }
-  if (status !== 200) return refuse(`The service answered ${status}.`);
-  if (!isPlan(json)) return refuse('The service\'s answer could not be read.');
-  if (json.ok !== true || json.plan === undefined || json.plan === null) {
-    return refuse(typeof json.error === 'string' && json.error !== '' ? json.error : 'The planner did not say why it could not plan that. Try saying it differently.');
-  }
+  if (status === 401) return 'The transpile service did not accept your token. Check Settings → Forge → Transpile token.';
+  if (status === 404) return `This transpile service does not offer planning yet (it needs version ${needs} or newer). The person who runs it has to update it.`;
+  if (status === 422) return `The service refused the request. A sentence can be at most ${SENTENCE_MAX} characters.`;
+  if (status === 429 || status === 503) return BUSY;
+  if (status === 502) { const d = detailText(json); return d !== null ? `The planner could not answer: ${d}` : 'The planner could not answer.'; }
+  if (status !== 200) return `The service answered ${status}.`;
+  if (!isPlan(json)) return 'The service\'s answer could not be read.';
+  return null;
+}
+
+/** The service's own reason when it did not plan (`ok` false or no plan), or the generic one. */
+export function planRefusalText(json: Record<string, unknown>): string {
+  return typeof json.error === 'string' && json.error !== '' ? json.error : 'The planner did not say why it could not plan that. Try saying it differently.';
+}
+
+export function interpretPlanResponse(res: { status: number; json: unknown }, barNames: Iterable<string>): PlanOutcome {
+  const refuse = (message: string): PlanOutcome => ({ ok: false, message });
+  const transport = planTransportRefusal(res, '0.2.39');
+  if (transport !== null) return refuse(transport);
+  const json = res.json as Plan;
+  if (json.ok !== true || json.plan === undefined || json.plan === null) return refuse(planRefusalText(json));
   const params = paramsFromPlan(json.plan);
   if (params.ok === false) return refuse(params.message);
   const bars = new Set(barNames);

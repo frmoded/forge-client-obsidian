@@ -28,7 +28,7 @@ async function rig(opts: { path?: string; phrase?: PhraseParams; withNotebook?: 
   const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
   const files = new Map<string, string>([['bars/bar_005.md', BAR], [PATH, noteContentFor('phrase_006', EXTEND)], ['notebook/README.md', 'Notebook.'], ...Object.entries(opts.extraFiles ?? {})]);
   if (opts.phrase) files.set(path, noteContentFor(path.replace(/^phrases\//, '').replace(/\.md$/, ''), opts.phrase));
-  const lines: string[] = []; const opened: string[] = []; const pins: unknown[] = []; const computes: string[] = [];
+  const lines: string[] = []; const opened: string[] = []; const pins: unknown[] = []; const computes: string[] = []; const asked: unknown[] = [];
   const notebook = createNotebook<string>({
     sourcePhrase: path.replace(/\.md$/, ''),
     activePath: () => path,
@@ -45,6 +45,8 @@ async function rig(opts: { path?: string; phrase?: PhraseParams; withNotebook?: 
     notify: () => {},
     isAlreadyExists: (e) => /already exists/.test(String((e as Error).message)),
     trace: (l) => { lines.push(l); },
+    ask: async (payload) => { asked.push(payload); return { status: 200, json: { ok: true, parsed_ok: true, plan: { kind: 'transform', op: 'thin_out', amount: 0.5, keep: 'downbeat' }, error: null } }; },
+    listBarBasenames: () => [...files.keys()].filter((p) => p.startsWith('bars/')).map((p) => p.replace(/^bars\//, '').replace(/\.md$/, '')),
   });
   const ports: PhraseMountPorts = {
     path, title: path.replace(/^phrases\//, '').replace(/\.md$/, ''), plan: 'score',
@@ -75,7 +77,7 @@ async function rig(opts: { path?: string; phrase?: PhraseParams; withNotebook?: 
   const q = (s: string) => parent.querySelector(s) as any;
   const qa = (s: string) => [...parent.querySelectorAll(s)] as any[];
   const click = (el: any, init: object = {}) => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, ...init }));
-  return { handle, parent, files, lines, opened, pins, computes, q, qa, click, clock, done: () => { handle.dispose(); clock.restore(); } };
+  return { handle, parent, files, lines, opened, pins, computes, asked, q, qa, click, clock, done: () => { handle.dispose(); clock.restore(); } };
 }
 
 test('the notebook sits BELOW the Score, and learns the Score\'s bars and rows from what the engine drew', async () => {
@@ -150,6 +152,27 @@ test('THE 1800 RULE: clicking the notebook (a bar box, a row, Run) is not a pin 
     assert.equal(r.pins.length, told, 'the notes pane heard nothing');
     r.q('.forge-rhythm-score-host').dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     assert.equal(r.pins.at(-1), null, 'Esc still lets go, as before');
+  } finally { r.done(); }
+});
+
+test('THE 1800 RULE for the request box: clicking it, typing in it, pressing Enter and Run with a sentence are not pin gestures either: a pinned bar stays pinned, the notes pane is told nothing, and the cell lists with its sentence', async () => {
+  const r = await rig();
+  try {
+    r.click(r.q('#ph_bar_3'));
+    const told = r.pins.length;
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_3']);
+    r.click(r.qa('.forge-notebook-bar')[2]); r.click(r.qa('.forge-notebook-bar')[4], { shiftKey: true });
+    r.click(r.q('.forge-notebook-request'));
+    const box = r.q('.forge-notebook-request');
+    box.value = 'make this half as busy, keep the downbeat'; box.dispatchEvent(new win.Event('input', { bubbles: true }));
+    box.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await r.clock.advance(50);
+    assert.equal(r.asked.length, 1, 'Enter asked the service once');
+    assert.deepEqual((r.asked[0] as any).selection, { phrase: 'phrases/phrase_006', first: 3, last: 5 });
+    assert.equal(r.qa('.forge-notebook-cell').length, 1, 'the cell is listed');
+    assert.equal(r.q('.forge-notebook-said').textContent, '“make this half as busy, keep the downbeat”');
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_3'], 'still pinned');
+    assert.equal(r.pins.length, told, 'the notes pane heard nothing');
+    assert.ok(r.lines.includes('[forge-notebook] asked "make this half as busy, keep the downbeat" -> thin_out'));
   } finally { r.done(); }
 });
 
