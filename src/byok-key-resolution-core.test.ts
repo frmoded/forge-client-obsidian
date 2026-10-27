@@ -42,9 +42,10 @@ const MAIN = readFileSync(new URL('./main.ts', import.meta.url), 'utf8');
 
 test('both AlphaGenerateRequest payload sites call resolveUserAnthropicKey', () => {
   const callSites = MAIN.split('\n').filter((l) => l.includes('resolveUserAnthropicKey(')).length;
+  // 2026-10-27-1015, deliberate: a THIRD site, the plan request of "New phrase from a sentence" (the askPlan hook), routes the same decision through the same function; nothing re-inlines it (the next test)
   assert.equal(
-    callSites, 2,
-    'expected exactly two payload-construction call sites (python-dialect + recipe-dialect) '
+    callSites, 3,
+    'expected exactly three key-decision call sites (python-dialect + recipe-dialect payloads, and the plan request) '
     + 'to route the BYOK key decision through the pure-core function',
   );
 });

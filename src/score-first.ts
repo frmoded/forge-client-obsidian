@@ -22,6 +22,8 @@ import { usedByChips } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
+import { PLAN_COMMAND_ID, PLAN_COMMAND_NAME, createSentencePlanner, planAvailable, type PlanPayload } from './sentence-plan-core.ts';
+import { SentencePlanModal } from './sentence-plan-modal.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -53,6 +55,9 @@ export interface ScoreFirstHooks {
   markRhythmText?(leaf: WorkspaceLeaf, path: string): void;
   /** 2026-10-26-1800: hold / release a leaf as reading text for the Beat Box default view (the pair's notes pane). */
   holdRhythmText?(leaf: WorkspaceLeaf, on: boolean): void;
+  /** 2026-10-27-1015 ("New phrase from a sentence"): POST the sentence to the hosted service's /plan with the person's token, and the BYOK key to send (or undefined). Absent = the dialog says the service cannot be reached. */
+  askPlan?(payload: PlanPayload): Promise<{ status: number; json: unknown }>;
+  ownKey?(): string | undefined;
 }
 
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {
@@ -115,6 +120,27 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     notify: (message) => { new Notice(message); },
     isAlreadyExists: isFileExistsError,
   });
+
+  // 2026-10-27-1015: "New phrase from a sentence". A fresh planner (no memory of an earlier sentence) per dialog; Create goes through the same loop every new phrase does.
+  const openSentencePlan = (): void => {
+    const barNames = (): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${BAR_FOLDER_NAME}/`)).map((f) => f.basename);
+    const planner = createSentencePlanner<TFile>({
+      activePath,
+      folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
+      createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
+      listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
+      listBarBasenames: barNames,
+      exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
+      create: (p, content) => app.vault.create(p, content),
+      open: (file) => openPhrase(app, file),
+      notify: (message) => { new Notice(message); },
+      isAlreadyExists: isFileExistsError,
+      ask: (payload) => (hooks.askPlan ? hooks.askPlan(payload) : Promise.resolve({ status: 0, json: { detail: 'planning is not available in this build' } })),
+      ownKey: () => hooks.ownKey?.(),
+      trace: (line) => { console.info(line); },
+    });
+    new SentencePlanModal(app, planner, barNames().filter((n) => n !== 'README').sort()).open();
+  };
 
   // 2026-10-25-1000 "Turn this mix into a morph": the note it acts on is named by the caller BEFORE any await (the active view's own file, or the strip button's own tab: never re-read from a getter later). It never
   // rejects: every failure is one Notice naming why (turnMixIntoMorph), and anything unexpected is a console.error plus a Notice, never a silent promise.
@@ -426,6 +452,15 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         checkCallback: (checking: boolean) => {
           if (!newMorphAvailable({ scoreFirst, activePath: activePath() })) return false;
           if (!checking) void createMorph();
+          return true;
+        },
+      });
+      plugin.addCommand({
+        id: PLAN_COMMAND_ID,
+        name: PLAN_COMMAND_NAME,
+        checkCallback: (checking: boolean) => {
+          if (!planAvailable({ scoreFirst })) return false;
+          if (!checking) openSentencePlan();
           return true;
         },
       });

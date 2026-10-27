@@ -110,7 +110,7 @@ test('MECHANISM PIN: "New bar" (command and ribbon) is registered only AFTER the
   // M7 Phase A (drain 2026-10-22-2330), deliberate: four — "New mix from this bar" joins them, registered after the same gate.
   // M7c Phase A (drain 2026-10-24-1200), deliberate: five — "New morph from this bar" joins them, registered after the same gate.
   // 2026-10-25-1000, deliberate: six — "Turn this mix into a morph" joins them, registered after the same gate.
-  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 8);   // 2026-10-26-1250 (M12), deliberate: + "Open Score with notes", after the same gate; 2026-10-26-1260: + "Refresh note links"
+  assert.equal((body.match(/plugin\.addCommand\(/g) ?? []).length, 9);   // 2026-10-27-1015, deliberate: + "New phrase from a sentence", registered after the same gate (and absent elsewhere: sentence-plan-wiring.test.ts, P3 x3);   // 2026-10-26-1250 (M12), deliberate: + "Open Score with notes", after the same gate; 2026-10-26-1260: + "Refresh note links"
   assert.equal((body.match(/plugin\.registerView\(/g) ?? []).length, 1);
   const lastAddCommand = body.lastIndexOf('plugin.addCommand(');
   assert.ok(body.indexOf('plugin.registerView(') > check && lastAddCommand > check, 'the phrase view and commands are registered after the gate');
@@ -143,7 +143,9 @@ test('the profile is a constant: no setting, command, menu item or modal anywher
       // 2026-10-26-1250 (M12), deliberate: linked-panes-core.ts is a pure core like the two above — `openPairAvailable` takes the gate's answer as an INPUT (`scoreFirst`) and never reads the profile
       'linked-panes-core.ts',
       // 2026-10-26-1260, deliberate: refresh-notes-core.ts and phrase-notes-core.ts are pure cores too (the vault and the gate's answer are inputs; they never read the profile)
-      'refresh-notes-core.ts', 'phrase-notes-core.ts'].includes(f));
+      'refresh-notes-core.ts', 'phrase-notes-core.ts',
+      // 2026-10-27-1015, deliberate: sentence-plan-core.ts is a pure core like the ones above — `planAvailable` takes the gate's answer as an INPUT and never reads the profile (the command is registered in score-first.ts after the gate)
+      'sentence-plan-core.ts'].includes(f));
   assert.deepEqual(offenders, []);
   const settingsFiles = fs.readdirSync(SRC).filter((f) => /setting/i.test(f) && f.endsWith('.ts') && !f.endsWith('.test.ts'));
   for (const f of settingsFiles) assert.ok(!/profile/i.test(code(f).replace(/openRhythmNotesInBeatBox/g, '')), `${f} has no profile setting`);

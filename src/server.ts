@@ -247,6 +247,31 @@ export async function generateSnippetAlpha(
   return { status: res.status, json: res.json };
 }
 
+/** 2026-10-27-1015 — POST /plan (forge-transpile 0.2.39+): one sentence plus the names of the vault's bars and phrases; the service answers ONE validated phrase plan or a one-sentence reason (see sentence-plan-core.ts
+ *  interpretPlanResponse). `user_anthropic_key` (BYOK) rides in this payload only, as for /generate. Empty token short-circuits with status 0 and the same wording /generate uses, so the caller shows a Notice without the network. */
+export async function planPhraseAlpha(
+  serviceUrl: string,
+  token: string,
+  payload: { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string },
+): Promise<{ status: number; json: unknown }> {
+  if (!token) {
+    return { status: 0, json: { detail: 'Set your transpile token in Settings → Forge → Transpile token before using /generate.' } };
+  }
+  const res = await requestUrl({
+    url: `${serviceUrl}/plan`,
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    throw: false,
+  });
+  let json: unknown = null;
+  try { json = res.json; } catch { json = null; }
+  return { status: res.status, json };
+}
+
 /** v0.2.70 Phase 2 §1.3 — try to extract a SlotCacheMissError payload
  *  from a Python-via-Pyodide exception message. The Python exception
  *  encodes its missing list as JSON; if msg parses cleanly and

@@ -449,20 +449,30 @@ export function refreshPhraseNoteText(text: string, name: string): { ok: true; t
 /** The starter content of a new phrase: the defaults, the source named. Its description, links and derived sections come from the json (phrase-notes-core.ts); the description is a double-quoted scalar (a JSON string is a YAML one). */
 export function phraseNoteContent(name: string, source: string): string {
   const p: ExtendPhrase = { kind: 'extend', source, ...PHRASE_DEFAULTS };
-  return newPhraseNote(name, p, formatPhraseJson(p));
+  return noteContentFor(name, p);
+}
+
+/** The note text for any phrase value: the json fence last, the derived Description / Recipe / links above it (phrase-notes-core.ts). The ONE place a new phrase note is made, whoever asks: the starters below, and a sentence
+ *  (2026-10-27-1015), so a note made from a sentence is byte for byte the note the controls would have made for the same value. */
+export function noteContentFor(name: string, p: PhraseParams, extraFront: string[] = []): string {
+  return newPhraseNote(name, p, formatPhraseJson(p), extraFront);
 }
 
 /** The starter content of a new mix (2026-10-26-0900): a PATH mix, explicit in its JSON (mode, order, seed), starting at weight 1 = all of bar a (stop 0, a stop for any d); threshold and ghost take the vote's defaults (kept, ignored in
  *  path mode, there when the person switches to Vote). */
 export function mixNoteContent(name: string, a: string, b: string): string {
-  const p: MixPhrase = { kind: 'mix', a, b, ...MIX_DEFAULTS, weight: 1, mode: 'path', order: MORPH_DEFAULTS.order, seed: MORPH_DEFAULTS.seed };
-  return newPhraseNote(name, p, formatPhraseJson(p));
+  return noteContentFor(name, starterMix(a, b));
+}
+
+/** The starter VALUE of a new mix (see mixNoteContent): what a sentence's mix starts from before the plan's own numbers are laid over it. */
+export function starterMix(a: string, b: string): MixPhrase {
+  return { kind: 'mix', a, b, ...MIX_DEFAULTS, weight: 1, mode: 'path', order: MORPH_DEFAULTS.order, seed: MORPH_DEFAULTS.seed };
 }
 
 /** The starter content of a new morph: the defaults, the two bars named. `bars` replaces the default. `from` (the mix it was made from, "Turn this mix into a morph") is a `made_from` wikilink property (the graph ties the morph to its mix); the description is derived from the json alone (2026-10-26-1260). */
 export function morphNoteContent(name: string, a: string, b: string, made: { from?: string; bars?: number } = {}): string {
   const p: MorphPhrase = { kind: 'morph', a, b, ...MORPH_DEFAULTS, ...(made.bars !== undefined ? { bars: made.bars } : {}) };
-  return newPhraseNote(name, p, formatPhraseJson(p), made.from ? [`made_from: ${JSON.stringify(`[[${made.from}]]`)}`] : []);
+  return noteContentFor(name, p, made.from ? [`made_from: ${JSON.stringify(`[[${made.from}]]`)}`] : []);
 }
 
 export function phraseName(n: number): string {
@@ -556,6 +566,11 @@ export function planNewMorph(input: { activePath: string | null | undefined; exi
   return plan;
 }
 
+/** A new phrase note for a value that is already decided (a sentence's plan, 2026-10-27-1015): the next free name from the listing, the same content the starters make. */
+export function planNewPhraseFromParams(input: { params: PhraseParams; existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewPhrasePlan {
+  return planPhraseNote(input, (name) => noteContentFor(name, input.params));
+}
+
 export interface NewPhrasePorts<F> {
   /** The path of the note the person is on right now. */
   activePath(): string | null;
@@ -607,6 +622,11 @@ async function createPhraseNote<F>(ports: NewPhrasePorts<F>, how: { fn: string; 
     console.error(`${how.fn} failed`, e);
     return fail(`Could not make a new ${how.noun}: ${(e as Error)?.message ?? e}`);
   }
+}
+
+/** The create-and-open loop for a value that is already decided: what "Create" does after a sentence was planned. Same loop, same notices, same failure handling as every other new phrase. */
+export function createNewPhraseFromParams<F>(ports: NewPhrasePorts<F>, params: PhraseParams): Promise<NewPhraseResult> {
+  return createPhraseNote(ports, { fn: 'createNewPhraseFromParams', noun: 'phrase', plan: (existingBasenames, exists) => planNewPhraseFromParams({ params, existingBasenames, exists }) });
 }
 
 /** The whole "New phrase from this bar" action with the vault and the UI injected (same shape as `createNewBar`). */
