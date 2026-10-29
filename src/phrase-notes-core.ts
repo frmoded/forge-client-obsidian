@@ -65,9 +65,9 @@ export function phraseRecipeSteps(p: PhraseParams): string[] {
 
 /** The last line of every block: how to get a Score from the bars it returns, as a COMMENT (2026-10-29-0810; the block returns bars, it never calls the stream helper). */
 const streamHint = (bars: string): string => `  # for a Score of these bars: rhythm_bars_to_stream(bars=${bars})`;
-const pyStr = (s: string): string => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+export const pyStr = (s: string): string => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 /** A bar read the way a Forge note reads a data note: call it by its name (music-theory/rhythm_data/rhythm_extended_fills.md: `base = rhythm_pattern_straight_rock()`). A name that is not a Python identifier goes through globals(). */
-const callNote = (name: string): string => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? `${name}()` : `globals()[${pyStr(name)}]()`);
+export const callNote = (name: string): string => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? `${name}()` : `globals()[${pyStr(name)}]()`);
 
 /** The Python facet: `def compute(context):` calling the engine functions of forge/music/lib.py with the json's own arguments (extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info; signatures grep-verified
  *  2026-10-27-1020). A vote mix is mix_rhythm; a PATH mix is one bar of the morph path, at the stop pathStopOf gives (the weight in millionths, integer arithmetic, the rule phrase-core.ts and the engine glue share). Forks replace their bar
@@ -137,15 +137,15 @@ export function extractPhraseJsonBlock(text: string): ({ ok: true } & PhraseJson
 
 // ---- frontmatter assembly --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-interface Front { eol: string; lines: string[] }
+export interface Front { eol: string; lines: string[] }
 
-function splitFront(text: string): Front | null {
+export function splitFront(text: string): Front | null {
   const m = /^---(\r?\n)([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/.exec(text);
   return m ? { eol: m[1], lines: m[2].split(/\r?\n/) } : null;
 }
 
 /** The frontmatter lines with `description` and the `links:` block replaced (description where it was, links straight after it), every other line kept as it is. */
-function withDerivedFront(lines: string[], description: string, links: string[]): string[] {
+export function withDerivedFront(lines: string[], description: string, links: string[]): string[] {
   const out: string[] = [];
   let placed = false;
   const put = () => { out.push(`description: ${q(description)}`); if (links.length > 0) { out.push('links:', ...links.map((l) => `  - ${q(link(l))}`)); } placed = true; };
@@ -160,13 +160,19 @@ function withDerivedFront(lines: string[], description: string, links: string[])
   return out;
 }
 
-/** The whole phrase note with its derived parts regenerated from `p`; `fenceText` (the opening fence line to the end of the note) is kept byte for byte. */
-export function renderPhraseNote(text: string, name: string, p: PhraseParams, fenceStart: number): string {
+/** A data note with its derived parts regenerated: the frontmatter keeps every line it has except `description` and `links` (set from the arguments), the derived sections replace everything between the frontmatter and the json fence, and `text.slice(fenceStart)`
+ *  (the opening fence line to the end of the note) is kept byte for byte. The ONE renderer of a phrase, a kit and an arrangement note (2026-10-29-0820). */
+export function renderDerivedNote(text: string, description: string, links: string[], sections: string[], fenceStart: number): string {
   const front = splitFront(text);
   if (!front) return text;
   const eol = front.eol;
-  const lines = withDerivedFront(front.lines, phraseDescription(name, p), phraseLinks(p));
-  return `---${eol}${lines.join(eol)}${eol}---${eol}${eol}${derivedSections(name, p).join(eol)}${eol}${eol}${text.slice(fenceStart)}`;
+  const lines = withDerivedFront(front.lines, description, links);
+  return `---${eol}${lines.join(eol)}${eol}---${eol}${eol}${sections.join(eol)}${eol}${eol}${text.slice(fenceStart)}`;
+}
+
+/** The whole phrase note with its derived parts regenerated from `p`; `fenceText` (the opening fence line to the end of the note) is kept byte for byte. */
+export function renderPhraseNote(text: string, name: string, p: PhraseParams, fenceStart: number): string {
+  return renderDerivedNote(text, phraseDescription(name, p), phraseLinks(p), derivedSections(name, p), fenceStart);
 }
 
 /** The starter text of a new phrase note: frontmatter, derived sections, then the fence last. */

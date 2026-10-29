@@ -6,6 +6,8 @@ import { test } from 'node:test';
 import { refreshLine, refreshNoteLinks, refreshNotice, type RefreshNotesPorts } from './refresh-notes-core.ts';
 import { formatPhraseJson, morphNoteContent } from './phrase-core.ts';
 import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
+import { newKitNote, type KitParams } from './kit-core.ts';
+import { newArrangementNote } from './arrangement-core.ts';
 
 const BAR_DATA = { time_signature: '4/4', steps: 4, group_size: 4, swing_pct: 0, tempo_bpm: 90, channels: { kick: [true, false, true, false] } } as RhythmData;
 const bar = (name: string, desc: string) => `---\ntype: data\ncontent_type: json\ndescription: ${JSON.stringify(desc)}\n---\n\n\`\`\`json\n${formatRhythmJson(BAR_DATA)}\n\`\`\`\n`;
@@ -64,4 +66,33 @@ test('a hand-written bar description is kept and counted; a note it cannot read 
 test('the notice says what changed', async () => {
   const v = vault({ 'phrases/phrase_001.md': OLD_PHRASE });
   assert.equal(refreshNotice(await refreshNoteLinks(v.ports)), 'Refresh note links: 1 phrase note(s) and 0 bar note(s) updated.');
+});
+
+// ---- 2026-10-29-0820: kits and arrangements ---------------------------------------------------------------------------------------------------------------------------------
+
+test('kits and arrangements: stale derived text is regenerated, current notes are NOT written, an unreadable one is named, and the line and notice count them - only when the vault has them', async () => {
+  const ROCK: KitParams = { kind: 'kit', name: 'rock', channels: ['kick', 'snare', 'hihat'] };
+  const files: Record<string, string> = {
+    'kits/rock.md': newKitNote(ROCK).replace('Add the kick.', 'Somebody typed here.'),
+    'kits/latin.md': newKitNote({ kind: 'kit', name: 'latin', channels: ['claves'] }),
+    'kits/broken.md': '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind": "kit"}\n```\n',
+    'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] }).replace('Together.', 'Somebody typed here.'),
+  };
+  const v = vault(files);
+  const named = (re: RegExp) => () => [...v.store.keys()].filter((p) => re.test(p)).map((path) => ({ path, name: path.replace(/^.*\//, '').replace(/\.md$/, '') }));
+  const ports: RefreshNotesPorts = { ...v.ports, kits: named(/^kits\/(?!README)[^/]+\.md$/), arrangements: named(/^arrangements\/(?!README)[^/]+\.md$/) };
+  const s = await refreshNoteLinks(ports);
+  assert.deepEqual([s.kits!.total, s.kits!.updated, s.kits!.current, s.kits!.skipped.length], [3, 1, 1, 1]);
+  assert.deepEqual([s.arrangements!.total, s.arrangements!.updated, s.arrangements!.current], [1, 1, 0]);
+  assert.ok(!v.store.get('kits/rock.md')!.includes('Somebody typed here.') && !v.store.get('arrangements/arr_001.md')!.includes('Somebody typed here.'));
+  assert.deepEqual(v.writes.sort(), ['arrangements/arr_001.md', 'kits/rock.md'], 'only the stale notes were written');
+  assert.match(s.kits!.skipped[0], /^kits\/broken\.md: /);
+  assert.match(refreshLine(s), /, kits 3 \(1 updated, 1 already current\), arrangements 1 \(1 updated, 0 already current\), 1 skipped$/);
+  assert.match(refreshNotice(s), /^Refresh note links: 0 phrase note\(s\) and 0 bar note\(s\) updated \(and 1 kit note\(s\), 1 arrangement note\(s\)\); 1 could not be read \(kits\/broken\.md: /);
+  const before = v.writes.length;
+  await refreshNoteLinks(ports);
+  assert.equal(v.writes.length, before, 'a second run writes nothing');
+  const plain = await refreshNoteLinks(v.ports);
+  assert.equal(plain.kits, undefined, 'a vault without the ports is exactly what it was');
+  assert.ok(!refreshLine(plain).includes('kits'));
 });

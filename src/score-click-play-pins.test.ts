@@ -10,7 +10,8 @@ const code = (f: string) => fs.readFileSync(path.join(SRC, f), 'utf8').split('\n
 
 test('every caller of renderTaggedMusicXML passes the click-to-play policy: the Beat Box tab, the phrase tab, the read-only Score view, the embed and the Forge output panel', () => {
   const callers = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts') && /\.renderTaggedMusicXML\(/.test(code(f))).sort();
-  assert.deepEqual(callers, ['output-view.ts', 'phrase-view.ts', 'rhythm-edit-view.ts', 'rhythm-embed-view.ts', 'rhythm-score-view.ts'], 'a new caller must decide too');
+  // 2026-10-29-0820 (M10 slice 1), deliberate: + kits-arrangements.ts - the arrangement tab engraves a Score like the phrase tab and hands the same policy to the renderer
+  assert.deepEqual(callers, ['kits-arrangements.ts', 'output-view.ts', 'phrase-view.ts', 'rhythm-edit-view.ts', 'rhythm-embed-view.ts', 'rhythm-score-view.ts'], 'a new caller must decide too');
   for (const f of callers) {
     const calls = code(f).match(/\.renderTaggedMusicXML\([^;]*\)/g) ?? [];
     assert.ok(calls.length > 0);

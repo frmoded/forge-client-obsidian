@@ -13,6 +13,9 @@ import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-co
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { morphChangesViaEngine } from './phrase-engine.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
+import { registerKitsAndArrangements } from './kits-arrangements.ts';
+import { isKitPath } from './kit-core.ts';
+import { isArrangementPath } from './arrangement-core.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
 import { createPhraseRouter } from './phrase-default-view-core.ts';
@@ -368,6 +371,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         openPhrase: (path: string) => { const f = app.vault.getAbstractFileByPath(path); if (f instanceof TFile) void openPhrase(app, f); },
       });
       plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }, structureHooks, notebookFor));
+      // 2026-10-29-0820 (M10 slice 1): kits and arrangements. Registered here, inside the score-first gate, so no other vault gets a view, a command or a byte of it (P3).
+      registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst });
       // 2026-10-26-1270: a bar's tab (its Beat Box or its Score) shows the phrases that use it, as chips above it, from the vault's resolved links (the `links:` of 1260 are what makes them resolve). The strip is added to the view's
       // content element on every event that can change the answer and put back if the view redrew without it; clicking a chip opens that phrase. Only in a score-first vault (this code runs after the gate).
       const barStrips = new WeakMap<HTMLElement, { handle: StripHandle; key: string }>();
@@ -439,6 +444,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           const summary = await refreshNoteLinks({
             phrases: () => app.vault.getFiles().filter((f) => isPhrasePath(f.path)).map(named),
             bars: () => app.vault.getFiles().filter((f) => isBarPath(f.path)).map(named),
+            kits: () => app.vault.getFiles().filter((f) => isKitPath(f.path)).map(named),
+            arrangements: () => app.vault.getFiles().filter((f) => isArrangementPath(f.path)).map(named),
             read: async (p) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); return app.vault.read(f); },
             process: async (p, fn) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); await app.vault.process(f, fn); },
           });
