@@ -42,28 +42,32 @@ test('Python, golden, per kind: def compute(context), the engine function with t
     'def compute(context):',
     '  base = bar_005()',
     "  bars = extend_rhythm(data=base, bars=8, style='repeat_with_fills', tempo_change_pct=-20)",
-    '  return rhythm_bars_to_stream(bars=bars)',
+    '  return bars',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n'));
   assert.equal(phrasePython(MORPH), [
     'def compute(context):',
     '  a = bar_007()',
     '  b = bar_008()',
     "  bars = morph_rhythm(a=a, b=b, bars=17, order='musical', seed=0)",
-    '  return rhythm_bars_to_stream(bars=bars)',
+    '  return bars',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n'));
   assert.equal(phrasePython({ ...MORPH, bars: 1, position: 3 }), [
     'def compute(context):',
     '  a = bar_007()',
     '  b = bar_008()',
     "  bars = [morph_rhythm(a=a, b=b, bars=1, order='musical', seed=0, position=3)]",
-    '  return rhythm_bars_to_stream(bars=bars)',
+    '  return bars',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n'));
   assert.equal(phrasePython(VOTE), [
     'def compute(context):',
     '  a = bar_005()',
     '  b = bar_006()',
     '  mixed = mix_rhythm(a=a, b=b, weight=0.6, threshold=0.65, ghost=True)',
-    '  return rhythm_bars_to_stream(bars=[mixed])',
+    '  return [mixed]',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=[mixed])',
   ].join('\n'));
   assert.equal(phrasePython(PATH), [
     'def compute(context):',
@@ -72,12 +76,13 @@ test('Python, golden, per kind: def compute(context), the engine function with t
     "  changes = morph_rhythm_info(a=a, b=b, order='musical', seed=0)['d']",
     '  stop = min(changes, max(0, ((1000000 - 1000000) * changes + 500000) // 1000000))',
     "  bar = morph_rhythm(a=a, b=b, bars=1, order='musical', seed=0, position=stop)",
-    '  return rhythm_bars_to_stream(bars=[bar])',
+    '  return [bar]',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=[bar])',
   ].join('\n'));
   assert.match(phrasePython({ ...PATH, weight: 0.45, order: 'seeded', seed: 3 }), /\(\(1000000 - 450000\) \* changes \+ 500000\)/, 'the weight in millionths, the rule pathStopOf uses');
 });
 
-test('a fork replaces its bar in the list, by index (bar n is index n - 1), after the engine call and before the Score', () => {
+test('a fork replaces its bar in the list, by index (bar n is index n - 1), after the engine call and before the return', () => {
   const forked = { ...EXTEND, overrides: { '9': 'bars/bar_009', '3': 'bars/bar_011' } } as never;
   assert.equal(phrasePython(forked), [
     'def compute(context):',
@@ -85,7 +90,8 @@ test('a fork replaces its bar in the list, by index (bar n is index n - 1), afte
     "  bars = extend_rhythm(data=base, bars=8, style='repeat_with_fills', tempo_change_pct=-20)",
     '  bars[2] = bar_011()',
     '  bars[8] = bar_009()',
-    '  return rhythm_bars_to_stream(bars=bars)',
+    '  return bars',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n'));
 });
 
@@ -168,6 +174,48 @@ test('an OLD-format note (## headings, the call as Recipe, Bars made) still read
   assert.ok(r.text.includes('read_only: false'), 'the person\'s own line stays');
   assert.equal(r.text.slice(r.text.indexOf('```json')), OLD.slice(OLD.indexOf('```json')), 'the json fence and everything after it: byte-identical');
   const again = refreshPhraseNoteText(r.text, 'phrase_003');
+  assert.ok(again.ok && !again.changed && again.text === r.text, 'a second run changes nothing');
+});
+
+// ---- 2026-10-29-0810: a phrase's compute RETURNS BARS ---------------------------------------------------------------------------------------------------------------------------
+
+/** The lines of a Python block that CALL the stream helper (a mention in a comment is not a call). */
+const streamCalls = (src: string): string[] => src.split('\n').filter((l) => l.includes('rhythm_bars_to_stream') && !l.trimStart().startsWith('#'));
+
+test('every kind\'s compute returns the BAR LIST (so a transform\'s Python can call its source phrase and get bars); the stream helper is only in a trailing comment, never called', () => {
+  const all: PhraseParams[] = [EXTEND, { ...EXTEND, style: 'building' }, { ...EXTEND, overrides: { '3': 'bars/bar_011' } } as never, MORPH, { ...MORPH, bars: 1, position: 2 }, VOTE, PATH,
+    { kind: 'transform', source: 'phrases/phrase_001', ops: [{ op: 'thin_out', first: 2, last: 3, row: 'kick', amount: 0.5 }] } as PhraseParams];
+  for (const p of all) {
+    const lines = phrasePython(p).split('\n');
+    assert.match(lines[lines.length - 2], /^  return (bars|\[mixed\]|\[bar\])$/, `${p.kind}: the last statement hands back the bars`);
+    assert.match(lines[lines.length - 1], /^  # for a Score of these bars: rhythm_bars_to_stream\(bars=(bars|\[mixed\]|\[bar\])\)$/, `${p.kind}: the stream is a comment for people who want a Score`);
+    assert.deepEqual(streamCalls(phrasePython(p)), [], `${p.kind}: the stream helper is never called`);
+  }
+  assert.notDeepEqual(streamCalls('def compute(context):\n  bars = x()\n  return rhythm_bars_to_stream(bars=bars)'), [], 'non-vacuity: the 1020 text IS caught by the same check');
+});
+
+/** A note as the 1020 plugin wrote it (compute returned the Score), PINNED here: the "before" of the rewrite is a fixed text, never the moving tree. */
+const NOTE_1020 = [
+  '---', 'type: data', 'content_type: json',
+  'description: "phrase_002 — a transform of [[phrase_001]]: thin out bars 2 to 3, kick row: remove half of the hits, keeping the strongest beats."',
+  'links:', '  - "[[phrase_001]]"', 'read_only: false', '---', '',
+  DERIVED_NOTE, '', '# Description', '', 'phrase_002 — a transform of [[phrase_001]]: thin out bars 2 to 3, kick row: remove half of the hits, keeping the strongest beats.', '',
+  '# Recipe', '', 'Take [[phrase_001]].', 'Thin out bars 2 to 3, kick row: remove half of the hits, keeping the strongest beats.', '',
+  '# Python', '', '```python', 'def compute(context):', '  bars = phrase_001()', "  bars = thin_out_bars(bars=bars, first=2, last=3, row='kick', amount=0.5)", '  return rhythm_bars_to_stream(bars=bars)', '```', '',
+  '```json', '{', '  "kind": "transform",', '  "source": "phrases/phrase_001",', '  "ops": [', '    {"op": "thin_out", "first": 2, "last": 3, "row": "kick", "amount": 0.5}', '  ]', '}', '```', '',
+].join('\n');
+
+test('a note the 1020 plugin wrote (compute returns the Score) still reads, and "bring every note up to date" rewrites its Python to return the bars: idempotent, the json byte-identical, the person\'s own line kept', () => {
+  assert.ok(readPhraseNote(NOTE_1020).ok, 'the 1020 note reads');
+  assert.equal(streamCalls(NOTE_1020).length, 1, 'the pinned note really has the old return');
+  const r = refreshPhraseNoteText(NOTE_1020, 'phrase_002');
+  assert.ok(r.ok && r.changed, 'the rewrite changes it');
+  if (!r.ok) return;
+  assert.deepEqual(streamCalls(r.text), [], 'no call to the stream helper is left');
+  assert.ok(r.text.includes("  bars = phrase_001()\n  bars = thin_out_bars(bars=bars, first=2, last=3, row='kick', amount=0.5)\n  return bars\n  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)\n```"), 'the transform calls its source, applies the op, returns the bars');
+  assert.ok(r.text.includes('read_only: false'), 'the person\'s own line stays');
+  assert.equal(r.text.slice(r.text.indexOf('```json')), NOTE_1020.slice(NOTE_1020.indexOf('```json')), 'the json fence and everything after it: byte-identical');
+  const again = refreshPhraseNoteText(r.text, 'phrase_002');
   assert.ok(again.ok && !again.changed && again.text === r.text, 'a second run changes nothing');
 });
 

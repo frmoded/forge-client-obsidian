@@ -1,6 +1,6 @@
 // 2026-10-27-1020: the # Python block of a phrase note RUNS, on the REAL engine (Pyodide with the vendored music wheels, as phrase-mix-engine.test.ts does), and gives what the plugin's own Score path computes. The block is exec'd with the
-// note names bound to the fixture bars (the way a Forge note reads a data note: by calling it) and `rhythm_bars_to_stream` replaced by the identity, so what the block hands to the Score is compared bar for bar with a direct engine call
-// of the same arguments. Skipped (visibly) without the music wheels. Pins the MECHANISM (the block calls the engine functions with the json's arguments); if the Python facet's design moves this SHOULD go red - reassess, don't just rewrite.
+// note names bound to the fixture bars (the way a Forge note reads a data note: by calling it); since 2026-10-29-0810 `compute` RETURNS THE BARS, so `rhythm_bars_to_stream` is deliberately NOT bound at all (a block that still called it would
+// be a NameError here), and what the block returns is compared bar for bar with a direct engine call of the same arguments. Skipped (visibly) without the music wheels. Pins the MECHANISM (the block calls the engine functions with the json's arguments); if the Python facet's design moves this SHOULD go red - reassess, don't just rewrite.
 import { test as baseTest } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,7 +17,7 @@ const FIXTURES = path.resolve(import.meta.dirname, '../test/fixtures/score-first
 const dataOf = (name: string): unknown => { const r = readRhythmNote(fs.readFileSync(path.join(FIXTURES, `${name}.md`), 'utf8')); if (r.ok === false) throw new Error(r.message); return r.value.data; };
 const BARS = Object.fromEntries(['bar_005', 'bar_006', 'bar_007', 'bar_008'].map((n) => [n, dataOf(n)]));
 
-/** What the note's Python hands to rhythm_bars_to_stream, as JSON. */
+/** What the note's Python returns (the bar list), as JSON. */
 async function runNote(p: PhraseParams): Promise<unknown> {
   const py = await engine();
   py.globals.set('_bars_json', JSON.stringify(BARS));
@@ -28,7 +28,6 @@ async function runNote(p: PhraseParams): Promise<unknown> {
     '_g = {k: getattr(_lib, k) for k in ("extend_rhythm", "mix_rhythm", "morph_rhythm", "morph_rhythm_info")}',
     'for _n, _d in _j.loads(_bars_json).items():',
     '    _g[_n] = (lambda d: (lambda: _j.loads(_j.dumps(d))))(_d)',
-    '_g["rhythm_bars_to_stream"] = lambda bars: bars',
     'exec(_src, _g)',
     '_j.dumps(_g["compute"](None))',
   ].join('\n')));

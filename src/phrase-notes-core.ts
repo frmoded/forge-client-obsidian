@@ -63,13 +63,16 @@ export function phraseRecipeSteps(p: PhraseParams): string[] {
   return steps;
 }
 
+/** The last line of every block: how to get a Score from the bars it returns, as a COMMENT (2026-10-29-0810; the block returns bars, it never calls the stream helper). */
+const streamHint = (bars: string): string => `  # for a Score of these bars: rhythm_bars_to_stream(bars=${bars})`;
 const pyStr = (s: string): string => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 /** A bar read the way a Forge note reads a data note: call it by its name (music-theory/rhythm_data/rhythm_extended_fills.md: `base = rhythm_pattern_straight_rock()`). A name that is not a Python identifier goes through globals(). */
 const callNote = (name: string): string => (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? `${name}()` : `globals()[${pyStr(name)}]()`);
 
-/** The Python facet: `def compute(context):` calling the engine functions of forge/music/lib.py with the json's own arguments (extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream; signatures grep-verified
+/** The Python facet: `def compute(context):` calling the engine functions of forge/music/lib.py with the json's own arguments (extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info; signatures grep-verified
  *  2026-10-27-1020). A vote mix is mix_rhythm; a PATH mix is one bar of the morph path, at the stop pathStopOf gives (the weight in millionths, integer arithmetic, the rule phrase-core.ts and the engine glue share). Forks replace their bar
- *  by index. Text only: the plugin draws the Score from the json through its own engine glue, never by running this. */
+ *  by index. Since 2026-10-29-0810 `compute` RETURNS THE BAR LIST (the shape rhythm_bars_to_stream takes), so a phrase called by name from another phrase's Python yields bars and a transform's Python can really apply its ops to its source;
+ *  the way to a Score is the last line, a comment (never a call). Text only: the plugin draws the Score from the json through its own engine glue, never by running this. */
 export function phrasePython(p: PhraseParams): string {
   const out: string[] = ['def compute(context):'];
   if (p.kind === 'extend') {
@@ -93,13 +96,13 @@ export function phrasePython(p: PhraseParams): string {
     out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`, `  changes = morph_rhythm_info(a=a, b=b, order=${order}, seed=${seed})['d']`,
       `  stop = min(changes, max(0, ((1000000 - ${millionths}) * changes + 500000) // 1000000))`,
       `  bar = morph_rhythm(a=a, b=b, bars=1, order=${order}, seed=${seed}, position=stop)`);
-    return [...out, '  return rhythm_bars_to_stream(bars=[bar])'].join('\n');
+    return [...out, '  return [bar]', streamHint('[bar]')].join('\n');
   } else {
     out.push(`  a = ${callNote(p.a)}`, `  b = ${callNote(p.b)}`, `  mixed = mix_rhythm(a=a, b=b, weight=${p.weight}, threshold=${p.threshold}, ghost=${p.ghost ? 'True' : 'False'})`);
-    return [...out, '  return rhythm_bars_to_stream(bars=[mixed])'].join('\n');
+    return [...out, '  return [mixed]', streamHint('[mixed]')].join('\n');
   }
   for (const f of forks(p)) out.push(`  bars[${f.bar - 1}] = ${callNote(f.note)}`);
-  out.push('  return rhythm_bars_to_stream(bars=bars)');
+  out.push('  return bars', streamHint('bars'));
   return out.join('\n');
 }
 

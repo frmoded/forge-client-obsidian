@@ -28,12 +28,13 @@ test('Description, links and Recipe of a transform: the source PHRASE is the wik
   assert.ok(phraseDescription('phrase_007', T2).endsWith('Edited by hand: bar 4 is [[bar_009]].'));
 });
 
-test('Python of a transform: the source phrase called by name, one region call per op in order, forks by index, the Score last', () => {
+test('Python of a transform: the source phrase called by name, one region call per op in order, forks by index, the bars returned last', () => {
   assert.equal(phrasePython(T), [
     'def compute(context):',
     '  bars = phrase_006()',
     "  bars = thin_out_bars(bars=bars, first=3, last=5, row='kick', amount=0.5)",
-    '  return rhythm_bars_to_stream(bars=bars)',
+    '  return bars',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n'));
   assert.equal(phrasePython(T2), [
     'def compute(context):',
@@ -42,7 +43,8 @@ test('Python of a transform: the source phrase called by name, one region call p
     '  bars = double_up_bars(bars=bars, first=7, last=9, grid=16)',
     "  bars = thin_out_bars(bars=bars, first=1, last=2, amount=0.25, keep='seeded', seed=3)",
     '  bars[3] = bar_009()',
-    '  return rhythm_bars_to_stream(bars=bars)',
+    '  return bars',
+    '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n'));
   for (const p of [T, T2, { ...T, ops: [{ op: 'double_up', first: 1, last: 1, row: 'snare', grid: 8 }] } as PhraseParams]) {
     assert.equal(spawnSync('python3', ['-I', '-c', 'import ast,sys; ast.parse(sys.stdin.read())'], { input: phrasePython(p), encoding: 'utf8' }).status, 0, JSON.stringify(p));
