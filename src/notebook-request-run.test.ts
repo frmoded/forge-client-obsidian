@@ -170,6 +170,23 @@ test('a current service (0.2.41+) or an unreadable version keeps the answer\'s o
   assert.equal(happy.versions.length, 0, 'a good answer never asks the version');
 });
 
+test('2026-10-29-0800: an answer that carries the service version is judged by it and /health is NOT asked; one without a readable version still asks /health (an older service)', async () => {
+  const jazzy = (extra: Record<string, unknown>) => ({ status: 200, json: { ok: false, plan: null, error: 'I cannot make a bar jazzier.', ...extra } });
+  const current = world({ answer: jazzy({ version: '0.2.42' }), version: '0.2.40' });                     // /health would say OLD; the answer's own version wins and /health is not asked
+  assert.deepEqual(await current.nb.runRequest(SEL, 'make it jazzier'), { ok: false, message: 'I cannot make a bar jazzier.' });
+  assert.equal(current.versions.length, 0, 'the answer said which service it was: no /health');
+  const tooOld = world({ answer: jazzy({ version: '0.2.40' }), version: '0.2.42' });                      // the answer says OLD; /health (which would say fine) is not asked
+  assert.deepEqual(await tooOld.nb.runRequest(SEL, 'make it jazzier'), { ok: false, message: OLD_SERVICE });
+  assert.equal(tooOld.versions.length, 0);
+  for (const unreadable of [undefined, '', 42, null]) {                                                    // no version in the answer: the existing fallback, the same sentence
+    const w = world({ answer: jazzy(unreadable === undefined ? {} : { version: unreadable }), version: '0.2.40' });
+    assert.deepEqual(await w.nb.runRequest(SEL, 'make it jazzier'), { ok: false, message: OLD_SERVICE }, JSON.stringify(unreadable));
+    assert.equal(w.versions.length, 1, `${JSON.stringify(unreadable)}: /health is asked`);
+  }
+  const noPort = world({ answer: jazzy({ version: '0.2.40' }) });
+  assert.deepEqual(await noPort.nb.runRequest(SEL, 'make it jazzier'), { ok: false, message: OLD_SERVICE }, 'the answer\'s version needs no /health port at all');
+});
+
 test('a build with no service call says so, and writes nothing', async () => {
   const w = world({ noAsk: true });
   assert.deepEqual(await w.nb.runRequest(SEL, 'half as busy'), { ok: false, message: 'Asking in a sentence is not available in this build.' });

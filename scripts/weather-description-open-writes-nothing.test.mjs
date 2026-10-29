@@ -23,6 +23,7 @@ import { backfillV113Shape } from '../src/v11-3-backfill-core.ts';
 import { computeFacetHash } from '../src/facet-hash-core.ts';
 import { computeFacetStates, FacetState } from '../src/facet-state-core.ts';
 import * as v2 from '../src/v2-note-core.ts';
+import { dirtySiblingReason } from '../src/test-support/dirty-sibling.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -41,11 +42,16 @@ const helpers = {
 const NO_ACTIONS = { pythonSection: false, hashes: [], derivedFromFields: [], canonicalHashRepairs: [], canonicalFacetSeeded: null, derivedFromParentSeeded: [], stubSyncRepairs: [], stubReplacedClaims: [] };
 const lines = (s) => s.split('\n');
 const SHIPPED = { 'the bundle copy (assets/vaults/forge-tutorial)': BUNDLE_FILE, 'the source vault file (../forge-tutorial)': SOURCE_FILE };
+// 2026-10-29-0800: the SOURCE file is read from the live ../forge-tutorial checkout. When that checkout has uncommitted edits under 05-conditionals the file is not the committed one this drain pins, so every test that reads
+// it is a COUNTED skip with the reason (never a red, never a silent pass); in the matrix's clean worktree DIRTY is null and they are strict. The bundle copy is in this repo and is always strict. (dirty-sibling.ts is the
+// .ts helper the src tests use; this .mjs imports it the same way it imports the other src modules.)
+const DIRTY = dirtySiblingReason(path.dirname(SOURCE_FILE), 'forge-tutorial/05-conditionals');
+const skipFor = (file) => (file === SOURCE_FILE && DIRTY !== null ? `not comparing: ${DIRTY}` : false);
 const mtimes = () => Object.values(SHIPPED).map((f) => fs.statSync(f).mtimeMs);
 const mtimesBefore = mtimes();
 
 for (const [label, file] of Object.entries(SHIPPED)) {
-  test(`OPENING WRITES NOTHING — ${label}: the real backfill makes zero actions and returns the very same bytes`, async () => {
+  test(`OPENING WRITES NOTHING — ${label}: the real backfill makes zero actions and returns the very same bytes`, { skip: skipFor(file) }, async () => {
     assert.ok(fs.existsSync(file), `${file} must exist (a missing sibling is a failure, not a skip)`);
     const original = fs.readFileSync(file, 'utf8');
     const r = await backfillV113Shape(original, helpers);
@@ -54,14 +60,14 @@ for (const [label, file] of Object.entries(SHIPPED)) {
     assert.equal(r.newBody, original, 'byte-identical to the ORIGINAL bytes of the file');
   });
 
-  test(`OPEN + RUN WRITE NOTHING — ${label}: the plugin's own audit, with Run modelled by the engine's RECORDED Python, lists no write`, async () => {
+  test(`OPEN + RUN WRITE NOTHING — ${label}: the plugin's own audit, with Run modelled by the engine's RECORDED Python, lists no write`, { skip: skipFor(file) }, async () => {
     const original = fs.readFileSync(file, 'utf8');
     const enginePython = recordedPythonFor(RECORDING, REL, original);
     assert.equal(typeof enginePython, 'string', 'the recording has the engine\'s Python for weather\'s own Recipe');
     assert.deepEqual(await auditNote(original, { libraryGated: false, enginePython }), { applies: true, open: [], run: [] });
   });
 
-  test(`ONLY THE DESCRIPTION CHANGED — ${label}: against the frozen bytes before this drain, the Description line and the description_hash differ and NOTHING else does`, () => {
+  test(`ONLY THE DESCRIPTION CHANGED — ${label}: against the frozen bytes before this drain, the Description line and the description_hash differ and NOTHING else does`, { skip: skipFor(file) }, () => {
     const now = fs.readFileSync(file, 'utf8');
     const a = lines(BEFORE), b = lines(now);
     assert.equal(a.length, b.length, 'same number of lines');
@@ -76,7 +82,7 @@ for (const [label, file] of Object.entries(SHIPPED)) {
     }
   });
 
-  test(`THE NOTE NEVER READS "OUT OF DATE" — ${label}: source_facet is recipe, so the Recipe is the source and the Python is derived from it, in sync`, async () => {
+  test(`THE NOTE NEVER READS "OUT OF DATE" — ${label}: source_facet is recipe, so the Recipe is the source and the Python is derived from it, in sync`, { skip: skipFor(file) }, async () => {
     const now = fs.readFileSync(file, 'utf8');
     assert.equal(asString(now, 'source_facet'), 'recipe');
     const hashes = { description: await computeFacetHash(v2.extractDescription(now)), recipe: await computeFacetHash(v2.extractRecipeSection(now)), python: await computeFacetHash(v2.extractPythonSection(now)) };
@@ -84,14 +90,14 @@ for (const [label, file] of Object.entries(SHIPPED)) {
     assert.deepEqual(states, { description: FacetState.Ignored, recipe: FacetState.Source, python: FacetState.DerivedFromRecipe });
   });
 
-  test(`the shipped-description-hash invariant holds — ${label}`, async () => {
+  test(`the shipped-description-hash invariant holds — ${label}`, { skip: skipFor(file) }, async () => {
     const r = await checkNote(fs.readFileSync(file, 'utf8'));
     assert.equal(r.ok, true, JSON.stringify(r));
     assert.equal(r.skipped, undefined, 'the invariant APPLIES to this note (it has a stored hash and a Description)');
   });
 }
 
-test('the bundle copy and the source file are the same bytes (the bundle mirrors the vault)', () => {
+test('the bundle copy and the source file are the same bytes (the bundle mirrors the vault)', { skip: skipFor(SOURCE_FILE) }, () => {
   assert.equal(fs.readFileSync(BUNDLE_FILE, 'utf8'), fs.readFileSync(SOURCE_FILE, 'utf8'));
 });
 
@@ -102,7 +108,7 @@ test('NON-VACUITY — the new Description with the OLD description_hash (a hand 
   assert.notEqual(r.stored, r.actual);
 });
 
-test('NON-VACUITY — the same note shipped BARE (no # Python, the way countdown shipped until 2e9e777) DOES write on open: the proof that the zero-action result above can fail', async () => {
+test('NON-VACUITY — the same note shipped BARE (no # Python, the way countdown shipped until 2e9e777) DOES write on open: the proof that the zero-action result above can fail', { skip: skipFor(SOURCE_FILE) }, async () => {
   const bare = fs.readFileSync(SOURCE_FILE, 'utf8').replace(/\n# Python[\s\S]*$/, '\n');
   assert.ok(!/# Python/.test(bare));
   const r = await backfillV113Shape(bare, helpers);

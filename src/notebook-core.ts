@@ -244,10 +244,13 @@ export function createNotebook<F>(ports: NotebookPorts<F>): Notebook {
         answer = { ok: false, message: `Could not reach the transpile service (${msg(e)}). Check your connection and Settings → Forge → Transpile service URL.`, suspectOld: false };
       }
       let outcome: TransformOutcome | { ok: false; message: string } = answer;
-      if (answer.ok === false && answer.suspectOld && ports.serviceVersion !== undefined) {
-        // an answer an old service could give too: ask the version before blaming the sentence (an unreadable version is unknown, not old)
-        let version: string | null = null;
-        try { version = await ports.serviceVersion(); } catch { /* unknown is not old */ }
+      if (answer.ok === false && answer.suspectOld) {
+        // an answer an old service could give too: learn the version before blaming the sentence (an unreadable version is unknown, not old). The answer says which service wrote it (0.2.42+); only an answer
+        // without a version (an older service) costs a GET /health.
+        let version: string | null = answer.serviceVersion ?? null;
+        if (version === null && ports.serviceVersion !== undefined) {
+          try { version = await ports.serviceVersion(); } catch { /* unknown is not old */ }
+        }
         if (versionAtLeast(version, REQUEST_NEEDS_VERSION) === false) outcome = { ok: false, message: OLD_SERVICE };
       }
       ports.trace(askedLine(sentence, outcome));

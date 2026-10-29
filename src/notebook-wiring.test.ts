@@ -246,6 +246,25 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
+  test(`[${edition}] 2026-10-29-0800: a /plan answer that carries the service version is the only request sent (no GET /health), the person still reads the service's reason; the same answer without it asks /health as before`, async () => {
+    const answer = (extra: Record<string, unknown>) => ({ status: 200, json: { ok: false, parsed_ok: true, plan: null, error: 'I cannot make a bar jazzier.', ...extra } });
+    for (const [label, extra, urls] of [
+      ['carries 0.2.42', { version: '0.2.42' }, ['https://svc.example/plan']],
+      ['carries no version (an older service)', {}, ['https://svc.example/plan', 'https://svc.example/health']],
+    ] as Array<[string, Record<string, unknown>, string[]]>) {
+      const w = await world(SCORE_FIRST_TOML);
+      try {
+        w.net.plan = answer(extra);
+        w.net.health = { status: 200, json: { status: 'ok', version: '0.2.42' } };
+        const view: any = w.plugin.views.get(PHRASE_VIEW_TYPE)!(w.makeLeaf());
+        const { notebook } = view.notebookFor(w.tf('phrases/phrase_006.md'));
+        const res = await notebook.runRequest(SEL, 'make it jazzier');
+        assert.deepEqual(res, { ok: false, message: 'I cannot make a bar jazzier.' }, label);
+        assert.deepEqual(w.requests.map((r: any) => r.url), urls, label);
+      } finally { w.done(); }
+    }
+  });
+
   test(`[${edition}] a version that cannot be read is unknown, never "old": a /health that fails, is not 200, has no version, a version that is not text or an empty one - the person still reads the service\'s answer, not "needs 0.2.41"`, async () => {
     const unreadable: Array<[string, (w: Awaited<ReturnType<typeof world>>) => void]> = [
       ['health throws', (w) => { w.net.healthThrows = new Error('offline'); }],

@@ -109,6 +109,23 @@ test('the trouble before there is a plan reads exactly as it does in the sentenc
   assert.match(OLD_SERVICE, /does not offer planning yet \(it needs version 0\.2\.41 or newer\)/);
 });
 
+// ---- 2026-10-29-0800: the answer carries the service version -----------------------------------------------------------------------------------------------------------------------
+
+test('an answer an old service could also give hands back the version the answer itself carries; one without a readable version hands back null (the caller then asks /health)', () => {
+  const refusal = (extra: Record<string, unknown>) => ({ status: 200, json: { ok: false, parsed_ok: true, plan: null, error: 'I cannot make a bar jazzier.', ...extra } });
+  const newPlan = (extra: Record<string, unknown>) => ({ status: 200, json: { ok: true, plan: { kind: 'extend', bar: 'bar_005', bars: 8 }, ...extra } });
+  for (const [label, res] of [['a refusal', refusal], ['another kind of phrase', newPlan]] as const) {
+    const withVersion = interpretTransformResponse(res({ version: '0.2.42' }), ctx());
+    assert.equal(withVersion.ok, false, label);
+    if (withVersion.ok === false) { assert.equal(withVersion.suspectOld, true, label); assert.equal(withVersion.serviceVersion, '0.2.42', label); }
+    for (const unreadable of [undefined, '', 42, null, ['0.2.42'], { v: '0.2.42' }]) {
+      const r = interpretTransformResponse(res(unreadable === undefined ? {} : { version: unreadable }), ctx());
+      assert.equal(r.ok, false, label);
+      if (r.ok === false) assert.equal(r.serviceVersion ?? null, null, `${label}: ${JSON.stringify(unreadable)} is no version`);
+    }
+  }
+});
+
 // ---- the version ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 test('a version is compared by its numbers, not its text; what is not a version is unknown (null), never old', () => {

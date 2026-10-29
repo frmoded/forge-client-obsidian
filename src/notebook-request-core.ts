@@ -44,8 +44,9 @@ export function buildTransformRequest(input: { sentence: string; source: string;
 
 export type TransformOutcome =
   | { ok: true; op: 'thin_out' | 'double_up'; ops: TransformOp[] }
-  /** `suspectOld`: the answer is one an old service (that ignores `selection`) could also give, so the caller may ask its version before showing the message. */
-  | { ok: false; message: string; suspectOld: boolean };
+  /** `suspectOld`: the answer is one an old service (that ignores `selection`) could also give, so the caller may ask its version before showing the message.
+   *  `serviceVersion` (2026-10-29-0800): the version the ANSWER carried (forge-transpile 0.2.42+); when it is there the caller does not ask /health, when it is null or absent (an older service) it does. */
+  | { ok: false; message: string; suspectOld: boolean; serviceVersion?: string | null };
 
 type Plan = Record<string, unknown>;
 
@@ -58,13 +59,21 @@ function opsFromPlan(plan: Plan, source: string, runs: ReadonlyArray<readonly [n
   return { ok: true, ops: (checked.value as TransformPhrase).ops };
 }
 
+/** The version an answer carries (forge-transpile 0.2.42+ puts `version` on every /plan answer): non-empty text, else null. A number, an empty string or a missing field is "no version": the caller falls back to /health. */
+function answerVersion(json: Plan): string | null {
+  const v = json.version;
+  return typeof v === 'string' && v.trim() !== '' ? v : null;
+}
+
 export function interpretTransformResponse(res: { status: number; json: unknown }, ctx: { source: string; runs: ReadonlyArray<readonly [number, number]>; row: string | null }): TransformOutcome {
   const transport = planTransportRefusal(res, REQUEST_NEEDS_VERSION);
   if (transport !== null) return { ok: false, message: transport, suspectOld: false };
   const json = res.json as Plan;
-  if (json.ok !== true || json.plan === undefined || json.plan === null) return { ok: false, message: planRefusalText(json), suspectOld: true };
+  const version = answerVersion(json);
+  const carried = version !== null ? { serviceVersion: version } : {};         // only when the answer says it: every older outcome keeps its exact shape
+  if (json.ok !== true || json.plan === undefined || json.plan === null) return { ok: false, message: planRefusalText(json), suspectOld: true, ...carried };
   const plan = json.plan as Plan;                                         // a string, a number or an array has no `kind`: the same refusal as another kind of phrase
-  if (plan.kind !== 'transform') return { ok: false, message: NOT_A_TRANSFORM, suspectOld: true };
+  if (plan.kind !== 'transform') return { ok: false, message: NOT_A_TRANSFORM, suspectOld: true, ...carried };
   if (plan.op !== 'thin_out' && plan.op !== 'double_up') return { ok: false, message: `The planner's answer is not a valid operation: op must be "thin_out" or "double_up", got ${JSON.stringify(plan.op)}.`, suspectOld: false };
   const made = opsFromPlan(plan, ctx.source, ctx.runs, ctx.row);
   if (made.ok === false) return { ok: false, message: made.message, suspectOld: false };
