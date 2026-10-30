@@ -99,3 +99,22 @@ test('a phrase tab\'s and a bar tab\'s strips are unchanged by the kit kind (no-
   assert.equal(stripText(chipsFor('phrase_001', EXTEND)), '[bar_005] -> [phrase_001 extend 8 bars]');
   assert.equal(stripText(usedByChips('bar_005', { 'phrases/phrase_001.md': { 'bars/bar_005.md': 1 } })), 'used by: [phrase_001]');
 });
+
+// 2026-10-29-0900 item 3 (g): a bar the mix USES must light. A mix is one bar made from a (weight) and b (1 - weight): both contributed whenever their share is above 0.
+test('(g) a mix lights its one bar for BOTH parents while each has a share above 0; at weight 0 only b, at weight 1 only a; a note that took no part lights none', () => {
+  const mix = (weight: number) => ({ kind: 'mix', a: 'bar_005', b: 'bar_006', weight, threshold: 0.5, ghost: false } as unknown as PhraseParams);
+  assert.deepEqual(barsContributedBy(mix(0.3), 'bar_005'), [1], 'smoke 8: 30 % bar_005 is still bar_005 in the bar');
+  assert.deepEqual(barsContributedBy(mix(0.3), 'bar_006'), [1]);
+  assert.deepEqual(barsContributedBy(mix(0.5), 'bar_005'), [1]);
+  assert.deepEqual(barsContributedBy(mix(0), 'bar_005'), [], 'weight 0: the mix uses only b, so a lights none (correct, not a bug)');
+  assert.deepEqual(barsContributedBy(mix(0), 'bar_006'), [1]);
+  assert.deepEqual(barsContributedBy(mix(1), 'bar_006'), [], 'weight 1: only a');
+  assert.deepEqual(barsContributedBy(mix(1), 'bar_005'), [1]);
+  assert.deepEqual(barsContributedBy(mix(0.3), 'bar_999'), []);
+  assert.deepEqual(barsContributedBy(mix(0.3), 'phrase_009', 'phrase_009'), [1], 'the phrase itself is still its one bar');
+});
+
+test('(g) no harm: extend, morph and transform keep their one-parent rule (barParent is unchanged)', () => {
+  assert.equal(barParent({ kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.3 } as unknown as PhraseParams, 1), 'bar_006', 'the single "made from" parent of the mix is still the heavier one');
+  assert.deepEqual(barsContributedBy(MORPH, 'bar_007'), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+});

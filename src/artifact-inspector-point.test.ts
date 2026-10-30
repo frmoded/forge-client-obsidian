@@ -11,7 +11,7 @@ const IDS = [1, 2, 3].map((n) => `ph_bar_${n}`);
 const MAP = Object.fromEntries(IDS.map((id, i) => [id, { noteId: 'phrases/phrase_001', role: 'phrase-bar', params: { bar: i + 1 } }]));
 
 /** Three side-by-side bars, 100 px wide each (box x: 0-100, 110-210, 220-320; y: 0-60). `big` is an extra, larger box that overlaps bar 2 (to prove the smallest box wins). */
-function rig(opts: { pointIds?: readonly string[]; trace?: (l: string) => void; pinLabel?: (id: string) => string; big?: boolean; bigOn?: number; keepPinOnControls?: boolean } = {}) {
+function rig(opts: { pointIds?: readonly string[]; trace?: (l: string) => void; pinLabel?: (id: string) => string; big?: boolean; bigOn?: number; keepPinOnControls?: boolean; releaseOnEscapeFrom?: boolean } = {}) {
   const win: any = new Window({ url: 'http://localhost/' });
   const doc = win.document;
   const root = doc.createElement('div'); doc.body.appendChild(root);
@@ -22,9 +22,10 @@ function rig(opts: { pointIds?: readonly string[]; trace?: (l: string) => void; 
   bars.forEach((g, i) => { g.getBoundingClientRect = () => box(110 * i, 0, 110 * i + 100, 60); });
   if (opts.big) bars[opts.bigOn ?? 0].getBoundingClientRect = () => box(0, 0, 400, 400);       // one bar's box is huge and covers everything, including the others (bar 1 by default)
   const pins: Array<string | null> = [];
-  const layer = attachArtifactInspector({ root, map: MAP, onHover: () => {}, onPin: (e) => { pins.push(e ? e.id : null); }, pointIds: opts.pointIds, trace: opts.trace, pinLabel: opts.pinLabel, keepPinOnControls: opts.keepPinOnControls } as any);
+  const pane = doc.createElement('div'); doc.body.appendChild(pane); pane.appendChild(root);   // the pane around the Score (the notebook's buttons are in it, outside root)
+  const layer = attachArtifactInspector({ root, releaseOnEscapeFrom: opts.releaseOnEscapeFrom ? pane : undefined, map: MAP, onHover: () => {}, onPin: (e) => { pins.push(e ? e.id : null); }, pointIds: opts.pointIds, trace: opts.trace, pinLabel: opts.pinLabel, keepPinOnControls: opts.keepPinOnControls } as any);
   const click = (target: any, x: number, y: number) => target.dispatchEvent(new win.MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
-  return { root, svg, bars, layer, pins, click };
+  return { root, pane, svg, bars, layer, pins, click };
 }
 
 test('the cause, before the fix: with no pointIds a click on empty space inside a bar UNPINS (the old, still-default behaviour of every other surface)', () => {
@@ -224,4 +225,37 @@ test('2026-10-27-1000: keepPinOnControls ignores only controls strictly inside t
   r.layer.pin('ph_bar_2');
   r.click(inner, 150, 30);
   assert.equal(r.layer.pinnedId(), 'ph_bar_2', 'a button inside the root is');
+});
+
+// ---- 2026-10-29-0900 item 3 (c): Esc releases the pin from anywhere in the pane (smoke 8: focus was on a notebook button) ----------------------------------------------------------------
+const esc = (target: any) => target.dispatchEvent(new (target.ownerDocument.defaultView as any).KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+test('(c) with releaseOnEscapeFrom (the phrase Score surfaces), Esc pressed on a button OUTSIDE the root but inside the pane releases the pin, with an evidence line', () => {
+  const lines: string[] = [];
+  const r = rig({ pointIds: IDS, trace: (l) => lines.push(l), releaseOnEscapeFrom: true });
+  const button = r.root.ownerDocument.createElement('button'); r.pane.appendChild(button);
+  r.layer.pin('ph_bar_2');
+  assert.equal(r.layer.pinnedId(), 'ph_bar_2');
+  esc(button);
+  assert.equal(r.layer.pinnedId(), null);
+  assert.ok(lines.some((l) => /^\[forge-pin\] Esc /.test(l)), lines.join('|'));
+});
+
+test('(c) P3: without releaseOnEscapeFrom (the bar inspector of every vault) Esc outside the root does nothing, exactly as before; Esc inside the root still releases', () => {
+  const r = rig({ pointIds: IDS });
+  const button = r.root.ownerDocument.createElement('button'); r.pane.appendChild(button);
+  r.layer.pin('ph_bar_2');
+  esc(button);
+  assert.equal(r.layer.pinnedId(), 'ph_bar_2', 'unchanged for every other surface');
+  esc(r.svg);
+  assert.equal(r.layer.pinnedId(), null);
+});
+
+test('(c) dispose removes the pane listener', () => {
+  const r = rig({ pointIds: IDS, releaseOnEscapeFrom: true });
+  r.layer.dispose();
+  r.layer.pin('ph_bar_2');                                              // pin() after dispose is a no-op or not: the point is that Esc no longer reaches a dead layer
+  const before = r.layer.pinnedId();
+  esc(r.pane);
+  assert.equal(r.layer.pinnedId(), before);
 });

@@ -45,6 +45,9 @@ export interface ArtifactInspectorOptions {
   /** 2026-10-26-1800: a click on the Score's player or on any button inside the root is not a pin gesture (the pin is kept, one evidence line). Opt-in, because this inspector is shared with the bar's Beat Box tab of EVERY vault,
    *  which must behave as before (P3, 2026-10-27-1000): only the phrase Score surfaces, which exist only in a score-first vault, ask for it. Absent = a click on a control is a click on empty space. */
   keepPinOnControls?: boolean;
+  /** 2026-10-29-0900 (c): Esc pressed anywhere inside this element (the whole pane: the notebook's buttons are outside `root`) releases the pin, with one evidence line. Opt-in for the same reason as `keepPinOnControls` (P3):
+   *  the bar's Beat Box tab of every vault keeps Esc on `root` only. Absent = unchanged. */
+  releaseOnEscapeFrom?: Element;
 }
 
 export interface ArtifactInspector {
@@ -232,6 +235,12 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   root.addEventListener('mouseout', onOut);
   root.addEventListener('click', onClick);
   root.addEventListener('keydown', onKey);
+  const onPaneKey = (e: Event) => {
+    if ((e as KeyboardEvent).key !== 'Escape' || root.contains(e.target as Node | null) || pinned === null) return;          // inside root, onKey has it
+    opts.trace?.(`[forge-pin] Esc from outside the Score -> let go of ${opts.pinLabel ? opts.pinLabel(pinned) : pinned}`);
+    setPinned(null);
+  };
+  opts.releaseOnEscapeFrom?.addEventListener('keydown', onPaneKey);
 
   return {
     highlight(id) { setHot(id !== null && Object.prototype.hasOwnProperty.call(map, id) ? id : null); },
@@ -243,6 +252,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
       root.removeEventListener('mouseout', onOut);
       root.removeEventListener('click', onClick);
       root.removeEventListener('keydown', onKey);
+      opts.releaseOnEscapeFrom?.removeEventListener('keydown', onPaneKey);
       arrival?.disconnect();
       hitAreas.forEach((r) => r.remove());
       hot.forEach((x) => mark(x, HOT_CLASS, false));

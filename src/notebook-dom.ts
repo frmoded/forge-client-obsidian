@@ -22,6 +22,7 @@ export interface NotebookHandle {
 
 const REQUEST_PLACEHOLDER = 'or say it: make this half as busy, keep the downbeat';
 const REQUEST_LABEL = 'What to do with the selected bars, in a sentence';
+const DERIVED_REASON = 'This phrase was made by a transform: open its source phrase to ask for another change.';   // 2026-10-29-0900 (a)
 const HINT = 'No selection yet: click bars above. The selection is always shown as chips; a cell shows the exact references it received.';
 
 export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): NotebookHandle {
@@ -36,7 +37,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   const cellsEl = el('div', 'forge-notebook-cells');
   const barsEl = el('div', 'forge-notebook-bars'); barsEl.setAttribute('role', 'group'); barsEl.setAttribute('aria-label', 'Bars');
   const rowsEl = el('div', 'forge-notebook-rows'); rowsEl.setAttribute('role', 'group'); rowsEl.setAttribute('aria-label', 'Row');
-  const chipsEl = el('div', 'forge-notebook-chips');
+  const chipsEl = el('div', 'forge-notebook-chips'); chipsEl.style.minHeight = '1.8em';   // 2026-10-29-0900 (f): the line is there before the first chip, so choosing a bar moves nothing
   const doEl = el('div', 'forge-notebook-do');
   const op = el('select', 'forge-notebook-op'); op.setAttribute('aria-label', 'What to do with the selection');
   for (const [value, text] of [['thin_out', 'Thin out'], ['double_up', 'Double up']] as const) { const o = doc.createElement('option'); o.value = value; o.textContent = text; op.appendChild(o); }
@@ -45,7 +46,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   const run = el('button', 'forge-notebook-run', 'Run'); run.type = 'button'; run.disabled = true;
   doEl.append(op, numberLabel, number, run);
   const request = el('input', 'forge-notebook-request');
-  request.setAttribute('placeholder', REQUEST_PLACEHOLDER); request.setAttribute('aria-label', REQUEST_LABEL);
+  request.setAttribute('placeholder', REQUEST_PLACEHOLDER); request.setAttribute('aria-label', REQUEST_LABEL); request.setAttribute('autocomplete', 'off');   // a remembered value must not look like a typed sentence (smoke 8)
   const hint = el('p', 'forge-notebook-hint', HINT);
   const message = el('div', 'forge-notebook-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   root.append(cellsEl, barsEl, rowsEl, chipsEl, doEl, request, hint, message);
@@ -57,6 +58,8 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   let busy = false;
   let lastChip: string | null = null;
   let disposed = false;
+  let derived = false;                  // this phrase is the RESULT of a cell: it is not asked for another change (the request box says why)
+  let madeId: string | null = null;     // the cell the status line last announced as made; the status goes when the cell does
 
   const say = (text: string, kind: 'status' | 'alert' = 'status') => { message.textContent = text; message.setAttribute('role', kind); };
   const setNumberFor = (kind: string) => {
@@ -79,7 +82,8 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     if (chip !== null) chipsEl.appendChild(el('span', 'forge-notebook-chip', chip));
     hint.style.display = chip !== null ? 'none' : '';
     run.disabled = busy || chip === null;
-    request.disabled = busy;
+    request.disabled = busy || derived;
+    request.setAttribute('placeholder', derived ? DERIVED_REASON : REQUEST_PLACEHOLDER); request.setAttribute('aria-label', derived ? DERIVED_REASON : REQUEST_LABEL);
     const typed = request.value.trim() !== '';
     op.disabled = typed; number.disabled = typed;                       // a typed sentence is what Run will use: the picker is dimmed, not hidden
     doEl.setAttribute('data-mode', typed ? 'sentence' : 'picker');
@@ -146,6 +150,9 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     cellsEl.textContent = '';
     for (const c of cells) cellsEl.appendChild(cellEl(c));
     for (const p of problems) cellsEl.appendChild(el('div', 'forge-notebook-problem', `${p.path}: ${p.message}`));
+    const nowDerived = cells.some((c) => c.role === 'result');
+    if (madeId !== null && !cells.some((c) => c.id === madeId) && message.textContent?.startsWith(`Made ${madeId} `)) { say(''); madeId = null; }   // 2026-10-29-0900 (b)
+    if (nowDerived !== derived) { derived = nowDerived; paint(); }
   }
 
   run.addEventListener('click', () => { void (async () => {
@@ -157,7 +164,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
       const r = sentence !== '' ? await ports.notebook.runRequest(chosen, sentence) : await ports.notebook.run(chosen, op.value as 'thin_out' | 'double_up', Number(number.value));
       if (disposed) return;
       if (r.ok === false) say(r.message, 'alert');
-      else { request.value = ''; say(`Made ${(r.cellPath.split('/').pop() ?? '').replace(/\.md$/, '')} and ${r.phrasePath}.`); await refresh(); }
+      else { request.value = ''; const made = (r.cellPath.split('/').pop() ?? '').replace(/\.md$/, ''); say(`Made ${made} and ${r.phrasePath}.`); await refresh(); madeId = made; }
     } finally { busy = false; if (!disposed) paint(); }
   })(); });
 

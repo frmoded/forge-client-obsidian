@@ -46,6 +46,8 @@ export function barsContributedBy(p: PhraseParams, noteName: string, phraseName?
   const n = barCount(p, known);
   const all = Array.from({ length: n }, (_, i) => i + 1);
   if (phraseName !== undefined && noteName === phraseName) return all;
+  // 2026-10-29-0900 (g): a mix's one bar is made from BOTH parents, a by its weight and b by what is left; a bar the mix uses at all lights (weight 0 = only b, 1 = only a). barParent stays the single heavier parent (what "made from" names).
+  if (p.kind === 'mix') return (noteName === p.a && p.weight > 0) || (noteName === p.b && p.weight < 1) ? all : [];
   return all.filter((bar) => barParent(p, bar) === noteName);
 }
 

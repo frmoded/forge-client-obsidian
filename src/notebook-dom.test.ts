@@ -283,3 +283,90 @@ test('a cell made from the op picker has no sentence line', async () => {
   await r.h.refresh();
   assert.equal(r.q('.forge-notebook-said'), null);
 });
+
+// ---- 2026-10-29-0900 item 2: "the box recorded a sentence nobody typed" (CCQA smoke 8) ----------------------------------------------------------------------------------------------
+// The box can only send its own value. These pin the PROPERTY "a Run with a truly empty box is the op picker, whatever came before it", in the real order a person goes in.
+
+test('refuse a sentence, select again, clear the box BY HAND, Run: that is the op picker (run), not a sentence (runRequest)', async () => {
+  const r = rig();
+  pickBars(r);
+  typeInto(r, 'make this half as busy, keep the downbeat');
+  r.click(r.q('.forge-notebook-run'));
+  r.pending[0]({ ok: false, message: 'I could not turn that into a change.' }); await r.flush();
+  assert.equal(r.q('.forge-notebook-request').value, 'make this half as busy, keep the downbeat', 'a refused sentence STAYS (by design)');
+  r.click(r.bar(7));                                                   // select again
+  typeInto(r, '');                                                     // clear by hand (select-all, delete)
+  assert.equal(r.q('.forge-notebook-do').getAttribute('data-mode'), 'picker');
+  r.calls.length = 0;
+  r.click(r.q('.forge-notebook-run'));
+  assert.equal(r.calls.length, 1);
+  assert.match(r.calls[0], /^run /, 'the picker ran');
+  assert.ok(!r.calls.some((c) => c.startsWith('ask')), 'no sentence was sent');
+  assert.equal(r.msg(), 'Running...');
+});
+
+test('the placeholder is never a sentence: with nothing typed and the example text only in the placeholder, Run is the op picker', () => {
+  const r = rig();
+  pickBars(r);
+  assert.equal(r.q('.forge-notebook-request').value, '');
+  r.click(r.q('.forge-notebook-run'));
+  assert.ok(r.calls[0]?.startsWith('run '), r.calls.join('|'));
+});
+
+test('the request box asks the browser not to autofill it (a remembered value would look like a typed sentence)', () => {
+  const r = rig();
+  assert.equal(r.q('.forge-notebook-request').getAttribute('autocomplete'), 'off');
+});
+
+// ---- 2026-10-29-0900 item 3 (a), (b): smoke 8 C3 ----------------------------------------------------------------------------------------------------------------------------------
+test('(a) on a derived (transform) phrase the request box is DISABLED and says why; on a source phrase it works', async () => {
+  const derived = rig({ cells: [{ ...CELL, role: 'result' }] });
+  await derived.h.refresh();
+  const box = derived.q('.forge-notebook-request');
+  assert.equal(box.disabled, true, 'a transform phrase is not asked for another change');
+  assert.match(box.getAttribute('placeholder'), /derived|source/i, 'the reason is on the box');
+  assert.match(box.getAttribute('aria-label'), /derived|source/i);
+  const source = rig({ cells: [CELL] });
+  await source.h.refresh();
+  assert.equal(source.q('.forge-notebook-request').disabled, false, 'P3: a source phrase keeps its working box');
+  assert.equal(source.q('.forge-notebook-request').getAttribute('placeholder'), 'or say it: make this half as busy, keep the downbeat');
+});
+
+test('(a) the box comes back when the derived phrase has no cell any more (nothing derived it)', async () => {
+  const r = rig({ cells: [{ ...CELL, role: 'result' }] });
+  await r.h.refresh();
+  assert.equal(r.q('.forge-notebook-request').disabled, true);
+  r.setCells([]);
+  await r.h.refresh();
+  assert.equal(r.q('.forge-notebook-request').disabled, false);
+});
+
+test('(b) a "Made cell_001 ..." status does not outlive the cell: once a refresh no longer finds it, the status is cleared (a status about something else is left alone)', async () => {
+  const r = rig();
+  pickBars(r);
+  r.click(r.q('.forge-notebook-run'));
+  r.setCells([{ ...CELL }]);
+  r.pending[0]({ ok: true, cellPath: 'notebook/cell_001.md', phrasePath: 'phrases/phrase_007.md' }); await r.flush();
+  assert.equal(r.msg(), 'Made cell_001 and phrases/phrase_007.md.');
+  await r.h.refresh();
+  assert.equal(r.msg(), 'Made cell_001 and phrases/phrase_007.md.', 'the cell is still there: the status stays');
+  r.setCells([]);                                                       // deleted from the other tab
+  await r.h.refresh();
+  assert.equal(r.msg(), '', 'cell_001 is gone: its "Made" status goes with it');
+  // a different status is never cleared by a refresh
+  pickBars(r);
+  r.click(r.q('.forge-notebook-run'));
+  r.pending[1]({ ok: false, message: 'Nothing to do.' }); await r.flush();
+  await r.h.refresh();
+  assert.equal(r.msg(), 'Nothing to do.');
+});
+
+test('(f) the chip line has its height from the start, so the first chip does not push the bars and rows down (smoke 8: a click landed one row off)', () => {
+  const r = rig();
+  const chips = r.q('.forge-notebook-chips');
+  assert.equal(chips.children.length, 0, 'no chip yet');
+  assert.notEqual(chips.style.minHeight, '', 'its height is reserved while empty');
+  const before = chips.style.minHeight;
+  pickBars(r);
+  assert.equal(chips.style.minHeight, before, 'and unchanged once a chip is there');
+});
