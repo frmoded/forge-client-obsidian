@@ -2,6 +2,7 @@
 // chips of a bar's tab (the phrases that use it). The "which note made bar n" rule is the SAME rule a pin sends the notes pane by (linked-panes-core.ts pinnedNoteFor): structure-strip-core.test.ts cross-checks them for every
 // kind, so the two cannot drift apart. Runtime imports from phrase-core.ts are types only.
 import type { PhraseParams } from './phrase-core.ts';
+import type { ArrangementParams } from './arrangement-core.ts';
 import { phraseBarId, PHRASE_BAR_SCOPE } from './phrase-lineage-core.ts';
 import { transformOpShort } from './phrase-words-core.ts';
 
@@ -11,7 +12,7 @@ export interface Chip {
   /** The note it opens (a lineage id: `bars/bar_007`, `phrases/phrase_004`). */
   noteId: string;
   /** `source` (2026-10-27-1030): the PHRASE a transform changes (a bar chip names a bar note; this names a phrase note). */
-  kind: 'bar' | 'phrase' | 'fork' | 'source';
+  kind: 'bar' | 'phrase' | 'fork' | 'source' | 'kit';
 }
 
 const baseName = (noteId: string): string => noteId.split('/').pop() ?? noteId;
@@ -65,6 +66,21 @@ export function chipsFor(name: string, p: PhraseParams): Chip[] {
   return [...chips, ...forks(p).map((f): Chip => ({ text: `${f.note} fork of bar ${f.bar}`, noteId: `bars/${f.note}`, kind: 'fork' }))];
 }
 
+/**
+ * 2026-10-29-0830: the chips of an ARRANGEMENT tab, left to right in the order of its Recipe: each track's phrase, then its kit, every note once (one phrase on two kits is one phrase chip). A flat row: nothing flows from one
+ * chip to the next, so the strip draws no arrows (stripTokens).
+ */
+export function arrangementChips(p: ArrangementParams): Chip[] {
+  const seen = new Set<string>();
+  const chips: Chip[] = [];
+  const add = (c: Chip): void => { if (!seen.has(c.noteId)) { seen.add(c.noteId); chips.push(c); } };
+  for (const t of p.tracks) {
+    add({ text: t.phrase, noteId: `phrases/${t.phrase}`, kind: 'phrase' });
+    add({ text: `${t.kit} kit`, noteId: `kits/${t.kit}`, kind: 'kit' });
+  }
+  return chips;
+}
+
 export type StripToken = Chip | '->' | 'used by:';
 
 /**
@@ -73,6 +89,7 @@ export type StripToken = Chip | '->' | 'used by:';
  */
 export function stripTokens(chips: readonly Chip[]): StripToken[] {
   if (chips.length === 0) return [];
+  if (chips.some((c) => c.kind === 'kit')) return [...chips];                    // an arrangement's strip: a flat row
   if (chips.every((c) => c.kind === 'phrase')) return ['used by:', ...chips];
   const at = chips.findIndex((c) => c.kind === 'phrase');
   const rest = chips.slice(at + 1);

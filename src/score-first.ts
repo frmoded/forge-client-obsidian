@@ -13,7 +13,7 @@ import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-co
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { morphChangesViaEngine } from './phrase-engine.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
-import { registerKitsAndArrangements } from './kits-arrangements.ts';
+import { ArrangementView, registerKitsAndArrangements } from './kits-arrangements.ts';
 import { isKitPath } from './kit-core.ts';
 import { isArrangementPath } from './arrangement-core.ts';
 import { choosePhraseTarget, createPhraseHeaderSync } from './phrase-header-core.ts';
@@ -372,7 +372,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       });
       plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }, structureHooks, notebookFor));
       // 2026-10-29-0820 (M10 slice 1): kits and arrangements. Registered here, inside the score-first gate, so no other vault gets a view, a command or a byte of it (P3).
-      registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst });
+      registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote });
       // 2026-10-26-1270: a bar's tab (its Beat Box or its Score) shows the phrases that use it, as chips above it, from the vault's resolved links (the `links:` of 1260 are what makes them resolve). The strip is added to the view's
       // content element on every event that can change the answer and put back if the view redrew without it; clicking a chip opens that phrase. Only in a score-first vault (this code runs after the gate).
       const barStrips = new WeakMap<HTMLElement, { handle: StripHandle; key: string }>();
@@ -409,6 +409,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       const pairTarget = (): { kind: PairSource; leaf: WorkspaceLeaf; file: TFile } | null => {
         const tab = app.workspace.getActiveViewOfType(PhraseView);
         if (tab?.file) return { kind: 'phrase', leaf: tab.leaf, file: tab.file };
+        const arrangement = app.workspace.getActiveViewOfType(ArrangementView);                 // 2026-10-29-0830: the notes pane shows the arrangement note itself (an arrangement's bars carry no pin)
+        if (arrangement?.file) return { kind: 'arrangement', leaf: arrangement.leaf, file: arrangement.file };
         const text = app.workspace.getActiveViewOfType(MarkdownView);
         if (text?.file && isPhrasePath(text.file.path)) return { kind: 'phrase-text', leaf: text.leaf, file: text.file };
         const recent = app.workspace.getMostRecentLeaf();

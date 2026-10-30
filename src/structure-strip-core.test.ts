@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { barParent, barsContributedBy, chipsFor, litBarIds, stripText, usedByChips, litEvidence } from './structure-strip-core.ts';
+import { arrangementChips, barParent, barsContributedBy, chipsFor, litBarIds, stripText, stripTokens, usedByChips, litEvidence } from './structure-strip-core.ts';
 import { pinnedNoteFor } from './linked-panes-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 
@@ -79,4 +79,23 @@ test('a bar tab shows the phrases that use it, from the vault\'s resolved links 
 test('the evidence line: the note the pane went to and the bars it lights', () => {
   assert.equal(litEvidence('bars/bar_008.md', [10, 11, 12]), '[forge-strip] note pane -> bars/bar_008.md lights bars 10, 11, 12');
   assert.equal(litEvidence('notes/other.md', []), '[forge-strip] note pane -> notes/other.md lights bars none');
+});
+
+// 2026-10-29-0830: an ARRANGEMENT tab's strip is a flat row, one chip per phrase and per kit it reads, in the order of the Recipe (each track's phrase, then its kit): no arrows (nothing flows from one to the next) and no "used by:".
+test('arrangementChips: one chip per phrase and per kit, each track\'s phrase then its kit, every note named once; the strip is a flat row with no arrows and no label', () => {
+  const two = { kind: 'arrangement' as const, tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_006' }] };
+  const chips = arrangementChips(two);
+  assert.deepEqual(chips.map((c) => [c.kind, c.noteId, c.text]), [
+    ['phrase', 'phrases/phrase_003', 'phrase_003'], ['kit', 'kits/rock', 'rock kit'],
+    ['phrase', 'phrases/phrase_006', 'phrase_006'], ['kit', 'kits/latin', 'latin kit'],
+  ]);
+  assert.equal(stripText(chips), '[phrase_003] [rock kit] [phrase_006] [latin kit]');
+  assert.deepEqual(stripTokens(chips), chips, 'the tokens ARE the chips: no arrow, no "used by:" even though a phrase chip is among them');
+  // one phrase on two kits (the case the 0820 playground proved works): the phrase is ONE chip
+  assert.equal(stripText(arrangementChips({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_006' }, { kit: 'latin', phrase: 'phrase_006' }] })), '[phrase_006] [rock kit] [latin kit]');
+});
+
+test('a phrase tab\'s and a bar tab\'s strips are unchanged by the kit kind (no-harm): the golden texts above still hold, and a strip with no kit chip keeps its arrows', () => {
+  assert.equal(stripText(chipsFor('phrase_001', EXTEND)), '[bar_005] -> [phrase_001 extend 8 bars]');
+  assert.equal(stripText(usedByChips('bar_005', { 'phrases/phrase_001.md': { 'bars/bar_005.md': 1 } })), 'used by: [phrase_001]');
 });

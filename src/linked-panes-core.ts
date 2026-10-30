@@ -54,9 +54,9 @@ export function pinnedNoteFor(prov: Provenance): PinnedNote | null {
   return null;
 }
 
-export type PairSource = 'phrase' | 'phrase-text' | 'bar';
+export type PairSource = 'phrase' | 'phrase-text' | 'bar' | 'arrangement';
 
-/** "Open Score with notes": a score-first vault, on a phrase tab (its Score), a phrase's JSON text tab, or a bar's Beat Box tab. Nowhere else, in no other vault. */
+/** "Open Score with notes": a score-first vault, on a phrase tab (its Score), a phrase's JSON text tab, a bar's Beat Box tab, or (2026-10-29-0830) an arrangement's Score tab. Nowhere else, in no other vault. */
 export function openPairAvailable(i: { scoreFirst: boolean; kind: PairSource | null }): boolean {
   return i.scoreFirst && i.kind !== null;
 }

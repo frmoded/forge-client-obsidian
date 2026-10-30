@@ -15,6 +15,7 @@ import { PAIR_SETTLE_MS } from './linked-panes-core.ts';
 import { installHostClock, iterateAllLeavesLikeObsidian, type HostClock } from './test-support/host-workspace.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
+import { ARRANGEMENT_VIEW_TYPE } from './arrangement-core.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const FX = path.join(ROOT, 'test/fixtures/score-first');
@@ -23,6 +24,7 @@ const TUTORIAL_TOML = 'name = "forge-tutorial"\nversion = "0.1.0"\ndescription =
 const MUSIC_THEORY_TOML = 'name = "music-theory"\nversion = "0.1.0"\ndescription = "x"\ndomains = ["music"]\n';
 const PAIR = 'open-score-with-notes';
 const PHRASE = 'phrases/phrase_001.md';
+const ARR = 'arrangements/arr_001.md';
 const SRC = import.meta.dirname;
 const code = (f: string) => fs.readFileSync(path.join(SRC, f), 'utf8').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
 
@@ -50,14 +52,14 @@ for (const edition of ['lean', 'music'] as const) {
       return leaf;
     };
     const deliver = (name: string) => { if (name === 'layout-change') clock.deliverAfterSettle(log.handlers.get(name)); else log.handlers.get(name)?.forEach((f) => f()); };
-    let active: { phrase?: any; text?: any } = {};
+    let active: { phrase?: any; text?: any; arrangement?: any } = {};
     let recent: any = null;
     const resolvedLinks: Record<string, Record<string, number>> = {};
     const app: any = {
       vault: {
         adapter: { exists: async (p: string) => p === 'forge.toml' && toml !== null, read: async (p: string) => (p === 'forge.toml' && toml !== null ? toml : '') },
         on: () => ({}), getMarkdownFiles: () => [], configDir: '.obsidian', getFiles: () => [],
-        getAbstractFileByPath: (p: string) => (/^(bars|phrases)\/.*\.md$/.test(p) ? tf(p) : null), read: async () => '', create: async () => {}, createFolder: async () => {},
+        getAbstractFileByPath: (p: string) => (/^(bars|phrases|kits|arrangements)\/.*\.md$/.test(p) ? tf(p) : null), read: async () => '', create: async () => {}, createFolder: async () => {},
       },
       workspace: {
         rootSplit: {}, leftSplit: {}, rightSplit: {},
@@ -65,7 +67,7 @@ for (const edition of ['lean', 'music'] as const) {
         iterateAllLeaves: iterateAllLeavesLikeObsidian<any>(() => ({ root: [...leaves] })),        // the shared host-faithful walk (it stops on a truthy return: the 2026-10-26-1545 incident)
         on: (name: string, cb: () => void) => { (log.handlers.get(name) ?? log.handlers.set(name, []).get(name)!).push(cb); return {}; },
         getLeavesOfType: () => [], getActiveFile: () => null,
-        getActiveViewOfType: (cls: unknown) => (cls === real.PhraseView ? active.phrase ?? null : cls === real.MarkdownView ? active.text ?? null : null),
+        getActiveViewOfType: (cls: unknown) => (cls === real.PhraseView ? active.phrase ?? null : cls === real.MarkdownView ? active.text ?? null : cls === real.ArrangementView ? active.arrangement ?? null : null),
         getMostRecentLeaf: () => recent,
         createLeafBySplit: (score: any, direction: string, before: boolean) => { log.splits.push([score, direction, before]); return makeLeaf(); },
         setActiveLeaf: (l: any) => { log.activated.push(l); }, revealLeaf: () => {}, getLeaf: () => makeLeaf(),
@@ -80,9 +82,11 @@ for (const edition of ['lean', 'music'] as const) {
     console.error = (...a: unknown[]) => { log.errors.push(a); };
     /** A phrase tab in `leaf`: the REAL PhraseView built by the registered factory. */
     const phraseTab = (leaf: any, file = PHRASE) => { const v: any = plugin.views.get(PHRASE_VIEW_TYPE)!(leaf); v.file = tf(file); v.leaf = leaf; leaf.view = v; v.getViewType = () => PHRASE_VIEW_TYPE; return v; };
+    /** An arrangement tab in `leaf`: the REAL ArrangementView built by the registered factory (its note is not loaded: the tab's Score is drawn by code this wiring does not exercise). */
+    const arrangementTab = (leaf: any, file = ARR) => { const v: any = plugin.views.get(ARRANGEMENT_VIEW_TYPE)!(leaf); v.file = tf(file); v.leaf = leaf; leaf.view = v; v.getViewType = () => ARRANGEMENT_VIEW_TYPE; return v; };
     const textTab = (leaf: any, file: string) => { const v: any = new real.MarkdownView(); v.file = tf(file); v.leaf = leaf; return v; };
     return {
-      plugin, app, leaves, log, makeLeaf, phraseTab, textTab, resolvedLinks, tick, clock,
+      plugin, app, leaves, log, makeLeaf, phraseTab, arrangementTab, textTab, resolvedLinks, tick, clock,
       fire: async (...names: string[]) => { for (const n of names) deliver(n); await tick(); },
       setActive: (a: typeof active) => { active = a; },
       setRecent: (l: any) => { recent = l; },
@@ -266,6 +270,76 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
+  // 2026-10-29-0830 (M10 slice 1 polish): the arrangement tab is a fourth source of the pair. The notes pane shows the ARRANGEMENT NOTE itself (its Description / Recipe / Python are what the person reads); the combined bars carry no
+  // pin lineage, so a click on a bar of the Score has nothing to send the pane to and the pane stays where it is.
+  test(`[${edition}] "Open Score with notes" is offered on an ARRANGEMENT's Score tab (score-first only), not on its JSON text tab, and the other three tabs are unchanged`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const leaf = w.makeLeaf();
+      w.setActive({ arrangement: w.arrangementTab(leaf) }); assert.equal(w.offered(), true, "an arrangement's Score tab");
+      w.setActive({ text: w.textTab(leaf, ARR) }); assert.equal(w.offered(), false, 'an arrangement as its JSON text is not a Score tab');
+      w.setActive({ text: w.textTab(leaf, 'kits/rock.md') }); assert.equal(w.offered(), false, 'a kit note');
+      w.setActive({ phrase: w.phraseTab(leaf) }); assert.equal(w.offered(), true, 'a phrase Score tab, as before');
+      w.setActive({}); assert.equal(w.offered(), false, 'no tab');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] running it on an arrangement tab: ONE split to the right, the notes leaf shows the ARRANGEMENT note in READING view, one evidence line; again: focused, no third pane; clicking in the Score sends the pane nowhere`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const score = w.makeLeaf(); const view = w.arrangementTab(score); w.setActive({ arrangement: view });
+      await w.run();
+      assert.equal(w.log.splits.length, 1);
+      assert.deepEqual([w.log.splits[0][0] === score, w.log.splits[0][1], w.log.splits[0][2]], [true, 'vertical', false], 'split beside the Score tab, to its right');
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      assert.deepEqual(notes.states, [{ type: 'markdown', active: false, state: { file: ARR, mode: 'preview' } }], 'the arrangement note, reading view, focus stays in the Score');
+      assert.deepEqual(w.log.lines, [`[forge-panes] opened pair (score ${ARR}, notes ${ARR})`]);
+      await w.run();
+      assert.equal(w.log.splits.length, 1, 'no third pane');
+      assert.deepEqual(w.log.activated, [score], 'the pair is focused');
+      assert.equal(view.onPin, undefined, 'the arrangement tab has no pin: the combined bars carry no lineage (stated in the FEEDBACK)');
+      await w.fire('file-open', 'active-leaf-change', 'layout-change');
+      assert.equal(notes.states.length, 1, 'nothing moved the pane');
+      assert.deepEqual(w.log.errors, []);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] the arrangement pair keeps the HOLD rules of 1800: a link the person opened in the notes pane is heard once and shown as the reading view again; closing the pane drops the pair with one line and the command makes a fresh one`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const score = w.makeLeaf(); const view = w.arrangementTab(score); w.setActive({ arrangement: view });
+      await w.run();
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      const heard: string[] = [];
+      view.structure.onNotesNavigated(score, (p: string) => heard.push(p));
+      notes.view = { getViewType: () => 'markdown', file: Object.assign(new real.TFile(), { path: 'kits/rock.md', extension: 'md', basename: 'rock' }) };       // the person clicked [[rock]] in the Recipe
+      await w.fire('file-open'); await w.fire('layout-change');
+      assert.deepEqual(heard, ['kits/rock.md'], 'heard once');
+      assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'kits/rock.md', mode: 'preview' } }, 'shown as the reading view again');
+      assert.deepEqual(w.log.lines.slice(1), ['[forge-panes] notes pane -> kits/rock.md (reason: navigated in the pane)', '[forge-panes] notes pane -> kits/rock.md (reason: kept as the reading view)']);
+      w.leaves.delete(notes); await w.layoutChange(); await w.layoutChange();
+      await w.tick(PAIR_SETTLE_MS + 120);
+      assert.match(w.log.lines.at(-1)!, /^\[forge-panes\] pair closed \(notes pane; reason: leaf missing/);
+      await w.run();
+      assert.equal(w.log.splits.length, 2, 'a fresh pair');
+      assert.deepEqual(w.log.errors, []);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] the arrangement tab's strip hooks: a chip click sends the pair's notes pane to that note (false without a pair: the tab opens the note itself)`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const score = w.makeLeaf(); const view = w.arrangementTab(score); w.setActive({ arrangement: view });
+      assert.equal(typeof view.structure?.goto, 'function', 'the view was given the strip hooks');
+      assert.equal(await view.structure.goto(score, 'kits/rock'), false, 'no pair yet');
+      await w.run();
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      assert.equal(await view.structure.goto(score, 'phrases/phrase_003'), true);
+      assert.equal(notes.states.at(-1).state.file, 'phrases/phrase_003.md');
+      assert.deepEqual(w.log.errors, []);
+    } finally { w.done(); }
+  });
+
   test(`[${edition}] MECHANISM PIN (if the design moves this SHOULD go red — reassess, do not just rewrite): the notes leaf is marked as text for BOTH default-view routers before every navigation, and the PhraseView hands its pin to the plugin with its own leaf`, () => {
     const sf = code('score-first.ts');
     // 2026-10-26-1545: the mark now says WHO set it ('plugin'), so the evidence line does not claim a person chose Open as JSON; the mechanism (mark both routers before the navigation) is unchanged
@@ -274,6 +348,17 @@ for (const edition of ['lean', 'music'] as const) {
     assert.match(sf, /\(l, pin\) => \{ void linker\.pinned\(l, pin\); \}, structureHooks(, notebookFor)?\)\);/);   // 2026-10-27-1030, deliberate: + the notebook's vault ports as the view's last argument; the pin and the strip hooks are what they were
     assert.match(code('phrase-view.ts'), /onPin: this\.onPin \? \(pin\) => \{ this\.onPin!\(this\.leaf, pin\); \} : undefined/);
     assert.match(code('main.ts'), /markRhythmText: \(leaf, path\) => \{ this\.rhythmEdit\?\.markAsText\(leaf, path\); \}/);
+  });
+
+  test(`[${edition}] MECHANISM PIN 2026-10-29-0830 (if the design moves this SHOULD go red — reassess, do not just rewrite): the arrangement tab draws its strip from its own note and sends a chip to the pair through the SAME hooks as a phrase tab; the command finds the tab from the active view`, () => {
+    const ka = code('kits-arrangements.ts');
+    assert.match(ka, /this\.strip = mountArrangementStrip\(this\.contentEl, \{ goto: \(noteId\) => structure\.goto\(leaf, noteId\), openNote \}\);\s*\n\s*this\.strip\.show\(text\);/);
+    assert.match(ka, /this\.strip\?\.show\(text\); this\.area\?\.update\(text\);/, 'a change to the note redraws the chips with the Score');
+    assert.match(ka, /new ArrangementView\(leaf, opts\.plan, opts\.structure, opts\.openNote\)/);
+    const sf = code('score-first.ts');
+    assert.match(sf, /registerKitsAndArrangements\(plugin, \{ plan, scoreFirst: \(\) => scoreFirst, structure: structureHooks, openNote \}\);/);
+    assert.match(sf, /const arrangement = app\.workspace\.getActiveViewOfType\(ArrangementView\);/);
+    assert.match(sf, /return \{ kind: 'arrangement', leaf: arrangement\.leaf, file: arrangement\.file \};/);
   });
 
   test(`[${edition}] MECHANISM PIN 2026-10-26-1800 (if the design moves this SHOULD go red — reassess, do not just rewrite): the pair HOLDS its notes pane as reading text for BOTH default-view routers, and shows a link the person opened for editing as the reading view again`, () => {

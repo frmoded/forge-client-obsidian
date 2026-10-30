@@ -15,15 +15,19 @@ import { KIT_FOLDER, isKitPath } from './kit-core.ts';
 import { NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMAND_ID, NEW_KIT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_ID, OPEN_ARRANGEMENT_COMMAND_NAME, createArrangement, createKit, newArrangementAvailable, newKitAvailable, openArrangementAvailable, type CreatePorts } from './kit-arrangement-flow-core.ts';
 import { mountKitDialog } from './kit-dom.ts';
 import { mountArrangementDialog } from './arrangement-dom.ts';
+import { mountArrangementStrip, type ArrangementStrip } from './arrangement-strip-dom.ts';
+import type { PhraseStructureHooks } from './phrase-view.ts';
 
 const stripLinks = (s: string): string => s.replace(/\[\[([^\]]+)\]\]/g, '$1');
 
 export class ArrangementView extends EditableFileView {
   private area: ScoreArea | null = null;
+  private strip: ArrangementStrip | null = null;
   private readonly zoom = createZoomMemory(SCORE_ZOOM_LEVELS, 1.0);
   private disposed = false;
 
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan) {
+  /** 2026-10-29-0830: `structure` sends a chip click to the notes pane of this tab's pair (the hooks of a phrase tab), `openNote` opens the note when there is no pair. Absent = no strip. */
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void) {
     super(leaf);
     this.addAction('code', 'Open as JSON', () => { void this.openAsJson(); });
   }
@@ -45,6 +49,11 @@ export class ArrangementView extends EditableFileView {
     this.disposed = false;
     const text = await this.readText(file);
     this.contentEl.createDiv({ cls: 'forge-arrangement-header', text: this.headerText(file, text) });
+    if (this.structure && this.openNote) {
+      const leaf = this.leaf, structure = this.structure, openNote = this.openNote;
+      this.strip = mountArrangementStrip(this.contentEl, { goto: (noteId) => structure.goto(leaf, noteId), openNote });
+      this.strip.show(text);
+    }
     const readNote = async (p: string): Promise<string> => {
       const f = this.app.vault.getAbstractFileByPath(p);
       if (!(f instanceof TFile)) throw new Error('File not found');
@@ -95,7 +104,7 @@ export class ArrangementView extends EditableFileView {
     const mine = this.file?.path;
     if (!mine || this.disposed || !this.area) return;
     if (path === mine || isKitPath(path) || isPhrasePath(path) || path.startsWith('bars/')) {
-      void this.readText(this.file!).then((text) => { if (!this.disposed) this.area?.update(text); });
+      void this.readText(this.file!).then((text) => { if (!this.disposed) { this.strip?.show(text); this.area?.update(text); } });
     }
   }
 
@@ -104,6 +113,8 @@ export class ArrangementView extends EditableFileView {
     this.stopAudio();
     this.area?.dispose();
     this.area = null;
+    this.strip?.dispose();
+    this.strip = null;
     this.contentEl.empty();
   }
 
@@ -136,11 +147,14 @@ export interface KitsArrangementsOptions {
   plan: ScorePanelPlan;
   /** The live answer to "is this vault score-first": asked each time a command is offered, so a forge.toml that stops declaring the profile turns the commands off at once. */
   scoreFirst(): boolean;
+  /** 2026-10-29-0830: the strip's hooks (the same as a phrase tab's) and the opener for a chip when the tab has no pair. */
+  structure: PhraseStructureHooks;
+  openNote(noteId: string): void;
 }
 
 export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangementsOptions): void {
   const app = plugin.app;
-  plugin.registerView(ARRANGEMENT_VIEW_TYPE, (leaf) => new ArrangementView(leaf, opts.plan));
+  plugin.registerView(ARRANGEMENT_VIEW_TYPE, (leaf) => new ArrangementView(leaf, opts.plan, opts.structure, opts.openNote));
 
   const ports = (open: (file: TFile) => Promise<void>): CreatePorts<TFile> => ({
     folderExists: (folder) => app.vault.getAbstractFileByPath(folder) !== null,

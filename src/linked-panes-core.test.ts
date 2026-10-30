@@ -51,9 +51,9 @@ test('anything that is not a bar of a phrase (a bar tab\'s own hit, a role we do
 // ---- when the command is offered -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 test('Open Score with notes: offered in a score-first vault on a phrase tab, a phrase\'s JSON text tab or a bar\'s Beat Box tab; nowhere else', () => {
-  for (const kind of ['phrase', 'phrase-text', 'bar'] as const) assert.equal(openPairAvailable({ scoreFirst: true, kind }), true, kind);
+  for (const kind of ['phrase', 'phrase-text', 'bar', 'arrangement'] as const) assert.equal(openPairAvailable({ scoreFirst: true, kind }), true, kind);
   assert.equal(openPairAvailable({ scoreFirst: true, kind: null }), false, 'some other tab');
-  for (const kind of ['phrase', 'phrase-text', 'bar', null] as const) assert.equal(openPairAvailable({ scoreFirst: false, kind }), false, `not score-first (${kind})`);
+  for (const kind of ['phrase', 'phrase-text', 'bar', 'arrangement', null] as const) assert.equal(openPairAvailable({ scoreFirst: false, kind }), false, `not score-first (${kind})`);
 });
 
 // ---- the pair ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
