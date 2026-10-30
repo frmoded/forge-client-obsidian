@@ -153,7 +153,7 @@ test('through the panel: a surface that names the bar role pins by box and print
   assert.deepEqual(withNote.pinned(), ['ph_bar_2'], 'a note is not chosen by its box');
 });
 
-test('MECHANISM PIN: the phrase surfaces (extend, mix and — M7c Phase B, deliberate — morph) opt in by role and print the evidence line; nothing else in the plugin names pointRoles', () => {
+test('MECHANISM PIN: the phrase surfaces (extend, mix and — M7c Phase B, deliberate — morph) and — 2026-10-30-1000, deliberate — the arrangement tab opt in by role; the phrase surfaces print the evidence line; nothing else in the plugin names pointRoles (if the design moves this SHOULD go red: reassess, do not just rewrite)', () => {
   const src = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), 'utf8');
   const dom = src('phrase-dom.ts');
   assert.match(dom, /pointRoles: \[PHRASE_BAR_ROLE\]/);
@@ -161,7 +161,8 @@ test('MECHANISM PIN: the phrase surfaces (extend, mix and — M7c Phase B, delib
   assert.match(dom, /pointRoles: \[MORPH_BAR_ROLE\]/);
   assert.equal((dom.match(/trace: \(line\) => \{ console\.info\(line\); \}/g) ?? []).length, 3, 'the line is printed by all three phrase surfaces');
   const users = fs.readdirSync(import.meta.dirname).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && /pointRoles/.test(src(f))).sort();
-  assert.deepEqual(users, ['phrase-dom.ts', 'score-inspector.ts']);
+  assert.deepEqual(users, ['kits-arrangements.ts', 'phrase-dom.ts', 'score-inspector.ts']);
+  assert.match(src('kits-arrangements.ts'), /pointRoles: \[ARRANGEMENT_ROW_ROLE\]/, 'the arrangement tab opts in with its own role, one row per bar and channel');
 });
 
 test('the box edges count as inside (all four), one pixel beyond does not', () => {
