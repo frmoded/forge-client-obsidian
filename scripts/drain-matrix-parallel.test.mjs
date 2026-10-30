@@ -15,15 +15,22 @@ import { REPOS, SCRIPT, git, matrix, projects, skip, write } from './test-suppor
 const DEFAULT_CEILING = /FORGE_PYTEST_SKIP_MAX:-(\d+)/.exec(fs.readFileSync(new URL('./drain-matrix.sh', import.meta.url), 'utf8'))[1];
 const mark = (p, name) => JSON.parse(fs.readFileSync(path.join(p.marks, `${name}.json`), 'utf8'));
 const overlap = (a, b) => a.start < b.end && b.start < a.end;
+// 2026-10-29-0930: this test flaked once under load - the legs slept ~1.5 s and the music leg started 1.9 s after the lean one, so they did not overlap although the script had started them together. The property is "each leg started before the
+// other ENDED"; what the old legs left to the machine was how long a leg lasts. The overlap test's legs now last LONG_LEG_S seconds (TEST_MS for the two client legs, FORGE_TEST_SLEEP for the pytest leg), so a start lag of several seconds still overlaps,
+// and the SAME assertion is shown red on serial legs below (the control: a check that cannot fail on the serial run would prove nothing).
+const LONG_LEG_S = 6;
+const LONG_LEGS = { TEST_MS: String(LONG_LEG_S * 1000), FORGE_TEST_SLEEP: String(LONG_LEG_S) };
+const assertOverlapped = (a, b, what) => assert.ok(overlap(a, b), `${what}: ${JSON.stringify(a)} and ${JSON.stringify(b)} did not overlap: one ended before the other started (start lag ${Math.abs(a.start - b.start)} ms, legs ${a.end - a.start} and ${b.end - b.start} ms)`);
 
 test('the music edition, the lean edition and the forge pytest leg run AT THE SAME TIME, each built with its own edition, and every result is read from its own log', { skip }, () => {
   const p = projects();
   try {
-    const r = matrix(p, ['--forge']);
+    const r = matrix(p, ['--forge'], LONG_LEGS);
     assert.equal(r.status, 0, r.out + r.err);
     const music = mark(p, 'music'), lean = mark(p, 'lean'), forge = mark(p, 'forge');
-    assert.ok(overlap(music, lean), `music ${JSON.stringify(music)} and lean ${JSON.stringify(lean)} did not overlap: they ran one after the other`);
-    assert.ok(overlap(music, forge) || overlap(lean, forge), 'the forge leg ran alone, after the client legs');
+    assertOverlapped(music, lean, 'music and lean ran one after the other');
+    assert.ok(overlap(music, forge) || overlap(lean, forge), `the forge leg ran alone, after the client legs: ${JSON.stringify({ music, lean, forge })}`);
+    assert.ok([music, lean, forge].every((leg) => leg.end - leg.start >= LONG_LEG_S * 900), `all three legs really lasted long (the margin is not an accident of the stub): ${JSON.stringify({ music, lean, forge })}`);
     assert.match(r.out, /== client legs: music and lean at the same time/);
     assert.match(r.out, /music: tests 3, pass 3, fail 0, skipped 0/);
     assert.match(r.out, /lean: tests 3, pass 3, fail 0, skipped 0/);
@@ -45,6 +52,8 @@ test('--serial runs the legs one after the other (the intervals do not overlap) 
     assert.equal(r.status, 0, r.out + r.err);
     const music = mark(p, 'music'), lean = mark(p, 'lean'), forge = mark(p, 'forge');
     assert.ok(!overlap(music, lean) && !overlap(music, forge) && !overlap(lean, forge), 'with --serial nothing may overlap');
+    // the control: the assertion the parallel test makes is RED on these serial legs
+    assert.throws(() => assertOverlapped(music, lean, 'control'), /control: .* did not overlap/, 'the overlap assertion can fail');
     assert.match(r.out, /client legs, one after the other \(--serial\)/);
     assert.match(r.out, /MATRIX GREEN/);
   } finally { p.done(); }

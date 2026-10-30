@@ -13,7 +13,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, buildMap, selectTests, orderTests, preferFirst, SLOW_SECONDS, parseTapSummary, classifyRun, summarize,
-  formatReport, runPool, confirmRedAlone, capLoops, DEFAULT_MAX_LOOP,
+  formatReport, runPool, confirmRedAlone, capLoops, DEFAULT_MAX_LOOP, importsOnlyNamers, importsOnlyNote,
 } from './dev/mutate-core.mjs';
 
 const CLI = path.resolve(import.meta.dirname, 'dev/mutate.mjs');
@@ -518,4 +518,64 @@ test('the CLI: a hand mutant that removes a loop exit is killed by the CAP in a 
     assert.match(r.stdout, /killed 1 \(by timeout 0, by loop cap 1\)/);
     assert.equal(git(proj, 'status', '--porcelain'), '', 'the project is as it was');
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+// ---- 2026-10-29-0930 item 2: a test that is marked "imports only" but NAMES the mutated file --------------------------------------------------------------------------------------------------
+// The incident (0840): a mutant in scripts/dev/mutate.mjs ran only the tests that IMPORT it; mutate-runner.test.mjs runs it as a CLI (names it, does not import it) and is marked imports-only (it quotes file names in its fixtures),
+// so it was not in the pool and a mutant that disabled the loop cap in the CLI survived until the test was named by hand. The report now says so.
+
+test('importsOnlyNamers: the imports-only tests that name the file but are not in its pool; a test that imports it, an ordinary naming test and a file nobody quotes give none', () => {
+  assert.deepEqual(importsOnlyNamers(TEXTS, MAP, 'src/leaf.ts'), ['src/quoter.test.ts'], 'the marked test quotes leaf.ts and does not import it');
+  const ordinary = new Map(TEXTS); ordinary.set('src/quoter.test.ts', "const name = 'leaf.ts';");
+  assert.deepEqual(importsOnlyNamers(ordinary, buildMap(ordinary), 'src/leaf.ts'), [], 'control: without the marker the test names leaf.ts and IS in the pool, so there is nothing to say');
+  const importing = new Map(TEXTS); importing.set('src/quoter.test.ts', "// mutate-map: imports only\nimport { leaf } from './leaf.ts'; const name = 'leaf.ts';");
+  assert.deepEqual(importsOnlyNamers(importing, buildMap(importing), 'src/leaf.ts'), [], 'a marked test that imports the file is in the pool anyway');
+  const helper = new Map(TEXTS); helper.set('src/helper.ts', "// mutate-map: imports only\nexport const x = 'leaf.ts';");
+  assert.deepEqual(importsOnlyNamers(helper, buildMap(helper), 'src/leaf.ts'), ['src/quoter.test.ts'], 'a marked file that is not a test is not a test of anything');
+  const unnamed = new Map(TEXTS); unnamed.set('src/quoter.test.ts', '// mutate-map: imports only\nconst name = "something else";');
+  assert.deepEqual(importsOnlyNamers(unnamed, buildMap(unnamed), 'src/leaf.ts'), [], 'a marked test that does not name the file says nothing about it');
+  assert.deepEqual(importsOnlyNamers(TEXTS, MAP, 'src/unrelated.ts'), []);
+  assert.deepEqual(importsOnlyNamers(TEXTS, MAP, 'src/quoter.test.ts'), [], 'a test is not its own subject');
+});
+
+test('importsOnlyNote says which test, which file, why it is not in the pool, and how to put it there; one or several tests read as a sentence', () => {
+  assert.equal(importsOnlyNote('f.mjs', ['a.test.mjs']), `note: a.test.mjs names f.mjs but is marked "mutate-map: imports only" (it runs the file, it does not import it), so it is not in the pool and the file's CLI wiring is covered by no test of this run: name it in the 'tests' field of a --hand mutant (or --glue) to cover it`);
+  assert.equal(importsOnlyNote('f.mjs', ['a.test.mjs', 'b.test.mjs']), `note: a.test.mjs, b.test.mjs name f.mjs but are marked "mutate-map: imports only" (they run the file, they do not import it), so they are not in the pool and the file's CLI wiring is covered by no test of this run: name them in the 'tests' field of a --hand mutant (or --glue) to cover it`);
+  const one = importsOnlyNote('scripts/dev/mutate.mjs', ['scripts/mutate-runner.test.mjs']);
+  assert.match(one, /^note: scripts\/mutate-runner\.test\.mjs names scripts\/dev\/mutate\.mjs but is marked "mutate-map: imports only"/);
+  assert.match(one, /it is not in the pool/);
+  assert.match(one, /'tests' field of a --hand mutant \(or --glue\)/);
+  const two = importsOnlyNote('f.mjs', ['a.test.mjs', 'b.test.mjs']);
+  assert.match(two, /^note: a\.test\.mjs, b\.test\.mjs name f\.mjs but are marked/);
+  assert.match(two, /they are not in the pool/);
+});
+
+test('formatReport prints the notes it is given, after the counts and before the survivors, and nothing when there are none', () => {
+  const s = summarize([{ id: 'x:1:eq-flip#1', file: 'src/leaf.ts', line: 1, op: 'eq-flip', from: '===', to: '!==', status: 'ok', outcome: 'survived' }], {});
+  const base = { wallMs: 1000, jobs: 1, testCount: 1 };
+  const without = formatReport(s, base).split('\n');
+  const withNote = formatReport(s, { ...base, notes: ['note: a names b'] }).split('\n');
+  assert.ok(!without.some((l) => l.startsWith('note:')));
+  const at = withNote.indexOf('note: a names b');
+  assert.ok(at > 1 && at < withNote.findIndex((l) => l.startsWith('SURVIVED')), withNote.join('|'));
+});
+
+test('the CLI: when a test marked "imports only" names the mutated file (a CLI test that runs it) the report carries the note; without the marker the same test is in the pool and there is no note', () => {
+  const NAMER = (mark) => `${mark}import { test } from 'node:test'; import assert from 'node:assert/strict'; import { spawnSync } from 'node:child_process';\ntest('runs src/tool.ts as a process', () => { assert.ok(spawnSync(process.execPath, ['--experimental-strip-types', 'src/tool.ts']).status === 0); });\n`;
+  const TOOL = 'export const answer = 1;\nif (answer !== 1) process.exit(1);\n';
+  const run = (mark) => {
+    const { root, proj } = makeProject({ 'src/tool.ts': TOOL, 'src/tool-cli.test.ts': NAMER(mark), 'src/alone.test.ts': "import { test } from 'node:test'; test('x', () => {});\n", 'package.json': '{"type":"module"}' });
+    try {
+      git(proj, 'init', '-q'); git(proj, 'add', '-A'); git(proj, 'commit', '-qm', 'one');
+      const hand = path.join(root, 'hand.json');
+      fs.writeFileSync(hand, JSON.stringify([['src/tool.ts', 'answer changed', 'export const answer = 1;', 'export const answer = 2;', ['src/alone.test.ts']]]));
+      const r = mutate(proj, '--hand', hand, '--no-fail', '--timeout', '30');
+      return r.stdout + r.stderr;
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  };
+  const marked = run('// mutate-map: imports only\n');
+  assert.match(marked, /note: src\/tool-cli\.test\.ts names src\/tool\.ts but is marked "mutate-map: imports only"/, marked);
+  assert.match(marked, /'tests' field of a --hand mutant/);
+  const plain = run('');
+  assert.ok(!/note: .*imports only/.test(plain), `control: no marker, no note\n${plain}`);
 });

@@ -316,6 +316,25 @@ export function summarize(results, equivalent = {}) {
 const show = (t) => JSON.stringify(t.length > 100 ? t.slice(0, 97) + '...' : t);
 
 /** The message for a mutant in a file the pool has no test for: it says what to do instead of a bare "uncovered". */
+/**
+ * 2026-10-29-0930: the tests marked "mutate-map: imports only" (a test that quotes real file names in its fixtures says so, and then only what it IMPORTS is a dependency) that nevertheless NAME `file` in their text and do not import it:
+ * the shape of a CLI test, which runs the file as a process. They are not in the pool for a mutant of `file`, so the file's wiring is covered by no test of the run; the report says so (importsOnlyNote).
+ */
+export function importsOnlyNamers(texts, map, file) {
+  const base = path.posix.basename(file);
+  const out = [];
+  for (const [t, text] of texts) {
+    if (t === file || !isTestFile(t) || !/mutate-map: imports only/.test(text) || !text.includes(base)) continue;
+    if (map.tests.get(t)?.closure.has(file)) continue;          // it imports the file (directly or far): it is in the pool anyway
+    out.push(t);
+  }
+  return out.sort();
+}
+export function importsOnlyNote(file, tests) {
+  const many = tests.length > 1;
+  return `note: ${tests.join(', ')} ${many ? 'name' : 'names'} ${file} but ${many ? 'are' : 'is'} marked "mutate-map: imports only" (${many ? 'they run' : 'it runs'} the file, ${many ? 'they do' : 'it does'} not import it), so ${many ? 'they are' : 'it is'} not in the pool and the file's CLI wiring is covered by no test of this run: name ${many ? 'them' : 'it'} in the 'tests' field of a --hand mutant (or --glue) to cover it`;
+}
+
 export const noTestMessage = (file) => `0 tests in the pool for ${file}: add \`--glue\` or name the file in a test`;
 
 /**
@@ -328,7 +347,7 @@ export async function confirmRedAlone(files, runOne) {
   return { redAlone, flaky };
 }
 
-export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], treeUnchanged = null, baselineRed = [] }) {
+export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], treeUnchanged = null, baselineRed = [], notes = [] }) {
   const lines = [];
   // A red baseline heads the report, loud: the run is printed anyway (a 20-60 minute run is never thrown away) but the kills by these files prove nothing.
   if (baselineRed.length) lines.push(`BASELINE NOT GREEN: kills by these files are unproven: ${baselineRed.join(', ')}`);
@@ -337,6 +356,7 @@ export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], t
   lines.push(`wall time ${mins}m${String(secs).padStart(2, '0')}s with ${jobs} at a time, ${testCount} test file(s) in the pool`);
   if (treeUnchanged !== null) lines.push(treeUnchanged.ok ? `working tree: unchanged (git status and ${treeUnchanged.files} file hashes identical before and after)` : `WORKING TREE CHANGED: ${treeUnchanged.why}`);
   if (chromeSkipped.length) lines.push(`not run (they drive Chrome; Chrome studies are never in the pool): ${chromeSkipped.join(', ')}`);
+  for (const note of notes) lines.push(note);
   const where = (r) => `${r.file}:${r.line ?? '?'}`;
   for (const r of s.survived) lines.push(`SURVIVED     ${where(r)} [${r.id}]  ${show(r.from)} -> ${show(r.to)}`);
   for (const r of s.uncovered) lines.push(`NO TEST      ${where(r)} [${r.id}]  ${noTestMessage(r.file)}`);

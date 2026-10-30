@@ -57,7 +57,7 @@ export const FORGE_TEST = [
   'import json, os, time',
   'def test_a():',
   '    start = time.time() * 1000',
-  '    time.sleep(1.5)',
+  "    time.sleep(float(os.environ.get('FORGE_TEST_SLEEP', '1.5')))",
   "    open(os.path.join(os.environ['MARKS'], 'forge.json'), 'w').write(json.dumps({'start': start, 'end': time.time() * 1000}))",
 ].join('\n') + '\n';
 

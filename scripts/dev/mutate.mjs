@@ -18,7 +18,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
-  orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage,
+  orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage, importsOnlyNamers, importsOnlyNote,
 } from './mutate-core.mjs';
 
 const USAGE = `usage: node scripts/dev/mutate.mjs [--diff <git ref or range>] [--hand <mutants.json>]... [options]
@@ -445,7 +445,9 @@ export async function main(argv) {
       const after = fingerprint(root);
       treeUnchanged = after.status === before.status && after.hash === before.hash ? { ok: true, files: after.files } : { ok: false, why: after.hash !== before.hash ? 'file bytes differ' : 'git status differs' };
     }
-    console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged, baselineRed }));
+    // 2026-10-29-0930: a mutated file that a CLI test names but whose test is marked imports-only is not covered by it; say so, once per file
+    const notes = [...new Set(mutants.map((m) => m.file))].sort().flatMap((f) => { const t = importsOnlyNamers(texts, map, f); return t.length ? [importsOnlyNote(f, t)] : []; });
+    console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged, baselineRed, notes }));
     if (a.out) fs.writeFileSync(path.resolve(a.out), JSON.stringify({ summary: { generated: s.generated, killed: s.killed, timeout: s.timeout, loopCap: s.loopCap, survived: s.survived.length, uncovered: s.uncovered.length, explained: s.explained.length, invalid: s.invalid.length, notApplicable: s.notApplicable.length, notRun: s.notRun.length, wallMs: Date.now() - started }, results }, null, 2));
     if (treeUnchanged && !treeUnchanged.ok) return 3;
     if (baselineRed.length > 0) return 2;
