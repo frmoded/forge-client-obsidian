@@ -284,7 +284,7 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
-  test(`[${edition}] running it on an arrangement tab: ONE split to the right, the notes leaf shows the ARRANGEMENT note in READING view, one evidence line; again: focused, no third pane; clicking in the Score sends the pane nowhere`, async () => {
+  test(`[${edition}] running it on an arrangement tab: ONE split to the right, the notes leaf shows the ARRANGEMENT note in READING view, one evidence line; again: focused, no third pane; a workspace event alone sends the pane nowhere; 2026-10-30-1000: a pinned ROW of the Score (the REAL ArrangementView's notification) sends it to the note that row came from and the release sends it home`, async () => {
     const w = await world(SCORE_FIRST_TOML);
     try {
       const score = w.makeLeaf(); const view = w.arrangementTab(score); w.setActive({ arrangement: view });
@@ -297,9 +297,21 @@ for (const edition of ['lean', 'music'] as const) {
       await w.run();
       assert.equal(w.log.splits.length, 1, 'no third pane');
       assert.deepEqual(w.log.activated, [score], 'the pair is focused');
-      assert.equal(view.onPin, undefined, 'the arrangement tab has no pin: the combined bars carry no lineage (stated in the FEEDBACK)');
+      // 2026-10-30-1000 (slice 3, DELIBERATE: this line used to say the arrangement tab has NO pin, because the combined bars carried no lineage; the engine has said it since 0910): the tab is given the pin callback of a phrase tab
+      assert.equal(typeof view.onPin, 'function', 'the arrangement tab was given the pin callback');
       await w.fire('file-open', 'active-leaf-change', 'layout-change');
-      assert.equal(notes.states.length, 1, 'nothing moved the pane');
+      assert.equal(notes.states.length, 1, 'a workspace event moved nothing: only a pin does');
+      view.onPin(score, { noteId: 'bars/bar_008', reason: 'pinned bar 2' }); await w.tick();
+      assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'bars/bar_008.md', mode: 'preview' } }, 'a pinned row of the latin kit: the bar note its phrase got that bar from');
+      view.onPin(score, { noteId: 'phrases/phrase_009', reason: 'phrase ended' }); await w.tick();
+      assert.equal(notes.states.at(-1).state.file, 'phrases/phrase_009.md', 'a row past its phrase\'s end: that phrase\'s own note');
+      view.onPin(score, null); await w.tick();
+      assert.equal(notes.states.at(-1).state.file, ARR, 'let go: home, the arrangement note');
+      assert.deepEqual(w.log.lines.slice(1), [
+        '[forge-panes] notes pane -> bars/bar_008.md (reason: pinned bar 2)',
+        '[forge-panes] notes pane -> phrases/phrase_009.md (reason: phrase ended)',
+        `[forge-panes] notes pane -> ${ARR} (reason: released)`,
+      ]);
       assert.deepEqual(w.log.errors, []);
     } finally { w.done(); }
   });
@@ -352,11 +364,11 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] MECHANISM PIN 2026-10-29-0830 (if the design moves this SHOULD go red — reassess, do not just rewrite): the arrangement tab draws its strip from its own note and sends a chip to the pair through the SAME hooks as a phrase tab; the command finds the tab from the active view`, () => {
     const ka = code('kits-arrangements.ts');
-    assert.match(ka, /this\.strip = mountArrangementStrip\(this\.contentEl, \{ goto: \(noteId\) => structure\.goto\(leaf, noteId\), openNote \}\);\s*\n\s*this\.strip\.show\(text\);/);
+    assert.match(ka, /this\.strip = mountArrangementStrip\(this\.contentEl, \{ goto: \(noteId\) => structure\.goto\(leaf, noteId\), openNote, onHover: [^\n]*\}\);\s*\n\s*this\.strip\.show\(text\);/);       // 2026-10-30-1000, deliberate: + the hover that lights the rows of a kit or phrase
     assert.match(ka, /this\.strip\?\.show\(text\); this\.area\?\.update\(text\);/, 'a change to the note redraws the chips with the Score');
-    assert.match(ka, /new ArrangementView\(leaf, opts\.plan, opts\.structure, opts\.openNote\)/);
+    assert.match(ka, /new ArrangementView\(leaf, opts\.plan, opts\.structure, opts\.openNote, opts\.onPin\)/);       // 2026-10-30-1000, deliberate: + the pin hook of a phrase tab as the view's last argument
     const sf = code('score-first.ts');
-    assert.match(sf, /registerKitsAndArrangements\(plugin, \{ plan, scoreFirst: \(\) => scoreFirst, structure: structureHooks, openNote \}\);/);
+    assert.match(sf, /registerKitsAndArrangements\(plugin, \{ plan, scoreFirst: \(\) => scoreFirst, structure: structureHooks, openNote, onPin: \(l, pin\) => \{ void linker\.pinned\(l, pin\); \} \}\);/);
     assert.match(sf, /const arrangement = app\.workspace\.getActiveViewOfType\(ArrangementView\);/);
     assert.match(sf, /return \{ kind: 'arrangement', leaf: arrangement\.leaf, file: arrangement\.file \};/);
   });

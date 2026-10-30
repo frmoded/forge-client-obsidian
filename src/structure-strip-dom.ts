@@ -5,6 +5,7 @@ import { stripTokens, type Chip } from './structure-strip-core.ts';
 export const STRIP_CLASS = 'forge-structure-strip';
 export const STRIP_CHIP_CLASS = 'forge-structure-chip';
 export const STRIP_CHIP_ON_CLASS = 'forge-structure-chip-on';
+export const STRIP_ROW_CLASS = 'forge-structure-row';
 
 export interface StripPorts {
   /** The pointer or keyboard focus is on a chip (`null` = it left). */
@@ -17,8 +18,8 @@ export interface StripHandle {
   el: HTMLElement;
   /** Draw these chips (none = the strip is hidden). Keeps nothing of the old ones. */
   set(chips: readonly Chip[]): void;
-  /** Emphasise the chip of this note (the bar a pin is on came from it); `null` clears. */
-  emphasise(noteId: string | null): void;
+  /** Emphasise the chip of this note (the bar a pin is on came from it); `null` clears. 2026-10-30-1000: a list emphasises each of them (a pinned arrangement row came from a phrase AND a kit). */
+  emphasise(noteId: string | readonly string[] | null): void;
   dispose(): void;
 }
 
@@ -31,10 +32,10 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
   el.style.display = 'none';
   if (before && before.parentNode === parent) parent.insertBefore(el, before); else parent.appendChild(el);
 
-  let emphasised: string | null = null;
+  let emphasised: ReadonlySet<string> = new Set();
   // 2026-10-26-1545 (S5): the emphasis is INLINE-styled, as the M6 band cue is (the class alone showed nothing: this plugin has no rule for it): bold and an accent outline.
   const paint = () => el.querySelectorAll<HTMLElement>(`.${STRIP_CHIP_CLASS}`).forEach((b) => {
-    const on = emphasised !== null && b.dataset.note === emphasised;
+    const on = b.dataset.note !== undefined && emphasised.has(b.dataset.note);
     b.classList.toggle(STRIP_CHIP_ON_CLASS, on);
     b.style.fontWeight = on ? '700' : '';
     // longhands, not the `outline` shorthand: happy-dom (the test DOM) drops a shorthand that holds var(), the real browser does not care
@@ -50,13 +51,22 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
       el.textContent = '';
       const tokens = stripTokens(chips);
       el.style.display = tokens.length === 0 ? 'none' : '';
+      // 2026-10-30-1000: chips that carry a `row` (an arrangement of several kits) are grouped into one block per row; every other strip is flat, as before
+      const rows = new Map<number, HTMLElement>();
+      const rowed = new Set(tokens.filter((t): t is Chip => typeof t !== 'string' && t.row !== undefined).map((t) => t.row)).size > 1;
+      const place = (t: (typeof tokens)[number], node: HTMLElement): void => {
+        if (!rowed || typeof t === 'string' || t.row === undefined) { el.appendChild(node); return; }
+        let block = rows.get(t.row);
+        if (!block) { block = doc.createElement('div'); block.className = STRIP_ROW_CLASS; rows.set(t.row, block); el.appendChild(block); }
+        block.appendChild(node);
+      };
       for (const t of tokens) {
         if (t === '->' || t === 'used by:') {
           const span = doc.createElement('span');
           span.className = t === '->' ? 'forge-structure-arrow' : 'forge-structure-label';
           span.textContent = t === '->' ? '→' : 'used by:';
           span.setAttribute('aria-hidden', t === '->' ? 'true' : 'false');
-          el.appendChild(span);
+          place(t, span);
           continue;
         }
         const b = doc.createElement('button');
@@ -71,11 +81,11 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
         b.addEventListener('focus', () => ports.onHover(chip));
         b.addEventListener('blur', () => ports.onHover(null));
         b.addEventListener('click', () => ports.onClick(chip));
-        el.appendChild(b);
+        place(t, b);
       }
       paint();
     },
-    emphasise(noteId) { emphasised = noteId; paint(); },
+    emphasise(noteId) { emphasised = new Set(noteId === null ? [] : typeof noteId === 'string' ? [noteId] : noteId); paint(); },
     dispose() { el.remove(); },
   };
 }

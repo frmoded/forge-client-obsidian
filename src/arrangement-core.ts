@@ -9,6 +9,8 @@ import { DERIVED_NOTE, callNote, extractPhraseJsonBlock, renderDerivedNote, pySt
 import type { RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { KIT_NAME_PATTERN, kitPath, readKitNote, type KitParams } from './kit-core.ts';
+import { FORGE_PHRASES_KEY } from './arrangement-nav-core.ts';
+import type { PhraseParams } from './phrase-core.ts';
 
 export const ARRANGEMENT_FOLDER = 'arrangements';
 export const ARRANGEMENT_VIEW_TYPE = 'forge-arrangement-view';
@@ -188,11 +190,14 @@ export async function produceArrangement(deps: ArrangementDeps, note: string | {
   const read = readArrangementNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Arrangement: ${read.message}` };
   const tracks: ArrangementInput['tracks'] = [];
+  const phrasesRead: Record<string, PhraseParams> = {};
   for (const track of read.value.tracks) {
     const kit = await readKit(deps.phrases, track.kit);
     if (typeof kit === 'string') return { kind: 'refusal', message: `Arrangement: ${kit}` };
-    const bars = await drawPhraseBars(deps.phrases, track.phrase);
-    if (typeof bars === 'string') return { kind: 'refusal', message: `Arrangement: ${bars}` };
+    const drawn = await drawPhraseBars(deps.phrases, track.phrase);
+    if (typeof drawn === 'string') return { kind: 'refusal', message: `Arrangement: ${drawn}` };
+    const { bars, params } = drawn;
+    phrasesRead[track.phrase] = params;
     tracks.push({ kit: kit.name, channels: kit.channels, bars, phrase: track.phrase, ...(track.mute !== undefined ? { mute: track.mute } : {}), ...(track.solo !== undefined ? { solo: track.solo } : {}), ...(track.volume !== undefined ? { volume: track.volume } : {}) });
   }
   let refused: string | null = null;
@@ -206,7 +211,8 @@ export async function produceArrangement(deps: ArrangementDeps, note: string | {
     }
   }, tracks[0].bars[0], title);
   if (refused !== null) return { kind: 'refusal', message: /^combine_tracks: every track is muted/.test(refused) ? ALL_MUTED : `Arrangement: ${refused}` };
-  return outcome;
+  // 2026-10-30-1000: the phrases this Score was made from ride along (as a morph's two bars do), so a row of the Score can name the bar note its phrase got that bar from without reading the vault again
+  return outcome.kind === 'score' ? { kind: 'score', payload: { ...outcome.payload, [FORGE_PHRASES_KEY]: phrasesRead } } : outcome;
 }
 
 async function readKit(deps: PhraseScoreDeps, name: string): Promise<KitParams | string> {
@@ -216,7 +222,7 @@ async function readKit(deps: PhraseScoreDeps, name: string): Promise<KitParams |
   return kit.ok === false ? `the kit ${name} is not usable: ${kit.message}` : kit.value;
 }
 
-async function drawPhraseBars(deps: PhraseScoreDeps, phrase: string): Promise<RhythmData[] | string> {
+async function drawPhraseBars(deps: PhraseScoreDeps, phrase: string): Promise<{ bars: RhythmData[]; params: PhraseParams } | string> {
   let text: string;
   try { text = await deps.readNote(phraseNotePath(phrase)); } catch (e) { return `the phrase ${phrase} (${phraseNotePath(phrase)}) was not found or could not be read (${(e as Error)?.message ?? e}).`; }
   const parsed = readPhraseNote(text);
@@ -224,5 +230,5 @@ async function drawPhraseBars(deps: PhraseScoreDeps, phrase: string): Promise<Rh
   const made = await producePhrase(deps, parsed.value, phrase);
   if (made.kind !== 'score') return `the phrase ${phrase} could not be drawn: ${made.message}`;
   const bars = barsOfPayload(made.payload);
-  return bars === null ? `the phrase ${phrase} gave no bars to play.` : bars;
+  return bars === null ? `the phrase ${phrase} gave no bars to play.` : { bars, params: parsed.value };
 }

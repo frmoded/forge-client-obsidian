@@ -4,6 +4,7 @@ import type { Provenance } from './provenance-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE } from './mix-lineage-core.ts';
 import { MORPH_BAR_ROLE, MORPH_HIT_ROLE } from './morph-lineage-core.ts';
 import { PHRASE_BAR_ROLE, phraseSourceNoteId } from './phrase-lineage-core.ts';
+import { ARRANGEMENT_ROW_ROLE } from './arrangement-nav-core.ts';
 
 export interface PinnedNote {
   /** The note's path without `.md` (a lineage id: `bars/bar_005`). */
@@ -18,6 +19,7 @@ export interface PinnedNote {
  *  - a morph bar (or one of its hits): bar a when the bar is at or before the middle bar of the path ((bars + 1) / 2), else bar b;
  *  - a path mix (one bar): bar a when at most half of the single-hit changes are applied (2k <= d), else bar b;
  *  - a vote mix (one bar): the heavier parent, bar a on a tie (weight >= 0.5).
+ *  - a row of an ARRANGEMENT's bar (2026-10-30-1000): the note its kit's phrase got that bar from (arrangement-nav-core `rowSource`, decided when the Score was tied, which has the phrases), or the phrase's own note;
  * null = nothing to follow (not a bar of a phrase, or the provenance lacks what the rule reads): the notes pane stays where it is.
  */
 export function pinnedNoteFor(prov: Provenance): PinnedNote | null {
@@ -38,6 +40,10 @@ export function pinnedNoteFor(prov: Provenance): PinnedNote | null {
     const a = str(p.a), b = str(p.b), bar = barOf(), bars = num(p.bars);
     if (!a || !b || bar === null || bars === null) return null;
     return { noteId: phraseSourceNoteId(bar <= (bars + 1) / 2 ? a : b), reason: pinnedLabel() };
+  }
+  if (prov.role === ARRANGEMENT_ROW_ROLE) {
+    const note = str(p.sourceNote), reason = str(p.sourceReason);
+    return note && reason ? { noteId: note, reason } : null;
   }
   if (prov.role === MIX_BAR_ROLE || prov.role === MIX_HIT_ROLE) {
     const a = str(p.a), b = str(p.b);

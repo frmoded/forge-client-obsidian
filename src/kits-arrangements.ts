@@ -11,6 +11,12 @@ import { messageDelivery } from './score-first-messages-core.ts';
 import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import { ARRANGEMENT_VIEW_TYPE, applySettingsPatches, arrangementDescription, isArrangementPath, produceArrangement, readArrangementNote, tempoRangeOf } from './arrangement-core.ts';
+import { ARRANGEMENT_INSPECTOR_HINT, ARRANGEMENT_ROW_ROLE, annotateArrangementPayload, arrangementLineageOf, chipsOfRow, readLineage, rowIdsPlayedBy, barsPlayedBy, type LineageBar } from './arrangement-nav-core.ts';
+import { ensureArrangementRows } from './arrangement-rows-dom.ts';
+import { litEvidence } from './structure-strip-core.ts';
+import { phraseNoteId } from './phrase-lineage-core.ts';
+import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
+import type { ProvenanceMap } from './provenance-core.ts';
 import { barsOfPayload } from './phrase-core.ts';
 import { KIT_FOLDER, isKitPath } from './kit-core.ts';
 import { NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMAND_ID, NEW_KIT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_ID, OPEN_ARRANGEMENT_COMMAND_NAME, createArrangement, createKit, newArrangementAvailable, newKitAvailable, openArrangementAvailable, type CreatePorts } from './kit-arrangement-flow-core.ts';
@@ -29,9 +35,16 @@ export class ArrangementView extends EditableFileView {
   private headerEl: HTMLElement | null = null;
   private readonly zoom = createZoomMemory(SCORE_ZOOM_LEVELS, 1.0);
   private disposed = false;
+  /** 2026-10-30-1000 (slice 3): what the Score on screen is made of - the engine's lineage (which kit and phrase played each row of each bar), the rows the inspector can pin, the rows the notes pane's note lit, and the way to stop hearing the pane. */
+  private lineage: LineageBar[] | null = null;
+  private rows: ProvenanceMap = {};
+  /** The note the pair's notes pane shows (a chip clicked, a link followed), or null: the rows of what it played stay lit until the next navigation, across redraws. */
+  private notesNote: string | null = null;
+  private stopListening: (() => void) | null = null;
 
-  /** 2026-10-29-0830: `structure` sends a chip click to the notes pane of this tab's pair (the hooks of a phrase tab), `openNote` opens the note when there is no pair. Absent = no strip. */
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void) {
+  /** 2026-10-29-0830: `structure` sends a chip click to the notes pane of this tab's pair (the hooks of a phrase tab), `openNote` opens the note when there is no pair. Absent = no strip. 2026-10-30-1000: `onPin` is told the note
+   *  that made the row the person pinned (or null: let go), for the notes pane beside this Score, exactly as a phrase tab's. */
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void) {
     super(leaf);
     this.addAction('code', 'Open as JSON', () => { void this.openAsJson(); });
   }
@@ -55,8 +68,15 @@ export class ArrangementView extends EditableFileView {
     this.headerEl = this.contentEl.createDiv({ cls: 'forge-arrangement-header', text: this.headerText(file, text) });
     if (this.structure && this.openNote) {
       const leaf = this.leaf, structure = this.structure, openNote = this.openNote;
-      this.strip = mountArrangementStrip(this.contentEl, { goto: (noteId) => structure.goto(leaf, noteId), openNote });
+      // 2026-10-30-1000: hovering a chip lights the rows of that kit or phrase in the Score; with nothing hovered, the rows of the note the notes pane shows stay lit (a chip clicked, a link followed)
+      this.strip = mountArrangementStrip(this.contentEl, { goto: (noteId) => structure.goto(leaf, noteId), openNote, onHover: (chip) => { this.light(chip ? rowIdsPlayedBy(this.lineage ?? [], chip.noteId) : this.litByNotes()); } });
       this.strip.show(text);
+      this.stopListening = structure.onNotesNavigated(leaf, (notesPath) => {
+        const noteId = notesPath.replace(/\.md$/, '');
+        this.notesNote = noteId;
+        this.light(this.litByNotes());
+        console.info(litEvidence(notesPath, barsPlayedBy(this.lineage ?? [], noteId)));
+      });
     }
     // the row per kit sits between the strip and the Score; a change goes out as one batch after a quiet moment and is written to the note (writeSettings), which redraws everything below
     this.controls = mountArrangementControls(this.contentEl, { commit: (patches) => { void this.writeSettings(patches); }, trace: (line) => { console.info(line); }, setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number) });
@@ -66,8 +86,34 @@ export class ArrangementView extends EditableFileView {
       if (!(f instanceof TFile)) throw new Error('File not found');
       return this.app.vault.read(f);
     };
+    const arrangementNote = phraseNoteId(file.path);
     this.area = attachScoreArea(this.contentEl, this.plan, {
       title: file.basename,
+      // 2026-10-30-1000 (slice 3): a click on a row of a bar pins it (the inspector shared with the phrase tabs, with the opt-in flags a score-first surface sets: P3), and the notes pane follows. Only with the hooks a pair needs.
+      inspector: this.openNote ? {
+        noteId: arrangementNote,
+        openNote: this.openNote,
+        annotate: (_note, payload) => { const r = annotateArrangementPayload(arrangementNote, payload); this.rows = r.map; return r; },
+        lineage: arrangementLineageOf,
+        hint: ARRANGEMENT_INSPECTOR_HINT,
+        order: (map) => Object.keys(map),
+        enlargeTargets: null,                          // the rows are drawn into the staves already; a rectangle over a notehead would take its click
+        pointRoles: [ARRANGEMENT_ROW_ROLE],            // a click on a notehead or the unpainted part of a staff is decided by the row's box
+        trace: (line) => { console.info(line); },
+        pinLabel: (id, prov) => (prov.role === ARRANGEMENT_ROW_ROLE ? `bar ${String(prov.params.bar)}, ${String(prov.params.channel)}` : id),
+        previewOnHover: true,
+        releaseOnEscapeFrom: this.contentEl,           // Esc from the row of controls or the strip lets go too (score-first surfaces only: P3)
+        keepPinOnControls: true,                       // the player and zoom buttons do not release the pin
+        band: true,
+        decorate: (host, map) => { ensureArrangementRows(host, map); },      // a redrawn SVG (the Kit / multi-staff toggle) gets its rows again
+        kitNote: 'Kit view: not mapped for this arrangement (use the multi-staff view to inspect).',
+        onPinned: (e) => {
+          const pin = e ? pinnedNoteFor(e.prov) : null;
+          this.onPin?.(this.leaf, pin);
+          this.strip?.emphasise(e ? chipsOfRow(e.prov) : null);
+        },
+      } : undefined,
+      onShown: (host) => { ensureArrangementRows(host, this.rows); this.light(this.litByNotes()); },       // the rows are drawn into the SVG the moment it is shown, before the first click; what the notes pane's note played stays lit
       renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays, zoom: this.zoom, trace: (line) => console.info(line) }),
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       setTimer: (fn, ms) => window.setTimeout(fn, ms),
@@ -81,7 +127,7 @@ export class ArrangementView extends EditableFileView {
           phrases: { readNote, compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t) },
           compute: (data, t) => computeArrangementScoreViaEngine(data, t),
         }, note as string | { unreadable: string }, title);
-        if (out.kind === 'score' && !this.disposed) this.paintTempo(file, note, out.payload);
+        if (out.kind === 'score' && !this.disposed) { this.paintTempo(file, note, out.payload); this.keepLineage(out.payload); }
         return out;
       },
     });
@@ -124,6 +170,19 @@ export class ArrangementView extends EditableFileView {
     this.controls?.show(read !== null && read.ok ? read.value : null);
   }
 
+  /** The engine's lineage of the Score on screen, checked; a Score without a usable one has no lighting (the inspector says why it cannot be pinned). */
+  private keepLineage(payload: Record<string, unknown>): void {
+    const bars = barsOfPayload(payload);
+    const l = bars === null ? null : readLineage(payload.arrangement_lineage, bars.length);
+    this.lineage = l === null || typeof l === 'string' ? null : l;
+  }
+
+  /** The rows the note in the notes pane played (the Score lights them; a row that is not drawn lights nothing). */
+  private litByNotes(): string[] { return this.notesNote === null ? [] : rowIdsPlayedBy(this.lineage ?? [], this.notesNote); }
+
+  /** Light these rows of the Score (none = clear). */
+  private light(ids: readonly string[]): void { this.area?.lightAll([...ids]); }
+
   /** The tab header, once the engine has drawn the Score: the Description with the bpm the arrangement plays at (the first bar's to the last bar's), which only the engine's bars know. */
   private paintTempo(file: TFile, note: unknown, payload: Record<string, unknown>): void {
     const read = typeof note === 'string' ? readArrangementNote(note) : null;
@@ -161,6 +220,9 @@ export class ArrangementView extends EditableFileView {
     this.area = null;
     this.strip?.dispose();
     this.strip = null;
+    this.stopListening?.();
+    this.stopListening = null;
+    this.lineage = null; this.rows = {}; this.notesNote = null;
     this.contentEl.empty();
   }
 
@@ -196,11 +258,13 @@ export interface KitsArrangementsOptions {
   /** 2026-10-29-0830: the strip's hooks (the same as a phrase tab's) and the opener for a chip when the tab has no pair. */
   structure: PhraseStructureHooks;
   openNote(noteId: string): void;
+  /** 2026-10-30-1000: the note that made the row pinned in an arrangement's Score (null = let go), for the notes pane of its pair: the same hook a phrase tab has. */
+  onPin(leaf: WorkspaceLeaf, pin: PinnedNote | null): void;
 }
 
 export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangementsOptions): void {
   const app = plugin.app;
-  plugin.registerView(ARRANGEMENT_VIEW_TYPE, (leaf) => new ArrangementView(leaf, opts.plan, opts.structure, opts.openNote));
+  plugin.registerView(ARRANGEMENT_VIEW_TYPE, (leaf) => new ArrangementView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin));
 
   const ports = (open: (file: TFile) => Promise<void>): CreatePorts<TFile> => ({
     folderExists: (folder) => app.vault.getAbstractFileByPath(folder) !== null,

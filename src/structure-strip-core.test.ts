@@ -118,3 +118,20 @@ test('(g) no harm: extend, morph and transform keep their one-parent rule (barPa
   assert.equal(barParent({ kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.3 } as unknown as PhraseParams, 1), 'bar_006', 'the single "made from" parent of the mix is still the heavier one');
   assert.deepEqual(barsContributedBy(MORPH, 'bar_007'), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
 });
+
+
+// ---- 2026-10-30-1000 (M10 slice 3): an arrangement's strip is one ROW per kit ------------------------------------------------------------------------------------------------------------
+test('arrangementChips: with more than one track each track is a row (its phrase chip, then its kit chip); a phrase played on two kits has one chip, in the first row that plays it; one track has no rows at all', () => {
+  const two = arrangementChips({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009' }] });
+  assert.deepEqual(two.map((c) => [c.text, c.row]), [['phrase_003', 0], ['rock kit', 0], ['phrase_009', 1], ['latin kit', 1]]);
+  const shared = arrangementChips({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_003' }] });
+  assert.deepEqual(shared.map((c) => [c.text, c.row]), [['phrase_003', 0], ['rock kit', 0], ['latin kit', 1]]);
+  const one = arrangementChips({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }] });
+  assert.deepEqual(one.map((c) => c.row), [undefined, undefined], 'a flat strip, as before 2026-10-30');
+});
+
+test('no other strip has rows: the chips of a phrase and of a bar\'s "used by" strip carry no row (P3: the shared strip is unchanged for them)', () => {
+  const extend: any = { kind: 'extend', source: 'bar_007', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0, overrides: { '2': 'bars/bar_009' } };
+  assert.ok(chipsFor('phrase_001', extend).every((c) => c.row === undefined));
+  assert.ok(usedByChips('bar_007', { 'phrases/phrase_001.md': { 'bars/bar_007.md': 1 } }).every((c) => c.row === undefined));
+});

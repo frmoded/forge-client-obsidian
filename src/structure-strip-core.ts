@@ -13,6 +13,8 @@ export interface Chip {
   noteId: string;
   /** `source` (2026-10-27-1030): the PHRASE a transform changes (a bar chip names a bar note; this names a phrase note). */
   kind: 'bar' | 'phrase' | 'fork' | 'source' | 'kit';
+  /** 2026-10-30-1000: an arrangement's strip with more than one kit is drawn as one ROW per kit (its phrase, then the kit); the chips of one row share this number. Absent = a flat strip (every other strip, and an arrangement of one kit). */
+  row?: number;
 }
 
 const baseName = (noteId: string): string => noteId.split('/').pop() ?? noteId;
@@ -70,16 +72,17 @@ export function chipsFor(name: string, p: PhraseParams): Chip[] {
 
 /**
  * 2026-10-29-0830: the chips of an ARRANGEMENT tab, left to right in the order of its Recipe: each track's phrase, then its kit, every note once (one phrase on two kits is one phrase chip). A flat row: nothing flows from one
- * chip to the next, so the strip draws no arrows (stripTokens).
+ * chip to the next, so the strip draws no arrows (stripTokens). 2026-10-30-1000: with more than one track each track is a ROW (`row` = its number): its phrase chip (a phrase played on two kits has one chip, in the first row that plays it), then its kit.
  */
 export function arrangementChips(p: ArrangementParams): Chip[] {
   const seen = new Set<string>();
   const chips: Chip[] = [];
-  const add = (c: Chip): void => { if (!seen.has(c.noteId)) { seen.add(c.noteId); chips.push(c); } };
-  for (const t of p.tracks) {
-    add({ text: t.phrase, noteId: `phrases/${t.phrase}`, kind: 'phrase' });
-    add({ text: `${t.kit} kit`, noteId: `kits/${t.kit}`, kind: 'kit' });
-  }
+  const rows = p.tracks.length > 1;
+  const add = (c: Chip, row: number): void => { if (!seen.has(c.noteId)) { seen.add(c.noteId); chips.push(rows ? { ...c, row } : c); } };
+  p.tracks.forEach((t, row) => {
+    add({ text: t.phrase, noteId: `phrases/${t.phrase}`, kind: 'phrase' }, row);
+    add({ text: `${t.kit} kit`, noteId: `kits/${t.kit}`, kind: 'kit' }, row);
+  });
   return chips;
 }
 

@@ -18,10 +18,12 @@ function rig(goto: (id: string) => Promise<boolean> = async () => true) {
   return { parent, s, calls, flush, buttons: () => [...s.el.querySelectorAll('button')] as any[] };
 }
 
-test('an arrangement note: a button per phrase and per kit in the order of its Recipe, no arrow and no label between them; the accessible names say what a click opens', () => {
+test('an arrangement note: a button per phrase and per kit in the order of its Recipe, no arrow and no label between them; the accessible names say what a click opens; 2026-10-30-1000: with more than one kit each track is its own ROW (its phrase, then its kit)', () => {
   const r = rig();
   r.s.show(TWO);
-  assert.deepEqual([...r.s.el.children].map((c: any) => c.textContent), ['phrase_003', 'rock kit', 'phrase_006', 'latin kit']);
+  assert.deepEqual([...r.s.el.children].map((c: any) => c.className), ['forge-structure-row', 'forge-structure-row'], 'one block per kit');
+  assert.deepEqual([...r.s.el.children].map((row: any) => [...row.children].map((c: any) => c.textContent)), [['phrase_003', 'rock kit'], ['phrase_006', 'latin kit']]);
+  assert.deepEqual([...r.s.el.querySelectorAll('button')].map((c: any) => c.textContent), ['phrase_003', 'rock kit', 'phrase_006', 'latin kit'], 'still in the order of the Recipe');
   assert.deepEqual(r.buttons().map((b) => b.getAttribute('aria-label')), ['Open phrase_003', 'Open rock', 'Open phrase_006', 'Open latin']);
   assert.deepEqual(r.buttons().map((b) => b.dataset.note), ['phrases/phrase_003', 'kits/rock', 'phrases/phrase_006', 'kits/latin']);
   assert.equal(r.s.el.style.display, '');
@@ -56,4 +58,30 @@ test('it is mounted where the owner asks (before the given element) and dispose 
   assert.equal(parent.firstElementChild, s.el, 'above the Score area');
   s.dispose();
   assert.equal(parent.children.length, 1);
+});
+
+
+// ---- 2026-10-30-1000 (M10 slice 3): hover lights the rows of a kit or phrase; the pinned row's chips are emphasised ----------------------------------------------------------------------------
+
+test('hover and focus on a chip tell the owner which chip (so the Score can light the rows of that kit or phrase), leaving tells null; without an owner that listens nothing happens', () => {
+  const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
+  const seen: Array<string | null> = [];
+  const s = mountArrangementStrip(parent, { goto: async () => true, openNote: () => {}, onHover: (chip) => seen.push(chip ? `${chip.kind}:${chip.noteId}` : null) });
+  s.show(TWO);
+  const b = [...s.el.querySelectorAll('button')] as any[];
+  b[1].dispatchEvent(new win.Event('mouseenter')); b[1].dispatchEvent(new win.Event('mouseleave'));
+  b[2].dispatchEvent(new win.Event('focus')); b[2].dispatchEvent(new win.Event('blur'));
+  assert.deepEqual(seen, ['kit:kits/rock', null, 'phrase:phrases/phrase_006', null]);
+  const quiet = rig(); quiet.s.show(TWO);
+  quiet.buttons()[0].dispatchEvent(new win.Event('mouseenter'));        // no onHover given: nothing to call, nothing thrown
+  assert.equal(quiet.buttons().length, 4);
+});
+
+test('emphasise marks the chips of the notes it is given (the phrase and kit of a pinned row) and clears with null; a redraw of the same note keeps it', () => {
+  const r = rig(); r.s.show(TWO);
+  const on = () => r.buttons().filter((b) => b.classList.contains('forge-structure-chip-on')).map((b) => b.dataset.note);
+  r.s.emphasise(['phrases/phrase_006', 'kits/latin']);
+  assert.deepEqual(on(), ['phrases/phrase_006', 'kits/latin']);
+  r.s.show(TWO); assert.deepEqual(on(), ['phrases/phrase_006', 'kits/latin']);
+  r.s.emphasise(null); assert.deepEqual(on(), []);
 });
