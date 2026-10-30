@@ -11,6 +11,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { killTree } from './proc-tree.mjs';
 
 const NOOP = { add() {}, remove() {}, addPath() {}, removePath() {}, stop() {} };
 
@@ -46,10 +47,7 @@ export function reapState() {
     /** What is registered right now (for the tests: a bad pid must never get as far as reap(), which would kill it). */
     snapshot: () => ({ groups: [...groups].sort((a, b) => a - b), paths: [...paths].sort() }),
     reap() {
-      for (const pid of groups) {
-        try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
-        try { process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
-      }
+      for (const pid of groups) killTree(pid);                            // 2026-10-30-1010: the group it leads AND everything under it, detached children of its test files included (proc-tree.mjs)
       for (const p of paths) { try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* the temp dir is cleaned by the system anyway */ } }
       groups.clear(); paths.clear();
     },

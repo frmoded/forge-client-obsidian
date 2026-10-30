@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
+import { killTree } from './proc-tree.mjs';
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
   orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage, importsOnlyNamers, importsOnlyNote,
@@ -198,7 +199,8 @@ function buildBase(root, scratch) {
 }
 
 const liveGroups = new Set();
-const killGroup = (pid) => { try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ } };
+// 2026-10-30-1010: not only the group the test file leads but everything under it (a test that starts a detached child of its own - a nested runner, a Chrome, a matrix - escaped `kill(-pid)` and outlived the run: proc-tree.mjs)
+const killGroup = (pid) => { killTree(pid); };
 const killAll = () => { for (const pid of liveGroups) killGroup(pid); };
 // 2026-10-27-0715: a runner killed with -9 (or whose terminal closes) used to leave its `node --test` groups running for ever (a hung mutant at 100% CPU, --test-timeout=0). A signal handler cannot catch SIGKILL, so main() starts a reaper
 // SIDECAR (reaper.mjs: its own session, a pipe on its stdin) that kills every registered group, and removes the scratch directory, when this process is gone for ANY reason. Until main() starts it, registering is a no-op.

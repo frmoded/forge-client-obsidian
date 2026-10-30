@@ -101,8 +101,8 @@ export interface PaneLinker<L> {
   /** A pane may have closed (layout change): drop every pair that lost one, saying which. Idempotent. A missing pane is dropped only once it is confirmed gone PAIR_SETTLE_MS after it was first missed (the first miss
    *  schedules the second look); `strict` drops at once (the command asking whether a pair exists). */
   sweep(strict?: boolean): void;
-  /** 2026-10-26-1270: a structure chip was clicked on this Score: the notes pane goes to that note. false = this Score has no pair (the caller opens the note itself). */
-  navigate(score: L, noteId: string): Promise<boolean>;
+  /** 2026-10-26-1270: a structure chip was clicked on this Score: the notes pane goes to that note. false = this Score has no pair (the caller opens the note itself). 2026-10-30-1010: `reason` is what the evidence line says caused it (default: the chip). */
+  navigate(score: L, noteId: string, reason?: string): Promise<boolean>;
   /** The workspace said something moved: if the PERSON navigated a notes pane (a wikilink click, a backlink), tell that pair's listeners the new path, once. A navigation the Score caused is never echoed back. */
   checkNotes(): void;
   /** Be told when the person navigates this Score's notes pane. Returns the way to stop. */
@@ -156,11 +156,11 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
       pair.reason = pin ? pin.reason : 'released';
       await settle(pair);
     },
-    async navigate(score, noteId) {
+    async navigate(score, noteId, reason = 'structure chip') {
       const pair = pairs.get(score);
       if (!pair) return false;
       pair.want = `${noteId}.md`;
-      pair.reason = 'structure chip';
+      pair.reason = reason;
       await settle(pair);
       return true;
     },

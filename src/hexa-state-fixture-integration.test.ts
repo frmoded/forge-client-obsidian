@@ -58,8 +58,9 @@ async function computeCurrentBodyHashes(body: string): Promise<CurrentBodyHashes
   };
 }
 
-test('L41 hexa fixture: all-aligned description-canonical → source / derived_from_description / derived_from_recipe', async () => {
-  const body = await readFixture('hexa_all_aligned_description_canonical.md');
+test('L41 hexa fixture: description-canonical with SYNTHETIC stored hashes (and a stub Python) → source / derived_from_description_out_of_date / derived_from_recipe_out_of_date', async () => {
+  // 2026-10-30-1010: this fixture was named hexa_all_aligned_description_canonical.md and its prose said "all aligned"; the real functions have always drawn it as out of date (below), so the name now says what it is.
+  const body = await readFixture('hexa_description_canonical_synthetic_stored_hashes.md');
   const { twoArg, oneArg } = makeReaders(body);
   const canonical = await whichLayerIsSource(body, {
     extractDescription,
@@ -75,11 +76,9 @@ test('L41 hexa fixture: all-aligned description-canonical → source / derived_f
   // downstream — the fixture is now a "stored aligned but body-hash-doesn't-match"
   // regression test rather than "all-aligned."
   //
-  // To keep this fixture semantically "all-aligned" under CW-1700, we would need
-  // to author fixture files with correct SHA-256 values in frontmatter. That's a
-  // followup — for now, adjust assertion to reflect the reality: stored parent
-  // hashes are synthetic; SHA-256(body) ≠ synthetic → Recipe renders out-of-date
-  // via CW-1700's current-body hash comparison.
+  // A note that really is aligned is shipped_scale_quality_quiz_fully_derived.md. This one keeps its synthetic
+  // stored hashes ON PURPOSE (a fixture for "the stored parent hash is not the hash of the body"):
+  // SHA-256(body) ≠ synthetic → Recipe renders out-of-date via CW-1700's current-body hash comparison.
   const bodyHashes = await computeCurrentBodyHashes(body);
   const states = computeFacetStates(canonical, oneArg, bodyHashes);
   assert.equal(states.description, FacetState.Source);

@@ -352,6 +352,115 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
+  // ---- 2026-10-30-1010 (0900 item (d)): "New phrase from a sentence" while a pair is open --------------------------------------------------------------------------------------------------------
+  /** The sentence dialog on the pair world: a vault with a bar and a phrase that records what is created, the dialog's Modal stand-in, and /plan answered with an extend of bar_005 to 8 bars. */
+  function sentenceWorld(w: Awaited<ReturnType<typeof world>>) {
+    const store = new Map<string, string>([['bars/bar_005.md', ''], ['phrases/phrase_001.md', '']]);
+    const tfp = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
+    w.app.vault.getFiles = () => [...store.keys()].map(tfp);
+    w.app.vault.getAbstractFileByPath = (p: string) => (store.has(p) || ['bars', 'phrases', 'kits', 'arrangements'].includes(p) ? tfp(p) : null);
+    w.app.vault.create = async (p: string, c: string) => { if (store.has(p)) throw new Error('File already exists.'); store.set(p, c); return tfp(p); };
+    (globalThis as any).__shimFns = { requestUrl: async (req: any) => (String(req.url).endsWith('/plan') ? { status: 200, json: { ok: true, parsed_ok: true, plan: { kind: 'extend', bar: 'bar_005', bars: 8 }, error: null } } : undefined) };
+    w.plugin.target.settings.transpileServiceUrl = 'https://svc.example'; w.plugin.target.settings.transpileServiceToken = 'tok-123'; w.plugin.target.settings.useOwnAnthropicKey = false; w.plugin.target.settings.ownAnthropicKey = '';
+    const doc = win.document, proto = real.Modal.prototype, saved = { open: proto.open, close: proto.close }, modals: any[] = [];
+    proto.open = function () { this.contentEl = doc.createElement('div'); this.contentEl.empty = function () { this.textContent = ''; }; doc.body.appendChild(this.contentEl); modals.push(this); this.onOpen(); };
+    proto.close = function () { this.closed = true; this.onClose(); this.contentEl.remove(); };
+    const q = (sel: string) => modals.at(-1)?.contentEl.querySelector(sel) as any;
+    return {
+      store, modals,
+      /** Run the command, type the sentence, Plan, Create. */
+      async createFromSentence() {
+        w.plugin.commands.get('new-phrase-from-sentence')!.checkCallback!(false); await w.tick(5);
+        const box = q('textarea'); box.value = 'extend bar_005 to 8 bars'; box.dispatchEvent(new win.Event('input', { bubbles: true }));
+        q('.forge-sentence-plan-plan').click(); await w.tick(5);
+        q('.forge-sentence-plan-create').click(); await w.tick(5);
+      },
+      restore() { proto.open = saved.open; proto.close = saved.close; delete (globalThis as any).__shimFns; },
+    };
+  }
+
+  test(`[${edition}] a phrase made from a sentence while a pair is open: the pair's notes pane shows the NEW phrase's note (the pair's own read-only show), once, with its own evidence line; the new phrase still opens as a Score`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const s = sentenceWorld(w);
+    try {
+      const score = w.makeLeaf(); w.setActive({ phrase: w.phraseTab(score) });
+      await w.run();
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      assert.equal(notes.states.length, 1, 'the pair\'s notes pane shows the phrase it was made for');
+      await s.createFromSentence();
+      assert.deepEqual([...s.store.keys()].filter((k) => k.startsWith('phrases/')).sort(), ['phrases/phrase_001.md', 'phrases/phrase_002.md']);
+      assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'phrases/phrase_002.md', mode: 'preview' } }, 'read-only, the reading view, focus stays where it was');
+      assert.equal(notes.states.length, 2, 'one show, no more');
+      assert.ok(w.log.lines.includes('[forge-panes] notes pane -> phrases/phrase_002.md (reason: new phrase)'), w.log.lines.join(' | '));
+      const opened = [...w.leaves].filter((l) => l !== notes && l !== score).flatMap((l) => l.states);
+      assert.deepEqual(opened, [{ type: PHRASE_VIEW_TYPE, active: true, state: { file: 'phrases/phrase_002.md' } }], 'and the new phrase is still opened as a Score in a tab of its own');
+      assert.equal(w.log.splits.length, 1, 'no third pane');
+      assert.deepEqual(w.log.errors, []);
+    } finally { s.restore(); w.done(); }
+  });
+
+  test(`[${edition}] a phrase made from a sentence with NO pair open changes nothing else: no pane is made, no notes pane is shown, no pair line is written (P3 for the pair: it only exists once the person asked for it)`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const s = sentenceWorld(w);
+    try {
+      const score = w.makeLeaf(); w.setActive({ phrase: w.phraseTab(score) });         // a phrase tab is active, but "Open Score with notes" was never run
+      await s.createFromSentence();
+      assert.ok(s.store.has('phrases/phrase_002.md'));
+      assert.equal(w.log.splits.length, 0);
+      assert.deepEqual(w.log.lines.filter((l) => l.startsWith('[forge-panes]')), []);
+      assert.deepEqual(w.log.errors, []);
+    } finally { s.restore(); w.done(); }
+  });
+
+  test(`[${edition}] a phrase made from a sentence follows only the pair of the tab the person STARTED from: another Score's pair is not moved, and a command run from a tab that has no pair moves none`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const s = sentenceWorld(w);
+    try {
+      const a = w.makeLeaf(); const b = w.makeLeaf();
+      w.setActive({ phrase: w.phraseTab(a) }); await w.run();                  // a pair for tab a
+      const notesA = [...w.leaves].find((l) => l !== a && l !== b)!;
+      w.setActive({ phrase: w.phraseTab(b, 'phrases/phrase_003.md') });          // the person is on tab b, which has no pair
+      await s.createFromSentence();
+      assert.equal(notesA.states.length, 1, 'tab a\'s pair was not touched by a command run from tab b');
+      w.setActive({});                                                          // no Score at all (the palette from a note)
+      await s.createFromSentence();
+      assert.equal(notesA.states.length, 1);
+      assert.deepEqual(w.log.errors, []);
+    } finally { s.restore(); w.done(); }
+  });
+
+  // ---- 2026-10-30-1010 (0900 item (e)): the tab title of a transform ----------------------------------------------------------------------------------------------------------------------------
+  test(`[${edition}] the REAL PhraseView's tab title: a transform says what it is a transform of, any other phrase (and a tab not read yet) is its file name; the leaf is asked to read the title again, defensively`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const leaf = w.makeLeaf();
+      const view = w.phraseTab(leaf, 'phrases/phrase_011.md');
+      assert.equal(view.getDisplayText(), 'phrase_011', 'before the note is read: the file name');
+      view.handle = { params: () => ({ kind: 'transform', source: 'phrases/phrase_003', ops: [] }) };
+      assert.equal(view.getDisplayText(), 'phrase_011 · transform of phrase_003');
+      view.handle = { params: () => ({ kind: 'extend', source: 'bar_007', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 }) };
+      assert.equal(view.getDisplayText(), 'phrase_011', 'an extend is its file name');
+      view.handle = { params: () => null };
+      assert.equal(view.getDisplayText(), 'phrase_011', 'a note that could not be read');
+      let asked = 0; leaf.updateHeader = () => { asked++; };
+      view.refreshTitle(); assert.equal(asked, 1, 'Obsidian is asked to draw the tab header again');
+      leaf.updateHeader = () => { throw new Error('header gone'); };
+      view.refreshTitle();                                                     // a host that throws is logged, not propagated (console.error is recorded by the world)
+      assert.equal(w.log.errors.length, 1);
+      delete leaf.updateHeader;
+      view.refreshTitle();                                                     // a host without updateHeader keeps the old title until the tab is next drawn: no throw
+      assert.equal(w.log.errors.length, 1);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] MECHANISM PIN 2026-10-30-1010 (if the design moves this SHOULD go red — reassess, do not just rewrite): the phrase tab asks the surface to tell it when its title changes and asks the leaf to read it again; the title is made by the pure core from what the surface shows`, () => {
+    const pv = code('phrase-view.ts');
+    assert.match(pv, /titleChanged: \(\) => \{ this\.refreshTitle\(\); \},/);
+    assert.match(pv, /getDisplayText\(\): string \{ return this\.file \? phraseTabTitle\(this\.file\.basename, this\.handle\?\.params\(\) \?\? null\) : super\.getDisplayText\(\); \}/);
+    assert.match(pv, /leaf\.updateHeader\?\.\(\);/);
+    assert.match(code('phrase-dom.ts'), /if \(title !== shownTitle\) \{ shownTitle = title; ports\.titleChanged\?\.\(\); \}/);
+  });
+
   test(`[${edition}] MECHANISM PIN (if the design moves this SHOULD go red — reassess, do not just rewrite): the notes leaf is marked as text for BOTH default-view routers before every navigation, and the PhraseView hands its pin to the plugin with its own leaf`, () => {
     const sf = code('score-first.ts');
     // 2026-10-26-1545: the mark now says WHO set it ('plugin'), so the evidence line does not claim a person chose Open as JSON; the mechanism (mark both routers before the navigation) is unchanged

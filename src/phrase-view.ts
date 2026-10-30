@@ -8,6 +8,7 @@ import { scoreClickPlays } from './score-click-policy.ts';
 import { computePhraseScoreViaEngine } from './phrase-engine.ts';
 import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
+import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import type { PinnedNote } from './linked-panes-core.ts';
 
 /** 2026-10-26-1270 (M13): what the structure strip of a phrase tab asks of the plugin, per Score leaf (score-first.ts): send the pair's notes pane to a note, and hear when the person navigates it. */
@@ -39,6 +40,15 @@ export class PhraseView extends EditableFileView {
 
   getViewType(): string { return PHRASE_VIEW_TYPE; }
 
+  /** 2026-10-30-1010: the file name, and for a TRANSFORM what it is a transform of (`phrase_011 · transform of phrase_003`), so the tab says what its strip says. Any other phrase: the file name, as before. */
+  getDisplayText(): string { return this.file ? phraseTabTitle(this.file.basename, this.handle?.params() ?? null) : super.getDisplayText(); }
+
+  /** Ask Obsidian to read the title again (the leaf's tab header). `updateHeader` is not in the public typings: asked defensively, and a host without it keeps the old title until the tab is next drawn. */
+  private refreshTitle(): void {
+    const leaf = this.leaf as unknown as { updateHeader?: () => void };
+    try { leaf.updateHeader?.(); } catch (e) { console.error('PhraseView.refreshTitle failed', e); }
+  }
+
   /** The kind of phrase this tab shows right now (`null` before its note is loaded). The "Turn this mix into a morph" command asks it, synchronously, when the palette is opened. */
   phraseKind(): PhraseParams['kind'] | null { return this.handle?.kind() ?? null; }
   getIcon(): string { return 'music'; }
@@ -63,6 +73,7 @@ export class PhraseView extends EditableFileView {
     this.handle = mountPhrase(this.contentEl, {
       path: file.path,
       title: file.basename,
+      titleChanged: () => { this.refreshTitle(); },
       plan: this.plan,
       initial,
       listBars: () => this.app.vault.getFiles().filter((f) => isBarPath(f.path)).map((f) => f.basename),

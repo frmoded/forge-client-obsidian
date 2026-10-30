@@ -16,6 +16,7 @@
 
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import type { ScoreInspectorPorts } from './score-inspector.ts';
+import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import { barsContributedBy, chipsFor, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
@@ -523,6 +524,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   structure?: PhraseStructurePorts;
   /** The phrase note's path. */
   path: string;
+  /** 2026-10-30-1010: the phrase on screen changed in a way that changes its TAB TITLE (a note that became, or stopped being, a transform; a transform whose source changed). Not called while the title stays what it was. Absent = nothing is told. */
+  titleChanged?(): void;
   plan: ScorePanelPlan;
   /** A vault note's text by path (fresh on every call). Rejects when the note is not there. */
   readNote(path: string): Promise<string>;
@@ -545,6 +548,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
 export interface PhraseHandle {
   /** Read the phrase note and show it (the first draw is immediate). */
   load(): Promise<void>;
+  /** The phrase on screen right now (what its note says; `null` = not readable or not read yet): the tab's title is made from it (phrase-tab-title-core.ts). */
+  params(): PhraseParams | null;
   /** The kind of phrase on screen right now (what the strip and the Score are for). The "Turn this mix into a morph" command asks it, synchronously, to know whether it is offered. */
   kind(): PhraseParams['kind'];
   /** The vault's `modify` event for any note: the phrase note reloads; its source bar redraws; anything else is ignored. */
@@ -633,7 +638,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { path: _path, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
@@ -643,6 +648,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   const phraseName = (ports.path.split('/').pop() ?? ports.path).replace(/\.md$/, '');
   let structureStrip: StripHandle | null = null;
   let notesLit: number[] = [];
+  let shownTitle = phraseName;                    // the tab title the view last asked for: only a change is told (titleChanged)
   const noteName = (noteId: string): string => (noteId.split('/').pop() ?? noteId).replace(/\.md$/, '');
   const barsOfChip = (chip: Chip): number[] => (current === null ? [] : barsContributedBy(current, noteName(chip.noteId), chip.kind === 'phrase' ? noteName(chip.noteId) : undefined, scoreBars?.length));
   const showLit = (bars: readonly number[]): void => { area?.lightAll(litBarIds(bars)); };
@@ -794,6 +800,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     // loses nothing). Any other refusal is what it was: every control disabled and the Score says why.
     const salvage = parsed && parsed.ok === false && typeof text === 'string' ? salvageOverrideRefusal(text) : null;
     current = parsed && parsed.ok ? parsed.value : salvage ? salvage.keep : null;
+    const title = phraseTabTitle(phraseName, current);
+    if (title !== shownTitle) { shownTitle = title; ports.titleChanged?.(); }
     // The surface follows what the note SAYS it is, even when the rest of it is wrong (a mix with weight 3 still gets the mix strip, disabled, and the Score says what is wrong).
     const says = typeof text === 'string' ? readPhraseKind(text) : null;
     if (says !== null && says !== kind) { teardown(); build(says); }
@@ -855,6 +863,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
 
   return {
     kind: () => kind,
+    params: () => current,
     async load() {
       const mine = ++seq;
       const text = await readText();

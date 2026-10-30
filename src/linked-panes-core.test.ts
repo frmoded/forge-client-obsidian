@@ -191,6 +191,18 @@ test('navigate (a chip was clicked): the notes pane goes to that note and the an
   assert.deepEqual(w.lines, ['[forge-panes] notes pane -> bars/bar_008.md (reason: structure chip)']);
 });
 
+test('navigate takes the reason the evidence line gives (a new phrase made from a sentence): the default stays "structure chip", the pair is the same, an unknown Score still answers false', async () => {
+  const w = world();
+  await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
+  w.lines.length = 0;
+  assert.equal(await w.linker.navigate(w.score, 'phrases/phrase_002', 'new phrase'), true);
+  assert.deepEqual(w.lines, ['[forge-panes] notes pane -> phrases/phrase_002.md (reason: new phrase)']);
+  w.lines.length = 0;
+  assert.equal(await w.linker.navigate(w.score, 'bars/bar_008'), true);
+  assert.deepEqual(w.lines, ['[forge-panes] notes pane -> bars/bar_008.md (reason: structure chip)'], 'a later navigation without a reason goes back to the default');
+  assert.equal(await w.linker.navigate({} as any, 'bars/bar_008', 'new phrase'), false);
+});
+
 test('the person navigates the notes pane (a wikilink click): checkNotes tells the listeners the new path ONCE, and a Score-caused show is never echoed back (the cause is tagged)', async () => {
   const w = world();
   await w.linker.open(w.score, 'phrases/phrase_001.md', 'phrases/phrase_001.md');
