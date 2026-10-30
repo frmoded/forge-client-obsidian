@@ -188,4 +188,46 @@ for (const edition of ['lean', 'music'] as const) {
       assert.ok(w.lines.some((l) => /^\[forge-notes\] refresh note links: .*, kits 1 \(1 updated, 0 already current\), arrangements 1 \(1 updated, 0 already current\), 2 skipped$/.test(l)), w.lines.join(' | '));      // the 2 skipped are this fixture's stub phrase and bar, which are not notes the refresh can read
     } finally { w.done(); }
   });
+
+  // ---- 2026-10-29-0910 (M10 slice 2): the controls' write, on the REAL ArrangementView of the real bundle -------------------------------------------------------------------------------
+  test(`[${edition}] the arrangement tab's controls write the note through the real view: the changes are applied to the CURRENT text in one process() call, the result is the note New arrangement would have made, an undone change restores the note, and a note that is not an arrangement is refused in a sentence and left alone`, async () => {
+    const ARR = { kind: 'arrangement' as const, tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009' }] };
+    const fresh = newArrangementNote('arr_001', ARR);
+    const w = await world(SCORE_FIRST_TOML, { 'arrangements/arr_001.md': fresh, 'arrangements/arr_002.md': 'just some text' });
+    try {
+      (Object.prototype as any).addAction = function () { return { remove() {} }; };          // the stand-in view base has no addAction (as in linked-panes-wiring.test.ts)
+      const view: any = w.plugin.views.get(ARRANGEMENT_VIEW_TYPE)!(w.leaves[0] ?? {});
+      view.app = w.app; view.disposed = false;
+      const tf = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
+      view.file = tf('arrangements/arr_001.md');
+      let processed = 0;
+      const realProcess = w.app.vault.process;
+      w.app.vault.process = async (f: any, fn: (t: string) => string) => { processed++; return realProcess(f, fn); };
+      await view.writeSettings([[1, { mute: true }], [0, { volume: 60 }]]);
+      assert.equal(processed, 1, 'ONE atomic read-modify-write for the whole batch');
+      assert.equal(w.store.get('arrangements/arr_001.md'), newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003', volume: 60 }, { kit: 'latin', phrase: 'phrase_009', mute: true }] }));
+      const back = readArrangementNote(w.store.get('arrangements/arr_001.md')!);
+      assert.deepEqual(back.ok && back.value.tracks.map((t) => [t.kit, t.mute, t.volume]), [['rock', undefined, 60], ['latin', true, undefined]]);
+      await view.writeSettings([[1, { mute: false }], [0, { volume: 100 }]]);
+      assert.equal(w.store.get('arrangements/arr_001.md'), fresh, 'undone = the note as it was, byte for byte');
+      await view.writeSettings([]);
+      assert.equal(processed, 2, 'an empty batch asks the vault for nothing');
+      view.file = tf('arrangements/arr_002.md');
+      await view.writeSettings([[0, { mute: true }]]);
+      assert.equal(w.store.get('arrangements/arr_002.md'), 'just some text', 'not an arrangement: left alone');
+      view.disposed = true; view.file = tf('arrangements/arr_001.md');
+      await view.writeSettings([[0, { mute: true }]]);
+      assert.equal(w.store.get('arrangements/arr_001.md'), fresh, 'a closed tab writes nothing');
+    } finally { delete (Object.prototype as any).addAction; w.done(); }
+  });
+
+  test(`[${edition}] the view mounts the row of controls between the strip and the Score, hands changes to writeSettings, and takes it down with the tab (a mechanism pin of the wiring that cannot run without Obsidian)`, () => {
+    const ka = fs.readFileSync(path.join(ROOT, 'src/kits-arrangements.ts'), 'utf8');
+    const strip = ka.indexOf('mountArrangementStrip(this.contentEl'), controls = ka.indexOf('mountArrangementControls(this.contentEl'), score = ka.indexOf('attachScoreArea(this.contentEl');
+    assert.ok(strip > 0 && controls > strip && score > controls, 'strip, then controls, then the Score');
+    assert.match(ka, /commit: \(patches\) => \{ void this\.writeSettings\(patches\); \}/);
+    assert.match(ka, /const file = this\.file;\n    if \(!file \|\| this\.disposed \|\| patches\.length === 0\) return;/, 'the file is captured before the await (L59)');
+    assert.match(ka, /this\.controls\?\.dispose\(\);\n    this\.controls = null;/);
+    assert.match(ka, /this\.showControls\(text\); this\.strip\?\.show\(text\); this\.area\?\.update\(text\);/, 'a redraw of the note refreshes the rows too (before the strip and the Score, which the 0830 pin keeps adjacent)');
+  });
 }

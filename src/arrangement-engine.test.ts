@@ -124,12 +124,87 @@ test('a channel two kits both have is refused in the engine\'s own sentence, nam
   }
 });
 
-test('phrases at different tempos are a plain refusal naming the field, the bar and both kits (v1: same meter, same steps, same tempo)', async () => {
+// 2026-10-29-0910 (deliberate): this test pinned "phrases at different tempos are a plain refusal naming the field, the bar and both kits". The driver decided RE-TIME: the arrangement plays at the FIRST track's tempo.
+test('phrases at different tempos are RE-TIMED, not refused: every bar plays at the first track\'s tempo (rock 100, latin 120 -> 100) and the lineage names the tempo the latin bars came with', async () => {
   const py = await engine();
   const files = vault({ latinBar: barText('bar_008') });        // bar_008 as shipped is 120 bpm; the rock bars are 100
   const out = await produceArrangement(deps(py, files), files['arrangements/arr_001.md'], 'arr_001');
+  assert.equal(out.kind, 'score', out.kind === 'score' ? '' : (out as { message: string }).message);
+  if (out.kind !== 'score') return;
+  const bars = barsOfPayload(out.payload)!;
+  assert.deepEqual(bars.map((b) => b.tempo_bpm), [100, 100, 100, 100]);
+  const lineage = (out.payload as any).arrangement_lineage;
+  assert.equal(lineage.length, 4);
+  assert.deepEqual(lineage[0].retimed_from, { latin: 120 });
+  assert.deepEqual(lineage[2].retimed_from, {}, 'bar 3: the latin phrase has ended, nothing to re-time');
+});
+
+test('the lineage rides out of the engine glue: per bar, which phrase and kit each channel group came from, None where the shorter phrase has ended; and it does not change the bars', async () => {
+  const py = await engine();
+  const files = vault();
+  const out = await produceArrangement(deps(py, files), files['arrangements/arr_001.md'], 'arr_001');
+  assert.equal(out.kind, 'score');
+  if (out.kind !== 'score') return;
+  const lineage = (out.payload as any).arrangement_lineage;
+  assert.deepEqual(lineage.map((r: any) => r.bar), [1, 2, 3, 4]);
+  assert.deepEqual(lineage[0].channels.kick, { kit: 'rock', phrase: 'phrase_003', bar: 1 });
+  assert.deepEqual(lineage[1].channels.claves, { kit: 'latin', phrase: 'phrase_009', bar: 2 });
+  const ended = lineage[2].channels.claves;
+  assert.deepEqual([ended.kit, ended.phrase, ended.bar ?? null], ['latin', 'phrase_009', null], 'Python None crosses Pyodide as undefined: "no bar" is == null on this side');
+  assert.deepEqual(lineage[3].channels.snare, { kit: 'rock', phrase: 'phrase_003', bar: 4 });
+  const bars = barsOfPayload(out.payload)!;
+  const rock = await (async () => { const o = await produceArrangement(deps(py, files), newArrangementNote('arr_002', { kind: 'arrangement', tracks: [ARR.tracks[0]] }), 'arr_002'); return barsOfPayload((o as any).payload)!; })();
+  const latin = await (async () => { const o = await produceArrangement(deps(py, files), newArrangementNote('arr_003', { kind: 'arrangement', tracks: [ARR.tracks[1]] }), 'arr_003'); return barsOfPayload((o as any).payload)!; })();
+  assert.deepEqual(bars, await direct(py, [{ kit: 'rock', channels: ROCK.channels, bars: rock }, { kit: 'latin', channels: LATIN.channels, bars: latin }]), 'the bars are still exactly combine_tracks over the tracks WITHOUT phrase names');
+});
+
+/** Run the PYTHON text of `entry` with every other note bound by name (a kit is its compute() dict, a phrase its bars): what a person running the note would get. */
+async function pythonBars(py: any, files: Record<string, string>, entry: string): Promise<unknown> {
+  const pythonOf = (note: string): string => /\n# Python\n\n```python\n([\s\S]*?)\n```\n/.exec(note)![1];
+  const srcs: Record<string, string> = {}; const bars: Record<string, unknown> = {};
+  for (const [p, t] of Object.entries(files)) { const name = p.replace(/^[^/]+\//, '').replace(/\.md$/, ''); if (p.startsWith('bars/')) bars[name] = barJson(t); else srcs[name] = pythonOf(t); }
+  py.globals.set('_bars_json', JSON.stringify(bars)); py.globals.set('_srcs_json', JSON.stringify(srcs)); py.globals.set('_entry', entry);
+  return JSON.parse(py.runPython([
+    'import json as _j', 'from forge.music import lib as _lib',
+    '_eng = {k: getattr(_lib, k) for k in ("extend_rhythm", "mix_rhythm", "morph_rhythm", "morph_rhythm_info", "thin_out_bars", "double_up_bars", "combine_tracks")}',
+    '_bars = _j.loads(_bars_json); _srcs = _j.loads(_srcs_json); _fns = {}',
+    'for _n, _d in _bars.items():', '    _fns[_n] = (lambda d: (lambda: _j.loads(_j.dumps(d))))(_d)',
+    'def _note(name):', '    def call():', '        g = dict(_eng); g.update(_fns)', '        exec(_srcs[name], g)', '        return g["compute"](None)', '    return call',
+    'for _n in _srcs: _fns[_n] = _note(_n)', '_j.dumps(_fns[_entry]())',
+  ].join('\n')));
+}
+const withSettings = (tracks: ArrangementParams['tracks']): Record<string, string> => ({ ...vault(), 'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks }) });
+
+test('mute, solo and volume on the REAL engine: a muted kit is gone from the Score, solo equals muting the rest, volume scales the velocities, and the note\'s generated Python gives the same bars as the Score it draws', async () => {
+  const py = await engine();
+  const draw = async (tracks: ArrangementParams['tracks']): Promise<{ files: Record<string, string>; bars: any[] }> => {
+    const files = withSettings(tracks);
+    const out = await produceArrangement(deps(py, files), files['arrangements/arr_001.md'], 'arr_001');
+    assert.equal(out.kind, 'score', out.kind === 'score' ? '' : (out as { message: string }).message);
+    return { files, bars: barsOfPayload((out as { payload: Record<string, unknown> }).payload)! };
+  };
+  const full = await draw(ARR.tracks);
+  const mutedLatin = await draw([ARR.tracks[0], { ...ARR.tracks[1], mute: true }]);
+  assert.deepEqual(Object.keys(mutedLatin.bars[0].channels), ['kick', 'snare', 'hihat'], 'latin is silent: only rock\'s rows');
+  assert.equal(mutedLatin.bars.length, 4, 'muting does not shorten the arrangement');
+  for (const row of ['kick', 'snare', 'hihat']) for (let i = 0; i < 4; i++) assert.deepEqual(mutedLatin.bars[i].channels[row], full.bars[i].channels[row], `rock\'s ${row} is untouched`);
+  const soloRock = await draw([{ ...ARR.tracks[0], solo: true }, ARR.tracks[1]]);
+  assert.deepEqual(soloRock.bars, mutedLatin.bars, 'solo rock is the same as muting latin');
+  const half = await draw([{ ...ARR.tracks[0], volume: 50 }, ARR.tracks[1]]);
+  const velocities = (bars: any[], row: string): number[] => bars.flatMap((b) => (b.channels[row] as Array<boolean | number>).filter((v) => v !== false && v !== 0).map((v) => (v === true ? 90 : (v as number))));
+  const before = velocities(full.bars, 'kick'); const after = velocities(half.bars, 'kick');
+  assert.equal(after.length, before.length, 'no hit lost');
+  assert.deepEqual(after, before.map((v) => Math.max(1, Math.min(127, Math.floor(v * 0.5 + 0.5)))), 'every kick hit is at half its velocity, rounded half up');
+  assert.deepEqual(half.bars.map((b) => Object.keys(b.channels)), full.bars.map((b) => Object.keys(b.channels)));
+  for (const d of [mutedLatin, soloRock, half]) assert.deepEqual(await pythonBars(py, d.files, 'arr_001'), d.bars, 'the note\'s Python and the drawn Score agree bar for bar');
+});
+
+test('every kit muted on the real engine: one plain sentence, not an empty Score', async () => {
+  const py = await engine();
+  const files = withSettings(ARR.tracks.map((t) => ({ ...t, mute: true })));
+  const out = await produceArrangement(deps(py, files), files['arrangements/arr_001.md'], 'arr_001');
   assert.equal(out.kind, 'refusal');
-  if (out.kind === 'refusal') assert.match(out.message, /^Arrangement: combine_tracks: kit 'latin' bar 1 has tempo_bpm 120 but kit 'rock' bar 1 has 100/);
+  if (out.kind === 'refusal') assert.equal(out.message, 'Every kit is muted, so nothing plays. Unmute one of them.');
 });
 
 test('a kit a phrase does not play is simply silent: a kit with a channel the phrase lacks adds no row, and the result still plays', async () => {

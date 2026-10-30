@@ -12,6 +12,7 @@ import { noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 import { newKitNote, type KitParams } from './kit-core.ts';
 import {
+  applyArrangementWrite, setTrackSetting, trackSettingsSteps,
   arrangementCreatedLine, arrangementDescription, arrangementLinks, arrangementPath, arrangementPython, arrangementRecipeSteps, combineRefusal, formatArrangementJson, isArrangementPath, newArrangementNote, nextArrangementName,
   ARRANGEMENT_VIEW_TYPE, produceArrangement, readArrangementNote, refreshArrangementNoteText, validateArrangement, type ArrangementInput, type ArrangementParams,
 } from './arrangement-core.ts';
@@ -20,7 +21,8 @@ const ARR: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', ph
 const parses = (src: string): boolean => spawnSync('python3', ['-I', '-c', 'import ast,sys; ast.parse(sys.stdin.read())'], { input: src, encoding: 'utf8' }).status === 0;
 
 test('the arrangement note, golden: Description naming the tracks and the rest rule, Recipe ("Play [[phrase]] on the [[kit]] kit." per track, then "Together."), Python (kits and phrases called by name, combine_tracks, the bars returned), links, then the json fence LAST', () => {
-  const desc = 'arr_001 — 2 tracks played together: [[phrase_003]] on the [[rock]] kit, [[phrase_009]] on the [[latin]] kit. A phrase that is shorter than the others rests until the longest one ends.';
+  // 2026-10-29-0910 (deliberate): two or more tracks now also say whose tempo they play at (the first track's phrase); the bpm itself is the engine's output and is added to the TAB HEADER live, never stored.
+  const desc = 'arr_001 — 2 tracks played together: [[phrase_003]] on the [[rock]] kit, [[phrase_009]] on the [[latin]] kit. A phrase that is shorter than the others rests until the longest one ends. All tracks play at the tempo of [[phrase_003]].';
   assert.equal(arrangementDescription('arr_001', ARR), desc);
   assert.deepEqual(arrangementRecipeSteps(ARR), ['Play [[phrase_003]] on the [[rock]] kit.', 'Play [[phrase_009]] on the [[latin]] kit.', 'Together.']);
   assert.deepEqual(arrangementLinks(ARR), ['phrase_003', 'rock', 'phrase_009', 'latin']);
@@ -203,4 +205,161 @@ test('a phrase the phrase code drew but that carries no bars is a refusal naming
   const e = await produceArrangement(broken.deps, newArrangementNote('arr_001', ARR), 'arr_001');
   assert.equal(e.kind, 'error');
   if (e.kind === 'error') assert.match(e.message, /KeyError: boom/, 'a fault in the engine is reported as the engine\'s, not swallowed as a refusal');
+});
+
+
+// ---- 2026-10-29-0910: tempo sentence, mute / solo / volume ----------------------------------------------------------------------------------------------------------------------------
+
+const SETTINGS: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003', volume: 70, solo: true }, { kit: 'latin', phrase: 'phrase_009', mute: true }] };
+
+test('the Description says whose tempo the tracks play at, computed from the first track (one track: nothing to say); with the engine\'s bpm known it adds "a to b bpm" (one number when they are equal)', () => {
+  assert.ok(!/tempo/.test(arrangementDescription('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] })));
+  const flip: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'latin', phrase: 'phrase_009' }, { kit: 'rock', phrase: 'phrase_003' }] };
+  assert.match(arrangementDescription('arr_001', flip), /All tracks play at the tempo of \[\[phrase_009\]\]\.$/, 'the FIRST track, not the longest or the first by name');
+  assert.match(arrangementDescription('arr_001', ARR, { from: 100, to: 90 }), /All tracks play at the tempo of \[\[phrase_003\]\]: 100 to 90 bpm\.$/);
+  assert.match(arrangementDescription('arr_001', ARR, { from: 120, to: 120 }), /All tracks play at the tempo of \[\[phrase_003\]\]: 120 bpm\.$/);
+});
+
+test('mute, solo and volume are optional per-track fields: validated, kept, written only when set (a note without them is byte-identical to a slice 1 note)', () => {
+  const ok = validateArrangement({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'p', mute: true, solo: false, volume: 0 }, { kit: 'latin', phrase: 'q', volume: 100 }] });
+  assert.equal(ok.ok, true);
+  const bad: Array<[unknown, RegExp]> = [
+    [{ mute: 1 }, /tracks\[0\]: mute must be true or false/], [{ solo: 'yes' }, /tracks\[0\]: solo must be true or false/],
+    [{ volume: 101 }, /tracks\[0\]: volume must be a whole number from 0 to 100/], [{ volume: -1 }, /volume must be a whole number/], [{ volume: 50.5 }, /volume must be a whole number/], [{ volume: true }, /volume must be a whole number/], [{ volume: '70' }, /volume must be a whole number/],
+    [{ loud: 1 }, /unexpected field "loud"/],
+  ];
+  for (const [extra, re] of bad) {
+    const r = validateArrangement({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'p', ...(extra as object) }] });
+    assert.equal(r.ok, false, JSON.stringify(extra));
+    if (r.ok === false) assert.match(r.message, re);
+  }
+  const json = formatArrangementJson(SETTINGS);
+  assert.match(json, /\{"kit": "rock", "phrase": "phrase_003", "solo": true, "volume": 70\},/);
+  assert.match(json, /\{"kit": "latin", "phrase": "phrase_009", "mute": true\}\n/);
+  assert.equal(formatArrangementJson(ARR).includes('mute'), false);
+  const back = readArrangementNote(newArrangementNote('arr_001', SETTINGS));
+  assert.deepEqual(back.ok && back.value, SETTINGS, 'round trip');
+});
+
+test('the Recipe says it in English ("Mute the [[latin]] kit.", "Play the [[rock]] kit at 70 percent volume.", "Only the [[rock]] kit plays."), the Python passes the fields to combine_tracks, and the links are unchanged', () => {
+  assert.deepEqual(trackSettingsSteps(SETTINGS), ['Play the [[rock]] kit at 70 percent volume.', 'Mute the [[latin]] kit.', 'Only the [[rock]] kit plays.']);
+  assert.deepEqual(arrangementRecipeSteps(SETTINGS), ['Play [[phrase_003]] on the [[rock]] kit.', 'Play [[phrase_009]] on the [[latin]] kit.', 'Play the [[rock]] kit at 70 percent volume.', 'Mute the [[latin]] kit.', 'Only the [[rock]] kit plays.', 'Together.']);
+  const two: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'a', solo: true }, { kit: 'latin', phrase: 'b', solo: true }, { kit: 'brush', phrase: 'c' }] };
+  assert.ok(trackSettingsSteps(two).includes('Only the [[rock]] and [[latin]] kits play.'));
+  const py = arrangementPython(SETTINGS);
+  assert.match(py, /tracks\.append\(\{'kit': 'rock', 'channels': rock\(\)\['channels'\], 'bars': phrase_003\(\), 'solo': True, 'volume': 70\}\)/);
+  assert.match(py, /tracks\.append\(\{'kit': 'latin', 'channels': latin\(\)\['channels'\], 'bars': phrase_009\(\), 'mute': True\}\)/);
+  assert.equal(parses(py), true);
+  assert.deepEqual(arrangementLinks(SETTINGS), ['phrase_003', 'rock', 'phrase_009', 'latin']);
+  assert.ok(arrangementDescription('arr_001', SETTINGS).includes('Muted: [[latin]].') && arrangementDescription('arr_001', SETTINGS).includes('Volume 70 percent: [[rock]].'));
+});
+
+test('setTrackSetting changes ONE field of ONE track and drops a field that is back at its default (mute off, solo off, volume 100), so an undone change leaves the note byte-identical; an unknown track or a bad value changes nothing', () => {
+  const muted = setTrackSetting(ARR, 1, { mute: true });
+  assert.deepEqual(muted.tracks[1], { kit: 'latin', phrase: 'phrase_009', mute: true });
+  assert.deepEqual(muted.tracks[0], ARR.tracks[0]);
+  assert.deepEqual(setTrackSetting(muted, 1, { mute: false }), ARR, 'back to default = the field is gone');
+  assert.deepEqual(setTrackSetting(ARR, 0, { volume: 100 }), ARR);
+  assert.equal(setTrackSetting(ARR, 0, { volume: 50 }).tracks[0].volume, 50);
+  assert.deepEqual(setTrackSetting(ARR, 5, { mute: true }), ARR);
+  assert.deepEqual(setTrackSetting(ARR, 0, { volume: 500 }), ARR);
+  assert.deepEqual(setTrackSetting(ARR, 0, { volume: 12.5 }), ARR);
+  assert.notEqual(setTrackSetting(ARR, 0, { solo: true }), ARR, 'a new object; the input is never changed');
+  assert.equal(ARR.tracks[0].solo, undefined);
+});
+
+test('the write path of the controls is the one New arrangement uses: applying a change to a fresh note gives exactly the note New arrangement would have made for the changed arrangement, keeps the person\'s own frontmatter lines, and is idempotent', () => {
+  const fresh = newArrangementNote('arr_001', ARR);
+  const w = applyArrangementWrite(fresh, 'arr_001', SETTINGS);
+  assert.equal(w.ok, true);
+  assert.equal(w.ok && w.text, newArrangementNote('arr_001', SETTINGS));
+  const again = applyArrangementWrite(w.ok ? w.text : '', 'arr_001', SETTINGS);
+  assert.equal(again.ok && again.text, w.ok && w.text, 'a second write of the same arrangement changes nothing');
+  const own = fresh.replace('type: data\n', 'type: data\ncolour: red\n');
+  const kept = applyArrangementWrite(own, 'arr_001', SETTINGS);
+  assert.ok(kept.ok && kept.text.includes('colour: red'), 'the person\'s own frontmatter line stays');
+  const broken = applyArrangementWrite('not a note', 'arr_001', SETTINGS);
+  assert.equal(broken.ok, false);
+});
+
+test('the producer hands the engine each track\'s phrase name, mute, solo and volume (only those set); a track without them is handed exactly what it was before', async () => {
+  const w = world();
+  await produceArrangement(w.deps, newArrangementNote('arr_001', SETTINGS), 'arr_001');
+  assert.deepEqual(w.received[0].tracks.map((t) => [t.kit, t.phrase, t.mute, t.solo, t.volume]), [['rock', 'phrase_003', undefined, true, 70], ['latin', 'phrase_009', true, undefined, undefined]]);
+  const plain = world();
+  await produceArrangement(plain.deps, newArrangementNote('arr_001', ARR), 'arr_001');
+  assert.deepEqual(Object.keys(plain.received[0].tracks[0]).sort(), ['bars', 'channels', 'kit', 'phrase']);
+});
+
+test('every kit muted is ONE plain sentence, not an empty Score and not the engine\'s jargon', async () => {
+  const w = world({ combine: () => { throw new Error('PythonError: ValueError: combine_tracks: every track is muted, so nothing plays; unmute a kit'); } });
+  const out = await produceArrangement(w.deps, newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003', mute: true }, { kit: 'latin', phrase: 'phrase_009', mute: true }] }), 'arr_001');
+  assert.equal(out.kind, 'refusal');
+  if (out.kind === 'refusal') assert.equal(out.message, 'Every kit is muted, so nothing plays. Unmute one of them.');
+});
+
+// ---- 2026-10-29-0910: what the controls do to the note, and the bpm the tab header shows ------------------------------------------------------------------------------------------------
+
+import { applySettingsPatches, tempoRangeOf } from './arrangement-core.ts';
+
+test('a batch of control changes is applied to the CURRENT text of the note (one atomic read-modify-write in the view); the second change to the same track wins; an unreadable note changes nothing', () => {
+  const fresh = newArrangementNote('arr_001', ARR);
+  const w = applySettingsPatches(fresh, 'arr_001', [[1, { mute: true }], [0, { volume: 70 }], [0, { volume: 60 }]]);
+  assert.equal(w.ok && w.text, newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003', volume: 60 }, { kit: 'latin', phrase: 'phrase_009', mute: true }] }));
+  const undone = applySettingsPatches(w.ok ? w.text : '', 'arr_001', [[1, { mute: false }], [0, { volume: 100 }]]);
+  assert.equal(undone.ok && undone.text, fresh, 'every change undone = the note as it was, byte for byte');
+  const same = applySettingsPatches(fresh, 'arr_001', [[0, { mute: false }]]);
+  assert.equal(same.ok && same.changed, false, 'a change that changes nothing writes nothing');
+  assert.equal(applySettingsPatches('nope', 'arr_001', [[0, { mute: true }]]).ok, false);
+});
+
+test('tempoRangeOf: the first bar\'s bpm to the last bar\'s (a ritardando reads 100 to 80), null when there are no bars or no tempo', () => {
+  const bar = (tempo_bpm?: number) => ({ time_signature: '4/4', steps: 16, group_size: 4, channels: {}, ...(tempo_bpm === undefined ? {} : { tempo_bpm }) }) as never;
+  assert.deepEqual(tempoRangeOf([bar(100), bar(90), bar(80)]), { from: 100, to: 80 });
+  assert.deepEqual(tempoRangeOf([bar(120)]), { from: 120, to: 120 });
+  assert.equal(tempoRangeOf([]), null);
+  assert.equal(tempoRangeOf([bar()]), null);
+});
+
+// ---- gaps the mutation pass found (2026-10-29-0910) --------------------------------------------------------------------------------------------------------------------------------------
+
+test('the Description says every setting once, in the same words each time: who is muted, who is solo, who is at which volume (grouped, in order of first appearance); 100 percent says nothing', () => {
+  const three: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'a', solo: true, volume: 70 }, { kit: 'latin', phrase: 'b', mute: true }, { kit: 'brush', phrase: 'c', volume: 70 }] };
+  assert.equal(arrangementDescription('arr_001', three),
+    'arr_001 — 3 tracks played together: [[a]] on the [[rock]] kit, [[b]] on the [[latin]] kit, [[c]] on the [[brush]] kit. A phrase that is shorter than the others rests until the longest one ends. All tracks play at the tempo of [[a]]. Muted: [[latin]]. Solo: [[rock]]. Volume 70 percent: [[rock]], [[brush]].');
+  const two: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'a', mute: true, volume: 40 }, { kit: 'latin', phrase: 'b', mute: true, volume: 70 }, { kit: 'brush', phrase: 'c', volume: 100 }, { kit: 'bells', phrase: 'd', mute: false, solo: false }] };
+  assert.ok(arrangementDescription('arr_001', two).endsWith('Muted: [[rock]], [[latin]]. Volume 40 percent: [[rock]]. Volume 70 percent: [[latin]].'), arrangementDescription('arr_001', two));
+});
+
+test('the English steps for the settings, exactly: solo of two or three kits reads as a sentence, volume 0 and 99 are said, volume 100 and "off" flags are not', () => {
+  const kits = (extra: object[]): ArrangementParams => ({ kind: 'arrangement', tracks: extra.map((e, i) => ({ kit: ['rock', 'latin', 'brush'][i], phrase: `p${i}`, ...e })) });
+  assert.deepEqual(trackSettingsSteps(kits([{ solo: true }, { solo: true }])), ['Only the [[rock]] and [[latin]] kits play.']);
+  assert.deepEqual(trackSettingsSteps(kits([{ solo: true }, { solo: true }, { solo: true }])), ['Only the [[rock]], [[latin]] and [[brush]] kits play.']);
+  assert.deepEqual(trackSettingsSteps(kits([{ volume: 0 }, { volume: 99 }, { volume: 100 }])), ['Play the [[rock]] kit at 0 percent volume.', 'Play the [[latin]] kit at 99 percent volume.']);
+  assert.deepEqual(trackSettingsSteps(kits([{ mute: false, solo: false }, {}])), []);
+});
+
+test('the Python passes only what is on: volume 0 and 99 yes, volume 100 and false flags no', () => {
+  const py = arrangementPython({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'a', volume: 0 }, { kit: 'latin', phrase: 'b', volume: 99 }, { kit: 'brush', phrase: 'c', volume: 100, mute: false, solo: false }] });
+  assert.match(py, /'bars': a\(\), 'volume': 0\}\)/);
+  assert.match(py, /'bars': b\(\), 'volume': 99\}\)/);
+  assert.match(py, /'bars': c\(\)\}\)/);
+});
+
+test('setTrackSetting at the edges: first and last track yes, one past either end no; volume 0 and 100 are the ends of the range, 101 and -1 are outside; only true or false is a flag; a flag set back to false is dropped', () => {
+  assert.equal(setTrackSetting(ARR, 1, { mute: true }).tracks[1].mute, true, 'the last track');
+  for (const bad of [-1, 2, 0.5, Number.NaN]) assert.equal(setTrackSetting(ARR, bad, { mute: true }), ARR, `track ${bad}`);
+  assert.equal(setTrackSetting(ARR, 0, { volume: 0 }).tracks[0].volume, 0);
+  assert.equal(setTrackSetting(ARR, 0, { volume: 99 }).tracks[0].volume, 99);
+  for (const bad of [101, -1, 0.5, '50' as unknown as number, Number.NaN]) assert.equal(setTrackSetting(ARR, 0, { volume: bad }), ARR, `volume ${String(bad)}`);
+  for (const bad of ['yes', 1, null]) { assert.equal(setTrackSetting(ARR, 0, { mute: bad as unknown as boolean }), ARR); assert.equal(setTrackSetting(ARR, 0, { solo: bad as unknown as boolean }), ARR); }
+  const solo = setTrackSetting(ARR, 0, { solo: true });
+  assert.equal(solo.tracks[0].solo, true);
+  assert.equal('solo' in setTrackSetting(solo, 0, { solo: false }).tracks[0], false, 'solo off = the field is gone');
+});
+
+test('tempoRangeOf needs a tempo on BOTH the first and the last bar', () => {
+  const bar = (tempo_bpm?: number) => ({ time_signature: '4/4', steps: 16, group_size: 4, channels: {}, ...(tempo_bpm === undefined ? {} : { tempo_bpm }) }) as never;
+  assert.equal(tempoRangeOf([bar(100), bar()]), null);
+  assert.equal(tempoRangeOf([bar(), bar(100)]), null);
 });

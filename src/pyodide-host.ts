@@ -1533,7 +1533,7 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     vault: both inputs come in as strings, the payload goes out as a dict. Raises on data the engine refuses (extend_rhythm's, mix_rhythm's or
     morph_rhythm's own ValueError) so the plugin can show it."""
     import json as _json
-    from forge.music.lib import extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream, thin_out_bars, double_up_bars, combine_tracks
+    from forge.music.lib import extend_rhythm, mix_rhythm, morph_rhythm, morph_rhythm_info, rhythm_bars_to_stream, thin_out_bars, double_up_bars, combine_tracks, combine_tracks_lineage
     data = _json.loads(data_json)
     p = _json.loads(params_json)
     if p.get("kind") == "mix" and p.get("mode") == "path":
@@ -1563,8 +1563,10 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
             bars[int(number) - 1] = forked
     elif p.get("kind") == "arrangement":
         # 2026-10-29-0820 (M10 slice 1): an ARRANGEMENT. data holds the tracks as tracks (each one: the kit's name and channels, and the bars of the phrase played on it, already drawn by the TS side); combine_tracks merges them
-        # channel by channel into one list of bars, drawn like any phrase (a track plays only its kit's channels; two kits with one channel, or another meter or tempo, is combine_tracks's own ValueError).
+        # channel by channel into one list of bars, drawn like any phrase (a track plays only its kit's channels and plays at the FIRST track's tempo; two kits with one channel, or another meter, is combine_tracks's own ValueError).
+        # 2026-10-29-0910 (slice 2): a track may carry mute, solo and volume, which combine_tracks applies; combine_tracks_lineage says, per bar, which phrase and kit each channel group came from (the bars are not touched by it).
         bars = combine_tracks(data["tracks"])
+        arrangement_lineage = combine_tracks_lineage(data["tracks"])
     else:
         bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
         # M9 (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number (the TS side has already checked its grid). Its tempo is its own.
@@ -1592,6 +1594,9 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
         # the bars as they are in the Score (forks laid in), and the bars the ops made BEFORE the forks went in
         out["bars_data"] = bars
         out["transform_generated"] = generated
+    elif p.get("kind") == "arrangement":
+        out["bars_data"] = bars
+        out["arrangement_lineage"] = arrangement_lineage
     else:
         # M9: the bars as they are in the Score, so "Edit this bar" writes exactly the generated bar into its own note
         out["bars_data"] = bars
