@@ -41,7 +41,7 @@ function fixture() {
 /** Start the runner, wait until its hung mutant is running, remember every process it started, then end the runner the way the case says. Returns what is left. */
 async function scenario(signal, env = {}) {
   const dir = fixture();
-  const runner = spawn(process.execPath, [RUNNER, '--root', dir, '--hand', path.join(dir, 'hand.json'), '--timeout', '120', '--no-fail'], {
+  const runner = spawn(process.execPath, [RUNNER, '--root', dir, '--hand', path.join(dir, 'hand.json'), '--timeout', '120', '--max-loop', '0', '--no-fail'], {      // 2026-10-29-0840: the loop cap OFF - the hang this test needs to orphan must really hang (with the cap on it dies in a second)
     cwd: dir, env: { ...process.env, ...env, TMPDIR: path.join(dir, 'tmp') }, detached: true, stdio: 'ignore',
   });
   const mine = new Set();

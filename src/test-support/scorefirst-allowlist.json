@@ -1,0 +1,36 @@
+{
+  "_about": "THE one allowlist behind the scoreFirst mechanism pins (score-first-p3.test.ts, score-click-play-pins.test.ts). A file is allowed a RIGHT by being listed with a ROLE; a role says which rights it may ever carry (only 'asks the profile' may read the profile - the property 'nothing but the gate reads the profile'). Rights: imports = imports the Score area / profile modules (vault-profile-core, score-first-core, score-first, live-score-core, live-score-dom); mentions = names scoreFirst / score_first in code; renders = calls renderTaggedMusicXML; reads-profile = names isScoreFirstVault / vault-profile-core. The check is exact both ways: add ONE line here when a new file touches the gate (the test names the line), take it out when the file stops. Reader and detector: src/test-support/scorefirst-allowlist.ts.",
+  "roles": {
+    "asks the profile": {"may": ["imports", "mentions", "renders", "reads-profile"]},
+    "registers the gate": {"may": ["imports", "mentions"]},
+    "pure core taking the gate's answer as input": {"may": ["imports", "mentions"]},
+    "view glue given the gate as a port": {"may": ["imports", "mentions", "renders"]},
+    "reads the published flag": {"may": ["mentions", "renders"]},
+    "engraves a Score and never sees the gate": {"may": ["renders"]}
+  },
+  "entries": [
+    {"file": "vault-profile-core.ts", "role": "asks the profile", "rights": ["mentions", "reads-profile"]},
+    {"file": "score-first.ts", "role": "asks the profile", "rights": ["imports", "mentions", "reads-profile"]},
+    {"file": "rhythm-edit-view.ts", "role": "asks the profile", "rights": ["imports", "mentions", "renders", "reads-profile"]},
+    {"file": "source-vault-core.ts", "role": "asks the profile", "rights": ["imports", "mentions", "reads-profile"]},
+    {"file": "main.ts", "role": "registers the gate", "rights": ["imports", "mentions"]},
+    {"file": "score-first-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "live-score-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["imports"]},
+    {"file": "phrase-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "phrase-header-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "phrase-default-view-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "linked-panes-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "sentence-plan-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "kit-arrangement-flow-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "kits-arrangements.ts", "role": "view glue given the gate as a port", "rights": ["imports", "mentions", "renders"]},
+    {"file": "phrase-dom.ts", "role": "view glue given the gate as a port", "rights": ["imports"]},
+    {"file": "phrase-view.ts", "role": "view glue given the gate as a port", "rights": ["imports", "renders"]},
+    {"file": "live-score-dom.ts", "role": "view glue given the gate as a port", "rights": ["imports"]},
+    {"file": "score-first-messages-core.ts", "role": "reads the published flag", "rights": ["mentions"]},
+    {"file": "forge-notice.ts", "role": "reads the published flag", "rights": ["mentions"]},
+    {"file": "score-click-policy.ts", "role": "reads the published flag", "rights": ["mentions"]},
+    {"file": "output-view.ts", "role": "reads the published flag", "rights": ["mentions", "renders"]},
+    {"file": "rhythm-embed-view.ts", "role": "engraves a Score and never sees the gate", "rights": ["renders"]},
+    {"file": "rhythm-score-view.ts", "role": "engraves a Score and never sees the gate", "rights": ["renders"]}
+  ]
+}

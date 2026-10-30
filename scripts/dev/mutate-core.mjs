@@ -275,13 +275,30 @@ export function classifyRun({ status, timedOut, output, summary }) {
 
 export const outcomeIsKill = (o) => o === 'killed' || o === 'timeout';
 
+// ---- the loop cap (drain 2026-10-29-0840) ---------------------------------------------------------------------------------------------------------------------------------------
+// A mutant that removes a loop's exit hangs until the per-mutant timeout. `capLoops` rewrites the UNBOUNDED loop headers of the mutated file so each site counts its iterations and throws after `max`: the mutant dies in a fraction
+// of a second, as a kill by the loop cap (reported apart from the timeouts). Sites: `while (true)`, `for (;;)` and `for (init; ; update)` (an empty condition; init and update without parentheses or semicolons). A loop it cannot read is left to
+// the timeout. The helper is appended AFTER the code, so no line of the file moves. The count is per site and per module INSTANCE (it lives on the helper function, not on globalThis, so a test that bundles the module again starts again from zero): 5,000,000 is far above any loop of this code base and a few tenths of a second of a spin.
+export const LOOP_CAP_MESSAGE = 'forge-mutate: loop cap exceeded';
+export const DEFAULT_MAX_LOOP = 5_000_000;
+export function capLoops(text, max = DEFAULT_MAX_LOOP) {
+  if (!(max > 0)) return text;
+  let sites = 0;
+  const site = (str, offset) => JSON.stringify(`L${str.slice(0, offset).split('\n').length}#${sites}`);              // the line and the header's ordinal: two loops on one line count apart
+  const whiles = text.replace(/\bwhile\s*\(\s*true\s*\)/g, (m, offset, str) => { sites++; return `while (__forgeLoopCap(${site(str, offset)}))`; });
+  const out = whiles.replace(/\bfor\s*\(([^;()]*);\s*;([^;()]*)\)/g, (m, init, update, offset, str) => { sites++; return `for (${init}; __forgeLoopCap(${site(str, offset)});${update})`; });
+  if (sites === 0) return text;
+  return `${out}\nfunction __forgeLoopCap(site) { const c = (__forgeLoopCap.counts ??= new Map()); const n = (c.get(site) ?? 0) + 1; c.set(site, n); if (n > ${max}) throw new Error('${LOOP_CAP_MESSAGE} at ' + site); return true; }\n`;
+}
+export const killedByLoopCap = (output) => output.includes(LOOP_CAP_MESSAGE);
+
 /** results: [{ id, file, line, op, name?, outcome, from, to, why? }]; equivalent: { id|name: reason }. */
 export function summarize(results, equivalent = {}) {
   const key = (r) => (r.name ?? r.id);
-  const s = { generated: results.length, killed: 0, timeout: 0, survived: [], explained: [], invalid: [], notApplicable: [], uncovered: [], notRun: [] };
+  const s = { generated: results.length, killed: 0, timeout: 0, loopCap: 0, survived: [], explained: [], invalid: [], notApplicable: [], uncovered: [], notRun: [] };
   for (const r of results) {
     if (r.status === 'n/a') { s.notApplicable.push(r); continue; }
-    if (r.outcome === 'killed') s.killed++;
+    if (r.outcome === 'killed') { s.killed++; if (r.loopCap) s.loopCap++; }
     else if (r.outcome === 'timeout') { s.killed++; s.timeout++; }
     else if (r.outcome === 'invalid') s.invalid.push(r);
     else if (r.outcome === 'not-run') s.notRun.push(r);
@@ -316,7 +333,7 @@ export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], t
   // A red baseline heads the report, loud: the run is printed anyway (a 20-60 minute run is never thrown away) but the kills by these files prove nothing.
   if (baselineRed.length) lines.push(`BASELINE NOT GREEN: kills by these files are unproven: ${baselineRed.join(', ')}`);
   const mins = Math.floor(wallMs / 60000), secs = Math.round((wallMs % 60000) / 1000);
-  lines.push(`mutants: generated ${s.generated} | killed ${s.killed} (by timeout ${s.timeout}) | survived ${s.survived.length} | uncovered ${s.uncovered.length} | equivalent-explained ${s.explained.length} | invalid ${s.invalid.length} | not applicable ${s.notApplicable.length} | not run ${s.notRun.length}`);
+  lines.push(`mutants: generated ${s.generated} | killed ${s.killed} (by timeout ${s.timeout}${s.loopCap > 0 ? `, by loop cap ${s.loopCap}` : ''}) | survived ${s.survived.length} | uncovered ${s.uncovered.length} | equivalent-explained ${s.explained.length} | invalid ${s.invalid.length} | not applicable ${s.notApplicable.length} | not run ${s.notRun.length}`);
   lines.push(`wall time ${mins}m${String(secs).padStart(2, '0')}s with ${jobs} at a time, ${testCount} test file(s) in the pool`);
   if (treeUnchanged !== null) lines.push(treeUnchanged.ok ? `working tree: unchanged (git status and ${treeUnchanged.files} file hashes identical before and after)` : `WORKING TREE CHANGED: ${treeUnchanged.why}`);
   if (chromeSkipped.length) lines.push(`not run (they drive Chrome; Chrome studies are never in the pool): ${chromeSkipped.join(', ')}`);

@@ -5,13 +5,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { loadAllowlist, measure, problems, readSources } from './test-support/scorefirst-allowlist.ts';
+
 const SRC = import.meta.dirname;
 const code = (f: string) => fs.readFileSync(path.join(SRC, f), 'utf8').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
 
 test('every caller of renderTaggedMusicXML passes the click-to-play policy: the Beat Box tab, the phrase tab, the read-only Score view, the embed and the Forge output panel', () => {
-  const callers = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts') && /\.renderTaggedMusicXML\(/.test(code(f))).sort();
-  // 2026-10-29-0820 (M10 slice 1), deliberate: + kits-arrangements.ts - the arrangement tab engraves a Score like the phrase tab and hands the same policy to the renderer
-  assert.deepEqual(callers, ['kits-arrangements.ts', 'output-view.ts', 'phrase-view.ts', 'rhythm-edit-view.ts', 'rhythm-embed-view.ts', 'rhythm-score-view.ts'], 'a new caller must decide too');
+  // 2026-10-29-0840: who may call renderTaggedMusicXML is the 'renders' right of the one allowlist (src/test-support/scorefirst-allowlist.json): a new caller is one line there, with a role, and the loop below then holds it to the policy.
+  const measured = measure(readSources(SRC));
+  assert.deepEqual(problems(measured, loadAllowlist(), 'renders'), [], 'a new caller must decide too');
+  const callers = Object.keys(measured).filter((f) => measured[f].includes('renders')).sort();
+  assert.ok(callers.length >= 6, 'the detector sees the callers');
   for (const f of callers) {
     const calls = code(f).match(/\.renderTaggedMusicXML\([^;]*\)/g) ?? [];
     assert.ok(calls.length > 0);

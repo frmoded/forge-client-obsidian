@@ -17,6 +17,7 @@ import { vaultDeclaresMusic } from './forge-music-gate.ts';
 import { isSourceVault } from './source-vault-core.ts';
 import { parseLocalImports } from './vault-imports-local-core.ts';
 import { BUNDLED_VAULT_NAMES } from './bundled-vault-extraction-core.ts';
+import { loadAllowlist, measure, problems, readSources } from './test-support/scorefirst-allowlist.ts';
 
 const SRC = path.resolve(import.meta.dirname);
 const ROOT = path.resolve(SRC, '..');
@@ -72,18 +73,15 @@ test('a score-first vault is otherwise an ordinary vault to every other forge.to
   assert.equal(isSourceVault(without, new Set(BUNDLED_VAULT_NAMES)), isSourceVault(toml, new Set(BUNDLED_VAULT_NAMES)));
 });
 
-test('MECHANISM PIN: the profile question is asked from exactly three places — the Beat Box tab, the "New bar" registration and the extraction gate (source-vault-core.ts, used by welcome.ts); the Forge output panel, the toolbar and the commands never ask it', () => {
-  const askers = fs.readdirSync(SRC)
-    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts'))
-    .filter((f) => /from ['"]\.\/(vault-profile-core|score-first-core|score-first|live-score-core|live-score-dom)\.ts['"]/.test(code(f)))
-    .sort();
-  // main.ts only registers; the cores/dom import each other.
-  // + the extraction gate (drain 2026-10-21-2200). + the phrase tab (M5, drain 2026-10-22-1850), deliberate: phrase-dom.ts reuses the live Score area and phrase-view.ts the Score panel's plan and message
-  // line; NEITHER reads the profile — score-first.ts asks once, registers the phrase view and commands only after the answer is yes, and hands the view its plan.
-  // + the arrangement tab (M10 slice 1, drain 2026-10-29-0820), deliberate: kits-arrangements.ts reuses the live Score area exactly as the phrase tab does; it does NOT read the profile - score-first.ts asks once, registers the
-  // arrangement view and the three kit/arrangement commands only after the answer is yes, and hands the view its plan and the live answer as a port.
-  assert.deepEqual(askers, ['kits-arrangements.ts', 'live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'phrase-dom.ts', 'phrase-view.ts', 'rhythm-edit-view.ts', 'score-first.ts', 'source-vault-core.ts'].sort());
-  for (const f of ['phrase-dom.ts', 'phrase-view.ts', 'phrase-core.ts', 'phrase-header-core.ts', 'kits-arrangements.ts', 'kit-arrangement-flow-core.ts', 'kit-core.ts', 'arrangement-core.ts']) assert.ok(!/isScoreFirstVault|vault-profile-core/.test(code(f)), `${f} never asks the profile question`);
+test('MECHANISM PIN: the profile question is asked from exactly the files the allowlist gives the role "asks the profile" - the Beat Box tab, the "New bar" registration, the extraction gate and the reader itself; no other file imports the Score area or the profile modules or reads the profile; the Forge output panel, the toolbar and the commands never ask it', () => {
+  // 2026-10-29-0840: the lists this pin used to carry (one dated edit per slice: M5, M7, M12, 1015, 0820) are ONE file now, src/test-support/scorefirst-allowlist.json, read by this pin and by the two below; the property is the same: a file that
+  // imports the Score area / the profile modules, or reads the profile, is a file somebody listed with a role, and only the role "asks the profile" can read the profile. The exactness (a listed right the file no longer uses is reported too) is the old deepEqual.
+  const measured = measure(readSources(SRC));
+  assert.deepEqual(problems(measured, loadAllowlist(), 'imports'), []);
+  assert.deepEqual(problems(measured, loadAllowlist(), 'reads-profile'), []);
+  const list = loadAllowlist();
+  const readers = list.entries.filter((e) => e.rights.includes('reads-profile')).map((e) => e.file).sort();
+  assert.deepEqual(readers, ['rhythm-edit-view.ts', 'score-first.ts', 'source-vault-core.ts', 'vault-profile-core.ts'], 'the four that ask: the Beat Box tab, the registration, the extraction gate, the reader');
   for (const f of ['output-view.ts', 'forge-action.ts', 'edges.ts', 'modal.ts', 'welcome.ts', 'chips.ts', 'rhythm-embed-view.ts', 'rhythm-score-view.ts']) {
     // M4 (drain 2026-10-21-2010), deliberate: the panel may READ the published flag (`messageDelivery.isScoreFirst()` from score-first-messages-core.ts); it still never reads the profile.
     if (fs.existsSync(path.join(SRC, f))) assert.ok(!/vault-profile-core|score-first|isScoreFirstVault/.test(code(f).replace(/score-first-messages-core|messageDelivery\.isScoreFirst\(\)/g, '')), `${f} does not know about profiles`);
@@ -131,26 +129,9 @@ test('MECHANISM PIN: the Beat Box tab feeds the Score area from the widget\'s ed
 });
 
 test('the profile is a constant: no setting, command, menu item or modal anywhere mentions it', () => {
-  const offenders = fs.readdirSync(SRC).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.generated.ts'))
-    .filter((f) => /score_first|scoreFirst/i.test(code(f)) && !['vault-profile-core.ts', 'score-first-core.ts', 'score-first.ts', 'rhythm-edit-view.ts', 'live-score-core.ts', 'live-score-dom.ts', 'main.ts', 'source-vault-core.ts',
-      // M4 (drain 2026-10-21-2010), deliberate: the message router, its two choke points and the Score's message DOM. They read the flag score-first.ts publishes; none reads the profile.
-      'score-first-messages-core.ts', 'score-messages-dom.ts', 'forge-notice.ts', 'output-view.ts',
-      // M5 (drain 2026-10-22-1850), deliberate: the phrase core, a pure core like score-first-core.ts — it takes the gate's answer as an INPUT (`newPhraseAvailable`) and never reads the profile.
-      // 2100, deliberate: phrase-header-core.ts is the same kind of pure core (which note gets the header button; it receives the gate's answer and never reads the profile).
-      'phrase-core.ts', 'phrase-header-core.ts',
-      // 2026-10-23-0030, deliberate: score-click-policy.ts is the one answer to "does a click on a note play?"; like the M4 files above it READS the flag score-first.ts publishes (messageDelivery.isScoreFirst()) and never the profile.
-      'score-click-policy.ts',
-      // 2026-10-23-0630, deliberate: phrase-default-view-core.ts is a pure core like phrase-header-core.ts — the gate's answer is an INPUT (`scoreFirst()` port, wired in score-first.ts); it never reads the profile.
-      'phrase-default-view-core.ts',
-      // 2026-10-26-1250 (M12), deliberate: linked-panes-core.ts is a pure core like the two above — `openPairAvailable` takes the gate's answer as an INPUT (`scoreFirst`) and never reads the profile
-      'linked-panes-core.ts',
-      // 2026-10-26-1260, deliberate: refresh-notes-core.ts and phrase-notes-core.ts are pure cores too (the vault and the gate's answer are inputs; they never read the profile)
-      'refresh-notes-core.ts', 'phrase-notes-core.ts',
-      // 2026-10-27-1015, deliberate: sentence-plan-core.ts is a pure core like the ones above — `planAvailable` takes the gate's answer as an INPUT and never reads the profile (the command is registered in score-first.ts after the gate)
-      'sentence-plan-core.ts',
-      // 2026-10-29-0820 (M10 slice 1), deliberate: kit-arrangement-flow-core.ts is a pure core like the ones above - `newKitAvailable` etc. take the gate's answer as an INPUT and never read the profile; kits-arrangements.ts is the view/command glue whose
-      // `scoreFirst()` is a port wired in score-first.ts (the live answer), asked each time a command is offered so a forge.toml that stops declaring the profile turns the commands off at once
-      'kit-arrangement-flow-core.ts', 'kits-arrangements.ts'].includes(f));
+  // 2026-10-29-0840: who may MENTION scoreFirst is the allowlist (src/test-support/scorefirst-allowlist.json), one line per file with its role: the owners, the registration, the pure cores that take the gate's answer as an INPUT, the view glue that is
+  // handed it as a PORT, and the files that READ the flag score-first.ts publishes (messageDelivery.isScoreFirst()); none but the owners reads the profile (the 'reads-profile' right).
+  const offenders = problems(measure(readSources(SRC)), loadAllowlist(), 'mentions');
   assert.deepEqual(offenders, []);
   const settingsFiles = fs.readdirSync(SRC).filter((f) => /setting/i.test(f) && f.endsWith('.ts') && !f.endsWith('.test.ts'));
   for (const f of settingsFiles) assert.ok(!/profile/i.test(code(f).replace(/openRhythmNotesInBeatBox/g, '')), `${f} has no profile setting`);

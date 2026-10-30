@@ -13,7 +13,7 @@ import { spawnSync, execFileSync } from 'node:child_process';
 
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, buildMap, selectTests, orderTests, preferFirst, SLOW_SECONDS, parseTapSummary, classifyRun, summarize,
-  formatReport, runPool, confirmRedAlone,
+  formatReport, runPool, confirmRedAlone, capLoops, DEFAULT_MAX_LOOP,
 } from './dev/mutate-core.mjs';
 
 const CLI = path.resolve(import.meta.dirname, 'dev/mutate.mjs');
@@ -320,7 +320,7 @@ test('the tool kills what a strong test sees, lets the weak test\'s mutants SURV
     fs.writeFileSync(hand, JSON.stringify([['src/lib.ts', 'hang: the loop never ends', 'while (i < n) i++;', 'while (true) i++;'], ['src/lib.ts', 'clamp: low bound', 'if (n < lo) return lo;', 'if (n < lo) return n;']]));
     const before = hashTree(proj);
     const out = path.join(root, 'out.json');
-    const r = mutate(proj, '--diff', 'HEAD~1', '--hand', hand, '--timeout', '6', '--out', out);
+    const r = mutate(proj, '--diff', 'HEAD~1', '--hand', hand, '--timeout', '6', '--max-loop', '0', '--out', out);          // 2026-10-29-0840: the loop cap is OFF here, so the per-mutant timeout is still proven on a real hang
     const body = r.stdout;
     assert.equal(r.status, 1, `unexplained survivors => exit 1\n${body}\n${r.stderr}`);
     const res = JSON.parse(fs.readFileSync(out, 'utf8'));
@@ -441,4 +441,81 @@ test('usage errors exit 2 and say what is wrong', () => {
   assert.match(run('--wat').stderr, /unknown option --wat/);
   assert.match(run('--diff', 'HEAD', '--jobs', '0').stderr, /--jobs must be a number of at least 1/);
   assert.match(run('--diff').stderr, /--diff needs a value/);
+});
+
+// ---- the loop cap (drain 2026-10-29-0840, CC 0820 recommendation 4) ----------------------------------------------------------------------------------------------------------
+// A mutant that removes a loop's exit used to be detected only by the per-mutant timeout (90 s by default, three of them in the 0820 run). `capLoops` rewrites the UNBOUNDED loop headers of the mutated file
+// (`while (true)`, `for (;;)`, `for (init; ; update)`) to count their iterations, so such a mutant throws after `--max-loop` iterations (default 5,000,000) and is killed in a fraction of a second.
+
+const run = (code, entry = 'f') => new Function(`${code}\n; return ${entry};`)();
+
+test('capLoops: every unbounded loop header is rewritten, a bounded loop and a for-of are left alone, the line count and the text before the helper are unchanged, and no site = no change at all', () => {
+  const src = [
+    'function a(i) { while (true) { i++; if (i > 3) return i; } }',
+    'function b(i) { for (;;) { if (++i > 3) return i; } }',
+    'function c(n) { for (let k = 2; ; k++) if (k * k > n) return k; }',
+    'function d(n) { let t = 0; for (let k = 0; k < n; k++) t += k; for (const x of [1, 2]) t += x; while (t < 100) t++; return t; }',
+  ].join('\n');
+  const out = capLoops(src, 1000);
+  const code = out.slice(0, out.indexOf('\nfunction __forgeLoopCap'));
+  assert.equal((code.match(/__forgeLoopCap\(/g) ?? []).length, 3, 'three unbounded loops, three call sites');
+  assert.ok(!/while \(true\)|for \(;;\)|; ;|;  ;/.test(code), 'no unbounded header is left');
+  assert.match(code, /for \(let k = 0; k < n; k\+\+\)/, 'the bounded for is as it was');
+  assert.match(code, /for \(const x of \[1, 2\]\)/);
+  assert.match(code, /while \(t < 100\)/);
+  assert.equal(code.split('\n').length, src.split('\n').length, 'the helper goes AFTER the code: no line moves');
+  assert.equal(capLoops('const x = 1;\nfor (let i = 0; i < 3; i++) {}\n', 1000), 'const x = 1;\nfor (let i = 0; i < 3; i++) {}\n', 'no unbounded loop: byte-identical');
+  assert.equal(capLoops(src, 0), src, 'a cap of 0 is "off"');
+  assert.equal(DEFAULT_MAX_LOOP, 5_000_000);
+});
+
+test('capLoops: a loop that exits on its own still runs to its exit; a loop whose exit is gone throws the named error after the cap; each site counts for itself', () => {
+  const good = capLoops('function f(i) { while (true) { i++; if (i > 3) return i; } }', 1000);
+  assert.equal(run(good)(0), 4, 'the working loop is untouched in behaviour');
+  const bad = capLoops('function f(i) { while (true) { i++; if (false) return i; } }', 1000);
+  assert.throws(() => run(bad)(0), /forge-mutate: loop cap exceeded/);
+  const freeName = capLoops('function f(taken) { for (let n = 2; ; n++) if (!taken(n)) return n; }', 50);
+  assert.equal(run(freeName)((n) => n < 10), 10);
+  const exitRemoved = capLoops('function f(taken) { for (let n = 2; ; n++) if (false) return n; }', 50);
+  assert.throws(() => run(exitRemoved)(() => false), /forge-mutate: loop cap exceeded at/);
+  const two = capLoops('function f() { let a = 0; while (true) { if (++a > 40) break; } let b = 0; for (;;) { if (++b > 40) break; } return a + b; }', 50);
+  assert.equal(run(two)(), 82, 'two sites of 41 iterations each stay under a cap of 50: the count is per site, not total');
+});
+
+test('capLoops: the cap is exact - a loop that goes round exactly `max` times passes, one more throws', () => {
+  const body = 'function f(stop) { for (let i = 0; ; i++) { if (i === stop) return i; } }';       // the header is evaluated stop + 1 times
+  assert.equal(run(capLoops(body, 10))(9), 9, 'ten evaluations under a cap of ten');
+  assert.throws(() => run(capLoops(body, 10))(10), /loop cap exceeded/, 'eleven do not');
+});
+
+test('classifyRun + summarize + formatReport: a kill by the loop cap is a kill, counted apart, and the report says how many', () => {
+  assert.equal(classifyRun({ status: 1, timedOut: false, output: 'Error: forge-mutate: loop cap exceeded at L12\n' }), 'killed');
+  const r = (id, outcome, extra = {}) => ({ id, file: 'src/a.ts', line: 1, op: 'x', outcome, from: 'a', to: 'b', ...extra });
+  const s = summarize([r('k1', 'killed'), r('k2', 'killed', { loopCap: true }), r('t1', 'timeout')]);
+  assert.equal(s.killed, 3); assert.equal(s.timeout, 1); assert.equal(s.loopCap, 1);
+  assert.match(formatReport(s, { wallMs: 1000, jobs: 1, testCount: 1 }), /killed 3 \(by timeout 1, by loop cap 1\)/);
+  assert.match(formatReport(summarize([r('k1', 'killed')]), { wallMs: 1000, jobs: 1, testCount: 1 }), /killed 1 \(by timeout 0\) \|/, 'no loop-cap kill: the line is as it always was');
+});
+
+test('the CLI: a hand mutant that removes a loop exit is killed by the CAP in a fraction of the timeout, says so, and the timeout never fires (--max-loop 0 would leave that to the timeout)', () => {
+  const { root, proj } = makeProject({ 'src/lib.ts': LIB, 'src/lib.test.ts': STRONG, 'package.json': '{"type":"module"}' });
+  try {
+    git(proj, 'init', '-q'); git(proj, 'add', '-A'); git(proj, 'commit', '-qm', 'one');
+    const hand = path.join(root, 'hand.json');
+    fs.writeFileSync(hand, JSON.stringify([['src/lib.ts', 'hang: the loop never ends', 'while (i < n) i++;', 'while (true) i++;']]));
+    const out = path.join(root, 'out.json');
+    const t0 = Date.now();
+    const r = mutate(proj, '--hand', hand, '--timeout', '60', '--out', out);
+    const secs = (Date.now() - t0) / 1000;
+    assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+    const res = JSON.parse(fs.readFileSync(out, 'utf8'));
+    const hang = res.results.find((x) => x.name === 'hang: the loop never ends');
+    assert.equal(hang.outcome, 'killed');
+    assert.equal(hang.loopCap, true);
+    assert.ok(secs < 30, `the cap killed it in ${secs} s, far under the 60 s timeout`);
+    assert.equal(res.summary.timeout, 0);
+    assert.equal(res.summary.loopCap, 1);
+    assert.match(r.stdout, /killed 1 \(by timeout 0, by loop cap 1\)/);
+    assert.equal(git(proj, 'status', '--porcelain'), '', 'the project is as it was');
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });

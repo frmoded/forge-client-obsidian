@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
 import {
-  parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, buildMap, selectTests, hashTexts, parseTapSummary,
+  parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
   orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage,
 } from './mutate-core.mjs';
 
@@ -33,6 +33,8 @@ const USAGE = `usage: node scripts/dev/mutate.mjs [--diff <git ref or range>] [-
   --engine-jobs <n>   of those, mutants whose tests boot the Pyodide engine at once (default 4)
   --test-concurrency <n>  test files one mutant runs at once (default: the cores divided by --jobs, at least 2)
   --timeout <s>       per mutant; a hang is killed and counted as killed by timeout (default 90)
+  --max-loop <n>      the mutated file's unbounded loops (while (true), for (;;), for (init; ; update)) throw after n iterations per site: a mutant that removes a loop exit dies in a second, as a kill 'by loop cap', instead of at the
+                      timeout (default 5000000; 0 = off, the timeout alone)
   --equivalent <file> JSON { "<id or name>": "why it is equivalent" }: survivors listed there are reported as equivalent-explained
   --glue <regexp>     files whose mutants also run the engine tests that import them anywhere (default: pyodide-host, phrase-engine, the engine bundle)
   --list              print the mutants and the tests each would run; run nothing
@@ -46,7 +48,7 @@ const USAGE = `usage: node scripts/dev/mutate.mjs [--diff <git ref or range>] [-
   --keep              keep the scratch copies`;
 
 function parseArgs(argv) {
-  const a = { hand: [], file: [], jobs: Math.min(8, Math.max(2, Math.floor(os.cpus().length / 2))), engineJobs: 4, timeout: 90, glue: '(pyodide-host|phrase-engine|real-rhythm-engine|engine-bundle)\\.|^assets/engine/', root: process.cwd() };
+  const a = { hand: [], file: [], jobs: Math.min(8, Math.max(2, Math.floor(os.cpus().length / 2))), engineJobs: 4, timeout: 90, maxLoop: DEFAULT_MAX_LOOP, glue: '(pyodide-host|phrase-engine|real-rhythm-engine|engine-bundle)\\.|^assets/engine/', root: process.cwd() };
   const need = (i, n) => { if (argv[i + 1] === undefined) throw new Error(`${n} needs a value`); return argv[i + 1]; };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
@@ -61,6 +63,7 @@ function parseArgs(argv) {
     else if (k === '--engine-jobs') a.engineJobs = Number(need(i++, k));
     else if (k === '--test-concurrency') a.testConcurrency = Number(need(i++, k));
     else if (k === '--timeout') a.timeout = Number(need(i++, k));
+    else if (k === '--max-loop') a.maxLoop = Number(need(i++, k));
     else if (k === '--equivalent') a.equivalent = need(i++, k);
     else if (k === '--glue') a.glue = need(i++, k);
     else if (k === '--list') a.list = true;
@@ -74,6 +77,7 @@ function parseArgs(argv) {
     else if (k === '-h' || k === '--help') { console.log(USAGE); process.exit(0); }
     else throw new Error(`unknown option ${k}`);
   }
+  if (!(a.maxLoop >= 0)) throw new Error('--max-loop must be a number of at least 0 (0 = off)');
   for (const k of ['jobs', 'engineJobs', 'timeout']) if (!(a[k] >= 1)) throw new Error(`--${k.replace('J', '-j')} must be a number of at least 1`);
   if (a.baseline === undefined) a.baseline = 'after';
   if (a.baseline !== 'after' && a.baseline !== 'first') throw new Error("--baseline is 'after' or 'first'");
@@ -374,6 +378,7 @@ export async function main(argv) {
     let done = 0;
     const order = runnable.map((m, i) => i).sort((x, y) => Number(runnable[y].heavy) - Number(runnable[x].heavy));
     const outcomes = new Array(runnable.length);
+    const capped = new Array(runnable.length).fill(false);
     const seconds = new Array(runnable.length);
     const killers = new Array(runnable.length).fill(null).map(() => []);
     const runMutant = async (m, i, timeoutS) => {
@@ -383,11 +388,12 @@ export async function main(argv) {
         cp(base, dir);
         const file = path.join(dir, m.file);
         fs.rmSync(file, { force: true });
-        fs.writeFileSync(file, applyMutant(texts.get(m.file), m));
+        fs.writeFileSync(file, capLoops(applyMutant(texts.get(m.file), m), a.maxLoop));      // 2026-10-29-0840: unbounded loops of the mutated file count their iterations (--max-loop)
         const r = await runFiles(dir, m.tests, { timeoutMs: timeoutS * 1000, concurrency, failFast: true });
         if (a.trace) for (const f of r.files) console.error(`  trace ${m.id}: ${f.status === 0 ? 'ok  ' : 'FAIL'} ${f.secs.toFixed(1).padStart(5)} s  ${f.file}`);
-        return { outcome: classifyRun(r), secs: (Date.now() - t0) / 1000, killers: r.failed.map((f) => f.file), files: r.files };
-      } catch (e) { console.error(`mutate: ${m.id}: ${e.message}`); return { outcome: 'not-run', secs: (Date.now() - t0) / 1000, killers: [], files: [] }; } finally {
+        const outcome = classifyRun(r);
+        return { outcome, loopCap: outcome === 'killed' && killedByLoopCap(r.output), secs: (Date.now() - t0) / 1000, killers: r.failed.map((f) => f.file), files: r.files };
+      } catch (e) { console.error(`mutate: ${m.id}: ${e.message}`); return { outcome: 'not-run', loopCap: false, secs: (Date.now() - t0) / 1000, killers: [], files: [] }; } finally {
         try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* cleaned with the scratch dir */ }
       }
     };
@@ -395,7 +401,7 @@ export async function main(argv) {
       const m = runnable[i];
       if (m.tests.length === 0) { outcomes[i] = 'uncovered'; seconds[i] = 0; done++; console.error(`[${done}/${runnable.length}] uncovered ${m.id}: ${noTestMessage(m.file)}`); return; }
       if (m.heavy) await heavy.take();
-      try { const r = await runMutant(m, i, a.timeout); outcomes[i] = r.outcome; seconds[i] = r.secs; killers[i] = r.killers; for (const f of r.files) if (outcomes[i] === 'survived') durations[f.file] = Math.round(f.secs * 10) / 10; } finally { if (m.heavy) heavy.give(); }
+      try { const r = await runMutant(m, i, a.timeout); outcomes[i] = r.outcome; capped[i] = r.loopCap; seconds[i] = r.secs; killers[i] = r.killers; for (const f of r.files) if (outcomes[i] === 'survived') durations[f.file] = Math.round(f.secs * 10) / 10; } finally { if (m.heavy) heavy.give(); }
       done++;
       console.error(`[${done}/${runnable.length}] ${outcomes[i].padEnd(8)} ${String(Math.round(seconds[i])).padStart(3)} s  ${m.id}`);
     });
@@ -405,7 +411,7 @@ export async function main(argv) {
       if (outcomes[i] !== 'timeout') continue;
       console.error(`mutate: ${runnable[i].id} timed out with ${a.jobs} running at once; running it again alone to tell a hang from a slow run`);
       const r = await runMutant(runnable[i], i, a.timeout);
-      outcomes[i] = r.outcome; seconds[i] = r.secs; killers[i] = r.killers; runnable[i].retriedAlone = true;
+      outcomes[i] = r.outcome; capped[i] = r.loopCap; seconds[i] = r.secs; killers[i] = r.killers; runnable[i].retriedAlone = true;
       console.error(`[again] ${r.outcome.padEnd(8)} ${String(Math.round(r.secs)).padStart(3)} s  ${runnable[i].id}`);
     }
 
@@ -431,8 +437,8 @@ export async function main(argv) {
     if (baselineRed.length === 0) { runnable.forEach((m, i) => { if (outcomes[i] === 'killed' && killers[i].length) kills[m.id] = killers[i]; }); saveKills(root, kills); }
 
     // 5. the report
-    runnable.forEach((m, i) => { m.outcome = outcomes[i]; m.seconds = seconds[i]; });
-    const results = mutants.map((m) => ({ id: m.id, name: m.op === 'hand' ? m.name : undefined, file: m.file, line: m.line, op: m.op, from: m.from, to: m.to, status: m.status, why: m.why, outcome: m.outcome, seconds: m.seconds, retriedAlone: m.retriedAlone, tests: m.tests }));
+    runnable.forEach((m, i) => { m.outcome = outcomes[i]; m.seconds = seconds[i]; m.loopCap = capped[i]; });
+    const results = mutants.map((m) => ({ id: m.id, name: m.op === 'hand' ? m.name : undefined, file: m.file, line: m.line, op: m.op, from: m.from, to: m.to, status: m.status, why: m.why, outcome: m.outcome, loopCap: m.loopCap, seconds: m.seconds, retriedAlone: m.retriedAlone, tests: m.tests }));
     const s = summarize(results, equivalent);
     let treeUnchanged = null;
     if (before) {
@@ -440,7 +446,7 @@ export async function main(argv) {
       treeUnchanged = after.status === before.status && after.hash === before.hash ? { ok: true, files: after.files } : { ok: false, why: after.hash !== before.hash ? 'file bytes differ' : 'git status differs' };
     }
     console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged, baselineRed }));
-    if (a.out) fs.writeFileSync(path.resolve(a.out), JSON.stringify({ summary: { generated: s.generated, killed: s.killed, timeout: s.timeout, survived: s.survived.length, uncovered: s.uncovered.length, explained: s.explained.length, invalid: s.invalid.length, notApplicable: s.notApplicable.length, notRun: s.notRun.length, wallMs: Date.now() - started }, results }, null, 2));
+    if (a.out) fs.writeFileSync(path.resolve(a.out), JSON.stringify({ summary: { generated: s.generated, killed: s.killed, timeout: s.timeout, loopCap: s.loopCap, survived: s.survived.length, uncovered: s.uncovered.length, explained: s.explained.length, invalid: s.invalid.length, notApplicable: s.notApplicable.length, notRun: s.notRun.length, wallMs: Date.now() - started }, results }, null, 2));
     if (treeUnchanged && !treeUnchanged.ok) return 3;
     if (baselineRed.length > 0) return 2;
     return s.unexplained > 0 && !a.noFail ? 1 : 0;
