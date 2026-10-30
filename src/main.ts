@@ -41,6 +41,7 @@ import {
 } from './source-aware-forge-click-core.ts';
 import { computeDescriptionHash } from './description-hash-core.ts';
 import { computeFacetHash, whichLayerIsSource, getSourceFacet } from './facet-hash-core.ts';
+import { sourceLayerStatusOf } from './source-layer-status-of-body-core.ts';
 import { computeSourceFacetAfterEdit } from './facet-edit-source-flip-core.ts';
 import { resolveRunTarget } from './run-snippet-target-core.ts';
 import { changedFacets, decideSourceWriteFromChange, type FacetHashes } from './facet-edit-tracker-core.ts';
@@ -3890,26 +3891,13 @@ export default class ForgePlugin extends Plugin {
     }
     try {
       const body = await this.app.vault.read(view.file);
-      const isV2 = isV2Shape(body);
-      let canonical: 'description' | 'recipe' | 'python' | 'synced' | null = null;
-      if (isV2) {
-        try {
-          canonical = await whichLayerIsSource(body, {
-            extractDescription,
-            extractRecipeSection,
-            extractPythonSection,
-            getFrontmatterField: getFmFieldV2,
-          });
-        } catch (e) {
-          console.error('refreshSourceLayerStatusBar: probe failed', e);
-          canonical = null;
-        }
-      }
+      // 2026-10-29-0920: the bar and the facet headings are fed by ONE function (source-layer-status-of-body-core), so "synced" is never said of a note whose heading says a facet is out of date or still a stub.
+      const status = await sourceLayerStatusOf(body);
       this.sourceLayerStatusBarItem.setText(
-        sourceLayerStatusLabel(isV2, canonical),
+        sourceLayerStatusLabel(status.isV2, status.canonical, status.staleFacets),
       );
       this.sourceLayerStatusBarItem.title =
-        sourceLayerStatusTooltip(canonical);
+        sourceLayerStatusTooltip(status.canonical, status.staleFacets);
     } catch (e) {
       console.error('refreshSourceLayerStatusBar: vault.read failed', e);
       this.sourceLayerStatusBarItem.setText('');

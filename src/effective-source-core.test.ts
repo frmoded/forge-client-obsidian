@@ -33,7 +33,10 @@ const read = (f: string) => fs.readFileSync(path.resolve(import.meta.dirname, f)
 
 test('wiring (pins the MECHANISM): the lineage stamper and the facet panel both resolve through effectiveSourceFacet', () => {
   assert.match(read('python-write-back-core.ts'), /effectiveSourceFacet\(input\.sourceLayer, stored\)/);
-  assert.match(read('stale-facet-view-plugin.ts'), /effectiveSourceFacet\(canonical, /);
+  // 2026-10-29-0920 (deliberate): the facet panel's states now come from source-layer-status-of-body-core, the ONE function the status bar uses too; the plugin calls it, and the core resolves through effectiveSourceFacet.
+  assert.match(read('stale-facet-view-plugin.ts'), /sourceLayerStatusOf\(body\)/);
+  assert.match(read('source-layer-status-of-body-core.ts'), /effectiveSourceFacet\(canonical, /);
+  assert.match(read('main.ts'), /sourceLayerStatusOf\(body\)/, 'and so does the status bar');
 });
 
 test('wiring (pins the MECHANISM): Run/transpile write-back goes through planPythonWriteBack with the library flag, and skips the file when told not to write', () => {

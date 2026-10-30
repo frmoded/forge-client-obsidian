@@ -14,26 +14,13 @@
 import { ViewPlugin, type ViewUpdate, type EditorView, Decoration, type DecorationSet, WidgetType } from '@codemirror/view';
 import { RangeSetBuilder } from '@codemirror/state';
 
+import { sourceLayerStatusOf } from './source-layer-status-of-body-core.ts';
 import {
-  whichLayerIsSource,
-  computeFacetHash,
-  getSourceFacet,
-} from './facet-hash-core.ts';
-import { effectiveSourceFacet } from './effective-source-core.ts';
-import {
-  computeFacetStates,
   suffixTextForState,
   FacetState,
   ALL_FACETS,
   type FacetName,
-  type CurrentBodyHashes,
 } from './facet-state-core.ts';
-import {
-  extractDescription,
-  extractRecipeSection,
-  extractPythonSection,
-  getFrontmatterField,
-} from './v2-note-core.ts';
 
 /** v0.2.264 — Body marks per hexa-state. Source facets get no body
  *  decoration (full color). */
@@ -244,58 +231,15 @@ export const staleFacetViewPlugin = ViewPlugin.fromClass(
 
     private async refresh(body: string) {
       this.pendingDoc = body;
-      const twoArgReader = (b: string, k: string): string | null => {
-        const v = getFrontmatterField(b, k);
-        return typeof v === 'string' ? v : null;
-      };
-      const oneArgReader = {
-        getFrontmatterField: (k: string): string | null => {
-          const v = getFrontmatterField(body, k);
-          return typeof v === 'string' ? v : null;
-        },
-      };
-      let canonical: Awaited<ReturnType<typeof whichLayerIsSource>>;
-      try {
-        canonical = await whichLayerIsSource(body, {
-          extractDescription,
-          extractRecipeSection,
-          extractPythonSection,
-          getFrontmatterField: twoArgReader,
-        });
-      } catch (e) {
-        console.error('facetStateViewPlugin: whichLayerIsSource failed', e);
-        return;
-      }
+      // 2026-10-29-0920: the same function feeds the status bar (source-layer-status-of-body-core), so the bar and these headings cannot disagree.
+      const status = await sourceLayerStatusOf(body);
       if (this.pendingDoc !== body) {
         return;
       }
-      // CW-1700 (drain 2026-07-06-1700): compute current-body hashes for
-      // freshness comparison. Stored `<facet>_hash` frontmatter fields
-      // remain "last-forged snapshot" per drain 1200 invariant; freshness
-      // check needs the actual current-body content hash to detect
-      // hand-edit drift immediately (before the next forge rewrites stored).
-      let currentBodyHashes: CurrentBodyHashes;
-      try {
-        const descText = extractDescription(body);
-        const recipeText = extractRecipeSection(body) ?? '';
-        const pythonText = extractPythonSection(body) ?? '';
-        currentBodyHashes = {
-          description: await computeFacetHash(descText),
-          recipe: await computeFacetHash(recipeText),
-          python: await computeFacetHash(pythonText),
-        };
-      } catch (e) {
-        console.error('facetStateViewPlugin: currentBodyHashes computation failed', e);
+      if (status.states === null) {
         return;
       }
-      if (this.pendingDoc !== body) {
-        return;
-      }
-      // Drain 2026-10-15-2100 §1 — `synced` is a freshness verdict, not a source: defer to the note's own stored source_facet
-      // (CCQA: hello_world, source_facet: recipe, drew "Description — source / Recipe — derived from Description").
-      const stored = getSourceFacet(body, twoArgReader);
-      const effective = effectiveSourceFacet(canonical, stored) ?? canonical;
-      const states = computeFacetStates(effective, oneArgReader, currentBodyHashes);
+      const states = status.states as Record<FacetName, FacetState>;
       this.decorations = buildFacetStateDecorations(body, states);
       try {
         this.view.dispatch({});

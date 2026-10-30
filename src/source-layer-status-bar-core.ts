@@ -10,6 +10,11 @@
 // `node --test`'d without an App / WorkspaceLeaf fixture.
 
 import type { SourceLayer } from './source-aware-forge-click-core.ts';
+import type { FacetName } from './facet-state-core.ts';
+
+const FACET_WORD: Record<FacetName, string> = { description: 'Description', recipe: 'Recipe', python: 'Python' };
+/** `Python`, `Recipe and Python`: the stale facets, named in the order of the note. */
+const names = (stale: readonly FacetName[]): string => stale.map((f) => FACET_WORD[f]).join(' and ');
 
 /** Compute the status-bar label for a given source layer + V2-shape
  *  state. Returns empty string only for non-V2 notes — the caller
@@ -32,10 +37,12 @@ import type { SourceLayer } from './source-aware-forge-click-core.ts';
 export function sourceLayerStatusLabel(
   isV2: boolean,
   source: SourceLayer | null,
+  staleFacets: readonly FacetName[] = [],
 ): string {
   if (!isV2) return '';
   if (source === null) return 'Forge: probe failed';
-  if (source === 'synced') return 'Forge: synced';
+  // 2026-10-29-0920: "synced" is a freshness claim; it is made only when no facet is out of date (or still a stub). The headings draw from the same facts.
+  if (source === 'synced') return staleFacets.length > 0 ? `Forge: ${names(staleFacets)} out of date` : 'Forge: synced';
   if (source === 'description') return 'Forge: Description source';
   if (source === 'recipe') return 'Forge: Recipe source';
   if (source === 'python') return 'Forge: Python source';
@@ -51,7 +58,14 @@ export function sourceLayerStatusLabel(
  *  clicking Forge first. */
 export function sourceLayerStatusTooltip(
   source: SourceLayer | null,
+  staleFacets: readonly FacetName[] = [],
 ): string {
+  if (source === 'synced' && staleFacets.length > 0) {
+    return (
+      `${names(staleFacets)} ${staleFacets.length > 1 ? 'are' : 'is'} out of date: derived from an earlier version of what it comes from, or not generated yet. `
+      + 'Run (or Forge-click) will bring it up to date.'
+    );
+  }
   if (source === null) {
     return (
       'Forge source-layer probe failed. The 3-layer hash state '
