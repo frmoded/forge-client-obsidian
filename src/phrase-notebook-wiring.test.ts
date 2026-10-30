@@ -207,3 +207,111 @@ test('the transform redraws when its SOURCE phrase changes; a change in notebook
     assert.equal(r.computes.length, n, 'a cell changed: the Score is not asked again');
   } finally { r.done(); }
 });
+
+// ---- 2026-10-30-1020: selecting bars ON the Score (the driver could not pick bars 3 to 5), through the real surface ---------------------------------------------------------------------------------------------------------
+const mouse = (el: any, type: string, init: object = {}) => el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, button: 0, ...init }));
+const tintedBars = (r: any): string[] => r.qa('.forge-selected-bar').map((e: any) => e.parentNode.id);
+const pressed = (r: any): number[] => r.qa('.forge-notebook-bar').filter((b: any) => b.getAttribute('aria-pressed') === 'true').map((b: any) => Number(b.textContent));
+/** A drag on the engraving as a browser sends it: press in one bar, move into the others, release, then the click. */
+const dragOnScore = (r: any, from: number, to: number): void => {
+  mouse(r.q(`#ph_bar_${from}`), 'mousedown');
+  const step = from <= to ? 1 : -1;
+  for (let n = from + step; n !== to + step; n += step) mouse(r.q(`#ph_bar_${n}`), 'mousemove');
+  mouse(r.q(`#ph_bar_${to}`), 'mouseup'); mouse(r.q(`#ph_bar_${to}`), 'click');
+};
+
+test('1020: a drag from bar 3 to bar 5 on the Score selects bars 3 to 5 in the notebook, tints them on the Score, and leaves the pin and the notes pane alone', async () => {
+  const r = await rig();
+  try {
+    r.click(r.q('#ph_bar_2'));
+    const told = r.pins.length;
+    dragOnScore(r, 3, 5);
+    assert.deepEqual(r.qa('.forge-notebook-chips .forge-notebook-chip').map((c: any) => c.textContent), ['bars 3 to 5']);
+    assert.deepEqual(pressed(r), [3, 4, 5], 'the numbers below show the same range');
+    assert.deepEqual(tintedBars(r), ['ph_bar_3', 'ph_bar_4', 'ph_bar_5'], 'the Score shows what Run will use');
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_2'], 'the drag did not move the pin');
+    assert.equal(r.pins.length, told, 'and the notes pane heard nothing');
+    r.click(r.qa('.forge-notebook-rows button').find((b: any) => b.textContent === 'kick'));
+    assert.deepEqual(r.qa('.forge-notebook-chips .forge-notebook-chip').map((c: any) => c.textContent), ['bars 3 to 5, kick row']);
+  } finally { r.done(); }
+});
+
+test('1020: a plain click on the Score still pins (and selects nothing); a Shift-click on a bar extends the notebook\'s selection and pins nothing', async () => {
+  const r = await rig();
+  try {
+    r.click(r.q('#ph_bar_4'));
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_4']);
+    assert.deepEqual(r.qa('.forge-notebook-chips .forge-notebook-chip'), []);
+    assert.deepEqual(tintedBars(r), []);
+    dragOnScore(r, 3, 5);
+    r.click(r.q('#ph_bar_7'), { shiftKey: true });
+    assert.deepEqual(pressed(r), [3, 4, 5, 6, 7]);
+    assert.deepEqual(tintedBars(r), ['ph_bar_3', 'ph_bar_4', 'ph_bar_5', 'ph_bar_6', 'ph_bar_7']);
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_4'], 'the Shift-click is not a pin gesture');
+  } finally { r.done(); }
+});
+
+test('1020: the numbers below tint the Score too, in both directions: pick 2, then 2 again -> tinted, then not', async () => {
+  const r = await rig();
+  try {
+    r.click(r.qa('.forge-notebook-bar')[1]);
+    assert.deepEqual(tintedBars(r), ['ph_bar_2']);
+    r.click(r.qa('.forge-notebook-bar')[1]);
+    assert.deepEqual(tintedBars(r), []);
+  } finally { r.done(); }
+});
+
+test('1020: a Score that is drawn again (the phrase changed) keeps its tint on the bars that are still selected', async () => {
+  const r = await rig();
+  try {
+    dragOnScore(r, 3, 5);
+    r.files.set(PATH, noteContentFor('phrase_006', { ...EXTEND, bars: 6 }));
+    r.handle.noteModified(PATH); await r.clock.advance(400);
+    assert.equal(r.qa('g.measure').length, 6);
+    assert.deepEqual(tintedBars(r), ['ph_bar_3', 'ph_bar_4', 'ph_bar_5'], 'the new engraving is tinted from the same selection');
+    r.files.set(PATH, noteContentFor('phrase_006', { ...EXTEND, bars: 4 }));
+    r.handle.noteModified(PATH); await r.clock.advance(400);
+    assert.deepEqual(pressed(r), [3, 4]);
+    assert.deepEqual(tintedBars(r), ['ph_bar_3', 'ph_bar_4'], 'a bar that is gone leaves the selection and the tint');
+  } finally { r.done(); }
+});
+
+test('1020 P3: a tab WITHOUT the notebook port drags and Shift-clicks exactly as before: the click after a drag pins the bar it lands on, no tint, nothing selected, nothing thrown', async () => {
+  const r = await rig({ withNotebook: false });
+  try {
+    dragOnScore(r, 3, 5);
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_5']);
+    assert.deepEqual(tintedBars(r), []);
+    r.click(r.q('#ph_bar_2'), { shiftKey: true });
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_2'], 'a Shift-click is a click here, as it always was');
+  } finally { r.done(); }
+});
+
+test('1020: the tint is painted by the inspector\'s own repaint (decorate), so it is NOT a DOM edit the inspector\'s observer answers with another repaint: a drag settles, it does not loop', async () => {
+  const r = await rig();
+  try {
+    dragOnScore(r, 3, 5);
+    await r.clock.advance(400);
+    const host = r.q('.forge-rhythm-score-host');
+    let edits = 0;
+    const obs = new win.MutationObserver((m: unknown[]) => { edits += m.length; });
+    obs.observe(host, { childList: true, subtree: true, attributes: true });
+    await r.clock.advance(400);
+    assert.equal(edits + obs.takeRecords().length, 0, 'nothing keeps repainting after the drag');
+    obs.disconnect();
+  } finally { r.done(); }
+});
+
+test('1020: the pane scrolls ONCE, when the drag is over (real Chrome showed it: scrolling at the first move slid the Score under the pointer and the drag stopped at bar 4)', async () => {
+  const proto = win.HTMLElement.prototype; const saved = proto.scrollIntoView;
+  const seen: string[] = [];
+  proto.scrollIntoView = function (this: any) { seen.push(this.className.split(' ')[0]); };
+  const r = await rig();
+  try {
+    mouse(r.q('#ph_bar_3'), 'mousedown');
+    mouse(r.q('#ph_bar_4'), 'mousemove'); mouse(r.q('#ph_bar_5'), 'mousemove');
+    assert.deepEqual(seen, [], 'the pointer is still down');
+    mouse(r.q('#ph_bar_5'), 'mouseup'); mouse(r.q('#ph_bar_5'), 'click');
+    assert.deepEqual(seen, ['forge-notebook-do']);
+  } finally { r.done(); if (saved === undefined) delete proto.scrollIntoView; else proto.scrollIntoView = saved; }
+});

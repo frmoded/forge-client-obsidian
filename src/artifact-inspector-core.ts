@@ -48,6 +48,16 @@ export interface ArtifactInspectorOptions {
   /** 2026-10-29-0900 (c): Esc pressed anywhere inside this element (the whole pane: the notebook's buttons are outside `root`) releases the pin, with one evidence line. Opt-in for the same reason as `keepPinOnControls` (P3):
    *  the bar's Beat Box tab of every vault keeps Esc on `root` only. Absent = unchanged. */
   releaseOnEscapeFrom?: Element;
+  /** 2026-10-30-1020: SELECT bars on the engraving itself. A press in one bar, a drag into another and a release is a RANGE (`onRange(first, last)` on every move into a new bar, so the selection follows the pointer); the click the browser
+   *  fires after it is not a pin gesture (the pin is kept, moved by nothing). A Shift-click on a bar is `onShiftClick(bar)` and pins nothing. A plain click still pins. `barOf` names the bar number an element belongs to (null = it is no bar).
+   *  Opt-in, like `keepPinOnControls`: this inspector is shared with the bar's Beat Box tab of EVERY vault (P3). Absent = no listener is added and every press, drag and Shift-click is what it always was. */
+  selectBars?: {
+    barOf(prov: Provenance): number | null;
+    onRange(first: number, last: number): void;
+    /** The pointer was released after a drag that selected bars (also when it was released outside the root). The surface may scroll now - never while the pointer is moving over the Score, which would slide it under the pointer. */
+    onRangeEnd?(): void;
+    onShiftClick(bar: number): void;
+  };
 }
 
 export interface ArtifactInspector {
@@ -202,7 +212,48 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     const hit = el?.closest?.(CONTROL) ?? null;
     return hit !== null && hit !== root && root.contains(hit);
   };
+  /** The bar number under a pointer event: the drawn part's mapped element, else the box the point is inside (the same rule a click pins by). null = no bar there. */
+  const barAt = (e: Event): number | null => {
+    const sel = opts.selectBars; if (!sel) return null;
+    const el = mappedAncestor(root, map, e.target) ?? boxAt(e);
+    return el ? sel.barOf(map[el.id]) : null;
+  };
+  let pressedIn: number | null = null;                    // the bar a press started in (selectBars only); null = no press, or it started in no bar
+  let draggedTo: number | null = null;                    // the bar the drag last reported
+  let swallowClick = false;                               // the click a browser fires after a drag is not a pin gesture
+  const onDown = (e: Event) => {
+    const m = e as MouseEvent;
+    if (m.button !== 0 || m.shiftKey === true) return;
+    if (opts.keepPinOnControls === true && isPlayerControl(e.target)) return;
+    pressedIn = barAt(e); draggedTo = null;
+    if (pressedIn === null) return;
+    const doc = root.ownerDocument;
+    doc.addEventListener('mouseup', onUp, true);
+  };
+  const onMove = (e: Event) => {
+    if (pressedIn === null) return;
+    const to = barAt(e);
+    if (to === null || to === draggedTo || (draggedTo === null && to === pressedIn)) return;
+    draggedTo = to;
+    opts.selectBars!.onRange(Math.min(pressedIn, to), Math.max(pressedIn, to));
+  };
+  const onUp = () => {
+    root.ownerDocument.removeEventListener('mouseup', onUp, true);
+    if (draggedTo !== null) {
+      opts.selectBars?.onRangeEnd?.();
+      swallowClick = true;
+      setTimeout(() => { swallowClick = false; }, 0);      // a click fires right after the release; one released outside the root has none, and must not eat the next real click
+    }
+    pressedIn = null; draggedTo = null;
+  };
   const onClick = (e: Event) => {
+    if (swallowClick) { swallowClick = false; return; }
+    if (opts.selectBars && (e as MouseEvent).shiftKey === true) {
+      const bar = barAt(e);
+      if (bar !== null) opts.selectBars.onShiftClick(bar);
+      opts.trace?.(`[forge-pin] shift-click ${clickKind(e.target)} -> ${bar !== null ? `extend the selection to bar ${bar}` : 'none (not on a bar)'}, the pin is kept`);
+      return;
+    }
     if (opts.keepPinOnControls === true && isPlayerControl(e.target)) { opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (a player control, the pin is kept)`); return; }
     const drawn = mappedAncestor(root, map, e.target);
     const el = drawn ?? boxAt(e);                         // the unpainted part of a bar has the svg root as its target: the point decides
@@ -234,6 +285,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   root.addEventListener('mouseover', onOver);
   root.addEventListener('mouseout', onOut);
   root.addEventListener('click', onClick);
+  if (opts.selectBars) { root.addEventListener('mousedown', onDown); root.addEventListener('mousemove', onMove); }
   root.addEventListener('keydown', onKey);
   const onPaneKey = (e: Event) => {
     if ((e as KeyboardEvent).key !== 'Escape' || root.contains(e.target as Node | null) || pinned === null) return;          // inside root, onKey has it
@@ -251,6 +303,9 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
       root.removeEventListener('mouseover', onOver);
       root.removeEventListener('mouseout', onOut);
       root.removeEventListener('click', onClick);
+      root.removeEventListener('mousedown', onDown);
+      root.removeEventListener('mousemove', onMove);
+      root.ownerDocument.removeEventListener('mouseup', onUp, true);
       root.removeEventListener('keydown', onKey);
       opts.releaseOnEscapeFrom?.removeEventListener('keydown', onPaneKey);
       arrival?.disconnect();

@@ -20,7 +20,7 @@ import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import { barsContributedBy, chipsFor, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
-import type { ProvenanceResult } from './provenance-core.ts';
+import type { ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
 import { paintMixHits } from './mix-hits-dom.ts';
@@ -29,6 +29,7 @@ import { paintMorphHits } from './morph-hits-dom.ts';
 import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.ts';
 import { mountTransformStrip } from './phrase-transform-dom.ts';
 import { mountNotebook, type NotebookDomPorts, type NotebookHandle } from './notebook-dom.ts';
+import { paintSelectionTint } from './selection-tint-dom.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import type { ScorePanelPlan } from './score-first-core.ts';
 import {
@@ -634,6 +635,17 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let want: PhraseParams | null = null;
   let writing = false;
   let notebookHandle: NotebookHandle | null = null;
+  let selectedBars: ReadonlySet<number> = new Set();   // 2026-10-30-1020: the bars the notebook has selected, tinted on the Score (the inspector's own repaint draws it, so a redrawn engraving has it again)
+  let tintHost: HTMLElement | null = null;
+  let tintRole = PHRASE_BAR_ROLE;
+  let tintMap: ProvenanceMap | null = null;
+  const tintedIds = (map: ProvenanceMap): string[] => Object.keys(map).filter((id) => map[id].role === tintRole && typeof map[id].params.bar === 'number' && selectedBars.has(map[id].params.bar as number));
+  const tintAttached = (host: HTMLElement, map: ProvenanceMap): void => { tintHost = host; tintMap = map; paintSelectionTint(host, tintedIds(map)); };
+  const withTint = (inner?: (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null) => void) => (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null): void => {
+    tintHost = host; tintMap = map;
+    inner?.(host, map, pinnedId);
+    paintSelectionTint(host, tintedIds(map));
+  };
   let scoreBars: RhythmData[] | null = null;     // the bars of the Score on screen (the notebook's boxes and rows; a transform's bar count)
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
@@ -672,8 +684,11 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       return null;
     }
   };
+  /** The inspector's port for selecting bars ON the Score (2026-10-30-1020): only a tab that has a notebook gets one, so a tab without it is exactly what it was. */
+  const selectBarsPort = (): ScoreInspectorPorts['selectBars'] => (ports.notebook ? { onRange: (a, b) => { notebookHandle?.selectRange(a, b); }, onRangeEnd: () => { notebookHandle?.reveal(); }, onShiftClick: (n) => { notebookHandle?.extendTo(n); } } : undefined);
   const build = (k: PhraseParams['kind']): void => {
     kind = k;
+    tintRole = k === 'morph' ? MORPH_BAR_ROLE : k === 'mix' ? MIX_BAR_ROLE : PHRASE_BAR_ROLE;
     if (k === 'morph') {
       const morph = mountMorphControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
       strip = { el: morph.el, set: (params) => morph.set(params && params.kind === 'morph' ? params : null), setStatus: (t) => morph.setStatus(t), dispose: () => morph.dispose() };
@@ -715,6 +730,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       keepPinOnControls: true,                       // 2026-10-26-1800: the Score's player and zoom buttons do not release the pin (phrase surfaces only: P3)
       band: true,                                    // 2300: the class recolour alone was not visible in the real Obsidian; the band does not depend on the stylesheet or the theme
       kitNote: 'Kit view: not mapped for this phrase (use the multi-staff view to inspect).',
+      decorate: withTint(),                          // 2026-10-30-1020: the bars the notebook has selected are tinted on the Score ...
+      attached: tintAttached,                        // ... from the moment a Score is shown, not from the first hover
+      selectBars: selectBarsPort(),                  // 2026-10-30-1020: a drag across bars selects them in the notebook, a Shift-click extends (phrase surfaces with a notebook only: P3)
     } : insp && k === 'mix' ? {
       // M8: the mix's one bar and each of its hits, tied to the two bars they came from. Clicking a notehead pins THAT hit, clicking the staff the bar; a redraw (the Weight slider) keeps the pin; the
       // pinned bar's noteheads are painted by parent. No bracket and no source link (they are the extend's); arrows have nowhere to go.
@@ -733,7 +751,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       pointRoles: [MIX_BAR_ROLE],                    // 1100: a click on the empty staff shows the bar's stack (a note, drawn or enlarged, still pins itself first)
       trace: (line) => { console.info(line); },
       pinLabel: (id, prov) => (prov.role === MIX_BAR_ROLE ? 'bar 1' : id),
-      decorate: paintMixHits,
+      decorate: withTint(paintMixHits),
+      attached: tintAttached,
+      selectBars: selectBarsPort(),
       kitNote: 'Kit view: not mapped for this mix (use the multi-staff view to inspect).',
     } : insp && k === 'morph' ? {
       // M7c Phase B: every bar of the path and each of its hits, tied to the two bars and the single-hit changes between them. Clicking a notehead pins THAT hit, a click anywhere else in a bar pins the BAR; arrows walk the
@@ -754,7 +774,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       pointRoles: [MORPH_BAR_ROLE],                  // a click anywhere inside a bar's box pins it (Iteration 123)
       trace: (line) => { console.info(line); },
       pinLabel: (id, prov) => (prov.role === MORPH_BAR_ROLE ? `bar ${String(prov.params.bar)}` : `bar ${String(prov.params.bar)}, ${String(prov.params.channel)} step ${Number(prov.params.step) + 1}`),
-      decorate: paintMorphHits,
+      decorate: withTint(paintMorphHits),
+      attached: tintAttached,
+      selectBars: selectBarsPort(),
       kitNote: 'Kit view: not mapped for this morph (use the multi-staff view to inspect).',
     } : undefined;
     structureStrip = ports.structure ? mountStructureStrip(parent, {
@@ -774,7 +796,14 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         return out;
       },
     });
-    if (ports.notebook) { notebookHandle = mountNotebook(parent, ports.notebook); void notebookHandle.refresh(); }
+    if (ports.notebook) {
+      const told = ports.notebook;
+      notebookHandle = mountNotebook(parent, {
+        ...told,
+        onSelection: (sel) => { selectedBars = new Set(sel.bars); if (tintHost && tintHost.isConnected !== false) { paintSelectionTint(tintHost, tintMap ? tintedIds(tintMap) : []); } told.onSelection?.(sel); },
+      });
+      void notebookHandle.refresh();
+    }
     if (bracket) wireBracket(bracket, () => (current && current.kind === 'extend' ? current : null), () => area, () => insp!.openNote(phraseNoteId(ports.path)));
   };
   const teardown = (): void => {
@@ -786,6 +815,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     bracket = null;
     notebookHandle?.dispose();
     notebookHandle = null;
+    selectedBars = new Set(); tintHost = null; tintMap = null;       // the notebook mounts again empty
     strip.dispose();
   };
   build(kind);

@@ -2,6 +2,8 @@
 // Run, and the cells below with exactly what each received, its Recipe, Re-run and Delete cell, plain refusals; 2026-10-27-0720 (slice 2) the text request box works: a typed sentence is what Run uses (the picker is dimmed), Enter runs, a
 // refusal keeps the sentence, a success clears it. The core (notebook-core.ts) is a fake here; the event order is a person's.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
@@ -49,7 +51,7 @@ test('what is on the page when it opens: a collapsible Notebook, one box per bar
   assert.equal(request.getAttribute('aria-label'), 'What to do with the selected bars, in a sentence');
   assert.ok(!/needs a sentence service/.test(r.parent.textContent + request.getAttribute('placeholder')), 'the slice 1 placeholder is gone');
   assert.equal(r.q('.forge-notebook-do').getAttribute('data-mode'), 'picker');
-  assert.match(r.q('.forge-notebook-hint').textContent, /^No selection yet: click bars above\./);
+  assert.equal(r.q('.forge-notebook-hint').textContent, 'Select bars: click a number below (Shift-click a second number for a range, e.g. 3 then Shift-click 5).');       // 2026-10-30-1020: "click bars above" was read as the bars of the Score
   assert.equal(r.q('.forge-notebook-bars').getAttribute('role'), 'group');
 });
 
@@ -369,4 +371,120 @@ test('(f) the chip line has its height from the start, so the first chip does no
   const before = chips.style.minHeight;
   pickBars(r);
   assert.equal(chips.style.minHeight, before, 'and unchanged once a chip is there');
+});
+
+// ---- 2026-10-30-1020: the driver could not pick bars 3 to 5 ("click bars above" read as the Score's bars; twice told how) -------------------------------------------------------------------------------------------------------------
+
+test('1020: the hint says where to click and how to get a range, and goes when a selection exists; no sentence of it says "above"', () => {
+  const r = rig();
+  const HINT = 'Select bars: click a number below (Shift-click a second number for a range, e.g. 3 then Shift-click 5).';
+  assert.equal(r.q('.forge-notebook-hint').textContent, HINT);
+  assert.ok(!/above/.test(r.q('.forge-notebook-hint').textContent));
+  r.click(r.bar(2));
+  assert.equal(r.q('.forge-notebook-hint').style.display, 'none');
+  r.click(r.bar(2));
+  assert.equal(r.q('.forge-notebook-hint').style.display, '', 'it comes back with the empty selection');
+});
+
+test('1020: selectRange(3, 5) (what a drag on the Score says) selects bars 3 to 5 as a REPLACEMENT, keeps the row, and shows the chip as "bars 3 to 5, kick row"', () => {
+  const r = rig();
+  r.click(r.bar(9)); r.click(r.qa('.forge-notebook-rows button').find((b: any) => b.textContent === 'kick'));
+  r.h.selectRange(3, 5);
+  assert.deepEqual(r.chips(), ['bars 3 to 5, kick row']);
+  assert.deepEqual([3, 4, 5].map((n) => r.bar(n).getAttribute('aria-pressed')), ['true', 'true', 'true']);
+  assert.equal(r.bar(9).getAttribute('aria-pressed'), 'false', 'the earlier selection is replaced, not added to');
+  assert.equal(r.bar(2).getAttribute('aria-pressed'), 'false');
+  assert.equal(r.bar(6).getAttribute('aria-pressed'), 'false');
+});
+
+test('1020: selectRange clamps to the Score (a range past the end ends at the last bar; a reversed range is the same range; one bar is a bar)', () => {
+  const r = rig();
+  r.h.selectRange(15, 40);
+  assert.deepEqual(r.chips(), ['bars 15 to 17']);
+  r.h.selectRange(6, 4);
+  assert.deepEqual(r.chips(), ['bars 4 to 6']);
+  r.h.selectRange(7, 7);
+  assert.deepEqual(r.chips(), ['bar 7']);
+  r.h.selectRange(30, 40);
+  assert.deepEqual(r.chips(), [], 'a range wholly past the end selects nothing');
+});
+
+test('1020: extendTo(n) is the Shift-click of the Score: from the last bar picked, by number or by range', () => {
+  const r = rig();
+  r.click(r.bar(3));
+  r.h.extendTo(5);
+  assert.deepEqual(r.chips(), ['bars 3 to 5']);
+  const r2 = rig();
+  r2.h.selectRange(2, 4);
+  r2.h.extendTo(8);
+  assert.deepEqual(r2.chips(), ['bars 2 to 8'], 'after a drag the anchor is where the drag ended');
+  const r3 = rig();
+  r3.h.extendTo(6);
+  assert.deepEqual(r3.chips(), ['bar 6'], 'with no anchor it is a plain pick, as a Shift-click on a number is');
+});
+
+test('1020: the tint is told: onSelection hears every change of the selection (number, Shift, row, drag, a Score that got shorter) and only a change', () => {
+  const heard: string[] = [];
+  const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
+  const nb: Notebook = { run: async () => ({ ok: false, message: '' }), runRequest: async () => ({ ok: false, message: '' }), cells: async () => ({ cells: [], problems: [] }), rerun: async () => ({ ok: false, message: '' }), deleteCell: async () => ({ ok: true }) } as never;
+  const h = mountNotebook(parent, { notebook: nb, trace: () => {}, onSelection: (s) => heard.push(`${s.bars.join(',')}|${s.row}`) });
+  h.setScore({ count: 9, rows: ['kick', 'snare'] });
+  const bars = [...parent.querySelectorAll('.forge-notebook-bar')] as any[];
+  const click = (el: any, init: object = {}) => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true, ...init }));
+  heard.length = 0;
+  click(bars[2]); click(bars[4], { shiftKey: true });
+  h.selectRange(6, 7);
+  click([...parent.querySelectorAll('.forge-notebook-rows button')].find((b: any) => b.textContent === 'snare') as any);
+  h.selectRange(6, 7);                          // the same range again: nothing changed
+  h.setScore({ count: 6, rows: ['kick', 'snare'] });
+  assert.deepEqual(heard, ['3|null', '3,4,5|null', '6,7|null', '6,7|snare', '6|snare']);
+});
+
+test('1020: a pick of a number and a Shift-click bring the Run row into view (the numbers of a long Score wrap over many lines); a DRAG does not scroll while it is moving (the Score would slide under the pointer) - the surface asks at its end; a plain refresh never scrolls', async () => {
+  const proto = win.HTMLElement.prototype; const saved = proto.scrollIntoView;
+  const seen: string[] = [];
+  let mine: any = null;                                  // other tests' notebooks are still on the page, with their own settle timers: only this rig's Run row counts
+  proto.scrollIntoView = function (this: any, o: any) { if (mine !== null && mine.contains(this)) seen.push(`${this.className.split(' ')[0]}:${o?.block}`); };
+  try {
+    const r = rig(); mine = r.parent;
+    r.click(r.bar(3)); r.h.extendTo(8); r.click(r.bar(9), { shiftKey: true });
+    assert.deepEqual(seen, Array(3).fill('forge-notebook-do:nearest'));
+    seen.length = 0;
+    r.h.selectRange(3, 5); r.h.selectRange(3, 6);
+    assert.deepEqual(seen, [], 'the pointer is still down: nothing may move the Score');
+    r.h.reveal();
+    assert.deepEqual(seen, ['forge-notebook-do:nearest'], 'when the drag is over, one scroll');
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    assert.deepEqual(seen, Array(2).fill('forge-notebook-do:nearest'), 'and one more once the layout has settled (real Chrome: the scroll put a drawn bar under the pointer, the hover preview opened and pushed the Run row 34 px out of view again)');
+    r.h.reveal(); r.h.reveal();
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    assert.equal(seen.length, 2 + 2 + 1, 'two reveals in a row settle ONCE');
+    seen.length = 0;
+    r.h.setScore({ count: 17, rows: ['kick'] });
+    assert.deepEqual(seen, []);
+  } finally { if (saved === undefined) delete proto.scrollIntoView; else proto.scrollIntoView = saved; }
+});
+
+test('1020: the numbered buttons are drawn as buttons, and the selected range is drawn filled - the plugin stylesheet says so for `.forge-notebook-bar` (border, hover, pressed, selected fill), and for the row buttons', () => {
+  const css = fs.readFileSync(path.join(import.meta.dirname, '../styles.css'), 'utf8');
+  const rule = (selector: string): string => [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].replace(/\/\*[\s\S]*?\*\//g, '').split(',').some((x) => x.trim() === selector)).map((m) => m[2]).join('\n');       // every block whose selector LIST holds the selector
+  assert.match(rule('.forge-notebook-bar'), /border:\s*1px solid/, 'a border: bare numbers do not look pressable');
+  assert.match(rule('.forge-notebook-bar'), /cursor:\s*pointer/);
+  assert.match(rule('.forge-notebook-bar:hover'), /background/);
+  assert.match(rule('.forge-notebook-bar:active'), /(transform|background)/, 'a pressed state');
+  assert.match(rule('.forge-notebook-bar[aria-pressed="true"]'), /background:\s*var\(--interactive-accent/, 'the selected range is filled with the accent');
+  assert.match(rule('.forge-notebook-row'), /border:\s*1px solid/);
+  assert.match(rule('.forge-notebook-row[aria-pressed="true"]'), /background:\s*var\(--interactive-accent/);
+});
+
+test('1020: a reveal that is still waiting to settle when the notebook is disposed does nothing (no scroll on a page that is gone)', async () => {
+  const proto = win.HTMLElement.prototype; const saved = proto.scrollIntoView;
+  let calls = 0;
+  proto.scrollIntoView = function () { calls++; };
+  try {
+    const r = rig();
+    r.h.reveal(); r.h.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    assert.equal(calls, 1);
+  } finally { if (saved === undefined) delete proto.scrollIntoView; else proto.scrollIntoView = saved; }
 });

@@ -61,6 +61,12 @@ export interface ScoreInspectorPorts {
   pinLabel?(id: string, prov: Provenance): string;
   /** 2026-10-26-1250 (M12): the pin changed (an element pinned, `null` = released, or forgotten by a redraw). The phrase tab turns it into "which note made this bar" for the notes pane beside the Score. Absent = nothing is told. */
   onPinned?(entry: InspectorEntry | null): void;
+  /** 2026-10-30-1020 (opt-in, see artifact-inspector-core `selectBars`): a drag across bars on the engraving is a range, a Shift-click on a bar extends it; neither pins. The bar number of an element is the `bar` of its provenance.
+   *  Absent = the Score behaves exactly as it did (P3). */
+  selectBars?: { onRange(first: number, last: number): void; onRangeEnd?(): void; onShiftClick(bar: number): void };
+  /** 2026-10-30-1020: a Score was shown and mapped, and the inspector is attached to it (called once per Score, before any pin is carried over): a surface that paints a cue of its own learns its host and map, without waiting for a
+   *  hover or a pin to make `decorate` run. Absent = nothing. */
+  attached?(host: HTMLElement, map: ProvenanceMap): void;
 }
 
 export interface ScoreInspector {
@@ -189,6 +195,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         pointIds: ports.pointRoles ? Object.keys(map).filter((id) => ports.pointRoles!.includes(map[id].role)) : undefined,
         trace: ports.trace,
         pinLabel: ports.pinLabel ? (id) => ports.pinLabel!(id, map[id]) : undefined,
+        selectBars: ports.selectBars ? { barOf: (prov) => (typeof prov.params.bar === 'number' ? prov.params.bar : null), onRange: ports.selectBars.onRange, onRangeEnd: ports.selectBars.onRangeEnd, onShiftClick: ports.selectBars.onShiftClick } : undefined,
         onHover: (e) => {
           if (ports.previewOnHover && !layer.pinnedId()) { if (e) renderStack(e, true); else showHint(hint); }
           if (!ports.postHighlight) return;
@@ -198,6 +205,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         onPin: (e) => { lastPinned = e ? e.id : null; renderPinned(e); ports.onPinned?.(e); },
       });
       current = { host, layer, result };
+      ports.attached?.(host, map);
       if (wasPinned !== null) {
         const id = Object.prototype.hasOwnProperty.call(map, wasPinned) ? wasPinned : Object.keys(map)[0];
         if (id !== undefined) { layer.pin(id); return; }   // pins on the NEW engraving and re-renders the stack from the NEW map (onPin told the pin)

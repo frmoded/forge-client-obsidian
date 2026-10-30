@@ -10,20 +10,29 @@ export interface NotebookDomPorts {
   trace(line: string): void;
   /** Open a phrase note (a cell's result, or its source from the result's tab). */
   openPhrase?(path: string): void;
+  /** 2026-10-30-1020: the selection changed (a number, a Shift-click, a row, a drag on the Score, a Score that got shorter): the tab tints those bars on the Score. Told only on a change. */
+  onSelection?(selection: Selection): void;
 }
 
 export interface NotebookHandle {
   /** The Score on screen changed: how many bars it has and the rows (channel names) its bars have. */
   setScore(score: { count: number; rows: readonly string[] }): void;
+  /** 2026-10-30-1020: a drag across bars 3 to 5 on the Score: THE selection becomes those bars (the row is kept), clamped to the Score. It never scrolls (the pointer is still down: the Score would slide under it); `reveal()` when the drag is over. */
+  selectRange(first: number, last: number): void;
+  /** 2026-10-30-1020: bring the Run row (and the chip above it) into view, moving nothing when it already is. */
+  reveal(): void;
+  /** 2026-10-30-1020: a Shift-click on bar `n` of the Score: the same as a Shift-click on its number (from the last bar picked; a plain pick when there is none). */
+  extendTo(n: number): void;
   /** Read the cells again (after Run, Re-run, Delete cell, or a change in notebook/). */
   refresh(): Promise<void>;
   dispose(): void;
 }
 
+const REVEAL_SETTLE_MS = 150;
 const REQUEST_PLACEHOLDER = 'or say it: make this half as busy, keep the downbeat';
 const REQUEST_LABEL = 'What to do with the selected bars, in a sentence';
 const DERIVED_REASON = 'This phrase was made by a transform: open its source phrase to ask for another change.';   // 2026-10-29-0900 (a)
-const HINT = 'No selection yet: click bars above. The selection is always shown as chips; a cell shows the exact references it received.';
+const HINT = 'Select bars: click a number below (Shift-click a second number for a range, e.g. 3 then Shift-click 5).';       // 2026-10-30-1020: the old "click bars above" was read as the bars of the Score
 
 export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): NotebookHandle {
   const doc = parent.ownerDocument;
@@ -57,6 +66,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   let score = { count: 0, rows: [] as readonly string[] };
   let busy = false;
   let lastChip: string | null = null;
+  let lastTold = '|null';                 // the selection last told to onSelection (the empty one at the start: nothing to tell)
   let disposed = false;
   let derived = false;                  // this phrase is the RESULT of a cell: it is not asked for another change (the request box says why)
   let madeId: string | null = null;     // the cell the status line last announced as made; the status goes when the cell does
@@ -88,6 +98,17 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     op.disabled = typed; number.disabled = typed;                       // a typed sentence is what Run will use: the picker is dimmed, not hidden
     doEl.setAttribute('data-mode', typed ? 'sentence' : 'picker');
     if (chip !== lastChip) { lastChip = chip; ports.trace(`[forge-notebook] selection ${chip ?? 'cleared'}`); }
+    const key = `${selection.bars.join(',')}|${selection.row}`;
+    if (key !== lastTold) { lastTold = key; ports.onSelection?.({ bars: [...selection.bars], row: selection.row }); }
+  };
+  /** The numbers of a long Score wrap over many lines: after a pick the Run row may be below the fold. `nearest` moves nothing when it is already in view. */
+  const scrollNow = (): void => { if (typeof doEl.scrollIntoView === 'function') doEl.scrollIntoView({ block: 'nearest' }); };
+  /** ... and once more when the layout has settled: measured in real Chrome (2026-10-30), the first scroll puts a drawn bar of the Score under the still pointer, the hover preview opens in the Inspector and pushes the Run row back out of view. */
+  let settling: ReturnType<typeof setTimeout> | null = null;
+  const reveal = (): void => {
+    scrollNow();
+    if (settling !== null) clearTimeout(settling);
+    settling = setTimeout(() => { settling = null; if (!disposed) scrollNow(); }, REVEAL_SETTLE_MS);
   };
 
   const buildScore = (): void => {
@@ -98,7 +119,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
       b.addEventListener('click', (e) => {
         selection = (e as MouseEvent).shiftKey ? extendSelection(selection, anchor, n) : toggleBar(selection, n);
         anchor = n;
-        paint();
+        paint(); reveal();
       });
       barsEl.appendChild(b);
     }
@@ -176,7 +197,19 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
       if (anchor !== null && anchor > score.count) anchor = null;
       buildScore(); paint();
     },
+    selectRange(first, last) {
+      const lo = Math.max(1, Math.min(first, last)); const hi = Math.min(score.count, Math.max(first, last));
+      selection = { bars: lo > hi ? [] : Array.from({ length: hi - lo + 1 }, (_, i) => lo + i), row: selection.row };
+      anchor = lo > hi ? null : hi;
+      paint();
+    },
+    reveal,
+    extendTo(n) {
+      if (!(n >= 1 && n <= score.count)) return;
+      selection = extendSelection(selection, anchor, n); anchor = n;
+      paint(); reveal();
+    },
     refresh,
-    dispose() { disposed = true; root.remove(); },
+    dispose() { disposed = true; if (settling !== null) clearTimeout(settling); root.remove(); },
   };
 }
