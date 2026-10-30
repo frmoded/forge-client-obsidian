@@ -2057,3 +2057,53 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-rhythm-score-host svg {
   user-select: none;
 }
+
+/* 2026-10-30-1040 — the row of controls above an arrangement's Score: Mute, Solo and a volume slider per kit. Until now NOTHING here was styled: Obsidian does not style aria-pressed, so a pressed Mute and a pressed
+   Solo looked exactly like unpressed buttons and exactly like each other, and the person could not see which kit was muted or solo (driver walk, step 10: "when I mute both, both appear as solo"). A muted kit is RED
+   and a solo kit is the accent colour, so the two can never be taken for each other; the unpressed buttons are plain. The note and the Score were always right (arrangement-controls-walk.test.ts). */
+.forge-arr-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+}
+.forge-arr-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.forge-arr-control-kit {
+  min-width: 5em;
+  font-weight: 600;
+}
+.forge-arr-mute,
+.forge-arr-solo {
+  min-width: 3.6em;
+  padding: 2px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+.forge-arr-mute:hover,
+.forge-arr-solo:hover {
+  background: var(--background-modifier-hover);
+}
+.forge-arr-mute[aria-pressed="true"] {
+  background: var(--background-modifier-error, #d04255);
+  border-color: var(--background-modifier-error, #d04255);
+  color: var(--text-on-accent, #ffffff);
+  font-weight: 600;
+}
+.forge-arr-solo[aria-pressed="true"] {
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  color: var(--text-on-accent, #ffffff);
+  font-weight: 600;
+}
+.forge-arr-volume-value {
+  min-width: 3em;
+  font-variant-numeric: tabular-nums;
+}
