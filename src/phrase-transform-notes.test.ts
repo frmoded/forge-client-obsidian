@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
 import { formatPhraseJson, noteContentFor, readPhraseNote, refreshPhraseNoteText, type PhraseParams, type TransformOp } from './phrase-core.ts';
-import { DERIVED_NOTE, derivedSections, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
+import { CACHE_NOTE, SOURCE_CHAIN_NOTE, phraseDescription, phraseLinks, phraseParts, phrasePython, phraseRecipeSteps, sourceChainSections } from './phrase-notes-core.ts';
+import { chainStampLines } from './test-support/source-chain-golden.ts';
 import { chipsFor, barParent, barsContributedBy, stripText } from './structure-strip-core.ts';
 
 const THIN: TransformOp = { op: 'thin_out', first: 3, last: 5, row: 'kick', amount: 0.5 };
@@ -56,11 +57,14 @@ test('the whole note, golden: frontmatter with whole-value links, the comment, #
   assert.equal(note, [
     '---', 'type: data', 'content_type: json',
     'description: "phrase_007 — a transform of [[phrase_006]]: thin out bars 3 to 5, kick row: remove half of the hits, keeping the strongest beats."',
-    'links:', '  - "[[phrase_006]]"', '---', '',
-    DERIVED_NOTE, '',
-    '# Description', '', 'phrase_007 — a transform of [[phrase_006]]: thin out bars 3 to 5, kick row: remove half of the hits, keeping the strongest beats.', '',
+    'links:', '  - "[[phrase_006]]"',
+    ...chainStampLines('Take [[phrase_006]]. Thin out bars 3 to 5, kick row, by half, keeping the downbeat.', ['Take [[phrase_006]].', 'Thin out bars 3 to 5, kick row: remove half of the hits, keeping the strongest beats.'], phrasePython(T)),
+    '---', '',
+    SOURCE_CHAIN_NOTE, '',
+    '# Description', '', 'Take [[phrase_006]]. Thin out bars 3 to 5, kick row, by half, keeping the downbeat.', '',
     '# Recipe', '', 'Take [[phrase_006]].', 'Thin out bars 3 to 5, kick row: remove half of the hits, keeping the strongest beats.', '',
     '# Python', '', '```python', phrasePython(T), '```', '',
+    '# Cache', '', CACHE_NOTE, '',
     '```json', formatPhraseJson(T), '```', '',
   ].join('\n'));
   const read = readPhraseNote(note);
@@ -68,7 +72,7 @@ test('the whole note, golden: frontmatter with whole-value links, the comment, #
   if (read.ok) assert.equal(formatPhraseJson(read.value), formatPhraseJson(T));
   const r = refreshPhraseNoteText(note, 'phrase_007');
   assert.ok(r.ok && !r.changed);
-  assert.ok(derivedSections('p', T2).includes('  bars[3] = bar_009()'));
+  assert.ok(sourceChainSections(phraseParts('p', T2)).includes('  bars[3] = bar_009()'));
 });
 
 test('the structure strip of a transform: the source phrase chip, an arrow, the transform chip, then the forks; the strip text is the golden', () => {

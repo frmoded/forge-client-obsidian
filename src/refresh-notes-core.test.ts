@@ -76,7 +76,7 @@ test('kits and arrangements: stale derived text is regenerated, current notes ar
     'kits/rock.md': newKitNote(ROCK).replace('Add the kick.', 'Somebody typed here.'),
     'kits/latin.md': newKitNote({ kind: 'kit', name: 'latin', channels: ['claves'] }),
     'kits/broken.md': '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind": "kit"}\n```\n',
-    'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] }).replace('Together.', 'Somebody typed here.'),
+    'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] }).replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay'),     // a hand edit of the DERIVED Recipe is overwritten (the Description is the source and is never overwritten: see the M15b test)
   };
   const v = vault(files);
   const named = (re: RegExp) => () => [...v.store.keys()].filter((p) => re.test(p)).map((path) => ({ path, name: path.replace(/^.*\//, '').replace(/\.md$/, '') }));

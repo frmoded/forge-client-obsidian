@@ -64,7 +64,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(w.plugin.commands.get(REFRESH)!.checkCallback!(true), true);
       await w.run();
       assert.deepEqual(w.processed.sort(), ['bars/bar_005.md', 'phrases/phrase_001.md']);
-      assert.match(w.files.get('phrases/phrase_001.md')!, /links:\n {2}- "\[\[bar_005\]\]"\n {2}- "\[\[bar_006\]\]"\n---/);
+      assert.match(w.files.get('phrases/phrase_001.md')!, /links:\n {2}- "\[\[bar_005\]\]"\n {2}- "\[\[bar_006\]\]"\nsource_facet: description\n/);
       assert.match(w.files.get('phrases/phrase_001.md')!, /# Recipe\n\nTake \[\[bar_005\]\] and \[\[bar_006\]\]\.\nMorph from the first to the second over 3 bars,/);
       assert.equal(w.files.get('phrases/README.md'), '# phrases\n'); assert.equal(w.files.get('bars/README.md'), '# bars\n');
       assert.equal(w.lines.length, 1); assert.match(w.lines[0], /^\[forge-notes\] refresh note links: phrases 1 \(1 updated, 0 already current\), bars 1 /);

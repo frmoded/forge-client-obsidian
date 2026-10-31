@@ -13,7 +13,7 @@
 // score-first.ts, like every other score-first decision.
 
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
-import { extractPhraseJsonBlock, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
+import { descriptionEditedByHand, extractPhraseJsonBlock, handEditRefusal, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { TRANSFORM_DEFAULT_GRID, rangeWords } from './phrase-words-core.ts';
 export { rangeWords, selectionWords, transformOpWords } from './phrase-words-core.ts';
@@ -113,7 +113,9 @@ export const TRANSFORM_KEEPS = ['downbeat', 'seeded'] as const;
 export const TRANSFORM_DEFAULTS = { amount: 0.5, grid: TRANSFORM_DEFAULT_GRID };
 export const TRANSFORM_OPS_MAX = 16;
 export const TRANSFORM_KEYS = ['kind', 'source', 'ops', 'overrides'] as const;
-const TRANSFORM_SOURCE = /^phrases\/phrase_\d+$/;
+const TRANSFORM_SOURCE = /^(?:phrases\/phrase|arrangements\/arr)_\d+$/;
+/** 2026-10-30-1050 (M15b): a transform may take an ARRANGEMENT as its source as well as a phrase (`Take [[arr_001]].`). */
+export const isArrangementSource = (source: string): boolean => source.startsWith('arrangements/');
 const CHANNEL_NAME = /^[A-Za-z0-9_-]+$/;
 
 export type PhraseParams = ExtendPhrase | MixPhrase | MorphPhrase | TransformPhrase;
@@ -250,7 +252,7 @@ function validateTransform(raw: Record<string, unknown>): Validation<PhraseParam
     if (!(TRANSFORM_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a transform holds only ${TRANSFORM_KEYS.join(', ')}).`);
   }
   if (typeof raw.source !== 'string' || !TRANSFORM_SOURCE.test(raw.source)) {
-    return bad(`source must be a phrase note without .md, like phrases/phrase_006, got ${JSON.stringify(raw.source)}.`);
+    return bad(`source must be a phrase note without .md, like phrases/phrase_006, or an arrangement note, like arrangements/arr_001, got ${JSON.stringify(raw.source)}.`);
   }
   if (!Array.isArray(raw.ops) || raw.ops.length < 1 || raw.ops.length > TRANSFORM_OPS_MAX) {
     return bad(`ops must be a list of 1 to ${TRANSFORM_OPS_MAX} operations, got ${Array.isArray(raw.ops) ? `${raw.ops.length}` : JSON.stringify(raw.ops)}.`);
@@ -534,9 +536,11 @@ export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: st
   if (problem) return { ok: false, message: `Not saved: ${problem}` };
   const block = extractPhraseJsonBlock(currentText);
   if (block.ok === false) return { ok: false, message: `Not saved: ${block.message}` };
+  // 2026-10-30-1050 (M15b): the Description is the source and this write replaces it, so a Description the person changed by hand is never overwritten here (M15c brings the button that reads it).
+  if (name !== undefined && descriptionEditedByHand(currentText)) return { ok: false, message: handEditRefusal(true) };
   const json = formatPhraseJson(p).replace(/\n/g, block.eol);
   const text = currentText.slice(0, block.contentStart) + json + currentText.slice(block.contentEnd);
-  // 2026-10-26-1260: with the note's name, the derived parts (description, links, Description / Recipe / Bars made) are regenerated from the params just written, so they never disagree with the json. Without it: the fence only, as before.
+  // 2026-10-26-1260: with the note's name, the derived parts (description, links, Description / Recipe / Python) are regenerated from the params just written, so they never disagree with the json (since M15b the Description is the grammar's sentence and the note carries the Forge hash fields). Without it: the fence only, as before.
   if (name === undefined) return { ok: true, text };
   const again = extractPhraseJsonBlock(text);
   return { ok: true, text: again.ok ? renderPhraseNote(text, name, p, again.fenceStart) : text };
@@ -548,6 +552,7 @@ export function refreshPhraseNoteText(text: string, name: string): { ok: true; t
   if (read.ok === false) return { ok: false, message: read.message };
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
+  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(false) };
   const next = renderPhraseNote(text, name, read.value, block.fenceStart);
   return { ok: true, text: next, changed: next !== text };
 }
@@ -857,6 +862,11 @@ export async function turnMixIntoMorph<F>(ports: TurnMixPorts<F>): Promise<NewPh
 export interface PhraseScoreDeps {
   /** The text of a vault note by path (fresh on every call). Rejects when the note is not there. */
   readNote(path: string): Promise<string>;
+  /** 2026-10-30-1050 (M15b): the Score of an ARRANGEMENT note, for a transform that takes an arrangement as its source (arrangement-core.ts cannot be imported here: it imports this file). `chain` is the sources
+   *  being drawn so far, so a loop (an arrangement whose phrase is a transform of that arrangement) is a refusal, not a hang. Absent = this surface cannot draw an arrangement as a source and says so. */
+  arrangementBars?(note: string, name: string, chain: readonly string[]): Promise<ScoreOutcome>;
+  /** The sources being drawn above this call (see `arrangementBars`); empty or absent at the top. */
+  chain?: readonly string[];
   /** Engine: `extend_rhythm` + `rhythm_bars_to_stream` on the source bar's data with the phrase's parameters, as a tagged MusicXML payload. For a MIX the data is the two bars (`{ a, b }`) and the
    *  engine runs `mix_rhythm` + `rhythm_bars_to_stream`. */
   compute(data: RhythmData | MixBars | TransformInput, params: PhraseParams, title: string): Promise<unknown>;
@@ -867,7 +877,7 @@ export interface PhraseScoreDeps {
 export async function producePhrase(deps: PhraseScoreDeps, raw: unknown, title: string): Promise<ScoreOutcome> {
   const valid = validatePhrase(raw);
   if (valid.ok === false) return { kind: 'refusal', message: `Phrase: ${valid.message}` };
-  return produceValidated(deps, valid.value, title, []);
+  return produceValidated(deps, valid.value, title, [...(deps.chain ?? [])]);
 }
 
 /** How far a chain of transforms may go (a transform of a transform of ...), and the guard against one that loops back to itself. */
@@ -985,7 +995,9 @@ export function barsOfPayload(payload: Record<string, unknown>): RhythmData[] | 
 /** The Score of a TRANSFORM (2026-10-27-1030): the source phrase is read FRESH and drawn by the same code that draws every phrase (so a transform of a morph, a mix, an extend or another transform works); the bars it
  *  made go to the engine with the ops, which change the regions asked for; forks lay over the result. A source that is missing, not a phrase, not drawable, or not as long as an op asks is a refusal naming which. */
 async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, title: string, chain: string[]): Promise<ScoreOutcome> {
-  const name = params.source.replace(/^phrases\//, '');
+  const arrangement = isArrangementSource(params.source);
+  const name = params.source.replace(/^(?:phrases|arrangements)\//, '');
+  const what = arrangement ? 'arrangement' : 'phrase';
   if (chain.includes(params.source) || chain.length >= TRANSFORM_DEPTH_MAX) {
     return { kind: 'refusal', message: `Phrase: the transform chain through ${name} loops back or is more than ${TRANSFORM_DEPTH_MAX} deep.` };
   }
@@ -993,22 +1005,28 @@ async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, 
   try {
     text = await deps.readNote(`${params.source}.md`);
   } catch (e) {
-    return { kind: 'refusal', message: `Phrase: the source phrase ${name} (${params.source}.md) was not found or could not be read (${(e as Error)?.message ?? e}).` };
+    return { kind: 'refusal', message: `Phrase: the source ${what} ${name} (${params.source}.md) was not found or could not be read (${(e as Error)?.message ?? e}).` };
   }
-  const source = readPhraseNote(text);
-  if (source.ok === false) return { kind: 'refusal', message: `Phrase: the source phrase ${name} is not usable: ${source.message}` };
-  const made = await produceValidated(deps, source.value, name, [...chain, params.source]);
-  if (made.kind !== 'score') return { kind: 'refusal', message: `Phrase: the source phrase ${name} could not be drawn: ${made.message}` };
+  let made: ScoreOutcome;
+  if (arrangement) {
+    if (deps.arrangementBars === undefined) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} cannot be drawn here (this surface has no way to draw an arrangement).` };
+    made = await deps.arrangementBars(text, name, [...chain, params.source]);
+  } else {
+    const source = readPhraseNote(text);
+    if (source.ok === false) return { kind: 'refusal', message: `Phrase: the source phrase ${name} is not usable: ${source.message}` };
+    made = await produceValidated(deps, source.value, name, [...chain, params.source]);
+  }
+  if (made.kind !== 'score') return { kind: 'refusal', message: `Phrase: the source ${what} ${name} could not be drawn: ${made.message}` };
   const bars = barsOfPayload(made.payload);
-  if (bars === null) return { kind: 'refusal', message: `Phrase: the source phrase ${name} gave no bars to change.` };
+  if (bars === null) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} gave no bars to change.` };
   for (let i = 0; i < params.ops.length; i++) {
     if (params.ops[i].last > bars.length) {
-      return { kind: 'refusal', message: `Phrase: ops[${i}] asks for ${rangeWords(params.ops[i].first, params.ops[i].last)}, but the source phrase ${name} has ${bars.length} bar${bars.length === 1 ? '' : 's'}.` };
+      return { kind: 'refusal', message: `Phrase: ops[${i}] asks for ${rangeWords(params.ops[i].first, params.ops[i].last)}, but the source ${what} ${name} has ${bars.length} bar${bars.length === 1 ? '' : 's'}.` };
     }
   }
   let asked: PhraseParams = params;
   if (params.overrides) {
-    const forks = await readForks(deps, params.overrides, bars[0], `the source phrase ${name}`);
+    const forks = await readForks(deps, params.overrides, bars[0], `the source ${what} ${name}`);
     if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
     asked = { ...params, override_bars: forks } as unknown as PhraseParams;
   }

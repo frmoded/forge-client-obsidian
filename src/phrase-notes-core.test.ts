@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { applyPhraseWrite, formatPhraseJson, mixNoteContent, morphNoteContent, phraseNoteContent, readPhraseKind, readPhraseNote, refreshPhraseNoteText, salvageOverrideRefusal, type PhraseParams } from './phrase-core.ts';
-import { DERIVED_NOTE, barDescription, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps, refreshBarNoteText } from './phrase-notes-core.ts';
+import { CACHE_NOTE, SOURCE_CHAIN_NOTE, barDescription, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps, refreshBarNoteText } from './phrase-notes-core.ts';
+import { chainStampLines } from './test-support/source-chain-golden.ts';
 import { forkNoteContent } from './phrase-fork-core.ts';
 import { applySave, formatRhythmJson, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
 
@@ -52,18 +53,20 @@ test('a new phrase / mix / morph note: frontmatter with description and links, t
     '---', 'type: data', 'content_type: json',
     'description: "phrase_004 — a morph from [[bar_007]] to [[bar_008]] in 17 bars, musical order."',
     'links:', '  - "[[bar_007]]"', '  - "[[bar_008]]"',
+    ...chainStampLines('Morph [[bar_007]] into [[bar_008]] over 17 bars, in musical order.', ['Take [[bar_007]] and [[bar_008]].', 'Morph from the first to the second over 17 bars, in musical order.'], phrasePython(MORPH)),
     '---', '',
-    DERIVED_NOTE, '',
-    '# Description', '', 'phrase_004 — a morph from [[bar_007]] to [[bar_008]] in 17 bars, musical order.', '',
+    SOURCE_CHAIN_NOTE, '',
+    '# Description', '', 'Morph [[bar_007]] into [[bar_008]] over 17 bars, in musical order.', '',
     '# Recipe', '', 'Take [[bar_007]] and [[bar_008]].', 'Morph from the first to the second over 17 bars, in musical order.', '',
     '# Python', '', '```python', phrasePython(MORPH), '```', '',
+    '# Cache', '', CACHE_NOTE, '',
     '```json', formatPhraseJson(MORPH), '```', '',
   ].join('\n'));
   assert.deepEqual((readPhraseNote(morph) as { value: PhraseParams }).value, MORPH);
   const extend = phraseNoteContent('phrase_001', 'bar_005');
   assert.deepEqual((readPhraseNote(extend) as { value: PhraseParams }).value.kind, 'extend');
   assert.match(extend, /^description: "phrase_001 — \[\[bar_005\]\] extended to 4 bars/m);
-  assert.match(extend, /\nlinks:\n {2}- "\[\[bar_005\]\]"\n---\n/);
+  assert.match(extend, /\nlinks:\n {2}- "\[\[bar_005\]\]"\nsource_facet: description\n/);
   const mix = mixNoteContent('phrase_002', 'bar_005', 'bar_006');
   assert.equal((readPhraseNote(mix) as { value: PhraseParams }).value.kind, 'mix');
   assert.match(mix, /# Recipe\n\nTake \[\[bar_005\]\] and \[\[bar_006\]\]\.\nMix them as a path of single-hit changes/);
@@ -82,7 +85,7 @@ test('refresh upgrades an old note: description, links, derived sections; the js
   if (!r.ok) return;
   assert.equal(r.changed, true);
   assert.match(r.text, /^description: "phrase_003 — a morph from \[\[bar_007\]\] to \[\[bar_001\]\] in 8 bars, musical order\."$/m);
-  assert.match(r.text, /\nlinks:\n {2}- "\[\[bar_007\]\]"\n {2}- "\[\[bar_001\]\]"\n---\n/);
+  assert.match(r.text, /\nlinks:\n {2}- "\[\[bar_007\]\]"\n {2}- "\[\[bar_001\]\]"\nsource_facet: description\n/);
   const fence = OLD_MORPH.slice(OLD_MORPH.indexOf('```json'));
   assert.ok(r.text.endsWith(fence), 'the fence and everything after it are the old bytes');
   const again = refreshPhraseNoteText(r.text, 'phrase_003');
@@ -97,9 +100,12 @@ test('refresh keeps every other frontmatter line (read_only, anything a person a
   if (!r.ok) return;
   assert.ok(r.text.includes('read_only: false\r\ntags: [demo]\r\n'), 'the person\'s own lines stay');
   assert.ok(!/[^\r]\n/.test(r.text), 'CRLF all the way');
-  const edited = r.text.replace('musical order.\r\n\r\n# Recipe', 'MY OWN WORDS.\r\n\r\n# Recipe').replace('# Recipe\r\n\r\nTake', '# Recipe\r\n\r\nTake my own');
-  const back = refreshPhraseNoteText(edited, 'phrase_003');
-  assert.ok(back.ok && back.text === r.text, 'regenerated to what it was');
+  // 2026-10-30-1050 (M15b): the Recipe and the Python are derived, so a hand edit of them is overwritten; the DESCRIPTION is the source, so a hand edit of it is never overwritten (refused, the note untouched)
+  const editedRecipe = r.text.replace('# Recipe\r\n\r\nTake', '# Recipe\r\n\r\nTake my own');
+  const back = refreshPhraseNoteText(editedRecipe, 'phrase_003');
+  assert.ok(back.ok && back.text === r.text, 'a hand-edited Recipe is regenerated to what it was');
+  const editedDescription = r.text.replace('musical order.\r\n\r\n# Recipe', 'MY OWN WORDS.\r\n\r\n# Recipe');
+  assert.deepEqual(refreshPhraseNoteText(editedDescription, 'phrase_003'), { ok: false, message: 'The Description was edited by hand; press Update from Description first or revert it.' });
 });
 
 test('refresh refuses what it cannot read (not a phrase, bad json, a read_only note) with the reason, and changes nothing', () => {

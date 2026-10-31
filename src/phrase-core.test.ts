@@ -144,7 +144,7 @@ test('"New phrase from this bar" is offered only in a score-first vault, and onl
 test('phraseNoteContent: a data/json note whose block is the defaults + the source, valid to read back; the description is a safe YAML scalar', () => {
   const text = phraseNoteContent('phrase_001', 'bar_005');
   assert.deepEqual(readPhraseNote(text), { ok: true, value: { kind: 'extend', source: 'bar_005', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 } });
-  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*"\nlinks:\n  - "\[\[bar_005\]\]"\n---\n\n<!-- derived from the json below[^\n]*-->\n\n# Description\n[\s\S]*\n# Recipe\n[\s\S]*\n# Python\n[\s\S]*\n```json\n/);   // 2026-10-26-1260: derived sections above the fence; 2026-10-27-1020, deliberate: in the Forge shape (# Description, # Recipe, # Python)
+  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*"\nlinks:\n  - "\[\[bar_005\]\]"\nsource_facet: description\n[\s\S]*\n---\n\n<!-- the Description below is the source[^\n]*-->\n\n# Description\n\nExtend \[\[bar_005\]\] to 4 bars, repeating with fills\.\n\n# Recipe\n[\s\S]*\n# Python\n[\s\S]*\n# Cache\n[\s\S]*\n```json\n/);   // 2026-10-26-1260: derived sections above the fence; 2026-10-27-1020, deliberate: in the Forge shape (# Description, # Recipe, # Python)
   assert.ok(text.endsWith('```\n'));
 });
 

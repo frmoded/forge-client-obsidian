@@ -10,7 +10,7 @@ import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
-import { ARRANGEMENT_VIEW_TYPE, applySettingsPatches, arrangementDescription, isArrangementPath, produceArrangement, readArrangementNote, tempoRangeOf } from './arrangement-core.ts';
+import { ARRANGEMENT_VIEW_TYPE, applySettingsPatches, arrangementDescription, isArrangementPath, phraseDepsWithArrangements, produceArrangement, readArrangementNote, tempoRangeOf } from './arrangement-core.ts';
 import { ARRANGEMENT_INSPECTOR_HINT, ARRANGEMENT_ROW_ROLE, annotateArrangementPayload, arrangementLineageOf, chipsOfRow, readLineage, rowIdsPlayedBy, barsPlayedBy, type LineageBar } from './arrangement-nav-core.ts';
 import { ensureArrangementRows } from './arrangement-rows-dom.ts';
 import { litEvidence } from './structure-strip-core.ts';
@@ -124,7 +124,7 @@ export class ArrangementView extends EditableFileView {
       // the arrangement note's text in, the combined Score out: every kit and phrase is read fresh by the producer, each phrase drawn by the phrase code
       produce: async (note, title) => {
         const out = await produceArrangement({
-          phrases: { readNote, compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t) },
+          phrases: phraseDepsWithArrangements({ readNote, compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t) }, (data, t) => computeArrangementScoreViaEngine(data, t)),      // 2026-10-30-1050 (M15b): a phrase it plays may be a transform of an arrangement
           compute: (data, t) => computeArrangementScoreViaEngine(data, t),
         }, note as string | { unreadable: string }, title);
         if (out.kind === 'score' && !this.disposed) { this.paintTempo(file, note, out.payload); this.keepLineage(out.payload); }

@@ -1,11 +1,14 @@
 // score_first M7b (a) / design 4.12 phase B (drain 2026-10-26-1260, DEMO profile) — phrase and bar notes that READ as notes. Pure, deterministic, derived from the json (no LLM; the json stays the only parsed data):
 //   * a `links:` list in the FRONTMATTER ("[[bar_005]]" strings) and a `description` with [[wikilinks]]: Obsidian indexes links in properties, so backlinks and the graph know which bars a phrase reads;
-//   * for a PHRASE note, derived sections above the json fence in the Forge shape (# Description, # Recipe as English steps, # Python as a fenced block; 2026-10-27-1020), regenerated on every plugin write and by "Refresh note links": a hand edit of them is overwritten;
+//   * for a PHRASE note, the SOURCE CHAIN above the json fence in the Forge shape (# Description = the grammar's sentence, # Recipe as English steps, # Python as a fenced block, # Cache; since 2026-10-30-1050 the Description is the source and the json a cache of it), regenerated on every plugin write and by "Refresh note links": a hand edit of the Recipe or the Python is overwritten, a hand edit of the Description is refused;
 //   * for a BAR note, FRONTMATTER only (a description that names the hits and the tempo, a fork's `forked_from` as a wikilink); the body stays exactly one json fence (the Beat Box requires it).
 // Runtime imports from phrase-core.ts are NOT allowed here (phrase-core imports this file): types only.
 import type { PhraseParams } from './phrase-core.ts';
+import { describe } from './phrase-describe-core.ts';
+import { facetHashSync } from './facet-sync-hash-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
 import { parseFrontmatter, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
+import { extractDescription, extractPythonSection, extractRecipeSection } from './v2-note-core.ts';
 
 export const DERIVED_NOTE = '<!-- derived from the json below; edit the controls, not this text -->';
 
@@ -106,11 +109,6 @@ export function phrasePython(p: PhraseParams): string {
   return out.join('\n');
 }
 
-/** The derived body above the fence (no json fence, no trailing blank line): the comment, then the three Forge layers. */
-export function derivedSections(name: string, p: PhraseParams): string[] {
-  return [DERIVED_NOTE, '', '# Description', '', phraseDescription(name, p), '', '# Recipe', '', ...phraseRecipeSteps(p), '', '# Python', '', '```python', ...phrasePython(p).split('\n'), '```'];   // one array element per line: the caller joins with the note's own line ending (CRLF too)
-}
-
 // ---- the json fence of a phrase note -------------------------------------------------------------------------------------------------------------------------------------------------
 
 export interface PhraseJsonBlock { contentStart: number; contentEnd: number; eol: string; fenceStart: number }
@@ -170,9 +168,85 @@ export function renderDerivedNote(text: string, description: string, links: stri
   return `---${eol}${lines.join(eol)}${eol}---${eol}${eol}${sections.join(eol)}${eol}${eol}${text.slice(fenceStart)}`;
 }
 
-/** The whole phrase note with its derived parts regenerated from `p`; `fenceText` (the opening fence line to the end of the note) is kept byte for byte. */
+// ---- the SOURCE CHAIN of a phrase or an arrangement note (2026-10-30-1050, M15b) --------------------------------------------------------------------------------------------------------------------------------------
+// The Description is the note's SOURCE: the grammar sentence(s) of phrase-describe-core.ts. The Recipe and the Python derive from it (deterministically, no LLM, as they did), the json fence below is a CACHE of what the
+// sentence says (every reader still parses it, none changed), and the note carries the Forge hash fields so the stale-facet plugin and the status bar judge it as they judge any Forge note. ONE renderer writes all of it
+// in one go, so no reader ever sees half a note; the hashes are taken from the FINISHED text by the same extractors the plugin reads a Forge note with (never from the strings that went in).
+
+/** The first line of the body: what the note is (the Description is the source; the rest is derived from it). */
+export const SOURCE_CHAIN_NOTE = '<!-- the Description below is the source of this note: the controls write it, and the Recipe, the Python and the json cache are derived from it -->';
+/** The line above the json fence: the json is a cache of what the grammar understood in the Description, never the place to edit. */
+export const CACHE_NOTE = '<!-- derived from the Description above; edit the Description, not this -->';
+/** The one sentence a control path answers with when the Description was changed by hand since the note was written (the M15c button is named here so the sentence need not change then). */
+export const DESCRIPTION_EDITED_BY_HAND = 'the Description was edited by hand; press Update from Description first or revert it';
+/** That sentence as a refusal: `Not saved: the Description was ...` for the phrase strip's write (every refusal there starts so), `The Description was ...` elsewhere (the arrangement notice, the refresh command: they add their own lead). */
+export const handEditRefusal = (notSavedLead: boolean): string => (notSavedLead ? `Not saved: ${DESCRIPTION_EDITED_BY_HAND}.` : `The ${DESCRIPTION_EDITED_BY_HAND.slice('the '.length)}.`);
+
+/** The frontmatter fields the source chain owns, in the order they are written. */
+export const SOURCE_CHAIN_KEYS = ['source_facet', 'description_hash', 'recipe_hash', 'python_hash', 'recipe_derived_from_description_hash', 'python_derived_from_recipe_hash'] as const;
+
+export interface SourceChainParts {
+  /** The frontmatter `description` property (words with wikilinks, for the graph): not the source. */
+  description: string;
+  links: string[];
+  /** The `# Description` body: the grammar's canonical text. */
+  sentence: string;
+  recipe: string[];
+  python: string;
+}
+
+/** The sections between the frontmatter and the json fence: the comment, then Description, Recipe, Python and the Cache heading with its comment (the heading ends the Python section, so the Python hash covers the Python only). */
+export function sourceChainSections(parts: Pick<SourceChainParts, 'sentence' | 'recipe' | 'python'>): string[] {
+  return [SOURCE_CHAIN_NOTE, '', '# Description', '', parts.sentence, '', '# Recipe', '', ...parts.recipe, '', '# Python', '', '```python', ...parts.python.split('\n'), '```', '', '# Cache', '', CACHE_NOTE];
+}
+
+/** The six frontmatter stamps of a finished note text: the source is the Description; each hash is the one `computeFacetHash` gives for what the plugin's own extractors read from that text. */
+export function sourceChainStamps(finished: string): Record<(typeof SOURCE_CHAIN_KEYS)[number], string> {
+  const description = facetHashSync(extractDescription(finished));
+  const recipe = facetHashSync(extractRecipeSection(finished) ?? '');
+  const python = facetHashSync(extractPythonSection(finished) ?? '');
+  return { source_facet: 'description', description_hash: description, recipe_hash: recipe, python_hash: python, recipe_derived_from_description_hash: description, python_derived_from_recipe_hash: recipe };
+}
+
+/** The frontmatter lines with the stamps in: a line that is already one of ours is replaced where it stands (a second run changes nothing), the missing ones come last, every other line is the person's and is kept. */
+export function withSourceChainStamps(lines: string[], stamps: Record<(typeof SOURCE_CHAIN_KEYS)[number], string>): string[] {
+  const placed = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const key = /^([A-Za-z0-9_-]+):/.exec(line)?.[1];
+    if (key !== undefined && (SOURCE_CHAIN_KEYS as readonly string[]).includes(key)) {
+      if (placed.has(key)) continue;
+      placed.add(key);
+      out.push(`${key}: ${stamps[key as (typeof SOURCE_CHAIN_KEYS)[number]]}`);
+    } else out.push(line);
+  }
+  for (const key of SOURCE_CHAIN_KEYS) if (!placed.has(key)) out.push(`${key}: ${stamps[key]}`);
+  return out;
+}
+
+/** A data note with its source chain written: the frontmatter keeps every line it has except `description`, `links` and ours (set from the arguments), the sections replace everything between the frontmatter and the json fence,
+ *  and `text.slice(fenceStart)` (the opening fence line to the end) is kept byte for byte. The ONE renderer of a phrase and an arrangement note. */
+export function renderSourceChainNote(text: string, parts: SourceChainParts, fenceStart: number): string {
+  const front = splitFront(text);
+  if (!front) return text;
+  const eol = front.eol;
+  const lines = withDerivedFront(front.lines, parts.description, parts.links);
+  const assemble = (l: string[]): string => `---${eol}${l.join(eol)}${eol}---${eol}${eol}${sourceChainSections(parts).join(eol)}${eol}${eol}${text.slice(fenceStart)}`;
+  return assemble(withSourceChainStamps(lines, sourceChainStamps(assemble(lines))));
+}
+
+/** Was the Description of this note changed by hand since the note was written? Only a note that carries `description_hash` can say so: a note written before the source chain has nothing to disagree with, and is rewritten whole. */
+export function descriptionEditedByHand(text: string): boolean {
+  const stored = parseFrontmatter(text)?.fields.description_hash;
+  return typeof stored === 'string' && stored !== '' && stored !== facetHashSync(extractDescription(text));
+}
+
+/** The parts of a phrase note: the `# Description` is the grammar's sentence for `p` (`describe`), the frontmatter `description` stays the words with wikilinks for the graph, Recipe and Python derive from `p` as they always did. */
+export const phraseParts = (name: string, p: PhraseParams): SourceChainParts => ({ description: phraseDescription(name, p), links: phraseLinks(p), sentence: describe(p), recipe: phraseRecipeSteps(p), python: phrasePython(p) });
+
+/** The whole phrase note with its source chain regenerated from `p`; the text from the fence on is kept byte for byte. */
 export function renderPhraseNote(text: string, name: string, p: PhraseParams, fenceStart: number): string {
-  return renderDerivedNote(text, phraseDescription(name, p), phraseLinks(p), derivedSections(name, p), fenceStart);
+  return renderSourceChainNote(text, phraseParts(name, p), fenceStart);
 }
 
 /** The starter text of a new phrase note: frontmatter, derived sections, then the fence last. */

@@ -18,6 +18,19 @@
 //
 // Pure-core extraction. No `obsidian` import.
 
+/** The text a facet hash is taken over: trailing whitespace stripped per line, leading and trailing blank lines dropped, internal blank lines kept. ONE definition, shared by the async hash below and the
+ *  synchronous one the phrase and arrangement note writers use (facet-sync-hash-core.ts; a parity test keeps the two digests equal). */
+export function normalizeFacetText(text: string): string {
+  const rawLines = text.split('\n');
+  // Strip any trailing Unicode whitespace per line (matches Python rstrip()).
+  const lines = rawLines.map((l) => l.replace(/[\s﻿\xA0]+$/g, ''));
+
+  while (lines.length > 0 && lines[0] === '') lines.shift();
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+
+  return lines.join('\n');
+}
+
 /** Stable hash of a Description facet for V2 cache invalidation.
  *  Returns hex-encoded sha256 string (64 chars, lowercase). */
 export async function computeDescriptionHash(
@@ -31,14 +44,7 @@ export async function computeDescriptionHash(
       `descriptionText must be string or null, got ${typeof descriptionText}`);
   }
 
-  const rawLines = descriptionText.split('\n');
-  // Strip any trailing Unicode whitespace per line (matches Python rstrip()).
-  const lines = rawLines.map((l) => l.replace(/[\s﻿\xA0]+$/g, ''));
-
-  while (lines.length > 0 && lines[0] === '') lines.shift();
-  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
-
-  const normalized = lines.join('\n');
+  const normalized = normalizeFacetText(descriptionText);
 
   const enc = new TextEncoder();
   const payload = enc.encode(normalized);

@@ -6,7 +6,8 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
 import { formatPhraseJson, readPhraseNote, refreshPhraseNoteText, type PhraseParams } from './phrase-core.ts';
-import { DERIVED_NOTE, derivedSections, extractPhraseJsonBlock, newPhraseNote, phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
+import { CACHE_NOTE, DERIVED_NOTE, SOURCE_CHAIN_NOTE, extractPhraseJsonBlock, newPhraseNote, phraseParts, phrasePython, phraseRecipeSteps, sourceChainSections } from './phrase-notes-core.ts';
+import { chainStampLines } from './test-support/source-chain-golden.ts';
 
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20 };
 const MORPH: PhraseParams = { kind: 'morph', a: 'bar_007', b: 'bar_008', bars: 17, order: 'musical', seed: 0 };
@@ -121,19 +122,22 @@ test('the whole note, golden: frontmatter (description + whole-value links), the
   assert.equal(newPhraseNote('phrase_001', p, json), [
     '---', 'type: data', 'content_type: json',
     'description: "phrase_001 — [[bar_005]] extended to 8 bars: repeat with fills, slowing 20 %. Edited by hand: bar 3 is [[bar_011]]."',
-    'links:', '  - "[[bar_005]]"', '  - "[[bar_011]]"', '---', '',
-    DERIVED_NOTE, '',
-    '# Description', '', 'phrase_001 — [[bar_005]] extended to 8 bars: repeat with fills, slowing 20 %. Edited by hand: bar 3 is [[bar_011]].', '',
+    'links:', '  - "[[bar_005]]"', '  - "[[bar_011]]"',
+    ...chainStampLines('Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower. Bar 3 is replaced by [[bar_011]].', ['Take [[bar_005]].', 'Repeat it for 8 bars with fills, 20 % slower.', 'Bar 3 is replaced by [[bar_011]].'], phrasePython(p)),
+    '---', '',
+    SOURCE_CHAIN_NOTE, '',
+    '# Description', '', 'Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower. Bar 3 is replaced by [[bar_011]].', '',
     '# Recipe', '', 'Take [[bar_005]].', 'Repeat it for 8 bars with fills, 20 % slower.', 'Bar 3 is replaced by [[bar_011]].', '',
     '# Python', '', '```python', phrasePython(p), '```', '',
+    '# Cache', '', CACHE_NOTE, '',
     '```json', json, '```', '',
   ].join('\n'));
 });
 
-test('derivedSections: the comment first, three level-one headings in this order, no level-two heading and no "Bars made" any more', () => {
-  const lines = derivedSections('phrase_001', EXTEND);
-  assert.equal(lines[0], DERIVED_NOTE);
-  assert.deepEqual(lines.filter((l) => /^#{1,6} /.test(l)), ['# Description', '# Recipe', '# Python']);
+test('sourceChainSections: the comment first, four level-one headings in this order (the Cache heading closes the Python section), no level-two heading and no "Bars made" any more', () => {
+  const lines = sourceChainSections(phraseParts('phrase_001', EXTEND));
+  assert.equal(lines[0], SOURCE_CHAIN_NOTE);
+  assert.deepEqual(lines.filter((l) => /^#{1,6} /.test(l)), ['# Description', '# Recipe', '# Python', '# Cache']);
   assert.ok(!lines.some((l) => /^## |Bars made/.test(l)));
   assert.equal(lines.filter((l) => l === '```python').length, 1);
   assert.equal(lines.filter((l) => l === '```').length, 1);
@@ -169,7 +173,7 @@ test('an OLD-format note (## headings, the call as Recipe, Bars made) still read
   assert.ok(r.ok && r.changed);
   if (!r.ok) return;
   assert.ok(!/^## |Bars made|morph_rhythm\(\[\[/m.test(r.text), 'nothing of the old shape is left');
-  assert.deepEqual(r.text.split('\n').filter((l) => /^# /.test(l)), ['# Description', '# Recipe', '# Python']);
+  assert.deepEqual(r.text.split('\n').filter((l) => /^# /.test(l)), ['# Description', '# Recipe', '# Python', '# Cache']);
   assert.ok(r.text.includes('Bar 2 is replaced by [[bar_020]].'));
   assert.ok(r.text.includes('read_only: false'), 'the person\'s own line stays');
   assert.equal(r.text.slice(r.text.indexOf('```json')), OLD.slice(OLD.indexOf('```json')), 'the json fence and everything after it: byte-identical');

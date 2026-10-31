@@ -28,6 +28,7 @@ import { MORPH_BAR_ROLE, MORPH_HIT_ROLE, annotateMorphPayload, morphLineageOf, m
 import { paintMorphHits } from './morph-hits-dom.ts';
 import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.ts';
 import { mountTransformStrip } from './phrase-transform-dom.ts';
+import { phraseDepsWithArrangements, type ArrangementDeps } from './arrangement-core.ts';
 import { mountNotebook, type NotebookDomPorts, type NotebookHandle } from './notebook-dom.ts';
 import { paintSelectionTint } from './selection-tint-dom.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
@@ -533,6 +534,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   /** Rewrite the phrase note's json block (one atomic read-modify-write on the vault side). */
   writePhrase(params: PhraseParams): Promise<{ ok: true } | { ok: false; message: string }>;
   compute: PhraseScoreDeps['compute'];
+  /** 2026-10-30-1050 (M15b): the engine's arrangement step, so a transform whose source is an ARRANGEMENT can be drawn (the Score reads either). Absent = such a transform is a refusal that says this surface cannot draw one. */
+  computeArrangement?: ArrangementDeps['compute'];
   /** M9 (fork on edit): the vault side of "Edit this bar" (create the fork note, list `bars/`, tell the person). Absent = the extend inspector offers no Edit this bar / Revert to generated. The phrase write and
    *  the opener are the ports above (`writePhrase`, `inspector.openNote`). */
   fork?: Pick<ForkPorts<unknown>, 'listBarBasenames' | 'exists' | 'create' | 'notify' | 'isAlreadyExists'>;
@@ -788,7 +791,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       inspector: inspectorPorts,
       debounceMs: k === 'mix' || k === 'morph' ? MIX_SCORE_DEBOUNCE_MS : undefined,           // a mix and a morph are dragged (sliders): the first change draws at once, later ones collapse into one draw
       produce: async (note, title) => {
-        const out = await producePhraseNote({ readNote: ports.readNote, compute: ports.compute }, note as NoteText, title);
+        const out = await producePhraseNote(ports.computeArrangement ? phraseDepsWithArrangements({ readNote: ports.readNote, compute: ports.compute }, ports.computeArrangement) : { readNote: ports.readNote, compute: ports.compute }, note as NoteText, title);
         if (out.kind === 'score' && !disposed) {
           const bars = barsOfPayload(out.payload);
           if (bars !== null) { scoreBars = bars; notebookHandle?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels)))) }); }

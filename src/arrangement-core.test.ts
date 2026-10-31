@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { DERIVED_NOTE } from './phrase-notes-core.ts';
+import { CACHE_NOTE, SOURCE_CHAIN_NOTE } from './phrase-notes-core.ts';
+import { chainStampLines } from './test-support/source-chain-golden.ts';
 import { noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 import { newKitNote, type KitParams } from './kit-core.ts';
@@ -33,10 +34,15 @@ test('the arrangement note, golden: Description naming the tracks and the rest r
     '  bars = combine_tracks(tracks=tracks)', '  return bars', '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n');
   assert.equal(arrangementPython(ARR), python);
+  // 2026-10-30-1050 (M15b, deliberate): the # Description of the note is the grammar's sentences (the source); the frontmatter description above stays the words with wikilinks for the graph
+  const said = 'Play [[phrase_003]] on the [[rock]] kit. Play [[phrase_009]] on the [[latin]] kit. Together.';
+  const steps = ['Play [[phrase_003]] on the [[rock]] kit.', 'Play [[phrase_009]] on the [[latin]] kit.', 'Together.'];
   assert.equal(newArrangementNote('arr_001', ARR), [
-    '---', 'type: data', 'content_type: json', `description: ${JSON.stringify(desc)}`, 'links:', '  - "[[phrase_003]]"', '  - "[[rock]]"', '  - "[[phrase_009]]"', '  - "[[latin]]"', '---', '',
-    DERIVED_NOTE, '', '# Description', '', desc, '', '# Recipe', '', 'Play [[phrase_003]] on the [[rock]] kit.', 'Play [[phrase_009]] on the [[latin]] kit.', 'Together.', '',
+    '---', 'type: data', 'content_type: json', `description: ${JSON.stringify(desc)}`, 'links:', '  - "[[phrase_003]]"', '  - "[[rock]]"', '  - "[[phrase_009]]"', '  - "[[latin]]"',
+    ...chainStampLines(said, steps, python), '---', '',
+    SOURCE_CHAIN_NOTE, '', '# Description', '', said, '', '# Recipe', '', ...steps, '',
     '# Python', '', '```python', python, '```', '',
+    '# Cache', '', CACHE_NOTE, '',
     '```json', '{', '  "kind": "arrangement",', '  "tracks": [', '    {"kit": "rock", "phrase": "phrase_003"},', '    {"kit": "latin", "phrase": "phrase_009"}', '  ]', '}', '```', '',
   ].join('\n'));
 });
@@ -73,7 +79,7 @@ test('the round trip, the links, and "Refresh note links": json -> note -> json 
   assert.equal((text.match(/^  - "\[\[/gm) ?? []).length, 4);
   const twice: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }, { kit: 'latin', phrase: 'phrase_001' }] };
   assert.deepEqual(arrangementLinks(twice), ['phrase_001', 'rock', 'latin'], 'a phrase on two kits is linked once');
-  const edited = text.replace('Together.', 'Somebody typed here.').replace('type: data', 'type: data\nread_only: false');
+  const edited = text.replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay').replace('type: data', 'type: data\nread_only: false');
   const r = refreshArrangementNoteText(edited, 'arr_001');
   assert.ok(r.ok && r.changed);
   if (!r.ok) return;

@@ -556,15 +556,15 @@ test('REFUSED: too many changes in a Take (more than 16) says so, and exactly 16
   assert.equal(parse(`Take [[phrase_006]]. ${ops(16)}`, VAULT).ok, true);
 });
 
-test('THE LAST GATE: what the grammar reads is also checked by the plugin\'s own validators, so a name the grammar accepts and the plugin does not is refused with the plugin\'s sentence (a phrase called "chorus" cannot be the source of a Take yet: the validator wants phrases/phrase_N)', () => {
+test('THE LAST GATE: what the grammar reads is also checked by the plugin\'s own validators, so a name the grammar accepts and the plugin does not is refused with the plugin\'s sentence (a phrase called "chorus" cannot be the source of a Take: the validator wants phrases/phrase_N or arrangements/arr_N)', () => {
   const v: GrammarVault = { ...VAULT, phrases: [...VAULT.phrases, 'chorus'], kits: [...VAULT.kits!, '-odd'] };
   const take = bad('Take [[chorus]]. Thin out bar 1.', v);
   assert.deepEqual([take.line, take.column], [1, 1]);
-  assert.match(take.message, /^source must be a phrase note without \.md, like phrases\/phrase_006, got "phrases\/chorus"\.$/);
+  assert.match(take.message, /^source must be a phrase note without \.md, like phrases\/phrase_006, or an arrangement note, like arrangements\/arr_001, got "phrases\/chorus"\.$/);
   const arr = bad('Play [[phrase_006]] on the [[-odd]] kit. Together.', v);
   assert.deepEqual([arr.line, arr.column], [1, 1]);
   assert.match(arr.message, /is not a kit name/);
-  assert.equal(parse('Take [[arr_001]]. Thin out bar 1.', { ...v, arrangements: ['arr_001'] }).ok, true, 'an ARRANGEMENT as the source is not run through the phrase rule: that is the point of naming it by a wikilink');
+  assert.equal(parse('Take [[arr_001]]. Thin out bar 1.', { ...v, arrangements: ['arr_001'] }).ok, true, 'an ARRANGEMENT as the source passes the plugin\'s own validator too (since M15b it accepts a phrase or an arrangement)');
 });
 
 test('parse never throws, even when the vault it is given does: the answer is a refusal that says it could not read the description', () => {
@@ -771,12 +771,27 @@ test('every refusal is ONE sentence that ends in a full stop, and names a place 
   }
 });
 
-test('MECHANISM PIN 2026-10-30-1030 (if the design moves this SHOULD go red: reassess, do not just rewrite): the grammar reads the plugin\'s own lists and validators - phrase-core.ts and arrangement-core.ts - and nothing in the plugin reads the grammar yet (M15b will)', () => {
-  const src = fs.readFileSync(path.join(import.meta.dirname, 'phrase-grammar-core.ts'), 'utf8');
+test('MECHANISM PIN 2026-10-30-1030, revised 2026-10-30-1050 (if the design moves this SHOULD go red: reassess, do not just rewrite): the grammar reads the plugin\'s own lists and validators - phrase-core.ts and arrangement-core.ts; the SAYING half (describe, canonical, the words) lives in phrase-describe-core.ts, which the two note writers call (M15b); nothing in the plugin PARSES yet (M15c will)', () => {
+  const dir = import.meta.dirname;
+  const read = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
+  const src = read('phrase-grammar-core.ts');
   assert.match(src, /from '\.\/phrase-core\.ts'/);
   assert.match(src, /from '\.\/arrangement-core\.ts'/);
-  assert.ok(!/from 'obsidian'/.test(src), 'a pure core');
-  for (const style of PHRASE_STYLES) assert.ok(src.includes(style), `the style ${style} has a word`);
-  const readers = fs.readdirSync(import.meta.dirname).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'phrase-grammar-core.ts' && /phrase-grammar-core/.test(fs.readFileSync(path.join(import.meta.dirname, f), 'utf8')));
-  assert.deepEqual(readers, [], 'nothing reads the grammar yet: no behaviour change in the plugin (M15a)');
+  assert.match(src, /from '\.\/phrase-describe-core\.ts'/);
+  assert.ok(!/from 'obsidian'/.test(src) && !/from 'obsidian'/.test(read('phrase-describe-core.ts')), 'pure cores');
+  for (const style of PHRASE_STYLES) assert.ok(read('phrase-describe-core.ts').includes(style), `the style ${style} has a word`);
+  const production = fs.readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+  const importers = (module: string) => production.filter((f) => f !== `${module}.ts` && read(f).includes(`'./${module}.ts'`)).sort();
+  assert.deepEqual(importers('phrase-describe-core'), ['arrangement-core.ts', 'phrase-grammar-core.ts', 'phrase-notes-core.ts'], 'the two note writers say the Description with it; the parser re-exports it');
+  assert.deepEqual(importers('phrase-grammar-core'), [], 'nothing PARSES a Description yet: the hand-edit button is M15c');
+});
+
+test('the saying half and phrase-core.ts import each other (describe reads three DEFAULTS inside functions): either may load FIRST, in a process of its own, and both work', async () => {
+  const { spawnSync } = await import('node:child_process');
+  for (const first of ['phrase-describe-core.ts', 'phrase-core.ts', 'phrase-notes-core.ts', 'arrangement-core.ts']) {
+    const code = `const a = await import(${JSON.stringify(path.join(import.meta.dirname, first))}); const d = await import(${JSON.stringify(path.join(import.meta.dirname, 'phrase-describe-core.ts'))}); const c = await import(${JSON.stringify(path.join(import.meta.dirname, 'phrase-core.ts'))}); process.stdout.write(d.describe({ kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.7, threshold: 0.5, ghost: false }) + '|' + (typeof c.noteContentFor) + '|' + Object.keys(a).length);`;
+    const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${first} first: ${r.stderr}`);
+    assert.match(r.stdout, /^Mix \[\[bar_005\]\] and \[\[bar_006\]\], 70 percent \[\[bar_005\]\], as a vote\.\|function\|\d+$/, first);
+  }
 });

@@ -3,6 +3,7 @@
 // The extend phrase is pinned byte-for-byte here too: M7 widened the union, and none of M5/M6's output may move.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { chainStampLines } from './test-support/source-chain-golden.ts';
 
 import {
   MIX_DEFAULTS, MIX_KEYS, PHRASE_KEYS, applyPhraseWrite, clampMixUnit, createNewMix, formatPhraseJson, mixNoteContent, mixSentence, newMixAvailable, newPhraseAvailable, phraseNoteContent,
@@ -120,11 +121,15 @@ test('applyPhraseWrite rewrites only the json block of a mix note: frontmatter a
   assert.equal(ro.ok, false);
 });
 
-test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026-10-26-1260, deliberate) the derived description, links and sections above the fence', () => {
+test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026-10-26-1260, deliberate) the derived description, links and sections above the fence, plus (2026-10-30-1050, deliberate) the source chain: the Description is the grammar\'s sentence and the Forge hash fields are stamped', () => {
+  const sentence = 'Extend [[bar_005]] to 4 bars, repeating with fills.';
+  const steps = ['Take [[bar_005]].', 'Repeat it for 4 bars with fills.'];
+  const python = "def compute(context):\n  base = bar_005()\n  bars = extend_rhythm(data=base, bars=4, style='repeat_with_fills', tempo_change_pct=0)\n  return bars\n  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)";
   assert.equal(
     phraseNoteContent('phrase_001', 'bar_005'),
-    '---\ntype: data\ncontent_type: json\ndescription: "phrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change."\nlinks:\n  - "[[bar_005]]"\n---\n\n'
-      + '<!-- derived from the json below; edit the controls, not this text -->\n\n# Description\n\nphrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change.\n\n# Recipe\n\nTake [[bar_005]].\nRepeat it for 4 bars with fills.\n\n# Python\n\n```python\ndef compute(context):\n  base = bar_005()\n  bars = extend_rhythm(data=base, bars=4, style=\'repeat_with_fills\', tempo_change_pct=0)\n  return bars\n  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)\n```\n\n```json\n'
+    '---\ntype: data\ncontent_type: json\ndescription: "phrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change."\nlinks:\n  - "[[bar_005]]"\n' + chainStampLines(sentence, steps, python).join('\n') + '\n---\n\n'
+      + '<!-- the Description below is the source of this note: the controls write it, and the Recipe, the Python and the json cache are derived from it -->\n\n# Description\n\n' + sentence + '\n\n# Recipe\n\n' + steps.join('\n') + '\n\n# Python\n\n```python\n' + python + '\n```\n\n'
+      + '# Cache\n\n<!-- derived from the Description above; edit the Description, not this -->\n\n```json\n'
       + '{\n  "kind": "extend",\n  "source": "bar_005",\n  "bars": 4,\n  "style": "repeat_with_fills",\n  "tempo_change_pct": 0\n}\n```\n',
   );
 });
@@ -132,7 +137,7 @@ test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026
 test('mixNoteContent: a data/json note whose block is a PATH mix of the two bars (2026-10-26-0900, deliberate: new mixes are path mixes, explicit in the JSON, starting at weight 1), valid to read back', () => {
   const text = mixNoteContent('phrase_002', 'bar_005', 'bar_006');
   assert.deepEqual(readPhraseNote(text), { ok: true, value: { ...MIX, weight: 1, mode: 'path', order: 'musical', seed: 0 } });
-  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*\[\[bar_005\]\].*\[\[bar_006\]\].*"\nlinks:\n  - "\[\[bar_005\]\]"\n  - "\[\[bar_006\]\]"\n---\n\n<!-- derived[\s\S]*\n```json\n/);
+  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*\[\[bar_005\]\].*\[\[bar_006\]\].*"\nlinks:\n  - "\[\[bar_005\]\]"\n  - "\[\[bar_006\]\]"\nsource_facet: description\n[\s\S]*---\n\n<!-- the Description below is the source[\s\S]*\n```json\n/);
   assert.ok(text.endsWith('```\n'));
 });
 

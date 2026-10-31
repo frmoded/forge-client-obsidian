@@ -178,7 +178,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] "Open arrangement as Score" switches an arrangement note to the arrangement tab; "Refresh note links" reaches kits and arrangements (stale derived text regenerated, current notes not written)`, async () => {
     const arr = newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }] });
-    const stale = { 'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick'] }).replace('Add the kick.', 'typed here'), 'arrangements/arr_001.md': arr.replace('Together.', 'typed here'), 'phrases/phrase_003.md': 'p' };
+    const stale = { 'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick'] }).replace('Add the kick.', 'typed here'), 'arrangements/arr_001.md': arr.replace('# Recipe\n\nPlay', '# Recipe\n\ntyped here\nPlay'), 'phrases/phrase_003.md': 'p' };
     const w = await world(SCORE_FIRST_TOML, stale, 'arrangements/arr_001.md');
     try {
       await w.run(OPEN_ARR);

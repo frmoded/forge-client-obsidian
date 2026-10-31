@@ -5,7 +5,8 @@
 //   * Python: `def compute(context):` reading each kit and phrase by calling its name (the way a Forge note reads a data note) and returning combine_tracks(...), the BAR LIST (the contract of a phrase's compute since 2026-10-29-0810).
 // The Score is drawn from the json by the code that draws every phrase (produceArrangement -> the engine glue's `arrangement` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 import { barsOfPayload, producePhrase, readPhraseNote, type PhraseScoreDeps } from './phrase-core.ts';
-import { DERIVED_NOTE, callNote, extractPhraseJsonBlock, renderDerivedNote, pyStr } from './phrase-notes-core.ts';
+import { callNote, descriptionEditedByHand, extractPhraseJsonBlock, handEditRefusal, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { describe } from './phrase-describe-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { KIT_NAME_PATTERN, kitPath, readKitNote, type KitParams } from './kit-core.ts';
@@ -93,12 +94,15 @@ export function arrangementPython(p: ArrangementParams): string {
     '  # for a Score of these bars: rhythm_bars_to_stream(bars=bars)',
   ].join('\n');
 }
-export const arrangementSections = (name: string, p: ArrangementParams): string[] => [DERIVED_NOTE, '', '# Description', '', arrangementDescription(name, p), '', '# Recipe', '', ...arrangementRecipeSteps(p), '', '# Python', '', '```python', ...arrangementPython(p).split('\n'), '```'];
+/** The parts of an arrangement note (2026-10-30-1050, M15b): the `# Description` is the grammar's sentence for the tracks (`describe`), the frontmatter `description` stays the words with wikilinks for the graph, Recipe and Python derive as before. */
+export const arrangementParts = (name: string, p: ArrangementParams): SourceChainParts => ({ description: arrangementDescription(name, p), links: arrangementLinks(p), sentence: describe(p), recipe: arrangementRecipeSteps(p), python: arrangementPython(p) });
+/** The arrangement note with its source chain written (the one renderer phrases use too); the text from the fence on is kept byte for byte. */
+export const renderArrangementNote = (text: string, name: string, p: ArrangementParams, fenceStart: number): string => renderSourceChainNote(text, arrangementParts(name, p), fenceStart);
 
 export function newArrangementNote(name: string, p: ArrangementParams): string {
   const fence = ['```json', formatArrangementJson(p), '```', ''].join('\n');
   const stub = ['---', 'type: data', 'content_type: json', '---', '', ''].join('\n');
-  return renderDerivedNote(stub + fence, arrangementDescription(name, p), arrangementLinks(p), arrangementSections(name, p), stub.length);
+  return renderArrangementNote(stub + fence, name, p, stub.length);
 }
 
 export function readArrangementNote(text: string): Validation<ArrangementParams> {
@@ -115,7 +119,8 @@ export function refreshArrangementNoteText(text: string, name: string): { ok: tr
   if (read.ok === false) return { ok: false, message: read.message };
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
-  const next = renderDerivedNote(text, arrangementDescription(name, read.value), arrangementLinks(read.value), arrangementSections(name, read.value), block.fenceStart);
+  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(false) };
+  const next = renderArrangementNote(text, name, read.value, block.fenceStart);
   return { ok: true, text: next, changed: next !== text };
 }
 
@@ -135,8 +140,9 @@ export function setTrackSetting(p: ArrangementParams, index: number, patch: { mu
 export function applyArrangementWrite(text: string, name: string, p: ArrangementParams): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
+  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(false) };
   const withJson = text.slice(0, block.contentStart) + formatArrangementJson(p) + text.slice(block.contentEnd);
-  const next = renderDerivedNote(withJson, arrangementDescription(name, p), arrangementLinks(p), arrangementSections(name, p), block.fenceStart);
+  const next = renderArrangementNote(withJson, name, p, block.fenceStart);
   return { ok: true, text: next, changed: next !== text };
 }
 
@@ -213,6 +219,18 @@ export async function produceArrangement(deps: ArrangementDeps, note: string | {
   if (refused !== null) return { kind: 'refusal', message: /^combine_tracks: every track is muted/.test(refused) ? ALL_MUTED : `Arrangement: ${refused}` };
   // 2026-10-30-1000: the phrases this Score was made from ride along (as a morph's two bars do), so a row of the Score can name the bar note its phrase got that bar from without reading the vault again
   return outcome.kind === 'score' ? { kind: 'score', payload: { ...outcome.payload, [FORGE_PHRASES_KEY]: phrasesRead } } : outcome;
+}
+
+/** 2026-10-30-1050 (M15b): the deps a phrase is drawn with, plus the way to draw an ARRANGEMENT as the source of a transform (the engine's arrangement step is `computeArrangement`). The phrases an arrangement plays are drawn with the same deps
+ *  one level down, carrying the chain of sources already being drawn, so an arrangement whose phrase is a transform of that arrangement is a refusal naming the loop. */
+export function phraseDepsWithArrangements(base: Pick<PhraseScoreDeps, 'readNote' | 'compute'>, computeArrangement: ArrangementDeps['compute'], chain: readonly string[] = []): PhraseScoreDeps {
+  const deps: PhraseScoreDeps = {
+    readNote: base.readNote,
+    compute: base.compute,
+    chain,
+    arrangementBars: (note, name, drawing) => produceArrangement({ phrases: phraseDepsWithArrangements(base, computeArrangement, drawing), compute: computeArrangement }, note, name),
+  };
+  return deps;
 }
 
 async function readKit(deps: PhraseScoreDeps, name: string): Promise<KitParams | string> {
