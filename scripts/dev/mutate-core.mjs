@@ -375,3 +375,14 @@ export async function runPool(items, n, fn) {
   await Promise.all(Array.from({ length: Math.max(1, Math.min(n, items.length)) }, worker));
   return out;
 }
+
+// ---- files the runner will not mutate ---------------------------------------------------------------------------------------------------------------------------------------------------
+// 2026-10-31-0800: the two files that SUPERVISE the runner's children. A mutated copy of either can spin for ever with nothing left to kill it (62 copies, load average near 50, measured 2026-10-30), so the runner refuses them
+// whatever the road in (--hand, --file; a --diff leaves their lines out).
+export const UNSUPERVISABLE = ['scripts/dev/reaper.mjs', 'scripts/dev/proc-tree.mjs'];
+/** Is this file (as the user spelled it, relative to the project or absolute) one of the two? Compared after path normalization, case-sensitively, whole path only. */
+export function unsupervisable(file, root) {
+  const rel = path.relative(root, path.resolve(root, file)).split(path.sep).join('/');
+  return UNSUPERVISABLE.includes(rel);
+}
+export const unsupervisableSentence = (rel) => `mutate: ${rel} is not mutated by this runner: the runner cannot supervise the thing that supervises it. Use a hand copy outside the repo, and check that \`ps -Ao pid,command | grep forge-mutate-\` is empty afterwards.`;

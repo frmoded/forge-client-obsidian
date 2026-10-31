@@ -19,7 +19,7 @@ import { startReaper } from './reaper.mjs';
 import { killTree } from './proc-tree.mjs';
 import {
   parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
-  orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage, importsOnlyNamers, importsOnlyNote,
+  orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage, importsOnlyNamers, importsOnlyNote, unsupervisable, unsupervisableSentence,
 } from './mutate-core.mjs';
 
 const USAGE = `usage: node scripts/dev/mutate.mjs [--diff <git ref or range>] [--hand <mutants.json>]... [options]
@@ -280,6 +280,12 @@ export async function main(argv) {
   try { a = parseArgs(argv); } catch (e) { console.error(`mutate: ${e.message}\n${USAGE}`); return 2; }
   const started = Date.now();
   const root = a.root;
+  // 2026-10-31-0800: the two files that supervise this runner are never mutated, whatever the road in; refused BEFORE anything is read or started (no scratch directory, no test process)
+  const rel = (f) => path.relative(root, path.resolve(root, f)).split(path.sep).join('/');
+  const asked = [...a.file];
+  for (const h of a.hand) { try { for (const m of parseHandList(JSON.parse(fs.readFileSync(path.resolve(h), 'utf8')))) asked.push(m.file); } catch { /* an unreadable list is reported where it is read below */ } }
+  const refused = asked.find((f) => unsupervisable(f, root));
+  if (refused !== undefined) { console.error(unsupervisableSentence(rel(refused))); return 2; }
   const texts = readTexts(root);
   const before = a.noVerify ? null : fingerprint(root);
   const { map, cached } = loadMap(root, texts);
@@ -291,7 +297,10 @@ export async function main(argv) {
     const diff = execFileSync('git', ['diff', '-U0', '--no-color', ...a.diff.split(/\s+/).filter(Boolean), '--', 'src', 'scripts'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
     const changed = parseChangedLines(diff);
     const seeded = [];
-    for (const [file, lines] of changed) if ((isMutableSource(file) || a.include?.test(file)) && texts.has(file)) seeded.push(...generateMutants(file, texts.get(file), lines));
+    for (const [file, lines] of changed) {
+      if (unsupervisable(file, root)) { console.error(`${unsupervisableSentence(file)} (its changed lines are left out of this run)`); continue; }
+      if ((isMutableSource(file) || a.include?.test(file)) && texts.has(file)) seeded.push(...generateMutants(file, texts.get(file), lines));
+    }
     mutants.push(...sample(seeded, a.max ?? Infinity));
   }
   if (a.file.length > 0) {
