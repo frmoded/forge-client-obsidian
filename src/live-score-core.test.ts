@@ -13,7 +13,7 @@ type Data = typeof RHYTHM_STARTER;
 const withTempo = (n: number): Data => ({ ...RHYTHM_STARTER, tempo_bpm: n });
 const PAYLOAD = (tag: string) => ({ type: 'musicxml', content: `<score-partwise>${tag}</score-partwise>` });
 
-function rig(opts: { drawResult?: boolean | (() => boolean); debounceMs?: number } = {}) {
+function rig(opts: { drawResult?: boolean | (() => boolean); debounceMs?: number; markPending?: boolean } = {}) {
   let now = 0;
   const timers: Array<{ id: number; at: number; fn: () => void }> = [];
   let nextId = 1;
@@ -29,6 +29,7 @@ function rig(opts: { drawResult?: boolean | (() => boolean); debounceMs?: number
       return r;
     },
     clear() { log.push('clear'); },
+    pending(on) { log.push(`pending:${on}`); },
   };
   const timings: LiveScoreTiming[] = [];
   const live = createLiveScore({
@@ -38,6 +39,7 @@ function rig(opts: { drawResult?: boolean | (() => boolean); debounceMs?: number
     setTimer: (fn, ms) => { const id = nextId++; timers.push({ id, at: now + ms, fn }); return id; },
     clearTimer: (h) => { const i = timers.findIndex((t) => t.id === h); if (i >= 0) timers.splice(i, 1); },
     debounceMs: opts.debounceMs,
+    markPending: opts.markPending,
     now: () => now,
     onTiming: (t) => timings.push(t),
   });
@@ -306,4 +308,69 @@ test('an injected `produce` replaces the data -> score step: the SAME debounce, 
 
 test('createLiveScore needs either `compute` or `produce`: with neither it refuses at creation, naming itself', () => {
   assert.throws(() => createLiveScore({ view: { status() {}, draw: () => true, clear() {} }, title: 't', setTimer: () => 0, clearTimer: () => {} } as never), /createLiveScore: .*compute.*produce/);
+});
+
+// ---- 2026-10-31-1110 item 3 (CCQA smoke 9): never leave a stale render up while a new one is pending --------------------------------------------------------------------------------------------------
+test('markPending: once a score is on screen, a change marks it stale AT ONCE (before the debounce), and the mark is lifted in the same step the new score is drawn; the first draw is not marked (it has "Rendering score…")', async () => {
+  const r = rig({ markPending: true });
+  r.live.showNow(RHYTHM_STARTER); await r.flush();
+  assert.ok(!r.log.some((l) => l.startsWith('pending')), 'nothing on screen yet: nothing to mark');
+  await r.finish('A');
+  r.log.length = 0;
+  r.live.update(withTempo(90));
+  assert.deepEqual(r.log, ['pending:true'], 'marked before any timer fired');
+  await r.advance(LIVE_SCORE_DEBOUNCE_MS); await r.finish('B');
+  assert.deepEqual(r.log, ['pending:true', 'pending:false', 'draw', 'status:'], 'lifted, then drawn');
+});
+
+test('markPending: a refusal lifts the mark (the stale score is cleared, the message shown); a score drawn from an OLDER ask while a newer one waits is still marked stale, and the newest draw lifts it', async () => {
+  const r = rig({ markPending: true });
+  r.live.showNow(RHYTHM_STARTER); await r.flush(); await r.finish('A'); r.log.length = 0;
+  r.live.update(withTempo(90)); await r.advance(LIVE_SCORE_DEBOUNCE_MS);          // render 1 in flight
+  r.live.update(withTempo(95)); await r.advance(LIVE_SCORE_DEBOUNCE_MS);          // render 2 queued behind it
+  await r.finish('older');                                                      // the older one returns and is drawn: the score on screen is for the OLDER ask
+  assert.deepEqual(r.log.filter((l) => l.startsWith('pending') || l === 'draw'), ['pending:true', 'draw'], 'drawn, and the mark stays: the view is told once, the panel keeps it on whichever host is current ' + r.log.join(' | '));
+  await r.finish('newest');
+  assert.deepEqual(r.log.filter((l) => l.startsWith('pending') || l === 'draw'), ['pending:true', 'draw', 'pending:false', 'draw'], r.log.join(' | '));
+  r.log.length = 0;
+  r.live.update({ ...RHYTHM_STARTER, tempo_bpm: -5 });                          // not a valid bar
+  assert.deepEqual(r.log, ['pending:true']);
+  await r.advance(LIVE_SCORE_DEBOUNCE_MS); await r.flush();
+  assert.deepEqual(r.log.slice(0, 3), ['pending:true', 'pending:false', 'clear'], r.log.join(' | '));
+  assert.equal(r.pendingCompute.length, 0, 'and the engine was not called for it');
+});
+
+test('markPending: showNow on a drawn score marks it as well; without the option the view is never asked (the Beat Box and the phrase tab are exactly what they were)', async () => {
+  const on = rig({ markPending: true });
+  on.live.showNow(RHYTHM_STARTER); await on.flush(); await on.finish('A'); on.log.length = 0;
+  on.live.showNow(withTempo(80)); await on.flush();
+  assert.deepEqual(on.log, ['pending:true']);
+  const off = rig();
+  off.live.showNow(RHYTHM_STARTER); await off.flush(); await off.finish('A');
+  off.live.update(withTempo(90)); await off.advance(LIVE_SCORE_DEBOUNCE_MS); await off.finish('B');
+  assert.ok(!off.log.some((l) => l.startsWith('pending')), off.log.join(' | '));
+});
+
+// ---- 2026-10-31-1110 item 3: a refusal the surface can decide from its data alone is shown NOW, past the debounce and past a render that is still in flight -----------------------------------------------
+test('refuse(): clears the score and shows the message at once, supersedes the render in flight (its late answer draws nothing) and the waiting debounce (no engine call), and lifts the stale mark', async () => {
+  const r = rig({ markPending: true });
+  r.live.showNow(RHYTHM_STARTER); await r.flush(); await r.finish('A'); r.log.length = 0;
+  r.live.update(withTempo(90)); await r.advance(LIVE_SCORE_DEBOUNCE_MS);          // render 1 is in flight (the engine has not answered)
+  r.live.update(withTempo(95));                                                  // and another change waits in the debounce
+  r.log.length = 0;
+  r.live.refuse(withTempo(100), 'Every kit is muted.');
+  assert.deepEqual(r.log, ['pending:false', 'clear', 'status:Every kit is muted.'], 'at once: no timer, no engine');
+  await r.finish('late');                                                        // the in-flight render answers late
+  await r.advance(LIVE_SCORE_DEBOUNCE_MS * 2); await r.flush();
+  assert.ok(!r.log.includes('draw'), 'the late score is not drawn over the message: ' + r.log.join(' | '));
+  assert.equal(r.log.at(-1), 'status:Every kit is muted.');
+  assert.equal(r.pendingCompute.length, 0, 'the waiting debounce was cancelled: the engine was never asked for the refused data, nor for the change that waited');
+});
+
+test('refuse(): the next real change draws again (showNow of the same refused data tries again, a different one renders after the debounce)', async () => {
+  const r = rig();
+  r.live.showNow(RHYTHM_STARTER); await r.flush(); await r.finish('A');
+  r.live.refuse(withTempo(100), 'Every kit is muted.'); r.log.length = 0;
+  r.live.update(withTempo(110)); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await r.finish('B');
+  assert.deepEqual(r.log, [`status:${SCORE_RENDERING_TEXT}`, 'draw', 'status:'], 'nothing is on screen, so the first draw says "Rendering score…" again: ' + r.log.join(' | '));
 });

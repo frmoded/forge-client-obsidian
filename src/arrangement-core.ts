@@ -182,6 +182,14 @@ export interface ArrangementDeps {
 /** Shown instead of an empty Score when every kit is muted (the engine refuses to draw nothing). */
 export const ALL_MUTED = 'Every kit is muted, so nothing plays. Unmute one of them.';
 
+/** 2026-10-31-1110: does no track sound? The engine's own rule (`combine_tracks`, `sounds`): volume 0 never sounds, a solo track always does, any other track sounds only when no track is solo and it is not muted. Decided from the note alone, so
+ *  "Every kit is muted" is shown at once instead of after the phrases are read and the engine refuses. An arrangement with no tracks is the validator's refusal, not this. */
+export function nothingPlays(p: ArrangementParams): boolean {
+  if (p.tracks.length === 0) return false;
+  const anySolo = p.tracks.some((t) => t.solo === true);
+  return !p.tracks.some((t) => t.volume !== 0 && (t.solo === true || (!anySolo && t.mute !== true)));
+}
+
 /** The engine's own `combine_tracks: ...` line out of an error (two kits with one channel, a different meter or tempo). `null` = not one of its refusals. */
 export function combineRefusal(message: string): string | null {
   const last = message.trim().split('\n').pop() ?? '';          // the exception line is the last line of a Python traceback, whatever prefix the host puts before it
@@ -195,6 +203,7 @@ export async function produceArrangement(deps: ArrangementDeps, note: string | {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Arrangement: the arrangement note could not be read (${note.unreadable}).` };
   const read = readArrangementNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Arrangement: ${read.message}` };
+  if (nothingPlays(read.value)) return { kind: 'refusal', message: ALL_MUTED };         // from the note alone: no kit or phrase is read, no engine round trip
   const tracks: ArrangementInput['tracks'] = [];
   const phrasesRead: Record<string, PhraseParams> = {};
   for (const track of read.value.tracks) {

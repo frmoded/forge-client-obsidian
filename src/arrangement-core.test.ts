@@ -15,7 +15,7 @@ import { newKitNote, type KitParams } from './kit-core.ts';
 import {
   applyArrangementWrite, setTrackSetting, trackSettingsSteps,
   arrangementCreatedLine, arrangementDescription, arrangementLinks, arrangementPath, arrangementPython, arrangementRecipeSteps, combineRefusal, formatArrangementJson, isArrangementPath, newArrangementNote, nextArrangementName,
-  ARRANGEMENT_VIEW_TYPE, produceArrangement, readArrangementNote, refreshArrangementNoteText, validateArrangement, type ArrangementInput, type ArrangementParams,
+  ALL_MUTED, ARRANGEMENT_VIEW_TYPE, nothingPlays, produceArrangement, readArrangementNote, refreshArrangementNoteText, validateArrangement, type ArrangementInput, type ArrangementParams,
 } from './arrangement-core.ts';
 
 const ARR: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009' }] };
@@ -368,4 +368,27 @@ test('tempoRangeOf needs a tempo on BOTH the first and the last bar', () => {
   const bar = (tempo_bpm?: number) => ({ time_signature: '4/4', steps: 16, group_size: 4, channels: {}, ...(tempo_bpm === undefined ? {} : { tempo_bpm }) }) as never;
   assert.equal(tempoRangeOf([bar(100), bar()]), null);
   assert.equal(tempoRangeOf([bar(), bar(100)]), null);
+});
+
+// ---- 2026-10-31-1110 item 3 (CCQA smoke 9): "Every kit is muted" at once, decided from the note alone (no phrase read, no engine) ---------------------------------------------------------------------
+const withTracks = (tracks: ArrangementParams['tracks']): ArrangementParams => ({ kind: 'arrangement', tracks });
+test('nothingPlays mirrors the engine\'s rule (combine_tracks `sounds`): volume 0 never sounds, a solo track always does, otherwise a track sounds only when no track is solo and it is not muted', () => {
+  assert.equal(nothingPlays(withTracks([{ kit: 'rock', phrase: 'phrase_003', mute: true }, { kit: 'latin', phrase: 'phrase_009', mute: true }])), true, 'both muted');
+  assert.equal(nothingPlays(withTracks([{ kit: 'rock', phrase: 'phrase_003', mute: true }, { kit: 'latin', phrase: 'phrase_009' }])), false, 'one muted: the other plays');
+  assert.equal(nothingPlays(withTracks([{ kit: 'rock', phrase: 'phrase_003', mute: true, solo: true }, { kit: 'latin', phrase: 'phrase_009', mute: true }])), false, 'solo wins over mute');
+  assert.equal(nothingPlays(withTracks([{ kit: 'rock', phrase: 'phrase_003', volume: 0 }, { kit: 'latin', phrase: 'phrase_009', volume: 0 }])), true, 'volume 0 on every track');
+  assert.equal(nothingPlays(withTracks([{ kit: 'rock', phrase: 'phrase_003', solo: true, volume: 0 }, { kit: 'latin', phrase: 'phrase_009' }])), true, 'a solo track at volume 0 does not sound, and solo silences the other');
+  assert.equal(nothingPlays(withTracks([{ kit: 'rock', phrase: 'phrase_003' }])), false, 'a plain track');
+  assert.equal(nothingPlays(withTracks([])), false, 'no tracks is a different refusal (the validator\'s), not "muted"');
+});
+
+test('produceArrangement with every kit muted answers ALL_MUTED from the note alone: no kit or phrase is read and the engine is not called; an unreadable or invalid note keeps its own refusal', async () => {
+  const text = newArrangementNote('arr_001', withTracks([{ kit: 'rock', phrase: 'phrase_003', mute: true }, { kit: 'latin', phrase: 'phrase_009', mute: true }]));
+  const touched: string[] = [];
+  const deps: any = { phrases: { readNote: async (p: string) => { touched.push(p); throw new Error('must not be read'); } }, compute: async () => { touched.push('engine'); throw new Error('must not be called'); } };
+  const out = await produceArrangement(deps, text, 'arr_001');
+  assert.deepEqual(out, { kind: 'refusal', message: ALL_MUTED });
+  assert.deepEqual(touched, []);
+  const bad = await produceArrangement(deps, text.replace('"kind": "arrangement"', '"kind": "nope"'), 'arr_001');
+  assert.equal(bad.kind, 'refusal'); assert.notEqual((bad as { message: string }).message, ALL_MUTED);
 });

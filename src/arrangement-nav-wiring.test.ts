@@ -110,7 +110,7 @@ for (const edition of ['lean', 'music'] as const) {
     assert.match(ka, /onHover: \(chip\) => \{ this\.light\(chip \? rowIdsPlayedBy\(this\.lineage \?\? \[\], chip\.noteId\) : this\.litByNotes\(\)\); \}/);
     assert.match(ka, /structure\.onNotesNavigated\(leaf, \(notesPath\) => \{/);
     assert.match(ka, /this\.stopListening\?\.\(\);\s*\n\s*this\.stopListening = null;/);
-    assert.match(ka, /if \(out\.kind === 'score' && !this\.disposed\) \{ this\.paintTempo\(file, note, out\.payload\); this\.keepLineage\(out\.payload\); \}/);
+    assert.match(ka, /if \(out\.kind === 'score' && !this\.disposed\) \{ this\.paintTempo\(note, out\.payload\); this\.keepLineage\(out\.payload\); \}/);       // 2026-10-31-1110: the header is painted by paintHeader; the tempo only feeds it
     // the inspector is NOT given to a tab that has no way to open a note (a tab built without the plugin's hooks): no half-wired pins
     assert.match(ka, /inspector: this\.openNote \? \{/);
   });

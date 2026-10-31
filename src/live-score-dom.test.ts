@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import {
-  READY_TIMEOUT_MS, SCORE_HOST_CLASS, SCORE_HOST_PENDING_CLASS, SCORE_PANEL_CLASS, SCORE_PANEL_LABEL, SCORE_STATUS_CLASS, attachScoreArea, mountLeanNote, mountScorePanel, type ScoreAreaPorts,
+  READY_TIMEOUT_MS, SCORE_HOST_CLASS, SCORE_HOST_PENDING_CLASS, SCORE_HOST_STALE_CLASS, SCORE_PANEL_CLASS, SCORE_PANEL_LABEL, SCORE_STATUS_CLASS, attachScoreArea, mountLeanNote, mountScorePanel, type ScoreAreaPorts,
 } from './live-score-dom.ts';
 import { LEAN_SCORE_NOTE, scorePanelPlan } from './score-first-core.ts';
 import { RHYTHM_STARTER } from './new-note-core.ts';
@@ -355,4 +355,36 @@ test('M3: without an inspector port the Score is exactly the M1 Score — no slo
   assert.equal(tab.querySelectorAll('g.note[id]').length, 0);
   area.gridHover({ channel: 'kick', step: 0 });                       // a no-op, never throws
   area.dispose();
+});
+
+// ---- 2026-10-31-1110 item 3: the Score on screen is marked stale (dimmed, aria-busy) from the moment a change is asked for until the new one is the one on screen ----------------------------------
+test('markPending: the score on screen is dimmed and aria-busy the moment the data changes, and the NEW host is the current one, clean, once it is swapped in; without the option the DOM is never touched', async () => {
+  for (const markPending of [true, false]) {
+    const { tab } = page();
+    const { p } = ports({ markPending });
+    const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+    area.showNow(RHYTHM_STARTER); await flush();
+    const panel = tab.children[1] as HTMLElement;
+    assert.equal(panel.querySelectorAll(`.${SCORE_HOST_STALE_CLASS}`).length, 0, 'nothing is stale after the first draw');
+    area.update({ ...RHYTHM_STARTER, tempo_bpm: 99 });
+    const stale = panel.querySelectorAll(`.${SCORE_HOST_STALE_CLASS}`);
+    assert.equal(stale.length, markPending ? 1 : 0, `${markPending}: marked before the debounce fired`);
+    if (markPending) assert.equal(panel.getAttribute('aria-busy'), 'true');
+    else assert.equal(panel.hasAttribute('aria-busy'), false);
+  }
+});
+
+test('markPending: the new score swapped in is not stale; a score drawn while a newer change waits is stale (the mark follows the host that is current)', async () => {
+  const { tab } = page();
+  const { p, timers } = ports({ markPending: true });
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(RHYTHM_STARTER); await flush();
+  area.update({ ...RHYTHM_STARTER, tempo_bpm: 99 });
+  for (const fn of timers.splice(0)) fn();                       // the debounce fires: the second score is built and swapped in
+  await flush();
+  const panel = tab.children[1] as HTMLElement;
+  const hosts = [...panel.querySelectorAll(`.${SCORE_HOST_CLASS}`)] as HTMLElement[];
+  assert.equal(hosts.length, 1, 'one score on screen');
+  assert.equal(hosts[0].classList.contains(SCORE_HOST_STALE_CLASS), false, 'the new score is current');
+  assert.equal(panel.hasAttribute('aria-busy'), false);
 });

@@ -2107,3 +2107,16 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   min-width: 3em;
   font-variant-numeric: tabular-nums;
 }
+
+/* 2026-10-31-1110: the engraving on screen is not the latest (a change is waiting to be drawn): dimmed until the new one replaces it (live-score-dom.ts, markPending) */
+.forge-rhythm-score-host-stale {
+  opacity: 0.45;
+  transition: opacity 120ms ease-out;
+}
+
+/* 2026-10-31-1110: the line under an arrangement's sentence while a row is pinned: the kit and the note the notes pane was sent to */
+.forge-arrangement-pin {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  padding: 0 0 4px;
+}

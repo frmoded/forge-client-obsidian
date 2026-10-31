@@ -131,7 +131,9 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
 
   // 2026-10-30-1010 (0900 item (d)): when the pair of the tab the person STARTED the sentence dialog from is open, the pair's notes pane shows the new phrase's note after Create. The pair itself (linker, the active tab) is built later, inside the gate;
   // this is the seam: `origin` is read when the dialog opens (before any await: L59), `follow` asks the pair to show the note. No pair = false and nothing at all happens (P3: the pair exists only once the person asked for it).
-  const pairBridge: { origin(): WorkspaceLeaf | null; follow(origin: WorkspaceLeaf, noteId: string): Promise<boolean> } = { origin: () => null, follow: async () => false };
+  // 2026-10-31-1110 (CCQA smoke 9, item 1): `origin` is the SCORE leaf of the pair the person started from, whichever pane of the pair was active (the notes pane may be: Obsidian's getLeaf(true) would open the new tab in ITS group), and
+  // `openIn` opens the new phrase as the Score in that very leaf, then asks the pair to show its note. false = the pair is gone since the dialog opened: the caller opens the phrase the ordinary way.
+  const pairBridge: { origin(): WorkspaceLeaf | null; openIn(origin: WorkspaceLeaf, file: TFile): Promise<boolean> } = { origin: () => null, openIn: async () => false };
   // 2026-10-27-1015: "New phrase from a sentence". A fresh planner (no memory of an earlier sentence) per dialog; Create goes through the same loop every new phrase does.
   const openSentencePlan = (): void => {
     const origin = pairBridge.origin();
@@ -145,9 +147,11 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
       create: (p, content) => app.vault.create(p, content),
       open: async (file) => {
-        await openPhrase(app, file);
-        if (origin === null) return;
-        try { await pairBridge.follow(origin, file.path.replace(/\.md$/, '')); } catch (e) { console.error('openSentencePlan: the pair could not follow the new phrase', e); }       // the phrase is made and open: a pane that cannot follow is not a failure of Create
+        let followed = false;
+        if (origin !== null) {
+          try { followed = await pairBridge.openIn(origin, file); } catch (e) { console.error('openSentencePlan: the pair could not follow the new phrase', e); }       // the phrase is made: a pair that cannot follow is not a failure of Create
+        }
+        if (!followed) await openPhrase(app, file);
       },
       notify: (message) => { new Notice(message); },
       isAlreadyExists: isFileExistsError,
@@ -433,8 +437,15 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         if (recent && (type === RHYTHM_EDIT_VIEW_TYPE || type === RHYTHM_SCORE_VIEW_TYPE) && file && isBarPath(file.path)) return { kind: 'bar', leaf: recent, file };
         return null;
       };
-      pairBridge.origin = () => pairTarget()?.leaf ?? null;
-      pairBridge.follow = (origin, noteId) => linker.navigate(origin, noteId, 'new phrase');
+      pairBridge.origin = () => {
+        const leaf = pairTarget()?.leaf ?? app.workspace.getMostRecentLeaf();
+        return leaf ? linker.scoreOf(leaf) : null;
+      };
+      pairBridge.openIn = async (origin, file) => {
+        if (linker.scoreOf(origin) !== origin) return false;
+        await openScore(origin, file);
+        return linker.navigate(origin, file.path.replace(/\.md$/, ''), 'new phrase');
+      };
       const openPair = async (target: { kind: PairSource; leaf: WorkspaceLeaf; file: TFile }): Promise<void> => {
         try {
           if (target.kind === 'phrase-text') await openScore(target.leaf, target.file);        // the Score in this very tab first, then the pair

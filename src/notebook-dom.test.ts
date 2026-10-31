@@ -69,7 +69,8 @@ test('clicking bars selects them, a second click unselects; Shift-click extends 
   r.click(r.bar(7), { shiftKey: true });
   assert.deepEqual(r.chips(), ['bars 3, 5, 7 to 9']);
   assert.equal(r.q('.forge-notebook-run').disabled, false);
-  assert.equal(r.q('.forge-notebook-hint').style.display, 'none', 'the hint goes once there is a selection');
+  assert.equal(r.q('.forge-notebook-hint').style.display, '', '2026-10-31-1110 (reassessed): the hint stays once there is a selection, now saying how to undo it');
+  assert.match(r.q('.forge-notebook-hint').textContent, /^Click a selected number again to unselect it; Esc clears the selection\.$/);
 });
 
 test('the row picker: a row joins the chip, "all" takes it away; the picked row looks pressed', () => {
@@ -375,15 +376,40 @@ test('(f) the chip line has its height from the start, so the first chip does no
 
 // ---- 2026-10-30-1020: the driver could not pick bars 3 to 5 ("click bars above" read as the Score's bars; twice told how) -------------------------------------------------------------------------------------------------------------
 
-test('1020: the hint says where to click and how to get a range, and goes when a selection exists; no sentence of it says "above"', () => {
+test('1020: the hint says where to click and how to get a range (and, 2026-10-31-1110, once a selection exists, how to undo it); no sentence of it says "above"', () => {
   const r = rig();
   const HINT = 'Select bars: click a number below (Shift-click a second number for a range, e.g. 3 then Shift-click 5).';
   assert.equal(r.q('.forge-notebook-hint').textContent, HINT);
   assert.ok(!/above/.test(r.q('.forge-notebook-hint').textContent));
   r.click(r.bar(2));
-  assert.equal(r.q('.forge-notebook-hint').style.display, 'none');
+  // 2026-10-31-1110 (CCQA smoke 9, item 5): with a selection the hint does NOT go; it says how to undo (a click on a selected number toggles it off; the hint used to be gone exactly when it mattered)
+  assert.equal(r.q('.forge-notebook-hint').style.display, '');
+  assert.equal(r.q('.forge-notebook-hint').textContent, 'Click a selected number again to unselect it; Esc clears the selection.');
   r.click(r.bar(2));
-  assert.equal(r.q('.forge-notebook-hint').style.display, '', 'it comes back with the empty selection');
+  assert.equal(r.q('.forge-notebook-hint').style.display, '', 'and with the empty selection the first hint is back');
+  assert.equal(r.q('.forge-notebook-hint').textContent, HINT);
+});
+
+test('1110: Esc anywhere in the tab (not typing in the box or the picker) clears the whole selection (bars, row, the Shift anchor): "click 3, Shift-click 5" on top of an old selection is then a plain pick of 5, not the range 3 to 5', () => {
+  const r = rig();
+  const esc = (target: any) => { const e = new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }); target.dispatchEvent(e); return e; };
+  r.click(r.bar(3)); r.click(r.qa('.forge-notebook-row')[1]);
+  assert.deepEqual(r.chips(), ['bar 3, kick row']);
+  const ignored = esc(r.q('.forge-notebook-request'));
+  assert.deepEqual(r.chips(), ['bar 3, kick row'], 'Esc while typing the sentence is the box\'s own');
+  assert.equal(ignored.defaultPrevented, false);
+  const e = esc(r.bar(3));
+  assert.deepEqual(r.chips(), [], 'cleared');
+  assert.deepEqual(r.qa('.forge-notebook-bar').map((b: any) => b.getAttribute('aria-pressed')).filter((v: string) => v === 'true'), []);
+  assert.equal(r.q('.forge-notebook-run').disabled, true);
+  assert.equal(r.qa('.forge-notebook-row')[0].getAttribute('aria-pressed'), 'true', 'the row is back to all');
+  assert.ok(e.defaultPrevented, 'the key was used');
+  assert.ok(r.lines.includes('[forge-notebook] selection cleared'), r.lines.join(' | '));
+  r.click(r.bar(5), { shiftKey: true });
+  assert.deepEqual(r.chips(), ['bar 5'], 'the anchor went with the selection: a Shift-click is a plain pick');
+  assert.ok(esc(r.parent).defaultPrevented, 'Esc on the tab itself clears too');
+  assert.deepEqual(r.chips(), []);
+  assert.equal(esc(r.parent).defaultPrevented, false, 'Esc with nothing selected is left to whoever else wants it (the pin, the pane)');
 });
 
 test('1020: selectRange(3, 5) (what a drag on the Score says) selects bars 3 to 5 as a REPLACEMENT, keeps the row, and shows the chip as "bars 3 to 5, kick row"', () => {

@@ -32,6 +32,7 @@ const REVEAL_SETTLE_MS = 150;
 const REQUEST_PLACEHOLDER = 'or say it: make this half as busy, keep the downbeat';
 const REQUEST_LABEL = 'What to do with the selected bars, in a sentence';
 const DERIVED_REASON = 'This phrase was made by a transform: open its source phrase to ask for another change.';   // 2026-10-29-0900 (a)
+const HINT_SELECTED = 'Click a selected number again to unselect it; Esc clears the selection.';       // 2026-10-31-1110 (CCQA smoke 9): the hint used to go with the first pick, exactly when "click again" and "Esc" matter
 const HINT = 'Select bars: click a number below (Shift-click a second number for a range, e.g. 3 then Shift-click 5).';       // 2026-10-30-1020: the old "click bars above" was read as the bars of the Score
 
 export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): NotebookHandle {
@@ -90,7 +91,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     const chip = selectionChip(selection);
     chipsEl.textContent = '';
     if (chip !== null) chipsEl.appendChild(el('span', 'forge-notebook-chip', chip));
-    hint.style.display = chip !== null ? 'none' : '';
+    hint.textContent = chip !== null ? HINT_SELECTED : HINT;
     run.disabled = busy || chip === null;
     request.disabled = busy || derived;
     request.setAttribute('placeholder', derived ? DERIVED_REASON : REQUEST_PLACEHOLDER); request.setAttribute('aria-label', derived ? DERIVED_REASON : REQUEST_LABEL);
@@ -110,6 +111,18 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     if (settling !== null) clearTimeout(settling);
     settling = setTimeout(() => { settling = null; if (!disposed) scrollNow(); }, REVEAL_SETTLE_MS);
   };
+
+  /** Esc anywhere in the tab (the box and the picker keep their own Esc) lets go of the whole selection: bars, row and the Shift anchor, so a Shift-click afterwards is a plain pick. With nothing selected the key is not used. */
+  const onKey = (e: Event): void => {
+    const k = e as KeyboardEvent;
+    if (k.key !== 'Escape' || (selection.bars.length === 0 && selection.row === null)) return;
+    const t = k.target as HTMLElement | null;
+    if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName ?? '')) return;
+    k.preventDefault();
+    selection = { bars: [], row: null }; anchor = null;
+    paint();
+  };
+  parent.addEventListener('keydown', onKey);
 
   const buildScore = (): void => {
     barsEl.textContent = ''; rowsEl.textContent = '';
@@ -210,6 +223,6 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
       paint(); reveal();
     },
     refresh,
-    dispose() { disposed = true; if (settling !== null) clearTimeout(settling); root.remove(); },
+    dispose() { disposed = true; if (settling !== null) clearTimeout(settling); parent.removeEventListener('keydown', onKey); root.remove(); },
   };
 }

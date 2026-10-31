@@ -139,6 +139,15 @@ export function arrangementLineageOf(prov: Provenance): LineageEntry[] {
   return out;
 }
 
+/** 2026-10-31-1110 (CCQA smoke 9): the line under the arrangement's sentence while a row is pinned - which KIT it is and which note the notes pane was sent to ("Notes pane: rock · bar_001"). Two kits whose bars were both made from bar_001 open the same note;
+ *  this is what tells them apart. null = the row sends the notes pane nowhere new (or this is not an arrangement row). */
+export function pinStatusLine(prov: Provenance): string | null {
+  if (prov.role !== ARRANGEMENT_ROW_ROLE) return null;
+  const note = prov.params.sourceNote, reason = prov.params.sourceReason, kit = prov.params.kit;
+  if (typeof note !== 'string' || note.length === 0 || typeof reason !== 'string' || typeof kit !== 'string' || kit.length === 0) return null;
+  return `Notes pane: ${kit} · ${baseName(note)}`;
+}
+
 /** Who sounds where: the bars (1-based, in order) in which the kit or the phrase of this note plays; `[]` for a note that is neither (the arrangement itself, a bar note). */
 export function barsPlayedBy(lineage: readonly LineageBar[], noteId: string): number[] {
   const kit = noteId.startsWith('kits/') ? baseName(noteId) : null, phrase = noteId.startsWith('phrases/') ? baseName(noteId) : null;

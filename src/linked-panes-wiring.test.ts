@@ -42,7 +42,7 @@ for (const edition of ['lean', 'music'] as const) {
     const tick = (ms = 60) => clock.advance(ms);
     const tf = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
     const leaves = new Set<any>();
-    const log = { splits: [] as unknown[][], activated: [] as any[], errors: [] as unknown[][], lines: [] as string[], handlers: new Map<string, Array<() => void>>() };
+    const log = { getLeafCalls: [] as any[], splits: [] as unknown[][], activated: [] as any[], errors: [] as unknown[][], lines: [] as string[], handlers: new Map<string, Array<() => void>>() };
     const makeLeaf = (type = 'empty', file?: string) => {
       const leaf: any = { states: [] as any[], view: { getViewType: () => type, file: file ? tf(file) : undefined, contentEl: (() => { const el = (globalThis as any).document.createElement('div'); el.appendChild((globalThis as any).document.createElement('span')); return el; })() } };
       leaf.setViewState = async (s: any) => { leaf.states.push(s); leaf.view = { getViewType: () => s.type, file: s.state?.file ? tf(s.state.file) : undefined }; };
@@ -70,7 +70,7 @@ for (const edition of ['lean', 'music'] as const) {
         getActiveViewOfType: (cls: unknown) => (cls === real.PhraseView ? active.phrase ?? null : cls === real.MarkdownView ? active.text ?? null : cls === real.ArrangementView ? active.arrangement ?? null : null),
         getMostRecentLeaf: () => recent,
         createLeafBySplit: (score: any, direction: string, before: boolean) => { log.splits.push([score, direction, before]); return makeLeaf(); },
-        setActiveLeaf: (l: any) => { log.activated.push(l); }, revealLeaf: () => {}, getLeaf: () => makeLeaf(),
+        setActiveLeaf: (l: any) => { log.activated.push(l); }, revealLeaf: () => {}, getLeaf: () => { const leaf = makeLeaf(); log.getLeafCalls.push(leaf); return leaf; },
       },
       metadataCache: { resolvedLinks, on: (name: string, cb: () => void) => { (log.handlers.get(`mc:${name}`) ?? log.handlers.set(`mc:${name}`, []).get(`mc:${name}`)!).push(cb); return {}; } }, plugins: {},
     };
@@ -392,8 +392,8 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'phrases/phrase_002.md', mode: 'preview' } }, 'read-only, the reading view, focus stays where it was');
       assert.equal(notes.states.length, 2, 'one show, no more');
       assert.ok(w.log.lines.includes('[forge-panes] notes pane -> phrases/phrase_002.md (reason: new phrase)'), w.log.lines.join(' | '));
-      const opened = [...w.leaves].filter((l) => l !== notes && l !== score).flatMap((l) => l.states);
-      assert.deepEqual(opened, [{ type: PHRASE_VIEW_TYPE, active: true, state: { file: 'phrases/phrase_002.md' } }], 'and the new phrase is still opened as a Score in a tab of its own');
+      assert.deepEqual(score.states.at(-1), { type: PHRASE_VIEW_TYPE, active: true, state: { file: 'phrases/phrase_002.md' } }, '2026-10-31-1110: and the new phrase is opened as the Score in the pair\'s Score leaf (not a tab of its own: the pair would not follow it)');
+      assert.deepEqual([...w.leaves].filter((l) => l !== notes && l !== score), [], 'no leaf besides the pair\'s two');
       assert.equal(w.log.splits.length, 1, 'no third pane');
       assert.deepEqual(w.log.errors, []);
     } finally { s.restore(); w.done(); }
@@ -425,6 +425,41 @@ for (const edition of ['lean', 'music'] as const) {
       w.setActive({});                                                          // no Score at all (the palette from a note)
       await s.createFromSentence();
       assert.equal(notesA.states.length, 1);
+      assert.deepEqual(w.log.errors, []);
+    } finally { s.restore(); w.done(); }
+  });
+
+  // ---- 2026-10-31-1110 item 1 (CCQA smoke 9): Create must follow INTO the pair, whichever pane of the pair the person started from. Obsidian's getLeaf(true) opens a tab in the ACTIVE leaf's group: with the notes pane active that is the
+  // notes pane's group, so the Score never moved. This pins the MECHANISM (Create opens the new phrase in the pair's Score leaf, explicitly); if the design moves this SHOULD go red — reassess, do not just rewrite.
+  test(`[${edition}] a phrase made from a sentence with the NOTES pane active: the new phrase opens as the Score in the pair's SCORE leaf (no new tab through getLeaf), the notes pane shows its note`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const s = sentenceWorld(w);
+    try {
+      const score = w.makeLeaf(); w.setActive({ phrase: w.phraseTab(score) });
+      await w.run();
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      w.setActive({ text: w.textTab(notes, PHRASE) });                         // the person clicked into the notes pane (a phrase note as reading text), then ran the command
+      await s.createFromSentence();
+      assert.ok(s.store.has('phrases/phrase_002.md'));
+      assert.deepEqual(score.states.at(-1), { type: PHRASE_VIEW_TYPE, active: true, state: { file: 'phrases/phrase_002.md' } }, 'the Score leaf of the pair shows the new phrase');
+      assert.deepEqual(w.log.getLeafCalls, [], 'no tab was asked of the active leaf\'s group (that is the notes pane\'s)');
+      assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'phrases/phrase_002.md', mode: 'preview' } }, 'the notes pane shows the new phrase\'s note, read-only');
+      assert.equal(w.log.splits.length, 1, 'no third pane');
+      assert.deepEqual(w.log.errors, []);
+    } finally { s.restore(); w.done(); }
+  });
+
+  test(`[${edition}] a phrase made from a sentence with the SCORE active and a pair open: the new phrase opens in the Score leaf too (the same rule from either pane), the old tab is replaced, not duplicated`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const s = sentenceWorld(w);
+    try {
+      const score = w.makeLeaf(); w.setActive({ phrase: w.phraseTab(score) });
+      await w.run();
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      await s.createFromSentence();
+      assert.deepEqual(score.states.at(-1), { type: PHRASE_VIEW_TYPE, active: true, state: { file: 'phrases/phrase_002.md' } });
+      assert.deepEqual(w.log.getLeafCalls, []);
+      assert.equal(notes.states.at(-1).state.file, 'phrases/phrase_002.md');
       assert.deepEqual(w.log.errors, []);
     } finally { s.restore(); w.done(); }
   });
@@ -474,7 +509,8 @@ for (const edition of ['lean', 'music'] as const) {
   test(`[${edition}] MECHANISM PIN 2026-10-29-0830 (if the design moves this SHOULD go red — reassess, do not just rewrite): the arrangement tab draws its strip from its own note and sends a chip to the pair through the SAME hooks as a phrase tab; the command finds the tab from the active view`, () => {
     const ka = code('kits-arrangements.ts');
     assert.match(ka, /this\.strip = mountArrangementStrip\(this\.contentEl, \{ goto: \(noteId\) => structure\.goto\(leaf, noteId\), openNote, onHover: [^\n]*\}\);\s*\n\s*this\.strip\.show\(text\);/);       // 2026-10-30-1000, deliberate: + the hover that lights the rows of a kit or phrase
-    assert.match(ka, /this\.strip\?\.show\(text\); this\.area\?\.update\(text\);/, 'a change to the note redraws the chips with the Score');
+    // 2026-10-31-1110 (reassessed, deliberate): the chips are redrawn with the sentence and the controls, and the Score follows: at once when nothing plays, else after the debounce
+    assert.match(ka, /this\.strip\?\.show\(text\);\s*\n[^\n]*\n[^\n]*this\.area\?\.update\(text\);/, 'a change to the note redraws the chips with the Score');
     assert.match(ka, /new ArrangementView\(leaf, opts\.plan, opts\.structure, opts\.openNote, opts\.onPin\)/);       // 2026-10-30-1000, deliberate: + the pin hook of a phrase tab as the view's last argument
     const sf = code('score-first.ts');
     assert.match(sf, /registerKitsAndArrangements\(plugin, \{ plan, scoreFirst: \(\) => scoreFirst, structure: structureHooks, openNote, onPin: \(l, pin\) => \{ void linker\.pinned\(l, pin\); \} \}\);/);

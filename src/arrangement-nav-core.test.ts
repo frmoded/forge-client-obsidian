@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  ARRANGEMENT_INSPECTOR_HINT, ARRANGEMENT_ROW_ROLE, FORGE_PHRASES_KEY, annotateArrangementPayload, arrangementLineageOf, barsPlayedBy, chipsOfRow, readLineage, rowId, rowIdsPlayedBy, rowSource, type LineageBar,
+  ARRANGEMENT_INSPECTOR_HINT, ARRANGEMENT_ROW_ROLE, FORGE_PHRASES_KEY, annotateArrangementPayload, arrangementLineageOf, barsPlayedBy, chipsOfRow, pinStatusLine, readLineage, rowId, rowIdsPlayedBy, rowSource, type LineageBar,
 } from './arrangement-nav-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 import { morphXml } from './test-support/morph-xml.ts';
@@ -305,4 +305,31 @@ test('barsPlayedBy and rowIdsPlayedBy: only a note under kits/ or phrases/ names
 
 test('the hint says what to do in plain words', () => {
   assert.equal(ARRANGEMENT_INSPECTOR_HINT, 'Click a row of a bar to see which kit and which phrase played it. Arrow keys move between rows; Esc lets go.');
+});
+
+// ---- 2026-10-31-1110 item 4 (CCQA smoke 9) ---------------------------------------------------------------------------------------------------------------------------------------------------
+test('GUARD: every line of the stack\'s first entry separates its parts with " · " and never " - ", in every state a row can be in (played, retimed, forked, ended, no phrase) - the dash CCQA read on the "phrase has ended" line is not in the code', () => {
+  const states: Array<(p: any) => void> = [
+    () => {},
+    (p) => { p.params = { ...p.params, tempoBpm: 97.5, cameWith: 120 }; },
+    (p) => { p.params = { ...p.params, phraseBar: null, tempoBpm: null }; },
+    (p) => { p.params = { ...p.params, phrase: null, phraseBar: null }; },
+  ];
+  for (const [i, mutate] of states.entries()) {
+    const p = row(3, 'bell'); mutate(p);
+    const first = arrangementLineageOf(p)[0].text;
+    assert.match(first, /^bar 3 of 4 · /, `state ${i}: ${first}`);
+    assert.ok(!/ - /.test(first), `state ${i} has a dash: ${first}`);
+  }
+});
+
+test('pinStatusLine: a pinned arrangement row says which KIT it is and which note the notes pane was sent to, so two kits that both open bar_001 can be told apart; anything else says nothing', () => {
+  const rock = row(2, 'kick'), latin = row(2, 'claves');
+  assert.equal(pinStatusLine(rock), `Notes pane: rock · ${(rock.params.sourceNote as string).replace(/^.*\//, '')}`);
+  assert.equal(pinStatusLine(latin), `Notes pane: latin · ${(latin.params.sourceNote as string).replace(/^.*\//, '')}`);
+  const ended = row(3, 'bell');
+  assert.equal(pinStatusLine(ended), 'Notes pane: latin · phrase_009', 'where the phrase has ended: its own note');
+  assert.equal(pinStatusLine({ role: 'bar', noteId: 'x', params: {} } as any), null, 'not an arrangement row');
+  const nokit = row(1, 'kick'); nokit.params = { ...nokit.params, sourceNote: undefined, sourceReason: undefined };
+  assert.equal(pinStatusLine(nokit), null, 'a row that sends the notes pane nowhere new has nothing to say');
 });

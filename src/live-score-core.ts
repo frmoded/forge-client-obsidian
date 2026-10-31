@@ -20,6 +20,8 @@ export interface LiveScoreView {
   draw(payload: Record<string, unknown>): boolean;
   /** Take the current score away (the data it showed is no longer valid). */
   clear(): void;
+  /** 2026-10-31-1110: the score on screen is stale (a change is waiting to be drawn: `on`) or current again. Only asked when `markPending` is on. */
+  pending?(on: boolean): void;
 }
 
 export interface LiveScoreTiming {
@@ -42,6 +44,8 @@ export interface LiveScoreDeps {
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
   debounceMs?: number;
+  /** 2026-10-31-1110 (CCQA smoke 9, item 3): a surface whose render takes seconds (an arrangement) asks to be told when the score on screen stops being the latest, so it is never shown as current while a newer one is pending. Absent = never asked. */
+  markPending?: boolean;
   /** A millisecond clock (performance.now in the plugin). Timing is reported only when both `now` and `onTiming` are given. */
   now?: () => number;
   onTiming?(t: LiveScoreTiming): void;
@@ -52,6 +56,8 @@ export interface LiveScore {
   update(data: unknown): void;
   /** Draw now (the first render of a tab, a reload from the note); cancels the debounce. */
   showNow(data: unknown): void;
+  /** 2026-10-31-1110: the surface knows from its data alone that there is nothing to draw (every kit muted): take the score away and say `message` NOW, past the debounce and past a render still in flight (its late answer draws nothing). */
+  refuse(data: unknown, message: string): void;
   dispose(): void;
 }
 
@@ -69,6 +75,9 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
   let disposed = false;
   let lastKey: string | null = null;  // the data (as json) of the latest request, so an identical showNow does not engrave the same bar twice
   let failed = false;                 // the last pass ended without a score (a refusal, an engine error): a showNow for the same data tries again
+  let asked = 0;                      // how many times the data changed; a score drawn from an older ask is stale the moment it is drawn
+  let marked = false;                 // the score on screen is flagged stale (markPending)
+  const mark = (on: boolean): void => { if (!deps.markPending || marked === on) return; marked = on; deps.view.pending?.(on); };
   const timed = typeof deps.now === 'function' && typeof deps.onTiming === 'function';
   const report = (t0: number, engineMs: number, outcome: LiveScoreTiming['outcome']) => {
     if (timed) deps.onTiming!({ totalMs: deps.now!() - t0, engineMs, outcome });
@@ -81,6 +90,7 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
     render: async () => {
       if (disposed || !hasData) return;
       const mine = ++seq;
+      const askedAtStart = asked;
       const t0 = timed ? deps.now!() : 0;
       if (!drawn) deps.view.status(SCORE_RENDERING_TEXT);
       const e0 = timed ? deps.now!() : 0;
@@ -88,6 +98,7 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
       const engineMs = timed ? deps.now!() - e0 : 0;
       if (disposed || mine !== seq) { report(t0, engineMs, 'superseded'); return; }   // a newer render started, or the tab moved on: draw nothing
       if (outcome.kind !== 'score') {
+        mark(false);
         deps.view.clear();
         drawn = false;
         deps.view.status(outcome.message);
@@ -96,6 +107,7 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
         return;
       }
       let drew: boolean;
+      mark(asked !== askedAtStart);      // the new score replaces the stale one in this same step; one asked for since this render began is already stale
       try {
         drew = deps.view.draw(outcome.payload);
       } catch (e) {
@@ -124,6 +136,8 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
       latest = data;
       lastKey = safeKey(data);
       hasData = true;
+      asked++;
+      if (drawn) mark(true);
       scheduler.request();
     },
     showNow(data) {
@@ -133,7 +147,23 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
       latest = data;
       lastKey = key;
       hasData = true;
+      asked++;
+      if (drawn) mark(true);
       scheduler.renderNow();
+    },
+    refuse(data, message) {
+      if (disposed) return;
+      latest = data;
+      lastKey = safeKey(data);
+      hasData = true;
+      asked++;
+      seq++;                                                  // a render in flight is superseded: its answer draws nothing
+      scheduler.cancel();
+      mark(false);
+      deps.view.clear();
+      drawn = false;
+      deps.view.status(message);
+      failed = true;
     },
     dispose() {
       disposed = true;

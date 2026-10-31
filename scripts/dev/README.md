@@ -22,6 +22,8 @@
 
 **Refresh note links as a dry run (drain 2026-10-30-1050).** `node scripts/dev/refresh-dry-run.ts <vault folder>` runs every phrase and arrangement note of a vault through the functions "Refresh note links" uses, IN MEMORY, and prints one row per note: would update / already current / REFUSED (a Description edited by hand, an unreadable note), whether the json fence stays byte-identical, whether the person's own frontmatter lines stay, whether a second run would change nothing, whether the Description parses back to the json's params, and which facets would be stale. It opens no file for writing (a test pins that). Exit 0 = no problem, 1 = a problem, 2 = usage.
 
+**CCQA smoke 9 (drain 2026-10-31-1110).** `measure-smoke9.ts` (entry `entry-smoke9.ts`) mounts the REAL Score panel with `markPending`, the REAL notebook and the arrangement's pin line in real Chrome under Obsidian's own stylesheet: a score on screen is dimmed (computed opacity 0.45, `aria-busy`) from the moment its data changes until the next one replaces it, the pin line names the kit and the note ("Notes pane: rock \u00b7 bar_001"), the notebook hint stays after a bar is picked and says how to undo, and a REAL Escape key clears the pick. Build `OUT=<dir>/harness-smoke9.js EDITION=music ENTRY=entry-smoke9.ts node scripts/dev/browser/build.mjs` (with `app.css` and this repo's `styles.css` as `plugin-styles.css` in `<dir>`), run `node scripts/dev/measure-smoke9.ts <dir>`; exits 1 when a verdict is false.
+
 ## The mutation runner (drain 2026-10-26-1300)
 
 `node scripts/dev/mutate.mjs` replaces the one-at-a-time, edit-the-working-tree mutation scripts. It is tooling only (no product behaviour); its own tests are `scripts/mutate-runner.test.mjs` (they run in `npm test`).

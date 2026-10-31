@@ -24,6 +24,8 @@ export const SCORE_STATUS_CLASS = 'forge-rhythm-edit-score-status';
 export const SCORE_HOST_CLASS = 'forge-rhythm-score-host';
 export const SCORE_PANEL_LABEL = 'Score of this bar';
 export const SCORE_HOST_PENDING_CLASS = 'forge-rhythm-score-host-pending';
+/** 2026-10-31-1110: the engraving on screen is not the latest any more (a change is waiting to be drawn): dimmed, and the panel says it is busy. */
+export const SCORE_HOST_STALE_CLASS = 'forge-rhythm-score-host-stale';
 /** How long a pending score may take to produce its first <svg> before it is shown anyway. */
 export const READY_TIMEOUT_MS = 4000;
 
@@ -67,6 +69,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   parent.appendChild(el);
   let current: HTMLElement | null = null;
   let pending: { host: HTMLElement; cancel: () => void } | null = null;
+  let stale = false;                                   // markPending: the score on screen is not the latest (the flag follows whichever host is current)
 
   const dropPending = () => {
     if (!pending) return;
@@ -85,6 +88,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   const swapIn = (next: HTMLElement, payload: Record<string, unknown>) => {
     pending = null;
     next.classList.remove(SCORE_HOST_PENDING_CLASS);
+    next.classList.toggle(SCORE_HOST_STALE_CLASS, stale);
     const old = current;
     current = next;
     if (old) { deps.onHidden?.(old); deps.stopPlayers(old); old.remove(); }
@@ -93,6 +97,11 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
 
   const view: LiveScoreView = {
     status(text) { statusEl.textContent = text; },
+    pending(on) {
+      stale = on;
+      current?.classList.toggle(SCORE_HOST_STALE_CLASS, on);
+      if (on) el.setAttribute('aria-busy', 'true'); else el.removeAttribute('aria-busy');
+    },
     draw(payload) {
       dropPending();                                   // a newer score supersedes one that has not shown yet
       const next = doc.createElement('div');
@@ -115,7 +124,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
       pending = { host: next, cancel };
       return true;
     },
-    clear() { dropPending(); removeCurrent(); },
+    clear() { dropPending(); removeCurrent(); stale = false; el.removeAttribute('aria-busy'); },
   };
 
   return {
@@ -146,6 +155,8 @@ export interface ScoreArea {
   update(data: unknown): void;
   /** Draw this bar now (open, reload from the note). A no-op in the lean edition. */
   showNow(data: unknown): void;
+  /** 2026-10-31-1110: nothing can be drawn for `data` and the surface knows it without the engine: show `message` now, past the debounce and a render in flight. A no-op in the lean edition. */
+  refuse(data: unknown, message: string): void;
   /** The pointer is over a Beat Box grid step (`null` = left): light the engraved note. A no-op without an inspector. */
   gridHover(target: GridTarget | null): void;
   /** M6: light these elements of the shown Score from outside (the phrase bracket); `[]` clears. A no-op without an inspector. */
@@ -167,6 +178,8 @@ export interface ScoreAreaPorts extends ScorePanelDeps {
   title: string;
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
+  /** 2026-10-31-1110: dim the Score on screen from the moment its data changes until the new one is drawn (a surface whose render takes seconds). Absent = the Score stays as it was, undimmed, until replaced. */
+  markPending?: boolean;
   /** How long after the last change the Score is redrawn. Absent = the live Score's own (LIVE_SCORE_DEBOUNCE_MS). The mix tab asks for a shorter one: it is dragged, not clicked. */
   debounceMs?: number;
   now?: () => number;
@@ -179,7 +192,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   if (plan === 'none') return null;
   if (plan === 'lean-note') {
     const note = mountLeanNote(parent, LEAN_SCORE_NOTE);
-    return { update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, gridHover() { /* no score in the lean edition */ }, lightAll() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
+    return { update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, refuse() { /* no score in the lean edition */ }, gridHover() { /* no score in the lean edition */ }, lightAll() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
   }
   // The provenance map travels WITH the payload it was built for: compute() attaches ids to the MusicXML and remembers the map by payload identity; the panel hands the very
   // payload back when that engraving becomes the shown one, so the map and the SVG are swapped in together (never a map for a score that is not on screen).
@@ -221,12 +234,14 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     setTimer: ports.setTimer,
     clearTimer: ports.clearTimer,
     debounceMs: ports.debounceMs,
+    markPending: ports.markPending,
     now: ports.now,
     onTiming: ports.onTiming,
   });
   return {
     update: (data) => live.update(data),
     showNow: (data) => live.showNow(data),
+    refuse: (data, message) => live.refuse(data, message),
     gridHover: (target) => inspector?.gridHover(target),
     lightAll: (ids) => inspector?.lightAll(ids),
     dispose() { live.dispose(); inspector?.dispose(); messages?.dispose(); panel.dispose(); },

@@ -106,6 +106,8 @@ export interface PaneLinker<L> {
   sweep(strict?: boolean): void;
   /** 2026-10-26-1270: a structure chip was clicked on this Score: the notes pane goes to that note. false = this Score has no pair (the caller opens the note itself). 2026-10-30-1010: `reason` is what the evidence line says caused it (default: the chip). */
   navigate(score: L, noteId: string, reason?: string): Promise<boolean>;
+  /** 2026-10-31-1110: the Score leaf of the pair `leaf` belongs to, whichever of its two panes `leaf` is (the person may start a command from the notes pane); null when `leaf` is in no pair. */
+  scoreOf(leaf: L): L | null;
   /** The workspace said something moved: if the PERSON navigated a notes pane (a wikilink click, a backlink), tell that pair's listeners the new path, once. A navigation the Score caused is never echoed back. */
   checkNotes(): void;
   /** Be told when the person navigates this Score's notes pane. Returns the way to stop. */
@@ -166,6 +168,11 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
       pair.reason = reason;
       await settle(pair);
       return true;
+    },
+    scoreOf(leaf) {
+      if (pairs.has(leaf)) return leaf;
+      for (const [score, pair] of pairs) if (pair.notes === leaf) return score;
+      return null;
     },
     checkNotes() {
       for (const [score, pair] of pairs) {

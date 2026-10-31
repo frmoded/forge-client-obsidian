@@ -70,6 +70,8 @@ export interface ScoreScheduler {
   request(): void;
   /** Render right now (the first render of a view, a manual refresh): cancels the debounce. */
   renderNow(): void;
+  /** 2026-10-31-1110: forget a render that is waiting for its debounce (a render already running is not touched). */
+  cancel(): void;
   dispose(): void;
 }
 
@@ -107,6 +109,7 @@ export function createScoreScheduler(deps: ScoreSchedulerDeps): ScoreScheduler {
       clear();
       void run();
     },
+    cancel() { clear(); },
     dispose() {
       disposed = true;
       clear();

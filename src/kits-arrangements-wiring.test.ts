@@ -228,6 +228,8 @@ for (const edition of ['lean', 'music'] as const) {
     assert.match(ka, /commit: \(patches\) => \{ void this\.writeSettings\(patches\); \}/);
     assert.match(ka, /const file = this\.file;\n    if \(!file \|\| this\.disposed \|\| patches\.length === 0\) return;/, 'the file is captured before the await (L59)');
     assert.match(ka, /this\.controls\?\.dispose\(\);\n    this\.controls = null;/);
-    assert.match(ka, /this\.showControls\(text\); this\.strip\?\.show\(text\); this\.area\?\.update\(text\);/, 'a redraw of the note refreshes the rows too (before the strip and the Score, which the 0830 pin keeps adjacent)');
+    // 2026-10-31-1110 (reassessed, the design moved on purpose): the sentence above the strip is painted in the same step as the controls and the strip, and the Score follows (at once when nothing plays, else after the debounce)
+    assert.match(ka, /this\.paintHeader\(text\); this\.showControls\(text\); this\.strip\?\.show\(text\);/, 'a redraw of the note refreshes the sentence and the rows too (before the Score, which the 0830 pin keeps adjacent)');
+    assert.match(ka, /nothingPlays\(read\.value\)\) this\.area\?\.refuse\(text, ALL_MUTED\); else this\.area\?\.update\(text\);/);
   });
 }
