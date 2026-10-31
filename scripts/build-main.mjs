@@ -22,6 +22,7 @@
 //   FORGE_EDITION=music node scripts/build-main.mjs
 //   (programmatic, for tests) import { buildMain } from './build-main.mjs'
 
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -31,8 +32,20 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Re-exported: scripts/build-main.test.mjs (Phase 1) imports these from here.
 export { EDITIONS, resolveEdition };
 
-/** The first line of every main.js this script writes. */
-export function editionStamp(edition) { return `/* forge-edition: ${edition} */`; }
+/** The first line of every main.js this script writes. 2026-10-31-1115: with a `build` ({sha, dirty}) it also says which commit the bundle was built from and whether the tree was clean
+ *  (`/* forge-edition: music; sha: abc123def; tree: clean *\/`), so an install can always say what it installed. Without one: the old line. */
+export function editionStamp(edition, build) {
+  return build ? `/* forge-edition: ${edition}; sha: ${build.sha}; tree: ${build.dirty ? "dirty" : "clean"} */` : `/* forge-edition: ${edition} */`;
+}
+
+/** The build identity `npm run build` wrote just before this script (src/build-stamp.generated.ts: scripts/inline-plugin-version.mjs), or null when it is missing or the commit is unknown. */
+export function readGeneratedBuildStamp(root = ROOT) {
+  try {
+    const m = /BUILD_STAMP = (\{[^}]*\})/.exec(fs.readFileSync(path.join(root, "src", "build-stamp.generated.ts"), "utf8"));
+    const stamp = m ? JSON.parse(m[1]) : null;
+    return stamp && /^[0-9a-f]{7,40}$/.test(stamp.sha) ? { sha: stamp.sha, dirty: stamp.dirty === true } : null;
+  } catch { return null; }
+}
 
 export function editionPlugin(edition) {
   return {
@@ -66,8 +79,9 @@ export function stubInlinedAssetsPlugin() {
   };
 }
 
-export async function buildMain({ edition, outfile = path.join(ROOT, "main.js"), stubInlinedAssets = false } = {}) {
+export async function buildMain({ edition, outfile = path.join(ROOT, "main.js"), stubInlinedAssets = false, stamp } = {}) {
   const ed = resolveEdition(edition ?? process.env.FORGE_EDITION);
+  const buildInfo = stamp === undefined ? readGeneratedBuildStamp() : stamp;
   await build({
     entryPoints: [path.join(ROOT, "src", "main.ts")],
     bundle: true,
@@ -76,7 +90,7 @@ export async function buildMain({ edition, outfile = path.join(ROOT, "main.js"),
     format: "cjs",
     outfile,
     // 2026-10-26-1700: the edition is the first line of main.js, greppable by anyone and by scripts/check-installable-build.mjs. The lean build in the repo root was once copied into the music vault.
-    banner: { js: editionStamp(ed) },
+    banner: { js: editionStamp(ed, buildInfo) },
     plugins: stubInlinedAssets ? [editionPlugin(ed), stubInlinedAssetsPlugin()] : [editionPlugin(ed)],
     logLevel: "info",
   });

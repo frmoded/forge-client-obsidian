@@ -39,3 +39,8 @@ export function setStatusBarTooltip(
   el.removeAttribute?.('title');
   if ('title' in el) el.title = undefined;
 }
+
+/** 2026-10-31-1115: the commit alone, for the onload banner: "904d575c7" or "904d575c7+dirty" ("unknown" when it could not be read). */
+export function formatBuildSha(stamp: Pick<BuildStamp, 'sha' | 'dirty'>): string {
+  return stamp.sha === 'unknown' ? 'unknown build' : `${stamp.sha}${stamp.dirty ? '+dirty' : ''}`;
+}

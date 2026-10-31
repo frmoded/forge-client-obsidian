@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
-import { formatBuildStamp, setStatusBarTooltip, statusBarTooltip } from './build-stamp-core.ts';
+import { formatBuildSha, formatBuildStamp, setStatusBarTooltip, statusBarTooltip } from './build-stamp-core.ts';
 
 test('format: sha, +dirty marker, and a minute-resolution UTC time', () => {
   assert.equal(formatBuildStamp({ sha: '904d575c7', dirty: false, builtAt: '2026-10-09T20:53:15.964Z' }), '904d575c7 · built 2026-10-09 20:53 UTC');
@@ -65,4 +65,10 @@ test('wiring: main.ts applies the tooltip through setStatusBarTooltip and no lon
   const main = fs.readFileSync(path.resolve(process.cwd(), 'src/main.ts'), 'utf-8').replace(/\/\/.*$/gm, '');
   assert.match(main, /setStatusBarTooltip\(statusBarItem, statusBarTooltip\(/);
   assert.ok(!/statusBarItem\.title\s*=/.test(main));
+});
+
+test('2026-10-31-1115: the banner names the commit alone: the sha, +dirty for a dirty tree, "unknown build" when it could not be read', () => {
+  assert.equal(formatBuildSha({ sha: '904d575c7', dirty: false }), '904d575c7');
+  assert.equal(formatBuildSha({ sha: '904d575c7', dirty: true }), '904d575c7+dirty');
+  assert.equal(formatBuildSha({ sha: 'unknown', dirty: false }), 'unknown build');
 });

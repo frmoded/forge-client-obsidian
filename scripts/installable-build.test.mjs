@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
-import { buildMain, editionStamp } from "./build-main.mjs";
+import { buildMain, editionStamp, readGeneratedBuildStamp } from "./build-main.mjs";
 import { installableProblems, stampedEdition } from "./check-installable-build.mjs";
 
 const MUSIC_VAULTS = ["forge-moda", "music-theory", "forge-tutorial", "music-core"];
@@ -37,7 +37,7 @@ test("the REAL build writes the stamp as the first line, for each edition (the b
       const outfile = path.join(dir, `${edition}.js`);
       await buildMain({ edition, outfile, stubInlinedAssets: true });
       const first = fs.readFileSync(outfile, "utf8").split("\n", 1)[0];
-      assert.equal(first, editionStamp(edition));
+      assert.equal(first, editionStamp(edition, readGeneratedBuildStamp()), "2026-10-31-1115 (reassessed): the first line is the edition AND the commit the build step recorded");
       assert.equal(stampedEdition(fs.readFileSync(outfile, "utf8")), edition);
     }
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }

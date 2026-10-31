@@ -36,7 +36,9 @@ const outPath = path.join(ROOT, "src", "version-constant.generated.ts");
 const stampPath = path.join(ROOT, "src", "build-stamp.generated.ts");
 
 /** Short SHA of HEAD + "dirty" (tracked files differ from HEAD), or {sha: "unknown"} outside a git checkout. */
-export function readGitStamp(cwd = ROOT, run = (args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })) {
+export function readGitStamp(cwd = ROOT, run = (args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }), env = process.env) {
+  // 2026-10-31-1115: a build from a scratch copy of a commit (scripts/install-local.sh) has no .git: the script that made the copy says which commit and tree it is
+  if (env.FORGE_BUILD_SHA !== undefined) return /^[0-9a-f]{7,40}$/.test(env.FORGE_BUILD_SHA) ? { sha: env.FORGE_BUILD_SHA, dirty: env.FORGE_BUILD_TREE === "dirty" } : { sha: "unknown", dirty: false };
   try {
     const sha = String(run(["rev-parse", "--short=9", "HEAD"])).trim();
     if (!/^[0-9a-f]{7,40}$/.test(sha)) return { sha: "unknown", dirty: false };
