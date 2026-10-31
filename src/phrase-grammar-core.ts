@@ -4,8 +4,8 @@
 //   describe(params) -> the canonical text;   parse(text, vault) -> { ok, params } | { ok: false, error: { message, line, column } };   canonical(params) -> the params as the text carries them.
 //
 // ONE VOCABULARY OF VERBS, not four (driver Q1, 2026-10-30): a description is a list of CLAUSES, one sentence each, a verb and its arguments. The first clause names the kind of note (Extend, Mix, Morph, Take, Play); the rest are the
-// clauses that kind takes. Every verb lives in VERBS below, in ONE table: adding a verb (the composition's `Then play ...`, `Repeat that 2 times.`, `For 8 bars play ...`, which are RESERVED here and refused by name) is adding a row, and no
-// existing sentence changes. A full stop followed by a space, or a line break, ends a sentence. A source is named by a wikilink and the grammar does not care what kind of note it is (a phrase, an arrangement, one day a composition): it asks the vault's lists.
+// clauses that kind takes. Every verb lives in VERBS below, in ONE table: adding a verb (the composition's `Then play ...`, `Repeat that 2 times.`, `For 8 bars play ...`, which M17b made real) is adding a row, and no
+// existing sentence changes. A full stop followed by a space, or a line break, ends a sentence. A source is named by a wikilink and the grammar does not care what kind of note it is (a phrase, an arrangement, a composition): it asks the vault's lists.
 //
 // DEFAULTS. The text OMITS only: a tempo change of 0 (the sentence is not said), a Mix threshold of 50 percent and ghost notes off (their sentences are not said), a morph or mix seed that its order does not use, and a Double up grid of 16.
 // Everything else is always said (bars, style, the share of a mix, its mode, the order of a morph, the amount and the kept beats of a thin out). On INPUT any parameter that has a default in the validators (`phrase-core.ts`) may be left out
@@ -16,20 +16,21 @@ import {
   type ExtendPhrase, type MixPhrase, type MorphOrder, type MorphPhrase, type PhraseParams, type PhraseStyle, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
 import { validateArrangement, type ArrangementParams, type ArrangementTrack } from './arrangement-core.ts';
+import { COMPOSITION_LENGTH_MAX, COMPOSITION_REPEAT_MAX, validateComposition, type CompositionParams, type CompositionSection } from './composition-core.ts';
 import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, orderWords, percentOf, plain, shiftDecimal, sortedOverrides, type GrammarParams } from './phrase-describe-core.ts';
 // the saying half lives in phrase-describe-core.ts (M15b); these are re-exported so this file stays the one place a reader of the grammar looks
 export { canonical, complementOf100, describe, orderWords, plain, shiftDecimal, type GrammarParams } from './phrase-describe-core.ts';
 
 /** The notes of the vault a description may name (basenames, no folder, no .md). `arrangements` and `kits` are optional: a list that is not given is not checked (names are then only checked for their spelling). */
-export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; kits?: readonly string[] }
+export interface GrammarVault { bars: readonly string[]; phrases: readonly string[]; arrangements?: readonly string[]; compositions?: readonly string[]; kits?: readonly string[] }
 export interface GrammarError { message: string; line: number; column: number }
 export type ParseResult = { ok: true; params: GrammarParams } | { ok: false; error: GrammarError };
 
 const NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'] as const;
 export const GRAMMAR_VOCABULARY = { styles: PHRASE_STYLES, orders: MORPH_ORDERS, keeps: TRANSFORM_KEEPS, styleWords: STYLE_WORDS } as const;
 
-/** The verbs. `kind` is the note a verb OPENS (the first clause) or `null` for a clause that follows; `reserved` verbs are the composition's, refused by name until they exist. */
-export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morph' | 'transform' | 'arrangement' | null; reserved?: boolean; example: string }> = [
+/** The verbs. `kind` is the note a verb OPENS (the first clause) or `null` for a clause that follows. */
+export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morph' | 'transform' | 'arrangement' | 'composition' | null; example: string }> = [
   { verb: 'extend', kind: 'extend', example: 'Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower.' },
   { verb: 'mix', kind: 'mix', example: 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a vote.' },
   { verb: 'morph', kind: 'morph', example: 'Morph [[bar_003]] into [[bar_001]] over 8 bars, in musical order.' },
@@ -44,9 +45,10 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
   { verb: 'mute', kind: null, example: 'Mute the [[latin]] kit.' },
   { verb: 'only', kind: null, example: 'Only the [[rock]] kit plays.' },
   { verb: 'together', kind: null, example: 'Together.' },
-  { verb: 'then play', kind: null, reserved: true, example: 'Then play [[arr_002]] for 4 bars.' },
-  { verb: 'repeat that', kind: null, reserved: true, example: 'Repeat that 2 times.' },
-  { verb: 'for bars play', kind: null, reserved: true, example: 'For 8 bars play [[arr_001]].' },
+  { verb: 'play for', kind: 'composition', example: 'Play [[arr_001]] for 8 bars.' },
+  { verb: 'then play', kind: null, example: 'Then play [[arr_002]] for 4 bars.' },
+  { verb: 'repeat that', kind: null, example: 'Repeat that 2 times.' },
+  { verb: 'for bars play', kind: 'composition', example: 'For 8 bars play [[arr_001]].' },
 ];
 
 
@@ -117,9 +119,10 @@ class Scan {
 }
 
 /** One note reference: `[[name]]` or a bare name that exists. `kinds` say which lists of the vault it may be in; a name in two of them is two readings and is refused. */
-type NoteKind = 'bar' | 'phrase' | 'arrangement' | 'kit';
-const LIST_OF: Record<NoteKind, (v: GrammarVault) => readonly string[] | undefined> = { bar: (v) => v.bars, phrase: (v) => v.phrases, arrangement: (v) => v.arrangements, kit: (v) => v.kits };
-const KIND_WORDS: Record<NoteKind, string> = { bar: 'a bar', phrase: 'a phrase', arrangement: 'an arrangement', kit: 'a kit' };
+type NoteKind = 'bar' | 'phrase' | 'arrangement' | 'composition' | 'kit';
+const LIST_OF: Record<NoteKind, (v: GrammarVault) => readonly string[] | undefined> = { bar: (v) => v.bars, phrase: (v) => v.phrases, arrangement: (v) => v.arrangements, composition: (v) => v.compositions, kit: (v) => v.kits };
+const KIND_WORDS: Record<NoteKind, string> = { bar: 'a bar', phrase: 'a phrase', arrangement: 'an arrangement', composition: 'a composition', kit: 'a kit' };
+const FOLDER_OF = { phrase: 'phrases', arrangement: 'arrangements', composition: 'compositions' } as const;
 function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: string): { name: string; kind: NoteKind } {
   sc.ws();
   const at = sc.at;
@@ -135,8 +138,11 @@ function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: string): {
     if (!m) sc.fail(`${what}, as [[a note]]`);
     name = m[0]; sc.i += name.length;
   }
-  const hits = kinds.filter((k) => (LIST_OF[k](vault) ?? [name]).includes(name));
-  if (hits.length === 0) sc.failAt(`Expected ${kinds.map((k) => KIND_WORDS[k]).join(' or ')} of this vault for ${what}, but "${name}" is not one.`, at);
+  // a kind whose list the caller did not give is not checked: it is the reading only when no kind WITH a list has the name (the first such kind), so a name that is in a list is never also read as an unchecked kind
+  const named = kinds.filter((k) => LIST_OF[k](vault)?.includes(name) === true);
+  const unchecked = kinds.find((k) => LIST_OF[k](vault) === undefined);
+  const hits = named.length > 0 || unchecked === undefined ? named : [unchecked];
+  if (hits.length === 0) sc.failAt(`Expected ${kinds.length > 2 ? `${kinds.slice(0, -1).map((k) => KIND_WORDS[k]).join(', ')} or ${KIND_WORDS[kinds[kinds.length - 1]]}` : kinds.map((k) => KIND_WORDS[k]).join(' or ')} of this vault for ${what}, but "${name}" is not one.`, at);
   if (hits.length > 1) sc.failAt(`Expected one note for ${what}, but "${name}" is both ${KIND_WORDS[hits[0]]} and ${KIND_WORDS[hits[1]]}; rename one of them.`, at);
   return { name, kind: hits[0] };
 }
@@ -162,7 +168,8 @@ function sentencesOf(text: string): Sentence[] {
   return out;
 }
 
-const RESERVED: Array<{ re: RegExp; verb: string }> = [{ re: /^then\s+play\b/i, verb: 'Then play' }, { re: /^repeat\s+that\b/i, verb: 'Repeat that' }, { re: /^for\s+\S+\s+bars?\s+play\b/i, verb: 'For N bars play' }];
+/** The sentences only a composition has: refused, by name, in a description of any other kind. */
+const COMPOSITION_ONLY: Array<{ re: RegExp; verb: string }> = [{ re: /^then\s+play\b/i, verb: 'Then play' }, { re: /^repeat\s+that\b/i, verb: 'Repeat that' }, { re: /^for\s+\S+\s+bars?\s+play\b/i, verb: 'For N bars play' }];
 const OPEN_VERBS: Array<{ re: RegExp; kind: 'extend' | 'mix' | 'morph' | 'transform' | 'arrangement' }> = [
   { re: /^extend\b/i, kind: 'extend' }, { re: /^mix\b/i, kind: 'mix' }, { re: /^morph\b/i, kind: 'morph' }, { re: /^take\b/i, kind: 'transform' }, { re: /^play\b/i, kind: 'arrangement' },
 ];
@@ -246,7 +253,7 @@ function followForks(ss: Sentence[], vault: GrammarVault, max: () => number): { 
 }
 function reservedGuard(sc: Scan): void {
   const rest = sc.s.slice(sc.i).trimStart();
-  for (const r of RESERVED) if (r.re.test(rest)) sc.failAt(`Expected a sentence of this description, but "${r.verb}" is reserved for compositions and does not exist yet.`, sc.at);
+  for (const r of COMPOSITION_ONLY) if (r.re.test(rest)) sc.failAt(`Expected a sentence of this description, but "${r.verb}" belongs to a composition (a description that starts with "Play [[a note]] for N bars.") and this one is not.`, sc.at);
 }
 
 function parseMorph(ss: Sentence[], vault: GrammarVault): MorphPhrase {
@@ -323,7 +330,7 @@ function parseMix(ss: Sentence[], vault: GrammarVault): MixPhrase {
 function parseTransform(ss: Sentence[], vault: GrammarVault): TransformPhrase & { source: string } {
   const sc = new Scan(ss[0].text, ss[0].start);
   sc.kw('take');
-  const src = note(sc, vault, ['phrase', 'arrangement'], 'the note to take');
+  const src = note(sc, vault, ['phrase', 'arrangement', 'composition'], 'the note to take');
   sc.end();
   const ops: TransformOp[] = [];
   const forks: Sentence[] = [];                                          // the "Bar N is replaced by" sentences, between or after the changes
@@ -380,7 +387,7 @@ function parseTransform(ss: Sentence[], vault: GrammarVault): TransformPhrase & 
   if (ops.length === 0) sc.failAt('Expected at least one change after "Take" (Thin out or Double up), but found none.', ss[0].start + ss[0].text.length);
   if (ops.length > TRANSFORM_OPS_MAX) sc.failAt(`Expected at most ${TRANSFORM_OPS_MAX} changes, but found ${ops.length}.`, ss[0].start);
   const overrides = followForks(forks, vault, () => Number.MAX_SAFE_INTEGER);
-  return { kind: 'transform', source: `${src.kind === 'arrangement' ? 'arrangements' : 'phrases'}/${src.name}`, ops, ...overrides };
+  return { kind: 'transform', source: `${FOLDER_OF[src.kind as 'phrase' | 'arrangement' | 'composition']}/${src.name}`, ops, ...overrides };
 }
 
 function parseArrangement(ss: Sentence[], vault: GrammarVault): ArrangementParams {
@@ -435,6 +442,48 @@ function parseArrangement(ss: Sentence[], vault: GrammarVault): ArrangementParam
   return { kind: 'arrangement', tracks: tracks.map((t) => ({ kit: t.kit, phrase: t.phrase, ...(t.mute === true ? { mute: true } : {}), ...(t.solo === true ? { solo: true } : {}), ...(t.volume !== undefined ? { volume: t.volume } : {}) })) };
 }
 
+/** A composition (M17b): "Play [[a]] for 8 bars." opens, "Then play [[b]] for 4 bars." follows (each also said "For 8 bars play [[a]]."), "Repeat that 2 times." plays the section before it 2 more times. A section with no "for N bars" is all of its note, once. */
+function parseComposition(ss: Sentence[], vault: GrammarVault): CompositionParams {
+  const sections: CompositionSection[] = [];
+  ss.forEach((s, i) => {
+    const sc = new Scan(s.text, s.start);
+    if (sc.kw('repeat that')) {
+      if (sections.length === 0) sc.failAt('Expected a section to play before "Repeat that", but found none.', s.start);
+      const last = sections[sections.length - 1];
+      if (last.repeat !== undefined) sc.failAt('Expected "Repeat that" to be said once for a section, but it is said twice.', s.start);
+      last.repeat = sc.whole('a number of times', 1, COMPOSITION_REPEAT_MAX);
+      if (!(sc.kw('times') || sc.kw('time'))) sc.fail('"times"');
+      sc.end();
+      return;
+    }
+    const lengthOf = (): number => { const n = sc.whole('a number of bars', 1, COMPOSITION_LENGTH_MAX); if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bars"'); return n; };
+    let length: number | undefined;
+    let src: { name: string; kind: NoteKind };
+    if (sc.kw('for')) {                                                    // "For 8 bars play [[a]]."
+      length = lengthOf();
+      if (!sc.kw('play')) sc.fail('"play"');
+      src = note(sc, vault, ['phrase', 'arrangement', 'composition'], 'the note to play');
+    } else {
+      if (!(i === 0 ? sc.kw('play') : sc.kw('then play'))) sc.fail(i === 0 ? '"Play [[a note]] for N bars." or "For N bars play [[a note]]."' : '"Then play [[a note]] for N bars.", "For N bars play [[a note]]." or "Repeat that N times."');
+      src = note(sc, vault, ['phrase', 'arrangement', 'composition'], 'the note to play');
+      if (sc.kw('for')) length = lengthOf();
+    }
+    sc.end();
+    sections.push({ source: `${FOLDER_OF[src.kind as 'phrase' | 'arrangement' | 'composition']}/${src.name}`, ...(length !== undefined ? { length } : {}) });
+  });
+  return { kind: 'composition', sections };
+}
+
+/** Is this description a composition's? Its first sentence is "For N bars play ..."; or "Play [[a]]" followed by "for N bars" or nothing (an arrangement's first sentence has "on the [[a kit]] kit"); or it has a sentence only a composition has. */
+function compositionLike(ss: Sentence[]): boolean {
+  const first = ss[0].text;
+  if (/^for\s+\S+\s+bars?\s+play\b/i.test(first)) return true;
+  if (!/^play\b/i.test(first)) return false;
+  if (/^play\s+(?:\[\[[^\]]*\]\]|[A-Za-z0-9_-]+)\s+on\b/i.test(first)) return false;                 // "Play [[a phrase]] on the [[a kit]] kit.": an arrangement's
+  if (ss.slice(1).some((x) => COMPOSITION_ONLY.some((r) => r.re.test(x.text)))) return true;
+  return /^play\s+(?:\[\[[^\]]*\]\]|[A-Za-z0-9_-]+)\s*(?:for\b|$)/i.test(first);
+}
+
 const placeOf = (text: string, offset: number): { line: number; column: number } => {
   const before = text.slice(0, Math.max(0, Math.min(offset, text.length)));
   const line = before.split('\n').length;
@@ -448,6 +497,10 @@ export function parse(text: string, vault: GrammarVault): ParseResult {
     const ss = sentencesOf(text);
     if (ss.length === 0) return err(0, `Expected a description (it starts with ${OPEN_EXAMPLES}), but found nothing.`);
     const first = new Scan(ss[0].text, ss[0].start);
+    if (compositionLike(ss)) {
+      const c = validateComposition(parseComposition(ss, vault));
+      return c.ok === false ? err(ss[0].start, c.message) : { ok: true, params: c.value };
+    }
     reservedGuard(first);
     const open = OPEN_VERBS.find((v) => v.re.test(ss[0].text));
     if (!open) first.fail(`a description that starts with ${OPEN_EXAMPLES}`);

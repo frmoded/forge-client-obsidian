@@ -5,6 +5,7 @@ import { refreshPhraseNoteText } from './phrase-core.ts';
 import { refreshBarNoteText } from './phrase-notes-core.ts';
 import { refreshKitNoteText } from './kit-core.ts';
 import { refreshArrangementNoteText } from './arrangement-core.ts';
+import { refreshCompositionNoteText } from './composition-core.ts';
 
 export interface RefreshNotesPorts {
   /** The notes to look at: `{ path, name }` for every `phrases/phrase_NNN.md` and `bars/bar_NNN.md` (never README.md). */
@@ -13,6 +14,8 @@ export interface RefreshNotesPorts {
   /** 2026-10-29-0820: the kit notes (`kits/<name>.md`) and arrangement notes (`arrangements/<name>.md`), when the vault has them (README.md never). Absent = those are not looked at, and the summary and its lines are exactly what they were. */
   kits?(): Array<{ path: string; name: string }>;
   arrangements?(): Array<{ path: string; name: string }>;
+  /** 2026-10-31-1100 (M17b): the composition notes (`compositions/<name>.md`, README.md never), when the vault has them. Absent = not looked at, and the summary and its lines are exactly what they were. */
+  compositions?(): Array<{ path: string; name: string }>;
   read(path: string): Promise<string>;
   /** One atomic read-modify-write of the note: `fn` gets the CURRENT text and returns the new one. */
   process(path: string, fn: (current: string) => string): Promise<void>;
@@ -23,6 +26,7 @@ export interface RefreshSummary {
   bars: { total: number; updated: number; current: number; keptAsWritten: number; skipped: string[] };
   kits?: { total: number; updated: number; current: number; skipped: string[] };
   arrangements?: { total: number; updated: number; current: number; skipped: string[] };
+  compositions?: { total: number; updated: number; current: number; skipped: string[] };
 }
 
 type Plain = { total: number; updated: number; current: number; skipped: string[] };
@@ -67,19 +71,20 @@ export async function refreshNoteLinks(ports: RefreshNotesPorts): Promise<Refres
   }
   if (ports.kits) sum.kits = await refreshKind(ports, ports.kits(), (text) => refreshKitNoteText(text));
   if (ports.arrangements) sum.arrangements = await refreshKind(ports, ports.arrangements(), refreshArrangementNoteText);
+  if (ports.compositions) sum.compositions = await refreshKind(ports, ports.compositions(), refreshCompositionNoteText);
   return sum;
 }
 
 /** The evidence line (`[forge-notes] ...`) and the one-line Notice of a run. */
 export function refreshLine(s: RefreshSummary): string {
-  const skipped = s.phrases.skipped.length + s.bars.skipped.length + (s.kits?.skipped.length ?? 0) + (s.arrangements?.skipped.length ?? 0);
+  const skipped = s.phrases.skipped.length + s.bars.skipped.length + (s.kits?.skipped.length ?? 0) + (s.arrangements?.skipped.length ?? 0) + (s.compositions?.skipped.length ?? 0);
   const more = (label: string, k: Plain | undefined): string => (k ? `, ${label} ${k.total} (${k.updated} updated, ${k.current} already current)` : '');
-  return `[forge-notes] refresh note links: phrases ${s.phrases.total} (${s.phrases.updated} updated, ${s.phrases.current} already current), bars ${s.bars.total} (${s.bars.updated} updated, ${s.bars.current} already current, ${s.bars.keptAsWritten} descriptions left as written)${more('kits', s.kits)}${more('arrangements', s.arrangements)}${skipped > 0 ? `, ${skipped} skipped` : ''}`;
+  return `[forge-notes] refresh note links: phrases ${s.phrases.total} (${s.phrases.updated} updated, ${s.phrases.current} already current), bars ${s.bars.total} (${s.bars.updated} updated, ${s.bars.current} already current, ${s.bars.keptAsWritten} descriptions left as written)${more('kits', s.kits)}${more('arrangements', s.arrangements)}${more('compositions', s.compositions)}${skipped > 0 ? `, ${skipped} skipped` : ''}`;
 }
 export function refreshNotice(s: RefreshSummary): string {
-  const extra = (s.kits?.updated ?? 0) + (s.arrangements?.updated ?? 0);
+  const extra = (s.kits?.updated ?? 0) + (s.arrangements?.updated ?? 0) + (s.compositions?.updated ?? 0);
   const n = s.phrases.updated + s.bars.updated + extra;
-  const skipped = [...s.phrases.skipped, ...s.bars.skipped, ...(s.kits?.skipped ?? []), ...(s.arrangements?.skipped ?? [])];
-  const changed = `${s.phrases.updated} phrase note(s) and ${s.bars.updated} bar note(s) updated${extra > 0 ? ` (and ${s.kits?.updated ?? 0} kit note(s), ${s.arrangements?.updated ?? 0} arrangement note(s))` : ''}`;
+  const skipped = [...s.phrases.skipped, ...s.bars.skipped, ...(s.kits?.skipped ?? []), ...(s.arrangements?.skipped ?? []), ...(s.compositions?.skipped ?? [])];
+  const changed = `${s.phrases.updated} phrase note(s) and ${s.bars.updated} bar note(s) updated${extra > 0 ? ` (and ${s.kits?.updated ?? 0} kit note(s), ${s.arrangements?.updated ?? 0} arrangement note(s)${s.compositions ? `, ${s.compositions.updated} composition note(s)` : ''})` : ''}`;
   return `Refresh note links: ${n === 0 ? 'every note was already up to date' : changed}${skipped.length > 0 ? `; ${skipped.length} could not be read (${skipped[0]})` : ''}.`;
 }

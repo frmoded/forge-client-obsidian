@@ -44,13 +44,13 @@ function world(over: { notes?: Record<string, string | undefined>; combined?: un
 }
 const transformNote = (source: string, ops = OPS): string => noteContentFor('phrase_010', { kind: 'transform', source, ops });
 
-test('the validator takes a phrase OR an arrangement as the source of a transform, and refuses everything else in one sentence naming both', () => {
+test('the validator takes a phrase OR an arrangement (and, since M17b, a composition) as the source of a transform, and refuses everything else in one sentence naming them', () => {
   for (const source of ['phrases/phrase_006', 'arrangements/arr_001', 'arrangements/arr_12']) {
     const v = validatePhrase({ kind: 'transform', source, ops: OPS });
     assert.ok(v.ok, source);
     if (v.ok) assert.equal((v.value as TransformPhrase).source, source);
   }
-  const SENTENCE = (got: string) => `source must be a phrase note without .md, like phrases/phrase_006, or an arrangement note, like arrangements/arr_001, got ${got}.`;
+  const SENTENCE = (got: string) => `source must be a phrase note without .md, like phrases/phrase_006, an arrangement note, like arrangements/arr_001, or a composition note, like compositions/intro, got ${got}.`;      // 2026-10-31-1100 (M17b, deliberate): a composition note too
   for (const source of ['phrase_006', 'arr_001', 'phrases/phrase_006.md', 'arrangements/arr_001.md', 'bars/bar_005', 'arrangements/arr_x', 'phrases/arr_001', 'arrangements/phrase_001', 'arrangement/arr_001', 'kits/rock', 'arrangements/arr_001/x', '/arrangements/arr_001', ' arrangements/arr_001', 7, null]) {
     const v = validatePhrase({ kind: 'transform', source, ops: OPS });
     assert.deepEqual(v, { ok: false, message: SENTENCE(JSON.stringify(source)) }, String(source));
@@ -153,7 +153,8 @@ test('MECHANISM PIN 2026-10-30-1050 (if the design moves this SHOULD go red: rea
   const read = (f: string) => fs.readFileSync(path.join(import.meta.dirname, f), 'utf8');
   assert.match(read('phrase-view.ts'), /computeArrangement: \(data, title\) => computeArrangementScoreViaEngine\(data, title\)/);
   assert.match(read('phrase-dom.ts'), /ports\.computeArrangement \? phraseDepsWithArrangements\(/);
-  assert.match(read('kits-arrangements.ts'), /phrases: phraseDepsWithArrangements\(/);
+  assert.match(read('phrase-dom.ts'), /ports\.computeArrangement && ports\.computeComposition \? phraseDepsWithSources\(/, '2026-10-31-1100 (M17b, deliberate): and with the composition step when the surface has one');
+  assert.match(read('kits-arrangements.ts'), /phrases: phraseDepsWithSources\(/, '... the arrangement tab draws its phrases with the arrangement AND the composition step (M17b)');
 });
 
 test('a transform of a PHRASE whose note is missing or unusable is a refusal naming the phrase (the path the arrangement source shares)', async () => {

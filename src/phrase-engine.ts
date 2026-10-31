@@ -3,6 +3,7 @@
 import type { RhythmData } from './rhythm-edit-core.ts';
 import type { MixBars, PhraseParams, TransformInput } from './phrase-core.ts';
 import type { ArrangementInput } from './arrangement-core.ts';
+import type { CompositionInput } from './composition-core.ts';
 import { getPyodideHost } from './pyodide-host.ts';
 
 export async function computePhraseScoreViaEngine(data: RhythmData | MixBars | TransformInput, params: PhraseParams, title: string): Promise<unknown> {
@@ -23,4 +24,11 @@ export async function morphChangesViaEngine(a: RhythmData, b: RhythmData, order:
   const host = getPyodideHost();
   if (!host) throw new Error('the engine is not available');
   return (await host.getInstance()).morphChanges(a, b, order, seed);
+}
+
+/** 2026-10-31-1100 (M17b): the Score of a COMPOSITION - the sections (the note each came from and the bars it made) repeated or cut to their lengths and joined by the engine's compose_sections, drawn by the same glue as a phrase. */
+export async function computeCompositionScoreViaEngine(data: CompositionInput, title: string): Promise<unknown> {
+  const host = getPyodideHost();
+  if (!host) throw new Error('the engine is not available');
+  return (await host.getInstance()).computePhraseScore(data, { kind: 'composition' }, title);
 }

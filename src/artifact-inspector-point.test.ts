@@ -161,8 +161,9 @@ test('MECHANISM PIN: the phrase surfaces (extend, mix and — M7c Phase B, delib
   assert.match(dom, /pointRoles: \[MORPH_BAR_ROLE\]/);
   assert.equal((dom.match(/trace: \(line\) => \{ console\.info\(line\); \}/g) ?? []).length, 3, 'the line is printed by all three phrase surfaces');
   const users = fs.readdirSync(import.meta.dirname).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && /pointRoles/.test(src(f))).sort();
-  assert.deepEqual(users, ['kits-arrangements.ts', 'phrase-dom.ts', 'score-inspector.ts']);
+  assert.deepEqual(users, ['compositions.ts', 'kits-arrangements.ts', 'phrase-dom.ts', 'score-inspector.ts']);              // 2026-10-31-1100 (M17b, deliberate): the composition tab opts in with its own role
   assert.match(src('kits-arrangements.ts'), /pointRoles: \[ARRANGEMENT_ROW_ROLE\]/, 'the arrangement tab opts in with its own role, one row per bar and channel');
+  assert.match(src('compositions.ts'), /pointRoles: \[COMPOSITION_BAR_ROLE\]/, 'the composition tab opts in with its own role, one bar');
 });
 
 test('the box edges count as inside (all four), one pixel beyond does not', () => {

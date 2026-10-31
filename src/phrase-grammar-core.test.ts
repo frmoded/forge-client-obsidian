@@ -11,6 +11,7 @@ import {
 } from './phrase-grammar-core.ts';
 import { MORPH_ORDERS, PHRASE_STYLES, TRANSFORM_KEEPS, validatePhrase, type PhraseParams, type TransformOp } from './phrase-core.ts';
 import { validateArrangement, type ArrangementParams } from './arrangement-core.ts';
+import { validateComposition } from './composition-core.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const LIB = fs.readFileSync(path.join(ROOT, 'assets/engine/forge/music/lib.py'), 'utf8');       // the bundled engine, which the sync check keeps equal to forge/forge/music/lib.py
@@ -30,6 +31,7 @@ const VAULT: GrammarVault = {
   bars: Array.from({ length: 30 }, (_, i) => `bar_${String(i + 1).padStart(3, '0')}`),
   phrases: Array.from({ length: 40 }, (_, i) => `phrase_${String(i + 1).padStart(3, '0')}`),
   arrangements: ['arr_001', 'arr_002', 'arr_003'],
+  compositions: ['intro', 'comp_001'],
   kits: ['rock', 'latin', 'jazz', 'funk'],
 };
 const ROWS = ['kick', 'snare', 'hihat', 'conga_high', 'clap-2'];
@@ -71,8 +73,15 @@ const GEN: Record<string, (r: Rng) => GrammarParams> = {
       else ops.push({ op: 'thin_out', first, last, ...(row !== undefined ? { row } : {}), amount: unit(r) });
     }
     const overrides = overridesFor(r, 40);
-    return { kind: 'transform', source: r.chance(0.2) ? `arrangements/${r.pick(VAULT.arrangements!)}` : `phrases/${r.pick(VAULT.phrases)}`, ops, ...(overrides ? { overrides } : {}) };
+    return { kind: 'transform', source: r.chance(0.2) ? `arrangements/${r.pick(VAULT.arrangements!)}` : r.chance(0.15) ? `compositions/${r.pick(VAULT.compositions!)}` : `phrases/${r.pick(VAULT.phrases)}`, ops, ...(overrides ? { overrides } : {}) };
   },
+  composition: (r) => ({
+    kind: 'composition',
+    sections: Array.from({ length: r.int(1, 6) }, () => {
+      const source = r.pick([`phrases/${r.pick(VAULT.phrases)}`, `arrangements/${r.pick(VAULT.arrangements!)}`, `compositions/${r.pick(VAULT.compositions!)}`]);
+      return { source, ...(r.chance(0.7) ? { length: r.pick([1, 4, 8, 16, r.int(1, 256)]) } : {}), ...(r.chance(0.3) ? { repeat: r.pick([1, 2, r.int(1, 16)]) } : {}) };
+    }),
+  }),
   arrangement: (r) => {
     const kits = [...VAULT.kits!].sort(() => r.next() - 0.5).slice(0, r.int(1, 4));
     return { kind: 'arrangement', tracks: kits.map((kit) => ({
@@ -86,7 +95,8 @@ const CASES = 600;
 /** The plugin's own gate for a generated value (a transform of an arrangement is the one thing its validator does not know yet: its source is checked as a phrase, everything else as it is). */
 function pluginAccepts(p: GrammarParams): boolean {
   if (p.kind === 'arrangement') return validateArrangement(p).ok;
-  return validatePhrase(p.kind === 'transform' && p.source.startsWith('arrangements/') ? { ...p, source: 'phrases/phrase_000' } : p).ok;
+  if (p.kind === 'composition') return validateComposition(p).ok;
+  return validatePhrase(p).ok;                                           // since M15b and M17b the validator knows an arrangement and a composition as a transform's source
 }
 
 test('the generators make valid params (so the property below is about the grammar, not about junk): every case of every kind passes the plugin\'s own validators', () => {
@@ -121,7 +131,7 @@ test('the generators reach the corners: forks, multi-op transforms, one-bar morp
   const r = rng(99);
   for (let i = 0; i < 3000; i++) {
     const p = GEN[KINDS[i % KINDS.length]](r);
-    if (p.kind !== 'arrangement' && p.kind !== 'mix' && p.overrides && Object.keys(p.overrides).length > 0) seen.fork++;
+    if ('overrides' in p && p.overrides && Object.keys(p.overrides).length > 0) seen.fork++;
     if (p.kind === 'transform') { if (p.ops.length > 1) seen.multiOp++; for (const o of p.ops) if (o.op === 'thin_out') seen.keeps.add(o.keep ?? 'downbeat'); }
     if (p.kind === 'morph') { if (p.bars === 1) seen.oneBar++; seen.orders.add(p.order); }
     if (p.kind === 'mix') { if (p.a === p.b) seen.self++; if (p.mode === 'path') seen.orders.add(p.order ?? 'musical'); }
@@ -296,7 +306,7 @@ test('the words of an order are the notes\' own (`morphOrderWords` of phrase-cor
 });
 
 test('the vault lists the names are checked against are not copies: a name that is a phrase is never read as a bar, and the check follows the vault it is given', () => {
-  const small: GrammarVault = { bars: ['bar_001'], phrases: ['phrase_001'], arrangements: ['arr_001'], kits: ['rock'] };
+  const small: GrammarVault = { bars: ['bar_001'], phrases: ['phrase_001'], arrangements: ['arr_001'], compositions: [], kits: ['rock'] };
   assert.equal(parse('Extend [[bar_001]].', small).ok, true);
   assert.equal(parse('Extend [[bar_002]].', small).ok, false);
   assert.equal(parse('Extend [[phrase_001]].', small).ok, false, 'a phrase is not a bar');
@@ -435,7 +445,7 @@ const REFUSALS: Array<[string, number, number, string]> = [
   ["Mix [[bar_001]] and [[bar_002]]. Dancing.", 1, 34, "Expected \"Threshold N percent.\" or \"With ghost notes.\", but found \"Dancing\"."],
   ["Take.", 1, 5, "Expected the note to take, as [[a note]], but found the end of the sentence."],
   ["Take [[phrase_006]] extra.", 1, 21, "Expected the end of the sentence, but found \"extra\"."],
-  ["Take [[nothing]]. Thin out bar 1.", 1, 6, "Expected a phrase or an arrangement of this vault for the note to take, but \"nothing\" is not one."],
+  ["Take [[nothing]]. Thin out bar 1.", 1, 6, "Expected a phrase, an arrangement or a composition of this vault for the note to take, but \"nothing\" is not one."],
   ["Take [[phrase_006]]. Thin out.", 1, 30, "Expected \"bar N\" or \"bars N to M\", but found the end of the sentence."],
   ["Take [[phrase_006]]. Thin out bars x.", 1, 36, "Expected a bar number, but found \"x\"."],
   ["Take [[phrase_006]]. Thin out bars 3 to x.", 1, 41, "Expected a bar number, but found \"x\"."],
@@ -456,7 +466,25 @@ const REFUSALS: Array<[string, number, number, string]> = [
   ["Take [[phrase_006]]. Double up.", 1, 31, "Expected \"bar N\" or \"bars N to M\", but found the end of the sentence."],
   ["Take [[phrase_006]]. Bar 2 is replaced by [[bar_001]]. Bar 2 is replaced by [[bar_002]].", 1, 20, "Expected at least one change after \"Take\" (Thin out or Double up), but found none."],
   ["Play.", 1, 5, "Expected the phrase to play, as [[a note]], but found the end of the sentence."],
-  ["Play [[phrase_006]].", 1, 20, "Expected \"on the\", but found the end of the sentence."],
+  ["Play [[phrase_006]]. Repeat that 2 times. Repeat that 3 times.", 1, 43, "Expected \"Repeat that\" to be said once for a section, but it is said twice."],
+  ["Play [[phrase_006]] for 0 bars.", 1, 25, "Expected a number of bars from 1 to 256, but found 0."],
+  ["Play [[phrase_006]] for 300 bars.", 1, 25, "Expected a number of bars from 1 to 256, but found 300."],
+  ["Play [[phrase_006]] for 2.5 bars.", 1, 25, "Expected a number of bars as a whole number, but found 2.5."],
+  ["Play [[phrase_006]] for 8.", 1, 26, "Expected \"bars\", but found the end of the sentence."],
+  ["Play [[nope]] for 8 bars. Then play [[arr_001]].", 1, 6, "Expected a phrase, an arrangement or a composition of this vault for the note to play, but \"nope\" is not one."],
+  ["Play [[bar_001]].", 1, 6, "Expected a phrase, an arrangement or a composition of this vault for the note to play, but \"bar_001\" is not one."],
+  ["Play [[phrase_006]] for 8 bars. Play [[arr_001]] for 4 bars.", 1, 33, "Expected \"Then play [[a note]] for N bars.\", \"For N bars play [[a note]].\" or \"Repeat that N times.\", but found \"Play\"."],
+  ["Play [[phrase_006]] for 8 bars. Dancing.", 1, 33, "Expected \"Then play [[a note]] for N bars.\", \"For N bars play [[a note]].\" or \"Repeat that N times.\", but found \"Dancing\"."],
+  ["Play [[phrase_006]]. Repeat that 0 times.", 1, 34, "Expected a number of times from 1 to 16, but found 0."],
+  ["Play [[phrase_006]]. Repeat that 17 times.", 1, 34, "Expected a number of times from 1 to 16, but found 17."],
+  ["Play [[phrase_006]]. Repeat that 2.", 1, 35, "Expected \"times\", but found the end of the sentence."],
+  ["Play [[phrase_006]] for 8 bars extra.", 1, 32, "Expected the end of the sentence, but found \"extra\"."],
+  ["Play [[phrase_006]]. Then play.", 1, 31, "Expected the note to play, as [[a note]], but found the end of the sentence."],
+  ["Play [[phrase_006]]. Then play [[phrase_007]] for.", 1, 50, "Expected a number of bars, but found the end of the sentence."],
+  ["For 8 bars play.", 1, 16, "Expected the note to play, as [[a note]], but found the end of the sentence."],
+  ["For 8 bars play [[phrase_006]] extra.", 1, 32, "Expected the end of the sentence, but found \"extra\"."],
+  ["For 0 bars play [[phrase_006]].", 1, 5, "Expected a number of bars from 1 to 256, but found 0."],
+  ["Then play [[phrase_006]].", 1, 1, "Expected a sentence of this description, but \"Then play\" belongs to a composition (a description that starts with \"Play [[a note]] for N bars.\") and this one is not."],
   ["Play [[phrase_006]] on.", 1, 23, "Expected the kit to play it on, as [[a note]], but found the end of the sentence."],
   ["Play [[phrase_006]] on the [[rock]].", 1, 36, "Expected \"kit\", but found the end of the sentence."],
   ["Play [[phrase_006]] on the [[rock]] kit extra.", 1, 41, "Expected the end of the sentence, but found \"extra\"."],
@@ -486,7 +514,7 @@ test('GOLDEN REFUSALS: every refusal of the grammar, word for word, at its line 
     const e = bad(text);
     assert.deepEqual([e.line, e.column, e.message], [line, column, message], text);
   }
-  assert.ok(REFUSALS.length >= 90);
+  assert.ok(REFUSALS.length >= 110);
   assert.equal(new Set(REFUSALS.map((r) => r[3])).size > 70, true, 'the sentences differ from one another: they say what is wrong HERE');
 });
 
@@ -560,7 +588,7 @@ test('THE LAST GATE: what the grammar reads is also checked by the plugin\'s own
   const v: GrammarVault = { ...VAULT, phrases: [...VAULT.phrases, 'chorus'], kits: [...VAULT.kits!, '-odd'] };
   const take = bad('Take [[chorus]]. Thin out bar 1.', v);
   assert.deepEqual([take.line, take.column], [1, 1]);
-  assert.match(take.message, /^source must be a phrase note without \.md, like phrases\/phrase_006, or an arrangement note, like arrangements\/arr_001, got "phrases\/chorus"\.$/);
+  assert.match(take.message, /^source must be a phrase note without \.md, like phrases\/phrase_006, an arrangement note, like arrangements\/arr_001, or a composition note, like compositions\/intro, got "phrases\/chorus"\.$/);
   const arr = bad('Play [[phrase_006]] on the [[-odd]] kit. Together.', v);
   assert.deepEqual([arr.line, arr.column], [1, 1]);
   assert.match(arr.message, /is not a kit name/);
@@ -632,45 +660,46 @@ test('plain and shiftDecimal at their edges: the smallest and the largest double
   assert.equal(complementOf100('0.5'), '99.5'); assert.equal(complementOf100('12.34'), '87.66'); assert.equal(complementOf100('50'), '50'); assert.equal(complementOf100('99.99'), '0.01'); assert.equal(complementOf100('1.001'), '98.999');
 });
 
-test('THE TABLE OF VERBS, as documented: each verb, the note it opens, whether it is reserved, and its example - and every example of a live verb is a sentence the grammar says itself', () => {
-  assert.deepEqual(VERBS.map((v) => [v.verb, v.kind, v.reserved === true]), [
-    ['extend', 'extend', false], ['mix', 'mix', false], ['morph', 'morph', false], ['take', 'transform', false], ['play', 'arrangement', false],
-    ['thin out', null, false], ['double up', null, false], ['bar replaced', null, false], ['threshold', null, false], ['ghost notes', null, false], ['volume', null, false], ['mute', null, false], ['only', null, false], ['together', null, false],
-    ['then play', null, true], ['repeat that', null, true], ['for bars play', null, true],
+test('THE TABLE OF VERBS, as documented: each verb, the note it opens, and its example - and every example is a sentence the grammar says itself (M17b: the three verbs of a composition are real rows now)', () => {
+  assert.deepEqual(VERBS.map((v) => [v.verb, v.kind]), [
+    ['extend', 'extend'], ['mix', 'mix'], ['morph', 'morph'], ['take', 'transform'], ['play', 'arrangement'],
+    ['thin out', null], ['double up', null], ['bar replaced', null], ['threshold', null], ['ghost notes', null], ['volume', null], ['mute', null], ['only', null], ['together', null],
+    ['play for', 'composition'], ['then play', null], ['repeat that', null], ['for bars play', 'composition'],
   ]);
   assert.deepEqual(VERBS.map((v) => v.example), [
     'Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower.', 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a vote.', 'Morph [[bar_003]] into [[bar_001]] over 8 bars, in musical order.', 'Take [[phrase_006]].', 'Play [[phrase_006]] on the [[rock]] kit.',
     'Thin out bars 3 to 5, kick row, by half, keeping the downbeat.', 'Double up bars 3 to 5, kick row.', 'Bar 9 is replaced by [[bar_009]].', 'Threshold 40 percent.', 'With ghost notes.', 'Play the [[rock]] kit at 70 percent volume.', 'Mute the [[latin]] kit.', 'Only the [[rock]] kit plays.', 'Together.',
-    'Then play [[arr_002]] for 4 bars.', 'Repeat that 2 times.', 'For 8 bars play [[arr_001]].',
+    'Play [[arr_001]] for 8 bars.', 'Then play [[arr_002]] for 4 bars.', 'Repeat that 2 times.', 'For 8 bars play [[arr_001]].',
   ]);
   for (const text of ['Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower.', 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a vote.', 'Morph [[bar_003]] into [[bar_001]] over 8 bars, in musical order.']) assert.equal(describe(ok(text)), text);
 });
 
-// ---- the reserved verbs: the extension point ------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// ---- the composition's verbs: the extension point, used --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-test('RESERVED VERBS: the composition\'s sequence verbs are named in the table of verbs and refused BY NAME until they exist - in the first sentence, and after any kind', () => {
-  const reserved = VERBS.filter((v) => v.reserved);
-  assert.deepEqual(reserved.map((v) => v.verb), ['then play', 'repeat that', 'for bars play']);
-  for (const v of reserved) {
-    const e = bad(v.example);
-    assert.match(e.message, /reserved for compositions and does not exist yet/, v.example);
-    assert.deepEqual([e.line, e.column], [1, 1]);
-  }
+test('THE COMPOSITION\'S VERBS (M17b, they were reserved by M15a): they are rows of the table of verbs, they read in a composition, and any other kind of description refuses them BY NAME, in the first sentence and after any kind', () => {
+  const rows = VERBS.filter((v) => ['play for', 'then play', 'repeat that', 'for bars play'].includes(v.verb));
+  assert.equal(rows.length, 4);
+  assert.equal(parse('Play [[arr_001]] for 8 bars. Then play [[arr_002]] for 4 bars. Repeat that 2 times.', VAULT).ok, true);
+  assert.equal(parse('For 8 bars play [[arr_001]].', VAULT).ok, true);
+  const first = bad('Then play [[arr_002]] for 4 bars.');
+  assert.match(first.message, /"Then play" belongs to a composition/);
+  assert.deepEqual([first.line, first.column], [1, 1]);
+  assert.match(bad('Repeat that 2 times.').message, /"Repeat that" belongs to a composition/);
   const after = bad('Play [[phrase_006]] on the [[rock]] kit. Together. Then play [[arr_001]] for 4 bars.');
-  assert.match(after.message, /"Then play" is reserved/);
-  assert.match(bad('Extend [[bar_005]] to 8 bars. Repeat that 2 times.').message, /"Repeat that" is reserved/);
-  assert.match(bad('Mix [[bar_001]] and [[bar_002]]. For 8 bars play [[arr_001]].').message, /"For N bars play" is reserved/);
-  assert.match(bad('Take [[phrase_006]]. Thin out bar 1. Then play [[arr_001]].').message, /"Then play" is reserved/);
+  assert.match(after.message, /"Then play" belongs to a composition/);
+  assert.match(bad('Extend [[bar_005]] to 8 bars. Repeat that 2 times.').message, /"Repeat that" belongs to a composition/);
+  assert.match(bad('Mix [[bar_001]] and [[bar_002]]. For 8 bars play [[arr_001]].').message, /"For N bars play" belongs to a composition/);
+  assert.match(bad('Take [[phrase_006]]. Thin out bar 1. Then play [[arr_001]].').message, /"Then play" belongs to a composition/);
 });
 
 test('THE EXTENSION POINT: every verb the grammar speaks is a row of ONE table (VERBS) with an example that PARSES (the examples are the documentation); the ones that open a note name its kind; adding a row changes no existing sentence', () => {
-  const live = VERBS.filter((v) => !v.reserved);
+  const live = VERBS;
   assert.ok(live.length >= 14);
-  assert.deepEqual(VERBS.filter((v) => v.kind !== null).map((v) => v.kind), ['extend', 'mix', 'morph', 'transform', 'arrangement']);
+  assert.deepEqual(VERBS.filter((v) => v.kind !== null).map((v) => v.kind), ['extend', 'mix', 'morph', 'transform', 'arrangement', 'composition', 'composition']);
   // the examples that are whole descriptions parse as written; the clause examples parse after the sentence that opens their kind
   const opener: Record<string, string> = {
     'thin out': 'Take [[phrase_006]]. ', 'double up': 'Take [[phrase_006]]. ', 'bar replaced': 'Extend [[bar_005]] to 12 bars. ', 'threshold': 'Mix [[bar_005]] and [[bar_006]]. ', 'ghost notes': 'Mix [[bar_005]] and [[bar_006]]. ',
-    'together': 'Play [[phrase_006]] on the [[rock]] kit. ', 'volume': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ', 'mute': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ', 'only': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ',
+    'together': 'Play [[phrase_006]] on the [[rock]] kit. ', 'then play': 'Play [[arr_001]] for 8 bars. ', 'repeat that': 'Play [[arr_001]] for 8 bars. ', 'volume': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ', 'mute': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ', 'only': 'Play [[phrase_006]] on the [[rock]] kit. Play [[phrase_010]] on the [[latin]] kit. ',
   };
   for (const v of live) {
     const tail = ['volume', 'mute', 'only'].includes(v.verb) ? ' Together.' : '';
@@ -782,7 +811,7 @@ test('MECHANISM PIN 2026-10-30-1030, revised 2026-10-30-1050 (if the design move
   for (const style of PHRASE_STYLES) assert.ok(read('phrase-describe-core.ts').includes(style), `the style ${style} has a word`);
   const production = fs.readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
   const importers = (module: string) => production.filter((f) => f !== `${module}.ts` && read(f).includes(`'./${module}.ts'`)).sort();
-  assert.deepEqual(importers('phrase-describe-core'), ['arrangement-core.ts', 'phrase-grammar-core.ts', 'phrase-notes-core.ts'], 'the two note writers say the Description with it; the parser re-exports it');
+  assert.deepEqual(importers('phrase-describe-core'), ['arrangement-core.ts', 'composition-core.ts', 'phrase-grammar-core.ts', 'phrase-notes-core.ts'], 'the three note writers say the Description with it (M17b: the composition is the third); the parser re-exports it');
   assert.deepEqual(importers('phrase-grammar-core'), [], 'nothing PARSES a Description yet: the hand-edit button is M15c');
 });
 
@@ -794,4 +823,17 @@ test('the saying half and phrase-core.ts import each other (describe reads three
     assert.equal(r.status, 0, `${first} first: ${r.stderr}`);
     assert.match(r.stdout, /^Mix \[\[bar_005\]\] and \[\[bar_006\]\], 70 percent \[\[bar_005\]\], as a vote\.\|function\|\d+$/, first);
   }
+});
+
+// ---- 2026-10-31-1100 mutation pass C (here because the runner maps phrase-describe-core and phrase-grammar-core mutants to the tests that import them DIRECTLY) ----------------------
+
+import { compositionSentences } from './phrase-describe-core.ts';
+
+test('composition: canonical drops a repeat of 0 and keeps 1; the sentences say "1 time" and "N times"; a composition that fails validation is refused at the start of the description', () => {
+  const c = canonical({ kind: 'composition', sections: [{ source: 'phrases/phrase_003', repeat: 0 }, { source: 'phrases/phrase_004', repeat: 1 }, { source: 'phrases/phrase_004' }] } as GrammarParams);
+  assert.deepEqual((c as { sections: unknown[] }).sections, [{ source: 'phrases/phrase_003' }, { source: 'phrases/phrase_004', repeat: 1 }, { source: 'phrases/phrase_004' }]);
+  assert.deepEqual(compositionSentences({ kind: 'composition', sections: [{ source: 'phrases/phrase_003', repeat: 1 }, { source: 'phrases/phrase_004', repeat: 2 }] }), ['Play [[phrase_003]].', 'Repeat that 1 time.', 'Then play [[phrase_004]].', 'Repeat that 2 times.']);
+  const many = Array.from({ length: 33 }, (_, i) => (i === 0 ? 'Play [[phrase_003]].' : 'Then play [[phrase_003]].')).join(' ');
+  const e = bad(many);
+  assert.deepEqual([e.message, e.line, e.column], ['A composition holds at most 32 sections, got 33.', 1, 1]);
 });

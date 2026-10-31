@@ -5,6 +5,7 @@ import { MIX_BAR_ROLE, MIX_HIT_ROLE } from './mix-lineage-core.ts';
 import { MORPH_BAR_ROLE, MORPH_HIT_ROLE } from './morph-lineage-core.ts';
 import { PHRASE_BAR_ROLE, phraseSourceNoteId } from './phrase-lineage-core.ts';
 import { ARRANGEMENT_ROW_ROLE } from './arrangement-nav-core.ts';
+import { COMPOSITION_BAR_ROLE, compositionPinnedNote } from './composition-nav-core.ts';
 
 export interface PinnedNote {
   /** The note's path without `.md` (a lineage id: `bars/bar_005`). */
@@ -19,6 +20,7 @@ export interface PinnedNote {
  *  - a morph bar (or one of its hits): bar a when the bar is at or before the middle bar of the path ((bars + 1) / 2), else bar b;
  *  - a path mix (one bar): bar a when at most half of the single-hit changes are applied (2k <= d), else bar b;
  *  - a vote mix (one bar): the heavier parent, bar a on a tie (weight >= 0.5).
+ *  - a bar of a COMPOSITION (2026-10-31-1100): the note its section plays (a phrase, an arrangement or another composition; composition-nav-core `compositionPinnedNote`);
  *  - a row of an ARRANGEMENT's bar (2026-10-30-1000): the note its kit's phrase got that bar from (arrangement-nav-core `rowSource`, decided when the Score was tied, which has the phrases), or the phrase's own note;
  * null = nothing to follow (not a bar of a phrase, or the provenance lacks what the rule reads): the notes pane stays where it is.
  */
@@ -41,6 +43,7 @@ export function pinnedNoteFor(prov: Provenance): PinnedNote | null {
     if (!a || !b || bar === null || bars === null) return null;
     return { noteId: phraseSourceNoteId(bar <= (bars + 1) / 2 ? a : b), reason: pinnedLabel() };
   }
+  if (prov.role === COMPOSITION_BAR_ROLE) return compositionPinnedNote(prov);            // 2026-10-31-1100 (M17b): a bar of a composition: the note its SECTION plays
   if (prov.role === ARRANGEMENT_ROW_ROLE) {
     const note = str(p.sourceNote), reason = str(p.sourceReason);
     return note && reason ? { noteId: note, reason } : null;
@@ -60,7 +63,7 @@ export function pinnedNoteFor(prov: Provenance): PinnedNote | null {
   return null;
 }
 
-export type PairSource = 'phrase' | 'phrase-text' | 'bar' | 'arrangement';
+export type PairSource = 'phrase' | 'phrase-text' | 'bar' | 'arrangement' | 'composition';
 
 /** "Open Score with notes": a score-first vault, on a phrase tab (its Score), a phrase's JSON text tab, a bar's Beat Box tab, or (2026-10-29-0830) an arrangement's Score tab. Nowhere else, in no other vault. */
 export function openPairAvailable(i: { scoreFirst: boolean; kind: PairSource | null }): boolean {

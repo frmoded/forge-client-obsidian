@@ -185,7 +185,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(w.leaves.flatMap((l) => l.states).map((s: any) => [s.type, s.state.file]), [[ARRANGEMENT_VIEW_TYPE, 'arrangements/arr_001.md']]);
       await w.run(REFRESH);
       assert.ok(!w.store.get('kits/rock.md')!.includes('typed here') && !w.store.get('arrangements/arr_001.md')!.includes('typed here'));
-      assert.ok(w.lines.some((l) => /^\[forge-notes\] refresh note links: .*, kits 1 \(1 updated, 0 already current\), arrangements 1 \(1 updated, 0 already current\), 2 skipped$/.test(l)), w.lines.join(' | '));      // the 2 skipped are this fixture's stub phrase and bar, which are not notes the refresh can read
+      assert.ok(w.lines.some((l) => /^\[forge-notes\] refresh note links: .*, kits 1 \(1 updated, 0 already current\), arrangements 1 \(1 updated, 0 already current\), compositions 0 \(0 updated, 0 already current\), 2 skipped$/.test(l)), w.lines.join(' | '));      // the 2 skipped are this fixture's stub phrase and bar, which are not notes the refresh can read
     } finally { w.done(); }
   });
 

@@ -3,8 +3,9 @@
 // only the three DEFAULTS objects, read INSIDE functions (never at load), so the two modules may load in either order (a test loads each first, in its own process). Pure: no Obsidian.
 import { MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type PhraseStyle, type TransformOp } from './phrase-core.ts';
 import type { ArrangementParams, ArrangementTrack } from './arrangement-core.ts';
+import type { CompositionParams, CompositionSection } from './composition-core.ts';
 
-export type GrammarParams = PhraseParams | ArrangementParams;
+export type GrammarParams = PhraseParams | ArrangementParams | CompositionParams;
 
 // ---- the vocabulary: ONE source (the validators' lists), words keyed by them so a new style or order is a compile error here and a failing test ------------------------------------------------------------------------------------
 
@@ -62,6 +63,9 @@ function canonicalOp(o: TransformOp): TransformOp {
 }
 /** The params as `describe` says them and `parse` gives them back: ignored fields dropped, defaults filled, keys in the validators' order. `parse(describe(p)).params` is `canonical(p)` for every valid `p`. */
 export function canonical(p: GrammarParams): GrammarParams {
+  if (p.kind === 'composition') {
+    return { kind: 'composition', sections: p.sections.map((x): CompositionSection => ({ source: x.source, ...(x.length !== undefined ? { length: x.length } : {}), ...(x.repeat !== undefined && x.repeat > 0 ? { repeat: x.repeat } : {}) })) };
+  }
   if (p.kind === 'arrangement') {
     return { kind: 'arrangement', tracks: p.tracks.map((t): ArrangementTrack => ({
       kit: t.kit, phrase: t.phrase, ...(t.mute === true ? { mute: true } : {}), ...(t.solo === true ? { solo: true } : {}), ...(t.volume !== undefined && t.volume !== 100 ? { volume: t.volume } : {}),
@@ -90,11 +94,25 @@ function opSentence(o: TransformOp): string {
 }
 const kitsPlay = (kits: string[]): string => (kits.length === 1 ? `the ${link(kits[0])} kit plays` : `the ${kits.slice(0, -1).map(link).join(', ')} and ${link(kits[kits.length - 1])} kits play`);
 
-/** The canonical text of a phrase or an arrangement: one sentence per fact, notes as wikilinks, joined by single spaces. */
+/** The sentences of a composition (2026-10-31-1100, M17b): "Play [[a]] for 8 bars." opens, "Then play [[b]] for 4 bars." follows, "Repeat that 2 times." plays the section before it again; a section with no length is just "Play [[a]]." / "Then play [[b]].". */
+export function compositionSentences(params: CompositionParams): string[] {
+  const p = canonical(params) as CompositionParams;
+  const out: string[] = [];
+  p.sections.forEach((s, i) => {
+    const length = s.length !== undefined ? ` for ${s.length} ${barsWord(s.length)}` : '';
+    out.push(`${i === 0 ? 'Play' : 'Then play'} ${link(baseName(s.source))}${length}.`);
+    if (s.repeat !== undefined) out.push(`Repeat that ${s.repeat} ${s.repeat === 1 ? 'time' : 'times'}.`);
+  });
+  return out;
+}
+
+/** The canonical text of a phrase, an arrangement or a composition: one sentence per fact, notes as wikilinks, joined by single spaces. */
 export function describe(params: GrammarParams): string {
   const p = canonical(params);
   const out: string[] = [];
-  if (p.kind === 'arrangement') {
+  if (p.kind === 'composition') {
+    out.push(...compositionSentences(p));
+  } else if (p.kind === 'arrangement') {
     out.push(...p.tracks.map((t) => `Play ${link(t.phrase)} on the ${link(t.kit)} kit.`));
     out.push(...p.tracks.filter((t) => t.volume !== undefined).map((t) => `Play the ${link(t.kit)} kit at ${t.volume} percent volume.`));
     out.push(...p.tracks.filter((t) => t.mute === true).map((t) => `Mute the ${link(t.kit)} kit.`));

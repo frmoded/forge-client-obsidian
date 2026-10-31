@@ -113,9 +113,11 @@ export const TRANSFORM_KEEPS = ['downbeat', 'seeded'] as const;
 export const TRANSFORM_DEFAULTS = { amount: 0.5, grid: TRANSFORM_DEFAULT_GRID };
 export const TRANSFORM_OPS_MAX = 16;
 export const TRANSFORM_KEYS = ['kind', 'source', 'ops', 'overrides'] as const;
-const TRANSFORM_SOURCE = /^(?:phrases\/phrase|arrangements\/arr)_\d+$/;
+const TRANSFORM_SOURCE = /^(?:(?:phrases\/phrase|arrangements\/arr)_\d+|compositions\/[A-Za-z0-9_-]+)$/;
 /** 2026-10-30-1050 (M15b): a transform may take an ARRANGEMENT as its source as well as a phrase (`Take [[arr_001]].`). */
 export const isArrangementSource = (source: string): boolean => source.startsWith('arrangements/');
+/** 2026-10-31-1100 (M17b): and a COMPOSITION too (`Take [[intro]].`). */
+export const isCompositionSource = (source: string): boolean => source.startsWith('compositions/');
 const CHANNEL_NAME = /^[A-Za-z0-9_-]+$/;
 
 export type PhraseParams = ExtendPhrase | MixPhrase | MorphPhrase | TransformPhrase;
@@ -252,7 +254,7 @@ function validateTransform(raw: Record<string, unknown>): Validation<PhraseParam
     if (!(TRANSFORM_KEYS as readonly string[]).includes(key)) return bad(`Unexpected field "${key}" (a transform holds only ${TRANSFORM_KEYS.join(', ')}).`);
   }
   if (typeof raw.source !== 'string' || !TRANSFORM_SOURCE.test(raw.source)) {
-    return bad(`source must be a phrase note without .md, like phrases/phrase_006, or an arrangement note, like arrangements/arr_001, got ${JSON.stringify(raw.source)}.`);
+    return bad(`source must be a phrase note without .md, like phrases/phrase_006, an arrangement note, like arrangements/arr_001, or a composition note, like compositions/intro, got ${JSON.stringify(raw.source)}.`);
   }
   if (!Array.isArray(raw.ops) || raw.ops.length < 1 || raw.ops.length > TRANSFORM_OPS_MAX) {
     return bad(`ops must be a list of 1 to ${TRANSFORM_OPS_MAX} operations, got ${Array.isArray(raw.ops) ? `${raw.ops.length}` : JSON.stringify(raw.ops)}.`);
@@ -865,6 +867,8 @@ export interface PhraseScoreDeps {
   /** 2026-10-30-1050 (M15b): the Score of an ARRANGEMENT note, for a transform that takes an arrangement as its source (arrangement-core.ts cannot be imported here: it imports this file). `chain` is the sources
    *  being drawn so far, so a loop (an arrangement whose phrase is a transform of that arrangement) is a refusal, not a hang. Absent = this surface cannot draw an arrangement as a source and says so. */
   arrangementBars?(note: string, name: string, chain: readonly string[]): Promise<ScoreOutcome>;
+  /** 2026-10-31-1100 (M17b): the same for a COMPOSITION note (composition-core.ts imports this file, so it is handed in). Absent = this surface cannot draw a composition as a source and says so. */
+  compositionBars?(note: string, name: string, chain: readonly string[]): Promise<ScoreOutcome>;
   /** The sources being drawn above this call (see `arrangementBars`); empty or absent at the top. */
   chain?: readonly string[];
   /** Engine: `extend_rhythm` + `rhythm_bars_to_stream` on the source bar's data with the phrase's parameters, as a tagged MusicXML payload. For a MIX the data is the two bars (`{ a, b }`) and the
@@ -996,8 +1000,9 @@ export function barsOfPayload(payload: Record<string, unknown>): RhythmData[] | 
  *  made go to the engine with the ops, which change the regions asked for; forks lay over the result. A source that is missing, not a phrase, not drawable, or not as long as an op asks is a refusal naming which. */
 async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, title: string, chain: string[]): Promise<ScoreOutcome> {
   const arrangement = isArrangementSource(params.source);
-  const name = params.source.replace(/^(?:phrases|arrangements)\//, '');
-  const what = arrangement ? 'arrangement' : 'phrase';
+  const composition = isCompositionSource(params.source);
+  const name = params.source.replace(/^(?:phrases|arrangements|compositions)\//, '');
+  const what = composition ? 'composition' : arrangement ? 'arrangement' : 'phrase';
   if (chain.includes(params.source) || chain.length >= TRANSFORM_DEPTH_MAX) {
     return { kind: 'refusal', message: `Phrase: the transform chain through ${name} loops back or is more than ${TRANSFORM_DEPTH_MAX} deep.` };
   }
@@ -1008,7 +1013,10 @@ async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, 
     return { kind: 'refusal', message: `Phrase: the source ${what} ${name} (${params.source}.md) was not found or could not be read (${(e as Error)?.message ?? e}).` };
   }
   let made: ScoreOutcome;
-  if (arrangement) {
+  if (composition) {
+    if (deps.compositionBars === undefined) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} cannot be drawn here (this surface has no way to draw a composition).` };
+    made = await deps.compositionBars(text, name, [...chain, params.source]);
+  } else if (arrangement) {
     if (deps.arrangementBars === undefined) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} cannot be drawn here (this surface has no way to draw an arrangement).` };
     made = await deps.arrangementBars(text, name, [...chain, params.source]);
   } else {

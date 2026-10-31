@@ -8,6 +8,7 @@ import { formatPhraseJson, morphNoteContent } from './phrase-core.ts';
 import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
 import { newKitNote, type KitParams } from './kit-core.ts';
 import { newArrangementNote } from './arrangement-core.ts';
+import { newCompositionNote } from './composition-core.ts';
 
 const BAR_DATA = { time_signature: '4/4', steps: 4, group_size: 4, swing_pct: 0, tempo_bpm: 90, channels: { kick: [true, false, true, false] } } as RhythmData;
 const bar = (name: string, desc: string) => `---\ntype: data\ncontent_type: json\ndescription: ${JSON.stringify(desc)}\n---\n\n\`\`\`json\n${formatRhythmJson(BAR_DATA)}\n\`\`\`\n`;
@@ -95,4 +96,32 @@ test('kits and arrangements: stale derived text is regenerated, current notes ar
   const plain = await refreshNoteLinks(v.ports);
   assert.equal(plain.kits, undefined, 'a vault without the ports is exactly what it was');
   assert.ok(!refreshLine(plain).includes('kits'));
+});
+
+// ---- 2026-10-31-1100 (M17b): compositions -------------------------------------------------------------------------------------------------------------------------------------
+
+test('compositions: stale derived text is regenerated, current notes are NOT written, an unreadable one is named, and the line and notice count them - only when the port is given', async () => {
+  const P = (source: string) => ({ kind: 'composition' as const, sections: [{ source }] });
+  const v = vault({
+    'compositions/stale.md': newCompositionNote('stale', P('phrases/phrase_001')).replace('description: ', 'description: old '),
+    'compositions/fresh.md': newCompositionNote('fresh', P('phrases/phrase_001')),
+    'compositions/broken.md': '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind": "composition"}\n```\n',
+  });
+  const named = () => [...v.store.keys()].filter((p) => /^compositions\/[^/]+\.md$/.test(p)).map((path) => ({ path, name: path.replace(/^.*\//, '').replace(/\.md$/, '') }));
+  const ports: RefreshNotesPorts = { ...v.ports, compositions: named };
+  const s = await refreshNoteLinks(ports);
+  assert.deepEqual([s.compositions!.total, s.compositions!.updated, s.compositions!.current, s.compositions!.skipped.length], [3, 1, 1, 1]);
+  assert.deepEqual(v.writes, ['compositions/stale.md'], 'only the stale note was written');
+  assert.match(s.compositions!.skipped[0], /^compositions\/broken\.md: /);
+  assert.match(refreshLine(s), /, compositions 3 \(1 updated, 1 already current\), 1 skipped$/);
+  assert.match(refreshNotice(s), /^Refresh note links: 0 phrase note\(s\) and 0 bar note\(s\) updated \(and 0 kit note\(s\), 0 arrangement note\(s\), 1 composition note\(s\)\); 1 could not be read \(compositions\/broken\.md: /);
+  const before = v.writes.length;
+  await refreshNoteLinks(ports);
+  assert.equal(v.writes.length, before, 'a second run writes nothing');
+  const plain = await refreshNoteLinks(v.ports);
+  assert.equal(plain.compositions, undefined, 'a vault without the port is exactly what it was');
+  assert.ok(!refreshLine(plain).includes('composition'));
+  const none = await refreshNoteLinks({ ...v.ports, compositions: () => [] });
+  assert.equal(none.compositions!.total, 0);
+  assert.match(refreshNotice(none), /every note was already up to date/);
 });

@@ -292,7 +292,7 @@ test('MECHANISM PIN 2026-10-30-1050 (if the design moves this SHOULD go red: rea
   const read = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
   const calling = (name: string) => production.filter((f) => new RegExp(`\\b${name}\\(`).test(read(f)) && !new RegExp(`function ${name}\\b`).test(read(f))).sort();
   assert.deepEqual(calling('renderDerivedNote'), ['kit-core.ts'], 'phrases and arrangements do not render by the old derived-sections path');
-  assert.deepEqual(calling('renderSourceChainNote'), ['arrangement-core.ts'], 'arrangements go through the one renderer ...');
+  assert.deepEqual(calling('renderSourceChainNote'), ['arrangement-core.ts', 'composition-core.ts'], 'arrangements and (M17b, deliberate) compositions go through the one renderer ...');
   assert.match(read('phrase-notes-core.ts'), /export function renderPhraseNote\([^)]*\): string \{\s*return renderSourceChainNote\(/, '... and so do phrases (renderPhraseNote is its one-line caller)');
   assert.deepEqual(production.filter((f) => /\bfacetHashSync\(/.test(read(f))).sort(), ['facet-sync-hash-core.ts', 'phrase-notes-core.ts'], 'the synchronous hash is used by the note renderer only');
   const src = read('phrase-notes-core.ts');
