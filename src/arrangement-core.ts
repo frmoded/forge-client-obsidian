@@ -137,10 +137,10 @@ export function setTrackSetting(p: ArrangementParams, index: number, patch: { mu
 }
 
 /** The controls' write: the note with ITS json replaced by `p` and the derived parts (Description, links, Recipe, Python) made again by the same builders New arrangement uses, so a changed note is the note New arrangement would have made for the changed arrangement. The person's own frontmatter lines stay. Idempotent. */
-export function applyArrangementWrite(text: string, name: string, p: ArrangementParams): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+export function applyArrangementWrite(text: string, name: string, p: ArrangementParams, applyingDescription = false): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
-  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(false) };
+  if (!applyingDescription && descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(true) };         // 2026-10-31-1120: a control's write: "Not saved: ...", as a phrase's and a composition's
   const withJson = text.slice(0, block.contentStart) + formatArrangementJson(p) + text.slice(block.contentEnd);
   const next = renderArrangementNote(withJson, name, p, block.fenceStart);
   return { ok: true, text: next, changed: next !== text };

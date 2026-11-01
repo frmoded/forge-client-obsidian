@@ -777,7 +777,7 @@ export default class ForgePlugin extends Plugin {
       toggleEdgesPanel: () => { void this.toggleEdgesView(); },
     });
     // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
-    registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl) });
+    registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim() });
     // score_first M4: "Forge log (N)" on the Score opens the panel the way the "Open Forge panel" command does (a person's own gesture).
     messageDelivery.setOpenLog(() => { void this.openForgePanelByGesture('Forge log (N) button'); });
 

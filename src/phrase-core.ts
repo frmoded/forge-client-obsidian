@@ -529,17 +529,28 @@ export function formatPhraseJson(p: PhraseParams): string {
   ].join('\n');
 }
 
+/** 2026-10-31-1120: THE one decision "may a control write this phrase note now?": null = yes, else the sentence that says why not. `applyPhraseWrite` asks it inside the atomic write, and anything that does work BEFORE the write
+ *  (the fork flow makes a bar note first) asks it through the tab, so the two can never disagree. `name` absent = the fence-only write, which never replaces the Description (no hand-edit check). */
+export function phraseWriteRefusal(currentText: string, name?: string, applyingDescription = false): string | null {
+  const fm = parseFrontmatter(currentText);
+  if (!fm) return 'Not saved: the note has no frontmatter, so it is not a data note.';
+  const problem = editabilityProblem(fm.fields);
+  if (problem) return `Not saved: ${problem}`;
+  const block = extractPhraseJsonBlock(currentText);
+  if (block.ok === false) return `Not saved: ${block.message}`;
+  // 2026-10-30-1050 (M15b): the Description is the source and this write replaces it, so a Description the person changed by hand is never overwritten here (M15c brings the button that reads it).
+  // 2026-10-31-1120 (M15c): `applyingDescription` is the ONE caller for which the hand-edited Description is the INPUT, not something to protect: "Update from Description" (description-apply-core.ts)
+  if (name !== undefined && !applyingDescription && descriptionEditedByHand(currentText)) return handEditRefusal(true);
+  return null;
+}
+
 /** A control-strip edit, as a pure rewrite of the note's CURRENT text: only the json block's content changes, every other byte (frontmatter, line endings) is kept. Refused for a note that
  *  is not an editable data note (including `read_only: true`, constitution D7). The caller runs it inside one atomic read-modify-write. */
-export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: string): { ok: true; text: string } | { ok: false; message: string } {
-  const fm = parseFrontmatter(currentText);
-  if (!fm) return { ok: false, message: 'Not saved: the note has no frontmatter, so it is not a data note.' };
-  const problem = editabilityProblem(fm.fields);
-  if (problem) return { ok: false, message: `Not saved: ${problem}` };
+export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: string, applyingDescription = false): { ok: true; text: string } | { ok: false; message: string } {
+  const refusal = phraseWriteRefusal(currentText, name, applyingDescription);
+  if (refusal !== null) return { ok: false, message: refusal };
   const block = extractPhraseJsonBlock(currentText);
   if (block.ok === false) return { ok: false, message: `Not saved: ${block.message}` };
-  // 2026-10-30-1050 (M15b): the Description is the source and this write replaces it, so a Description the person changed by hand is never overwritten here (M15c brings the button that reads it).
-  if (name !== undefined && descriptionEditedByHand(currentText)) return { ok: false, message: handEditRefusal(true) };
   const json = formatPhraseJson(p).replace(/\n/g, block.eol);
   const text = currentText.slice(0, block.contentStart) + json + currentText.slice(block.contentEnd);
   // 2026-10-26-1260: with the note's name, the derived parts (description, links, Description / Recipe / Python) are regenerated from the params just written, so they never disagree with the json (since M15b the Description is the grammar's sentence and the note carries the Forge hash fields). Without it: the fence only, as before.

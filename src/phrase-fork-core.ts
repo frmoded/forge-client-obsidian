@@ -62,6 +62,8 @@ export interface ForkPorts<F> {
   listBarBasenames(): string[];
   exists(path: string): boolean;
   create(path: string, content: string): Promise<F>;
+  /** 2026-10-31-1120: may the phrase be written at all right now? null = yes, else the sentence that says why not. Asked BEFORE the fork note is made, so a refusal leaves no bar note behind. Absent = always. */
+  canWrite?(): Promise<string | null>;
   /** Rewrite the phrase's json block (one atomic read-modify-write on the vault side). */
   writePhrase(params: ForkablePhrase): Promise<{ ok: true } | { ok: false; message: string }>;
   /** Open a note by its lineage id (`bars/bar_007`): the plugin's own opener (a bar opens in the Beat Box). */
@@ -80,6 +82,8 @@ export async function editThisBar<F>(ports: ForkPorts<F>, input: { params: Forka
   const { params, barNumber, phraseNoteId, barData } = input;
   if (!forkable(params, barNumber)) return fail(`Edit this bar: bar ${barNumber} is ${Number.isInteger(barNumber) && barNumber >= 1 && barNumber <= params.bars ? 'already a fork' : 'not a bar of this phrase'}.`);
   try {
+    const refusal = await ports.canWrite?.();
+    if (refusal) return fail(`Edit this bar: ${refusal}`);
     const taken = new Set(ports.listBarBasenames());
     let path = '';
     let name = '';

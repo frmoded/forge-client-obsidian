@@ -6,7 +6,7 @@ import { EditableFileView, MarkdownView, Notice, TFile, type App, type Workspace
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine } from './phrase-engine.ts';
-import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
+import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, phraseWriteRefusal, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import type { PinnedNote } from './linked-panes-core.ts';
@@ -96,6 +96,7 @@ export class PhraseView extends EditableFileView {
         if (p === file.path) trace(mixTraceRead(text));
         return text;
       },
+      canWritePhrase: async () => phraseWriteRefusal(await this.app.vault.read(file), file.basename),       // 2026-10-31-1120: the fork flow asks this BEFORE it makes a bar note
       writePhrase: async (params) => {
         let refusal: string | null = null;
         try {

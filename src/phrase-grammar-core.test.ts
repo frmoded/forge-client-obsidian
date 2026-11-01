@@ -811,8 +811,8 @@ test('MECHANISM PIN 2026-10-30-1030, revised 2026-10-30-1050 (if the design move
   for (const style of PHRASE_STYLES) assert.ok(read('phrase-describe-core.ts').includes(style), `the style ${style} has a word`);
   const production = fs.readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
   const importers = (module: string) => production.filter((f) => f !== `${module}.ts` && read(f).includes(`'./${module}.ts'`)).sort();
-  assert.deepEqual(importers('phrase-describe-core'), ['arrangement-core.ts', 'composition-core.ts', 'phrase-grammar-core.ts', 'phrase-notes-core.ts'], 'the three note writers say the Description with it (M17b: the composition is the third); the parser re-exports it');
-  assert.deepEqual(importers('phrase-grammar-core'), [], 'nothing PARSES a Description yet: the hand-edit button is M15c');
+  assert.deepEqual(importers('phrase-describe-core'), ['arrangement-core.ts', 'composition-core.ts', 'description-apply.ts', 'phrase-grammar-core.ts', 'phrase-notes-core.ts'], 'the three note writers say the Description with it (M17b: the composition is the third); the parser re-exports it; 2026-10-31-1120 (M15c, deliberate): the Update-from-Description controller says the service\'s suggestion with it');
+  assert.deepEqual(importers('phrase-grammar-core'), ['description-apply-core.ts', 'description-apply.ts'], '2026-10-31-1120 (M15c, deliberate): what PARSES a Description is Update from Description, the core that decides and the controller that carries the parse types, and nothing else');
 });
 
 test('the saying half and phrase-core.ts import each other (describe reads three DEFAULTS inside functions): either may load FIRST, in a process of its own, and both work', async () => {

@@ -533,6 +533,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   /** A vault note's text by path (fresh on every call). Rejects when the note is not there. */
   readNote(path: string): Promise<string>;
   /** Rewrite the phrase note's json block (one atomic read-modify-write on the vault side). */
+  /** 2026-10-31-1120: may the phrase be written right now (the one decision `applyPhraseWrite` makes)? null = yes, else the sentence that says why not. Asked before work that precedes the write (a fork note). Absent = always. */
+  canWritePhrase?(): Promise<string | null>;
   writePhrase(params: PhraseParams): Promise<{ ok: true } | { ok: false; message: string }>;
   compute: PhraseScoreDeps['compute'];
   /** 2026-10-30-1050 (M15b): the engine's arrangement step, so a transform whose source is an ARRANGEMENT can be drawn (the Score reads either). Absent = such a transform is a refusal that says this surface cannot draw one. */
@@ -656,7 +658,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, canWritePhrase: _canWrite, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
@@ -860,7 +862,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   async function runForkAction(action: { id: 'fork' | 'revert'; barNumber: number }): Promise<void> {
     if (!current || (current.kind !== 'extend' && current.kind !== 'morph') || !ports.fork || !insp) return;
     const f = ports.fork;
-    const forkPorts: ForkPorts<unknown> = { ...f, writePhrase: (p) => ports.writePhrase(p), open: (id) => insp.openNote(id), trace: (line) => console.info(line) };
+    const forkPorts: ForkPorts<unknown> = { ...f, canWrite: ports.canWritePhrase, writePhrase: (p) => ports.writePhrase(p), open: (id) => insp.openNote(id), trace: (line) => console.info(line) };
     if (action.id === 'revert') {
       const r = await revertThisBar(forkPorts, { params: current, barNumber: action.barNumber });
       if (r.ok) current = r.params;                                          // the vault's modify event for this write brings the Score

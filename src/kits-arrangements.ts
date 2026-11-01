@@ -35,6 +35,7 @@ export class ArrangementView extends EditableFileView {
   private controls: ArrangementControls | null = null;
   private headerEl: HTMLElement | null = null;
   private pinEl: HTMLElement | null = null;
+  private statusEl: HTMLElement | null = null;
   private readonly zoom = createZoomMemory(SCORE_ZOOM_LEVELS, 1.0);
   private disposed = false;
   /** 2026-10-30-1000 (slice 3): what the Score on screen is made of - the engine's lineage (which kit and phrase played each row of each bar), the rows the inspector can pin, the rows the notes pane's note lit, and the way to stop hearing the pane. */
@@ -88,6 +89,8 @@ export class ArrangementView extends EditableFileView {
     }
     // the row per kit sits between the strip and the Score; a change goes out as one batch after a quiet moment and is written to the note (writeSettings), which redraws everything below
     this.controls = mountArrangementControls(this.contentEl, { commit: (patches) => { void this.writeSettings(patches); }, trace: (line) => { console.info(line); }, setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number) });
+    this.statusEl = this.contentEl.createDiv({ cls: 'forge-phrase-status' });             // 2026-10-31-1120: a write the note refused says why here, as a phrase tab's strip does
+    this.statusEl.setAttribute('role', 'status');
     this.showControls(text);
     const readNote = async (p: string): Promise<string> => {
       const f = this.app.vault.getAbstractFileByPath(p);
@@ -238,14 +241,22 @@ export class ArrangementView extends EditableFileView {
       new Notice(`Arrangement: the change could not be written (${(e as Error)?.message ?? e}).`);
       return;
     }
-    if (refused !== null) { console.error('ArrangementView.writeSettings refused', refused); new Notice(`Arrangement: ${refused}`); }
+    if (this.disposed) return;
+    if (refused !== null) {
+      // 2026-10-31-1120: nothing was written, so no modify event will bring the buttons back: they go back to what the note says, and the sentence is on the tab
+      console.error('ArrangementView.writeSettings refused', refused);
+      this.statusEl?.setText(refused);
+      this.showControls(await this.readText(file));
+      return;
+    }
+    this.statusEl?.setText('');
   }
 
   private release(): void {
     this.disposed = true;
     this.controls?.dispose();
     this.controls = null;
-    this.headerEl = null; this.pinEl = null;
+    this.headerEl = null; this.pinEl = null; this.statusEl = null;
     this.stopAudio();
     this.area?.dispose();
     this.area = null;

@@ -15,6 +15,8 @@ import { morphChangesViaEngine } from './phrase-engine.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
 import { ArrangementView, registerKitsAndArrangements } from './kits-arrangements.ts';
 import { CompositionView, registerCompositions } from './compositions.ts';
+import { createDescriptionController } from './description-apply.ts';
+import { familyOfPath } from './description-apply-core.ts';
 import { isCompositionPath } from './composition-core.ts';
 import { isKitPath } from './kit-core.ts';
 import { isArrangementPath } from './arrangement-core.ts';
@@ -66,6 +68,8 @@ export interface ScoreFirstHooks {
   ownKey?(): string | undefined;
   /** 2026-10-27-0720 (the notebook's typed request): the service's /health version, or null. Asked only to tell an old service from a sentence it cannot plan. */
   serviceVersion?(): Promise<string | null>;
+  /** 2026-10-31-1120 (M15c): is the sentence service set up (a URL and a token)? "Ask the sentence service" is offered only then. Absent = offered (the answer to a missing token is the dialog's own sentence). */
+  planConfigured?(): boolean;
 }
 
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {
@@ -416,6 +420,39 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         });
       };
       onWorkspaceMoved(() => syncBarStrips());
+      // 2026-10-31-1120 (M15c, "Update from Description"): the person edits the Description of a phrase, arrangement or composition by hand; once they stop typing the note is updated from it (or the bar says where the sentence is wrong).
+      // Only in a score-first vault (this code runs after the gate). A `modify` is heard for the three families only; opening a note or moving a pane only LOOKS (the bar), it never writes.
+      const folderNames = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename).filter((n) => n !== 'README');
+      const noteFile = (p: string): TFile => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); return f; };
+      const descriptions = createDescriptionController({
+        read: async (p) => app.vault.read(noteFile(p)),
+        process: async (p, fn) => { await app.vault.process(noteFile(p), fn); },
+        vault: () => ({ bars: folderNames(BAR_FOLDER_NAME), phrases: folderNames(PHRASE_FOLDER), arrangements: folderNames('arrangements'), compositions: folderNames('compositions'), kits: folderNames('kits') }),
+        barNames: () => folderNames(BAR_FOLDER_NAME), phraseNames: () => folderNames(PHRASE_FOLDER),
+        setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
+        trace: (line) => { console.info(line); },
+        panes: () => {
+          const out: Array<{ path: string; contentEl: HTMLElement }> = [];
+          app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && familyOfPath(v.file.path) !== null) out.push({ path: v.file.path, contentEl: v.contentEl }); });
+          return out;
+        },
+        askPlan: hooks.askPlan ? (payload) => hooks.askPlan!(payload) : undefined,
+        configured: hooks.planConfigured,
+        ownKey: () => hooks.ownKey?.(),
+      });
+      plugin.registerEvent(app.vault.on('modify', (f) => { descriptions.modified(f.path); }));
+      plugin.registerEvent(app.workspace.on('file-open', (f) => { if (f) void descriptions.inspect(f.path); }));
+      onWorkspaceMoved(() => descriptions.syncBars());
+      plugin.addCommand({
+        id: 'update-from-description',
+        name: 'Update from Description',
+        checkCallback: (checking) => {
+          const file = app.workspace.getActiveFile?.();
+          if (!file || !descriptions.canUpdate(file.path)) return false;
+          if (!checking) void descriptions.update(file.path);
+          return true;
+        },
+      });
       plugin.registerEvent(app.metadataCache.on('resolved', () => syncBarStrips()));
       plugin.registerEvent(app.metadataCache.on('changed', () => syncBarStrips()));
       syncBarStrips();

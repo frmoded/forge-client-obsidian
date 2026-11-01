@@ -125,10 +125,10 @@ export function refreshCompositionNoteText(text: string, name: string): { ok: tr
 }
 
 /** The controls' write: the note with ITS json replaced by `p` and the derived parts made again by the same builders New composition uses. */
-export function applyCompositionWrite(text: string, name: string, p: CompositionParams): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+export function applyCompositionWrite(text: string, name: string, p: CompositionParams, applyingDescription = false): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
-  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(true) };         // the sentence of M15b, unchanged: "Not saved: the Description was edited by hand; ..."
+  if (!applyingDescription && descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(true) };         // the sentence of M15b, unchanged: "Not saved: the Description was edited by hand; ..."
   const withJson = text.slice(0, block.contentStart) + formatCompositionJson(p) + text.slice(block.contentEnd);
   const next = renderCompositionNote(withJson, name, p, block.fenceStart);
   return { ok: true, text: next, changed: next !== text };

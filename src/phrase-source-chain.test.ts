@@ -212,13 +212,14 @@ test('a control write on a note whose Description was edited by hand is REFUSED 
   assert.ok(bare.ok && bare.text.includes('"weight": 0.3'));
 });
 
-test('the same for an arrangement: the controls row and the full write are refused, in the bare sentence the notice leads with; Refresh note links too', () => {
+test('the same for an arrangement: the controls row and the full write are refused, in the "Not saved:" sentence the tab\'s status line shows (2026-10-31-1120, deliberate: it was the bare sentence a Notice led with); Refresh note links keeps the bare sentence', () => {
   const p: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }, { kit: 'latin', phrase: 'phrase_002' }] };
   const note = newArrangementNote('arr_001', p);
   const edited = note.replace('Together.', 'Together, loudly.');
   const sentence = 'The Description was edited by hand; press Update from Description first or revert it.';
-  assert.deepEqual(applySettingsPatches(edited, 'arr_001', [[0, { mute: true }]]), { ok: false, message: sentence });
-  assert.deepEqual(applyArrangementWrite(edited, 'arr_001', p), { ok: false, message: sentence });
+  const written = 'Not saved: the Description was edited by hand; press Update from Description first or revert it.';
+  assert.deepEqual(applySettingsPatches(edited, 'arr_001', [[0, { mute: true }]]), { ok: false, message: written });
+  assert.deepEqual(applyArrangementWrite(edited, 'arr_001', p), { ok: false, message: written });
   assert.deepEqual(refreshArrangementNoteText(edited, 'arr_001'), { ok: false, message: sentence });
   const ok = applySettingsPatches(edited.replace('Together, loudly.', 'Together.'), 'arr_001', [[0, { mute: true }]]);
   assert.ok(ok.ok && ok.changed);
@@ -294,7 +295,7 @@ test('MECHANISM PIN 2026-10-30-1050 (if the design moves this SHOULD go red: rea
   assert.deepEqual(calling('renderDerivedNote'), ['kit-core.ts'], 'phrases and arrangements do not render by the old derived-sections path');
   assert.deepEqual(calling('renderSourceChainNote'), ['arrangement-core.ts', 'composition-core.ts'], 'arrangements and (M17b, deliberate) compositions go through the one renderer ...');
   assert.match(read('phrase-notes-core.ts'), /export function renderPhraseNote\([^)]*\): string \{\s*return renderSourceChainNote\(/, '... and so do phrases (renderPhraseNote is its one-line caller)');
-  assert.deepEqual(production.filter((f) => /\bfacetHashSync\(/.test(read(f))).sort(), ['facet-sync-hash-core.ts', 'phrase-notes-core.ts'], 'the synchronous hash is used by the note renderer only');
+  assert.deepEqual(production.filter((f) => /\bfacetHashSync\(/.test(read(f))).sort(), ['description-apply-core.ts', 'facet-sync-hash-core.ts', 'phrase-notes-core.ts'], 'the synchronous hash is used by the note renderer only; 2026-10-31-1120 (M15c, deliberate): and by Update from Description, which asks whether a Recipe or Python was edited by comparing the same stamps');
   const src = read('phrase-notes-core.ts');
   assert.ok(!/derivedSections/.test(src), 'the old sections builder is gone');
   assert.match(src, /extractDescription\(finished\)/, 'the stamps are taken from the FINISHED text with the plugin\'s own extractors');
