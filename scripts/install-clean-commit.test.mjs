@@ -145,9 +145,11 @@ test("--ref picks another commit (a sha or a branch); an unknown ref is one sent
     try { assert.equal(bySha.sha, local.slice(0, 9)); assert.equal(fs.readFileSync(path.join(bySha.dir, "a.txt"), "utf8"), "local only\n"); assert.equal(bySha.tree, "clean"); } finally { bySha.cleanup(); }
     const byBranch = await prepareSource({ repo: r.repo, ref: "main" });
     try { assert.equal(byBranch.sha, local.slice(0, 9)); } finally { byBranch.cleanup(); }
-    const before = fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("forge-install-")).length;
-    await assert.rejects(() => prepareSource({ repo: r.repo, ref: "no-such-branch" }), /no-such-branch/);
-    assert.equal(fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("forge-install-")).length, before, "no scratch directory is left by a refusal");
+    const own = fs.mkdtempSync(path.join(os.tmpdir(), "forge-own-tmp-"));                  // a private temp dir: the matrix runs this file in two legs at once, and a shared one would count the other leg's copy
+    try {
+      await assert.rejects(() => prepareSource({ repo: r.repo, ref: "no-such-branch", tmp: own }), /no-such-branch/);
+      assert.deepEqual(fs.readdirSync(own), [], "no scratch directory is left by a refusal");
+    } finally { fs.rmSync(own, { recursive: true, force: true }); }
   } finally { r.done(); }
 });
 
@@ -193,11 +195,12 @@ test("install-local.sh: --worktree and --ref are its two options, the default bu
 });
 
 test("install-local.sh --plan on this repo (no fetch): says the commit it WOULD build and the tree, builds nothing, installs nothing, leaves no scratch copy and does not move HEAD", () => {
-  const before = { head: git(ROOT, "rev-parse", "HEAD"), scratch: fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("forge-install-")).length };
+  const own = fs.mkdtempSync(path.join(os.tmpdir(), "forge-own-tmp-"));                    // a private TMPDIR for the script's scratch copy: counted here, not in a directory the other matrix leg is also writing to
+  const before = { head: git(ROOT, "rev-parse", "HEAD") };
   const vault = fs.mkdtempSync(path.join(os.tmpdir(), "forge-plan-vault-"));
   try {
     fs.mkdirSync(path.join(vault, ".obsidian", "plugins", JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8")).id), { recursive: true });
-    const run = (...args) => spawnSync("bash", [path.join(SCRIPTS, "install-local.sh"), ...args], { cwd: ROOT, encoding: "utf8", env: { ...process.env, VAULT: vault, INSTALL_LOCAL_NO_FETCH: "1" } });
+    const run = (...args) => spawnSync("bash", [path.join(SCRIPTS, "install-local.sh"), ...args], { cwd: ROOT, encoding: "utf8", env: { ...process.env, VAULT: vault, INSTALL_LOCAL_NO_FETCH: "1", TMPDIR: own } });
     const def = run("--plan", "--ref", "HEAD");
     assert.equal(def.status, 0, def.stderr);
     assert.match(def.stdout, new RegExp(`install-local: building ${git(ROOT, "rev-parse", "--short=9", "HEAD")} \\(HEAD\\), tree clean`));
@@ -206,9 +209,9 @@ test("install-local.sh --plan on this repo (no fetch): says the commit it WOULD 
     assert.equal(wt.status, 0, wt.stderr);
     assert.match(wt.stdout, /WORKING TREE/);
     assert.equal(git(ROOT, "rev-parse", "HEAD"), before.head);
-    assert.equal(fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("forge-install-")).length, before.scratch, "no scratch copy is left");
+    assert.deepEqual(fs.readdirSync(own), [], "no scratch copy is left (the script's own TMPDIR is empty again)");
     assert.equal(fs.readdirSync(path.join(vault, ".obsidian", "plugins", JSON.parse(fs.readFileSync(path.join(ROOT, "manifest.json"), "utf8")).id)).length, 0, "--plan installs nothing");
     const bad = run("--plan", "--ref", "no-such-branch"); assert.equal(bad.status, 1); assert.match(bad.stderr, /no-such-branch/);
     const unknown = run("--bogus"); assert.equal(unknown.status, 2); assert.match(unknown.stderr, /--bogus/);
-  } finally { fs.rmSync(vault, { recursive: true, force: true }); }
+  } finally { fs.rmSync(vault, { recursive: true, force: true }); fs.rmSync(own, { recursive: true, force: true }); }
 });
