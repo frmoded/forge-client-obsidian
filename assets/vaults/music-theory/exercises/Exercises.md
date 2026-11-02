@@ -35,4 +35,14 @@ practice or hear.
 - [[piano_play_smoke]] — click keys on a piano widget, hear them played back.
 - [[guitar_play_smoke]] — pick notes on a fretboard widget, hear them played back.
 
-Back up to [[README]].
+<div style="
+  display:flex;
+  justify-content:space-between;
+  font-size:12px;
+  color:#666666;
+  border-top:1px solid #F2F2EC;
+  padding:6px 2px;
+  margin:10px 0;
+">
+<span>&uarr; <a class="internal-link" data-href="README" href="README" style="color:#1963D1;">README</a></span>
+</div>
