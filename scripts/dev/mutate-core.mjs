@@ -292,6 +292,36 @@ export function capLoops(text, max = DEFAULT_MAX_LOOP) {
 }
 export const killedByLoopCap = (output) => output.includes(LOOP_CAP_MESSAGE);
 /** 2026-10-31-1125: node's own abort when a test child reaches its heap cap (FORGE_TEST_HEAP_MB, default 1024): a kill by the memory cap, reported apart - the mutant needed more than the cap allows, which is a kill, never a survivor. */
+/** The files of a run (`r.failed`) that the memory cap killed, with the size the tree held: [{ file, mb }] (2026-11-02-1151). */
+export const capKilledFiles = (r) => (r.failed ?? []).flatMap((f) => { const m = /forge-mutate: memory cap exceeded \((\d+) MB\)/.exec(f.output ?? ''); return m ? [{ file: f.file, mb: Number(m[1]) }] : []; });
+
+/**
+ * The first failing test of a TAP report: its name, the first line of its error and where in `file` it failed (the first stack frame that is in that file, else the test's own location). null = nothing failed.
+ * (2026-11-02-1151: a red baseline named only the file.)
+ */
+export function firstFailure(output, file) {
+  const lines = String(output).split('\n');
+  const at = lines.findIndex((l) => /^\s*not ok \d+ - /.test(l));
+  if (at < 0) return null;
+  const test = lines[at].replace(/^\s*not ok \d+ - /, '').replace(/\s+#.*$/, '').trim();
+  let error = '';
+  const block = lines.slice(at + 1, at + 60);
+  for (let i = 0; i < block.length; i++) {
+    if (/^\s*(?:not )?ok \d+ - /.test(block[i])) break;                  // the next test's line: the block is over
+    const m = /^\s*error: (.*)$/.exec(block[i]);
+    if (!m) continue;
+    let v = m[1].trim();
+    if (v === '|-' || v === '|' || v === '') v = (block.slice(i + 1).find((x) => x.trim() !== '') ?? '').trim();
+    error = v.replace(/^'(.*)'$/s, '$1').replace(/^"(.*)"$/s, '$1');
+    break;
+  }
+  const esc = String(file).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const where = new RegExp(`${esc}:(\\d+):\\d+`);
+  const stackAt = block.findIndex((l) => /^\s*stack: /.test(l));
+  const frame = (stackAt >= 0 ? where.exec(block.slice(stackAt).join('\n')) : null) ?? where.exec(block.join('\n'));   // the failing line (stack), not where the test is declared (location)
+  return { test, error, at: frame ? `${file}:${frame[1]}` : file };
+}
+
 export const killedByHeapCap = (output) => /JavaScript heap out of memory|Reached heap limit|forge-mutate: memory cap exceeded/.test(output);
 
 /** results: [{ id, file, line, op, name?, outcome, from, to, why? }]; equivalent: { id|name: reason }. */
@@ -349,10 +379,13 @@ export async function confirmRedAlone(files, runOne) {
   return { redAlone, flaky };
 }
 
-export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], treeUnchanged = null, baselineRed = [], notes = [] }) {
+export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], treeUnchanged = null, baselineRed = [], baselineWhy = {}, notes = [] }) {
   const lines = [];
   // A red baseline heads the report, loud: the run is printed anyway (a 20-60 minute run is never thrown away) but the kills by these files prove nothing.
-  if (baselineRed.length) lines.push(`BASELINE NOT GREEN: kills by these files are unproven: ${baselineRed.join(', ')}`);
+  if (baselineRed.length) {
+    lines.push(`BASELINE NOT GREEN: kills by these files are unproven: ${baselineRed.join(', ')}`);
+    for (const f of baselineRed) if (baselineWhy[f]) lines.push(`  ${f}: ${baselineWhy[f]}`);        // 2026-11-02-1151: WHY it is red (the test and the first failing line, or the memory it needs), not only which file
+  }
   const mins = Math.floor(wallMs / 60000), secs = Math.round((wallMs % 60000) / 1000);
   lines.push(`mutants: generated ${s.generated} | killed ${s.killed} (by timeout ${s.timeout}${s.loopCap > 0 ? `, by loop cap ${s.loopCap}` : ''}${s.heapCap > 0 ? `, by heap cap ${s.heapCap}` : ''}) | survived ${s.survived.length} | uncovered ${s.uncovered.length} | equivalent-explained ${s.explained.length} | invalid ${s.invalid.length} | not applicable ${s.notApplicable.length} | not run ${s.notRun.length}`);
   lines.push(`wall time ${mins}m${String(secs).padStart(2, '0')}s with ${jobs} at a time, ${testCount} test file(s) in the pool`);

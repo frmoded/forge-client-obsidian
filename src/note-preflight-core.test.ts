@@ -171,6 +171,26 @@ test('the check names the NOTE it draws by its file name (no folder, no .md), an
   assert.ok(names.length > 0, 'a phrase is drawn');
 });
 
+// Added by the 1135 mutation pass re-run (1151): `split('/')` read as `split('')` named every note by its last letter, and nothing looked.
+test('the engine is asked under the NOTE\'s name: the file name without folder or .md (the title the engine draws it by)', async () => {
+  const files = vaultFiles();
+  const titles: unknown[] = [];
+  const pf = makeNotePreflight({ ...engine(files, {}), compute: async (_d: any, _p: PhraseParams, title: unknown) => { titles.push(title); return { type: 'musicxml', content: '<score-partwise/>', bars_data: [] }; } } as never);
+  await pf('phrases/phrase_020.md', noteContentFor('phrase_020', EXTEND_FROM_9));
+  assert.deepEqual([...new Set(titles)], ['phrase_020']);
+});
+
+// Added by the 1135 mutation pass re-run (1151): the `catch` answers (an engine refusal thrown OUTSIDE the produce flows, here by the engine's own reader being asked for) were seen by no test.
+test('an error thrown out of the check itself: the engine\'s own refusal is one plain sentence, anything else (the engine is not there) says nothing - null, not undefined', async () => {
+  const files = vaultFiles();
+  const throwing = (text: string) => makeNotePreflight({ ...engine(files, {}), get readNote(): never { throw new Error(text); } } as never);
+  const said = await throwing(TRACE(EXTEND_12))('phrases/phrase_020.md', noteContentFor('phrase_020', EXTEND_FROM_9));
+  assert.equal(typeof said, 'string');
+  assert.match(String(said), /12 steps|16-step/);
+  assert.doesNotMatch(String(said), /Traceback|ValueError:|\n/);
+  assert.strictEqual(await throwing('Pyodide is not ready yet')('phrases/phrase_020.md', noteContentFor('phrase_020', EXTEND_FROM_9)), null);
+});
+
 test('createComposition asks the check for the path and the text it WILL write: the named path, or the next free name; and "root: true" only for a root', async () => {
   const files = vaultFiles();
   const seen: Array<[string, string]> = [];

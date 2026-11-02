@@ -96,11 +96,11 @@ export const MIN_DERIVED_RSS_CAP_MB = 512;
 // the derived cap has a floor: a plain `node --test` tree weighs 115-200 MB by itself (measured 2026-11-02, when FORGE_TEST_HEAP_MB=64 derived a 96 MB cap and the watchdog killed even the unmutated baseline run); an explicit FORGE_TEST_RSS_MB is taken as given
 export const testRssCapMb = (env = process.env) => (Number(env.FORGE_TEST_RSS_MB) > 0 ? Number(env.FORGE_TEST_RSS_MB) : Math.max(MIN_DERIVED_RSS_CAP_MB, Math.round(testHeapMb(env) * 1.5)));
 
-/** Of the process trees led by `roots` (pids), those whose summed resident memory is over `capMb`: [{ root, mb }]. `rows` come from parsePs (the root's own row, its descendants). */
-export function groupsOverCap(rows, roots, capMb) {
+/** The summed resident memory of the process tree led by each of `roots` (pids): [{ root, mb }] (a root that is not in `rows` is left out). `rows` come from parsePs (the root's own row, its descendants). */
+export function groupMbs(rows, roots) {
   const children = new Map(), byPid = new Map();
   for (const r of rows) { byPid.set(r.pid, r); (children.get(r.ppid) ?? children.set(r.ppid, []).get(r.ppid)).push(r.pid); }
-  const over = [];
+  const out = [];
   for (const root of roots) {
     if (!byPid.has(root)) continue;
     let kb = 0;
@@ -110,10 +110,14 @@ export function groupsOverCap(rows, roots, capMb) {
       kb += byPid.get(pid)?.rssKb ?? 0;
       for (const c of children.get(pid) ?? []) if (c > 1 && !seen.has(c)) { seen.add(c); queue.push(c); }
     }
-    const mb = Math.round(kb / 1024);
-    if (mb > capMb) over.push({ root, mb });
+    out.push({ root, mb: Math.round(kb / 1024) });
   }
-  return over;
+  return out;
+}
+
+/** Of the process trees led by `roots` (pids), those whose summed resident memory is over `capMb`: [{ root, mb }]. `capMb` is a number, or a function of the root (2026-11-02-1151: a test file that needs more than the cap has a cap of its own). */
+export function groupsOverCap(rows, roots, capMb) {
+  return groupMbs(rows, roots).filter(({ root, mb }) => mb > (typeof capMb === 'function' ? capMb(root) : capMb));
 }
 
 /**

@@ -124,3 +124,13 @@ test('dispose stops the guard: after it a click on a player whose sounds failed 
   await tick();
   assert.deepEqual(calls, ['start'], 'no retry, the click reaches the library\'s own handler');
 });
+
+// Added by the 1135 mutation pass re-run (1151): the guarded load promises true (the sounds are there) or false (they are not) and never rejects; nothing read the answer.
+test('the guarded load answers true when the sounds came and false when they did not (never undefined, never a rejection)', async () => {
+  let works = false;
+  const { el } = fakePlayer(window.document as unknown as Document, async () => { if (!works) throw new Error('offline'); });
+  guardPlayerSounds(el, { log: () => {}, say: () => {} });
+  assert.strictEqual(await el.initPlayerNow(), false);
+  works = true;
+  assert.strictEqual(await el.initPlayerNow(), true);
+});

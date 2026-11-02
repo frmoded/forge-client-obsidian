@@ -18,9 +18,9 @@ import { spawn, execFile, execFileSync } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
 import { killTree } from './proc-tree.mjs';
 import { acquireForProcess } from './heavy-lock.mjs';
-import { memBudgetMb, testHeapMb, testRssCapMb, capConcurrency, createMemoryGate, groupsOverCap, parsePs as parseRssPs, readSystemMemory } from './mem-core.mjs';
+import { memBudgetMb, testHeapMb, testRssCapMb, capConcurrency, createMemoryGate, groupMbs, parsePs as parseRssPs, readSystemMemory } from './mem-core.mjs';
 import {
-  parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, killedByHeapCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
+  capKilledFiles, firstFailure, parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, killedByHeapCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
   orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage, importsOnlyNamers, importsOnlyNote, unsupervisable, unsupervisableSentence,
 } from './mutate-core.mjs';
 
@@ -207,7 +207,15 @@ const killAll = () => { for (const pid of liveGroups) killGroup(pid); };
 // 2026-10-31-1125: the RSS watchdog. Four times a second the resident memory of every live test tree is read (one `ps`); a tree over the cap (testRssCapMb) is killed at once and its file reports 'memory cap exceeded', which the report
 // counts as a kill by the memory cap. The V8 heap cap alone does not bound a runaway mutant (3.7 GB seen under a 1 GB cap), and a runaway left to the timeout holds that memory for all of it.
 const overCap = new Map();
+// 2026-11-02-1151: ONE number was the cap of every test file, and a real-plugin test (it bundles the plugin: esbuild and node, the resident memory of the whole tree summed, about 2 GB) is over 1536 MB with no mutant at all - the
+// runner killed it at once, called its baseline red and every kill by it unproven. So the cap is PER FILE when a file needs one (learnCap, in main): `capByFile` holds the raised caps, `peakByFile` the most memory each file's tree was
+// seen to hold (the same look the cap uses), `rootFile` which file a tree is running.
+let defaultCapMb = Infinity;
+// A MEASURING run (learnCap) is keyed by where it runs as well as by the file (`runKey`): its high ceiling and its peak are its own, never those of a mutant of the same file running at the same time.
+const runKey = (cwd, file) => `${cwd}\0${file}`;
+const capByFile = new Map(), capByRun = new Map(), peakByRun = new Map(), rootFile = new Map();
 function startRssWatchdog(capMb) {
+  defaultCapMb = capMb;
   let busy = false;
   const t = setInterval(() => {
     if (busy || liveGroups.size === 0) return;
@@ -215,10 +223,13 @@ function startRssWatchdog(capMb) {
     execFile('ps', ['-Ao', 'pid=,ppid=,rss=,command='], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 5000 }, (err, stdout) => {
       busy = false;
       if (err) return;
-      for (const { root, mb } of groupsOverCap(parseRssPs(stdout), [...liveGroups], capMb)) {
-        if (overCap.has(root)) continue;
+      for (const { root, mb } of groupMbs(parseRssPs(stdout), [...liveGroups])) {
+        const run = rootFile.get(root);
+        if (run !== undefined && mb > (peakByRun.get(run.key) ?? 0)) peakByRun.set(run.key, mb);
+        const cap = (run !== undefined ? (capByRun.get(run.key) ?? capByFile.get(run.file)) : undefined) ?? capMb;
+        if (mb <= cap || overCap.has(root)) continue;
         overCap.set(root, mb);
-        console.error(`mutate: a test process tree (pid ${root}) holds ${mb} MB, over the ${capMb} MB cap (FORGE_TEST_RSS_MB): killed`);
+        console.error(`mutate: a test process tree (pid ${root}) holds ${mb} MB, over the ${cap} MB cap (FORGE_TEST_RSS_MB): killed`);
         killGroup(root);
       }
     });
@@ -246,12 +257,13 @@ function startOne(cwd, file) {
   const t0 = Date.now();
   const child = spawn(process.execPath, ['--test', '--test-reporter=tap', file], { cwd, detached: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
   liveGroups.add(child.pid);
+  rootFile.set(child.pid, { file, key: runKey(cwd, file) });
   reaper.add(child.pid);
   let out = '';
   const take = (d) => { out += d; if (out.length > 300_000) out = out.slice(-200_000); };
   child.stdout.on('data', take); child.stderr.on('data', take);
   const promise = new Promise((resolve) => {
-    const done = (status, signal) => { killGroup(child.pid); liveGroups.delete(child.pid); reaper.remove(child.pid); if (overCap.has(child.pid)) { out += `\nforge-mutate: memory cap exceeded (${overCap.get(child.pid)} MB)\n`; overCap.delete(child.pid); if (!status) status = 1; } resolve({ file, status: status ?? (signal ? 1 : 0), signal, secs: (Date.now() - t0) / 1000, output: out, summary: parseTapSummary(out) }); };
+    const done = (status, signal) => { killGroup(child.pid); liveGroups.delete(child.pid); rootFile.delete(child.pid); reaper.remove(child.pid); if (overCap.has(child.pid)) { out += `\nforge-mutate: memory cap exceeded (${overCap.get(child.pid)} MB)\n`; overCap.delete(child.pid); if (!status) status = 1; } resolve({ file, status: status ?? (signal ? 1 : 0), signal, secs: (Date.now() - t0) / 1000, output: out, summary: parseTapSummary(out) }); };
     child.on('close', done);
     child.on('error', (e) => { out += String(e); done(1, null); });
   });
@@ -404,9 +416,47 @@ export async function main(argv) {
     const redNames = (r) => r.failed.flatMap((f) => [f.file, ...f.output.split('\n').filter((l) => /^\s*not ok \d+ - /.test(l)).slice(0, 6).map((l) => '    ' + l.trim())]).slice(0, 60).join('\n');
     const unmutated = (files) => runFiles(base, files, { timeoutMs: 15 * 60_000, concurrency: Math.max(1, Math.min(Math.max(2, os.cpus().length - 1), childCap)), failFast: false });
     // A file that fails among others is re-run ALONE before it is called red (CC saw 22 of 23 'red' files pass alone and in the matrix): only a file that fails alone is named.
-    const alone = (files) => confirmRedAlone(files, (f) => runFiles(base, [f], { timeoutMs: 15 * 60_000, concurrency: 1, failFast: false }));
+    const lastAlone = new Map();
+    const alone = (files) => confirmRedAlone(files, async (f) => {
+      const once = () => runFiles(base, [f], { timeoutMs: 15 * 60_000, concurrency: 1, failFast: false });
+      let r = await once();
+      if (r.status !== 0 && capKilledFiles(r).length > 0 && await learnCap(f)) r = await once();      // the cap killed it, and it needs more than the cap: it is judged under what it needs
+      lastAlone.set(f, r);
+      return r;
+    });
+    const whyRed = (f) => {
+      const r = lastAlone.get(f);
+      const cap = r ? capKilledFiles(r)[0] : undefined;
+      if (cap) return `its process tree held ${cap.mb} MB, over the ${capByFile.get(f) ?? defaultCapMb} MB cap (FORGE_TEST_RSS_MB), and it needs more than the cap`;
+      const ff = r ? firstFailure(r.failed?.[0]?.output ?? r.output ?? '', f) : null;
+      if (ff) return `test "${ff.test}" failed${ff.error ? `: ${ff.error}` : ''} (${ff.at})`;
+      return r ? `no failing test was reported (exit status ${r.failed?.[0]?.status ?? r.status}${r.timedOut ? ', timed out' : ''})` : 'it failed';
+    };
     const flakyNote = (flaky) => (flaky.length ? `mutate: ${flaky.length} file(s) failed in the batch but pass alone (load, not a red baseline): ${flaky.join(', ')}\n` : '');
+    // 2026-11-02-1151: a test file whose UNMUTATED tree is over the cap is measured (alone, unmutated, under a high ceiling) and given the cap it needs plus a margin for the rest of this run; the runner says so. A file that stays under
+    // the cap is left alone (a kill by the cap in it is a runaway, and stands); a file that needs more than the ceiling is left red and the report says how much it held.
+    const learning = new Map();
+    const MEASURE_CEILING_MB = Math.max(defaultCapMb * 4, 4096);
+    const learnCap = (file) => {
+      if (!learning.has(file)) learning.set(file, (async () => {
+        const key = runKey(base, file);
+        capByRun.set(key, MEASURE_CEILING_MB); peakByRun.delete(key);
+        const r = await runFiles(base, [file], { timeoutMs: 15 * 60_000, concurrency: 1, failFast: false });
+        const peak = peakByRun.get(key) ?? 0;
+        capByRun.delete(key);
+        if (capKilledFiles(r).length > 0) { console.error(`mutate: ${file} needs more than ${MEASURE_CEILING_MB} MB of process tree unmutated: its cap is left at ${defaultCapMb} MB (FORGE_TEST_RSS_MB raises it)`); return false; }
+        const raised = Math.ceil(peak * 1.5);
+        if (raised <= defaultCapMb) return false;
+        capByFile.set(file, raised);
+        console.error(`mutate: ${file} needs about ${peak} MB of process tree unmutated (the cap is ${defaultCapMb} MB, FORGE_TEST_RSS_MB): its cap is raised to ${raised} MB for this run`);
+        return true;
+      })());
+      return learning.get(file);
+    };
+    /** A run in which the cap killed a file: was the cap below what that file needs? Then the kill proves nothing and the run is to be done again (under the raised cap). */
+    const relearn = async (r) => { let again = false; for (const { file, mb } of capKilledFiles(r)) { await learnCap(file); const c = capByFile.get(file); if (c !== undefined && mb <= c) again = true; } return again; };
     let baselineRed = [];
+    const baselineWhy = {};
     if (a.baseline === 'first' && pool.length > 0) {
       const t0 = Date.now();
       const r = await unmutated(pool);
@@ -449,7 +499,8 @@ export async function main(argv) {
         const file = path.join(dir, m.file);
         fs.rmSync(file, { force: true });
         fs.writeFileSync(file, capLoops(applyMutant(texts.get(m.file), m), a.maxLoop));      // 2026-10-29-0840: unbounded loops of the mutated file count their iterations (--max-loop)
-        const r = await runFiles(dir, m.tests, { timeoutMs: timeoutS * 1000, concurrency, failFast: true });
+        let r = await runFiles(dir, m.tests, { timeoutMs: timeoutS * 1000, concurrency, failFast: true });
+        if (capKilledFiles(r).length > 0 && await relearn(r)) r = await runFiles(dir, m.tests, { timeoutMs: timeoutS * 1000, concurrency, failFast: true });
         if (a.trace) for (const f of r.files) console.error(`  trace ${m.id}: ${f.status === 0 ? 'ok  ' : 'FAIL'} ${f.secs.toFixed(1).padStart(5)} s  ${f.file}`);
         const outcome = classifyRun(r);
         return { outcome, loopCap: outcome === 'killed' && killedByLoopCap(r.output), heapCap: outcome === 'killed' && killedByHeapCap(r.output), secs: (Date.now() - t0) / 1000, killers: r.failed.map((f) => f.file), files: r.files };
@@ -489,6 +540,7 @@ export async function main(argv) {
         if (red.size > 0) {
           // The run is NOT thrown away: the report is printed below under a loud header, and the exit status is 2 (a red baseline is never trusted).
           baselineRed = [...red].sort();
+          for (const f of baselineRed) baselineWhy[f] = whyRed(f);
           console.error(`mutate: the baseline is not green: ${red.size} of the ${killing.length} test file(s) that killed mutants also fail on the UNMUTATED tree (alone, too), so their kills prove nothing; the report follows anyway\n${redNames({ failed: r.failed.filter((f) => red.has(f.file)) })}`);
         } else console.error(`mutate: baseline after: the ${killing.length} test file(s) that killed mutants pass on the unmutated tree (${Math.round((Date.now() - t0) / 1000)} s)`);
       }
@@ -507,7 +559,7 @@ export async function main(argv) {
     }
     // 2026-10-29-0930: a mutated file that a CLI test names but whose test is marked imports-only is not covered by it; say so, once per file
     const notes = [...new Set(mutants.map((m) => m.file))].sort().flatMap((f) => { const t = importsOnlyNamers(texts, map, f); return t.length ? [importsOnlyNote(f, t)] : []; });
-    console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged, baselineRed, notes }));
+    console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged, baselineRed, baselineWhy, notes }));
     if (a.out) fs.writeFileSync(path.resolve(a.out), JSON.stringify({ summary: { generated: s.generated, killed: s.killed, timeout: s.timeout, loopCap: s.loopCap, heapCap: s.heapCap, survived: s.survived.length, uncovered: s.uncovered.length, explained: s.explained.length, invalid: s.invalid.length, notApplicable: s.notApplicable.length, notRun: s.notRun.length, wallMs: Date.now() - started }, results }, null, 2));
     if (treeUnchanged && !treeUnchanged.ok) return 3;
     if (baselineRed.length > 0) return 2;
