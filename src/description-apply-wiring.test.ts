@@ -13,7 +13,9 @@ import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/h
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
 import { PHRASE_DEFAULTS, PHRASE_VIEW_TYPE, noteContentFor, type PhraseParams } from './phrase-core.ts';
-import { extractDescription } from './v2-note-core.ts';
+import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
+import { BOTH_EDITED } from './recipe-apply-core.ts';
+import { asRecipeSourced } from './phrase-notes-core.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml'), 'utf8');
@@ -22,6 +24,7 @@ const barText = (n: string): string => fs.readFileSync(path.join(ROOT, 'test/fix
 const PATH = 'phrases/phrase_001.md';
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
 const edit = (text: string, from: string, to: string): string => { const d = extractDescription(text); return text.replace(d, d.replace(from, to)); };
+const editRecipe = (text: string, from: string, to: string): string => { const x = extractRecipeSection(text) ?? ''; return text.replace(x, x.replace(from, to)); };
 
 for (const edition of ['lean', 'music'] as const) {
   let real: RealPlugin;
@@ -56,7 +59,7 @@ for (const edition of ['lean', 'music'] as const) {
       metadataCache: { resolvedLinks: {}, on: () => ({}), getFileCache: () => null }, plugins: {},
     };
     const savedInfo = console.info, savedError = console.error, savedDebug = console.debug;
-    console.info = (...a: unknown[]) => { if (/^\[forge-description\]/.test(String(a[0]))) lines.push(String(a[0])); }; console.error = () => {}; console.debug = () => {};
+    console.info = (...a: unknown[]) => { if (/^\[forge-(description|recipe)\]/.test(String(a[0]))) lines.push(String(a[0])); }; console.error = () => {}; console.debug = () => {};
     const HP = win.HTMLElement.prototype;
     const saved = ['createEl', 'createDiv', 'createSpan', 'setText', 'empty', 'addClass', 'removeClass'].map((k) => [k, HP[k]] as const);
     HP.createEl = function (tag: string, o: any = {}) { const e = win.document.createElement(tag); if (o.cls) e.className = o.cls; if (o.text) e.textContent = o.text; if (o.attr) for (const [k, v] of Object.entries(o.attr)) e.setAttribute(k, String(v)); this.appendChild(e); return e; };
@@ -185,6 +188,77 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w2.done(); }
   });
 
+  // ---- 2026-10-31-1140 (M16a): the RECIPE is a source, on the same real wiring (the vault writes first and tells its listeners after, the tab and the notes pane both hear it) --------------------------------------------------------
+  test(`[${edition}] a hand edit of the RECIPE "8 bars" -> "6 bars" is applied BY ITSELF after the person stops typing: the note (Recipe-sourced), the Bars control and the [forge-recipe] evidence line follow, and the write's own modify finds nothing more to do`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const tab = await w.openTab();
+      w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars'));
+      await w.wait(DESCRIPTION_DEBOUNCE_MS - 100);
+      assert.deepEqual(w.writes, [], 'still within the wait');
+      await w.wait(150);
+      assert.deepEqual(w.writes, [PATH], 'one write');
+      assert.equal(w.store.get(PATH), asRecipeSourced(noteContentFor('phrase_001', { ...EXTEND, bars: 6 })));
+      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
+      assert.deepEqual(w.lines, ['[forge-recipe] applied phrase_001 (8 -> 6 bars)']);
+      await w.wait(3000);
+      assert.deepEqual(w.writes, [PATH]);
+      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] a Recipe that does not parse writes NOTHING; "Recipe, line N, column M: ..." is in the bar of the tab AND of the notes pane with Revert only; Revert puts the last good note back and takes both bars away`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const tab = await w.openTab(); const notes = w.openNotesPane();
+      const good = w.store.get(PATH)!;
+      w.type(good.replace(extractRecipeSection(good) ?? '', 'Take [[bar_007]].\nRepeat it for 8 bars with fills.\nSprinkle [[bar_008]].'));
+      await w.wait();
+      assert.deepEqual(w.writes, []);
+      for (const view of [tab, notes]) {
+        const bar = view.contentEl.querySelector('.forge-description-bar');
+        assert.ok(bar, 'a bar');
+        assert.match(bar.querySelector('.forge-description-message').textContent, /^Recipe, line 3, column 1: I do not know the step 'Sprinkle'\./);
+        assert.deepEqual([...bar.querySelectorAll('button')].map((b: any) => b.getAttribute('data-action')), ['revert']);
+      }
+      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '8', 'the last good cache still draws the tab');
+      (notes.contentEl.querySelector('[data-action="revert"]') as any).click(); await w.wait(100);
+      assert.equal(w.store.get(PATH), good);
+      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null); assert.equal(notes.contentEl.querySelector('.forge-description-bar'), null);
+      assert.equal(w.lines.at(-1), '[forge-recipe] reverted phrase_001 to the json cache');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] Description AND Recipe both edited: nothing is written, both panes say so with Update from Description / Update from Recipe; pressing Update from Recipe in the notes pane keeps the Recipe and the tab's Bars control reads it`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const tab = await w.openTab(); const notes = w.openNotesPane();
+      w.type(edit(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars'));
+      await w.wait();
+      assert.deepEqual(w.writes, []);
+      for (const view of [tab, notes]) {
+        const bar = view.contentEl.querySelector('.forge-description-bar');
+        assert.equal(bar.querySelector('.forge-description-message').textContent, BOTH_EDITED);
+        assert.deepEqual([...bar.querySelectorAll('button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);
+      }
+      (notes.contentEl.querySelector('[data-action="update-recipe"]') as any).click(); await w.wait(100);
+      assert.deepEqual(w.writes, [PATH]);
+      assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '6');
+      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] after the Recipe is applied the note is Recipe-sourced: its stamps say so (source_facet: recipe, and the Description stamped as derived from that Recipe)`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      await w.openTab();
+      w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars')); await w.wait();
+      const done = w.store.get(PATH)!;
+      assert.match(done, /^source_facet: recipe$/m);
+      assert.match(done, /^description_derived_from_recipe_hash: [0-9a-f]{64}$/m);
+    } finally { w.done(); }
+  });
+
   test(`[${edition}] P3: a vault that is not score-first has no command, no listener on the phrase notes and no bar: a hand-edited phrase note is left exactly as typed`, async () => {
     const w = await world(TUTORIAL_TOML);
     try {
@@ -192,6 +266,9 @@ for (const edition of ['lean', 'music'] as const) {
       const typed = edit(w.store.get(PATH)!, '8 bars', '6 bars');
       w.type(typed); await w.wait(3000);
       assert.deepEqual(w.writes, []); assert.equal(w.store.get(PATH), typed); assert.deepEqual(w.lines, []);
+      const typedRecipe = editRecipe(w.store.get(PATH)!, '8 bars', '6 bars');
+      w.type(typedRecipe); await w.wait(3000);
+      assert.deepEqual(w.writes, [], '2026-10-31-1140: and a hand-edited Recipe is left exactly as typed too'); assert.equal(w.store.get(PATH), typedRecipe); assert.deepEqual(w.lines, []);
     } finally { w.done(); }
   });
 }

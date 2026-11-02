@@ -109,6 +109,11 @@ export function computeFacetStates(
   // Description
   if (canonical === 'description') {
     out.description = FacetState.Source;
+  } else if (canonical === 'recipe') {
+    // 2026-10-31-1140 (M16a): a note the plugin writes from an edited Recipe stamps its Description as derived from that Recipe, and is then drawn "derived from Recipe" (out of date when the Recipe has moved on).
+    // A note WITHOUT the stamp (every Forge note written before, in any vault) keeps the reading it always had: its Description is upstream of the Recipe and is ignored.
+    const parent = fm.getFrontmatterField('description_derived_from_recipe_hash');
+    if (parent !== null) out.description = parent === currentBodyHashes.recipe ? FacetState.DerivedFromRecipe : FacetState.DerivedFromRecipeOutOfDate;
   }
 
   // Recipe

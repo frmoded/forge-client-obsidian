@@ -18,6 +18,7 @@ import {
 import { validateArrangement, type ArrangementParams, type ArrangementTrack } from './arrangement-core.ts';
 import { COMPOSITION_LENGTH_MAX, COMPOSITION_REPEAT_MAX, validateComposition, type CompositionParams, type CompositionSection } from './composition-core.ts';
 import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, orderWords, percentOf, plain, shiftDecimal, sortedOverrides, type GrammarParams } from './phrase-describe-core.ts';
+// 2026-10-31-1140 (M16a): the scanner and its helpers (Scan, Fail, note, sentencesOf, followForks, orderFromWords, placeOf) are exported so the RECIPE parser (recipe-grammar-core.ts) reads with the SAME words, numbers, names and refusals, never a copy.
 // the saying half lives in phrase-describe-core.ts (M15b); these are re-exported so this file stays the one place a reader of the grammar looks
 export { canonical, complementOf100, describe, orderWords, plain, shiftDecimal, type GrammarParams } from './phrase-describe-core.ts';
 
@@ -54,13 +55,13 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
 
 // ---- parse: a scanner over one sentence, errors with the place they are at ------------------------------------------------------------------------------------------------------------------------------------------------
 
-class Fail extends Error {
+export class Fail extends Error {
   at: number;
   constructor(at: number, message: string) { super(message); this.at = at; }
 }
 const NAME = /^[A-Za-z0-9_-]+$/;
 
-class Scan {
+export class Scan {
   s: string;
   base: number;
   i = 0;
@@ -119,11 +120,11 @@ class Scan {
 }
 
 /** One note reference: `[[name]]` or a bare name that exists. `kinds` say which lists of the vault it may be in; a name in two of them is two readings and is refused. */
-type NoteKind = 'bar' | 'phrase' | 'arrangement' | 'composition' | 'kit';
+export type NoteKind = 'bar' | 'phrase' | 'arrangement' | 'composition' | 'kit';
 const LIST_OF: Record<NoteKind, (v: GrammarVault) => readonly string[] | undefined> = { bar: (v) => v.bars, phrase: (v) => v.phrases, arrangement: (v) => v.arrangements, composition: (v) => v.compositions, kit: (v) => v.kits };
 const KIND_WORDS: Record<NoteKind, string> = { bar: 'a bar', phrase: 'a phrase', arrangement: 'an arrangement', composition: 'a composition', kit: 'a kit' };
-const FOLDER_OF = { phrase: 'phrases', arrangement: 'arrangements', composition: 'compositions' } as const;
-function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: string): { name: string; kind: NoteKind } {
+export const FOLDER_OF = { phrase: 'phrases', arrangement: 'arrangements', composition: 'compositions' } as const;
+export function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: string): { name: string; kind: NoteKind } {
   sc.ws();
   const at = sc.at;
   let name: string;
@@ -147,9 +148,9 @@ function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: string): {
   return { name, kind: hits[0] };
 }
 
-interface Sentence { text: string; start: number }
+export interface Sentence { text: string; start: number }
 /** The sentences of a text: a full stop followed by a space or the end, or a line break, ends one (a full stop inside a number, and anything inside a link, does not). */
-function sentencesOf(text: string): Sentence[] {
+export function sentencesOf(text: string): Sentence[] {
   const out: Sentence[] = [];
   let from = 0, inLink = false;
   const push = (to: number): void => {
@@ -175,7 +176,7 @@ const OPEN_VERBS: Array<{ re: RegExp; kind: 'extend' | 'mix' | 'morph' | 'transf
 ];
 const OPEN_EXAMPLES = 'Extend, Mix, Morph, Take or Play';
 
-const orderFromWords = (sc: Scan): MorphOrder | null => {
+export const orderFromWords = (sc: Scan): MorphOrder | null => {
   for (const o of MORPH_ORDERS) { const words = orderWords(o); if (sc.kw(words) || sc.kw(words.replace(/-/g, ' ')) || sc.kw(`${o} order`)) return o; }
   return null;
 };
@@ -194,7 +195,7 @@ function fork(sc: Scan, vault: GrammarVault, max: number): { bar: number; note: 
   sc.end();
   return { bar, note: n.name };
 }
-function readRange(sc: Scan): { first: number; last: number } {
+export function readRange(sc: Scan): { first: number; last: number } {
   if (!(sc.kw('bars') || sc.kw('bar'))) sc.fail('"bar N" or "bars N to M"');
   const first = sc.whole('a bar number', 1);
   let last = first;
@@ -239,7 +240,7 @@ function parseExtend(ss: Sentence[], vault: GrammarVault): ExtendPhrase {
 }
 
 /** The sentences after the head of a kind that only has forks after it: each is "Bar N is replaced by [[a bar]]". */
-function followForks(ss: Sentence[], vault: GrammarVault, max: () => number): { overrides?: Record<string, string> } {
+export function followForks(ss: Sentence[], vault: GrammarVault, max: () => number): { overrides?: Record<string, string> } {
   const found: Record<string, string> = {};
   for (const s of ss) {
     const sc = new Scan(s.text, s.start);
@@ -497,7 +498,7 @@ function compositionLike(ss: Sentence[]): boolean {
   return /^play\s+(?:\[\[[^\]]*\]\]|[A-Za-z0-9_-]+)\s*(?:for\b|$)/i.test(first);
 }
 
-const placeOf = (text: string, offset: number): { line: number; column: number } => {
+export const placeOf = (text: string, offset: number): { line: number; column: number } => {
   const before = text.slice(0, Math.max(0, Math.min(offset, text.length)));
   const line = before.split('\n').length;
   return { line, column: before.length - (before.lastIndexOf('\n') + 1) + 1 };

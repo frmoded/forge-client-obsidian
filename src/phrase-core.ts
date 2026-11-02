@@ -13,7 +13,7 @@
 // score-first.ts, like every other score-first decision.
 
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
-import { descriptionEditedByHand, extractPhraseJsonBlock, handEditRefusal, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
+import { extractPhraseJsonBlock, handEditRefusalOf, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { extendGridSentence } from './engine-refusal-core.ts';
 import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
@@ -542,7 +542,9 @@ export function phraseWriteRefusal(currentText: string, name?: string, applyingD
   if (block.ok === false) return `Not saved: ${block.message}`;
   // 2026-10-30-1050 (M15b): the Description is the source and this write replaces it, so a Description the person changed by hand is never overwritten here (M15c brings the button that reads it).
   // 2026-10-31-1120 (M15c): `applyingDescription` is the ONE caller for which the hand-edited Description is the INPUT, not something to protect: "Update from Description" (description-apply-core.ts)
-  if (name !== undefined && !applyingDescription && descriptionEditedByHand(currentText)) return handEditRefusal(true);
+  // 2026-10-31-1140 (M16a): the Recipe is a source too, and the same protection holds for it (`applyingDescription` lifts it for "Update from Description" and "Update from Recipe": a hand edit that is the INPUT)
+  const lost = handEditRefusalOf(currentText, true);
+  if (name !== undefined && !applyingDescription && lost !== null) return lost;
   return null;
 }
 
@@ -567,8 +569,9 @@ export function refreshPhraseNoteText(text: string, name: string): { ok: true; t
   if (read.ok === false) return { ok: false, message: read.message };
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
-  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(false) };
-  const next = renderPhraseNote(text, name, read.value, block.fenceStart);
+  const lost = handEditRefusalOf(text, false);
+  if (lost !== null) return { ok: false, message: lost };
+  const next = keepRecipeSource(text, renderPhraseNote(text, name, read.value, block.fenceStart));
   return { ok: true, text: next, changed: next !== text };
 }
 

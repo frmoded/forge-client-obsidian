@@ -223,11 +223,13 @@ test('a note the 1020 plugin wrote (compute returns the Score) still reads, and 
   assert.ok(again.ok && !again.changed && again.text === r.text, 'a second run changes nothing');
 });
 
-test('a hand edit of the derived text (a new Recipe line, a changed Python body) is overwritten on the next write, the json is not', () => {
+test('a hand edit of the derived text (a changed Python body) is overwritten on the next write, the json is not; a hand-edited RECIPE is a source (2026-10-31-1140, M16a, deliberate) and is refused, not overwritten', () => {
   const text = newPhraseNote('phrase_001', EXTEND, formatPhraseJson(EXTEND));
-  const edited = text.replace('Take [[bar_005]].', 'Take my own thing.').replace("style='repeat_with_fills'", "style='building'");
+  const edited = text.replace("style='repeat_with_fills'", "style='building'");
   const r = refreshPhraseNoteText(edited, 'phrase_001');
   assert.ok(r.ok && r.text === text);
+  const typed = text.replace('Take [[bar_005]].', 'Take my own thing.');
+  assert.deepEqual(refreshPhraseNoteText(typed, 'phrase_001'), { ok: false, message: 'The Recipe was edited by hand; press Update from Recipe first or revert it.' });
 });
 
 // ---- P3 and the bars ----------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 //   * for a BAR note, FRONTMATTER only (a description that names the hits and the tempo, a fork's `forked_from` as a wikilink); the body stays exactly one json fence (the Beat Box requires it).
 // Runtime imports from phrase-core.ts are NOT allowed here (phrase-core imports this file): types only.
 import type { PhraseParams } from './phrase-core.ts';
-import { describe } from './phrase-describe-core.ts';
+import { complementOf100, describe, percentOf, plain } from './phrase-describe-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
 import { parseFrontmatter, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
@@ -57,10 +57,16 @@ export function phraseRecipeSteps(p: PhraseParams): string[] {
       p.bars === 1 ? `Morph from the first to the second and keep the bar at position ${p.position ?? 0}, in ${orderWords(p.order, p.seed)}.` : `Morph from the first to the second over ${p.bars} bars, in ${orderWords(p.order, p.seed)}.`);
   } else if (p.mode === 'path') {
     steps.push(`Take ${link(p.a)} and ${link(p.b)}.`, `Mix them as a path of single-hit changes from the first to the second, in ${orderWords(p.order ?? 'musical', p.seed)}.`,
-      `Keep the state at weight ${p.weight} (1 is all of ${link(p.a)}, 0 is all of ${link(p.b)}).`);
+      `Keep the state at weight ${plain(p.weight)} (1 is all of ${link(p.a)}, 0 is all of ${link(p.b)}).`);
+    // 2026-10-31-1140 (M16a): a threshold and ghost notes do nothing to a path, but the json holds them and the Recipe is to be READ BACK (recipe-grammar-core.ts), so they are said, in the Description grammar's own sentences, only when they are not the defaults
+    if (p.threshold !== 0.5) steps.push(`Threshold ${percentOf(p.threshold)} percent.`);
+    if (p.ghost) steps.push('With ghost notes.');
   } else {
+    // 2026-10-31-1140 (M16a): the Recipe is to be READ BACK, so it says the share and the threshold EXACTLY (the same text as before for a whole percent and a threshold of two decimals: 70 % and 0.50)
+    const share = percentOf(p.weight);
+    const threshold = Number(p.threshold.toFixed(2)) === p.threshold ? p.threshold.toFixed(2) : plain(p.threshold);
     steps.push(`Take ${link(p.a)} and ${link(p.b)}.`,
-      `Mix them by vote: ${Math.round(p.weight * 100)} % ${link(p.a)} and ${Math.round((1 - p.weight) * 100)} % ${link(p.b)}, threshold ${p.threshold.toFixed(2)}, ghost notes ${p.ghost ? 'on' : 'off'}.`);
+      `Mix them by vote: ${share} % ${link(p.a)} and ${complementOf100(share)} % ${link(p.b)}, threshold ${threshold}, ghost notes ${p.ghost ? 'on' : 'off'}.`);
   }
   for (const f of forks(p)) steps.push(`Bar ${f.bar} is replaced by ${link(f.note)}.`);
   return steps;
@@ -182,6 +188,9 @@ export const DESCRIPTION_EDITED_BY_HAND = 'the Description was edited by hand; p
 /** That sentence as a refusal: `Not saved: the Description was ...` for the phrase strip's write (every refusal there starts so), `The Description was ...` elsewhere (the arrangement notice, the refresh command: they add their own lead). */
 export const handEditRefusal = (notSavedLead: boolean): string => (notSavedLead ? `Not saved: ${DESCRIPTION_EDITED_BY_HAND}.` : `The ${DESCRIPTION_EDITED_BY_HAND.slice('the '.length)}.`);
 
+/** The one stamp only a RECIPE-sourced note carries (2026-10-31-1140, M16a): the Description is derived from the Recipe, and this is the hash of the Recipe it was derived from. A Description-sourced render never writes it (withSourceChainStamps drops it). */
+export const RECIPE_SOURCE_KEY = 'description_derived_from_recipe_hash';
+
 /** The frontmatter fields the source chain owns, in the order they are written. */
 export const SOURCE_CHAIN_KEYS = ['source_facet', 'description_hash', 'recipe_hash', 'python_hash', 'recipe_derived_from_description_hash', 'python_derived_from_recipe_hash'] as const;
 
@@ -214,6 +223,7 @@ export function withSourceChainStamps(lines: string[], stamps: Record<(typeof SO
   const out: string[] = [];
   for (const line of lines) {
     const key = /^([A-Za-z0-9_-]+):/.exec(line)?.[1];
+    if (key === RECIPE_SOURCE_KEY) continue;                           // a Description-sourced note never carries it (asRecipeSourced puts it back for a Recipe-sourced one)
     if (key !== undefined && (SOURCE_CHAIN_KEYS as readonly string[]).includes(key)) {
       if (placed.has(key)) continue;
       placed.add(key);
@@ -240,6 +250,47 @@ export function descriptionEditedByHand(text: string): boolean {
   const stored = parseFrontmatter(text)?.fields.description_hash;
   return typeof stored === 'string' && stored !== '' && stored !== facetHashSync(extractDescription(text));
 }
+
+/** What a Recipe the person changed is called in the sentences below (M16a): the Recipe is a SOURCE, exactly as the Description is, and a write that would replace it says so before it does. */
+export const RECIPE_EDITED_BY_HAND = 'the Recipe was edited by hand; press Update from Recipe first or revert it';
+export const recipeEditRefusal = (notSavedLead: boolean): string => (notSavedLead ? `Not saved: ${RECIPE_EDITED_BY_HAND}.` : `The ${RECIPE_EDITED_BY_HAND.slice('the '.length)}.`);
+
+/** Was the Recipe of this note changed by hand since the note was written? Only a note that carries `recipe_hash` can say so. */
+export function recipeEditedByHand(text: string): boolean {
+  const stored = parseFrontmatter(text)?.fields.recipe_hash;
+  return typeof stored === 'string' && stored !== '' && stored !== facetHashSync(extractRecipeSection(text) ?? '');
+}
+
+/** The refusal a write that would REPLACE the derived parts answers with when it would lose something a person typed: the Description's first, then the Recipe's. `null` = nothing to protect. */
+export function handEditRefusalOf(text: string, notSavedLead: boolean): string | null {
+  if (descriptionEditedByHand(text)) return handEditRefusal(notSavedLead);
+  if (recipeEditedByHand(text)) return recipeEditRefusal(notSavedLead);
+  return null;
+}
+
+/** The stored `source_facet` of a note (null = none). */
+export const sourceFacetOf = (text: string): string | null => { const v = parseFrontmatter(text)?.fields.source_facet; return typeof v === 'string' && v !== '' ? v : null; };
+
+/** The note as a RECIPE-sourced one (M16a): `source_facet: recipe`, and the Description stamped as derived from the Recipe it was made from (the stamp `computeFacetStates` reads to draw "derived from Recipe"). Idempotent; every other line is kept. */
+export function asRecipeSourced(text: string): string {
+  const m = /^---(\r?\n)([\s\S]*?)\r?\n---/.exec(text);
+  if (!m) return text;
+  const hash = facetHashSync(extractRecipeSection(text) ?? '');
+  const lines: string[] = [];
+  let haveSource = false, haveKey = false;
+  for (const line of m[2].split(/\r?\n/)) {
+    const key = /^([A-Za-z0-9_-]+):/.exec(line)?.[1];
+    if (key === 'source_facet') { if (!haveSource) { lines.push('source_facet: recipe'); haveSource = true; } }
+    else if (key === RECIPE_SOURCE_KEY) { if (!haveKey) { lines.push(`${RECIPE_SOURCE_KEY}: ${hash}`); haveKey = true; } }
+    else lines.push(line);
+  }
+  if (!haveSource) lines.push('source_facet: recipe');
+  if (!haveKey) lines.push(`${RECIPE_SOURCE_KEY}: ${hash}`);
+  return `---${m[1]}${lines.join(m[1])}${m[1]}---${text.slice(m[0].length)}`;
+}
+
+/** "Refresh note links" makes the derived parts again from the json; a note whose SOURCE is its Recipe stays so (the person's Recipe is not put back to a Description-sourced note by a refresh). */
+export const keepRecipeSource = (before: string, after: string): string => (sourceFacetOf(before) === 'recipe' ? asRecipeSourced(after) : after);
 
 /** The parts of a phrase note: the `# Description` is the grammar's sentence for `p` (`describe`), the frontmatter `description` stays the words with wikilinks for the graph, Recipe and Python derive from `p` as they always did. */
 export const phraseParts = (name: string, p: PhraseParams): SourceChainParts => ({ description: phraseDescription(name, p), links: phraseLinks(p), sentence: describe(p), recipe: phraseRecipeSteps(p), python: phrasePython(p) });

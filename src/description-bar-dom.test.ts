@@ -19,7 +19,7 @@ test('the bar is the first child of its pane, carries the sentence in a status r
   assert.deepEqual([...bar.el.querySelectorAll('button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['revert', 'Revert'], ['ask', 'Ask the sentence service']]);
   (bar.el.querySelector('[data-action="ask"]') as any).click(); (bar.el.querySelector('[data-action="revert"]') as any).click();
   assert.deepEqual(heard, ['ask', 'revert']);
-  assert.deepEqual(Object.keys(BAR_LABELS).sort(), ['apply-preview', 'ask', 'cancel-preview', 'revert', 'update']);
+  assert.deepEqual(Object.keys(BAR_LABELS).sort(), ['apply-preview', 'ask', 'cancel-preview', 'revert', 'update', 'update-recipe']);
 });
 
 test('showing again replaces the content (no duplicate message or buttons); a busy bar says so and its buttons do nothing', () => {
@@ -52,5 +52,5 @@ test('the DOM contract the stylesheet and the panes rely on: class names, the po
   const buttons = [...bar.el.querySelectorAll('button')] as any[];
   assert.deepEqual(buttons.map((b) => b.textContent), ['Update from Description', 'Revert', 'Ask the sentence service', 'Apply', 'Cancel']);
   for (const b of buttons) { assert.equal(b.getAttribute('type'), 'button'); assert.equal(b.className, 'forge-description-button'); }
-  assert.deepEqual(BAR_LABELS, { update: 'Update from Description', revert: 'Revert', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' });
+  assert.deepEqual(BAR_LABELS, { update: 'Update from Description', 'update-recipe': 'Update from Recipe', revert: 'Revert', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' });
 });

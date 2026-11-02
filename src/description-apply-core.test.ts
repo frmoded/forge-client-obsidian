@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { applyDescriptionText, cacheParams, changeSummary, derivedEditedByHand, descriptionState, familyOfPath, ignoredLine, revertDescriptionText, revertedLine, rejectionMessage, RECIPE_PYTHON_DERIVED, appliedLine, askedServiceLine, rejectedLine, writeFromParams } from './description-apply-core.ts';
+import { applyDescriptionText, cacheParams, changeSummary, derivedEditedByHand, descriptionState, familyOfPath, ignoredLine, revertDescriptionText, revertedLine, rejectionMessage, PYTHON_DERIVED, appliedLine, askedServiceLine, rejectedLine, writeFromParams } from './description-apply-core.ts';
 import { parse } from './phrase-grammar-core.ts';
 import { PHRASE_DEFAULTS, applyPhraseWrite, noteContentFor, readPhraseNote, starterMix, type PhraseParams } from './phrase-core.ts';
 import { newArrangementNote } from './arrangement-core.ts';
@@ -82,12 +82,12 @@ test('edge: a source that is not in the vault (a transform whose source phrase w
   if (st.kind === 'rejected') assert.match(st.message, /phrase_003/, st.message);
 });
 
-test('edge: the Recipe or the Python edited instead is DERIVED: the state says so and nothing is applied; a Description that is in sync with its own edit does not count', () => {
+test('edge: the Python edited instead is DERIVED: the state says so and nothing is applied; a Description that is in sync with its own edit does not count. (2026-10-31-1140, deliberate: the RECIPE is a source now, see recipe-apply-core.test.ts)', () => {
   const n = note();
-  const recipe = n.replace('# Recipe\n\n', '# Recipe\n\nCall [[something_else]].\n');
-  assert.deepEqual(descriptionState(recipe, 'phrase', VAULT), { kind: 'derived-edited', message: RECIPE_PYTHON_DERIVED });
   const python = n.replace('```python\n', '```python\n# hand edit\n');
-  assert.equal(descriptionState(python, 'phrase', VAULT).kind, 'derived-edited');
+  assert.deepEqual(descriptionState(python, 'phrase', VAULT), { kind: 'derived-edited', message: PYTHON_DERIVED });
+  const recipe = n.replace('# Recipe\n\n', '# Recipe\n\nCall [[something_else]].\n');
+  assert.equal(descriptionState(recipe, 'phrase', VAULT).kind, 'recipe-rejected', 'a Recipe edit is no longer "derived": it is read (here: it does not parse)');
 });
 
 test('edge: two quick edits - the plan made for the FIRST sentence is not written once the text holds the second (stale), and the second is applied by its own turn', () => {
@@ -139,8 +139,8 @@ test('a note that is not data of ours, or whose json fence is missing, says noth
 
 // ---- the survivors of the first mutation pass: every message the person can read, every pairing of a note with a sentence, every refusal path -------------------------------------------------------------------------
 test('the sentences the person reads are exactly these (a reworded message is a decision, not a drift)', () => {
-  assert.equal(RECIPE_PYTHON_DERIVED, 'Recipe and Python are derived; edit the Description.');
-  assert.equal(ignoredLine('phrase_001'), '[forge-description] ignored phrase_001: Recipe and Python are derived; edit the Description.');
+  assert.equal(PYTHON_DERIVED, 'Python is derived; edit the Description or the Recipe.');
+  assert.equal(ignoredLine('phrase_001'), '[forge-description] ignored phrase_001: Python is derived; edit the Description or the Recipe.');
   assert.equal(revertedLine('phrase_001'), '[forge-description] reverted phrase_001 to the json cache');
   assert.equal(askedServiceLine('phrase_001', 'extend'), '[forge-description] asked the service about phrase_001 -> extend');
   assert.equal(rejectionMessage({ message: '', line: 3, column: 4 }), 'Description, line 3, column 4: it could not be read', 'a grammar error with no words still says where');

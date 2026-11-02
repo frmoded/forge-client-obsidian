@@ -1,6 +1,7 @@
 // 2026-10-27-1030 (M14 slice 1): the words a bar range, a selection and a transform op read in. Shared by the notes (phrase-notes-core.ts: Description, Recipe), the notebook's chips and cells, and phrase-core.ts, which re-exports them.
 // A leaf: types only from phrase-core.ts (phrase-core imports phrase-notes-core, which imports this).
 import type { TransformOp } from './phrase-core.ts';
+import { percentOf } from './number-words-core.ts';
 
 export const TRANSFORM_DEFAULT_GRID = 16;
 
@@ -16,7 +17,7 @@ export function selectionWords(first: number, last: number, row?: string): strin
 export function transformOpWords(o: TransformOp): string {
   const where = selectionWords(o.first, o.last, o.row);
   if (o.op === 'double_up') return `double up ${where}: every hit gets a second one a step later${o.grid !== TRANSFORM_DEFAULT_GRID ? ` (grid ${o.grid})` : ''}`;
-  const amount = o.amount === 1 ? 'remove all the hits' : o.amount === 0 ? 'remove none of the hits' : o.amount === 0.5 ? 'remove half of the hits' : `remove ${Math.round(o.amount * 100)} % of the hits`;
+  const amount = o.amount === 1 ? 'remove all the hits' : o.amount === 0 ? 'remove none of the hits' : o.amount === 0.5 ? 'remove half of the hits' : `remove ${percentOf(o.amount)} % of the hits`;
   return `thin out ${where}: ${amount}, ${o.keep === 'seeded' ? `chosen by seed ${o.seed ?? 0}` : 'keeping the strongest beats'}`;
 }
 

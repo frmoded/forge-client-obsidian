@@ -1,0 +1,447 @@
+extend, fills, slower, a fork | step 1: junk after it | 1:18 Expected the end of the sentence, but found "banana".
+extend, fills, slower, a fork | step 1: cut after word 1 | 1:5 Expected the bar to extend, as [[a note]], but found the end of the sentence.
+extend, fills, slower, a fork | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the bar to extend, but "nope_1" is not one.
+extend, fills, slower, a fork | step 1: a number that is not one | 1:6 Expected a bar of this vault for the bar to extend, but "bar_x" is not one.
+extend, fills, slower, a fork | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Repeat".
+extend, fills, slower, a fork | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, fills, slower, a fork | step 2: junk after it | 2:46 Expected the end of the sentence, but found "banana".
+extend, fills, slower, a fork | step 2: cut after word 1 | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, fills, slower, a fork | step 2: cut after word 2 | 2:1 Expected "Repeat it for N bars with fills", "Repeat it for N bars with ghost notes" or "Build it up over N bars", but found "Repeat".
+extend, fills, slower, a fork | step 2: cut after word 3 | 2:14 Expected a number of bars, but found the end of the sentence.
+extend, fills, slower, a fork | step 2: cut after word 4 | 2:16 Expected "bars", but found the end of the sentence.
+extend, fills, slower, a fork | step 2: cut after word 5 | 2:21 Expected "with fills" or "with ghost notes", but found the end of the sentence.
+extend, fills, slower, a fork | step 2: cut after word 6 | 2:26 Expected "fills" or "ghost notes", but found the end of the sentence.
+extend, fills, slower, a fork | step 2: cut after word 7 | 2:33 Expected "N % slower" or "N % faster", but found the end of the sentence.
+extend, fills, slower, a fork | step 2: cut after word 8 | 2:36 Expected "%" after 20, but found the end of the sentence.
+extend, fills, slower, a fork | step 2: cut after word 9 | 2:38 Expected "slower" or "faster", but found the end of the sentence.
+extend, fills, slower, a fork | step 2: a number that is not one | 2:15 Expected a number of bars, but found "x".
+extend, fills, slower, a fork | step 2: the commas missing | 2:33 Expected the end of the sentence, but found "20".
+extend, fills, slower, a fork | step 2: missing | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, fills, slower, a fork | step 2: said twice | 3:1 Expected "Bar N is replaced by [[a bar]]", but found "Repeat".
+extend, fills, slower, a fork | step 3: junk after it | 3:34 Expected the end of the sentence, but found "banana".
+extend, fills, slower, a fork | step 3: cut after word 1 | 3:4 Expected a bar number, but found the end of the sentence.
+extend, fills, slower, a fork | step 3: cut after word 2 | 3:6 Expected "is replaced by", but found the end of the sentence.
+extend, fills, slower, a fork | step 3: cut after word 3 | 3:9 Expected bar 3, as [[a note]], but found the end of the sentence.
+extend, fills, slower, a fork | step 3: cut after word 4 | 3:10 Expected a bar of this vault for bar 3, but "replaced" is not one.
+extend, fills, slower, a fork | step 3: cut after word 5 | 3:21 Expected bar 3, as [[a note]], but found the end of the sentence.
+extend, fills, slower, a fork | step 3: a name the vault does not have | 3:22 Expected a bar of this vault for bar 3, but "nope_1" is not one.
+extend, fills, slower, a fork | step 3: a number that is not one | 3:5 Expected a bar number, but found "x".
+extend, fills, slower, a fork | step 3: missing | read
+extend, fills, slower, a fork | step 3: said twice | 4:1 Expected bar 3 to be replaced once, but it is replaced twice.
+extend, ghost notes, faster | step 1: junk after it | 1:18 Expected the end of the sentence, but found "banana".
+extend, ghost notes, faster | step 1: cut after word 1 | 1:5 Expected the bar to extend, as [[a note]], but found the end of the sentence.
+extend, ghost notes, faster | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the bar to extend, but "nope_1" is not one.
+extend, ghost notes, faster | step 1: a number that is not one | 1:6 Expected a bar of this vault for the bar to extend, but "bar_x" is not one.
+extend, ghost notes, faster | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Repeat".
+extend, ghost notes, faster | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, ghost notes, faster | step 2: junk after it | 2:54 Expected the end of the sentence, but found "banana".
+extend, ghost notes, faster | step 2: cut after word 1 | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, ghost notes, faster | step 2: cut after word 2 | 2:1 Expected "Repeat it for N bars with fills", "Repeat it for N bars with ghost notes" or "Build it up over N bars", but found "Repeat".
+extend, ghost notes, faster | step 2: cut after word 3 | 2:14 Expected a number of bars, but found the end of the sentence.
+extend, ghost notes, faster | step 2: cut after word 4 | 2:16 Expected "bars", but found the end of the sentence.
+extend, ghost notes, faster | step 2: cut after word 5 | 2:21 Expected "with fills" or "with ghost notes", but found the end of the sentence.
+extend, ghost notes, faster | step 2: cut after word 6 | 2:26 Expected "fills" or "ghost notes", but found the end of the sentence.
+extend, ghost notes, faster | step 2: cut after word 7 | 2:27 Expected "fills" or "ghost notes", but found "ghost".
+extend, ghost notes, faster | step 2: cut after word 8 | 2:39 Expected "N % slower" or "N % faster", but found the end of the sentence.
+extend, ghost notes, faster | step 2: cut after word 9 | 2:44 Expected "%" after 15.5, but found the end of the sentence.
+extend, ghost notes, faster | step 2: cut after word 10 | 2:46 Expected "slower" or "faster", but found the end of the sentence.
+extend, ghost notes, faster | step 2: a number that is not one | 2:15 Expected a number of bars, but found "x".
+extend, ghost notes, faster | step 2: the commas missing | 2:39 Expected the end of the sentence, but found "15.5".
+extend, ghost notes, faster | step 2: missing | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, ghost notes, faster | step 2: said twice | 3:1 Expected "Bar N is replaced by [[a bar]]", but found "Repeat".
+extend, building | step 1: junk after it | 1:18 Expected the end of the sentence, but found "banana".
+extend, building | step 1: cut after word 1 | 1:5 Expected the bar to extend, as [[a note]], but found the end of the sentence.
+extend, building | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the bar to extend, but "nope_1" is not one.
+extend, building | step 1: a number that is not one | 1:6 Expected a bar of this vault for the bar to extend, but "bar_x" is not one.
+extend, building | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Build".
+extend, building | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, building | step 2: junk after it | 2:25 Expected the end of the sentence, but found "banana".
+extend, building | step 2: cut after word 1 | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, building | step 2: cut after word 2 | 2:1 Expected "Repeat it for N bars with fills", "Repeat it for N bars with ghost notes" or "Build it up over N bars", but found "Build".
+extend, building | step 2: cut after word 3 | 2:1 Expected "Repeat it for N bars with fills", "Repeat it for N bars with ghost notes" or "Build it up over N bars", but found "Build".
+extend, building | step 2: cut after word 4 | 2:17 Expected a number of bars, but found the end of the sentence.
+extend, building | step 2: cut after word 5 | 2:19 Expected "bars", but found the end of the sentence.
+extend, building | step 2: a number that is not one | 2:18 Expected a number of bars, but found "x".
+extend, building | step 2: missing | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_005" is not one.
+extend, building | step 2: said twice | 3:1 Expected "Bar N is replaced by [[a bar]]", but found "Build".
+morph, seeded | step 1: junk after it | 1:34 Expected the end of the sentence, but found "banana".
+morph, seeded | step 1: cut after word 1 | 1:5 Expected the first bar, as [[a note]], but found the end of the sentence.
+morph, seeded | step 1: cut after word 2 | 1:17 Expected "and", but found the end of the sentence.
+morph, seeded | step 1: cut after word 3 | 1:21 Expected the second bar, as [[a note]], but found the end of the sentence.
+morph, seeded | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the first bar, but "nope_1" is not one.
+morph, seeded | step 1: a number that is not one | 1:6 Expected a bar of this vault for the first bar, but "bar_x" is not one.
+morph, seeded | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Morph".
+morph, seeded | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_001" is not one.
+morph, seeded | step 2: junk after it | 2:74 Expected the end of the sentence, but found "banana".
+morph, seeded | step 2: cut after word 1 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, seeded | step 2: cut after word 2 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, seeded | step 2: cut after word 3 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, seeded | step 2: cut after word 4 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, seeded | step 2: cut after word 5 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, seeded | step 2: cut after word 6 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, seeded | step 2: cut after word 7 | 2:35 Expected "over N bars" or "and keep the bar at position N", but found the end of the sentence.
+morph, seeded | step 2: cut after word 8 | 2:40 Expected a number of bars, but found the end of the sentence.
+morph, seeded | step 2: cut after word 9 | 2:42 Expected "bars", but found the end of the sentence.
+morph, seeded | step 2: cut after word 10 | 2:48 Expected ", in musical order" (or another order: musical, seeded, by_channel), but found the end of the sentence.
+morph, seeded | step 2: cut after word 11 | 2:51 Expected an order (musical, seeded, by_channel), but found the end of the sentence.
+morph, seeded | step 2: cut after word 12 | 2:52 Expected an order (musical, seeded, by_channel), but found "seeded".
+morph, seeded | step 2: cut after word 13 | read
+morph, seeded | step 2: cut after word 14 | 2:70 Expected a seed, but found the end of the sentence.
+morph, seeded | step 2: a number that is not one | 2:41 Expected a number of bars, but found "x".
+morph, seeded | step 2: a closing parenthesis missing | 2:72 Expected ")", but found the end of the sentence.
+morph, seeded | step 2: the commas missing | read
+morph, seeded | step 2: missing | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_001" is not one.
+morph, seeded | step 2: said twice | 3:1 Expected "Bar N is replaced by [[a bar]]", but found "Morph".
+morph, seeded | step 3: junk after it | 3:34 Expected the end of the sentence, but found "banana".
+morph, seeded | step 3: cut after word 1 | 3:4 Expected a bar number, but found the end of the sentence.
+morph, seeded | step 3: cut after word 2 | 3:6 Expected "is replaced by", but found the end of the sentence.
+morph, seeded | step 3: cut after word 3 | 3:9 Expected bar 2, as [[a note]], but found the end of the sentence.
+morph, seeded | step 3: cut after word 4 | 3:10 Expected a bar of this vault for bar 2, but "replaced" is not one.
+morph, seeded | step 3: cut after word 5 | 3:21 Expected bar 2, as [[a note]], but found the end of the sentence.
+morph, seeded | step 3: a name the vault does not have | 3:22 Expected a bar of this vault for bar 2, but "nope_1" is not one.
+morph, seeded | step 3: a number that is not one | 3:5 Expected a bar number, but found "x".
+morph, seeded | step 3: missing | read
+morph, seeded | step 3: said twice | 4:1 Expected bar 2 to be replaced once, but it is replaced twice.
+morph, one bar | step 1: junk after it | 1:34 Expected the end of the sentence, but found "banana".
+morph, one bar | step 1: cut after word 1 | 1:5 Expected the first bar, as [[a note]], but found the end of the sentence.
+morph, one bar | step 1: cut after word 2 | 1:17 Expected "and", but found the end of the sentence.
+morph, one bar | step 1: cut after word 3 | 1:21 Expected the second bar, as [[a note]], but found the end of the sentence.
+morph, one bar | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the first bar, but "nope_1" is not one.
+morph, one bar | step 1: a number that is not one | 1:6 Expected a bar of this vault for the first bar, but "bar_x" is not one.
+morph, one bar | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Morph".
+morph, one bar | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_001" is not one.
+morph, one bar | step 2: junk after it | 2:85 Expected the end of the sentence, but found "banana".
+morph, one bar | step 2: cut after word 1 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, one bar | step 2: cut after word 2 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, one bar | step 2: cut after word 3 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, one bar | step 2: cut after word 4 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, one bar | step 2: cut after word 5 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, one bar | step 2: cut after word 6 | 2:1 Expected "Morph from the first to the second over N bars, in musical order.", but found "Morph".
+morph, one bar | step 2: cut after word 7 | 2:35 Expected "over N bars" or "and keep the bar at position N", but found the end of the sentence.
+morph, one bar | step 2: cut after word 8 | 2:36 Expected "over N bars" or "and keep the bar at position N", but found "and".
+morph, one bar | step 2: cut after word 9 | 2:36 Expected "over N bars" or "and keep the bar at position N", but found "and".
+morph, one bar | step 2: cut after word 10 | 2:36 Expected "over N bars" or "and keep the bar at position N", but found "and".
+morph, one bar | step 2: cut after word 11 | 2:36 Expected "over N bars" or "and keep the bar at position N", but found "and".
+morph, one bar | step 2: cut after word 12 | 2:36 Expected "over N bars" or "and keep the bar at position N", but found "and".
+morph, one bar | step 2: cut after word 13 | 2:64 Expected a position, but found the end of the sentence.
+morph, one bar | step 2: cut after word 14 | 2:67 Expected ", in musical order" (or another order: musical, seeded, by_channel), but found the end of the sentence.
+morph, one bar | step 2: cut after word 15 | 2:70 Expected an order (musical, seeded, by_channel), but found the end of the sentence.
+morph, one bar | step 2: cut after word 16 | 2:71 Expected an order (musical, seeded, by_channel), but found "musical".
+morph, one bar | step 2: a number that is not one | 2:65 Expected a position, but found "x".
+morph, one bar | step 2: the commas missing | read
+morph, one bar | step 2: missing | 1:33 Expected "Morph from the first to the second ..." or "Mix them ..." after the two bars, but found the end of the Recipe.
+morph, one bar | step 2: said twice | 3:1 Expected "Bar N is replaced by [[a bar]]", but found "Morph".
+mix, vote | step 1: junk after it | 1:34 Expected the end of the sentence, but found "banana".
+mix, vote | step 1: cut after word 1 | 1:5 Expected the first bar, as [[a note]], but found the end of the sentence.
+mix, vote | step 1: cut after word 2 | 1:17 Expected "and", but found the end of the sentence.
+mix, vote | step 1: cut after word 3 | 1:21 Expected the second bar, as [[a note]], but found the end of the sentence.
+mix, vote | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the first bar, but "nope_1" is not one.
+mix, vote | step 1: a number that is not one | 1:6 Expected a bar of this vault for the first bar, but "bar_x" is not one.
+mix, vote | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Mix".
+mix, vote | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_001" is not one.
+mix, vote | step 2: junk after it | 2:90 Expected the end of the sentence, but found "banana".
+mix, vote | step 2: cut after word 1 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, vote | step 2: cut after word 2 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, vote | step 2: cut after word 3 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, vote | step 2: cut after word 4 | 2:18 Expected the first share as a number of percent, but found the end of the sentence.
+mix, vote | step 2: cut after word 5 | 2:21 Expected "%" after 70, but found the end of the sentence.
+mix, vote | step 2: cut after word 6 | 2:23 Expected the bar the share belongs to, as [[a note]], but found the end of the sentence.
+mix, vote | step 2: cut after word 7 | 2:35 Expected "and", but found the end of the sentence.
+mix, vote | step 2: cut after word 8 | 2:39 Expected the second share as a number of percent, but found the end of the sentence.
+mix, vote | step 2: cut after word 9 | 2:42 Expected "%" after 30, but found the end of the sentence.
+mix, vote | step 2: cut after word 10 | 2:44 Expected the bar the share belongs to, as [[a note]], but found the end of the sentence.
+mix, vote | step 2: cut after word 11 | 2:57 Expected ", threshold 0.50", but found the end of the sentence.
+mix, vote | step 2: cut after word 12 | 2:67 Expected a threshold from 0 to 1, but found the end of the sentence.
+mix, vote | step 2: cut after word 13 | 2:73 Expected ", ghost notes on" or ", ghost notes off", but found the end of the sentence.
+mix, vote | step 2: cut after word 14 | 2:74 Expected ", ghost notes on" or ", ghost notes off", but found "ghost".
+mix, vote | step 2: cut after word 15 | 2:85 Expected "on" or "off", but found the end of the sentence.
+mix, vote | step 2: a name the vault does not have | 2:24 Expected a bar of this vault for the bar the share belongs to, but "nope_1" is not one.
+mix, vote | step 2: a number that is not one | 2:19 Expected the first share as a number of percent, but found "x".
+mix, vote | step 2: the commas missing | 2:57 Expected ", threshold 0.50", but found "threshold".
+mix, vote | step 2: the colon missing | read
+mix, vote | step 2: missing | 1:33 Expected "Morph from the first to the second ..." or "Mix them ..." after the two bars, but found the end of the Recipe.
+mix, vote | step 2: said twice | 3:1 Expected nothing after the vote step, but found "Mix".
+mix, path | step 1: junk after it | 1:34 Expected the end of the sentence, but found "banana".
+mix, path | step 1: cut after word 1 | 1:5 Expected the first bar, as [[a note]], but found the end of the sentence.
+mix, path | step 1: cut after word 2 | 1:17 Expected "and", but found the end of the sentence.
+mix, path | step 1: cut after word 3 | 1:21 Expected the second bar, as [[a note]], but found the end of the sentence.
+mix, path | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the first bar, but "nope_1" is not one.
+mix, path | step 1: a number that is not one | 1:6 Expected a bar of this vault for the first bar, but "bar_x" is not one.
+mix, path | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Mix".
+mix, path | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_001" is not one.
+mix, path | step 2: junk after it | 2:97 Expected the end of the sentence, but found "banana".
+mix, path | step 2: cut after word 1 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 2 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 3 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 4 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 5 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 6 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 7 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 8 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 9 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 10 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 11 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 12 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 13 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+mix, path | step 2: cut after word 14 | 2:71 Expected ", in musical order" (or another order: musical, seeded, by_channel), but found the end of the sentence.
+mix, path | step 2: cut after word 15 | 2:74 Expected an order (musical, seeded, by_channel), but found the end of the sentence.
+mix, path | step 2: cut after word 16 | 2:75 Expected an order (musical, seeded, by_channel), but found "seeded".
+mix, path | step 2: cut after word 17 | read
+mix, path | step 2: cut after word 18 | 2:93 Expected a seed, but found the end of the sentence.
+mix, path | step 2: a number that is not one | 2:94 Expected a seed, but found "x".
+mix, path | step 2: a closing parenthesis missing | 2:95 Expected ")", but found the end of the sentence.
+mix, path | step 2: the commas missing | read
+mix, path | step 2: missing | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_001" is not one.
+mix, path | step 2: said twice | 3:1 Expected "Keep the state at weight N (1 is all of [[a]], 0 is all of [[b]]).", but found "Mix".
+mix, path | step 3: junk after it | 3:82 Expected the end of the sentence, but found "banana".
+mix, path | step 3: cut after word 1 | 3:1 Expected "Keep the state at weight N (1 is all of [[a]], 0 is all of [[b]]).", but found "Keep".
+mix, path | step 3: cut after word 2 | 3:1 Expected "Keep the state at weight N (1 is all of [[a]], 0 is all of [[b]]).", but found "Keep".
+mix, path | step 3: cut after word 3 | 3:1 Expected "Keep the state at weight N (1 is all of [[a]], 0 is all of [[b]]).", but found "Keep".
+mix, path | step 3: cut after word 4 | 3:1 Expected "Keep the state at weight N (1 is all of [[a]], 0 is all of [[b]]).", but found "Keep".
+mix, path | step 3: cut after word 5 | 3:25 Expected a weight from 0 to 1, but found the end of the sentence.
+mix, path | step 3: cut after word 6 | read
+mix, path | step 3: cut after word 7 | 3:32 Expected "1 is all of [[a]]", but found "1".
+mix, path | step 3: cut after word 8 | 3:32 Expected "1 is all of [[a]]", but found "1".
+mix, path | step 3: cut after word 9 | 3:32 Expected "1 is all of [[a]]", but found "1".
+mix, path | step 3: cut after word 10 | 3:43 Expected the bar the weight 1 is, as [[a note]], but found the end of the sentence.
+mix, path | step 3: cut after word 11 | 3:56 Expected "0 is all of [[b]]", but found the end of the sentence.
+mix, path | step 3: cut after word 12 | 3:57 Expected "0 is all of [[b]]", but found "0".
+mix, path | step 3: cut after word 13 | 3:57 Expected "0 is all of [[b]]", but found "0".
+mix, path | step 3: cut after word 14 | 3:57 Expected "0 is all of [[b]]", but found "0".
+mix, path | step 3: cut after word 15 | 3:68 Expected the bar the weight 0 is, as [[a note]], but found the end of the sentence.
+mix, path | step 3: a name the vault does not have | 3:44 Expected a bar of this vault for the bar the weight 1 is, but "nope_1" is not one.
+mix, path | step 3: a number that is not one | 3:26 Expected a weight from 0 to 1, but found "x".
+mix, path | step 3: a closing parenthesis missing | 3:80 Expected ")", but found the end of the sentence.
+mix, path | step 3: the commas missing | read
+mix, path | step 3: missing | 3:1 Expected "Keep the state at weight N (1 is all of [[a]], 0 is all of [[b]]).", but found "Threshold".
+mix, path | step 3: said twice | 4:1 Expected "Threshold N percent." or "With ghost notes.", but found "Keep".
+mix, path | step 4: junk after it | 4:22 Expected the end of the sentence, but found "banana".
+mix, path | step 4: cut after word 1 | 4:10 Expected a threshold as a number of percent, but found the end of the sentence.
+mix, path | step 4: cut after word 2 | 4:13 Expected "percent" after 30, but found the end of the sentence.
+mix, path | step 4: a number that is not one | 4:11 Expected a threshold as a number of percent, but found "x".
+mix, path | step 4: missing | read
+mix, path | step 4: said twice | 5:1 Expected the threshold to be said once, but it is said twice.
+mix, path | step 5: junk after it | 5:18 Expected the end of the sentence, but found "banana".
+mix, path | step 5: cut after word 1 | 5:1 Expected "Threshold N percent." or "With ghost notes.", but found "With".
+mix, path | step 5: cut after word 2 | 5:1 Expected "Threshold N percent." or "With ghost notes.", but found "With".
+mix, path | step 5: missing | read
+mix, path | step 5: said twice | 6:1 Expected the ghost notes to be said once, but they are said twice.
+transform | step 1: junk after it | 1:21 Expected the end of the sentence, but found "banana".
+transform | step 1: cut after word 1 | 1:5 Expected the note to take, as [[a note]], but found the end of the sentence.
+transform | step 1: a name the vault does not have | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "nope_1" is not one.
+transform | step 1: a number that is not one | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "phrase_x" is not one.
+transform | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Thin".
+transform | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]", but found "Take".
+transform | step 2: junk after it | 2:86 Expected the end of the sentence, but found "banana".
+transform | step 2: cut after word 1 | 2:1 I do not know the step 'Thin'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform | step 2: cut after word 2 | 2:9 Expected "bar N" or "bars N to M", but found the end of the sentence.
+transform | step 2: cut after word 3 | 2:14 Expected a bar number, but found the end of the sentence.
+transform | step 2: cut after word 4 | 2:16 Expected ":", but found the end of the sentence.
+transform | step 2: cut after word 5 | 2:19 Expected a bar number, but found the end of the sentence.
+transform | step 2: cut after word 6 | 2:22 Expected "kick row", but found the end of the sentence.
+transform | step 2: cut after word 7 | 2:23 Expected "kick row", but found "kick".
+transform | step 2: cut after word 8 | 2:32 Expected "remove half of the hits", "remove N % of the hits", "remove all the hits" or "remove none of the hits", but found the end of the sentence.
+transform | step 2: cut after word 9 | 2:39 Expected an amount as a number of percent, but found the end of the sentence.
+transform | step 2: cut after word 10 | 2:40 Expected an amount as a number of percent, but found "half".
+transform | step 2: cut after word 11 | 2:40 Expected an amount as a number of percent, but found "half".
+transform | step 2: cut after word 12 | 2:40 Expected an amount as a number of percent, but found "half".
+transform | step 2: cut after word 13 | 2:57 Expected "keeping the strongest beats" or "chosen by seed N", but found the end of the sentence.
+transform | step 2: cut after word 14 | 2:58 Expected "keeping the strongest beats" or "chosen by seed N", but found "keeping".
+transform | step 2: cut after word 15 | 2:58 Expected "keeping the strongest beats" or "chosen by seed N", but found "keeping".
+transform | step 2: cut after word 16 | 2:58 Expected "keeping the strongest beats" or "chosen by seed N", but found "keeping".
+transform | step 2: a number that is not one | 2:15 Expected a bar number, but found "x".
+transform | step 2: the commas missing | 2:22 Expected ":", but found "kick".
+transform | step 2: the colon missing | 2:32 Expected ":", but found "remove".
+transform | step 2: missing | read
+transform | step 2: said twice | read
+transform | step 3: junk after it | 3:59 Expected the end of the sentence, but found "banana".
+transform | step 3: cut after word 1 | 3:1 I do not know the step 'Thin'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform | step 3: cut after word 2 | 3:9 Expected "bar N" or "bars N to M", but found the end of the sentence.
+transform | step 3: cut after word 3 | 3:13 Expected a bar number, but found the end of the sentence.
+transform | step 3: cut after word 4 | 3:16 Expected "remove half of the hits", "remove N % of the hits", "remove all the hits" or "remove none of the hits", but found the end of the sentence.
+transform | step 3: cut after word 5 | 3:23 Expected an amount as a number of percent, but found the end of the sentence.
+transform | step 3: cut after word 6 | 3:26 Expected "percent" after 25, but found the end of the sentence.
+transform | step 3: cut after word 7 | 3:28 Expected "of the hits", but found the end of the sentence.
+transform | step 3: cut after word 8 | 3:29 Expected "of the hits", but found "of".
+transform | step 3: cut after word 9 | 3:29 Expected "of the hits", but found "of".
+transform | step 3: cut after word 10 | 3:41 Expected "keeping the strongest beats" or "chosen by seed N", but found the end of the sentence.
+transform | step 3: cut after word 11 | 3:42 Expected "keeping the strongest beats" or "chosen by seed N", but found "chosen".
+transform | step 3: cut after word 12 | 3:42 Expected "keeping the strongest beats" or "chosen by seed N", but found "chosen".
+transform | step 3: cut after word 13 | 3:56 Expected a seed, but found the end of the sentence.
+transform | step 3: a number that is not one | 3:14 Expected a bar number, but found "x".
+transform | step 3: the commas missing | 3:41 Expected ", keeping the strongest beats" or ", chosen by seed N", but found "chosen".
+transform | step 3: the colon missing | 3:16 Expected ":", but found "remove".
+transform | step 3: missing | read
+transform | step 3: said twice | read
+transform | step 4: junk after it | 4:85 Expected the end of the sentence, but found "banana".
+transform | step 4: cut after word 1 | 4:1 I do not know the step 'Double'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform | step 4: cut after word 2 | 4:10 Expected "bar N" or "bars N to M", but found the end of the sentence.
+transform | step 4: cut after word 3 | 4:15 Expected a bar number, but found the end of the sentence.
+transform | step 4: cut after word 4 | 4:17 Expected ":", but found the end of the sentence.
+transform | step 4: cut after word 5 | 4:20 Expected a bar number, but found the end of the sentence.
+transform | step 4: cut after word 6 | 4:23 Expected "kick row", but found the end of the sentence.
+transform | step 4: cut after word 7 | 4:24 Expected "kick row", but found "snare".
+transform | step 4: cut after word 8 | 4:34 Expected "every hit gets a second one a step later", but found the end of the sentence.
+transform | step 4: cut after word 9 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 10 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 11 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 12 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 13 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 14 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 15 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 16 | 4:35 Expected "every hit gets a second one a step later", but found "every".
+transform | step 4: cut after word 17 | read
+transform | step 4: cut after word 18 | 4:81 Expected a grid, but found the end of the sentence.
+transform | step 4: a number that is not one | 4:16 Expected a bar number, but found "x".
+transform | step 4: a closing parenthesis missing | 4:83 Expected ")", but found the end of the sentence.
+transform | step 4: the commas missing | 4:23 Expected ":", but found "snare".
+transform | step 4: the colon missing | 4:34 Expected ":", but found "every".
+transform | step 4: missing | read
+transform | step 4: said twice | read
+transform | step 5: junk after it | 5:34 Expected the end of the sentence, but found "banana".
+transform | step 5: cut after word 1 | 5:4 Expected a bar number, but found the end of the sentence.
+transform | step 5: cut after word 2 | 5:6 Expected "is replaced by", but found the end of the sentence.
+transform | step 5: cut after word 3 | 5:9 Expected bar 9, as [[a note]], but found the end of the sentence.
+transform | step 5: cut after word 4 | 5:10 Expected a bar of this vault for bar 9, but "replaced" is not one.
+transform | step 5: cut after word 5 | 5:21 Expected bar 9, as [[a note]], but found the end of the sentence.
+transform | step 5: a name the vault does not have | 5:22 Expected a bar of this vault for bar 9, but "nope_1" is not one.
+transform | step 5: a number that is not one | 5:5 Expected a bar number, but found "x".
+transform | step 5: missing | read
+transform | step 5: said twice | 6:1 Expected bar 9 to be replaced once, but it is replaced twice.
+arrangement | step 1: junk after it | 1:41 Expected the end of the sentence, but found "banana".
+arrangement | step 1: cut after word 1 | 1:5 Expected the phrase to play, as [[a note]], but found the end of the sentence.
+arrangement | step 1: cut after word 2 | 2:1 Expected "Then play [[a note]] for N bars.", "For N bars play [[a note]]." or "Repeat that N more times.", but found "Play".
+arrangement | step 1: cut after word 3 | 1:23 Expected the kit to play it on, as [[a note]], but found the end of the sentence.
+arrangement | step 1: cut after word 4 | 1:27 Expected the kit to play it on, as [[a note]], but found the end of the sentence.
+arrangement | step 1: cut after word 5 | 1:36 Expected "kit", but found the end of the sentence.
+arrangement | step 1: a name the vault does not have | 1:6 Expected a phrase of this vault for the phrase to play, but "nope_1" is not one.
+arrangement | step 1: a number that is not one | 1:6 Expected a phrase of this vault for the phrase to play, but "phrase_x" is not one.
+arrangement | step 1: missing | 2:10 Expected a kit that plays a phrase above, but nothing plays on [[rock]].
+arrangement | step 1: said twice | 2:28 Expected a kit to play one phrase, but [[rock]] is given a second one.
+arrangement | step 2: junk after it | 2:42 Expected the end of the sentence, but found "banana".
+arrangement | step 2: cut after word 1 | 2:5 Expected the phrase to play, as [[a note]], but found the end of the sentence.
+arrangement | step 2: cut after word 2 | 2:20 Expected "on the", but found the end of the sentence.
+arrangement | step 2: cut after word 3 | 2:23 Expected the kit to play it on, as [[a note]], but found the end of the sentence.
+arrangement | step 2: cut after word 4 | 2:27 Expected the kit to play it on, as [[a note]], but found the end of the sentence.
+arrangement | step 2: cut after word 5 | 2:37 Expected "kit", but found the end of the sentence.
+arrangement | step 2: a name the vault does not have | 2:6 Expected a phrase of this vault for the phrase to play, but "nope_1" is not one.
+arrangement | step 2: a number that is not one | 2:6 Expected a phrase of this vault for the phrase to play, but "phrase_x" is not one.
+arrangement | step 2: missing | 3:10 Expected a kit that plays a phrase above, but nothing plays on [[latin]].
+arrangement | step 2: said twice | 3:28 Expected a kit to play one phrase, but [[latin]] is given a second one.
+arrangement | step 3: junk after it | 3:44 Expected the end of the sentence, but found "banana".
+arrangement | step 3: cut after word 1 | 3:5 Expected the phrase to play, as [[a note]], but found the end of the sentence.
+arrangement | step 3: cut after word 2 | 3:9 Expected the kit, as [[a note]], but found the end of the sentence.
+arrangement | step 3: cut after word 3 | 3:18 Expected "kit", but found the end of the sentence.
+arrangement | step 3: cut after word 4 | 3:22 Expected "at", but found the end of the sentence.
+arrangement | step 3: cut after word 5 | 3:25 Expected a volume in percent, but found the end of the sentence.
+arrangement | step 3: cut after word 6 | 3:28 Expected "percent", but found the end of the sentence.
+arrangement | step 3: cut after word 7 | 3:36 Expected "volume", but found the end of the sentence.
+arrangement | step 3: a name the vault does not have | 3:10 Expected a kit of this vault for the kit, but "nope_1" is not one.
+arrangement | step 3: a number that is not one | 3:26 Expected a volume in percent, but found "x".
+arrangement | step 3: missing | read
+arrangement | step 3: said twice | read
+arrangement | step 4: junk after it | 4:24 Expected the end of the sentence, but found "banana".
+arrangement | step 4: cut after word 1 | 4:5 Expected the kit to mute, as [[a note]], but found the end of the sentence.
+arrangement | step 4: cut after word 2 | 4:9 Expected the kit to mute, as [[a note]], but found the end of the sentence.
+arrangement | step 4: cut after word 3 | 4:19 Expected "kit", but found the end of the sentence.
+arrangement | step 4: a name the vault does not have | 4:10 Expected a kit of this vault for the kit to mute, but "nope_1" is not one.
+arrangement | step 4: missing | read
+arrangement | step 4: said twice | read
+arrangement | step 5: junk after it | 5:29 Expected the end of the sentence, but found "banana".
+arrangement | step 5: cut after word 1 | 5:5 Expected a kit that plays, as [[a note]], but found the end of the sentence.
+arrangement | step 5: cut after word 2 | 5:9 Expected a kit that plays, as [[a note]], but found the end of the sentence.
+arrangement | step 5: cut after word 3 | 5:18 Expected "kit" or "kits", but found the end of the sentence.
+arrangement | step 5: cut after word 4 | 5:22 Expected "play", but found the end of the sentence.
+arrangement | step 5: a name the vault does not have | 5:10 Expected a kit of this vault for a kit that plays, but "nope_1" is not one.
+arrangement | step 5: missing | read
+arrangement | step 5: said twice | read
+arrangement | step 6: junk after it | 6:10 Expected the end of the sentence, but found "banana".
+arrangement | step 6: missing | 5:28 Expected "Together." after the tracks, but found the end of the Recipe.
+arrangement | step 6: said twice | 7:1 Expected nothing after "Together.", but found another sentence.
+composition | step 1: junk after it | 1:32 Expected the end of the sentence, but found "banana".
+composition | step 1: cut after word 1 | 1:5 Expected the note to play, as [[a note]], but found the end of the sentence.
+composition | step 1: cut after word 2 | read
+composition | step 1: cut after word 3 | 1:24 Expected a number of bars, but found the end of the sentence.
+composition | step 1: cut after word 4 | 1:26 Expected "bars", but found the end of the sentence.
+composition | step 1: a name the vault does not have | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to play, but "nope_1" is not one.
+composition | step 1: a number that is not one | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to play, but "phrase_x" is not one.
+composition | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Then".
+composition | step 1: said twice | 2:1 Expected "Then play [[a note]] for N bars.", "For N bars play [[a note]]." or "Repeat that N more times.", but found "Play".
+composition | step 2: junk after it | 2:34 Expected the end of the sentence, but found "banana".
+composition | step 2: cut after word 1 | 2:1 I do not know the step 'Then'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+composition | step 2: cut after word 2 | 2:10 Expected the note to play, as [[a note]], but found the end of the sentence.
+composition | step 2: cut after word 3 | read
+composition | step 2: cut after word 4 | 2:26 Expected a number of bars, but found the end of the sentence.
+composition | step 2: cut after word 5 | 2:28 Expected "bars", but found the end of the sentence.
+composition | step 2: a name the vault does not have | 2:11 Expected a phrase, an arrangement or a composition of this vault for the note to play, but "nope_1" is not one.
+composition | step 2: a number that is not one | 2:11 Expected a phrase, an arrangement or a composition of this vault for the note to play, but "arr_x" is not one.
+composition | step 2: missing | read
+composition | step 2: said twice | read
+composition | step 3: junk after it | 3:26 Expected the end of the sentence, but found "banana".
+composition | step 3: cut after word 1 | 3:1 Expected "Then play [[a note]] for N bars.", "For N bars play [[a note]]." or "Repeat that N more times.", but found "Repeat".
+composition | step 3: cut after word 2 | 3:12 Expected a number of times, but found the end of the sentence.
+composition | step 3: cut after word 3 | 3:14 Expected "more times", but found the end of the sentence.
+composition | step 3: cut after word 4 | 3:19 Expected "times", but found the end of the sentence.
+composition | step 3: a number that is not one | 3:13 Expected a number of times, but found "x".
+composition | step 3: missing | read
+composition | step 3: said twice | 4:1 Expected "Repeat that" to be said once for a section, but it is said twice.
+a path with nothing after it | step 1: junk after it | 1:34 Expected the end of the sentence, but found "banana".
+a path with nothing after it | step 1: cut after word 1 | 1:5 Expected the first bar, as [[a note]], but found the end of the sentence.
+a path with nothing after it | step 1: cut after word 2 | 1:17 Expected "and", but found the end of the sentence.
+a path with nothing after it | step 1: cut after word 3 | 1:21 Expected the second bar, as [[a note]], but found the end of the sentence.
+a path with nothing after it | step 1: a name the vault does not have | 1:6 Expected a bar of this vault for the first bar, but "nope_1" is not one.
+a path with nothing after it | step 1: a number that is not one | 1:6 Expected a bar of this vault for the first bar, but "bar_x" is not one.
+a path with nothing after it | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Mix".
+a path with nothing after it | step 1: said twice | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "bar_001" is not one.
+a path with nothing after it | step 2: junk after it | 2:89 Expected the end of the sentence, but found "banana".
+a path with nothing after it | step 2: cut after word 1 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 2 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 3 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 4 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 5 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 6 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 7 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 8 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 9 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 10 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 11 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 12 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 13 | 2:1 Expected "Mix them by vote: ..." or "Mix them as a path of single-hit changes from the first to the second, in musical order.", but found "Mix".
+a path with nothing after it | step 2: cut after word 14 | 2:71 Expected ", in musical order" (or another order: musical, seeded, by_channel), but found the end of the sentence.
+a path with nothing after it | step 2: cut after word 15 | 2:74 Expected an order (musical, seeded, by_channel), but found the end of the sentence.
+a path with nothing after it | step 2: cut after word 16 | 2:75 Expected an order (musical, seeded, by_channel), but found "musical".
+a path with nothing after it | step 2: the commas missing | 2:87 Expected "Keep the state at weight N (...)." after the path, but found the end of the Recipe.
+a path with nothing after it | step 2: missing | 1:33 Expected "Morph from the first to the second ..." or "Mix them ..." after the two bars, but found the end of the Recipe.
+a path with nothing after it | step 2: said twice | 3:1 Expected "Keep the state at weight N (1 is all of [[a]], 0 is all of [[b]]).", but found "Mix".
+a take with nothing after it | step 1: junk after it | 1:21 Expected the end of the sentence, but found "banana".
+a take with nothing after it | step 1: cut after word 1 | 1:5 Expected the note to take, as [[a note]], but found the end of the sentence.
+a take with nothing after it | step 1: a name the vault does not have | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "nope_1" is not one.
+a take with nothing after it | step 1: a number that is not one | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "phrase_x" is not one.
+a take with nothing after it | step 1: missing | 1:1 Expected a Recipe (its first step is Take or Play), but found nothing.
+a take with nothing after it | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]", but found "Take".
+transform, a grid | step 1: junk after it | 1:21 Expected the end of the sentence, but found "banana".
+transform, a grid | step 1: cut after word 1 | 1:5 Expected the note to take, as [[a note]], but found the end of the sentence.
+transform, a grid | step 1: a name the vault does not have | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "nope_1" is not one.
+transform, a grid | step 1: a number that is not one | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "phrase_x" is not one.
+transform, a grid | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Double".
+transform, a grid | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]", but found "Take".
+transform, a grid | step 2: junk after it | 2:68 Expected the end of the sentence, but found "banana".
+transform, a grid | step 2: cut after word 1 | 2:1 I do not know the step 'Double'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform, a grid | step 2: cut after word 2 | 2:10 Expected "bar N" or "bars N to M", but found the end of the sentence.
+transform, a grid | step 2: cut after word 3 | 2:14 Expected a bar number, but found the end of the sentence.
+transform, a grid | step 2: cut after word 4 | 2:17 Expected "every hit gets a second one a step later", but found the end of the sentence.
+transform, a grid | step 2: cut after word 5 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 6 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 7 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 8 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 9 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 10 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 11 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 12 | 2:18 Expected "every hit gets a second one a step later", but found "every".
+transform, a grid | step 2: cut after word 13 | read
+transform, a grid | step 2: cut after word 14 | 2:64 Expected a grid, but found the end of the sentence.
+transform, a grid | step 2: a number that is not one | 2:15 Expected a bar number, but found "x".
+transform, a grid | step 2: a closing parenthesis missing | 2:66 Expected ")", but found the end of the sentence.
+transform, a grid | step 2: the colon missing | 2:17 Expected ":", but found "every".
+transform, a grid | step 2: missing | 1:20 Expected at least one change after "Take" (Thin out or Double up), but found none.
+transform, a grid | step 2: said twice | read

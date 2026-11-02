@@ -77,19 +77,21 @@ test('kits and arrangements: stale derived text is regenerated, current notes ar
     'kits/rock.md': newKitNote(ROCK).replace('Add the kick.', 'Somebody typed here.'),
     'kits/latin.md': newKitNote({ kind: 'kit', name: 'latin', channels: ['claves'] }),
     'kits/broken.md': '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind": "kit"}\n```\n',
-    'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] }).replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay'),     // a hand edit of the DERIVED Recipe is overwritten (the Description is the source and is never overwritten: see the M15b test)
+    'arrangements/arr_001.md': newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] }).replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay'),     // 2026-10-31-1140 (M16a, deliberate): the Recipe is a SOURCE now, so a hand edit of it is NO LONGER overwritten: it is left as written and the line says why (it was overwritten when the Recipe was derived text; the Description was never overwritten: see the M15b test)
   };
   const v = vault(files);
   const named = (re: RegExp) => () => [...v.store.keys()].filter((p) => re.test(p)).map((path) => ({ path, name: path.replace(/^.*\//, '').replace(/\.md$/, '') }));
   const ports: RefreshNotesPorts = { ...v.ports, kits: named(/^kits\/(?!README)[^/]+\.md$/), arrangements: named(/^arrangements\/(?!README)[^/]+\.md$/) };
   const s = await refreshNoteLinks(ports);
   assert.deepEqual([s.kits!.total, s.kits!.updated, s.kits!.current, s.kits!.skipped.length], [3, 1, 1, 1]);
-  assert.deepEqual([s.arrangements!.total, s.arrangements!.updated, s.arrangements!.current], [1, 1, 0]);
-  assert.ok(!v.store.get('kits/rock.md')!.includes('Somebody typed here.') && !v.store.get('arrangements/arr_001.md')!.includes('Somebody typed here.'));
-  assert.deepEqual(v.writes.sort(), ['arrangements/arr_001.md', 'kits/rock.md'], 'only the stale notes were written');
+  assert.deepEqual([s.arrangements!.total, s.arrangements!.updated, s.arrangements!.current, s.arrangements!.skipped.length], [1, 0, 0, 1]);
+  assert.match(s.arrangements!.skipped[0], /^arrangements\/arr_001\.md: The Recipe was edited by hand; press Update from Recipe first or revert it\.$/);
+  assert.ok(!v.store.get('kits/rock.md')!.includes('Somebody typed here.'), 'a kit has no source but its json: its typed text is derived and overwritten');
+  assert.ok(v.store.get('arrangements/arr_001.md')!.includes('Somebody typed here.'), 'the person\'s Recipe is left as written');
+  assert.deepEqual(v.writes.sort(), ['kits/rock.md'], 'only the stale kit was written');
   assert.match(s.kits!.skipped[0], /^kits\/broken\.md: /);
-  assert.match(refreshLine(s), /, kits 3 \(1 updated, 1 already current\), arrangements 1 \(1 updated, 0 already current\), 1 skipped$/);
-  assert.match(refreshNotice(s), /^Refresh note links: 0 phrase note\(s\) and 0 bar note\(s\) updated \(and 1 kit note\(s\), 1 arrangement note\(s\)\); 1 could not be read \(kits\/broken\.md: /);
+  assert.match(refreshLine(s), /, kits 3 \(1 updated, 1 already current\), arrangements 1 \(0 updated, 0 already current\), 2 skipped$/);
+  assert.match(refreshNotice(s), /^Refresh note links: 0 phrase note\(s\) and 0 bar note\(s\) updated \(and 1 kit note\(s\), 0 arrangement note\(s\)\); 2 could not be read \(kits\/broken\.md: /);
   const before = v.writes.length;
   await refreshNoteLinks(ports);
   assert.equal(v.writes.length, before, 'a second run writes nothing');
@@ -124,4 +126,27 @@ test('compositions: stale derived text is regenerated, current notes are NOT wri
   const none = await refreshNoteLinks({ ...v.ports, compositions: () => [] });
   assert.equal(none.compositions!.total, 0);
   assert.match(refreshNotice(none), /every note was already up to date/);
+});
+
+// ---- 2026-10-31-1140 (M16a): the Recipe is a source: "Refresh note links" keeps it ------------------------------------------------------------------------------------------------------------------------------------------
+test('Refresh note links and the Recipe: a Recipe a person typed (not applied yet) is left as written and the line says why; a Recipe-SOURCED note (its Recipe applied) is current - no write, no byte - and stays Recipe-sourced even when a derived part has drifted', async () => {
+  const { noteContentFor, PHRASE_DEFAULTS } = await import('./phrase-core.ts');
+  const { asRecipeSourced } = await import('./phrase-notes-core.ts');
+  const { extractRecipeSection } = await import('./v2-note-core.ts');
+  const p = { kind: 'extend' as const, source: 'bar_007', ...PHRASE_DEFAULTS, bars: 6 };
+  const sourced = asRecipeSourced(noteContentFor('phrase_002', p));
+  const typedText = noteContentFor('phrase_001', { ...p, bars: 8 });
+  const typed = typedText.replace(extractRecipeSection(typedText) ?? '', (extractRecipeSection(typedText) ?? '').replace('8 bars', '3 bars'));
+  const drifted = sourced.replace(/^description: ".*"$/m, 'description: "stale"');
+  const v = vault({ 'phrases/phrase_001.md': typed, 'phrases/phrase_002.md': sourced, 'phrases/phrase_003.md': drifted.replace('phrase_002', 'phrase_003'), 'bars/bar_007.md': bar('bar_007', 'x') });
+  const sum = await refreshNoteLinks(v.ports);
+  assert.equal(sum.phrases.skipped.length, 1);
+  assert.match(sum.phrases.skipped[0], /^phrases\/phrase_001\.md: The Recipe was edited by hand; press Update from Recipe first or revert it\.$/);
+  assert.equal(v.store.get('phrases/phrase_001.md'), typed, 'the person\'s Recipe is untouched');
+  assert.ok(!v.writes.includes('phrases/phrase_002.md'), 'a Recipe-sourced note that is current is not written');
+  assert.ok(v.writes.includes('phrases/phrase_003.md'), 'a drifted derived part is repaired');
+  assert.match(v.store.get('phrases/phrase_003.md')!, /^source_facet: recipe$/m, 'and the note stays Recipe-sourced');
+  const again = await refreshNoteLinks(v.ports);
+  assert.deepEqual(v.writes, ['phrases/phrase_003.md'], 'a second run writes nothing more');
+  assert.equal(again.phrases.updated, 0);
 });

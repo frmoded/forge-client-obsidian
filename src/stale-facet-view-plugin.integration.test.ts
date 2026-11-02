@@ -157,3 +157,41 @@ test('CM6 integration (real hello_world): the same bytes with source_facet: desc
     harness.destroy();
   }
 });
+
+// ---- 2026-10-31-1140 (M16a): a note whose SOURCE is its Recipe (applied by "Update from Recipe": the real writers) is drawn by the same plugin, from the same status function ------------------------------------------------------
+async function recipeSourcedNote(): Promise<string> {
+  const { PHRASE_DEFAULTS, noteContentFor } = await import('./phrase-core.ts');
+  const { applyRecipeText } = await import('./description-apply-core.ts');
+  const { extractRecipeSection } = await import('./v2-note-core.ts');
+  const base = noteContentFor('phrase_001', { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 });
+  const recipe = extractRecipeSection(base) ?? '';
+  const edited = base.replace(recipe, recipe.replace('8 bars', '6 bars'));
+  const done = applyRecipeText(edited, 'phrase_001', 'phrase', { bars: ['bar_007'], phrases: ['phrase_001'], arrangements: [], compositions: [], kits: [] }, extractRecipeSection(edited) ?? '');
+  assert.ok(done.ok);
+  return done.ok ? done.text : '';
+}
+const suffixesOf = (html: string): string[] => [...html.matchAll(/— (source|ignored|derived from [A-Za-z]+(?:, out of date)?)/g)].map((m) => m[0]);
+
+test('CM6 integration (M16a): a Recipe-SOURCED note: Description "— derived from Recipe", Recipe "— source", Python "— derived from Recipe"; the Recipe moved on (hand edit) turns the Description and the Python "out of date"; the same note WITHOUT the Description stamp keeps the old reading "— ignored" (P3)', async () => {
+  const text = await recipeSourcedNote();
+  const harness = createIntegrationHarness();
+  try {
+    const view = harness.mount(text, [staleFacetViewPlugin]);
+    await waitForDecorations(harness);
+    assert.deepEqual(suffixesOf(view.contentDOM.innerHTML), ['— derived from Recipe', '— source', '— derived from Recipe']);
+  } finally { harness.destroy(); }
+  const moved = text.replace('Repeat it for 6 bars', 'Repeat it for 5 bars');
+  assert.notEqual(moved, text);
+  const h2 = createIntegrationHarness();
+  try {
+    const view = h2.mount(moved, [staleFacetViewPlugin]);
+    await waitForDecorations(h2);
+    assert.deepEqual(suffixesOf(view.contentDOM.innerHTML), ['— derived from Recipe, out of date', '— source', '— derived from Recipe, out of date']);
+  } finally { h2.destroy(); }
+  const h3 = createIntegrationHarness();
+  try {
+    const view = h3.mount(text.replace(/^description_derived_from_recipe_hash: .*\n/m, ''), [staleFacetViewPlugin]);
+    await waitForDecorations(h3);
+    assert.deepEqual(suffixesOf(view.contentDOM.innerHTML), ['— ignored', '— source', '— derived from Recipe']);
+  } finally { h3.destroy(); }
+});

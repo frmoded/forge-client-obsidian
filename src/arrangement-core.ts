@@ -5,7 +5,7 @@
 //   * Python: `def compute(context):` reading each kit and phrase by calling its name (the way a Forge note reads a data note) and returning combine_tracks(...), the BAR LIST (the contract of a phrase's compute since 2026-10-29-0810).
 // The Score is drawn from the json by the code that draws every phrase (produceArrangement -> the engine glue's `arrangement` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 import { barsOfPayload, producePhrase, readPhraseNote, type PhraseScoreDeps } from './phrase-core.ts';
-import { callNote, descriptionEditedByHand, extractPhraseJsonBlock, handEditRefusal, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { callNote, extractPhraseJsonBlock, handEditRefusalOf, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
@@ -119,8 +119,9 @@ export function refreshArrangementNoteText(text: string, name: string): { ok: tr
   if (read.ok === false) return { ok: false, message: read.message };
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
-  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(false) };
-  const next = renderArrangementNote(text, name, read.value, block.fenceStart);
+  const lost = handEditRefusalOf(text, false);
+  if (lost !== null) return { ok: false, message: lost };
+  const next = keepRecipeSource(text, renderArrangementNote(text, name, read.value, block.fenceStart));
   return { ok: true, text: next, changed: next !== text };
 }
 
@@ -140,7 +141,8 @@ export function setTrackSetting(p: ArrangementParams, index: number, patch: { mu
 export function applyArrangementWrite(text: string, name: string, p: ArrangementParams, applyingDescription = false): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
-  if (!applyingDescription && descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(true) };         // 2026-10-31-1120: a control's write: "Not saved: ...", as a phrase's and a composition's
+  const lost = handEditRefusalOf(text, true);
+  if (!applyingDescription && lost !== null) return { ok: false, message: lost };         // 2026-10-31-1120: a control's write: "Not saved: ...", as a phrase's and a composition's
   const withJson = text.slice(0, block.contentStart) + formatArrangementJson(p) + text.slice(block.contentEnd);
   const next = renderArrangementNote(withJson, name, p, block.fenceStart);
   return { ok: true, text: next, changed: next !== text };

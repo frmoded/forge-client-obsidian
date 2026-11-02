@@ -1,3 +1,4 @@
+// 2026-10-31-1140 (M16a): the same strip says what became of a hand-edited RECIPE (the line and the column, Revert) and, for a note whose Description AND Recipe were both edited, offers the two buttons Update from Description / Update from Recipe.
 // 2026-10-31-1120 (M15c) - the strip that says what became of a hand-edited Description, drawn at the top of every pane that shows the note (the phrase / arrangement / composition tab, the notes pane, the text view): one sentence and
 // the buttons that answer it. Plain DOM, no obsidian import (a happy-dom test mounts the very code the tab runs).
 //
@@ -7,8 +8,8 @@
 //     <div class="forge-description-preview"><pre class="forge-description-preview-description">...</pre><pre class="forge-description-preview-recipe">...</pre></div>     (only for the service's suggestion)
 //   </div>
 
-export type BarAction = 'update' | 'revert' | 'ask' | 'apply-preview' | 'cancel-preview';
-export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', revert: 'Revert', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
+export type BarAction = 'update' | 'update-recipe' | 'revert' | 'ask' | 'apply-preview' | 'cancel-preview';
+export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'update-recipe': 'Update from Recipe', revert: 'Revert', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
 
 export interface BarView {
   message: string;

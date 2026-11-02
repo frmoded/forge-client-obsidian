@@ -79,7 +79,10 @@ test('the round trip, the links, and "Refresh note links": json -> note -> json 
   assert.equal((text.match(/^  - "\[\[/gm) ?? []).length, 4);
   const twice: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }, { kit: 'latin', phrase: 'phrase_001' }] };
   assert.deepEqual(arrangementLinks(twice), ['phrase_001', 'rock', 'latin'], 'a phrase on two kits is linked once');
-  const edited = text.replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay').replace('type: data', 'type: data\nread_only: false');
+  // 2026-10-31-1140 (M16a, deliberate): the PYTHON is the derived text a refresh overwrites; a hand-edited RECIPE is a source now and is left as written (refused, the note untouched)
+  const edited = text.replace('```python\n', '```python\n# Somebody typed here.\n').replace('type: data', 'type: data\nread_only: false');
+  const typedRecipe = text.replace('# Recipe\n\nPlay', '# Recipe\n\nSomebody typed here.\nPlay');
+  assert.deepEqual(refreshArrangementNoteText(typedRecipe, 'arr_001'), { ok: false, message: 'The Recipe was edited by hand; press Update from Recipe first or revert it.' });
   const r = refreshArrangementNoteText(edited, 'arr_001');
   assert.ok(r.ok && r.changed);
   if (!r.ok) return;

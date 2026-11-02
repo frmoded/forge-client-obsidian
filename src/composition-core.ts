@@ -6,7 +6,7 @@
 //   * the Score is drawn from the json by the code that draws every phrase (produceComposition -> the engine glue's `composition` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 // A section of `length` N bars is REPEATED to fill N or CUT to N (never padded, never stretched), no `length` is all its bars once; `repeat` R plays the whole section R more times (the sentence "Repeat that R times."). Every bar keeps its tempo.
 import { barsOfPayload, producePhrase, readPhraseNote, TRANSFORM_DEPTH_MAX, type PhraseScoreDeps } from './phrase-core.ts';
-import { callNote, descriptionEditedByHand, extractPhraseJsonBlock, handEditRefusal, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { callNote, extractPhraseJsonBlock, handEditRefusalOf, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
 import { describe, compositionSentences } from './phrase-describe-core.ts';
 import { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 export { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
@@ -120,8 +120,9 @@ export function refreshCompositionNoteText(text: string, name: string): { ok: tr
   if (block.ok === false) return { ok: false, message: block.message };
   const read = readCompositionNote(text);
   if (read.ok === false) return { ok: false, message: read.message };
-  if (descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(false) };
-  const next = renderCompositionNote(text, name, read.value, block.fenceStart);
+  const lost = handEditRefusalOf(text, false);
+  if (lost !== null) return { ok: false, message: lost };
+  const next = keepRecipeSource(text, renderCompositionNote(text, name, read.value, block.fenceStart));
   return { ok: true, text: next, changed: next !== text };
 }
 
@@ -129,7 +130,8 @@ export function refreshCompositionNoteText(text: string, name: string): { ok: tr
 export function applyCompositionWrite(text: string, name: string, p: CompositionParams, applyingDescription = false): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
-  if (!applyingDescription && descriptionEditedByHand(text)) return { ok: false, message: handEditRefusal(true) };         // the sentence of M15b, unchanged: "Not saved: the Description was edited by hand; ..."
+  const lost = handEditRefusalOf(text, true);
+  if (!applyingDescription && lost !== null) return { ok: false, message: lost };         // the sentence of M15b, unchanged: "Not saved: the Description was edited by hand; ..."
   const withJson = text.slice(0, block.contentStart) + formatCompositionJson(p) + text.slice(block.contentEnd);
   const next = renderCompositionNote(withJson, name, p, block.fenceStart);
   return { ok: true, text: next, changed: next !== text };

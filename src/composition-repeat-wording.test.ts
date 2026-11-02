@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { compositionRecipeSteps, newCompositionNote, readCompositionNote, refreshCompositionNoteText, type CompositionParams } from './composition-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { canonical, describe, parse, VERBS, type GrammarVault } from './phrase-grammar-core.ts';
-import { extractDescription } from './v2-note-core.ts';
+import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 
 const VAULT: GrammarVault = { bars: ['bar_007'], phrases: ['phrase_003', 'phrase_004'], arrangements: ['arr_001'], compositions: ['intro'], kits: ['rock'] };
 const ONE = (repeat?: number): CompositionParams => ({ kind: 'composition', sections: [{ source: 'phrases/phrase_003', length: 8, ...(repeat !== undefined ? { repeat } : {}) }] });
@@ -75,6 +75,7 @@ test('MIGRATION: a composition note written with the old wording is rewritten by
   let old = fresh.replace('Repeat that 2 more times.', 'Repeat that 2 times.').replace('Repeat that 2 more times.', 'Repeat that 2 times.').replace('Repeat that once more.', 'Repeat that 1 time.').replace('Repeat that once more.', 'Repeat that 1 time.');
   assert.notEqual(old, fresh); assert.doesNotMatch(old, /Repeat that (?:\d+ more|once more)/);      // (the frontmatter `description:` words already said "2 more times")
   old = old.replace(/description_hash: \S+/, `description_hash: ${facetHashSync(extractDescription(old))}`);
+  old = old.replace(/^recipe_hash: \S+/m, `recipe_hash: ${facetHashSync(extractRecipeSection(old) ?? '')}`);       // 2026-10-31-1140 (M16a): a Recipe whose stamp disagrees is a hand edit; the old plugin stamped the Recipe it wrote
   const json = (t: string): string => t.slice(t.indexOf('```json'));
   const first = refreshCompositionNoteText(old, 'comp_007');
   assert.ok(first.ok && first.changed, JSON.stringify(first));
