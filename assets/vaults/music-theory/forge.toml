@@ -1,5 +1,5 @@
 name = "music-theory"
-version = "0.11.51"
+version = "0.11.52"
 description = "Forge vault for music theory pedagogy: exercises, quizzes, and worked compositions."
 domains = ["music"]
 

@@ -11,7 +11,7 @@ music_instruments/resources/html/piano_keyboard_c_major_triad.html
 
 Stack a third on a note, then another third on top of that, and you have a triad. Press Run on [[build_triad]] with `tonic="C4"` and `quality="major"` to hear it — then change the tonic and listen to the same shape land somewhere else.
 
-Not every third is the same size. A major third is 4 half steps (a half step is the distance from one piano key to the very next one, black keys included) and a minor third is 3. Stack a major third and then a minor third and you get a major triad (C E G); stack a minor third and then a major third and you get a minor triad (C E-flat G). Two minor thirds make a diminished triad and two major thirds an augmented one; [[chord_quality]] takes each in turn. The bottom note of the stack is the [[root]], though as [[inversion]] shows, the root is not always the lowest note you hear.
+Not every third is the same size. A major third is 4 half steps (a half step is the distance from one piano key to the very next one, black keys included) and a minor third is 3. Stack a major third and then a minor third and you get a major triad (C E G); stack a minor third and then a major third and you get a minor triad (C E♭ G). Two minor thirds make a diminished triad and two major thirds an augmented one; [[chord_quality]] takes each in turn. The bottom note of the stack is the [[root]], though as [[inversion]] shows, the root is not always the lowest note you hear.
 
 Once you can build a triad, [[seventh_chord|seventh chords]] are one more stacked third away.
 
