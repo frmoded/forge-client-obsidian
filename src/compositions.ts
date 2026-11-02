@@ -251,6 +251,15 @@ export interface CompositionsOptions {
   onPin(leaf: WorkspaceLeaf, pin: PinnedNote | null): void;
   /** Open the notes pane beside this composition's Score ("Open the piece" opens the Score with its notes, like any phrase). Absent = the Score alone. */
   pair?(leaf: WorkspaceLeaf, file: TFile): Promise<void>;
+  /** 2026-10-31-1135 (CCQA smoke 10, B1/B4): the seam "New composition" uses, as the sentence dialog's does (1110). `origin` is the SCORE leaf of the pair the person started from (null = no pair); it is read when the dialog opens,
+   *  before any await (L59). `openIn` opens the new composition as the Score in that very leaf and moves the pair's notes pane to its note; false = the pair is gone since, and the caller opens the pair the ordinary way. */
+  newCompositionPair?: { origin(): WorkspaceLeaf | null; openIn(origin: WorkspaceLeaf, file: TFile): Promise<boolean> };
+}
+
+/** The composition tab IN this leaf (the Score of a pair already open is replaced by the new piece's, never a third pane): the composition counterpart of openPhraseInLeaf. */
+export async function openCompositionInLeaf(app: App, leaf: WorkspaceLeaf, file: TFile): Promise<void> {
+  await leaf.setViewState({ type: COMPOSITION_VIEW_TYPE, active: true, state: { file: file.path } });
+  app.workspace.revealLeaf(leaf);
 }
 
 export function registerCompositions(plugin: Plugin, opts: CompositionsOptions): void {
@@ -287,7 +296,18 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
       const phrases = names(PHRASE_FOLDER), arrangements = names(ARRANGEMENT_FOLDER);
       if (!newCompositionAvailable({ scoreFirst: opts.scoreFirst(), phraseCount: phrases.length, arrangementCount: arrangements.length })) return false;
       if (!checking) {
-        const compPorts = ports(async (file) => { await openComposition(app, file); });
+        // 2026-10-31-1135 (smoke 10, B1/B4): the composition is the root of the piece, so it is always opened WITH its notes: the pair the person started from follows to the new note (the Score takes its leaf), and with no pair
+        // the notes pane opens beside the new Score ('Open Score with notes'). `origin` is read now, before any await.
+        const origin = opts.newCompositionPair?.origin() ?? null;
+        const compPorts = ports(async (file) => {
+          let followed = false;
+          if (origin !== null && opts.newCompositionPair) {
+            try { followed = await opts.newCompositionPair.openIn(origin, file); } catch (e) { console.error('New composition: the pair could not follow the new composition', e); }
+          }
+          if (followed) return;
+          const leaf = await openComposition(app, file);
+          try { await opts.pair?.(leaf, file); } catch (e) { console.error('New composition: the notes pane could not be opened', e); }          // the composition is made and open: a pane that will not open is not a failure of Create
+        });
         void readAll().then((all) => {
           new DialogModal(app, (parent, close) => mountCompositionDialog(parent, {
             phrases, arrangements, compositions: names(COMPOSITION_FOLDER), hasRoot: rootOf(all).kind !== 'none',

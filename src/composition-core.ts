@@ -10,6 +10,7 @@ import { callNote, descriptionEditedByHand, extractPhraseJsonBlock, handEditRefu
 import { describe, compositionSentences } from './phrase-describe-core.ts';
 import { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 export { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
+import { composeMismatchSentence } from './engine-refusal-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { produceArrangement, type ArrangementDeps } from './arrangement-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
@@ -223,12 +224,29 @@ export async function produceComposition(deps: CompositionDeps, note: string | {
       throw e;
     }
   }, sections[0].bars[0], title);
-  if (refused !== null) return { kind: 'refusal', message: `Composition: ${refused}` };
+  // 2026-10-31-1135 (CCQA smoke 10, B5): two sections of another meter are ONE sentence naming both (the engine counts the sections it was handed; the person counts the lines of the composition)
+  if (refused !== null) return { kind: 'refusal', message: `Composition: ${composeMismatchSentence(refused, expanded.map((s) => ({ section: s.index + 1, source: s.source }))) ?? refused}` };
   if (outcome.kind !== 'score') return outcome;
   let first = 1;
   const shape: CompositionShape = { sections: expanded.map((s, i) => { const bars = s.length ?? sections[i].bars.length; const out = { ...s, bars, first }; first += bars; return out; }) };
   return { kind: 'score', payload: { ...outcome.payload, [FORGE_COMPOSITION_KEY]: shape } };
 }
+
+/**
+ * THE count of a composition's sections (2026-10-31-1135, CCQA smoke 10 B3: the header said "2 sections", the strip "played 2 times", the Inspector "section 2 of 3"). A SECTION is a line of the composition - what the header counts, the
+ * strip lists, the sentence says; a repeat of it is a PASS of that section. `expanded` is what the engine plays (expandSections: every pass in order), `at` the 0-based place in it. ONE function: the Inspector's line, the pin's reason
+ * and the numbers the strip prints all come from here, so they cannot drift apart.
+ */
+export interface SectionPosition { section: number; sections: number; pass: number; passes: number }
+export function sectionPositionOf(expanded: ReadonlyArray<{ index: number; copy: number }>, at: number): SectionPosition {
+  const here = expanded[at];
+  const sections = expanded.reduce((m, e) => Math.max(m, e.index + 1), 0);
+  return { section: here.index + 1, sections, pass: here.copy + 1, passes: expanded.filter((e) => e.index === here.index).length };
+}
+/** "section 2 of 2", and ", pass 2 of 2" only for a section that is played more than once. */
+export const sectionPositionText = (pos: SectionPosition): string => `section ${pos.section} of ${pos.sections}${pos.passes > 1 ? `, pass ${pos.pass} of ${pos.passes}` : ''}`;
+/** "2 passes" / "1 pass": a section played `n` times in all (its repeat + 1). */
+export const passesWord = (n: number): string => `${n} ${n === 1 ? 'pass' : 'passes'}`;
 
 /** The tab header: "3 sections, 22 bars, 1.4 min" - the sections as the json has them (a repeat is the same section), the bars the Score has, the minutes it plays at each bar's own tempo. `null` = nothing to say yet. */
 export function compositionHeader(p: CompositionParams, bars: readonly RhythmData[] | null): string {

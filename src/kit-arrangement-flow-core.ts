@@ -1,6 +1,7 @@
 // score_first M10 slice 1 (drain 2026-10-29-0820) - what "New kit" and "New arrangement" DO once the person has chosen: validate, make the folder if the vault lacks it, pick a free name, write the note, print the evidence line, open it, say so. Pure: the
 // vault is injected (the Obsidian glue is kits-arrangements.ts; the choosing is kit-dom.ts / arrangement-dom.ts). Nothing here throws: every trouble is one sentence returned and shown. Score-first vaults only (the gates below; P3).
 import { ARRANGEMENT_FOLDER, arrangementCreatedLine, arrangementPath, nextArrangementName, newArrangementNote, validateArrangement, type ArrangementTrack } from './arrangement-core.ts';
+import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import { KIT_FOLDER, freeKitName, kitCreatedLine, kitFromChoice, kitPath, newKitNote } from './kit-core.ts';
 
 export interface CreatePorts<F = unknown> {
@@ -13,6 +14,8 @@ export interface CreatePorts<F = unknown> {
   /** One evidence line (`[forge-kit] created ...`), printed as Info. */
   trace(line: string): void;
   isAlreadyExists(e: unknown): boolean;
+  /** 2026-10-31-1135: the engine checks the note BEFORE it is written (note-preflight-seam.ts). Absent = the installed one, if any. */
+  preflight?: NotePreflight;
 }
 export type CreateResult = { ok: true; path: string } | { ok: false; message: string };
 
@@ -57,6 +60,13 @@ export async function createArrangement<F>(ports: CreatePorts<F>, tracks: readon
   const valid = validateArrangement({ kind: 'arrangement', tracks: tracks.map((t) => ({ kit: t.kit, phrase: t.phrase })) });
   if (valid.ok === false) return fail(ports, `New arrangement: ${valid.message}`);
   try {
+    // 2026-10-31-1135 (CCQA smoke 10, B5): the engine draws the prospective note first; a refusal is one sentence and nothing is written (not the folder either)
+    const check = ports.preflight ?? installedNotePreflight();
+    if (check !== null) {
+      const first = nextArrangementName((p) => ports.exists(p));
+      const refusal = await check(arrangementPath(first), newArrangementNote(first, valid.value));
+      if (refusal !== null) return fail(ports, refusal);
+    }
     await ensureFolder(ports, ARRANGEMENT_FOLDER);
     const refused = new Set<string>();
     for (let tries = 0; tries < NAME_TRIES; tries++) {

@@ -20,6 +20,7 @@ import {
   type ScoreViewModeStorage,
 } from './view-mode-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
+import { guardPlayerSounds } from './player-sounds-core.ts';
 import { waitForWidth } from './host-width-core.ts';
 import { registerWidget } from './input-widget-core.ts';
 import { pianoWidget } from './input-widget-piano.ts';
@@ -383,10 +384,16 @@ function renderMusicXML(
         const noteSequence = await midiBase64ToNoteSequence(midiBase64);
         applyPlaybackLeadIn(noteSequence, PLAYBACK_LEAD_IN_SECS);
         player = document.createElement('midi-player');
+        // 2026-10-31-1135 (CCQA smoke 10, A): the element loads the soundfont the moment a note sequence is set; a failed fetch used to be an uncaught rejection and a "!" until a reload. Guarded BEFORE the sequence is set: one evidence
+        // line, one sentence beside the player, and the next Play loads the sounds again (player-sounds-core.ts).
+        const soundsNote = document.createElement('div');
+        soundsNote.className = 'forge-player-message'; soundsNote.setAttribute('role', 'status'); soundsNote.hidden = true;
+        guardPlayerSounds(player, { log: (line) => { console.error(line); }, say: (message) => { soundsNote.textContent = message ?? ''; soundsNote.hidden = message === null; } });
         player.soundFont = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
         player.noteSequence = noteSequence;
         player.classList.add('forge-midi-player');
         host.appendChild(player);
+        host.appendChild(soundsNote);
       } catch (e) {
         console.error('renderMusicXML: MIDI player init failed; score will render without playback.', e);
       }

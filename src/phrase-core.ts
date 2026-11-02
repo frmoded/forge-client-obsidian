@@ -14,6 +14,8 @@
 
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
 import { descriptionEditedByHand, extractPhraseJsonBlock, handEditRefusal, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
+import { extendGridSentence } from './engine-refusal-core.ts';
+import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { TRANSFORM_DEFAULT_GRID, rangeWords } from './phrase-words-core.ts';
 export { rangeWords, selectionWords, transformOpWords } from './phrase-words-core.ts';
@@ -720,6 +722,8 @@ export interface NewPhrasePorts<F> {
   notify(message: string): void;
   /** Obsidian's refusal to create a file that is already there. */
   isAlreadyExists(e: unknown): boolean;
+  /** 2026-10-31-1135: the engine checks the note BEFORE it is written (note-preflight-core.ts). Absent = the installed one, if any. */
+  preflight?: NotePreflight;
 }
 
 export type NewPhraseResult = { ok: true; path: string } | { ok: false; message: string };
@@ -736,6 +740,9 @@ async function createPhraseNote<F>(ports: NewPhrasePorts<F>, how: { fn: string; 
   try {
     const first = how.plan([], () => false);
     if (first.ok === false) return fail(first.message);               // not on a bar: say so before touching the vault
+    // 2026-10-31-1135 (CCQA smoke 10, B5/B5x): the engine's own rules refuse a note it cannot draw BEFORE anything is written (not the folder, not the note); the sentence is the engine's, in one line, never a traceback
+    const check = ports.preflight ?? installedNotePreflight();
+    if (check !== null) { const refusal = await check(first.path, first.content); if (refusal !== null) return fail(refusal); }
     if (!ports.folderExists()) {
       try { await ports.createFolder(); } catch (e) { if (!ports.isAlreadyExists(e)) throw e; }
     }
@@ -911,13 +918,23 @@ async function produceValidated(deps: PhraseScoreDeps, params: PhraseParams, tit
   }
   const bar = readRhythmNote(text);
   if (bar.ok === false) return { kind: 'refusal', message: `Phrase: the source ${params.source} is not usable: ${bar.message}` };
-  if (!params.overrides) return computeScore((data, t) => deps.compute(data, params, t), bar.value.data, title);
+  // 2026-10-31-1135 (CCQA smoke 10, B5x): extend_rhythm's refusal of a bar that is not on a 16-step grid is the person's data, not a fault: one plain sentence naming the bar, not a traceback in the Score area
+  let refused: string | null = null;
+  const asked = async (data: RhythmData, p: PhraseParams, t: string): Promise<unknown> => {
+    try { return await deps.compute(data, p, t); } catch (e) {
+      const sentence = extendGridSentence((e as Error)?.message ?? String(e), params.source);
+      if (sentence !== null) { refused = sentence; return null; }
+      throw e;
+    }
+  };
+  if (!params.overrides) { const out = await computeScore((data, t) => asked(data as RhythmData, params, t), bar.value.data, title); return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : out; }
   // M9: forked bars. The fork notes are read FRESH (a bar edited in the Beat Box is what the phrase shows), checked against the source's grid, and handed to the engine as `override_bars`; the engine
   // glue lays each over the generated bar of that number. A phrase without overrides never reaches this line, so its engine call is exactly what it was.
   const forks = await readForks(deps, params.overrides, bar.value.data, `the source ${params.source}`);
   if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
   const withForks = { ...params, override_bars: forks } as unknown as PhraseParams;
-  return computeScore((data, t) => deps.compute(data, withForks, t), bar.value.data, title);
+  const out = await computeScore((data, t) => asked(data as RhythmData, withForks, t), bar.value.data, title);
+  return refused !== null ? { kind: 'refusal', message: `Phrase: ${refused}` } : out;
 }
 
 /** The data of every fork note of a phrase, by bar number, or the reason one cannot be used (naming the bar and the note). Each distinct note is read once. */

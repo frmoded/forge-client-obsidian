@@ -210,7 +210,7 @@ test('a phrase the phrase code drew but that carries no bars is a refusal naming
   const broken = world({ combine: () => { throw new Error('KeyError: boom'); } });
   const e = await produceArrangement(broken.deps, newArrangementNote('arr_001', ARR), 'arr_001');
   assert.equal(e.kind, 'error');
-  if (e.kind === 'error') assert.match(e.message, /KeyError: boom/, 'a fault in the engine is reported as the engine\'s, not swallowed as a refusal');
+  if (e.kind === 'error') assert.match(e.message, /\(boom\)$/, 'a fault in the engine is reported as the engine\'s (its own words, without the Python exception name since 2026-10-31-1135), not swallowed as a refusal');
 });
 
 

@@ -3,8 +3,9 @@
 // received - P4: the cell is a note, the Score stays derived). Re-run writes the same phrase again from the cell (deterministic, no LLM). Delete cell removes the cell and the phrase it made; the source is never touched.
 // 2026-10-27-0720 (slice 2): Run can also take a typed REQUEST (a sentence): the service turns it into the same ops (notebook-request-core.ts), the cell records the sentence as its Description and in its json, and everything after that
 // (the phrase, the cell, Re-run, Delete cell) is the one write path the op picker uses.
+import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import {
-  createNewPhraseFromParams, formatTransformOp, noteContentFor, validatePhrase, type NewPhraseResult, type TransformOp, type TransformPhrase,
+  createNewPhraseFromParams, formatTransformOp, noteContentFor, planNewPhraseFromParams, validatePhrase, type NewPhraseResult, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
 import { askedLine, buildTransformRequest, interpretTransformResponse, oneLine, versionAtLeast, OLD_SERVICE, REQUEST_NEEDS_VERSION, NO_BARS_SELECTED, type TransformOutcome } from './notebook-request-core.ts';
 import { extractPhraseJsonBlock } from './phrase-notes-core.ts';
@@ -152,6 +153,8 @@ export interface NotebookPorts<F> {
   listBarBasenames?(): string[];
   /** The service's /health version, or null when it cannot be read: asked ONLY when an answer is one an old service could also give. */
   serviceVersion?(): Promise<string | null>;
+  /** 2026-10-31-1135: the engine checks the transform BEFORE it is written (note-preflight-seam.ts). Absent = the installed one, if any. */
+  preflight?: NotePreflight;
 }
 
 export type RunResult = { ok: true; cellPath: string; phrasePath: string } | { ok: false; message: string };
@@ -182,6 +185,12 @@ export function createNotebook<F>(ports: NotebookPorts<F>): Notebook {
     const params = valid.value as TransformPhrase;
     let created: F | undefined;
     let phrase: NewPhraseResult;
+    // 2026-10-31-1135 (CCQA smoke 10, B5): the engine draws the transform BEFORE anything is written - not the phrase, not the cell, not even the notebook folder; a refusal is one sentence (the inner create below is told it was checked)
+    const check = ports.preflight ?? installedNotePreflight();
+    if (check !== null) {
+      const first = planNewPhraseFromParams({ params, existingBasenames: ports.listPhraseBasenames(), exists: ports.exists });
+      if (first.ok) { const refusal = await check(first.path, first.content); if (refusal !== null) return fail(refusal); }
+    }
     try {
       await ensureFolder(NOTEBOOK_FOLDER);
       phrase = await createNewPhraseFromParams<F>({
@@ -194,6 +203,7 @@ export function createNotebook<F>(ports: NotebookPorts<F>): Notebook {
         open: async () => {},                                   // the tab opens after the cell is written, so a failed cell never leaves a tab on a note that is taken back
         notify: ports.notify,
         isAlreadyExists: ports.isAlreadyExists,
+        preflight: async () => null,                          // checked above, before the notebook folder was made
       }, params);
     } catch (e) {
       return fail(`Could not make the transform: ${msg(e)}`);

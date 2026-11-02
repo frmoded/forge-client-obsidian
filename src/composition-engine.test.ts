@@ -146,7 +146,7 @@ test('two sections in another meter are the engine\'s own refusal in one sentenc
   const files = vault({ notes: { 'bars/bar_020.md': waltz, 'phrases/phrase_020.md': noteContentFor('phrase_020', extend('bar_020', 2)) } });
   const out = await produceComposition(depsOf(py, files), newCompositionNote('comp_001', P([{ source: 'phrases/phrase_003' }, { source: 'phrases/phrase_020' }])), 'comp_001');
   assert.equal(out.kind, 'refusal', out.kind === 'refusal' ? '' : JSON.stringify(out).slice(0, 200));
-  if (out.kind === 'refusal') assert.match(out.message, /^Composition: compose_sections: section 2 bar 1 has time_signature '3\/4' but section 1 has '4\/4'; all sections must share the same meter and steps$/);
+  if (out.kind === 'refusal') assert.match(out.message, /^Composition: phrase_020 \(section 2\) is 3\/4 but phrase_003 \(section 1\) is 4\/4; all sections of a composition must share the same meter and steps\.$/);
 });
 
 test('the REAL Score of a composition is tied bar by bar to its sections: an id on all 12 measures, and each bar says its section, its note, the bar of that note and its tempo (the engine\'s lineage and the producer\'s shape agree)', async () => {

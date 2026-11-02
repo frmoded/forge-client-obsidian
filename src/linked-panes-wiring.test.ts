@@ -11,6 +11,7 @@ import { Window } from 'happy-dom';
 
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
+import { realNoteAt } from './test-support/score-first-notes.ts';
 import { PAIR_SETTLE_MS } from './linked-panes-core.ts';
 import { installHostClock, iterateAllLeavesLikeObsidian, type HostClock } from './test-support/host-workspace.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
@@ -355,7 +356,8 @@ for (const edition of ['lean', 'music'] as const) {
   // ---- 2026-10-30-1010 (0900 item (d)): "New phrase from a sentence" while a pair is open --------------------------------------------------------------------------------------------------------
   /** The sentence dialog on the pair world: a vault with a bar and a phrase that records what is created, the dialog's Modal stand-in, and /plan answered with an extend of bar_005 to 8 bars. */
   function sentenceWorld(w: Awaited<ReturnType<typeof world>>) {
-    const store = new Map<string, string>([['bars/bar_005.md', ''], ['phrases/phrase_001.md', '']]);
+    const store = new Map<string, string>([['bars/bar_005.md', realNoteAt('bars/bar_005.md')], ['phrases/phrase_001.md', realNoteAt('phrases/phrase_001.md')]]);
+    w.app.vault.read = async (f: any) => store.get(f.path) ?? '';
     const tfp = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
     w.app.vault.getFiles = () => [...store.keys()].map(tfp);
     w.app.vault.getAbstractFileByPath = (p: string) => (store.has(p) || ['bars', 'phrases', 'kits', 'arrangements'].includes(p) ? tfp(p) : null);

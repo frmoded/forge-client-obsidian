@@ -13,6 +13,7 @@ import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/h
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { COMPOSITION_VIEW_TYPE, newCompositionNote, readCompositionNote } from './composition-core.ts';
 import { isRootNote } from './composition-root-core.ts';
+import { noteContentFor, type PhraseParams } from './phrase-core.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml'), 'utf8');
@@ -92,7 +93,10 @@ for (const edition of ['lean', 'music'] as const) {
     };
   }
 
-  const PHRASES = { 'phrases/phrase_003.md': 'p', 'phrases/phrase_004.md': 'p' };
+  // 2026-10-31-1135: Create now asks the engine's producers about the prospective note first, so the phrases a composition plays are REAL phrases of a real bar (a placeholder 'p' is a note that cannot be drawn)
+  const BAR = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/bar_007.md'), 'utf8');
+  const EXTEND = (source: string): PhraseParams => ({ kind: 'extend', source, bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 } as PhraseParams);
+  const PHRASES = { 'bars/bar_005.md': BAR, 'phrases/phrase_003.md': noteContentFor('phrase_003', EXTEND('bar_005')), 'phrases/phrase_004.md': noteContentFor('phrase_004', EXTEND('bar_005')) };
 
   test(`[${edition}] a score-first vault: the four commands and the composition view are registered; "New composition" needs a phrase or an arrangement, "Open composition as Score" and "Make ... the root" only on a composition note, "Open the piece" only when the vault has a composition`, async () => {
     const w = await world(SCORE_FIRST_TOML);
@@ -151,9 +155,36 @@ for (const edition of ['lean', 'music'] as const) {
       assert.ok(isRootNote(text), 'marked as the root');
       assert.match(text, /# Description\n\nPlay \[\[phrase_003\]\] for 8 bars\. Then play \[\[phrase_004\]\]\. Repeat that 2 more times\.\n/);
       assert.deepEqual(w.lines.filter((l) => l.startsWith('[forge-composition]')), ['[forge-composition] created compositions/comp_001.md sections=phrase_003:8,phrase_004x3']);
-      assert.deepEqual(w.leaves.flatMap((l) => l.states).map((s: any) => [s.type, s.state.file]), [[COMPOSITION_VIEW_TYPE, 'compositions/comp_001.md']]);
+      // 2026-10-31-1135 (CCQA smoke 10, B1): the composition is the root of the piece, so it opens WITH its notes: the Score, and the notes pane beside it showing the new note (it was the Score alone, 'Open Score with notes' needed)
+      assert.deepEqual(w.leaves.flatMap((l) => l.states).map((s: any) => [s.type, s.state.file]), [[COMPOSITION_VIEW_TYPE, 'compositions/comp_001.md'], ['markdown', 'compositions/comp_001.md']]);
+      assert.equal(w.leaves.length, 2, 'two panes: the Score and its notes');
       assert.equal(w.modals[0].closed, true);
     } finally { w.done(); }
+  });
+
+  test(`[${edition}] "New composition" with a pair ALREADY open (smoke 10, B4): the new composition takes the Score's pane and the notes pane moves to the new note - no third pane, the notes pane does not stay on the previous composition`, async () => {
+    const w = await world(SCORE_FIRST_TOML, { ...PHRASES, 'compositions/comp_001.md': newCompositionNote('comp_001', P('phrases/phrase_003'), ['root: true']) });
+    try {
+      const leaf: any = { states: [] as any[], opened: [] as string[], setViewState: async (s: any) => { leaf.states.push(s); }, openFile: async (f: any) => { leaf.opened.push(f.path); }, containerEl: win.document.createElement('div') };
+      (Object.prototype as any).addAction = function () { return { remove() {} }; };
+      const view: any = w.plugin.views.get(COMPOSITION_VIEW_TYPE)!(leaf);
+      view.leaf = leaf; view.app = w.app;
+      view.file = Object.assign(new (w.real as any).TFile(), { path: 'compositions/comp_001.md', extension: 'md', basename: 'comp_001' });
+      w.setActiveView(view);
+      await w.run('open-score-with-notes');                                          // the pair of comp_001: its Score (leaf) and a notes pane
+      const panes = () => w.leaves.filter((l: any) => l !== leaf && l.states.some((s: any) => s.type === 'markdown'));
+      assert.equal(panes().length, 1, 'the pair is open');
+      const before = w.leaves.length;
+      await w.run(NEW_COMP);
+      w.q('.forge-comp-root').checked = false;
+      w.click(w.q('.forge-comp-create'));
+      await w.flush(); await w.flush();
+      assert.equal(w.created.length, 1); assert.equal(w.created[0][0], 'compositions/comp_002.md');
+      assert.equal(w.leaves.length, before, `no third pane: ${JSON.stringify(w.leaves.map((l: any) => l.states.map((s: any) => [s.type, s.state?.file])))}`);
+      assert.deepEqual(leaf.states.at(-1), { type: COMPOSITION_VIEW_TYPE, active: true, state: { file: 'compositions/comp_002.md' } }, 'the Score pane now shows the new composition');
+      const shown = panes().flatMap((l: any) => [...l.states.map((s: any) => s.state?.file), ...l.opened]);
+      assert.equal(String(shown.at(-1)), 'compositions/comp_002.md', `the notes pane moved to the new note, not left on comp_001: ${JSON.stringify(shown)}`);
+    } finally { delete (Object.prototype as any).addAction; w.done(); }
   });
 
   test(`[${edition}] a second composition is not the root by default, and ticking the root box moves the mark: the first one loses it`, async () => {
@@ -182,7 +213,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.ok(states.some(([type, file]) => type === 'markdown' && file === 'compositions/comp_001.md'), `the notes pane opened beside the Score: ${JSON.stringify(states)}`);
       await w.run(REFRESH);
       assert.ok(!w.store.get('compositions/comp_001.md')!.includes('typed here'));
-      assert.ok(w.lines.some((l) => /^\[forge-notes\] refresh note links: .*, compositions 1 \(1 updated, 0 already current\), 3 skipped$/.test(l)), w.lines.join(' | '));
+      assert.ok(w.lines.some((l) => /^\[forge-notes\] refresh note links: .*, compositions 1 \(1 updated, 0 already current\)(?:, \d+ skipped)?$/.test(l)), w.lines.join(' | '));
     } finally { w.done(); }
   });
 

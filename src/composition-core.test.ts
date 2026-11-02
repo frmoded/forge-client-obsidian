@@ -218,11 +218,11 @@ test('REFUSED in one sentence that names it: a missing note, an unusable note, a
   void w;
 });
 
-test('two sections the engine will not join (another meter) are a refusal carrying the engine\'s own sentence, not a thrown error', async () => {
+test('two sections the engine will not join (another meter) are a refusal in ONE sentence naming both sections (2026-10-31-1135), not a thrown error and not the engine\'s raw line', async () => {
   const w = world();
   const deps: CompositionDeps = { ...w.deps, compute: async () => { throw new Error('Traceback (most recent call last):\n  File "<exec>", line 1\nValueError: compose_sections: section 2 bar 1 has time_signature \'3/4\' but section 1 has \'4/4\'; all sections must share the same meter and steps'); } };
   const out = await produceComposition(deps, comp('comp_001', SECTIONS), 'comp_001');
-  assert.deepEqual(out, { kind: 'refusal', message: "Composition: compose_sections: section 2 bar 1 has time_signature '3/4' but section 1 has '4/4'; all sections must share the same meter and steps" });
+  assert.deepEqual(out, { kind: 'refusal', message: 'Composition: arr_001 (section 2) is 3/4 but phrase_003 (section 1) is 4/4; all sections of a composition must share the same meter and steps.' });       // 2026-10-31-1135: one sentence naming BOTH sections by note and by the number the person sees
   assert.equal(composeRefusal('boom'), null);
   assert.equal(composeRefusal('ValueError: compose_sections_lineage: section 2 bar 1 has steps 8 but section 1 has 16'), 'compose_sections_lineage: section 2 bar 1 has steps 8 but section 1 has 16');
   const broken: CompositionDeps = { ...w.deps, compute: async () => { throw new Error('the engine is not available'); } };
@@ -371,4 +371,14 @@ test('the grammar of a composition says exactly what is wrong, and where: a word
   assert.deepEqual(at('Play [[phrase_003]] twice.'), ['Expected "on the", but found "twice".', 1, 21], 'alone it is read as an arrangement\'s first sentence');
   assert.deepEqual(at('Banana.'), ['Expected a description that starts with Extend, Mix, Morph, Take or Play, but found "Banana".', 1, 1]);
   assert.deepEqual(at('Play [[phrase_003]] for 8 bars. Repeat that 2 times. Repeat that 3 times.'), ['Expected "Repeat that" to be said once for a section, but it is said twice.', 1, 54]);
+});
+
+// Added by the 1135 mutation pass: the wording of a count of passes is the one function every place uses (card 20), so its words are pinned.
+test('passesWord and sectionPositionText: "1 pass" / "2 passes"; "section 2 of 3" and the pass only for a section played more than once', async () => {
+  const { passesWord, sectionPositionText } = await import('./composition-core.ts');
+  assert.equal(passesWord(1), '1 pass');
+  assert.equal(passesWord(2), '2 passes');
+  assert.equal(passesWord(0), '0 passes');
+  assert.equal(sectionPositionText({ section: 2, sections: 3, pass: 1, passes: 1 }), 'section 2 of 3');
+  assert.equal(sectionPositionText({ section: 2, sections: 2, pass: 2, passes: 2 }), 'section 2 of 2, pass 2 of 2');
 });

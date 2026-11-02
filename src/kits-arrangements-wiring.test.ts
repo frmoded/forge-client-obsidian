@@ -11,6 +11,7 @@ import { Window } from 'happy-dom';
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
 import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
+import { realNoteAt } from './test-support/score-first-notes.ts';
 import { ARRANGEMENT_VIEW_TYPE, newArrangementNote, readArrangementNote } from './arrangement-core.ts';
 import { newKitNote, readKitNote } from './kit-core.ts';
 
@@ -101,7 +102,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(w.offered(OPEN_ARR), true, 'on an arrangement note');
       for (const p of ['arrangements/README.md', 'phrases/phrase_001.md', 'kits/rock.md', null]) { w.setActive(p); assert.equal(w.offered(OPEN_ARR), false, String(p)); }
     } finally { w.done(); }
-    const some = await world(SCORE_FIRST_TOML, { 'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick'] }), 'phrases/phrase_001.md': 'p' });
+    const some = await world(SCORE_FIRST_TOML, { 'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick'] }), 'phrases/phrase_001.md': realNoteAt('phrases/phrase_001.md') });
     try { assert.equal(some.offered(NEW_ARR), true, 'a kit and a phrase: offered'); } finally { some.done(); }
   });
 
@@ -154,7 +155,7 @@ for (const edition of ['lean', 'music'] as const) {
   test(`[${edition}] "New arrangement" on the real wiring: arrangements/ is made, arr_001 reads back to the two tracks, the evidence line is printed and the note opens in the ARRANGEMENT tab`, async () => {
     const rock = newKitNote({ kind: 'kit', name: 'rock', channels: ['kick', 'snare', 'hihat'] });
     const latin = newKitNote({ kind: 'kit', name: 'latin', channels: ['bell', 'claves', 'conga_high', 'conga_low'] });
-    const w = await world(SCORE_FIRST_TOML, { 'kits/rock.md': rock, 'kits/latin.md': latin, 'phrases/phrase_003.md': 'p', 'phrases/phrase_009.md': 'p', 'phrases/README.md': 'x' });
+    const w = await world(SCORE_FIRST_TOML, { 'kits/rock.md': rock, 'kits/latin.md': latin, 'bars/bar_005.md': realNoteAt('bars/bar_005.md'), 'phrases/phrase_003.md': realNoteAt('phrases/phrase_003.md'), 'phrases/phrase_009.md': realNoteAt('phrases/phrase_009.md'), 'phrases/README.md': 'x' });
     try {
       await w.run(NEW_ARR);
       assert.equal(w.q('h3').textContent, 'New arrangement');

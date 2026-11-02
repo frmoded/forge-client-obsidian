@@ -74,7 +74,7 @@ export class ArrangementView extends EditableFileView {
     this.headerEl = this.contentEl.createDiv({ cls: 'forge-arrangement-header' });
     this.paintHeader(text);
     this.pinEl = this.contentEl.createDiv({ cls: 'forge-arrangement-pin' });          // 2026-10-31-1110: which kit's row is pinned and which note the notes pane shows (empty = nothing pinned)
-    this.pinEl.style.display = 'none';
+    // 2026-10-31-1135 (CCQA smoke 10, C2): the line is always IN the layout with its one line of height reserved (styles.css), empty or not - it used to be display:none until a row was pinned, and everything below jumped ~10 px when it appeared
     if (this.structure && this.openNote) {
       const leaf = this.leaf, structure = this.structure, openNote = this.openNote;
       // 2026-10-30-1000: hovering a chip lights the rows of that kit or phrase in the Score; with nothing hovered, the rows of the note the notes pane shows stay lit (a chip clicked, a link followed)
@@ -200,8 +200,7 @@ export class ArrangementView extends EditableFileView {
 
   private paintPin(text: string | null): void {
     if (!this.pinEl) return;
-    this.pinEl.setText(text ?? '');
-    this.pinEl.style.display = text === null ? 'none' : '';
+    this.pinEl.setText(text ?? '');                       // (never display:none: see the creation above)
   }
 
   /** The engine's lineage of the Score on screen, checked; a Score without a usable one has no lighting (the inspector says why it cannot be pinned). */

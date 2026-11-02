@@ -2,6 +2,7 @@
 // print the evidence line, open it, say so. The vault is injected (the Obsidian glue is compositions.ts; the choosing is composition-dialog-dom.ts). Nothing here throws: every trouble is one sentence returned and shown. Score-first vaults only (P3).
 import { COMPOSITION_FOLDER, COMPOSITION_NAME_PATTERN, compositionCreatedLine, compositionPath, newCompositionNote, nextCompositionName, validateComposition, type CompositionSection } from './composition-core.ts';
 import { withRoot } from './composition-root-core.ts';
+import { installedNotePreflight } from './note-preflight-seam.ts';
 import type { CreatePorts, CreateResult } from './kit-arrangement-flow-core.ts';
 
 const msg = (e: unknown): string => (e as Error)?.message ?? String(e);
@@ -24,6 +25,13 @@ export async function createComposition<F>(ports: CreatePorts<F>, choice: NewCom
   if (wanted !== '' && !COMPOSITION_NAME_PATTERN.test(wanted)) return fail(ports, `New composition: the name "${wanted}" can only have letters, digits, _ and -.`);
   if (wanted !== '' && ports.exists(compositionPath(wanted))) return fail(ports, `New composition: a composition called ${wanted} already exists (${compositionPath(wanted)}). Pick another name.`);
   try {
+    // 2026-10-31-1135 (CCQA smoke 10, B5): the engine draws the prospective composition BEFORE anything is written (the same compose_sections that draws its Score); sections of another meter are one sentence naming both, no folder, no note
+    const check = ports.preflight ?? installedNotePreflight();
+    if (check !== null) {
+      const first = wanted !== '' ? wanted : nextCompositionName((p) => ports.exists(p));
+      const refusal = await check(compositionPath(first), newCompositionNote(first, valid.value, choice.root === true ? ['root: true'] : []));
+      if (refusal !== null) return fail(ports, refusal);
+    }
     if (!ports.folderExists(COMPOSITION_FOLDER)) {
       try { await ports.createFolder(COMPOSITION_FOLDER); } catch (e) { if (!ports.isAlreadyExists(e)) throw e; }
     }

@@ -2119,6 +2119,20 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   padding: 0 0 4px;
+  /* 2026-10-31-1135 (smoke 10, C2): the height of its one line is reserved from the start, so the line appearing moves nothing below it */
+  line-height: 1.4;
+  box-sizing: content-box;                        /* Obsidian sets border-box on everything: with it the 4px padding would eat into the reserved line (measured: a 4px shift) */
+  min-height: calc(1em * 1.4);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 2026-10-31-1135 (smoke 10, A): the sentence beside the player when the sounds could not be loaded */
+.forge-player-message {
+  color: var(--text-error, #d33);
+  font-size: var(--font-ui-smaller);
+  padding: 2px 0;
 }
 
 /* 2026-10-31-1120 (M15c): the bar at the top of a pane that shows a note whose Description was edited by hand: one sentence, the buttons that answer it, and the sentence service's preview */

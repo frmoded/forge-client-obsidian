@@ -1,6 +1,6 @@
 // 2026-10-31-1100 (M17b, item 4) - the TREE a composition's structure strip shows: the sections as rows, each with the note it plays as a chip, a source that is itself a composition shown one level below it (v1: at most one level of
 // nesting is drawn; deeper ones are still played, just not unfolded). Pure; no `obsidian` import.
-import type { CompositionParams, CompositionShape } from './composition-core.ts';
+import { passesWord, type CompositionParams, type CompositionShape } from './composition-core.ts';
 
 export interface TreeRow {
   /** 0 = a section of this composition, 1 = a section of the composition that section plays. */
@@ -22,7 +22,7 @@ const barsWord = (n: number): string => (n === 1 ? 'bar' : 'bars');
 
 function detailOf(s: CompositionParams['sections'][number], span: { first: number; last: number } | null): string {
   const parts: string[] = [s.length !== undefined ? `${s.length} ${barsWord(s.length)}` : 'all its bars'];
-  if (s.repeat !== undefined) parts.push(`played ${s.repeat + 1} times`);
+  if (s.repeat !== undefined) parts.push(passesWord(s.repeat + 1));                       // 2026-10-31-1135 (smoke 10, B3): a repeat is a PASS of the section, as the Inspector says
   if (span !== null) parts.push(span.first === span.last ? `bar ${span.first}` : `bars ${span.first}-${span.last}`);
   return parts.join(' · ');
 }

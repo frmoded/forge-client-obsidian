@@ -10,6 +10,7 @@ import { Window } from 'happy-dom';
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
 import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
+import { realNoteAt } from './test-support/score-first-notes.ts';
 import { PHRASE_VIEW_TYPE, phraseNoteContent } from './phrase-core.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -31,7 +32,7 @@ for (const edition of ['lean', 'music'] as const) {
     const clock = installHostClock(win);
     const doc = win.document;
     const tf = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
-    const store = new Map<string, string>(files.map((f) => [f, '']));
+    const store = new Map<string, string>(files.map((f) => [f, realNoteAt(f)]));
     const created: Array<[string, string]> = [];
     const requests: any[] = [];
     const net = { status: 200, json: { ok: true, parsed_ok: true, plan: { kind: 'extend', bar: 'bar_005', bars: 8 }, error: null } as unknown, throws: null as Error | null };
@@ -47,7 +48,7 @@ for (const edition of ['lean', 'music'] as const) {
         getFiles: () => [...store.keys()].map(tf),
         getMarkdownFiles: () => [...store.keys()].map(tf),
         getAbstractFileByPath: (p: string) => (store.has(p) || p === 'phrases' || p === 'bars' ? tf(p) : null),
-        read: async () => '', createFolder: async () => {},
+        read: async (f: any) => store.get(f.path) ?? '', createFolder: async () => {},
         create: async (p: string, c: string) => { if (store.has(p)) throw new Error('File already exists.'); store.set(p, c); if (p.startsWith('phrases/')) created.push([p, c]); return tf(p); },   // the plugin writes its own Welcome note in a vault with no forge.toml; only PHRASE notes are what these tests count
 
       },

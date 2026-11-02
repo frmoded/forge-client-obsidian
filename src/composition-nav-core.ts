@@ -5,7 +5,7 @@
 import type { LineageEntry } from './artifact-inspector-core.ts';
 import { annotatePhraseXml, phraseBarId, PHRASE_BAR_SCOPE } from './phrase-lineage-core.ts';
 import type { Provenance, ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
-import type { CompositionShape } from './composition-core.ts';
+import { sectionPositionOf, sectionPositionText, type CompositionShape, type SectionPosition } from './composition-core.ts';
 
 export const COMPOSITION_BAR_ROLE = 'composition-bar';
 /** The key the producer puts on the payload: what the Score on screen is made of (the expanded sections), so the tab can name a bar's section and note without reading the vault again. */
@@ -61,7 +61,8 @@ export function annotateCompositionPayload(compositionNote: string, payload: Rec
         noteId: compositionNote,
         role: COMPOSITION_BAR_ROLE,
         params: {
-          bar: info.index, bars: drawn.length, section: l.section, sections: shape.sections.length, source: section.source, sourceBar: l.bar, sourceBars: section.bars, copy: section.copy, jsonSection: section.index + 1,
+          // 2026-10-31-1135 (smoke 10, B3): `section`/`sections` are the lines of the composition (what the header counts), `pass`/`passes` the plays of that line; the engine's own numbering (repeats counted) stays in the lineage
+          bar: info.index, bars: drawn.length, ...positionParams(sectionPositionOf(shape.sections, l.section - 1)), source: section.source, sourceBar: l.bar, sourceBars: section.bars,
           tempo: info.tempo, tempoBpm: l.tempo_bpm,
         },
       };
@@ -75,6 +76,7 @@ export function annotateCompositionPayload(compositionNote: string, payload: Rec
   }
 }
 
+const positionParams = (pos: SectionPosition): Record<string, number> => ({ section: pos.section, sections: pos.sections, pass: pos.pass, passes: pos.passes });
 const bpm = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 const kindWord = (source: string): string => (source.startsWith('arrangements/') ? 'arrangement' : source.startsWith('compositions/') ? 'composition' : 'phrase');
 
@@ -86,9 +88,10 @@ export function compositionLineageOf(prov: Provenance): LineageEntry[] {
   const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
   const source = str(p.source), tempo = num(p.tempoBpm), sourceBar = num(p.sourceBar), sourceBars = num(p.sourceBars);
   const name = source === null ? null : baseName(source);
-  const copy = num(p.copy);
+  const section = num(p.section), sections = num(p.sections), pass = num(p.pass), passes = num(p.passes);
+  const positionText = section !== null && sections !== null ? sectionPositionText({ section, sections, pass: pass ?? 1, passes: passes ?? 1 }) : `section ${String(p.section)} of ${String(p.sections)}`;
   const out: LineageEntry[] = [
-    { kind: 'bar', text: `bar ${String(p.bar)} of ${String(p.bars)} · section ${String(p.section)} of ${String(p.sections)}${name === null ? '' : ` · ${name}${sourceBar === null ? '' : ` bar ${sourceBar}${sourceBars === null ? '' : ` of ${sourceBars}`}`}`}${copy !== null && copy > 0 ? ` · play ${copy + 1} of the section` : ''}${tempo === null ? '' : ` · played at ${bpm(tempo)} bpm`}`, covers: 'self' },
+    { kind: 'bar', text: `bar ${String(p.bar)} of ${String(p.bars)} · ${positionText}${name === null ? '' : ` · ${name}${sourceBar === null ? '' : ` bar ${sourceBar}${sourceBars === null ? '' : ` of ${sourceBars}`}`}`}${tempo === null ? '' : ` · played at ${bpm(tempo)} bpm`}`, covers: 'self' },
   ];
   if (source !== null && name !== null) out.push({ kind: 'note', text: `${kindWord(source)} ${name}`, noteId: source, openLabel: `Open ${name}` });
   out.push({ kind: 'note', text: `composition ${baseName(prov.noteId)}`, noteId: prov.noteId, openLabel: `Open ${baseName(prov.noteId)}` });

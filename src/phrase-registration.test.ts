@@ -11,6 +11,7 @@ import { Window } from 'happy-dom';
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
 import { iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload, type LoadedPlugin } from './test-support/real-onload.ts';
+import { realNoteAt } from './test-support/score-first-notes.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -49,6 +50,12 @@ for (const edition of ['lean', 'music'] as const) {
   before(async () => {
     const win: any = new Window({ url: 'http://localhost/' });
     Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
+  });
+  // 2026-10-31-1135: the command asks the engine about its source before it writes, so the bars it names must be IN the vault as real files with real text, as in Obsidian (a missing or empty bar is refused, rightly). Only bars: the phrase folder
+  // stays absent so the command still has to make it.
+  const withBarsOfTheVault = (app: any) => Object.assign(app.vault, {
+    getAbstractFileByPath: (p: string) => (/^bars\/(?!README).+\.md$/.test(p) ? Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') }) : null),
+    read: async (f: any) => realNoteAt(f.path),
   });
   const load = async (toml: string | null, active: string | null) => {
     real ??= await bundleRealPlugin(ROOT, edition);
@@ -101,6 +108,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] running the commands on the real wiring: "New phrase from this bar" creates phrases/phrase_001.md naming the bar and opens it in a phrase tab; "Open phrase as Score" switches the note's own tab`, async () => {
     const { plugin, app } = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
+    withBarsOfTheVault(app);
     const created: Array<{ path: string; content: string }> = []; const folders: string[] = []; const states: Array<{ how: string; state: any }> = [];
     const leaf = (how: string) => ({ setViewState: async (state: any) => { states.push({ how, state }); } });
     Object.assign(app.vault, {
@@ -128,6 +136,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] running "New mix from this bar" on the real wiring: it creates phrases/phrase_001.md as a mix of THIS bar and the first other bar, and opens it in a phrase tab; with one bar it says so`, async () => {
     const { plugin, app } = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
+    withBarsOfTheVault(app);
     const created: Array<{ path: string; content: string }> = []; const folders: string[] = []; const states: Array<{ how: string; state: any }> = [];
     const leaf = (how: string) => ({ setViewState: async (state: any) => { states.push({ how, state }); } });
     const file = (p: string) => ({ path: p, basename: path.basename(p, '.md') });
@@ -158,6 +167,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] running "New morph from this bar" on the real wiring: it creates phrases/phrase_001.md as a morph from THIS bar to the first other bar (5 bars, musical order, seed 0), and opens it in a phrase tab; with one bar it says so`, async () => {
     const { plugin, app } = await load(SCORE_FIRST_TOML, 'bars/bar_005.md');
+    withBarsOfTheVault(app);
     const created: Array<{ path: string; content: string }> = []; const folders: string[] = []; const states: Array<{ how: string; state: any }> = [];
     const leaf = (how: string) => ({ setViewState: async (state: any) => { states.push({ how, state }); } });
     const file = (p: string) => ({ path: p, basename: path.basename(p, '.md') });

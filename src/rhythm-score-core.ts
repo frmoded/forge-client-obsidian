@@ -4,6 +4,7 @@
 //                         It always reads the SAVED note (never a widget's in-memory state) and never writes anything.
 //   createScoreScheduler  re-render freshness: debounce external modify events, one render in flight, the latest request queued.
 
+import { plainEngineSentence } from './engine-refusal-core.ts';
 import { readRhythmNote, validateRhythmData, type RhythmData } from './rhythm-edit-core.ts';
 
 export const SCORE_DEBOUNCE_MS = 250;
@@ -32,7 +33,7 @@ export async function computeScore(compute: ScoreDeps['compute'], data: RhythmDa
   try {
     result = await compute(data, title);
   } catch (e) {
-    return { kind: 'error', message: `Score: the engine could not build the score (${(e as Error)?.message ?? e})` };
+    return { kind: 'error', message: `Score: the engine could not build the score (${plainEngineSentence((e as Error)?.message ?? String(e))})` };       // one line: never a Python traceback in the Score area (2026-10-31-1135)
   }
   if (!isMusicXmlPayload(result)) return { kind: 'error', message: 'Score: the engine returned no score for this note.' };
   return { kind: 'score', payload: result };

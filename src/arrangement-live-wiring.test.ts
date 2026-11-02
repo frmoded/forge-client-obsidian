@@ -90,11 +90,12 @@ for (const edition of ['lean', 'music'] as const) {
         for (let i = 0; i < 10; i++) await Promise.resolve();
         assert.equal(el.querySelector('.forge-rhythm-edit-score-status')?.textContent, ALL_MUTED, 'at once, before the 400 ms debounce');
       }
-      // item 4: the line under the sentence names the kit of the pinned row and the note the notes pane was sent to; empty and hidden with nothing pinned
+      // item 4: the line under the sentence names the kit of the pinned row and the note the notes pane was sent to; empty with nothing pinned
+      // 2026-10-31-1135 (CCQA smoke 10, C2): and ALWAYS in the layout (never display:none; its one line of height is reserved by styles.css), so it appearing moves nothing below it - it was hidden until a row was pinned and the page jumped ~10 px
       const pin = el.querySelector('.forge-arrangement-pin') as any;
-      assert.ok(pin, 'the line exists'); assert.equal(pin.style.display, 'none'); assert.equal(pin.textContent, '');
-      view.paintPin('Notes pane: rock \u00b7 bar_001'); assert.equal(pin.textContent, 'Notes pane: rock \u00b7 bar_001'); assert.equal(pin.style.display, '');
-      view.paintPin(null); assert.equal(pin.textContent, ''); assert.equal(pin.style.display, 'none');
+      assert.ok(pin, 'the line exists'); assert.notEqual(pin.style.display, 'none'); assert.equal(pin.textContent, '');
+      view.paintPin('Notes pane: rock \u00b7 bar_001'); assert.equal(pin.textContent, 'Notes pane: rock \u00b7 bar_001'); assert.notEqual(pin.style.display, 'none');
+      view.paintPin(null); assert.equal(pin.textContent, ''); assert.notEqual(pin.style.display, 'none', 'released: empty, still in the layout');
       await view.onUnloadFile(view.file);
     } finally {
       console.info = savedInfo; console.error = savedError; console.debug = savedDebug;

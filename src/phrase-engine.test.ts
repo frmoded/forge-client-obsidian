@@ -89,8 +89,8 @@ test('REAL ENGINE: all three styles engrave, and a seed the engine refuses (12 s
     .replace(/\[false, false, false, false, true, false, true, false, false, false, false, false, true, false, false, false\]/, JSON.stringify(Array(12).fill(false)));
   assert.notEqual(twelve, BAR_005);
   const o = await producePhrase(deps(py, twelve), PHRASE, 'p');
-  assert.equal(o.kind, 'error');
-  if (o.kind === 'error') assert.match(o.message, /16|steps/i);
+  assert.equal(o.kind, 'refusal', 'since 2026-10-31-1135 the engine\'s own refusal of the seed is a refusal sentence, not a thrown error');
+  if (o.kind === 'refusal') { assert.match(o.message, /16|steps/i); assert.ok(!/Traceback|Error:/.test(o.message), 'one plain line'); }
 });
 
 test('END TO END (real engine, fake canvas): the live Score scheduler draws the phrase, a changed parameter redraws, a missing source is a line and the old score is taken away', async () => {

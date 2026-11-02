@@ -7,7 +7,7 @@ import { Window } from 'happy-dom';
 
 import { isRootNote, makeRootAvailable, manyRootsMessage, noRootMessage, openPieceAvailable, rootOf, withRoot } from './composition-root-core.ts';
 import { createComposition, moveRoot, newCompositionAvailable, openCompositionAvailable } from './composition-flow-core.ts';
-import { FORGE_COMPOSITION_KEY, newCompositionNote, readCompositionNote, type CompositionParams, type CompositionShape } from './composition-core.ts';
+import { FORGE_COMPOSITION_KEY, compositionHeader, expandSections, newCompositionNote, readCompositionNote, type CompositionParams, type CompositionShape } from './composition-core.ts';
 import { COMPOSITION_BAR_ROLE, annotateCompositionPayload, barIdsPlayedFrom, barsPlayedFrom, compositionLineageOf, compositionPinnedNote, readCompositionLineage } from './composition-nav-core.ts';
 import { treeRows, treeText } from './composition-strip-core.ts';
 import { COMPOSITION_INDENT_PX, mountCompositionStrip } from './composition-strip-dom.ts';
@@ -159,9 +159,9 @@ test('annotateCompositionPayload: an id on every measure and, per bar, the secti
   assert.match(String(r.payload.content), /<measure number="1" id="ph_bar_1">/);
   const p4 = r.map.ph_bar_4;
   assert.equal(p4.role, COMPOSITION_BAR_ROLE); assert.equal(p4.noteId, 'compositions/comp_001');
-  assert.deepEqual(p4.params, { bar: 4, bars: 6, section: 2, sections: 3, source: 'arrangements/arr_001', sourceBar: 2, sourceBars: 2, copy: 0, jsonSection: 2, tempo: 120, tempoBpm: 120 });
-  assert.equal(r.map.ph_bar_5.params.copy, 1);
-  assert.equal(r.map.ph_bar_5.params.jsonSection, 2, 'a repeat is the same section of the json');
+  assert.deepEqual(p4.params, { bar: 4, bars: 6, section: 2, sections: 2, pass: 1, passes: 2, source: 'arrangements/arr_001', sourceBar: 2, sourceBars: 2, tempo: 120, tempoBpm: 120 });       // 2026-10-31-1135: section/sections are the lines of the composition, pass/passes the plays of a line
+  assert.equal(r.map.ph_bar_5.params.pass, 2);
+  assert.equal(r.map.ph_bar_5.params.section, 2, 'a repeat is the same section of the json');
   const none = (over: Record<string, unknown>, problem: RegExp) => { const x = annotateCompositionPayload('compositions/c', payload(over)); assert.deepEqual(x.map, {}); assert.match(x.problems[0], problem); };
   none({ bars_data: [] }, /did not return the bars/); none({ bars_data: undefined }, /did not return the bars/);
   none({ composition_lineage: undefined }, /did not say which section/); none({ composition_lineage: LINEAGE.slice(1) }, /gave 5 bar/);
@@ -173,15 +173,15 @@ test('annotateCompositionPayload: an id on every measure and, per bar, the secti
 test('the pin rule: a bar of a composition sends the notes pane to the note its SECTION plays (the real pinnedNoteFor), the lineage stack names bar, section, note and composition, and the bars a note plays are found', () => {
   const map = annotateCompositionPayload('compositions/comp_001', payload()).map;
   assert.deepEqual(pinnedNoteFor(map.ph_bar_1), { noteId: 'phrases/phrase_003', reason: 'section 1' });
-  assert.deepEqual(pinnedNoteFor(map.ph_bar_6), { noteId: 'arrangements/arr_001', reason: 'section 3' });
+  assert.deepEqual(pinnedNoteFor(map.ph_bar_6), { noteId: 'arrangements/arr_001', reason: 'section 2' });       // (it was 'section 3': the engine's count, a repeat counted as a section)
   assert.deepEqual(compositionPinnedNote(map.ph_bar_3), { noteId: 'arrangements/arr_001', reason: 'section 2' });
   assert.equal(compositionPinnedNote({ ...map.ph_bar_3, role: 'phrase-bar' }), null);
   assert.equal(compositionPinnedNote({ ...map.ph_bar_3, params: { ...map.ph_bar_3.params, source: '' } }), null);
   const stack = compositionLineageOf(map.ph_bar_5);
   assert.deepEqual(stack.map((e) => e.kind), ['bar', 'note', 'note']);
-  assert.equal(stack[0].text, 'bar 5 of 6 · section 3 of 3 · arr_001 bar 1 of 2 · play 2 of the section · played at 120 bpm');
+  assert.equal(stack[0].text, 'bar 5 of 6 · section 2 of 2, pass 2 of 2 · arr_001 bar 1 of 2 · played at 120 bpm');
   assert.deepEqual(stack.slice(1).map((e) => [e.text, (e as { noteId?: string }).noteId]), [['arrangement arr_001', 'arrangements/arr_001'], ['composition comp_001', 'compositions/comp_001']]);
-  assert.equal(compositionLineageOf(map.ph_bar_1)[0].text, 'bar 1 of 6 · section 1 of 3 · phrase_003 bar 1 of 2 · played at 100 bpm');
+  assert.equal(compositionLineageOf(map.ph_bar_1)[0].text, 'bar 1 of 6 · section 1 of 2 · phrase_003 bar 1 of 2 · played at 100 bpm');
   assert.deepEqual(compositionLineageOf({ noteId: 'x', role: 'other', params: {} })[0], { kind: 'hit', text: 'other' });
   const lineage = readCompositionLineage(LINEAGE, 6) as Exclude<ReturnType<typeof readCompositionLineage>, string>;
   assert.deepEqual(barsPlayedFrom(lineage, 'arrangements/arr_001'), [3, 4, 5, 6]);
@@ -196,7 +196,7 @@ test('the tree: one row per section of the json with its note, bars and plays; t
   const inner = { 'compositions/intro': P({ source: 'phrases/phrase_004', length: 4 }, { source: 'compositions/deeper' }) };
   const rows = treeRows(p, SHAPE, inner);
   assert.deepEqual(rows.map((r) => [r.depth, r.section, r.label, r.kind]), [[0, 1, 'phrase_003', 'phrase'], [0, 2, 'arr_001', 'arrangement'], [0, 3, 'intro', 'composition'], [1, null, 'phrase_004', 'phrase'], [1, null, 'deeper', 'composition']]);
-  assert.deepEqual(rows.map((r) => r.detail), ['2 bars · bars 1-2', 'all its bars · played 2 times · bars 3-6', 'all its bars', '4 bars', 'all its bars']);
+  assert.deepEqual(rows.map((r) => r.detail), ['2 bars · bars 1-2', 'all its bars · 2 passes · bars 3-6', 'all its bars', '4 bars', 'all its bars']);
   assert.equal(treeText(treeRows(P({ source: 'phrases/phrase_003', length: 1 }), null, {})), '1 phrase_003 (phrase) · 1 bar');
   assert.equal(treeText(rows).split('\n')[3], '  - phrase_004 (phrase) · 4 bars');
   assert.deepEqual(treeRows(P({ source: 'compositions/gone' }), null, { 'compositions/gone': undefined }).map((r) => r.depth), [0], 'a composition that cannot be read has no children');
@@ -406,17 +406,80 @@ test('the lineage stack: the kind of note, its open label, a fractional tempo, a
   assert.doesNotMatch(with_({ tempoBpm: NaN })[0].text, /played at/);
   assert.doesNotMatch(with_({ tempoBpm: null })[0].text, /played at/);
   const lone = with_({ source: 'x', sourceBar: 1, sourceBars: 4 });
-  assert.equal(lone[0].text, 'bar 1 of 6 · section 1 of 3 · x bar 1 of 4 · played at 100 bpm');
+  assert.equal(lone[0].text, 'bar 1 of 6 · section 1 of 2 · x bar 1 of 4 · played at 100 bpm');
   assert.equal(lone.length, 3);
   for (const source of ['', 5, null, undefined]) {
     const out = with_({ source });
     assert.equal(out.length, 2, `source ${String(source)}: only the composition is linked`);
-    assert.equal(out[0].text, 'bar 1 of 6 · section 1 of 3 · played at 100 bpm');
+    assert.equal(out[0].text, 'bar 1 of 6 · section 1 of 2 · played at 100 bpm');
     assert.equal(out[1].text, 'composition comp_001');
   }
-  assert.equal(with_({ sourceBar: NaN })[0].text, 'bar 1 of 6 · section 1 of 3 · phrase_003 · played at 100 bpm');
-  assert.equal(with_({ sourceBars: NaN })[0].text, 'bar 1 of 6 · section 1 of 3 · phrase_003 bar 1 · played at 100 bpm');
+  assert.equal(with_({ sourceBar: NaN })[0].text, 'bar 1 of 6 · section 1 of 2 · phrase_003 · played at 100 bpm');
+  assert.equal(with_({ sourceBars: NaN })[0].text, 'bar 1 of 6 · section 1 of 2 · phrase_003 bar 1 · played at 100 bpm');
   assert.doesNotMatch(with_({ copy: NaN })[0].text, /play \d/);
   assert.doesNotMatch(with_({ copy: 0 })[0].text, /play \d/);
   assert.deepEqual(compositionPinnedNote({ ...map.ph_bar_1, params: { ...base, source: 'x' } }), { noteId: 'x', reason: 'section 1' });
+});
+
+// ---- 2026-10-31-1135 (CCQA smoke 10, B3): ONE count of sections ---------------------------------------------------------------------------------------------------------------------
+// The header said "2 sections", the tree strip "played 2 times", the Inspector "section 2 of 3" (the repeat counted as a section there). A SECTION is a line of the composition; a repeat of it is a PASS of that section: one function
+// (sectionPositionOf, composition-core.ts) feeds the Inspector, and the header and the strip count the same lines. Proven over a SET of compositions (card 20), with a non-vacuity partner.
+
+const bars2 = (n: number): string => `<score-partwise><part-list/><part id="P1">${Array.from({ length: n }, (_, i) => `<measure number="${i + 1}"><attributes/><sound tempo="100"/></measure>`).join('')}</part></score-partwise>`;
+/** The payload the producer would give for `p`, every section of 2 bars: the engine's lineage (repeats counted) and the producer's shape. */
+function payloadFor(p: CompositionParams): { payload: Record<string, unknown>; shape: CompositionShape } {
+  const expanded = expandSections(p);
+  const shape: CompositionShape = { sections: expanded.map((e, i) => ({ ...e, bars: 2, first: i * 2 + 1 })) };
+  const lineage = expanded.flatMap((e, i) => [1, 2].map((bar) => ({ section: i + 1, source: e.source, bar, tempo_bpm: 100 })));
+  const n = expanded.length * 2;
+  return { shape, payload: { type: 'musicxml', content: bars2(n), bars_data: new Array(n).fill({}), composition_lineage: lineage, [FORGE_COMPOSITION_KEY]: shape } };
+}
+const SET: Array<[string, CompositionParams]> = [
+  ['one plain section', P({ source: 'phrases/phrase_003' })],
+  ['two plain sections', P({ source: 'phrases/phrase_003' }, { source: 'arrangements/arr_001' })],
+  ['the smoke-10 piece: a section, then a section played again', P({ source: 'phrases/phrase_003', length: 8 }, { source: 'arrangements/arr_001', length: 4, repeat: 1 })],
+  ['a repeat on the first section', P({ source: 'phrases/phrase_003', repeat: 2 }, { source: 'arrangements/arr_001' })],
+  ['every section repeated, differently', P({ source: 'phrases/phrase_003', repeat: 1 }, { source: 'arrangements/arr_001', repeat: 3 }, { source: 'compositions/intro', repeat: 2 })],
+];
+
+test('ONE COUNT over a set of compositions: the header says N sections, the strip has N section rows, and EVERY bar\'s Inspector line says "section k of N" (k, N the lines of the composition) with "pass j of m" only for a repeated section', () => {
+  for (const [label, p] of SET) {
+    const n = p.sections.length;
+    const { payload, shape } = payloadFor(p);
+    assert.equal(compositionHeader(p, null), `${n} ${n === 1 ? 'section' : 'sections'}`, label);
+    const rows = treeRows(p, shape, {}).filter((r) => r.depth === 0);
+    assert.equal(rows.length, n, label);
+    const r = annotateCompositionPayload('compositions/comp_001', payload);
+    assert.deepEqual(r.problems, [], label);
+    let bar = 0;
+    expandSections(p).forEach((e) => {
+      const passes = (p.sections[e.index].repeat ?? 0) + 1;
+      for (let b = 0; b < 2; b++) {
+        bar++;
+        const text = compositionLineageOf(r.map[`ph_bar_${bar}`])[0].text;
+        const expectSection = `section ${e.index + 1} of ${n}`;
+        assert.ok(text.includes(` · ${expectSection}${passes > 1 ? `, pass ${e.copy + 1} of ${passes}` : ' ·'}`), `${label}: bar ${bar}: ${text}`);
+        assert.doesNotMatch(text, /play \d+ of the section/, 'the old wording is gone');
+        assert.equal(compositionPinnedNote(r.map[`ph_bar_${bar}`])?.reason, `section ${e.index + 1}`, `${label}: the notes pane is sent for the SECTION the person counts`);
+      }
+    });
+    // the strip says the same number of passes the Inspector counts
+    p.sections.forEach((s, i) => { const detail = rows[i].detail; if (s.repeat !== undefined) assert.match(detail, new RegExp(`${s.repeat + 1} passes`), label); else assert.doesNotMatch(detail, /pass/, label); });
+  }
+});
+
+test('the smoke-10 piece, word for word: a bar of the second section\'s second pass reads "section 2 of 2, pass 2 of 2" (it read "section 2 of 3")', () => {
+  const p = SET[2][1];
+  const { payload } = payloadFor(p);
+  const map = annotateCompositionPayload('compositions/comp_001', payload).map;
+  assert.equal(compositionLineageOf(map.ph_bar_5)[0].text, 'bar 5 of 6 · section 2 of 2, pass 2 of 2 · arr_001 bar 1 of 2 · played at 100 bpm');
+  assert.equal(compositionLineageOf(map.ph_bar_1)[0].text, 'bar 1 of 6 · section 1 of 2 · phrase_003 bar 1 of 2 · played at 100 bpm');
+});
+
+// Added by the 1135 mutation pass: the position text of a bar's lineage line, with and without the pass numbers the annotator may not have written.
+test('compositionLineageOf: a bar without pass numbers reads "section 1 of 2" (a pass of 1 of 1 is not said); a bar with the section but no section COUNT does not invent one', () => {
+  const base = { noteId: 'compositions/comp_001', role: COMPOSITION_BAR_ROLE };
+  assert.equal(compositionLineageOf({ ...base, params: { bar: 1, bars: 4, section: 1, sections: 2, source: 'phrases/phrase_003' } })[0].text, 'bar 1 of 4 · section 1 of 2 · phrase_003');
+  const partial = compositionLineageOf({ ...base, params: { bar: 1, bars: 4, section: 1, source: 'phrases/phrase_003' } })[0].text;
+  assert.doesNotMatch(partial, /NaN|null|pass/, partial);
 });

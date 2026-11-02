@@ -11,10 +11,11 @@ import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-core.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
-import { morphChangesViaEngine } from './phrase-engine.ts';
+import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, morphChangesViaEngine } from './phrase-engine.ts';
+import { installNotePreflight, makeNotePreflight } from './note-preflight-core.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
 import { ArrangementView, registerKitsAndArrangements } from './kits-arrangements.ts';
-import { CompositionView, registerCompositions } from './compositions.ts';
+import { CompositionView, openCompositionInLeaf, registerCompositions } from './compositions.ts';
 import { createDescriptionController } from './description-apply.ts';
 import { familyOfPath } from './description-apply-core.ts';
 import { isCompositionPath } from './composition-core.ts';
@@ -84,6 +85,16 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
   };
   void refresh();
 
+  // 2026-10-31-1135 (CCQA smoke 10, B5/B5x): every note-creating command asks the ENGINE before it writes (note-preflight-core.ts): the check draws the prospective note with the producers and the engine calls that draw every Score, so a
+  // refusal (sections of another meter, an extend of a 12-step bar) is one sentence and no note exists. Installed once; the flows that have a port of their own use that.
+  installNotePreflight(makeNotePreflight({
+    readNote: async (p) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); return app.vault.read(f); },
+    compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t),
+    computeArrangement: (data, t) => computeArrangementScoreViaEngine(data, t),
+    computeComposition: (data, t) => computeCompositionScoreViaEngine(data, t),
+  }));
+  plugin.register(() => installNotePreflight(null));
+
   const createBar = (): Promise<unknown> => createNewBar<TFile>({
     folderExists: () => app.vault.getAbstractFileByPath(BAR_FOLDER) !== null,
     createFolder: async () => { await app.vault.createFolder(BAR_FOLDER); },
@@ -138,6 +149,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
   // 2026-10-31-1110 (CCQA smoke 9, item 1): `origin` is the SCORE leaf of the pair the person started from, whichever pane of the pair was active (the notes pane may be: Obsidian's getLeaf(true) would open the new tab in ITS group), and
   // `openIn` opens the new phrase as the Score in that very leaf, then asks the pair to show its note. false = the pair is gone since the dialog opened: the caller opens the phrase the ordinary way.
   const pairBridge: { origin(): WorkspaceLeaf | null; openIn(origin: WorkspaceLeaf, file: TFile): Promise<boolean> } = { origin: () => null, openIn: async () => false };
+  // 2026-10-31-1135 (smoke 10, B1/B4): the same seam for "New composition" (set below, where the linker is).
+  const compositionBridge: { origin(): WorkspaceLeaf | null; openIn(origin: WorkspaceLeaf, file: TFile): Promise<boolean> } = { origin: () => null, openIn: async () => false };
   // 2026-10-27-1015: "New phrase from a sentence". A fresh planner (no memory of an earlier sentence) per dialog; Create goes through the same loop every new phrase does.
   const openSentencePlan = (): void => {
     const origin = pairBridge.origin();
@@ -392,7 +405,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2026-10-29-0820 (M10 slice 1): kits and arrangements. Registered here, inside the score-first gate, so no other vault gets a view, a command or a byte of it (P3).
       registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, onPin: (l, pin) => { void linker.pinned(l, pin); } });
       // 2026-10-31-1100 (M17b): compositions, the root note of a piece. Registered here too, inside the score-first gate (P3). `pair` opens the notes pane beside a composition's Score (the pair machinery is defined below; it is called later).
-      registerCompositions(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, onPin: (l, pin) => { void linker.pinned(l, pin); }, pair: (leaf, file) => openPair({ kind: 'composition', leaf, file }) });
+      registerCompositions(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, newCompositionPair: compositionBridge, onPin: (l, pin) => { void linker.pinned(l, pin); }, pair: (leaf, file) => openPair({ kind: 'composition', leaf, file }) });
       // 2026-10-26-1270: a bar's tab (its Beat Box or its Score) shows the phrases that use it, as chips above it, from the vault's resolved links (the `links:` of 1260 are what makes them resolve). The strip is added to the view's
       // content element on every event that can change the answer and put back if the view redrew without it; clicking a chip opens that phrase. Only in a score-first vault (this code runs after the gate).
       const barStrips = new WeakMap<HTMLElement, { handle: StripHandle; key: string }>();
@@ -477,6 +490,12 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       pairBridge.origin = () => {
         const leaf = pairTarget()?.leaf ?? app.workspace.getMostRecentLeaf();
         return leaf ? linker.scoreOf(leaf) : null;
+      };
+      compositionBridge.origin = () => pairBridge.origin();
+      compositionBridge.openIn = async (origin, file) => {
+        if (linker.scoreOf(origin) !== origin) return false;
+        await openCompositionInLeaf(app, origin, file);
+        return linker.navigate(origin, file.path.replace(/\.md$/, ''), 'new composition');
       };
       pairBridge.openIn = async (origin, file) => {
         if (linker.scoreOf(origin) !== origin) return false;
