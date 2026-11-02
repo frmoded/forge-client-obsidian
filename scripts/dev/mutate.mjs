@@ -14,11 +14,13 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, execFile, execFileSync } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
 import { killTree } from './proc-tree.mjs';
+import { acquireForProcess } from './heavy-lock.mjs';
+import { memBudgetMb, testHeapMb, testRssCapMb, capConcurrency, createMemoryGate, groupsOverCap, parsePs as parseRssPs, readSystemMemory } from './mem-core.mjs';
 import {
-  parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
+  parseChangedLines, isMutableSource, generateMutants, sample, parseHandList, resolveHand, applyMutant, capLoops, killedByLoopCap, killedByHeapCap, DEFAULT_MAX_LOOP, buildMap, selectTests, hashTexts, parseTapSummary,
   orderTests, preferFirst, classifyRun, summarize, formatReport, runPool, confirmRedAlone, noTestMessage, importsOnlyNamers, importsOnlyNote, unsupervisable, unsupervisableSentence,
 } from './mutate-core.mjs';
 
@@ -202,14 +204,39 @@ const liveGroups = new Set();
 // 2026-10-30-1010: not only the group the test file leads but everything under it (a test that starts a detached child of its own - a nested runner, a Chrome, a matrix - escaped `kill(-pid)` and outlived the run: proc-tree.mjs)
 const killGroup = (pid) => { killTree(pid); };
 const killAll = () => { for (const pid of liveGroups) killGroup(pid); };
+// 2026-10-31-1125: the RSS watchdog. Four times a second the resident memory of every live test tree is read (one `ps`); a tree over the cap (testRssCapMb) is killed at once and its file reports 'memory cap exceeded', which the report
+// counts as a kill by the memory cap. The V8 heap cap alone does not bound a runaway mutant (3.7 GB seen under a 1 GB cap), and a runaway left to the timeout holds that memory for all of it.
+const overCap = new Map();
+function startRssWatchdog(capMb) {
+  let busy = false;
+  const t = setInterval(() => {
+    if (busy || liveGroups.size === 0) return;
+    busy = true;
+    execFile('ps', ['-Ao', 'pid=,ppid=,rss=,command='], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, timeout: 5000 }, (err, stdout) => {
+      busy = false;
+      if (err) return;
+      for (const { root, mb } of groupsOverCap(parseRssPs(stdout), [...liveGroups], capMb)) {
+        if (overCap.has(root)) continue;
+        overCap.set(root, mb);
+        console.error(`mutate: a test process tree (pid ${root}) holds ${mb} MB, over the ${capMb} MB cap (FORGE_TEST_RSS_MB): killed`);
+        killGroup(root);
+      }
+    });
+  }, 250);                    // 250 ms: a runaway grows 1-3 GB a second (measured), a 1 s look let it overshoot the cap two- or threefold
+  t.unref();
+  return t;
+}
 // 2026-10-27-0715: a runner killed with -9 (or whose terminal closes) used to leave its `node --test` groups running for ever (a hung mutant at 100% CPU, --test-timeout=0). A signal handler cannot catch SIGKILL, so main() starts a reaper
 // SIDECAR (reaper.mjs: its own session, a pipe on its stdin) that kills every registered group, and removes the scratch directory, when this process is gone for ANY reason. Until main() starts it, registering is a no-op.
 let reaper = { add() {}, remove() {}, addPath() {}, removePath() {}, stop() {} };
+// 2026-10-31-1125: the memory gate (main() makes the real one): while the machine is short of memory NO new test process is started (it says so on stderr); and the most test processes this run may have at once (the budget cap)
+let memGate = { async wait() { return false; } };
+let childCap = Infinity;
 /** What an EARLIER killed run left behind (orphaned test groups, stale scratch directories): scripts/dev/reap.sh, quiet, orphans only (parent pid 1, older than a minute). Never fails the run. */
 const sweepLeftovers = () => { if (process.env.FORGE_REAP !== '1') return;       // OPT-IN: it sweeps shared temp space by name, which nothing should do unasked (run it by hand: bash scripts/dev/reap.sh --dry-run)
   try { execFileSync('bash', [path.join(path.dirname(fileURLToPath(import.meta.url)), 'reap.sh'), '--quiet'], { stdio: 'ignore', timeout: 30_000 }); } catch { /* a broom that cannot run is not a reason to stop */ } };
-/** NODE_OPTIONS for a test child with a heap cap (a runaway mutant is killed by node at the cap instead of eating the machine); a cap already in NODE_OPTIONS wins. FORGE_TEST_HEAP_MB overrides the 2048. */
-export const withHeapCap = (nodeOptions, mb = Number(process.env.FORGE_TEST_HEAP_MB) || 2048) => (/--max-old-space-size/.test(nodeOptions ?? '') ? nodeOptions : `${nodeOptions ? `${nodeOptions} ` : ''}--max-old-space-size=${mb}`);
+/** NODE_OPTIONS for a test child with a heap cap (a runaway mutant is killed by node at the cap instead of eating the machine); a cap already in NODE_OPTIONS wins. FORGE_TEST_HEAP_MB overrides the 1024 (2048 until 2026-10-31-1125: eight mutants x two files x 2 GB is more than a 24 GB laptop has). */
+export const withHeapCap = (nodeOptions, mb = testHeapMb(process.env)) => (/--max-old-space-size/.test(nodeOptions ?? '') ? nodeOptions : `${nodeOptions ? `${nodeOptions} ` : ''}--max-old-space-size=${mb}`);
 
 /** Start one test file in its own `node --test` process (its own process group, so a hang or a spawned child can be killed whole). Returns { child, promise }. */
 function startOne(cwd, file) {
@@ -224,7 +251,7 @@ function startOne(cwd, file) {
   const take = (d) => { out += d; if (out.length > 300_000) out = out.slice(-200_000); };
   child.stdout.on('data', take); child.stderr.on('data', take);
   const promise = new Promise((resolve) => {
-    const done = (status, signal) => { killGroup(child.pid); liveGroups.delete(child.pid); reaper.remove(child.pid); resolve({ file, status: status ?? (signal ? 1 : 0), signal, secs: (Date.now() - t0) / 1000, output: out, summary: parseTapSummary(out) }); };
+    const done = (status, signal) => { killGroup(child.pid); liveGroups.delete(child.pid); reaper.remove(child.pid); if (overCap.has(child.pid)) { out += `\nforge-mutate: memory cap exceeded (${overCap.get(child.pid)} MB)\n`; overCap.delete(child.pid); if (!status) status = 1; } resolve({ file, status: status ?? (signal ? 1 : 0), signal, secs: (Date.now() - t0) / 1000, output: out, summary: parseTapSummary(out) }); };
     child.on('close', done);
     child.on('error', (e) => { out += String(e); done(1, null); });
   });
@@ -245,6 +272,7 @@ async function runFiles(cwd, tests, { timeoutMs, concurrency, failFast }) {
     for (;;) {
       if (stop || next >= tests.length) return;
       const file = tests[next++];
+      await memGate.wait();
       const { child, promise } = startOne(cwd, file);
       running.add(child);
       const r = await promise;
@@ -286,6 +314,26 @@ export async function main(argv) {
   for (const h of a.hand) { try { for (const m of parseHandList(JSON.parse(fs.readFileSync(path.resolve(h), 'utf8')))) asked.push(m.file); } catch { /* an unreadable list is reported where it is read below */ } }
   const refused = asked.find((f) => unsupervisable(f, root));
   if (refused !== undefined) { console.error(unsupervisableSentence(rel(refused))); return 2; }
+  // 2026-10-31-1125: a MEMORY BUDGET. --jobs x test-concurrency is capped so that (test processes x heap cap) fits FORGE_MEM_BUDGET_MB (default: half the RAM, at least 2 GB); a flag does not defeat it, the variable raises it.
+  // what one test process may cost is its RSS cap (the watchdog kills it there), never less than its heap cap
+  const budgetMb = memBudgetMb(process.env, os.totalmem(), readSystemMemory(process.env).availableMb), heapMb = testHeapMb(process.env), perProcessMb = Math.max(heapMb, testRssCapMb(process.env));
+  {
+    const wanted = { jobs: a.jobs, testConcurrency: a.testConcurrency ?? Math.max(2, Math.floor(os.cpus().length / a.jobs)) };
+    const cap = capConcurrency({ budgetMb, heapMb: perProcessMb, ...wanted });
+    childCap = cap.fit;
+    if (cap.lowered) {
+      console.error(`mutate: memory budget ${budgetMb} MB, test heap ${heapMb} MB, ${perProcessMb} MB a test process at most: ${cap.fit} test processes at once; --jobs ${wanted.jobs} -> ${cap.jobs}, test concurrency ${wanted.testConcurrency} -> ${cap.testConcurrency} (FORGE_MEM_BUDGET_MB raises it)`);
+      a.jobs = cap.jobs; a.testConcurrency = cap.testConcurrency; a.engineJobs = Math.min(a.engineJobs, a.jobs);
+    }
+    startRssWatchdog(testRssCapMb(process.env));
+    memGate = createMemoryGate({
+      read: async () => readSystemMemory(process.env), thresholdMb: Math.max(1536, Math.round(heapMb * 1.5)), pollMs: Number(process.env.FORGE_MEM_POLL_MS) || 2000,
+      sleep: (ms) => new Promise((r) => setTimeout(r, ms)), say: (line) => console.error(line),
+    });
+  }
+  // 2026-10-31-1125: one heavy thing at a time ($TMPDIR/forge-heavy.lock, heavy-lock.mjs): a second heavy run waits and says who holds it. Not for --list (it runs nothing), and not inside a test run (NODE_TEST_CONTEXT: that run
+  // is the heavy thing, and its own tests start this CLI on scratch projects); a runner started BY a lock holder (FORGE_HEAVY_LOCK_HELD) does not wait for it.
+  if (!a.list && !process.env.NODE_TEST_CONTEXT) await acquireForProcess({ what: 'mutation pass' });
   const texts = readTexts(root);
   const before = a.noVerify ? null : fingerprint(root);
   const { map, cached } = loadMap(root, texts);
@@ -354,7 +402,7 @@ export async function main(argv) {
     const base = buildBase(root, scratch);
     const durations = loadDurations(root);
     const redNames = (r) => r.failed.flatMap((f) => [f.file, ...f.output.split('\n').filter((l) => /^\s*not ok \d+ - /.test(l)).slice(0, 6).map((l) => '    ' + l.trim())]).slice(0, 60).join('\n');
-    const unmutated = (files) => runFiles(base, files, { timeoutMs: 15 * 60_000, concurrency: Math.max(2, os.cpus().length - 1), failFast: false });
+    const unmutated = (files) => runFiles(base, files, { timeoutMs: 15 * 60_000, concurrency: Math.max(1, Math.min(Math.max(2, os.cpus().length - 1), childCap)), failFast: false });
     // A file that fails among others is re-run ALONE before it is called red (CC saw 22 of 23 'red' files pass alone and in the matrix): only a file that fails alone is named.
     const alone = (files) => confirmRedAlone(files, (f) => runFiles(base, [f], { timeoutMs: 15 * 60_000, concurrency: 1, failFast: false }));
     const flakyNote = (flaky) => (flaky.length ? `mutate: ${flaky.length} file(s) failed in the batch but pass alone (load, not a red baseline): ${flaky.join(', ')}\n` : '');
@@ -390,6 +438,7 @@ export async function main(argv) {
     const order = runnable.map((m, i) => i).sort((x, y) => Number(runnable[y].heavy) - Number(runnable[x].heavy));
     const outcomes = new Array(runnable.length);
     const capped = new Array(runnable.length).fill(false);
+    const heapCapped = new Array(runnable.length).fill(false);
     const seconds = new Array(runnable.length);
     const killers = new Array(runnable.length).fill(null).map(() => []);
     const runMutant = async (m, i, timeoutS) => {
@@ -403,8 +452,8 @@ export async function main(argv) {
         const r = await runFiles(dir, m.tests, { timeoutMs: timeoutS * 1000, concurrency, failFast: true });
         if (a.trace) for (const f of r.files) console.error(`  trace ${m.id}: ${f.status === 0 ? 'ok  ' : 'FAIL'} ${f.secs.toFixed(1).padStart(5)} s  ${f.file}`);
         const outcome = classifyRun(r);
-        return { outcome, loopCap: outcome === 'killed' && killedByLoopCap(r.output), secs: (Date.now() - t0) / 1000, killers: r.failed.map((f) => f.file), files: r.files };
-      } catch (e) { console.error(`mutate: ${m.id}: ${e.message}`); return { outcome: 'not-run', loopCap: false, secs: (Date.now() - t0) / 1000, killers: [], files: [] }; } finally {
+        return { outcome, loopCap: outcome === 'killed' && killedByLoopCap(r.output), heapCap: outcome === 'killed' && killedByHeapCap(r.output), secs: (Date.now() - t0) / 1000, killers: r.failed.map((f) => f.file), files: r.files };
+      } catch (e) { console.error(`mutate: ${m.id}: ${e.message}`); return { outcome: 'not-run', loopCap: false, heapCap: false, secs: (Date.now() - t0) / 1000, killers: [], files: [] }; } finally {
         try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* cleaned with the scratch dir */ }
       }
     };
@@ -412,7 +461,7 @@ export async function main(argv) {
       const m = runnable[i];
       if (m.tests.length === 0) { outcomes[i] = 'uncovered'; seconds[i] = 0; done++; console.error(`[${done}/${runnable.length}] uncovered ${m.id}: ${noTestMessage(m.file)}`); return; }
       if (m.heavy) await heavy.take();
-      try { const r = await runMutant(m, i, a.timeout); outcomes[i] = r.outcome; capped[i] = r.loopCap; seconds[i] = r.secs; killers[i] = r.killers; for (const f of r.files) if (outcomes[i] === 'survived') durations[f.file] = Math.round(f.secs * 10) / 10; } finally { if (m.heavy) heavy.give(); }
+      try { const r = await runMutant(m, i, a.timeout); outcomes[i] = r.outcome; capped[i] = r.loopCap; heapCapped[i] = r.heapCap; seconds[i] = r.secs; killers[i] = r.killers; for (const f of r.files) if (outcomes[i] === 'survived') durations[f.file] = Math.round(f.secs * 10) / 10; } finally { if (m.heavy) heavy.give(); }
       done++;
       console.error(`[${done}/${runnable.length}] ${outcomes[i].padEnd(8)} ${String(Math.round(seconds[i])).padStart(3)} s  ${m.id}`);
     });
@@ -422,7 +471,7 @@ export async function main(argv) {
       if (outcomes[i] !== 'timeout') continue;
       console.error(`mutate: ${runnable[i].id} timed out with ${a.jobs} running at once; running it again alone to tell a hang from a slow run`);
       const r = await runMutant(runnable[i], i, a.timeout);
-      outcomes[i] = r.outcome; capped[i] = r.loopCap; seconds[i] = r.secs; killers[i] = r.killers; runnable[i].retriedAlone = true;
+      outcomes[i] = r.outcome; capped[i] = r.loopCap; heapCapped[i] = r.heapCap; seconds[i] = r.secs; killers[i] = r.killers; runnable[i].retriedAlone = true;
       console.error(`[again] ${r.outcome.padEnd(8)} ${String(Math.round(r.secs)).padStart(3)} s  ${runnable[i].id}`);
     }
 
@@ -448,8 +497,8 @@ export async function main(argv) {
     if (baselineRed.length === 0) { runnable.forEach((m, i) => { if (outcomes[i] === 'killed' && killers[i].length) kills[m.id] = killers[i]; }); saveKills(root, kills); }
 
     // 5. the report
-    runnable.forEach((m, i) => { m.outcome = outcomes[i]; m.seconds = seconds[i]; m.loopCap = capped[i]; });
-    const results = mutants.map((m) => ({ id: m.id, name: m.op === 'hand' ? m.name : undefined, file: m.file, line: m.line, op: m.op, from: m.from, to: m.to, status: m.status, why: m.why, outcome: m.outcome, loopCap: m.loopCap, seconds: m.seconds, retriedAlone: m.retriedAlone, tests: m.tests }));
+    runnable.forEach((m, i) => { m.outcome = outcomes[i]; m.seconds = seconds[i]; m.loopCap = capped[i]; m.heapCap = heapCapped[i]; });
+    const results = mutants.map((m) => ({ id: m.id, name: m.op === 'hand' ? m.name : undefined, file: m.file, line: m.line, op: m.op, from: m.from, to: m.to, status: m.status, why: m.why, outcome: m.outcome, loopCap: m.loopCap, heapCap: m.heapCap, seconds: m.seconds, retriedAlone: m.retriedAlone, tests: m.tests }));
     const s = summarize(results, equivalent);
     let treeUnchanged = null;
     if (before) {
@@ -459,7 +508,7 @@ export async function main(argv) {
     // 2026-10-29-0930: a mutated file that a CLI test names but whose test is marked imports-only is not covered by it; say so, once per file
     const notes = [...new Set(mutants.map((m) => m.file))].sort().flatMap((f) => { const t = importsOnlyNamers(texts, map, f); return t.length ? [importsOnlyNote(f, t)] : []; });
     console.log(formatReport(s, { wallMs: Date.now() - started, jobs: a.jobs, testCount: pool.length, chromeSkipped: [...chromeSeen], treeUnchanged, baselineRed, notes }));
-    if (a.out) fs.writeFileSync(path.resolve(a.out), JSON.stringify({ summary: { generated: s.generated, killed: s.killed, timeout: s.timeout, loopCap: s.loopCap, survived: s.survived.length, uncovered: s.uncovered.length, explained: s.explained.length, invalid: s.invalid.length, notApplicable: s.notApplicable.length, notRun: s.notRun.length, wallMs: Date.now() - started }, results }, null, 2));
+    if (a.out) fs.writeFileSync(path.resolve(a.out), JSON.stringify({ summary: { generated: s.generated, killed: s.killed, timeout: s.timeout, loopCap: s.loopCap, heapCap: s.heapCap, survived: s.survived.length, uncovered: s.uncovered.length, explained: s.explained.length, invalid: s.invalid.length, notApplicable: s.notApplicable.length, notRun: s.notRun.length, wallMs: Date.now() - started }, results }, null, 2));
     if (treeUnchanged && !treeUnchanged.ok) return 3;
     if (baselineRed.length > 0) return 2;
     return s.unexplained > 0 && !a.noFail ? 1 : 0;

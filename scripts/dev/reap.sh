@@ -67,5 +67,12 @@ for d in "$T"/cdp-*; do
   DID=$((DID + 1)); say "$([ "$DRY" = "1" ] && echo 'would remove' || echo 'removing') a Chrome profile: $d"
   [ "$DRY" = "1" ] || rm -rf "$d"
 done
+# ---- 4: a stale heavy lock (2026-10-31-1125) ----------------------------------------------------------------------------------------------------------------------
+# $TMPDIR/forge-heavy.lock (heavy-lock.mjs) names the holder; one whose holder AND the run it started are gone is stale (a kill -9 leaves it), and is cleared here. A LIVE lock is never touched.
+HL="$(cd "$(dirname "$0")" && pwd)/heavy-lock.mjs"
+if [ -f "$HL" ]; then
+  if [ "$DRY" = "1" ]; then hl="$(node "$HL" status 2>/dev/null || true)"; case "$hl" in STALE*) DID=$((DID + 1)); say "would clear a stale heavy lock: $hl" ;; esac
+  else hl="$(node "$HL" clear-stale 2>/dev/null || true)"; case "$hl" in *"cleared a stale"*) DID=$((DID + 1)); say "$hl" ;; esac; fi
+fi
 [ "$DID" = "0" ] && say "nothing to clear"
 exit 0

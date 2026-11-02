@@ -32,6 +32,12 @@
 # Output: one summary table at the end; full logs under $LOGDIR (default: <worktrees>/logs).
 set -euo pipefail
 
+# 2026-10-31-1125: ONE HEAVY THING AT A TIME. The first thing this script does is take $TMPDIR/forge-heavy.lock (scripts/dev/heavy-lock.mjs): when a mutation pass, a real-Chrome measure or another matrix holds it, this one WAITS and
+# says who holds it; a stale lock (its holder gone, kill -9 included) is taken over. Whatever the lock starts is told so (FORGE_HEAVY_LOCK_HELD), so a heavy tool inside the matrix does not wait for the matrix. FORGE_HEAVY_LOCK=off: no lock.
+if [ -z "${FORGE_HEAVY_LOCK_HELD:-}" ] && [ "${FORGE_HEAVY_LOCK:-}" != "off" ]; then
+  exec node "$(cd "$(dirname "$0")" && pwd)/dev/heavy-lock.mjs" run --what drain-matrix -- bash "$0" "$@"
+fi
+
 PROJECTS="${PROJECTS:-$HOME/projects}"
 REPOS=(forge-client-obsidian music-theory forge-tutorial forge-moda music-core forge music-playground)
 FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD; SERIAL=0
@@ -129,6 +135,13 @@ fi
 
 declare -a SUMMARY
 
+# 2026-10-31-1125: the memory budget. Node's own default is every core minus one test files at once PER LEG, and two legs run together (measured 2026-10-31: 34 files at once, 11.5 GB of tooling); the files one leg runs at once are
+# capped so that (files x the assumed size of one) fits FORGE_MEM_BUDGET_MB (default half the RAM) - scripts/dev/mem-plan.mjs. FORGE_MATRIX_FILE_MB (default 400) is that size.
+LEGS_AT_ONCE=2; [ "$SERIAL" = "1" ] && LEGS_AT_ONCE=1
+FILE_CONC="$(node "$(cd "$(dirname "$0")" && pwd)/dev/mem-plan.mjs" matrix-files --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 8)"
+export FILE_CONC
+echo "memory: $(node "$(cd "$(dirname "$0")" && pwd)/dev/mem-plan.mjs" --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 'budget unknown')"
+
 # ---- 2. the legs --------------------------------------------------------------------------------------------------------------------------------------------------------
 edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and bump check in the music leg) + build + npm test; a failed step leaves $LOGDIR/leg-<ed>.failed naming it
   local ed="$1" dir="$2" t0; t0=$(date +%s)
@@ -146,7 +159,7 @@ edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and b
     leg_step bump bash -c 'FORGE_EDITION=music node scripts/check-bundled-vault-bump.mjs' || return 0
   fi
   leg_step "build-$ed" bash -c "FORGE_EDITION=$ed npm run build" || return 0
-  npm test >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
+  npm test -- --test-concurrency="${FILE_CONC:-8}" >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
   echo $(( $(date +%s) - t0 )) >"$lg.secs"
 }
 

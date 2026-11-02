@@ -2,8 +2,13 @@
 // Tiny Chrome DevTools helper: serve a directory + a page, drive headless Chrome, evaluate, hover, screenshot.
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import { spawn } from 'node:child_process';
 import { startReaper } from './reaper.mjs';
+import { acquireForProcess } from './heavy-lock.mjs';
+// 2026-10-31-1125: a real-Chrome measure is a heavy run: the first openPage of a process takes $TMPDIR/forge-heavy.lock and keeps it until the process ends (a second heavy run waits and says who holds it). Not inside a test run (NODE_TEST_CONTEXT).
+let heavyLock = null;
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function openPage({ dir, width = 900, height = 1200, pageHtml, routes = {} }) {
+  if (!heavyLock && !process.env.NODE_TEST_CONTEXT) heavyLock = acquireForProcess({ what: 'real-Chrome measure' });
+  if (heavyLock) await heavyLock;
   const srv = http.createServer(async (q, r) => {
     if (routes[q.method + ' ' + q.url]) { await routes[q.method + ' ' + q.url](q, r); return; }
     if (q.url === '/' || q.url === '/index.html') { r.writeHead(200, { 'content-type': 'text/html' }); r.end(pageHtml); return; }
