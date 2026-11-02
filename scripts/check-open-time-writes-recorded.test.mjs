@@ -24,7 +24,13 @@ const cli = (...args) => spawnSync(process.execPath, ['--no-warnings', '--experi
 const noteOf = (rel) => RECORDING.notes[rel].note;
 // Drain 2026-10-20-1100: build_triad was re-derived (Phase B), so the recording's `note` is now clean. The "a note whose Python is not what the engine produces" exemplar
 // is therefore the PINNED pre-Phase-B bytes (music-theory baf108d: `def compute(context):` — the signature lacks the inputs), never the moving recording.
-const NOT_DERIVED_TRIAD = fs.readFileSync(path.join(ROOT, 'test', 'fixtures', 'vault', 'shipped_not_derived_build_triad_signature_lacks_inputs.md'), 'utf8');
+const PINNED_NOT_DERIVED_TRIAD = fs.readFileSync(path.join(ROOT, 'test', 'fixtures', 'vault', 'shipped_not_derived_build_triad_signature_lacks_inputs.md'), 'utf8');
+// Drain 2026-10-31-1138: a recording only applies to a note whose RECIPE is the one recorded (recordedPythonFor), and build_triad's Recipe gained its enum Inputs (R5), so the pinned bytes' old one-line Recipe would be
+// "unrecorded" and judged the old way (no write at all). The exemplar keeps the pinned NOT-DERIVED part (the `def compute(context):` signature that lacks the inputs) and takes the recording's CURRENT Recipe, so the recording
+// still applies to it and the engine's answer still differs from the note's Python. The fixture file itself stays the pre-Phase-B bytes.
+const NOT_DERIVED_TRIAD = PINNED_NOT_DERIVED_TRIAD.replace(/(^# Recipe\s*\n\n)[\s\S]*?(?=\n# Python)/m, (_m, head) => `${head}${RECORDING.notes[TRIAD].recipe}\n`);
+assert.notEqual(NOT_DERIVED_TRIAD, PINNED_NOT_DERIVED_TRIAD, 'the Recipe was swapped (the test is not judging the old Recipe)');
+assert.match(NOT_DERIVED_TRIAD, /def compute\(context\):/, 'the not-derived Python is kept');
 function vaultNamed(name, files) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'otwr-'));
   const root = path.join(base, name);
