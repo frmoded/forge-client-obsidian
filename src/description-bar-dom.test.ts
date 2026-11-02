@@ -54,3 +54,17 @@ test('the DOM contract the stylesheet and the panes rely on: class names, the po
   for (const b of buttons) { assert.equal(b.getAttribute('type'), 'button'); assert.equal(b.className, 'forge-description-button'); }
   assert.deepEqual(BAR_LABELS, { update: 'Update from Description', 'update-recipe': 'Update from Recipe', revert: 'Revert', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' });
 });
+
+test('a button that is disabled (the bar is busy) does not answer even when a click reaches it by another way than the browser\'s own (a script, an assistive tool): the guard is the bar\'s, not only the browser\'s', () => {
+  const el = pane();
+  const heard: string[] = [];
+  const bar = mountDescriptionBar(el, (a) => heard.push(a));
+  bar.show({ message: 'x', actions: ['revert', 'update-recipe'], busy: true });
+  const buttons = [...el.querySelectorAll('button')] as any[];
+  assert.ok(buttons.length === 2 && buttons.every((b) => b.disabled === true));
+  for (const b of buttons) b.dispatchEvent(new win.Event('click', { bubbles: true }));
+  assert.deepEqual(heard, [], 'nothing is heard from a disabled button');
+  bar.show({ message: 'x', actions: ['revert'] });
+  (el.querySelector('button') as any).dispatchEvent(new win.Event('click', { bubbles: true }));
+  assert.deepEqual(heard, ['revert'], 'and an enabled one is');
+});

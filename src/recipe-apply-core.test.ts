@@ -242,3 +242,18 @@ test('a text that is not one of our notes has nothing to say about its Recipe; a
   assert.deepEqual(recipeEdit('---\ntype: data\nrecipe_hash: abc\n---\n\n# Recipe\n\nTake [[bar_007]].\n', 'phrase', VAULT), { kind: 'none' }, 'no json block at all');
   assert.equal(PYTHON_DERIVED, 'Python is derived; edit the Description or the Recipe.');
 });
+
+test('a note its WRITER refuses (read_only) is not a stale plan: Update from Recipe and Update from Description answer with the writer\'s sentence and `stale: false` (the controller shows that sentence and keeps the buttons; a stale plan is read afresh instead)', () => {
+  const ro = (t: string): string => t.replace('content_type: json', 'content_type: json\nread_only: true');
+  const recipeEdited = ro(editRecipe(note(), '8 bars', '6 bars'));
+  const a = applyRecipeText(recipeEdited, 'phrase_001', 'phrase', VAULT, extractRecipeSection(recipeEdited) ?? '');
+  assert.equal(a.ok, false);
+  if (a.ok === false) { assert.equal(a.stale, false); assert.match(a.message, /read_only|read-only|editable/i, a.message); }
+  const descEdited = ro(editDescription(note(), '8 bars', '6 bars'));
+  const b = applyDescriptionText(descEdited, 'phrase_001', 'phrase', VAULT, extractDescription(descEdited));
+  assert.equal(b.ok, false);
+  if (b.ok === false) { assert.equal(b.stale, false); assert.match(b.message, /read_only|read-only|editable/i, b.message); }
+  // and the plans that ARE stale say so
+  const c = applyRecipeText(editRecipe(note(), '8 bars', '6 bars'), 'phrase_001', 'phrase', VAULT, 'another recipe');
+  assert.ok(c.ok === false && c.stale === true);
+});

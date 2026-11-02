@@ -17,15 +17,16 @@ const PATH = 'phrases/phrase_001.md';
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
 const edit = (text: string, from: string, to: string): string => { const d = extractDescription(text); return text.replace(d, d.replace(from, to)); };
 
-function rig(opts: { service?: (payload: any) => Promise<{ status: number; json: unknown }> | null; configured?: boolean; processError?: string; extra?: Record<string, string> } = {}) {
-  const store = new Map<string, string>([[PATH, noteContentFor('phrase_001', EXTEND)], ...Object.entries(opts.extra ?? {})]);
+function rig(opts: { service?: (payload: any) => Promise<{ status: number; json: unknown }> | null; configured?: boolean; processError?: string; extra?: Record<string, string>; beforeProcess?: (path: string) => void; start?: string } = {}) {
+  const store = new Map<string, string>([[PATH, opts.start ?? noteContentFor('phrase_001', EXTEND)], ...Object.entries(opts.extra ?? {})]);
+  const reads: string[] = [], calls: string[] = [];                                                // every read and every atomic write attempt the controller made (a note that is not ours must cost neither)
   let now = 0; const timers: Array<{ id: number; at: number; fn: () => void }> = []; let ids = 0;
   const lines: string[] = [], writes: string[] = [], asked: any[] = [];
   const doc = win.document;
   const panes: Array<{ path: string; contentEl: HTMLElement }> = [];
   const ports: DescriptionPorts = {
-    read: async (p) => { const t = store.get(p); if (t === undefined) throw new Error('gone'); return t; },
-    process: async (p, fn) => { await Promise.resolve(); if (opts.processError) throw new Error(opts.processError); const cur = store.get(p)!; const next = fn(cur); if (next !== cur) { store.set(p, next); writes.push(p); } },
+    read: async (p) => { reads.push(p); const t = store.get(p); if (t === undefined) throw new Error('gone'); return t; },
+    process: async (p, fn) => { calls.push(p); await Promise.resolve(); if (opts.processError) throw new Error(opts.processError); opts.beforeProcess?.(p); const cur = store.get(p)!; const next = fn(cur); if (next !== cur) { store.set(p, next); writes.push(p); } },
     vault: () => ({ bars: ['bar_007', 'bar_008'], phrases: ['phrase_001', 'phrase_003'], arrangements: [], compositions: [], kits: [] }),
     barNames: () => ['bar_007', 'bar_008'], phraseNames: () => ['phrase_001'],
     setTimer: (fn, ms) => { const id = ++ids; timers.push({ id, at: now + ms, fn }); return id; },
@@ -36,7 +37,7 @@ function rig(opts: { service?: (payload: any) => Promise<{ status: number; json:
   const ctl = createDescriptionController(ports);
   const advance = async (ms: number) => { now += ms; for (;;) { const due = timers.filter((t) => t.at <= now).sort((a, b) => a.at - b.at)[0]; if (!due) break; timers.splice(timers.indexOf(due), 1); due.fn(); } for (let i = 0; i < 30; i++) await Promise.resolve(); };
   const pane = (path = PATH) => { const el = doc.createElement('div'); doc.body.appendChild(el); panes.push({ path, contentEl: el }); return el as HTMLElement; };
-  return { ctl, store, lines, writes, asked, advance, pane, timers };
+  return { ctl, store, lines, writes, asked, advance, pane, timers, reads, calls };
 }
 const msg = (el: HTMLElement): string => el.querySelector('.forge-description-message')?.textContent ?? '';
 const buttons = (el: HTMLElement): string[] => [...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action') ?? '');
@@ -446,4 +447,308 @@ test('the "Update from Description" command (canUpdate) is there for a Recipe th
   await r.ctl.update(PATH);
   assert.equal(r.lines.at(-1), '[forge-recipe] applied phrase_001 (8 -> 6 bars)');
   assert.equal(r.ctl.canUpdate(PATH), false);
+});
+
+// ---- 2026-10-31-1149: the survivors of the mutation pass of 1120 (re-run on an idle machine) and of the same files at M16a: what the controller says and does when a write FAILS, when a plan is STALE, how often a problem is SAID, what Cancel and Revert leave, and what a disposed or a foreign note costs --------
+const quiet = async <T>(fn: () => Promise<T>): Promise<T> => { const saved = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = saved; } };
+const READ_ONLY = (text: string): string => text.replace('content_type: json', 'content_type: json\nread_only: true');
+
+test('a Recipe that parses is OFFERED (nothing written) when the note is only looked at: the sentence names the change and the two buttons are Update from Recipe and Revert', async () => {
+  const r = rig(); const a = r.pane();
+  r.store.set(PATH, editRecipe(r.store.get(PATH)!, '8 bars', '6 bars'));
+  await r.ctl.inspect(PATH);
+  assert.deepEqual(r.writes, []);
+  assert.equal(msg(a), 'The Recipe changed (8 -> 6 bars); update the note from it.'); assert.deepEqual(buttons(a), ['update-recipe', 'revert']);
+});
+
+test('a problem is SAID once and said again when it comes back: a Python edit, both facets edited and a rejected Recipe are each reported once however often the note is touched, and the sentence is reported again after the problem was fixed', async () => {
+  const r = rig(); r.pane();
+  const good = r.store.get(PATH)!;
+  r.store.set(PATH, good.replace('```python\n', '```python\n# hand edit\n'));
+  for (let i = 0; i < 3; i++) { r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS); }
+  assert.equal(r.lines.length, 1, 'a Python edit said once');
+  const both = edit(editRecipe(good, '8 bars', '6 bars'), '8 bars', '5 bars');
+  r.store.set(PATH, both);
+  for (let i = 0; i < 3; i++) { r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS); }
+  assert.equal(r.lines.filter((l) => /refused phrase_001/.test(l)).length, 1, 'both edited said once');
+  // fixed by hand (the note is as the controls wrote it again): the bar goes, and the same problem is said again when it returns
+  r.store.set(PATH, good); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  r.store.set(PATH, both); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(r.lines.filter((l) => /refused phrase_001/.test(l)).length, 2, 'said again after it was fixed in between');
+  const bad = edit(good, '8 bars', '8 barz');
+  r.store.set(PATH, bad); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  r.store.set(PATH, good); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  r.store.set(PATH, bad); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(r.lines.filter((l) => /rejected phrase_001/.test(l)).length, 2, 'a rejected sentence is said again after the note was good in between');
+});
+
+test('a note that is fixed by hand loses its bar (and a synced note costs no write at all)', async () => {
+  const r = rig(); const a = r.pane();
+  const good = r.store.get(PATH)!;
+  r.store.set(PATH, edit(good, '8 bars', '8 barz')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.ok(a.querySelector('.forge-description-bar'));
+  r.store.set(PATH, good); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(a.querySelector('.forge-description-bar'), null, 'back to a note the controls wrote: the bar is taken away');
+  const calls = r.calls.length;
+  await r.ctl.inspect(PATH); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(r.calls.length, calls, 'a synced note is looked at, never written (not even a write that changes nothing)');
+});
+
+test('a note that is not ours costs nothing: no read and no write for a bar, a README or another folder, whichever way the controller is asked', async () => {
+  const r = rig({ extra: { 'bars/bar_001.md': 'x', 'notes/x.md': 'x' } });
+  for (const path of ['bars/bar_001.md', 'notes/x.md', 'phrases/README.md']) {
+    await r.ctl.inspect(path); r.ctl.modified(path); await r.ctl.update(path); await r.ctl.revert(path); await r.ctl.ask(path);
+    await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  }
+  assert.deepEqual(r.reads, []); assert.deepEqual(r.calls, []); assert.deepEqual(r.writes, []); assert.deepEqual(r.lines, []);
+});
+
+test('a write that FAILS says so and keeps what it can still do: Update from Description fails -> its sentence with Update and Revert; Update from Recipe likewise; the failure is logged to the console', async () => {
+  const logged: unknown[][] = [];
+  const saved = console.error; console.error = (...a: unknown[]) => { logged.push(a); };
+  try {
+    const d = rig({ processError: 'disk full' }); const da = d.pane();
+    d.store.set(PATH, edit(d.store.get(PATH)!, '8 bars', '6 bars')); d.ctl.modified(PATH); await d.advance(DESCRIPTION_DEBOUNCE_MS);
+    assert.equal(msg(da), 'Update from Description: disk full'); assert.deepEqual(buttons(da), ['update', 'revert']);
+    assert.deepEqual(d.writes, []);
+    const x = rig({ processError: 'disk full' }); const xa = x.pane();
+    x.store.set(PATH, editRecipe(x.store.get(PATH)!, '8 bars', '6 bars')); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS);
+    assert.equal(msg(xa), 'Update from Recipe: disk full'); assert.deepEqual(buttons(xa), ['update-recipe', 'revert']);
+    assert.equal(logged.length, 2); assert.match(String(logged[0][0]), /description-apply: could not write the note/); assert.match(String(logged[1][0]), /recipe-apply: could not write the note/);
+    // both edited, the person chose the Description, the write fails: the same two buttons stay, with the reason
+    const b = rig({ processError: 'disk full' }); const ba = b.pane();
+    b.store.set(PATH, edit(editRecipe(b.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars')); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
+    (ba.querySelector('[data-action="update"]') as HTMLElement).click(); await b.advance(1);
+    assert.equal(msg(ba), 'Update from Description: disk full'); assert.deepEqual(buttons(ba), ['update', 'update-recipe']);
+    assert.equal(logged.length, 3); assert.match(String(logged[2][0]), /description-apply: could not write the note/);
+  } finally { console.error = saved; }
+});
+
+test('a note its WRITER refuses (read_only) is said in the writer\'s own words and the buttons stay: a Description, a Recipe and both-edited, each decided by the writer inside the write', async () => {
+  for (const [label, make, buttonsWant] of [
+    ['Description', (t: string) => edit(t, '8 bars', '6 bars'), ['update', 'revert']],
+    ['Recipe', (t: string) => editRecipe(t, '8 bars', '6 bars'), ['update-recipe', 'revert']],
+  ] as const) {
+    const r = rig(); const a = r.pane();
+    r.store.set(PATH, READ_ONLY(make(r.store.get(PATH)!))); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+    assert.deepEqual(r.writes, [], label);
+    assert.match(msg(a), /read_only|read-only|editable/i, `${label}: ${msg(a)}`); assert.deepEqual(buttons(a), buttonsWant, label);
+    assert.deepEqual(r.lines, [], `${label}: a refusal of the writer is not an applied line`);
+  }
+  const b = rig(); const ba = b.pane();
+  b.store.set(PATH, READ_ONLY(edit(editRecipe(b.store.get(PATH)!, '8 bars', '6 bars'), '8 bars', '5 bars'))); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
+  (ba.querySelector('[data-action="update"]') as HTMLElement).click(); await b.advance(1);
+  assert.deepEqual(b.writes, []); assert.match(msg(ba), /read_only|read-only|editable/i); assert.deepEqual(buttons(ba), ['update', 'update-recipe']);
+});
+
+test('a STALE plan is dropped and the note is read afresh, with no failure sentence: the text changes between the plan and the write, so nothing stale is written and the bar offers what the note says NOW', async () => {
+  const base = noteContentFor('phrase_001', EXTEND);
+  for (const [label, first, second, want] of [
+    ['Description', (t: string) => edit(t, '8 bars', '6 bars'), (t: string) => edit(t, '8 bars', '5 bars'), 'The Description changed (8 -> 5 bars); update the note from it.'],
+    ['Recipe', (t: string) => editRecipe(t, '8 bars', '6 bars'), (t: string) => editRecipe(t, '8 bars', '5 bars'), 'The Recipe changed (8 -> 5 bars); update the note from it.'],
+  ] as const) {
+    let fired = false;
+    const r = rig({ beforeProcess: (p) => { if (!fired) { fired = true; r.store.set(p, second(base)); } } });          // typed after the plan, before the write (no event: nobody has heard it yet)
+    const a = r.pane();
+    r.store.set(PATH, first(base)); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+    assert.deepEqual(r.writes, [], `${label}: the stale plan is not written`);
+    assert.equal(msg(a), want, `${label}: the bar offers what the note says now, not a failure sentence`);
+    assert.deepEqual(r.lines, [], `${label}: nothing was applied`);
+  }
+  // a stale plan whose newer text does not parse: the bar says where
+  let fired = false;
+  const r = rig({ beforeProcess: (p) => { if (!fired) { fired = true; r.store.set(p, edit(base, '8 bars', '8 barz')); } } });
+  const a = r.pane();
+  r.store.set(PATH, edit(base, '8 bars', '6 bars')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, []);
+  assert.match(msg(a), /^Description, line 1, column \d+: expected "bars"/); assert.deepEqual(buttons(a), ['revert']);
+});
+
+test('Update from Recipe on a note that no longer has a Recipe to apply shows what the note says now and writes nothing', async () => {
+  const r = rig(); const a = r.pane();
+  const good = r.store.get(PATH)!;
+  r.store.set(PATH, editRecipe(good, '8 bars', '6 bars')); await r.ctl.inspect(PATH);
+  assert.deepEqual(buttons(a), ['update-recipe', 'revert']);
+  r.store.set(PATH, good);                                                                    // fixed by hand, no event heard yet
+  (a.querySelector('[data-action="update-recipe"]') as HTMLElement).click(); await r.advance(1);
+  assert.deepEqual(r.writes, []); assert.deepEqual(r.calls, [], 'nothing was written, not even an empty write');
+  assert.equal(a.querySelector('.forge-description-bar'), null, 'and the bar that offered it is gone');
+});
+
+test('Revert says which kind of problem it reverted ([forge-recipe] for a Recipe edit, a rejected Recipe and both edited; [forge-description] for a Description) and forgets it was told: the same sentence is said again afterwards', async () => {
+  const good = noteContentFor('phrase_001', EXTEND);
+  // [label, the note as typed, the evidence line of the revert, whether the PROBLEM itself is said in an evidence line (a rejected text and both edited are; an edit that parses is only offered)]
+  const cases: Array<[string, string, string, boolean]> = [
+    ['a Recipe that parses', editRecipe(good, '8 bars', '6 bars'), '[forge-recipe] reverted phrase_001 to the json cache', false],
+    ['a Recipe that does not', good.replace(extractRecipeSection(good) ?? '', 'Sprinkle.'), '[forge-recipe] reverted phrase_001 to the json cache', true],
+    ['both edited', edit(editRecipe(good, '8 bars', '6 bars'), '8 bars', '5 bars'), '[forge-recipe] reverted phrase_001 to the json cache', true],
+    ['a Description that parses', edit(good, '8 bars', '6 bars'), '[forge-description] reverted phrase_001 to the json cache', false],
+    ['a Description that does not', edit(good, '8 bars', '8 barz'), '[forge-description] reverted phrase_001 to the json cache', true],
+  ];
+  for (const [label, typed, want, traced] of cases) {
+    const r = rig(); const a = r.pane();
+    r.store.set(PATH, typed); await r.ctl.inspect(PATH);
+    assert.ok(a.querySelector('.forge-description-bar'), `${label}: there is something to revert`);
+    await r.ctl.revert(PATH);                                                                   // the command's path: one for every state (both edited has no Revert button)
+    assert.equal(r.store.get(PATH), good, label);
+    assert.equal(r.lines.at(-1), want, label);
+    assert.equal(a.querySelector('.forge-description-bar'), null, label);
+    // it forgot it was told: the same problem is said again when it comes back
+    const said = r.lines.length;
+    r.store.set(PATH, typed); await r.ctl.inspect(PATH);
+    assert.equal(r.lines.length, said + (traced ? 1 : 0), `${label}: ${traced ? 'said again' : 'an edit that parses is offered, not said'}`);
+  }
+});
+
+test('a Revert that cannot be done leaves a note that was not in trouble without a bar, and says why when it was', async () => {
+  const r = rig(); const a = r.pane();
+  r.store.set(PATH, r.store.get(PATH)!.replace(/```json[\s\S]*$/, '```json\n{ "kind": "extend", \n```\n'));        // the json cache cannot be read
+  await r.ctl.revert(PATH);
+  assert.deepEqual(r.writes, []);
+  assert.equal(a.querySelector('.forge-description-bar'), null, 'no bar for a note that had nothing to say');
+  const b = rig(); const ba = b.pane();
+  const bad = edit(b.store.get(PATH)!, '8 bars', '8 barz');
+  b.store.set(PATH, bad); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
+  b.store.set(PATH, bad.replace(/```json[\s\S]*$/, '```json\n{ "kind": "extend", \n```\n'));
+  (ba.querySelector('[data-action="revert"]') as HTMLElement).click(); await b.advance(1);
+  assert.match(msg(ba), /^Revert: /); assert.deepEqual(buttons(ba), ['revert']);
+});
+
+test('the sentence service: its refusal is in the evidence line; the preview\'s Recipe is one step per line; Cancel takes the preview away and keeps the problem; Apply takes the bar and the preview away and clears what was told; a writer that refuses says so; a sentence typed while the service thinks drops its answer', async () => {
+  const ok = { status: 200, json: { ok: true, parsed_ok: true, plan: { kind: 'extend', bar: 'bar_007', bars: 12, tempo_change_pct: -10 }, error: null } };
+  const typed = (t: string): string => edit(t, 'to 8 bars, repeating with fills', 'to a dozen bars and a bit slower');
+  // refused
+  const refused = rig({ service: async () => ({ status: 200, json: { ok: false, parsed_ok: false, plan: null, error: 'I could not read that.' } }), configured: true });
+  const refusedPane = refused.pane();
+  refused.store.set(PATH, typed(refused.store.get(PATH)!)); refused.ctl.modified(PATH); await refused.advance(DESCRIPTION_DEBOUNCE_MS);
+  (refusedPane.querySelector('[data-action="ask"]') as HTMLElement).click(); await refused.advance(1);
+  assert.match(refused.lines.at(-1)!, /^\[forge-description\] asked the service about phrase_001 -> refused: .+/, refused.lines.join(' | '));
+  assert.ok(refused.lines.at(-1)!.length > '[forge-description] asked the service about phrase_001 -> refused: '.length);
+  // preview, Cancel
+  const r = rig({ service: async () => ok, configured: true }); const a = r.pane();
+  const problem = typed(r.store.get(PATH)!);
+  r.store.set(PATH, problem); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  (a.querySelector('[data-action="ask"]') as HTMLElement).click(); await r.advance(1);
+  const recipe = a.querySelector('.forge-description-preview-recipe')!.textContent!;
+  assert.ok(recipe.split('\n').length >= 2 && /\n/.test(recipe), `the preview's Recipe has one step per line: ${JSON.stringify(recipe)}`);
+  (a.querySelector('[data-action="cancel-preview"]') as HTMLElement).click(); await r.advance(1);
+  assert.equal(a.querySelector('.forge-description-preview'), null, 'Cancel takes the preview away'); assert.deepEqual(buttons(a), ['revert', 'ask'], '... and the problem is still there with its buttons');
+  assert.deepEqual(r.writes, [], 'Cancel writes nothing');
+  // preview, Apply: the bar goes, and the same sentence is reported again when it returns
+  (a.querySelector('[data-action="ask"]') as HTMLElement).click(); await r.advance(1);
+  (a.querySelector('[data-action="apply-preview"]') as HTMLElement).click(); await r.advance(1);
+  assert.deepEqual(r.writes, [PATH]); assert.equal(a.querySelector('.forge-description-bar'), null);
+  const rejectedBefore = r.lines.filter((l) => /rejected/.test(l)).length;
+  r.store.set(PATH, problem); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);                       // the SAME sentence the person typed before the Apply
+  assert.equal(r.lines.filter((l) => /rejected/.test(l)).length, rejectedBefore + 1, 'a sentence is reported again after an Apply in between');
+  // Apply on a note the writer refuses
+  const w = rig({ service: async () => ok, configured: true }); const wa = w.pane();
+  const wp = typed(w.store.get(PATH)!);
+  w.store.set(PATH, wp); w.ctl.modified(PATH); await w.advance(DESCRIPTION_DEBOUNCE_MS);
+  (wa.querySelector('[data-action="ask"]') as HTMLElement).click(); await w.advance(1);
+  w.store.set(PATH, READ_ONLY(wp));
+  (wa.querySelector('[data-action="apply-preview"]') as HTMLElement).click(); await w.advance(1);
+  assert.deepEqual(w.writes, []); assert.match(msg(wa), /read_only|read-only|editable/i, msg(wa));
+  // the Description is changed while the service thinks: its answer is for a sentence that is gone
+  let thinking: Promise<void> | null = null;
+  const t: ReturnType<typeof rig> = rig({ service: async () => { t.store.set(PATH, edit(t.store.get(PATH)!, 'a dozen bars', 'a dozen barz')); await t.ctl.inspect(PATH); return ok; }, configured: true });
+  const ta = t.pane();
+  t.store.set(PATH, typed(t.store.get(PATH)!)); t.ctl.modified(PATH); await t.advance(DESCRIPTION_DEBOUNCE_MS);
+  (ta.querySelector('[data-action="ask"]') as HTMLElement).click(); await t.advance(1);
+  void thinking;
+  assert.equal(ta.querySelector('.forge-description-preview'), null, 'the stale answer is not shown');
+  assert.ok(!t.lines.some((l) => /asked the service/.test(l)), 'and not reported as an answer');
+});
+
+test('dispose: a timer that is pending never fires, a disposed controller says and writes nothing however it is asked, and its bars are taken away', async () => {
+  const r = rig(); const a = r.pane();
+  r.store.set(PATH, edit(r.store.get(PATH)!, '8 bars', '6 bars')); r.ctl.modified(PATH);
+  assert.equal(r.timers.length, 1, 'a timer is pending');
+  r.ctl.dispose();
+  assert.equal(r.timers.length, 0, 'the pending timer is cleared AT dispose (not merely never heard)');
+  await r.advance(DESCRIPTION_DEBOUNCE_MS * 3);
+  assert.deepEqual(r.writes, []); assert.deepEqual(r.lines, []);
+  r.store.set(PATH, edit(noteContentFor('phrase_001', EXTEND), '8 bars', '8 barz'));
+  await r.ctl.inspect(PATH); r.ctl.syncBars(); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.lines, [], 'nothing is said by a disposed controller'); assert.equal(a.querySelector('.forge-description-bar'), null); assert.equal(r.timers.length, 0, 'and no timer is set');
+  const b = rig(); const ba = b.pane();
+  b.store.set(PATH, edit(b.store.get(PATH)!, '8 bars', '8 barz')); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.ok(ba.querySelector('.forge-description-bar'));
+  b.ctl.dispose();
+  assert.equal(ba.querySelector('.forge-description-bar'), null, 'its bars are taken away');
+  const c = rig(); c.pane();
+  c.store.set(PATH, edit(c.store.get(PATH)!, '8 bars', '6 bars')); await c.ctl.inspect(PATH);
+  assert.equal(c.ctl.canUpdate(PATH), true, 'a note with something to update');
+  c.ctl.dispose();
+  assert.equal(c.ctl.canUpdate(PATH), false, 'a disposed controller offers nothing');
+});
+
+
+test('a problem is said AGAIN after each way it can be answered, not only after the note was seen fixed: an Update, an Update from Recipe, an Update from Description over both edits and an Apply each forget what they were told', async () => {
+  const good = noteContentFor('phrase_001', EXTEND);
+  // a rejected Description, then a Description that parses and is applied by its own turn, then the SAME rejected sentence: said again
+  const d = rig(); d.pane();
+  const bad = edit(good, '8 bars', '8 barz');
+  d.store.set(PATH, bad); d.ctl.modified(PATH); await d.advance(DESCRIPTION_DEBOUNCE_MS);
+  d.store.set(PATH, edit(good, '8 bars', '6 bars')); d.ctl.modified(PATH); await d.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.ok(d.lines.some((l) => /applied/.test(l)));
+  d.store.set(PATH, bad); d.ctl.modified(PATH); await d.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(d.lines.filter((l) => /rejected/.test(l)).length, 2, 'Description: said again after an apply');
+  // the same for a Recipe
+  const x = rig(); x.pane();
+  const badRecipe = good.replace(extractRecipeSection(good) ?? '', 'Take [[bar_007]].\nSprinkle [[bar_008]].');
+  x.store.set(PATH, badRecipe); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS);
+  x.store.set(PATH, editRecipe(good, '8 bars', '6 bars')); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.ok(x.lines.some((l) => /\[forge-recipe\] applied/.test(l)));
+  x.store.set(PATH, badRecipe); x.ctl.modified(PATH); await x.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(x.lines.filter((l) => /rejected/.test(l)).length, 2, 'Recipe: said again after an apply');
+  // both edited, the person chooses the Description, then the same two edits again: refused (and said) again
+  const b = rig(); const ba = b.pane();
+  const both = edit(editRecipe(good, '8 bars', '6 bars'), '8 bars', '5 bars');
+  b.store.set(PATH, both); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
+  (ba.querySelector('[data-action="update"]') as HTMLElement).click(); await b.advance(1);
+  b.store.set(PATH, both); b.ctl.modified(PATH); await b.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(b.lines.filter((l) => /refused phrase_001/.test(l)).length, 2, 'both edited: said again after the Description was chosen');
+});
+
+test('Update from Recipe is the Recipe and nothing else: when the Recipe was fixed meanwhile and the DESCRIPTION is what was edited, the button does not apply the Description behind the person\'s back - the bar offers it', async () => {
+  const r = rig(); const a = r.pane();
+  const good = r.store.get(PATH)!;
+  r.store.set(PATH, editRecipe(good, '8 bars', '6 bars')); await r.ctl.inspect(PATH);
+  assert.deepEqual(buttons(a), ['update-recipe', 'revert']);
+  r.store.set(PATH, edit(good, '8 bars', '5 bars'));                                          // the Recipe is back to what it was and the Description was edited instead; no event heard yet
+  (a.querySelector('[data-action="update-recipe"]') as HTMLElement).click(); await r.advance(1);
+  assert.deepEqual(r.writes, [], 'nothing was applied: the person pressed Update from RECIPE');
+  assert.equal(msg(a), 'The Description changed (8 -> 5 bars); update the note from it.'); assert.deepEqual(buttons(a), ['update', 'revert']);
+});
+
+test('a button that is still in the hand of a script after its bar went away (a Cancel, an Apply) answers nothing and breaks nothing; an answer from the sentence service for a sentence that is gone is dropped whatever became of the note meanwhile (fixed, edited to parse, or edited again)', async () => {
+  const unhandled: unknown[] = [];
+  const onRejection = (e: unknown): void => { unhandled.push(e); };
+  process.on('unhandledRejection', onRejection);
+  try {
+    const ok = { status: 200, json: { ok: true, parsed_ok: true, plan: { kind: 'extend', bar: 'bar_007', bars: 12, tempo_change_pct: -10 }, error: null } };
+    const good = noteContentFor('phrase_001', EXTEND);
+    const typed = edit(good, 'to 8 bars, repeating with fills', 'to a dozen bars and a bit slower');
+    // a preview is up; the note is fixed by hand (the bar and the preview go); the buttons that were in it are clicked
+    const r = rig({ service: async () => ok, configured: true }); const a = r.pane();
+    r.store.set(PATH, typed); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+    (a.querySelector('[data-action="ask"]') as HTMLElement).click(); await r.advance(1);
+    const cancel = a.querySelector('[data-action="cancel-preview"]') as HTMLElement, apply = a.querySelector('[data-action="apply-preview"]') as HTMLElement;
+    r.store.set(PATH, good); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+    assert.equal(a.querySelector('.forge-description-bar'), null);
+    cancel.click(); apply.click(); await r.advance(1);
+    assert.deepEqual(r.writes, [], 'a stale Apply writes nothing'); assert.equal(a.querySelector('.forge-description-bar'), null);
+    // the service thinks; meanwhile the note becomes: fixed / edited to parse / edited to another sentence that does not parse
+    for (const [label, meanwhile] of [['fixed', (t: string) => t], ['edited to parse', (t: string) => edit(t, '8 bars', '6 bars')], ['edited again', (t: string) => edit(t, '8 bars', '8 barz')]] as const) {
+      const t: ReturnType<typeof rig> = rig({ service: async () => { t.store.set(PATH, meanwhile(good)); await t.ctl.inspect(PATH); return ok; }, configured: true });
+      const ta = t.pane();
+      t.store.set(PATH, typed); t.ctl.modified(PATH); await t.advance(DESCRIPTION_DEBOUNCE_MS);
+      (ta.querySelector('[data-action="ask"]') as HTMLElement).click(); await t.advance(1);
+      assert.equal(ta.querySelector('.forge-description-preview'), null, `${label}: the stale answer is not shown`);
+      assert.ok(!t.lines.some((l) => /asked the service/.test(l)), `${label}: and not reported as an answer`);
+    }
+    await r.advance(1);
+  } finally { process.off('unhandledRejection', onRejection); }
+  assert.deepEqual(unhandled, [], 'nothing threw');
 });
