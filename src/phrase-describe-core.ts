@@ -94,14 +94,14 @@ function opSentence(o: TransformOp): string {
 }
 const kitsPlay = (kits: string[]): string => (kits.length === 1 ? `the ${link(kits[0])} kit plays` : `the ${kits.slice(0, -1).map(link).join(', ')} and ${link(kits[kits.length - 1])} kits play`);
 
-/** The sentences of a composition (2026-10-31-1100, M17b): "Play [[a]] for 8 bars." opens, "Then play [[b]] for 4 bars." follows, "Repeat that 2 times." plays the section before it again; a section with no length is just "Play [[a]]." / "Then play [[b]].". */
+/** The sentences of a composition (2026-10-31-1100, M17b): "Play [[a]] for 8 bars." opens, "Then play [[b]] for 4 bars." follows, "Repeat that 2 more times." plays the section before it 2 more times; a section with no length is just "Play [[a]]." / "Then play [[b]].". */
 export function compositionSentences(params: CompositionParams): string[] {
   const p = canonical(params) as CompositionParams;
   const out: string[] = [];
   p.sections.forEach((s, i) => {
     const length = s.length !== undefined ? ` for ${s.length} ${barsWord(s.length)}` : '';
     out.push(`${i === 0 ? 'Play' : 'Then play'} ${link(baseName(s.source))}${length}.`);
-    if (s.repeat !== undefined) out.push(`Repeat that ${s.repeat} ${s.repeat === 1 ? 'time' : 'times'}.`);
+    if (s.repeat !== undefined) out.push(s.repeat === 1 ? 'Repeat that once more.' : `Repeat that ${s.repeat} more times.`);        // N MORE plays (N + 1 in all); the old "Repeat that N times." is still READ (phrase-grammar-core)
   });
   return out;
 }

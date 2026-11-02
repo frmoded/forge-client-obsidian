@@ -4,7 +4,7 @@
 //   describe(params) -> the canonical text;   parse(text, vault) -> { ok, params } | { ok: false, error: { message, line, column } };   canonical(params) -> the params as the text carries them.
 //
 // ONE VOCABULARY OF VERBS, not four (driver Q1, 2026-10-30): a description is a list of CLAUSES, one sentence each, a verb and its arguments. The first clause names the kind of note (Extend, Mix, Morph, Take, Play); the rest are the
-// clauses that kind takes. Every verb lives in VERBS below, in ONE table: adding a verb (the composition's `Then play ...`, `Repeat that 2 times.`, `For 8 bars play ...`, which M17b made real) is adding a row, and no
+// clauses that kind takes. Every verb lives in VERBS below, in ONE table: adding a verb (the composition's `Then play ...`, `Repeat that 2 more times.`, `For 8 bars play ...`, which M17b made real) is adding a row, and no
 // existing sentence changes. A full stop followed by a space, or a line break, ends a sentence. A source is named by a wikilink and the grammar does not care what kind of note it is (a phrase, an arrangement, a composition): it asks the vault's lists.
 //
 // DEFAULTS. The text OMITS only: a tempo change of 0 (the sentence is not said), a Mix threshold of 50 percent and ghost notes off (their sentences are not said), a morph or mix seed that its order does not use, and a Double up grid of 16.
@@ -47,7 +47,7 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
   { verb: 'together', kind: null, example: 'Together.' },
   { verb: 'play for', kind: 'composition', example: 'Play [[arr_001]] for 8 bars.' },
   { verb: 'then play', kind: null, example: 'Then play [[arr_002]] for 4 bars.' },
-  { verb: 'repeat that', kind: null, example: 'Repeat that 2 times.' },
+  { verb: 'repeat that', kind: null, example: 'Repeat that 2 more times.' },
   { verb: 'for bars play', kind: 'composition', example: 'For 8 bars play [[arr_001]].' },
 ];
 
@@ -442,7 +442,21 @@ function parseArrangement(ss: Sentence[], vault: GrammarVault): ArrangementParam
   return { kind: 'arrangement', tracks: tracks.map((t) => ({ kit: t.kit, phrase: t.phrase, ...(t.mute === true ? { mute: true } : {}), ...(t.solo === true ? { solo: true } : {}), ...(t.volume !== undefined ? { volume: t.volume } : {}) })) };
 }
 
-/** A composition (M17b): "Play [[a]] for 8 bars." opens, "Then play [[b]] for 4 bars." follows (each also said "For 8 bars play [[a]]."), "Repeat that 2 times." plays the section before it 2 more times. A section with no "for N bars" is all of its note, once. */
+/**
+ * What follows "Repeat that": how many MORE times the section plays (2026-10-31-1130). The canonical sentence is "Repeat that N more times." ("Repeat that once more." for 1); "again" (1), "twice" (2), "once" (1) and the old
+ * "Repeat that N times." / "N time." are read too, and EVERY one of them means N MORE (N + 1 plays in all): the old wording was ambiguous in English ("repeat twice" can be two plays in all), the new one says it.
+ */
+function repeatCount(sc: Scan): number {
+  if (sc.kw('again')) return 1;
+  if (sc.kw('twice')) return 2;
+  if (sc.kw('once')) { sc.kw('more'); return 1; }
+  const n = sc.whole('a number of times', 1, COMPOSITION_REPEAT_MAX);
+  const more = sc.kw('more');
+  if (!(sc.kw('times') || sc.kw('time'))) sc.fail(more ? '"times"' : '"more times"');
+  return n;
+}
+
+/** A composition (M17b): "Play [[a]] for 8 bars." opens, "Then play [[b]] for 4 bars." follows (each also said "For 8 bars play [[a]]."), "Repeat that 2 more times." plays the section before it 2 more times. A section with no "for N bars" is all of its note, once. */
 function parseComposition(ss: Sentence[], vault: GrammarVault): CompositionParams {
   const sections: CompositionSection[] = [];
   ss.forEach((s, i) => {
@@ -451,8 +465,7 @@ function parseComposition(ss: Sentence[], vault: GrammarVault): CompositionParam
       if (sections.length === 0) sc.failAt('Expected a section to play before "Repeat that", but found none.', s.start);
       const last = sections[sections.length - 1];
       if (last.repeat !== undefined) sc.failAt('Expected "Repeat that" to be said once for a section, but it is said twice.', s.start);
-      last.repeat = sc.whole('a number of times', 1, COMPOSITION_REPEAT_MAX);
-      if (!(sc.kw('times') || sc.kw('time'))) sc.fail('"times"');
+      last.repeat = repeatCount(sc);
       sc.end();
       return;
     }
@@ -464,7 +477,7 @@ function parseComposition(ss: Sentence[], vault: GrammarVault): CompositionParam
       if (!sc.kw('play')) sc.fail('"play"');
       src = note(sc, vault, ['phrase', 'arrangement', 'composition'], 'the note to play');
     } else {
-      if (!(i === 0 ? sc.kw('play') : sc.kw('then play'))) sc.fail(i === 0 ? '"Play [[a note]] for N bars." or "For N bars play [[a note]]."' : '"Then play [[a note]] for N bars.", "For N bars play [[a note]]." or "Repeat that N times."');
+      if (!(i === 0 ? sc.kw('play') : sc.kw('then play'))) sc.fail(i === 0 ? '"Play [[a note]] for N bars." or "For N bars play [[a note]]."' : '"Then play [[a note]] for N bars.", "For N bars play [[a note]]." or "Repeat that N more times."');
       src = note(sc, vault, ['phrase', 'arrangement', 'composition'], 'the note to play');
       if (sc.kw('for')) length = lengthOf();
     }

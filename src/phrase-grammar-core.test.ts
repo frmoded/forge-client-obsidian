@@ -473,11 +473,11 @@ const REFUSALS: Array<[string, number, number, string]> = [
   ["Play [[phrase_006]] for 8.", 1, 26, "Expected \"bars\", but found the end of the sentence."],
   ["Play [[nope]] for 8 bars. Then play [[arr_001]].", 1, 6, "Expected a phrase, an arrangement or a composition of this vault for the note to play, but \"nope\" is not one."],
   ["Play [[bar_001]].", 1, 6, "Expected a phrase, an arrangement or a composition of this vault for the note to play, but \"bar_001\" is not one."],
-  ["Play [[phrase_006]] for 8 bars. Play [[arr_001]] for 4 bars.", 1, 33, "Expected \"Then play [[a note]] for N bars.\", \"For N bars play [[a note]].\" or \"Repeat that N times.\", but found \"Play\"."],
-  ["Play [[phrase_006]] for 8 bars. Dancing.", 1, 33, "Expected \"Then play [[a note]] for N bars.\", \"For N bars play [[a note]].\" or \"Repeat that N times.\", but found \"Dancing\"."],
+  ["Play [[phrase_006]] for 8 bars. Play [[arr_001]] for 4 bars.", 1, 33, "Expected \"Then play [[a note]] for N bars.\", \"For N bars play [[a note]].\" or \"Repeat that N more times.\", but found \"Play\"."],
+  ["Play [[phrase_006]] for 8 bars. Dancing.", 1, 33, "Expected \"Then play [[a note]] for N bars.\", \"For N bars play [[a note]].\" or \"Repeat that N more times.\", but found \"Dancing\"."],
   ["Play [[phrase_006]]. Repeat that 0 times.", 1, 34, "Expected a number of times from 1 to 16, but found 0."],
   ["Play [[phrase_006]]. Repeat that 17 times.", 1, 34, "Expected a number of times from 1 to 16, but found 17."],
-  ["Play [[phrase_006]]. Repeat that 2.", 1, 35, "Expected \"times\", but found the end of the sentence."],
+  ["Play [[phrase_006]]. Repeat that 2.", 1, 35, "Expected \"more times\", but found the end of the sentence."],
   ["Play [[phrase_006]] for 8 bars extra.", 1, 32, "Expected the end of the sentence, but found \"extra\"."],
   ["Play [[phrase_006]]. Then play.", 1, 31, "Expected the note to play, as [[a note]], but found the end of the sentence."],
   ["Play [[phrase_006]]. Then play [[phrase_007]] for.", 1, 50, "Expected a number of bars, but found the end of the sentence."],
@@ -669,7 +669,7 @@ test('THE TABLE OF VERBS, as documented: each verb, the note it opens, and its e
   assert.deepEqual(VERBS.map((v) => v.example), [
     'Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower.', 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a vote.', 'Morph [[bar_003]] into [[bar_001]] over 8 bars, in musical order.', 'Take [[phrase_006]].', 'Play [[phrase_006]] on the [[rock]] kit.',
     'Thin out bars 3 to 5, kick row, by half, keeping the downbeat.', 'Double up bars 3 to 5, kick row.', 'Bar 9 is replaced by [[bar_009]].', 'Threshold 40 percent.', 'With ghost notes.', 'Play the [[rock]] kit at 70 percent volume.', 'Mute the [[latin]] kit.', 'Only the [[rock]] kit plays.', 'Together.',
-    'Play [[arr_001]] for 8 bars.', 'Then play [[arr_002]] for 4 bars.', 'Repeat that 2 times.', 'For 8 bars play [[arr_001]].',
+    'Play [[arr_001]] for 8 bars.', 'Then play [[arr_002]] for 4 bars.', 'Repeat that 2 more times.', 'For 8 bars play [[arr_001]].',
   ]);
   for (const text of ['Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower.', 'Mix [[bar_005]] and [[bar_006]], 70 percent [[bar_005]], as a vote.', 'Morph [[bar_003]] into [[bar_001]] over 8 bars, in musical order.']) assert.equal(describe(ok(text)), text);
 });
@@ -829,10 +829,10 @@ test('the saying half and phrase-core.ts import each other (describe reads three
 
 import { compositionSentences } from './phrase-describe-core.ts';
 
-test('composition: canonical drops a repeat of 0 and keeps 1; the sentences say "1 time" and "N times"; a composition that fails validation is refused at the start of the description', () => {
+test('composition: canonical drops a repeat of 0 and keeps 1; the sentences say "once more" and "N more times"; a composition that fails validation is refused at the start of the description', () => {
   const c = canonical({ kind: 'composition', sections: [{ source: 'phrases/phrase_003', repeat: 0 }, { source: 'phrases/phrase_004', repeat: 1 }, { source: 'phrases/phrase_004' }] } as GrammarParams);
   assert.deepEqual((c as { sections: unknown[] }).sections, [{ source: 'phrases/phrase_003' }, { source: 'phrases/phrase_004', repeat: 1 }, { source: 'phrases/phrase_004' }]);
-  assert.deepEqual(compositionSentences({ kind: 'composition', sections: [{ source: 'phrases/phrase_003', repeat: 1 }, { source: 'phrases/phrase_004', repeat: 2 }] }), ['Play [[phrase_003]].', 'Repeat that 1 time.', 'Then play [[phrase_004]].', 'Repeat that 2 times.']);
+  assert.deepEqual(compositionSentences({ kind: 'composition', sections: [{ source: 'phrases/phrase_003', repeat: 1 }, { source: 'phrases/phrase_004', repeat: 2 }] }), ['Play [[phrase_003]].', 'Repeat that once more.', 'Then play [[phrase_004]].', 'Repeat that 2 more times.']);
   const many = Array.from({ length: 33 }, (_, i) => (i === 0 ? 'Play [[phrase_003]].' : 'Then play [[phrase_003]].')).join(' ');
   const e = bad(many);
   assert.deepEqual([e.message, e.line, e.column], ['A composition holds at most 32 sections, got 33.', 1, 1]);

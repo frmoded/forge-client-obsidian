@@ -1,7 +1,7 @@
 // 2026-10-31-1100 (score_first M17b, design 4.14) - a COMPOSITION is the ROOT note of a piece: `compositions/<name>.md`, in the Forge shape (# Description, # Recipe, # Python, # Cache) above ONE json fence
 // `{"kind": "composition", "sections": [{"source": "phrases/phrase_003", "length": 8}, {"source": "arrangements/arr_001", "length": 4, "repeat": 2}]}`: sections played one after another, each the bars of
 // a phrase, an arrangement or another composition (a loop or a chain deeper than COMPOSITION_DEPTH_MAX is a refusal). Pure; no `obsidian` import.
-//   * the Description is the one grammar's sentences (`describe`): "Play [[phrase_003]] for 8 bars. Then play [[arr_001]] for 4 bars. Repeat that 2 times." - written by the controls (M15b writer path), the json is its cache;
+//   * the Description is the one grammar's sentences (`describe`): "Play [[phrase_003]] for 8 bars. Then play [[arr_001]] for 4 bars. Repeat that 2 more times." - written by the controls (M15b writer path), the json is its cache;
 //   * the Recipe is those same sentences, one per line; the Python is `def compute(context):` reading each source by calling its name and returning compose_sections(...), the BAR LIST (forge/music/lib.py);
 //   * the Score is drawn from the json by the code that draws every phrase (produceComposition -> the engine glue's `composition` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 // A section of `length` N bars is REPEATED to fill N or CUT to N (never padded, never stretched), no `length` is all its bars once; `repeat` R plays the whole section R more times (the sentence "Repeat that R times."). Every bar keeps its tempo.
@@ -85,7 +85,7 @@ export function compositionPython(p: CompositionParams): string {
   ].join('\n');
 }
 
-/** The sections the engine plays: each section of the json, then its `repeat` copies (the sentence "Repeat that 2 times." plays the section 2 more times). `index` is the section of the json (from 0), `copy` which play of it (0 is the first). */
+/** The sections the engine plays: each section of the json, then its `repeat` copies (the sentence "Repeat that 2 more times." plays the section 2 more times). `index` is the section of the json (from 0), `copy` which play of it (0 is the first). */
 export interface ExpandedSection { index: number; copy: number; source: string; length?: number }
 export function expandSections(p: CompositionParams): ExpandedSection[] {
   const out: ExpandedSection[] = [];

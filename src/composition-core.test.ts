@@ -78,23 +78,23 @@ test('validateComposition: a list of 1 to 32 sections, each a phrase, an arrange
 
 // ---- the sentences ------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-test('THE SENTENCES (exact): the first section opens with Play, the others with Then play, "for N bars" only when a length is said, "Repeat that N times." after the section it repeats', () => {
+test('THE SENTENCES (exact): the first section opens with Play, the others with Then play, "for N bars" only when a length is said, "Repeat that N more times." after the section it repeats', () => {
   assert.equal(describe(P([{ source: 'phrases/phrase_003', length: 8 }, { source: 'arrangements/arr_001', length: 4 }, { source: 'compositions/intro' }])),
     'Play [[phrase_003]] for 8 bars. Then play [[arr_001]] for 4 bars. Then play [[intro]].');
   assert.equal(describe(P([{ source: 'phrases/phrase_003', length: 1, repeat: 1 }, { source: 'phrases/phrase_004', repeat: 2 }])),
-    'Play [[phrase_003]] for 1 bar. Repeat that 1 time. Then play [[phrase_004]]. Repeat that 2 times.');
-  assert.deepEqual(compositionRecipeSteps(P([{ source: 'phrases/phrase_003', length: 8 }, { source: 'phrases/phrase_004', repeat: 2 }])), ['Play [[phrase_003]] for 8 bars.', 'Then play [[phrase_004]].', 'Repeat that 2 times.']);
+    'Play [[phrase_003]] for 1 bar. Repeat that once more. Then play [[phrase_004]]. Repeat that 2 more times.');
+  assert.deepEqual(compositionRecipeSteps(P([{ source: 'phrases/phrase_003', length: 8 }, { source: 'phrases/phrase_004', repeat: 2 }])), ['Play [[phrase_003]] for 8 bars.', 'Then play [[phrase_004]].', 'Repeat that 2 more times.']);
 });
 
-test('TOLERANT: "For 8 bars play [[a]]." is the same section as "Play [[a]] for 8 bars."; number words, any case, % spacing; "Repeat that 1 times." reads (and is said "1 time"); the canonical form is a fixed point', () => {
-  const canon = 'Play [[phrase_003]] for 8 bars. Then play [[arr_001]] for 4 bars. Repeat that 2 times.';
+test('TOLERANT: "For 8 bars play [[a]]." is the same section as "Play [[a]] for 8 bars."; number words, any case, % spacing; "Repeat that 1 times." (the old wording) reads, as 1 MORE, and is said "once more"; the canonical form is a fixed point', () => {
+  const canon = 'Play [[phrase_003]] for 8 bars. Then play [[arr_001]] for 4 bars. Repeat that 2 more times.';
   for (const text of [canon, 'For 8 bars play [[phrase_003]]. Then play [[arr_001]] for 4 bars. Repeat that 2 times.', 'FOR eight BARS play [[phrase_003]].\nTHEN PLAY [[arr_001]] FOR four bars.\nrepeat that two times', 'Play phrase_003 for 8 bars. Then play arr_001 for 4 bars. Repeat that 2 time.']) {
     const back = parse(text, VAULT);
     assert.ok(back.ok, `${text}: ${JSON.stringify(!back.ok && back.error)}`);
     if (back.ok) { assert.equal(describe(back.params), canon, text); assert.deepEqual(back.params, canonical(back.params)); }
   }
   const once = parse('Play [[phrase_003]]. Repeat that 1 times.', VAULT);
-  assert.ok(once.ok && describe(once.params) === 'Play [[phrase_003]]. Repeat that 1 time.');
+  assert.ok(once.ok && describe(once.params) === 'Play [[phrase_003]]. Repeat that once more.');
 });
 
 test('an arrangement is still an arrangement and a composition is a composition: "Play [[a phrase]] on the [[a kit]] kit." never reads as a one-section composition, and "Play [[a]]." alone is one', () => {
@@ -126,7 +126,7 @@ test('the note is in the Forge shape through the ONE writer path: # Description 
   assert.match(text, /\nlinks:\n  - "\[\[phrase_003\]\]"\n  - "\[\[arr_001\]\]"\n/);
   assert.match(text, /\ndescription: "comp_001 — a piece of 2 sections: \[\[phrase_003\]\] for 8 bars, then \[\[arr_001\]\] for 4 bars, 2 more times\."\n/);
   for (const key of ['source_facet: description', 'description_hash:', 'recipe_hash:', 'python_hash:', 'recipe_derived_from_description_hash:', 'python_derived_from_recipe_hash:']) assert.ok(text.includes(key), key);
-  assert.match(text, /\n# Recipe\n\nPlay \[\[phrase_003\]\] for 8 bars\.\nThen play \[\[arr_001\]\] for 4 bars\.\nRepeat that 2 times\.\n/);
+  assert.match(text, /\n# Recipe\n\nPlay \[\[phrase_003\]\] for 8 bars\.\nThen play \[\[arr_001\]\] for 4 bars\.\nRepeat that 2 more times\.\n/);
   assert.match(text, /\n# Cache\n/);
   assert.equal((text.match(/```json/g) ?? []).length, 1);
   assert.deepEqual(readCompositionNote(text), { ok: true, value: SECTIONS });
@@ -357,10 +357,10 @@ test('the header: nothing but the sections for no bars, the bars and minutes for
 
 // ---- 2026-10-31-1100 mutation pass C: the grammar and the describer of a composition ------------------------------------------------------------------------------------------
 
-test('canonical and the sentences: a repeat of 0 is no repeat, 1 is "Repeat that 1 time." and more is "N times."', () => {
+test('canonical and the sentences: a repeat of 0 is no repeat, 1 is "Repeat that once more." and more is "N more times."', () => {
   const c = canonical({ kind: 'composition', sections: [{ source: 'phrases/phrase_003', repeat: 0 }, { source: 'phrases/phrase_004', repeat: 1 }, { source: 'phrases/phrase_004' }] } as CompositionParams);
   assert.deepEqual((c as CompositionParams).sections, [{ source: 'phrases/phrase_003' }, { source: 'phrases/phrase_004', repeat: 1 }, { source: 'phrases/phrase_004' }]);
-  assert.deepEqual(compositionRecipeSteps(P([{ source: 'phrases/phrase_003', repeat: 1 }, { source: 'phrases/phrase_004', repeat: 2 }])), ['Play [[phrase_003]].', 'Repeat that 1 time.', 'Then play [[phrase_004]].', 'Repeat that 2 times.']);
+  assert.deepEqual(compositionRecipeSteps(P([{ source: 'phrases/phrase_003', repeat: 1 }, { source: 'phrases/phrase_004', repeat: 2 }])), ['Play [[phrase_003]].', 'Repeat that once more.', 'Then play [[phrase_004]].', 'Repeat that 2 more times.']);
 });
 
 test('the grammar of a composition says exactly what is wrong, and where: a word after "Repeat that N times", "For N bars" without "play", a first sentence that is not a composition\'s but a later one is, and a mistake at the very start', () => {

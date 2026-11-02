@@ -149,7 +149,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.ok(read.ok);
       if (read.ok) assert.deepEqual(read.value.sections, [{ source: 'phrases/phrase_003', length: 8 }, { source: 'phrases/phrase_004', repeat: 2 }]);
       assert.ok(isRootNote(text), 'marked as the root');
-      assert.match(text, /# Description\n\nPlay \[\[phrase_003\]\] for 8 bars\. Then play \[\[phrase_004\]\]\. Repeat that 2 times\.\n/);
+      assert.match(text, /# Description\n\nPlay \[\[phrase_003\]\] for 8 bars\. Then play \[\[phrase_004\]\]\. Repeat that 2 more times\.\n/);
       assert.deepEqual(w.lines.filter((l) => l.startsWith('[forge-composition]')), ['[forge-composition] created compositions/comp_001.md sections=phrase_003:8,phrase_004x3']);
       assert.deepEqual(w.leaves.flatMap((l) => l.states).map((s: any) => [s.type, s.state.file]), [[COMPOSITION_VIEW_TYPE, 'compositions/comp_001.md']]);
       assert.equal(w.modals[0].closed, true);
