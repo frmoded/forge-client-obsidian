@@ -13,8 +13,6 @@ This section is about what a chord IS made of: which notes, spaced how, and in w
 
 Try [[build_triad]] and [[build_seventh_chord]] to hear these stacks built from a tonic and a quality of your choosing.
 
-Back up to [[chord]].
-
 <div style="
   display:flex;
   justify-content:space-between;

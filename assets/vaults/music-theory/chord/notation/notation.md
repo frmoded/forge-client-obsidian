@@ -8,8 +8,6 @@ This section is about how chords get written and named — the symbols performer
 
 Press Run on [[slash_chord]] to hear a chord and its bass note controlled independently.
 
-Back up to [[chord]].
-
 <div style="
   display:flex;
   justify-content:space-between;

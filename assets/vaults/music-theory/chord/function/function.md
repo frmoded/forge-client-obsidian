@@ -9,8 +9,6 @@ This section is about how chords behave together over time — the roles they pl
 
 Build your own progression in [[chord_progression]] and listen for the difference a cadence makes.
 
-Back up to [[chord]].
-
 <div style="
   display:flex;
   justify-content:space-between;

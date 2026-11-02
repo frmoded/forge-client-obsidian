@@ -8,9 +8,6 @@ New here? Start with [[triad]] — every other concept in this section builds ou
 
 Press Run on [[build_triad]] right now if you want to hear a chord before reading another word.
 
-Back up to [[README]].
-
-
 <div style="
   display:flex;
   justify-content:space-between;

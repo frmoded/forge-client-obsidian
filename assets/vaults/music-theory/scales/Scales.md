@@ -20,9 +20,6 @@ Because the pattern is what matters, the same pattern started on a different ton
 - [[exercises/complete_this_scale_challenge]] — hear the first four notes of C major.
 - [[exercises/complete_this_scale_submit]] — work out and submit the four notes that finish the octave, get note-by-note feedback.
 
-Back up to [[README]].
-
-
 <div style="
   display:flex;
   justify-content:space-between;
