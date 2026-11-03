@@ -160,7 +160,7 @@
   var WW = 40, WH = 150, BW = 24, BH = 92, PAD = 2;
   var $ = function (id) { return document.getElementById(id); };
   var svg = $("svg"), keyEls = {};
-  // C4 + E4 + G4 start held (the C major triad, MIDI 60, 64, 67), so "Play together" sounds the chord on load. The only line that differs from piano_keyboard.html.
+  // C4 + E4 + G4 start held (the C major triad, MIDI 60, 64, 67), so "Play together" sounds the chord on load. One of the two places that differ from piano_keyboard.html (the other is the scroll at the end).
   var held = new Set([60, 64, 67]);
   var tuning = "equal";                          // default: equal temperament, as before
 
@@ -249,6 +249,8 @@
   $("tuning").addEventListener("change", function (e) { tuning = e.target.value; });
 
   render();
+  // C4 at the left edge of the strip on load (the keyboard scrolls sideways on a narrow pane, and E4 and G4 are the keys to see). The offset is C4's own position, so it holds at any width. The other of the two places that differ from piano_keyboard.html (the held keys are the first).
+  svg.parentNode.scrollLeft = keyEls[60].getBoundingClientRect().left - svg.getBoundingClientRect().left;
 })();
 </script>
 </body>
