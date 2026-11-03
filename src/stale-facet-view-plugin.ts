@@ -87,6 +87,10 @@ const TITLE_BY_STATE: Record<FacetState, string> = {
     'Out of date — Recipe\'s lineage points at a prior Description state. Regenerating refreshes.',
   [FacetState.DerivedFromRecipeOutOfDate]:
     'Out of date — Python\'s lineage points at a prior Recipe state OR Recipe is transitively out of date from Description.',
+  [FacetState.DerivedFromPython]:
+    'Derived from Python — reflects the current Python (the note\'s source).',
+  [FacetState.DerivedFromPythonOutOfDate]:
+    'Out of date — its lineage points at a prior Python. Editing the Description or Recipe by hand, or regenerating, refreshes.',
   [FacetState.Ignored]:
     'Ignored — upstream of the current canonical in the D → R → P chain. Edit to reclaim canonical status.',
 };
@@ -110,6 +114,14 @@ const SUFFIX_DECOS: Record<FacetState, Decoration> = {
   }),
   [FacetState.DerivedFromRecipeOutOfDate]: Decoration.widget({
     widget: new FacetStateSuffixWidget(FacetState.DerivedFromRecipeOutOfDate),
+    side: 1,
+  }),
+  [FacetState.DerivedFromPython]: Decoration.widget({
+    widget: new FacetStateSuffixWidget(FacetState.DerivedFromPython),
+    side: 1,
+  }),
+  [FacetState.DerivedFromPythonOutOfDate]: Decoration.widget({
+    widget: new FacetStateSuffixWidget(FacetState.DerivedFromPythonOutOfDate),
     side: 1,
   }),
   [FacetState.Ignored]: Decoration.widget({
@@ -167,9 +179,11 @@ function bodyMarkForState(state: FacetState): Decoration | null {
       return null;
     case FacetState.DerivedFromDescription:
     case FacetState.DerivedFromRecipe:
+    case FacetState.DerivedFromPython:
       return DERIVED_MARK;
     case FacetState.DerivedFromDescriptionOutOfDate:
     case FacetState.DerivedFromRecipeOutOfDate:
+    case FacetState.DerivedFromPythonOutOfDate:
       return OUT_OF_DATE_MARK;
     case FacetState.Ignored:
       return IGNORED_MARK;

@@ -1,6 +1,7 @@
 // score_first M13 / design 4.12 phase C (drain 2026-10-26-1270, DEMO profile) — the structure strip above the Score. Pure: chips naming the notes behind what is drawn (lineage order), the bars each note contributed to, the
 // chips of a bar's tab (the phrases that use it). The "which note made bar n" rule is the SAME rule a pin sends the notes pane by (linked-panes-core.ts pinnedNoteFor): structure-strip-core.test.ts cross-checks them for every
 // kind, so the two cannot drift apart. Runtime imports from phrase-core.ts are types only.
+import { callsInPython } from './custom-note-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 import type { ArrangementParams } from './arrangement-core.ts';
 import { phraseBarId, PHRASE_BAR_SCOPE } from './phrase-lineage-core.ts';
@@ -12,7 +13,7 @@ export interface Chip {
   /** The note it opens (a lineage id: `bars/bar_007`, `phrases/phrase_004`). */
   noteId: string;
   /** `source` (2026-10-27-1030): the PHRASE a transform changes (a bar chip names a bar note; this names a phrase note). */
-  kind: 'bar' | 'phrase' | 'fork' | 'source' | 'kit';
+  kind: 'bar' | 'phrase' | 'fork' | 'source' | 'kit' | 'custom';
   /** 2026-10-30-1000: an arrangement's strip with more than one kit is drawn as one ROW per kit (its phrase, then the kit); the chips of one row share this number. Absent = a flat strip (every other strip, and an arrangement of one kit). */
   row?: number;
 }
@@ -59,6 +60,24 @@ export function litBarIds(bars: readonly number[]): string[] {
 }
 
 /** The chips of a phrase tab, left to right in lineage order. */
+/**
+ * 2026-11-02-1155 (M16b): the chips of a CUSTOM note: the note itself, then every note its Python calls by name (`phrase_003()`, `bar_005()`, `arr_001()`) and every [[link]] its Recipe has, once each. The json cache is not asked: what the
+ * grammar last understood is not what the Python does any more.
+ */
+export function customChips(name: string, python: string, recipe: string): Chip[] {
+  const names = [...callsInPython(python), ...[...recipe.matchAll(/\[\[([A-Za-z0-9_-]+)(?:\|[^\]]*)?\]\]/g)].map((m) => m[1])];
+  const chips: Chip[] = [{ text: `${name} custom`, noteId: `phrases/${name}`, kind: 'custom' }];
+  const seen = new Set<string>([name]);
+  for (const n of names) {
+    if (seen.has(n)) continue;
+    seen.add(n);
+    if (/^bar_\d+$/.test(n)) chips.push({ text: n, noteId: `bars/${n}`, kind: 'bar' });
+    else if (/^phrase_\d+$/.test(n)) chips.push({ text: n, noteId: `phrases/${n}`, kind: 'phrase' });
+    else if (/^arr_\d+$/.test(n)) chips.push({ text: n, noteId: `arrangements/${n}`, kind: 'phrase' });
+  }
+  return chips;
+}
+
 export function chipsFor(name: string, p: PhraseParams): Chip[] {
   const bar = (b: string): Chip => ({ text: b, noteId: `bars/${b}`, kind: 'bar' });
   const phrase = (what: string): Chip => ({ text: `${name} ${what}`, noteId: `phrases/${name}`, kind: 'phrase' });
@@ -94,7 +113,7 @@ export type StripToken = Chip | '->' | 'used by:';
  */
 export function stripTokens(chips: readonly Chip[]): StripToken[] {
   if (chips.length === 0) return [];
-  if (chips.some((c) => c.kind === 'kit')) return [...chips];                    // an arrangement's strip: a flat row
+  if (chips.some((c) => c.kind === 'kit' || c.kind === 'custom')) return [...chips];                    // an arrangement's strip, and a custom note's (2026-11-02-1155): a flat row
   if (chips.every((c) => c.kind === 'phrase')) return ['used by:', ...chips];
   const at = chips.findIndex((c) => c.kind === 'phrase');
   const rest = chips.slice(at + 1);

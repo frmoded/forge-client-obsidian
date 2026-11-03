@@ -18,8 +18,8 @@ export interface ScoreDeps {
 
 export type ScoreOutcome =
   | { kind: 'score'; payload: Record<string, unknown> }
-  | { kind: 'refusal'; message: string }
-  | { kind: 'error'; message: string };
+  | { kind: 'refusal'; message: string; keep?: true }
+  | { kind: 'error'; message: string; keep?: true };
 
 function isMusicXmlPayload(v: unknown): v is Record<string, unknown> {
   if (!v || typeof v !== 'object') return false;

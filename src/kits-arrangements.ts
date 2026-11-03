@@ -4,7 +4,7 @@
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
-import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine } from './phrase-engine.ts';
+import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
 import { phraseDepsWithSources } from './composition-core.ts';
 import { PHRASE_FOLDER, isPhrasePath } from './phrase-core.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
@@ -137,7 +137,7 @@ export class ArrangementView extends EditableFileView {
       // the arrangement note's text in, the combined Score out: every kit and phrase is read fresh by the producer, each phrase drawn by the phrase code
       produce: async (note, title) => {
         const out = await produceArrangement({
-          phrases: phraseDepsWithSources({ readNote, compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t) }, { computeArrangement: (data, t) => computeArrangementScoreViaEngine(data, t), computeComposition: (data, t) => computeCompositionScoreViaEngine(data, t) }),      // 2026-10-30-1050 (M15b): a phrase it plays may be a transform of an arrangement
+          phrases: phraseDepsWithSources({ readNote, compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t), runCustom: (python, name, limitS) => runCustomPythonViaEngine(python, name, limitS) }, { computeArrangement: (data, t) => computeArrangementScoreViaEngine(data, t), computeComposition: (data, t) => computeCompositionScoreViaEngine(data, t) }),      // 2026-10-30-1050 (M15b): a phrase it plays may be a transform of an arrangement
           compute: (data, t) => computeArrangementScoreViaEngine(data, t),
         }, note as string | { unreadable: string }, title);
         if (out.kind === 'score' && !this.disposed) { this.paintTempo(note, out.payload); this.keepLineage(out.payload); }

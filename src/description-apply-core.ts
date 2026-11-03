@@ -2,7 +2,7 @@
 // the Description by hand, the hash no longer matches, and this decides what that edit means: it parses (apply it: json cache, Recipe, Python, stamps follow), it does not parse (write nothing, say where), or it is the derived Recipe / Python
 // that was edited instead (they are derived: say so, change nothing). No `obsidian` import: the vault, the clock and the UI are the controller's (description-apply.ts).
 import { parse, type GrammarError, type GrammarParams, type GrammarVault } from './phrase-grammar-core.ts';
-import { asRecipeSourced, descriptionEditedByHand, extractPhraseJsonBlock, recipeEditedByHand } from './phrase-notes-core.ts';
+import { asCustom, asPythonSourced, asRecipeSourced, extractPhraseJsonBlock, isCustomNote } from './phrase-notes-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { extractDescription, extractPythonSection, extractRecipeSection } from './v2-note-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
@@ -10,25 +10,29 @@ import { applyPhraseWrite, readPhraseNote } from './phrase-core.ts';
 import { applyArrangementWrite, readArrangementNote } from './arrangement-core.ts';
 import { applyCompositionWrite, readCompositionNote } from './composition-core.ts';
 import { wrongKindSentence, type Family } from './note-family-core.ts';
-import { BOTH_EDITED, PYTHON_DERIVED, recipeEdit } from './recipe-apply-core.ts';
+import { recipeEdit } from './recipe-apply-core.ts';
+import { bothEditedMessage, editedFacetsOf, pythonEdit, type Facet } from './python-apply-core.ts';
 
 // the kind tables moved to note-family-core.ts (2026-10-31-1140, so the Recipe core can read them too); re-exported so every importer is unchanged
 export { familyOfPath, type Family } from './note-family-core.ts';
-export { PYTHON_DERIVED };
 export const DESCRIPTION_DEBOUNCE_MS = 600;
 
 /**
  * What a note's text says right now about its SOURCES (a Description and, since 2026-10-31-1140 (M16a), a Recipe: either may be the one a person edited by hand).
- *  `synced` nothing to say; `derived-edited` only the Python was edited (derived: said, not applied); `rejected` / `apply` the Description was edited; `recipe-rejected` / `recipe-apply` the Recipe was; `both-edited` both were.
+ *  `synced` nothing to say; `custom-note` a custom note at rest (the banner); `rejected` / `apply` the Description was edited; `recipe-rejected` / `recipe-apply` the Recipe was; `python-apply` / `python-custom` the Python was (2026-11-02-1155, M16b: a known shape maps back; anything else is a CUSTOM note);
+ *  `both-edited` two or three of them were (`facets` says which).
  */
 export type DescriptionState =
   | { kind: 'synced' }
-  | { kind: 'derived-edited'; message: string }
-  | { kind: 'both-edited'; message: string }
+  | { kind: 'both-edited'; message: string; facets: Facet[] }
   | { kind: 'rejected'; sentence: string; error: GrammarError; message: string }
   | { kind: 'apply'; sentence: string; params: GrammarParams; change: string; unchanged: boolean }
   | { kind: 'recipe-rejected'; recipe: string; error: GrammarError; message: string }
-  | { kind: 'recipe-apply'; recipe: string; params: GrammarParams; change: string; unchanged: boolean };
+  | { kind: 'recipe-apply'; recipe: string; params: GrammarParams; change: string; unchanged: boolean }
+  | { kind: 'python-apply'; python: string; params: GrammarParams; change: string; unchanged: boolean }
+  | { kind: 'python-custom'; python: string; already: boolean }
+  /** A custom note nobody is editing right now: the banner stays (the controls are off), and Revert to generated is offered when the json cache from before the takeover can be read. */
+  | { kind: 'custom-note'; canRevert: boolean };
 
 /** `Description, line 1, column 28: expected "bars" after the number.` - one sentence, the grammar's own words with a lower-case start. */
 export function rejectionMessage(error: GrammarError): string {
@@ -59,29 +63,28 @@ export function changeSummary(prev: GrammarParams | null, next: GrammarParams): 
 
 const sameParams = (a: GrammarParams | null, b: GrammarParams): boolean => a !== null && JSON.stringify(a) === JSON.stringify(b);
 
-/** Was the Python edited by hand (the Description and the Recipe still match their stamps)? Only a note that carries the stamps can say so. Since 2026-10-31-1140 (M16a) the Recipe is a SOURCE, not derived text: a Recipe edit is `recipeEdit`'s. */
-export function derivedEditedByHand(text: string): boolean {
-  const fields = parseFrontmatter(text)?.fields;
-  if (!fields) return false;
-  const stored = fields.python_hash;
-  return typeof stored === 'string' && stored !== '' && stored !== facetHashSync(extractPythonSection(text) ?? '');
-}
-
 /**
  * What the note's text says right now about its sources. Pure; `vault` is what the grammar checks names against.
- * `prefer` settles a note whose Description AND Recipe were both edited, for the button the person pressed: with none, that note is `both-edited` and nothing is applied.
+ * `prefer` settles a note whose facets were edited TOGETHER (two or three of Description, Recipe, Python), for the button the person pressed: with none, that note is `both-edited` and nothing is applied.
  */
-export function descriptionState(text: string, family: Family, vault: GrammarVault, prefer?: 'description' | 'recipe'): DescriptionState {
+export function descriptionState(text: string, family: Family, vault: GrammarVault, prefer?: Facet): DescriptionState {
   if (!parseFrontmatter(text) || extractPhraseJsonBlock(text).ok === false) return { kind: 'synced' };           // not a data note of ours: nothing to say
-  const descriptionEdited = descriptionEditedByHand(text), recipeEdited = recipeEditedByHand(text);
-  if (descriptionEdited && recipeEdited && prefer === undefined) return { kind: 'both-edited', message: BOTH_EDITED };
-  if (recipeEdited && (!descriptionEdited || prefer === 'recipe')) {
+  const edited = editedFacetsOf(text);
+  if (edited.length === 0) return isCustomNote(text) ? { kind: 'custom-note', canRevert: cacheParams(text, family) !== null } : { kind: 'synced' };
+  if (edited.length > 1 && prefer === undefined) return { kind: 'both-edited', message: bothEditedMessage(edited), facets: edited };
+  const facet: Facet = prefer !== undefined && edited.includes(prefer) ? prefer : edited[0];
+  if (facet === 'python') {
+    const prev = cacheParams(text, family);
+    const e = pythonEdit(text, prev);
+    if (e.kind === 'apply') return { kind: 'python-apply', python: e.python, params: e.params, change: changeSummary(prev, e.params), unchanged: sameParams(prev, e.params) };
+    return e.kind === 'custom' ? { kind: 'python-custom', python: e.python, already: isCustomNote(text) } : { kind: 'synced' };
+  }
+  if (facet === 'recipe') {
     const e = recipeEdit(text, family, vault);
     if (e.kind === 'rejected') return { kind: 'recipe-rejected', recipe: e.recipe, error: e.error, message: e.message };
     if (e.kind === 'apply') { const prev = cacheParams(text, family); return { kind: 'recipe-apply', recipe: e.recipe, params: e.params, change: changeSummary(prev, e.params), unchanged: sameParams(prev, e.params) }; }
     return { kind: 'synced' };
   }
-  if (!descriptionEdited) return derivedEditedByHand(text) ? { kind: 'derived-edited', message: PYTHON_DERIVED } : { kind: 'synced' };
   const sentence = extractDescription(text);
   const res = parse(sentence, vault);
   if (res.ok === false) return { kind: 'rejected', sentence, error: res.error, message: rejectionMessage(res.error) };
@@ -124,6 +127,30 @@ export function applyRecipeText(text: string, name: string, family: Family, vaul
   return w.ok === false ? { ok: false, message: w.message, stale: false } : { ok: true, text: asRecipeSourced(w.text), change: st.change };
 }
 
+/**
+ * "Update from Python" (M16b): the new text, or why not. Decided on the text it is GIVEN (inside the atomic write), against the Python that was planned: a Python that changed since is not written (the newer edit is evaluated by its own turn).
+ * A known shape: the params it says are the input, every derived part is made again by the same writers (the hand-edit refusal lifted) and the note is PYTHON-sourced (the Description and the Recipe stamped as derived from it).
+ * Anything else: the note becomes CUSTOM (its Python is kept as typed, its json cache is kept for "Revert to generated"; nothing else is written).
+ */
+export function applyPythonText(text: string, name: string, family: Family, vault: GrammarVault, planned: string): { ok: true; text: string; change: string; custom: boolean } | { ok: false; message: string; stale: boolean } {
+  const st = descriptionState(text, family, vault, 'python');
+  if (st.kind !== 'python-apply' && st.kind !== 'python-custom') return { ok: false, message: 'There is nothing to update: the Python matches the note.', stale: true };
+  if (st.python !== planned) return { ok: false, message: 'The Python changed again; the newer text is being read.', stale: true };
+  if (st.kind === 'python-custom') return { ok: true, text: asCustom(text), change: 'custom Python', custom: true };
+  const w = writeFromParams(text, name, family, st.params);
+  return w.ok === false ? { ok: false, message: w.message, stale: false } : { ok: true, text: asPythonSourced(w.text), change: st.change, custom: false };
+}
+
+/** What "Revert to generated" says it loses, for the confirm dialog: the person's Python (and where the grammar's version comes from). */
+export const REVERT_GENERATED_CONFIRM = 'Revert to generated replaces your Python (and the Description and Recipe that were written for it) with what the controls last made for this note. Your Python is lost. Revert?';
+
+/** "Revert to generated" (M16b): the Python of the json cache - the params the grammar last understood, from before the takeover - and every derived part with it; the note is the grammar's again (not custom, Description-sourced). */
+export function revertToGeneratedText(text: string, name: string, family: Family): Written {
+  const prev = cacheParams(text, family);
+  if (prev === null) return { ok: false, message: 'Revert to generated: the note\'s json cache cannot be read, so there is no last good version to go back to.' };
+  return writeFromParams(text, name, family, prev);
+}
+
 /** "Revert": the Description the json cache says, and every derived part with it (the hand edit is dropped). */
 export function revertDescriptionText(text: string, name: string, family: Family): Written {
   const prev = cacheParams(text, family);
@@ -134,5 +161,4 @@ export function revertDescriptionText(text: string, name: string, family: Family
 export const appliedLine = (name: string, change: string): string => `[forge-description] applied ${name} (${change})`;
 export const rejectedLine = (name: string, e: GrammarError): string => `[forge-description] rejected ${name}: line ${e.line} column ${e.column} ${e.message}`;
 export const revertedLine = (name: string): string => `[forge-description] reverted ${name} to the json cache`;
-export const ignoredLine = (name: string): string => `[forge-description] ignored ${name}: ${PYTHON_DERIVED}`;
 export const askedServiceLine = (name: string, outcome: string): string => `[forge-description] asked the service about ${name} -> ${outcome}`;

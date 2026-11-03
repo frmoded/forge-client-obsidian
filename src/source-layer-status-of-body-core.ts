@@ -40,6 +40,6 @@ export async function sourceLayerStatusOf(body: string): Promise<SourceLayerStat
   };
   const effective = effectiveSourceFacet(canonical, getSourceFacet(body, read)) ?? canonical;
   const states = computeFacetStates(effective as SourceLayer, { getFrontmatterField: (k: string) => read(body, k) }, currentBodyHashes);
-  const staleFacets = ALL_FACETS.filter((f) => states[f] === FacetState.DerivedFromDescriptionOutOfDate || states[f] === FacetState.DerivedFromRecipeOutOfDate || (f === 'python' && squash(pythonText) === STUB));
+  const staleFacets = ALL_FACETS.filter((f) => states[f] === FacetState.DerivedFromDescriptionOutOfDate || states[f] === FacetState.DerivedFromRecipeOutOfDate || states[f] === FacetState.DerivedFromPythonOutOfDate || (f === 'python' && squash(pythonText) === STUB));
   return { isV2: true, canonical, effective, states, staleFacets };
 }

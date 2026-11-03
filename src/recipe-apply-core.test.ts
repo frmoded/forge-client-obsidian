@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { PYTHON_DERIVED, applyDescriptionText, applyRecipeText, descriptionState, revertDescriptionText } from './description-apply-core.ts';
+import { applyDescriptionText, applyRecipeText, descriptionState, revertDescriptionText } from './description-apply-core.ts';
 import { BOTH_EDITED, recipeAppliedLine, recipeEdit, recipeRejectedLine, recipeRejectionMessage, recipeRevertedLine } from './recipe-apply-core.ts';
 import { PHRASE_DEFAULTS, applyPhraseWrite, noteContentFor, readPhraseNote, refreshPhraseNoteText, type PhraseParams } from './phrase-core.ts';
 import { newArrangementNote, refreshArrangementNoteText } from './arrangement-core.ts';
@@ -136,7 +136,7 @@ test('a Recipe of another KIND is refused in one sentence: this note is a phrase
 
 test('BOTH edited: nothing is applied and the sentence names both; "Update from Description" keeps the Description (the Recipe edit is dropped), "Update from Recipe" keeps the Recipe (the Description edit is dropped)', () => {
   const both = editDescription(editRecipe(note(), '8 bars', '6 bars'), '8 bars', '5 bars');
-  assert.deepEqual(descriptionState(both, 'phrase', VAULT), { kind: 'both-edited', message: BOTH_EDITED });
+  assert.deepEqual(descriptionState(both, 'phrase', VAULT), { kind: 'both-edited', message: BOTH_EDITED, facets: ['description', 'recipe'] });   // 2026-11-02-1155 (M16b, deliberate): the state says which facets were edited (three now)
   assert.equal(BOTH_EDITED, 'Description and Recipe were both edited; keep one: Update from Description / Update from Recipe.');
   const fromDescription = applyDescriptionText(both, 'phrase_001', 'phrase', VAULT, extractDescription(both), 'description');
   assert.ok(fromDescription.ok);
@@ -240,7 +240,6 @@ test('a text that is not one of our notes has nothing to say about its Recipe; a
   assert.deepEqual(recipeEdit(noJson, 'phrase', VAULT), { kind: 'none' });
   assert.deepEqual(descriptionState(noJson, 'phrase', VAULT), { kind: 'synced' });
   assert.deepEqual(recipeEdit('---\ntype: data\nrecipe_hash: abc\n---\n\n# Recipe\n\nTake [[bar_007]].\n', 'phrase', VAULT), { kind: 'none' }, 'no json block at all');
-  assert.equal(PYTHON_DERIVED, 'Python is derived; edit the Description or the Recipe.');
 });
 
 test('a note its WRITER refuses (read_only) is not a stale plan: Update from Recipe and Update from Description answer with the writer\'s sentence and `stale: false` (the controller shows that sentence and keeps the buttons; a stale plan is read afresh instead)', () => {

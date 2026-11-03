@@ -13,7 +13,8 @@
 // score-first.ts, like every other score-first decision.
 
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
-import { extractPhraseJsonBlock, handEditRefusalOf, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
+import { extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
+import { produceCustomScore, type CustomDeps, type CustomRun } from './custom-note-core.ts';
 import { extendGridSentence } from './engine-refusal-core.ts';
 import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
@@ -895,6 +896,8 @@ export interface PhraseScoreDeps {
   /** Engine: `extend_rhythm` + `rhythm_bars_to_stream` on the source bar's data with the phrase's parameters, as a tagged MusicXML payload. For a MIX the data is the two bars (`{ a, b }`) and the
    *  engine runs `mix_rhythm` + `rhythm_bars_to_stream`. */
   compute(data: RhythmData | MixBars | TransformInput, params: PhraseParams, title: string): Promise<unknown>;
+  /** 2026-11-02-1155 (M16b): run the Python of a CUSTOM note in the engine with a time limit (custom-note-core.ts). Absent = this surface cannot run one and says so. */
+  runCustom?(python: string, name: string, limitS: number): Promise<CustomRun>;
 }
 
 /** The Score of a phrase, from the phrase's parameters (already parsed JSON): validate them, read the source bar FRESH from the vault, ask the engine. A phrase that is wrong or whose source is
@@ -1181,6 +1184,7 @@ async function produceMix(deps: PhraseScoreDeps, params: MixPhrase, title: strin
  *  refusal line as a missing source — one path, one place that says why. The source bar is read only for a phrase that is valid. */
 export async function producePhraseNote(deps: PhraseScoreDeps, note: string | { unreadable: string }, title: string): Promise<ScoreOutcome> {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Phrase: the phrase note could not be read (${note.unreadable}).` };
+  if (isCustomNote(note)) return produceCustomScore({ readNote: deps.readNote, runCustom: deps.runCustom, compute: deps.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
   const read = readPhraseNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Phrase: ${read.message}` };
   return producePhrase(deps, read.value, title);

@@ -8,14 +8,16 @@
 //     <div class="forge-description-preview"><pre class="forge-description-preview-description">...</pre><pre class="forge-description-preview-recipe">...</pre></div>     (only for the service's suggestion)
 //   </div>
 
-export type BarAction = 'update' | 'update-recipe' | 'revert' | 'ask' | 'apply-preview' | 'cancel-preview';
-export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'update-recipe': 'Update from Recipe', revert: 'Revert', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
+export type BarAction = 'update' | 'update-recipe' | 'update-python' | 'revert' | 'revert-generated' | 'ask' | 'apply-preview' | 'cancel-preview';
+export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
 
 export interface BarView {
   message: string;
   actions: BarAction[];
   preview?: { description: string; recipe: string };
   busy?: boolean;
+  /** `custom`: the banner of a custom note (its own look: the controls are off for the note). */
+  tone?: 'custom';
 }
 export interface BarHandle { readonly el: HTMLElement; show(view: BarView): void; dispose(): void }
 
@@ -30,6 +32,7 @@ export function mountDescriptionBar(parent: HTMLElement, onAction: (a: BarAction
     el,
     show(view) {
       el.textContent = '';
+      el.classList.toggle('is-custom', view.tone === 'custom');
       const message = doc.createElement('span'); message.className = 'forge-description-message'; message.textContent = view.message; el.appendChild(message);
       if (view.preview) {
         const box = doc.createElement('div'); box.className = 'forge-description-preview';

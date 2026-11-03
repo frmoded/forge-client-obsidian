@@ -3,6 +3,8 @@
 // kit-arrangement-dom; this proves they are CONNECTED: only in a score-first vault (P3), "New kit" makes kits/<name>.md and opens it, "New arrangement" makes arrangements/arr_001.md and opens it in the arrangement tab, "Open arrangement as Score"
 // switches an arrangement note to the tab, and "Refresh note links" reaches kits and arrangements.
 import assert from 'node:assert/strict';
+import { facetHashSync } from './facet-sync-hash-core.ts';
+import { pythonTextOf } from './phrase-notes-core.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { before, test } from 'node:test';
@@ -14,6 +16,9 @@ import { loadRealOnload } from './test-support/real-onload.ts';
 import { realNoteAt } from './test-support/score-first-notes.ts';
 import { ARRANGEMENT_VIEW_TYPE, newArrangementNote, readArrangementNote } from './arrangement-core.ts';
 import { newKitNote, readKitNote } from './kit-core.ts';
+
+/** 2026-11-02-1155 (M16b, deliberate): a STALE derived Python that nobody edited (what an older plugin version wrote): the text changed AND `python_hash` re-stamped to it, so the note does not read as a hand edit (a hand-edited Python is a source now and a refresh refuses it). */
+const staleDerived = (text: string): string => { const t = text.replace('```python\n', '```python\n# typed here\n'); return t.replace(/^python_hash: .*$/m, `python_hash: ${facetHashSync(pythonTextOf(t) ?? '')}`); };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml'), 'utf8');
@@ -179,7 +184,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] "Open arrangement as Score" switches an arrangement note to the arrangement tab; "Refresh note links" reaches kits and arrangements (stale derived text regenerated, current notes not written)`, async () => {
     const arr = newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }] });
-    const stale = { 'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick'] }).replace('Add the kick.', 'typed here'), 'arrangements/arr_001.md': arr.replace('```python\n', '```python\n# typed here\n'), 'phrases/phrase_003.md': 'p' };
+    const stale = { 'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick'] }).replace('Add the kick.', 'typed here'), 'arrangements/arr_001.md': staleDerived(arr), 'phrases/phrase_003.md': 'p' };
     const w = await world(SCORE_FIRST_TOML, stale, 'arrangements/arr_001.md');
     try {
       await w.run(OPEN_ARR);

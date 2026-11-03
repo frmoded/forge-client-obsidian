@@ -16,6 +16,7 @@ import { installNotePreflight, makeNotePreflight } from './note-preflight-core.t
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
 import { ArrangementView, registerKitsAndArrangements } from './kits-arrangements.ts';
 import { CompositionView, openCompositionInLeaf, registerCompositions } from './compositions.ts';
+import { ConfirmModal } from './confirm-modal.ts';
 import { createDescriptionController } from './description-apply.ts';
 import { familyOfPath } from './description-apply-core.ts';
 import { isCompositionPath } from './composition-core.ts';
@@ -452,6 +453,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         askPlan: hooks.askPlan ? (payload) => hooks.askPlan!(payload) : undefined,
         configured: hooks.planConfigured,
         ownKey: () => hooks.ownKey?.(),
+        confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
       });
       plugin.registerEvent(app.vault.on('modify', (f) => { descriptions.modified(f.path); }));
       plugin.registerEvent(app.workspace.on('file-open', (f) => { if (f) void descriptions.inspect(f.path); }));

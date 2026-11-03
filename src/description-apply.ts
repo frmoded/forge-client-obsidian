@@ -7,10 +7,12 @@
 // score-first vault: P3).
 import { mountDescriptionBar, type BarAction, type BarHandle, type BarView } from './description-bar-dom.ts';
 import {
-  DESCRIPTION_DEBOUNCE_MS, appliedLine, applyDescriptionText, applyRecipeText, askedServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, ignoredLine, rejectedLine, revertDescriptionText, revertedLine, writeFromParams,
+  DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, revertDescriptionText, revertToGeneratedText, revertedLine, writeFromParams,
   type DescriptionState, type Family,
 } from './description-apply-core.ts';
 import { bothEditedLine, recipeAppliedLine, recipeRejectedLine, recipeRevertedLine } from './recipe-apply-core.ts';
+import { bothEditedLineOf, pythonAppliedLine, pythonCustomLine, pythonRevertedLine } from './python-apply-core.ts';
+import { CUSTOM_BANNER } from './phrase-notes-core.ts';
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 import { buildPlanRequest, interpretPlanResponse, type PlanPayload } from './sentence-plan-core.ts';
 import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
@@ -34,6 +36,8 @@ export interface DescriptionPorts {
   askPlan?(payload: PlanPayload): Promise<{ status: number; json: unknown }>;
   configured?(): boolean;
   ownKey?(): string | undefined;
+  /** Ask the person to confirm a step that loses something ("Revert to generated"); absent = it goes ahead. */
+  confirm?(message: string): Promise<boolean>;
 }
 
 interface Ui { state: DescriptionState; message?: string; preview?: { params: PhraseParams; description: string; recipe: string; forSentence: string }; busy?: boolean }
@@ -72,8 +76,10 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (st.kind === 'apply') return { message: u.message ?? `The Description changed (${st.change}); update the note from it.`, actions: ['update', 'revert'], busy: u.busy };
     if (st.kind === 'recipe-rejected') return { message: u.message ?? st.message, actions: ['revert'], busy: u.busy };               // no "Ask the sentence service" for a Recipe: no LLM, the person fixes it
     if (st.kind === 'recipe-apply') return { message: u.message ?? `The Recipe changed (${st.change}); update the note from it.`, actions: ['update-recipe', 'revert'], busy: u.busy };
-    if (st.kind === 'both-edited') return { message: u.message ?? st.message, actions: ['update', 'update-recipe'], busy: u.busy };
-    if (st.kind === 'derived-edited') return { message: st.message, actions: [], busy: u.busy };
+    if (st.kind === 'python-apply') return { message: u.message ?? `The Python changed (${st.change}); update the note from it.`, actions: ['update-python', 'revert'], busy: u.busy };
+    if (st.kind === 'python-custom') return { message: u.message ?? 'The Python is not a shape the controls know: the note becomes a custom note.', actions: ['update-python', 'revert'], busy: u.busy };
+    if (st.kind === 'custom-note') return { message: u.message ?? CUSTOM_BANNER, actions: st.canRevert ? ['revert-generated'] : [], busy: u.busy, tone: 'custom' };
+    if (st.kind === 'both-edited') return { message: u.message ?? st.message, actions: st.facets.map((f) => (f === 'description' ? 'update' : f === 'recipe' ? 'update-recipe' : 'update-python') as BarAction), busy: u.busy };
     return { message: '', actions: [] };
   };
 
@@ -102,8 +108,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     try { text = await ports.read(path); } catch { return; }                                             // the note went away: nothing to say
     const st = descriptionState(text, family, ports.vault());
     if (st.kind === 'synced') { told.delete(path); set(path, null); return; }
-    if (st.kind === 'derived-edited') { if (told.get(path) !== 'derived') { told.set(path, 'derived'); ports.trace(ignoredLine(basename(path))); } set(path, { state: st }); return; }
-    if (st.kind === 'both-edited') { if (told.get(path) !== 'both') { told.set(path, 'both'); ports.trace(bothEditedLine(basename(path))); } set(path, { state: st }); return; }
+    if (st.kind === 'custom-note') { told.delete(path); set(path, { state: st }); return; }
+    if (st.kind === 'both-edited') {
+      const said = st.facets.join('+');
+      if (told.get(path) !== `both:${said}`) { told.set(path, `both:${said}`); ports.trace(said === 'description+recipe' ? bothEditedLine(basename(path)) : bothEditedLineOf(basename(path), st.facets)); }
+      set(path, { state: st });
+      return;
+    }
+    if (st.kind === 'python-apply' || st.kind === 'python-custom') { if (auto) await doApplyPython(path, family, st); else set(path, { state: st }); return; }
     if (st.kind === 'recipe-rejected') {
       if (told.get(path) !== `recipe:${st.recipe}`) { told.set(path, `recipe:${st.recipe}`); ports.trace(recipeRejectedLine(basename(path), st.error)); }
       set(path, { state: st });
@@ -117,6 +129,32 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return;
     }
     if (auto) await doApply(path, family, st); else set(path, { state: st });
+  }
+
+  /** The Python was edited: a known shape maps back (the same `process` as for a Description or a Recipe, then the note is Python-sourced); anything else makes the note CUSTOM (its Python is kept as typed). */
+  async function doApplyPython(path: string, family: Family, st: Extract<DescriptionState, { kind: 'python-apply' | 'python-custom' }>): Promise<void> {
+    let change = '', failure: string | null = null, stale = false, custom = false;
+    try {
+      await ports.process(path, (cur) => {
+        const r = applyPythonText(cur, basename(path), family, ports.vault(), st.python);
+        if (r.ok === false) { failure = r.message; stale = r.stale; return cur; }
+        change = r.change; custom = r.custom;
+        return r.text;
+      });
+    } catch (e) { failure = `Update from Python: ${(e as Error)?.message ?? e}`; console.error('python-apply: could not write the note', e); }
+    if (failure === null) { told.delete(path); ports.trace(custom ? pythonCustomLine(basename(path)) : pythonAppliedLine(basename(path), change)); set(path, null); if (custom) await evaluate(path, false); return; }       // a custom note keeps its banner
+    if (stale) { await evaluate(path, false); return; }                                                    // the text moved on: what it says now is read afresh (a newer edit has its own timer)
+    set(path, { state: st, message: failure });
+  }
+
+  /** "Revert to generated": the grammar's Python from the json cache (after the person confirms what is lost). */
+  async function revertGenerated(path: string): Promise<void> {
+    const family = familyOfPath(path); if (family === null) return;
+    if (ports.confirm && !(await ports.confirm(REVERT_GENERATED_CONFIRM))) return;
+    let failure: string | null = null;
+    try { await ports.process(path, (cur) => { const r = revertToGeneratedText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert to generated: ${(e as Error)?.message ?? e}`; }
+    if (failure !== null) { const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: failure }); return; }
+    told.delete(path); ports.trace(pythonRevertedLine(basename(path))); set(path, null);
   }
 
   /** The Recipe parsed: ONE `process` makes every derived part again from it (the plan re-decided on the CURRENT text inside the write, against the Recipe that was planned). */
@@ -168,6 +206,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function act(path: string, a: BarAction): Promise<void> {
     if (a === 'update') await update(path);
     else if (a === 'update-recipe') await updateRecipe(path);
+    else if (a === 'update-python') await updatePython(path);
+    else if (a === 'revert-generated') await revertGenerated(path);
     else if (a === 'revert') await revert(path);
     else if (a === 'ask') await ask(path);
     else if (a === 'apply-preview') await applyPreview(path);
@@ -180,7 +220,18 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (u && u.state.kind === 'apply') { await doApply(path, family, u.state); return; }
     if (u && u.state.kind === 'both-edited') { await doApplyDescriptionOver(path, family); return; }           // the person chose the Description
     if (u && u.state.kind === 'recipe-apply') { await doApplyRecipe(path, family, u.state); return; }          // "Update from Description" on a note whose Recipe is what changed: the Recipe is what there is to apply
+    if (u && (u.state.kind === 'python-apply' || u.state.kind === 'python-custom')) { await doApplyPython(path, family, u.state); return; }
     await evaluate(path, true);
+  }
+
+  /** "Update from Python": the Python as it stands now (a note whose other facets were edited too: the person chose the Python). */
+  async function updatePython(path: string): Promise<void> {
+    const family = familyOfPath(path); if (family === null) return;
+    let text: string;
+    try { text = await ports.read(path); } catch { return; }
+    const st = descriptionState(text, family, ports.vault(), 'python');
+    if (st.kind === 'python-apply' || st.kind === 'python-custom') { await doApplyPython(path, family, st); return; }
+    await evaluate(path, false);
   }
 
   /** "Update from Recipe": the Recipe as it stands now (a note whose Description was edited too: the person chose the Recipe). */
@@ -199,7 +250,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     try { await ports.process(path, (cur) => { const r = revertDescriptionText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert: ${(e as Error)?.message ?? e}`; }
     if (failure !== null) { const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: failure }); return; }
     const was = ui.get(path)?.state.kind;
-    told.delete(path); ports.trace(was === 'recipe-rejected' || was === 'recipe-apply' || was === 'both-edited' ? recipeRevertedLine(basename(path)) : revertedLine(basename(path))); set(path, null);
+    told.delete(path); ports.trace(was === 'python-apply' || was === 'python-custom' ? pythonRevertedLine(basename(path)) : was === 'recipe-rejected' || was === 'recipe-apply' || was === 'both-edited' ? recipeRevertedLine(basename(path)) : revertedLine(basename(path))); set(path, null);
   }
 
   async function ask(path: string): Promise<void> {
@@ -247,7 +298,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     },
     inspect: (path) => evaluate(path, false),
     update, revert, ask, syncBars,
-    canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply'); },
+    canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
     dispose() { disposed = true; for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); ui.clear(); },
   };
 }

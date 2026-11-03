@@ -3,6 +3,8 @@
 // DOM in composition-dialog-dom / composition-strip-dom; this proves they are CONNECTED: only in a score-first vault (P3), "New composition" makes compositions/comp_001.md (marked root when it is the first) and opens it in the composition tab,
 // "Open composition as Score" switches a composition note to the tab, "Open the piece" opens the ROOT composition and says so when there is none or more than one, "Make this composition the root" moves the mark, and "Refresh note links" reaches compositions.
 import assert from 'node:assert/strict';
+import { facetHashSync } from './facet-sync-hash-core.ts';
+import { pythonTextOf } from './phrase-notes-core.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { before, test } from 'node:test';
@@ -14,6 +16,9 @@ import { loadRealOnload } from './test-support/real-onload.ts';
 import { COMPOSITION_VIEW_TYPE, newCompositionNote, readCompositionNote } from './composition-core.ts';
 import { isRootNote } from './composition-root-core.ts';
 import { noteContentFor, type PhraseParams } from './phrase-core.ts';
+
+/** 2026-11-02-1155 (M16b, deliberate): a STALE derived Python that nobody edited (what an older plugin version wrote): the text changed AND `python_hash` re-stamped to it, so the note does not read as a hand edit (a hand-edited Python is a source now and a refresh refuses it). */
+const staleDerived = (text: string): string => { const t = text.replace('```python\n', '```python\n# typed here\n'); return t.replace(/^python_hash: .*$/m, `python_hash: ${facetHashSync(pythonTextOf(t) ?? '')}`); };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml'), 'utf8');
@@ -204,7 +209,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] "Open composition as Score" switches a composition note to the composition tab; "Refresh note links" reaches compositions (stale derived text regenerated, current notes not written)`, async () => {
     const note = newCompositionNote('comp_001', P('phrases/phrase_003'));
-    const stale = { ...PHRASES, 'compositions/comp_001.md': note.replace('```python\n', '```python\n# typed here\n') };       // 2026-10-31-1140 (M16a): the PYTHON is the derived text a refresh regenerates; a typed Recipe is a source now (recipe-apply-core.test.ts)
+    const stale = { ...PHRASES, 'compositions/comp_001.md': staleDerived(note) };       // 2026-10-31-1140 (M16a): the PYTHON is the derived text a refresh regenerates; a typed Recipe is a source now (recipe-apply-core.test.ts)
     const w = await world(SCORE_FIRST_TOML, stale, 'compositions/comp_001.md');
     try {
       await w.run(OPEN_COMP);

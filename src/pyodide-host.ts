@@ -1522,6 +1522,44 @@ def _forge_mix_path(a, b, weight, order, seed):
     k = max(0, min(d, k))
     return morph_rhythm(a, b, bars=1, order=order, seed=seed, position=k), info, k
 
+def _forge_run_custom_bars(python_text: str, snippet_id: str, seconds):
+    """M16b (2026-11-02-1155) - run the Python of a CUSTOM score-first note and give back the bars it returns, as json text. The other notes it
+    calls by name (phrase_003(), bar_005()) are the engine's own snippet shims, as for every note. A trace function stops a run that goes on
+    longer than 'seconds' (a BaseException, so no except Exception inside the person's code or the executor swallows it). The person's mistakes
+    come back as a plain dict (ok False, the error line, the line of the Python it stopped at); nothing is raised."""
+    import sys as _sys, time as _time, json as _json, traceback as _tb
+    state = {'timed_out': False}
+    deadline = _time.monotonic() + float(seconds)
+    class _TimeLimit(BaseException):
+        pass
+    def _tracer(frame, event, arg):
+        if _time.monotonic() > deadline:
+            state['timed_out'] = True
+            raise _TimeLimit()
+        return _tracer
+    reg, resolver = _forge_get_resolver(None)
+    _sys.settrace(_tracer)
+    try:
+        stdout, result = exec_python(python_text, {}, resolver, args=(), vault_path=_forge_user_vault, registry=reg, snippet_id=snippet_id)
+    except _TimeLimit:
+        return {'ok': False, 'timed_out': True, 'error': '', 'line': 0}
+    except BaseException as e:
+        if state['timed_out']:
+            return {'ok': False, 'timed_out': True, 'error': '', 'line': 0}
+        root = e.__cause__ if e.__cause__ is not None else e
+        line = 0
+        for fs in _tb.extract_tb(root.__traceback__):
+            if fs.filename == '<snippet>':
+                line = fs.lineno
+        return {'ok': False, 'timed_out': False, 'error': type(root).__name__ + ': ' + str(root), 'line': line}
+    finally:
+        _sys.settrace(None)
+    try:
+        text = _json.dumps(result)
+    except Exception as e:
+        return {'ok': False, 'timed_out': False, 'error': 'ValueError: the result is not plain data (' + str(e) + ')', 'line': 0}
+    return {'ok': True, 'bars_json': text}
+
 def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
     """M5 (phrases) - a PHRASE: the bar data + the phrase's parameters -> tagged MusicXML payload of the phrase's bars.
 
@@ -1572,6 +1610,9 @@ def _forge_rhythm_phrase_payload(data_json: str, params_json: str, title: str):
         # compose_sections repeats or cuts each to its length and joins them in order (every bar keeps its own tempo; another meter is compose_sections's own ValueError); compose_sections_lineage says, per bar, which section and which bar of its note it is.
         bars = compose_sections(data["sections"])
         composition_lineage = compose_sections_lineage(data["sections"])
+    elif p.get("kind") == "custom":
+        # 2026-11-02-1155 (M16b): a CUSTOM note. data holds the bars its own Python returned; rhythm_bars_to_stream below checks them (its ValueError names the bar and the field) and draws them like any phrase
+        bars = list(data["bars"])
     else:
         bars = extend_rhythm(data, bars=p["bars"], style=p["style"], tempo_change_pct=p["tempo_change_pct"])
         # M9 (fork on edit): a bar the person edited is its own note; its data stands in for the generated bar of that number (the TS side has already checked its grid). Its tempo is its own.
@@ -1940,6 +1981,8 @@ export interface PyodideHostInstance {
   computeRhythmScore(data: unknown, title: string): Promise<unknown>;
   /** score_first M5: the Score of a phrase (a bar's data + `{bars, style, tempo_change_pct}`), extended by the engine. Pure compute, writes nothing. */
   computePhraseScore(data: unknown, params: unknown, title: string): Promise<unknown>;
+  /** 2026-11-02-1155 (M16b): run the Python of a custom note with a time limit (the run is stopped, not waited for); the bars it returned, or why not. Writes nothing. */
+  runCustomPython(python: string, snippetId: string, seconds: number): Promise<{ ok: true; bars: unknown } | { ok: false; timedOut: boolean; error: string; line: number }>;
   /** 2026-10-25-1000: the engine's count of single-hit changes between two bars (`morph_rhythm_info`'s d), for "Turn this mix into a morph". */
   morphChanges(a: unknown, b: unknown, order: string, seed: number): Promise<number>;
   /** v0.2.17: sync a single user-vault file change into MEMFS so the
@@ -2223,6 +2266,16 @@ _forge_resolve_action_code(
     this.pyodide.globals.set("_forge_phrase_title", title);
     const proxy = this.pyodide.runPython(`_forge_rhythm_phrase_payload(_forge_phrase_data_json, _forge_phrase_params_json, _forge_phrase_title)`);
     return this._unwrap(proxy);
+  }
+
+  async runCustomPython(python: string, snippetId: string, seconds: number): Promise<{ ok: true; bars: unknown } | { ok: false; timedOut: boolean; error: string; line: number }> {
+    this.pyodide.globals.set("_forge_custom_python", python);
+    this.pyodide.globals.set("_forge_custom_id", snippetId);
+    this.pyodide.globals.set("_forge_custom_seconds", seconds);
+    const proxy = this.pyodide.runPython(`_forge_run_custom_bars(_forge_custom_python, _forge_custom_id, _forge_custom_seconds)`);
+    const out = this._unwrap(proxy) as { ok: boolean; timed_out?: boolean; error?: string; line?: number; bars_json?: string };
+    if (out.ok) return { ok: true, bars: JSON.parse(String(out.bars_json)) };
+    return { ok: false, timedOut: out.timed_out === true, error: String(out.error ?? ''), line: Number(out.line ?? 0) };
   }
 
   async morphChanges(a: unknown, b: unknown, order: string, seed: number): Promise<number> {

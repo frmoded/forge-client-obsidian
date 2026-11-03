@@ -5,7 +5,7 @@
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
-import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine } from './phrase-engine.ts';
+import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
 import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, phraseWriteRefusal, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { phraseTabTitle } from './phrase-tab-title-core.ts';
@@ -112,6 +112,7 @@ export class PhraseView extends EditableFileView {
         if (refusal === null) { trace(mixTraceWritten(params)); trace(morphTraceWritten(params)); }
         return refusal === null ? { ok: true } : { ok: false, message: refusal };
       },
+      runCustom: (python, name, limitS) => runCustomPythonViaEngine(python, name, limitS),         // 2026-11-02-1155 (M16b): a custom note's Python is run in the engine, with a limit
       computeArrangement: (data, title) => computeArrangementScoreViaEngine(data, title),
       computeComposition: (data, title) => computeCompositionScoreViaEngine(data, title),         // 2026-10-31-1100 (M17b): ... or a composition         // 2026-10-30-1050 (M15b): a transform may take an arrangement as its source
       compute: async (data, params, title) => {

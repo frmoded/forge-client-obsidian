@@ -5,7 +5,7 @@
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
-import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine } from './phrase-engine.ts';
+import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
@@ -122,7 +122,7 @@ export class CompositionView extends EditableFileView {
       // the composition note's text in, the Score of the whole piece out: every section's note is read fresh by the producer and drawn by the code that draws it
       produce: async (note, title) => {
         const out = await produceComposition({
-          phrases: phraseDepsWithSources({ readNote, compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t) }, { computeArrangement, computeComposition }),
+          phrases: phraseDepsWithSources({ readNote, compute: (data, params, t) => computePhraseScoreViaEngine(data, params, t), runCustom: (python, name, limitS) => runCustomPythonViaEngine(python, name, limitS) }, { computeArrangement, computeComposition }),
           compute: computeComposition,
           computeArrangement,
         }, note as string | { unreadable: string }, title);

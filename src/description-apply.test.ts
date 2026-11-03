@@ -5,11 +5,12 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
-import { DESCRIPTION_DEBOUNCE_MS, PYTHON_DERIVED } from './description-apply-core.ts';
+import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor, readPhraseNote, type PhraseParams } from './phrase-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 import { BOTH_EDITED } from './recipe-apply-core.ts';
-import { asRecipeSourced } from './phrase-notes-core.ts';
+import { CUSTOM_BANNER, asRecipeSourced, isCustomNote } from './phrase-notes-core.ts';
+import { REVERT_GENERATED_CONFIRM } from './description-apply-core.ts';
 import { newArrangementNote } from './arrangement-core.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
@@ -17,11 +18,11 @@ const PATH = 'phrases/phrase_001.md';
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
 const edit = (text: string, from: string, to: string): string => { const d = extractDescription(text); return text.replace(d, d.replace(from, to)); };
 
-function rig(opts: { service?: (payload: any) => Promise<{ status: number; json: unknown }> | null; configured?: boolean; processError?: string; extra?: Record<string, string>; beforeProcess?: (path: string) => void; start?: string } = {}) {
+function rig(opts: { service?: (payload: any) => Promise<{ status: number; json: unknown }> | null; configured?: boolean; processError?: string; confirm?: boolean; extra?: Record<string, string>; beforeProcess?: (path: string) => void; start?: string } = {}) {
   const store = new Map<string, string>([[PATH, opts.start ?? noteContentFor('phrase_001', EXTEND)], ...Object.entries(opts.extra ?? {})]);
   const reads: string[] = [], calls: string[] = [];                                                // every read and every atomic write attempt the controller made (a note that is not ours must cost neither)
   let now = 0; const timers: Array<{ id: number; at: number; fn: () => void }> = []; let ids = 0;
-  const lines: string[] = [], writes: string[] = [], asked: any[] = [];
+  const lines: string[] = [], writes: string[] = [], asked: any[] = [], confirms: string[] = [];
   const doc = win.document;
   const panes: Array<{ path: string; contentEl: HTMLElement }> = [];
   const ports: DescriptionPorts = {
@@ -32,12 +33,13 @@ function rig(opts: { service?: (payload: any) => Promise<{ status: number; json:
     setTimer: (fn, ms) => { const id = ++ids; timers.push({ id, at: now + ms, fn }); return id; },
     clearTimer: (h) => { const i = timers.findIndex((t) => t.id === h); if (i >= 0) timers.splice(i, 1); },
     trace: (l) => lines.push(l), panes: () => panes,
+    ...(opts.confirm !== undefined ? { confirm: async (m: string) => { confirms.push(m); return opts.confirm as boolean; } } : {}),
     ...(opts.service !== undefined ? { askPlan: async (payload: any) => { asked.push(payload); return (await opts.service!(payload))!; }, configured: () => opts.configured !== false } : {}),
   };
   const ctl = createDescriptionController(ports);
   const advance = async (ms: number) => { now += ms; for (;;) { const due = timers.filter((t) => t.at <= now).sort((a, b) => a.at - b.at)[0]; if (!due) break; timers.splice(timers.indexOf(due), 1); due.fn(); } for (let i = 0; i < 30; i++) await Promise.resolve(); };
   const pane = (path = PATH) => { const el = doc.createElement('div'); doc.body.appendChild(el); panes.push({ path, contentEl: el }); return el as HTMLElement; };
-  return { ctl, store, lines, writes, asked, advance, pane, timers, reads, calls };
+  return { ctl, store, lines, writes, asked, advance, pane, timers, reads, calls, confirms };
 }
 const msg = (el: HTMLElement): string => el.querySelector('.forge-description-message')?.textContent ?? '';
 const buttons = (el: HTMLElement): string[] => [...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action') ?? '');
@@ -111,12 +113,14 @@ test('a pane that emptied itself (a reload) gets its bar again at the next sync;
   assert.equal(a.querySelectorAll('.forge-description-bar').length, 1);
 });
 
-test('the Python edited instead: said once ("Python is derived; edit the Description or the Recipe."), nothing is written (2026-10-31-1140, deliberate: a Recipe edit is a source now)', async () => {
+test('the Python edited instead is a SOURCE (2026-11-02-1155, M16b, deliberate: it was "Python is derived; edit the Description or the Recipe.", said and not applied): a known shape (a comment added) is applied by ONE write, the note is Python-sourced, the bar is gone', async () => {
   const r = rig();
   const a = r.pane();
   r.store.set(PATH, r.store.get(PATH)!.replace('```python\n', '```python\n# hand edit\n')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
-  assert.deepEqual(r.writes, []); assert.equal(msg(a), PYTHON_DERIVED); assert.deepEqual(buttons(a), []);
-  assert.deepEqual(r.lines, [`[forge-description] ignored phrase_001: ${PYTHON_DERIVED}`]);
+  assert.equal(r.writes.length, 1);
+  assert.match(r.store.get(PATH)!, /source_facet: python/);
+  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (no change in the music)']);
+  assert.equal(a.querySelector('.forge-description-bar'), null);
 });
 
 test('inspect (a note opened): the bar shows an unparsable sentence or the Update button for one that parses, and WRITES nothing; the Update button applies it', async () => {
@@ -202,7 +206,7 @@ test('the bar\'s sentences: a Description that parses (before it is applied), a 
   assert.match(a.querySelector('.forge-description-preview-recipe')!.textContent!, /Take \[\[bar_007\]\]/);
   const d = rig(); const b = d.pane();
   d.store.set(PATH, d.store.get(PATH)!.replace('```python\n', '```python\n# hand edit\n')); await d.ctl.inspect(PATH);
-  assert.equal(msg(b), PYTHON_DERIVED); assert.deepEqual(buttons(b), []);
+  assert.match(msg(b), /^The Python changed \(no change in the music\); update the note from it\.$/); assert.deepEqual(buttons(b), ['update-python', 'revert']);   // 2026-11-02-1155 (M16b, deliberate): a Python edit is a source
 });
 
 test('a note with nothing to say gets no bar, and a pane that moves to another note loses the bar it had', async () => {
@@ -751,4 +755,102 @@ test('a button that is still in the hand of a script after its bar went away (a 
     await r.advance(1);
   } finally { process.off('unhandledRejection', onRejection); }
   assert.deepEqual(unhandled, [], 'nothing threw');
+});
+
+// ---- 2026-11-02-1155 (M16b): the Python is a source ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+const withPython = (text: string, edit: (py: string) => string): string => { const py = (text.match(/```python\n([\s\S]*?)\n```/) as RegExpMatchArray)[1]; return text.replace(py, edit(py)); };
+const THIN = "  bars[1] = thin_out_bars(bars=[bars[1]], first=1, last=1, amount=0.5)[0]\n  return bars";
+
+test('the Python edited to a known shape (bars=8 -> bars=6): applied once the person stops typing, by ONE write; the Description and the Score follow, the note is Python-sourced, one evidence line, no bar', async () => {
+  const r = rig();
+  const a = r.pane();
+  r.store.set(PATH, withPython(r.store.get(PATH)!, (py) => py.replace('bars=8', 'bars=6')));
+  r.ctl.modified(PATH);
+  await r.advance(DESCRIPTION_DEBOUNCE_MS - 1);
+  assert.deepEqual(r.writes, [], 'not before the wait is over');
+  await r.advance(1);
+  assert.deepEqual(r.writes, [PATH]);
+  assert.match(extractDescription(r.store.get(PATH)!), /6 bars/);
+  assert.equal((readPhraseNote(r.store.get(PATH)!) as any).value.bars, 6);
+  assert.match(r.store.get(PATH)!, /source_facet: python/);
+  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (8 -> 6 bars)']);
+  assert.equal(a.querySelector('.forge-description-bar'), null);
+  await r.advance(5000); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, [PATH], 'its own modify event finds the note synced');
+});
+
+test('the Python edited to something the grammar does not know: the note becomes CUSTOM - Python kept as typed, the json cache kept, one evidence line, and the banner stays (the controls are off) with Revert to generated', async () => {
+  const r = rig();
+  const a = r.pane();
+  const original = r.store.get(PATH)!;
+  const typed = withPython(original, (py) => py.replace('  return bars', THIN));
+  r.store.set(PATH, typed); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, [PATH]);
+  assert.equal(isCustomNote(r.store.get(PATH)!), true);
+  assert.ok(r.store.get(PATH)!.includes('thin_out_bars(bars=[bars[1]]'), 'the Python is what was typed');
+  assert.deepEqual(r.lines, ['[forge-python] phrase_001 is now a custom note (its Python is not a shape the grammar knows)']);
+  assert.equal(msg(a), CUSTOM_BANNER); assert.deepEqual(buttons(a), ['revert-generated']);
+  assert.ok(a.querySelector('.forge-description-bar.is-custom'), 'the banner has its own look');
+  assert.equal((readPhraseNote(r.store.get(PATH)!) as any).value.bars, 8, 'the json cache is what the grammar last understood');
+  // the Description of a custom note is free text: editing it writes nothing and the banner stays
+  r.store.set(PATH, edit(r.store.get(PATH)!, '8 bars', 'eight bars of my own'));
+  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, [PATH]); assert.equal(msg(a), CUSTOM_BANNER);
+});
+
+test('a custom note opened (inspect): the banner is shown and nothing is written; Revert to generated asks first, naming what is lost - "Keep my Python" changes nothing, "Revert" puts back the note the controls made', async () => {
+  const original = noteContentFor('phrase_001', EXTEND);
+  const typed = withPython(original, (py) => py.replace('  return bars', THIN));
+  const first = rig();
+  first.store.set(PATH, typed); first.ctl.modified(PATH); await first.advance(DESCRIPTION_DEBOUNCE_MS);
+  const custom = first.store.get(PATH)!;
+  const no = rig({ start: custom, confirm: false }); const na = no.pane();
+  await no.ctl.inspect(PATH);
+  assert.equal(msg(na), CUSTOM_BANNER); assert.deepEqual(buttons(na), ['revert-generated']); assert.deepEqual(no.writes, []);
+  (na.querySelector('[data-action="revert-generated"]') as HTMLElement).click(); await no.advance(1);
+  assert.deepEqual(no.confirms, [REVERT_GENERATED_CONFIRM]);
+  assert.deepEqual(no.writes, [], 'declined: nothing is written'); assert.equal(isCustomNote(no.store.get(PATH)!), true);
+  const yes = rig({ start: custom, confirm: true }); const ya = yes.pane();
+  await yes.ctl.inspect(PATH);
+  (ya.querySelector('[data-action="revert-generated"]') as HTMLElement).click(); await yes.advance(1);
+  assert.deepEqual(yes.writes, [PATH]);
+  assert.equal(yes.store.get(PATH), original, 'byte for byte the note the controls made');
+  assert.deepEqual(yes.lines, ["[forge-python] reverted phrase_001 to the grammar's Python (from the json cache)"]);
+  assert.equal(ya.querySelector('.forge-description-bar'), null);
+});
+
+test('the Description AND the Python edited: nothing is applied, the bar names both and offers one button for each; "Update from Python" keeps the Python (the Description edit is dropped)', async () => {
+  const r = rig();
+  const a = r.pane();
+  r.store.set(PATH, withPython(edit(r.store.get(PATH)!, '8 bars', '3 bars'), (py) => py.replace('bars=8', 'bars=5')));
+  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, []);
+  assert.equal(msg(a), 'Description and Python were both edited; keep one: Update from Description / Update from Python.');
+  assert.deepEqual(buttons(a), ['update', 'update-python']);
+  assert.deepEqual(r.lines, ['[forge-python] refused phrase_001: Description and Python were both edited; keep one: Update from Description / Update from Python.']);
+  (a.querySelector('[data-action="update-python"]') as HTMLElement).click(); await r.advance(1);
+  assert.equal((readPhraseNote(r.store.get(PATH)!) as any).value.bars, 5, 'the Python won');
+  assert.equal(a.querySelector('.forge-description-bar'), null);
+});
+
+test('the Python edited while the bar already says something about the Description (a sentence that does not parse) is "both edited" too, and Revert drops the Python edit with the rest', async () => {
+  const r = rig();
+  const a = r.pane();
+  r.store.set(PATH, withPython(edit(r.store.get(PATH)!, '8 bars', '8 barz'), (py) => py.replace('bars=8', 'bars=5')));
+  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(buttons(a), ['update', 'update-python']);
+  assert.deepEqual(r.writes, []);
+});
+
+test('dispose with a custom banner on screen takes the bar away and a later modify does nothing', async () => {
+  const r = rig();
+  const a = r.pane();
+  r.store.set(PATH, withPython(r.store.get(PATH)!, (py) => py.replace('  return bars', THIN)));
+  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.ok(a.querySelector('.forge-description-bar'));
+  r.ctl.dispose();
+  assert.equal(a.querySelector('.forge-description-bar'), null);
+  r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, [PATH]);
 });

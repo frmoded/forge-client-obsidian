@@ -14,11 +14,13 @@
 // the Score redraws when the vault's modify event for that note arrives (ONE path: a hand edit of the JSON, a sync and a control all redraw the same way). The Score is the live Score
 // controller with a `produce` step of its own — no second scheduler: debounce, one render in flight, the latest request queued.
 
+import { isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
+import { extractRecipeSection } from './v2-note-core.ts';
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import type { ScoreInspectorPorts } from './score-inspector.ts';
 import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
-import { barsContributedBy, chipsFor, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
+import { barsContributedBy, chipsFor, customChips, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import type { ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
@@ -541,6 +543,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   computeArrangement?: ArrangementDeps['compute'];
   /** 2026-10-31-1100 (M17b): the same for a COMPOSITION as a transform's source (with `computeArrangement`; absent = such a transform is a refusal that says so). */
   computeComposition?: CompositionDeps['compute'];
+  /** 2026-11-02-1155 (M16b): run the Python of a CUSTOM note in the engine, with a time limit. Absent = a custom note cannot be drawn here and the Score says so. */
+  runCustom?: PhraseScoreDeps['runCustom'];
   /** M9 (fork on edit): the vault side of "Edit this bar" (create the fork note, list `bars/`, tell the person). Absent = the extend inspector offers no Edit this bar / Revert to generated. The phrase write and
    *  the opener are the ports above (`writePhrase`, `inspector.openNote`). */
   fork?: Pick<ForkPorts<unknown>, 'listBarBasenames' | 'exists' | 'create' | 'notify' | 'isAlreadyExists'>;
@@ -796,7 +800,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       inspector: inspectorPorts,
       debounceMs: k === 'mix' || k === 'morph' ? MIX_SCORE_DEBOUNCE_MS : undefined,           // a mix and a morph are dragged (sliders): the first change draws at once, later ones collapse into one draw
       produce: async (note, title) => {
-        const base = { readNote: ports.readNote, compute: ports.compute };
+        const base = { readNote: ports.readNote, compute: ports.compute, ...(ports.runCustom ? { runCustom: ports.runCustom } : {}) };
         const deps = ports.computeArrangement && ports.computeComposition ? phraseDepsWithSources(base, { computeArrangement: ports.computeArrangement, computeComposition: ports.computeComposition }) : ports.computeArrangement ? phraseDepsWithArrangements(base, ports.computeArrangement) : base;
         const out = await producePhraseNote(deps, note as NoteText, title);
         if (out.kind === 'score' && !disposed) {
@@ -845,8 +849,10 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     // The surface follows what the note SAYS it is, even when the rest of it is wrong (a mix with weight 3 still gets the mix strip, disabled, and the Score says what is wrong).
     const says = typeof text === 'string' ? readPhraseKind(text) : null;
     if (says !== null && says !== kind) { teardown(); build(says); }
-    if (!writing && want === null) strip.set(salvage ? salvage.shown : current);                  // while a drag's writes are in flight the sliders stay where the person has them
-    structureStrip?.set(current ? chipsFor(phraseName, current) : []);
+    // 2026-11-02-1155 (M16b): a CUSTOM note has no controls: the strip is disabled (the banner above the pane says why: the description bar; the Score is what its Python makes; the chips are the notes it calls)
+    const custom = typeof text === 'string' && isCustomNote(text);
+    if (!writing && want === null) strip.set(custom ? null : salvage ? salvage.shown : current);                  // while a drag's writes are in flight the sliders stay where the person has them
+    structureStrip?.set(custom ? customChips(phraseName, pythonTextOf(text as string) ?? '', extractRecipeSection(text as string) ?? '') : current ? chipsFor(phraseName, current) : []);
     if (bracket) {
       const ext = current && current.kind === 'extend' && !salvage ? current : null;
       bracket.style.display = ext ? '' : 'none';

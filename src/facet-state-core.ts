@@ -28,6 +28,8 @@ export const FacetState = {
   DerivedFromRecipe: 'derived_from_recipe',
   DerivedFromDescriptionOutOfDate: 'derived_from_description_out_of_date',
   DerivedFromRecipeOutOfDate: 'derived_from_recipe_out_of_date',
+  DerivedFromPython: 'derived_from_python',
+  DerivedFromPythonOutOfDate: 'derived_from_python_out_of_date',
   Ignored: 'ignored',
 } as const;
 export type FacetState = typeof FacetState[keyof typeof FacetState];
@@ -114,13 +116,19 @@ export function computeFacetStates(
     // A note WITHOUT the stamp (every Forge note written before, in any vault) keeps the reading it always had: its Description is upstream of the Recipe and is ignored.
     const parent = fm.getFrontmatterField('description_derived_from_recipe_hash');
     if (parent !== null) out.description = parent === currentBodyHashes.recipe ? FacetState.DerivedFromRecipe : FacetState.DerivedFromRecipeOutOfDate;
+  } else if (canonical === 'python') {
+    // 2026-11-02-1155 (M16b): the same for the Description of a Python-sourced note.
+    const parent = fm.getFrontmatterField('description_derived_from_python_hash');
+    if (parent !== null) out.description = parent === currentBodyHashes.python ? FacetState.DerivedFromPython : FacetState.DerivedFromPythonOutOfDate;
   }
 
   // Recipe
   if (canonical === 'recipe') {
     out.recipe = FacetState.Source;
   } else if (canonical === 'python') {
-    out.recipe = FacetState.Ignored;
+    // 2026-11-02-1155 (M16b): the Recipe of a Python-sourced note the plugin wrote is stamped as derived from that Python; one WITHOUT the stamp keeps the reading it always had (ignored).
+    const parent = fm.getFrontmatterField('recipe_derived_from_python_hash');
+    if (parent !== null) out.recipe = parent === currentBodyHashes.python ? FacetState.DerivedFromPython : FacetState.DerivedFromPythonOutOfDate;
   } else {
     // canonical === 'description' — Recipe is downstream.
     // CW-1700: compare parent-hash stamp against CURRENT-body description hash.
@@ -194,6 +202,10 @@ export function suffixTextForState(state: FacetState): string {
       return '— derived from Description, out of date';
     case FacetState.DerivedFromRecipeOutOfDate:
       return '— derived from Recipe, out of date';
+    case FacetState.DerivedFromPython:
+      return '— derived from Python';
+    case FacetState.DerivedFromPythonOutOfDate:
+      return '— derived from Python, out of date';
     case FacetState.Ignored:
       return '— ignored';
   }

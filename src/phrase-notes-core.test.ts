@@ -101,10 +101,11 @@ test('refresh keeps every other frontmatter line (read_only, anything a person a
   assert.ok(r.text.includes('read_only: false\r\ntags: [demo]\r\n'), 'the person\'s own lines stay');
   assert.ok(!/[^\r]\n/.test(r.text), 'CRLF all the way');
   // 2026-10-30-1050 (M15b): the Recipe and the Python are derived, so a hand edit of them is overwritten; the DESCRIPTION is the source, so a hand edit of it is never overwritten (refused, the note untouched)
-  // 2026-10-31-1140 (M16a, deliberate): only the PYTHON is derived now; the Recipe is a source too, so a hand edit of it is never overwritten either (refused, the note untouched)
+  // 2026-10-31-1140 (M16a, deliberate): the Recipe is a source too, so a hand edit of it is never overwritten either (refused, the note untouched)
   const editedPython = r.text.replace('```python\r\n', '```python\r\n# my own\r\n');
   const back = refreshPhraseNoteText(editedPython, 'phrase_003');
-  assert.ok(back.ok && back.text === r.text, 'a hand-edited Python is regenerated to what it was');
+  // 2026-11-02-1155 (M16b, deliberate): the Python is a source too now; a hand edit of it is never overwritten either (refused, the note untouched; Update from Python or Revert decide)
+  assert.deepEqual(back, { ok: false, message: 'The Python was edited by hand; press Update from Python first or revert it.' });
   const editedRecipe = r.text.replace('# Recipe\r\n\r\nTake', '# Recipe\r\n\r\nTake my own');
   assert.deepEqual(refreshPhraseNoteText(editedRecipe, 'phrase_003'), { ok: false, message: 'The Recipe was edited by hand; press Update from Recipe first or revert it.' });
   const editedDescription = r.text.replace('musical order.\r\n\r\n# Recipe', 'MY OWN WORDS.\r\n\r\n# Recipe');

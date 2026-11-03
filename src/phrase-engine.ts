@@ -32,3 +32,10 @@ export async function computeCompositionScoreViaEngine(data: CompositionInput, t
   if (!host) throw new Error('the engine is not available');
   return (await host.getInstance()).computePhraseScore(data, { kind: 'composition' }, title);
 }
+
+/** 2026-11-02-1155 (M16b): run the Python of a CUSTOM note in the engine with a time limit (the person's mistakes come back as `ok: false`; only an engine that is not there throws). */
+export async function runCustomPythonViaEngine(python: string, snippetId: string, seconds: number): Promise<{ ok: true; bars: unknown } | { ok: false; timedOut: boolean; error: string; line: number }> {
+  const host = getPyodideHost();
+  if (!host) throw new Error('the engine is not available');
+  return (await host.getInstance()).runCustomPython(python, snippetId, seconds);
+}

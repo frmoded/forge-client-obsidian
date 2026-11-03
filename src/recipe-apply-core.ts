@@ -8,8 +8,6 @@ import { parseRecipe } from './recipe-grammar-core.ts';
 import { wrongKindSentence, type Family } from './note-family-core.ts';
 import type { GrammarError, GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 
-/** The Python is derived from the Recipe and the Recipe from the params: a hand edit of the Python alone is said, not applied. */
-export const PYTHON_DERIVED = 'Python is derived; edit the Description or the Recipe.';
 /** The one sentence when a person changed BOTH facets since the note was written: the bar offers the two buttons. */
 export const BOTH_EDITED = 'Description and Recipe were both edited; keep one: Update from Description / Update from Recipe.';
 

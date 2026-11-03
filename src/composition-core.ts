@@ -6,7 +6,8 @@
 //   * the Score is drawn from the json by the code that draws every phrase (produceComposition -> the engine glue's `composition` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 // A section of `length` N bars is REPEATED to fill N or CUT to N (never padded, never stretched), no `length` is all its bars once; `repeat` R plays the whole section R more times (the sentence "Repeat that R times."). Every bar keeps its tempo.
 import { barsOfPayload, producePhrase, readPhraseNote, TRANSFORM_DEPTH_MAX, type PhraseScoreDeps } from './phrase-core.ts';
-import { callNote, extractPhraseJsonBlock, handEditRefusalOf, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { produceCustomScore, type CustomDeps } from './custom-note-core.ts';
 import { describe, compositionSentences } from './phrase-describe-core.ts';
 import { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 export { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
@@ -169,10 +170,11 @@ export function composeRefusal(message: string): string | null {
 }
 
 /** The deps a phrase is drawn with when a transform may take an arrangement OR a composition as its source: the phrase deps (`readNote`, `compute`), the chain of sources being drawn, and the two ways to draw the other kinds of note. */
-export function phraseDepsWithSources(base: Pick<PhraseScoreDeps, 'readNote' | 'compute'>, engines: { computeArrangement: ArrangementDeps['compute']; computeComposition: CompositionDeps['compute'] }, chain: readonly string[] = []): PhraseScoreDeps {
+export function phraseDepsWithSources(base: Pick<PhraseScoreDeps, 'readNote' | 'compute' | 'runCustom'>, engines: { computeArrangement: ArrangementDeps['compute']; computeComposition: CompositionDeps['compute'] }, chain: readonly string[] = []): PhraseScoreDeps {
   return {
     readNote: base.readNote,
     compute: base.compute,
+    ...(base.runCustom ? { runCustom: base.runCustom } : {}),
     chain,
     arrangementBars: (note, name, drawing) => produceArrangement({ phrases: phraseDepsWithSources(base, engines, drawing), compute: engines.computeArrangement }, note, name),
     compositionBars: (note, name, drawing) => produceComposition({ phrases: phraseDepsWithSources(base, engines, drawing), compute: engines.computeComposition, computeArrangement: engines.computeArrangement, chain: drawing }, note, name),
@@ -204,6 +206,7 @@ async function barsOfSource(deps: CompositionDeps, source: string, chain: readon
  *  too deep, or two sections the engine refuses to join (another meter), is a refusal naming which and why. The sources of the payload ride along (`forge_composition`) for the tab. */
 export async function produceComposition(deps: CompositionDeps, note: string | { unreadable: string }, title: string): Promise<ScoreOutcome> {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Composition: the composition note could not be read (${note.unreadable}).` };
+  if (isCustomNote(note)) return produceCustomScore({ readNote: deps.phrases.readNote, runCustom: deps.phrases.runCustom, compute: deps.phrases.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
   const read = readCompositionNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Composition: ${read.message}` };
   const chain = deps.chain && deps.chain.length > 0 ? deps.chain : [`${COMPOSITION_FOLDER}/${title}`];

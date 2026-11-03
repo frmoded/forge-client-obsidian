@@ -21,7 +21,7 @@ const LIB = [
   '/** Holds `mb` megabytes, touched and KEPT (the resident size counts them): what a real-plugin test does while it bundles. */',
   'const held: Buffer[] = [];', 'export function hold(mb: number): number {', '  held.push(Buffer.alloc(mb * 1024 * 1024, 1));', '  return held.length;', '}',
 ].join('\n');
-const HUNGRY = ["import { test } from 'node:test'; import assert from 'node:assert/strict';", "import { hold, twice } from './lib.ts';", "test('twice, holding 700 MB for a while', async () => { assert.equal(twice(2), 4); assert.ok(hold(700) > 0); await new Promise((r) => setTimeout(r, 1500)); });"].join('\n');
+const HUNGRY = ["import { test } from 'node:test'; import assert from 'node:assert/strict';", "import { hold, twice } from './lib.ts';", "test('twice, holding 300 MB for a while', async () => { assert.equal(twice(2), 4); assert.ok(hold(300) > 0); await new Promise((r) => setTimeout(r, 2500)); });"].join('\n');
 const RED = ["import { test } from 'node:test'; import assert from 'node:assert/strict';", "import { twice } from './lib.ts';", "test('always red', () => {", "  assert.equal(twice(2), 5, 'two doubled is four');", '});'].join('\n');
 function project(extra = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mutate-learned-cap-'));
@@ -42,9 +42,9 @@ test('a test file that NEEDS more than the cap is measured and run under what it
       ['src/lib.ts', 'twice is off by one', 'return n * 2;', 'return n * 2 + 1;', ['src/hungry.test.ts']],
       ['src/lib.ts', 'hold grows three-fold', 'held.push(Buffer.alloc(mb * 1024 * 1024, 1))', 'held.push(Buffer.alloc(mb * 3 * 1024 * 1024, 1))', ['src/hungry.test.ts']],
     ]));
-    const r = run(proj, hand, { FORGE_TEST_RSS_MB: '400' });
+    const r = run(proj, hand, { FORGE_TEST_RSS_MB: '250' });       // 2026-11-02-1155: 300 MB held under a 250 MB cap (it was 700 under 400: two matrix legs at once compress a 2 GB runaway before the watchdog's next look)
     assert.doesNotMatch(`${r.stdout}\n${r.stderr}`, /BASELINE NOT GREEN/, `${r.stdout}\n${r.stderr}`);
-    assert.match(r.stderr, /mutate: src\/hungry\.test\.ts needs about \d+ MB of process tree unmutated \(the cap is 400 MB, FORGE_TEST_RSS_MB\): its cap is raised to \d+ MB for this run/, r.stderr);
+    assert.match(r.stderr, /mutate: src\/hungry\.test\.ts needs about \d+ MB of process tree unmutated \(the cap is 250 MB, FORGE_TEST_RSS_MB\): its cap is raised to \d+ MB for this run/, r.stderr);
     assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
     assert.match(r.stdout, /generated 3 \| killed 2 .*survived 1/, r.stdout);
     assert.match(r.stdout, /by heap cap 1\b/, 'only the runaway is a kill by the cap');

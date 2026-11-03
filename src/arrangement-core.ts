@@ -5,7 +5,8 @@
 //   * Python: `def compute(context):` reading each kit and phrase by calling its name (the way a Forge note reads a data note) and returning combine_tracks(...), the BAR LIST (the contract of a phrase's compute since 2026-10-29-0810).
 // The Score is drawn from the json by the code that draws every phrase (produceArrangement -> the engine glue's `arrangement` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 import { barsOfPayload, producePhrase, readPhraseNote, type PhraseScoreDeps } from './phrase-core.ts';
-import { callNote, extractPhraseJsonBlock, handEditRefusalOf, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
+import { produceCustomScore, type CustomDeps } from './custom-note-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
@@ -203,6 +204,7 @@ export function combineRefusal(message: string): string | null {
  *  phrase that is missing or unusable, or two tracks the engine refuses to play together, is a refusal naming which and why. */
 export async function produceArrangement(deps: ArrangementDeps, note: string | { unreadable: string }, title: string): Promise<ScoreOutcome> {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Arrangement: the arrangement note could not be read (${note.unreadable}).` };
+  if (isCustomNote(note)) return produceCustomScore({ readNote: deps.phrases.readNote, runCustom: deps.phrases.runCustom, compute: deps.phrases.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
   const read = readArrangementNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Arrangement: ${read.message}` };
   if (nothingPlays(read.value)) return { kind: 'refusal', message: ALL_MUTED };         // from the note alone: no kit or phrase is read, no engine round trip

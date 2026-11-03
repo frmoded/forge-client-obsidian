@@ -78,6 +78,8 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
   let asked = 0;                      // how many times the data changed; a score drawn from an older ask is stale the moment it is drawn
   let marked = false;                 // the score on screen is flagged stale (markPending)
   const mark = (on: boolean): void => { if (!deps.markPending || marked === on) return; marked = on; deps.view.pending?.(on); };
+  let dimmed = false;                 // the score on screen is dimmed because a custom run failed (not because a change is waiting)
+  const dim = (on: boolean): void => { if (dimmed === on) return; dimmed = on; deps.view.pending?.(on); };
   const timed = typeof deps.now === 'function' && typeof deps.onTiming === 'function';
   const report = (t0: number, engineMs: number, outcome: LiveScoreTiming['outcome']) => {
     if (timed) deps.onTiming!({ totalMs: deps.now!() - t0, engineMs, outcome });
@@ -98,7 +100,10 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
       const engineMs = timed ? deps.now!() - e0 : 0;
       if (disposed || mine !== seq) { report(t0, engineMs, 'superseded'); return; }   // a newer render started, or the tab moved on: draw nothing
       if (outcome.kind !== 'score') {
+        // 2026-11-02-1155 (M16b): a custom note's run that failed KEEPS the Score on screen, dimmed, with the sentence above it (the person's Python is theirs to fix; the last good drawing is not thrown away)
+        if (outcome.keep === true && drawn) { dim(true); deps.view.status(outcome.message); failed = true; report(t0, engineMs, outcome.kind); return; }
         mark(false);
+        dim(false);
         deps.view.clear();
         drawn = false;
         deps.view.status(outcome.message);
@@ -107,6 +112,7 @@ export function createLiveScore(deps: LiveScoreDeps): LiveScore {
         return;
       }
       let drew: boolean;
+      dim(false);
       mark(asked !== askedAtStart);      // the new score replaces the stale one in this same step; one asked for since this render began is already stale
       try {
         drew = deps.view.draw(outcome.payload);
