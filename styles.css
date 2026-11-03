@@ -1875,9 +1875,6 @@
 .forge-rhythm-score-message { min-height: 0; padding: 2px 4px; font-size: var(--font-ui-small); color: var(--text-muted); }
 .forge-rhythm-score-message:empty { display: none; }
 .forge-rhythm-score-message.is-error { color: var(--text-error); }
-.forge-rhythm-forge-log { display: block; margin: 2px 4px 2px auto; padding: 0 6px; font-size: var(--font-ui-smaller); color: var(--text-faint); background: transparent; border: none; box-shadow: none; cursor: pointer; }
-.forge-rhythm-forge-log:hover { color: var(--text-muted); }
-.forge-rhythm-forge-log:focus-visible { outline: 1px solid var(--interactive-accent); }
 
 /* score_first M5 — the phrase tab: a control strip (bars, style, tempo change) above the live Score. Only a score-first vault ever opens it. */
 .forge-phrase-controls {

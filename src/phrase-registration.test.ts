@@ -222,6 +222,7 @@ for (const edition of ['lean', 'music'] as const) {
       a.addClass = (c: string) => a.classList.add(c); a.removeClass = (c: string) => a.classList.remove(c); a.setText = (t: string) => { a.textContent = t; };
       Object.assign(a, { icon, title, cb, removed: false });
       const realRemove = a.remove.bind(a); a.remove = () => { a.removed = true; realRemove(); };
+      el.prepend(a);                                                            // 1155-91: like Obsidian's, an action lives in the header, so main.ts's sweep of its own buttons can find and remove it
       actions.push(a); return a;
     };
     view.leaf = { setViewState: async (s: any) => { states.push(s); }, view, getRoot: () => null };
@@ -259,10 +260,12 @@ for (const edition of ['lean', 'music'] as const) {
     });
   }
 
-  test(`[${edition}] P3: a bar's text tab in a score-first vault, and the same path in a vault without the profile, have EXACTLY the header they had before (the rhythm note buttons); no phrase button anywhere else`, async () => {
+  test(`[${edition}] P3: a bar's text tab in a score-first vault, and the same path in a vault without the profile, have the header they had before (the rhythm note buttons) - except the edges toggle, which a score-first vault no longer draws (1155-91); no phrase button anywhere else`, async () => {
     const bar = await headerFor(SCORE_FIRST_TOML, 'bars/bar_001.md');
     const barElsewhere = await headerFor(TUTORIAL_TOML, 'bars/bar_001.md');
-    assert.deepEqual(bar.titles, barElsewhere.titles, 'a bar is the same with and without the profile');
+    assert.ok(barElsewhere.titles.some((t) => /Toggle edges panel/.test(t)), 'non-vacuity: outside a score-first vault the edges toggle is there');
+    assert.ok(!bar.titles.some((t) => /Toggle edges panel/.test(t)), 'a score-first vault does not draw it');
+    assert.deepEqual(bar.titles, barElsewhere.titles.filter((t) => !/Toggle edges panel/.test(t)), 'a bar is the same with and without the profile, but for that one button');
     assert.ok(bar.titles.some((t) => /Open as Beat Box/.test(t)), 'non-vacuity: the rhythm buttons really are there for a bar');
     const phraseNamedNoteElsewhere = await headerFor(TUTORIAL_TOML, 'phrases/phrase_001.md');
     assert.deepEqual(phraseNamedNoteElsewhere.titles, barElsewhere.titles, 'outside a score-first vault a note named like a phrase is just a note: the same buttons a bar gets');

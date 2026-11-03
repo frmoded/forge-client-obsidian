@@ -36,6 +36,11 @@ export const MARKDOWN_HEADER_ACTIONS: readonly MarkdownHeaderAction[] = [
   },
 ];
 
+/** 2026-11-03-1155-91: the header actions (and their commands) a SCORE-FIRST vault does not show. Every other vault keeps all of them: this answers `true` for every id when `scoreFirst` is false (P3). The edges view itself stays
+ *  registered (a vault that is not score-first still opens it, and so does any code that asks for it); only its header button and its "Toggle edges panel" command are hidden here. */
+export const HIDDEN_IN_SCORE_FIRST: readonly string[] = ['edges-toggle'];
+export const headerActionShown = (id: string, scoreFirst: boolean): boolean => !(scoreFirst && HIDDEN_IN_SCORE_FIRST.includes(id));
+
 export interface BeatBoxAction { id: string; icon: string; title: string }
 
 /** Actions only the Beat Box view has. */

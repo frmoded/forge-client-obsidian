@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { CACHE_NOTE, SOURCE_CHAIN_NOTE } from './phrase-notes-core.ts';
+import { CACHE_NOTE } from './phrase-notes-core.ts';
 import { chainStampLines } from './test-support/source-chain-golden.ts';
 import { noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
@@ -40,7 +40,7 @@ test('the arrangement note, golden: Description naming the tracks and the rest r
   assert.equal(newArrangementNote('arr_001', ARR), [
     '---', 'type: data', 'content_type: json', `description: ${JSON.stringify(desc)}`, 'links:', '  - "[[phrase_003]]"', '  - "[[rock]]"', '  - "[[phrase_009]]"', '  - "[[latin]]"',
     ...chainStampLines(said, steps, python), '---', '',
-    SOURCE_CHAIN_NOTE, '', '# Description', '', said, '', '# Recipe', '', ...steps, '',
+    '# Description', '', said, '', '# Recipe', '', ...steps, '',
     '# Python', '', '```python', python, '```', '',
     '# Cache', '', CACHE_NOTE, '',
     '```json', '{', '  "kind": "arrangement",', '  "tracks": [', '    {"kit": "rock", "phrase": "phrase_003"},', '    {"kit": "latin", "phrase": "phrase_009"}', '  ]', '}', '```', '',

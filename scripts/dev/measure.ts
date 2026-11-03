@@ -214,9 +214,9 @@ async function m4Scenario() {
   const line = () => p.ev(`(document.querySelector('.forge-rhythm-score-message')||{}).textContent||''`);
   const lineIsError = () => p.ev(`!!document.querySelector('.forge-rhythm-score-message.is-error')`);
   const status = () => p.ev(`(document.querySelector('.forge-rhythm-edit-score-status')||{}).textContent||''`);
-  const logLabel = () => p.ev(`(document.querySelector('.forge-rhythm-forge-log')||{}).textContent||''`);
+  const logLabel = () => p.ev(`document.querySelectorAll('.forge-rhythm-forge-log').length`);           // 1155-91: the button is gone; this is how many there are (0)
   try {
-    await p.ev(`window.__messageDelivery.setScoreFirst(true); window.__lab = window.__panelLab.build(document.getElementById('lab')); window.__messageDelivery.setOpenLog(() => { void window.__lab.openPanelByGesture(); }); true`);
+    await p.ev(`window.__messageDelivery.setScoreFirst(true); window.__lab = window.__panelLab.build(document.getElementById('lab')); true`);
     await p.ev(`window.__mountTab(document.getElementById('pane'), { note: ${JSON.stringify(NOTE)}, widget: ${JSON.stringify(widget)}, toml: ${JSON.stringify(PLAYGROUND_TOML)} })`);
     for (let w = 0; w < 15000; w += 100) { if (await p.ev(`!!document.querySelector('.forge-rhythm-score-host svg')`)) break; await sleep(100); }
     await sleep(500);
@@ -245,11 +245,10 @@ async function m4Scenario() {
     res.steps.successLine = { line: await line() };
     await sleep(6600);
     res.steps.successLineLater = { line: await line() };
-    // "Forge log (N)" opens the panel, which then holds EVERY message, in order
-    res.steps.beforeLogClick = { panelOnScreen: await vis(), logButton: await logLabel() };
-    const btn = await p.findNode((_n: any, a: any) => a.class && /forge-rhythm-forge-log/.test(a.class));
-    const bc = await p.boxCenter(btn.nodeId); await p.click(bc.x, bc.y); await sleep(500);
-    res.steps.afterLogClick = { panelOnScreen: await vis(), panelText: await p.ev('window.__lab.panelText()'), logButton: await logLabel() };
+    // 1155-91: no "Forge log (N)" button any more. The palette command opens the panel (the lab's own gesture stands in for it), which then holds EVERY message, in order
+    res.steps.beforeLogClick = { panelOnScreen: await vis(), logButtons: await logLabel() };
+    await p.ev('window.__lab.openPanelByGesture()'); await sleep(500);
+    res.steps.afterLogClick = { panelOnScreen: await vis(), panelText: await p.ev('window.__lab.panelText()'), logButtons: await logLabel() };
     if (SHOTS) await p.shot(path.join(SHOTS, 'm4-after-log-click.png'), { x: 0, y: 0, width: 760, height: 900 });
     res.errors = (await p.ev('window.__errors.slice()')).filter((e: string) => !/resume|AudioContext|SoundFont|is not a constructor/.test(e));
   } finally { p.close(); }

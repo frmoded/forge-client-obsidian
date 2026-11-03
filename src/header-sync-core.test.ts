@@ -223,3 +223,9 @@ test('install: dispose() also cancels the catch-up passes', () => {
   c.advance(10000);
   assert.equal(syncs.length, n);
 });
+
+test('headerSignature: a score-first vault has its own signature (its header has no edges button, so the answer arriving late must rebuild), every other vault\'s is unchanged (1155-91)', () => {
+  assert.equal(headerSignature('a.md', 'data', true), 'a.md|data|score-first');
+  assert.equal(headerSignature('a.md', 'data', false), headerSignature('a.md', 'data'));
+  assert.notEqual(headerSignature('a.md', 'data', true), headerSignature('a.md', 'data'));
+});

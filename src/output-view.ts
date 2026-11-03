@@ -126,7 +126,7 @@ export class ForgeOutputView extends ItemView {
     this.stripEl = contentEl.createDiv({ cls: 'forge-panel-inputs' });
     this.renderStrip();
 
-    // score_first M4 (drain 2026-10-21-2010): only in a score-first vault. Entries kept while the panel did not exist are replayed now, and "Forge log (N)" counts from here.
+    // score_first M4 (drain 2026-10-21-2010): only in a score-first vault. Entries kept while the panel did not exist are replayed now, and the unread counter counts from here.
     if (messageDelivery.isScoreFirst()) {
       messageDelivery.drain(this);
       messageDelivery.markOpened();
@@ -828,7 +828,7 @@ export class ForgeOutputView extends ItemView {
       meta.createEl('span', { text: snippetId, cls: 'forge-output-id' });
       meta.createEl('span', { text: new Date().toLocaleTimeString(), cls: 'forge-output-time' });
     }
-    // score_first M4: a message that reached a panel nobody is looking at counts toward "Forge log (N)" (score-first only; elsewhere nothing reads the counter).
+    // score_first M4: a message that reached a panel nobody is looking at is counted as unread (score-first only; since 1155-91 no button shows the count: tests read it as evidence that nothing reached the panel).
     if (messageDelivery.isScoreFirst() && !(this.containerEl as unknown as { isShown?: () => boolean }).isShown?.()) messageDelivery.bump();
     return entry;
   }

@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
 import { formatPhraseJson, noteContentFor, readPhraseNote, refreshPhraseNoteText, type PhraseParams, type TransformOp } from './phrase-core.ts';
-import { CACHE_NOTE, SOURCE_CHAIN_NOTE, phraseDescription, phraseLinks, phraseParts, phrasePython, phraseRecipeSteps, sourceChainSections } from './phrase-notes-core.ts';
+import { CACHE_NOTE, phraseDescription, phraseLinks, phraseParts, phrasePython, phraseRecipeSteps, sourceChainSections } from './phrase-notes-core.ts';
 import { chainStampLines } from './test-support/source-chain-golden.ts';
 import { chipsFor, barParent, barsContributedBy, stripText } from './structure-strip-core.ts';
 
@@ -60,7 +60,6 @@ test('the whole note, golden: frontmatter with whole-value links, the comment, #
     'links:', '  - "[[phrase_006]]"',
     ...chainStampLines('Take [[phrase_006]]. Thin out bars 3 to 5, kick row, by half, keeping the downbeat.', ['Take [[phrase_006]].', 'Thin out bars 3 to 5, kick row: remove half of the hits, keeping the strongest beats.'], phrasePython(T)),
     '---', '',
-    SOURCE_CHAIN_NOTE, '',
     '# Description', '', 'Take [[phrase_006]]. Thin out bars 3 to 5, kick row, by half, keeping the downbeat.', '',
     '# Recipe', '', 'Take [[phrase_006]].', 'Thin out bars 3 to 5, kick row: remove half of the hits, keeping the strongest beats.', '',
     '# Python', '', '```python', phrasePython(T), '```', '',

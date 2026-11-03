@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { applyPhraseWrite, formatPhraseJson, mixNoteContent, morphNoteContent, phraseNoteContent, readPhraseKind, readPhraseNote, refreshPhraseNoteText, salvageOverrideRefusal, type PhraseParams } from './phrase-core.ts';
-import { CACHE_NOTE, SOURCE_CHAIN_NOTE, barDescription, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps, refreshBarNoteText } from './phrase-notes-core.ts';
+import { CACHE_NOTE, barDescription, phraseDescription, phraseLinks, phrasePython, phraseRecipeSteps, refreshBarNoteText } from './phrase-notes-core.ts';
 import { chainStampLines } from './test-support/source-chain-golden.ts';
 import { forkNoteContent } from './phrase-fork-core.ts';
 import { applySave, formatRhythmJson, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
@@ -55,7 +55,6 @@ test('a new phrase / mix / morph note: frontmatter with description and links, t
     'links:', '  - "[[bar_007]]"', '  - "[[bar_008]]"',
     ...chainStampLines('Morph [[bar_007]] into [[bar_008]] over 17 bars, in musical order.', ['Take [[bar_007]] and [[bar_008]].', 'Morph from the first to the second over 17 bars, in musical order.'], phrasePython(MORPH)),
     '---', '',
-    SOURCE_CHAIN_NOTE, '',
     '# Description', '', 'Morph [[bar_007]] into [[bar_008]] over 17 bars, in musical order.', '',
     '# Recipe', '', 'Take [[bar_007]] and [[bar_008]].', 'Morph from the first to the second over 17 bars, in musical order.', '',
     '# Python', '', '```python', phrasePython(MORPH), '```', '',

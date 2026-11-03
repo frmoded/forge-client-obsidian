@@ -26,8 +26,8 @@ export const HEADER_SYNC_DEBOUNCE_MS = 60;
 export const HEADER_SYNC_CATCH_UP_MS = [300, 1200, 4000] as const;
 
 /** What a view's header was last built for. A different note or a changed frontmatter `type` changes the set of actions. */
-export function headerSignature(path: string | null | undefined, type: unknown): string {
-  return `${path ?? ''}|${typeof type === 'string' ? type : ''}`;
+export function headerSignature(path: string | null | undefined, type: unknown, scoreFirst = false): string {
+  return `${path ?? ''}|${typeof type === 'string' ? type : ''}${scoreFirst ? '|score-first' : ''}`;   // 1155-91: the set of actions differs in a score-first vault; every other vault's signature is as it was
 }
 
 /** Rebuild only when the actions are missing, or were built for something else. */

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { PhraseParams } from './phrase-core.ts';
-import { CACHE_NOTE, DERIVED_NOTE, SOURCE_CHAIN_KEYS, SOURCE_CHAIN_NOTE, barDescription, extractPhraseJsonBlock, newPhraseNote, phraseDescription, phraseLinks, phraseParts, phrasePython, phraseRecipeSteps, refreshBarNoteText, renderPhraseNote, sourceChainSections } from './phrase-notes-core.ts';
+import { CACHE_NOTE, DERIVED_NOTE, SOURCE_CHAIN_KEYS, barDescription, extractPhraseJsonBlock, newPhraseNote, phraseDescription, phraseLinks, phraseParts, phrasePython, phraseRecipeSteps, refreshBarNoteText, renderPhraseNote, sourceChainSections } from './phrase-notes-core.ts';
 import { chainStampLines } from './test-support/source-chain-golden.ts';
 import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
 
@@ -13,12 +13,11 @@ const MORPH: PhraseParams = { kind: 'morph', a: 'bar_007', b: 'bar_008', bars: 1
 
 // ---- the sentences ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-test('the comments are exactly these (they tell a person which text is the source and which is not theirs to edit); a kit keeps the derived-note marker, a phrase has the two source-chain ones', () => {
+test('the comments are exactly these (they tell a person which text is the source and which is not theirs to edit); a kit keeps the derived-note marker, a phrase has the cache one (the "source of this note" comment is gone, 1155-91)', () => {
   assert.equal(DERIVED_NOTE, '<!-- derived from the json below; edit the controls, not this text -->');
-  assert.equal(SOURCE_CHAIN_NOTE, '<!-- the Description below is the source of this note: the controls write it, and the Recipe, the Python and the json cache are derived from it -->');
   assert.equal(CACHE_NOTE, '<!-- derived from the Description above; edit the Description, not this -->');
   const sections = sourceChainSections(phraseParts('phrase_001', EXTEND));
-  assert.equal(sections[0], SOURCE_CHAIN_NOTE);
+  assert.equal(sections[0], '# Description');
   assert.equal(sections[sections.length - 1], CACHE_NOTE);
   assert.equal(sections[sections.length - 3], '# Cache', 'the heading ends the Python section, so the Python hash covers the Python only');
 });
@@ -135,7 +134,7 @@ test('a text without frontmatter is returned as it is; a new phrase note is fron
   const text = newPhraseNote('phrase_001', EXTEND, '{"kind": "extend"}');
   assert.equal(text, [
     '---', 'type: data', 'content_type: json', DESC, 'links:', '  - "[[bar_005]]"', ...chainStampLines('Extend [[bar_005]] to 8 bars, building up.', ['Take [[bar_005]].', 'Build it up over 8 bars.'], phrasePython(EXTEND)), '---', '',
-    SOURCE_CHAIN_NOTE, '', '# Description', '', 'Extend [[bar_005]] to 8 bars, building up.', '', '# Recipe', '', 'Take [[bar_005]].', 'Build it up over 8 bars.', '',
+    '# Description', '', 'Extend [[bar_005]] to 8 bars, building up.', '', '# Recipe', '', 'Take [[bar_005]].', 'Build it up over 8 bars.', '',
     '# Python', '', '```python', phrasePython(EXTEND), '```', '',
     '# Cache', '', CACHE_NOTE, '',
     '```json', '{"kind": "extend"}', '```', '',

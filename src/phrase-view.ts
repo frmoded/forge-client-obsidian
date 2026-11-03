@@ -128,7 +128,7 @@ export class PhraseView extends EditableFileView {
       clearTimer: (h) => window.clearTimeout(h as number),
       now: () => performance.now(),
       onTiming: (t) => console.debug(`Forge: phrase score ${t.outcome} in ${Math.round(t.totalMs)} ms (engine ${Math.round(t.engineMs)} ms)`),
-      messages: messageDelivery,                         // the same message line and "Forge log (N)" as the bar's Score: the panel stays closed
+      messages: messageDelivery,                         // the same message line as the bar's Score: the panel stays closed
     });
     await this.handle.load();
   }

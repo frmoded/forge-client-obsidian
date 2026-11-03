@@ -34,6 +34,7 @@ import { scoreClickPlays } from './score-click-policy.ts';
 import { RhythmScoreView } from './rhythm-score-view.ts';
 import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts';
 import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsFor, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
+import { headerActionShown } from './header-actions-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
@@ -121,7 +122,11 @@ export class RhythmEditView extends EditableFileView {
       this.addAction(a.icon, a.title, () => { void this.switchMode(a.mode); });
     }
     this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });
-    this.addAction('network', 'Toggle edges panel', () => { this.hooks.toggleEdgesPanel(); });
+    // 1155-91: no edges button in a score-first vault. The profile answer can arrive after this view was built, so the button is also taken away the moment it does.
+    if (headerActionShown('edges-toggle', messageDelivery.hasBeenScoreFirst())) {
+      const edges = this.addAction('network', 'Toggle edges panel', () => { this.hooks.toggleEdgesPanel(); });
+      this.register(messageDelivery.onScoreFirst((on) => { if (on && !headerActionShown('edges-toggle', true)) edges.remove(); }));
+    }
     this.addAction('file-plus', 'New Forge note', () => { this.hooks.createNewNote(); });
   }
 
@@ -264,7 +269,7 @@ export class RhythmEditView extends EditableFileView {
         postHighlight: (target) => { this.iframe?.contentWindow?.postMessage(buildHighlightMessage(target), '*'); },
       } : undefined,
       onProvenanceMs: (ms) => console.debug(`Forge: provenance map built in ${(Math.round(ms * 10) / 10).toFixed(1)} ms`),
-      messages: messageDelivery,                   // M4: the message line and "Forge log (N)" (this is the score panel, so only a score-first vault gets here)
+      messages: messageDelivery,                   // M4: the message line (this is the score panel, so only a score-first vault gets here)
     });
     this.scoreArea?.showNow(data);
   }

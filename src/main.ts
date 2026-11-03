@@ -106,7 +106,7 @@ import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
 import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts';
 import { registerScoreFirst } from './score-first.ts';
-import { classifyMessageSource, messageDelivery, routeMessage } from './score-first-messages-core.ts';
+import { classifyMessageSource, messageDelivery, mirrorPanelErrors, routeMessage } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { EDITION } from './edition-selected.ts';
 import {
@@ -220,6 +220,7 @@ import {
 // writePythonAndEnglishHash.
 import { forgeButtonShouldShow, edgesToggleShouldShow } from './forge-button-gate-core.ts';
 import { headerSignature, installHeaderSync, needsHeaderSync } from './header-sync-core.ts';
+import { headerActionShown } from './header-actions-core.ts';
 import { isBakPath, bakDedupKey, baseLibraryName } from './bak-path-core.ts';
 import { makeFacetMutexViewPlugin, type FacetMutexHost } from './facet-mutex-view-plugin.ts';
 import { makeFrontmatterFoldViewPlugin, type FrontmatterFoldHost } from './frontmatter-fold-view-plugin.ts';
@@ -778,10 +779,9 @@ export default class ForgePlugin extends Plugin {
       toggleEdgesPanel: () => { void this.toggleEdgesView(); },
     });
     // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
+    // 1155-91: the profile answer arrives after load; the markdown header is re-decided when it does (the edges button is not drawn in a score-first vault).
+    this.register(messageDelivery.onScoreFirst(() => { this.syncAllHeaderActions(); }));
     registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim() });
-    // score_first M4: "Forge log (N)" on the Score opens the panel the way the "Open Forge panel" command does (a person's own gesture).
-    messageDelivery.setOpenLog(() => { void this.openForgePanelByGesture('Forge log (N) button'); });
-
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
     // EditorView; per-view state lives on the plugin instance, the
@@ -1231,7 +1231,12 @@ export default class ForgePlugin extends Plugin {
     this.addCommand({
       id: 'forge-toggle-edges-panel',
       name: 'Toggle edges panel',
-      callback: () => { this.toggleEdgesView(); },
+      // 1155-91: not offered in a score-first vault (the view stays registered; every other vault is as it was).
+      checkCallback: (checking: boolean) => {
+        if (!headerActionShown('edges-toggle', messageDelivery.hasBeenScoreFirst())) return false;
+        if (!checking) this.toggleEdgesView();
+        return true;
+      },
     });
 
     // CW-facet-headings-copyable (drain 2026-07-21-1515). Cmd-A + Cmd-C
@@ -1339,6 +1344,17 @@ export default class ForgePlugin extends Plugin {
       id: 'open-forge-panel',
       name: 'Open Forge panel',
       callback: () => { void this.openForgePanelByGesture('command: Open Forge panel'); },
+    });
+
+    // 2026-11-03-1155-91: the "Forge log (N)" button is gone from the Score (1155-91); in a score-first vault this command is the one gesture to the panel (same helper as "Open Forge panel", which every vault has).
+    this.addCommand({
+      id: 'open-forge-log',
+      name: 'Open Forge log',
+      checkCallback: (checking: boolean) => {
+        if (!messageDelivery.hasBeenScoreFirst()) return false;
+        if (!checking) void this.openForgePanelByGesture('command: Open Forge log');
+        return true;
+      },
     });
 
     this.addCommand({
@@ -1685,7 +1701,7 @@ export default class ForgePlugin extends Plugin {
     // events subscribed in onload) therefore cost nothing and can never duplicate or flicker the header.
     {
       const fmNow = view.file ? this.app.metadataCache.getFileCache(view.file)?.frontmatter : undefined;
-      const sig = headerSignature(view.file?.path, fmNow?.type);
+      const sig = headerSignature(view.file?.path, fmNow?.type, messageDelivery.hasBeenScoreFirst());
       const present = view.containerEl.querySelector(`.${RESTORE_BTN_CLASS}`) !== null;
       if (!needsHeaderSync({ signature: sig, lastSignature: this.headerSignatures.get(view), actionsPresent: present })) return;
       this.headerSignatures.set(view, sig);
@@ -1741,7 +1757,7 @@ export default class ForgePlugin extends Plugin {
     // v0.2.77 — gate the edges panel toggle on snippet-ness. Edges
     // are inherently per-snippet (caller→callee dependency graph);
     // toggling the edges panel from a plain note is meaningless.
-    if (edgesToggleShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined })) {
+    if (edgesToggleShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined }) && headerActionShown('edges-toggle', messageDelivery.hasBeenScoreFirst())) {   // 1155-91: not in a score-first vault
       const edgesBtn = view.addAction('network', 'Toggle edges panel', () => { this.toggleEdgesView(); });
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
@@ -6256,7 +6272,7 @@ export default class ForgePlugin extends Plugin {
     return candidate;
   }
 
-  /** A person's own gesture that must show the Forge panel ("Open Forge panel", "Forge log (N)"). Never silent: it logs its steps, and if the panel cannot be opened it says so in the
+  /** A person's own gesture that must show the Forge panel ("Open Forge panel", "Open Forge log"). Never silent: it logs its steps, and if the panel cannot be opened it says so in the
    *  console AND in a Notice (the click used to be `void this.getOutputView(...)`: a rejection vanished and the click looked dead). */
   private async openForgePanelByGesture(origin: string): Promise<void> {
     console.log(`[forge-log] openForgePanelByGesture: ${origin}`);
@@ -6272,11 +6288,12 @@ export default class ForgePlugin extends Plugin {
 
   private async getOutputView(opts?: { userInitiated?: boolean }): Promise<ForgeOutputView> {
     // score_first M4 (drain 2026-10-21-2010): in a score-first vault a run or a message does not open, reveal or expand the panel; the caller gets the panel if it already exists, or a
-    // sink that keeps its calls until the panel is first opened. A person's own gesture (the "Open Forge panel" command, "Forge log (N)") passes userInitiated and takes the path below,
+    // sink that keeps its calls until the panel is first opened. A person's own gesture (the "Open Forge panel" command, "Open Forge log") passes userInitiated and takes the path below,
     // which is the one every other vault has always taken, unchanged.
     if (messageDelivery.isScoreFirst() && !opts?.userInitiated) {
       const open = this.app.workspace.getLeavesOfType(OUTPUT_VIEW_TYPE)[0]?.view;
-      return open instanceof ForgeOutputView ? open : (messageDelivery.bufferedSink() as unknown as ForgeOutputView);
+      // 2026-11-03-1155-91: no "Forge log (N)" button any more, so the four error methods of the panel are mirrored to the Score line and the console (an error is never in the panel alone).
+      return mirrorPanelErrors(open instanceof ForgeOutputView ? open : (messageDelivery.bufferedSink() as unknown as ForgeOutputView), messageDelivery, (l) => console.info(l));
     }
     // [forge-log] lines (drain 2026-10-22-1610): only on a person's gesture, so the driver can see which step a click reaches in the real Obsidian.
     const gesture = opts?.userInitiated === true;

@@ -30,6 +30,7 @@ export async function forgeNotice(
   snippetId: string = GENERIC_ATTRIBUTION,
 ): Promise<void> {
   if (kind === 'error') console.info(noticeLine(text));                         // 2026-11-03-1155-9: an error sentence is ALSO an evidence line in the console, whichever panel it goes to
+  else if (messageDelivery.isScoreFirst()) console.info(noticeLine(text));      // 2026-11-03-1155-91: no Forge log button in a score-first vault, so what stays panel-only is still in the console
   // score_first M4 (drain 2026-10-21-2010): in a score-first vault the panel does not open by itself. Everything below this block is what every OTHER vault has always run,
   // unchanged: `isScoreFirst()` is false there, so this block is skipped.
   if (messageDelivery.isScoreFirst()) {

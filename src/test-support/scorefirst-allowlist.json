@@ -18,6 +18,8 @@
     {"file": "live-score-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["imports"]},
     {"file": "phrase-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "phrase-header-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "header-actions-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "header-sync-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "phrase-default-view-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "linked-panes-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "sentence-plan-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},

@@ -1,11 +1,13 @@
 // score_first_experiment M4 (drain 2026-10-21-2010) — where a message goes in a score-first vault.
 //
 // In a vault that declares `profile = "score_first"` the engraved Score is the primary surface: what the person needs to know while making a drum bar is shown ON the score, and the
-// Forge output panel stops opening by itself (it stays the truth log: it still receives every message, and one click on "Forge log (N)" opens it). In every other vault nothing changes:
+// Forge output panel stops opening by itself (it stays the truth log: it still receives every message, and the palette command "Open Forge log" opens it). In every other vault nothing changes:
 // `routeMessage` answers 'panel-reveal' (today's behaviour) for EVERY message when `scoreFirst` is false, and that is the only answer such a vault ever gets (principle P3).
 //
 // Pure core (no obsidian): the router, and the small piece of shared state the two choke points (forgeNotice, ForgePlugin.getOutputView) and the Score panel talk through. The profile is
 // read in ONE place (vault-profile-core, via score-first.ts); this file only receives the answer.
+
+import { noticeLine } from './logged-notice-core.ts';
 
 export type MessageKind = 'info' | 'error' | 'success';
 /** 'notice' = any plain text message; 'llm' = an LLM call is happening / its outcome; 'stale' = a note is out of date or changed because a parent changed. Classified from the text by
@@ -49,6 +51,37 @@ const SINK_METHODS = ['append', 'appendError', 'appendForgeError', 'appendMessag
 
 export interface ScoreMessage { text: string; kind: MessageKind; line: ScoreLine }
 
+/** 2026-11-03-1155-91: with the "Forge log (N)" button gone, an error a Forge RUN writes to the panel (the four error methods of the sink) must not live in the panel alone: each one is ALSO a line on the Score
+ *  (until the next good draw) and a `[forge-notice]` console line. The sentence of each method, as one plain text. */
+export function panelErrorText(method: 'appendError' | 'appendForgeError' | 'appendLlmRecipeRejection' | 'appendSlotCacheNotFound', args: unknown[]): string {
+  const a = args as any[];
+  if (method === 'appendError') return String(a[1] ?? '').trim() || 'The run failed.';
+  if (method === 'appendForgeError') return [a[1]?.cause, a[1]?.suggested_fix].filter((x) => typeof x === 'string' && x !== '').join(' ') || 'The run failed.';
+  if (method === 'appendLlmRecipeRejection') return `The Recipe the LLM wrote was rejected (${a[1]?.failureMode ?? 'unknown reason'}); the Forge panel has the details.`;
+  return 'The slot cache was not written: the note file was not found; the Forge panel has the details.';
+}
+const MIRRORED_ERRORS = ['appendError', 'appendForgeError', 'appendLlmRecipeRejection', 'appendSlotCacheNotFound'] as const;
+
+const MIRRORED = Symbol.for('forge.panelErrorsMirrored');
+/** The panel (or the sink that keeps its calls) with its four error methods mirrored to the Score and the console. The SAME object comes back (callers and tests compare it), patched once on its own properties
+ *  (a second call is a no-op). A score-first vault only: the caller (ForgePlugin.getOutputView) wraps in that one branch, so every other vault gets the sink untouched. */
+export function mirrorPanelErrors<T extends object>(sink: T, delivery: Pick<MessageDelivery, 'postToScore'>, log: (line: string) => void): T {
+  const host = sink as Record<string | symbol, any>;
+  if (host[MIRRORED]) return sink;
+  for (const method of MIRRORED_ERRORS) {
+    const original = host[method];
+    if (typeof original !== 'function') continue;
+    host[method] = (...args: unknown[]) => {
+      const text = panelErrorText(method, args);
+      log(noticeLine(text));
+      delivery.postToScore({ text, kind: 'error', line: { persistence: 'until-next-draw' } });
+      return original.apply(sink, args);
+    };
+  }
+  host[MIRRORED] = true;
+  return sink;
+}
+
 /** Shared state of a score-first session. One instance per plugin; `scoreFirst` is a CONSTANT of the vault set once by `score-first.ts` (there is no toggle). */
 export class MessageDelivery {
   private scoreFirst = false;
@@ -56,7 +89,6 @@ export class MessageDelivery {
   private backlog: Array<(sink: OutputSinkLike) => void> = [];
   private unreadListeners = new Set<(n: number) => void>();
   private scoreListeners = new Set<(m: ScoreMessage) => void>();
-  private openLog: (() => void) | null = null;
 
   /** The profile answer is read asynchronously after load, so anything that depends on it (the header buttons of a markdown tab) may first run while it is still the default (false). Those listen here
    *  and re-decide the moment the answer CHANGES (drain 2026-10-22-2200). A listener that throws is logged and does not stop the others. */
@@ -80,7 +112,7 @@ export class MessageDelivery {
   onScoreFirst(f: (on: boolean) => void): () => void { this.scoreFirstListeners.add(f); return () => { this.scoreFirstListeners.delete(f); }; }
   isScoreFirst(): boolean { return this.scoreFirst; }
 
-  // --- the unread counter behind "Forge log (N)": messages that reached the panel while it was not being looked at
+  // --- the unread counter (the "Forge log (N)" button that showed it is gone, 1155-91; kept as evidence for the tests): messages that reached the panel while it was not being looked at
   unreadCount(): number { return this.unread; }
   bump(): void { this.unread++; this.unreadListeners.forEach((f) => f(this.unread)); }
   markOpened(): void { if (this.unread === 0) return; this.unread = 0; this.unreadListeners.forEach((f) => f(0)); }
@@ -109,13 +141,6 @@ export class MessageDelivery {
   // --- messages shown on the Score
   postToScore(m: ScoreMessage): void { this.scoreListeners.forEach((f) => f(m)); }
   onScoreMessage(f: (m: ScoreMessage) => void): () => void { this.scoreListeners.add(f); return () => this.scoreListeners.delete(f); }
-
-  // --- "Forge log (N)" opens the panel: the plugin registers how
-  setOpenLog(f: (() => void) | null): void { this.openLog = f; }
-  openForgeLog(): void {
-    if (!this.openLog) { console.error('[forge-log] openForgeLog: no handler registered (the plugin never called setOpenLog); the click cannot open the panel'); return; }
-    this.openLog();
-  }
 }
 
 /** The one instance the plugin's choke points and the Score panel share. */

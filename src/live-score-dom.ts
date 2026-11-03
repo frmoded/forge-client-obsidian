@@ -176,7 +176,7 @@ export interface ScoreAreaPorts extends ScorePanelDeps {
   inspector?: ScoreInspectorPorts;
   /** Optional: report how long the provenance map took to build (ms). */
   onProvenanceMs?(ms: number): void;
-  /** score_first M4: present = the panel shows the message line and the "Forge log (N)" button (the output panel stays closed; see score-first-messages-core.ts). Absent = neither exists. */
+  /** score_first M4: present = the panel shows the message line (the output panel stays closed; see score-first-messages-core.ts). Absent = neither exists. */
   messages?: ScoreMessagePorts;
   title: string;
   setTimer(fn: () => void, ms: number): unknown;

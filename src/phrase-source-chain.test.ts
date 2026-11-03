@@ -268,7 +268,7 @@ test('Refresh note links on an old ARRANGEMENT note: the new shape, the fence by
 
 test('the stamps stay where they are and the person\'s lines stay in their order: a note whose own line comes AFTER the stamps is already current (no churn), a stamp the person deleted comes back at the end', () => {
   const note = noteContentFor('phrase_001', { kind: 'extend', source: 'bar_005', bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 });
-  const withTags = note.replace('\n---\n\n<!--', '\ntags: [demo]\n---\n\n<!--');
+  const withTags = note.replace('\n---\n\n# Description', '\ntags: [demo]\n---\n\n# Description');
   assert.ok(withTags.includes('python_derived_from_recipe_hash:') && withTags.includes('tags: [demo]\n---'));
   const r = refreshPhraseNoteText(withTags, 'phrase_001');
   assert.ok(r.ok && !r.changed && r.text === withTags, 'nothing to change, nothing written');

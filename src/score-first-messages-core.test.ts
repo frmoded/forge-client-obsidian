@@ -72,12 +72,11 @@ test('the backlog keeps the newest BACKLOG_CAP entries (a long session cannot gr
   assert.equal(got.at(-1), String(BACKLOG_CAP + 4));
 });
 
-test('messages to the Score: listeners get them, unsubscribe stops them; "Forge log" calls whatever the plugin registered, and nothing when nothing was', () => {
-  const d = new MessageDelivery(); const seen: string[] = []; let opened = 0;
+test('messages to the Score: listeners get them, unsubscribe stops them', () => {
+  const d = new MessageDelivery(); const seen: string[] = [];
   const off = d.onScoreMessage((m) => seen.push(m.text));
   d.postToScore({ text: 'a', kind: 'error', line: { persistence: 'until-next-draw' } }); off(); d.postToScore({ text: 'b', kind: 'info', line: { persistence: 'transient' } });
   assert.deepEqual(seen, ['a']);
-  d.openForgeLog(); d.setOpenLog(() => { opened++; }); d.openForgeLog(); assert.equal(opened, 1);
 });
 
 test('P3 audit: for EVERY vault the plugin ships, the vault\'s real forge.toml yields scoreFirst=false and every message of every kind and source routes "panel-reveal"; non-vacuity: the playground\'s forge.toml flips it', () => {

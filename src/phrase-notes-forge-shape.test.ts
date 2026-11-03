@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
 import { formatPhraseJson, readPhraseNote, refreshPhraseNoteText, type PhraseParams } from './phrase-core.ts';
-import { CACHE_NOTE, DERIVED_NOTE, SOURCE_CHAIN_NOTE, extractPhraseJsonBlock, newPhraseNote, phraseParts, phrasePython, phraseRecipeSteps, sourceChainSections } from './phrase-notes-core.ts';
+import { CACHE_NOTE, DERIVED_NOTE, extractPhraseJsonBlock, newPhraseNote, phraseParts, phrasePython, phraseRecipeSteps, sourceChainSections } from './phrase-notes-core.ts';
 import { chainStampLines } from './test-support/source-chain-golden.ts';
 
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20 };
@@ -125,7 +125,6 @@ test('the whole note, golden: frontmatter (description + whole-value links), the
     'links:', '  - "[[bar_005]]"', '  - "[[bar_011]]"',
     ...chainStampLines('Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower. Bar 3 is replaced by [[bar_011]].', ['Take [[bar_005]].', 'Repeat it for 8 bars with fills, 20 % slower.', 'Bar 3 is replaced by [[bar_011]].'], phrasePython(p)),
     '---', '',
-    SOURCE_CHAIN_NOTE, '',
     '# Description', '', 'Extend [[bar_005]] to 8 bars, repeating with fills, 20 percent slower. Bar 3 is replaced by [[bar_011]].', '',
     '# Recipe', '', 'Take [[bar_005]].', 'Repeat it for 8 bars with fills, 20 % slower.', 'Bar 3 is replaced by [[bar_011]].', '',
     '# Python', '', '```python', phrasePython(p), '```', '',
@@ -134,9 +133,10 @@ test('the whole note, golden: frontmatter (description + whole-value links), the
   ].join('\n'));
 });
 
-test('sourceChainSections: the comment first, four level-one headings in this order (the Cache heading closes the Python section), no level-two heading and no "Bars made" any more', () => {
+test('sourceChainSections: no comment before the first heading, four level-one headings in this order (the Cache heading closes the Python section), no level-two heading and no "Bars made" any more', () => {
   const lines = sourceChainSections(phraseParts('phrase_001', EXTEND));
-  assert.equal(lines[0], SOURCE_CHAIN_NOTE);
+  assert.equal(lines[0], '# Description', 'the note opens with its Description: no comment before it (1155-91)');
+  assert.ok(!lines.some((l) => l.startsWith('<!--') && /source of this note/.test(l)));
   assert.deepEqual(lines.filter((l) => /^#{1,6} /.test(l)), ['# Description', '# Recipe', '# Python', '# Cache']);
   assert.ok(!lines.some((l) => /^## |Bars made/.test(l)));
   assert.equal(lines.filter((l) => l === '```python').length, 1);

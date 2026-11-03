@@ -128,7 +128,7 @@ test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026
   assert.equal(
     phraseNoteContent('phrase_001', 'bar_005'),
     '---\ntype: data\ncontent_type: json\ndescription: "phrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change."\nlinks:\n  - "[[bar_005]]"\n' + chainStampLines(sentence, steps, python).join('\n') + '\n---\n\n'
-      + '<!-- the Description below is the source of this note: the controls write it, and the Recipe, the Python and the json cache are derived from it -->\n\n# Description\n\n' + sentence + '\n\n# Recipe\n\n' + steps.join('\n') + '\n\n# Python\n\n```python\n' + python + '\n```\n\n'
+      + '# Description\n\n' + sentence + '\n\n# Recipe\n\n' + steps.join('\n') + '\n\n# Python\n\n```python\n' + python + '\n```\n\n'
       + '# Cache\n\n<!-- derived from the Description above; edit the Description, not this -->\n\n```json\n'
       + '{\n  "kind": "extend",\n  "source": "bar_005",\n  "bars": 4,\n  "style": "repeat_with_fills",\n  "tempo_change_pct": 0\n}\n```\n',
   );
@@ -137,7 +137,7 @@ test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026
 test('mixNoteContent: a data/json note whose block is a PATH mix of the two bars (2026-10-26-0900, deliberate: new mixes are path mixes, explicit in the JSON, starting at weight 1), valid to read back', () => {
   const text = mixNoteContent('phrase_002', 'bar_005', 'bar_006');
   assert.deepEqual(readPhraseNote(text), { ok: true, value: { ...MIX, weight: 1, mode: 'path', order: 'musical', seed: 0 } });
-  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*\[\[bar_005\]\].*\[\[bar_006\]\].*"\nlinks:\n  - "\[\[bar_005\]\]"\n  - "\[\[bar_006\]\]"\nsource_facet: description\n[\s\S]*---\n\n<!-- the Description below is the source[\s\S]*\n```json\n/);
+  assert.match(text, /^---\ntype: data\ncontent_type: json\ndescription: ".*\[\[bar_005\]\].*\[\[bar_006\]\].*"\nlinks:\n  - "\[\[bar_005\]\]"\n  - "\[\[bar_006\]\]"\nsource_facet: description\n[\s\S]*---\n\n# Description\n[\s\S]*\n```json\n/);
   assert.ok(text.endsWith('```\n'));
 });
 

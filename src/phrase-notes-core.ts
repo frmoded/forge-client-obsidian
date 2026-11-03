@@ -179,8 +179,8 @@ export function renderDerivedNote(text: string, description: string, links: stri
 // sentence says (every reader still parses it, none changed), and the note carries the Forge hash fields so the stale-facet plugin and the status bar judge it as they judge any Forge note. ONE renderer writes all of it
 // in one go, so no reader ever sees half a note; the hashes are taken from the FINISHED text by the same extractors the plugin reads a Forge note with (never from the strings that went in).
 
-/** The first line of the body: what the note is (the Description is the source; the rest is derived from it). */
-export const SOURCE_CHAIN_NOTE = '<!-- the Description below is the source of this note: the controls write it, and the Recipe, the Python and the json cache are derived from it -->';
+// 2026-11-03-1155-91: the note used to open with an HTML comment saying "the Description below is the source of this note ..." (SOURCE_CHAIN_NOTE). It is gone: it was false for a Recipe- or Python-sourced note, `source_facet:`
+// and the per-facet headings already say which facet is the source, and nothing read it (it sat before `# Description`, outside every hashed section). A note written before keeps it until the next write that renders it.
 /** The line above the json fence: the json is a cache of what the grammar understood in the Description, never the place to edit. */
 export const CACHE_NOTE = '<!-- derived from the Description above; edit the Description, not this -->';
 /** The one sentence a control path answers with when the Description was changed by hand since the note was written (the M15c button is named here so the sentence need not change then). */
@@ -210,9 +210,9 @@ export interface SourceChainParts {
   python: string;
 }
 
-/** The sections between the frontmatter and the json fence: the comment, then Description, Recipe, Python and the Cache heading with its comment (the heading ends the Python section, so the Python hash covers the Python only). */
+/** The sections between the frontmatter and the json fence: Description, Recipe, Python and the Cache heading with its comment (the heading ends the Python section, so the Python hash covers the Python only). */
 export function sourceChainSections(parts: Pick<SourceChainParts, 'sentence' | 'recipe' | 'python'>): string[] {
-  return [SOURCE_CHAIN_NOTE, '', '# Description', '', parts.sentence, '', '# Recipe', '', ...parts.recipe, '', '# Python', '', '```python', ...parts.python.split('\n'), '```', '', '# Cache', '', CACHE_NOTE];
+  return ['# Description', '', parts.sentence, '', '# Recipe', '', ...parts.recipe, '', '# Python', '', '```python', ...parts.python.split('\n'), '```', '', '# Cache', '', CACHE_NOTE];
 }
 
 /** The six frontmatter stamps of a finished note text: the source is the Description; each hash is the one `computeFacetHash` gives for what the plugin's own extractors read from that text. */
