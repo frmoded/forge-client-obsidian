@@ -3,6 +3,7 @@
 // Score with its notes pane) and **Make this composition the root of the piece**. The decisions are in composition-core.ts / composition-nav-core.ts / composition-strip-core.ts / composition-flow-core.ts / composition-root-core.ts, the DOM in
 // composition-dialog-dom.ts / composition-strip-dom.ts, all unit-tested without Obsidian (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3).
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
@@ -284,7 +285,7 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
     create: (p, content) => app.vault.create(p, content),
     open,
-    notify: (message) => { new Notice(message); },
+    notify: (message) => { loggedNotice(message); },
     trace: (line) => { console.info(line); },
     isAlreadyExists: isFileExistsError,
   });
@@ -329,7 +330,7 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
       if (!checking) {
         openComposition(app, active).then(async (leaf) => { await opts.pair?.(leaf, active); }).catch((e) => {
           console.error('Open composition as Score failed', e);
-          new Notice(`${OPEN_COMPOSITION_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+          loggedNotice(`${OPEN_COMPOSITION_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
         });
       }
       return true;
@@ -344,15 +345,15 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
       if (!checking) {
         void (async () => {
           const answer = rootOf(await readAll());
-          if (answer.kind === 'none') { new Notice(noRootMessage); return; }
-          if (answer.kind === 'many') { new Notice(manyRootsMessage(answer.paths)); return; }
+          if (answer.kind === 'none') { loggedNotice(noRootMessage); return; }
+          if (answer.kind === 'many') { loggedNotice(manyRootsMessage(answer.paths)); return; }
           const file = app.vault.getAbstractFileByPath(answer.path);
-          if (!(file instanceof TFile)) { new Notice(noRootMessage); return; }
+          if (!(file instanceof TFile)) { loggedNotice(noRootMessage); return; }
           const leaf = await openComposition(app, file);
           await opts.pair?.(leaf, file);
         })().catch((e) => {
           console.error('Open the piece failed', e);
-          new Notice(`${OPEN_PIECE_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+          loggedNotice(`${OPEN_PIECE_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
         });
       }
       return true;
@@ -366,9 +367,9 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
       const active = app.workspace.getActiveViewOfType(CompositionView)?.file ?? app.workspace.getActiveViewOfType(MarkdownView)?.file ?? app.workspace.getActiveFile();
       if (!makeRootAvailable({ scoreFirst: opts.scoreFirst(), activePath: active?.path ?? null }) || !(active instanceof TFile)) return false;
       if (!checking) {
-        makeRoot(active.path).then(() => { new Notice(`${active.basename} is now the root of the piece.`); console.info(`[forge-composition] root ${active.path}`); }).catch((e) => {
+        makeRoot(active.path).then(() => { loggedNotice(`${active.basename} is now the root of the piece.`); console.info(`[forge-composition] root ${active.path}`); }).catch((e) => {
           console.error('Make this composition the root failed', e);
-          new Notice(`${MAKE_ROOT_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+          loggedNotice(`${MAKE_ROOT_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
         });
       }
       return true;

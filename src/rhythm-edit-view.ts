@@ -20,6 +20,7 @@
 // note's json block, and is refused if the note changed on disk since the baseline or if it is marked `read_only: true` (D7).
 
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { createSandboxedWidgetIframe } from './html-embed-view.ts';
 import { attachAutoHeight } from './widget-auto-height.ts';
 import { parseWidgetResize, type AutoHeightController } from './widget-auto-height-core.ts';
@@ -505,7 +506,7 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
           const file = view.file;
           // 2200: a button that outlived the profile answer (it was added while the answer was still unknown) must not send a phrase down the rhythm path and fail with "missing time signature":
           // in a score-first vault a phrase is not a bar, and it says so by name.
-          if (file && wantsPhraseHeader(messageDelivery.hasBeenScoreFirst(), file.path)) { new Notice('This is a phrase, not a bar: the Beat Box cannot open it. Use the "Open as Score" button of the phrase (or Cmd+P, "Open phrase as Score").'); return; }
+          if (file && wantsPhraseHeader(messageDelivery.hasBeenScoreFirst(), file.path)) { loggedNotice('This is a phrase, not a bar: the Beat Box cannot open it. Use the "Open as Score" button of the phrase (or Cmd+P, "Open phrase as Score").'); return; }
           if (isCandidateFile(app, file)) void switchLeafToMode(app, view.leaf, file, 'json', a.mode, hooks);
         }));
         headerActions.set(view, els);

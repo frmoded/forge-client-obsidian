@@ -121,7 +121,7 @@ test('toggle: every mode switch changes the note\'s OWN leaf through ONE helper 
 // drain 2026-10-22-2200, deliberate: the click handler first refuses a phrase in a score-first vault BY NAME (phrase-registration.test.ts drives it); the rest is what it was.
 test('toggle: the mode buttons on the markdown view switch view.leaf (the note\'s own tab); the command passes the active markdown leaf', () => {
   const body = code(view);
-  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(file && wantsPhraseHeader\(messageDelivery\.hasBeenScoreFirst\(\), file\.path\)\) \{ new Notice\([^\n]*\); return; \}\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
+  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(file && wantsPhraseHeader\(messageDelivery\.hasBeenScoreFirst\(\), file\.path\)\) \{ loggedNotice\([^\n]*\); return; \}\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
   assert.match(body, /void openRhythmEditor\(app, file, hooks, app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf\)/);
 });
 
@@ -146,7 +146,7 @@ test('no per-file memory: nothing in the view persists a view preference', () =>
 });
 
 test('the mode switch refuses (with a Notice naming why) before any pane switches: read_only, wrong type, wrong body', () => {
-  assert.match(switchSrc, /if \(to !== 'json'\) \{\s*const note = readRhythmNote\(await app\.vault\.read\(file\)\);\s*if \(note\.ok === false\) \{\s*new Notice\(`\$\{to === 'score' \? 'Score' : 'Edit rhythm'\}: \$\{note\.message\}`, 8000\);\s*return;/);
+  assert.match(switchSrc, /if \(to !== 'json'\) \{\s*const note = readRhythmNote\(await app\.vault\.read\(file\)\);\s*if \(note\.ok === false\) \{\s*loggedNotice\(`\$\{to === 'score' \? 'Score' : 'Edit rhythm'\}: \$\{note\.message\}`, 8000\);\s*return;/);
 });
 
 test('registration: main.ts registers the view, command and menus once, via registerRhythmEdit, lending it the setting and two vault-level actions', () => {

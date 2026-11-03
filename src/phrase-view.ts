@@ -3,6 +3,7 @@
 //
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
@@ -82,7 +83,7 @@ export class PhraseView extends EditableFileView {
         listBarBasenames: () => this.app.vault.getFiles().filter((f) => isBarPath(f.path)).map((f) => f.basename),
         exists: (p) => this.app.vault.getAbstractFileByPath(p) !== null,
         create: (p, content) => this.app.vault.create(p, content),
-        notify: (message) => { new Notice(message); },
+        notify: (message) => { loggedNotice(message); },
         isAlreadyExists: isFileExistsError,
       },
       notebook: this.notebookFor?.(file),

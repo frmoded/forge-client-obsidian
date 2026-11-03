@@ -18,6 +18,7 @@
 //   toast, per driver: no more toasts anywhere.
 
 import type { App } from 'obsidian';
+import { noticeLine } from './logged-notice-core.ts';
 import { ForgeOutputView, OUTPUT_VIEW_TYPE } from './output-view.ts';
 import { GENERIC_ATTRIBUTION } from './output-entry-meta-core.ts';
 import { classifyMessageSource, messageDelivery, routeMessage } from './score-first-messages-core.ts';
@@ -28,6 +29,7 @@ export async function forgeNotice(
   kind: 'info' | 'error' | 'success' = 'info',
   snippetId: string = GENERIC_ATTRIBUTION,
 ): Promise<void> {
+  if (kind === 'error') console.info(noticeLine(text));                         // 2026-11-03-1155-9: an error sentence is ALSO an evidence line in the console, whichever panel it goes to
   // score_first M4 (drain 2026-10-21-2010): in a score-first vault the panel does not open by itself. Everything below this block is what every OTHER vault has always run,
   // unchanged: `isScoreFirst()` is false there, so this block is skipped.
   if (messageDelivery.isScoreFirst()) {

@@ -1,5 +1,6 @@
 // 2026-10-31-1120 (M15c): the bar's DOM, in happy-dom: the code the panes run. One sentence, the buttons that answer it in the order given, a click reports the action once, a busy bar disables its buttons, the preview shows Description and Recipe as text
 // (never as markup), the bar is the FIRST child of its pane, and it can be shown again (no duplicates) and taken away.
+import { setCopyPortsForTest } from './copy-message-dom.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -16,7 +17,7 @@ test('the bar is the first child of its pane, carries the sentence in a status r
   bar.show({ message: 'Description, line 1, column 28: expected "bars" after the number.', actions: ['revert', 'ask'] });
   assert.equal(bar.el.getAttribute('role'), 'status');
   assert.equal(bar.el.querySelector('.forge-description-message')!.textContent, 'Description, line 1, column 28: expected "bars" after the number.');
-  assert.deepEqual([...bar.el.querySelectorAll('button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['revert', 'Revert'], ['ask', 'Ask the sentence service']]);
+  assert.deepEqual([...bar.el.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['revert', 'Revert'], ['ask', 'Ask the sentence service']]);
   (bar.el.querySelector('[data-action="ask"]') as any).click(); (bar.el.querySelector('[data-action="revert"]') as any).click();
   assert.deepEqual(heard, ['ask', 'revert']);
   assert.deepEqual(Object.keys(BAR_LABELS).sort(), ['apply-preview', 'ask', 'cancel-preview', 'revert', 'revert-generated', 'update', 'update-python', 'update-recipe']);
@@ -28,8 +29,8 @@ test('showing again replaces the content (no duplicate message or buttons); a bu
   bar.show({ message: 'one', actions: ['update', 'revert'] }); bar.show({ message: 'two', actions: ['revert'], busy: true });
   assert.equal(bar.el.querySelectorAll('.forge-description-message').length, 1); assert.equal(bar.el.querySelector('.forge-description-message')!.textContent, 'two');
   assert.equal(bar.el.getAttribute('aria-busy'), 'true');
-  const b = bar.el.querySelector('button') as any; assert.equal(b.disabled, true); b.click(); assert.deepEqual(heard, []);
-  bar.show({ message: 'three', actions: ['revert'] }); assert.equal(bar.el.getAttribute('aria-busy'), 'false'); (bar.el.querySelector('button') as any).click(); assert.deepEqual(heard, ['revert']);
+  const b = bar.el.querySelector('.forge-description-button') as any; assert.equal(b.disabled, true); b.click(); assert.deepEqual(heard, []);
+  bar.show({ message: 'three', actions: ['revert'] }); assert.equal(bar.el.getAttribute('aria-busy'), 'false'); (bar.el.querySelector('.forge-description-button') as any).click(); assert.deepEqual(heard, ['revert']);
 });
 
 test('the service\'s preview is two blocks of TEXT (markup in a sentence is not interpreted), with Apply and Cancel; dispose takes the bar out of the pane', () => {
@@ -49,7 +50,7 @@ test('the DOM contract the stylesheet and the panes rely on: class names, the po
   bar.show({ message: 'm', actions: ['update', 'revert', 'ask', 'apply-preview', 'cancel-preview'], preview: { description: 'd', recipe: 'r' } });
   assert.equal((bar.el.querySelector('.forge-description-preview') as HTMLElement).className, 'forge-description-preview');
   assert.equal((bar.el.querySelector('.forge-description-buttons') as HTMLElement).className, 'forge-description-buttons');
-  const buttons = [...bar.el.querySelectorAll('button')] as any[];
+  const buttons = [...bar.el.querySelectorAll('.forge-description-button')] as any[];
   assert.deepEqual(buttons.map((b) => b.textContent), ['Update from Description', 'Revert', 'Ask the sentence service', 'Apply', 'Cancel']);
   for (const b of buttons) { assert.equal(b.getAttribute('type'), 'button'); assert.equal(b.className, 'forge-description-button'); }
   assert.deepEqual(BAR_LABELS, { update: 'Update from Description', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' });
@@ -60,11 +61,33 @@ test('a button that is disabled (the bar is busy) does not answer even when a cl
   const heard: string[] = [];
   const bar = mountDescriptionBar(el, (a) => heard.push(a));
   bar.show({ message: 'x', actions: ['revert', 'update-recipe'], busy: true });
-  const buttons = [...el.querySelectorAll('button')] as any[];
+  const buttons = [...el.querySelectorAll('.forge-description-button')] as any[];
   assert.ok(buttons.length === 2 && buttons.every((b) => b.disabled === true));
   for (const b of buttons) b.dispatchEvent(new win.Event('click', { bubbles: true }));
   assert.deepEqual(heard, [], 'nothing is heard from a disabled button');
   bar.show({ message: 'x', actions: ['revert'] });
-  (el.querySelector('button') as any).dispatchEvent(new win.Event('click', { bubbles: true }));
+  (el.querySelector('.forge-description-button') as any).dispatchEvent(new win.Event('click', { bubbles: true }));
   assert.deepEqual(heard, ['revert'], 'and an enabled one is');
+});
+
+// ---- 2026-11-03-1155-9: the message is selectable text with its Copy button beside it ----------------------------------------------------------------------------------------------------------------------------------------------
+
+test('the sentence has a Copy button BESIDE it (not inside, not one of the action buttons): it copies the sentence, says Copied; a bar with no sentence has none; showing again keeps one', async () => {
+  const p = pane(); const heard: BarAction[] = [];
+  const written: string[] = [];
+  setCopyPortsForTest({ write: async (t) => { written.push(t); return true; }, setTimer: () => 0, clearTimer: () => {} });
+  const bar = mountDescriptionBar(p, (a) => heard.push(a));
+  const SENTENCE = "Recipe, line 3, column 1: I do not know the step 'Sprinkle'. A step starts with Take, Repeat, Build.";
+  bar.show({ message: SENTENCE, actions: ['revert'] });
+  const msg = bar.el.querySelector('.forge-description-message') as HTMLElement;
+  const copy = bar.el.querySelector('.forge-copy-button') as HTMLButtonElement;
+  assert.ok(copy); assert.equal(copy.previousSibling, msg); assert.equal(msg.contains(copy), false);
+  assert.deepEqual([...bar.el.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert'], 'the Copy button is not an action');
+  copy.click(); for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.deepEqual(written, [SENTENCE]); assert.equal(copy.textContent, 'Copied'); assert.deepEqual(heard, [], 'copying is not an action');
+  bar.show({ message: SENTENCE, actions: ['revert'] });
+  assert.equal(bar.el.querySelectorAll('.forge-copy-button').length, 1);
+  bar.show({ message: '', actions: [] });
+  assert.equal(bar.el.querySelector('.forge-copy-button'), null);
+  setCopyPortsForTest(null);
 });

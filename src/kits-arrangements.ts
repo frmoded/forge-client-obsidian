@@ -2,6 +2,7 @@
 // **New arrangement** and **Open arrangement as Score**. The decisions are in kit-core.ts / arrangement-core.ts / kit-arrangement-flow-core.ts, the dialogs' DOM in kit-dom.ts / arrangement-dom.ts, all unit-tested without Obsidian. Registered ONLY in a score-first vault
 // (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3). 2026-10-29-0910: the tab's one write is the row of controls per kit (Mute, Solo, volume), which edits the note through the builders New arrangement uses. An arrangement is otherwise edited as its note.
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
@@ -237,7 +238,7 @@ export class ArrangementView extends EditableFileView {
       });
     } catch (e) {
       console.error('ArrangementView.writeSettings failed', e);
-      new Notice(`Arrangement: the change could not be written (${(e as Error)?.message ?? e}).`);
+      loggedNotice(`Arrangement: the change could not be written (${(e as Error)?.message ?? e}).`);
       return;
     }
     if (this.disposed) return;
@@ -313,7 +314,7 @@ export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangemen
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
     create: (p, content) => app.vault.create(p, content),
     open,
-    notify: (message) => { new Notice(message); },
+    notify: (message) => { loggedNotice(message); },
     trace: (line) => { console.info(line); },
     isAlreadyExists: isFileExistsError,
   });
@@ -356,7 +357,7 @@ export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangemen
       if (!checking) {
         openArrangement(app, active).catch((e) => {
           console.error('Open arrangement as Score failed', e);
-          new Notice(`${OPEN_ARRANGEMENT_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+          loggedNotice(`${OPEN_ARRANGEMENT_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
         });
       }
       return true;

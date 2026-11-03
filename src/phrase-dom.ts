@@ -15,6 +15,7 @@
 // controller with a `produce` step of its own — no second scheduler: debounce, one render in flight, the latest request queued.
 
 import { isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
+import { copyableMessage } from './copy-message-dom.ts';
 import { extractRecipeSection } from './v2-note-core.ts';
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import type { ScoreInspectorPorts } from './score-inspector.ts';
@@ -144,7 +145,7 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
       if (params) revert();
       showStyleNote(params ? params.style : '');
     },
-    setStatus(text) { statusEl.textContent = text; },
+    setStatus(text) { copyableMessage(statusEl, text); },                       // 2026-11-03-1155-9: a refusal is selectable and has its Copy button
     dispose() { el.remove(); },
   };
 }
@@ -334,7 +335,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
       if (morph) morph.disabled = off;
       if (params) { fill(a, params.a); fill(b, params.b); paint(params); refresh(); } else { sentence.textContent = ''; }
     },
-    setStatus(text) { statusEl.textContent = text; },
+    setStatus(text) { copyableMessage(statusEl, text); },                       // 2026-11-03-1155-9: a refusal is selectable and has its Copy button
     dispose() { el.remove(); },
   };
 }
@@ -494,7 +495,7 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
       a.disabled = b.disabled = bars.disabled = atomic.disabled = order.disabled = position.disabled = off;
       if (params) { fill(a, params.a); fill(b, params.b); seed.disabled = params.order !== 'seeded'; paint(params); refresh(); } else { seed.disabled = true; sentence.textContent = ''; }
     },
-    setStatus(text) { statusEl.textContent = text; },
+    setStatus(text) { copyableMessage(statusEl, text); },                       // 2026-11-03-1155-9: a refusal is selectable and has its Copy button
     dispose() { ask++; el.remove(); },
   };
 }

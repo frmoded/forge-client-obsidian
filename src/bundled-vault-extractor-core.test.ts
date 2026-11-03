@@ -259,7 +259,7 @@ test('welcome.ts: the launch sweep is manifest-based — no listing-diff trash, 
   assert.match(src, /sweepBundleDroppedCore\(adapter as ExtractorAdapter, \{/);
   assert.match(src, /manifestsBefore\[lib\] \?\? null/);
   assert.match(src, /formatLibraryNotice\(\{ leftEdited: libraryPass\.leftEdited, keptEdited, removed \}\)/);
-  assert.equal([...src.matchAll(/new Notice\(notice, 14000\)/g)].length, 1, 'exactly one Notice for the pass');
+  assert.equal([...src.matchAll(/loggedNotice\(notice, 14000\)/g)].length, 1, 'exactly one Notice for the pass');
   assert.match(src, /if \(manifest === null\) \{[\s\S]*?return none;/, 'no manifest -> nothing is swept');
 });
 

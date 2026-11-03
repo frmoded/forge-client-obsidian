@@ -41,6 +41,7 @@ proto.setText = function (t: string) { this.textContent = t; };
     onTiming: (t) => { ((window as any).__timings ??= []).push({ ...t, at: performance.now() }); },   // M7: every render's engine ms and total ms, and WHEN it finished
     readNote: async (p) => { const t = files.get(p); if (t === undefined) throw new Error('File not found'); return t; },
     writePhrase: async (params) => {
+      if ((window as any).__refuse) return { ok: false, message: (window as any).__refuse };      // 2026-11-03-1155-9: a refusal the note gives, said by the real strip (the sentence is the plugin's own: set by the measure)
       const { applyPhraseWrite } = await import('@client/phrase-core.ts');
       const w = applyPhraseWrite(files.get(PATH)!, params);
       if (w.ok === false) return w;

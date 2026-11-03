@@ -1,4 +1,5 @@
 import { Plugin, Notice, DataAdapter, FileSystemAdapter, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import type { EditorView } from '@codemirror/view';
 import {
   isV2Shape,
@@ -653,7 +654,7 @@ export default class ForgePlugin extends Plugin {
           console.log(
             `Forge chip inventory (from bundled executor.py):\n${formatChipInventoryFull(inventory)}`,
           );
-          new Notice(
+          loggedNotice(
             `Library note inventory logged to console (${formatChipInventorySummary(inventory)})`,
           );
         },
@@ -3748,7 +3749,7 @@ export default class ForgePlugin extends Plugin {
       // event-driven; a transient toast matches the semantic weight.
       // Panel is reserved for compute results + tracebacks cohort
       // needs to keep visible while debugging.
-      new Notice(
+      loggedNotice(
         `${NOTICE_PREFIX}removed ${cleaned.length} forensic library-note shadow note(s): `
           + cleaned.join(', '),
         6000,
@@ -3836,7 +3837,7 @@ export default class ForgePlugin extends Plugin {
           // v0.2.246 drain 2026-07-03-0400 — was forgeOutput
           // (panel-persistent). See sweep-time twin at line ~2810
           // for rationale.
-          new Notice(
+          loggedNotice(
             `${NOTICE_PREFIX}removed forensic shadow note: ${resolved.path}`, 5000,
           );
         }
@@ -6265,7 +6266,7 @@ export default class ForgePlugin extends Plugin {
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
       console.error(`openForgePanelByGesture (${origin}): could not open the Forge panel`, e);
-      new Notice(`Forge: could not open the Forge panel (${detail}). See the console for [forge-log] lines.`);
+      loggedNotice(`Forge: could not open the Forge panel (${detail}). See the console for [forge-log] lines.`);
     }
   }
 

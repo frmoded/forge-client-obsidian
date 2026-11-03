@@ -17,6 +17,7 @@
 // back over it, with no error anywhere.
 
 import { App, MarkdownView, Notice, TFile } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { ConfirmModal } from './confirm-modal.ts';
 import {
   decideRestoreNote, selectRestorablePaths, describeRestore, attemptCheckout,
@@ -80,19 +81,19 @@ export async function restoreActiveNoteToLastCommit(app: App): Promise<void> {
  *  and silenced first, and they reload from disk afterwards — success or failure. */
 export async function restoreNoteToLastCommit(app: App, file: TFile | null | undefined): Promise<void> {
   const base = vaultBasePath(app);
-  if (!base) { new Notice('Restore is desktop-only.'); return; }
+  if (!base) { loggedNotice('Restore is desktop-only.'); return; }
 
-  if (!file) { new Notice('No active note.'); return; }
+  if (!file) { loggedNotice('No active note.'); return; }
 
   // An edit still waiting in a Beat Box's autosave debounce is part of the note: write it first, so `git status` sees it.
   await flushRestoreParticipants(collectRestoreParticipants(), [file.path]);
   let status: string;
   try { status = git(base, ['status', '--short', '--', file.path]); }
-  catch (e) { new Notice('Restore failed: this vault is not a git repository.'); return; }
+  catch (e) { loggedNotice('Restore failed: this vault is not a git repository.'); return; }
 
   const decision = decideRestoreNote(file.path, status);
   if (decision.restorable === false) {
-    new Notice(decision.reason === 'untracked'
+    loggedNotice(decision.reason === 'untracked'
       ? `${file.path} is not tracked by git — nothing to restore to.`
       : `${file.path} already matches the last commit.`);
     return;
@@ -108,24 +109,24 @@ export async function restoreNoteToLastCommit(app: App, file: TFile | null | und
   await flushOpenEditors(app);
   const outcome = await runRestoreWithHolds(collectRestoreParticipants(), [decision.path],
     () => attemptCheckout(() => { git(base, ['checkout', '--', decision.path]); }));
-  if (outcome.ok === false) { new Notice(outcome.noticeText); return; }
+  if (outcome.ok === false) { loggedNotice(outcome.noticeText); return; }
   await reloadOpenEditors(app, [decision.path]);
-  new Notice(`Restored ${decision.path} to last commit.`);
+  loggedNotice(`Restored ${decision.path} to last commit.`);
 }
 
 /** "Restore ALL notes to last commit." */
 export async function restoreVaultToLastCommit(app: App): Promise<void> {
   const base = vaultBasePath(app);
-  if (!base) { new Notice('Restore is desktop-only.'); return; }
+  if (!base) { loggedNotice('Restore is desktop-only.'); return; }
 
   const open = collectRestoreParticipants();
   await flushRestoreParticipants(open, open.map((p) => p.path));
   let status: string;
   try { status = git(base, ['status', '--short']); }
-  catch (e) { new Notice('Restore failed: this vault is not a git repository.'); return; }
+  catch (e) { loggedNotice('Restore failed: this vault is not a git repository.'); return; }
 
   const paths = selectRestorablePaths(status);
-  if (paths.length === 0) { new Notice('Nothing to restore — no tracked changes.'); return; }
+  if (paths.length === 0) { loggedNotice('Nothing to restore — no tracked changes.'); return; }
 
   // TWO-STEP GATE, and the second step is deliberately not a type-the-name
   // box. The prompt allowed "an equivalent two-step"; a text-entry modal
@@ -151,7 +152,7 @@ export async function restoreVaultToLastCommit(app: App): Promise<void> {
   await flushOpenEditors(app);
   const outcome = await runRestoreWithHolds(collectRestoreParticipants(), paths,
     () => attemptCheckout(() => { git(base, ['checkout', '--', ...paths]); }));
-  if (outcome.ok === false) { new Notice(outcome.noticeText); return; }
+  if (outcome.ok === false) { loggedNotice(outcome.noticeText); return; }
   const reloaded = await reloadOpenEditors(app, paths);
-  new Notice(`Restored ${paths.length} notes; refreshed ${reloaded.length} open editor(s).`);
+  loggedNotice(`Restored ${paths.length} notes; refreshed ${reloaded.length} open editor(s).`);
 }

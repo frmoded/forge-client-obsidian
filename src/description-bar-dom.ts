@@ -8,6 +8,8 @@
 //     <div class="forge-description-preview"><pre class="forge-description-preview-description">...</pre><pre class="forge-description-preview-recipe">...</pre></div>     (only for the service's suggestion)
 //   </div>
 
+import { copyableMessage } from './copy-message-dom.ts';
+
 export type BarAction = 'update' | 'update-recipe' | 'update-python' | 'revert' | 'revert-generated' | 'ask' | 'apply-preview' | 'cancel-preview';
 export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
 
@@ -33,7 +35,7 @@ export function mountDescriptionBar(parent: HTMLElement, onAction: (a: BarAction
     show(view) {
       el.textContent = '';
       el.classList.toggle('is-custom', view.tone === 'custom');
-      const message = doc.createElement('span'); message.className = 'forge-description-message'; message.textContent = view.message; el.appendChild(message);
+      const message = doc.createElement('span'); message.className = 'forge-description-message'; el.appendChild(message); copyableMessage(message, view.message);       // 2026-11-03-1155-9: selectable, with its Copy button beside it
       if (view.preview) {
         const box = doc.createElement('div'); box.className = 'forge-description-preview';
         const d = doc.createElement('pre'); d.className = 'forge-description-preview-description'; d.textContent = view.preview.description;

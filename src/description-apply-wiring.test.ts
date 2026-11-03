@@ -134,7 +134,7 @@ for (const edition of ['lean', 'music'] as const) {
         const bar = view.contentEl.querySelector('.forge-description-bar');
         assert.ok(bar, 'a bar');
         assert.match(bar.querySelector('.forge-description-message').textContent, /^Description, line 1, column \d+: expected "bars", but found "barz"\.$/);
-        assert.deepEqual([...bar.querySelectorAll('button')].map((b: any) => b.getAttribute('data-action')), ['revert'], 'no service configured: no Ask button');
+        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert'], 'no service configured: no Ask button');
       }
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '8', 'the last good cache still draws the tab');
       tab.contentEl.querySelector('.forge-description-bar').remove();                       // a pane that redrew itself (a reload of the tab) lost its bar ...
@@ -158,7 +158,7 @@ for (const edition of ['lean', 'music'] as const) {
       w.store.set(PATH, edit(w.store.get(PATH)!, '8 bars', '5 bars'));                           // edited behind the plugin's back: no modify event
       w.workspaceEvent('file-open', w.tf(PATH)); await w.wait(100);
       assert.deepEqual(w.writes, [], 'looking is not writing');
-      assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-bar button')].map((b: any) => b.getAttribute('data-action')), ['update', 'revert']);
+      assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-bar .forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['update', 'revert']);
       assert.equal(cmd.checkCallback(true), true);
       cmd.checkCallback(false); await w.wait(100);
       assert.deepEqual(w.writes, [PATH]); assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '5');
@@ -172,7 +172,7 @@ for (const edition of ['lean', 'music'] as const) {
       const tab = await w.openTab();
       w.type(edit(w.store.get(PATH)!, 'to 8 bars, repeating with fills', 'to a dozen bars and a bit slower'));
       await w.wait();
-      assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-bar button')].map((b: any) => b.getAttribute('data-action')), ['revert', 'ask']);
+      assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-bar .forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert', 'ask']);
       (tab.contentEl.querySelector('[data-action="ask"]') as any).click(); await w.wait(100);
       assert.deepEqual(w.writes, [], 'a preview writes nothing');
       assert.match(tab.contentEl.querySelector('.forge-description-preview-description').textContent, /12 bars/);
@@ -184,7 +184,7 @@ for (const edition of ['lean', 'music'] as const) {
     try {
       const tab = await w2.openTab();
       w2.type(edit(w2.store.get(PATH)!, '8 bars', '8 barz')); await w2.wait();
-      assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-bar button')].map((b: any) => b.getAttribute('data-action')), ['revert']);
+      assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-bar .forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert']);
     } finally { w2.done(); }
   });
 
@@ -219,7 +219,7 @@ for (const edition of ['lean', 'music'] as const) {
         const bar = view.contentEl.querySelector('.forge-description-bar');
         assert.ok(bar, 'a bar');
         assert.match(bar.querySelector('.forge-description-message').textContent, /^Recipe, line 3, column 1: I do not know the step 'Sprinkle'\./);
-        assert.deepEqual([...bar.querySelectorAll('button')].map((b: any) => b.getAttribute('data-action')), ['revert']);
+        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert']);
       }
       assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '8', 'the last good cache still draws the tab');
       (notes.contentEl.querySelector('[data-action="revert"]') as any).click(); await w.wait(100);
@@ -239,7 +239,7 @@ for (const edition of ['lean', 'music'] as const) {
       for (const view of [tab, notes]) {
         const bar = view.contentEl.querySelector('.forge-description-bar');
         assert.equal(bar.querySelector('.forge-description-message').textContent, BOTH_EDITED);
-        assert.deepEqual([...bar.querySelectorAll('button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);
+        assert.deepEqual([...bar.querySelectorAll('.forge-description-button')].map((b: any) => [b.getAttribute('data-action'), b.textContent]), [['update', 'Update from Description'], ['update-recipe', 'Update from Recipe']]);
       }
       (notes.contentEl.querySelector('[data-action="update-recipe"]') as any).click(); await w.wait(100);
       assert.deepEqual(w.writes, [PATH]);

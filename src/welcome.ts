@@ -1,4 +1,5 @@
 import { App, DataAdapter, TFile, WorkspaceLeaf, MarkdownView, Notice } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { copyDirRecursive } from './copy-dir-core.ts';
 import { ensureForgeTomlStub } from './forge-toml-stub.ts';
 import { shouldSweepLegacyBakDir } from './rolling-backup-core.ts';
@@ -337,7 +338,7 @@ export async function runFirstRunCheck(app: App, pluginDir: string): Promise<voi
         await writeManifestStore(adapter, pluginDir, manifestsBefore, manifests);
         // ONE Notice for the whole pass: what was moved to the trash, and what was left alone because the user had edited it.
         const notice = formatLibraryNotice({ leftEdited: libraryPass.leftEdited, keptEdited, removed });
-        if (notice !== null) new Notice(notice, 14000);
+        if (notice !== null) loggedNotice(notice, 14000);
       } catch (e) {
         console.error('runFirstRunCheck: bundle-dropped sweep failed', e);
       }
@@ -454,7 +455,7 @@ async function parkLegacyMusicDirs(adapter: DataAdapter): Promise<void> {
       `Forge: parked pre-rename ${LEGACY_MUSIC_DIR}/ at ` +
       `${LEGACY_MUSIC_BACKUP_DIR}/ (two-vault split, v0.2.333)`,
     );
-    new Notice(legacyMusicRenameNotice(), 12000);
+    loggedNotice(legacyMusicRenameNotice(), 12000);
   } else if (action === 'rename-legacy-variant') {
     await adapter.rename(LEGACY_MUSIC_VARIANT_DIR, LEGACY_MUSIC_BACKUP_DIR);
     console.log(
@@ -462,7 +463,7 @@ async function parkLegacyMusicDirs(adapter: DataAdapter): Promise<void> {
       `${LEGACY_MUSIC_BACKUP_DIR}/ (no .bak. segment — it defeated ` +
       `the engine's backup-dir exclusion; drain 2026-08-08-1200)`,
     );
-    new Notice(legacyVariantRenameNotice(), 12000);
+    loggedNotice(legacyVariantRenameNotice(), 12000);
   } else if (action === 'skip-backup-exists') {
     // A legacy dir AND an earlier park both exist — refuse to
     // clobber the backup. The leftover dir is neutralized by the
@@ -866,7 +867,7 @@ async function refreshOutdatedWelcomes(
   }
 
   if (refreshed.length > 0) {
-    new Notice(
+    loggedNotice(
       `Forge: welcome notes refreshed to V2 — ${refreshed.join(', ')}. Previous versions moved to system trash; recover from Trash if you customized them.`,
       12000,
     );

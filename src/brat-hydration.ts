@@ -9,6 +9,7 @@
 // online launch.
 
 import { Notice, requestUrl } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import type { App } from 'obsidian';
 
 import {
@@ -125,7 +126,7 @@ export async function hydrateRuntime(
   log(`Forge hydration: ${plan.pending.length} artifact(s), `
     + `${(plan.pendingBytes / 1048576).toFixed(1)} MB from release v${version}`);
 
-  const notice = new Notice(hydrationNotice(plan.pendingBytes), 0);
+  const notice = loggedNotice(hydrationNotice(plan.pendingBytes), 0);
   let result: HydrationResult;
   try {
     result = await hydrate(plan, net, fs, subtleDigest, (p) => {
@@ -136,7 +137,7 @@ export async function hydrateRuntime(
   }
 
   if (result.ok) {
-    new Notice('Forge runtime ready.', 4000);
+    loggedNotice('Forge runtime ready.', 4000);
     log(`Forge hydration: complete — ${result.fetched.length} artifact(s), `
       + `${(result.bytesFetched / 1048576).toFixed(1)} MB verified`);
     return { ready: true, wasAlreadyComplete: false, result };
@@ -146,9 +147,9 @@ export async function hydrateRuntime(
   // were never attempted and naming them would be noise.
   const failure = result.failures[0];
   if (failure?.reason === 'network') {
-    new Notice(offlineNotice(version), 15000);
+    loggedNotice(offlineNotice(version), 15000);
   } else {
-    new Notice(
+    loggedNotice(
       `Forge runtime download failed on ${failure?.name} `
       + `(${failure?.detail}). It will retry next launch.`,
       15000,

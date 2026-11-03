@@ -5,6 +5,7 @@
 // edited mid-session to ADD the profile takes effect on the next load.
 
 import { MarkdownView, Notice, TFile, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
@@ -103,7 +104,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
     create: (p, content) => app.vault.create(p, content),
     open: (file) => hooks.openRhythmNote(file),
-    notify: (message) => { new Notice(message); },
+    notify: (message) => { loggedNotice(message); },
   });
 
   const activePath = (): string | null => app.workspace.getActiveFile()?.path ?? null;
@@ -115,7 +116,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
     create: (p, content) => app.vault.create(p, content),
     open: (file) => openPhrase(app, file),
-    notify: (message) => { new Notice(message); },
+    notify: (message) => { loggedNotice(message); },
     isAlreadyExists: isFileExistsError,
   });
 
@@ -128,7 +129,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
     create: (p, content) => app.vault.create(p, content),
     open: (file) => openPhrase(app, file),
-    notify: (message) => { new Notice(message); },
+    notify: (message) => { loggedNotice(message); },
     isAlreadyExists: isFileExistsError,
   });
 
@@ -141,7 +142,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
     create: (p, content) => app.vault.create(p, content),
     open: (file) => openPhrase(app, file),
-    notify: (message) => { new Notice(message); },
+    notify: (message) => { loggedNotice(message); },
     isAlreadyExists: isFileExistsError,
   });
 
@@ -171,7 +172,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         }
         if (!followed) await openPhrase(app, file);
       },
-      notify: (message) => { new Notice(message); },
+      notify: (message) => { loggedNotice(message); },
       isAlreadyExists: isFileExistsError,
       ask: (payload) => (hooks.askPlan ? hooks.askPlan(payload) : Promise.resolve({ status: 0, json: { detail: 'planning is not available in this build' } })),
       ownKey: () => hooks.ownKey?.(),
@@ -192,7 +193,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
       create: (p, content) => app.vault.create(p, content),
       open: (created) => openPhrase(app, created),
-      notify: (message) => { new Notice(message); },
+      notify: (message) => { loggedNotice(message); },
       isAlreadyExists: isFileExistsError,
       readNote: async (p) => {
         const f = app.vault.getAbstractFileByPath(p);
@@ -201,7 +202,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       },
       changes: (a, b, order, seed) => morphChangesViaEngine(a, b, order, seed),
       trace: (line) => { console.info(line); },
-    }).then(() => undefined, (e) => { console.error('turnMix: unexpected failure', e); new Notice(`Could not turn this mix into a morph: ${(e as Error)?.message ?? e}`); });
+    }).then(() => undefined, (e) => { console.error('turnMix: unexpected failure', e); loggedNotice(`Could not turn this mix into a morph: ${(e as Error)?.message ?? e}`); });
   };
   // The phrase the person is on, from the ACTIVE VIEW (not from a leaf lookup): a phrase tab (its Score) or a phrase's own text tab, with the kind it says it is. null = not on a phrase.
   const activePhrase = (): { kind: PhraseParams['kind'] | null; file: TFile } | null => {
@@ -235,7 +236,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // M6: a lineage link names a note by its path without .md. A phrase opens as a phrase tab, a bar in the Beat Box; a note that is not there is a Notice naming it (the person just clicked it).
       const openNote = (noteId: string) => {
         const file = app.vault.getAbstractFileByPath(`${noteId}.md`);
-        if (!(file instanceof TFile)) { new Notice(`Could not open ${noteId}: that note is not in this vault.`); return; }
+        if (!(file instanceof TFile)) { loggedNotice(`Could not open ${noteId}: that note is not in this vault.`); return; }
         if (noteId.startsWith(`${PHRASE_FOLDER}/`)) { void openPhrase(app, file); return; }
         // 2026-10-25-0800: a bar that is already open in a tab (its Beat Box, its Score or its text) is focused THERE, as a phrase is; only otherwise is it opened (the fork's "Open note" used to open a second tab of a bar already open)
         let open: WorkspaceLeaf | null = null;
@@ -360,7 +361,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // A chip of the strip was clicked: the pair's notes pane goes there; a note that is not in the vault is ONE Notice naming it (and counts as handled, so the tab does not also try to open it).
       const structureHooks: PhraseStructureHooks = {
         goto: async (leaf, noteId) => {
-          if (!(app.vault.getAbstractFileByPath(`${noteId}.md`) instanceof TFile)) { new Notice(`Could not open ${noteId}: that note is not in this vault.`); return true; }
+          if (!(app.vault.getAbstractFileByPath(`${noteId}.md`) instanceof TFile)) { loggedNotice(`Could not open ${noteId}: that note is not in this vault.`); return true; }
           return linker.navigate(leaf, noteId);
         },
         onNotesNavigated: (leaf, fn) => linker.onNotesNavigated(leaf, fn),
@@ -390,7 +391,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           write: async (p, content) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); await app.vault.process(f, () => content); },
           remove: removeNote,
           open: (f) => openPhrase(app, f),
-          notify: (message) => { new Notice(message); },
+          notify: (message) => { loggedNotice(message); },
           isAlreadyExists: isFileExistsError,
           trace: (line) => { console.info(line); },
           // the typed request (slice 2): the same service call, token and BYOK key as "New phrase from a sentence"; the bar names ride along as for every /plan call
@@ -508,10 +509,10 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         try {
           if (target.kind === 'phrase-text') await openScore(target.leaf, target.file);        // the Score in this very tab first, then the pair
           const result = await linker.open(target.leaf, target.file.path, target.file.path);
-          if (result === 'failed') new Notice(`${OPEN_PAIR_COMMAND_NAME} failed: the notes pane could not be opened (see the console).`);
+          if (result === 'failed') loggedNotice(`${OPEN_PAIR_COMMAND_NAME} failed: the notes pane could not be opened (see the console).`);
         } catch (e) {
           console.error('Open Score with notes failed', e);
-          new Notice(`${OPEN_PAIR_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+          loggedNotice(`${OPEN_PAIR_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
         }
       };
       plugin.addCommand({
@@ -538,10 +539,10 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
             process: async (p, fn) => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); await app.vault.process(f, fn); },
           });
           console.info(refreshLine(summary));
-          new Notice(refreshNotice(summary));
+          loggedNotice(refreshNotice(summary));
         } catch (e) {
           console.error('Refresh note links failed', e);
-          new Notice(`${REFRESH_LINKS_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+          loggedNotice(`${REFRESH_LINKS_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
         }
       };
       plugin.addCommand({
@@ -638,10 +639,10 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           if (!target) return false;
           if (!checking) {
             const file = app.vault.getAbstractFileByPath(target.path);
-            if (!(file instanceof TFile)) { new Notice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${target.path} is not in this vault.`); return true; }
+            if (!(file instanceof TFile)) { loggedNotice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${target.path} is not in this vault.`); return true; }
             openScore(target.leaf ?? app.workspace.getLeaf(false), file).catch((e) => {
               console.error('Open phrase as Score failed', e);
-              new Notice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
+              loggedNotice(`${OPEN_PHRASE_COMMAND_NAME} failed: ${(e as Error)?.message ?? e}`);
             });
           }
           return true;

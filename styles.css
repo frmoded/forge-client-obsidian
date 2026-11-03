@@ -1757,6 +1757,9 @@
   font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
+  /* 2026-11-03-1155-9: selectable text (the one rule of this class; the message block below lists the others) */
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Drain 2026-10-20-2100 — "not saved" is a STATE: shown only while the embed differs from the note. Hidden with `visibility`, not `display`, so it keeps its room and the row does not shift
@@ -2156,3 +2159,63 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-description-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .forge-description-preview { flex: 1 1 100%; display: grid; gap: 4px; }
 .forge-description-preview pre { margin: 0; padding: 4px 6px; white-space: pre-wrap; background: var(--background-primary); border-radius: 3px; }
+
+/* 2026-11-03-1155-9 (PRIORITY, driver: "make all the text tags selectable and copyable so I can copy them to you"): EVERY message the plugin draws is selectable text. Obsidian's leaf container inherits `user-select: none` from its chrome, so the
+   messages opt in one by one (the Forge output panel did in v0.2.178). Only TEXT: buttons, chips, drag handles and the engraving (`.forge-rhythm-score-host svg`, whose drag selects bars) stay as they were. */
+.forge-description-message,
+.forge-description-preview pre,
+.forge-phrase-status,
+.forge-phrase-style-note,
+.forge-mix-path-note,
+.forge-mix-sentence,
+.forge-morph-sentence,
+.forge-transform-label,
+.forge-rhythm-edit-score-status,
+.forge-rhythm-score-message,
+.forge-player-message,
+.forge-source-layer-status,
+.forge-arrangement-pin,
+.forge-arrangement-header,
+.forge-composition-header,
+.forge-composition-detail,
+.forge-inspector-title,
+.forge-inspector-body,
+.forge-inspector-note,
+.forge-inspector-notes-title,
+.forge-inspector-preview,
+.forge-inspector-quiet,
+.forge-inspector-lineage > li > span,
+.forge-notebook-message,
+.forge-notebook-hint,
+.forge-notebook-problem,
+.forge-notebook-said,
+.forge-notebook-result,
+.forge-notebook-summary,
+.forge-notebook-recipe,
+.forge-html-embed-error,
+.forge-html-embed-error-title,
+.forge-html-embed-error-detail,
+.forge-rhythm-embed-error,
+.forge-rhythm-embed-status,
+.forge-re-extract-warning,
+.forge-deps-line,
+.forge-add-domain-status,
+.forge-panel-inputs-hint,
+.forge-generation-label {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/* the Copy button beside a message (copy-message-dom.ts): small, never part of the selection it sits next to */
+.forge-copy-button {
+  user-select: none;
+  -webkit-user-select: none;
+  margin-left: 6px;
+  padding: 0 8px;
+  height: 22px;
+  min-height: 20px;
+  font-size: var(--font-ui-smaller);
+  vertical-align: baseline;
+  cursor: pointer;
+}

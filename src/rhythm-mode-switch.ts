@@ -4,6 +4,7 @@
 // there is no second swapper (the automatic default-view swap in rhythm-edit-view.ts has its own popstate/verify/retry path).
 
 import { Notice, type App, type TFile, type WorkspaceLeaf } from 'obsidian';
+import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 import { VIEW_TYPE_BY_MODE, transition, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
@@ -23,7 +24,7 @@ export async function switchLeafToMode(
   if (to !== 'json') {
     const note = readRhythmNote(await app.vault.read(file));
     if (note.ok === false) {
-      new Notice(`${to === 'score' ? 'Score' : 'Edit rhythm'}: ${note.message}`, 8000);
+      loggedNotice(`${to === 'score' ? 'Score' : 'Edit rhythm'}: ${note.message}`, 8000);
       return;
     }
   }
