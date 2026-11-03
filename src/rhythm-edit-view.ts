@@ -540,6 +540,10 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
         out.push({ path: v.file.path, flush: () => v.flush(), hold: () => v.holdForRestore(), release: () => v.releaseAfterRestore() });
       }
     }
+    for (const leaf of app.workspace.getLeavesOfType(RHYTHM_SCORE_VIEW_TYPE)) {          // 2026-11-03-1155-92 (R4): the bar's Score tab redraws from the restored file (nothing of its own to hold)
+      const v = leaf.view;
+      if (v instanceof RhythmScoreView && v.file) out.push({ path: v.file.path, flush: async () => {}, hold: async () => {}, release: async () => { v.reloadAfterRestore(); } });
+    }
     return out;
   }));
 

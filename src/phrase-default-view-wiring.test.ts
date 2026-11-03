@@ -159,7 +159,7 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(w.leaf.view.getViewType(), PHRASE_VIEW_TYPE);
       const view: any = w.plugin.views.get(PHRASE_VIEW_TYPE)!(w.leaf);
       view.leaf = w.leaf; view.file = w.tfile;
-      icons.find((i) => i.title === 'Open as JSON')!.cb();
+      icons.find((i) => i.title === 'Open as Forge note')!.cb();       // 2026-11-03-1155-92 (R5): was 'Open as JSON'
       await tick(30);
       assert.equal(w.leaf.view.getViewType(), 'markdown', 'the text is showing');
       const before = w.states.length;
@@ -167,7 +167,7 @@ for (const edition of ['lean', 'music'] as const) {
       for (let i = 0; i < 4; i++) { await w.fire('file-open', 'active-leaf-change', 'layout-change'); await tick(200); }       // > 600 ms: the +150 and +600 re-syncs have fired
       assert.equal(w.states.length, before, 'no bounce back to the Score');
       assert.equal(w.leaf.view.getViewType(), 'markdown');
-      assert.equal(w.lines.filter((l) => /-> json \(the person chose Open as JSON\)/.test(l)).length, 1, `one evidence line: ${w.lines.join(' | ')}`);
+      assert.equal(w.lines.filter((l) => /-> json \(the person chose Open as Forge note\)/.test(l)).length, 1, `one evidence line: ${w.lines.join(' | ')}`);
       w.showText('notes/other.md'); await w.fire('file-open');
       w.showText(PHRASE); await w.fire('file-open');
       assert.equal(w.leaf.view.getViewType(), PHRASE_VIEW_TYPE, 'the choice ended when the tab navigated away');

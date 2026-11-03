@@ -5,6 +5,7 @@
 // edited mid-session to ADD the profile takes effect on the next load.
 
 import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
+import { registerRestoreParticipants, type RestoreParticipant } from './restore-hold-core.ts';
 import { deferredTabName } from './deferred-tab-title-core.ts';
 import { MarkdownView, Notice, TFile, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
@@ -484,6 +485,18 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       onWorkspaceMoved(nameDeferredTabs);
       nameDeferredTabs();
       void descriptions.inspectOpen();
+      // 2026-11-03-1155-92 (R4): "Restore to last commit" on a Score tab: the open Score tabs of the note take part (restore-hold-core.ts): a hand edit still waiting is dropped before the checkout, and afterwards the tab redraws from the restored file and the bar forgets what it said.
+      plugin.register(registerRestoreParticipants(() => {
+        const out: RestoreParticipant[] = [];
+        app.workspace.iterateAllLeaves((leaf) => {
+          const v = leaf.view;
+          if ((v instanceof PhraseView || v instanceof ArrangementView || v instanceof CompositionView) && v.file) {
+            const path = v.file.path;
+            out.push({ path, flush: async () => {}, hold: async () => { descriptions.drop(path); }, release: async () => { v.reloadAfterRestore(); await descriptions.reset(path); } });
+          }
+        });
+        return out;
+      }));
       plugin.register(onHandEditRefusal((p) => { void descriptions.inspect(p); }));                   // 2026-11-03-1155-8 (A): a control refused for a hand edit: the bar that offers Update / Revert is drawn at once
       plugin.addCommand({
         id: 'revert-custom-python',

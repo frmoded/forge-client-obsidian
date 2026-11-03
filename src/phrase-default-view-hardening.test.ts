@@ -24,7 +24,7 @@ test('a mark with no author is the person\'s: the line says they chose Open as J
   person.router.setMark(person.leaf, 'phrases/phrase_001.md', 'markdown');
   assert.equal(await person.router.evaluate(person.leaf), 'chosen-json');
   assert.equal(person.lines.length, 1);
-  assert.match(person.lines[0], /the person chose Open as JSON/);
+  assert.match(person.lines[0], /the person chose Open as Forge note/);
   assert.doesNotMatch(person.lines[0], /pair/);
   const plugin = rig();
   plugin.router.setMark(plugin.leaf, 'phrases/phrase_001.md', 'markdown', 'plugin');

@@ -15,6 +15,8 @@ import { computeRhythmScoreViaEngine } from './rhythm-score-engine.ts';
 import { produceScore, createScoreScheduler, type ScoreScheduler } from './rhythm-score-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE, MODE_ACTIONS, headerActionsFor, type RhythmMode } from './rhythm-mode-core.ts';
 import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts';
+import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
+import { messageDelivery } from './score-first-messages-core.ts';
 
 export class RhythmScoreView extends EditableFileView {
   private scheduler: ScoreScheduler | null = null;
@@ -27,7 +29,13 @@ export class RhythmScoreView extends EditableFileView {
     for (const a of [...headerActionsFor('score', musicEdition.id)].reverse()) {
       this.addAction(a.icon, a.title, () => { void this.switchMode(a.mode); });
     }
+    // 2026-11-03-1155-92 (R4): the bar's Score tab in a SCORE-FIRST vault carries "Restore to last commit" too (the Beat Box and the text view already do); another vault's tab is unchanged (P3). The profile answer can arrive after the tab is built.
+    const addRestore = (): void => { this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); }); };
+    if (messageDelivery.isScoreFirst()) addRestore(); else this.register(messageDelivery.onScoreFirst(addRestore));
   }
+
+  /** 2026-11-03-1155-92 (R4): "Restore to last commit" has put the committed text on disk: draw from it now. */
+  reloadAfterRestore(): void { this.scheduler?.renderNow(); }
 
   getViewType(): string { return RHYTHM_SCORE_VIEW_TYPE; }
   getIcon(): string { return MODE_ACTIONS.score.icon; }

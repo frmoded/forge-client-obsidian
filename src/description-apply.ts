@@ -61,6 +61,10 @@ export interface DescriptionController {
   revertGenerated(path: string): Promise<void>;
   /** Is there something for "Update from Description" to do on this note (the command's availability)? */
   canUpdate(path: string): boolean;
+  /** "Restore to last commit" is about to replace this note's text: whatever was pending (a hand edit waiting out its 600 ms) is DROPPED, never applied to the restored text. */
+  drop(path: string): void;
+  /** ... and it has: forget every bar, sentence and told line for the note, then look at the text now on disk (reads, never writes). */
+  reset(path: string): Promise<void>;
   dispose(): void;
 }
 
@@ -312,6 +316,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       timers.set(path, ports.setTimer(() => { timers.delete(path); void evaluate(path, true); }, DESCRIPTION_DEBOUNCE_MS));       // a second edit inside the wait replaces the first: the first is never written
     },
     inspect: (path) => evaluate(path, false),
+    drop(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } },
+    async reset(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } ui.delete(path); told.delete(path); notices.delete(path); syncBars(); await evaluate(path, false); },
     async inspectOpen() {
       if (disposed) return;
       const todo = new Set<string>();

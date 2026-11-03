@@ -82,7 +82,7 @@ export interface PhraseRouter<L> {
 }
 
 const JSON_WHY: Partial<Record<PhraseRouteReason, string>> = {
-  'chosen-json': 'the person chose Open as JSON',
+  'chosen-json': 'the person chose Open as Forge note',
   'layout-restore': 'a tab restored with the layout',
 };
 const PLUGIN_JSON_WHY = 'the pair notes pane shows it as text';       // 2026-10-26-1545: the plugin set this mark (showReadOnly), nobody chose it

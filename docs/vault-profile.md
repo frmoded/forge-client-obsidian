@@ -102,7 +102,7 @@ switched with `popstate` (kept out of the navigation history). Evidence line, pr
 
 - **Only phrase notes** (`isPhrasePath`): not bars, not `phrases/README.md`, not anything else. **Only score-first vaults**: the router is created inside the profile gate, so any other vault has no router at all (P3), and it asks the live
   profile answer at every event.
-- **Open as JSON stays JSON.** The phrase tab marks its leaf (`chooseJson`) BEFORE it switches the tab to the note's text; the mark belongs to that leaf and that file and ends when the leaf shows another file. `Open as Score`
+- **Open as Forge note stays the note's text** (it was called Open as JSON until 2026-11-03). The phrase tab marks its leaf (`chooseJson`) BEFORE it switches the tab to the note's text; the mark belongs to that leaf and that file and ends when the leaf shows another file. `Open as Score`
   (header button, command) clears it. The +150 / +600 ms header re-syncs and every workspace event find the mark and leave the tab alone.
 - **A tab restored with the layout keeps its text.** The tabs that exist when the router is registered are a baseline (read from each leaf's saved view state, so a background tab that has not loaded yet counts); such a tab is
   routed only after its leaf shows another file.
@@ -112,7 +112,7 @@ switched with `popstate` (kept out of the navigation history). Evidence line, pr
 
 Obsidian's explorer, links and quick switcher open a note with `getLeaf(false).openFile(file)`: they navigate the current tab and never look for a tab that already shows the note (read from Obsidian 1.14.5's `app.js`;
 a custom view such as the phrase tab is not accepted for `.md`, so the clicked tab first becomes markdown text). So the router, when a leaf has just opened a phrase as text and ANOTHER leaf already shows that phrase (its Score, or
-its note as text, which includes the tab left on `Open as JSON`), focuses that tab and dismisses the clicked one: back to what it showed, or closed when it was a fresh tab (the two moves Obsidian itself makes in
+its note as text, which includes the tab left on `Open as Forge note`), focuses that tab and dismisses the clicked one: back to what it showed, or closed when it was a fresh tab (the two moves Obsidian itself makes in
 `FileView.onDelete`). A tab that cannot give way (the only tab of its pane, nothing to go back to) shows the Score as before: a second tab, never a loop. Two different phrases still get two tabs. The explicit `Open phrase as Score`
 command and the `Open as Score` header button are unchanged. Evidence line: `[forge-phrase] reused <path> (focused existing tab)`.
 

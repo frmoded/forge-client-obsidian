@@ -92,7 +92,7 @@ for (const edition of ['lean', 'music'] as const) {
     };
     const openNotesPane = () => { const leaf: any = { getViewState: () => ({ type: 'markdown', state: { file: PATH } }), getRoot: () => ({}) }; const view: any = new real.MarkdownView(); view.file = tf(PATH); view.leaf = leaf; view.contentEl = makeEl(); view.getViewType = () => 'markdown'; leaf.view = view; leaves.push(leaf); return view; };
     return {
-      plugin, store, writes, lines, clock, openTab, openNotesPane, fire, tf, addLeaf: (l: any) => { leaves.push(l); },
+      app, plugin, store, writes, lines, clock, openTab, openNotesPane, fire, tf, addLeaf: (l: any) => { leaves.push(l); },
       type: (text: string) => { store.set(PATH, text); fire('modify', tf(PATH)); },            // the person types: the file changes and the vault says so
       wait: async (ms = DESCRIPTION_DEBOUNCE_MS + 20) => { await clock.advance(ms); for (let i = 0; i < 20; i++) await Promise.resolve(); },
       workspaceEvent: (name: string, arg?: unknown) => { for (const cb of wsHandlers.get(name) ?? []) cb(arg); },
@@ -364,6 +364,71 @@ for (const edition of ['lean', 'music'] as const) {
         w.workspaceEvent('layout-change'); await w.wait(100);
         assert.equal(phrase.el.textContent, toml === SCORE_FIRST_TOML ? 'phrase_001' : PHRASE_VIEW_TYPE);
         assert.equal(other.el.textContent, 'some-other-view');
+      } finally { w.done(); }
+    }
+  });
+
+  // ---- 2026-11-03-1155-92 (R4, R5) -------------------------------------------------------------------------------------------------------------------------------------------------------------
+  const captureActions = (make: () => unknown): Array<{ icon: string; title: string; cb: () => void }> => {
+    const calls: Array<{ icon: string; title: string; cb: () => void }> = [];
+    const keep = (Object.prototype as any).addAction, keepRegister = (Object.prototype as any).register;
+    (Object.prototype as any).addAction = function (icon: string, title: string, cb: () => void) { calls.push({ icon, title, cb }); return { remove() {} }; };
+    (Object.prototype as any).register = function () {};                                                  // Component.register: the shim view has none
+    try { make(); } finally { (Object.prototype as any).addAction = keep; if (keepRegister === undefined) delete (Object.prototype as any).register; else (Object.prototype as any).register = keepRegister; }
+    return calls;
+  };
+  test(`[${edition}] R5+R4: the phrase, arrangement and composition Score tabs say "Open as Forge note" (icon file-text) and carry "Restore to last commit" (icon history, to the left of it); the word JSON is in no header title; pressing Restore runs the one restore function`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const infos: string[] = []; const savedInfo = console.info; console.info = (...a: unknown[]) => { infos.push(String(a[0])); };
+    try {
+      for (const type of [PHRASE_VIEW_TYPE, 'forge-arrangement-view', 'forge-composition-view']) {
+        const factory = w.plugin.views.get(type); assert.ok(factory, `${type} is registered in a score-first vault`);
+        let view: any; const actions = captureActions(() => { view = factory({ getViewState: () => ({ type, state: {} }), getRoot: () => ({}) }); view.app = w.app; view.file = w.tf(PATH); });
+        assert.deepEqual(actions.map((a) => [a.icon, a.title]), [['file-text', 'Open as Forge note'], ['history', 'Restore to last commit']], `${type}: added right-to-left, so Restore renders to the left`);
+        assert.equal(actions.some((a) => /json/i.test(a.title)), false, `${type}: no JSON in the header`);
+        actions[1].cb(); await w.wait(20);
+        assert.ok(infos.some((l) => /^\[forge-notice\] (Restore is desktop-only\.|No active note\.)/.test(l)), `${type}: Restore reached restoreNoteToLastCommit (it answers in a notice here: no git in a test)`);
+        infos.length = 0;
+      }
+    } finally { console.info = savedInfo; w.done(); }
+  });
+
+  test(`[${edition}] R5: the Beat Box of a rhythm note keeps "Open as JSON" (it IS JSON); the three Score views have no "Open as JSON" literal left in their sources`, async () => {
+    const { BEAT_BOX_ONLY_ACTIONS } = await import('./header-actions-core.ts');
+    assert.ok(BEAT_BOX_ONLY_ACTIONS.some((a) => a.id === 'open-as-json' && a.title === 'Open as JSON'));
+    for (const f of ['phrase-view.ts', 'compositions.ts', 'kits-arrangements.ts']) assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'src', f), 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n'), /Open as JSON/, f);
+  });
+
+  test(`[${edition}] R4: Restore to last commit with a hand edit pending: the Score tab and the bar come back to the restored note, the pending edit is DROPPED (never applied), and nothing is written afterwards`, async () => {
+    for (const how of ['bar-showing', 'timer-pending'] as const) {
+      const w = await world(SCORE_FIRST_TOML);
+      try {
+        const original = w.store.get(PATH)!;
+        const tab = await w.openTab(); const notes = w.openNotesPane();
+        const edited = editRecipe(original, '8 bars', '6 bars');
+        if (how === 'bar-showing') { w.store.set(PATH, edited); w.workspaceEvent('file-open', w.tf(PATH)); await w.wait(100); assert.deepEqual([...tab.contentEl.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['update-recipe', 'revert']); }
+        else { w.type(edited); await w.wait(100); }                                                      // the 600 ms timer is still running
+        const parts = real.collectRestoreParticipants().filter((p) => p.path === PATH);
+        assert.ok(parts.length >= 1, 'the open Score tab takes part in a restore');
+        await real.runRestoreWithHolds(parts, [PATH], () => { w.store.set(PATH, original); });          // the checkout: the file on disk is the committed one again
+        w.fire('modify', w.tf(PATH)); await w.wait(DESCRIPTION_DEBOUNCE_MS + 3000);
+        assert.deepEqual(w.writes, [], `${how}: the dropped hand edit was not applied`);
+        assert.equal(w.store.get(PATH), original);
+        assert.equal(tab.contentEl.querySelector('.forge-phrase-bars').value, '8', `${how}: the controls re-read the restored note`);
+        for (const el of [tab.contentEl, notes.contentEl]) assert.equal(el.querySelector('.forge-description-bar') === null, true, `${how}: no stale bar`);
+      } finally { w.done(); }
+    }
+  });
+
+  test(`[${edition}] R4 + P3: the bar's own Score tab (music edition) carries "Restore to last commit" in a score-first vault and does not in any other vault; its participant redraws it from the restored file`, async () => {
+    for (const [toml, expected] of [[SCORE_FIRST_TOML, true], [TUTORIAL_TOML, false]] as const) {
+      const w = await world(toml);
+      try {
+        const factory = w.plugin.views.get('forge-rhythm-score');
+        if (!factory) { assert.equal(edition, 'lean', 'only the lean edition has no bar Score tab'); continue; }
+        const actions = captureActions(() => factory({ getViewState: () => ({ type: 'forge-rhythm-score', state: {} }), getRoot: () => ({}) }));
+        assert.equal(actions.some((a) => a.title === 'Restore to last commit' && a.icon === 'history'), expected, `score-first=${expected}`);
+        assert.equal(actions.some((a) => a.title === 'Open as JSON'), true, 'a bar IS JSON: its Score tab keeps Open as JSON');
       } finally { w.done(); }
     }
   });

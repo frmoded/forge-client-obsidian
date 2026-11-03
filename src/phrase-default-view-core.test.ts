@@ -54,7 +54,7 @@ test('(c) Open as JSON stays JSON: the mark holds across every re-sync (the +150
   r.router.setMark(leaf, 'phrases/phrase_001.md', 'markdown');          // what the phrase tab's Open as JSON does BEFORE it switches the tab
   for (let i = 0; i < 6; i++) assert.equal(await r.router.evaluate(leaf), 'chosen-json');
   assert.deepEqual(r.swaps, []);
-  assert.deepEqual(r.lines, ['[forge-phrase] routed phrases/phrase_001.md -> json (the person chose Open as JSON)'], 'one evidence line, not six');
+  assert.deepEqual(r.lines, ['[forge-phrase] routed phrases/phrase_001.md -> json (the person chose Open as Forge note)'], 'one evidence line, not six');
 });
 
 test('2026-10-26-1545: a mark the PLUGIN set (the pair\'s notes pane) keeps the leaf as text but the evidence line does not say a person chose it', async () => {
@@ -68,7 +68,7 @@ test('2026-10-26-1545: a mark the PLUGIN set (the pair\'s notes pane) keeps the 
   open(p, mine, 'phrases/phrase_001.md');
   p.router.setMark(mine, 'phrases/phrase_001.md', 'markdown');
   await p.router.evaluate(mine);
-  assert.deepEqual(p.lines, ['[forge-phrase] routed phrases/phrase_001.md -> json (the person chose Open as JSON)'], 'a person\'s own choice still says so');
+  assert.deepEqual(p.lines, ['[forge-phrase] routed phrases/phrase_001.md -> json (the person chose Open as Forge note)'], 'a person\'s own choice still says so');
 });
 
 test('the JSON choice lasts until the leaf navigates elsewhere: another note drops the mark, and coming back to the phrase is a new open that routes to the Score', async () => {

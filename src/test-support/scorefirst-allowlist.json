@@ -36,6 +36,6 @@
     {"file": "score-click-policy.ts", "role": "reads the published flag", "rights": ["mentions"]},
     {"file": "output-view.ts", "role": "reads the published flag", "rights": ["mentions", "renders"]},
     {"file": "rhythm-embed-view.ts", "role": "engraves a Score and never sees the gate", "rights": ["renders"]},
-    {"file": "rhythm-score-view.ts", "role": "engraves a Score and never sees the gate", "rights": ["renders"]}
+    {"file": "rhythm-score-view.ts", "role": "reads the published flag", "rights": ["mentions", "renders"]}
   ]
 }
