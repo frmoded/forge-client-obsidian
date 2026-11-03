@@ -4,6 +4,8 @@
 // person can see: no "New bar" command and no ribbon button are registered. The vault's profile is a constant, so both are added once, when the workspace is ready; a forge.toml
 // edited mid-session to ADD the profile takes effect on the next load.
 
+import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
+import { deferredTabName } from './deferred-tab-title-core.ts';
 import { MarkdownView, Notice, TFile, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
@@ -340,6 +342,15 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         router.setMark(leaf, path, 'markdown', 'plugin');
         hooks.markRhythmText?.(leaf, path);
         await leaf.setViewState({ type: 'markdown', active: false, state: { file: path, mode: 'preview' } } as ViewState);
+        // 2026-11-03-1155-8 (D2): Obsidian silently drops setViewState on a leaf that is `working` (the notes pane is, right after the Score beside it changed). So the result is CHECKED, and the show waits for the leaf and asks again;
+        // a pane that still is not on the note after four tries is an error the linker traces (it keeps what it last showed), never a silent success.
+        const onNote = (): boolean => (leaf.getViewState().state as { file?: unknown } | undefined)?.file === path;
+        for (let attempt = 0; attempt < 4 && !onNote(); attempt++) {
+          await new Promise<void>((resolve) => { window.setTimeout(resolve, 60 * (attempt + 1)); });
+          await idle(leaf);
+          await leaf.setViewState({ type: 'markdown', active: false, state: { file: path, mode: 'preview' } } as ViewState);
+        }
+        if (!onNote()) throw new Error(`the notes pane did not move to ${path}`);
       };
       const linker = createPaneLinker<WorkspaceLeaf>({
         openBeside: async (score, path) => { const notes = app.workspace.createLeafBySplit(score, 'vertical', false); await showReadOnly(notes, path); return notes; },
@@ -458,7 +469,32 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       });
       plugin.registerEvent(app.vault.on('modify', (f) => { descriptions.modified(f.path); }));
       plugin.registerEvent(app.workspace.on('file-open', (f) => { if (f) void descriptions.inspect(f.path); }));
-      onWorkspaceMoved(() => descriptions.syncBars());
+      // 2026-11-03-1155-8 (C): the bar is computed from the note when a pane OPENS and when a restored layout settles, not only heard from a modify (a reload brought the panes back and a custom note had no banner until `touch`).
+      onWorkspaceMoved(() => { void descriptions.inspectOpen().then(() => descriptions.syncBars()); });
+      // 2026-11-03-1155-8 (D1): a restored tab that has not been opened yet is a deferred leaf, titled with its view type (`forge-phrase`); it is named after its note from its saved state, without loading the view.
+      const nameDeferredTabs = (): void => {
+        app.workspace.iterateAllLeaves((leaf) => {
+          const l = leaf as unknown as { isDeferred?: boolean; tabHeaderInnerTitleEl?: HTMLElement };
+          if (l.isDeferred !== true || !l.tabHeaderInnerTitleEl) return;
+          const s = leaf.getViewState();
+          const name = deferredTabName(s.type, s.state);
+          if (name !== null && l.tabHeaderInnerTitleEl.textContent !== name) l.tabHeaderInnerTitleEl.textContent = name;
+        });
+      };
+      onWorkspaceMoved(nameDeferredTabs);
+      nameDeferredTabs();
+      void descriptions.inspectOpen();
+      plugin.register(onHandEditRefusal((p) => { void descriptions.inspect(p); }));                   // 2026-11-03-1155-8 (A): a control refused for a hand edit: the bar that offers Update / Revert is drawn at once
+      plugin.addCommand({
+        id: 'revert-custom-python',
+        name: 'Revert custom Python to generated',
+        checkCallback: (checking) => {
+          const file = app.workspace.getActiveFile?.();
+          if (!file || !descriptions.canRevertGenerated(file.path)) return false;
+          if (!checking) void descriptions.revertGenerated(file.path);
+          return true;
+        },
+      });
       plugin.addCommand({
         id: 'update-from-description',
         name: 'Update from Description',

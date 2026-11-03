@@ -8,6 +8,7 @@ import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
 import { PHRASE_VIEW_TYPE, type PhraseParams, applyPhraseWrite, phraseWriteRefusal, isBarPath, mixTraceEngine, mixTraceRead, mixTraceWritten, morphTraceEngine, morphTraceWritten } from './phrase-core.ts';
+import { handEditRefused } from './hand-edit-refusal-core.ts';
 import { mountPhrase, type PhraseHandle } from './phrase-dom.ts';
 import { phraseTabTitle } from './phrase-tab-title-core.ts';
 import type { PinnedNote } from './linked-panes-core.ts';
@@ -111,6 +112,7 @@ export class PhraseView extends EditableFileView {
           return { ok: false, message: `Not saved: ${(e as Error)?.message ?? e}` };
         }
         if (refusal === null) { trace(mixTraceWritten(params)); trace(morphTraceWritten(params)); }
+        if (refusal !== null) handEditRefused(file.path, refusal);               // 2026-11-03-1155-8 (A): a refusal for a hand edit makes the bar (Update from X / Revert) appear now
         return refusal === null ? { ok: true } : { ok: false, message: refusal };
       },
       runCustom: (python, name, limitS) => runCustomPythonViaEngine(python, name, limitS),         // 2026-11-02-1155 (M16b): a custom note's Python is run in the engine, with a limit

@@ -41,7 +41,30 @@ export function pythonEdit(text: string, hint: GrammarParams | null): PythonEdit
   return res.ok ? { kind: 'apply', python, params: res.params } : { kind: 'custom', python };
 }
 
-export const pythonAppliedLine = (name: string, change: string): string => `[forge-python] applied ${name} (${change})`;
+/** 2026-11-03-1155-8 (D4): every `#` comment of a Python text (a # inside a string is not one; a trailing comment counts), trimmed, in order. */
+export function pythonCommentsOf(text: string): string[] {
+  const out: string[] = [];
+  let triple: string | null = null;                                  // inside a triple-quoted string that began on an earlier line (or this one)
+  for (const line of text.split(/\r?\n/)) {
+    let q: string | null = triple;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (q !== null) {
+        if (c === '\\') { i++; continue; }
+        if (q.length === 3 ? line.startsWith(q, i) : c === q) { i += q.length - 1; q = null; }
+        continue;
+      }
+      if (c === '#') { out.push(line.slice(i).trim()); break; }
+      if (c === '"' || c === "'") { q = line.startsWith(c.repeat(3), i) ? c.repeat(3) : c; i += q.length - 1; }
+    }
+    triple = q !== null && q.length === 3 ? q : null;
+  }
+  return out;
+}
+/** The one sentence said when a Python apply wrote the grammar's own text over the person's: their comments are gone (D4). */
+export const COMMENTS_NOT_KEPT = 'comments in the Python are not kept';
+export const COMMENTS_NOT_KEPT_BAR = `Applied from the Python; ${COMMENTS_NOT_KEPT}.`;
+export const pythonAppliedLine = (name: string, change: string, commentsDropped = false): string => `[forge-python] applied ${name} (${change})${commentsDropped ? `; ${COMMENTS_NOT_KEPT}` : ''}`;
 export const pythonCustomLine = (name: string): string => `[forge-python] ${name} is now a custom note (its Python is not a shape the grammar knows)`;
 export const pythonRevertedLine = (name: string): string => `[forge-python] reverted ${name} to the grammar's Python (from the json cache)`;
 export const bothEditedLineOf = (name: string, facets: readonly Facet[]): string => `[forge-python] refused ${name}: ${bothEditedMessage(facets)}`;

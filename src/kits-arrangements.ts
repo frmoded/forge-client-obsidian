@@ -1,6 +1,7 @@
 // score_first M10 slice 1 (drain 2026-10-29-0820, design 4.10) - the Obsidian-coupled half of kits and arrangements: the arrangement tab (a Score drawn by the code that draws every phrase, nothing else on it), the two dialogs' Modal frames, and the commands **New kit**,
 // **New arrangement** and **Open arrangement as Score**. The decisions are in kit-core.ts / arrangement-core.ts / kit-arrangement-flow-core.ts, the dialogs' DOM in kit-dom.ts / arrangement-dom.ts, all unit-tested without Obsidian. Registered ONLY in a score-first vault
 // (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3). 2026-10-29-0910: the tab's one write is the row of controls per kit (Mute, Solo, volume), which edits the note through the builders New arrangement uses. An arrangement is otherwise edited as its note.
+import { handEditRefused, handEditStatusSettled } from './hand-edit-refusal-core.ts';
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
@@ -186,6 +187,7 @@ export class ArrangementView extends EditableFileView {
     if (path === mine || isKitPath(path) || isPhrasePath(path) || path.startsWith('bars/')) {
       void this.readText(this.file!).then((text) => {
         if (this.disposed) return;
+        if (typeof text === 'string' && this.statusEl && handEditStatusSettled(this.statusEl.textContent ?? '', text)) this.statusEl.setText('');         // 2026-11-03-1155-8 (B): the refusal on the tab is not true any more
         this.paintHeader(text); this.showControls(text); this.strip?.show(text);
         // every kit muted is answered from the note alone: the message now, past the debounce and past a render still in flight
         const read = typeof text === 'string' ? readArrangementNote(text) : null;
@@ -245,6 +247,7 @@ export class ArrangementView extends EditableFileView {
     if (refused !== null) {
       // 2026-10-31-1120: nothing was written, so no modify event will bring the buttons back: they go back to what the note says, and the sentence is on the tab
       console.error('ArrangementView.writeSettings refused', refused);
+      handEditRefused(file.path, refused);                                   // 2026-11-03-1155-8 (A): a refusal for a hand edit makes the bar (Update from X / Revert) appear now
       this.statusEl?.setText(refused);
       this.showControls(await this.readText(file));
       return;

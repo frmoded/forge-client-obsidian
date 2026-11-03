@@ -15,7 +15,10 @@ import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
 import { PHRASE_DEFAULTS, PHRASE_VIEW_TYPE, noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 import { BOTH_EDITED } from './recipe-apply-core.ts';
-import { asRecipeSourced } from './phrase-notes-core.ts';
+import { asRecipeSourced, isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
+import { applyPythonText } from './description-apply-core.ts';
+const THIN = "  bars[1] = thin_out_bars(bars=[bars[1]], first=1, last=1, amount=0.5)[0]\n  return bars";
+const withPython = (text: string, edit: (py: string) => string): string => { const py = (text.match(/```python\n([\s\S]*?)\n```/) as RegExpMatchArray)[1]; return text.replace(py, edit(py)); };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml'), 'utf8');
@@ -30,13 +33,13 @@ for (const edition of ['lean', 'music'] as const) {
   let real: RealPlugin;
   let win: any;
 
-  async function world(toml: string, opts: { service?: boolean } = {}) {
+  async function world(toml: string, opts: { service?: boolean; start?: string } = {}) {
     win ??= new Window({ url: 'http://localhost/' });
     Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
     real ??= await bundleRealPlugin(ROOT, edition);
     const clock = installHostClock(win);
     const tf = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
-    const store = new Map<string, string>([['bars/bar_007.md', barText('bar_007')], ['bars/bar_008.md', barText('bar_008')], [PATH, noteContentFor('phrase_001', EXTEND)]]);
+    const store = new Map<string, string>([['bars/bar_007.md', barText('bar_007')], ['bars/bar_008.md', barText('bar_008')], [PATH, opts.start ?? noteContentFor('phrase_001', EXTEND)]]);
     const writes: string[] = [], handlers = new Map<string, Array<(f: any) => void>>(), wsHandlers = new Map<string, Array<(f: any) => void>>(), lines: string[] = [], leaves: any[] = [];
     let activeFile: string | null = null;
     const fire = (name: string, f: any) => { for (const cb of handlers.get(name) ?? []) cb(f); };
@@ -89,7 +92,7 @@ for (const edition of ['lean', 'music'] as const) {
     };
     const openNotesPane = () => { const leaf: any = { getViewState: () => ({ type: 'markdown', state: { file: PATH } }), getRoot: () => ({}) }; const view: any = new real.MarkdownView(); view.file = tf(PATH); view.leaf = leaf; view.contentEl = makeEl(); view.getViewType = () => 'markdown'; leaf.view = view; leaves.push(leaf); return view; };
     return {
-      plugin, store, writes, lines, clock, openTab, openNotesPane, fire, tf,
+      plugin, store, writes, lines, clock, openTab, openNotesPane, fire, tf, addLeaf: (l: any) => { leaves.push(l); },
       type: (text: string) => { store.set(PATH, text); fire('modify', tf(PATH)); },            // the person types: the file changes and the vault says so
       wait: async (ms = DESCRIPTION_DEBOUNCE_MS + 20) => { await clock.advance(ms); for (let i = 0; i < 20; i++) await Promise.resolve(); },
       workspaceEvent: (name: string, arg?: unknown) => { for (const cb of wsHandlers.get(name) ?? []) cb(arg); },
@@ -270,5 +273,98 @@ for (const edition of ['lean', 'music'] as const) {
       w.type(typedRecipe); await w.wait(3000);
       assert.deepEqual(w.writes, [], '2026-10-31-1140: and a hand-edited Recipe is left exactly as typed too'); assert.equal(w.store.get(PATH), typedRecipe); assert.deepEqual(w.lines, []);
     } finally { w.done(); }
+  });
+
+  // 2026-11-03-1155-8 (C): the reload. A custom note's banner and Revert must not wait for a `modify`.
+  test(`[${edition}] RELOAD: a custom note whose panes were restored shows the banner in the tab AND the notes pane when the layout settles (no modify, no file-open); the command "Revert custom Python to generated" is offered only then and reverts after the confirm`, async () => {
+    const original = noteContentFor('phrase_001', EXTEND);
+    const typed = withPython(original, (py) => py.replace('  return bars', THIN));
+    const made = applyPythonText(typed, 'phrase_001', 'phrase', { bars: ['bar_007', 'bar_008'], phrases: ['phrase_001'], arrangements: [], compositions: [], kits: [] }, pythonTextOf(typed) as string);
+    assert.equal(made.ok, true); const custom = (made as { text: string }).text; assert.equal(isCustomNote(custom), true);
+    const w = await world(SCORE_FIRST_TOML, { start: custom });                                            // the note was made custom in an earlier session: this controller has never heard of it
+    try {
+      const tab = await w.openTab(); const notes = w.openNotesPane();                                      // "Reload app without saving": the panes come back, nothing is modified, no file-open names this note
+      const cmd = w.plugin.commands.get('revert-custom-python');
+      assert.ok(cmd, 'the second door exists in a score-first vault'); w.setActive(PATH);
+      assert.equal(cmd.checkCallback(true), false, 'before the layout settles nothing is known');
+      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null);
+      w.workspaceEvent('layout-change'); await w.wait(100);
+      for (const el of [tab.contentEl, notes.contentEl]) {
+        assert.equal(el.querySelector('.forge-description-message').textContent, 'Custom Python: the controls are off for this note.');
+        assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert-generated']);
+      }
+      assert.deepEqual(w.writes, [], 'looking is not writing');
+      assert.equal(cmd.checkCallback(true), true);
+      assert.equal(w.store.get(PATH), custom);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] P3: a vault that is not score-first has no "Revert custom Python to generated" command`, async () => {
+    const w = await world(TUTORIAL_TOML);
+    try { assert.equal(w.plugin.commands.has('revert-custom-python'), false); } finally { w.done(); }
+  });
+
+  // 2026-11-03-1155-8 (A and B, CCQA smoke 11 step 2): a control used inside the 600 ms wait of a hand-typed Recipe is refused (nothing half-typed is ever written by a control) - and the sentence must name buttons that are ON SCREEN; the red line goes when the note settles.
+  const barsOf = (tab: any) => tab.contentEl.querySelector('.forge-phrase-bars');
+  const statusOf = (tab: any): string => (tab.contentEl.querySelector('.forge-phrase-status')?.textContent ?? '').replace(/Copy$/, '').trim();
+  const actionsOf = (tab: any): string[] => [...tab.contentEl.querySelectorAll('.forge-description-bar .forge-description-button')].map((b: any) => b.getAttribute('data-action'));
+  const typeInto = (win: any, el: any, v: string) => { el.value = v; el.dispatchEvent(new win.Event('change')); };
+  test(`[${edition}] A: a control used inside the wait of a hand-typed Recipe is refused AND the bar with Update from Recipe / Revert is on screen at once (the sentence names buttons that exist); nothing half-typed is written by the control`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const tab = await w.openTab();
+      w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars'));
+      await w.wait(100);
+      assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null, 'inside the wait there is no bar yet (that is the situation)');
+      typeInto(win, barsOf(tab), '9'); await w.wait(50);
+      assert.equal(statusOf(tab), 'Not saved: the Recipe was edited by hand; press Update from Recipe first or revert it.');
+      assert.deepEqual(actionsOf(tab), ['update-recipe', 'revert'], 'the buttons the sentence names are there');
+      assert.deepEqual(w.writes, [], 'the control wrote nothing, and nothing was applied before the person stopped typing');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] B: the red "Not saved" line goes when the note settles - after the bar's own apply, and after Revert`, async () => {
+    for (const how of ['apply', 'revert'] as const) {
+      const w = await world(SCORE_FIRST_TOML);
+      try {
+        const tab = await w.openTab();
+        w.type(editRecipe(w.store.get(PATH)!, '8 bars', '6 bars')); await w.wait(100);
+        typeInto(win, barsOf(tab), '9'); await w.wait(50);
+        assert.match(statusOf(tab), /^Not saved: the Recipe was edited by hand/, how);
+        if (how === 'apply') await w.wait(DESCRIPTION_DEBOUNCE_MS + 50);
+        else { (tab.contentEl.querySelector('.forge-description-button[data-action="revert"]') as HTMLElement).click(); await w.wait(100); }
+        assert.equal(w.writes.length, 1, `${how}: one write settled the note`);
+        assert.equal(statusOf(tab), '', `${how}: the refusal of a state that no longer exists is gone`);
+        assert.equal(tab.contentEl.querySelector('.forge-description-bar'), null, how);
+      } finally { w.done(); }
+    }
+  });
+
+  test(`[${edition}] B: a refusal that still holds is NOT cleared by an unrelated modify (a Recipe that is still hand-edited keeps its sentence)`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const tab = await w.openTab();
+      w.type(editRecipe(w.store.get(PATH)!, '8 bars', 'eight bars of my own'));                    // does not parse: nothing is applied
+      await w.wait(DESCRIPTION_DEBOUNCE_MS + 50);
+      typeInto(win, barsOf(tab), '9'); await w.wait(50);
+      assert.match(statusOf(tab), /^Not saved: the Recipe was edited by hand/);
+      w.fire('modify', w.tf(PATH)); await w.wait(100);
+      assert.match(statusOf(tab), /^Not saved: the Recipe was edited by hand/, 'the note is still hand-edited: the sentence is still true');
+    } finally { w.done(); }
+  });
+
+  // 2026-11-03-1155-8 (D1): a restored tab that has not been opened is a DEFERRED leaf, titled with the view type until it loads.
+  test(`[${edition}] RELOAD: a restored phrase tab that is still deferred is titled with its note's name when the layout settles (not "forge-phrase"); a tab of another view type is left alone; P3: nothing in a vault that is not score-first`, async () => {
+    for (const toml of [SCORE_FIRST_TOML, TUTORIAL_TOML]) {
+      const w = await world(toml);
+      try {
+        const mk = (type: string, file: string) => { const el = win.document.createElement('div'); el.textContent = type; return { el, leaf: { isDeferred: true, getViewState: () => ({ type, state: { file } }), getRoot: () => ({}), tabHeaderInnerTitleEl: el } }; };
+        const phrase = mk(PHRASE_VIEW_TYPE, 'phrases/phrase_001.md'), other = mk('some-other-view', 'x/y.md');
+        w.addLeaf(phrase.leaf); w.addLeaf(other.leaf);
+        w.workspaceEvent('layout-change'); await w.wait(100);
+        assert.equal(phrase.el.textContent, toml === SCORE_FIRST_TOML ? 'phrase_001' : PHRASE_VIEW_TYPE);
+        assert.equal(other.el.textContent, 'some-other-view');
+      } finally { w.done(); }
+    }
   });
 }

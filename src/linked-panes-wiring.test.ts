@@ -13,6 +13,7 @@ import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-pl
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { realNoteAt } from './test-support/score-first-notes.ts';
 import { PAIR_SETTLE_MS } from './linked-panes-core.ts';
+import { setTimeout as realSetTimeout } from 'node:timers';
 import { installHostClock, iterateAllLeavesLikeObsidian, type HostClock } from './test-support/host-workspace.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
@@ -29,6 +30,7 @@ const ARR = 'arrangements/arr_001.md';
 const SRC = import.meta.dirname;
 const code = (f: string) => fs.readFileSync(path.join(SRC, f), 'utf8').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
 
+const realSleep = (ms: number): Promise<void> => new Promise<void>((resolve) => { realSetTimeout(resolve, ms); });
 for (const edition of ['lean', 'music'] as const) {
   let real: RealPlugin;
   let win: any;
@@ -448,6 +450,24 @@ for (const edition of ['lean', 'music'] as const) {
       assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'phrases/phrase_002.md', mode: 'preview' } }, 'the notes pane shows the new phrase\'s note, read-only');
       assert.equal(w.log.splits.length, 1, 'no third pane');
       assert.deepEqual(w.log.errors, []);
+    } finally { s.restore(); w.done(); }
+  });
+
+  test(`[${edition}] 2026-11-03-1155-8 D2: a notes pane that is BUSY when Create moves it (Obsidian drops setViewState on a working leaf) still ends on the new phrase's note - the show waits for the leaf, checks the result and retries`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    const s = sentenceWorld(w);
+    try {
+      const score = w.makeLeaf(); w.setActive({ phrase: w.phraseTab(score) });
+      await w.run();
+      const notes = [...w.leaves].find((l) => l !== score)!;
+      const original = notes.setViewState; const dropped: unknown[] = [];
+      notes.working = true; setTimeout(() => { notes.working = false; }, 70);                        // the pane is in the middle of a change when Create asks it to move
+      notes.setViewState = async (st: any) => { if (notes.working) { dropped.push(st); return; } return original(st); };
+      await s.createFromSentence();
+      for (let i = 0; i < 40 && notes.states.at(-1)?.state?.file !== 'phrases/phrase_002.md'; i++) { await w.tick(30); await realSleep(10); }          // the retry waits on `window.setTimeout` (60 ms steps): the host clock where it is faked, real time where `window` is another edition's (`before` hooks run first) - both are moved
+      assert.ok(dropped.length >= 1, 'non-vacuity: the busy leaf really did drop a call');
+      assert.deepEqual(notes.states.at(-1), { type: 'markdown', active: false, state: { file: 'phrases/phrase_002.md', mode: 'preview' } }, 'the notes pane shows the new phrase\'s note');
+      assert.deepEqual(notes.getViewState().state, { file: 'phrases/phrase_002.md' });
     } finally { s.restore(); w.done(); }
   });
 

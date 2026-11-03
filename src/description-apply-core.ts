@@ -2,7 +2,7 @@
 // the Description by hand, the hash no longer matches, and this decides what that edit means: it parses (apply it: json cache, Recipe, Python, stamps follow), it does not parse (write nothing, say where), or it is the derived Recipe / Python
 // that was edited instead (they are derived: say so, change nothing). No `obsidian` import: the vault, the clock and the UI are the controller's (description-apply.ts).
 import { parse, type GrammarError, type GrammarParams, type GrammarVault } from './phrase-grammar-core.ts';
-import { asCustom, asPythonSourced, asRecipeSourced, extractPhraseJsonBlock, isCustomNote } from './phrase-notes-core.ts';
+import { asCustom, asPythonSourced, asRecipeSourced, extractPhraseJsonBlock, isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { extractDescription, extractPythonSection, extractRecipeSection } from './v2-note-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
@@ -11,7 +11,7 @@ import { applyArrangementWrite, readArrangementNote } from './arrangement-core.t
 import { applyCompositionWrite, readCompositionNote } from './composition-core.ts';
 import { wrongKindSentence, type Family } from './note-family-core.ts';
 import { recipeEdit } from './recipe-apply-core.ts';
-import { bothEditedMessage, editedFacetsOf, pythonEdit, type Facet } from './python-apply-core.ts';
+import { bothEditedMessage, editedFacetsOf, pythonCommentsOf, pythonEdit, type Facet } from './python-apply-core.ts';
 
 // the kind tables moved to note-family-core.ts (2026-10-31-1140, so the Recipe core can read them too); re-exported so every importer is unchanged
 export { familyOfPath, type Family } from './note-family-core.ts';
@@ -132,17 +132,21 @@ export function applyRecipeText(text: string, name: string, family: Family, vaul
  * A known shape: the params it says are the input, every derived part is made again by the same writers (the hand-edit refusal lifted) and the note is PYTHON-sourced (the Description and the Recipe stamped as derived from it).
  * Anything else: the note becomes CUSTOM (its Python is kept as typed, its json cache is kept for "Revert to generated"; nothing else is written).
  */
-export function applyPythonText(text: string, name: string, family: Family, vault: GrammarVault, planned: string): { ok: true; text: string; change: string; custom: boolean } | { ok: false; message: string; stale: boolean } {
+export function applyPythonText(text: string, name: string, family: Family, vault: GrammarVault, planned: string): { ok: true; text: string; change: string; custom: boolean; commentsDropped: boolean } | { ok: false; message: string; stale: boolean } {
   const st = descriptionState(text, family, vault, 'python');
   if (st.kind !== 'python-apply' && st.kind !== 'python-custom') return { ok: false, message: 'There is nothing to update: the Python matches the note.', stale: true };
   if (st.python !== planned) return { ok: false, message: 'The Python changed again; the newer text is being read.', stale: true };
-  if (st.kind === 'python-custom') return { ok: true, text: asCustom(text), change: 'custom Python', custom: true };
+  if (st.kind === 'python-custom') return { ok: true, text: asCustom(text), change: 'custom Python', custom: true, commentsDropped: false };
   const w = writeFromParams(text, name, family, st.params);
-  return w.ok === false ? { ok: false, message: w.message, stale: false } : { ok: true, text: asPythonSourced(w.text), change: st.change, custom: false };
+  if (w.ok === false) return { ok: false, message: w.message, stale: false };
+  const next = asPythonSourced(w.text);
+  // 2026-11-03-1155-8 (D4): the grammar writes its own Python; a comment of the person's that is not in it is gone
+  const kept = new Set(pythonCommentsOf(pythonTextOf(next) ?? ''));
+  return { ok: true, text: next, change: st.change, custom: false, commentsDropped: pythonCommentsOf(planned).some((c) => !kept.has(c)) };
 }
 
 /** What "Revert to generated" says it loses, for the confirm dialog: the person's Python (and where the grammar's version comes from). */
-export const REVERT_GENERATED_CONFIRM = 'Revert to generated replaces your Python (and the Description and Recipe that were written for it) with what the controls last made for this note. Your Python is lost. Revert?';
+export const REVERT_GENERATED_CONFIRM = 'Revert to generated replaces your Python (and the Description and Recipe that were written for it) with what the controls last made for this note, and the Description is the source again (whatever the note was sourced from before). Your Python is lost. Revert?';
 
 /** "Revert to generated" (M16b): the Python of the json cache - the params the grammar last understood, from before the takeover - and every derived part with it; the note is the grammar's again (not custom, Description-sourced). */
 export function revertToGeneratedText(text: string, name: string, family: Family): Written {

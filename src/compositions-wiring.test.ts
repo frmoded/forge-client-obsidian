@@ -48,7 +48,7 @@ for (const edition of ['lean', 'music'] as const) {
     const touched: string[] = [];
     const leaves: any[] = [];
     const notices: string[] = [];
-    const makeLeaf = () => { const l: any = { states: [] as any[], opened: [] as string[], setViewState: async (s: any) => { l.states.push(s); }, openFile: async (f: any) => { l.opened.push(f.path); } }; leaves.push(l); return l; };
+    const makeLeaf = () => { const l: any = { states: [] as any[], opened: [] as string[], setViewState: async (s: any) => { l.states.push(s); }, getViewState: () => ({ type: l.states.at(-1)?.type, state: { file: l.states.at(-1)?.state?.file } }), openFile: async (f: any) => { l.opened.push(f.path); } }; leaves.push(l); return l; };
     let activeFile: string | null = active;
     let activeView: any = null;
     const app: any = {
@@ -170,7 +170,7 @@ for (const edition of ['lean', 'music'] as const) {
   test(`[${edition}] "New composition" with a pair ALREADY open (smoke 10, B4): the new composition takes the Score's pane and the notes pane moves to the new note - no third pane, the notes pane does not stay on the previous composition`, async () => {
     const w = await world(SCORE_FIRST_TOML, { ...PHRASES, 'compositions/comp_001.md': newCompositionNote('comp_001', P('phrases/phrase_003'), ['root: true']) });
     try {
-      const leaf: any = { states: [] as any[], opened: [] as string[], setViewState: async (s: any) => { leaf.states.push(s); }, openFile: async (f: any) => { leaf.opened.push(f.path); }, containerEl: win.document.createElement('div') };
+      const leaf: any = { states: [] as any[], opened: [] as string[], setViewState: async (s: any) => { leaf.states.push(s); }, getViewState: () => ({ type: leaf.states.at(-1)?.type, state: { file: leaf.states.at(-1)?.state?.file } }), openFile: async (f: any) => { leaf.opened.push(f.path); }, containerEl: win.document.createElement('div') };
       (Object.prototype as any).addAction = function () { return { remove() {} }; };
       const view: any = w.plugin.views.get(COMPOSITION_VIEW_TYPE)!(leaf);
       view.leaf = leaf; view.app = w.app;
@@ -248,7 +248,7 @@ for (const edition of ['lean', 'music'] as const) {
     const w = await world(SCORE_FIRST_TOML, { ...PHRASES, 'compositions/comp_001.md': newCompositionNote('comp_001', P('phrases/phrase_003')) });
     try {
       assert.equal(w.offered('open-score-with-notes'), false, 'no composition tab, no pair');
-      const leaf: any = { states: [] as any[], opened: [] as string[], setViewState: async (s: any) => { leaf.states.push(s); }, openFile: async (f: any) => { leaf.opened.push(f.path); }, containerEl: win.document.createElement('div') };
+      const leaf: any = { states: [] as any[], opened: [] as string[], setViewState: async (s: any) => { leaf.states.push(s); }, getViewState: () => ({ type: leaf.states.at(-1)?.type, state: { file: leaf.states.at(-1)?.state?.file } }), openFile: async (f: any) => { leaf.opened.push(f.path); }, containerEl: win.document.createElement('div') };
       (Object.prototype as any).addAction = function () { return { remove() {} }; };          // the stand-in view base has no addAction (as in kits-arrangements-wiring.test.ts and linked-panes-wiring.test.ts)
       const view: any = w.plugin.views.get(COMPOSITION_VIEW_TYPE)!(leaf);
       view.leaf = leaf; view.app = w.app;

@@ -181,8 +181,8 @@ export function renderDerivedNote(text: string, description: string, links: stri
 
 // 2026-11-03-1155-91: the note used to open with an HTML comment saying "the Description below is the source of this note ..." (SOURCE_CHAIN_NOTE). It is gone: it was false for a Recipe- or Python-sourced note, `source_facet:`
 // and the per-facet headings already say which facet is the source, and nothing read it (it sat before `# Description`, outside every hashed section). A note written before keeps it until the next write that renders it.
-/** The line above the json fence: the json is a cache of what the grammar understood in the Description, never the place to edit. */
-export const CACHE_NOTE = '<!-- derived from the Description above; edit the Description, not this -->';
+/** The line above the json fence: the json is a cache of what the grammar understood in the note's SOURCE (the Description, or the Recipe or the Python when the person made one of those the source), never the place to edit. True for every source (2026-11-03-1155-8, D3: it used to say "Description" on Recipe- and Python-sourced notes). */
+export const CACHE_NOTE = "<!-- the grammar's reading of the note's source (Description, Recipe or Python): edit the source, not this -->";
 /** The one sentence a control path answers with when the Description was changed by hand since the note was written (the M15c button is named here so the sentence need not change then). */
 export const DESCRIPTION_EDITED_BY_HAND = 'the Description was edited by hand; press Update from Description first or revert it';
 /** That sentence as a refusal: `Not saved: the Description was ...` for the phrase strip's write (every refusal there starts so), `The Description was ...` elsewhere (the arrangement notice, the refresh command: they add their own lead). */

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
+import { pythonCommentsOf } from './python-apply-core.ts';
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
 import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor, readPhraseNote, type PhraseParams } from './phrase-core.ts';
@@ -113,14 +114,14 @@ test('a pane that emptied itself (a reload) gets its bar again at the next sync;
   assert.equal(a.querySelectorAll('.forge-description-bar').length, 1);
 });
 
-test('the Python edited instead is a SOURCE (2026-11-02-1155, M16b, deliberate: it was "Python is derived; edit the Description or the Recipe.", said and not applied): a known shape (a comment added) is applied by ONE write, the note is Python-sourced, the bar is gone', async () => {
+test('the Python edited instead is a SOURCE (2026-11-02-1155, M16b, deliberate: it was "Python is derived; edit the Description or the Recipe.", said and not applied): a known shape (a comment added) is applied by ONE write and the note is Python-sourced; 2026-11-03-1155-8 (D4, deliberate): the comment is not kept, and that is said on the evidence line and on the bar (no buttons)', async () => {
   const r = rig();
   const a = r.pane();
   r.store.set(PATH, r.store.get(PATH)!.replace('```python\n', '```python\n# hand edit\n')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.equal(r.writes.length, 1);
   assert.match(r.store.get(PATH)!, /source_facet: python/);
-  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (no change in the music)']);
-  assert.equal(a.querySelector('.forge-description-bar'), null);
+  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (no change in the music); comments in the Python are not kept']);
+  assert.equal(msg(a), 'Applied from the Python; comments in the Python are not kept.'); assert.deepEqual(buttons(a), []);
 });
 
 test('inspect (a note opened): the bar shows an unparsable sentence or the Update button for one that parses, and WRITES nothing; the Update button applies it', async () => {
@@ -853,4 +854,86 @@ test('dispose with a custom banner on screen takes the bar away and a later modi
   assert.equal(a.querySelector('.forge-description-bar'), null);
   r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
   assert.deepEqual(r.writes, [PATH]);
+});
+
+// 2026-11-03-1155-8 (C, CCQA smoke 12 step 8): the banner was driven only by a `modify` and by `file-open` of ONE file; after "Reload app without saving" the restored panes were never looked at, so a custom note had no banner and no Revert.
+// `inspectOpen` looks at every pane that shows one of our notes and has not been looked at yet (a tab opened, a layout restored).
+const customStart = async (): Promise<string> => { const first = rig(); first.store.set(PATH, withPython(first.store.get(PATH)!, (py) => py.replace('  return bars', THIN))); first.ctl.modified(PATH); await first.advance(DESCRIPTION_DEBOUNCE_MS); return first.store.get(PATH)!; };
+
+test('a custom note in a pane nobody inspected (a reload): inspectOpen draws the banner with Revert to generated, writes nothing, and looks at a pane once (not at every layout change)', async () => {
+  const custom = await customStart();
+  assert.equal(isCustomNote(custom), true);
+  const r = rig({ start: custom, confirm: true }); const a = r.pane();
+  r.ctl.syncBars();
+  assert.equal(a.querySelector('.forge-description-bar'), null, 'without a look there is nothing to draw (the failure the smoke saw)');
+  await r.ctl.inspectOpen();
+  assert.equal(msg(a), CUSTOM_BANNER); assert.deepEqual(buttons(a), ['revert-generated']); assert.deepEqual(r.writes, []);
+  const reads = r.reads.length;
+  await r.ctl.inspectOpen(); await r.ctl.inspectOpen();
+  assert.equal(r.reads.length, reads, 'the same pane showing the same note is not read again');
+  r.pane();                                                                                                 // a second pane (the notes pane) showing the note: looked at, same banner
+  await r.ctl.inspectOpen();
+  assert.equal(r.reads.length, reads + 1);
+});
+
+test('the second door: canRevertGenerated is true only on a custom note that has a json cache, revertGenerated asks first and puts back the note the controls made', async () => {
+  const original = noteContentFor('phrase_001', EXTEND);
+  const custom = await customStart();
+  const r = rig({ start: custom, confirm: true }); r.pane();
+  assert.equal(r.ctl.canRevertGenerated(PATH), false, 'before any look the controller does not know');
+  await r.ctl.inspectOpen();
+  assert.equal(r.ctl.canRevertGenerated(PATH), true);
+  await r.ctl.revertGenerated(PATH); await r.advance(1);
+  assert.deepEqual(r.confirms, [REVERT_GENERATED_CONFIRM]); assert.equal(r.store.get(PATH), original);
+  assert.equal(r.ctl.canRevertGenerated(PATH), false, 'and once reverted the command is not offered');
+  const plain = rig(); plain.pane(); await plain.ctl.inspectOpen();
+  assert.equal(plain.ctl.canRevertGenerated(PATH), false, 'a note that is not custom has nothing to revert');
+});
+
+test('edits made while the plugin was off are only LOOKED at when the pane opens (nothing is written): a Recipe, a Python and a Description edit each show their bar with their buttons; a Python that is not a known shape offers to make the note custom', async () => {
+  const base = noteContentFor('phrase_001', EXTEND);
+  const cases: Array<[string, string, string[]]> = [
+    ['recipe', base.replace('Repeat it for 8 bars', 'Repeat it for 6 bars'), ['update-recipe', 'revert']],
+    ['python', withPython(base, (py) => py.replace('bars=8', 'bars=5')), ['update-python', 'revert']],
+    ['custom python', withPython(base, (py) => py.replace('  return bars', THIN)), ['update-python', 'revert']],
+    ['description', edit(base, '8 bars', '5 bars'), ['update', 'revert']],
+  ];
+  for (const [label, text, expected] of cases) {
+    assert.notEqual(text, base, `${label}: the fixture really differs`);
+    const r = rig({ start: text }); const a = r.pane();
+    await r.ctl.inspectOpen();
+    assert.deepEqual(buttons(a), expected, label); assert.deepEqual(r.writes, [], `${label}: opening only looks`);
+  }
+});
+
+// 2026-11-03-1155-8 (D4, CCQA smoke 12 step 6): applying a known-shape Python writes the grammar's own text, so a person's `#` comments inside it are gone. Said once, only when comments were really dropped.
+test('D4: a known-shape Python edit that carried the person\'s comments says so - in the evidence line and in the bar (no buttons); a later edit takes the bar away; the generator\'s own trailing comment and a # inside a string are not "comments dropped"', async () => {
+  const r = rig(); const a = r.pane();
+  const mine = withPython(r.store.get(PATH)!, (py) => py.replace('bars=8', 'bars=6').replace('  base = bar_007()', '  # my note\n  base = bar_007()  # and another'));
+  r.store.set(PATH, mine); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.writes, [PATH]);
+  assert.ok(!/# my note/.test(r.store.get(PATH)!), 'the comments really are gone from the note');
+  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (8 -> 6 bars); comments in the Python are not kept']);
+  assert.equal(msg(a), 'Applied from the Python; comments in the Python are not kept.'); assert.deepEqual(buttons(a), []);
+  await r.advance(5000); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(msg(a), 'Applied from the Python; comments in the Python are not kept.', 'its own modify event does not take the sentence away');
+  r.store.set(PATH, edit(r.store.get(PATH)!, '6 bars', '5 bars')); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.equal(a.querySelector('.forge-description-bar') === null, true, 'the next edit settles it: the sentence goes');
+});
+
+test('D4: a Python edit WITHOUT comments (and one whose only comment is the generator\'s own, or inside a string) says nothing about comments', async () => {
+  const r = rig(); const a = r.pane();
+  r.store.set(PATH, withPython(r.store.get(PATH)!, (py) => py.replace('bars=8', 'bars=6'))); r.ctl.modified(PATH); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.lines, ['[forge-python] applied phrase_001 (8 -> 6 bars)']);
+  assert.equal(a.querySelector('.forge-description-bar') === null, true);
+  assert.deepEqual(pythonCommentsOf("x = 'a # b'  # real\n# whole line\ny = \"#nope\""), ['# real', '# whole line']);
+});
+
+test('D5: the confirm of "Revert to generated" says the Description is the source again (a note that was Recipe-sourced comes back Description-sourced, as the controls make it), and so does the note it writes', async () => {
+  assert.match(REVERT_GENERATED_CONFIRM, /the Description is the source again/);
+  const custom = await customStart();
+  const r = rig({ start: asRecipeSourced(custom), confirm: true }); r.pane();
+  await r.ctl.inspectOpen(); await r.ctl.revertGenerated(PATH); await r.advance(1);
+  assert.match(r.store.get(PATH)!, /source_facet: description/);
+  assert.equal(r.confirms.length, 1); assert.match(r.confirms[0], /the Description is the source again/);
 });

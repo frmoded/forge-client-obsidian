@@ -14,6 +14,7 @@
 // the Score redraws when the vault's modify event for that note arrives (ONE path: a hand edit of the JSON, a sync and a control all redraw the same way). The Score is the live Score
 // controller with a `produce` step of its own — no second scheduler: debounce, one render in flight, the latest request queued.
 
+import { handEditStatusSettled, isHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
 import { copyableMessage } from './copy-message-dom.ts';
 import { extractRecipeSection } from './v2-note-core.ts';
@@ -838,8 +839,10 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   const readText = async (): Promise<NoteText> => {
     try { return await ports.readNote(ports.path); } catch (e) { return { unreadable: (e as Error)?.message ?? String(e) }; }
   };
+  let handEditStatus: string | null = null;                              // the hand-edit refusal on screen, if the status line shows one (cleared when the note stops answering with it)
   const apply = (text: NoteText): void => {
     last = text;
+    if (handEditStatus !== null && typeof text === 'string' && handEditStatusSettled(handEditStatus, text)) { handEditStatus = null; strip.setStatus(''); }          // 2026-11-03-1155-8 (B): the refusal is not true any more
     const parsed = typeof text === 'string' ? readPhraseNote(text) : null;
     // 2026-10-26-1100: a phrase refused ONLY because a fork lies past Bars can be fixed from the strip, so the strip stays live for it: it shows the phrase without that fork, and every write carries the fork along (raising Bars
     // loses nothing). Any other refusal is what it was: every control disabled and the Score says why.
@@ -897,10 +900,11 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
           want = null;
           strip.set(current);                                            // refused: the fields go back to what the note says
           strip.setStatus(result.message);
+          handEditStatus = isHandEditRefusal(result.message) ? result.message : null;
           return;
         }
         current = next;                                                  // written: the vault's modify event for this write brings the Score
-        strip.setStatus('');
+        strip.setStatus(''); handEditStatus = null;
         if (want === next) want = null;                                  // nothing newer was asked for meanwhile
       }
     } finally {

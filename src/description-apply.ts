@@ -11,7 +11,7 @@ import {
   type DescriptionState, type Family,
 } from './description-apply-core.ts';
 import { bothEditedLine, recipeAppliedLine, recipeRejectedLine, recipeRevertedLine } from './recipe-apply-core.ts';
-import { bothEditedLineOf, pythonAppliedLine, pythonCustomLine, pythonRevertedLine } from './python-apply-core.ts';
+import { COMMENTS_NOT_KEPT_BAR, bothEditedLineOf, pythonAppliedLine, pythonCustomLine, pythonRevertedLine } from './python-apply-core.ts';
 import { CUSTOM_BANNER } from './phrase-notes-core.ts';
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 import { buildPlanRequest, interpretPlanResponse, type PlanPayload } from './sentence-plan-core.ts';
@@ -51,8 +51,14 @@ export interface DescriptionController {
   update(path: string): Promise<void>;
   revert(path: string): Promise<void>;
   ask(path: string): Promise<void>;
+  /** Look at every pane that shows one of our notes and has not been looked at yet (a tab opened, a layout restored after a reload): the bar is computed from the note, not only heard from a `modify`. Reads, never writes. */
+  inspectOpen(): Promise<void>;
   /** Draw (or take away) the bar in every pane that shows a note with something to say. */
   syncBars(): void;
+  /** Is this a custom note the person can revert to the grammar's Python (the palette command's availability; false until the note has been looked at)? */
+  canRevertGenerated(path: string): boolean;
+  /** "Revert to generated" as a command: asks first, as the button does. */
+  revertGenerated(path: string): Promise<void>;
   /** Is there something for "Update from Description" to do on this note (the command's availability)? */
   canUpdate(path: string): boolean;
   dispose(): void;
@@ -63,6 +69,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const timers = new Map<string, unknown>();
   const told = new Map<string, string>();                         // path -> the sentence an evidence line was last written for (a rejected sentence is said once, not at every unrelated modify)
   const bars = new Map<HTMLElement, BarHandle>();
+  const notices = new Map<string, { message: string; text: string }>();     // path -> a sentence that stays on the note's bar after a successful apply (D4: comments dropped), until the note's text changes
+  const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
   let disposed = false;
 
   const viewOf = (path: string, u: Ui): BarView => {
@@ -88,17 +96,18 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const live = new Set<HTMLElement>();
     for (const { path, contentEl } of ports.panes()) {
       const u = ui.get(path);
-      if (!u || u.state.kind === 'synced') continue;
+      const n = notices.get(path);
+      if ((!u || u.state.kind === 'synced') && !n) continue;
       live.add(contentEl);
       let h = bars.get(contentEl);
       if (h && h.el.parentElement !== contentEl) { h = undefined; bars.delete(contentEl); }                  // the pane emptied itself (a reload): draw again
       if (!h) { h = mountDescriptionBar(contentEl, (a) => { void act(path, a); }); bars.set(contentEl, h); }
-      h.show(viewOf(path, u));
+      h.show(u ? viewOf(path, u) : { message: n!.message, actions: [] });
     }
     for (const [el, h] of [...bars]) if (!live.has(el)) { h.dispose(); bars.delete(el); }
   };
 
-  const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else ui.set(path, u); syncBars(); };
+  const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
 
   async function evaluate(path: string, auto: boolean): Promise<void> {
     if (disposed) return;
@@ -106,6 +115,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (family === null) return;
     let text: string;
     try { text = await ports.read(path); } catch { return; }                                             // the note went away: nothing to say
+    if (notices.get(path)?.text !== text) notices.delete(path);                                          // D4: a sentence about an apply is for the text that apply wrote; any other text has moved on
     const st = descriptionState(text, family, ports.vault());
     if (st.kind === 'synced') { told.delete(path); set(path, null); return; }
     if (st.kind === 'custom-note') { told.delete(path); set(path, { state: st }); return; }
@@ -133,16 +143,21 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   /** The Python was edited: a known shape maps back (the same `process` as for a Description or a Recipe, then the note is Python-sourced); anything else makes the note CUSTOM (its Python is kept as typed). */
   async function doApplyPython(path: string, family: Family, st: Extract<DescriptionState, { kind: 'python-apply' | 'python-custom' }>): Promise<void> {
-    let change = '', failure: string | null = null, stale = false, custom = false;
+    let change = '', failure: string | null = null, stale = false, custom = false, dropped = false;
     try {
       await ports.process(path, (cur) => {
         const r = applyPythonText(cur, basename(path), family, ports.vault(), st.python);
         if (r.ok === false) { failure = r.message; stale = r.stale; return cur; }
-        change = r.change; custom = r.custom;
+        change = r.change; custom = r.custom; dropped = r.commentsDropped;
         return r.text;
       });
     } catch (e) { failure = `Update from Python: ${(e as Error)?.message ?? e}`; console.error('python-apply: could not write the note', e); }
-    if (failure === null) { told.delete(path); ports.trace(custom ? pythonCustomLine(basename(path)) : pythonAppliedLine(basename(path), change)); set(path, null); if (custom) await evaluate(path, false); return; }       // a custom note keeps its banner
+    if (failure === null) {
+      told.delete(path); ports.trace(custom ? pythonCustomLine(basename(path)) : pythonAppliedLine(basename(path), change, dropped)); set(path, null);
+      if (dropped) { try { notices.set(path, { message: COMMENTS_NOT_KEPT_BAR, text: await ports.read(path) }); syncBars(); } catch { /* the note went away: nothing to say */ } }       // D4: the person's comments are gone; said on the bar until the note changes again
+      if (custom) await evaluate(path, false);
+      return;                                                                                                 // a custom note keeps its banner
+    }
     if (stale) { await evaluate(path, false); return; }                                                    // the text moved on: what it says now is read afresh (a newer edit has its own timer)
     set(path, { state: st, message: failure });
   }
@@ -297,8 +312,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       timers.set(path, ports.setTimer(() => { timers.delete(path); void evaluate(path, true); }, DESCRIPTION_DEBOUNCE_MS));       // a second edit inside the wait replaces the first: the first is never written
     },
     inspect: (path) => evaluate(path, false),
+    async inspectOpen() {
+      if (disposed) return;
+      const todo = new Set<string>();
+      for (const { path, contentEl } of ports.panes()) { if (looked.get(contentEl) === path) continue; looked.set(contentEl, path); todo.add(path); }
+      for (const path of todo) await evaluate(path, false);
+    },
+    canRevertGenerated: (path) => { const st = ui.get(path)?.state; return st?.kind === 'custom-note' && st.canRevert; },
+    revertGenerated,
     update, revert, ask, syncBars,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
-    dispose() { disposed = true; for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); ui.clear(); },
+    dispose() { disposed = true; notices.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); ui.clear(); },
   };
 }

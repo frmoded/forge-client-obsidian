@@ -15,7 +15,7 @@ const MORPH: PhraseParams = { kind: 'morph', a: 'bar_007', b: 'bar_008', bars: 1
 
 test('the comments are exactly these (they tell a person which text is the source and which is not theirs to edit); a kit keeps the derived-note marker, a phrase has the cache one (the "source of this note" comment is gone, 1155-91)', () => {
   assert.equal(DERIVED_NOTE, '<!-- derived from the json below; edit the controls, not this text -->');
-  assert.equal(CACHE_NOTE, '<!-- derived from the Description above; edit the Description, not this -->');
+  assert.equal(CACHE_NOTE, "<!-- the grammar's reading of the note's source (Description, Recipe or Python): edit the source, not this -->");
   const sections = sourceChainSections(phraseParts('phrase_001', EXTEND));
   assert.equal(sections[0], '# Description');
   assert.equal(sections[sections.length - 1], CACHE_NOTE);

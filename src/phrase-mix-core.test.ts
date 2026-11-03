@@ -129,7 +129,7 @@ test('the extend note\'s starter text is byte-for-byte what M5 wrote, plus (2026
     phraseNoteContent('phrase_001', 'bar_005'),
     '---\ntype: data\ncontent_type: json\ndescription: "phrase_001 — [[bar_005]] extended to 4 bars: repeat with fills, no tempo change."\nlinks:\n  - "[[bar_005]]"\n' + chainStampLines(sentence, steps, python).join('\n') + '\n---\n\n'
       + '# Description\n\n' + sentence + '\n\n# Recipe\n\n' + steps.join('\n') + '\n\n# Python\n\n```python\n' + python + '\n```\n\n'
-      + '# Cache\n\n<!-- derived from the Description above; edit the Description, not this -->\n\n```json\n'
+      + '# Cache\n\n<!-- the grammar\'s reading of the note\'s source (Description, Recipe or Python): edit the source, not this -->\n\n```json\n'
       + '{\n  "kind": "extend",\n  "source": "bar_005",\n  "bars": 4,\n  "style": "repeat_with_fills",\n  "tempo_change_pct": 0\n}\n```\n',
   );
 });
