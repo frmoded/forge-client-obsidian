@@ -66,7 +66,7 @@
 // rest of this plugin's onload().
 
 import { TFile } from 'obsidian';
-import { parseHtmlEmbedSource } from './html-embed-view-core.ts';
+import { HTML_EMBED_LANGUAGE, parseHtmlEmbedSource } from './html-embed-view-core.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
 
 /** Narrow structural slice of `Plugin` + `App` this file actually
@@ -94,7 +94,7 @@ export interface HtmlEmbedHostPlugin {
 
 export function registerHtmlEmbedProcessor(plugin: HtmlEmbedHostPlugin): void {
   try {
-    plugin.registerMarkdownCodeBlockProcessor('html-embed', async (source, el) => {
+    plugin.registerMarkdownCodeBlockProcessor(HTML_EMBED_LANGUAGE, async (source, el) => {
       await renderHtmlEmbed(plugin, source, el);
     });
   } catch (e) {

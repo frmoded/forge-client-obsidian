@@ -29,6 +29,9 @@
 // prompt ("no existing note needs editing"). If a future note wants
 // `auto`, that's a separate, explicit follow-up.
 
+/** The code-block language the native processor registers (html-embed-view.ts) and the stylesheet hides Obsidian's "</>" edit button for (styles.css; pinned in rhythm-embed-chrome.test.ts). */
+export const HTML_EMBED_LANGUAGE = 'html-embed';
+
 export interface HtmlEmbedParsed {
   /** Vault-relative path to the target .html file, or null if the
    *  code block's first non-blank line was missing/empty. */

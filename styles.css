@@ -1825,11 +1825,19 @@
    (a link and a few option lines), which is not what the embed is for; the block is still editable by moving the cursor into it, and "Open note" is
    in the embed's own toolbar. Names verified against the INSTALLED Obsidian (scripts/verify-obsidian-embed-classes.mjs): the button is added only by
    Live Preview editor widgets — Reading view has none — so the `.block-language-forge-rhythm` selectors are a harmless safety net. Scoped to this
-   language on purpose: every other code block keeps its button. */
+   language on purpose: every other code block keeps its button.
+   2026-11-03-1157: the same for `html-embed` (the gadgets: piano, guitar, monochord, the triad keyboard): the icon sat on the gadget when the pointer was over it. The widget root is
+   `div.cm-preview-code-block.cm-embed-block.markdown-rendered.cm-lang-html-embed`, its processor output `div.block-language-html-embed`, and the button `div.embed-actions > div.embed-action.edit-block-button`
+   (Obsidian's `.markdown-source-view.mod-cm6 .edit-block-button`: absolute, 4 px from the top and from the inline end, opacity 0 until the block is hovered). A code-block widget adds NO other action to
+   `embed-actions` (the installed app.js calls `addEditButton` once there), so hiding the container loses no control. Still two languages only (rhythm-embed-chrome.test.ts). */
 .cm-preview-code-block.cm-lang-forge-rhythm .embed-actions,
 .cm-preview-code-block.cm-lang-forge-rhythm .edit-block-button,
 .block-language-forge-rhythm .embed-actions,
-.block-language-forge-rhythm .edit-block-button {
+.block-language-forge-rhythm .edit-block-button,
+.cm-preview-code-block.cm-lang-html-embed .embed-actions,
+.cm-preview-code-block.cm-lang-html-embed .edit-block-button,
+.block-language-html-embed .embed-actions,
+.block-language-html-embed .edit-block-button {
   display: none;
 }
 
