@@ -1652,11 +1652,11 @@
   overflow-x: hidden;
 }
 
-/* score_first_experiment M1 (drain 2026-10-21-1100): the live Score under the Beat Box, in a score-first vault only (live-score-dom.ts). A hairline separates it from the widget; the
+/* score_first_experiment M1 (drain 2026-10-21-1100): the live Score in a score-first vault only (2026-11-03-1155-93: ABOVE the Beat Box, the first thing in the tab) (live-score-dom.ts). A hairline separates it from the widget; the
    one status line (progress, a refusal, an engine error) is quiet and takes no room when empty. The lean edition's single explanatory line shares the look. */
 .forge-rhythm-edit-score {
   position: relative;
-  border-top: 1px solid var(--background-modifier-border);
+  border-bottom: 1px solid var(--background-modifier-border);        /* 2026-11-03-1155-93 (R6): the Score is the FIRST thing in the tab; the hairline now separates it from what is under it (it used to separate it from the Beat Box above) */
   padding: 8px 12px 16px;
 }
 
@@ -1876,7 +1876,7 @@
 .forge-rhythm-score-message:empty { display: none; }
 .forge-rhythm-score-message.is-error { color: var(--text-error); }
 
-/* score_first M5 — the phrase tab: a control strip (bars, style, tempo change) above the live Score. Only a score-first vault ever opens it. */
+/* score_first M5 — the phrase tab: a control strip (bars, style, tempo change) under the live Score (2026-11-03-1155-93). Only a score-first vault ever opens it. */
 .forge-phrase-controls {
   display: flex;
   flex-wrap: wrap;
@@ -1911,15 +1911,15 @@
 .forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-hot *,
 .forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-pinned * { fill: var(--interactive-accent); stroke: var(--interactive-accent); }
 .forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-pinned { filter: drop-shadow(0 0 3px var(--interactive-accent)); }
-/* the bracket over every bar made by the phrase note */
+/* the bracket under every bar made by the phrase note (2026-11-03-1155-93: the Score is the first thing in the tab, so the bracket sits right under it, open upward) */
 .forge-phrase-bracket {
   display: block;
-  margin: 8px 4px 0;
-  padding: 1px 8px 0;
+  margin: 0 4px 8px;
+  padding: 0 8px 1px;
   text-align: center;
   border: 2px solid var(--interactive-accent);
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   cursor: pointer;
@@ -2069,8 +2069,9 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 }
 .forge-arr-control {
   display: flex;
+  flex-wrap: wrap;                       /* 2026-11-03-1155-93 (R6): at 300 px the volume slider and its number wrapped nowhere and ran 62 px past the pane; they go to the next line instead */
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
 }
 .forge-arr-control-kit {
   min-width: 5em;

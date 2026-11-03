@@ -100,7 +100,7 @@ export function newBarAvailable(scoreFirst: boolean): boolean {
 
 export type ScorePanelPlan = 'none' | 'score' | 'lean-note';
 
-/** What the Beat Box tab shows under the widget. Not score-first -> 'none' in EVERY edition (the tab is exactly what it was). Score-first -> the live Score in the music
+/** What the Beat Box tab shows above the widget (2026-11-03-1155-93: the Score is the first thing in a score-first tab). Not score-first -> 'none' in EVERY edition (the tab is exactly what it was). Score-first -> the live Score in the music
  *  edition, and in the lean edition (no Verovio, no MIDI player) a one-line explanation instead. */
 export function scorePanelPlan(input: { scoreFirst: boolean; edition: 'lean' | 'music' }): ScorePanelPlan {
   if (input.scoreFirst !== true) return 'none';
@@ -108,7 +108,7 @@ export function scorePanelPlan(input: { scoreFirst: boolean; edition: 'lean' | '
 }
 
 /** The lean edition's one line. */
-export const LEAN_SCORE_NOTE = 'The score under the Beat Box needs the music edition of the plugin.';
+export const LEAN_SCORE_NOTE = 'The score above the Beat Box needs the music edition of the plugin.';
 
 /** Wording on the live panel. */
 export const SCORE_RENDERING_TEXT = 'Rendering score…';

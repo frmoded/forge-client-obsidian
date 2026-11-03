@@ -39,6 +39,7 @@ await build({
     b.onResolve({ filter: /\.\/restore-note-to-git\.ts$/ }, () => ({ path: path.join(here, 'stub-restore.ts') }));       // child_process
     b.onResolve({ filter: /\.\/bundled-widget-lookup\.ts$/ }, () => ({ path: path.join(here, 'stub-widget-lookup.ts') }));
     b.onResolve({ filter: /\.\/rhythm-score-engine\.ts$/ }, () => ({ path: path.join(here, 'stub-score-engine.ts') }));   // -> the real engine behind /compute
+    b.onResolve({ filter: /\.\/phrase-engine\.ts$/ }, () => ({ path: path.join(here, 'stub-phrase-engine.ts') }));       // -> the real engine behind /phrase (the arrangement and composition views import it directly)
     b.onResolve({ filter: /\.\/music-edition-selected\.ts$/ }, () => ({ path: path.join(CLIENT, 'src', EDITION === 'music' ? 'music-edition.full.ts' : 'music-edition.lean.ts') }));
     b.onResolve({ filter: /\.\/edition-selected\.ts$/ }, () => ({ path: path.join(CLIENT, 'src', EDITION === 'music' ? 'edition-selected.music.ts' : 'edition-selected.ts') }));
   } }],

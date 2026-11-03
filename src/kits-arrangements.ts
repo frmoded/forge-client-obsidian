@@ -91,7 +91,7 @@ export class ArrangementView extends EditableFileView {
         console.info(litEvidence(notesPath, barsPlayedBy(this.lineage ?? [], noteId)));
       });
     }
-    // the row per kit sits between the strip and the Score; a change goes out as one batch after a quiet moment and is written to the note (writeSettings), which redraws everything below
+    // the row per kit sits under the strip (2026-11-03-1155-93: all of it under the Score, which is first); a change goes out as one batch after a quiet moment and is written to the note (writeSettings), which redraws everything below
     this.controls = mountArrangementControls(this.contentEl, { commit: (patches) => { void this.writeSettings(patches); }, trace: (line) => { console.info(line); }, setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number) });
     this.statusEl = this.contentEl.createDiv({ cls: 'forge-phrase-status' });             // 2026-10-31-1120: a write the note refused says why here, as a phrase tab's strip does
     this.statusEl.setAttribute('role', 'status');
@@ -104,6 +104,7 @@ export class ArrangementView extends EditableFileView {
     const arrangementNote = phraseNoteId(file.path);
     this.area = attachScoreArea(this.contentEl, this.plan, {
       title: file.basename,
+      first: true,                                      // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the sentence, the pin line, the strip and the controls go under it
       markPending: true,                                // 2026-10-31-1110: a render takes seconds; the Score on screen is dimmed from the moment the note changes until the new one replaces it
       // 2026-10-30-1000 (slice 3): a click on a row of a bar pins it (the inspector shared with the phrase tabs, with the opt-in flags a score-first surface sets: P3), and the notes pane follows. Only with the hooks a pair needs.
       inspector: this.openNote ? {

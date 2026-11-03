@@ -24,7 +24,7 @@ proto.removeClass = function (c: string) { this.classList.remove(c); };
 proto.toggleClass = function (c: string, on: boolean) { this.classList.toggle(c, !!on); };
 proto.setText = function (t: string) { this.textContent = t; };
 
-(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; plan?: 'score' | 'lean-note'; path?: string; bars?: Record<string, string>; name?: string; noZoomMemory?: boolean; notebook?: boolean }) => {
+(window as any).__mountPhrase = async (parent: HTMLElement, opts: { phrase: string; bar: string; plan?: 'score' | 'lean-note'; path?: string; bars?: Record<string, string>; name?: string; noZoomMemory?: boolean; notebook?: boolean; structure?: boolean }) => {
   // 2026-10-26-1100: the zoom a tab keeps across its redraws, as the phrase view gives it; `noZoomMemory` is the red run (every redraw back to 100%, as before)
   const zoom = opts.noZoomMemory ? undefined : createZoomMemory(SCORE_ZOOM_LEVELS, 1.0);
   const PATH = opts.path ?? 'phrases/phrase_001.md';
@@ -61,6 +61,7 @@ proto.setText = function (t: string) { this.textContent = t; };
       notebook: { run: async () => ({ ok: false, message: 'harness' }), runRequest: async () => ({ ok: false, message: 'harness' }), cells: async () => ({ cells: [], problems: [] }), rerun: async () => ({ ok: false, message: 'harness' }), deleteCell: async () => ({ ok: true }) } as any,
       trace: (line) => { ((window as any).__notebookLines ??= []).push(line); },
     } : undefined,
+    structure: opts.structure ? { goto: async () => false, onNotesNavigated: () => () => {}, trace: () => {} } : undefined,       // 2026-11-03-1155-93: the chip strip a phrase tab has beside a notes pane
     // M9: the vault side of "Edit this bar" (the harness's files map is the vault)
     fork: {
       listBarBasenames: () => [...files.keys()].filter((k) => /^bars\/bar_\d+\.md$/.test(k)).map((k) => k.slice(5, -3)),

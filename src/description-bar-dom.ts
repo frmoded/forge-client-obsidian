@@ -10,6 +10,8 @@
 
 import { copyableMessage } from './copy-message-dom.ts';
 
+/** The banner's class: the Score slot (live-score-dom.ts) knows it, because the banner is the one thing allowed above the Score. */
+export const DESCRIPTION_BAR_CLASS = 'forge-description-bar';
 export type BarAction = 'update' | 'update-recipe' | 'update-python' | 'revert' | 'revert-generated' | 'ask' | 'apply-preview' | 'cancel-preview';
 export const BAR_LABELS: Record<BarAction, string> = { update: 'Update from Description', 'update-recipe': 'Update from Recipe', 'update-python': 'Update from Python', revert: 'Revert', 'revert-generated': 'Revert to generated', ask: 'Ask the sentence service', 'apply-preview': 'Apply', 'cancel-preview': 'Cancel' };
 
@@ -26,7 +28,7 @@ export interface BarHandle { readonly el: HTMLElement; show(view: BarView): void
 export function mountDescriptionBar(parent: HTMLElement, onAction: (a: BarAction) => void): BarHandle {
   const doc = parent.ownerDocument;
   const el = doc.createElement('div');
-  el.className = 'forge-description-bar';
+  el.className = DESCRIPTION_BAR_CLASS;
   el.setAttribute('role', 'status');
   el.setAttribute('aria-live', 'polite');
   parent.insertBefore(el, parent.firstChild);

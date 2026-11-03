@@ -91,6 +91,7 @@ export class CompositionView extends EditableFileView {
     const computeComposition = (data: Parameters<typeof computeCompositionScoreViaEngine>[0], t: string) => computeCompositionScoreViaEngine(data, t);
     this.area = attachScoreArea(this.contentEl, this.plan, {
       title: file.basename,
+      first: true,                                      // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the header and the tree go under it
       // a click on a bar pins it (the inspector shared with the phrase tabs, with the opt-in flags a score-first surface sets: P3), and the notes pane follows. Only with the hooks a pair needs.
       inspector: this.openNote ? {
         noteId: compositionNote,

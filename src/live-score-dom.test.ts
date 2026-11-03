@@ -5,8 +5,9 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import {
-  READY_TIMEOUT_MS, SCORE_HOST_CLASS, SCORE_HOST_PENDING_CLASS, SCORE_HOST_STALE_CLASS, SCORE_PANEL_CLASS, SCORE_PANEL_LABEL, SCORE_STATUS_CLASS, attachScoreArea, mountLeanNote, mountScorePanel, type ScoreAreaPorts,
+  READY_TIMEOUT_MS, SCORE_HOST_CLASS, SCORE_HOST_PENDING_CLASS, SCORE_HOST_STALE_CLASS, SCORE_PANEL_CLASS, SCORE_PANEL_LABEL, SCORE_STATUS_CLASS, attachScoreArea, mountLeanNote, mountScorePanel, scoreSlot, type ScoreAreaPorts,
 } from './live-score-dom.ts';
+import { DESCRIPTION_BAR_CLASS } from './description-bar-dom.ts';
 import { LEAN_SCORE_NOTE, scorePanelPlan } from './score-first-core.ts';
 import { RHYTHM_STARTER } from './new-note-core.ts';
 
@@ -387,4 +388,57 @@ test('markPending: the new score swapped in is not stale; a score drawn while a 
   assert.equal(hosts.length, 1, 'one score on screen');
   assert.equal(hosts[0].classList.contains(SCORE_HOST_STALE_CLASS), false, 'the new score is current');
   assert.equal(panel.hasAttribute('aria-busy'), false);
+});
+
+// ---- 2026-11-03-1155-93 (R6): the Score is the FIRST thing in a score-first tab ------------------------------------------------------------------------------------------------------------------------
+
+test('R6 first: with `first` the Score panel goes before the Beat Box iframe the tab already holds (the Beat Box tab: Score, then the widget); without it the panel is appended as it always was (the lab and every older caller)', () => {
+  const { tab } = page();
+  const plan = scorePanelPlan({ scoreFirst: true, edition: 'music' });
+  const area = attachScoreArea(tab, plan, ports({ first: true }).p)!;
+  assert.deepEqual([...tab.children].map((c: any) => c.tagName === 'IFRAME' ? 'iframe' : c.className), [SCORE_PANEL_CLASS, 'iframe']);
+  assert.ok(area.el === tab.children[0], 'the area hands out its panel');
+  area.dispose();
+  const plain = page().tab;
+  attachScoreArea(plain, plan, ports().p)!;
+  assert.deepEqual([...plain.children].map((c: any) => c.tagName === 'IFRAME' ? 'iframe' : c.className), ['iframe', SCORE_PANEL_CLASS], 'CONTROL: without `first` the order is the old one (so the assertion above can fail)');
+});
+
+test('R6 first: the description banner is the one thing allowed above the Score - found by its class, so a banner that is already there stays on top, and the Score is inserted under it, before everything else', () => {
+  const { tab, doc } = page();
+  const banner = doc.createElement('div'); banner.className = DESCRIPTION_BAR_CLASS;
+  tab.insertBefore(banner, tab.firstChild);
+  const parts = doc.createElement('div'); parts.className = 'forge-phrase-controls'; tab.appendChild(parts);
+  attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), ports({ first: true }).p)!;
+  assert.deepEqual([...tab.children].map((c: any) => c.tagName === 'IFRAME' ? 'iframe' : c.className), [DESCRIPTION_BAR_CLASS, SCORE_PANEL_CLASS, 'iframe', 'forge-phrase-controls']);
+  assert.ok(scoreSlot(tab) === banner.nextElementSibling, 'the slot (where a Score would go next) is the first part after the banner: the Score itself');
+  const empty = doc.createElement('div');
+  assert.ok(scoreSlot(empty) === null, 'an empty parent: append');
+  const onlyBanner = doc.createElement('div'); onlyBanner.appendChild(doc.createElement('div')).className = DESCRIPTION_BAR_CLASS;
+  assert.ok(scoreSlot(onlyBanner) === null, 'a parent holding only the banner: append (after it)');
+});
+
+test('R6 first: the lean edition\'s one line takes the same place (first), and a rebuilt Score (dispose, attach again) lands in the same place', () => {
+  const { tab } = page();
+  const lean = scorePanelPlan({ scoreFirst: true, edition: 'lean' });
+  const a = attachScoreArea(tab, lean, ports({ first: true }).p)!;
+  assert.ok(tab.children[0] === a.el); assert.equal(tab.children[0].textContent, LEAN_SCORE_NOTE);
+  a.dispose();
+  assert.equal(tab.children.length, 1, 'the line went with the area');
+  const b = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), ports({ first: true }).p)!;
+  b.dispose();
+  const c = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), ports({ first: true }).p)!;
+  assert.ok(tab.children[0] === c.el, 'a rebuild puts the Score back in the first place');
+  const plain = page().tab;
+  attachScoreArea(plain, lean, ports().p)!;
+  assert.equal((plain.lastElementChild as any).className.includes('forge-rhythm-edit-score-lean'), true, 'CONTROL: without `first` the line is last');
+});
+
+test('R6 P3: a vault that is not score-first - `first` changes nothing, the tab\'s DOM is byte-for-byte what it was', () => {
+  for (const edition of ['music', 'lean'] as const) {
+    const { tab } = page();
+    const before = tab.outerHTML;
+    assert.equal(attachScoreArea(tab, scorePanelPlan({ scoreFirst: false, edition }), ports({ first: true }).p), null);
+    assert.equal(tab.outerHTML, before, edition);
+  }
 });

@@ -1,4 +1,4 @@
-// score_first M5 (drain 2026-10-22-1850) — the phrase tab: a `phrases/phrase_NNN.md` data note shown as a control strip over a live Score. The Obsidian-coupled half (the decisions are in
+// score_first M5 (drain 2026-10-22-1850) — the phrase tab: a `phrases/phrase_NNN.md` data note shown as a live Score with its control strip under it (2026-11-03-1155-93). The Obsidian-coupled half (the decisions are in
 // phrase-core.ts, the DOM and its freshness in phrase-dom.ts, both unit-tested without Obsidian). It is registered, and opened, ONLY in a score-first vault (score-first.ts).
 //
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.

@@ -1,11 +1,11 @@
-// score_first M5 (drain 2026-10-22-1850; M7 Phase A 2026-10-22-2330 adds the mix strip) — the phrase surface, plain DOM (no obsidian import, so a happy-dom test mounts the very code the tab runs): a small control strip above the live Score.
+// score_first M5 (drain 2026-10-22-1850; M7 Phase A 2026-10-22-2330 adds the mix strip) — the phrase surface, plain DOM (no obsidian import, so a happy-dom test mounts the very code the tab runs): a small control strip under the live Score (2026-11-03-1155-93: the Score is the first thing in the tab).
 //
+//   <div class="forge-rhythm-edit-score">…the live Score, the same panel the Beat Box tab has… (2026-11-03-1155-93: FIRST in the tab, then the bracket under it)</div>
 //   <div class="forge-phrase-controls" role="group" aria-label="Phrase">
 //     Source <span class="forge-phrase-source">bar_005</span>
 //     Bars <input class="forge-phrase-bars">   Style <select class="forge-phrase-style">   Tempo change (%) <input class="forge-phrase-pct">
 //     <span class="forge-phrase-status" role="status">…</span>                                  a write the note refused ('' = nothing to say)
 //   </div>
-//   <div class="forge-rhythm-edit-score">…the live Score, the same panel the Beat Box tab has…</div>
 //
 // A MIX phrase (M7) has its own strip in the same place — two bar dropdowns, a Weight slider, a Threshold slider, a Ghost notes checkbox and one plain-words sentence — and NO inspector, bracket or
 // source link (navigation through a mix is M8). The strip, the bracket and the Score area are rebuilt when the note's `kind` changes (a hand edit), so the tab always shows the surface of what the note says.
@@ -509,7 +509,7 @@ export interface PhraseInspectorPorts {
   onPin?(pin: PinnedNote | null): void;
 }
 
-/** 2026-10-26-1270 (M13): the structure strip above the Score. Present = the tab has the strip; absent = no strip at all (the tab as it was). */
+/** 2026-10-26-1270 (M13): the structure strip (under the Score since 2026-11-03-1155-93). Present = the tab has the strip; absent = no strip at all (the tab as it was). */
 export interface PhraseStructurePorts {
   /** A chip was clicked: send the notes pane of this Score's pair to that note. false = there is no pair (the tab then opens the note with the inspector's opener). */
   goto(noteId: string): Promise<boolean>;
@@ -527,7 +527,7 @@ export const MORPH_INSPECTOR_HINT = 'Click a bar or a note to see where it came 
 
 export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'produce' | 'inspector'> {
   inspector?: PhraseInspectorPorts;
-  /** 2026-10-26-1270 (M13): the structure strip (chips above the Score, two-way highlight with the notes pane). */
+  /** 2026-10-26-1270 (M13): the structure strip (chips under the Score, two-way highlight with the notes pane). */
   structure?: PhraseStructurePorts;
   /** The phrase note's path. */
   path: string;
@@ -685,7 +685,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     ports.structure?.trace?.(litEvidence(path, notesLit));
   });
 
-  /** Build the surface of one kind: its strip, (extend only) the bracket and the inspector, and the live Score. Everything is appended in that order, so after `teardown()` a rebuild lands in the same places. */
+  /** Build the surface of one kind. 2026-11-03-1155-93 (R6) the order, top to bottom: the live Score (it takes the first place itself: `first`), (extend only) its bracket, the controls strip, the chips, the notebook. Everything else is appended in that order,
+   *  so after `teardown()` a rebuild lands in the same places. */
   /** How many single-hit changes lie between two bars, read FRESH from the vault; null = a bar could not be read or is not rhythm data (the Score says why). */
   const morphChanges = async (x: string, y: string): Promise<number | null> => {
     try {
@@ -716,17 +717,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       const controls = mountPhraseControls(parent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
       strip = { el: controls.el, set: (params) => controls.set(params && params.kind === 'extend' ? params : null), setStatus: (t) => controls.setStatus(t), dispose: () => controls.dispose() };
     }
-    // The bracket over every bar made by this phrase note (hover lights them all, a click opens the phrase). Built before the Score so it sits between the strip and the engraving. A mix has none (M8).
     bracket = null;
-    if (insp && k === 'extend') {
-      const doc = parent.ownerDocument;
-      bracket = doc.createElement('div');
-      bracket.className = PHRASE_BRACKET_CLASS;
-      bracket.setAttribute('role', 'button');
-      bracket.setAttribute('tabindex', '0');
-      bracket.style.display = 'none';
-      parent.appendChild(bracket);
-    }
     const inspectorPorts: ScoreInspectorPorts | undefined = insp && k === 'extend' ? {
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
@@ -799,6 +790,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     }) : null;
     area = attachScoreArea(parent, plan, {
       ...areaPorts,
+      first: true,                                                                              // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the controls, the chips and the notebook (mounted in their own order) go under it
       inspector: inspectorPorts,
       debounceMs: k === 'mix' || k === 'morph' ? MIX_SCORE_DEBOUNCE_MS : undefined,           // a mix and a morph are dragged (sliders): the first change draws at once, later ones collapse into one draw
       produce: async (note, title) => {
@@ -812,6 +804,16 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         return out;
       },
     });
+    // The bracket under every bar made by this phrase note (hover lights them all, a click opens the phrase), directly under the Score it brackets (2026-11-03-1155-93: it used to sit over it, between the strip and the engraving). A mix has none (M8).
+    if (insp && k === 'extend') {
+      const doc = parent.ownerDocument;
+      bracket = doc.createElement('div');
+      bracket.className = PHRASE_BRACKET_CLASS;
+      bracket.setAttribute('role', 'button');
+      bracket.setAttribute('tabindex', '0');
+      bracket.style.display = 'none';
+      parent.insertBefore(bracket, area ? area.el.nextSibling : null);
+    }
     if (ports.notebook) {
       const told = ports.notebook;
       notebookHandle = mountNotebook(parent, {

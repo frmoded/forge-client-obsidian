@@ -35,8 +35,9 @@ test('both buttons are drawn as buttons, a PRESSED Mute is drawn, a PRESSED Solo
   assert.notEqual(declared(pressed.mute, 'background'), declared(pressed.solo, 'background'), 'a muted kit and a solo kit are drawn in different colours');
 });
 
-test('the row lays out kit name, Mute, Solo, slider and value on one line, and the rows stack', () => {
+test('the row lays out kit name, Mute, Solo, slider and value on one line when there is room (and wraps when there is not), and the rows stack', () => {
   assert.match(rule('.forge-arr-controls'), /flex-direction:\s*column/);
   assert.match(rule('.forge-arr-control'), /display:\s*flex/);
+  assert.match(rule('.forge-arr-control'), /flex-wrap:\s*wrap/, 'a kit row wraps at a narrow pane (the notes-pane width): the slider and its number go to the next line, nothing runs past the pane (2026-11-03-1155-93)');
   assert.match(rule('.forge-arr-control'), /align-items:\s*center/);
 });

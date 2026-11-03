@@ -1,4 +1,4 @@
-// score_first_experiment M1 (drain 2026-10-21-1100) — the DOM of the live Score panel under the Beat Box. Plain DOM, no obsidian import (so a happy-dom test mounts the very
+// score_first_experiment M1 (drain 2026-10-21-1100) — the DOM of the live Score panel (above the Beat Box since 2026-11-03-1155-93). Plain DOM, no obsidian import (so a happy-dom test mounts the very
 // code the tab runs): the Obsidian-only parts — drawing a MusicXML payload with Verovio and silencing the player — arrive as two injected functions.
 //
 //   <div class="forge-rhythm-edit-score" role="region" aria-label="Score of this bar">
@@ -20,6 +20,7 @@ import { mountScoreMessages, type ScoreMessagePorts, type ScoreMessages } from '
 import { createScoreInspector, type GridTarget, type ScoreInspector, type ScoreInspectorPorts } from './score-inspector.ts';
 
 import { copyableMessage } from './copy-message-dom.ts';
+import { DESCRIPTION_BAR_CLASS } from './description-bar-dom.ts';
 import { SCORE_RENDERING_TEXT } from './score-first-core.ts';
 
 export const SCORE_PANEL_CLASS = 'forge-rhythm-edit-score';
@@ -44,6 +45,15 @@ export interface ScorePanelDeps {
   /** Timers for the "ready" timeout (the page's own by default). */
   setTimer?(fn: () => void, ms: number): unknown;
   clearTimer?(handle: unknown): void;
+  /** 2026-11-03-1155-93 (R6): the panel goes FIRST in its parent (see `scoreSlot`), not at the end. Absent = at the end, as it always was (the output panel's lab, the unit tests). Every score-first tab sets it. */
+  first?: boolean;
+}
+
+/** 2026-11-03-1155-93 (R6): where the Score goes in a score-first tab: before everything the tab has mounted so far, except the description banner (it appears only when a note has something to say, and the person reads it first).
+ *  Found BY ROLE (the banner's class), never by position, so a rebuild of the tab (a phrase that changes kind) and a banner that comes and goes leave the Score where it belongs. `null` = append. */
+export function scoreSlot(parent: HTMLElement): Node | null {
+  for (const c of Array.from(parent.children)) if (!c.classList.contains(DESCRIPTION_BAR_CLASS)) return c;
+  return null;
 }
 
 export interface ScorePanel {
@@ -69,7 +79,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   const slot = doc.createElement('div');
   slot.className = 'forge-rhythm-inspector-slot';
   el.appendChild(slot);
-  parent.appendChild(el);
+  parent.insertBefore(el, deps.first ? scoreSlot(parent) : null);
   let current: HTMLElement | null = null;
   let pending: { host: HTMLElement; cancel: () => void } | null = null;
   let stale = false;                                   // markPending: the score on screen is not the latest (the flag follows whichever host is current)
@@ -143,17 +153,19 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
 }
 
 /** The lean edition's panel: one line, no score. */
-export function mountLeanNote(parent: HTMLElement, text: string): HTMLElement {
+export function mountLeanNote(parent: HTMLElement, text: string, first = false): HTMLElement {
   const doc = parent.ownerDocument;
   const el = doc.createElement('div');
   el.className = `${SCORE_PANEL_CLASS} forge-rhythm-edit-score-lean`;
   el.textContent = text;
-  parent.appendChild(el);
+  parent.insertBefore(el, first ? scoreSlot(parent) : null);
   return el;
 }
 
-/** What the Beat Box tab holds on to for the Score under the widget. */
+/** What the Beat Box tab holds on to for the Score above the widget. */
 export interface ScoreArea {
+  /** The Score panel (or the lean edition's one line): what a tab puts the parts that belong right under the Score after (the phrase's bracket). */
+  readonly el: HTMLElement;
   /** The widget's data changed (debounced re-draw). A no-op in the lean edition. */
   update(data: unknown): void;
   /** Draw this bar now (open, reload from the note). A no-op in the lean edition. */
@@ -194,8 +206,8 @@ export interface ScoreAreaPorts extends ScorePanelDeps {
 export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports: ScoreAreaPorts): ScoreArea | null {
   if (plan === 'none') return null;
   if (plan === 'lean-note') {
-    const note = mountLeanNote(parent, LEAN_SCORE_NOTE);
-    return { update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, refuse() { /* no score in the lean edition */ }, gridHover() { /* no score in the lean edition */ }, lightAll() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
+    const note = mountLeanNote(parent, LEAN_SCORE_NOTE, ports.first);
+    return { el: note, update() { /* no score in the lean edition */ }, showNow() { /* no score in the lean edition */ }, refuse() { /* no score in the lean edition */ }, gridHover() { /* no score in the lean edition */ }, lightAll() { /* no score in the lean edition */ }, dispose() { note.remove(); } };
   }
   // The provenance map travels WITH the payload it was built for: compute() attaches ids to the MusicXML and remembers the map by payload identity; the panel hands the very
   // payload back when that engraving becomes the shown one, so the map and the SVG are swapped in together (never a map for a score that is not on screen).
@@ -242,6 +254,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     onTiming: ports.onTiming,
   });
   return {
+    el: panel.el,
     update: (data) => live.update(data),
     showNow: (data) => live.showNow(data),
     refuse: (data, message) => live.refuse(data, message),

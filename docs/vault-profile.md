@@ -27,7 +27,7 @@ music-core = { local = "../music-core" }
 ## What `score_first` does (music edition; milestone M1)
 
 - **New bar** — a command (palette) and a ribbon button, present **only** in a score-first vault. It makes `bars/bar_001.md`, `bar_002.md`, … (a rhythm data note with the same starter as *New Forge note → Rhythm (Beat Box)*: 4/4, 16 steps, kick on 1 and 3, snare on 2 and 4) and opens it in the Beat Box.
-- **Score underneath** — in the Beat Box tab of a rhythm note, the engraved score of the **current** data sits right under the grid / circle and redraws (debounced) after every edit. Read-only; it never writes. In the lean edition, which has no score, one line says so instead.
+- **Score at the top** — in the Beat Box tab of a rhythm note, the engraved score of the **current** data is the first thing in the tab, right above the grid / circle, and redraws (debounced) after every edit. Read-only; it never writes. In the lean edition, which has no score, one line says so instead.
 
 ## Inspecting the Score (music edition; milestone M3, single bar)
 
@@ -51,7 +51,7 @@ music-core = { local = "../music-core" }
 ## Navigating a phrase (music edition; milestone M6)
 
 - **Every bar of a phrase's Score answers "which note, which parameter, which parent":** each engraved bar is a measure group whose id the plugin put on the engine's MusicXML (the first part's measures; Verovio keeps them). Clicking a bar (or the arrow keys, Esc to let go) pins it and the inspector shows `bar 5 of 8 | made by phrase_001 (extend, slowing 20 %, style repeat_with_fills) | from bar_005 | tempo 89`; the tempo is read from the engine's own `<sound tempo>` for that bar, not recomputed. The phrase and the source bar are links (**Open note**); hovering an entry lights the bars it covers; hovering a bar with nothing pinned previews its stack.
-- **The bracket** above the Score (`phrase_001 · 8 bars`) lights every bar the phrase made and opens the phrase note; the source name in the strip opens the bar.
+- **The bracket** under the Score (`phrase_001 · 8 bars`; the Score is the first thing in every score-first tab, then its bracket, the controls, the chips and the notebook) lights every bar the phrase made and opens the phrase note; the source name in the strip opens the bar.
 - **It is the bar inspector, reused:** `score-inspector.ts` takes optional phrase options (lineage, order, hint, preview) that are absent for the Beat Box tab; the Beat Box tab's DOM and behaviour are pinned unchanged. The pure part is `src/phrase-lineage-core.ts`.
 - **The way back from JSON (2100):** while a phrase note is shown as text in a score-first vault, its tab header carries **Open as Score** (the Beat Box's own label; `src/phrase-header-core.ts`, wired in `score-first.ts`); the rhythm note buttons are not shown on a phrase there. The phrase strip also says in plain words what the chosen style does (`PHRASE_STYLE_NOTES`; the fill rule is pinned against the real engine).
 - **Lighting (2300):** a lit bar gets a translucent band inside it (inline-styled, behind its drawing, never hit-testable; stronger for a pin than a hover) and the other bars are dimmed while one is pinned, so it shows whatever the stylesheet or theme does; the CSS recolour stays as a second cue. Option `band` of the artifact inspector; the bar's Beat Box tab does not use it.

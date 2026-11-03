@@ -1,4 +1,4 @@
-// score_first M10 slice 1 polish (drain 2026-10-29-0830) - the strip above an ARRANGEMENT's Score: one chip per phrase and per kit it reads (structure-strip-core.ts `arrangementChips`), drawn by the strip every tab uses. Plain DOM, no obsidian
+// score_first M10 slice 1 polish (drain 2026-10-29-0830) - the strip of an ARRANGEMENT's tab (under its Score since 2026-11-03-1155-93): one chip per phrase and per kit it reads (structure-strip-core.ts `arrangementChips`), drawn by the strip every tab uses. Plain DOM, no obsidian
 // import. A click is the same as on a phrase tab: the pair's notes pane goes to that note; with no pair the tab opens the note itself. A note that cannot be read as an arrangement has no chips (the header already says why).
 import { readArrangementNote } from './arrangement-core.ts';
 import { arrangementChips, type Chip } from './structure-strip-core.ts';

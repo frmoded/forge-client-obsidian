@@ -81,7 +81,7 @@ export class RhythmEditView extends EditableFileView {
   private pipeline: AutosavePipeline | null = null;
   /** Drain 2026-10-18-1800 — sizes the iframe to the widget's content (never below the pane: the iframe has min-height 100%). */
   private autoHeight: AutoHeightController | null = null;
-  /** score_first_experiment M1 (drain 2026-10-21-1100) — the live Score under the widget. Present ONLY in a score-first vault (vault-profile-core.ts); everywhere else all three stay null
+  /** score_first_experiment M1 (drain 2026-10-21-1100) — the live Score above the widget (2026-11-03-1155-93). Present ONLY in a score-first vault (vault-profile-core.ts); everywhere else all three stay null
    *  and the tab is exactly what it was. */
   private scoreArea: ScoreArea | null = null;
   /** score_first M3: this tab's widget is asked to report hovered steps and to light the step the Score names (the load message says `hoverLink: true`). False everywhere else. */
@@ -245,9 +245,10 @@ export class RhythmEditView extends EditableFileView {
     this.mountScore(plan, file, note.value.data);
   }
 
-  /** Score-first vaults only: the Score under the grid / circle (music edition), or the lean edition's one line. Plan 'none' attaches nothing (live-score-dom.ts#attachScoreArea). */
+  /** Score-first vaults only: the Score above the grid / circle (music edition; 2026-11-03-1155-93: it was under it), or the lean edition's one line. Plan 'none' attaches nothing (live-score-dom.ts#attachScoreArea). */
   private mountScore(plan: ScorePanelPlan, file: TFile, data: unknown): void {
     this.scoreArea = attachScoreArea(this.contentEl, plan, {
+      first: true,                                 // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the Beat Box (already mounted by now) goes under it
       renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays }),
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       compute: computeRhythmScoreViaEngine,

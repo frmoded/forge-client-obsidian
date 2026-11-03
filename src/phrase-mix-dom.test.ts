@@ -258,13 +258,12 @@ test('an extend phrase that is hand-edited into a mix swaps the strip and the in
   assert.equal(r.drawn.at(-1), '<score-partwise>extend:2</score-partwise>');
 });
 
-test('the strip sits above the Score, in the same place the extend strip does', async () => {
+test('the strip sits under the Score (the Score is the first thing in the tab, 2026-11-03-1155-93), in the same place the extend strip does', async () => {
   const r = rig({ initial: true });
   await r.handle.load(); await flush();
   const kids = [...r.parent.children].map((c: any) => c.className.split(' ')[0]);
-  assert.equal(kids[0], 'forge-phrase-controls');
-  assert.equal(kids.includes('forge-rhythm-edit-score'), true);
-  assert.ok(kids.indexOf('forge-phrase-controls') < kids.indexOf('forge-rhythm-edit-score'));
+  assert.equal(kids[0], 'forge-rhythm-edit-score');          // pins the MECHANISM (the Score slot is first); if the design moves this SHOULD go red - reassess, don't just rewrite
+  assert.equal(kids[1], 'forge-phrase-controls');
 });
 
 test('lean edition: the mix strip is there, the Score is the one-line explanation, the engine is never asked', async () => {

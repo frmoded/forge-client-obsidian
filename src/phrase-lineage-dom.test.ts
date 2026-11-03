@@ -136,7 +136,9 @@ test('THE BRACKET over the bars: labelled with the phrase and its bar count; hov
   b.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   b.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'x', bubbles: true }));
   assert.deepEqual(r.opened, ['phrases/phrase_001', 'phrases/phrase_001']);
-  assert.equal(b.previousElementSibling.className, 'forge-phrase-controls', 'the bracket sits between the strip and the Score');
+  // pins the MECHANISM (the Score slot is first; the bracket is mounted right after it); if the design moves this SHOULD go red - reassess, don't just rewrite (2026-11-03-1155-93: the Score is the first thing in the tab, the bracket sits directly under it)
+  assert.equal(b.previousElementSibling.className, 'forge-rhythm-edit-score', 'the bracket sits directly under the Score');
+  assert.equal(b.nextElementSibling.className, 'forge-phrase-controls', 'and the controls strip comes after it');
 });
 
 test('a one-bar phrase says "1 bar"; a phrase the tab cannot read has no bracket', async () => {
@@ -310,12 +312,12 @@ test('M12: without the onPin port the tab is exactly what it was (the pin works,
 const hotBars = (r: any) => r.qa('g.measure.forge-artifact-hot').map((g: any) => g.id);
 const chipTexts = (r: any) => r.qa('.forge-structure-strip button').map((b: any) => b.textContent);
 
-test('M13: with the structure port the phrase tab has a strip ABOVE the Score naming bar_005 -> phrase_001 extend 8 bars; without the port there is no strip at all (the tab is what it was)', async () => {
+test('M13: with the structure port the phrase tab has a strip (UNDER the Score since 2026-11-03-1155-93) naming bar_005 -> phrase_001 extend 8 bars; without the port there is no strip at all (the tab is what it was)', async () => {
   const r = rig({ structure: true });
   await r.handle.load(); await flush();
   assert.deepEqual(chipTexts(r), ['bar_005', 'phrase_001 extend 8 bars']);
   const strip = r.q('.forge-structure-strip'), score = r.q('.forge-rhythm-score-host');
-  assert.ok(strip.compareDocumentPosition(score) & 4, 'the strip comes before the Score in the DOM');
+  assert.ok(strip.compareDocumentPosition(score) & 2, 'the strip comes after the Score in the DOM (the Score is the first thing in the tab)');       // pins the MECHANISM (the Score slot is first); if the design moves this SHOULD go red - reassess, don't just rewrite
   const plain = rig();
   await plain.handle.load(); await flush();
   assert.equal(plain.q('.forge-structure-strip'), null);
