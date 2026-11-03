@@ -395,7 +395,7 @@ export function formatReport(s, { wallMs, jobs, testCount, chromeSkipped = [], t
   const where = (r) => `${r.file}:${r.line ?? '?'}`;
   for (const r of s.survived) lines.push(`SURVIVED     ${where(r)} [${r.id}]  ${show(r.from)} -> ${show(r.to)}`);
   for (const r of s.uncovered) lines.push(`NO TEST      ${where(r)} [${r.id}]  ${noTestMessage(r.file)}`);
-  for (const r of s.notRun) lines.push(`NOT RUN      ${where(r)} [${r.id}]  the selected tests did not pass (skipped or empty), so this proves nothing`);
+  for (const r of s.notRun) lines.push(`NOT RUN      ${where(r)} [${r.id}]  ${r.why === 'time box' ? 'the time box (--time-box) was over before it started' : 'the selected tests did not pass (skipped or empty), so this proves nothing'}`);
   for (const r of s.explained) lines.push(`equivalent   ${where(r)} [${r.id}]  ${r.why}`);
   for (const r of s.invalid) lines.push(`invalid      ${where(r)} [${r.id}]  not valid code: ${show(r.from)} -> ${show(r.to)}`);
   for (const r of s.notApplicable) lines.push(`n/a          ${r.file} [${r.id}]  ${r.why}`);

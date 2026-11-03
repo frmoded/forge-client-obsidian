@@ -36,6 +36,7 @@ const USAGE = `usage: node scripts/dev/mutate.mjs [--diff <git ref or range>] [-
   --engine-jobs <n>   of those, mutants whose tests boot the Pyodide engine at once (default 4)
   --test-concurrency <n>  test files one mutant runs at once (default: the cores divided by --jobs, at least 2)
   --timeout <s>       per mutant; a hang is killed and counted as killed by timeout (default 90)
+  --time-box <min>    the whole pass: a mutant not STARTED when the minutes (from the start of the run) are over is reported as 'not run' (a running one finishes, within --timeout); default: no limit
   --max-loop <n>      the mutated file's unbounded loops (while (true), for (;;), for (init; ; update)) throw after n iterations per site: a mutant that removes a loop exit dies in a second, as a kill 'by loop cap', instead of at the
                       timeout (default 5000000; 0 = off, the timeout alone)
   --equivalent <file> JSON { "<id or name>": "why it is equivalent" }: survivors listed there are reported as equivalent-explained
@@ -66,6 +67,7 @@ function parseArgs(argv) {
     else if (k === '--engine-jobs') a.engineJobs = Number(need(i++, k));
     else if (k === '--test-concurrency') a.testConcurrency = Number(need(i++, k));
     else if (k === '--timeout') a.timeout = Number(need(i++, k));
+    else if (k === '--time-box') a.timeBox = Number(need(i++, k));
     else if (k === '--max-loop') a.maxLoop = Number(need(i++, k));
     else if (k === '--equivalent') a.equivalent = need(i++, k);
     else if (k === '--glue') a.glue = need(i++, k);
@@ -510,6 +512,7 @@ export async function main(argv) {
     };
     await runPool(order, a.jobs, async (i) => {
       const m = runnable[i];
+      if (a.timeBox !== undefined && Date.now() - started >= a.timeBox * 60_000) { outcomes[i] = 'not-run'; m.why = 'time box'; seconds[i] = 0; done++; console.error(`[${done}/${runnable.length}] not run   ${m.id}: the ${a.timeBox}-minute time box (--time-box) was over before it started`); return; }
       if (m.tests.length === 0) { outcomes[i] = 'uncovered'; seconds[i] = 0; done++; console.error(`[${done}/${runnable.length}] uncovered ${m.id}: ${noTestMessage(m.file)}`); return; }
       if (m.heavy) await heavy.take();
       try { const r = await runMutant(m, i, a.timeout); outcomes[i] = r.outcome; capped[i] = r.loopCap; heapCapped[i] = r.heapCap; seconds[i] = r.secs; killers[i] = r.killers; for (const f of r.files) if (outcomes[i] === 'survived') durations[f.file] = Math.round(f.secs * 10) / 10; } finally { if (m.heavy) heavy.give(); }

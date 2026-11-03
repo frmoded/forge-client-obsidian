@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import {
-  GRAMMAR_VOCABULARY, VERBS, canonical, complementOf100, describe, orderWords, parse, plain, shiftDecimal, type GrammarParams, type GrammarVault,
+  GRAMMAR_VOCABULARY, Scan, VERBS, canonical, complementOf100, describe, orderWords, parse, plain, shiftDecimal, type GrammarParams, type GrammarVault,
 } from './phrase-grammar-core.ts';
 import { MORPH_ORDERS, PHRASE_STYLES, TRANSFORM_KEEPS, validatePhrase, type PhraseParams, type TransformOp } from './phrase-core.ts';
 import { validateArrangement, type ArrangementParams } from './arrangement-core.ts';
@@ -765,3 +765,23 @@ test('composition: canonical drops a repeat of 0 and keeps 1; the sentences say 
   const e = bad(many);
   assert.deepEqual([e.message, e.line, e.column], ['A composition holds at most 32 sections, got 33.', 1, 1]);
 });
+
+// Added by the 1154 mutation re-run (M15a's pass over this file, at HEAD): the scanner's own primitives were seen only through the sentences that happen to feed them, so dropping the
+// whitespace skip of done / found / eatPercentSign, or the rewind of peekKw, changed nothing any sentence test looked at. The Recipe grammar shares this scanner (1140), so each is pinned directly.
+test('the scanner: done() and found() skip the spaces first, peekKw() looks without moving, "%" may follow a space', () => {
+  assert.equal(new Scan('   ', 0).done(), true, 'only spaces left: done');
+  assert.equal(new Scan('  x', 0).done(), false);
+  assert.equal(new Scan('  x', 0).found(), '"x"', 'the next token, not the spaces before it');
+  assert.equal(new Scan('   ', 0).found(), 'the end of the sentence');
+  const sc = new Scan('to 4 bars', 0);
+  assert.equal(sc.peekKw('to'), true);
+  assert.equal(sc.i, 0, 'peeking moved nothing');
+  assert.equal(sc.peekKw('into'), false);
+  assert.equal(sc.i, 0);
+  assert.equal(sc.kw('to'), true, 'and the same word can then be eaten');
+  assert.equal(new Scan(' %', 0).eatPercentSign(), true, 'a space before the percent sign');
+  assert.equal(new Scan(' x', 0).eatPercentSign(), false);
+  const r = parse('Extend [[bar_001]] to 4 bars, 10 % slower.', VAULT);
+  assert.ok(r.ok, 'a percent sign after a space is read'); assert.equal((r as { params: { tempo_change_pct: number } }).params.tempo_change_pct, -10);
+});
+
