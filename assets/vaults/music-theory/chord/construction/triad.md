@@ -2,6 +2,18 @@
 
 A **triad** is a chord of three notes. Pick a note (the root), skip one note of the scale and take the next, then skip another and take the next. In C major that gives C, E and G: counting C as 1, those are the 1st, 3rd and 5th notes of the scale (C D E F G), which is why you will hear them called degrees 1, 3 and 5. It is the atom everything else in [[chord]] extends: sevenths add a fourth note, extensions add more, inversions reorder it, voicings dress it up.
 
+Any notes sounded together can be called a chord, but a triad is the special case of three notes stacked in thirds, which is the main way Western harmony builds chords. That method has a name, **tertian harmony**: building chords by stacking thirds. Stacking in fourths (quartal harmony) or packing notes a second apart (secundal harmony) also makes chords, but those are not triads.
+
+Here is the C major scale. Counting C as 1, the 1st, 3rd and 5th notes are C, E and G: the triad.
+
+![[scales/resources/images/c_major_scale.svg]]
+
+![[scales/resources/audio/c_major_scale.mp3]]
+
+![[chord/construction/resources/images/c_major_triad.svg]]
+
+Played together, the same three notes are the C major triad.
+
 Here is the C major triad on a keyboard. C, E and G are held; press **Play together** to hear all three at once, or **Play ascending** to hear them one at a time, then click other keys to try a different stack.
 
 ```html-embed
