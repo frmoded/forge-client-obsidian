@@ -1,5 +1,5 @@
 // 2026-11-03-1155-9 (PRIORITY, driver: "make all the text tags selectable and copyable so I can copy them to you") in real Chrome under Obsidian's own app.css: every kind of message the plugin draws is selectable by a REAL triple-click (the browser's own
-// selection equals the message text), the Copy button's REAL click puts the same text on the (stubbed) clipboard and says Copied, a `user-select: none` CONTROL is not selectable (so the test can fail), a REAL drag across the Score still selects bars and selects no
+// selection equals the message text), there is NO Copy button anywhere (2026-11-03-1160-copy: the driver's Ctrl+C works; the bar's message has its full width back), a `user-select: none` CONTROL is not selectable (so the test can fail), a REAL drag across the Score still selects bars and selects no
 // text, buttons stay unselectable, nothing shifts. Every message class of the stylesheet's list is also probed for its computed `user-select`. Build and run from the repo root:
 //   OUT=<dir>/harness-messages.js EDITION=music ENTRY=entry-messages.ts node scripts/dev/browser/build.mjs      (with app.css and plugin-styles.css = this repo's styles.css in <dir>)
 //   PANE_W=1500 node scripts/dev/measure-selectable-messages.ts <dir>        (writes <dir>/selectable-messages-measurements.json and shots/selectable-*.png; exits 1 when a verdict is false)
@@ -44,10 +44,10 @@ try {
   // 0. the stylesheet's list, probed for the computed value in the real structure; controls
   out.probe = await p.ev(`(() => { const host = document.getElementById('pane'); const res = {}; for (const sel of ${JSON.stringify(selectors)}) { const parts = sel.split('>').map((s) => s.trim()); let parent = host, el = null; for (const part of parts) { el = document.createElement(part === 'li' ? 'li' : part === 'span' ? 'span' : part === 'pre' ? 'pre' : 'div'); const m = /\\.([A-Za-z0-9_-]+)/.exec(part); if (m) el.className = m[1]; if (part.includes(' ')) { const [anc, desc] = part.split(' '); parent.appendChild(Object.assign(document.createElement('div'), { className: anc.slice(1) })).appendChild(el = document.createElement(desc)); } else parent.appendChild(el); parent = el; } res[sel] = getComputedStyle(el).userSelect || getComputedStyle(el).webkitUserSelect; } return res; })()`);
   out.probeBad = Object.entries(out.probe).filter(([, v]) => v !== 'text').map(([k]) => k);
-  out.controls = await p.ev(`(() => { const u = (e) => e && (getComputedStyle(e).userSelect || getComputedStyle(e).webkitUserSelect); return { scoreSvg: u(document.querySelector('.forge-rhythm-score-host svg')), plainNone: u(document.getElementById('ctl')), copyButtonClass: (() => { const b = document.createElement('button'); b.className = 'forge-copy-button'; document.getElementById('pane').appendChild(b); return u(b); })(), notebookBarButton: u(document.querySelector('.forge-notebook-bar')) }; })()`);
+  out.controls = await p.ev(`(() => { const u = (e) => e && (getComputedStyle(e).userSelect || getComputedStyle(e).webkitUserSelect); return { scoreSvg: u(document.querySelector('.forge-rhythm-score-host svg')), plainNone: u(document.getElementById('ctl')), notebookBarButton: u(document.querySelector('.forge-notebook-bar')) }; })()`);
   // 1. the CONTROL: a user-select none paragraph is NOT selected by a real triple-click
   { const c = await center('#ctl'); await clearSel(); await tripleClick(c.x, c.y); out.control = { got: await selection() }; }
-  // 2. the Description / Recipe bar: the real sentences, triple-click, the Copy button's click, no layout shift
+  // 2. the Description / Recipe bar: the real sentences, triple-click, no Copy button, no layout shift
   const SENTENCES = {
     recipeError: "Recipe, line 3, column 1: I do not know the step 'Sprinkle'. A step starts with Take, Repeat, Build, Mix, Morph, Transform, Play, Together, Mute, Solo, Only.",
     notSaved: 'Not saved: the Recipe was edited by hand; press Update from Recipe first or revert it.',
@@ -56,12 +56,11 @@ try {
   out.bar = {};
   for (const [name, text] of Object.entries(SENTENCES)) {
     await p.ev(`window.__bar.show({ message: ${JSON.stringify(text)}, actions: ['revert'] }); 0`); await sleep(100);
-    const before = await p.ev(`(() => { const b = document.querySelector('.forge-description-bar').getBoundingClientRect(); const m = document.querySelector('.forge-description-message').getBoundingClientRect(); return { barH: b.height, msgTop: m.top, msgLeft: m.left }; })()`);
+    const before = await p.ev(`(() => { const b = document.querySelector('.forge-description-bar').getBoundingClientRect(); const m = document.querySelector('.forge-description-message').getBoundingClientRect(); return { barH: b.height, msgTop: +(m.top - b.top).toFixed(1), msgLeft: +(m.left - b.left).toFixed(1) }; })()`);
     const sel = await selects('.forge-description-message');
-    await p.ev(`window.__clipWrites.length = 0; 0`);
-    const cb = await center('.forge-copy-button'); await mouse('mouseMoved', cb.x, cb.y); await mouse('mousePressed', cb.x, cb.y); await mouse('mouseReleased', cb.x, cb.y); await sleep(120);
-    const after = await p.ev(`(() => { const b = document.querySelector('.forge-description-bar').getBoundingClientRect(); const m = document.querySelector('.forge-description-message').getBoundingClientRect(); return { barH: b.height, msgTop: m.top, msgLeft: m.left, label: document.querySelector('.forge-copy-button').textContent, clip: window.__clipWrites.slice() }; })()`);
-    out.bar[name] = { selects: sel, copied: after.clip, label: after.label, shifted: Math.abs(after.barH - before.barH) > 1 || Math.abs(after.msgTop - before.msgTop) > 1 || Math.abs(after.msgLeft - before.msgLeft) > 1, ok: sel.ok === true && after.clip.length === 1 && after.clip[0] === text && after.label === 'Copied' };
+    const noCopy = await p.ev(`document.querySelectorAll('.forge-copy-button, .forge-description-bar button').length === document.querySelectorAll('.forge-description-button').length && !document.querySelector('.forge-copy-button')`);
+    const after = await p.ev(`(() => { const b = document.querySelector('.forge-description-bar').getBoundingClientRect(); const m = document.querySelector('.forge-description-message').getBoundingClientRect(); const sib = document.querySelector('.forge-description-message').nextElementSibling; return { barH: b.height, barW: b.width, msgTop: +(m.top - b.top).toFixed(1), msgLeft: +(m.left - b.left).toFixed(1), msgW: m.width, nextIs: sib ? sib.className : null }; })()`);
+    out.bar[name] = { selects: sel, noCopy, geometry: { before, after }, msgW: after.msgW, barW: after.barW, nextIs: after.nextIs, shifted: Math.abs(after.barH - before.barH) > 1 || Math.abs(after.msgTop - before.msgTop) > 1 || Math.abs(after.msgLeft - before.msgLeft) > 1, ok: sel.ok === true && noCopy === true && after.nextIs === 'forge-description-buttons' };
   }
   await p.shot(path.join(SHOTS, 'selectable-bar.png'), { x: 0, y: 0, width: 1500, height: 120 });
   await p.ev(`window.__bar.show({ message: 'The sentence service suggests this.', actions: ['apply-preview'], preview: { description: 'Extend [[bar_005]] to 6 bars.', recipe: 'Take [[bar_005]].' } }); 0`); await sleep(100);
@@ -70,7 +69,7 @@ try {
   // 3. the strip's refusal: the REAL sentence a note gives when its Description was edited by hand, shown by the real strip when a control is changed
   await p.ev(`window.__refuse = ${JSON.stringify(handEditRefusal(true))}; (() => { const e = document.querySelector('.forge-phrase-bars'); e.value = '6'; e.dispatchEvent(new Event('change', { bubbles: true })); })()`); await sleep(800);
   out.strip = { statusText: await p.ev(`document.querySelector('.forge-phrase-status')?.textContent ?? null`), selects: await selects('.forge-phrase-status'), copyButton: await p.ev(`!!document.querySelector('.forge-phrase-status + .forge-copy-button')`) };
-  // 4. the Score's own refusal (an invalid note): status line selectable, Copy beside it
+  // 4. the Score's own refusal (an invalid note): status line selectable, no Copy button
   await p.ev(`window.__refuse = ''; window.__edit('phrases/phrase_003.md', ${JSON.stringify(note({ bars: 0 }))}); 0`); await sleep(1500);
   out.scoreStatus = { text: await p.ev(`document.querySelector('.forge-rhythm-edit-score-status')?.textContent ?? null`), selects: await selects('.forge-rhythm-edit-score-status'), copyButton: await p.ev(`!!document.querySelector('.forge-rhythm-edit-score-status + .forge-copy-button')`) };
   await p.shot(path.join(SHOTS, 'selectable-strip-score.png'), { x: 0, y: 0, width: 1100, height: 640 });
@@ -99,12 +98,12 @@ out.verdicts = {
   controlFails: out.control.got === '' && out.controls.plainNone === 'none',
   bar: bar.every((b) => b.ok && !b.shifted),
   preview: out.preview.description.ok && out.preview.recipe.ok,
-  strip: out.strip.selects.ok === true && out.strip.copyButton === true && /Not saved/.test(String(out.strip.statusText)),
-  scoreStatus: out.scoreStatus.selects.ok === true && out.scoreStatus.copyButton === true,
-  notebook: out.notebook.selects.ok === true && out.notebook.copyButton === true,
+  strip: out.strip.selects.ok === true && out.strip.copyButton === false && /Not saved/.test(String(out.strip.statusText)),
+  scoreStatus: out.scoreStatus.selects.ok === true && out.scoreStatus.copyButton === false,
+  notebook: out.notebook.selects.ok === true && out.notebook.copyButton === false,
   inspector: out.inspector.lineage.ok === true,
   dragStillSelectsBars: JSON.stringify(out.drag.pressed) === '[3,4,5]' && out.drag.selectedText === '',
-  buttonsStillNotText: out.controls.scoreSvg === 'none' && out.controls.copyButtonClass === 'none',
+  buttonsStillNotText: out.controls.scoreSvg === 'none' && out.controls.notebookBarButton === 'none',
   noErrors: out.errors.length === 0,
 };
 fs.writeFileSync(path.join(here, 'selectable-messages-measurements.json'), JSON.stringify(out, null, 2));

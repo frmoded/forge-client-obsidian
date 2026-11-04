@@ -26,10 +26,12 @@ test('MECHANISM PIN 2026-11-03-1155-9 (if the design moves this SHOULD go red: r
   assert.match(code('forge-notice.ts'), /kind === 'error'\) console\.info\(noticeLine\(text\)\)/, 'the panel path logs its errors too');
 });
 
-test('MECHANISM PIN 2026-11-03-1155-9: the message surfaces draw their text through copyableMessage (selectable, a Copy button beside it): the bar, the three strips\' status, the Score\'s status and the notebook\'s alerts', () => {
-  assert.match(code('description-bar-dom.ts'), /copyableMessage\(message, view\.message\)/);
-  assert.equal((code('phrase-dom.ts').match(/setStatus\(text\) \{ copyableMessage\(statusEl, text\); \}/g) ?? []).length, 3);
-  assert.ok(!/statusEl\.textContent = text/.test(code('phrase-dom.ts')), 'no strip sets its status text behind the helper');
-  assert.match(code('live-score-dom.ts'), /else copyableMessage\(statusEl, text\)/);
-  assert.match(code('notebook-dom.ts'), /kind === 'alert'\) copyableMessage\(message, text\)/);
+test('MECHANISM PIN 2026-11-03-1160-copy (if the design moves this SHOULD go red - reassess, do not just rewrite): the message surfaces set their text as plain text (selectable: styles.css), and no Copy button or helper is left', () => {
+  assert.match(code('description-bar-dom.ts'), /message\.textContent = view\.message/);
+  assert.equal((code('phrase-dom.ts').match(/setStatus\(text\) \{ statusEl\.textContent = text; \}/g) ?? []).length, 3);
+  assert.match(code('live-score-dom.ts'), /status\(text\) \{ statusEl\.textContent = text; \}/);
+  assert.match(code('notebook-dom.ts'), /message\.textContent = text; message\.setAttribute\('role', kind\)/);
+  for (const f of production) assert.ok(!/copyableMessage|copy-message-dom|forge-copy-button/.test(code(f)), `${f}: the Copy button is gone`);
+  assert.ok(!/forge-copy-button/.test(fs.readFileSync(path.join(SRC, '..', 'styles.css'), 'utf8')), 'and its CSS');
+  assert.equal(fs.existsSync(path.join(SRC, 'copy-message-dom.ts')), false, 'and the helper file');
 });

@@ -19,9 +19,7 @@ import { attachProvenance, type ProvenanceResult, type RhythmDataLike } from './
 import { mountScoreMessages, type ScoreMessagePorts, type ScoreMessages } from './score-messages-dom.ts';
 import { createScoreInspector, type GridTarget, type ScoreInspector, type ScoreInspectorPorts } from './score-inspector.ts';
 
-import { copyableMessage } from './copy-message-dom.ts';
 import { DESCRIPTION_BAR_CLASS } from './description-bar-dom.ts';
-import { SCORE_RENDERING_TEXT } from './score-first-core.ts';
 
 export const SCORE_PANEL_CLASS = 'forge-rhythm-edit-score';
 export const SCORE_STATUS_CLASS = 'forge-rhythm-edit-score-status';
@@ -109,7 +107,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   };
 
   const view: LiveScoreView = {
-    status(text) { if (text === '' || text === SCORE_RENDERING_TEXT) { copyableMessage(statusEl, ''); statusEl.textContent = text; } else copyableMessage(statusEl, text); },       // 2026-11-03-1155-9: an error or a refusal is copyable; the progress text is not a message to copy
+    status(text) { statusEl.textContent = text; },       // selectable text (styles.css): an error or a refusal is copied with a triple-click and Cmd+C
     pending(on) {
       stale = on;
       current?.classList.toggle(SCORE_HOST_STALE_CLASS, on);

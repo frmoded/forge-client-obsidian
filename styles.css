@@ -2213,15 +2213,3 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   cursor: text;
 }
 
-/* the Copy button beside a message (copy-message-dom.ts): small, never part of the selection it sits next to */
-.forge-copy-button {
-  user-select: none;
-  -webkit-user-select: none;
-  margin-left: 6px;
-  padding: 0 8px;
-  height: 22px;
-  min-height: 20px;
-  font-size: var(--font-ui-smaller);
-  vertical-align: baseline;
-  cursor: pointer;
-}

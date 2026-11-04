@@ -1,6 +1,5 @@
 // 2026-10-31-1120 (M15c): the bar's DOM, in happy-dom: the code the panes run. One sentence, the buttons that answer it in the order given, a click reports the action once, a busy bar disables its buttons, the preview shows Description and Recipe as text
 // (never as markup), the bar is the FIRST child of its pane, and it can be shown again (no duplicates) and taken away.
-import { setCopyPortsForTest } from './copy-message-dom.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -70,24 +69,18 @@ test('a button that is disabled (the bar is busy) does not answer even when a cl
   assert.deepEqual(heard, ['revert'], 'and an enabled one is');
 });
 
-// ---- 2026-11-03-1155-9: the message is selectable text with its Copy button beside it ----------------------------------------------------------------------------------------------------------------------------------------------
+// ---- 2026-11-03-1160-copy: the sentence is plain selectable text; there is NO Copy button (the driver: Ctrl+C works) --------------------------------------------------------------------------------------------
 
-test('the sentence has a Copy button BESIDE it (not inside, not one of the action buttons): it copies the sentence, says Copied; a bar with no sentence has none; showing again keeps one', async () => {
-  const p = pane(); const heard: BarAction[] = [];
-  const written: string[] = [];
-  setCopyPortsForTest({ write: async (t) => { written.push(t); return true; }, setTimer: () => 0, clearTimer: () => {} });
-  const bar = mountDescriptionBar(p, (a) => heard.push(a));
+test('the sentence is the text of its own element (a triple-click selects exactly it) and nothing is drawn beside it but the action buttons; a bar with no sentence has an empty element', () => {
+  const p = pane();
+  const bar = mountDescriptionBar(p, () => {});
   const SENTENCE = "Recipe, line 3, column 1: I do not know the step 'Sprinkle'. A step starts with Take, Repeat, Build.";
   bar.show({ message: SENTENCE, actions: ['revert'] });
   const msg = bar.el.querySelector('.forge-description-message') as HTMLElement;
-  const copy = bar.el.querySelector('.forge-copy-button') as HTMLButtonElement;
-  assert.ok(copy); assert.equal(copy.previousSibling, msg); assert.equal(msg.contains(copy), false);
-  assert.deepEqual([...bar.el.querySelectorAll('.forge-description-button')].map((b: any) => b.getAttribute('data-action')), ['revert'], 'the Copy button is not an action');
-  copy.click(); for (let i = 0; i < 10; i++) await Promise.resolve();
-  assert.deepEqual(written, [SENTENCE]); assert.equal(copy.textContent, 'Copied'); assert.deepEqual(heard, [], 'copying is not an action');
-  bar.show({ message: SENTENCE, actions: ['revert'] });
-  assert.equal(bar.el.querySelectorAll('.forge-copy-button').length, 1);
+  assert.equal(msg.textContent, SENTENCE);
+  assert.equal(msg.children.length, 0, 'the sentence is bare text');
+  assert.deepEqual([...bar.el.querySelectorAll('button')].map((b: any) => b.getAttribute('data-action')), ['revert'], 'the only button is the action: no Copy button');
   bar.show({ message: '', actions: [] });
-  assert.equal(bar.el.querySelector('.forge-copy-button'), null);
-  setCopyPortsForTest(null);
+  assert.equal((bar.el.querySelector('.forge-description-message') as HTMLElement).textContent, '');
+  assert.equal(bar.el.querySelectorAll('button').length, 0);
 });

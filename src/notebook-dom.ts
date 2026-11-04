@@ -28,7 +28,6 @@ export interface NotebookHandle {
   dispose(): void;
 }
 
-import { copyableMessage } from './copy-message-dom.ts';
 const REVEAL_SETTLE_MS = 150;
 const REQUEST_PLACEHOLDER = 'or say it: make this half as busy, keep the downbeat';
 const REQUEST_LABEL = 'What to do with the selected bars, in a sentence';
@@ -73,7 +72,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   let derived = false;                  // this phrase is the RESULT of a cell: it is not asked for another change (the request box says why)
   let madeId: string | null = null;     // the cell the status line last announced as made; the status goes when the cell does
 
-  const say = (text: string, kind: 'status' | 'alert' = 'status') => { if (kind === 'alert') copyableMessage(message, text); else { copyableMessage(message, ''); message.textContent = text; } message.setAttribute('role', kind); };       // 2026-11-03-1155-9: an alert is copyable
+  const say = (text: string, kind: 'status' | 'alert' = 'status') => { message.textContent = text; message.setAttribute('role', kind); };
   const setNumberFor = (kind: string) => {
     if (kind === 'double_up') {
       numberLabel.textContent = 'Grid'; number.value = '16'; number.setAttribute('min', '1'); number.removeAttribute('max'); number.setAttribute('step', '1');
