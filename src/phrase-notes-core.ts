@@ -268,8 +268,9 @@ export function recipeEditedByHand(text: string): boolean {
 }
 
 /**
- * The Python of a score-first note as the PERSON has it (M16b): the text of the ```python fence under `# Python`, to the closing fence line. `extractPythonSection` (shared by every Forge note, so not changed here: P3) ends the section at ANY
- * column-0 `# ...` line, fence or not, so a person's own comment at the start of a line would cut their Python short. For a note the plugin wrote the two give the same text (its Python has no such line). A note with no fence reads as before.
+ * The Python of a score-first note as the PERSON has it (M16b): the text of the ```python fence under `# Python`, to the closing fence line. `extractPythonSection` used to end the section at ANY column-0 `# ...` line, fence or not, so a
+ * person's own comment at the start of a line cut their Python short; since 2026-11-03-1159 it is fence-aware too, and the two give the same text for every shipped, fixture and generated note (extract-python-section-fence.test.ts). This one
+ * stays: it also reads a fence with prose after it and an indented one, which `extractPythonSection` reads as it always did (changing that would move hashes). A note with no fence reads as before.
  */
 export function pythonTextOf(text: string): string | null {
   const m = /^# Python\s*$/m.exec(text);

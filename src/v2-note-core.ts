@@ -103,9 +103,28 @@ export function extractRecipeSection(body: string): string | null {
  *  unfenced body keeps `computeFacetHash` stable across that prose
  *  difference. */
 export function extractPythonSection(body: string): string | null {
-  if (!/^# Python\s*$/m.test(body)) return null;
-  const raw = _extractH1Section(body, 'Python');
+  const m = /^# Python\s*$/m.exec(body);
+  if (!m) return null;
+  const raw = _extractPythonRaw(body.slice(m.index + m[0].length));
   return _unwrapPythonFence(raw);
+}
+
+/** 2026-11-03-1159 — the raw text of the `# Python` section, FENCE-AWARE. It used to end at the next column-0 `# ...` line, even inside the ```python fence, so a Python comment that starts a line (or a line of a triple-quoted
+ *  string) cut the code short for every hash and facet state. Now: when the first thing after the heading is a fence, a column-0 `# ...` line inside it is Python; the section ends at the next H1 AFTER the closing fence. With no fence, or
+ *  a fence that never closes, it is what it always was (to the next H1). For every committed note of every shipped and test vault the two readings are identical (census 1159: none has such a line; pinned in
+ *  extract-python-section-fence.test.ts). */
+function _extractPythonRaw(tail: string): string {
+  let from = 0;
+  const lead = /^(?:[ \t]*\r?\n)*/.exec(tail)![0].length;                 // blank lines between the heading and the fence
+  const fenced = /^[ \t]*```(?:python|py)?[ \t]*\r?\n/.exec(tail.slice(lead));
+  if (fenced) {
+    const body = tail.slice(lead + fenced[0].length);
+    const close = /^```[ \t]*\r?$/m.exec(body);
+    if (close) from = lead + fenced[0].length + close.index + close[0].length;
+  }
+  const nextH1 = /^# [^#\n]/m.exec(tail.slice(from));
+  const sectionRaw = nextH1 ? tail.slice(0, from + nextH1.index) : tail;
+  return sectionRaw.replace(/^\s*\n/, '').replace(/\s+$/, '');
 }
 
 function _unwrapPythonFence(text: string): string {
