@@ -21,12 +21,16 @@ export interface LoadedPlugin {
   commands: Map<string, { callback?: () => unknown; checkCallback?: (checking: boolean) => boolean; name?: string }>;
   /** Every `registerView(type, factory)` onload (and the layout-ready work it scheduled) made, by view type. */
   views: Map<string, (leaf: unknown) => unknown>;
+  /** Every `registerMarkdownCodeBlockProcessor(language, handler)` onload made, by language (2026-11-04-1170). */
+  processors: Map<string, (source: string, el: unknown, ctx: unknown) => unknown>;
 }
 
 export async function loadRealOnload(real: RealPlugin, app: any): Promise<LoadedPlugin> {
   const target: any = Object.create(real.ForgePlugin.prototype);
   const commands = new Map<string, { callback?: () => unknown; checkCallback?: (checking: boolean) => boolean; name?: string }>();
   const views = new Map<string, (leaf: unknown) => unknown>();
+  const processors = new Map<string, (source: string, el: unknown, ctx: unknown) => unknown>();
+  target.registerMarkdownCodeBlockProcessor = (language: string, handler: (source: string, el: unknown, ctx: unknown) => unknown) => { processors.set(language, handler); };
   target.addCommand = (c: any) => { commands.set(c.id, c); return c; };
   target.registerView = (type: string, factory: (leaf: unknown) => unknown) => { views.set(type, factory); };
   target.loadData = async () => ({});
@@ -38,5 +42,5 @@ export async function loadRealOnload(real: RealPlugin, app: any): Promise<Loaded
   const saved = { log: console.log, error: console.error, warn: console.warn, info: console.info, debug: console.debug };
   console.log = console.error = console.warn = console.info = console.debug = () => {};
   try { await real.ForgePlugin.prototype.onload.call(self); } finally { Object.assign(console, saved); }
-  return { self, target, commands, views };
+  return { self, target, commands, views, processors };
 }

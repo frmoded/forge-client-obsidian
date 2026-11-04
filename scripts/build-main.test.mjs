@@ -20,6 +20,13 @@ const MUSIC_CHAIN_MARKERS = [
   "@magenta",
 ];
 
+// 2026-11-04-1170: strings only the Scale Explorer carries (the forge-scale block, its view type, its command, its CSS class in the DOM module). Lean has none of them; music has all (so the lean assertion cannot pass vacuously).
+const SCALE_EXPLORER_MARKERS = [
+  "forge-scale-explorer",
+  "Open Scale Explorer",
+  "forge-scale-degree",
+];
+
 function buildTo(edition) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `forge-${edition}-`));
   const outfile = path.join(dir, "main.js");
@@ -42,6 +49,9 @@ test("lean build: contains NONE of the music chain and no createElement('script'
   }
   assert.equal(/createElement\(\s*["']script["']\s*\)/.test(js), false,
     "lean main.js contains a createElement('script') — the Obsidian directory-review Error");
+  for (const marker of SCALE_EXPLORER_MARKERS) {
+    assert.equal(js.includes(marker), false, `lean main.js unexpectedly contains the Scale Explorer: ${JSON.stringify(marker)}`);
+  }
 });
 
 test("music build: DOES contain the music chain (guards the lean assertion against passing vacuously)", async () => {
@@ -50,6 +60,9 @@ test("music build: DOES contain the music chain (guards the lean assertion again
     assert.equal(js.includes(marker), true, `music main.js is missing ${JSON.stringify(marker)}`);
   }
   assert.ok(js.length > 5_000_000, `music main.js suspiciously small (${js.length} bytes)`);
+  for (const marker of SCALE_EXPLORER_MARKERS) {
+    assert.equal(js.includes(marker), true, `music main.js is missing the Scale Explorer: ${JSON.stringify(marker)}`);
+  }
 });
 
 // Phase 5c rider (drain 2026-10-07-0100): this used to measure lean main.js INCLUDING src/bundled-assets.generated.ts — a gitignored build

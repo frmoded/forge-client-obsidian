@@ -31,6 +31,7 @@ import type { MusicEdition, RenderOptions } from './music-edition.ts';
 import { attachClickToPlay } from './score-click-play-dom.ts';
 import { SCORE_ZOOM_LEVELS } from './zoom-memory-core.ts';
 import { followerEvidence } from './score-follower-trace-core.ts';
+import { registerScaleExplorer } from './scale-explorer-view.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
 // load it lazily and guard against re-registration (plugin reload would
@@ -662,6 +663,10 @@ export const musicEdition: MusicEdition = {
     registerWidget(pianoWidget);
     registerWidget(guitarFretboardWidget);
     registerWidget(chordBuilderWidget);
+  },
+  registerScaleExplorer(plugin) {
+    // 2026-11-04-1170: the forge-scale block + the side view + the command (scale-explorer-view.ts).
+    registerScaleExplorer(plugin);
   },
   stopPlayers(root, onError) {
     // v0.2.224 — silence audio before tearing down DOM. Removing a <midi-player> from the DOM

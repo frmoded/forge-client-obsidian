@@ -494,6 +494,8 @@ export default class ForgePlugin extends Plugin {
     // edition this is a no-op, so a widget type in frontmatter falls back to the plain text box
     // plus a Notice naming it.
     musicEdition.registerInputWidgets();
+    // 2026-11-04-1170 — the Scale Explorer (the forge-scale block, a side view, the command "Open Scale Explorer"): music edition only, a no-op in lean.
+    musicEdition.registerScaleExplorer(this);
 
     // v0.2.131 — stale-main.js self-check. BRAT sometimes updates
     // manifest.json but fails to replace main.js, leaving cohort

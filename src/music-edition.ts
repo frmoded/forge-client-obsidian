@@ -14,6 +14,7 @@
 // than depending on dead-code elimination.
 //
 // This file is types only: no runtime code, nothing to bundle.
+import type { Plugin } from 'obsidian';
 
 /** Per-render options. Absent = what every surface did before. */
 export interface RenderOptions {
@@ -31,6 +32,9 @@ export interface MusicEdition {
   /** Register the music run-input widgets (piano / guitar fretboard / chord builder). Lean: no-op,
    *  so a widget type in frontmatter falls back to the plain text box plus a Notice naming it. */
   registerInputWidgets(): void;
+
+  /** 2026-11-04-1170: register the Scale Explorer — the `forge-scale` code block, its side view and the command "Open Scale Explorer". Lean: no-op, so a lean vault sees no new block, view or command. */
+  registerScaleExplorer(plugin: Plugin): void;
 
   /** Silence any playing MIDI players under `root` before the DOM is torn down (Clear, close,
    *  preview swap). Lean: no-op — there are no players. */

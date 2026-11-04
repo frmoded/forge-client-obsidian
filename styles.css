@@ -1449,6 +1449,123 @@
   pointer-events: none;
 }
 
+/* 2026-11-04-1170 (Scale Explorer 1 of 4): the `forge-scale` block and the Scale Explorer side view — one scale as controls + the piano widget's own keyboard (146 px tall, the scale highlighted, the root and the octave in orange, degree numbers on the
+   keys, the playing notes in yellow) + a Verovio staff. Music edition only (the lean build has no such block, so these rules never apply there). */
+.forge-scale {
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: 8px 0 16px;
+  padding: 8px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+}
+
+/* No margin of its own inside Live Preview (the hover frame of a code-block widget is a block-formatting context: a bottom margin shows as a strip inside it; the same fix as .forge-rhythm-embed, 2026-10-20-0900). */
+.cm-embed-block .forge-scale {
+  margin: 0;
+}
+
+.forge-scale-view {
+  padding: 8px;
+}
+
+.forge-scale-view .forge-scale {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.forge-scale-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 6px;
+}
+
+.forge-scale-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-ui-small);
+}
+
+.forge-scale-play {
+  /* The label turns into "Stop" while it plays: the button must keep its width, or a second click at the same spot lands beside it (measured: 104.6 px -> 52.2 px without this). */
+  min-width: 8.5em;
+}
+
+.forge-scale-caption {
+  margin: 2px 0 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.forge-scale-svg .forge-piano-key {
+  cursor: default;
+}
+
+.forge-scale-svg .forge-piano-key-white:not(.is-scale):hover {
+  fill: var(--background-primary);
+}
+
+.forge-scale-svg .forge-piano-key-black:not(.is-scale):hover {
+  fill: var(--text-normal);
+}
+
+.forge-scale-key.is-scale {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent-hover);
+}
+
+.forge-scale-key.is-root {
+  fill: var(--color-orange, #e0842a);
+  stroke: var(--color-orange, #e0842a);
+}
+
+.forge-scale-key.is-playing {
+  fill: var(--color-yellow, #e5c03a);
+  stroke: var(--color-yellow, #e5c03a);
+}
+
+.forge-scale-degree {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--text-on-accent, #fff);
+  user-select: none;
+  pointer-events: none;
+}
+
+.forge-scale-staff {
+  margin-top: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.forge-scale-staff svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.forge-scale-staff-error {
+  color: var(--text-error);
+  font-size: var(--font-ui-small);
+}
+
+.forge-scale-error {
+  margin: 8px 0 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-modifier-error-hover);
+}
+
+.forge-scale-error p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+
 /* ------------------------------------------------------------------
    Guitar fretboard widget. Drain 2026-08-05-1530.
 
@@ -2203,6 +2320,9 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-html-embed-error-detail,
 .forge-rhythm-embed-error,
 .forge-rhythm-embed-status,
+.forge-scale-error,
+.forge-scale-staff-error,
+.forge-scale-caption,
 .forge-re-extract-warning,
 .forge-deps-line,
 .forge-add-domain-status,

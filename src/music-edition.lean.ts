@@ -9,6 +9,9 @@ export const musicEdition: MusicEdition = {
     // registered in the lean edition; a widget type in frontmatter falls back to the plain text
     // box plus a Notice naming it.
   },
+  registerScaleExplorer() {
+    // The Scale Explorer (forge-scale block, side view, command) is music-domain: not registered in the lean edition.
+  },
   stopPlayers() {
     // No MIDI players exist in the lean edition.
   },
