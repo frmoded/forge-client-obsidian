@@ -27,6 +27,8 @@ import { NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMA
 import { mountKitDialog } from './kit-dom.ts';
 import { mountArrangementDialog } from './arrangement-dom.ts';
 import { mountArrangementStrip, type ArrangementStrip } from './arrangement-strip-dom.ts';
+import { setControlsOff } from './custom-controls-off-dom.ts';
+import { isCustomNote } from './phrase-notes-core.ts';
 import { mountArrangementControls, type ArrangementControls } from './arrangement-controls-dom.ts';
 import type { PhraseStructureHooks } from './phrase-view.ts';
 
@@ -205,6 +207,7 @@ export class ArrangementView extends EditableFileView {
   private showControls(text: string | { unreadable: string }): void {
     const read = typeof text === 'string' ? readArrangementNote(text) : null;
     this.controls?.show(read !== null && read.ok ? read.value : null);
+    if (this.controls) setControlsOff(this.controls.el, typeof text === 'string' && isCustomNote(text));       // 2026-11-03-1160 (c): a CUSTOM note's controls are off (the writes were refused with the banner sentence; now they are not offered)
   }
 
   private paintPin(text: string | null): void {

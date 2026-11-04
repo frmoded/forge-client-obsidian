@@ -16,7 +16,7 @@ async function mountView(make: (leaf: any) => any, pane: HTMLElement, opts: { fi
       on: (name: string, cb: (f: any) => void) => { handlers.set(name, cb); return {}; },
       getAbstractFileByPath: (p: string) => (files.has(p) ? tf(p) : null),
       getFiles: () => [...files.keys()].map(tf),
-      process: async () => {},
+      process: async (f: any, fn: (t: string) => string) => { ((window as any).__processed ??= []).push(f.path); files.set(f.path, fn(files.get(f.path) ?? '')); },       // a write the view makes (recorded: the 1160 measure asks whether a click wrote)
       adapter: { exists: async () => false, read: async () => { throw new Error('no'); } },
     },
     metadataCache: {}, workspace: {},

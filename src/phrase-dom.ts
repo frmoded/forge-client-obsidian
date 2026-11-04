@@ -16,6 +16,7 @@
 
 import { handEditStatusSettled, isHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
+import { setControlsOff } from './custom-controls-off-dom.ts';
 import { copyableMessage } from './copy-message-dom.ts';
 import { extractRecipeSection } from './v2-note-core.ts';
 import { attachScoreArea, type ScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
@@ -858,6 +859,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     // 2026-11-02-1155 (M16b): a CUSTOM note has no controls: the strip is disabled (the banner above the pane says why: the description bar; the Score is what its Python makes; the chips are the notes it calls)
     const custom = typeof text === 'string' && isCustomNote(text);
     if (!writing && want === null) strip.set(custom ? null : salvage ? salvage.shown : current);                  // while a drag's writes are in flight the sliders stay where the person has them
+    setControlsOff(strip.el, custom);                                      // 2026-11-03-1160 (c): the strip is off for a custom note, and says why in its tooltip (one helper for every tab)
     structureStrip?.set(custom ? customChips(phraseName, pythonTextOf(text as string) ?? '', extractRecipeSection(text as string) ?? '') : current ? chipsFor(phraseName, current) : []);
     if (bracket) {
       const ext = current && current.kind === 'extend' && !salvage ? current : null;

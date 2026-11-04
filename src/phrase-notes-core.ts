@@ -327,6 +327,23 @@ export function asRecipeSourced(text: string): string {
   return `---${m[1]}${lines.join(m[1])}${m[1]}---${text.slice(m[0].length)}`;
 }
 
+/** 2026-11-03-1160 (d): the note with its `links:` property made again from `links` (note names, written as "[[name]]" exactly as a generated note's are), straight after `description:` where the note has one; an EMPTY list takes the property away, as for a generated note
+ *  that reads nothing (`withDerivedFront`). Every other line, and everything from the closing fence on, is kept byte for byte. */
+export function withLinks(text: string, links: string[]): string {
+  return withFrontLines(text, (lines) => {
+    const out: string[] = [];
+    let placed = false;
+    const put = (): void => { if (links.length > 0) out.push('links:', ...links.map((l) => `  - ${q(link(l))}`)); placed = true; };
+    for (let i = 0; i < lines.length; i++) {
+      if (/^links:/.test(lines[i])) { while (i + 1 < lines.length && /^\s*-/.test(lines[i + 1])) i++; continue; }
+      out.push(lines[i]);
+      if (!placed && /^description:/.test(lines[i])) put();
+    }
+    if (!placed) put();
+    return out;
+  });
+}
+
 /** The frontmatter with `edit` applied to its lines (a line the edit returns null for is dropped), every other line kept; the text from the closing fence on is kept byte for byte. */
 function withFrontLines(text: string, edit: (lines: string[]) => string[]): string {
   const m = /^---(\r?\n)([\s\S]*?)\r?\n---/.exec(text);

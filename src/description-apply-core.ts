@@ -2,7 +2,8 @@
 // the Description by hand, the hash no longer matches, and this decides what that edit means: it parses (apply it: json cache, Recipe, Python, stamps follow), it does not parse (write nothing, say where), or it is the derived Recipe / Python
 // that was edited instead (they are derived: say so, change nothing). No `obsidian` import: the vault, the clock and the UI are the controller's (description-apply.ts).
 import { parse, type GrammarError, type GrammarParams, type GrammarVault } from './phrase-grammar-core.ts';
-import { asCustom, asPythonSourced, asRecipeSourced, extractPhraseJsonBlock, isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
+import { asCustom, asPythonSourced, asRecipeSourced, extractPhraseJsonBlock, isCustomNote, pythonTextOf, withLinks } from './phrase-notes-core.ts';
+import { customCallNotes } from './custom-note-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { extractDescription, extractPythonSection, extractRecipeSection } from './v2-note-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
@@ -136,7 +137,7 @@ export function applyPythonText(text: string, name: string, family: Family, vaul
   const st = descriptionState(text, family, vault, 'python');
   if (st.kind !== 'python-apply' && st.kind !== 'python-custom') return { ok: false, message: 'There is nothing to update: the Python matches the note.', stale: true };
   if (st.python !== planned) return { ok: false, message: 'The Python changed again; the newer text is being read.', stale: true };
-  if (st.kind === 'python-custom') return { ok: true, text: asCustom(text), change: 'custom Python', custom: true, commentsDropped: false };
+  if (st.kind === 'python-custom') return { ok: true, text: withLinks(asCustom(text), customCallNotes(name, st.python)), change: 'custom Python', custom: true, commentsDropped: false };         // 2026-11-03-1160 (d): `links:` follows the calls, in this ONE write, both ways
   const w = writeFromParams(text, name, family, st.params);
   if (w.ok === false) return { ok: false, message: w.message, stale: false };
   const next = asPythonSourced(w.text);

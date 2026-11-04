@@ -20,6 +20,12 @@ export function callsInPython(python: string): string[] {
   return found;
 }
 
+/** 2026-11-03-1160 (d): what kind of note of the plugin's own a called name is - a bar, a phrase or an arrangement - or null (a kit, an engine chip, a composition: not one the chips or the `links:` property name). One scan for the strip's chips and the note's `links:`. */
+export const noteKindOfName = (n: string): 'bar' | 'phrase' | 'arrangement' | null => (/^bar_\d+$/.test(n) ? 'bar' : /^phrase_\d+$/.test(n) ? 'phrase' : /^arr_\d+$/.test(n) ? 'arrangement' : null);
+
+/** The notes a custom note's Python calls, by name, once each in the order they first appear, the note itself left out: what its `links:` property holds (the chips of the strip read the same calls, and the Recipe's own links besides). */
+export const customCallNotes = (name: string, python: string): string[] => callsInPython(python).filter((n) => n !== name && noteKindOfName(n) !== null);
+
 /** The notes of the vault a name can be: a phrase, an arrangement or a composition (a bar has no Python to follow). */
 export const notePathsFor = (name: string): string[] => [`phrases/${name}.md`, `arrangements/${name}.md`, `compositions/${name}.md`];
 

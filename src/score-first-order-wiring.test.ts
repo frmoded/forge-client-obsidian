@@ -16,6 +16,7 @@ import { loadRealOnload } from './test-support/real-onload.ts';
 import { ARRANGEMENT_VIEW_TYPE, newArrangementNote, type ArrangementParams } from './arrangement-core.ts';
 import { COMPOSITION_VIEW_TYPE, newCompositionNote } from './composition-core.ts';
 import { PHRASE_VIEW_TYPE, noteContentFor } from './phrase-core.ts';
+import { asCustom, pythonTextOf } from './phrase-notes-core.ts';
 import { newKitNote } from './kit-core.ts';
 import { mountDescriptionBar } from './description-bar-dom.ts';
 
@@ -25,11 +26,15 @@ const barText = (n: string): string => fs.readFileSync(path.join(ROOT, 'test/fix
 const extend = (source: string, bars: number): any => ({ kind: 'extend', source, bars, style: 'repeat_with_fills', tempo_change_pct: 0 });
 const MIX: any = { kind: 'mix', a: 'bar_007', b: 'bar_008', weight: 0.5, threshold: 0.5, ghost: false };
 const PHRASE = 'phrases/phrase_003.md', ARR = 'arrangements/arr_001.md', COMP = 'compositions/comp_001.md';
+const ARR_CUSTOM = 'arrangements/arr_900.md', PHRASE_CUSTOM = 'phrases/phrase_900.md';
+const customOf = (text: string): string => { const py = pythonTextOf(text) as string; return asCustom(text.replace(py, `${py}\n  # the person's own line`)); };
 const FILES: Record<string, string> = {
   'bars/bar_007.md': barText('bar_007'), 'bars/bar_008.md': barText('bar_008'),
   'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick', 'snare', 'hihat'] } as any), 'kits/latin.md': newKitNote({ kind: 'kit', name: 'latin', channels: ['bell', 'claves', 'conga_high', 'conga_low'] } as any),
   [PHRASE]: noteContentFor('phrase_003', extend('bar_007', 4)), 'phrases/phrase_009.md': noteContentFor('phrase_009', extend('bar_008', 2)),
   [ARR]: newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009' }] } as ArrangementParams),
+  [ARR_CUSTOM]: customOf(newArrangementNote('arr_900', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009' }] } as ArrangementParams)),
+  [PHRASE_CUSTOM]: customOf(noteContentFor('phrase_900', extend('bar_007', 4))),
   [COMP]: newCompositionNote('comp_001', { kind: 'composition', sections: [{ source: 'phrases/phrase_003' }, { source: 'phrases/phrase_009' }] } as any),
 };
 
@@ -174,6 +179,46 @@ for (const edition of ['lean', 'music'] as const) {
       bar.dispose();
       roles = rolesOf(el);
       assert.equal(roles[0], 'score', 'the banner goes: the Score is first: ' + roles.join(' > '));
+    } finally { w.done(); }
+  });
+
+  // ---- 2026-11-03-1160 (c): the controls of a CUSTOM note are off, on the arrangement tab (kits) and the phrase tab (strip), with the banner's sentence as tooltip ----
+  const TIP = 'Custom Python: the controls are off for this note.';
+  test(`[${edition}] a CUSTOM arrangement: the kit controls are drawn DISABLED with the tooltip; a plain arrangement's are enabled (the CONTROL: the check can fail)`, async () => {
+    const w = await world();
+    try {
+      const { el } = await w.open(ARRANGEMENT_VIEW_TYPE, ARR_CUSTOM);
+      const controls = [...el.querySelectorAll('.forge-arr-controls button, .forge-arr-controls input')];
+      assert.ok(controls.length >= 6, `non-vacuity: two kits x (Mute, Solo, volume) = ${controls.length} controls`);
+      assert.ok(controls.every((c: any) => c.disabled === true && c.getAttribute('title') === TIP), 'every control is disabled and says why');
+      assert.equal(el.querySelector('.forge-arr-controls').getAttribute('aria-disabled'), 'true');
+      const plain = await w.open(ARRANGEMENT_VIEW_TYPE, ARR);
+      const on = [...plain.el.querySelectorAll('.forge-arr-controls button, .forge-arr-controls input')];
+      assert.ok(on.length >= 6 && on.every((c: any) => c.disabled === false && !c.hasAttribute('title')), 'CONTROL: a note that is not custom has its controls on');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] a CUSTOM phrase: the strip is off with the same tooltip (one helper), a plain phrase's strip is on`, async () => {
+    const w = await world();
+    try {
+      const { el } = await w.open(PHRASE_VIEW_TYPE, PHRASE_CUSTOM);
+      const strip = el.querySelector('.forge-phrase-controls');
+      const fields = [...strip.querySelectorAll('input, select, button')];
+      assert.ok(fields.length >= 3, 'non-vacuity');
+      assert.ok(fields.every((c: any) => c.disabled === true && c.getAttribute('title') === TIP), 'disabled, with the sentence');
+      const plain = await w.open(PHRASE_VIEW_TYPE, PHRASE);
+      const on = [...plain.el.querySelectorAll('.forge-phrase-controls input, .forge-phrase-controls select')];
+      assert.ok(on.length >= 3 && on.every((c: any) => c.disabled === false && !c.hasAttribute('title')), 'CONTROL: not custom, on');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] the composition tab has NO write control to switch off: its only buttons are the chips of the tree, which open notes`, async () => {
+    const w = await world();
+    try {
+      const { el } = await w.open(COMPOSITION_VIEW_TYPE, COMP);
+      const buttons = [...el.querySelectorAll('button, input, select, textarea')];
+      assert.ok(buttons.length > 0, 'non-vacuity: the tree has chips');
+      assert.ok(buttons.every((b: any) => b.classList.contains('forge-structure-chip')), 'every control is a chip: ' + buttons.map((b: any) => b.className).join(' | '));
     } finally { w.done(); }
   });
 }

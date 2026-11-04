@@ -13,7 +13,7 @@ export interface ArrangementControlsPorts {
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
 }
-export interface ArrangementControls { show(p: ArrangementParams | null): void; dispose(): void }
+export interface ArrangementControls { /** The row of kits (2026-11-03-1160: the tab switches it off for a custom note). */ readonly el: HTMLElement; show(p: ArrangementParams | null): void; dispose(): void }
 
 export function mountArrangementControls(parent: HTMLElement, ports: ArrangementControlsPorts): ArrangementControls {
   const doc = parent.ownerDocument;
@@ -73,6 +73,7 @@ export function mountArrangementControls(parent: HTMLElement, ports: Arrangement
   };
 
   return {
+    el: root,
     show(p) {
       if (disposed) return;
       if (p === null) { root.textContent = ''; kits = []; return; }

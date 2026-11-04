@@ -1,7 +1,7 @@
 // score_first M13 / design 4.12 phase C (drain 2026-10-26-1270, DEMO profile) — the structure strip (under the Score since 2026-11-03-1155-93). Pure: chips naming the notes behind what is drawn (lineage order), the bars each note contributed to, the
 // chips of a bar's tab (the phrases that use it). The "which note made bar n" rule is the SAME rule a pin sends the notes pane by (linked-panes-core.ts pinnedNoteFor): structure-strip-core.test.ts cross-checks them for every
 // kind, so the two cannot drift apart. Runtime imports from phrase-core.ts are types only.
-import { callsInPython } from './custom-note-core.ts';
+import { callsInPython, noteKindOfName } from './custom-note-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 import type { ArrangementParams } from './arrangement-core.ts';
 import { phraseBarId, PHRASE_BAR_SCOPE } from './phrase-lineage-core.ts';
@@ -71,9 +71,10 @@ export function customChips(name: string, python: string, recipe: string): Chip[
   for (const n of names) {
     if (seen.has(n)) continue;
     seen.add(n);
-    if (/^bar_\d+$/.test(n)) chips.push({ text: n, noteId: `bars/${n}`, kind: 'bar' });
-    else if (/^phrase_\d+$/.test(n)) chips.push({ text: n, noteId: `phrases/${n}`, kind: 'phrase' });
-    else if (/^arr_\d+$/.test(n)) chips.push({ text: n, noteId: `arrangements/${n}`, kind: 'phrase' });
+    const kind = noteKindOfName(n);
+    if (kind === 'bar') chips.push({ text: n, noteId: `bars/${n}`, kind: 'bar' });
+    else if (kind === 'phrase') chips.push({ text: n, noteId: `phrases/${n}`, kind: 'phrase' });
+    else if (kind === 'arrangement') chips.push({ text: n, noteId: `arrangements/${n}`, kind: 'phrase' });
   }
   return chips;
 }

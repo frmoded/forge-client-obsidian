@@ -10,7 +10,8 @@ import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor, readPhraseNote, type PhraseParams } from './phrase-core.ts';
 import { extractDescription, extractRecipeSection } from './v2-note-core.ts';
 import { BOTH_EDITED } from './recipe-apply-core.ts';
-import { CUSTOM_BANNER, asRecipeSourced, isCustomNote } from './phrase-notes-core.ts';
+import { CUSTOM_BANNER, asRecipeSourced, isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
+import { customCallNotes } from './custom-note-core.ts';
 import { REVERT_GENERATED_CONFIRM } from './description-apply-core.ts';
 import { newArrangementNote } from './arrangement-core.ts';
 
@@ -790,6 +791,8 @@ test('the Python edited to something the grammar does not know: the note becomes
   assert.deepEqual(r.writes, [PATH]);
   assert.equal(isCustomNote(r.store.get(PATH)!), true);
   assert.ok(r.store.get(PATH)!.includes('thin_out_bars(bars=[bars[1]]'), 'the Python is what was typed');
+  const linked = [...(/^links:\s*\n((?:\s+-.*\n)*)/m.exec(r.store.get(PATH)!)?.[1] ?? '').matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1]);
+  assert.deepEqual(linked, customCallNotes('phrase_001', pythonTextOf(r.store.get(PATH)!) as string), '2026-11-03-1160 (d): the `links:` property follows the notes the Python calls, in the SAME one write (writes is still [PATH])');
   assert.deepEqual(r.lines, ['[forge-python] phrase_001 is now a custom note (its Python is not a shape the grammar knows)']);
   assert.equal(msg(a), CUSTOM_BANNER); assert.deepEqual(buttons(a), ['revert-generated']);
   assert.ok(a.querySelector('.forge-description-bar.is-custom'), 'the banner has its own look');
