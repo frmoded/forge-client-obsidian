@@ -4,20 +4,20 @@ inputs:
   - key_name
   - mode_name
   - progression
-recipe_version: 1
-description_hash: 7eb58c1f8a0ab9ecc10cc6f3cf053b238260a2f009435d56636bd6145785b0ed
-recipe_hash: 8d055994d0a30918dfd401764bd293e55456c2638d63622d2f57ad0c0ce3bcd9
-python_hash: fb6972d689024ff8cd1c1afa432a88d8829c5996a583d824ba7ff66028de84d3
-recipe_derived_from_source_hash: 7eb58c1f8a0ab9ecc10cc6f3cf053b238260a2f009435d56636bd6145785b0ed
-source_facet: recipe
-recipe_derived_from_description_hash: 7eb58c1f8a0ab9ecc10cc6f3cf053b238260a2f009435d56636bd6145785b0ed
-python_derived_from_source_hash: 8d055994d0a30918dfd401764bd293e55456c2638d63622d2f57ad0c0ce3bcd9
-python_derived_from_recipe_hash: 8d055994d0a30918dfd401764bd293e55456c2638d63622d2f57ad0c0ce3bcd9
+recipe_version: 2
+description_hash: 3f4970993ce5fdedced6f775ab7957ecf9d22cd1b0cea1d0fa997cbfdb9e5fda
+recipe_hash: d0000787e59cf0b692d9cca09ee77026454069e948e27960402a873e56a44f34
+python_hash: af58466e2749546b9f7a3102f5645e7d4fbfe6ce8e0b10ac60ea88bad78efa66
+recipe_derived_from_source_hash: 3f4970993ce5fdedced6f775ab7957ecf9d22cd1b0cea1d0fa997cbfdb9e5fda
+source_facet: description
+recipe_derived_from_description_hash: 3f4970993ce5fdedced6f775ab7957ecf9d22cd1b0cea1d0fa997cbfdb9e5fda
+python_derived_from_source_hash: 3f4970993ce5fdedced6f775ab7957ecf9d22cd1b0cea1d0fa997cbfdb9e5fda
+python_derived_from_recipe_hash: d0000787e59cf0b692d9cca09ee77026454069e948e27960402a873e56a44f34
 ---
 
 # Description
 
-Return a music21 Score realizing your Roman-numeral `progression` (e.g. ["I", "IV", "I", "V", "I"]) as concrete triads in `key_name`/`mode_name` — press Run to hear it. Build different progressions to compare how they punctuate: ending V→I resolves fully (authentic cadence), IV→I is softer (plagal, the "amen"), stopping on V leaves it hanging (half cadence), V→vi surprises instead of resolving (deceptive cadence). All seven diatonic scale-degree triads (I ii iii IV V vi vii°) are available to build with. Concept refresher: [[chord/function/diatonic_chord]], [[chord/function/harmonic_function]], [[chord/function/chord_progression]], [[chord/function/cadence]].
+Return a music21 Score realizing your Roman-numeral `progression` (e.g. ["I", "IV", "I", "V", "I"]) as concrete triads in `key_name`/`mode_name`, in 4/4 at 90 BPM — press Run to hear it. `mode_name` is one of "major", "minor", "ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian". All three inputs are required and have no defaults. Build different progressions to compare how they punctuate: ending V→I resolves fully (authentic cadence), IV→I is softer (plagal, the "amen"), stopping on V leaves it hanging (half cadence), V→vi surprises instead of resolving (deceptive cadence). All seven diatonic scale-degree triads (I ii iii IV V vi vii°) are available to build with. Concept refresher: [[chord/function/diatonic_chord]], [[chord/function/harmonic_function]], [[chord/function/chord_progression]], [[chord/function/cadence]].
 
 ## Inputs
 
@@ -27,11 +27,16 @@ Return a music21 Score realizing your Roman-numeral `progression` (e.g. ["I", "I
 
 # Recipe
 
-Return Call [[form]] with key_name=key_name, mode_name=mode_name, progression=progression, ts_str="4/4", tempo_bpm=90.
+Input key_name: str.
+Input mode_name: str.
+Input progression: list.
+Let harmony = Call [[form]] with key_name=key_name, mode_name=mode_name, tempo_bpm=90, ts_str="4/4", progression=progression.
+Return harmony.
 
 # Python
 
 ```python
-def compute(context, key_name, mode_name, progression):
-  return form(key_name=key_name, mode_name=mode_name, progression=progression, ts_str='4/4', tempo_bpm=90)
+def compute(context, key_name: str, mode_name: str, progression: list):
+  harmony = form(key_name=key_name, mode_name=mode_name, tempo_bpm=90, ts_str='4/4', progression=progression)
+  return harmony
 ```

@@ -1,4 +1,4 @@
-A **chord** is multiple notes sounding together, built by stacking thirds on a root. This section routes into three lenses on that idea:
+A **chord** is any set of notes sounding together. That's the whole definition: they don't have to be pretty, and they don't have to be stacked in thirds. C, F and G sounded together make a chord (a suspended one) with no stack of thirds in sight. The kind most Western music runs on is the **triad**, a root with thirds stacked on top, and that's where this section starts. It routes into three lenses:
 
 - [[construction]] — what a chord is MADE of: triads, quality, root, chord tones, seventh chords, extensions, inversions, voicings.
 - [[notation]] — how a chord gets WRITTEN and NAMED: chord symbols, Roman numerals, slash chords.
