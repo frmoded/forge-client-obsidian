@@ -39,7 +39,7 @@ import { fileURLToPath } from "node:url";
 // duplicated the list here + in build-release-zip.mjs; the 2026-07-28
 // arc showed the two copies drifting is a real risk.
 import { isExcludedName } from "./exclusions.mjs";
-import { snapshotVaultHead } from "./vault-head-snapshot.mjs";
+import { snapshotVaultHead, uncommittedPaths } from "./vault-head-snapshot.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -105,6 +105,16 @@ function syncOne(vaultName) {
     process.exit(1);
   }
   const SOURCE = snapshot.root;
+
+  // 2026-11-03-1165 — say what is being LEFT OUT before anything is copied: the paths of the vault's working tree that are
+  // modified, staged-but-uncommitted or untracked are not in HEAD, so they are not in the bundle (a person who sees a file
+  // missing from the bundle can read why here). Read-only, and never a reason to stop.
+  const ignored = uncommittedPaths(VAULT);
+  if (ignored.length > 0) {
+    console.log(`  not synced (uncommitted in the vault, so not in HEAD): ${ignored.length} path(s)`);
+    for (const { path: p, state } of ignored.slice(0, 25)) console.log(`    ${p} (${state})`);
+    if (ignored.length > 25) console.log(`    ... and ${ignored.length - 25} more`);
+  }
 
   try {
   const sourceFiles = walk(SOURCE);

@@ -24,7 +24,7 @@ export const STUBS = {
   '.gitignore': 'node_modules\nassets/wheels\n.edition\n',
   'scripts/sync-bundled-vault.mjs': [
     "import fs from 'node:fs';",
-    "if (process.env.LAG_BUNDLE) { fs.mkdirSync('assets/vaults/x', { recursive: true }); fs.writeFileSync('assets/vaults/x/n.md', 'the source vault moved on'); }",   // the sync CHANGES the committed bundle = the bundle lags the sources
+    "if (process.env.LAG_BUNDLE) { fs.mkdirSync('assets/vaults/music-theory', { recursive: true }); fs.writeFileSync('assets/vaults/music-theory/n.md', 'the source vault moved on'); }",   // the sync CHANGES the committed bundle = the bundle lags the sources
   ].join('\n') + '\n',
   'scripts/sync-engine-bundle.mjs': 'process.exit(0);\n',
   'scripts/check-engine-fixtures.mjs': [

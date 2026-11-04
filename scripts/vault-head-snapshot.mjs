@@ -26,6 +26,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
+import { isExcludedName } from "./exclusions.mjs";
 
 /**
  * A read-only view of `vaultPath` as of its last commit.
@@ -91,4 +92,25 @@ export function snapshotVaultHead(vaultPath) {
       fs.rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * 2026-11-03-1165 — what the sync is NOT shipping: the paths of the vault's working tree that differ from HEAD (modified,
+ * staged-but-uncommitted, untracked) and would be in the bundle if the sync copied the working tree. Paths with an excluded
+ * segment (`.obsidian/`, `.DS_Store`, ...) are not listed (they are never bundled, so they are not news). Read-only:
+ * `git status` takes no lock and writes nothing. [] for a clean vault; `{ path, state }` otherwise, state one of
+ * `modified`, `staged`, `untracked`, `deleted`, `renamed`.
+ */
+export function uncommittedPaths(vaultPath) {
+  const r = spawnSync("git", ["-C", vaultPath, "status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z"], { encoding: "utf-8" });
+  if (r.status !== 0) return [];
+  const out = [];
+  for (const entry of r.stdout.split("\0")) {
+    if (entry.length < 4) continue;
+    const x = entry[0], y = entry[1], file = entry.slice(3);
+    if (file.split("/").some((seg) => isExcludedName(seg))) continue;
+    const state = x === "?" ? "untracked" : y === "D" || x === "D" ? "deleted" : x !== " " && y === " " ? "staged" : "modified";
+    out.push({ path: file, state });
+  }
+  return out;
 }

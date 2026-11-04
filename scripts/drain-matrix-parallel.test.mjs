@@ -96,14 +96,21 @@ test('failing tests and SKIPPED tests in one edition are each a RED matrix, per 
 });
 
 // 2026-10-27-0930: after the sync, the COMMITTED bundle (assets/vaults) must equal the source vaults. A vault drain that bumps a forge.toml commits the client sync in the same drain (cc-operating-card.md); the matrix says so when it does not.
-test('the committed bundle lags the source vaults (the sync changes assets/vaults in the clean worktree): the matrix is RED naming the step "bundle-lag", the changed paths and the fix; an up-to-date bundle is green', { skip }, () => {
+test('the committed bundle lags the source vaults (the sync changes assets/vaults in the clean worktree): the matrix is RED naming the step "bundle-lag", the changed paths, the VAULT, its newest commits, the ONE command and the wizard-batch sentence; an up-to-date bundle is green', { skip }, () => {
   const p = projects();
   try {
+    // 2026-11-03-1165: the wizard's way - two commits in the source vault the bundle has not caught up with
+    for (const body of ['first wizard edit', 'second wizard edit']) { write(path.join(p.dir, 'music-theory'), 'n.md', body); git(path.join(p.dir, 'music-theory'), 'add', 'n.md'); git(path.join(p.dir, 'music-theory'), 'commit', '-q', '-m', `forge_edit_markdown_note: ${body}`); }
     const lag = matrix(p, ['--no-forge'], { LAG_BUNDLE: '1' });
     assert.notEqual(lag.status, 0, lag.out + lag.err);
     assert.match(lag.err, /FAIL: music: step 'bundle-lag' failed/);
-    assert.match(lag.out + lag.err, /assets\/vaults\/x\/n\.md/, 'the changed path is printed');
-    assert.match(lag.out + lag.err, /npm run sync-bundled-vaults/, 'and the fix');
+    const said = lag.out + lag.err;
+    assert.match(said, /assets\/vaults\/music-theory\/n\.md/, 'the changed path is printed');
+    assert.match(said, /lags the source vault\(s\): music-theory/, 'it names the VAULT');
+    assert.match(said, /forge_edit_markdown_note: first wizard edit/, 'and the commits the bundle has not caught up with (both)');
+    assert.match(said, /forge_edit_markdown_note: second wizard edit/);
+    assert.match(said, /node scripts\/sync-bundled-vault\.mjs music-theory/, 'and the ONE command, for that vault');
+    assert.match(said, /wizard batch .* needs this step before any matrix/, 'and says a wizard batch needs it');
     const ok = matrix(p, ['--no-forge']);
     assert.equal(ok.status, 0, ok.out + ok.err);
   } finally { p.done(); }
