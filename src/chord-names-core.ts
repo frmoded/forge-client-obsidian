@@ -86,7 +86,8 @@ export function chordRootNamesFor(quality: ChordQuality, table: readonly ChordSp
   return tonicNamesFor(hasThirdMinor(specOf(quality, table)) ? 'natural minor' : 'major');
 }
 
-/** The root's name for a pitch class: the family list's (see chordRootNamesFor), always. A quality that forces a double accidental keeps it (C dim7 is C Eb Gb Bbb, F# augmented F# A# C##): respelling the ROOT to dodge one gives names nobody writes (B#dim7). */
+/** NOTE FOR THE DIATONIC ROW (1172, not started): name each degree's chord from the SCALE's own spelling (Eb natural minor has Cb and Db: Ebm, Fdim, Cb, Dbm...), NOT from this function, which names a pitch class by the chord family's list (pc 11 is "B", never "Cb").
+ * The root's name for a pitch class: the family list's (see chordRootNamesFor), always. A quality that forces a double accidental keeps it (C dim7 is C Eb Gb Bbb, F# augmented F# A# C##): respelling the ROOT to dodge one gives names nobody writes (B#dim7). */
 export function chordRootName(pc: number, quality: ChordQuality, table: readonly ChordSpec[] = CHORD_TABLE): string {
   return chordRootNamesFor(quality, table)[((pc % 12) + 12) % 12];
 }

@@ -30,6 +30,7 @@ const BLOCKS: Record<string, string> = {
   chordC: 'mode: chord',
   chordBb7: 'tonic: Bb\nmode: chord\nchord: dom7',
   chordBad: 'mode: chord\nchord: sus4',
+  ebm: 'tonic: Eb\nscale: minor',
 };
 const page = (w: number) => `<!doctype html><html><head><meta charset=utf-8><link rel=stylesheet href="app.css"><link rel=stylesheet href="plugin-styles.css"><style>body{margin:0}</style></head><body class="theme-light mod-macos">
 <div class="markdown-source-view mod-cm6 is-live-preview" style="width:${w}px;padding:12px"><div class="cm-editor"><div class="cm-scroller"><div class="cm-content" id="content" style="width:${w - 24}px;min-width:${w - 24}px">
@@ -64,6 +65,7 @@ const READ = (id: string) => `(() => {
     pianoHeight: +root.querySelector('svg.forge-scale-svg').getAttribute('height'), widgetHeight: rootEl.height, widgetWidth: rootEl.width,
     staff: staff ? { notes: staff.querySelectorAll('g.note').length, keySigSharps: keySig.filter((h) => /E262/.test(h)).length, keySigFlats: keySig.filter((h) => /E260/.test(h)).length, noteAccidentals: noteAccids.length, w: r(staff).w, h: r(staff).h, withinPane: r(staff).r <= pane.r + 0.5 } : null,
     staffError: root.querySelector('.forge-scale-staff-error')?.textContent ?? null,
+    tonicSelect: root.querySelector('select.forge-scale-tonic')?.value ?? null, tonicOptions: [...root.querySelectorAll('select.forge-scale-tonic option')].map((o) => o.textContent),
     caption: root.querySelector('.forge-scale-caption').textContent,
     controls: { selects: root.querySelectorAll('select').length, buttons: [...root.querySelectorAll('button')].map((b) => b.textContent) },
     overflow: { root: root.scrollWidth > root.clientWidth + 1, rootRight: rootEl.right > pane.r + 0.5, page: document.documentElement.scrollWidth > innerWidth },
@@ -81,7 +83,7 @@ const verdicts: Record<string, boolean> = {};
 
 for (const width of [640, 300]) {
   const key = `w${width}`;
-  const p = await openPage({ dir: here, width: width + 40, height: 3600, pageHtml: page(width), routes: {} });
+  const p = await openPage({ dir: here, width: width + 40, height: 4800, pageHtml: page(width), routes: {} });
   try {
     await sleep(500);
     for (const [id, src] of Object.entries(BLOCKS)) await p.ev(`window.__mount(document.getElementById('blk-${id}'), ${JSON.stringify(src)})`);
@@ -111,6 +113,7 @@ for (const width of [640, 300]) {
     verdicts[`${key} CONTROL: C major's keys compared with Bb dom7's expected keys are NOT equal (a wrong chord fails the comparator)`] = !same(cc.midis, expectedChord('Bb', 'dom7'));
     verdicts[`${key} chord mode: Play together and Play arpeggio only, a root dropdown and a quality dropdown`] = cc.controls.selects === 2 && cc.controls.buttons.join('|') === 'Play together|Play arpeggio';
     verdicts[`${key} chord mode: nothing overflows, the highlighted keys are visible, the bad chord block shows its error`] = [cc, cb].every((b: any) => !b.overflow.root && !b.overflow.rootRight && !b.overflow.page && b.scaleKeysVisible && b.staff.withinPane) && !!m.chordBad.error && /chord must be one of .*\(got "sus4"\)/.test(m.chordBad.error.text) && m.chordBad.error.withinPane;
+    verdicts[`${key} 1171-2, Eb natural minor: the dropdown shows Eb (and offers Eb, not D#), the staff has 6 flats in its key signature and no sign in front of a note, the keys are Eb F Gb Ab Bb Cb Db Eb`] = m.ebm.tonicSelect === 'Eb' && m.ebm.tonicOptions.includes('Eb') && !m.ebm.tonicOptions.includes('D#') && !!m.ebm.staff && m.ebm.staff.notes === 8 && m.ebm.staff.keySigFlats === 6 && m.ebm.staff.keySigSharps === 0 && m.ebm.staff.noteAccidentals === 0 && same(m.ebm.midis, expectedMidis('Eb', 'natural minor'));
     verdicts[`${key} the pane shows the caption naming the scale (${c.caption})`] = c.caption === 'C Major (Ionian): C D E F G A B C';
 
     // A REAL click on Play together (block c): the sound double hears it, with all 8 notes at once.

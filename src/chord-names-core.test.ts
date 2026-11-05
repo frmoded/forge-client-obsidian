@@ -45,7 +45,7 @@ test('chordNotes carries the degree of each tone (1 3 5 7 9 11 13) and the midi 
   assert.deepEqual(n.map((x) => x.name), ['C4', 'E4', 'G4', 'Bb4', 'D5']);
 });
 
-test('the root name: major-third chords use 1170\'s major list (Db, F#, Bb), minor-third chords its natural-minor list (C#, D#, G#)', () => {
+test('the root name: major-third chords use 1170\'s major list (Db, F#, Bb), minor-third chords its natural-minor list (C#, Eb, G#)', () => {
   assert.deepEqual(chordRootNamesFor('major'), tonicNamesFor('major'));
   assert.deepEqual(chordRootNamesFor('dom7'), tonicNamesFor('major'));
   assert.deepEqual(chordRootNamesFor('minor'), tonicNamesFor('natural minor'));
@@ -55,7 +55,7 @@ test('the root name: major-third chords use 1170\'s major list (Db, F#, Bb), min
   assert.equal(chordRootName(10, 'dom7'), 'Bb');
 });
 
-test('PROPERTY: every root name is the family list\'s, and the chord on it is spelled with one letter per degree; a double accidental appears ONLY where the quality forces it (exactly five of the 144 root x quality pairs)', () => {
+test('PROPERTY: every root name is the family list\'s, and the chord on it is spelled with one letter per degree; a double accidental appears ONLY where the quality forces it (exactly eight of the 144 root x quality pairs: the 1171-2 change to Eb minor adds Eb diminished, Eb m7b5 and Eb dim7)', () => {
   const doubles: string[] = [];
   for (const q of CHORD_QUALITIES) {
     const family = chordRootNamesFor(q);
@@ -68,7 +68,7 @@ test('PROPERTY: every root name is the family list\'s, and the chord on it is sp
       for (const n of notes) if (Math.abs(n.alter) > 1) doubles.push(`${root} ${q}: ${n.name}`);
     }
   }
-  assert.deepEqual(doubles, ['F# augmented: C##5', 'B augmented: F##5', 'C dim7: Bbb4', 'F dim7: Ebb5', 'Bb dim7: Abb5']);
+  assert.deepEqual(doubles, ['Eb diminished: Bbb4', 'F# augmented: C##5', 'B augmented: F##5', 'Eb half_dim7: Bbb4', 'C dim7: Bbb4', 'Eb dim7: Bbb4', 'Eb dim7: Dbb5', 'F dim7: Ebb5', 'Bb dim7: Abb5']);
 });
 
 test('naming: root position, with the symbol, the title and the quality', () => {
@@ -268,4 +268,20 @@ test('chordMusicXML skeleton: the xml declaration, the part list, divisions 1 an
   assert.match(xml, /<divisions>1<\/divisions>/);
   assert.equal((xml.match(/<duration>4<\/duration>/g) ?? []).length, 4);
   assert.match(xml, /<\/measure>\n  <\/part>\n<\/score-partwise>\n$/);
+});
+
+// ---- 2026-11-04-1171-2: Eb minor ------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+test('Eb minor chords are named with the flat: Ebm from Eb Gb Bb, Ebm7, Ebdim, Ebm7b5 and by midi numbers (63 66 70); the dropdown list has Eb and no D#', () => {
+  assert.equal(named(nameChord(['Eb4', 'Gb4', 'Bb4'])).name, 'Ebm');
+  assert.equal(named(nameChord(['Eb4', 'Gb4', 'Bb4'])).title, 'Eb minor');
+  assert.equal(named(nameChord(['Eb4', 'Gb4', 'Bb4', 'Db5'])).name, 'Ebm7');
+  assert.equal(named(nameChord(['Eb4', 'Gb4', 'Bbb4'])).name, 'Ebdim');
+  assert.equal(named(nameChord(['Eb4', 'Gb4', 'Bbb4', 'Db5'])).name, 'Ebm7b5');
+  assert.equal(named(nameChord([63, 66, 70])).name, 'Ebm', 'a midi number is named by the list');
+  assert.equal(named(nameChord([63, 66, 70, 73])).name, 'Ebm7');
+  assert.ok(chordRootNamesFor('minor').includes('Eb') && !chordRootNamesFor('minor').includes('D#'));
+  assert.equal(chordRootName(3, 'min7'), 'Eb');
+  assert.equal(chordRootName(3, 'major'), 'Eb', 'the major list had Eb already');
+  assert.equal(named(nameChord(['D#4', 'F#4', 'A#4'])).name, 'D#m', 'CONTROL: a D# minor chord WRITTEN as D# F# A# keeps its spelling');
 });

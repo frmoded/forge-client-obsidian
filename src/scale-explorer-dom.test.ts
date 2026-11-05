@@ -137,8 +137,8 @@ test('choosing a tonic re-highlights the keys, moves the root and the caption; c
   assert.deepEqual(w.q('rect.is-scale').map((k) => k.getAttribute('data-name')).sort(), scaleNotes('Eb', 'major', 4).map((n) => n.name).sort());
   assert.match(w.q('.forge-scale-caption')[0].textContent ?? '', /^Eb Major \(Ionian\): Eb F G Ab Bb C D Eb$/);
   w.change(w.q<HTMLSelectElement>('select.forge-scale-type')[0], 'natural minor');
-  assert.deepEqual(w.handle.state(), { tonic: 'D#', scale: 'natural minor' }, 'Eb and D# are one pitch class: the minor list spells it D#');
-  assert.equal(w.q<HTMLSelectElement>('select.forge-scale-tonic')[0].value, 'D#');
+  assert.deepEqual(w.handle.state(), { tonic: 'Eb', scale: 'natural minor' }, 'Eb major and Eb minor: the minor list spells pitch class 3 as Eb (1171-2)');
+  assert.equal(w.q<HTMLSelectElement>('select.forge-scale-tonic')[0].value, 'Eb');
   assert.equal(tonicAfterTypeChange('F#', 'major', 'natural minor'), 'F#');
   assert.equal(tonicAfterTypeChange('Db', 'major', 'natural minor'), 'C#');
 });
@@ -333,4 +333,16 @@ test('a bad chord block names the bad line', () => {
   const el = win.document.createElement('div');
   assert.equal(mountScaleBlock(el, 'mode: chord\nchord: sus4', { sound: { play() {}, stop() {} } }), null);
   assert.match(el.querySelector('.forge-scale-error p')?.textContent ?? '', /chord must be one of .*\(got "sus4"\)/);
+});
+
+test('1171-2: an Eb minor block shows Eb in the dropdown (six flats on the staff XML); a D# minor block keeps D# as typed, added to the list', async () => {
+  const eb = world({ tonic: 'Eb', scale: 'natural minor' });
+  await tick();
+  assert.equal(eb.q<HTMLSelectElement>('select.forge-scale-tonic')[0].value, 'Eb');
+  assert.deepEqual(eb.q('select.forge-scale-tonic option').map((o) => o.textContent), tonicNamesFor('natural minor'));
+  assert.match(eb.xml[0], /<fifths>-6<\/fifths>/);
+  const ds = world({ tonic: 'D#', scale: 'natural minor' });
+  assert.equal(ds.q<HTMLSelectElement>('select.forge-scale-tonic')[0].value, 'D#');
+  assert.deepEqual(ds.q('select.forge-scale-tonic option').map((o) => o.textContent), [...tonicNamesFor('natural minor'), 'D#']);
+  assert.deepEqual(ds.handle.state(), { tonic: 'D#', scale: 'natural minor' });
 });

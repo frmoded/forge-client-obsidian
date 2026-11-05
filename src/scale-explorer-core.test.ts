@@ -167,9 +167,9 @@ test('every scale of every type has 8 pitches, one letter per degree, the last a
 
 // ---- the tonic names the dropdown offers -----------------------------------------------------------------------------------------------------------------------------
 
-test('the dropdown names: 12, one per pitch class, the key-signature spelling (major: F#, Db; minor: D#, C#, G#, Bb)', () => {
+test('the dropdown names: 12, one per pitch class, the key-signature spelling (major: F#, Db; minor: Eb (six flats, the one tie that goes to the flat), C#, G#, Bb)', () => {
   assert.deepEqual(tonicNamesFor('major'), ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']);
-  assert.deepEqual(tonicNamesFor('natural minor'), ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B']);
+  assert.deepEqual(tonicNamesFor('natural minor'), ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B']);
   for (const type of SCALE_TYPES) {
     const list = tonicNamesFor(type);
     assert.equal(list.length, 12, type);
@@ -389,4 +389,35 @@ test('a scale block is unchanged by the new options: the same defaults, scale mo
 test('the arpeggio plan is the notes one after the other, upward: the same events as up', () => {
   const midis = [60, 64, 67, 70];
   assert.deepEqual(playEvents(midis, 'arpeggio'), playEvents(midis, 'up'));
+});
+
+// ---- 2026-11-04-1171-2: the natural minor on pitch class 3 is Eb minor, not D# minor -------------------------------------------------------------------------------------------------------
+
+test('Eb natural minor: the pitches (Cb among them), the six-flat signature, and a staff with NO accidental sign (the signature has Cb)', () => {
+  assert.deepEqual(scalePitches('Eb', 'natural minor', 4), ['Eb4', 'F4', 'Gb4', 'Ab4', 'Bb4', 'Cb5', 'Db5', 'Eb5']);
+  assert.deepEqual(scaleNotes('Eb', 'natural minor', 4).map((n) => n.midi), [63, 65, 66, 68, 70, 71, 73, 75], 'Cb5 sounds as B4: midi 71');
+  assert.equal(keySignatureFifths('Eb', 'natural minor'), -6);
+  const xml = scaleMusicXML('Eb', 'natural minor', 4);
+  assert.match(xml, /<fifths>-6<\/fifths>/);
+  assert.ok(noteTags(xml).every((n) => n.accidental === null), 'six flats in the signature cover Eb Gb Ab Bb Cb Db');
+  assert.deepEqual(noteTags(xml).map((n) => `${n.step}${n.alter}${n.octave}`), ['E-14', 'F04', 'G-14', 'A-14', 'B-14', 'C-15', 'D-15', 'E-15']);
+});
+
+test('the dropdown offers Eb, not D#, for the natural minor; the major list is unchanged (Eb major, F# major); the other minors and the modes are unchanged', () => {
+  assert.ok(tonicNamesFor('natural minor').includes('Eb') && !tonicNamesFor('natural minor').includes('D#'));
+  assert.deepEqual(tonicNamesFor('major'), ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']);
+  // the other minors and every mode: unchanged by 1171-2 (the old and the new rule were compared for all nine types: only the natural minor's pitch class 3 differs)
+  assert.deepEqual(tonicNamesFor('harmonic minor'), ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'], 'D# harmonic minor needs a double sharp: it was already Eb');
+  assert.deepEqual(tonicNamesFor('melodic minor'), ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']);
+  assert.deepEqual(tonicNamesFor('dorian'), ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B']);
+  for (const type of SCALE_TYPES) assert.equal(tonicNamesFor(type).length, 12);
+});
+
+test('CONTROL: a D# minor TYPED in a block is kept as typed: the parser, the notes (D# E# F# G# A# B C#), the six-SHARP signature the engine agrees with', () => {
+  const r = parseScaleExplorerSource('tonic: D#\nscale: minor');
+  assert.ok(r.ok);
+  if (r.ok) assert.deepEqual([r.options.tonic, r.options.scale], ['D#', 'natural minor']);
+  assert.equal(names('D#', 'natural minor'), 'D# E# F# G# A# B C#');
+  assert.equal(keySignatureFifths('D#', 'natural minor'), 6);
+  assert.match(scaleMusicXML('D#', 'natural minor', 4), /<fifths>6<\/fifths>/);
 });

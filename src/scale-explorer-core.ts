@@ -197,7 +197,10 @@ export function degreeLabels(notes: readonly ScaleNote[]): string[] {
   return notes.map((n) => String(n.degree));
 }
 
-/** The 12 tonic names the dropdown offers for a scale type, one per pitch class: for each black-key pitch class the sharp or the flat name, whichever spells the scale with fewer accidentals and no double ones (a tie goes to the sharp: F# major, D# minor). */
+/** A tie in the number of accidentals goes to the sharp (F# major) EXCEPT where the flat is the name people write: the natural minor on pitch class 3 is Eb minor (six flats: Eb F Gb Ab Bb Cb Db), not D# minor (six sharps) - the driver's call, 2026-11-04 (1171-2). ONE table: the chord roots follow it (chord-names-core.ts takes this list for a minor-third chord, so Eb minor is "Ebm"). */
+const TIE_GOES_TO_FLAT: Partial<Record<ScaleType, readonly number[]>> = { 'natural minor': [3] };
+
+/** The 12 tonic names the dropdown offers for a scale type, one per pitch class: for each black-key pitch class the sharp or the flat name, whichever spells the scale with fewer accidentals and no double ones (a tie goes to the sharp: F# major; the one exception is TIE_GOES_TO_FLAT: Eb minor). */
 export function tonicNamesFor(type: ScaleType): string[] {
   const cost = (tonic: string): number => {
     const notes = scaleNotes(tonic, type, 4).slice(0, 7);
@@ -209,7 +212,8 @@ export function tonicNamesFor(type: ScaleType): string[] {
     if (natural) { names.push(natural); continue; }
     const sharp = `${STEPS.find((s) => STEP_PC[s] === pc - 1)!}#`;
     const flat = `${STEPS.find((s) => STEP_PC[s] === pc + 1)!}b`;
-    names.push(cost(flat) < cost(sharp) ? flat : sharp);
+    const tieToFlat = cost(flat) === cost(sharp) && (TIE_GOES_TO_FLAT[type] ?? []).includes(pc);
+    names.push(cost(flat) < cost(sharp) || tieToFlat ? flat : sharp);
   }
   return names;
 }
