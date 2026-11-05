@@ -358,12 +358,21 @@ for (const edition of ['lean', 'music'] as const) {
     for (const toml of [SCORE_FIRST_TOML, TUTORIAL_TOML]) {
       const w = await world(toml);
       try {
-        const mk = (type: string, file: string) => { const el = win.document.createElement('div'); el.textContent = type; return { el, leaf: { isDeferred: true, getViewState: () => ({ type, state: { file } }), getRoot: () => ({}), tabHeaderInnerTitleEl: el } }; };
+        // 2026-11-04-1175 (A): Obsidian's tab-list menu (the chevron) does not read the tab header: it reads `leaf.view.getDisplayText()`, and a deferred leaf's view (`DeferredView`) answers its `title` field, saved with the layout.
+        // The stand-in is that view as it is in app.js: `getDisplayText() { return this.title }`, the title being what the layout saved (`forge-phrase`).
+        const mk = (type: string, file: string) => {
+          const el = win.document.createElement('div'); el.textContent = type;
+          const view = { title: type, getViewType: () => type, getDisplayText() { return this.title; } };
+          let headerRedraws = 0;
+          return { el, view, redraws: () => headerRedraws, leaf: { isDeferred: true, view, updateHeader: () => { headerRedraws++; }, getViewState: () => ({ type, state: { file } }), getRoot: () => ({}), tabHeaderInnerTitleEl: el } };
+        };
         const phrase = mk(PHRASE_VIEW_TYPE, 'phrases/phrase_001.md'), other = mk('some-other-view', 'x/y.md');
         w.addLeaf(phrase.leaf); w.addLeaf(other.leaf);
         w.workspaceEvent('layout-change'); await w.wait(100);
         assert.equal(phrase.el.textContent, toml === SCORE_FIRST_TOML ? 'phrase_001' : PHRASE_VIEW_TYPE);
+        assert.equal(phrase.view.getDisplayText(), toml === SCORE_FIRST_TOML ? 'phrase_001' : PHRASE_VIEW_TYPE, 'the field the tab-list menu reads (leaf.view.getDisplayText())');
         assert.equal(other.el.textContent, 'some-other-view');
+        assert.equal(other.view.getDisplayText(), 'some-other-view');
       } finally { w.done(); }
     }
   });

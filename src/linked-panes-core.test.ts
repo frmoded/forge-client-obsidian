@@ -284,3 +284,65 @@ test('2026-10-26-1800: a person\'s navigation that left the notes pane in an edi
   alive.delete(score); linker.sweep(true);
   assert.deepEqual(held.at(-1), [notes, false], 'the pair is gone: the pane is an ordinary leaf again');
 });
+
+// ---- 2026-11-04-1175 (B): which restored reading pane goes with which restored Score ------------------------------------------------------------------------------------------------------------
+import { matchRestoredPairs, createPaneLinker as createLinkerForReload } from './linked-panes-core.ts';
+
+test('matchRestoredPairs: a Score and a reading pane on the SAME note pair up; a pane on another note, or the Score itself, is nobody\'s', () => {
+  const s = { leaf: 'S1', path: 'phrases/a.md' };
+  assert.deepEqual(matchRestoredPairs([s], [{ leaf: 'N1', path: 'phrases/a.md' }], new Set()), [{ score: 'S1', notes: 'N1', path: 'phrases/a.md' }]);
+  assert.deepEqual(matchRestoredPairs([s], [{ leaf: 'N1', path: 'phrases/b.md' }], new Set()), []);
+  assert.deepEqual(matchRestoredPairs([s], [{ leaf: 'S1', path: 'phrases/a.md' }], new Set()), [], 'a leaf is not its own notes pane');
+  assert.deepEqual(matchRestoredPairs([s], [], new Set()), []);
+  assert.deepEqual(matchRestoredPairs([], [{ leaf: 'N1', path: 'phrases/a.md' }], new Set()), []);
+});
+
+test('matchRestoredPairs: a leaf is in one pair at most - the first Score claims the first pane, leaves already paired are skipped', () => {
+  const panes = [{ leaf: 'N1', path: 'p.md' }, { leaf: 'N2', path: 'p.md' }];
+  assert.deepEqual(matchRestoredPairs([{ leaf: 'S1', path: 'p.md' }, { leaf: 'S2', path: 'p.md' }], panes, new Set()).map((m) => [m.score, m.notes]), [['S1', 'N1'], ['S2', 'N2']]);
+  assert.deepEqual(matchRestoredPairs([{ leaf: 'S1', path: 'p.md' }, { leaf: 'S2', path: 'p.md' }], [panes[0]], new Set()).map((m) => [m.score, m.notes]), [['S1', 'N1']], 'one pane, two Scores: the first only');
+  assert.deepEqual(matchRestoredPairs([{ leaf: 'S1', path: 'p.md' }], panes, new Set(['N1'])).map((m) => [m.score, m.notes]), [['S1', 'N2']], 'N1 is in a pair already');
+  assert.deepEqual(matchRestoredPairs([{ leaf: 'S1', path: 'p.md' }], panes, new Set(['S1'])), [], 'S1 is in a pair already');
+});
+
+test('relink makes the pair again, holds the pane, is idempotent, and does nothing when the ports do not list leaves', async () => {
+  const held: string[] = []; const lines: string[] = [];
+  const shown: Array<[string, string]> = [];
+  const base = { openBeside: async () => 'X', show: async (l: string, p: string) => { shown.push([l, p]); }, alive: () => true, focus() {}, trace: (l: string) => { lines.push(l); }, pathOf: () => null, hold: (l: string, on: boolean) => { held.push(`${l}:${on}`); } };
+  const linker = createLinkerForReload<string>({ ...base, scoreLeaves: () => [{ leaf: 'S', path: 'p.md' }], readingPanes: () => [{ leaf: 'N', path: 'p.md' }] });
+  assert.equal(linker.relink(), 1);
+  assert.equal(linker.relink(), 0, 'idempotent');
+  assert.deepEqual(held, ['N:true']);
+  assert.deepEqual(lines, ['[forge-panes] re-linked pair (score p.md, notes p.md)']);
+  assert.equal(linker.scoreOf('N'), 'S');
+  await linker.pinned('S', { noteId: 'bars/bar_005', reason: 'pinned bar 2' });
+  assert.deepEqual(shown, [['N', 'bars/bar_005.md']]);
+  assert.equal(createLinkerForReload<string>(base).relink(), 0);
+});
+
+test('a re-linked pair is in step with its pane: the pane showing its note is not "navigated by the person"; the person then navigating it IS heard once', async () => {
+  const lines: string[] = []; let now = 'p.md'; const heard: string[] = [];
+  const linker = createLinkerForReload<string>({ openBeside: async () => 'X', show: async () => {}, alive: () => true, focus() {}, trace: (l) => { lines.push(l); }, pathOf: () => now, scoreLeaves: () => [{ leaf: 'S', path: 'p.md' }], readingPanes: () => [{ leaf: 'N', path: 'p.md' }] });
+  linker.relink(); linker.onNotesNavigated('S', (p) => heard.push(p));
+  linker.checkNotes();
+  assert.deepEqual(heard, [], 'the pane shows the note the pair says it shows: nothing was navigated');
+  now = 'other.md'; linker.checkNotes(); linker.checkNotes();
+  assert.deepEqual(heard, ['other.md']);
+});
+
+test('relink with only one of the two lists given does nothing and does not throw', () => {
+  const base = { openBeside: async () => 'X', show: async () => {}, alive: () => true, focus() {}, trace() {}, pathOf: () => null };
+  assert.equal(createLinkerForReload<string>({ ...base, scoreLeaves: () => [{ leaf: 'S', path: 'p.md' }] }).relink(), 0);
+  assert.equal(createLinkerForReload<string>({ ...base, readingPanes: () => [{ leaf: 'N', path: 'p.md' }] }).relink(), 0);
+});
+
+test('open reuses a reading pane on the Score\'s note: answers focused, focuses the Score, opens nothing; a pane that is already in a pair is not reused (the second Score gets its own)', async () => {
+  const focused: string[] = []; const opened: string[] = []; const lines: string[] = [];
+  const linker = createLinkerForReload<string>({ openBeside: async (_s, p) => { opened.push(p); return 'NEW'; }, show: async () => {}, alive: () => true, focus: (l) => { focused.push(l); }, trace: (l) => { lines.push(l); }, pathOf: () => null, readingPanes: () => [{ leaf: 'N', path: 'p.md' }] });
+  assert.equal(await linker.open('S1', 'p.md', 'p.md'), 'focused');
+  assert.deepEqual(focused, ['S1']);
+  assert.deepEqual(opened, [], 'no second pane');
+  assert.deepEqual(lines, ['[forge-panes] re-linked pair (score p.md, notes p.md)']);
+  assert.equal(await linker.open('S2', 'p.md', 'p.md'), 'opened', 'N belongs to S1: S2 makes its own');
+  assert.deepEqual(opened, ['p.md']);
+});

@@ -7,6 +7,8 @@
 import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { registerRestoreParticipants, type RestoreParticipant } from './restore-hold-core.ts';
 import { deferredTabName } from './deferred-tab-title-core.ts';
+import { ARRANGEMENT_VIEW_TYPE } from './arrangement-core.ts';
+import { COMPOSITION_VIEW_TYPE } from './composition-core.ts';
 import { MarkdownView, Notice, TFile, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
@@ -353,6 +355,16 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         }
         if (!onNote()) throw new Error(`the notes pane did not move to ${path}`);
       };
+      const SCORE_VIEW_TYPES: readonly string[] = [PHRASE_VIEW_TYPE, ARRANGEMENT_VIEW_TYPE, COMPOSITION_VIEW_TYPE];
+      const savedLeaves = (keep: (vs: ViewState) => boolean): Array<{ leaf: WorkspaceLeaf; path: string }> => {
+        const out: Array<{ leaf: WorkspaceLeaf; path: string }> = [];
+        for (const leaf of liveLeaves()) {
+          const vs = leaf.getViewState();
+          const file = (vs.state as { file?: unknown } | undefined)?.file;
+          if (typeof file === 'string' && keep(vs)) out.push({ leaf, path: file });
+        }
+        return out;
+      };
       const linker = createPaneLinker<WorkspaceLeaf>({
         openBeside: async (score, path) => { const notes = app.workspace.createLeafBySplit(score, 'vertical', false); await showReadOnly(notes, path); return notes; },
         show: showReadOnly,
@@ -364,7 +376,12 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         idOf: (leaf) => String((leaf as unknown as { id?: unknown }).id ?? '?'),
         isReading: (leaf) => (leaf.getViewState().state as { mode?: unknown } | undefined)?.mode === 'preview',
         hold: (leaf, on) => { router.hold(leaf, on); hooks.holdRhythmText?.(leaf, on); },      // BOTH default-view routers: a wikilink click in the notes pane must stay a reading view
+        // 2026-11-04-1175 (B): read from the leaves' SAVED view state, so a restored tab that is still deferred counts as it does once loaded.
+        scoreLeaves: () => savedLeaves((vs) => SCORE_VIEW_TYPES.includes(vs.type)),
+        readingPanes: () => savedLeaves((vs) => vs.type === 'markdown' && (vs.state as { mode?: unknown } | undefined)?.mode === 'preview'),
       });
+      // 2026-11-04-1175 (B): a reload restores the Score tab and the notes pane and none of the in-memory pair: when the layout is ready they are linked again (Create then moves that pane; the command focuses it).
+      app.workspace.onLayoutReady(() => { linker.relink(); });
       plugin.registerEvent(app.workspace.on('layout-change', () => linker.sweep()));
       // 2026-10-26-1270 (M13): when the workspace says something moved, see whether the PERSON navigated a notes pane (a wikilink click in the Recipe, a backlink): the Score lights the bars that note contributed. A show we made
       // ourselves is tagged and never echoed back (linked-panes-core.ts).
@@ -475,11 +492,14 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2026-11-03-1155-8 (D1): a restored tab that has not been opened yet is a deferred leaf, titled with its view type (`forge-phrase`); it is named after its note from its saved state, without loading the view.
       const nameDeferredTabs = (): void => {
         app.workspace.iterateAllLeaves((leaf) => {
-          const l = leaf as unknown as { isDeferred?: boolean; tabHeaderInnerTitleEl?: HTMLElement };
-          if (l.isDeferred !== true || !l.tabHeaderInnerTitleEl) return;
+          const l = leaf as unknown as { isDeferred?: boolean; tabHeaderInnerTitleEl?: HTMLElement; view?: { title?: unknown } };
+          if (l.isDeferred !== true) return;
           const s = leaf.getViewState();
           const name = deferredTabName(s.type, s.state);
-          if (name !== null && l.tabHeaderInnerTitleEl.textContent !== name) l.tabHeaderInnerTitleEl.textContent = name;
+          if (name === null) return;
+          if (l.tabHeaderInnerTitleEl && l.tabHeaderInnerTitleEl.textContent !== name) l.tabHeaderInnerTitleEl.textContent = name;
+          // 2026-11-04-1175 (A): the tab-list menu (the chevron) reads `leaf.view.getDisplayText()`, and a deferred leaf's view answers its `title` field (what the layout saved: `forge-phrase`); the next layout save keeps the right one.
+          if (l.view && typeof l.view.title === 'string' && l.view.title !== name) l.view.title = name;
         });
       };
       onWorkspaceMoved(nameDeferredTabs);

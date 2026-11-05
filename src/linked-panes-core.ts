@@ -91,6 +91,27 @@ export interface PaneLinkerPorts<L> {
   isReading?(leaf: L): boolean;
   /** 2026-10-26-1800: the notes pane is HELD as reading text for the default-view routers (they would turn a navigated note into its Score / Beat Box) from the moment it is made until the pair is dropped. */
   hold?(leaf: L, on: boolean): void;
+  /** 2026-11-04-1175 (B): the Score tabs the workspace holds (loaded or still deferred) and the notes panes it holds (a note shown as the READING view), each with the note path its saved state names. A reload brings the
+   *  leaves back and nothing of the in-memory pairs; these two lists are what `relink` and `open` match. Absent = no re-linking and no reuse. */
+  scoreLeaves?(): Array<RestoredLeaf<L>>;
+  readingPanes?(): Array<RestoredLeaf<L>>;
+}
+
+export interface RestoredLeaf<L> { leaf: L; path: string }
+
+/** 2026-11-04-1175 (B): which restored reading pane goes with which restored Score. THE RULE: a Score and a reading pane showing the SAME note, the first Score (in workspace order) claiming the first such pane; a leaf is in one
+ *  pair at most; a pane on another note, or in `taken`, is nobody's. (A notes pane the person had sent to another note before the reload shows that note: it is not found, and the command makes a fresh pair.) */
+export function matchRestoredPairs<L>(scores: ReadonlyArray<RestoredLeaf<L>>, panes: ReadonlyArray<RestoredLeaf<L>>, taken: ReadonlySet<L>): Array<{ score: L; notes: L; path: string }> {
+  const used = new Set<L>(taken);
+  const out: Array<{ score: L; notes: L; path: string }> = [];
+  for (const s of scores) {
+    if (used.has(s.leaf)) continue;
+    const pane = panes.find((p) => p.leaf !== s.leaf && !used.has(p.leaf) && p.path === s.path);
+    if (!pane) continue;
+    used.add(s.leaf); used.add(pane.leaf);
+    out.push({ score: s.leaf, notes: pane.leaf, path: s.path });
+  }
+  return out;
 }
 
 /** A pair is dropped only when a pane is still missing this long after it was first seen missing: one layout-change never closes it. */
@@ -106,6 +127,8 @@ export interface PaneLinker<L> {
   sweep(strict?: boolean): void;
   /** 2026-10-26-1270: a structure chip was clicked on this Score: the notes pane goes to that note. false = this Score has no pair (the caller opens the note itself). 2026-10-30-1010: `reason` is what the evidence line says caused it (default: the chip). */
   navigate(score: L, noteId: string, reason?: string): Promise<boolean>;
+  /** 2026-11-04-1175 (B): after a reload (layout ready): every restored Score with a reading pane on its note is a pair again (the pane is held as before). Returns how many pairs it made. Idempotent. */
+  relink(): number;
   /** 2026-10-31-1110: the Score leaf of the pair `leaf` belongs to, whichever of its two panes `leaf` is (the person may start a command from the notes pane); null when `leaf` is in no pair. */
   scoreOf(leaf: L): L | null;
   /** The workspace said something moved: if the PERSON navigated a notes pane (a wikilink click, a backlink), tell that pair's listeners the new path, once. A navigation the Score caused is never echoed back. */
@@ -142,11 +165,20 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
     return pair.running;
   };
 
+  const takenLeaves = (): Set<L> => { const t = new Set<L>(); for (const [score, pair] of pairs) { t.add(score); t.add(pair.notes); } return t; };
+  const adopt = (score: L, notes: L, path: string): void => {
+    pairs.set(score, { notes, scorePath: path, home: path, shown: path, want: path, reason: 'opened', busy: false, running: Promise.resolve(), missingSince: null });
+    try { ports.hold?.(notes, true); } catch (e) { ports.trace(`[forge-panes] could not hold the notes pane: ${message(e)}`); }
+    ports.trace(`[forge-panes] re-linked pair (score ${path}, notes ${path})`);
+  };
+
   return {
     async open(score, scorePath, home) {
       this.sweep(true);
       const existing = pairs.get(score);
       if (existing) { ports.focus(score); return 'focused'; }
+      const reuse = matchRestoredPairs([{ leaf: score, path: home }], ports.readingPanes?.() ?? [], takenLeaves())[0];      // 2026-11-04-1175 (B): a notes pane already beside it is that Score's, not a reason for a second one
+      if (reuse) { adopt(score, reuse.notes, home); ports.focus(score); return 'focused'; }
       let notes: L;
       try { notes = await ports.openBeside(score, home); } catch (e) { ports.trace(`[forge-panes] could not open the notes pane: ${message(e)}`); return 'failed'; }
       pairs.set(score, { notes, scorePath, home, shown: home, want: home, reason: 'opened', busy: false, running: Promise.resolve(), missingSince: null });
@@ -168,6 +200,13 @@ export function createPaneLinker<L extends object>(ports: PaneLinkerPorts<L>): P
       pair.reason = reason;
       await settle(pair);
       return true;
+    },
+    relink() {
+      if (!ports.scoreLeaves || !ports.readingPanes) return 0;
+      this.sweep(true);
+      const found = matchRestoredPairs(ports.scoreLeaves(), ports.readingPanes(), takenLeaves());
+      for (const f of found) adopt(f.score, f.notes, f.path);
+      return found.length;
     },
     scoreOf(leaf) {
       if (pairs.has(leaf)) return leaf;

@@ -310,3 +310,45 @@ test('0900 NON-VACUITY: syncButtons still registers the edges, new-note and Forg
   assert.ok(!/addAction\(\s*'puzzle'/.test(syncButtons), 'the retired chips button came back');
   assert.match(syncButtons, /addAction\(\s*'hammer'/, 'the Forge button is gone');
 });
+
+// ---- 2026-11-04-1175 (C): Restore right after typing --------------------------------------------------------------------------------------------------------------------------------------
+// Smoke 13 step 7: Restore pressed within about a second of typing said "already matches the last commit" - the editor had not saved yet, so `git status` saw the committed text - and then the edit applied.
+// The status is read AFTER the open editors of the note are flushed. This pins the MECHANISM (the flush is awaited before the status is read, in this order); if the design moves this SHOULD go red - reassess, don't just rewrite.
+import { statusAfterFlush } from './restore-note-to-git-core.ts';
+
+/** A note on a fake disk, committed as `committed`, and an editor holding `buffer` whose save lands on disk only after `delayMs` (the editor's own debounce; `save()` forces it). */
+function fakeNote(committed: string, buffer: string) {
+  const disk = { text: committed };
+  let pending: string | null = buffer;
+  const editor = { async save() { if (pending !== null) { await new Promise<void>((r) => setTimeout(r, 15)); disk.text = pending; pending = null; } } };
+  const status = (): string => (disk.text === committed ? '' : ' M phrases/phrase_001.md\n');
+  return { disk, editor, status, pending: () => pending };
+}
+
+test('the status is read after the editor has saved: a note typed on a moment ago is restorable, not "already matches"', async () => {
+  const n = fakeNote('committed', 'committed + typed');
+  const status = await statusAfterFlush({ flush: () => n.editor.save(), status: n.status });
+  assert.equal(decideRestoreNote('phrases/phrase_001.md', status).restorable, true);
+  assert.equal(n.pending(), null, 'nothing is left only in the buffer');
+});
+
+test('control: read before the flush (the old order) the same note says clean - the failure this fixes', async () => {
+  const n = fakeNote('committed', 'committed + typed');
+  const early = n.status();
+  await n.editor.save();
+  assert.equal(decideRestoreNote('phrases/phrase_001.md', early).restorable, false);
+  assert.equal(n.status() === '', false, 'and the file was changed all along');
+});
+
+test('a note with nothing typed on it is still "already matches the last commit" after the flush (no-op stays no-op)', async () => {
+  const n = fakeNote('committed', 'committed');
+  const status = await statusAfterFlush({ flush: () => n.editor.save(), status: n.status });
+  assert.deepEqual(decideRestoreNote('phrases/phrase_001.md', status), { restorable: false, reason: 'unchanged' });
+});
+
+test('a flush that fails does not stop the status: the restore goes on with what is on disk, and the failure is reported to the caller', async () => {
+  const errors: unknown[] = [];
+  const status = await statusAfterFlush({ flush: async () => { throw new Error('disk full'); }, status: () => ' M a.md\n', onFlushError: (e) => errors.push(e) });
+  assert.equal(status, ' M a.md\n');
+  assert.equal(errors.length, 1);
+});

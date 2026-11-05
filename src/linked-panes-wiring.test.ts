@@ -39,17 +39,18 @@ for (const edition of ['lean', 'music'] as const) {
     Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
   });
 
-  async function world(toml: string | null) {
+  async function world(toml: string | null, opts: { restored?: (h: { makeLeaf: (type?: string, file?: string, mode?: string) => any }) => void } = {}) {
     real ??= await bundleRealPlugin(ROOT, edition);
     const clock: HostClock = installHostClock(win);          // time moves only when a test moves it; layout-change arrives after the host's settle (test-support/host-workspace.ts)
     const tick = (ms = 60) => clock.advance(ms);
     const tf = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
     const leaves = new Set<any>();
     const log = { getLeafCalls: [] as any[], splits: [] as unknown[][], activated: [] as any[], errors: [] as unknown[][], lines: [] as string[], handlers: new Map<string, Array<() => void>>() };
-    const makeLeaf = (type = 'empty', file?: string) => {
+    const makeLeaf = (type = 'empty', file?: string, mode?: string) => {
       const leaf: any = { states: [] as any[], view: { getViewType: () => type, file: file ? tf(file) : undefined, contentEl: (() => { const el = (globalThis as any).document.createElement('div'); el.appendChild((globalThis as any).document.createElement('span')); return el; })() } };
       leaf.setViewState = async (s: any) => { leaf.states.push(s); leaf.view = { getViewType: () => s.type, file: s.state?.file ? tf(s.state.file) : undefined }; };
-      leaf.getViewState = () => ({ type: leaf.view.getViewType(), state: leaf.view.file ? { file: leaf.view.file.path } : {} });
+      leaf.mode = mode;
+      leaf.getViewState = () => ({ type: leaf.view.getViewType(), state: leaf.view.file ? { file: leaf.view.file.path, ...(leaf.mode ? { mode: leaf.mode } : {}) } : {} });
       leaf.getRoot = () => ({});
       leaves.add(leaf);
       return leaf;
@@ -77,12 +78,13 @@ for (const edition of ['lean', 'music'] as const) {
       },
       metadataCache: { resolvedLinks, on: (name: string, cb: () => void) => { (log.handlers.get(`mc:${name}`) ?? log.handlers.set(`mc:${name}`, []).get(`mc:${name}`)!).push(cb); return {}; } }, plugins: {},
     };
-    const plugin = await loadRealOnload(real, app);
-    await tick();
-    (Object.prototype as any).addAction = function () { return { remove() {} }; };       // the stand-in view base has no addAction
     const savedInfo = console.info, savedError = console.error;
     console.info = (...a: unknown[]) => { if (/^\[forge-(panes|strip)\]/.test(String(a[0]))) log.lines.push(String(a[0])); };
     console.error = (...a: unknown[]) => { log.errors.push(a); };
+    opts.restored?.({ makeLeaf });                                           // 2026-11-04-1175 (B): a reload: the layout's leaves exist BEFORE the plugin loads
+    const plugin = await loadRealOnload(real, app);
+    await tick();
+    (Object.prototype as any).addAction = function () { return { remove() {} }; };       // the stand-in view base has no addAction
     /** A phrase tab in `leaf`: the REAL PhraseView built by the registered factory. */
     const phraseTab = (leaf: any, file = PHRASE) => { const v: any = plugin.views.get(PHRASE_VIEW_TYPE)!(leaf); v.file = tf(file); v.leaf = leaf; leaf.view = v; v.getViewType = () => PHRASE_VIEW_TYPE; return v; };
     /** An arrangement tab in `leaf`: the REAL ArrangementView built by the registered factory (its note is not loaded: the tab's Score is drawn by code this wiring does not exercise). */
@@ -184,6 +186,69 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(notes.states[0].state.file, 'bars/bar_005.md');
       assert.deepEqual(w.log.errors, []);
     } finally { w.done(); }
+  });
+
+  // ---- 2026-11-04-1175 (B): the pair after a reload. The link is in memory (linked-panes-core `pairs`); a reload restores the leaves (a Score tab, a reading pane) and nothing else. ----
+  const READING_PHRASE_PANES = (h: { makeLeaf: (type?: string, file?: string, mode?: string) => any }) => ({ score: h.makeLeaf(PHRASE_VIEW_TYPE, PHRASE), notes: h.makeLeaf('markdown', PHRASE, 'preview') });
+  test(`[${edition}] RELOAD: a restored Score tab and the reading pane on the same note are one pair again when the layout is ready (one evidence line); a pin then moves that pane; "Open Score with notes" focuses it and opens no second pane`, async () => {
+    let score: any, notes: any;
+    const w = await world(SCORE_FIRST_TOML, { restored: (h) => { ({ score, notes } = READING_PHRASE_PANES(h)); } });
+    try {
+      const view = w.phraseTab(score); w.setActive({ phrase: view });          // (the evidence line is written while the plugin loads, before a test can listen: the "REUSES" test below reads the same line)
+      view.onPin(score, { noteId: 'bars/bar_005', reason: 'pinned bar 2' }); await w.tick();
+      assert.equal(notes.states.at(-1).state.file, 'bars/bar_005.md', 'the restored notes pane follows the pin');
+      await w.run();
+      assert.equal(w.log.splits.length, 0, 'no second notes pane');
+      assert.deepEqual(w.log.activated, [score], 'the pair is focused');
+      assert.deepEqual(w.log.errors, []);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] RELOAD controls: a reading pane on ANOTHER note, an EDITING pane on the same note, and a Score with no pane beside it are not a pair; the command then makes a fresh pair as before`, async () => {
+    let score: any;
+    const w = await world(SCORE_FIRST_TOML, { restored: (h) => { score = h.makeLeaf(PHRASE_VIEW_TYPE, PHRASE); h.makeLeaf('markdown', 'phrases/phrase_002.md', 'preview'); h.makeLeaf('markdown', PHRASE, 'source'); } });
+    try {
+      assert.deepEqual(w.log.lines, [], 'nothing re-linked');
+      w.setActive({ phrase: w.phraseTab(score) });
+      await w.run();
+      assert.equal(w.log.splits.length, 1, 'a fresh pair, as before');
+      assert.deepEqual(w.log.lines, [`[forge-panes] opened pair (score ${PHRASE}, notes ${PHRASE})`]);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] RELOAD: two restored Scores of different notes each get their own reading pane (a pane is claimed once); a reading pane of the same note as two Scores belongs to the first only`, async () => {
+    let a: any, an: any, b: any, bn: any;
+    const w = await world(SCORE_FIRST_TOML, { restored: (h) => { a = h.makeLeaf(PHRASE_VIEW_TYPE, PHRASE); an = h.makeLeaf('markdown', PHRASE, 'preview'); b = h.makeLeaf(PHRASE_VIEW_TYPE, 'phrases/phrase_002.md'); bn = h.makeLeaf('markdown', 'phrases/phrase_002.md', 'preview'); h.makeLeaf(PHRASE_VIEW_TYPE, PHRASE); } });
+    try {
+      const viewA = w.phraseTab(a), viewB = w.phraseTab(b, 'phrases/phrase_002.md'); w.setActive({ phrase: viewA });
+      viewA.onPin(a, { noteId: 'bars/bar_005', reason: 'pinned bar 2' }); viewB.onPin(b, { noteId: 'bars/bar_006', reason: 'pinned bar 1' }); await w.tick();
+      assert.equal(an.states.at(-1).state.file, 'bars/bar_005.md');
+      assert.equal(bn.states.at(-1).state.file, 'bars/bar_006.md');
+      const third = [...w.leaves].find((l) => l.view.getViewType() === PHRASE_VIEW_TYPE && l !== a && l !== b)!;
+      w.setActive({ phrase: w.phraseTab(third) }); await w.run();
+      assert.equal(w.log.splits.length, 1, 'the third Score has no pane of its own: the command makes one');
+      assert.deepEqual(w.log.errors, []);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] "Open Score with notes" REUSES a reading pane on the same note that is in no pair (a layout the plugin did not link) instead of opening a second one; a pane in another pair is not taken`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const score = w.makeLeaf(PHRASE_VIEW_TYPE, PHRASE); const notes = w.makeLeaf('markdown', PHRASE, 'preview');
+      w.setActive({ phrase: w.phraseTab(score) });
+      await w.run();
+      assert.equal(w.log.splits.length, 0, 'no second notes pane');
+      assert.deepEqual(w.log.lines, [`[forge-panes] re-linked pair (score ${PHRASE}, notes ${PHRASE})`]);
+      const other = w.makeLeaf(PHRASE_VIEW_TYPE, PHRASE); w.setActive({ phrase: w.phraseTab(other) });
+      await w.run();
+      assert.equal(w.log.splits.length, 1, 'the one pane belongs to the first pair: the second Score gets its own');
+      assert.notEqual(w.log.splits[0][0], notes);
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] P3: a vault that is not score-first never links, adopts or traces a pane, whatever its layout holds`, async () => {
+    const w = await world(TUTORIAL_TOML, { restored: (h) => { READING_PHRASE_PANES(h); } });
+    try { assert.deepEqual(w.log.lines, []); assert.deepEqual(w.log.splits, []); } finally { w.done(); }
   });
 
   test(`[${edition}] closing the notes pane or the Score never throws and never touches another tab; the pair is dropped with one line and the command makes a fresh one`, async () => {

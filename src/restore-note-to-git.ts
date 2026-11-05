@@ -20,7 +20,7 @@ import { App, MarkdownView, Notice, TFile } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { ConfirmModal } from './confirm-modal.ts';
 import {
-  decideRestoreNote, selectRestorablePaths, describeRestore, attemptCheckout,
+  decideRestoreNote, selectRestorablePaths, describeRestore, attemptCheckout, statusAfterFlush,
 } from './restore-note-to-git-core.ts';
 import { collectRestoreParticipants, flushRestoreParticipants, runRestoreWithHolds } from './restore-hold-core.ts';
 
@@ -41,10 +41,11 @@ function git(cwd: string, args: string[]): string {
 
 /** STEP 1 — flush. Reuses the primitive v0.2.219 added at main.ts:2550
  *  ("Forcing view.save() flushes the editor → disk SYNCHRONOUSLY"). */
-async function flushOpenEditors(app: App): Promise<void> {
+async function flushOpenEditors(app: App, onlyPaths?: readonly string[]): Promise<void> {
   for (const leaf of app.workspace.getLeavesOfType('markdown')) {
     const view = leaf.view;
     if (view instanceof MarkdownView) {
+      if (onlyPaths && !(view.file && onlyPaths.includes(view.file.path))) continue;
       try { await view.save(); } catch (e) {
         console.error('restoreToGit: view.save() failed', e);
       }
@@ -87,9 +88,15 @@ export async function restoreNoteToLastCommit(app: App, file: TFile | null | und
 
   // An edit still waiting in a Beat Box's autosave debounce is part of the note: write it first, so `git status` sees it.
   await flushRestoreParticipants(collectRestoreParticipants(), [file.path]);
+  // 2026-11-04-1175 (C): and an edit still in a text editor's buffer (typed a moment ago, not yet autosaved) is written first as well, or the status below would read the committed text and say "already matches".
   let status: string;
-  try { status = git(base, ['status', '--short', '--', file.path]); }
-  catch (e) { loggedNotice('Restore failed: this vault is not a git repository.'); return; }
+  try {
+    status = await statusAfterFlush({
+      flush: () => flushOpenEditors(app, [file.path]),
+      status: () => git(base, ['status', '--short', '--', file.path]),
+      onFlushError: (e) => { console.error('restoreNoteToLastCommit: flushing the editor failed', e); },
+    });
+  } catch (e) { loggedNotice('Restore failed: this vault is not a git repository.'); return; }
 
   const decision = decideRestoreNote(file.path, status);
   if (decision.restorable === false) {

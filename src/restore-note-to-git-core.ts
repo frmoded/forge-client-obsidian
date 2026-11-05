@@ -134,3 +134,10 @@ export function attemptCheckout(runCheckout: () => void): CheckoutOutcome {
     return { ok: false, noticeText: `Restore failed: ${raw}` };
   }
 }
+
+/** 2026-11-04-1175 (C): the status the restore decides on is read AFTER the open editors of the note have saved. An editor keeps a keystroke in its buffer until its own debounce fires (about two seconds); a `git status` read
+ *  before that sees the committed text and answers "already matches the last commit" - and the typed edit then lands. A flush that fails is reported, never fatal: the restore goes on with what is on disk. */
+export async function statusAfterFlush(p: { flush(): Promise<void>; status(): string; onFlushError?(e: unknown): void }): Promise<string> {
+  try { await p.flush(); } catch (e) { p.onFlushError?.(e); }
+  return p.status();
+}
