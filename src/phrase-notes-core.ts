@@ -8,6 +8,7 @@ import { complementOf100, describe, percentOf, plain } from './phrase-describe-c
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
 import { parseFrontmatter, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
+import { barOriginOf, withBarProvenance } from './bar-provenance-core.ts';
 import { extractDescription, extractPythonSection, extractRecipeSection } from './v2-note-core.ts';
 
 export const DERIVED_NOTE = '<!-- derived from the json below; edit the controls, not this text -->';
@@ -436,7 +437,9 @@ export function refreshBarNoteText(text: string, name: string): { ok: true; text
     handWritten = true;
     return line;
   });
-  const next = `---${front.eol}${lines.join(front.eol)}${text.slice(front.eol.length + 3 + front.lines.join(front.eol).length)}`;
+  const frontRefreshed = `---${front.eol}${lines.join(front.eol)}${text.slice(front.eol.length + 3 + front.lines.join(front.eol).length)}`;
+  // M17a (2026-11-05-1182): the bar's provenance sections (where it came from), written in the same refresh: a bar that has none gets them, one that has them gets them derived again from its (unchanged) origin and its data.
+  const next = withBarProvenance(frontRefreshed, barOriginOf(frontRefreshed), read.value.data);
   return { ok: true, text: next, changed: next !== text, ...(handWritten ? { kept: 'hand-written' as const } : {}) };
 }
 

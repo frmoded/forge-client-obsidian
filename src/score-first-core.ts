@@ -3,7 +3,8 @@
 // Everything that is score-first is gated by ONE question, answered by vault-profile-core.ts#isScoreFirstVault. The functions here take that answer as an input and
 // return what to do; for a vault that is NOT score-first each of them returns the "as before" answer (nothing to add), which is what the P3 test pins.
 
-import { RHYTHM_CHOICE, dataNoteContent } from './new-note-core.ts';
+import { RHYTHM_CHOICE, RHYTHM_STARTER, dataNoteContent } from './new-note-core.ts';
+import { withBarProvenance } from './bar-provenance-core.ts';
 
 export const BAR_FOLDER = 'bars';
 const BAR_NAME = /^bar_(\d+)$/;
@@ -39,7 +40,7 @@ export function planNewBar(input: { existingBasenames: Iterable<string>; exists:
   for (let i = 0; i < attempts; i++) {
     const name = nextBarName(taken);
     const path = barPath(name);
-    if (!input.exists(path)) return { ok: true, name, path, content: dataNoteContent(name, RHYTHM_CHOICE) };
+    if (!input.exists(path)) return { ok: true, name, path, content: withBarProvenance(dataNoteContent(name, RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER) };
     taken.add(name);
   }
   return { ok: false, message: `Could not find a free bar name in ${BAR_FOLDER}/ — try again.` };

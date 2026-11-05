@@ -52,9 +52,10 @@ test('trust: a malformed widget message is dropped with a warning and never reac
 });
 
 test('write: the note is changed only through ONE atomic vault.process, whose callback validates (session.apply) and aborts by throwing', () => {
+  // pins the MECHANISM (the callback runs session.apply, passing keepBarProvenance so a bar that carries its provenance sections gets them kept current in the same write); if the design moves this SHOULD go red - reassess, don't just rewrite
   const body = code(view);
   assert.equal([...body.matchAll(/vault\.process\(/g)].length, 1);
-  assert.match(body, /vault\.process\(file, \(current\) => \{\s*const result = session\.apply\(current, payload\);\s*if \(result\.ok === false\) throw new RhythmSaveRefused\(result\.kind, result\.message\);/);
+  assert.match(body, /vault\.process\(file, \(current\) => \{\s*const result = session\.apply\(current, payload, keepBarProvenance\);\s*if \(result\.ok === false\) throw new RhythmSaveRefused\(result\.kind, result\.message\);/);
   for (const forbidden of ['vault.modify(', 'vault.create(', 'vault.append(', 'adapter.write(', 'adapter.append(', 'vault.delete(', 'vault.rename(', 'fileManager.processFrontMatter(']) {
     assert.ok(!body.includes(forbidden), `the view must not call ${forbidden}`);
   }

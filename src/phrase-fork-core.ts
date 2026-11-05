@@ -5,6 +5,7 @@
 //   Revert to generated   removes the override from the phrase JSON; the fork note stays (nothing in this milestone deletes a note).
 // Pure: the vault and the UI are injected (same shape as `createNewBar` / `createNewMix`); nothing here knows about Obsidian. Not an asker of the profile: the gate is an input to whoever offers the action.
 import { formatRhythmJson, type RhythmData } from './rhythm-edit-core.ts';
+import { withBarProvenance } from './bar-provenance-core.ts';
 import type { ExtendPhrase, MorphPhrase } from './phrase-core.ts';
 
 /** The phrases that can fork a bar: both hold `bars` and `overrides`. */
@@ -23,7 +24,7 @@ function nextBarName(existing: Iterable<string>): string {
  *  every other byte, so the line survives edits). */
 export function forkNoteContent(name: string, phraseNoteId: string, barNumber: number, data: RhythmData): string {
   const phraseName = phraseNoteId.split('/').pop() ?? phraseNoteId;
-  return [
+  return withBarProvenance([
     '---',
     'type: data',
     'content_type: json',
@@ -36,7 +37,7 @@ export function forkNoteContent(name: string, phraseNoteId: string, barNumber: n
     formatRhythmJson(data),
     '```',
     '',
-  ].join('\n');
+  ].join('\n'), { kind: 'fork', phrase: phraseName, bar: barNumber }, data);   // M17a: and where it came from, in the same write (# Description, # Recipe)
 }
 
 /** Is "Edit this bar" offered for this bar: a bar of the phrase that is not already a fork. */

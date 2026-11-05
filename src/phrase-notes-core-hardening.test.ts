@@ -163,25 +163,29 @@ test('refreshing a bar: what cannot be read is refused with the reason and nothi
   const r = refreshBarNoteText(text, 'bar_001');
   assert.ok(r.ok);
   if (!r.ok) return;
-  assert.equal(r.text, text, 'untouched');
-  assert.equal(r.changed, false);
+  // (M17a: the refresh also writes the provenance sections, so the NOTE changes once; the frontmatter line is left exactly as it was and a second refresh changes nothing)
+  assert.ok(r.text.includes('description: not json at all\n'), 'the line is untouched');
+  assert.equal(r.changed, true);
   assert.equal('kept' in r, false, 'a line that is not even JSON is neither derived nor reported as a person\'s words');
+  const again = refreshBarNoteText(r.text, 'bar_001');
+  assert.ok(again.ok && !again.changed && again.text === r.text);
 });
 
 test('refreshing a bar: a description a person wrote is kept and reported as hand-written; a generated one is derived again; a note with no description is left alone', () => {
   const mine = bar('description: "bar_001 — my words."\n');
   const kept = refreshBarNoteText(mine, 'bar_001');
-  assert.ok(kept.ok && kept.kept === 'hand-written' && !kept.changed && kept.text === mine);
+  assert.ok(kept.ok && kept.kept === 'hand-written' && kept.text.includes('description: "bar_001 — my words."\n'), 'the person\'s description is kept word for word');
+  if (kept.ok) { const again = refreshBarNoteText(kept.text, 'bar_001'); assert.ok(again.ok && again.kept === 'hand-written' && !again.changed && again.text === kept.text, 'and the second refresh changes nothing'); }
   const stale = bar('description: "bar_001 — a one-bar rhythm for the Beat Box: no hits in 8 steps, tempo 100."\n');
   const fresh = refreshBarNoteText(stale, 'bar_001');
   assert.ok(fresh.ok && fresh.changed && !('kept' in fresh));
   if (fresh.ok) assert.ok(fresh.text.includes('description: "bar_001 — a one-bar rhythm for the Beat Box: 1 hit in 8 steps (kick 1), tempo 100."\n'));
   const none = bar('');
   const same = refreshBarNoteText(none, 'bar_001');
-  assert.ok(same.ok && !same.changed && !('kept' in same));
+  assert.ok(same.ok && !('kept' in same) && !/^description:/m.test(same.text), 'no description is invented for a note that has none');
   const prefix = bar('descriptionx: "kept"\n');
   const p = refreshBarNoteText(prefix, 'bar_001');
-  assert.ok(p.ok && p.text === prefix && !('kept' in p), 'only a line that starts with "description:" is a description');
+  assert.ok(p.ok && p.text.includes('descriptionx: "kept"\n') && !/^description:/m.test(p.text) && !('kept' in p), 'only a line that starts with "description:" is a description');
 });
 
 test('refreshing a bar: the old fork description and forked_from become wikilinks, word for word', () => {
@@ -207,5 +211,5 @@ test('refreshing a bar that cannot be read as rhythm data is refused with the re
 test('refreshing a bar: only a line that STARTS with "description:" is looked at; a stray line that happens to be JSON is not mistaken for one', () => {
   const stray = bar('"bar_001 — a one-bar rhythm for the Beat Box: no hits in 8 steps, tempo 100."\n0123456789ab"zzz"\n');
   const r = refreshBarNoteText(stray, 'bar_001');
-  assert.ok(r.ok && !r.changed && r.text === stray && !('kept' in r), 'neither rewritten nor reported');
+  assert.ok(r.ok && !('kept' in r) && r.text.includes('"bar_001 — a one-bar rhythm for the Beat Box: no hits in 8 steps, tempo 100."\n0123456789ab"zzz"\n'), 'neither rewritten nor reported (the two stray lines are kept word for word)');
 });

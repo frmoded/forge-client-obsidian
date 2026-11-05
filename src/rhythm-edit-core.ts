@@ -274,6 +274,8 @@ export function parseFrontmatter(text: string): ParsedNote | null {
 }
 
 export interface JsonBlock {
+  /** Index of the first character of the opening fence line (the ```json line): what is above it is the frontmatter and, in a bar that carries its provenance, the derived sections. */
+  fenceStart: number;
   /** Index of the first character of the block's content (just after the opening fence line). */
   contentStart: number;
   /** Index just past the block's last content character (just before the newline that precedes the closing fence). */
@@ -282,21 +284,40 @@ export interface JsonBlock {
   eol: string;
 }
 
+/** 2026-11-05-1182 (M17a): the ONE thing allowed above a bar's json fence: the bar's derived provenance, an optional one-line HTML comment, then `# Description` and `# Recipe` (each a heading line, then text with no
+ *  fence in it), nothing else. Narrow on purpose: any other prose, another heading or another fence above the block is still refused, so a note that is not a bar the plugin wrote is read exactly as it always was. */
+export function isBarProvenancePrefix(prefix: string): boolean {
+  if (prefix.includes('```')) return false;
+  const lines = prefix.split(/\r?\n/);
+  let i = 0;
+  const skipBlank = () => { while (i < lines.length && lines[i].trim() === '') i++; };
+  skipBlank();
+  if (i < lines.length && /^<!--.*-->[ \t]*$/.test(lines[i])) { i++; skipBlank(); }
+  if (i >= lines.length || lines[i].trimEnd() !== '# Description') return false;
+  const headings = lines.slice(i + 1).filter((l) => l.startsWith('#'));
+  return headings.length === 1 && headings[0].trimEnd() === '# Recipe';          // exactly one more heading, and it is the Recipe: no other heading, no Python, nothing above the Description
+}
+
 /** Locate THE fenced json block. The body must be exactly one fenced json block plus optional whitespace — anything else (prose,
- *  a second block, another fence language, an unclosed block) is refused: the write never guesses where to put the data. */
+ *  a second block, another fence language, an unclosed block) is refused: the write never guesses where to put the data. The one exception is
+ *  a bar's own derived provenance sections ABOVE the block (BAR_PROVENANCE_PREFIX); nothing is ever allowed after it. */
 export function extractJsonBlock(text: string): ({ ok: true } & JsonBlock) | { ok: false; message: string } {
   const fm = parseFrontmatter(text);
   if (!fm) return { ok: false, message: 'The note has no frontmatter, so it is not a data note.' };
   const body = text.slice(fm.bodyStart);
-  const open = /^\s*```json[ \t]*(\r?\n)/.exec(body);
-  if (!open) return { ok: false, message: 'The note body must be exactly one fenced ```json block (found something else before it, or no json block).' };
-  const contentStart = fm.bodyStart + open[0].length;
+  const open = /^[ \t]*```json[ \t]*(\r?\n)/m.exec(body);
+  const refusal = { ok: false as const, message: 'The note body must be exactly one fenced ```json block (found something else before it, or no json block).' };
+  if (!open) return refusal;
+  const before = body.slice(0, open.index);
+  if (before.trim() !== '' && !isBarProvenancePrefix(before)) return refusal;
+  const fenceStart = fm.bodyStart + open.index;
+  const contentStart = fm.bodyStart + open.index + open[0].length;
   const close = /\r?\n```[ \t]*(?=\r?\n|$)/.exec(text.slice(contentStart));
   if (!close) return { ok: false, message: 'The json block is not closed.' };
   const contentEnd = contentStart + close.index;
   const rest = text.slice(contentStart + close.index + close[0].length);
   if (rest.trim() !== '') return { ok: false, message: 'The note has text after the json block; it must contain exactly one fenced json block and nothing else.' };
-  return { ok: true, contentStart, contentEnd, eol: open[1] };
+  return { ok: true, fenceStart, contentStart, contentEnd, eol: open[1] };
 }
 
 /** Why this note cannot be edited, or null if it can: a data note, content_type json, not read_only (constitution D7). */
@@ -355,7 +376,7 @@ export type SaveResult =
  * Order: the payload is validated first (nothing is ever written for invalid data), then staleness, then whether the note is
  * still an editable rhythm note; only the json block's content changes — every other byte is kept.
  */
-export function applySave(currentText: string, fingerprintAtLoad: string, payload: unknown): SaveResult {
+export function applySave(currentText: string, fingerprintAtLoad: string, payload: unknown, derive?: (text: string, data: RhythmData) => string): SaveResult {
   const valid = validateRhythmData(payload);
   if (valid.ok === false) return { ok: false, kind: 'invalid', message: `Not saved: ${valid.message}` };
   if (contentFingerprint(currentText) !== fingerprintAtLoad) {
@@ -366,7 +387,9 @@ export function applySave(currentText: string, fingerprintAtLoad: string, payloa
   const block = extractJsonBlock(currentText);
   if (block.ok === false) return { ok: false, kind: 'refused', message: `Not saved: ${block.message}` };
   const json = formatRhythmJson(valid.value).replace(/\n/g, block.eol);
-  return { ok: true, text: currentText.slice(0, block.contentStart) + json + currentText.slice(block.contentEnd) };
+  const written = currentText.slice(0, block.contentStart) + json + currentText.slice(block.contentEnd);
+  // `derive` (M17a, bar provenance): in the SAME write, a bar that carries derived sections gets them kept current with the data just saved; a note that carries none comes out byte for byte as it did.
+  return { ok: true, text: derive ? derive(written, valid.value) : written };
 }
 
 // ---- command availability --------------------------------------------------------------------------------------
@@ -411,8 +434,8 @@ export class RhythmNoteSession {
   }
 
   /** Run inside the atomic read-modify-write. Same decision as applySave, plus it records what we are about to write. */
-  apply(currentText: string, payload: unknown): SaveResult {
-    const result = applySave(currentText, this.baseline, payload);
+  apply(currentText: string, payload: unknown, derive?: (text: string, data: RhythmData) => string): SaveResult {
+    const result = applySave(currentText, this.baseline, payload, derive);
     if (result.ok) this.expected = contentFingerprint(result.text);
     return result;
   }

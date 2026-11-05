@@ -7,6 +7,7 @@ import {
 } from './score-first-core.ts';
 import { RHYTHM_CHOICE, RHYTHM_STARTER, dataNoteContent, rhythmNoteTemplate } from './new-note-core.ts';
 import { decideDefaultView, type DefaultViewInput } from './rhythm-default-view-core.ts';
+import { withBarProvenance } from './bar-provenance-core.ts';
 import { formatRhythmJson, readRhythmNote } from './rhythm-edit-core.ts';
 
 // ---- names -----------------------------------------------------------------------------------------------------------------------
@@ -47,8 +48,11 @@ test('planNewBar: the next free name, its path, and exactly the starter "New For
   if (plan.ok !== true) return;
   assert.equal(plan.name, 'bar_002');
   assert.equal(plan.path, 'bars/bar_002.md');
-  assert.equal(plan.content, dataNoteContent('bar_002', RHYTHM_CHOICE), 'ONE decision function for the starter content');
-  assert.equal(plan.content, rhythmNoteTemplate('bar_002'));
+  // M17a (2026-11-05-1182): the starter is still ONE decision function's note (the same frontmatter and the same json fence, byte for byte); a New bar also says where it came from, above the fence
+  assert.equal(plan.content, withBarProvenance(dataNoteContent('bar_002', RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER));
+  assert.equal(plan.content, withBarProvenance(rhythmNoteTemplate('bar_002'), { kind: 'beatbox' }, RHYTHM_STARTER));
+  assert.equal(plan.content.slice(plan.content.indexOf('```json')), rhythmNoteTemplate('bar_002').slice(rhythmNoteTemplate('bar_002').indexOf('```json')), 'the json fence and what follows it are the starter\'s own');
+  assert.match(plan.content, /\n# Description\n\nBar made in the Beat Box; 4 hits in 16 steps, tempo 100\.\n\n# Recipe\n\nDraw the bar in the Beat Box\.\n\n```json/);
 });
 
 test('the starter is a valid rhythm note that opens in the Beat Box: 4/4, 16 steps, kick and snare', () => {
@@ -163,7 +167,7 @@ test('createNewBar: the starter content is the Rhythm (Beat Box) note, written e
   const orig = r.ports.create;
   r.ports.create = async (p, c) => { contents.push(c); return orig(p, c); };
   await createNewBar(r.ports);
-  assert.deepEqual(contents, [rhythmNoteTemplate('bar_001')]);
+  assert.deepEqual(contents, [withBarProvenance(rhythmNoteTemplate('bar_001'), { kind: 'beatbox' }, RHYTHM_STARTER)], 'the Rhythm (Beat Box) starter with its provenance, written once');
 });
 
 test('createNewBar: a name taken in the same instant ("File already exists.") tries the NEXT number, with no notice', async () => {

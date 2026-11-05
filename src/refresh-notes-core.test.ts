@@ -60,8 +60,12 @@ test('a hand-written bar description is kept and counted; a note it cannot read 
   assert.match(s.phrases.skipped.join('|'), /phrases\/phrase_002\.md: The json block is not valid JSON/);
   assert.match(s.phrases.skipped.join('|'), /phrases\/phrase_003\.md: disk full/);
   assert.equal(v.store.get('phrases/phrase_002.md'), before);
-  assert.equal(refreshLine(s), '[forge-notes] refresh note links: phrases 3 (0 updated, 1 already current), bars 1 (0 updated, 1 already current, 1 descriptions left as written), 2 skipped');
-  assert.match(refreshNotice(s), /^Refresh note links: every note was already up to date; 2 could not be read \(phrases\/phrase_002\.md: /);
+  // (M17a, 2026-11-05-1182: the first refresh of a bar also writes its provenance sections, so this bar counts as updated once; its hand-written description is still left as written)
+  assert.equal(refreshLine(s), '[forge-notes] refresh note links: phrases 3 (0 updated, 1 already current), bars 1 (1 updated, 0 already current, 1 descriptions left as written), 2 skipped');
+  assert.match(v.store.get('bars/bar_001.md')!, /^description: "bar_001 — my own words\."$/m, 'the person\'s description is kept word for word');
+  const second = await refreshNoteLinks(v.ports);
+  assert.equal(second.bars.updated, 0, 'and the second refresh writes no bar');
+  assert.match(refreshNotice(second), /^Refresh note links: every note was already up to date; 2 could not be read \(phrases\/phrase_002\.md: /);
 });
 
 test('the notice says what changed', async () => {
@@ -146,7 +150,10 @@ test('Refresh note links and the Recipe: a Recipe a person typed (not applied ye
   assert.ok(!v.writes.includes('phrases/phrase_002.md'), 'a Recipe-sourced note that is current is not written');
   assert.ok(v.writes.includes('phrases/phrase_003.md'), 'a drifted derived part is repaired');
   assert.match(v.store.get('phrases/phrase_003.md')!, /^source_facet: recipe$/m, 'and the note stays Recipe-sourced');
+  assert.ok(v.writes.includes('bars/bar_007.md'), 'the bar gets its provenance sections once (M17a)');
+  const written = [...v.writes];
   const again = await refreshNoteLinks(v.ports);
-  assert.deepEqual(v.writes, ['phrases/phrase_003.md'], 'a second run writes nothing more');
+  assert.deepEqual(v.writes, written, 'a second run writes nothing more');
   assert.equal(again.phrases.updated, 0);
+  assert.equal(again.bars.updated, 0);
 });

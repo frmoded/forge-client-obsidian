@@ -56,8 +56,13 @@ test('hand-written descriptions are counted only for the bars that have one; cur
     'bars/bar_004.md': bar(null),
   });
   const sum = await refreshNoteLinks(v.ports);
-  assert.deepEqual(sum.bars, { total: 4, updated: 1, current: 3, keptAsWritten: 1, skipped: [] });
-  assert.deepEqual(v.writes, ['bars/bar_003.md']);
+  // (M17a, 2026-11-05-1182: the first refresh also writes each bar's provenance sections, so all four bars are updated once, the one that has a hand-written description among them; the counts are still apart: a second run has them all current)
+  assert.deepEqual(sum.bars, { total: 4, updated: 4, current: 0, keptAsWritten: 1, skipped: [] });
+  assert.deepEqual(v.writes.sort(), ['bars/bar_001.md', 'bars/bar_002.md', 'bars/bar_003.md', 'bars/bar_004.md']);
+  v.writes.length = 0;
+  const again = await refreshNoteLinks(v.ports);
+  assert.deepEqual(again.bars, { total: 4, updated: 0, current: 4, keptAsWritten: 1, skipped: [] }, 'migrated: current, and the hand-written one is still counted as such');
+  assert.deepEqual(v.writes, []);
 });
 
 test('the evidence line and the Notice, word for word, with and without skipped notes', () => {

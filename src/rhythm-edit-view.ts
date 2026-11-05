@@ -38,6 +38,7 @@ import { headerActionShown } from './header-actions-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { isKitPath } from './kit-core.ts';
+import { keepBarProvenance } from './bar-provenance-core.ts';
 import { kitChoices, type KitChoice } from './kit-picker-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { rhythmHeaderApplies, wantsPhraseHeader } from './phrase-header-core.ts';
@@ -342,7 +343,7 @@ export class RhythmEditView extends EditableFileView {
     if (!session) return { ok: false, kind: 'error', message: 'Not saved: no note is open' };
     try {
       await this.app.vault.process(file, (current) => {
-        const result = session.apply(current, payload);
+        const result = session.apply(current, payload, keepBarProvenance);   // M17a: a bar that carries its provenance sections gets them kept current in this same write
         if (result.ok === false) throw new RhythmSaveRefused(result.kind, result.message);
         return result.text;
       });

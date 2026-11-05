@@ -176,7 +176,9 @@ test('refreshing a bar: a starter description that no longer matches the hits is
   assert.ok(again.ok && !again.changed && again.text === r.text);
   const mine = STARTER('bar_007').replace(/description: .*/, 'description: "bar_007 — my own words about this groove."');
   const kept = refreshBarNoteText(mine, 'bar_007');
-  assert.ok(kept.ok && !kept.changed && kept.text === mine, 'hand-written description: untouched');
+  // (M17a, 2026-11-05-1182: a refresh also writes the bar's provenance sections, so the first refresh changes the NOTE; the property is that the frontmatter description is untouched and the second refresh changes nothing)
+  assert.ok(kept.ok && kept.kept === 'hand-written' && kept.text.includes('description: "bar_007 — my own words about this groove."\n'), 'hand-written description: untouched');
+  if (kept.ok) { const kept2 = refreshBarNoteText(kept.text, 'bar_007'); assert.ok(kept2.ok && !kept2.changed && kept2.text === kept.text); }
   const oldFork = `---\ntype: data\ncontent_type: json\ndescription: "bar_009 — forked from phrases/phrase_001 bar 3 to edit by hand. The phrase shows this bar instead of the generated one."\nforked_from: "phrases/phrase_001 bar 3"\n---\n\n\`\`\`json\n${formatRhythmJson(BAR_DATA)}\n\`\`\`\n`;
   const fork = refreshBarNoteText(oldFork, 'bar_009');
   assert.ok(fork.ok && fork.changed);
