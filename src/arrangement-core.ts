@@ -8,7 +8,7 @@ import { barsOfPayload, producePhrase, readPhraseNote, type PhraseScoreDeps } fr
 import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
 import { produceCustomScore, type CustomDeps } from './custom-note-core.ts';
 import { describe } from './phrase-describe-core.ts';
-import type { RhythmData } from './rhythm-edit-core.ts';
+import { RHYTHM_CHANNELS, type RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { KIT_NAME_PATTERN, kitPath, readKitNote, type KitParams } from './kit-core.ts';
 import { FORGE_PHRASES_KEY } from './arrangement-nav-core.ts';
@@ -200,6 +200,30 @@ export function combineRefusal(message: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * 2026-11-05 (smoke 13 E): the engine's `combine_tracks` keeps only the channels a kit has, so a phrase of kick and snare on a kit of bell, claves and congas leaves every bar with no channel at all, and the engine's drawing then
+ * refuses in words about its own insides ("channels must be a non-empty dict"). Said here first, in one sentence, before the engine round trip: when NO sounding track puts any channel of its phrase on its kit. A track that is silent
+ * while another plays is not a refusal (the engine keeps that behaviour); a muted track or volume 0 is not judged (the engine's `sounds` rule, as `nothingPlays`); all muted is `ALL_MUTED`'s business. The engine says the same
+ * thing in its own wording (`combine_tracks: kit '...' has none of the channels ...`), for every caller that is not this one. null = nothing to say.
+ */
+export function noSharedChannelRefusal(tracks: ArrangementInput['tracks']): string | null {
+  const anySolo = tracks.some((t) => t.solo === true);
+  const sounding = tracks.filter((t) => t.volume !== 0 && (t.solo === true || (!anySolo && t.mute !== true)));
+  if (sounding.length === 0) return null;
+  const rows = (t: ArrangementInput['tracks'][number]): string[] => {
+    const named = new Set<string>();
+    for (const bar of t.bars) for (const c of Object.keys(bar.channels ?? {})) named.add(c);
+    return [...RHYTHM_CHANNELS.filter((c) => named.has(c)), ...[...named].filter((c) => !(RHYTHM_CHANNELS as readonly string[]).includes(c))];
+  };
+  const empty = sounding.filter((t) => !rows(t).some((c) => t.channels.includes(c)));
+  if (empty.length < sounding.length) return null;
+  const said = empty.map((t) => {
+    const phrase = t.phrase !== undefined && t.phrase !== '';
+    return `nothing of ${phrase ? t.phrase : 'its bars'} can play on the kit ${t.kit}: the ${phrase ? 'phrase uses' : 'bars use'} ${rows(t).join(', ')} and the kit has ${t.channels.join(', ')}.`;
+  });
+  return `Arrangement: ${said.join(' ')} Choose a kit that has one of them.`;
+}
+
 /** The Score of an arrangement note: every kit and phrase is read FRESH and each phrase is drawn by the same code that draws every phrase tab (so any kind of phrase works); the engine merges the bars. A kit or
  *  phrase that is missing or unusable, or two tracks the engine refuses to play together, is a refusal naming which and why. */
 export async function produceArrangement(deps: ArrangementDeps, note: string | { unreadable: string }, title: string): Promise<ScoreOutcome> {
@@ -219,6 +243,8 @@ export async function produceArrangement(deps: ArrangementDeps, note: string | {
     phrasesRead[track.phrase] = params;
     tracks.push({ kit: kit.name, channels: kit.channels, bars, phrase: track.phrase, ...(track.mute !== undefined ? { mute: track.mute } : {}), ...(track.solo !== undefined ? { solo: track.solo } : {}), ...(track.volume !== undefined ? { volume: track.volume } : {}) });
   }
+  const noShared = noSharedChannelRefusal(tracks);                                          // before the engine round trip: nothing of the phrase can play on the kit
+  if (noShared !== null) return { kind: 'refusal', message: noShared };
   let refused: string | null = null;
   const outcome = await computeScore(async (_data, t) => {
     try {

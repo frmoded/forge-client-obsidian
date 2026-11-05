@@ -216,3 +216,31 @@ test('a kit a phrase does not play is simply silent: a kit with a channel the ph
   const rows = Object.keys(barsOfPayload(out.payload)![0].channels);
   assert.ok(!rows.includes('bell') && !rows.includes('conga_high'));
 });
+
+// 2026-11-05 (smoke 13 E, drain 1178), on the BUNDLED engine (assets/engine, synced from forge/music/lib.py): a phrase of kick and snare on the latin kit. The plugin says it first (noSharedChannelRefusal, before the round trip);
+// the engine says it too, in its own wording, for every caller that is not this one - and what the person saw before (`channels must be a non-empty dict`) is gone from both.
+test('a phrase that shares no channel with its kit: the plugin refuses first in its own sentence; asked directly, the bundled engine refuses in the engine\'s own sentence; neither says rhythm_data_to_stream; the mixed arrangement is unchanged', async () => {
+  const py = await engine();
+  const lonely = vault({ latin: LATIN });
+  lonely['arrangements/arr_001.md'] = newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'latin', phrase: 'phrase_003' }] });      // phrase_003 is the rock phrase of bar_007: kick, snare, hihat
+  const plugin = await produceArrangement(deps(py, lonely), lonely['arrangements/arr_001.md'], 'arr_001');
+  assert.deepEqual(plugin, { kind: 'refusal', message: 'Arrangement: nothing of phrase_003 can play on the kit latin: the phrase uses kick, snare, hihat and the kit has bell, claves, conga_high, conga_low. Choose a kit that has one of them.' });
+  // the engine alone (the plugin's pre-check bypassed on purpose): its own sentence, in the bundle
+  const barsOfRock = barJson(barText('bar_007'));
+  const direct = await py.runPythonAsync(`
+import json
+from forge.music import lib
+bar = json.loads(${JSON.stringify(JSON.stringify(barsOfRock))})
+try:
+  lib.combine_tracks([{"kit": "latin", "channels": ["bell", "claves", "conga_high", "conga_low"], "bars": [bar], "phrase": "phrase_003"}])
+  out = "no refusal"
+except ValueError as e:
+  out = str(e)
+out
+`);
+  assert.equal(direct, "combine_tracks: kit 'latin' has none of the channels phrase 'phrase_003' uses (kick, snare, hihat); the kit has bell, claves, conga_high, conga_low.");
+  // the mixed arrangement: the latin phrase of bar_008 shares claves, conga_low with its kit, rock plays: a Score, as before
+  const mixed = vault();
+  const ok = await produceArrangement(deps(py, mixed), mixed['arrangements/arr_001.md'], 'arr_001');
+  assert.equal(ok.kind, 'score');
+});

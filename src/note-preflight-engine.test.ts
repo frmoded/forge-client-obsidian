@@ -63,3 +63,22 @@ test('New phrase (extend) of a 12-step bar: the engine\'s extend_rhythm refuses 
   const out = await producePhraseNote(deps, noteContentFor('phrase_099', extend('bar_009')), 'phrase_099');
   assert.deepEqual(out, { kind: 'refusal', message: 'Phrase: bar_009 has 12 steps; extend needs a 16-step bar.' });
 });
+
+// ---- 2026-11-05 (smoke 13 E, drain 1178): New arrangement of a phrase on a kit it shares no channel with, on the REAL engine -----------------------------------------------------------------
+import { createArrangement } from './kit-arrangement-flow-core.ts';
+import { KIT_FOLDER, newKitNote } from './kit-core.ts';
+
+test('New arrangement: phrase_001 (kick, snare) on the latin kit is refused BEFORE a note is written, in the plugin\'s sentence naming the phrase, the kit and both channel lists - not in the engine\'s words about rhythm_data_to_stream; on the rock kit it is written', async () => {
+  const py = await engine();
+  const w = world(py);
+  w.files.set(`${KIT_FOLDER}/latin.md`, newKitNote({ kind: 'kit', name: 'latin', channels: ['bell', 'claves', 'conga_high', 'conga_low'] } as never));
+  w.files.set(`${KIT_FOLDER}/rock.md`, newKitNote({ kind: 'kit', name: 'rock', channels: ['kick', 'snare', 'hihat'] } as never));
+  const r = await createArrangement(w.ports as never, [{ kit: 'latin', phrase: 'phrase_001' }]);
+  // (the preflight drops the "Arrangement: " lead of the Score's refusal: the dialog already says which command refused)
+  assert.deepEqual(r, { ok: false, message: 'nothing of phrase_001 can play on the kit latin: the phrase uses kick, snare and the kit has bell, claves, conga_high, conga_low. Choose a kit that has one of them.' });
+  assert.doesNotMatch(JSON.stringify(r), /rhythm_data_to_stream|non-empty dict/);
+  assert.deepEqual([w.writes, w.folders], [[], []], 'nothing written, not even the folder');
+  assert.equal(w.notices.length, 1);
+  const ok = await createArrangement(w.ports as never, [{ kit: 'rock', phrase: 'phrase_001' }]);
+  assert.equal(ok.ok, true, JSON.stringify(ok)); assert.deepEqual(w.writes, ['arrangements/arr_001.md']);
+});

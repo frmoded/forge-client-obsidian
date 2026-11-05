@@ -397,3 +397,45 @@ test('produceArrangement with every kit muted answers ALL_MUTED from the note al
   const bad = await produceArrangement(deps, text.replace('"kind": "arrangement"', '"kind": "nope"'), 'arr_001');
   assert.equal(bad.kind, 'refusal'); assert.notEqual((bad as { message: string }).message, ALL_MUTED);
 });
+
+// ---- 2026-11-05 (smoke 13 E, drain 1178): a phrase that shares no channel with its kit says so, before the engine round trip -----------------------------------------------------------------
+import { noSharedChannelRefusal } from './arrangement-core.ts';
+
+const SAYS = 'Arrangement: nothing of phrase_003 can play on the kit latin: the phrase uses kick, snare, hihat and the kit has bell, claves, conga_high, conga_low. Choose a kit that has one of them.';
+const barOf = (...channels: string[]) => ({ time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 100, channels: Object.fromEntries(channels.map((c) => [c, Array(16).fill(false)])) }) as any;
+const trackOf = (kit: string, channels: string[], phrase: string | undefined, bars: any[], more: Record<string, unknown> = {}) => ({ kit, channels, bars, ...(phrase ? { phrase } : {}), ...more }) as ArrangementInput['tracks'][number];
+const LATIN_CH = ['bell', 'claves', 'conga_high', 'conga_low'];
+
+test('noSharedChannelRefusal: the phrase of kick, snare, hihat on the latin kit is one sentence naming phrase, kit and both channel lists; rock is fine', () => {
+  assert.equal(noSharedChannelRefusal([trackOf('latin', LATIN_CH, 'phrase_003', [barOf('kick', 'snare', 'hihat')])]), SAYS);
+  assert.equal(noSharedChannelRefusal([trackOf('rock', ['kick', 'snare', 'hihat'], 'phrase_003', [barOf('kick', 'snare', 'hihat')])]), null);
+});
+
+test('noSharedChannelRefusal: a track that is silent while another plays is NOT a refusal; muted tracks are not judged; a solo track alone is; the channels are listed in the engine\'s order whatever the bars say', () => {
+  const rock = trackOf('rock', ['kick', 'snare', 'hihat'], 'phrase_003', [barOf('kick', 'snare')]);
+  const latinSilent = trackOf('latin', LATIN_CH, 'phrase_009', [barOf('kick')]);
+  assert.equal(noSharedChannelRefusal([rock, latinSilent]), null, 'rock plays: the mixed arrangement works as it did');
+  assert.equal(noSharedChannelRefusal([rock, { ...latinSilent, mute: true }]), null, 'a muted one is not judged');
+  assert.equal(noSharedChannelRefusal([rock, { ...latinSilent, volume: 0 }]), null, 'volume 0 does not sound, so it is not judged');
+  assert.match(noSharedChannelRefusal([latinSilent, { ...rock, volume: 0 }]) ?? '', /^Arrangement: nothing of phrase_009 can play on the kit latin/, 'volume 0 does not sound: the silent latin track is then the only one that does');
+  assert.match(noSharedChannelRefusal([rock, { ...latinSilent, solo: true }]) ?? '', /^Arrangement: nothing of phrase_009 can play on the kit latin: the phrase uses kick and the kit has /, 'a solo track sounds alone');
+  assert.equal(noSharedChannelRefusal([{ ...rock, mute: true }, { ...latinSilent, mute: true }]), null, 'all muted is the other refusal (ALL_MUTED), not this one');
+  assert.match(noSharedChannelRefusal([trackOf('latin', LATIN_CH, 'p', [barOf('hihat', 'kick', 'snare')])]) ?? '', /the phrase uses kick, snare, hihat and/, 'canonical order');
+  assert.match(noSharedChannelRefusal([trackOf('latin', LATIN_CH, 'p', [barOf('snare'), barOf('kick')])]) ?? '', /the phrase uses kick, snare and/, 'across every bar of the phrase');
+});
+
+test('noSharedChannelRefusal: every sounding track that has nothing to play is named, once the sentence ends with the one instruction; a track without a phrase name says "its bars"', () => {
+  const both = noSharedChannelRefusal([trackOf('latin', LATIN_CH, 'phrase_001', [barOf('kick')]), trackOf('congas', ['conga_high', 'conga_low'], 'phrase_002', [barOf('snare')])]);
+  assert.equal(both, 'Arrangement: nothing of phrase_001 can play on the kit latin: the phrase uses kick and the kit has bell, claves, conga_high, conga_low. nothing of phrase_002 can play on the kit congas: the phrase uses snare and the kit has conga_high, conga_low. Choose a kit that has one of them.');
+  assert.match(noSharedChannelRefusal([trackOf('latin', LATIN_CH, undefined, [barOf('kick')])]) ?? '', /^Arrangement: nothing of its bars can play on the kit latin: the bars use kick and the kit has /);
+});
+
+test('produceArrangement refuses a phrase with no channel on its kit with the plugin sentence and never calls the engine; with a kit it shares a channel with, the engine is asked as before', async () => {
+  const note = newArrangementNote('arr_001', withTracks([{ kit: 'latin', phrase: 'phrase_003' }]));
+  const w = world();
+  assert.deepEqual(await produceArrangement(w.deps, note, 'arr_001'), { kind: 'refusal', message: SAYS });
+  assert.equal(w.received.length, 0, 'no engine round trip');
+  const ok = world();
+  assert.equal((await produceArrangement(ok.deps, newArrangementNote('arr_001', withTracks([{ kit: 'rock', phrase: 'phrase_003' }])), 'arr_001')).kind, 'score');
+  assert.equal(ok.received.length, 1);
+});
