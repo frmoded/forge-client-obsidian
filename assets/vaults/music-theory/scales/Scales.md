@@ -7,15 +7,13 @@ Try it: pick another tonic or scale type and press Play.
 ```forge-scale
 tonic: C
 scale: major
-show: piano, staff, numbers, guitar
+show: piano, staff, numbers
 controls: yes
 ```
 
-Hear a full C major scale climb from C to the C an octave above, and see it on the staff:
+Hear a full C major scale climb from C to the C an octave above:
 
 ![[scales/resources/audio/c_major_scale.mp3]]
-
-![[scales/resources/images/c_major_scale.svg]]
 
 What defines a scale is its **pattern of intervals** — the whole (W) and half (H) steps between consecutive notes, not the specific letters:
 
