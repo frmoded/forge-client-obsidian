@@ -5,6 +5,7 @@
 // The piano is input-widget-piano.ts's own keyboard (buildKeyboard / keyboardWidth / centerXOf / initialScrollLeft / KEYBOARD_HEIGHT, and its CSS classes), not a copy: 88 keys in a horizontal scroller, 146 px tall, opened on the scale.
 
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
+import { CHORD_QUALITIES, CHORD_QUALITY_LABELS, chordMusicXML, chordNotes, chordRootName, chordRootNamesFor, nameChord, type ChordQuality } from './chord-names-core.ts';
 import {
   SCALE_TYPES,
   SCALE_TYPE_LABELS,
@@ -38,16 +39,22 @@ export interface ScaleExplorerDeps {
 
 export interface ScaleExplorerHandle {
   /** The tonic and scale type shown now. */
-  state(): { tonic: string; scale: ScaleType };
+  /** The tonic (the root, in chord mode) and the scale type shown now; chord mode answers `{ tonic, chord }` instead. */
+  state(): { tonic: string; scale: ScaleType } | { tonic: string; chord: ChordQuality };
   /** Silence and unlight (a second press of the same Play button does this too). */
   stop(): void;
   destroy(): void;
 }
 
-const MODES: readonly { mode: PlayMode; label: string }[] = [
+const SCALE_PLAY_MODES: readonly { mode: PlayMode; label: string }[] = [
   { mode: 'up', label: 'Play up' },
   { mode: 'down', label: 'Play down' },
   { mode: 'together', label: 'Play together' },
+];
+/** Chord mode (1171): the chord all at once, or one note after the other, upward. */
+const CHORD_PLAY_MODES: readonly { mode: PlayMode; label: string }[] = [
+  { mode: 'together', label: 'Play together' },
+  { mode: 'arpeggio', label: 'Play arpeggio' },
 ];
 
 /** The tonic the dropdown shows after the scale type changes: the same pitch class, named the way the new type's key signature names it. */
@@ -56,10 +63,19 @@ export function tonicAfterTypeChange(tonic: string, from: ScaleType, to: ScaleTy
   return tonicNamesFor(to).find((t) => scaleNotes(t, to, 4)[0].midi % 12 === pc) ?? tonic;
 }
 
+/** The root the dropdown shows after the chord quality changes: the same pitch class, named the way the new quality's list names it. */
+export function rootAfterQualityChange(root: string, from: ChordQuality, to: ChordQuality): string {
+  const pc = chordNotes(root, from, 4)[0].midi % 12;
+  return chordRootName(pc, to);
+}
+
 export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOptions, deps: ScaleExplorerDeps): ScaleExplorerHandle {
   const doc = el.ownerDocument;
   let tonic = options.tonic;
   let scale = options.scale;
+  let chord = options.chord;
+  const chordMode = options.mode === 'chord';
+  const PLAY_MODES = chordMode ? CHORD_PLAY_MODES : SCALE_PLAY_MODES;
   let playing: PlayMode | null = null;
   let drawToken = 0;
   let destroyed = false;
@@ -82,7 +98,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
 
   const fillTonics = (): void => {
     if (!tonicSelect) return;
-    const names = tonicNamesFor(scale);
+    const names = chordMode ? chordRootNamesFor(chord) : tonicNamesFor(scale);
     if (!names.includes(tonic)) names.push(tonic);
     tonicSelect.textContent = '';
     for (const n of names) {
@@ -99,18 +115,18 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
     tonicSelect = h('select', 'forge-scale-tonic');
     tonicSelect.setAttribute('aria-label', 'Tonic');
     tLabel.appendChild(tonicSelect);
-    const sLabel = h('label', 'forge-scale-field', 'Scale ');
-    typeSelect = h('select', 'forge-scale-type');
-    typeSelect.setAttribute('aria-label', 'Scale type');
-    for (const t of SCALE_TYPES) {
-      const o = h('option', undefined, SCALE_TYPE_LABELS[t]);
+    const sLabel = h('label', 'forge-scale-field', chordMode ? 'Chord ' : 'Scale ');
+    typeSelect = h('select', chordMode ? 'forge-scale-type forge-chord-quality' : 'forge-scale-type');
+    typeSelect.setAttribute('aria-label', chordMode ? 'Chord quality' : 'Scale type');
+    for (const t of chordMode ? CHORD_QUALITIES : SCALE_TYPES) {
+      const o = h('option', undefined, chordMode ? CHORD_QUALITY_LABELS[t as ChordQuality] : SCALE_TYPE_LABELS[t as ScaleType]);
       o.value = t;
       typeSelect.appendChild(o);
     }
-    typeSelect.value = scale;
+    typeSelect.value = chordMode ? chord : scale;
     sLabel.appendChild(typeSelect);
     bar.append(tLabel, sLabel);
-    for (const { mode, label } of MODES) {
+    for (const { mode, label } of PLAY_MODES) {
       const b = h('button', 'forge-scale-play', label);
       b.type = 'button';
       b.setAttribute('data-mode', mode);
@@ -129,15 +145,24 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
       draw();
     });
     typeSelect.addEventListener('change', () => {
-      const next = typeSelect!.value as ScaleType;
       stop();
-      tonic = tonicAfterTypeChange(tonic, scale, next);
-      scale = next;
+      if (chordMode) {
+        const next = typeSelect!.value as ChordQuality;
+        tonic = rootAfterQualityChange(tonic, chord, next);
+        chord = next;
+      } else {
+        const next = typeSelect!.value as ScaleType;
+        tonic = tonicAfterTypeChange(tonic, scale, next);
+        scale = next;
+      }
       fillTonics();
       draw();
     });
   }
 
+  // Chord mode: the chord's name, large, above the piano ("C major", "G7"). Scale mode has no such element.
+  const chordName = chordMode ? h('div', 'forge-scale-chord-name') : null;
+  if (chordName) { chordName.setAttribute('aria-live', 'polite'); root.appendChild(chordName); }
   const caption = h('div', 'forge-scale-caption');
   caption.setAttribute('aria-live', 'polite');
   root.appendChild(caption);
@@ -178,7 +203,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
       let cls = `forge-piano-key ${key.black ? 'forge-piano-key-black' : 'forge-piano-key-white'}`;
       if (note) {
         cls += ' forge-scale-key is-scale';
-        if (note.degree === 1 || note.degree === 8) cls += ' is-root';
+        if (note.degree === 1 || (!chordMode && note.degree === 8)) cls += ' is-root';
         rect.setAttribute('data-degree', String(note.degree));
         rect.setAttribute('data-name', note.name);
         keyEls.set(key.midi, rect);
@@ -218,7 +243,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
     const host = h('div', 'forge-scale-staff-score');
     staffHost.textContent = '';
     staffHost.appendChild(host);
-    engrave(host, scaleMusicXML(tonic, scale, options.octave)).catch((e: unknown) => {
+    engrave(host, chordMode ? chordMusicXML(tonic, chord, options.octave) : scaleMusicXML(tonic, scale, options.octave)).catch((e: unknown) => {
       if (token !== drawToken || destroyed) return;
       console.error('Forge: scale explorer — the staff could not be drawn:', e);
       host.textContent = `The staff could not be drawn: ${e instanceof Error ? e.message : String(e)}`;
@@ -227,10 +252,18 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
   };
 
   const draw = (): void => {
-    notes = scaleNotes(tonic, scale, options.octave);
+    notes = chordMode ? chordNotes(tonic, chord, options.octave) : scaleNotes(tonic, scale, options.octave);
     root.setAttribute('data-tonic', tonic);
-    root.setAttribute('data-scale', scale);
-    caption.textContent = `${tonic} ${SCALE_TYPE_LABELS[scale]}: ${notes.map((n) => n.name.replace(/\d+$/, '')).join(' ')}`;
+    if (chordMode) {
+      root.setAttribute('data-mode', 'chord');
+      root.setAttribute('data-chord', chord);
+      const named = nameChord(notes.map((n) => n.name));
+      if (chordName) chordName.textContent = named.title ?? `${tonic} ${chord}`;
+      caption.textContent = notes.map((n) => n.name.replace(/\d+$/, '')).join(' ');
+    } else {
+      root.setAttribute('data-scale', scale);
+      caption.textContent = `${tonic} ${SCALE_TYPE_LABELS[scale]}: ${notes.map((n) => n.name.replace(/\d+$/, '')).join(' ')}`;
+    }
     drawPiano();
     drawStaff();
   };
@@ -239,7 +272,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
   const light = (midi: number, on: boolean): void => { keyEls.get(midi)?.classList.toggle('is-playing', on); };
 
   const refreshButtons = (): void => {
-    for (const { mode, label } of MODES) {
+    for (const { mode, label } of PLAY_MODES) {
       const b = playButtons.get(mode);
       if (!b) continue;
       const on = playing === mode;
@@ -274,7 +307,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
   draw();
 
   return {
-    state: () => ({ tonic, scale }),
+    state: () => (chordMode ? { tonic, chord } : { tonic, scale }),
     stop,
     destroy: () => {
       destroyed = true;

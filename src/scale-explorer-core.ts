@@ -9,6 +9,10 @@
 //     show: piano, staff, numbers
 //     controls: yes
 //     ```
+//
+// 2026-11-04-1171: `mode: chord` + `chord: dom7` shows one chord instead (chord-names-core.ts: the table, the names, the stacked notes). The two modules import each other (this one for the quality names the parser accepts, that one for the
+// spelling primitives); neither uses the other's exports while it is being evaluated, only inside functions, so the cycle is safe.
+import { CHORD_QUALITIES, normalizeChordQuality, type ChordQuality } from './chord-names-core.ts';
 
 export const SCALE_EXPLORER_LANGUAGE = 'forge-scale';
 export const SCALE_EXPLORER_VIEW_TYPE = 'forge-scale-explorer';
@@ -51,18 +55,19 @@ const SIGNATURE_OFFSET: Record<ScaleType, number> = {
 
 const ALIASES: Record<string, ScaleType> = { ionian: 'major', aeolian: 'natural minor', minor: 'natural minor' };
 
-const STEPS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
+export const STEPS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
 export type Step = (typeof STEPS)[number];
-const STEP_PC: Record<Step, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+export const STEP_PC: Record<Step, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 /** Position on the line of fifths (C = 0); a sharp adds 7, a flat takes 7 away. */
 const STEP_FIFTHS: Record<Step, number> = { F: -1, C: 0, G: 1, D: 2, A: 3, E: 4, B: 5 };
 const SHARP_ORDER: readonly Step[] = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
 const FLAT_ORDER: readonly Step[] = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
 
 export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean }
-export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean }
+export type ExplorerMode = 'scale' | 'chord';
+export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean; mode: ExplorerMode; chord: ChordQuality }
 
-export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true }, controls: true };
+export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true }, controls: true, mode: 'scale', chord: 'major' };
 
 export const MIN_OCTAVE = 1;
 export const MAX_OCTAVE = 6;
@@ -70,7 +75,7 @@ export const MAX_OCTAVE = 6;
 export type ScaleExplorerParse = { ok: true; options: ScaleExplorerOptions } | { ok: false; message: string };
 
 const OPTION_RE = /^([A-Za-z_]+)\s*:\s*(.*)$/;
-const SUPPORTED_OPTIONS = ['tonic', 'scale', 'octave', 'show', 'controls'] as const;
+const SUPPORTED_OPTIONS = ['tonic', 'scale', 'mode', 'chord', 'octave', 'show', 'controls'] as const;
 const TONIC_RE = /^([A-Ga-g])([#b♯♭]?)$/;
 
 /** A tonic as typed -> the spelling kept (`bb` -> `Bb`, `F♯` -> `F#`), or null. */
@@ -108,6 +113,14 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       const s = normalizeScaleType(value);
       if (!s) return bad(`scale must be one of ${SCALE_TYPES.join(', ')} (also ionian, aeolian, minor) (got "${value}").`);
       out.scale = s;
+    } else if (key === 'mode') {
+      const v = value.toLowerCase();
+      if (v !== 'scale' && v !== 'chord') return bad(`mode must be scale or chord (got "${value}").`);
+      out.mode = v;
+    } else if (key === 'chord') {
+      const c = normalizeChordQuality(value);
+      if (!c) return bad(`chord must be one of ${CHORD_QUALITIES.join(', ')} (got "${value}").`);
+      out.chord = c;
     } else if (key === 'octave') {
       const n = /^\d+$/.test(value) ? Number(value) : NaN;
       if (!(n >= MIN_OCTAVE && n <= MAX_OCTAVE)) return bad(`octave must be a whole number from ${MIN_OCTAVE} to ${MAX_OCTAVE} (got "${value}").`);
@@ -129,6 +142,8 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       else return bad(`controls must be yes or no (got "${value}").`);
     }
   }
+  if (seen.has('chord') && out.mode !== 'chord') return bad('"chord" picks the quality of a chord, so the block needs "mode: chord".');
+  if (seen.has('scale') && out.mode === 'chord') return bad('"scale" belongs to mode: scale; this block is "mode: chord" (pick the quality with "chord:").');
   return { ok: true, options: out };
 }
 
@@ -263,17 +278,17 @@ export function scaleMusicXML(tonic: string, type: ScaleType, octave: number): s
 
 // ---- the sound ----------------------------------------------------------------------------------------------------------------------------------------------------
 
-export type PlayMode = 'up' | 'down' | 'together';
+export type PlayMode = 'up' | 'down' | 'together' | 'arpeggio';
 export interface PlayEvent { midi: number; startMs: number; durMs: number }
 
 export const NOTE_STEP_MS = 450;
 export const NOTE_LENGTH_MS = 420;
 export const TOGETHER_LENGTH_MS = 1800;
 
-/** Which note sounds when: up/down one after the other, together all at once. */
+/** Which note sounds when: up/down/arpeggio one after the other, together all at once. */
 export function playEvents(midis: readonly number[], mode: PlayMode): PlayEvent[] {
   if (mode === 'together') return midis.map((midi) => ({ midi, startMs: 0, durMs: TOGETHER_LENGTH_MS }));
-  const order = mode === 'down' ? [...midis].reverse() : [...midis];
+  const order = mode === 'down' ? [...midis].reverse() : [...midis];   // 'arpeggio' (chord mode) is the notes one after the other, upward: the same plan as 'up'
   return order.map((midi, i) => ({ midi, startMs: i * NOTE_STEP_MS, durMs: NOTE_LENGTH_MS }));
 }
 

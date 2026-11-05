@@ -26,13 +26,13 @@ test('an empty block is the defaults: C major, octave 4, piano + staff + numbers
   const r = parseScaleExplorerSource('');
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual(r.options, DEFAULT_SCALE_OPTIONS);
-  assert.deepEqual(DEFAULT_SCALE_OPTIONS, { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true }, controls: true });
+  assert.deepEqual(DEFAULT_SCALE_OPTIONS, { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true }, controls: true, mode: 'scale', chord: 'major' });
 });
 
 test('every option, in any order, case-insensitive, blank lines and CRLF ignored', () => {
   const r = parseScaleExplorerSource('\r\nScale: Harmonic Minor\r\n\r\ntonic: A\r\noctave: 3\r\nshow: staff, numbers, piano\r\ncontrols: no\r\n');
   assert.ok(r.ok);
-  if (r.ok) assert.deepEqual(r.options, { tonic: 'A', scale: 'harmonic minor', octave: 3, show: { piano: true, staff: true, numbers: true }, controls: false });
+  if (r.ok) assert.deepEqual(r.options, { tonic: 'A', scale: 'harmonic minor', octave: 3, show: { piano: true, staff: true, numbers: true }, controls: false, mode: 'scale', chord: 'major' });
 });
 
 test('show picks the parts; "numbers" alone is refused (it labels the piano)', () => {
@@ -348,4 +348,45 @@ test('the plan ends when its last note ends; an empty plan ends at 0', () => {
   const midis = scaleNotes('C', 'major', 4).map((n) => n.midi);
   assert.equal(playEndMs(playEvents(midis, 'up')), 7 * 450 + 420);
   assert.equal(playEndMs(playEvents(midis, 'together')), 1800);
+});
+
+// ---- 2026-11-04-1171: chord mode in the block ---------------------------------------------------------------------------------------------------------------------------------
+
+test('mode: chord and chord: <quality> (the vault\'s twelve names, m7b5 for half_dim7); a chord block defaults to C major', () => {
+  const def = parseScaleExplorerSource('mode: chord');
+  assert.ok(def.ok);
+  if (def.ok) assert.deepEqual([def.options.mode, def.options.chord, def.options.tonic, def.options.scale], ['chord', 'major', 'C', 'major']);
+  for (const q of ['major', 'minor', 'diminished', 'augmented', 'maj7', 'dom7', 'min7', 'half_dim7', 'dim7', 'dom9', 'dom11', 'dom13']) {
+    const r = parseScaleExplorerSource(`mode: chord\nchord: ${q}\ntonic: Bb`);
+    assert.ok(r.ok, q);
+    if (r.ok) assert.deepEqual([r.options.chord, r.options.tonic], [q, 'Bb']);
+  }
+  const alias = parseScaleExplorerSource('chord: M7B5\nmode: Chord');
+  assert.ok(alias.ok);
+  if (alias.ok) assert.deepEqual([alias.options.mode, alias.options.chord], ['chord', 'half_dim7']);
+});
+
+test('chord-mode bad lines: an unknown mode, an unknown quality, a chord without mode: chord, a scale in a chord block, a repeated mode', () => {
+  const bad = (src: string, re: RegExp): void => {
+    const r = parseScaleExplorerSource(src);
+    assert.equal(r.ok, false, src);
+    if (!r.ok) assert.match(r.message, re, src);
+  };
+  bad('mode: arpeggio', /mode must be scale or chord \(got "arpeggio"\)/);
+  bad('mode: chord\nchord: sus4', /chord must be one of major, minor.*\(got "sus4"\)/);
+  bad('chord: dom7', /needs "mode: chord"/);
+  bad('mode: scale\nchord: dom7', /needs "mode: chord"/);
+  bad('mode: chord\nscale: dorian', /"scale" belongs to mode: scale/);
+  bad('mode: chord\nmode: scale', /"mode" is given twice/);
+});
+
+test('a scale block is unchanged by the new options: the same defaults, scale mode, and "scale:" still works there', () => {
+  const r = parseScaleExplorerSource('mode: scale\nscale: dorian');
+  assert.ok(r.ok);
+  if (r.ok) assert.deepEqual([r.options.mode, r.options.scale], ['scale', 'dorian']);
+});
+
+test('the arpeggio plan is the notes one after the other, upward: the same events as up', () => {
+  const midis = [60, 64, 67, 70];
+  assert.deepEqual(playEvents(midis, 'arpeggio'), playEvents(midis, 'up'));
 });

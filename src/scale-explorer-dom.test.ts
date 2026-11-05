@@ -6,7 +6,7 @@ import { Window } from 'happy-dom';
 
 import { KEYBOARD_HEIGHT } from './input-widget-piano.ts';
 import { DEFAULT_SCALE_OPTIONS, scaleNotes, tonicNamesFor, type PlayEvent, type ScaleExplorerOptions } from './scale-explorer-core.ts';
-import { mountScaleBlock, mountScaleExplorer, tonicAfterTypeChange, type ScaleExplorerDeps, type ScaleSound } from './scale-explorer-dom.ts';
+import { mountScaleBlock, mountScaleExplorer, rootAfterQualityChange, tonicAfterTypeChange, type ScaleExplorerDeps, type ScaleSound } from './scale-explorer-dom.ts';
 
 interface Hooks { onNoteOn(m: number): void; onNoteOff(m: number): void; onEnd(): void }
 
@@ -222,4 +222,115 @@ test('a good source mounts the explorer with the options read from it', () => {
   assert.deepEqual(handle!.state(), { tonic: 'A', scale: 'harmonic minor' });
   assert.equal(el.querySelector('.forge-scale')?.getAttribute('data-scale'), 'harmonic minor');
   assert.equal(el.querySelectorAll('select, button').length, 0);
+});
+
+// ---- 2026-11-04-1171: chord mode -------------------------------------------------------------------------------------------------------------------------------------------
+
+import { chordNotes, chordRootNamesFor } from './chord-names-core.ts';
+
+function chordWorld(over: Partial<ScaleExplorerOptions> = {}) {
+  return world({ mode: 'chord', ...over });
+}
+const keysOf = (w: ReturnType<typeof world>) => w.q('rect.is-scale').map(midiOf).sort((a, b) => a - b);
+
+test('chord mode, C major: C E G highlighted, the root marked once, the labels 1 3 5, the name "C major" large above the piano', () => {
+  const w = chordWorld();
+  assert.deepEqual(keysOf(w), [60, 64, 67]);
+  assert.deepEqual(w.q('rect.is-root').map(midiOf), [60]);
+  assert.deepEqual(w.q('text.forge-scale-degree').map((t) => t.textContent), ['1', '3', '5']);
+  assert.equal(w.q('.forge-scale-chord-name')[0].textContent, 'C major');
+  assert.equal(w.q('.forge-scale-caption')[0].textContent, 'C E G');
+  assert.equal(w.q('.forge-scale')[0].getAttribute('data-mode'), 'chord');
+  assert.deepEqual(w.handle.state(), { tonic: 'C', chord: 'major' });
+  const order = [...w.q('.forge-scale')[0].children].map((c) => c.className.split(' ')[0]);
+  assert.deepEqual(order, ['forge-scale-controls', 'forge-scale-chord-name', 'forge-scale-caption', 'forge-scale-piano', 'forge-scale-staff'], 'controls, the name, the note names, the piano, the staff');
+});
+
+test('chord mode, Bb dom7: four notes, the name "Bb7" (ASCII flat, as 1170 names notes), the labels 1 3 5 7; a control: it is not C major\'s picture', () => {
+  const w = chordWorld({ tonic: 'Bb', chord: 'dom7' });
+  assert.deepEqual(keysOf(w), chordNotes('Bb', 'dom7', 4).map((n) => n.midi).sort((a, b) => a - b));
+  assert.equal(keysOf(w).length, 4);
+  assert.equal(w.q('.forge-scale-chord-name')[0].textContent, 'Bb7');
+  assert.deepEqual(w.q('text.forge-scale-degree').map((t) => t.textContent), ['1', '3', '5', '7']);
+  assert.notDeepEqual(keysOf(w), keysOf(chordWorld()));
+});
+
+test('every quality: the highlighted keys, the labels and the name come from the chord table (12 qualities)', () => {
+  for (const q of ['major', 'minor', 'diminished', 'augmented', 'maj7', 'dom7', 'min7', 'half_dim7', 'dim7', 'dom9', 'dom11', 'dom13'] as const) {
+    const w = chordWorld({ tonic: chordRootNamesFor(q)[2], chord: q });
+    const notes = chordNotes(chordRootNamesFor(q)[2], q, 4);
+    assert.deepEqual(keysOf(w), notes.map((n) => n.midi).sort((a, b) => a - b), q);
+    assert.deepEqual(w.q('text.forge-scale-degree').map((t) => t.textContent), notes.map((n) => String(n.degree)), q);
+    assert.ok((w.q('.forge-scale-chord-name')[0].textContent ?? '').startsWith('D'), q);
+  }
+});
+
+test('chord mode controls: a root dropdown (the quality\'s 12 names), a quality dropdown (12), and Play together / Play arpeggio only', () => {
+  const w = chordWorld({ chord: 'minor' });
+  assert.deepEqual(w.q('select.forge-scale-tonic option').map((o) => o.textContent), chordRootNamesFor('minor'));
+  assert.equal(w.q('select.forge-chord-quality option').length, 12);
+  assert.deepEqual(w.q<HTMLButtonElement>('button.forge-scale-play').map((b) => b.textContent), ['Play together', 'Play arpeggio']);
+  assert.deepEqual(w.q('button.forge-scale-play').map((b) => b.getAttribute('data-mode')), ['together', 'arpeggio']);
+  assert.ok(/Chord/.test(w.q('label.forge-scale-field')[1].textContent ?? ''));
+});
+
+test('chord mode: choosing a root or a quality redraws the keys, the name and the staff; the quality keeps the pitch class, re-named by the new quality\'s list', async () => {
+  const w = chordWorld();
+  w.change(w.q<HTMLSelectElement>('select.forge-scale-tonic')[0], 'G');
+  assert.equal(w.q('.forge-scale-chord-name')[0].textContent, 'G major');
+  w.change(w.q<HTMLSelectElement>('select.forge-chord-quality')[0], 'dom7');
+  assert.deepEqual(w.handle.state(), { tonic: 'G', chord: 'dom7' });
+  assert.equal(w.q('.forge-scale-chord-name')[0].textContent, 'G7');
+  assert.deepEqual(keysOf(w), chordNotes('G', 'dom7', 4).map((n) => n.midi).sort((a, b) => a - b));
+  w.change(w.q<HTMLSelectElement>('select.forge-scale-tonic')[0], 'Db');
+  w.change(w.q<HTMLSelectElement>('select.forge-chord-quality')[0], 'minor');
+  assert.deepEqual(w.handle.state(), { tonic: 'C#', chord: 'minor' }, 'Db and C# are one pitch class: the minor list names it C#');
+  assert.equal(w.q('.forge-scale-chord-name')[0].textContent, 'C# minor');
+  await tick();
+  assert.match(w.xml[w.xml.length - 1], /<chord\/>/);
+  assert.equal(rootAfterQualityChange('F#', 'major', 'minor'), 'F#');
+});
+
+test('the staff of a chord block gets ONE chord of stacked notes (chordMusicXML), not the scale\'s eight', async () => {
+  const w = chordWorld({ tonic: 'C', chord: 'dom7' });
+  await tick();
+  assert.equal((w.xml[0].match(/<note>/g) ?? []).length, 4);
+  assert.equal((w.xml[0].match(/<chord\/>/g) ?? []).length, 3);
+  assert.match(w.xml[0], /<fifths>0<\/fifths>/);
+});
+
+test('chord mode sound: Play together = the notes at once; Play arpeggio = one after the other, upward; a second press stops', () => {
+  const w = chordWorld({ tonic: 'C', chord: 'dom7' });
+  w.q<HTMLButtonElement>('button[data-mode="together"]')[0].click();
+  assert.deepEqual(w.plays[0].events.map((e) => e.midi).sort((a, b) => a - b), [60, 64, 67, 70]);
+  assert.ok(w.plays[0].events.every((e) => e.startMs === 0));
+  const arp = w.q<HTMLButtonElement>('button[data-mode="arpeggio"]')[0];
+  arp.click();
+  assert.deepEqual(w.plays[1].events.map((e) => e.midi), [60, 64, 67, 70]);
+  assert.ok(w.plays[1].events.every((e, i) => i === 0 || e.startMs > w.plays[1].events[i - 1].startMs));
+  assert.deepEqual(w.q<HTMLButtonElement>('button.forge-scale-play').map((b) => b.textContent), ['Play together', 'Stop']);
+  const stopsBefore = w.stops();
+  arp.click();
+  assert.equal(w.plays.length, 2);
+  assert.ok(w.stops() > stopsBefore);
+  assert.equal(arp.textContent, 'Play arpeggio');
+  w.plays[1].hooks.onNoteOn(64);
+});
+
+test('chord mode: no sound on mount, controls: no is a fixed picture, and the block source drives it (mode: chord, chord: half_dim7, tonic: B)', () => {
+  const win: any = new Window({ url: 'http://localhost/' });
+  const el = win.document.createElement('div');
+  const h = mountScaleBlock(el, 'mode: chord\nchord: half_dim7\ntonic: B\ncontrols: no', { sound: { play() { throw new Error('no sound on mount'); }, stop() {} } });
+  assert.ok(h);
+  assert.deepEqual(h!.state(), { tonic: 'B', chord: 'half_dim7' });
+  assert.equal(el.querySelector('.forge-scale-chord-name')?.textContent, 'Bm7b5');
+  assert.equal(el.querySelectorAll('select, button').length, 0);
+  assert.equal(el.querySelectorAll('rect.is-scale').length, 4);
+});
+
+test('a bad chord block names the bad line', () => {
+  const win: any = new Window({ url: 'http://localhost/' });
+  const el = win.document.createElement('div');
+  assert.equal(mountScaleBlock(el, 'mode: chord\nchord: sus4', { sound: { play() {}, stop() {} } }), null);
+  assert.match(el.querySelector('.forge-scale-error p')?.textContent ?? '', /chord must be one of .*\(got "sus4"\)/);
 });

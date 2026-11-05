@@ -1495,6 +1495,13 @@
   min-width: 8.5em;
 }
 
+.forge-scale-chord-name {
+  margin: 2px 0 0;
+  font-size: var(--font-ui-larger, 1.4em);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .forge-scale-caption {
   margin: 2px 0 6px;
   color: var(--text-muted);
@@ -2323,6 +2330,7 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-scale-error,
 .forge-scale-staff-error,
 .forge-scale-caption,
+.forge-scale-chord-name,
 .forge-re-extract-warning,
 .forge-deps-line,
 .forge-add-domain-status,
