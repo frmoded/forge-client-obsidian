@@ -145,6 +145,11 @@ LEANSCAN="$(cd "$(dirname "$0")" && pwd)/dev/lean-leg-files.mjs"
 
 # 2026-10-31-1125: the memory budget. Node's own default is every core minus one test files at once PER LEG, and two legs run together (measured 2026-10-31: 34 files at once, 11.5 GB of tooling); the files one leg runs at once are
 # capped so that (files x the assumed size of one) fits FORGE_MEM_BUDGET_MB (default half the RAM) - scripts/dev/mem-plan.mjs. FORGE_MATRIX_FILE_MB (default 400) is that size.
+# 2026-11-05-1176: the machine first. Its load, swap and free memory are printed at the start of every run; when swap is over 85 % used or the 1-minute load is over 4 per core (two matrix reds on 2026-11-03/04 were that machine, not the tree) the legs are not run at once
+# (the sentence says so and the run goes on --serial). Never a failure: a machine that cannot be read, or the check erroring, is silence and the run goes on as asked. FORGE_MACHINE_READ_FILE stands in for the machine in the tests.
+STRAIN="$(node "$(cd "$(dirname "$0")" && pwd)/dev/mem-plan.mjs" strain 2>/dev/null || true)"
+[ -n "$STRAIN" ] && printf '%s\n' "$STRAIN"
+if printf '%s\n' "$STRAIN" | grep -q '^the machine is thrashing'; then SERIAL=1; fi
 LEGS_AT_ONCE=2; [ "$SERIAL" = "1" ] && LEGS_AT_ONCE=1
 FILE_CONC="$(node "$(cd "$(dirname "$0")" && pwd)/dev/mem-plan.mjs" matrix-files --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 8)"
 export FILE_CONC

@@ -21,7 +21,8 @@ const LIB = [
   '/** Holds `mb` megabytes, touched and KEPT (the resident size counts them): what a real-plugin test does while it bundles. */',
   'const held: Buffer[] = [];', 'export function hold(mb: number): number {', '  held.push(Buffer.alloc(mb * 1024 * 1024, 1));', '  return held.length;', '}',
 ].join('\n');
-const HUNGRY = ["import { test } from 'node:test'; import assert from 'node:assert/strict';", "import { hold, twice } from './lib.ts';", "test('twice, holding 300 MB for a while', async () => { assert.equal(twice(2), 4); assert.ok(hold(300) > 0); await new Promise((r) => setTimeout(r, 2500)); });"].join('\n');
+// 2026-11-05-1176: the fixture used to sleep a fixed 2.5 s and the runaway mutant (three-fold memory) had to be SEEN by the runner's memory watchdog inside that window - on a thrashing machine the watchdog's sample came late, the mutant ended first and "survived". Now a process that holds more than 650 MB (the runaway; the honest 300 MB file is about 350 MB) waits until it is killed (90 s at most), so the watchdog may sample whenever it gets to; the honest file still ends after 2.5 s.
+const HUNGRY = ["import { test } from 'node:test'; import assert from 'node:assert/strict';", "import { hold, twice } from './lib.ts';", "test('twice, holding 300 MB for a while', async () => { assert.equal(twice(2), 4); assert.ok(hold(300) > 0); const runaway = process.memoryUsage().rss > 650 * 1024 * 1024; await new Promise((r) => setTimeout(r, runaway ? 90_000 : 2500)); });"].join('\n');
 const RED = ["import { test } from 'node:test'; import assert from 'node:assert/strict';", "import { twice } from './lib.ts';", "test('always red', () => {", "  assert.equal(twice(2), 5, 'two doubled is four');", '});'].join('\n');
 function project(extra = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mutate-learned-cap-'));

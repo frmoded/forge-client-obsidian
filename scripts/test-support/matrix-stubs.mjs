@@ -83,10 +83,14 @@ export function projects() {
   return { dir, marks, client, done: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
 
+/** 2026-11-05-1176: a calm machine, for the tests that pin how the legs run (at once, or not): the matrix reads the machine's load and swap at its start and runs --serial on a thrashing one, so a test that ran on such a machine would pin the weather. */
+export const CALM_MACHINE = { load1: 0.5, cores: 8, swapUsedMb: 100, swapTotalMb: 8192, availableMb: 8192, freePercent: 60 };
 export function matrix(p, args = [], env = {}) {
+  const calm = path.join(p.dir, '.calm-machine.json');
+  if (!fs.existsSync(calm)) fs.writeFileSync(calm, JSON.stringify(CALM_MACHINE));
   const r = spawnSync('bash', [SCRIPT, ...args], {
     encoding: 'utf8', timeout: 240_000,
-    env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, ...env },
+    env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, FORGE_MACHINE_READ_FILE: calm, ...env },
   });
   const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
   return { status: r.status, out: strip(r.stdout ?? ''), err: strip(r.stderr ?? '') };

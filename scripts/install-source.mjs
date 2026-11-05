@@ -81,6 +81,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!dir || !Number.isSafeInteger(pid) || pid <= 1) { console.error("install-source hold: usage: hold <dir> <pid>"); process.exit(2); }
     const reaper = startReaper();
     reaper.addPath(dir);
+    console.log(`held ${dir}`);                                                             // 2026-11-05-1176: the event a test waits for (the registration was written to the sidecar's pipe BEFORE this line), instead of a fixed sleep
     const poll = setInterval(() => { if (!alive(pid)) { clearInterval(poll); reaper.stop(); setTimeout(() => process.exit(0), 200); } }, Number(process.env.FORGE_HOLD_POLL_MS ?? 1000));
     for (const sig of ["SIGTERM", "SIGINT", "SIGHUP"]) process.once(sig, () => { clearInterval(poll); reaper.stop(); setTimeout(() => process.exit(0), 200); });
   } else if (cmd === "remove") {

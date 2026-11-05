@@ -204,6 +204,49 @@ export function summaryLines(sum) {
 
 const run = (cmd, args) => { try { return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000, maxBuffer: 32 << 20 }); } catch { return ''; } };
 export const readPs = () => parsePs(run('ps', ['-Ao', 'pid,ppid,rss,command']));
+/** 2026-11-05-1176: `sysctl vm.swapusage` ("total = 11264.00M  used = 9648.81M  free = 1615.19M  (encrypted)") -> { totalMb, usedMb } (null when it does not say). */
+export function parseSwapUsage(text) {
+  const m = /total\s*=\s*([\d.]+)M\s+used\s*=\s*([\d.]+)M/.exec(String(text));
+  return m ? { totalMb: Number(m[1]), usedMb: Number(m[2]) } : null;
+}
+
+/**
+ * 2026-11-05-1176: what the machine is doing NOW, for the drain matrix's first lines: { load1, cores, swapUsedMb, swapTotalMb, availableMb, freePercent }. A stand-in for the machine, so that every rule below is
+ * tested with readings and not with the weather: FORGE_MACHINE_READ_FILE names a JSON file with any of those fields (the ones it lacks are read for real).
+ */
+export function readMachine(env = process.env) {
+  const swap = process.platform === 'darwin' ? parseSwapUsage(run('sysctl', ['-n', 'vm.swapusage'])) : null;
+  const mem = readSystemMemory({ ...env, FORGE_MEM_READ_FILE: '' });
+  const real = { load1: os.loadavg()[0], cores: os.cpus().length, swapUsedMb: swap?.usedMb ?? null, swapTotalMb: swap?.totalMb ?? null, availableMb: mem.availableMb, freePercent: mem.freePercent };
+  if (env.FORGE_MACHINE_READ_FILE) { try { return { ...real, ...JSON.parse(fs.readFileSync(env.FORGE_MACHINE_READ_FILE, 'utf8')) }; } catch { /* unreadable: the real readings */ } }
+  return real;
+}
+
+/** The two limits (2026-11-05-1176): swap more than 85 % used, or a 1-minute load average above 4 per core. Past either the machine is paging and every timing a test assumed is a guess. */
+export const SWAP_USED_LIMIT = 0.85;
+export const LOAD_PER_CORE_LIMIT = 4;
+
+/** { thrashing, reasons } from readings. Missing readings (no swap figure, no cores) never count as strain: a machine that cannot be read is not called thrashing. */
+export function machineStrain(m) {
+  const reasons = [];
+  if (Number.isFinite(m.swapTotalMb) && m.swapTotalMb > 0 && Number.isFinite(m.swapUsedMb) && m.swapUsedMb / m.swapTotalMb > SWAP_USED_LIMIT) reasons.push('swap');
+  if (Number.isFinite(m.load1) && Number.isFinite(m.cores) && m.cores > 0 && m.load1 > LOAD_PER_CORE_LIMIT * m.cores) reasons.push('load');
+  return { thrashing: reasons.length > 0, reasons };
+}
+
+const gb = (mb) => (mb / 1024).toFixed(1);
+/** The line the matrix prints at its start, always. */
+export function readingsLine(m) {
+  const swap = Number.isFinite(m.swapTotalMb) && Number.isFinite(m.swapUsedMb) ? `swap ${gb(m.swapUsedMb)} of ${gb(m.swapTotalMb)} GB used` : 'swap unknown';
+  const free = Number.isFinite(m.availableMb) ? `${gb(m.availableMb)} GB${Number.isFinite(m.freePercent) ? ` (${m.freePercent} % free)` : ''}` : 'unknown';
+  return `machine: load average ${Number(m.load1).toFixed(1)} (${m.cores} cores), ${swap}, free memory ${free}`;
+}
+
+/** The sentence the matrix prints when it will not run its legs at once. */
+export function thrashingSentence(m) {
+  return `the machine is thrashing (swap ${gb(m.swapUsedMb)} of ${gb(m.swapTotalMb)} GB, load ${Number(m.load1).toFixed(1)}): running the legs one after the other; close apps or quit Obsidian vaults you are not using`;
+}
+
 /** The machine's memory now: { availableMb, freePercent } (macOS: vm_stat + memory_pressure; elsewhere os.freemem and no percentage). */
 export function readSystemMemory(env = process.env) {
   // a test hook: FORGE_MEM_READ_FILE names a JSON file { availableMb, freePercent } that stands in for the machine (a fake low-memory reading)

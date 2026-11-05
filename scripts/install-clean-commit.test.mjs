@@ -172,11 +172,15 @@ test("the scratch copy is registered with the reaper: when the process that hold
   const r = repoWithDirtyTree();
   try {
     const src = await prepareSource({ repo: r.repo });
-    const holder = spawn("node", [path.join(SCRIPTS, "install-source.mjs"), "hold", src.dir, String(process.pid)], { stdio: "ignore", env: { ...process.env, FORGE_HOLD_POLL_MS: "50" } });
-    await sleepMs(300);
+    const holder = spawn("node", [path.join(SCRIPTS, "install-source.mjs"), "hold", src.dir, String(process.pid)], { stdio: ["ignore", "pipe", "ignore"], env: { ...process.env, FORGE_HOLD_POLL_MS: "50" } });
+    // 2026-11-05-1176: wait for the holder's own event ("held <dir>": it has registered the copy with its sidecar), not for 300 ms - on a thrashing machine node takes seconds to start and a -9 that came first left nothing registered.
+    // The bound is generous (a hang is the only way to hit it) and the wait ends the moment the event arrives.
+    let said = ""; holder.stdout.on("data", (d) => { said += String(d); });
+    const t1 = Date.now(); while (!said.includes(`held ${src.dir}`) && Date.now() - t1 < 60_000) await sleepMs(25);
+    assert.ok(said.includes(`held ${src.dir}`), "the holder registered the copy with its reaper");
     assert.equal(fs.existsSync(src.dir), true, "held while its owner (this process) lives");
     holder.kill("SIGKILL");                                                              // the hardest case: the holder is killed with -9 and nothing runs its cleanup
-    const t0 = Date.now(); while (fs.existsSync(src.dir) && Date.now() - t0 < 5000) await sleepMs(50);
+    const t0 = Date.now(); while (fs.existsSync(src.dir) && Date.now() - t0 < 60_000) await sleepMs(50);
     assert.equal(fs.existsSync(src.dir), false, "the reaper sidecar removed it");
   } finally { r.done(); }
 });

@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { REPOS, SCRIPT, git, projects, skip } from './test-support/matrix-stubs.mjs';
+import { CALM_MACHINE, REPOS, SCRIPT, git, projects, skip } from './test-support/matrix-stubs.mjs';
 
 const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
@@ -27,7 +27,8 @@ const worktrees = (p) => REPOS.map((r) => git(path.join(p.dir, r), 'worktree', '
 
 async function interrupt(how) {
   const p = projects();
-  const matrix = spawn('bash', [SCRIPT, '--no-forge'], { cwd: p.client, detached: true, stdio: 'ignore', env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, TEST_MS: '60000' } });
+  const calm = path.join(p.dir, '.calm-machine.json'); fs.writeFileSync(calm, JSON.stringify(CALM_MACHINE));       // 2026-11-05-1176: both editions are expected to run AT ONCE; on a thrashing machine the matrix rightly runs them one after the other
+  const matrix = spawn('bash', [SCRIPT, '--no-forge'], { cwd: p.client, detached: true, stdio: 'ignore', env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, TEST_MS: '60000', FORGE_MACHINE_READ_FILE: calm } });
   const mine = new Map();
   try {
     assert.ok(await until(() => { for (const r of descendants(matrix.pid)) mine.set(r.pid, r.cmd); return [...mine.values()].filter((c) => /scripts\/test\.mjs/.test(c)).length >= 2; }, 120000), 'the matrix never reached its test step (both editions)');
