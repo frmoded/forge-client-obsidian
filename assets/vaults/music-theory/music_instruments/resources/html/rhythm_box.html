@@ -81,6 +81,7 @@
   .rhythm-tools button.ring-pick { min-width: 0; font-size: 12px; line-height: normal; }
   .rhythm-tools select { font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 6px; min-height: 32px; }
   .rhythm-tools select:disabled { opacity: 0.5; cursor: not-allowed; }
+  .rhythm-tools select[hidden] { display: none; }   /* the property "a hidden element computes display: none" holds for the selects too (the kit dropdown is hidden unless the host sent kits) */
   /* The grid's row selector (the circle's is the ring chips): the instrument's name is a button; the selected one is highlighted like a chip. */
   .channel-label .row-pick { flex: 1; min-width: 0; min-height: 24px; padding: 1px 6px; font-size: 12px; text-align: left; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 4px; }
   .channel-label .row-pick:hover { border-color: var(--axis); }
@@ -223,6 +224,7 @@
 </div>
 
 <div class="rhythm-tools" id="rhythmTools" role="toolbar" aria-label="Rhythm tools">
+  <select id="kitPick" aria-label="Kit" title="Choose a kit: Add instrument then offers that kit's instruments" hidden></select>
   <select id="addInstrument" aria-label="Add instrument" title="Add a row for another instrument (bell, claves, congas)"></select>
   <span class="tool-group" id="transformTools" role="group" aria-label="Transform the pattern"></span>
   <span class="tool-group" id="circleExtras" role="group" aria-label="Circle tools" hidden>
@@ -589,6 +591,26 @@ function autoHeightPlan(content, lastPosted) {
   if (typeof lastPosted === "number" && Math.abs(h - lastPosted) <= 1) return null;
   return h;
 }
+// Kit picker (drain 2026-11-05-1181, score_first M10c). A host that sends `kits` on its load message (the Beat Box of a score-first vault; every other host sends none) gets a
+// kit dropdown, and "Add instrument" then offers THAT kit's channels. The kit only helps to CHOOSE a channel: the note keeps its channels by name and never records a kit.
+// cleanKits: the host's list as the page may trust it: [{name, channels}] with a non-empty string name (the first of a repeated name), and the kit's KNOWN channels once each, in the
+// engine's order; a kit with none is dropped. Anything that is not such a list is no kits. channelsToOffer: the channels "Add instrument" lists, in the engine's order: the kit's
+// channels that are not rows yet; with no kit (null / undefined: no dropdown) every channel that is not a row yet, exactly as before.
+function cleanKits(list) {
+  var out = [], seen = {};
+  if (!Array.isArray(list)) return out;
+  list.forEach(function (k) {
+    if (!k || typeof k !== "object" || typeof k.name !== "string" || k.name === "" || seen[k.name] === true || !Array.isArray(k.channels)) return;
+    var channels = CHANNELS.filter(function (ch) { return k.channels.indexOf(ch) >= 0; });
+    if (channels.length === 0) return;
+    seen[k.name] = true;
+    out.push({ name: k.name, channels: channels });
+  });
+  return out;
+}
+function channelsToOffer(kit, rows) {
+  return CHANNELS.filter(function (ch) { return rows.indexOf(ch) < 0 && (!kit || kit.channels.indexOf(ch) >= 0); });
+}
 // --- pure math -- END pure-core -------------------------------------------------------------
 
 if (typeof document === "undefined") {           // node test harness
@@ -605,7 +627,8 @@ if (typeof document === "undefined") {           // node test harness
     CIRCLE_MAX_RINGS: CIRCLE_MAX_RINGS, CIRCLE_SIZE: CIRCLE_SIZE, circleGeometry: circleGeometry, circleSizeFor: circleSizeFor,
     rotatePattern: rotatePattern, mirrorPattern: mirrorPattern, polygonPoints: polygonPoints,
     TRANSFORM_TOOLS: TRANSFORM_TOOLS, transformToolText: transformToolText, applyTransform: applyTransform, selectedRowOf: selectedRowOf,
-    moveRing: moveRing, autoHeightPlan: autoHeightPlan
+    moveRing: moveRing, autoHeightPlan: autoHeightPlan,
+    cleanKits: cleanKits, channelsToOffer: channelsToOffer
   };
 } else {
 (function () {
@@ -627,6 +650,7 @@ if (typeof document === "undefined") {           // node test harness
   // View (Grid | Circle) lives in WIDGET STATE ONLY — never in the note, never in a save payload. Grid is the default.
   var viewMode = "grid", viewInit = false, showShape = true, selectedChannel = null, focusedCell = null;   // selectedChannel: the instrument the rotate buttons turn and the circle draws the shape of — ONE state for both views
   var muted = new Set(), soloed = new Set();
+  var kits = [], kitName = "";         // the host's kit list (cleanKits) and the one picked; widget state only, never in the note or a save payload
   var playing = false;
   var currentStep = -1;                // for the visual indicator only
   var schedulerState = { currentStep: 0, nextNoteTime: 0 };
@@ -690,22 +714,38 @@ if (typeof document === "undefined") {           // node test harness
   // "Add instrument": the channels not shown yet (in the engine's order). The first option is the inert prompt. ONE control, first in the toolbar, in
   // both views (it used to be two, one per view).
   var CIRCLE_FULL_MSG = "Circle shows up to 4 instruments \u2014 use Grid to add more.";
+  // The kit dropdown (kit picker, drain 2026-11-05-1181): drawn only when the host sent kits; hidden otherwise, so a page without them is what it always was.
+  function currentKit() {
+    for (var i = 0; i < kits.length; i++) if (kits[i].name === kitName) return kits[i];
+    return null;
+  }
+  function renderKitPick() {
+    var ks = $("kitPick");
+    ks.innerHTML = "";
+    kits.forEach(function (k) {
+      var o = document.createElement("option"); o.value = k.name; o.textContent = k.name;
+      ks.appendChild(o);
+    });
+    ks.value = kitName;
+    ks.hidden = kits.length === 0;
+  }
   function renderAddInstrument() {
+    renderKitPick();
     var sel = $("addInstrument");
     sel.innerHTML = "";
     var prompt = document.createElement("option"); prompt.value = ""; prompt.textContent = "Add instrument\u2026";
     sel.appendChild(prompt);
-    CHANNELS.forEach(function (ch) {
-      if (rows.indexOf(ch) >= 0) return;
+    var offer = channelsToOffer(currentKit(), rows);
+    offer.forEach(function (ch) {
       var o = document.createElement("option"); o.value = ch; o.textContent = CHANNEL_LABEL[ch];
       sel.appendChild(o);
     });
     sel.value = "";
-    sel.hidden = rows.length >= CHANNELS.length;
+    sel.hidden = offer.length === 0;              // nothing left to add (every channel is a row; with a kit: every channel of THAT kit)
     // At the circle's ring limit the control is DISABLED IN CIRCLE (and says why), not hidden and not a silent no-op; the grid has no limit.
     var full = viewMode === "circle" && rows.length >= CIRCLE_MAX_RINGS;
     sel.disabled = full;
-    sel.title = full ? CIRCLE_FULL_MSG : "Add a row for another instrument (bell, claves, congas)";
+    sel.title = full ? CIRCLE_FULL_MSG : (currentKit() ? "Add a row for another instrument of the " + kitName + " kit" : "Add a row for another instrument (bell, claves, congas)");
   }
   buildGrid();
 
@@ -752,6 +792,8 @@ if (typeof document === "undefined") {           // node test harness
     renderAddInstrument();
   }
   $("addInstrument").addEventListener("change", function (e) { onAddInstrument(e.target); });
+  // Picking a kit changes what "Add instrument" offers, nothing in the note: no commitChange, nothing saved.
+  $("kitPick").addEventListener("change", function (e) { kitName = e.target.value; renderAddInstrument(); });
   function renderMuteSolo() {
     rows.forEach(function (ch) {
       var row = gridEl.querySelector('[data-mute-btn-' + ch + ']');
@@ -1341,6 +1383,8 @@ if (typeof document === "undefined") {           // node test harness
     if (!r.ok) { hostLoaded = false; dismissConfirm(); $("hostBar").hidden = false; setHostMsg("loadMsg", "Could not load this note: " + r.message, true); return; }
     hostMode = msg.mode === "playground" ? "playground" : "edit";
     resetInHost = hostMode === "playground" && msg.resetInHost === true;
+    kits = cleanKits(msg.kits);                        // a load without (usable) kits switches the kit dropdown off again
+    if (!kits.some(function (k) { return k.name === kitName; })) kitName = kits.length ? kits[0].name : "";   // keep the kit picked while it is still offered, else the host's first
     setHoverLink(msg.hoverLink === true);              // only the exact true; a load without it switches the link off again
     loadedData = hostMode === "playground" ? JSON.parse(JSON.stringify(msg.data)) : null;
     hostLoaded = true;                                // set BEFORE showLoaded so a stop() inside it is announced consistently
