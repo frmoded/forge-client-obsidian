@@ -17,6 +17,11 @@ import { ARRANGEMENT_FOLDER, isArrangementPath } from './arrangement-core.ts';
 import { COMPOSITION_FOLDER, COMPOSITION_VIEW_TYPE, compositionHeader, isCompositionPath, phraseDepsWithSources, produceComposition, readCompositionNote, FORGE_COMPOSITION_KEY, type CompositionParams, type CompositionShape } from './composition-core.ts';
 import { COMPOSITION_INSPECTOR_HINT, COMPOSITION_BAR_ROLE, annotateCompositionPayload, barIdsPlayedFrom, barsPlayedFrom, compositionLineageOf, readCompositionLineage, type CompositionLineageBar } from './composition-nav-core.ts';
 import { treeRows, treeText } from './composition-strip-core.ts';
+import { mountNotebook, type NotebookDomPorts, type NotebookHandle } from './notebook-dom.ts';
+import type { Selection } from './notebook-core.ts';
+import { compositionSelectionChip } from './composition-notebook-core.ts';
+import { paintSelectionTint } from './selection-tint-dom.ts';
+import type { ProvenanceMap } from './provenance-core.ts';
 import { mountCompositionStrip, type CompositionStrip } from './composition-strip-dom.ts';
 import { mountCompositionDialog } from './composition-dialog-dom.ts';
 import { NEW_COMPOSITION_COMMAND_ID, NEW_COMPOSITION_COMMAND_NAME, OPEN_COMPOSITION_COMMAND_ID, OPEN_COMPOSITION_COMMAND_NAME, createComposition, moveRoot, newCompositionAvailable, openCompositionAvailable } from './composition-flow-core.ts';
@@ -40,9 +45,14 @@ export class CompositionView extends EditableFileView {
   /** The note the pair's notes pane shows (a chip clicked, a link followed), or null: the bars it played stay lit until the next navigation, across redraws. */
   private notesNote: string | null = null;
   private stopListening: (() => void) | null = null;
+  /** 2026-11-05-1183 (M17c): the notebook below the Score (the phrase tabs' own component, with the composition's selection source), and the bars it has selected, tinted on the Score. Present only when the plugin hands the view `notebookFor`. */
+  private notebook: NotebookHandle | null = null;
+  private selectedBars: ReadonlySet<number> = new Set();
+  private tintHost: HTMLElement | null = null;
+  private tintMap: ProvenanceMap | null = null;
 
   /** `structure` sends a chip click to the notes pane of this tab's pair (the hooks of a phrase tab), `openNote` opens the note when there is no pair; `onPin` is told the note that made the bar the person pinned (or null: let go). */
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void) {
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void, private readonly notebookFor?: (file: TFile, chip: (selection: Selection) => string | null) => NotebookDomPorts) {
     super(leaf);
     this.addAction('file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
     this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
@@ -57,6 +67,11 @@ export class CompositionView extends EditableFileView {
     // A composition is made of phrases, arrangements, other compositions and (through them) bars and kits: any of them changing, or the composition's own note, redraws the Score.
     this.registerEvent(this.app.vault.on('modify', (f) => { this.noteChanged(f.path); }));
     this.registerEvent(this.app.vault.on('delete', (f) => { this.noteChanged(f.path); }));
+    // cells are made and unmade in notebook/ (and the transform phrases they own in phrases/): the notebook lists them again, as a phrase tab's does
+    const cellsChanged = (f: { path: string }) => { if (f.path.startsWith('notebook/') || f.path.startsWith('phrases/')) void this.notebook?.refresh(); };
+    this.registerEvent(this.app.vault.on('create', cellsChanged));
+    this.registerEvent(this.app.vault.on('delete', cellsChanged));
+    this.registerEvent(this.app.vault.on('rename', cellsChanged));
   }
 
   async onLoadFile(file: TFile): Promise<void> {
@@ -109,6 +124,12 @@ export class CompositionView extends EditableFileView {
         keepPinOnControls: true,
         band: true,
         kitNote: 'Kit view: not mapped for this composition (use the multi-staff view to inspect).',
+        // M17c: the bars the notebook has selected are tinted on the Score (from the moment it is shown), a drag across bars selects them in the notebook and a Shift-click extends: only a tab that has a notebook (P3)
+        ...(this.notebookFor ? {
+          decorate: (host: HTMLElement, map: ProvenanceMap) => { this.tintHost = host; this.tintMap = map; paintSelectionTint(host, this.tintedIds(map)); },
+          attached: (host: HTMLElement, map: ProvenanceMap) => { this.tintHost = host; this.tintMap = map; paintSelectionTint(host, this.tintedIds(map)); },
+          selectBars: { onRange: (a: number, b: number) => { this.notebook?.selectRange(a, b); }, onRangeEnd: () => { this.notebook?.reveal(); }, onShiftClick: (n: number) => { this.notebook?.extendTo(n); } },
+        } : {}),
         onPinned: (e) => {
           const pin = e ? pinnedNoteFor(e.prov) : null;
           this.onPin?.(this.leaf, pin);
@@ -134,7 +155,22 @@ export class CompositionView extends EditableFileView {
         return out;
       },
     });
+    // 2026-11-05-1183 (M17c): the notebook below the Score and the tree - the same component as a phrase tab's. Its bars are the composition's own, 1..N across the piece, and its chip names the section a bar belongs to.
+    if (this.notebookFor) {
+      const told = this.notebookFor(file, (s) => compositionSelectionChip(s, this.shape?.sections ?? []));
+      this.notebook = mountNotebook(this.contentEl, {
+        ...told,
+        chip: (s) => compositionSelectionChip(s, this.shape?.sections ?? []),
+        onSelection: (sel) => { this.selectedBars = new Set(sel.bars); if (this.tintHost && this.tintHost.isConnected !== false) paintSelectionTint(this.tintHost, this.tintMap ? this.tintedIds(this.tintMap) : []); told.onSelection?.(sel); },
+      });
+      void this.notebook.refresh();
+    }
     this.area?.showNow(text);
+  }
+
+  /** The ids of the Score's bars the notebook has selected (the inspector's own repaint draws the tint, so a redrawn engraving has it again). */
+  private tintedIds(map: ProvenanceMap): string[] {
+    return Object.keys(map).filter((id) => map[id].role === COMPOSITION_BAR_ROLE && typeof map[id].params.bar === 'number' && this.selectedBars.has(map[id].params.bar as number));
   }
 
   async onUnloadFile(file: TFile): Promise<void> {
@@ -193,6 +229,7 @@ export class CompositionView extends EditableFileView {
   /** The Score is on screen: keep its lineage and shape (the lighting and the tree need them), say "<N> sections, <B> bars, <t> min" in the header, and draw the tree again with the bars each section covers. */
   private scoreShown(file: TFile, note: unknown, payload: Record<string, unknown>): void {
     const bars = barsOfPayload(payload);
+    if (bars !== null) this.notebook?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels)))) });     // M17c: how many bars the Score has and the rows they have
     const l = bars === null ? null : readCompositionLineage(payload.composition_lineage, bars.length);
     this.lineage = l === null || typeof l === 'string' ? null : l;
     const s = payload[FORGE_COMPOSITION_KEY];
@@ -217,6 +254,9 @@ export class CompositionView extends EditableFileView {
     this.strip = null;
     this.stopListening?.();
     this.stopListening = null;
+    this.notebook?.dispose();
+    this.notebook = null;
+    this.selectedBars = new Set(); this.tintHost = null; this.tintMap = null;       // the notebook mounts again empty
     this.lineage = null; this.params = null; this.shape = null; this.notesNote = null;
     this.contentEl.empty();
   }
@@ -261,6 +301,8 @@ export interface CompositionsOptions {
   /** 2026-10-31-1135 (CCQA smoke 10, B1/B4): the seam "New composition" uses, as the sentence dialog's does (1110). `origin` is the SCORE leaf of the pair the person started from (null = no pair); it is read when the dialog opens,
    *  before any await (L59). `openIn` opens the new composition as the Score in that very leaf and moves the pair's notes pane to its note; false = the pair is gone since, and the caller opens the pair the ordinary way. */
   newCompositionPair?: { origin(): WorkspaceLeaf | null; openIn(origin: WorkspaceLeaf, file: TFile): Promise<boolean> };
+  /** 2026-11-05-1183 (M17c): the vault side of the notebook below a composition's Score (the ports of the phrase tabs' notebook, with the composition as the source and the composition's own chip text). Absent = the tab is exactly what it was. */
+  notebookFor?: (file: TFile, chip: (selection: Selection) => string | null) => NotebookDomPorts;
 }
 
 /** The composition tab IN this leaf (the Score of a pair already open is replaced by the new piece's, never a third pane): the composition counterpart of openPhraseInLeaf. */
@@ -271,7 +313,7 @@ export async function openCompositionInLeaf(app: App, leaf: WorkspaceLeaf, file:
 
 export function registerCompositions(plugin: Plugin, opts: CompositionsOptions): void {
   const app = plugin.app;
-  plugin.registerView(COMPOSITION_VIEW_TYPE, (leaf) => new CompositionView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin));
+  plugin.registerView(COMPOSITION_VIEW_TYPE, (leaf) => new CompositionView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin, opts.notebookFor));
 
   const names = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && f.extension === 'md' && f.basename !== 'README').map((f) => `${folder}/${f.basename}`).sort();
   const compositionFiles = (): TFile[] => app.vault.getFiles().filter((f) => isCompositionPath(f.path));

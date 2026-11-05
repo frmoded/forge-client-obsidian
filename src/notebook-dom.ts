@@ -10,6 +10,8 @@ export interface NotebookDomPorts {
   trace(line: string): void;
   /** Open a phrase note (a cell's result, or its source from the result's tab). */
   openPhrase?(path: string): void;
+  /** 2026-11-05-1183 (M17c): the chip text of a selection. Absent = the phrase tab's own (`selectionChip`: "bars 3 to 5, kick row"); a composition's names the section ("bars 3-4 of section 2 ([[arr_001]])"). */
+  chip?(selection: Selection): string | null;
   /** 2026-10-30-1020: the selection changed (a number, a Shift-click, a row, a drag on the Score, a Score that got shorter): the tab tints those bars on the Score. Told only on a change. */
   onSelection?(selection: Selection): void;
 }
@@ -72,6 +74,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   let derived = false;                  // this phrase is the RESULT of a cell: it is not asked for another change (the request box says why)
   let madeId: string | null = null;     // the cell the status line last announced as made; the status goes when the cell does
 
+  const chipOf = (s: Selection): string | null => (ports.chip ? ports.chip(s) : selectionChip(s));
   const say = (text: string, kind: 'status' | 'alert' = 'status') => { message.textContent = text; message.setAttribute('role', kind); };
   const setNumberFor = (kind: string) => {
     if (kind === 'double_up') {
@@ -88,7 +91,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   const paint = (): void => {
     for (const b of Array.from(barsEl.children) as HTMLElement[]) b.setAttribute('aria-pressed', String(selection.bars.includes(Number(b.textContent))));
     for (const b of Array.from(rowsEl.children) as HTMLElement[]) b.setAttribute('aria-pressed', String((b.textContent === 'all' ? null : b.textContent) === selection.row));
-    const chip = selectionChip(selection);
+    const chip = chipOf(selection);
     chipsEl.textContent = '';
     if (chip !== null) chipsEl.appendChild(el('span', 'forge-notebook-chip', chip));
     hint.textContent = chip !== null ? HINT_SELECTED : HINT;
@@ -190,7 +193,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   }
 
   run.addEventListener('click', () => { void (async () => {
-    if (busy || selectionChip(selection) === null) return;
+    if (busy || chipOf(selection) === null) return;
     const sentence = request.value.trim();
     const chosen = selection;                                           // what was selected when Run was pressed is what runs, whatever is clicked while the service thinks
     busy = true; paint(); say(sentence !== '' ? 'Asking...' : 'Running...');

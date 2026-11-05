@@ -40,7 +40,7 @@ import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 import { PLAN_COMMAND_ID, PLAN_COMMAND_NAME, createSentencePlanner, planAvailable, type PlanPayload } from './sentence-plan-core.ts';
 import { SentencePlanModal } from './sentence-plan-modal.ts';
-import { NOTEBOOK_FOLDER, createNotebook } from './notebook-core.ts';
+import { NOTEBOOK_FOLDER, createNotebook, type Selection } from './notebook-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -407,9 +407,12 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         if (app.vault.getAbstractFileByPath(path) !== null) await app.vault.adapter.remove(path);
         if (await app.vault.adapter.exists(path)) throw new Error(`${path} is still there`);
       };
-      const notebookFor = (file: TFile) => ({
+      // 2026-11-05-1183 (M17c): the SAME notebook ports serve a composition tab: its `sourcePhrase` is the composition (`compositions/intro`; a transform may take one as its source) and `chip` is the composition's own chip text
+      // (it names the section). A phrase tab passes no chip: it is exactly what it was.
+      const notebookFor = (file: TFile, chip?: (selection: Selection) => string | null) => ({
         notebook: createNotebook<TFile>({
           sourcePhrase: file.path.replace(/\.md$/, ''),
+          ...(chip ? { chip } : {}),
           activePath: () => file.path,
           folderExists: (folder) => app.vault.getAbstractFileByPath(folder) !== null,
           createFolder: async (folder) => { await app.vault.createFolder(folder); },
@@ -437,7 +440,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2026-10-29-0820 (M10 slice 1): kits and arrangements. Registered here, inside the score-first gate, so no other vault gets a view, a command or a byte of it (P3).
       registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, onPin: (l, pin) => { void linker.pinned(l, pin); } });
       // 2026-10-31-1100 (M17b): compositions, the root note of a piece. Registered here too, inside the score-first gate (P3). `pair` opens the notes pane beside a composition's Score (the pair machinery is defined below; it is called later).
-      registerCompositions(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, newCompositionPair: compositionBridge, onPin: (l, pin) => { void linker.pinned(l, pin); }, pair: (leaf, file) => openPair({ kind: 'composition', leaf, file }) });
+      registerCompositions(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, newCompositionPair: compositionBridge, notebookFor, onPin: (l, pin) => { void linker.pinned(l, pin); }, pair: (leaf, file) => openPair({ kind: 'composition', leaf, file }) });
       // 2026-10-26-1270: a bar's tab (its Beat Box or its Score) shows the phrases that use it, as chips above it, from the vault's resolved links (the `links:` of 1260 are what makes them resolve). The strip is added to the view's
       // content element on every event that can change the answer and put back if the view redrew without it; clicking a chip opens that phrase. Only in a score-first vault (this code runs after the gate).
       const barStrips = new WeakMap<HTMLElement, { handle: StripHandle; key: string }>();

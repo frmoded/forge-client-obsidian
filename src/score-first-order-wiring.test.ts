@@ -216,9 +216,13 @@ for (const edition of ['lean', 'music'] as const) {
     const w = await world();
     try {
       const { el } = await w.open(COMPOSITION_VIEW_TYPE, COMP);
+      // (M17c, 2026-11-05-1183: the composition tab now has the NOTEBOOK below its Score, the phrase tabs' own component. Its controls make NEW notes (a transform phrase in phrases/, a cell in notebook/) and never write the composition
+      // - proved in composition-notebook.test.ts and measured in real Chrome - so the property here is: outside the notebook every control is still a chip of the tree, which opens notes; and the notebook is the only other control area.)
       const buttons = [...el.querySelectorAll('button, input, select, textarea')];
-      assert.ok(buttons.length > 0, 'non-vacuity: the tree has chips');
-      assert.ok(buttons.every((b: any) => b.classList.contains('forge-structure-chip')), 'every control is a chip: ' + buttons.map((b: any) => b.className).join(' | '));
+      const outside = buttons.filter((b: any) => !b.closest('.forge-notebook'));
+      assert.ok(outside.length > 0, 'non-vacuity: the tree has chips');
+      assert.ok(outside.every((b: any) => b.classList.contains('forge-structure-chip')), 'every control outside the notebook is a chip: ' + outside.map((b: any) => b.className).join(' | '));
+      assert.ok(buttons.some((b: any) => b.closest('.forge-notebook')), 'non-vacuity: the notebook is there, and it is the only other control area');
     } finally { w.done(); }
   });
 }

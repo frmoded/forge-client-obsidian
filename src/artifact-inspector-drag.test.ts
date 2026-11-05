@@ -126,8 +126,11 @@ test('dispose takes the listeners with it: a drag after dispose tells nobody', (
 test('MECHANISM PIN 2026-10-30-1020 (if the design moves this SHOULD go red: reassess, do not just rewrite): `selectBars` is opt-in - only the phrase surfaces\' wiring (phrase-dom.ts) turns it on, through score-inspector.ts; the Beat Box tab, the kit and arrangement tabs and every other Score never name it', () => {
   const dir = import.meta.dirname;
   const users = fs.readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && /\bselectBars\b/.test(fs.readFileSync(path.join(dir, f), 'utf8'))).sort();
-  assert.deepEqual(users, ['artifact-inspector-core.ts', 'phrase-dom.ts', 'score-inspector.ts']);
+  assert.deepEqual(users, ['artifact-inspector-core.ts', 'compositions.ts', 'phrase-dom.ts', 'score-inspector.ts']);     // (M17c: the composition tab has the notebook too, so it turns the gesture on - and, as the phrase tab, only when it HAS one: asserted below)
   const dom = fs.readFileSync(path.join(dir, 'phrase-dom.ts'), 'utf8');
   assert.equal((dom.match(/selectBars: selectBarsPort\(\),/g) ?? []).length, 3, 'extend, mix and morph');
   assert.match(dom, /const selectBarsPort = \(\): ScoreInspectorPorts\['selectBars'\] => \(ports\.notebook \? \{/, 'only a tab that HAS a notebook gets the gesture');
+  const comp = fs.readFileSync(path.join(dir, 'compositions.ts'), 'utf8');
+  assert.equal((comp.match(/selectBars: \{/g) ?? []).length, 1, 'the composition tab turns it on once');
+  assert.match(comp, /\.\.\.\(this\.notebookFor \? \{[\s\S]*?selectBars: \{[\s\S]*?\} : \{\}\)/, 'and only when the plugin gave it a notebook'); 
 });

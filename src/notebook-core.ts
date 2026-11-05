@@ -16,6 +16,8 @@ import { parseFrontmatter } from './rhythm-edit-core.ts';
 export const NOTEBOOK_FOLDER = 'notebook';
 const CELL_NAME = /^cell_(\d+)$/;
 const PHRASE_NOTE = /^phrases\/phrase_\d+$/;
+/** What a cell may have been made FROM: a phrase (as ever) or, since the notebook is on a composition's tab too (M17c), a composition note. A cell's RESULT is always a phrase. */
+const CELL_SOURCE = /^(?:phrases\/phrase_\d+|compositions\/[A-Za-z0-9_-]+)$/;
 
 // ---- the selection --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -100,7 +102,7 @@ export function readCellNote(text: string, path: string): { ok: true; cell: Note
   try { raw = JSON.parse(text.slice(block.contentStart, block.contentEnd)); } catch (e) { return bad(`The json block is not valid JSON: ${(e as Error).message}`); }
   const o = raw as { kind?: unknown; source?: unknown; result?: unknown; selection?: unknown; ops?: unknown; request?: unknown } | null;
   if (typeof o !== 'object' || o === null || o.kind !== 'notebook_cell') return bad('This is not a notebook cell (kind must be "notebook_cell").');
-  if (typeof o.source !== 'string' || !PHRASE_NOTE.test(o.source)) return bad(`source must be a phrase note without .md, like phrases/phrase_006, got ${JSON.stringify(o.source)}.`);
+  if (typeof o.source !== 'string' || !CELL_SOURCE.test(o.source)) return bad(`source must be a phrase note without .md, like phrases/phrase_006, got ${JSON.stringify(o.source)}.`);
   if (typeof o.result !== 'string' || !PHRASE_NOTE.test(o.result)) return bad(`result must be a phrase note without .md, like phrases/phrase_007, got ${JSON.stringify(o.result)}.`);
   if (typeof o.selection !== 'string') return bad('selection must be a string like "bars 3 to 5, kick row".');
   if (o.request !== undefined && typeof o.request !== 'string') return bad('request must be the sentence the cell was made from (a string), or absent.');
@@ -126,8 +128,10 @@ export function planNewCell(input: { existingBasenames: Iterable<string>; exists
 // ---- Run, Re-run, Delete cell -------------------------------------------------------------------------------------------------------------------------------------------------------
 
 export interface NotebookPorts<F> {
-  /** The phrase this notebook is under (`phrases/phrase_006`, no .md). */
+  /** The note this notebook is under (`phrases/phrase_006`, or a composition: `compositions/intro`; no .md). */
   sourcePhrase: string;
+  /** 2026-11-05-1183 (M17c): the text a cell records for its selection. Absent = `selectionChip` (the phrase tab's); a composition's names the section. */
+  chip?(selection: Selection): string | null;
   activePath(): string | null;
   folderExists(folder: string): boolean;
   createFolder(folder: string): Promise<void>;
@@ -209,7 +213,7 @@ export function createNotebook<F>(ports: NotebookPorts<F>): Notebook {
       return fail(`Could not make the transform: ${msg(e)}`);
     }
     if (phrase.ok === false) return { ok: false, message: phrase.message };
-    const chip = selectionChip(selection) ?? '';
+    const chip = (ports.chip ? ports.chip(selection) : selectionChip(selection)) ?? '';
     let cellPath: string | null = null;
     let cellError = '';
     for (let attempt = 0; attempt < 3 && cellPath === null; attempt++) {
