@@ -6,6 +6,8 @@
 
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
 import { mountFreeMode } from './free-mode-dom.ts';
+import { GUITAR_FRETS, positionsOf, tabForRun, tabText } from './guitar-core.ts';
+import { mountGuitar } from './guitar-dom.ts';
 import { CHORD_QUALITIES, CHORD_QUALITY_LABELS, chordMusicXML, chordNotes, chordRootName, chordRootNamesFor, nameChord, type ChordQuality } from './chord-names-core.ts';
 import {
   SCALE_TYPES,
@@ -167,8 +169,15 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
   root.appendChild(caption);
   const pianoHost = options.show.piano ? h('div', 'forge-scale-piano') : null;
   if (pianoHost) root.appendChild(pianoHost);
+  // 2026-11-04-1173: the guitar fretboard under the piano (or alone), and the one-line tab of the played run under it. Absent unless `show: guitar`: scale and chord mode without it are byte-identical.
+  const guitarHost = options.show.guitar ? h('div', 'forge-scale-guitar') : null;
+  if (guitarHost) root.appendChild(guitarHost);
+  const tabHost = options.show.guitar && options.tab ? h('div', 'forge-scale-tab') : null;
+  if (tabHost) root.appendChild(tabHost);
   const staffHost = options.show.staff && deps.renderStaff ? h('div', 'forge-scale-staff') : null;
   if (staffHost) root.appendChild(staffHost);
+  const litMidis = new Set<number>();
+  const guitar = guitarHost ? mountGuitar(guitarHost, { onClick: (pos) => { deps.sound.play([{ midi: pos.midi, startMs: 0, durMs: 350 }], { onNoteOn: () => {}, onNoteOff: () => {}, onEnd: () => {} }); } }) : null;
 
   // ---- drawing -----------------------------------------------------------------------------------------------------------------------------------------------
   let notes: ScaleNote[] = [];
@@ -250,6 +259,19 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
     });
   };
 
+  const drawGuitar = (): void => {
+    if (!guitar) return;
+    const names = new Map<number, string>();
+    const degrees = new Map<number, number>();
+    for (const n of notes) {
+      const pc = ((n.midi % 12) + 12) % 12;
+      if (!names.has(pc)) { names.set(pc, n.name.replace(/\d+$/, '')); degrees.set(pc, n.degree); }   // the first note of a pitch class: the octave note is degree 1 again
+    }
+    const rootPc = ((notes[0].midi % 12) + 12) % 12;
+    guitar.setDots(positionsOf(notes.map((n) => n.name), GUITAR_FRETS, { root: rootPc, degrees }).map((p) => ({ ...p, label: options.labels === 'degrees' ? String(p.degree) : names.get(p.pc)! })));
+    if (tabHost) tabHost.textContent = tabText(tabForRun(notes.map((n) => n.midi)));
+  };
+
   const draw = (): void => {
     notes = chordMode ? chordNotes(tonic, chord, options.octave) : scaleNotes(tonic, scale, options.octave);
     root.setAttribute('data-tonic', tonic);
@@ -264,11 +286,17 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
       caption.textContent = `${tonic} ${SCALE_TYPE_LABELS[scale]}: ${notes.map((n) => n.name.replace(/\d+$/, '')).join(' ')}`;
     }
     drawPiano();
+    drawGuitar();
     drawStaff();
   };
 
   // ---- sound -------------------------------------------------------------------------------------------------------------------------------------------------
-  const light = (midi: number, on: boolean): void => { keyEls.get(midi)?.classList.toggle('is-playing', on); };
+  const light = (midi: number, on: boolean): void => {
+    keyEls.get(midi)?.classList.toggle('is-playing', on);
+    if (on) litMidis.add(midi); else litMidis.delete(midi);
+    guitar?.setLit(litMidis);
+  };
+  const clearLit = (): void => { for (const k of keyEls.values()) k.classList.remove('is-playing'); litMidis.clear(); guitar?.setLit(litMidis); };
 
   const refreshButtons = (): void => {
     for (const { mode, label } of PLAY_MODES) {
@@ -282,7 +310,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
 
   function stop(): void {
     deps.sound.stop();
-    for (const k of keyEls.values()) k.classList.remove('is-playing');
+    clearLit();
     playing = null;
     refreshButtons();
   }
@@ -296,7 +324,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
       onNoteOn: (midi) => { light(midi, true); },
       onNoteOff: (midi) => { light(midi, false); },
       onEnd: () => {
-        for (const k of keyEls.values()) k.classList.remove('is-playing');
+        clearLit();
         playing = null;
         refreshButtons();
       },

@@ -63,11 +63,13 @@ const STEP_FIFTHS: Record<Step, number> = { F: -1, C: 0, G: 1, D: 2, A: 3, E: 4,
 const SHARP_ORDER: readonly Step[] = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
 const FLAT_ORDER: readonly Step[] = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
 
-export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean; diatonic: boolean }
+export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean; diatonic: boolean; guitar: boolean }
+/** What a guitar dot shows: the scale degree / the chord tone's number, or the note name. */
+export type GuitarLabels = 'degrees' | 'names';
 export type ExplorerMode = 'scale' | 'chord' | 'free';
-export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean; mode: ExplorerMode; chord: ChordQuality }
+export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean; mode: ExplorerMode; chord: ChordQuality; labels: GuitarLabels; tab: boolean }
 
-export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false }, controls: true, mode: 'scale', chord: 'major' };
+export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false }, controls: true, mode: 'scale', chord: 'major', labels: 'degrees', tab: false };
 
 export const MIN_OCTAVE = 1;
 export const MAX_OCTAVE = 6;
@@ -75,7 +77,7 @@ export const MAX_OCTAVE = 6;
 export type ScaleExplorerParse = { ok: true; options: ScaleExplorerOptions } | { ok: false; message: string };
 
 const OPTION_RE = /^([A-Za-z_]+)\s*:\s*(.*)$/;
-const SUPPORTED_OPTIONS = ['tonic', 'scale', 'mode', 'chord', 'octave', 'show', 'controls'] as const;
+const SUPPORTED_OPTIONS = ['tonic', 'scale', 'mode', 'chord', 'octave', 'show', 'controls', 'labels', 'tab'] as const;
 const TONIC_RE = /^([A-Ga-g])([#b♯♭]?)$/;
 
 /** A tonic as typed -> the spelling kept (`bb` -> `Bb`, `F♯` -> `F#`), or null. */
@@ -97,6 +99,7 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
   const lines = source.split(/\r?\n/).map((l) => l.trim()).filter((l) => l !== '');
   const out: ScaleExplorerOptions = { ...DEFAULT_SCALE_OPTIONS, show: { ...DEFAULT_SCALE_OPTIONS.show } };
   const seen = new Set<string>();
+  let labels: GuitarLabels | null = null;
   for (const line of lines) {
     const m = OPTION_RE.exec(line);
     if (!m) return bad(`Unrecognised line "${line}". Each line is "key: value" — ${SUPPORTED_OPTIONS.join(', ')}.`);
@@ -121,16 +124,25 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       const c = normalizeChordQuality(value);
       if (!c) return bad(`chord must be one of ${CHORD_QUALITIES.join(', ')} (got "${value}").`);
       out.chord = c;
+    } else if (key === 'labels') {
+      const v = value.toLowerCase();
+      if (v !== 'degrees' && v !== 'names') return bad(`labels must be degrees or names (got "${value}").`);
+      labels = v;
+    } else if (key === 'tab') {
+      const v = value.toLowerCase();
+      if (v === 'yes' || v === 'true') out.tab = true;
+      else if (v === 'no' || v === 'false') out.tab = false;
+      else return bad(`tab must be yes or no (got "${value}").`);
     } else if (key === 'octave') {
       const n = /^\d+$/.test(value) ? Number(value) : NaN;
       if (!(n >= MIN_OCTAVE && n <= MAX_OCTAVE)) return bad(`octave must be a whole number from ${MIN_OCTAVE} to ${MAX_OCTAVE} (got "${value}").`);
       out.octave = n;
     } else if (key === 'show') {
       const parts = value.split(',').map((p) => p.trim().toLowerCase()).filter((p) => p !== '');
-      if (parts.length === 0) return bad(`show must list what to show: piano, staff, numbers, diatonic (got "${value}").`);
-      const show: ScaleShow = { piano: false, staff: false, numbers: false, diatonic: false };
+      if (parts.length === 0) return bad(`show must list what to show: piano, staff, numbers, diatonic, guitar (got "${value}").`);
+      const show: ScaleShow = { piano: false, staff: false, numbers: false, diatonic: false, guitar: false };
       for (const p of parts) {
-        if (p !== 'piano' && p !== 'staff' && p !== 'numbers' && p !== 'diatonic') return bad(`show lists piano, staff, numbers and diatonic (got "${p}" in "${value}").`);
+        if (p !== 'piano' && p !== 'staff' && p !== 'numbers' && p !== 'diatonic' && p !== 'guitar') return bad(`show lists piano, staff, numbers, diatonic and guitar (got "${p}" in "${value}").`);
         show[p] = true;
       }
       if (show.numbers && !show.piano) return bad('show: "numbers" labels the piano keys, so it needs "piano" too.');
@@ -143,6 +155,9 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       else return bad(`controls must be yes or no (got "${value}").`);
     }
   }
+  if (seen.has('labels') && !out.show.guitar) return bad('"labels" names what the guitar dots show, so "show" must include "guitar".');
+  if (out.tab && !out.show.guitar) return bad('"tab: yes" writes the tab under the guitar, so "show" must include "guitar".');
+  out.labels = labels ?? (out.mode === 'scale' ? 'degrees' : 'names');   // the default: degrees in scale mode, names in chord and free modes
   if (out.show.diatonic && out.mode !== 'free') return bad('show: "diatonic" is the row of chords you click in free mode, so the block needs "mode: free".');
   if (out.mode === 'free' && !out.show.piano) return bad('mode: free is played on the piano, so "show" must include "piano".');
   if (out.mode === 'free' && !out.controls) return bad('mode: free is interactive: "controls: no" is not available there.');

@@ -1585,6 +1585,74 @@
   color: var(--text-on-accent);
 }
 
+/* 2026-11-04-1173: the guitar view of the Scale Explorer (guitar-dom.ts): the widget's neck styles (.forge-guitar-scroller / -string / -fret / -nut / -inlay / -open-label / -fret-number) plus the dots, which are NOT the widget's .forge-guitar-dot (that one is
+   invisible until hovered). The root is larger and orange; a tinted dot is a note of the key not picked; a picked dot is the accent; a lit dot (a note being played) is yellow. */
+.forge-scale-guitar {
+  margin: 6px 0;
+}
+
+.forge-guitar-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.forge-gdot {
+  cursor: pointer;
+}
+
+/* Free mode: every intersection is a hit cell UNDER the dots: a dot must let the click through to its cell. */
+.is-clickall .forge-gdot {
+  pointer-events: none;
+  cursor: default;
+}
+
+.forge-gdot-disc {
+  fill: var(--interactive-accent);
+}
+
+.forge-gdot.is-root .forge-gdot-disc {
+  fill: var(--color-orange, #e0842a);
+}
+
+.forge-gdot.is-tint .forge-gdot-disc {
+  fill: var(--background-modifier-hover);
+  fill: color-mix(in srgb, var(--interactive-accent) 30%, var(--background-primary));
+}
+
+.forge-gdot.is-picked .forge-gdot-disc {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent-hover);
+  stroke-width: 2;
+}
+
+.forge-gdot.is-lit .forge-gdot-disc {
+  fill: var(--color-yellow, #e5c03a);
+}
+
+.forge-gdot-label {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--text-on-accent, #fff);
+  pointer-events: none;
+  user-select: none;
+}
+
+.forge-gdot.is-tint .forge-gdot-label {
+  fill: var(--text-normal);
+}
+
+.forge-gdot.is-picked .forge-gdot-label,
+.forge-gdot.is-root:not(.is-tint) .forge-gdot-label {
+  fill: var(--text-on-accent, #fff);
+}
+
+.forge-scale-tab {
+  margin: 4px 0 6px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
 .forge-scale-caption {
   margin: 2px 0 6px;
   color: var(--text-muted);
@@ -2414,6 +2482,7 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-scale-staff-error,
 .forge-scale-caption,
 .forge-scale-chord-name,
+.forge-scale-tab,
 .forge-scale-readout,
 .forge-scale-diatonic-label,
 .forge-re-extract-warning,

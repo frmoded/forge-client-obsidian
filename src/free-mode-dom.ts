@@ -7,7 +7,9 @@
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
 import { stackedMusicXML } from './chord-names-core.ts';
 import { diatonicChords, keyName } from './diatonic-chords-core.ts';
-import { clefFor, freeReadout, pickedNotes, toggleKey } from './free-mode-core.ts';
+import { clefFor, freeReadout, pickedNotes, spellInKey, toggleKey } from './free-mode-core.ts';
+import { GUITAR_FRETS, positionsOf, positionsOfMidi, tabForRun, tabText } from './guitar-core.ts';
+import { mountGuitar, type GuitarDot } from './guitar-dom.ts';
 import {
   SCALE_TYPES,
   SCALE_TYPE_LABELS,
@@ -90,6 +92,11 @@ export function mountFreeMode(el: HTMLElement, options: ScaleExplorerOptions, de
 
   const rowHost = options.show.diatonic ? h('div', 'forge-scale-diatonic') : null;
   if (rowHost) root.appendChild(rowHost);
+  // 2026-11-04-1173: the guitar neck (every intersection clickable: a click toggles that PITCH like a piano key; a pitch has several dots, they all light) and the one-line tab of the picked notes.
+  const guitarHost = options.show.guitar ? h('div', 'forge-scale-guitar') : null;
+  if (guitarHost) root.appendChild(guitarHost);
+  const tabHost = options.show.guitar && options.tab ? h('div', 'forge-scale-tab') : null;
+  if (tabHost) root.appendChild(tabHost);
   const staffHost = options.show.staff && deps.renderStaff ? h('div', 'forge-scale-staff') : null;
   if (staffHost) root.appendChild(staffHost);
 
@@ -183,6 +190,27 @@ export function mountFreeMode(el: HTMLElement, options: ScaleExplorerOptions, de
     rowHost.appendChild(sw);
   };
 
+  const guitar = guitarHost ? mountGuitar(guitarHost, { clickAll: true, onClick: (pos) => { toggle(pos.midi); } }) : null;
+  /** The key's notes everywhere on the neck (tinted), the root larger; plus a dot for each picked pitch that is not a note of the key; every dot of a picked pitch is lit. */
+  const refreshGuitar = (): void => {
+    if (!guitar) return;
+    const key = { tonic, scale };
+    const sc = scaleNotes(tonic, scale, options.octave).slice(0, 7);
+    const names = new Map<number, string>(sc.map((n) => [((n.midi % 12) + 12) % 12, n.name.replace(/\d+$/, '')]));
+    const degrees = new Map<number, number>(sc.map((n) => [((n.midi % 12) + 12) % 12, n.degree]));
+    const rootPc = ((sc[0].midi % 12) + 12) % 12;
+    const labelOf = (pc: number, midi: number): string => (options.labels === 'degrees' ? (degrees.has(pc) ? String(degrees.get(pc)) : '') : (names.get(pc) ?? spellInKey(midi, key).replace(/\d+$/, '')));
+    const dots: GuitarDot[] = positionsOf(sc.map((n) => n.name), GUITAR_FRETS, { root: rootPc, degrees }).map((p) => ({ string: p.string, fret: p.fret, midi: p.midi, pc: p.pc, isRoot: p.isRoot, label: labelOf(p.pc, p.midi), tint: true }));
+    for (const m of picked) {
+      const pc = ((m % 12) + 12) % 12;
+      if (degrees.has(pc)) continue;
+      for (const pos of positionsOfMidi(m)) dots.push({ string: pos.string, fret: pos.fret, midi: m, pc, isRoot: false, label: labelOf(pc, m), tint: false });
+    }
+    guitar.setDots(dots);
+    guitar.setPicked(new Set(picked));
+    if (tabHost) tabHost.textContent = tabText(tabForRun(picked));
+  };
+
   const refreshAll = (): void => {
     root.setAttribute('data-tonic', tonic);
     root.setAttribute('data-scale', scale);
@@ -191,6 +219,7 @@ export function mountFreeMode(el: HTMLElement, options: ScaleExplorerOptions, de
     markPicked();
     updateReadout();
     renderRow();
+    refreshGuitar();
     drawStaff();
   };
 
@@ -198,17 +227,17 @@ export function mountFreeMode(el: HTMLElement, options: ScaleExplorerOptions, de
   function toggle(midi: number): void {
     const wasOn = picked.includes(midi);
     picked = toggleKey(picked, midi);
-    markPicked(); updateReadout(); drawStaff();
+    markPicked(); updateReadout(); refreshGuitar(); drawStaff();
     if (!wasOn) deps.sound.play([{ midi, startMs: 0, durMs: TOGGLE_NOTE_MS }], SILENT_HOOKS);   // a key going ON sounds; going OFF is silent
   }
   function replaceWith(midis: number[]): void {
     picked = [...midis].sort((a, b) => a - b);
-    markPicked(); updateReadout(); drawStaff();
+    markPicked(); updateReadout(); refreshGuitar(); drawStaff();
     deps.sound.play(playEvents(picked, 'together'), SILENT_HOOKS);
   }
   function stop(): void { deps.sound.stop(); }
 
-  clearBtn.addEventListener('click', () => { stop(); picked = []; markPicked(); updateReadout(); drawStaff(); });
+  clearBtn.addEventListener('click', () => { stop(); picked = []; markPicked(); updateReadout(); refreshGuitar(); drawStaff(); });
   tonicSelect.addEventListener('change', () => {
     const t = normalizeTonic(tonicSelect.value);
     if (!t) return;

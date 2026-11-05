@@ -75,13 +75,13 @@ test('the piano is the piano widget\'s own keyboard: 146 px tall, in a horizonta
 });
 
 test('show: numbers off -> no numbers; piano off -> no piano and numbers cannot appear; staff off -> the staff drawer is never called', async () => {
-  const noNum = world({ show: { piano: true, staff: true, numbers: false, diatonic: false } });
+  const noNum = world({ show: { piano: true, staff: true, numbers: false, diatonic: false, guitar: false } });
   assert.equal(noNum.q('text.forge-scale-degree').length, 0);
   assert.equal(noNum.q('rect.is-scale').length, 8);
-  const noPiano = world({ show: { piano: false, staff: true, numbers: false, diatonic: false } });
+  const noPiano = world({ show: { piano: false, staff: true, numbers: false, diatonic: false, guitar: false } });
   assert.equal(noPiano.q('rect').length, 0);
   assert.equal(noPiano.q('.forge-scale-piano').length, 0);
-  const noStaff = world({ show: { piano: true, staff: false, numbers: true, diatonic: false } });
+  const noStaff = world({ show: { piano: true, staff: false, numbers: true, diatonic: false, guitar: false } });
   await tick();
   assert.equal(noStaff.xml.length, 0);
   assert.equal(noStaff.q('.forge-scale-staff').length, 0);
@@ -390,7 +390,7 @@ test('free mode: a click toggles a key (ON then OFF), the set stays ascending ac
 });
 
 test('free mode, the readout: C E G is "C major" and "I in C major"; adding F# gives no name and "F# is not in C major"; the V button lights G B D', () => {
-  const f = freeWorld({ show: { piano: true, staff: true, numbers: false, diatonic: true } });
+  const f = freeWorld({ show: { piano: true, staff: true, numbers: false, diatonic: true, guitar: false } });
   f.click(60); f.click(64); f.click(67);
   assert.equal(f.readout().head, 'C major');
   assert.equal(f.readout().roman, 'I in C major');
@@ -467,7 +467,7 @@ test('free mode: the staff shows the toggled notes as ONE chord, live; none = a 
 });
 
 test('free mode, show: diatonic: seven buttons I ii iii IV V vi vii° labelled C Dm Em F G Am B°; the 7ths switch makes them sevenths; a click replaces the set, lights it and plays it together', () => {
-  const f = freeWorld({ show: { piano: true, staff: true, numbers: false, diatonic: true } });
+  const f = freeWorld({ show: { piano: true, staff: true, numbers: false, diatonic: true, guitar: false } });
   const btns = f.q<HTMLButtonElement>('button.forge-scale-diatonic-btn');
   assert.deepEqual(btns.map((b) => b.getAttribute('data-numeral')), ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°']);
   assert.deepEqual(btns.map((b) => b.querySelector('.forge-scale-diatonic-label')!.textContent), ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'B°']);
@@ -489,11 +489,11 @@ test('free mode, show: diatonic: seven buttons I ii iii IV V vi vii° labelled C
 });
 
 test('free mode, the row follows the key and the scale: A minor gives i ii° III iv v VI VII (Am B° C Dm Em F G); D natural minor Dm E° F Gm Am Bb C', () => {
-  const am = freeWorld({ tonic: 'A', scale: 'natural minor', show: { piano: true, staff: false, numbers: false, diatonic: true } });
+  const am = freeWorld({ tonic: 'A', scale: 'natural minor', show: { piano: true, staff: false, numbers: false, diatonic: true, guitar: false } });
   assert.deepEqual(am.q<HTMLButtonElement>('button.forge-scale-diatonic-btn').map((b) => b.getAttribute('data-numeral')), ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII']);
   am.rowBtn(1).click();
   assert.equal(am.readout().roman, 'i in A minor');
-  const dm = freeWorld({ tonic: 'D', scale: 'natural minor', show: { piano: true, staff: false, numbers: false, diatonic: true } });
+  const dm = freeWorld({ tonic: 'D', scale: 'natural minor', show: { piano: true, staff: false, numbers: false, diatonic: true, guitar: false } });
   assert.deepEqual(dm.q<HTMLButtonElement>('button.forge-scale-diatonic-btn').map((b) => b.querySelector('.forge-scale-diatonic-label')!.textContent), ['Dm', 'E°', 'F', 'Gm', 'Am', 'Bb', 'C']);
 });
 
@@ -510,4 +510,138 @@ test('free mode: without show: diatonic there is no row; the block source mode: 
     assert.equal(mountScaleBlock(e2, src, { sound: { play() {}, stop() {} } }), null, src);
     assert.match(e2.querySelector('.forge-scale-error p')?.textContent ?? '', re, src);
   }
+});
+
+// ---- 2026-11-04-1173: the guitar view ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+import { GUITAR_HEIGHT } from './guitar-dom.ts';
+import { positionsOf, positionsOfMidi, tabText, tabForRun } from './guitar-core.ts';
+
+function guitarWorld(over: Partial<ScaleExplorerOptions> = {}) {
+  const base: Partial<ScaleExplorerOptions> = { show: { piano: true, staff: false, numbers: false, diatonic: false, guitar: true }, ...over };
+  const w = world(base);
+  const dots = () => w.q('g.forge-gdot');
+  const dotAt = (s: number, f: number) => w.q(`g.forge-gdot[data-string="${s}"][data-fret="${f}"]`)[0];
+  const label = (g: Element | undefined) => g?.querySelector('.forge-gdot-label')?.textContent ?? null;
+  return { ...w, dots, dotAt, label };
+}
+
+test('guitar, scale mode: C major shows EVERY position of its notes (59 dots), degrees in the dots by default, the 8 root dots larger and marked, the dot at string 5 fret 3 is the root, and a D# on string 4 is absent', () => {
+  const g = guitarWorld();
+  assert.equal(g.dots().length, 59);
+  assert.equal(g.q('g.forge-gdot.is-root').length, 8);
+  assert.equal(g.dotAt(5, 3)?.getAttribute('data-root'), 'true');
+  assert.equal(g.label(g.dotAt(5, 3)), '1');
+  assert.equal(g.dotAt(4, 1), undefined, 'D# on the D string');
+  assert.equal(g.label(g.dotAt(4, 0)), '2', 'the open D is degree 2');
+  assert.equal(g.dotAt(5, 3)!.querySelector('circle')!.getAttribute('r'), '11', 'the root dot is larger');
+  assert.equal(g.dotAt(5, 5)!.querySelector('circle')!.getAttribute('r'), '9');
+  assert.deepEqual([...new Set(g.dots().map((d) => label(d)))].sort(), ['1', '2', '3', '4', '5', '6', '7']);
+  function label(d: Element) { return d.querySelector('.forge-gdot-label')!.textContent; }
+});
+
+test('guitar: the neck is the widget\'s geometry: 6 strings, fret numbers 1 to 15, inlays at 3 5 7 9 12 (two) 15, the open-string names E A D G B E, 164 px tall, in a horizontal scroller', () => {
+  const g = guitarWorld();
+  assert.equal(GUITAR_HEIGHT, 164);
+  assert.equal(g.q('svg.forge-guitar-svg')[0].getAttribute('height'), '164');
+  assert.equal(g.q('line.forge-guitar-string').length, 6);
+  assert.deepEqual(g.q('text.forge-guitar-fret-number').map((t) => t.textContent), Array.from({ length: 15 }, (_, i) => String(i + 1)));
+  assert.equal(g.q('circle.forge-guitar-inlay').length, 7);
+  assert.deepEqual(g.q('text.forge-guitar-open-label').map((t) => t.textContent), ['E', 'A', 'D', 'G', 'B', 'E']);
+  assert.equal(g.q('.forge-guitar-scroller').length, 1);
+});
+
+test('guitar labels: names instead of degrees; chord mode defaults to names (C E G) and degrees give 1 3 5', () => {
+  const n = guitarWorld({ labels: 'names' });
+  assert.deepEqual([...new Set(n.dots().map((d) => d.querySelector('.forge-gdot-label')!.textContent))].sort(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+  const chord = guitarWorld({ mode: 'chord', labels: 'names', chord: 'major' });
+  assert.deepEqual([...new Set(chord.dots().map((d) => d.querySelector('.forge-gdot-label')!.textContent))].sort(), ['C', 'E', 'G']);
+  assert.equal(chord.q('g.forge-gdot.is-root').every((d) => d.querySelector('.forge-gdot-label')!.textContent === 'C'), true);
+  const deg = guitarWorld({ mode: 'chord', labels: 'degrees', chord: 'dom7', tonic: 'Bb' });
+  assert.deepEqual([...new Set(deg.dots().map((d) => d.querySelector('.forge-gdot-label')!.textContent))].sort(), ['1', '3', '5', '7']);
+  const eb = guitarWorld({ tonic: 'Eb', scale: 'natural minor', labels: 'names' });
+  assert.ok(eb.dots().some((d) => d.querySelector('.forge-gdot-label')!.textContent === 'Cb'), 'the scale\'s own spelling: Cb');
+});
+
+test('guitar: without show: guitar there is no neck; the dots follow the tonic and the scale dropdowns', () => {
+  assert.equal(world().q('svg.forge-guitar-svg').length, 0);
+  const g = guitarWorld();
+  g.change(g.q<HTMLSelectElement>('select.forge-scale-tonic')[0], 'G');
+  assert.equal(g.q('g.forge-gdot.is-root').every((d) => d.getAttribute('data-midi') !== null && Number(d.getAttribute('data-midi')) % 12 === 7), true);
+  assert.equal(g.dots().length, positionsOf(['G', 'A', 'B', 'C', 'D', 'E', 'F#']).length, 'G major: its own positions (58: the F# and the G land differently on the neck)');
+});
+
+test('guitar tab: tab: yes writes the run Play up plays: C major from C3 is 5:3 4:0 4:2 4:3 3:0 3:2 2:0 2:1', () => {
+  const g = guitarWorld({ tab: true, octave: 3 });
+  assert.equal(g.q('.forge-scale-tab')[0].textContent, '5:3 4:0 4:2 4:3 3:0 3:2 2:0 2:1');
+  const off = guitarWorld();
+  assert.equal(off.q('.forge-scale-tab').length, 0);
+  const em = guitarWorld({ tab: true, octave: 2, tonic: 'E', scale: 'natural minor' });
+  assert.equal(em.q('.forge-scale-tab')[0].textContent, '6:0 6:2 6:3 5:0 5:2 5:3 4:0 4:2');
+  const chord = guitarWorld({ tab: true, mode: 'chord', octave: 3, tonic: 'C', chord: 'major' });
+  assert.equal(chord.q('.forge-scale-tab')[0].textContent, tabText(tabForRun(['C3', 'E3', 'G3'])));
+});
+
+test('guitar: while a note plays every dot that sounds it is lit (a pitch has several), and they go out; a click on a dot plays that pitch', () => {
+  const g = guitarWorld();
+  g.q<HTMLButtonElement>('button[data-mode="up"]')[0].click();
+  g.plays[0].hooks.onNoteOn(60);
+  assert.deepEqual(g.q('g.forge-gdot.is-lit').map((d) => `${d.getAttribute('data-string')}:${d.getAttribute('data-fret')}`).sort(), ['2:1', '3:5', '4:10', '5:15']);
+  g.plays[0].hooks.onNoteOff(60);
+  assert.equal(g.q('g.forge-gdot.is-lit').length, 0);
+  g.plays[0].hooks.onNoteOn(64); g.plays[0].hooks.onEnd();
+  assert.equal(g.q('g.forge-gdot.is-lit').length, 0);
+  const before = g.plays.length;
+  g.dotAt(5, 3)!.dispatchEvent(new g.win.MouseEvent('click', { bubbles: true }));
+  assert.equal(g.plays.length, before + 1);
+  assert.deepEqual(g.plays[g.plays.length - 1].events.map((e) => e.midi), [48]);
+});
+
+test('free mode, the guitar: a click on the string 2 fret 1 cell toggles middle C (the same pitch list as the piano): the piano key 60 is picked, ALL four dots of that pitch light, the readout says C4 and the tab 2:1; a second click turns them off', () => {
+  const g = guitarWorld({ mode: 'free', tab: true });
+  const cell = (s: number, f: number) => g.q(`rect.forge-guitar-hit[data-string="${s}"][data-fret="${f}"]`)[0];
+  assert.equal(g.q('rect.forge-guitar-hit').length, 96, 'every intersection is clickable');
+  cell(2, 1).dispatchEvent(new g.win.MouseEvent('click', { bubbles: true }));
+  assert.deepEqual(g.q('rect.is-picked').map(midiOf), [60]);
+  assert.deepEqual(g.handle.state(), { tonic: 'C', scale: 'major', picked: [60] });
+  assert.deepEqual(g.q('g.forge-gdot.is-picked').map((d) => `${d.getAttribute('data-string')}:${d.getAttribute('data-fret')}`).sort(), ['2:1', '3:5', '4:10', '5:15']);
+  assert.equal(g.q('.forge-scale-readout-headline')[0].textContent, 'C4');
+  assert.equal(g.q('.forge-scale-tab')[0].textContent, '2:1');
+  assert.equal(g.plays.length, 1);
+  assert.deepEqual(g.plays[0].events.map((e) => e.midi), [60]);
+  cell(5, 15).dispatchEvent(new g.win.MouseEvent('click', { bubbles: true }));            // the same pitch on another string: toggles it OFF
+  assert.equal(g.q('rect.is-picked').length, 0);
+  assert.equal(g.q('g.forge-gdot.is-picked').length, 0);
+  assert.equal(g.plays.length, 1, 'switching OFF is silent');
+});
+
+test('free mode, the guitar: the key\'s notes are tinted dots (names, the parser\'s default for free mode), a picked note OUTSIDE the key gets its own dots (D#3 at string 4 fret 1) and the readout says it is not in the key; the neck chord reads like the piano chord', () => {
+  const g = guitarWorld({ mode: 'free', labels: 'names' });
+  const cell = (s: number, f: number) => g.q(`rect.forge-guitar-hit[data-string="${s}"][data-fret="${f}"]`)[0];
+  const click = (s: number, f: number) => cell(s, f).dispatchEvent(new g.win.MouseEvent('click', { bubbles: true }));
+  assert.equal(g.dots().length, 59);
+  assert.ok(g.dots().every((d) => d.classList.contains('is-tint')));
+  assert.deepEqual([...new Set(g.dots().map((d) => d.querySelector('.forge-gdot-label')!.textContent))].sort(), ['A', 'B', 'C', 'D', 'E', 'F', 'G']);
+  click(4, 1);
+  assert.equal(g.dotAt(4, 1)?.classList.contains('is-picked'), true);
+  assert.equal(g.q('.forge-scale-readout-headline')[0].textContent, 'D#3');
+  assert.equal(g.q('.forge-scale-readout-outside')[0].textContent, 'D# is not in C major');
+  click(4, 1);
+  assert.equal(g.dotAt(4, 1), undefined, 'the extra dot goes with the pick');
+  click(5, 3); click(4, 2); click(3, 0);                                              // C3 E3 G3 on the neck
+  assert.equal(g.q('.forge-scale-readout-headline')[0].textContent, 'C major');
+  assert.equal(g.q('.forge-scale-readout-roman')[0].textContent, 'I in C major');
+  assert.deepEqual(g.q('rect.is-picked').map(midiOf), [48, 52, 55]);
+  assert.deepEqual(g.handle.state(), { tonic: 'C', scale: 'major', picked: [48, 52, 55] });
+});
+
+test('free mode: a click on a piano key lights the guitar dots too (one source of truth), and Clear / the V button clear them or replace them', () => {
+  const g = guitarWorld({ mode: 'free', show: { piano: true, staff: false, numbers: false, diatonic: true, guitar: true } });
+  g.q('rect[data-midi="60"]')[0].dispatchEvent(new g.win.MouseEvent('click', { bubbles: true }));
+  assert.equal(g.q('g.forge-gdot.is-picked').length, 4);
+  g.q<HTMLButtonElement>('button.forge-scale-diatonic-btn')[4].click();
+  assert.deepEqual([...new Set(g.q('g.forge-gdot.is-picked').map((d) => d.getAttribute('data-midi')))].sort(), ['67', '71', '74']);
+  g.q<HTMLButtonElement>('button.forge-scale-clear')[0].click();
+  assert.equal(g.q('g.forge-gdot.is-picked').length, 0);
+  assert.ok(positionsOfMidi(67).length >= 3);
 });

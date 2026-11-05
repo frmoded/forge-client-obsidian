@@ -9,6 +9,8 @@
 //     keys differ); Play together and Play arpeggio reach the sound double (all at once / one after the other);
 //   * 1172 free mode (+ the diatonic row): REAL clicks on the C, E and G keys give the readout "C major" and "I in C major", the staff one stacked chord of 3, the toggled keys differ in colour from the key's tint; a click on F# gives
 //     "F# is not in C major" and no name; a REAL click on the V button replaces the set with G B D, lights those keys and plays them at once; a CONTROL (the V button's keys compared with the IV's expected keys differ); no overflow;
+//   * 1173 the guitar view: C major shows every position of its notes (59 dots: the dot at string 5 fret 3 is the root, larger and another colour, labelled 1; a D# on string 4 is absent; every dot's midi is its open string + its fret), the neck is 164 px
+//     tall and scrolls horizontally (the last fret is reachable at 300 px), the tab line is 5:3 4:0 4:2 4:3 3:0 3:2 2:0 2:1; in free mode a REAL click on the string 2 fret 1 cell toggles middle C: the piano key 60 and ALL FOUR guitar dots of that pitch light and nothing else;
 //   * a bad source shows the inline error naming the bad value, within the pane; `controls: no` has no dropdown and no button.
 // Writes shots/scale-explorer-*.png and scale-explorer-measurements.json; exits 1 when a verdict is false. Build and run from the client repo root:
 //   OUT=<dir>/harness-scale-explorer.js EDITION=music ENTRY=entry-scale-explorer.ts node scripts/dev/browser/build.mjs      (with app.css and plugin-styles.css = this repo's styles.css in <dir>)
@@ -34,6 +36,8 @@ const BLOCKS: Record<string, string> = {
   chordBad: 'mode: chord\nchord: sus4',
   ebm: 'tonic: Eb\nscale: minor',
   free: 'mode: free\nshow: piano, staff, diatonic',
+  gc: 'show: piano, guitar\ntab: yes\noctave: 3',
+  gfree: 'mode: free\nshow: piano, guitar\ntab: yes',
 };
 const page = (w: number) => `<!doctype html><html><head><meta charset=utf-8><link rel=stylesheet href="app.css"><link rel=stylesheet href="plugin-styles.css"><style>body{margin:0}</style></head><body class="theme-light mod-macos">
 <div class="markdown-source-view mod-cm6 is-live-preview" style="width:${w}px;padding:12px"><div class="cm-editor"><div class="cm-scroller"><div class="cm-content" id="content" style="width:${w - 24}px;min-width:${w - 24}px">
@@ -86,7 +90,7 @@ const verdicts: Record<string, boolean> = {};
 
 for (const width of [640, 300]) {
   const key = `w${width}`;
-  const p = await openPage({ dir: here, width: width + 40, height: 6400, pageHtml: page(width), routes: {} });
+  const p = await openPage({ dir: here, width: width + 40, height: 9000, pageHtml: page(width), routes: {} });
   try {
     await sleep(500);
     for (const [id, src] of Object.entries(BLOCKS)) await p.ev(`window.__mount(document.getElementById('blk-${id}'), ${JSON.stringify(src)})`);
@@ -159,6 +163,26 @@ for (const width of [640, 300]) {
     verdicts[`${key} free mode CONTROL: the V button's keys compared with the IV's expected keys (F A C) are NOT equal`] = !same(f5.picked, [65, 69, 72]);
     verdicts[`${key} free mode: the readout stays inside the pane and nothing overflows`] = [f0, f3, f4, f5].every((f: any) => f.readoutInside && !f.overflow);
     out[key].freeClicks = { f0, f3, f4, f5, plays0 };
+    // The guitar view (1173).
+    const gread = (id: string) => p.ev(`(() => { const r = document.getElementById('blk-${id}'); const dots = [...r.querySelectorAll('g.forge-gdot')]; const at = (s, f) => r.querySelector('g.forge-gdot[data-string="' + s + '"][data-fret="' + f + '"]'); const rad = (g) => g ? +g.querySelector('circle').getAttribute('r') : null; const fill = (g) => g ? getComputedStyle(g.querySelector('circle')).fill : null; const sc = r.querySelector('.forge-guitar-scroller'); const svg = r.querySelector('svg.forge-guitar-svg'); const open = [40, 45, 50, 55, 59, 64]; const num = (n) => [...svg.querySelectorAll('text.forge-guitar-fret-number')].find((t) => t.textContent === String(n)); const tr = (e) => e.getBoundingClientRect(); const pane = tr(document.getElementById('content')); return { count: dots.length, roots: dots.filter((d) => d.getAttribute('data-root') === 'true').length, midiOk: dots.every((d) => +d.getAttribute('data-midi') === open[6 - +d.getAttribute('data-string')] + +d.getAttribute('data-fret')), root53: at(5, 3) ? { root: at(5, 3).getAttribute('data-root'), label: at(5, 3).querySelector('text').textContent, r: rad(at(5, 3)), fill: fill(at(5, 3)) } : null, plain55: at(5, 5) ? { r: rad(at(5, 5)), fill: fill(at(5, 5)), label: at(5, 5).querySelector('text').textContent } : null, d41: !!at(4, 1), d40: !!at(4, 0), height: +svg.getAttribute('height'), tab: r.querySelector('.forge-scale-tab')?.textContent ?? null, scrollable: sc.scrollWidth > sc.clientWidth + 1, nibs: { strings: svg.querySelectorAll('line.forge-guitar-string').length, nums: svg.querySelectorAll('text.forge-guitar-fret-number').length, inlays: svg.querySelectorAll('circle.forge-guitar-inlay').length }, scRect: { l: tr(sc).left, r: tr(sc).right }, withinPane: tr(sc).right <= pane.right + 0.5, pageOverflow: document.documentElement.scrollWidth > innerWidth, lastNumVisibleAfterScroll: (() => { sc.scrollLeft = sc.scrollWidth; const n = tr(num(15)); return n.right <= tr(sc).right + 1 && n.left >= tr(sc).left - 1; })() && (() => { sc.scrollLeft = 0; return true; })() }; })()`);
+    const g1 = await gread('gc');
+    verdicts[`${key} guitar, C major: every position of its notes (59 dots, 8 roots), and every dot sounds its open string + its fret`] = g1.count === 59 && g1.roots === 8 && g1.midiOk;
+    verdicts[`${key} guitar: the dot at string 5 fret 3 is the ROOT (labelled ${g1.root53?.label}, radius ${g1.root53?.r} against ${g1.plain55?.r}, another colour ${g1.root53?.fill} / ${g1.plain55?.fill}); a D# on string 4 (fret 1) is absent while the open D is there`] = !!g1.root53 && g1.root53.root === 'true' && g1.root53.label === '1' && g1.root53.r > g1.plain55.r && g1.root53.fill !== g1.plain55.fill && g1.d41 === false && g1.d40 === true;
+    verdicts[`${key} guitar: 6 strings, fret numbers 1 to 15, 7 inlay dots, ${g1.height} px tall (medium), scrolls sideways (${g1.scrollable}) and fret 15 is reachable by scrolling, inside the pane, no page overflow`] = g1.nibs.strings === 6 && g1.nibs.nums === 15 && g1.nibs.inlays === 7 && g1.height === 164 && g1.lastNumVisibleAfterScroll && g1.withinPane && !g1.pageOverflow && (width > 400 || g1.scrollable);
+    verdicts[`${key} guitar tab: tab: yes writes the run of Play up (C major from C3): ${g1.tab}`] = g1.tab === '5:3 4:0 4:2 4:3 3:0 3:2 2:0 2:1';
+    const gcell = (s: number, f: number) => p.ev(`(() => { const r = document.querySelector('#blk-gfree rect.forge-guitar-hit[data-string="${s}"][data-fret="${f}"]'); const sc = document.querySelector('#blk-gfree .forge-guitar-scroller'); r.scrollIntoView({ block: 'center' }); sc.scrollLeft = 0; const b = r.getBoundingClientRect(); const x = b.left + b.width / 2, y = b.top + b.height / 2; const hit = document.elementFromPoint(x, y); return { x, y, hit: hit === r }; })()`);
+    const gfreeRead = () => p.ev(`(() => { const r = document.getElementById('blk-gfree'); const key = (m) => r.querySelector('rect.forge-free-key[data-midi="' + m + '"]'); return { picked: [...r.querySelectorAll('rect.forge-free-key.is-picked')].map((k) => +k.getAttribute('data-midi')).sort((a, b) => a - b), dotsLit: [...r.querySelectorAll('g.forge-gdot.is-picked')].map((d) => d.getAttribute('data-string') + ':' + d.getAttribute('data-fret')).sort(), head: r.querySelector('.forge-scale-readout-headline').textContent, tab: r.querySelector('.forge-scale-tab').textContent, dots: r.querySelectorAll('g.forge-gdot').length, tinted: r.querySelectorAll('g.forge-gdot.is-tint').length, hits: r.querySelectorAll('rect.forge-guitar-hit').length }; })()`);
+    const gf0 = await gfreeRead();
+    const gc21 = await gcell(2, 1); await p.click(gc21.x, gc21.y); await sleep(200);
+    const gf1 = await gfreeRead();
+    verdicts[`${key} guitar, free mode: ${gf0.hits} clickable intersections, the key's ${gf0.dots} dots tinted, nothing picked at the start`] = gf0.hits === 96 && gf0.dots === 59 && gf0.tinted === 59 && gf0.picked.length === 0;
+    verdicts[`${key} guitar, free mode: a REAL click on the string 2 fret 1 cell (the click target) toggles middle C: the piano key 60 is picked and ALL FOUR guitar dots of that pitch light (${gf1.dotsLit.join(' ')}), nothing else; the readout says ${gf1.head}, the tab ${gf1.tab}`] = gc21.hit && gf1.picked.join() === '60' && gf1.dotsLit.join(' ') === '2:1 3:5 4:10 5:15' && gf1.head === 'C4' && gf1.tab === '2:1';
+    const gc41 = await gcell(4, 1); await p.click(gc41.x, gc41.y); await sleep(200);
+    const gf2 = await gfreeRead();
+    verdicts[`${key} guitar, free mode CONTROL: a click on string 4 fret 1 (D#3, outside the key) picks D#3 (piano key 51) and lights only ITS dots (the C dots stay as they were), so the lit set can differ`] = gc41.hit && gf2.picked.join() === '51,60' && gf2.dotsLit.includes('4:1') && gf2.dotsLit.includes('2:1') && gf2.dots > gf0.dots && gf2.dotsLit.length > gf1.dotsLit.length;
+    await p.click(gc21.x, gc21.y); await sleep(150); await p.click(gc41.x, gc41.y); await sleep(150);
+    const gf3 = await gfreeRead();
+    verdicts[`${key} guitar, free mode: clicking the same two cells again switches both pitches off (no dot lit, the extra dot gone, nothing picked)`] = gf3.picked.length === 0 && gf3.dotsLit.length === 0 && gf3.dots === 59;
     // Chord mode: REAL clicks on Play together (all at once) and Play arpeggio (one after the other, upward) of the Bb7 block.
     const clickBtn = async (sel: string) => { const b = await p.ev(`(() => { const e = document.querySelector('${sel}'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, hit: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === e }; })()`); await p.click(b.x, b.y); await sleep(150); return b; };
     const lastPlay = () => p.ev(`(() => { const s = window.__sound; const e = s.plays[s.plays.length - 1].events; return { plays: s.plays.length, midis: e.map((x) => x.midi), starts: e.map((x) => x.startMs) }; })()`);
