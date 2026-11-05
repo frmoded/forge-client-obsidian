@@ -22,6 +22,7 @@
     {"file": "header-sync-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "phrase-default-view-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "linked-panes-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
+    {"file": "cache-fold-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "sentence-plan-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "kit-arrangement-flow-core.ts", "role": "pure core taking the gate's answer as input", "rights": ["mentions"]},
     {"file": "kits-arrangements.ts", "role": "view glue given the gate as a port", "rights": ["imports", "mentions", "renders"]},

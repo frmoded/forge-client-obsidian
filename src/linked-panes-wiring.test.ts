@@ -251,6 +251,108 @@ for (const edition of ['lean', 'music'] as const) {
     try { assert.deepEqual(w.log.lines, []); assert.deepEqual(w.log.splits, []); } finally { w.done(); }
   });
 
+  // ---- 2026-11-05-1177: the `# Cache` section is folded the first time a leaf shows a score-first note ----------------------------------------------------------------------------------------------
+  const CACHE_NOTE = ['---', 'type: data', '---', '', '# Description', '', 'Extend bar_006.', '', '# Cache', '', '<!-- derived from the Description above; edit the Description, not this -->', '', '```json', '{ "kind": "extend" }', '```', ''].join('\n');
+  const CACHE_FOLD = { folds: [{ from: 8, to: 15 }], lines: 16 };
+  /** A markdown tab with a fake fold-capable view: `applies` records what the plugin gave `currentMode.applyFoldInfo`, `folded` is what `getFoldInfo` answers (the person's own folds, or an unfold). */
+  function foldView(w: any, leaf: any, file: string, text = CACHE_NOTE, mode: 'preview' | 'source' = 'preview') {
+    const v: any = w.textTab(leaf, file);
+    const st = { applies: [] as any[], folded: { folds: [] as any[], lines: text.split('\n').length }, text, mode, editorText: text };
+    v.getViewType = () => 'markdown'; v.getViewData = () => st.text; v.getMode = () => st.mode; v.editor = { getValue: () => st.editorText };
+    v.currentMode = { getFoldInfo: () => st.folded, applyFoldInfo: (i: any) => { st.applies.push(i); } };
+    leaf.view = v; leaf.getViewState = () => ({ type: 'markdown', state: { file: v.file.path, mode: st.mode } });
+    return { v, st };
+  }
+  const countWrites = (w: any) => { const calls: string[] = []; for (const m of ['modify', 'create', 'process', 'trash', 'delete', 'rename']) w.app.vault[m] = async () => { calls.push(m); }; return calls; };
+
+  test(`[${edition}] a phrase, arrangement, composition, kit and bar note with a # Cache heading is opened with it folded - once per leaf and note; a person's unfold is kept; the note is never written`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const writes = countWrites(w);
+      const seen: Array<[string, ReturnType<typeof foldView>]> = [];
+      for (const f of [PHRASE, ARR, 'compositions/comp_001.md', 'kits/rock.md', 'bars/bar_006.md']) { const leaf = w.makeLeaf('markdown', f); seen.push([f, foldView(w, leaf, f)]); }
+      await w.fire('layout-change');
+      for (const [f, { st }] of seen) assert.deepEqual(st.applies, [CACHE_FOLD], `${f}: folded once, on the Cache heading, with the line count the view has`);
+      await w.fire('layout-change', 'active-leaf-change', 'file-open');
+      for (const [f, { st }] of seen) assert.equal(st.applies.length, 1, `${f}: never folded a second time`);
+      // the person unfolds (their fold state is empty, the heading line is not in it): kept open while the note stays open
+      const [, one] = seen[0]; one.st.folded = { folds: [], lines: 16 };
+      await w.fire('layout-change');
+      assert.equal(one.st.applies.length, 1, 'an unfold is kept');
+      assert.deepEqual(writes, [], 'no vault write of any kind');
+      assert.equal(one.v.getViewData(), CACHE_NOTE, 'the text is as it was (byte for byte)');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] the same leaf shows another note: that note is folded once too; back to the first it is NOT folded again; the person's other folds are kept`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const leaf = w.makeLeaf('markdown', PHRASE); const { v, st } = foldView(w, leaf, PHRASE);
+      st.folded = { folds: [{ from: 4, to: 6 }], lines: 16 };
+      await w.fire('layout-change');
+      assert.deepEqual(st.applies, [{ folds: [{ from: 4, to: 6 }, { from: 8, to: 15 }], lines: 16 }], "the person's Description fold stays");
+      v.file = Object.assign(v.file, { path: 'phrases/phrase_002.md', basename: 'phrase_002' });
+      await w.fire('file-open');
+      assert.equal(st.applies.length, 2, 'the second note, folded');
+      v.file = Object.assign(v.file, { path: PHRASE, basename: 'phrase_001' });
+      await w.fire('file-open');
+      assert.equal(st.applies.length, 2, 'back to the first: its one chance is used');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] a note that is not one of the five kinds (a plain note with a # Cache heading, a README) and a note with no # Cache heading are not touched; a heading that appears later is not folded`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const plain = foldView(w, w.makeLeaf('markdown', 'notes/plain.md'), 'notes/plain.md');
+      const readme = foldView(w, w.makeLeaf('markdown', 'phrases/README.md'), 'phrases/README.md');
+      const bare = foldView(w, w.makeLeaf('markdown', PHRASE), PHRASE, '# Description\n\nx\n');
+      await w.fire('layout-change');
+      assert.deepEqual([plain.st.applies, readme.st.applies, bare.st.applies], [[], [], []]);
+      bare.st.text = CACHE_NOTE; bare.st.editorText = CACHE_NOTE; bare.st.folded = { folds: [], lines: 16 };
+      await w.fire('layout-change');
+      assert.deepEqual(bare.st.applies, [], 'its chance went with the first look: it appears later, it stays as it is');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] a view whose text is not loaded yet (or whose editor does not hold it yet) is looked at again a moment later and then folded once`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const empty = foldView(w, w.makeLeaf('markdown', PHRASE), PHRASE, '');
+      const editing = foldView(w, w.makeLeaf('markdown', ARR), ARR, CACHE_NOTE, 'source'); editing.st.editorText = '';
+      await w.fire('layout-change');
+      assert.deepEqual([empty.st.applies, editing.st.applies], [[], []], 'not ready: nothing, and no chance used');
+      empty.st.text = CACHE_NOTE; empty.st.folded = { folds: [], lines: 16 }; editing.st.editorText = CACHE_NOTE;
+      await w.tick(400); await realSleep(400);                      // the retry rides window.setTimeout: this edition's host clock, or (the global window belongs to the last edition set up) real time
+      assert.deepEqual([empty.st.applies, editing.st.applies], [[CACHE_FOLD], [CACHE_FOLD]]);
+      await w.tick(2000); await realSleep(400);
+      assert.deepEqual([empty.st.applies.length, editing.st.applies.length], [1, 1], 'and once');
+    } finally { w.done(); }
+  });
+
+  test(`[${edition}] P3: a vault that is not score-first folds nothing - a phrase note with a # Cache heading stays as it opens, and nothing is written`, async () => {
+    for (const toml of [TUTORIAL_TOML, MUSIC_THEORY_TOML, null]) {
+      const w = await world(toml);
+      try {
+        const writes = countWrites(w);
+        const { st } = foldView(w, w.makeLeaf('markdown', PHRASE), PHRASE);
+        await w.fire('layout-change', 'file-open', 'active-leaf-change'); await w.tick(500);
+        assert.deepEqual(st.applies, []); assert.deepEqual(writes, []);
+      } finally { w.done(); }
+    }
+  });
+
+  test(`[${edition}] a view without the fold API (a future Obsidian) is left alone: no throw, no error line, the chance is used`, async () => {
+    const w = await world(SCORE_FIRST_TOML);
+    try {
+      const { v } = foldView(w, w.makeLeaf('markdown', PHRASE), PHRASE);
+      v.currentMode = {};
+      await w.fire('layout-change');
+      v.currentMode = { getFoldInfo: () => { throw new Error('boom'); }, applyFoldInfo: () => { throw new Error('boom'); } };
+      await w.fire('layout-change');
+      assert.ok(w.log.errors.length === 0 || w.log.errors.every((e: unknown[]) => /foldCaches/.test(String(e[0]))), `only the plugin's own labelled errors: ${JSON.stringify(w.log.errors)}`);
+    } finally { w.done(); }
+  });
+
   test(`[${edition}] closing the notes pane or the Score never throws and never touches another tab; the pair is dropped with one line and the command makes a fresh one`, async () => {
     const w = await world(SCORE_FIRST_TOML);
     try {

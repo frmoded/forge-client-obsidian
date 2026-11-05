@@ -7,6 +7,7 @@
 import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { registerRestoreParticipants, type RestoreParticipant } from './restore-hold-core.ts';
 import { deferredTabName } from './deferred-tab-title-core.ts';
+import { cacheFoldInfo, cacheFoldKind, shouldFoldCache, type FoldInfo } from './cache-fold-core.ts';
 import { ARRANGEMENT_VIEW_TYPE } from './arrangement-core.ts';
 import { COMPOSITION_VIEW_TYPE } from './composition-core.ts';
 import { MarkdownView, Notice, TFile, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
@@ -504,6 +505,35 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       };
       onWorkspaceMoved(nameDeferredTabs);
       nameDeferredTabs();
+      // 2026-11-05-1177: the `# Cache` section of a phrase, bar, kit, arrangement or composition is generated; the first time a leaf shows such a note (in the notes pane, "Open as Forge note", a restored tab) the heading is folded through
+      // Obsidian's own fold state (`currentMode.applyFoldInfo`, in the editor and in the reading view alike - not in the public typings, so asked defensively). Fold state lives in the workspace: the note is never written. A leaf is
+      // given ONE chance per note (`cacheHandled`): a person who unfolds it keeps it open while the note stays open. A view whose text is not loaded yet is looked at again a moment later (not counted as its chance).
+      type FoldMode = { getFoldInfo?: () => FoldInfo | null; applyFoldInfo?: (info: FoldInfo | null) => void };
+      const cacheHandled = new WeakMap<WorkspaceLeaf, Set<string>>();
+      const foldCaches = (retries = 20): void => {
+        let waiting = false;
+        app.workspace.iterateAllLeaves((leaf) => {                                                      // a truthy return would stop Obsidian's walk
+          if (!(leaf.view instanceof MarkdownView)) return;
+          const view = leaf.view as MarkdownView & { currentMode?: FoldMode };
+          const path = view.file?.path;
+          if (!path) return;
+          const done = cacheHandled.get(leaf) ?? new Set<string>();
+          if (!shouldFoldCache(scoreFirst, cacheFoldKind(path), done.has(path))) return;
+          const text = view.getViewData?.() ?? '';
+          const editorText = view.getMode?.() === 'source' ? view.editor?.getValue?.() : undefined;       // the editor must hold the text too, or Obsidian ignores a fold state for another line count
+          if (text === '' || (editorText !== undefined && editorText !== text)) { waiting = true; return; }
+          const mode = view.currentMode;
+          let current: FoldInfo | null = null;
+          try { current = mode?.getFoldInfo?.() ?? null; } catch (e) { console.error('foldCaches: getFoldInfo failed', e); }
+          const info = cacheFoldInfo(text, current);
+          done.add(path); cacheHandled.set(leaf, done);
+          if (info === null || typeof mode?.applyFoldInfo !== 'function') return;
+          try { mode.applyFoldInfo(info); console.info(`[forge-fold] ${path}: # Cache folded`); } catch (e) { console.error('foldCaches: applyFoldInfo failed', e); }
+        });
+        if (waiting && retries > 0) window.setTimeout(() => { foldCaches(retries - 1); }, 150);
+      };
+      onWorkspaceMoved(() => { foldCaches(); });
+      foldCaches();
       void descriptions.inspectOpen();
       // 2026-11-03-1155-92 (R4): "Restore to last commit" on a Score tab: the open Score tabs of the note take part (restore-hold-core.ts): a hand edit still waiting is dropped before the checkout, and afterwards the tab redraws from the restored file and the bar forgets what it said.
       plugin.register(registerRestoreParticipants(() => {
