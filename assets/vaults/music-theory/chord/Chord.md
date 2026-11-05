@@ -4,6 +4,15 @@ A **chord** is any set of notes sounding together. That's the whole definition: 
 - [[notation]] — how a chord gets WRITTEN and NAMED: chord symbols, Roman numerals, slash chords.
 - [[function]] — how chords BEHAVE together over time: diatonic chords, harmonic function, progressions, cadences.
 
+Try it: change the quality and watch the name and the notes change.
+
+```forge-scale
+mode: chord
+chord: major
+tonic: C
+show: piano, staff, guitar
+```
+
 New here? Start with [[triad]] — every other concept in this section builds outward from it. Already comfortable with triads? [[chord_progression]] is where the individual-chord concepts turn into music.
 
 Press Run on [[build_triad]] right now if you want to hear a chord before reading another word.

@@ -2,6 +2,15 @@
 
 A **triad** is a chord of three notes. Pick a note (the root), skip one note of the scale and take the next, then skip another and take the next. In C major that gives C, E and G: counting C as 1, those are the 1st, 3rd and 5th notes of the scale (C D E F G), which is why you will hear them called degrees 1, 3 and 5. It is the atom everything else in [[chord]] extends: sevenths add a fourth note, extensions add more, inversions reorder it, voicings dress it up.
 
+Try it: click any three keys and read the chord name; click a Roman numeral to hear that triad.
+
+```forge-scale
+mode: free
+tonic: C
+scale: major
+show: piano, staff, diatonic
+```
+
 Are any three notes a chord? Sure. Sound them together and call it that. A **triad** is the useful special case: three notes stacked in thirds, which is how Western harmony has built most of its chords for centuries. That method has a name, **tertian harmony**, and it isn't the only game in town. Stack in fourths and you get quartal harmony; pack notes a second apart and you get secundal harmony. Both are real chords, and neither is a triad.
 
 Here is the C major scale. Counting C as 1, the 1st, 3rd and 5th notes are C, E and G: the triad.

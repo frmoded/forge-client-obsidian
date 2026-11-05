@@ -2,6 +2,15 @@ This section holds scale-family theory: how scales are built from interval patte
 
 A **scale** is an ordered sequence of musical pitches — a ladder of notes spanning an octave that a piece of music draws its melody and harmony from. Every scale is anchored to a **tonic**, the note that feels like "home": a scale begins on its tonic and climbs step by step until it reaches the tonic again, an octave higher. Naming a scale means naming its tonic and its type — "C major" is the major scale whose tonic is C.
 
+Try it: pick another tonic or scale type and press Play.
+
+```forge-scale
+tonic: C
+scale: major
+show: piano, staff, numbers, guitar
+controls: yes
+```
+
 Hear a full C major scale climb from C to the C an octave above, and see it on the staff:
 
 ![[scales/resources/audio/c_major_scale.mp3]]
