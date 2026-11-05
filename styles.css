@@ -1659,6 +1659,38 @@
   font-size: var(--font-ui-small);
 }
 
+/* 2026-11-05-1185: the interval pattern of the scale type under the piano - seven chips, each the step's letter (W, H, W+H) over its semitones. A grid of seven equal columns that may shrink (min-width 0), so it fits a 300 px pane
+   without scrolling or wrapping; a half tone's letter is the accent colour, so the two half tones of a major scale are easy to find. */
+.forge-scale-intervals {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin: 6px 0 4px;
+}
+.forge-scale-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 2px 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-secondary);
+  font-size: var(--font-ui-small);
+  line-height: 1.25;
+}
+.forge-scale-step-letter {
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.forge-scale-step-semis {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.forge-scale-step[data-semitones="1"] .forge-scale-step-letter {
+  color: var(--text-accent);
+}
+
 .forge-scale-svg .forge-piano-key {
   cursor: default;
 }
@@ -2104,7 +2136,8 @@
    2026-11-03-1157: the same for `html-embed` (the gadgets: piano, guitar, monochord, the triad keyboard): the icon sat on the gadget when the pointer was over it. The widget root is
    `div.cm-preview-code-block.cm-embed-block.markdown-rendered.cm-lang-html-embed`, its processor output `div.block-language-html-embed`, and the button `div.embed-actions > div.embed-action.edit-block-button`
    (Obsidian's `.markdown-source-view.mod-cm6 .edit-block-button`: absolute, 4 px from the top and from the inline end, opacity 0 until the block is hovered). A code-block widget adds NO other action to
-   `embed-actions` (the installed app.js calls `addEditButton` once there), so hiding the container loses no control. Still two languages only (rhythm-embed-chrome.test.ts). */
+   `embed-actions` (the installed app.js calls `addEditButton` once there), so hiding the container loses no control. Still two languages only (rhythm-embed-chrome.test.ts).
+   2026-11-05-1185: and `forge-scale` (the Scale Explorer block: `div.cm-preview-code-block.cm-embed-block.markdown-rendered.cm-lang-forge-scale`, its output `div.block-language-forge-scale`): three languages, each scoped by its own class. */
 .cm-preview-code-block.cm-lang-forge-rhythm .embed-actions,
 .cm-preview-code-block.cm-lang-forge-rhythm .edit-block-button,
 .block-language-forge-rhythm .embed-actions,
@@ -2112,7 +2145,11 @@
 .cm-preview-code-block.cm-lang-html-embed .embed-actions,
 .cm-preview-code-block.cm-lang-html-embed .edit-block-button,
 .block-language-html-embed .embed-actions,
-.block-language-html-embed .edit-block-button {
+.block-language-html-embed .edit-block-button,
+.cm-preview-code-block.cm-lang-forge-scale .embed-actions,
+.cm-preview-code-block.cm-lang-forge-scale .edit-block-button,
+.block-language-forge-scale .embed-actions,
+.block-language-forge-scale .edit-block-button {
   display: none;
 }
 

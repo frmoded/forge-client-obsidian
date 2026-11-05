@@ -26,22 +26,22 @@ test('an empty block is the defaults: C major, octave 4, piano + staff + numbers
   const r = parseScaleExplorerSource('');
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual(r.options, DEFAULT_SCALE_OPTIONS);
-  assert.deepEqual(DEFAULT_SCALE_OPTIONS, { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false }, controls: true, mode: 'scale', chord: 'major', labels: 'degrees', tab: false });
+  assert.deepEqual(DEFAULT_SCALE_OPTIONS, { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false, intervals: true }, controls: true, mode: 'scale', chord: 'major', labels: 'degrees', tab: false });
 });
 
 test('every option, in any order, case-insensitive, blank lines and CRLF ignored', () => {
   const r = parseScaleExplorerSource('\r\nScale: Harmonic Minor\r\n\r\ntonic: A\r\noctave: 3\r\nshow: staff, numbers, piano\r\ncontrols: no\r\n');
   assert.ok(r.ok);
-  if (r.ok) assert.deepEqual(r.options, { tonic: 'A', scale: 'harmonic minor', octave: 3, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false }, controls: false, mode: 'scale', chord: 'major', labels: 'degrees', tab: false });
+  if (r.ok) assert.deepEqual(r.options, { tonic: 'A', scale: 'harmonic minor', octave: 3, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false, intervals: false }, controls: false, mode: 'scale', chord: 'major', labels: 'degrees', tab: false });
 });
 
 test('show picks the parts; "numbers" alone is refused (it labels the piano)', () => {
   const only = parseScaleExplorerSource('show: staff');
   assert.ok(only.ok);
-  if (only.ok) assert.deepEqual(only.options.show, { piano: false, staff: true, numbers: false, diatonic: false, guitar: false });
+  if (only.ok) assert.deepEqual(only.options.show, { piano: false, staff: true, numbers: false, diatonic: false, guitar: false, intervals: false });
   const pn = parseScaleExplorerSource('show: piano');
   assert.ok(pn.ok);
-  if (pn.ok) assert.deepEqual(pn.options.show, { piano: true, staff: false, numbers: false, diatonic: false, guitar: false });
+  if (pn.ok) assert.deepEqual(pn.options.show, { piano: true, staff: false, numbers: false, diatonic: false, guitar: false, intervals: false });
   const bad = parseScaleExplorerSource('show: numbers');
   assert.equal(bad.ok, false);
   if (!bad.ok) assert.match(bad.message, /numbers.*piano/);
@@ -426,7 +426,7 @@ test('CONTROL: a D# minor TYPED in a block is kept as typed: the parser, the not
 test('show: guitar (alone or with the piano), labels: degrees|names and tab: yes|no; the label default is degrees in scale mode and names in chord and free modes', () => {
   const g = parseScaleExplorerSource('show: guitar');
   assert.ok(g.ok);
-  if (g.ok) assert.deepEqual([g.options.show, g.options.labels, g.options.tab], [{ piano: false, staff: false, numbers: false, diatonic: false, guitar: true }, 'degrees', false]);
+  if (g.ok) assert.deepEqual([g.options.show, g.options.labels, g.options.tab], [{ piano: false, staff: false, numbers: false, diatonic: false, guitar: true, intervals: false }, 'degrees', false]);
   const all = parseScaleExplorerSource('show: piano, staff, guitar\ntab: yes\nlabels: names');
   assert.ok(all.ok);
   if (all.ok) assert.deepEqual([all.options.show.guitar, all.options.labels, all.options.tab], [true, 'names', true]);
@@ -454,5 +454,5 @@ test('guitar bad lines: an unknown labels value, tab that is not yes/no, labels 
   bad('tab: yes', /"tab: yes".*"show" must include "guitar"/);
   bad('show: piano\ntab: yes', /must include "guitar"/);
   bad('show: guitar\ntab: yes\ntab: no', /"tab" is given twice/);
-  bad('show: guitar, banjo', /show lists piano, staff, numbers, diatonic and guitar \(got "banjo"/);
+  bad('show: guitar, banjo', /show lists piano, staff, numbers, diatonic, guitar and intervals \(got "banjo"/);
 });

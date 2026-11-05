@@ -53,6 +53,23 @@ const SIGNATURE_OFFSET: Record<ScaleType, number> = {
   major: 0, dorian: -2, phrygian: -4, lydian: 1, mixolydian: -1, 'natural minor': -3, locrian: -5, 'harmonic minor': -3, 'melodic minor': -3,
 };
 
+/** One step of a scale, between two neighbouring degrees (the last one is from degree 7 up to the octave): what it is called and how many semitones it is. */
+export interface IntervalStep { letter: string; semitones: number }
+
+/** The name of a step: a semitone is H, a whole tone W, three semitones W+H (what an augmented second is, said in the same two letters; A2 is the technical name). */
+function stepLetter(semitones: number): string {
+  return semitones === 1 ? 'H' : semitones === 2 ? 'W' : semitones === 3 ? 'W+H' : `${semitones} st`;
+}
+
+/**
+ * The interval pattern of a scale TYPE: the seven steps from degree 1 up to the octave, derived from the semitone table above (never typed again): major 2 2 1 2 2 2 1 = W W H W W W H. It belongs to the TYPE, not to the tonic:
+ * C major and F# major have the same pattern (they differ in which notes the pattern lands on).
+ */
+export function intervalPattern(type: ScaleType): IntervalStep[] {
+  const degrees = [...PATTERNS[type], 12];
+  return degrees.slice(1).map((semis, i) => ({ letter: stepLetter(semis - degrees[i]), semitones: semis - degrees[i] }));
+}
+
 const ALIASES: Record<string, ScaleType> = { ionian: 'major', aeolian: 'natural minor', minor: 'natural minor' };
 
 export const STEPS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'] as const;
@@ -63,13 +80,13 @@ const STEP_FIFTHS: Record<Step, number> = { F: -1, C: 0, G: 1, D: 2, A: 3, E: 4,
 const SHARP_ORDER: readonly Step[] = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
 const FLAT_ORDER: readonly Step[] = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
 
-export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean; diatonic: boolean; guitar: boolean }
+export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean; diatonic: boolean; guitar: boolean; intervals: boolean }
 /** What a guitar dot shows: the scale degree / the chord tone's number, or the note name. */
 export type GuitarLabels = 'degrees' | 'names';
 export type ExplorerMode = 'scale' | 'chord' | 'free';
 export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean; mode: ExplorerMode; chord: ChordQuality; labels: GuitarLabels; tab: boolean }
 
-export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false }, controls: true, mode: 'scale', chord: 'major', labels: 'degrees', tab: false };
+export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false, intervals: true }, controls: true, mode: 'scale', chord: 'major', labels: 'degrees', tab: false };
 
 export const MIN_OCTAVE = 1;
 export const MAX_OCTAVE = 6;
@@ -139,10 +156,10 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       out.octave = n;
     } else if (key === 'show') {
       const parts = value.split(',').map((p) => p.trim().toLowerCase()).filter((p) => p !== '');
-      if (parts.length === 0) return bad(`show must list what to show: piano, staff, numbers, diatonic, guitar (got "${value}").`);
-      const show: ScaleShow = { piano: false, staff: false, numbers: false, diatonic: false, guitar: false };
+      if (parts.length === 0) return bad(`show must list what to show: piano, staff, numbers, diatonic, guitar, intervals (got "${value}").`);
+      const show: ScaleShow = { piano: false, staff: false, numbers: false, diatonic: false, guitar: false, intervals: false };
       for (const p of parts) {
-        if (p !== 'piano' && p !== 'staff' && p !== 'numbers' && p !== 'diatonic' && p !== 'guitar') return bad(`show lists piano, staff, numbers, diatonic and guitar (got "${p}" in "${value}").`);
+        if (p !== 'piano' && p !== 'staff' && p !== 'numbers' && p !== 'diatonic' && p !== 'guitar' && p !== 'intervals') return bad(`show lists piano, staff, numbers, diatonic, guitar and intervals (got "${p}" in "${value}").`);
         show[p] = true;
       }
       if (show.numbers && !show.piano) return bad('show: "numbers" labels the piano keys, so it needs "piano" too.');
@@ -157,6 +174,9 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
   }
   if (seen.has('labels') && !out.show.guitar) return bad('"labels" names what the guitar dots show, so "show" must include "guitar".');
   if (out.tab && !out.show.guitar) return bad('"tab: yes" writes the tab under the guitar, so "show" must include "guitar".');
+  // 2026-11-05-1185: the interval pattern is a SCALE row. With no `show:` line it is on in scale mode (the default picture) and off in chord and free mode; a `show:` line lists what to show, so it is off unless listed - and listing it in chord or free mode is an error.
+  if (!seen.has('show') && out.mode !== 'scale') out.show.intervals = false;
+  if (out.show.intervals && out.mode !== 'scale') return bad('show: "intervals" is the interval pattern of a scale, so the block needs "mode: scale".');
   out.labels = labels ?? (out.mode === 'scale' ? 'degrees' : 'names');   // the default: degrees in scale mode, names in chord and free modes
   if (out.show.diatonic && out.mode !== 'free') return bad('show: "diatonic" is the row of chords you click in free mode, so the block needs "mode: free".');
   if (out.mode === 'free' && !out.show.piano) return bad('mode: free is played on the piano, so "show" must include "piano".');

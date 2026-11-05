@@ -13,6 +13,7 @@ import {
   SCALE_TYPES,
   SCALE_TYPE_LABELS,
   degreeLabels,
+  intervalPattern,
   normalizeTonic,
   parseScaleExplorerSource,
   playEvents,
@@ -169,6 +170,9 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
   root.appendChild(caption);
   const pianoHost = options.show.piano ? h('div', 'forge-scale-piano') : null;
   if (pianoHost) root.appendChild(pianoHost);
+  // 2026-11-05-1185: the interval pattern of the scale TYPE (W W H W W W H over 2 2 1 2 2 2 1) as a row of chips right under the piano: scale mode with `show: ... intervals` only (the default picture of a scale block has it). Chord and free mode never.
+  const intervalsHost = !chordMode && options.show.intervals ? h('div', 'forge-scale-intervals') : null;
+  if (intervalsHost) root.appendChild(intervalsHost);
   // 2026-11-04-1173: the guitar fretboard under the piano (or alone), and the one-line tab of the played run under it. Absent unless `show: guitar`: scale and chord mode without it are byte-identical.
   const guitarHost = options.show.guitar ? h('div', 'forge-scale-guitar') : null;
   if (guitarHost) root.appendChild(guitarHost);
@@ -244,6 +248,21 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
     if (raf) raf.call(doc.defaultView, () => { if (!destroyed) scrollToScale(); });
   };
 
+  /** The seven steps of the scale TYPE, one chip each: the letter (W, H, W+H) over the semitones. Redrawn with the rest, so a change of type changes it (a change of tonic does not: the pattern is the type's). */
+  const drawIntervals = (): void => {
+    if (!intervalsHost) return;
+    intervalsHost.textContent = '';
+    intervalsHost.setAttribute('role', 'group');
+    intervalsHost.setAttribute('aria-label', 'Interval pattern: the steps between the degrees, W whole tone, H half tone');
+    for (const step of intervalPattern(scale)) {
+      const chip = h('span', 'forge-scale-step');
+      chip.setAttribute('data-semitones', String(step.semitones));
+      chip.title = `${step.semitones} semitone${step.semitones === 1 ? '' : 's'}`;
+      chip.append(h('span', 'forge-scale-step-letter', step.letter), h('span', 'forge-scale-step-semis', String(step.semitones)));
+      intervalsHost.appendChild(chip);
+    }
+  };
+
   const drawStaff = (): void => {
     if (!staffHost || !deps.renderStaff) return;
     const token = ++drawToken;
@@ -286,6 +305,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
       caption.textContent = `${tonic} ${SCALE_TYPE_LABELS[scale]}: ${notes.map((n) => n.name.replace(/\d+$/, '')).join(' ')}`;
     }
     drawPiano();
+    drawIntervals();
     drawGuitar();
     drawStaff();
   };
