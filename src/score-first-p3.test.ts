@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { pinnedSiblingFile } from './test-support/sibling-pin.ts';
 
 import { isScoreFirstToml, readVaultProfile } from './vault-profile-core.ts';
 import { newBarAvailable, scorePanelPlan, widgetFillsPane } from './score-first-core.ts';
@@ -25,7 +26,6 @@ const VAULTS = path.join(ROOT, 'assets/vaults');
 const src = (f: string) => fs.readFileSync(path.join(SRC, f), 'utf8');
 const code = (f: string) => src(f).split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
 const FIXTURE = path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml');
-const SIBLING = path.resolve(ROOT, '../music-playground/forge.toml');
 const shippedVaults = () => fs.readdirSync(VAULTS).filter((d) => fs.existsSync(path.join(VAULTS, d, 'forge.toml'))).sort();
 
 test('every vault the plugin ships has NO profile — and so every score-first decision answers "as before" for it, in both editions', () => {
@@ -137,11 +137,13 @@ test('the profile is a constant: no setting, command, menu item or modal anywher
   for (const f of settingsFiles) assert.ok(!/profile/i.test(code(f).replace(/openRhythmNotesInBeatBox/g, '')), `${f} has no profile setting`);
 });
 
-// The fixture above is a byte copy of the playground vault's forge.toml, so the tests run where the vault is not checked out. When it IS checked out the two must agree
-// (a skip says so by name — a skipped test is not a passing one).
-test('the fixture is the playground vault\'s own forge.toml', { skip: fs.existsSync(SIBLING) ? false : `${SIBLING} is not checked out here` }, () => {
-  assert.equal(fs.readFileSync(FIXTURE, 'utf8'), fs.readFileSync(SIBLING, 'utf8'));
-  assert.equal(isScoreFirstToml(fs.readFileSync(SIBLING, 'utf8')), true);
+// The fixture above is a byte copy of the playground vault's forge.toml, so the tests run where the vault is not checked out. When it IS checked out (and has the pinned commit, sibling-pin.ts) the two must agree AT THAT COMMIT
+// (2026-11-04-1171-1: never the moving HEAD; a skip says why by name — a skipped test is not a passing one).
+test('the fixture is the playground vault\'s own forge.toml', (t) => {
+  const pinned = pinnedSiblingFile('music-playground', 'forge.toml');
+  if ('skip' in pinned) { t.skip(pinned.skip); return; }
+  assert.equal(fs.readFileSync(FIXTURE, 'utf8'), pinned.text);
+  assert.equal(isScoreFirstToml(pinned.text), true);
 });
 
 test('MECHANISM PIN (M4): the message router\'s flag is set from ONE place — score-first.ts, from the profile answer — and read only through messageDelivery.isScoreFirst()', () => {

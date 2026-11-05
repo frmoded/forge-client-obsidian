@@ -9,14 +9,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhythm-engine.ts';
-import { dirtySiblingReason } from './test-support/dirty-sibling.ts';
+import { pinnedSiblingFile } from './test-support/sibling-pin.ts';
 import { mixTraceEngine, producePhrase, producePhraseNote, type MixPhrase, type PhraseParams } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 
 const skip = WHEELS_PRESENT ? false : 'music wheels not fetched — run: npm run fetch-music-wheels';
 const test = (name: string, fn: () => Promise<void>) => baseTest(name, { skip, timeout: 300_000 }, fn);
 const FIXTURES = path.resolve(import.meta.dirname, '../test/fixtures/score-first');
-const SIBLINGS = path.resolve(import.meta.dirname, '../../music-playground/bars');
 const BARS: Record<string, string> = {
   bar_005: fs.readFileSync(path.join(FIXTURES, 'bar_005.md'), 'utf8'),
   bar_006: fs.readFileSync(path.join(FIXTURES, 'bar_006.md'), 'utf8'),
@@ -47,15 +46,12 @@ function scoreOfBar(py: any, bar: unknown, title = 'phrase_002'): any {
 // music21 gives every part a fresh random id (P or I + 32 hex digits, for the part and its instrument) on each run; nothing else in the XML is random, so two Scores of the same bars are equal once those ids are made alike.
 const xmlOf = (payload: Record<string, unknown>) => (payload.multi_staff_content as string).replace(/[PI][0-9a-f]{32}/g, 'ID');
 
-// Strict against the COMMITTED playground bars (the matrix's clean worktree); a live checkout whose bars the plugin has refreshed (untracked or modified files) is skipped WITH its reason, counted as a skip,
-// never compared (it would be red on the driver's machine for a reason that is not a bug) and never silently passed.
+// 2026-11-04-1171-1: strict against the playground bars AT THE PINNED COMMIT (sibling-pin.ts), never the live checkout and never the moving HEAD; not checked out / pinned commit missing: a counted skip with the reason.
 baseTest('the fixtures are the playground vault\'s own bars (when it is checked out)', async (t) => {
-  const dirty = dirtySiblingReason(SIBLINGS, 'music-playground/bars');
-  if (dirty !== null) { t.skip(`not comparing: ${dirty}`); return; }
   for (const name of Object.keys(BARS)) {
-    const sibling = path.join(SIBLINGS, `${name}.md`);
-    if (!fs.existsSync(sibling)) continue;                 // not checked out here: the fixture stands in
-    assert.equal(fs.readFileSync(sibling, 'utf8'), BARS[name], name);
+    const pinned = pinnedSiblingFile('music-playground', `bars/${name}.md`);
+    if ('skip' in pinned) { t.skip(pinned.skip); return; }
+    assert.equal(pinned.text, BARS[name], name);
   }
 });
 

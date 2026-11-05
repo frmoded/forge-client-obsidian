@@ -23,13 +23,15 @@ import { backfillV113Shape } from '../src/v11-3-backfill-core.ts';
 import { computeFacetHash } from '../src/facet-hash-core.ts';
 import { computeFacetStates, FacetState } from '../src/facet-state-core.ts';
 import * as v2 from '../src/v2-note-core.ts';
-import { dirtySiblingReason } from '../src/test-support/dirty-sibling.ts';
+import { exportPinnedSibling } from '../src/test-support/sibling-pin.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const REL = 'forge-tutorial/05-conditionals/weather';
 const BUNDLE_FILE = path.join(ROOT, 'assets/vaults/forge-tutorial/05-conditionals/weather.md');
-const SOURCE_FILE = path.resolve(ROOT, '../forge-tutorial/05-conditionals/weather.md');
+// 2026-11-04-1171-1: the SOURCE file is read AT THE PINNED COMMIT of forge-tutorial (a git archive, sibling-pin.ts), never from the live checkout or its moving HEAD.
+const PINNED = exportPinnedSibling('forge-tutorial');
+const SOURCE_FILE = 'dir' in PINNED ? path.join(PINNED.dir, '05-conditionals/weather.md') : path.join(ROOT, 'sibling-not-pinned', '05-conditionals/weather.md')   /* never read: every test that uses it is skipped with PINNED.skip */;
 const BEFORE = fs.readFileSync(path.join(ROOT, 'test/fixtures/weather/weather.before-2e9e777.md'), 'utf8');
 const RECORDING = loadRecording(path.join(ROOT, 'test/fixtures/engine-transpile/shipped-notes.json'));
 const NEW_DESCRIPTION = 'Sets the temperature to 72. Returns "It\'s hot." if the temperature is above 80, and "It\'s pleasant." otherwise.';
@@ -42,12 +44,10 @@ const helpers = {
 const NO_ACTIONS = { pythonSection: false, hashes: [], derivedFromFields: [], canonicalHashRepairs: [], canonicalFacetSeeded: null, derivedFromParentSeeded: [], stubSyncRepairs: [], stubReplacedClaims: [] };
 const lines = (s) => s.split('\n');
 const SHIPPED = { 'the bundle copy (assets/vaults/forge-tutorial)': BUNDLE_FILE, 'the source vault file (../forge-tutorial)': SOURCE_FILE };
-// 2026-10-29-0800: the SOURCE file is read from the live ../forge-tutorial checkout. When that checkout has uncommitted edits under 05-conditionals the file is not the committed one this drain pins, so every test that reads
-// it is a COUNTED skip with the reason (never a red, never a silent pass); in the matrix's clean worktree DIRTY is null and they are strict. The bundle copy is in this repo and is always strict. (dirty-sibling.ts is the
-// .ts helper the src tests use; this .mjs imports it the same way it imports the other src modules.)
-const DIRTY = dirtySiblingReason(path.dirname(SOURCE_FILE), 'forge-tutorial/05-conditionals');
+// 2026-10-29-0800 / 2026-11-04-1171-1: when the sibling is not checked out or lacks the pinned commit, every test that reads the SOURCE file is a COUNTED skip with the reason (never a red, never a silent pass). The bundle copy is in this repo and is always strict.
+const DIRTY = 'skip' in PINNED ? PINNED.skip : null;
 const skipFor = (file) => (file === SOURCE_FILE && DIRTY !== null ? `not comparing: ${DIRTY}` : false);
-const mtimes = () => Object.values(SHIPPED).map((f) => fs.statSync(f).mtimeMs);
+const mtimes = () => Object.values(SHIPPED).filter((f) => fs.existsSync(f)).map((f) => fs.statSync(f).mtimeMs);
 const mtimesBefore = mtimes();
 
 for (const [label, file] of Object.entries(SHIPPED)) {

@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, before } from 'node:test';
+import { staleBarText } from './test-support/score-first-notes.ts';
 import { Window } from 'happy-dom';
 
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
@@ -32,7 +33,7 @@ for (const edition of ['lean', 'music'] as const) {
     real ??= await bundleRealPlugin(ROOT, edition);
     const files = new Map<string, string>([
       ['phrases/phrase_001.md', OLD_PHRASE], ['phrases/README.md', '# phrases\n'],
-      ['bars/bar_005.md', fs.readFileSync(path.join(FX, 'bar_005.md'), 'utf8')], ['bars/README.md', '# bars\n'],
+      ['bars/bar_005.md', staleBarText(fs.readFileSync(path.join(FX, 'bar_005.md'), 'utf8'))], ['bars/README.md', '# bars\n'],
     ]);
     const tf = (p: string) => Object.assign(new real.TFile(), { path: p, extension: 'md', basename: path.basename(p, '.md') });
     const processed: string[] = []; const lines: string[] = [];

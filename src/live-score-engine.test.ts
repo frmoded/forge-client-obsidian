@@ -1,6 +1,7 @@
 // score_first_experiment M0 + M1 (drain 2026-10-21-1100) — REAL engine checks for the live Score and for the playground vault's manifest. The real Pyodide engine (the very Python the
 // plugin runs, test-support/real-rhythm-engine.ts) engraves the data the controller hands it; a fake canvas stands in for Verovio. Skipped (visibly) without the music wheels.
 import { test as baseTest } from 'node:test';
+import { exportPinnedSibling } from './test-support/sibling-pin.ts';
 import assert from 'node:assert/strict';
 import { Window } from 'happy-dom';
 
@@ -104,10 +105,13 @@ _pg_reg.scan('/pg/music-playground')
 // Drain 2026-10-21-2200 (decision 5): the REAL playground tree, with NO extracted libraries in it (a score-first vault skips extraction), resolves music-core through [imports] alone.
 import fs from 'node:fs';
 import path from 'node:path';
-const REAL_PG = path.resolve(import.meta.dirname, '../../music-playground');
-const REAL_MC = path.resolve(import.meta.dirname, '../../music-core');
-const realSkip = skip || (fs.existsSync(path.join(REAL_PG, 'forge.toml')) && fs.existsSync(path.join(REAL_MC, 'forge.toml')) ? false : `${REAL_PG} / ${REAL_MC} not checked out here`);
+// 2026-11-04-1171-1: the two real vaults are read AT THEIR PINNED COMMITS (a git archive of each, sibling-pin.ts), never from the live checkout or the moving HEAD: a later commit in either vault cannot red this.
+const REAL_PG_PIN = skip ? { skip } : exportPinnedSibling('music-playground');
+const REAL_MC_PIN = 'skip' in REAL_PG_PIN ? REAL_PG_PIN : exportPinnedSibling('music-core');
+const realSkip = 'skip' in REAL_MC_PIN ? REAL_MC_PIN.skip : false;
 baseTest('the REAL music-playground tree (no extracted libraries) + the real music-core: music-core is indexed through [imports] alone, no errors, pitched_line resolves', { skip: realSkip, timeout: 300_000 }, async () => {
+  const REAL_PG = (REAL_PG_PIN as { dir: string }).dir;
+  const REAL_MC = (REAL_MC_PIN as { dir: string }).dir;
   const py = await engine();
   const put = (src: string, dest: string) => {
     for (const e of fs.readdirSync(src, { withFileTypes: true })) {

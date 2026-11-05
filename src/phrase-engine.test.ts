@@ -8,7 +8,7 @@ import path from 'node:path';
 import { Window } from 'happy-dom';
 
 import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhythm-engine.ts';
-import { dirtySiblingReason } from './test-support/dirty-sibling.ts';
+import { pinnedSiblingFile } from './test-support/sibling-pin.ts';
 import { createLiveScore } from './live-score-core.ts';
 import { mountScorePanel } from './live-score-dom.ts';
 import { producePhrase, type PhraseParams } from './phrase-core.ts';
@@ -17,7 +17,6 @@ import { annotatePhraseXml, phraseLineageOf, phraseProvenance } from './phrase-l
 const skip = WHEELS_PRESENT ? false : 'music wheels not fetched — run: npm run fetch-music-wheels';
 const test = (name: string, fn: () => Promise<void>) => baseTest(name, { skip, timeout: 300_000 }, fn);
 const FIXTURE = path.resolve(import.meta.dirname, '../test/fixtures/score-first/bar_005.md');
-const SIBLING = path.resolve(import.meta.dirname, '../../music-playground/bars/bar_005.md');
 const BAR_005 = fs.readFileSync(FIXTURE, 'utf8');
 const flush = async (n = 40) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 2)); };
 
@@ -33,12 +32,12 @@ function deps(py: any, text = BAR_005) {
   };
 }
 
-// Strict against the COMMITTED playground bar (the matrix's clean worktree); a live checkout whose bars the plugin refreshed is skipped WITH its reason (a counted skip), never compared and never silently passed.
+// 2026-11-04-1171-1: strict against the playground bar AT THE PINNED COMMIT (sibling-pin.ts), never the live checkout and never the moving HEAD: a later commit in that vault (the plugin's own "notes snapshot") cannot red this. Not checked out
+// here, or the pinned commit is missing: a counted skip with the reason.
 baseTest('the fixture is the playground vault\'s own bar_005 (when it is checked out)', async (t) => {
-  const dirty = dirtySiblingReason(path.dirname(SIBLING), 'music-playground/bars');
-  if (dirty !== null) { t.skip(`not comparing: ${dirty}`); return; }
-  if (!fs.existsSync(SIBLING)) return;                // not checked out here: the fixture stands in
-  assert.equal(fs.readFileSync(SIBLING, 'utf8'), BAR_005);
+  const pinned = pinnedSiblingFile('music-playground', 'bars/bar_005.md');
+  if ('skip' in pinned) { t.skip(pinned.skip); return; }
+  assert.equal(pinned.text, BAR_005);
 });
 
 test('REAL ENGINE: bar_005 as a phrase of 8 bars slowing 20 % is 8 bars with a tempo mark at bar 1 and at every change, in both engraved views', async () => {

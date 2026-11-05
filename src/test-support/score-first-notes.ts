@@ -15,3 +15,13 @@ export function realNoteAt(p: string, other = ''): string {
   if (/^phrases\/(?!README)/.test(p)) return phraseNoteContent(path.basename(p, '.md'), 'bar_005');
   return other;
 }
+
+/**
+ * 2026-11-04-1171-1: the STALE form of a bar note, DERIVED in memory from the fixture (the fixture is a byte copy of the playground vault's bar, in the plugin-refreshed form it has there now): the description line rewritten to the text a bar note
+ * carried before the plugin refreshed it ("kick on beats 1 and 3, snare on 2 and 4."). The "Refresh note links" family needs a bar that is stale; deriving it here lets the fixtures stay the vault's own bytes.
+ */
+export function staleBarText(text: string): string {
+  const stale = text.replace(/^description: "(bar_\d+) — [^"]*"$/m, 'description: "$1 — a one-bar rhythm for the Beat Box: kick on beats 1 and 3, snare on 2 and 4."');
+  if (stale === text && !/kick on beats 1 and 3, snare on 2 and 4\./.test(text)) throw new Error('staleBarText: no bar description line to rewrite');
+  return stale;
+}

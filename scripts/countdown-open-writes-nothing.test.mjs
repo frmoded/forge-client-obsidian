@@ -20,12 +20,16 @@ import { loadRecording, recordedPythonFor } from './engine-recording.mjs';
 import { backfillV113Shape } from '../src/v11-3-backfill-core.ts';
 import { computeFacetHash } from '../src/facet-hash-core.ts';
 import * as v2 from '../src/v2-note-core.ts';
+import { exportPinnedSibling } from '../src/test-support/sibling-pin.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const REL = 'forge-tutorial/06-loops/countdown';
 const BUNDLE_FILE = path.join(ROOT, 'assets/vaults/forge-tutorial/06-loops/countdown.md');
-const SOURCE_FILE = path.resolve(ROOT, '../forge-tutorial/06-loops/countdown.md');
+// 2026-11-04-1171-1: the SOURCE file is read AT THE PINNED COMMIT of forge-tutorial (a git archive, sibling-pin.ts), never from the live checkout or its moving HEAD; not checked out / commit missing: a counted skip.
+const PINNED = exportPinnedSibling('forge-tutorial');
+const SOURCE_FILE = 'dir' in PINNED ? path.join(PINNED.dir, '06-loops/countdown.md') : path.join(ROOT, 'sibling-not-pinned', '06-loops/countdown.md')   /* never read: every test that uses it is skipped with PINNED.skip */;
+const skipFor = (file) => (file === SOURCE_FILE && 'skip' in PINNED ? PINNED.skip : false);
 const FIX = path.join(ROOT, 'test/fixtures/countdown');
 const BARE = fs.readFileSync(path.join(FIX, 'countdown.bare-HEAD-b1bdedb.md'), 'utf8');
 const STAMPED_STUB = fs.readFileSync(path.join(FIX, 'countdown.stamped-stub.md'), 'utf8');
@@ -42,7 +46,7 @@ const NO_ACTIONS = { pythonSection: false, hashes: [], derivedFromFields: [], ca
 const SHIPPED = { 'the bundle copy (assets/vaults/forge-tutorial)': BUNDLE_FILE, 'the source vault file (../forge-tutorial)': SOURCE_FILE };
 
 for (const [label, file] of Object.entries(SHIPPED)) {
-  test(`OPENING WRITES NOTHING — ${label}: the real backfill makes zero actions and returns the very same bytes`, async () => {
+  test(`OPENING WRITES NOTHING — ${label}: the real backfill makes zero actions and returns the very same bytes`, { skip: skipFor(file) }, async () => {
     assert.ok(fs.existsSync(file), `${file} must exist (a missing sibling is a failure, not a skip)`);
     const original = fs.readFileSync(file, 'utf8');
     const r = await backfillV113Shape(original, helpers);
@@ -51,7 +55,7 @@ for (const [label, file] of Object.entries(SHIPPED)) {
     assert.equal(r.newBody, original, 'byte-identical to the ORIGINAL bytes of the file');
   });
 
-  test(`OPEN + RUN WRITE NOTHING — ${label}: the plugin's own audit, with Run modelled by the engine's RECORDED Python, lists no write`, async () => {
+  test(`OPEN + RUN WRITE NOTHING — ${label}: the plugin's own audit, with Run modelled by the engine's RECORDED Python, lists no write`, { skip: skipFor(file) }, async () => {
     const original = fs.readFileSync(file, 'utf8');
     const enginePython = recordedPythonFor(RECORDING, REL, original);
     assert.equal(typeof enginePython, 'string', 'the recording has the engine\'s Python for countdown\'s own Recipe');
@@ -59,7 +63,7 @@ for (const [label, file] of Object.entries(SHIPPED)) {
     assert.deepEqual(a, { applies: true, open: [], run: [] });
   });
 
-  test(`THE # Python IS THE ENGINE'S OWN OUTPUT, the facet declares its source, and nothing authored changed — ${label}`, () => {
+  test(`THE # Python IS THE ENGINE'S OWN OUTPUT, the facet declares its source, and nothing authored changed — ${label}`, { skip: skipFor(file) }, () => {
     const original = fs.readFileSync(file, 'utf8');
     assert.equal(norm(v2.extractPythonSection(original)?.replace(/^```python\n|\n```$/g, '')), norm(recordedPythonFor(RECORDING, REL, original)), 'the shipped Python is what the real engine produced for this Recipe');
     assert.equal(asString(original, 'source_facet'), 'synced', 'all three facets agree and none was hand-edited: the Python is the engine\'s transpile of the Recipe, which the Description produced (what the restamp fixed point elects; the same value the 26 notes of drain 2026-10-21-1200 got)');
@@ -69,7 +73,7 @@ for (const [label, file] of Object.entries(SHIPPED)) {
   });
 }
 
-test('the bundle copy and the source file are the same bytes (the bundle mirrors the vault)', () => {
+test('the bundle copy and the source file are the same bytes (the bundle mirrors the vault)', { skip: skipFor(SOURCE_FILE) }, () => {
   assert.equal(fs.readFileSync(BUNDLE_FILE, 'utf8'), fs.readFileSync(SOURCE_FILE, 'utf8'));
 });
 
