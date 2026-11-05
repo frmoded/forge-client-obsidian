@@ -100,6 +100,7 @@ test('WIRING: npm test ends with the reaper (posttest), the test script itself i
   const root = path.resolve(import.meta.dirname, '..');
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts.posttest, 'node scripts/dev/reap-fixtures.mjs --quiet');
-  assert.equal(pkg.scripts.test, 'node --test src/*.test.ts scripts/*.test.mjs');
+  // 2026-11-05-1184: the test script is the runner (it runs the same files: src/*.test.ts then scripts/*.test.mjs; the nested-runner ones after the rest, one at a time, under a hard timeout)
+  assert.equal(pkg.scripts.test, 'node scripts/run-tests.mjs');
   assert.match(fs.readFileSync(path.join(root, 'scripts/drain-matrix.sh'), 'utf8'), /reap-fixtures\.mjs/);
 });

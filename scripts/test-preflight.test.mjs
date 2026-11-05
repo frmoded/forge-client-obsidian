@@ -78,7 +78,8 @@ test('FORGE_TEST_PREFLIGHT=off runs the tests anyway (exit 0, silent) — only t
 test('wiring: `npm test` runs the preflight first (pretest), and the test script itself is unchanged', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   assert.equal(pkg.scripts.pretest, 'node scripts/test-preflight.mjs');
-  assert.equal(pkg.scripts.test, 'node --test src/*.test.ts scripts/*.test.mjs');
+  // 2026-11-05-1184: the test script is the runner (it runs the same files, the nested-runner ones after the rest, one at a time, under a hard timeout: scripts/run-tests.mjs)
+  assert.equal(pkg.scripts.test, 'node scripts/run-tests.mjs');
 });
 
 test('this very tree passes its own preflight (or the suite could not be running: the generated modules exist when this test does, unless it was run by hand on a bare tree)', () => {

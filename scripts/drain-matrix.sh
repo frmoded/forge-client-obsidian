@@ -181,7 +181,7 @@ edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and b
   fi
   if [ -n "$subset" ]; then
     # shellcheck disable=SC2086
-    { node scripts/test-preflight.mjs && node --test --test-concurrency="${FILE_CONC:-8}" $subset; } >"$LOGDIR/test-$ed.log" 2>&1 || true
+    { node scripts/test-preflight.mjs && node scripts/run-tests.mjs --test-concurrency="${FILE_CONC:-8}" $subset; } >"$LOGDIR/test-$ed.log" 2>&1 || true        # 2026-11-05-1184: through the runner, so the nested-runner files run one at a time after the rest under a hard group timeout
   else
     npm test -- --test-concurrency="${FILE_CONC:-8}" >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
   fi
