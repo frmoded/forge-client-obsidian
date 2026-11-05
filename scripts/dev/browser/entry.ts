@@ -20,13 +20,16 @@ proto.removeClass = function (c: string) { this.classList.remove(c); };
 proto.toggleClass = function (c: string, on: boolean) { this.classList.toggle(c, !!on); };
 proto.setText = function (t: string) { this.textContent = t; };
 
-(window as any).__mountTab = async (pane: HTMLElement, opts: { note: string; widget: string; toml: string | null }) => {
+(window as any).__mountTab = async (pane: HTMLElement, opts: { note: string; widget: string; toml: string | null; kits?: Array<[string, string]> }) => {
   (globalThis as any).__WIDGET_HTML = opts.widget;
   const file = new TFile('bars/bar_001.md');
   let noteText = opts.note;
+  const kitTexts = new Map((opts.kits ?? []).map(([name, text]) => [`kits/${name}.md`, text] as [string, string]));   // 2026-11-05-1181: the vault's kit notes (the Beat Box's kit dropdown reads them)
+  const kitFiles = [...kitTexts.keys()].map((p) => new TFile(p));
   const app: any = {
     vault: {
-      read: async () => noteText,
+      read: async (f: any) => kitTexts.get(f?.path) ?? noteText,
+      getFiles: () => kitFiles,
       on: () => ({}),
       process: async (_f: unknown, fn: (s: string) => string) => { noteText = fn(noteText); },
       adapter: {

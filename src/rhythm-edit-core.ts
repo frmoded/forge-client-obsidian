@@ -100,13 +100,16 @@ export type RhythmWidgetView = 'grid' | 'circle';
 /** `autoHeight: true` asks the widget to measure itself and post `resize` (widget-auto-height-core.ts); absent otherwise, so every older shape is unchanged.
  *  `resetInHost: true` (drain 2026-10-20-0900) says the HOST's toolbar owns the playground's Reset and its "not saved" reminder, so the widget need not draw
  *  its own; absent, the widget draws them as it always did (an older plugin, or any host that does not say). */
-export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null, autoHeight = false, resetInHost = false, hoverLink = false) {
+export function buildLoadMessage(data: RhythmData, noteName: string, mode: RhythmHostMode = 'edit', view: RhythmWidgetView | null = null, autoHeight = false, resetInHost = false, hoverLink = false, kits: ReadonlyArray<{ name: string; channels: readonly string[] }> = []) {
   const base = mode === 'playground' ? { type: MSG_LOAD, data, noteName, mode } : { type: MSG_LOAD, data, noteName };
   const withView = view === null ? base : { ...base, view };
   const withHeight = autoHeight ? { ...withView, autoHeight: true as const } : withView;
   const withReset = resetInHost ? { ...withHeight, resetInHost: true as const } : withHeight;
   // `hoverLink: true` (M3, drain 2026-10-21-1230): the widget then reports hovered steps and honours highlight messages. Absent otherwise, so every older shape is unchanged.
-  return hoverLink ? { ...withReset, hoverLink: true as const } : withReset;
+  const withLink = hoverLink ? { ...withReset, hoverLink: true as const } : withReset;
+  // `kits` (M10c, drain 2026-11-05-1181): the vault's kits (kit-picker-core.ts), only ever sent to the Beat Box of a score-first vault. With it the widget draws a kit dropdown and "Add instrument" offers that kit's
+  // channels; absent (or empty) the widget is exactly what it was. The kit is a way to PICK a channel: the bar note the widget saves is the same JSON either way.
+  return kits.length > 0 ? { ...withLink, kits: kits.map((k) => ({ name: k.name, channels: [...k.channels] })) } : withLink;
 }
 
 /** Host -> widget: light the grid step / ring cell (channel, step), or clear with `null`. Ignored by a widget whose load did not ask for hover-link. */

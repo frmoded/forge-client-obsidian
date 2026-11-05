@@ -37,6 +37,8 @@ import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsF
 import { headerActionShown } from './header-actions-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
+import { isKitPath } from './kit-core.ts';
+import { kitChoices, type KitChoice } from './kit-picker-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { rhythmHeaderApplies, wantsPhraseHeader } from './phrase-header-core.ts';
 import { headerResync } from './header-resync.ts';
@@ -86,6 +88,8 @@ export class RhythmEditView extends EditableFileView {
   private scoreArea: ScoreArea | null = null;
   /** score_first M3: this tab's widget is asked to report hovered steps and to light the step the Score names (the load message says `hoverLink: true`). False everywhere else. */
   private hoverLink = false;
+  /** score_first M10c (drain 2026-11-05-1181): this tab is a score-first vault's Beat Box, so its widget is given the vault's kits (kit-picker-core.ts) on every load and draws the kit dropdown. False everywhere else: no `kits` key, the widget is what it always was. */
+  private offerKits = false;
 
   private readonly onMessage = (ev: MessageEvent): void => {
     // Only OUR iframe may talk to us. (The widget makes the mirror check: it accepts only its embedding window.)
@@ -242,6 +246,7 @@ export class RhythmEditView extends EditableFileView {
     this.blobUrl = blobUrl;
     this.autoHeight = attachAutoHeight(iframe, { initial: 0, paneHeight: () => this.contentEl.clientHeight || window.innerHeight });
     this.hoverLink = plan === 'score';
+    this.offerKits = plan !== 'none';                 // both editions: the lean edition's score-first vault has the same Beat Box
     this.mountScore(plan, file, note.value.data);
   }
 
@@ -291,10 +296,22 @@ export class RhythmEditView extends EditableFileView {
       this.showRefusal(`Edit rhythm: ${note.message}`);     // the note stopped being rhythm data (e.g. hand-edited in the JSON view)
       return;
     }
+    const kits = this.offerKits ? await this.readKits() : [];
     if (!this.iframe) return;
     this.session.rebaseline(text);
-    this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename, 'edit', null, true, false, this.hoverLink), '*');
+    this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename, 'edit', null, true, false, this.hoverLink, kits), '*');
     this.scoreArea?.showNow(note.value.data);   // a (re)load from the note: the score shows the same data the widget was just given
+  }
+
+  /** M10c: the vault's kit notes as the widget's dropdown lists them. Read at every load, so a kit made since the tab opened is offered on the next one. A kit that cannot be read leaves the dropdown out (never the Beat Box). */
+  private async readKits(): Promise<KitChoice[]> {
+    try {
+      const files = this.app.vault.getFiles().filter((f) => isKitPath(f.path));
+      return kitChoices(await Promise.all(files.map(async (f) => ({ path: f.path, text: await this.app.vault.read(f) }))));
+    } catch (e) {
+      console.error('Forge: RhythmEditView.readKits could not read the kit notes; the Beat Box is shown without a kit dropdown', e);
+      return [];
+    }
   }
 
   /** "Reload from note": drop the halt and any error, then load what is on disk now. */

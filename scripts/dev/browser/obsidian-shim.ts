@@ -9,6 +9,7 @@ export class EditableFileView {
   constructor(leaf: any) { this.leaf = leaf; this.app = leaf.app; this.contentEl = leaf.contentEl; }
   addAction(_i: string, _t: string, _cb: () => void) { return document.createElement('div'); }
   registerEvent(_e: unknown) {}
+  register(_f: unknown) {}   // (2026-11-05-1181: the Beat Box tab registers the edges-button listener through it when the vault is not known to be score-first yet)
   async onOpen() {} async onClose() {} async onLoadFile(_f: TFile) {} async onUnloadFile(_f: TFile) {}
   async setState() {}
 }
