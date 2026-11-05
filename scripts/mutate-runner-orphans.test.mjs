@@ -10,6 +10,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { withHeapCap } from './dev/mutate.mjs';
+import { SCRATCH_MARKER, readProcessTable } from './dev/reap-fixtures.mjs';
+import { killTree } from './dev/proc-tree.mjs';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const RUNNER = path.join(REPO, 'scripts', 'dev', 'mutate.mjs');
@@ -36,7 +38,8 @@ function fixture(opts = {}) {
   const startIt = "const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' }); c.unref(); fs.writeFileSync(process.env.NESTED_PID_FILE, String(c.pid)); ";
   fs.writeFileSync(path.join(dir, 'src', 'a.test.ts'), `${opts.nested ? grandchild : ''}import assert from 'node:assert/strict';\nimport { test } from 'node:test';\nimport { f } from './a.ts';\ntest('f is 1', () => { ${opts.nested ? startIt : ''}assert.equal(f(), 1); });\n`);
   fs.symlinkSync(path.join(REPO, 'node_modules'), path.join(dir, 'node_modules'));
-  fs.writeFileSync(path.join(dir, 'hand.json'), JSON.stringify([['src/a.ts', 'hang', 'export const f = (): number => 1;', 'export const f = (): number => { while (true) { /* hang */ } };', ['src/a.test.ts']]]));
+  // 2026-11-04-1174 (R): the hang EXPIRES (ten minutes, far past anything a scenario waits for): a fixture process that outlives its runner and every cleanup can no longer spin at 100 % CPU for ever.
+  fs.writeFileSync(path.join(dir, 'hand.json'), JSON.stringify([['src/a.ts', 'hang', 'export const f = (): number => 1;', 'export const f = (): number => { const t0 = Date.now(); while (Date.now() - t0 < 600000) { /* hang */ } return 1; };', ['src/a.test.ts']]]));
   return dir;
 }
 
@@ -53,20 +56,24 @@ async function scenario(signal, env = {}, opts = {}) {
     const testProcs = () => descendants(runner.pid).filter((d) => /--test/.test(d.cmd));
     assert.ok(await until(() => { descendants(runner.pid).forEach((d) => mine.add(d.pid)); return testProcs().length >= 2; }, 120000), 'the runner never started its test processes');
     await sleepMs(1000);                                                  // the registrations have reached the sidecar
+    const cmds = descendants(runner.pid).map((d) => d.cmd);                   // what the runner's test processes carry in their command lines (the reaper finds a leak by it)
     for (const d of descendants(runner.pid)) mine.add(d.pid);
     if (opts.nested) assert.ok(await until(() => fs.existsSync(path.join(dir, 'nested.pid')), 20000), 'the test never started its own child');
     for (const d of descendants(runner.pid)) mine.add(d.pid);
     if (typeof signal === 'function') signal(runner, dir); else if (signal !== null) process.kill(runner.pid, signal);
     await sleepMs(signal === 'SIGKILL' ? 500 : 200);
-    const gone = await until(() => [...mine].every((p) => !alive(p)), signal === 'SIGKILL' && env.FORGE_REAPER === 'off' ? 3000 : 40000);
+    // 2026-11-04-1174 (B): a CONTROL (a leak it WANTS to see) passes `waitMs`: it needs only the time the kills take to land (measured: about a second), not the full 40 s of a run that expects everything to go.
+    const gone = await until(() => [...mine].every((p) => !alive(p)), opts.waitMs ?? (signal === 'SIGKILL' && env.FORGE_REAPER === 'off' ? 3000 : 40000));
     const survivors = [...mine].filter(alive);
     const scratchLeft = fs.readdirSync(path.join(dir, 'tmp')).filter((n) => n.startsWith('forge-mutate-') && n !== 'forge-mutate-cache');
     const nestedPid = fs.existsSync(path.join(dir, 'nested.pid')) ? Number(fs.readFileSync(path.join(dir, 'nested.pid'), 'utf8')) : null;
     if (nestedPid !== null) mine.add(nestedPid);                          // for the cleanup below, whatever happens
-    return { gone, survivors, scratchLeft, tmp: path.join(dir, 'tmp'), mine: [...mine], nestedPid, nestedAlive: nestedPid !== null && alive(nestedPid) };
+    return { gone, cmds, survivors, scratchLeft, tmp: path.join(dir, 'tmp'), mine: [...mine], nestedPid, nestedAlive: nestedPid !== null && alive(nestedPid) };
   } finally {
     for (const p of mine) { try { process.kill(-p, 'SIGKILL'); } catch { /* not a group leader */ } try { process.kill(p, 'SIGKILL'); } catch { /* gone */ } }
     try { process.kill(-runner.pid, 'SIGKILL'); } catch { /* gone */ }
+    // 2026-11-04-1174 (R): and whatever carries this fixture's directory in its command line, wherever it is and whenever it started: the list above is a SNAPSHOT of pids and a process started after it (a slow machine) outlived the cleanup.
+    for (const row of readProcessTable()) if (row.pid !== process.pid && row.command.includes(dir)) killTree(row.pid);
     await sleepMs(200);
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -105,8 +112,29 @@ test('a runner ended by `pkill -f` on its command line (what a person types) lea
 // the runner's `kill(-pid)`: the group of the test file dies, the grandchild keeps running (a hung nested mutant spins at 100% CPU), whether the runner was ended by a signal, by its own --timeout, or by SIGKILL (the sidecar kills the groups it was told
 // about, and was never told about this one). The fix walks the process TREE under every test file it kills (scripts/dev/proc-tree.mjs). CONTROL first: with the tree walk OFF (FORGE_TREE_KILL=off) the grandchild IS left, so the scenarios measure the operation.
 test('CONTROL: with the tree kill OFF a runner ended by SIGTERM leaves the detached child its test file started (the leak this fix exists for)', async () => {
-  const r = await scenario('SIGTERM', { FORGE_TREE_KILL: 'off' }, { nested: true });
+  const r = await scenario('SIGTERM', { FORGE_TREE_KILL: 'off' }, { nested: true, waitMs: 4000 });     // 2026-11-04-1174 (B): 4 s, not 40: the kills land in about a second; what must still be alive then is the detached child, and ONLY it
   assert.equal(r.nestedAlive, true, 'the grandchild was gone without the fix: the scenarios below would prove nothing');
+  assert.equal(r.gone, false, 'everything was gone: the control saw no leak');
+  assert.deepEqual(r.survivors.filter((p) => p !== r.nestedPid), [], `4 s is long enough for every kill to land: the ONLY survivor must be the detached child, not ${r.survivors}`);
+});
+
+test('the runner\'s test process carries its scratch directory in its command line (the shape the fixture reaper finds a leak by)', async () => {
+  const r = await scenario('SIGKILL', { FORGE_REAPER: 'off' });
+  const tests = r.cmds.filter((c) => /--test/.test(c));
+  assert.ok(tests.length >= 1, `no test process seen: ${r.cmds}`);
+  assert.ok(tests.some((c) => SCRATCH_MARKER.test(c)), `no test process command line carries .../forge-mutate-<id>/: ${tests.join(' | ')}`);
+  assert.ok(tests.every((c) => !/ src\/a\.test\.ts$/.test(c)), 'the test file is named by its absolute path, not by src/a.test.ts alone');
+});
+
+test('the cleanup of a scenario finds a process by the fixture\'s directory, not by a remembered pid: a process that started after the snapshot is gone too', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mutate-orphans-sweep-'));
+  const late = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', path.join(dir, 'tmp', 'forge-mutate-Late01', 'src', 'a.test.ts')], { detached: true, stdio: 'ignore' });
+  late.unref();
+  try {
+    assert.equal(alive(late.pid), true);
+    for (const row of readProcessTable()) if (row.pid !== process.pid && row.command.includes(dir)) killTree(row.pid);
+    assert.ok(await until(() => !alive(late.pid), 4000), 'a process that carries the fixture directory survived the sweep');
+  } finally { try { process.kill(late.pid, 'SIGKILL'); } catch { /* gone */ } fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('a runner ended by SIGTERM leaves no process, not even the detached child its test file started', async () => {

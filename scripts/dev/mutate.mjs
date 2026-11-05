@@ -257,7 +257,9 @@ function startOne(cwd, file) {
   const env = { ...process.env, FORCE_COLOR: '0', NODE_NO_WARNINGS: '1', NO_COLOR: '1', NODE_OPTIONS: withHeapCap(process.env.NODE_OPTIONS) };
   delete env.NODE_TEST_CONTEXT;
   const t0 = Date.now();
-  const child = spawn(process.execPath, ['--test', '--test-reporter=tap', file], { cwd, detached: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  // 2026-11-04-1174: the file is named by its ABSOLUTE path, so the process's command line carries the scratch directory (.../forge-mutate-<id>/src/a.test.ts). A test process that outlives its runner (a leak) can then be found, and
+  // reaped, by what it carries (scripts/dev/reap-fixtures.mjs), not by a list of pids remembered by whoever started it. cwd is unchanged: the same file is run from the same directory.
+  const child = spawn(process.execPath, ['--test', '--test-reporter=tap', path.join(cwd, file)], { cwd, detached: true, env, stdio: ['ignore', 'pipe', 'pipe'] });
   liveGroups.add(child.pid);
   rootFile.set(child.pid, { file, key: runKey(cwd, file) });
   reaper.add(child.pid);

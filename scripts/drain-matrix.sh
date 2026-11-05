@@ -7,6 +7,7 @@
 #          --forge | --no-forge | --auto (default)     # the forge-pytest leg: always / never / only when the drain touched forge Python (see below)
 #          --forge-only                                # run ONLY the forge-pytest leg (no client sync, build or tests): the quick check for an engine-only drain
 #          --serial                                    # run the legs one after the other (the pre-2026-10-26 behaviour; for a machine that cannot take three at once)
+#          --full-lean                                 # the LEAN leg runs the WHOLE suite again (the behaviour before 2026-11-04-1174); by default it runs only the edition-sensitive files (below)
 #
 # What it does: worktrees (detached, committed state only) of forge-client-obsidian, music-theory, forge-tutorial, forge-moda, music-core, forge and music-playground
 # next to each other; links node_modules, forge/.venv and the music wheels into them; then THREE LEGS AT THE SAME TIME (drain 2026-10-26-1300; the machine has the cores):
@@ -15,8 +16,9 @@
 #   the LEAN leg, in a SECOND client worktree (lean/forge-client-obsidian, its siblings symlinked to the first set): the same sync, then build + `npm test` for the LEAN edition
 #                                           (the explicit gates run and the bump check are edition-independent and run once, in the music leg, as they did when the legs were serial; `npm run build` also runs the package's prebuild hook, the same gates, in every build);
 #   the FORGE leg: `pytest tests/music` (below), whenever its rule says it runs.
-# Why two client worktrees: a build writes main.js and the generated sources into its tree, so two editions cannot share one. Why the tests are not split: the two editions run the SAME
-# test files (3820 each on 2026-10-26) and several read build output, so the split is not clean; both editions run in full, concurrently.
+# Why two client worktrees: a build writes main.js and the generated sources into its tree, so two editions cannot share one. Which tests each leg runs (2026-11-04-1174): the MUSIC leg runs the whole suite; the LEAN leg runs only the files that
+# can see a difference between the editions, COMPUTED by a static import scan (scripts/dev/lean-leg-files.mjs: a file that reaches the built main.js, a generated module, an edition selector, the real-plugin bundle, a build step, or that the scan cannot
+# read, stays in the lean leg; the rest is the same computation in both worktrees). The leg prints how many files it ran and which; --full-lean restores the old behaviour (both editions in full).
 # It FAILS (non-zero exit, a red line saying why) when: a repo is missing, a wheel is missing, a step fails, a test run does not print its summary, any test fails,
 # or ANY test is skipped (a skipped test is not a passing test). It also WARNS when a repo has uncommitted changes (the matrix does not see them). A failed step in one leg does not
 # stop the others (they are already running); the matrix waits for all of them, prints each failure's log tail, and exits non-zero. The exit status is the status of the whole matrix:
@@ -40,7 +42,7 @@ fi
 
 PROJECTS="${PROJECTS:-$HOME/projects}"
 REPOS=(forge-client-obsidian music-theory forge-tutorial forge-moda music-core forge music-playground)
-FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD; SERIAL=0
+FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD; SERIAL=0; LEAN_FULL=0
 for arg in "$@"; do
   case "$arg" in
     --forge) FORGE_MODE=on ;;
@@ -48,6 +50,7 @@ for arg in "$@"; do
     --forge-only) FORGE_ONLY=1; [ "$FORGE_MODE" = auto ] && FORGE_MODE=on ;;      # the quick check runs the leg; follow it with --auto to let the change decide (the test uses that)
     --auto) FORGE_MODE=auto ;;
     --serial) SERIAL=1 ;;
+    --full-lean) LEAN_FULL=1 ;;
     --*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) CLIENT_REF="$arg" ;;
   esac
@@ -92,6 +95,10 @@ on_signal() {
 }
 trap on_signal INT TERM HUP
 REAP="$(cd "$(dirname "$0")" && pwd)/dev/reap.sh"
+# 2026-11-04-1174 (R): the narrow reaper (scripts/dev/reap-fixtures.mjs): kills only ORPHANED test processes whose command line carries a mutation runner's scratch directory (a leaked fixture mutant spins at 100 % CPU for ever). It runs
+# after the legs and again at the cleanup; it never fails a run and never touches an unrelated node.
+REAP_FIXTURES="$(cd "$(dirname "$0")" && pwd)/dev/reap-fixtures.mjs"
+reap_fixtures() { [ -f "$REAP_FIXTURES" ] && node "$REAP_FIXTURES" --quiet 2>/dev/null || true; }
 # The broom is OPT-IN here (FORGE_REAP=1): it sweeps shared temp space by name, which nothing should do unasked. Run it by hand: bash scripts/dev/reap.sh --dry-run
 reap_leftovers() { [ "${FORGE_REAP:-0}" = "1" ] && [ -f "$REAP" ] && bash "$REAP" --quiet 2>/dev/null || true; }
 reap_leftovers                                   # what an EARLIER killed run left (orphaned test groups, stale worktrees): quiet, orphans only
@@ -134,6 +141,7 @@ if [ "$FORGE_ONLY" = "0" ]; then
 fi
 
 declare -a SUMMARY
+LEANSCAN="$(cd "$(dirname "$0")" && pwd)/dev/lean-leg-files.mjs"
 
 # 2026-10-31-1125: the memory budget. Node's own default is every core minus one test files at once PER LEG, and two legs run together (measured 2026-10-31: 34 files at once, 11.5 GB of tooling); the files one leg runs at once are
 # capped so that (files x the assumed size of one) fits FORGE_MEM_BUDGET_MB (default half the RAM) - scripts/dev/mem-plan.mjs. FORGE_MATRIX_FILE_MB (default 400) is that size.
@@ -159,7 +167,19 @@ edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and b
     leg_step bump bash -c 'FORGE_EDITION=music node scripts/check-bundled-vault-bump.mjs' || return 0
   fi
   leg_step "build-$ed" bash -c "FORGE_EDITION=$ed npm run build" || return 0
-  npm test -- --test-concurrency="${FILE_CONC:-8}" >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
+  # 2026-11-04-1174 (A): the lean leg runs only the edition-sensitive files (a COMPUTED import scan of THIS worktree; if the scan cannot run or finds nothing, the whole suite runs: the safe side). The music leg always runs everything.
+  local subset=""
+  if [ "$ed" = lean ] && [ "$LEAN_FULL" != "1" ]; then
+    subset="$(node "$LEANSCAN" --root "$dir" --files 2>"$LOGDIR/lean-scan.err" || true)"
+    [ -n "$subset" ] && node "$LEANSCAN" --root "$dir" --report >"$LOGDIR/lean-report.txt" 2>>"$LOGDIR/lean-scan.err" || true
+    [ -s "$LOGDIR/lean-report.txt" ] || subset=""
+  fi
+  if [ -n "$subset" ]; then
+    # shellcheck disable=SC2086
+    { node scripts/test-preflight.mjs && node --test --test-concurrency="${FILE_CONC:-8}" $subset; } >"$LOGDIR/test-$ed.log" 2>&1 || true
+  else
+    npm test -- --test-concurrency="${FILE_CONC:-8}" >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
+  fi
   echo $(( $(date +%s) - t0 )) >"$lg.secs"
 }
 
@@ -207,6 +227,7 @@ if [ "$run_forge_leg" = "1" ]; then
   fi
 fi
 for p in "${pids[@]:-}"; do [ -n "$p" ] && { wait "$p" || true; }; done
+reap_fixtures                                    # what a fixture of the suites just run left behind (a leaked hung mutant), before anything is judged
 
 # ---- 3. what the legs said ----------------------------------------------------------------------------------------------------------------------------------------
 for ed in music lean; do
@@ -229,7 +250,13 @@ for ed in music lean; do
     red "---- tail of $LOGDIR/test-$ed.log"; tail -25 "$LOGDIR/test-$ed.log" >&2
     fail "$ed: the test run printed no summary (it did less than asked)"; SUMMARY+=("$ed: NO SUMMARY"); continue
   fi
-  SUMMARY+=("$ed: tests $tests, pass $pass, fail $failn, skipped $skipped")
+  lean_note=""
+  if [ "$ed" = lean ] && [ -s "$LOGDIR/lean-report.txt" ]; then
+    lean_note=" ($(sed -n 1p "$LOGDIR/lean-report.txt" | sed -E 's/^lean leg: ([0-9]+ of [0-9]+ test files).*/\1/'); --full-lean runs them all)"
+    echo "  $(sed -n 1p "$LOGDIR/lean-report.txt")"
+    echo "  the lean leg ran these files:"; sed -n 2p "$LOGDIR/lean-report.txt" | sed 's/^lean leg runs: //' | fold -s -w 150 | sed 's/^/    /'
+  fi
+  SUMMARY+=("$ed: tests $tests, pass $pass, fail $failn, skipped $skipped$lean_note")
   echo "  tests $tests / pass $pass / fail $failn / skipped $skipped"
   if [ "$failn" != "0" ]; then fail "$ed: $failn test(s) failed"; { grep -E '^✖' "$LOGDIR/test-$ed.log" || true; } | sort -u | head -15 >&2; fi
   if [ "$skipped" != "0" ]; then
@@ -282,4 +309,5 @@ if [ "${KEEP:-0}" != "1" ]; then
 fi
 cleanup
 reap_leftovers
+reap_fixtures
 exit "$FAILED"
