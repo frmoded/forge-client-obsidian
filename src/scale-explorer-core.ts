@@ -63,11 +63,11 @@ const STEP_FIFTHS: Record<Step, number> = { F: -1, C: 0, G: 1, D: 2, A: 3, E: 4,
 const SHARP_ORDER: readonly Step[] = ['F', 'C', 'G', 'D', 'A', 'E', 'B'];
 const FLAT_ORDER: readonly Step[] = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
 
-export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean }
-export type ExplorerMode = 'scale' | 'chord';
+export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean; diatonic: boolean }
+export type ExplorerMode = 'scale' | 'chord' | 'free';
 export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean; mode: ExplorerMode; chord: ChordQuality }
 
-export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true }, controls: true, mode: 'scale', chord: 'major' };
+export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false }, controls: true, mode: 'scale', chord: 'major' };
 
 export const MIN_OCTAVE = 1;
 export const MAX_OCTAVE = 6;
@@ -115,7 +115,7 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       out.scale = s;
     } else if (key === 'mode') {
       const v = value.toLowerCase();
-      if (v !== 'scale' && v !== 'chord') return bad(`mode must be scale or chord (got "${value}").`);
+      if (v !== 'scale' && v !== 'chord' && v !== 'free') return bad(`mode must be scale, chord or free (got "${value}").`);
       out.mode = v;
     } else if (key === 'chord') {
       const c = normalizeChordQuality(value);
@@ -127,13 +127,14 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       out.octave = n;
     } else if (key === 'show') {
       const parts = value.split(',').map((p) => p.trim().toLowerCase()).filter((p) => p !== '');
-      if (parts.length === 0) return bad(`show must list what to show: piano, staff, numbers (got "${value}").`);
-      const show: ScaleShow = { piano: false, staff: false, numbers: false };
+      if (parts.length === 0) return bad(`show must list what to show: piano, staff, numbers, diatonic (got "${value}").`);
+      const show: ScaleShow = { piano: false, staff: false, numbers: false, diatonic: false };
       for (const p of parts) {
-        if (p !== 'piano' && p !== 'staff' && p !== 'numbers') return bad(`show lists piano, staff and numbers (got "${p}" in "${value}").`);
+        if (p !== 'piano' && p !== 'staff' && p !== 'numbers' && p !== 'diatonic') return bad(`show lists piano, staff, numbers and diatonic (got "${p}" in "${value}").`);
         show[p] = true;
       }
       if (show.numbers && !show.piano) return bad('show: "numbers" labels the piano keys, so it needs "piano" too.');
+      if (show.diatonic && !show.piano) return bad('show: "diatonic" is a row under the piano, so it needs "piano" too.');
       out.show = show;
     } else {
       const v = value.toLowerCase();
@@ -142,6 +143,9 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       else return bad(`controls must be yes or no (got "${value}").`);
     }
   }
+  if (out.show.diatonic && out.mode !== 'free') return bad('show: "diatonic" is the row of chords you click in free mode, so the block needs "mode: free".');
+  if (out.mode === 'free' && !out.show.piano) return bad('mode: free is played on the piano, so "show" must include "piano".');
+  if (out.mode === 'free' && !out.controls) return bad('mode: free is interactive: "controls: no" is not available there.');
   if (seen.has('chord') && out.mode !== 'chord') return bad('"chord" picks the quality of a chord, so the block needs "mode: chord".');
   if (seen.has('scale') && out.mode === 'chord') return bad('"scale" belongs to mode: scale; this block is "mode: chord" (pick the quality with "chord:").');
   return { ok: true, options: out };
@@ -216,6 +220,12 @@ export function tonicNamesFor(type: ScaleType): string[] {
     names.push(cost(flat) < cost(sharp) || tieToFlat ? flat : sharp);
   }
   return names;
+}
+
+/** The tonic the dropdown shows after the scale type changes: the same pitch class, named the way the new type's key signature names it. */
+export function tonicAfterTypeChange(tonic: string, from: ScaleType, to: ScaleType): string {
+  const pc = scaleNotes(tonic, from, 4)[0].midi % 12;
+  return tonicNamesFor(to).find((t) => scaleNotes(t, to, 4)[0].midi % 12 === pc) ?? tonic;
 }
 
 // ---- the staff -----------------------------------------------------------------------------------------------------------------------------------------------

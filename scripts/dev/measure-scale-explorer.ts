@@ -7,6 +7,8 @@
 //   * every highlighted key is inside the piano scroller's visible area at its opening scroll; the piano is 146 px tall (medium); nothing overflows the pane or the page; no page errors;
 //   * 1171 chord mode: C major shows C, E, G (the root once, the labels 1 3 5), the name "C major" large above the piano and ONE stacked chord on the staff with no key signature; B-flat dom7 shows 4 notes, the name "Bb7" and two flats; a CONTROL (C major's keys vs Bb7's expected
 //     keys differ); Play together and Play arpeggio reach the sound double (all at once / one after the other);
+//   * 1172 free mode (+ the diatonic row): REAL clicks on the C, E and G keys give the readout "C major" and "I in C major", the staff one stacked chord of 3, the toggled keys differ in colour from the key's tint; a click on F# gives
+//     "F# is not in C major" and no name; a REAL click on the V button replaces the set with G B D, lights those keys and plays them at once; a CONTROL (the V button's keys compared with the IV's expected keys differ); no overflow;
 //   * a bad source shows the inline error naming the bad value, within the pane; `controls: no` has no dropdown and no button.
 // Writes shots/scale-explorer-*.png and scale-explorer-measurements.json; exits 1 when a verdict is false. Build and run from the client repo root:
 //   OUT=<dir>/harness-scale-explorer.js EDITION=music ENTRY=entry-scale-explorer.ts node scripts/dev/browser/build.mjs      (with app.css and plugin-styles.css = this repo's styles.css in <dir>)
@@ -31,6 +33,7 @@ const BLOCKS: Record<string, string> = {
   chordBb7: 'tonic: Bb\nmode: chord\nchord: dom7',
   chordBad: 'mode: chord\nchord: sus4',
   ebm: 'tonic: Eb\nscale: minor',
+  free: 'mode: free\nshow: piano, staff, diatonic',
 };
 const page = (w: number) => `<!doctype html><html><head><meta charset=utf-8><link rel=stylesheet href="app.css"><link rel=stylesheet href="plugin-styles.css"><style>body{margin:0}</style></head><body class="theme-light mod-macos">
 <div class="markdown-source-view mod-cm6 is-live-preview" style="width:${w}px;padding:12px"><div class="cm-editor"><div class="cm-scroller"><div class="cm-content" id="content" style="width:${w - 24}px;min-width:${w - 24}px">
@@ -62,7 +65,7 @@ const READ = (id: string) => `(() => {
     plainWhiteFill: fill(keys.find((k) => !k.classList.contains('is-scale') && k.classList.contains('forge-piano-key-white'))), plainBlackFill: fill(keys.find((k) => !k.classList.contains('is-scale') && k.classList.contains('forge-piano-key-black'))),
     labels, scrollerScrollLeft: sc.scrollLeft, scrollerScrollable: sc.scrollWidth > sc.clientWidth + 1,
     scaleKeysVisible: scale.every((k) => { const b = r(k); return b.l >= scr.l - 1 && b.r <= scr.r + 1; }),
-    pianoHeight: +root.querySelector('svg.forge-scale-svg').getAttribute('height'), widgetHeight: rootEl.height, widgetWidth: rootEl.width,
+    pianoHeight: +root.querySelector('svg.forge-scale-svg, svg.forge-free-svg').getAttribute('height'), widgetHeight: rootEl.height, widgetWidth: rootEl.width,
     staff: staff ? { notes: staff.querySelectorAll('g.note').length, keySigSharps: keySig.filter((h) => /E262/.test(h)).length, keySigFlats: keySig.filter((h) => /E260/.test(h)).length, noteAccidentals: noteAccids.length, w: r(staff).w, h: r(staff).h, withinPane: r(staff).r <= pane.r + 0.5 } : null,
     staffError: root.querySelector('.forge-scale-staff-error')?.textContent ?? null,
     tonicSelect: root.querySelector('select.forge-scale-tonic')?.value ?? null, tonicOptions: [...root.querySelectorAll('select.forge-scale-tonic option')].map((o) => o.textContent),
@@ -83,7 +86,7 @@ const verdicts: Record<string, boolean> = {};
 
 for (const width of [640, 300]) {
   const key = `w${width}`;
-  const p = await openPage({ dir: here, width: width + 40, height: 4800, pageHtml: page(width), routes: {} });
+  const p = await openPage({ dir: here, width: width + 40, height: 6400, pageHtml: page(width), routes: {} });
   try {
     await sleep(500);
     for (const [id, src] of Object.entries(BLOCKS)) await p.ev(`window.__mount(document.getElementById('blk-${id}'), ${JSON.stringify(src)})`);
@@ -132,6 +135,30 @@ for (const width of [640, 300]) {
     const stopped = await p.ev(`(() => ({ plays: window.__sound.plays.length, stops: window.__sound.stops, label: document.querySelector('#blk-c button[data-mode="together"]').textContent, lit: document.querySelectorAll('#blk-c rect.is-playing').length }))()`);
     verdicts[`${key} a second click stops it: no new play, the sound double was stopped, the lit keys are out, the button says Play together`] = stopped.plays === play.plays && stopped.stops > play.stops && stopped.lit === 0 && stopped.label === 'Play together';
 
+    // Free mode (1172): REAL clicks on piano keys and on the V button of the diatonic row.
+    const FREE = `#blk-free`;
+    const keyPoint = (midi: number) => p.ev(`(() => { const k = document.querySelector('${FREE} rect[data-midi="${midi}"]'); const sc = document.querySelector('${FREE} .forge-piano-scroller'); k.scrollIntoView({ block: 'center' }); const r = k.getBoundingClientRect(); const black = k.classList.contains('forge-piano-key-black'); const x = r.left + r.width / 2, y = r.top + r.height * (black ? 0.4 : 0.88); const sr = sc.getBoundingClientRect(); return { x, y, hit: document.elementFromPoint(x, y) === k, visible: r.left >= sr.left - 1 && r.right <= sr.right + 1 }; })()`);
+    const freeRead = () => p.ev(`(() => { const r = document.querySelector('${FREE}'); const t = (c) => r.querySelector('.forge-scale-readout-' + c)?.textContent ?? ''; const picked = [...r.querySelectorAll('rect.is-picked')].map((k) => +k.getAttribute('data-midi')).sort((a, b) => a - b); const fills = (c) => { const k = r.querySelector('rect.' + c); return k ? getComputedStyle(k).fill : null; }; const rr = (e) => e.getBoundingClientRect(); const pane = rr(document.getElementById('content')); const ro = rr(r.querySelector('.forge-scale-readout')); const staff = r.querySelector('.forge-scale-staff svg'); return { head: t('headline'), roman: t('roman'), outside: t('outside'), also: t('also'), picked, pickedFill: fills('is-picked'), tintFill: fills('is-in-key.forge-piano-key-white:not(.is-picked)'), tinted: r.querySelectorAll('rect.is-in-key').length, readoutInside: ro.right <= pane.right + 0.5, rowBtns: [...r.querySelectorAll('button.forge-scale-diatonic-btn')].map((b) => b.querySelector('.forge-scale-diatonic-label').textContent), numerals: [...r.querySelectorAll('button.forge-scale-diatonic-btn')].map((b) => b.getAttribute('data-numeral')), chords: staff ? staff.querySelectorAll('g.chord').length : -1, heads: staff ? staff.querySelectorAll('g.notehead').length : -1, overflow: r.scrollWidth > r.clientWidth + 1 || document.documentElement.scrollWidth > innerWidth }; })()`);
+    const f0 = await freeRead();
+    const fclick = async (midi: number) => { const k = await keyPoint(midi); await p.click(k.x, k.y); await sleep(120); return k; };
+    const kc = await fclick(60); const ke = await fclick(64); const kg = await fclick(67);
+    await sleep(700);                                                          // the staff redraws after each click
+    const f3 = await freeRead();
+    verdicts[`${key} free mode: at the start the hint shows, nothing is picked, the key's 52 keys are tinted, the row is I ii iii IV V vi vii° = C Dm Em F G Am B°`] = f0.head === 'Click keys to build a chord' && f0.picked.length === 0 && f0.tinted === 52 && f0.numerals.join(' ') === 'I ii iii IV V vi vii°' && f0.rowBtns.join(' ') === 'C Dm Em F G Am B°';
+    verdicts[`${key} free mode: REAL clicks on the C, E and G keys (each the click target, each visible) give "${f3.head}", "${f3.roman}" and no outside note`] = kc.hit && ke.hit && kg.hit && kc.visible && ke.visible && kg.visible && same(f3.picked, [60, 64, 67]) && f3.head === 'C major' && f3.roman === 'I in C major' && f3.outside === '';
+    verdicts[`${key} free mode: a toggled key differs in colour from a tinted one (${f3.pickedFill} / ${f3.tintFill}), and the staff shows ONE chord of 3 stacked notes`] = f3.pickedFill !== null && f3.tintFill !== null && f3.pickedFill !== f3.tintFill && f3.chords === 1 && f3.heads === 3;
+    const plays0 = await p.ev('window.__sound.plays.length');
+    const kf = await fclick(66); await sleep(700);
+    const f4 = await freeRead();
+    verdicts[`${key} free mode: adding the F# key (a black key, the click target) gives "${f4.outside}" and no name and no numeral ("${f4.head}")`] = kf.hit && f4.outside === 'F# is not in C major' && /^No chord name: /.test(f4.head) && f4.roman === '' && same(f4.picked, [60, 64, 66, 67]);
+    const rowPoint = (n: number) => p.ev(`(() => { const b = document.querySelectorAll('${FREE} button.forge-scale-diatonic-btn')[${n - 1}]; b.scrollIntoView({ block: 'center' }); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, hit: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === b || b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) }; })()`);
+    const bv = await rowPoint(5); await p.click(bv.x, bv.y); await sleep(700);
+    const f5 = await freeRead();
+    const vPlay = await p.ev(`(() => { const s = window.__sound; const e = s.plays[s.plays.length - 1].events; return { midis: e.map((x) => x.midi).sort((a, b) => a - b), together: e.every((x) => x.startMs === 0) }; })()`);
+    verdicts[`${key} free mode: a REAL click on the V button REPLACES the set with G B D, lights those keys, reads "${f5.head}" / "${f5.roman}" and plays them at once`] = bv.hit && same(f5.picked, [67, 71, 74]) && f5.head === 'G major' && f5.roman === 'V in C major' && same(vPlay.midis, [67, 71, 74]) && vPlay.together;
+    verdicts[`${key} free mode CONTROL: the V button's keys compared with the IV's expected keys (F A C) are NOT equal`] = !same(f5.picked, [65, 69, 72]);
+    verdicts[`${key} free mode: the readout stays inside the pane and nothing overflows`] = [f0, f3, f4, f5].every((f: any) => f.readoutInside && !f.overflow);
+    out[key].freeClicks = { f0, f3, f4, f5, plays0 };
     // Chord mode: REAL clicks on Play together (all at once) and Play arpeggio (one after the other, upward) of the Bb7 block.
     const clickBtn = async (sel: string) => { const b = await p.ev(`(() => { const e = document.querySelector('${sel}'); e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, hit: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === e }; })()`); await p.click(b.x, b.y); await sleep(150); return b; };
     const lastPlay = () => p.ev(`(() => { const s = window.__sound; const e = s.plays[s.plays.length - 1].events; return { plays: s.plays.length, midis: e.map((x) => x.midi), starts: e.map((x) => x.startMs) }; })()`);

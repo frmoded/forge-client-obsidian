@@ -160,19 +160,20 @@ export function nameChord(input: readonly (string | number)[], table: readonly C
 
 const ACCIDENTAL_NAME: Record<number, string> = { '-2': 'flat-flat', '-1': 'flat', '1': 'sharp', '2': 'double-sharp' };
 
-/** One bar with the chord as ONE whole-note chord (stacked notes), a treble clef from octave 4 (bass below), no key signature - a chord has none - so every altered note carries its own accidental sign. */
-export function chordMusicXML(root: string, quality: ChordQuality, octave = 4, table: readonly ChordSpec[] = CHORD_TABLE): string {
-  const notes = chordNotes(root, quality, octave, table);
-  const [clefSign, clefLine] = octave >= 4 ? ['G', 2] : ['F', 4];
-  const body = notes.map((n, i) => [
-    '      <note>',
-    i > 0 ? '        <chord/>' : '',
-    `        <pitch><step>${n.step}</step>${n.alter !== 0 ? `<alter>${n.alter}</alter>` : ''}<octave>${n.octave}</octave></pitch>`,
-    '        <duration>4</duration>',
-    '        <type>whole</type>',
-    n.alter !== 0 ? `        <accidental>${ACCIDENTAL_NAME[n.alter]}</accidental>` : '',
-    '      </note>',
-  ].filter((l) => l !== '').join('\n')).join('\n');
+/** One bar with `notes` as ONE whole-note chord (stacked notes; no notes: a whole rest), no key signature - every altered note carries its own accidental sign. */
+export function stackedMusicXML(notes: readonly ScaleNote[], clef: 'G' | 'F' = 'G'): string {
+  const [clefSign, clefLine] = clef === 'G' ? ['G', 2] : ['F', 4];
+  const body = notes.length === 0
+    ? ['      <note>', '        <rest/>', '        <duration>4</duration>', '        <type>whole</type>', '      </note>'].join('\n')
+    : notes.map((n, i) => [
+      '      <note>',
+      i > 0 ? '        <chord/>' : '',
+      `        <pitch><step>${n.step}</step>${n.alter !== 0 ? `<alter>${n.alter}</alter>` : ''}<octave>${n.octave}</octave></pitch>`,
+      '        <duration>4</duration>',
+      '        <type>whole</type>',
+      n.alter !== 0 ? `        <accidental>${ACCIDENTAL_NAME[n.alter]}</accidental>` : '',
+      '      </note>',
+    ].filter((l) => l !== '').join('\n')).join('\n');
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<score-partwise version="3.1">',
@@ -191,4 +192,9 @@ export function chordMusicXML(root: string, quality: ChordQuality, octave = 4, t
     '</score-partwise>',
     '',
   ].join('\n');
+}
+
+/** One bar with the chord as ONE whole-note chord of stacked notes, a treble clef from octave 4 (bass below). */
+export function chordMusicXML(root: string, quality: ChordQuality, octave = 4, table: readonly ChordSpec[] = CHORD_TABLE): string {
+  return stackedMusicXML(chordNotes(root, quality, octave, table), octave >= 4 ? 'G' : 'F');
 }

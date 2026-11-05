@@ -1502,6 +1502,89 @@
   line-height: 1.25;
 }
 
+/* 2026-11-04-1172: free mode. The keys of the chosen scale are tinted (lighter than a toggled key); a toggled key is the accent; the readout names what sounds; the row of the scale's chords sits under it. */
+.forge-free-svg .forge-free-key {
+  cursor: pointer;
+}
+
+.forge-free-key.is-in-key.forge-piano-key-white {
+  fill: var(--background-modifier-hover);
+  fill: color-mix(in srgb, var(--interactive-accent) 22%, var(--background-primary));
+}
+
+.forge-free-key.is-in-key.forge-piano-key-black {
+  fill: var(--text-muted);
+  fill: color-mix(in srgb, var(--interactive-accent) 45%, var(--text-normal));
+}
+
+/* As specific as the tint rules above (three classes), later in the file: a toggled key that is also a key of the scale must look TOGGLED (measured: without this it looked exactly like the tint). */
+.forge-free-key.is-picked.forge-piano-key-white,
+.forge-free-key.is-picked.forge-piano-key-black {
+  fill: var(--interactive-accent);
+  stroke: var(--interactive-accent-hover);
+}
+
+.forge-scale-readout {
+  margin: 6px 0;
+  min-height: 3.4em;
+}
+
+.forge-scale-readout-headline {
+  font-size: var(--font-ui-larger, 1.3em);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.forge-scale-readout-also,
+.forge-scale-readout-outside {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.forge-scale-readout-roman {
+  font-weight: 600;
+  color: var(--text-accent);
+}
+
+.forge-scale-readout-outside {
+  color: var(--text-error);
+}
+
+.forge-scale-readout [hidden] {
+  display: none;
+}
+
+.forge-scale-diatonic {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.forge-scale-diatonic-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 3.4em;
+  padding: 3px 8px;
+  line-height: 1.2;
+}
+
+.forge-scale-diatonic-numeral {
+  font-size: var(--font-ui-smaller, 0.8em);
+  color: var(--text-muted);
+}
+
+.forge-scale-diatonic-label {
+  font-weight: 600;
+}
+
+.forge-scale-sevenths[aria-pressed="true"] {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
 .forge-scale-caption {
   margin: 2px 0 6px;
   color: var(--text-muted);
@@ -2331,6 +2414,8 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-scale-staff-error,
 .forge-scale-caption,
 .forge-scale-chord-name,
+.forge-scale-readout,
+.forge-scale-diatonic-label,
 .forge-re-extract-warning,
 .forge-deps-line,
 .forge-add-domain-status,

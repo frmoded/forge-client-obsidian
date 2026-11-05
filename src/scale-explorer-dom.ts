@@ -5,6 +5,7 @@
 // The piano is input-widget-piano.ts's own keyboard (buildKeyboard / keyboardWidth / centerXOf / initialScrollLeft / KEYBOARD_HEIGHT, and its CSS classes), not a copy: 88 keys in a horizontal scroller, 146 px tall, opened on the scale.
 
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
+import { mountFreeMode } from './free-mode-dom.ts';
 import { CHORD_QUALITIES, CHORD_QUALITY_LABELS, chordMusicXML, chordNotes, chordRootName, chordRootNamesFor, nameChord, type ChordQuality } from './chord-names-core.ts';
 import {
   SCALE_TYPES,
@@ -15,6 +16,7 @@ import {
   playEvents,
   scaleMusicXML,
   scaleNotes,
+  tonicAfterTypeChange,
   tonicNamesFor,
   type PlayEvent,
   type PlayMode,
@@ -40,7 +42,7 @@ export interface ScaleExplorerDeps {
 export interface ScaleExplorerHandle {
   /** The tonic and scale type shown now. */
   /** The tonic (the root, in chord mode) and the scale type shown now; chord mode answers `{ tonic, chord }` instead. */
-  state(): { tonic: string; scale: ScaleType } | { tonic: string; chord: ChordQuality };
+  state(): { tonic: string; scale: ScaleType } | { tonic: string; chord: ChordQuality } | { tonic: string; scale: ScaleType; picked: number[] };
   /** Silence and unlight (a second press of the same Play button does this too). */
   stop(): void;
   destroy(): void;
@@ -57,11 +59,7 @@ const CHORD_PLAY_MODES: readonly { mode: PlayMode; label: string }[] = [
   { mode: 'arpeggio', label: 'Play arpeggio' },
 ];
 
-/** The tonic the dropdown shows after the scale type changes: the same pitch class, named the way the new type's key signature names it. */
-export function tonicAfterTypeChange(tonic: string, from: ScaleType, to: ScaleType): string {
-  const pc = scaleNotes(tonic, from, 4)[0].midi % 12;
-  return tonicNamesFor(to).find((t) => scaleNotes(t, to, 4)[0].midi % 12 === pc) ?? tonic;
-}
+export { tonicAfterTypeChange };
 
 /** The root the dropdown shows after the chord quality changes: the same pitch class, named the way the new quality's list names it. */
 export function rootAfterQualityChange(root: string, from: ChordQuality, to: ChordQuality): string {
@@ -70,6 +68,7 @@ export function rootAfterQualityChange(root: string, from: ChordQuality, to: Cho
 }
 
 export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOptions, deps: ScaleExplorerDeps): ScaleExplorerHandle {
+  if (options.mode === 'free') return mountFreeMode(el, options, deps);   // 2026-11-04-1172: free mode lives in its own module (scale and chord mode are untouched)
   const doc = el.ownerDocument;
   let tonic = options.tonic;
   let scale = options.scale;

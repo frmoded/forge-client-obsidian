@@ -75,13 +75,13 @@ test('the piano is the piano widget\'s own keyboard: 146 px tall, in a horizonta
 });
 
 test('show: numbers off -> no numbers; piano off -> no piano and numbers cannot appear; staff off -> the staff drawer is never called', async () => {
-  const noNum = world({ show: { piano: true, staff: true, numbers: false } });
+  const noNum = world({ show: { piano: true, staff: true, numbers: false, diatonic: false } });
   assert.equal(noNum.q('text.forge-scale-degree').length, 0);
   assert.equal(noNum.q('rect.is-scale').length, 8);
-  const noPiano = world({ show: { piano: false, staff: true, numbers: false } });
+  const noPiano = world({ show: { piano: false, staff: true, numbers: false, diatonic: false } });
   assert.equal(noPiano.q('rect').length, 0);
   assert.equal(noPiano.q('.forge-scale-piano').length, 0);
-  const noStaff = world({ show: { piano: true, staff: false, numbers: true } });
+  const noStaff = world({ show: { piano: true, staff: false, numbers: true, diatonic: false } });
   await tick();
   assert.equal(noStaff.xml.length, 0);
   assert.equal(noStaff.q('.forge-scale-staff').length, 0);
@@ -345,4 +345,169 @@ test('1171-2: an Eb minor block shows Eb in the dropdown (six flats on the staff
   assert.equal(ds.q<HTMLSelectElement>('select.forge-scale-tonic')[0].value, 'D#');
   assert.deepEqual(ds.q('select.forge-scale-tonic option').map((o) => o.textContent), [...tonicNamesFor('natural minor'), 'D#']);
   assert.deepEqual(ds.handle.state(), { tonic: 'D#', scale: 'natural minor' });
+});
+
+// ---- 2026-11-04-1172: free mode and the diatonic row -------------------------------------------------------------------------------------------------------------------------------
+
+function freeWorld(over: Partial<ScaleExplorerOptions> = {}) {
+  const w = world({ mode: 'free', ...over });
+  const click = (midi: number) => { const k = w.q(`rect[data-midi="${midi}"]`)[0]; k.dispatchEvent(new w.win.MouseEvent('click', { bubbles: true })); };
+  const readout = () => ({
+    head: w.q('.forge-scale-readout-headline')[0].textContent ?? '', also: w.q('.forge-scale-readout-also')[0].textContent ?? '',
+    roman: w.q('.forge-scale-readout-roman')[0].textContent ?? '', outside: w.q('.forge-scale-readout-outside')[0].textContent ?? '',
+  });
+  const pickedKeys = () => w.q('rect.is-picked').map(midiOf).sort((a, b) => a - b);
+  const rowBtn = (n: number) => w.q<HTMLButtonElement>('button.forge-scale-diatonic-btn')[n - 1];
+  return { ...w, click, readout, pickedKeys, rowBtn };
+}
+
+test('free mode: nothing sounds on mount, the hint shows, no key is picked, the 88 keys are there, the key C major is tinted (7 pitch classes in every octave) and the toggled keys will differ from it', () => {
+  const f = freeWorld();
+  assert.equal(f.plays.length, 0);
+  assert.equal(f.readout().head, 'Click keys to build a chord');
+  assert.equal(f.pickedKeys().length, 0);
+  assert.equal(f.q('rect.forge-piano-key').length, 88);
+  const tinted = f.q('rect.is-in-key').map(midiOf);
+  assert.ok(tinted.every((m) => [0, 2, 4, 5, 7, 9, 11].includes(m % 12)));
+  assert.equal(tinted.length, 52, '7 of 12 pitch classes over A0..C8: 52 keys');
+  assert.equal(f.q('.forge-scale')[0].getAttribute('data-mode'), 'free');
+  assert.deepEqual(f.handle.state(), { tonic: 'C', scale: 'major', picked: [] });
+});
+
+test('free mode: a click toggles a key (ON then OFF), the set stays ascending across octaves, a note sounds when a key goes ON and not when it goes OFF', () => {
+  const f = freeWorld();
+  f.click(67); f.click(60); f.click(64);
+  assert.deepEqual(f.pickedKeys(), [60, 64, 67]);
+  assert.deepEqual(f.handle.state(), { tonic: 'C', scale: 'major', picked: [60, 64, 67] });
+  assert.equal(f.plays.length, 3, 'one short note for each key switched on');
+  assert.deepEqual(f.plays.map((p) => p.events[0].midi), [67, 60, 64]);
+  assert.ok(f.plays.every((p) => p.events.length === 1 && p.events[0].durMs > 0));
+  f.click(64);
+  assert.deepEqual(f.pickedKeys(), [60, 67]);
+  assert.equal(f.plays.length, 3, 'switching OFF is silent');
+  f.click(72);
+  assert.deepEqual(f.pickedKeys(), [60, 67, 72], 'a key in another octave');
+});
+
+test('free mode, the readout: C E G is "C major" and "I in C major"; adding F# gives no name and "F# is not in C major"; the V button lights G B D', () => {
+  const f = freeWorld({ show: { piano: true, staff: true, numbers: false, diatonic: true } });
+  f.click(60); f.click(64); f.click(67);
+  assert.equal(f.readout().head, 'C major');
+  assert.equal(f.readout().roman, 'I in C major');
+  assert.equal(f.readout().outside, '');
+  f.click(66);
+  assert.match(f.readout().head, /^No chord name: P1 M3 d5 P5 above C$/);
+  assert.equal(f.readout().outside, 'F# is not in C major');
+  assert.equal(f.readout().roman, '');
+  f.rowBtn(5).click();
+  assert.deepEqual(f.pickedKeys(), [67, 71, 74], 'G B D lit; the F# and the old notes are gone (the click REPLACES)');
+  assert.equal(f.readout().head, 'G major');
+  assert.equal(f.readout().roman, 'V in C major');
+});
+
+test('free mode: inversion and slash bass ("C major/E", I6), "also:" with the other readings, an interval for two notes, a note for one', () => {
+  const f = freeWorld();
+  f.click(64); f.click(67); f.click(72);
+  assert.equal(f.readout().head, 'C major/E');
+  assert.equal(f.readout().roman, 'I6 in C major');
+  const g = freeWorld();
+  [59, 62, 65, 68].forEach((m) => g.click(m));
+  assert.equal(g.readout().head, 'Bdim7');
+  assert.match(g.readout().also, /^also: .*dim7\/B.* \/ .*dim7\/B/);
+  const two = freeWorld(); two.click(60); two.click(64);
+  assert.equal(two.readout().head, 'major third');
+  const one = freeWorld(); one.click(61);
+  assert.equal(one.readout().head, 'C#4');
+  assert.equal(one.readout().outside, 'C# is not in C major');
+});
+
+test('free mode: Clear empties the set, the readout and the staff, and silences', () => {
+  const f = freeWorld();
+  f.click(60); f.click(64);
+  const stops = f.stops();
+  f.q<HTMLButtonElement>('button.forge-scale-clear')[0].click();
+  assert.equal(f.pickedKeys().length, 0);
+  assert.equal(f.readout().head, 'Click keys to build a chord');
+  assert.ok(f.stops() > stops);
+  assert.deepEqual(f.handle.state(), { tonic: 'C', scale: 'major', picked: [] });
+});
+
+test('free mode: the dropdowns set the KEY, the tint follows, the picked keys stay, and the numeral is read in the new key ("V in F major" for C E G)', () => {
+  const f = freeWorld();
+  f.click(60); f.click(64); f.click(67);
+  f.change(f.q<HTMLSelectElement>('select.forge-scale-tonic')[0], 'F');
+  assert.equal(f.readout().roman, 'V in F major');
+  assert.equal(f.readout().outside, '');
+  assert.deepEqual(f.pickedKeys(), [60, 64, 67]);
+  assert.ok(f.q('rect.is-in-key').map(midiOf).every((m) => [5, 7, 9, 10, 0, 2, 4].includes(m % 12)), 'F major tinted: F G A Bb C D E');
+  f.change(f.q<HTMLSelectElement>('select.forge-scale-type')[0], 'natural minor');
+  assert.deepEqual(f.handle.state(), { tonic: 'F', scale: 'natural minor', picked: [60, 64, 67] });
+  assert.equal(f.readout().outside, 'E is not in F minor');
+  assert.equal(f.readout().roman, '');
+  assert.match(f.q('.forge-scale-caption')[0].textContent ?? '', /^Key: F minor: F G Ab Bb C Db Eb$/);
+});
+
+test('free mode: the staff shows the toggled notes as ONE chord, live; none = a whole rest; low notes take the bass clef', async () => {
+  const f = freeWorld();
+  await tick();
+  assert.match(f.xml[f.xml.length - 1], /<rest\/>/);
+  f.click(60); f.click(64); f.click(67);
+  await tick();
+  const last = f.xml[f.xml.length - 1];
+  assert.equal((last.match(/<note>/g) ?? []).length, 3);
+  assert.equal((last.match(/<chord\/>/g) ?? []).length, 2);
+  assert.match(last, /<sign>G<\/sign>/);
+  f.click(66);
+  await tick();
+  assert.match(f.xml[f.xml.length - 1], /<alter>1<\/alter>/, 'F# carries its sharp');
+  f.q<HTMLButtonElement>('button.forge-scale-clear')[0].click();
+  f.click(48); f.click(52);
+  await tick();
+  assert.match(f.xml[f.xml.length - 1], /<sign>F<\/sign>/);
+});
+
+test('free mode, show: diatonic: seven buttons I ii iii IV V vi vii° labelled C Dm Em F G Am B°; the 7ths switch makes them sevenths; a click replaces the set, lights it and plays it together', () => {
+  const f = freeWorld({ show: { piano: true, staff: true, numbers: false, diatonic: true } });
+  const btns = f.q<HTMLButtonElement>('button.forge-scale-diatonic-btn');
+  assert.deepEqual(btns.map((b) => b.getAttribute('data-numeral')), ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°']);
+  assert.deepEqual(btns.map((b) => b.querySelector('.forge-scale-diatonic-label')!.textContent), ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'B°']);
+  f.click(61);
+  f.rowBtn(2).click();
+  assert.deepEqual(f.pickedKeys(), [62, 65, 69], 'D F A: the old C# is gone');
+  const last = f.plays[f.plays.length - 1];
+  assert.deepEqual(last.events.map((e) => e.midi).sort((a, b) => a - b), [62, 65, 69]);
+  assert.ok(last.events.every((e) => e.startMs === 0), 'together');
+  const sw = f.q<HTMLButtonElement>('button.forge-scale-sevenths')[0];
+  assert.equal(sw.getAttribute('aria-pressed'), 'false');
+  sw.click();
+  assert.equal(f.q<HTMLButtonElement>('button.forge-scale-sevenths')[0].getAttribute('aria-pressed'), 'true');
+  assert.deepEqual(f.q<HTMLButtonElement>('button.forge-scale-diatonic-btn').map((b) => b.querySelector('.forge-scale-diatonic-label')!.textContent), ['Cmaj7', 'Dm7', 'Em7', 'Fmaj7', 'G7', 'Am7', 'Bø7']);
+  f.rowBtn(5).click();
+  assert.deepEqual(f.pickedKeys(), [67, 71, 74, 77]);
+  assert.equal(f.readout().head, 'G7');
+  assert.equal(f.readout().roman, 'V7 in C major');
+});
+
+test('free mode, the row follows the key and the scale: A minor gives i ii° III iv v VI VII (Am B° C Dm Em F G); D natural minor Dm E° F Gm Am Bb C', () => {
+  const am = freeWorld({ tonic: 'A', scale: 'natural minor', show: { piano: true, staff: false, numbers: false, diatonic: true } });
+  assert.deepEqual(am.q<HTMLButtonElement>('button.forge-scale-diatonic-btn').map((b) => b.getAttribute('data-numeral')), ['i', 'ii°', 'III', 'iv', 'v', 'VI', 'VII']);
+  am.rowBtn(1).click();
+  assert.equal(am.readout().roman, 'i in A minor');
+  const dm = freeWorld({ tonic: 'D', scale: 'natural minor', show: { piano: true, staff: false, numbers: false, diatonic: true } });
+  assert.deepEqual(dm.q<HTMLButtonElement>('button.forge-scale-diatonic-btn').map((b) => b.querySelector('.forge-scale-diatonic-label')!.textContent), ['Dm', 'E°', 'F', 'Gm', 'Am', 'Bb', 'C']);
+});
+
+test('free mode: without show: diatonic there is no row; the block source mode: free parses, and "controls: no" and a missing piano are refused naming the line', () => {
+  assert.equal(freeWorld().q('.forge-scale-diatonic').length, 0);
+  const win: any = new Window({ url: 'http://localhost/' });
+  const el = win.document.createElement('div');
+  const h = mountScaleBlock(el, 'mode: free\ntonic: G\nshow: piano, staff, diatonic', { sound: { play() { throw new Error('no sound on mount'); }, stop() {} } });
+  assert.ok(h);
+  assert.deepEqual(h!.state(), { tonic: 'G', scale: 'major', picked: [] });
+  assert.equal(el.querySelectorAll('button.forge-scale-diatonic-btn').length, 7);
+  for (const [src, re] of [['mode: free\ncontrols: no', /controls: no.*not available/], ['mode: free\nshow: staff', /needs.*piano|must include "piano"/], ['mode: scale\nshow: piano, diatonic', /needs "mode: free"/]] as const) {
+    const e2 = win.document.createElement('div');
+    assert.equal(mountScaleBlock(e2, src, { sound: { play() {}, stop() {} } }), null, src);
+    assert.match(e2.querySelector('.forge-scale-error p')?.textContent ?? '', re, src);
+  }
 });

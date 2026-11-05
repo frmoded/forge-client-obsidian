@@ -26,22 +26,22 @@ test('an empty block is the defaults: C major, octave 4, piano + staff + numbers
   const r = parseScaleExplorerSource('');
   assert.ok(r.ok);
   if (r.ok) assert.deepEqual(r.options, DEFAULT_SCALE_OPTIONS);
-  assert.deepEqual(DEFAULT_SCALE_OPTIONS, { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true }, controls: true, mode: 'scale', chord: 'major' });
+  assert.deepEqual(DEFAULT_SCALE_OPTIONS, { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false }, controls: true, mode: 'scale', chord: 'major' });
 });
 
 test('every option, in any order, case-insensitive, blank lines and CRLF ignored', () => {
   const r = parseScaleExplorerSource('\r\nScale: Harmonic Minor\r\n\r\ntonic: A\r\noctave: 3\r\nshow: staff, numbers, piano\r\ncontrols: no\r\n');
   assert.ok(r.ok);
-  if (r.ok) assert.deepEqual(r.options, { tonic: 'A', scale: 'harmonic minor', octave: 3, show: { piano: true, staff: true, numbers: true }, controls: false, mode: 'scale', chord: 'major' });
+  if (r.ok) assert.deepEqual(r.options, { tonic: 'A', scale: 'harmonic minor', octave: 3, show: { piano: true, staff: true, numbers: true, diatonic: false }, controls: false, mode: 'scale', chord: 'major' });
 });
 
 test('show picks the parts; "numbers" alone is refused (it labels the piano)', () => {
   const only = parseScaleExplorerSource('show: staff');
   assert.ok(only.ok);
-  if (only.ok) assert.deepEqual(only.options.show, { piano: false, staff: true, numbers: false });
+  if (only.ok) assert.deepEqual(only.options.show, { piano: false, staff: true, numbers: false, diatonic: false });
   const pn = parseScaleExplorerSource('show: piano');
   assert.ok(pn.ok);
-  if (pn.ok) assert.deepEqual(pn.options.show, { piano: true, staff: false, numbers: false });
+  if (pn.ok) assert.deepEqual(pn.options.show, { piano: true, staff: false, numbers: false, diatonic: false });
   const bad = parseScaleExplorerSource('show: numbers');
   assert.equal(bad.ok, false);
   if (!bad.ok) assert.match(bad.message, /numbers.*piano/);
@@ -372,7 +372,7 @@ test('chord-mode bad lines: an unknown mode, an unknown quality, a chord without
     assert.equal(r.ok, false, src);
     if (!r.ok) assert.match(r.message, re, src);
   };
-  bad('mode: arpeggio', /mode must be scale or chord \(got "arpeggio"\)/);
+  bad('mode: arpeggio', /mode must be scale, chord or free \(got "arpeggio"\)/);
   bad('mode: chord\nchord: sus4', /chord must be one of major, minor.*\(got "sus4"\)/);
   bad('chord: dom7', /needs "mode: chord"/);
   bad('mode: scale\nchord: dom7', /needs "mode: chord"/);
