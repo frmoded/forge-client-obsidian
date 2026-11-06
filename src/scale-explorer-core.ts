@@ -83,10 +83,10 @@ const FLAT_ORDER: readonly Step[] = ['B', 'E', 'A', 'D', 'G', 'C', 'F'];
 export interface ScaleShow { piano: boolean; staff: boolean; numbers: boolean; diatonic: boolean; guitar: boolean; intervals: boolean }
 /** What a guitar dot shows: the scale degree / the chord tone's number, or the note name. */
 export type GuitarLabels = 'degrees' | 'names';
-export type ExplorerMode = 'scale' | 'chord' | 'free';
-export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean; mode: ExplorerMode; chord: ChordQuality; labels: GuitarLabels; tab: boolean }
+export type ExplorerMode = 'scale' | 'chord' | 'free' | 'triad';
+export interface ScaleExplorerOptions { tonic: string; scale: ScaleType; octave: number; show: ScaleShow; controls: boolean; mode: ExplorerMode; chord: ChordQuality; labels: GuitarLabels; tab: boolean; degree: number }
 
-export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false, intervals: true }, controls: true, mode: 'scale', chord: 'major', labels: 'degrees', tab: false };
+export const DEFAULT_SCALE_OPTIONS: ScaleExplorerOptions = { tonic: 'C', scale: 'major', octave: 4, show: { piano: true, staff: true, numbers: true, diatonic: false, guitar: false, intervals: true }, controls: true, mode: 'scale', chord: 'major', labels: 'degrees', tab: false, degree: 1 };
 
 export const MIN_OCTAVE = 1;
 export const MAX_OCTAVE = 6;
@@ -94,7 +94,7 @@ export const MAX_OCTAVE = 6;
 export type ScaleExplorerParse = { ok: true; options: ScaleExplorerOptions } | { ok: false; message: string };
 
 const OPTION_RE = /^([A-Za-z_]+)\s*:\s*(.*)$/;
-const SUPPORTED_OPTIONS = ['tonic', 'scale', 'mode', 'chord', 'octave', 'show', 'controls', 'labels', 'tab'] as const;
+const SUPPORTED_OPTIONS = ['tonic', 'scale', 'mode', 'chord', 'octave', 'show', 'controls', 'labels', 'tab', 'degree'] as const;
 const TONIC_RE = /^([A-Ga-g])([#b♯♭]?)$/;
 
 /** A tonic as typed -> the spelling kept (`bb` -> `Bb`, `F♯` -> `F#`), or null. */
@@ -117,11 +117,13 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
   const out: ScaleExplorerOptions = { ...DEFAULT_SCALE_OPTIONS, show: { ...DEFAULT_SCALE_OPTIONS.show } };
   const seen = new Set<string>();
   let labels: GuitarLabels | null = null;
+  const triadSource = lines.some((l) => /^mode\s*:\s*triad$/i.test(l));      // 2026-11-05-1188: a `sevenths` line in a triad block gets its own sentence (it is an unknown option everywhere else)
   for (const line of lines) {
     const m = OPTION_RE.exec(line);
     if (!m) return bad(`Unrecognised line "${line}". Each line is "key: value" — ${SUPPORTED_OPTIONS.join(', ')}.`);
     const key = m[1].toLowerCase();
     const value = m[2].trim();
+    if (key === 'sevenths' && triadSource) return bad('mode: triad has no sevenths: a triad is three notes, the root and the next-but-one note twice, all taken from the scale.');
     if (!(SUPPORTED_OPTIONS as readonly string[]).includes(key)) return bad(`Unknown option "${m[1]}" (supported: ${SUPPORTED_OPTIONS.join(', ')}).`);
     if (seen.has(key)) return bad(`The option "${key}" is given twice.`);
     seen.add(key);
@@ -135,8 +137,12 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
       out.scale = s;
     } else if (key === 'mode') {
       const v = value.toLowerCase();
-      if (v !== 'scale' && v !== 'chord' && v !== 'free') return bad(`mode must be scale, chord or free (got "${value}").`);
+      if (v !== 'scale' && v !== 'chord' && v !== 'free' && v !== 'triad') return bad(`mode must be scale, chord, free or triad (got "${value}").`);
       out.mode = v;
+    } else if (key === 'degree') {
+      const n = /^\d+$/.test(value) ? Number(value) : NaN;
+      if (!(n >= 1 && n <= 7)) return bad(`degree must be a whole number from 1 to 7 (got "${value}").`);
+      out.degree = n;
     } else if (key === 'chord') {
       const c = normalizeChordQuality(value);
       if (!c) return bad(`chord must be one of ${CHORD_QUALITIES.join(', ')} (got "${value}").`);
@@ -174,6 +180,15 @@ export function parseScaleExplorerSource(source: string): ScaleExplorerParse {
   }
   if (seen.has('labels') && !out.show.guitar) return bad('"labels" names what the guitar dots show, so "show" must include "guitar".');
   if (out.tab && !out.show.guitar) return bad('"tab: yes" writes the tab under the guitar, so "show" must include "guitar".');
+  // 2026-11-05-1188: `mode: triad` - the scale as a score, a note picked from it, the triad of that note on the piano and on its own staff. `show` may list piano and staff only (the default is both); the rows and views of the other modes are refused in one sentence each.
+  if (seen.has('degree') && out.mode !== 'triad') return bad('"degree" picks the root of a triad, so the block needs "mode: triad".');
+  if (out.mode === 'triad') {
+    if (!seen.has('show')) out.show = { piano: true, staff: true, numbers: false, diatonic: false, guitar: false, intervals: false };
+    for (const [part, why] of [['diatonic', 'the row of chords you click in free mode'], ['guitar', 'the guitar neck of the other modes'], ['intervals', 'the interval pattern of a scale'], ['numbers', 'the degree numbers of a scale on the piano']] as const) {
+      if (out.show[part]) return bad(`show: "${part}" is ${why}, so it is not available in mode: triad (show lists piano and staff there).`);
+    }
+    if (seen.has('chord')) return bad('"chord" picks the quality of a chord in mode: chord; in mode: triad the triad comes from the scale and the picked note.');
+  }
   // 2026-11-05-1185: the interval pattern is a SCALE row. With no `show:` line it is on in scale mode (the default picture) and off in chord and free mode; a `show:` line lists what to show, so it is off unless listed - and listing it in chord or free mode is an error.
   if (!seen.has('show') && out.mode !== 'scale') out.show.intervals = false;
   if (out.show.intervals && out.mode !== 'scale') return bad('show: "intervals" is the interval pattern of a scale, so the block needs "mode: scale".');

@@ -6,6 +6,7 @@
 
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
 import { mountFreeMode } from './free-mode-dom.ts';
+import { mountTriadMode } from './triad-mode-dom.ts';
 import { GUITAR_FRETS, positionsOf, tabForRun, tabText } from './guitar-core.ts';
 import { mountGuitar } from './guitar-dom.ts';
 import { CHORD_QUALITIES, CHORD_QUALITY_LABELS, chordMusicXML, chordNotes, chordRootName, chordRootNamesFor, nameChord, type ChordQuality } from './chord-names-core.ts';
@@ -45,7 +46,7 @@ export interface ScaleExplorerDeps {
 export interface ScaleExplorerHandle {
   /** The tonic and scale type shown now. */
   /** The tonic (the root, in chord mode) and the scale type shown now; chord mode answers `{ tonic, chord }` instead. */
-  state(): { tonic: string; scale: ScaleType } | { tonic: string; chord: ChordQuality } | { tonic: string; scale: ScaleType; picked: number[] };
+  state(): { tonic: string; scale: ScaleType } | { tonic: string; chord: ChordQuality } | { tonic: string; scale: ScaleType; picked: number[] } | { tonic: string; scale: ScaleType; degree: number };
   /** Silence and unlight (a second press of the same Play button does this too). */
   stop(): void;
   destroy(): void;
@@ -71,7 +72,8 @@ export function rootAfterQualityChange(root: string, from: ChordQuality, to: Cho
 }
 
 export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOptions, deps: ScaleExplorerDeps): ScaleExplorerHandle {
-  if (options.mode === 'free') return mountFreeMode(el, options, deps);   // 2026-11-04-1172: free mode lives in its own module (scale and chord mode are untouched)
+  if (options.mode === 'free') return mountFreeMode(el, options, deps);
+  if (options.mode === 'triad') return mountTriadMode(el, options, deps);     // 2026-11-05-1188: triad mode lives in its own module too (scale, chord and free mode are untouched)   // 2026-11-04-1172: free mode lives in its own module (scale and chord mode are untouched)
   const doc = el.ownerDocument;
   let tonic = options.tonic;
   let scale = options.scale;
