@@ -7,7 +7,7 @@ Try it: pick another tonic or scale type and press Play.
 ```forge-scale
 tonic: C
 scale: major
-show: piano, staff, numbers
+show: piano, staff, numbers, intervals
 controls: yes
 ```
 
