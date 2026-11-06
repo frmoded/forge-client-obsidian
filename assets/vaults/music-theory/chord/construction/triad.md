@@ -1,36 +1,25 @@
 # Triad
 
-A **triad** is a chord of three notes. Pick a note (the root), skip one note of the scale and take the next, then skip another and take the next. In C major that gives C, E and G: counting C as 1, those are the 1st, 3rd and 5th notes of the scale (C D E F G), which is why you will hear them called degrees 1, 3 and 5. It is the atom everything else in [[chord]] extends: sevenths add a fourth note, extensions add more, inversions reorder it, voicings dress it up.
+A **triad** is defined by a **scale and a note in that scale**: pick any scale and any note of it, call that note the root, skip a note, take the next, skip another, take the next, and you always get a triad. In C major that gives C, E and G: counting C as 1, those are the 1st, 3rd and 5th notes of the scale (C D E F G), which is why you will hear them called degrees 1, 3 and 5. It is the atom everything else in [[chord]] extends: sevenths add a fourth note, extensions add more, inversions reorder it, voicings dress it up.
 
-Try it: click any three keys and read the chord name; click a Roman numeral to hear that triad.
+Try it: pick a scale, then click any note of the scale on the staff. The three notes it picks (the root, the third and the fifth) appear on the keyboard and on their own staff.
 
 ```forge-scale
-mode: free
+mode: triad
 tonic: C
 scale: major
-show: piano, staff, diatonic
+show: piano, staff
 ```
+
+## Reading the Roman numerals
+
+The Roman numerals I ii iii IV V vi vii° name the seven triads you can build on a major scale. The numeral is the degree of the scale that the triad's root sits on: I is built on the 1st note, ii on the 2nd, iii on the 3rd, and so on up to vii° on the 7th. A capital numeral means a major triad, a small one a minor triad, a small one with a degree sign ° a diminished triad, and a capital with + an augmented one. So in C major the seven triads are C major (I), D minor (ii), E minor (iii), F major (IV), G major (V), A minor (vi) and B diminished (vii°). [[diatonic_chord]] has the full list.
 
 Are any three notes a chord? Sure. Sound them together and call it that. A **triad** is the useful special case: three notes stacked in thirds, which is how Western harmony has built most of its chords for centuries. That method has a name, **tertian harmony**, and it isn't the only game in town. Stack in fourths and you get quartal harmony; pack notes a second apart and you get secundal harmony. Both are real chords, and neither is a triad.
 
 Here is the C major scale. Counting C as 1, the 1st, 3rd and 5th notes are C, E and G: the triad.
 
-![[scales/resources/images/c_major_scale.svg]]
-
 ![[scales/resources/audio/c_major_scale.mp3]]
-
-**Figure 1 — The C major scale.** *Take the 1st, 3rd and 5th notes and you have the three notes of the triad.*
-
-![[chord/construction/resources/images/c_major_triad.svg]]
-
-**Figure 2 — The C major triad.** *Played together, the same three notes are the C major triad.*
-
-Here is the C major triad on a keyboard. C, E and G are held; press **Play together** to hear all three at once, or **Play ascending** to hear them one at a time, then click other keys to try a different stack.
-
-```html-embed
-music_instruments/resources/html/piano_keyboard_c_major_triad.html
-300
-```
 
 Stack a third on a note, then another third on top of that, and you have a triad. Press Run on [[build_triad]] with `tonic="C4"` and `quality="major"` to hear it — then change the tonic and listen to the same shape land somewhere else.
 
