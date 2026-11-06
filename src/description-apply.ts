@@ -7,7 +7,7 @@
 // score-first vault: P3).
 import { mountDescriptionBar, type BarAction, type BarHandle, type BarView } from './description-bar-dom.ts';
 import {
-  DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, revertDescriptionText, revertToGeneratedText, revertedLine, writeFromParams,
+  DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, revertDescriptionText, revertToGeneratedText, revertedLine, writeFromParams, pythonCustomBarMessage,
   type DescriptionState, type Family,
 } from './description-apply-core.ts';
 import { bothEditedLine, recipeAppliedLine, recipeRejectedLine, recipeRevertedLine } from './recipe-apply-core.ts';
@@ -89,7 +89,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (st.kind === 'recipe-rejected') return { message: u.message ?? st.message, actions: ['revert'], busy: u.busy };               // no "Ask the sentence service" for a Recipe: no LLM, the person fixes it
     if (st.kind === 'recipe-apply') return { message: u.message ?? `The Recipe changed (${st.change}); update the note from it.`, actions: ['update-recipe', 'revert'], busy: u.busy };
     if (st.kind === 'python-apply') return { message: u.message ?? `The Python changed (${st.change}); update the note from it.`, actions: ['update-python', 'revert'], busy: u.busy };
-    if (st.kind === 'python-custom') return { message: u.message ?? 'The Python is not a shape the controls know: the note becomes a custom note.', actions: ['update-python', 'revert'], busy: u.busy };
+    if (st.kind === 'python-custom') return { message: u.message ?? pythonCustomBarMessage(st.already), actions: ['update-python', 'revert'], busy: u.busy };
     if (st.kind === 'custom-note') return { message: u.message ?? CUSTOM_BANNER, actions: st.canRevert ? ['revert-generated'] : [], busy: u.busy, tone: 'custom' };
     if (st.kind === 'both-edited') return { message: u.message ?? st.message, actions: st.facets.map((f) => (f === 'description' ? 'update' : f === 'recipe' ? 'update-recipe' : 'update-python') as BarAction), busy: u.busy };
     return { message: '', actions: [] };

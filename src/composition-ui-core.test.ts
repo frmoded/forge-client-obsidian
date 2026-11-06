@@ -241,7 +241,7 @@ function dialog(over: { hasRoot?: boolean; create?: (c: any) => Promise<any> } =
   const seen: any[] = [];
   let closed = 0;
   const handle = mountCompositionDialog(parent, {
-    phrases: ['phrases/phrase_003', 'phrases/phrase_004'], arrangements: ['arrangements/arr_001'], compositions: ['compositions/intro'], hasRoot: over.hasRoot ?? false,
+    phrases: ['phrases/phrase_003', 'phrases/phrase_004'], arrangements: ['arrangements/arr_001'], compositions: ['compositions/intro'], hasRoot: over.hasRoot ?? false, nextName: 'comp_001',
     create: over.create ?? (async (c) => { seen.push(c); return { ok: true, path: 'compositions/comp_001.md' }; }), close: () => { closed++; },
   });
   const q = (sel: string) => parent.querySelector(sel) as any;

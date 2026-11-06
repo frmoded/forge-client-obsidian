@@ -167,3 +167,6 @@ export const appliedLine = (name: string, change: string): string => `[forge-des
 export const rejectedLine = (name: string, e: GrammarError): string => `[forge-description] rejected ${name}: line ${e.line} column ${e.column} ${e.message}`;
 export const revertedLine = (name: string): string => `[forge-description] reverted ${name} to the json cache`;
 export const askedServiceLine = (name: string, outcome: string): string => `[forge-description] asked the service about ${name} -> ${outcome}`;
+
+/** 2026-11-06-1190 (c): the bar's sentence when the Python is not a shape the controls know. A note that is not custom yet becomes one; one that already is (`already`) stays one. */
+export const pythonCustomBarMessage = (already: boolean): string => `The Python is not a shape the controls know: ${already ? 'this note stays a custom note.' : 'the note becomes a custom note.'}`;

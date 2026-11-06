@@ -14,7 +14,7 @@ import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
 import { PHRASE_FOLDER, barsOfPayload, isPhrasePath } from './phrase-core.ts';
 import { ARRANGEMENT_FOLDER, isArrangementPath } from './arrangement-core.ts';
-import { COMPOSITION_FOLDER, COMPOSITION_VIEW_TYPE, compositionHeader, isCompositionPath, phraseDepsWithSources, produceComposition, readCompositionNote, FORGE_COMPOSITION_KEY, type CompositionParams, type CompositionShape } from './composition-core.ts';
+import { COMPOSITION_FOLDER, COMPOSITION_VIEW_TYPE, compositionHeader, isCompositionPath, nextCompositionName, phraseDepsWithSources, produceComposition, readCompositionNote, FORGE_COMPOSITION_KEY, type CompositionParams, type CompositionShape } from './composition-core.ts';
 import { COMPOSITION_INSPECTOR_HINT, COMPOSITION_BAR_ROLE, annotateCompositionPayload, barIdsPlayedFrom, barsPlayedFrom, compositionLineageOf, readCompositionLineage, type CompositionLineageBar } from './composition-nav-core.ts';
 import { treeRows, treeText } from './composition-strip-core.ts';
 import { mountNotebook, type NotebookDomPorts, type NotebookHandle } from './notebook-dom.ts';
@@ -359,7 +359,7 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
         });
         void readAll().then((all) => {
           new DialogModal(app, (parent, close) => mountCompositionDialog(parent, {
-            phrases, arrangements, compositions: names(COMPOSITION_FOLDER), hasRoot: rootOf(all).kind !== 'none',
+            phrases, arrangements, compositions: names(COMPOSITION_FOLDER), hasRoot: rootOf(all).kind !== 'none', nextName: nextCompositionName((p) => app.vault.getAbstractFileByPath(p) !== null),
             create: (choice) => createComposition(compPorts, choice, (path) => makeRoot(path)),
             close,
           })).open();

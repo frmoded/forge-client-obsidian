@@ -71,7 +71,7 @@ export function interpretTransformResponse(res: { status: number; json: unknown 
   const json = res.json as Plan;
   const version = answerVersion(json);
   const carried = version !== null ? { serviceVersion: version } : {};         // only when the answer says it: every older outcome keeps its exact shape
-  if (json.ok !== true || json.plan === undefined || json.plan === null) return { ok: false, message: planRefusalText(json), suspectOld: true, ...carried };
+  if (json.ok !== true || json.plan === undefined || json.plan === null) return { ok: false, message: opWordsIn(planRefusalText(json)), suspectOld: true, ...carried };
   const plan = json.plan as Plan;                                         // a string, a number or an array has no `kind`: the same refusal as another kind of phrase
   if (plan.kind !== 'transform') return { ok: false, message: NOT_A_TRANSFORM, suspectOld: true, ...carried };
   if (plan.op !== 'thin_out' && plan.op !== 'double_up') return { ok: false, message: `The planner's answer is not a valid operation: op must be "thin_out" or "double_up", got ${JSON.stringify(plan.op)}.`, suspectOld: false };
@@ -97,4 +97,9 @@ export function askedLine(sentence: string, outcome: TransformOutcome | { ok: fa
   const one = oneLine(sentence);
   const shown = one.length > 80 ? `${one.slice(0, 80)}...` : one;
   return `[forge-notebook] asked "${shown}" -> ${outcome.ok === false ? `refused: ${outcome.message}` : outcome.op}`;
+}
+
+/** 2026-11-06-1190 (a): a refusal the service wrote names the engine's operations (`thin_out`, `double_up`); the notebook's op picker calls them "thin out" and "double up", so that is what the person is told. `thin_out_bars` and `double_up_bars` (the engine's functions) are not operation names and stay as the engine said them. */
+export function opWordsIn(text: string): string {
+  return text.replace(/\bthin_out\b/g, 'thin out').replace(/\bdouble_up\b/g, 'double up');
 }

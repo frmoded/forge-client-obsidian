@@ -11,6 +11,8 @@ export interface CompositionDialogPorts {
   compositions: readonly string[];
   /** Is there already a root among the compositions? The root box starts ticked only when there is not. */
   hasRoot: boolean;
+  /** 2026-11-06-1190 (b): the name an empty Name field gets (the next free one, `nextCompositionName`), shown as the placeholder. */
+  nextName: string;
   create(choice: NewCompositionChoice): Promise<NewCompositionResult>;
   close(): void;
 }
@@ -22,7 +24,7 @@ export function mountCompositionDialog(parent: HTMLElement, ports: CompositionDi
   root.appendChild(el('h3', '', 'New composition'));
   root.appendChild(el('p', 'forge-comp-hint', 'A composition is a piece made of sections played one after another. Each section plays a phrase, an arrangement or another composition; give it a number of bars to repeat or cut it to that length, or leave the bars empty to play all of it once.'));
   const nameLabel = el('label', 'forge-comp-name-label', 'Name (optional) ');
-  const name = el('input', 'forge-comp-name'); name.type = 'text'; name.placeholder = 'comp_001'; name.setAttribute('aria-label', 'Name');
+  const name = el('input', 'forge-comp-name'); name.type = 'text'; name.placeholder = ports.nextName; name.setAttribute('aria-label', 'Name');
   nameLabel.appendChild(name);
   const rows = el('div', 'forge-comp-sections');
   const message = el('div', 'forge-comp-message'); message.setAttribute('role', 'status');
