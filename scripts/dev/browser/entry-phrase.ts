@@ -70,7 +70,7 @@ proto.setText = function (t: string) { this.textContent = t; };
       notify: (m) => { ((window as any).__notices ??= []).push(m); },
       isAlreadyExists: () => false,
     },   // M6: the lineage links, the bracket and the source link report which note they would open
-    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME, { clickToPlay: scoreClickPlays, zoom, trace: (line) => { ((window as any).__follower ??= []).push(line); } }),
+    renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, NAME, { clickToPlay: scoreClickPlays, compact: true, zoom, trace: (line) => { ((window as any).__follower ??= []).push(line); } }),
     stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (h) => window.clearTimeout(h as number),

@@ -34,8 +34,6 @@ import { headerResync } from './header-resync.ts';
 import { createPhraseRouter } from './phrase-default-view-core.ts';
 import { createPaneLinker, openPairAvailable, type PairSource } from './linked-panes-core.ts';
 import { collectLeaves } from './workspace-leaves-core.ts';
-import { usedByChips } from './structure-strip-core.ts';
-import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
 import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 import { PLAN_COMMAND_ID, PLAN_COMMAND_NAME, createSentencePlanner, planAvailable, type PlanPayload } from './sentence-plan-core.ts';
@@ -441,33 +439,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, onPin: (l, pin) => { void linker.pinned(l, pin); } });
       // 2026-10-31-1100 (M17b): compositions, the root note of a piece. Registered here too, inside the score-first gate (P3). `pair` opens the notes pane beside a composition's Score (the pair machinery is defined below; it is called later).
       registerCompositions(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, newCompositionPair: compositionBridge, notebookFor, onPin: (l, pin) => { void linker.pinned(l, pin); }, pair: (leaf, file) => openPair({ kind: 'composition', leaf, file }) });
-      // 2026-10-26-1270: a bar's tab (its Beat Box or its Score) shows the phrases that use it, as chips above it, from the vault's resolved links (the `links:` of 1260 are what makes them resolve). The strip is added to the view's
-      // content element on every event that can change the answer and put back if the view redrew without it; clicking a chip opens that phrase. Only in a score-first vault (this code runs after the gate).
-      const barStrips = new WeakMap<HTMLElement, { handle: StripHandle; key: string }>();
-      const syncBarStrips = () => {
-        const resolved = (app.metadataCache as unknown as { resolvedLinks?: Record<string, Record<string, number>> }).resolvedLinks ?? {};
-        app.workspace.iterateAllLeaves((leaf) => {
-          const type = leaf.view?.getViewType();
-          if (type !== RHYTHM_EDIT_VIEW_TYPE && type !== RHYTHM_SCORE_VIEW_TYPE) return;
-          const file = (leaf.view as unknown as { file?: TFile | null }).file;
-          const host = (leaf.view as unknown as { contentEl?: HTMLElement }).contentEl;
-          if (!host || !file || !isBarPath(file.path)) return;
-          const chips = usedByChips(file.basename, resolved);
-          const key = chips.map((c) => c.noteId).join('|');
-          let entry = barStrips.get(host);
-          if (!entry || !host.contains(entry.handle.el)) {
-            entry?.handle.dispose();
-            entry = { handle: mountStructureStrip(host, { onHover: () => {}, onClick: (chip) => { openNote(chip.noteId); } }, host.firstChild as Element | null), key: '\0' };
-            barStrips.set(host, entry);
-          }
-          if (entry.key !== key) {
-            entry.handle.set(chips);
-            entry.key = key;
-            if (chips.length > 0) console.info(`[forge-strip] ${file.basename} used by ${chips.map((c) => c.text).join(', ')}`);
-          }
-        });
-      };
-      onWorkspaceMoved(() => syncBarStrips());
+      // 2026-11-05-1189: a bar's tab (its Beat Box or its Score) no longer shows the "used by:" chips above it (they were mounted here from the vault's resolved links, 2026-10-26-1270). The phrase, arrangement and composition tabs keep
+      // their own strips: they are mounted by phrase-dom.ts and arrangement-strip-dom.ts, not from this file.
       // 2026-10-31-1120 (M15c, "Update from Description"): the person edits the Description of a phrase, arrangement or composition by hand; once they stop typing the note is updated from it (or the bar says where the sentence is wrong).
       // Only in a score-first vault (this code runs after the gate). A `modify` is heard for the three families only; opening a note or moving a pane only LOOKS (the bar), it never writes.
       const folderNames = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename).filter((n) => n !== 'README');
@@ -571,9 +544,6 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return true;
         },
       });
-      plugin.registerEvent(app.metadataCache.on('resolved', () => syncBarStrips()));
-      plugin.registerEvent(app.metadataCache.on('changed', () => syncBarStrips()));
-      syncBarStrips();
       // Open as Score is the person asking for the Score again: forget an earlier Open as JSON on that leaf
       const openScore = (leaf: WorkspaceLeaf, file: TFile) => { router.setMark(leaf, file.path, null); return openPhraseInLeaf(app, leaf, file); };
       // The tab the command acts on comes from the ACTIVE VIEW (never a leaf lookup), as the other palette commands do. A bar's tab is its Beat Box (or its Score): the most recent leaf, which is the one the palette was opened from.

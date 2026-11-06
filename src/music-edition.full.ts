@@ -207,13 +207,24 @@ function renderMusicXMLWithToggle(
   // chrome along with the score. v0.2.162 — zoom-bar slot lives in
   // the same toolbar as the kit toggle so the controls are
   // co-located at the top of the score area.
-  const toolbar = entry.createDiv({ cls: 'forge-output-toolbar' });
-  const button = toolbar.createEl('button', {
+  // 2026-11-05-1189 (compact, score-first tabs): the toolbar IS the one row (the player is put first by renderMusicXML, then the zoom buttons, then this button), so the zoom slot is made BEFORE the button there.
+  const compact = opts.compact === true;
+  const toolbar = entry.createDiv({ cls: compact ? 'forge-score-toolbar' : 'forge-output-toolbar' });
+  const zoomSlotFirst = compact ? toolbar.createDiv({ cls: 'forge-zoom-bar' }) : null;
+  const buttonHost = compact ? toolbar.createDiv({ cls: 'forge-kit-pill' }) : toolbar;
+  const button = buttonHost.createEl('button', {
     cls: 'forge-kit-toggle',
     attr: { 'aria-label': 'Toggle drum notation view' },
   });
   const updateLabel = (m: ScoreViewMode) => {
-    button.setText(m === 'kit' ? '🎼 Multi-staff' : '🥁 Kit');
+    if (compact) {
+      // the icon stays (the driver likes it), the words go in a span a narrow pane hides (styles.css container query); the title and the aria-label carry the meaning at any width
+      button.empty();
+      button.createSpan({ cls: 'forge-kit-toggle-icon', text: m === 'kit' ? '🎼' : '🥁' });
+      button.createSpan({ cls: 'forge-kit-toggle-label', text: m === 'kit' ? 'Multi-staff' : 'Kit' });
+    } else {
+      button.setText(m === 'kit' ? '🎼 Multi-staff' : '🥁 Kit');
+    }
     button.title = m === 'kit'
       ? 'Switch to multi-staff orchestral percussion view'
       : 'Switch to drum-kit single-staff view';
@@ -222,7 +233,7 @@ function renderMusicXMLWithToggle(
   // Zoom-bar slot — renderMusicXML populates it per render.
   // Same .forge-zoom-bar class as the inline (non-toggle) path so
   // child buttons inherit the existing zoom-button styles.
-  const zoomBarHost = toolbar.createDiv({ cls: 'forge-zoom-bar' });
+  const zoomBarHost = zoomSlotFirst ?? toolbar.createDiv({ cls: 'forge-zoom-bar' });
 
   const scoreHost = entry.createDiv({ cls: 'forge-output-musicxml-host' });
 
@@ -270,6 +281,7 @@ function renderMusicXMLWithToggle(
     // would play simultaneously (or the prior one keeps running with
     // no UI to stop it).
     stopMidiPlayersIn(scoreHost, (m, e) => console.error(m, e));
+    if (compact) stopMidiPlayersIn(toolbar, (m, e) => console.error(m, e));     // the compact toolbar holds the player; the previous render's goes with its audio
     scoreHost.empty();
     const shared = await ensureSharedMidi();
     // v0.2.155 — both modes use shared multi-staff MIDI bytes. Kit
@@ -302,7 +314,7 @@ function renderMusicXML(
   externalZoomBar?: HTMLElement,
   opts: RenderOptions = {},
 ) {
-  const host = entry.createDiv({ cls: 'forge-output-musicxml' });
+  const host = entry.createDiv({ cls: opts.compact === true ? 'forge-output-musicxml forge-score-compact' : 'forge-output-musicxml' });
   host.setText('Rendering score…');
   // Defer one frame so clientWidth reflects the actual layout width.
   requestAnimationFrame(async () => {
@@ -326,7 +338,7 @@ function renderMusicXML(
       const sameXml = midiSourceXml === undefined || midiSourceXml === musicxml;
       const midiXml = midiSourceXml ?? musicxml;
       // M6 rider: a host that has not been laid out yet (a background tab, a pane still opening) measures a few pixels; engrave for the width it will be shown at, not for that.
-      const displayRender = await renderMusicXMLAndMIDI(musicxml, await waitForWidth(host));
+      const displayRender = await renderMusicXMLAndMIDI(musicxml, await waitForWidth(host), { noHeader: opts.compact === true });
       const svg = displayRender.svg;
       let midiBase64: string;
       let midiTotalMs: number;
@@ -373,6 +385,14 @@ function renderMusicXML(
       }
       host.empty();
 
+      // 2026-11-05-1189 (compact): the ONE toolbar row. In a percussion Score the kit-toggle wrapper made it (the zoom slot's parent); otherwise it is made here, first in the host.
+      const compact = opts.compact === true;
+      let toolbar: HTMLElement | null = null;
+      if (compact) {
+        toolbar = externalZoomBar?.parentElement ?? host.createDiv({ cls: 'forge-score-toolbar' });
+        for (const old of Array.from(toolbar.querySelectorAll('.forge-midi-player'))) old.remove();      // a re-render (the kit toggle) replaces the player it had
+      }
+
       // Download links — always available, even if playback init fails.
       // Downloads the displayed XML + its corresponding MIDI (canonical).
       host.appendChild(makeDownloadBar(snippetId, musicxml, midiBase64));
@@ -393,7 +413,7 @@ function renderMusicXML(
         player.soundFont = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
         player.noteSequence = noteSequence;
         player.classList.add('forge-midi-player');
-        host.appendChild(player);
+        if (toolbar) toolbar.insertBefore(player, toolbar.firstChild); else host.appendChild(player);     // compact: the player is the first thing of the one row
         host.appendChild(soundsNote);
       } catch (e) {
         console.error('renderMusicXML: MIDI player init failed; score will render without playback.', e);
@@ -411,25 +431,26 @@ function renderMusicXML(
         externalZoomBar.empty();
         zoomBar = externalZoomBar;
       } else {
-        zoomBar = host.createDiv({ cls: 'forge-zoom-bar' });
+        zoomBar = (toolbar ?? host).createDiv({ cls: 'forge-zoom-bar' });
       }
       const ZOOM_LEVELS = SCORE_ZOOM_LEVELS;
       // 2026-10-26-1100: a tab that keeps a zoom memory gets its Score back at the zoom the person chose (every redraw used to start again at 100%)
       let zoomIdx = opts.zoom ? opts.zoom.get() : ZOOM_LEVELS.indexOf(1.0);
+      // compact: each button also says what it is as a tooltip (the aria-label was always there)
       const zoomOutBtn = zoomBar.createEl('button', {
         text: '−',
         cls: 'forge-zoom-button',
-        attr: { 'aria-label': 'Zoom out' },
+        attr: compact ? { 'aria-label': 'Zoom out', title: 'Zoom out' } : { 'aria-label': 'Zoom out' },
       });
       const zoomLabel = zoomBar.createEl('button', {
         text: '100%',
         cls: 'forge-zoom-button forge-zoom-reset',
-        attr: { 'aria-label': 'Reset zoom to 100%' },
+        attr: compact ? { 'aria-label': 'Reset zoom to 100%', title: 'Reset zoom to 100%' } : { 'aria-label': 'Reset zoom to 100%' },
       });
       const zoomInBtn = zoomBar.createEl('button', {
         text: '+',
         cls: 'forge-zoom-button',
-        attr: { 'aria-label': 'Zoom in' },
+        attr: compact ? { 'aria-label': 'Zoom in', title: 'Zoom in' } : { 'aria-label': 'Zoom in' },
       });
       const scoreWrap = host.createDiv({ cls: 'forge-output-score' });
       scoreWrap.append(...parseSvgMarkup(svg, new DOMParser()));

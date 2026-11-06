@@ -205,3 +205,61 @@ test('2026-10-26-1100: hiding a host that is not the current one changes nothing
   p.insp.onHidden(other.host);
   assert.ok(p.slot.querySelector('.forge-inspector-lineage'), 'the stack of the current Score is still there');
 });
+
+// ---- 2026-11-05-1189 (R1): a bar's tab has NO Inspector section; what is not the panel still works -------------------------------------------------------------------------------------------------
+
+function headless(over: Partial<ProvenanceResult> = {}) {
+  const d = dom(); const opened: string[] = []; const posted: any[] = []; const said: string[] = []; const pins: any[] = [];
+  const slot = d.doc.createElement('div'); d.doc.body.appendChild(slot);
+  const insp = createScoreInspector(slot, { headless: true, say: (t) => said.push(t), noteId: 'bars/bar_001', openNote: (n) => opened.push(n), postHighlight: (t) => posted.push(t), onPinned: (e) => pins.push(e?.id ?? null) });
+  const result: ProvenanceResult = { payload: {}, map: MAP, problems: [], kitProblems: [], ...over };
+  return { d, slot, insp, opened, posted, said, pins, result };
+}
+
+test('HEADLESS: nothing of the panel is on the page (no "Inspector" title, hint, lineage, "Notes in this score", "Open note" buttons) - before, while pinned, and after', () => {
+  const p = headless(); p.insp.onShown(p.d.host, p.result);
+  assert.equal(p.slot.children.length, 0, 'the slot stays empty');
+  assert.equal(p.d.doc.querySelector('.forge-inspector'), null);
+  p.d.fire(p.d.el('a_snare_12'), 'click');
+  assert.equal(p.slot.textContent, '', 'a pin draws no lineage');
+  assert.equal(p.d.doc.querySelector('.forge-inspector-open'), null);
+  // CONTROL: the same inspector without `headless` does put the panel on the page (the assertions above can fail)
+  const control = panel(); control.insp.onShown(control.d.host, control.result);
+  assert.ok(control.slot.querySelector('.forge-inspector') && control.text().includes(INSPECTOR_HINT), 'the panel tabs keep their Inspector');
+});
+
+test('HEADLESS: the interaction stays - hover lights the note and tells the grid, a click pins (band class) and Esc lets go, the arrow keys walk, the grid lights the engraved note without an echo, and the pin is told to whoever listens', () => {
+  const p = headless(); p.insp.onShown(p.d.host, p.result);
+  p.d.fire(p.d.el('a_kick_8'), 'mouseover');
+  assert.deepEqual(hot(p.d), ['a_kick_8']);
+  p.d.fire(p.d.el('a_kick_8'), 'mouseout', { relatedTarget: p.d.el('decoy') });
+  assert.deepEqual(p.posted, [{ channel: 'kick', step: 8 }, null]);
+  p.d.fire(p.d.el('a_snare_4'), 'click');
+  assert.ok(p.d.el('a_snare_4').classList.contains(PINNED_CLASS));
+  assert.deepEqual(p.pins, ['a_snare_4'], 'onPinned still hears it');
+  p.d.key(p.d.host, 'ArrowRight');
+  assert.ok(!p.d.el('a_snare_4').classList.contains(PINNED_CLASS), 'the arrow key moved the pin');
+  p.d.key(p.d.host, 'Escape');
+  assert.equal(p.d.doc.querySelectorAll(`.${PINNED_CLASS}`).length, 0);
+  p.posted.length = 0;
+  p.insp.gridHover({ channel: 'kick', step: 0 });
+  assert.deepEqual(hot(p.d), ['a_kick_0', 'a_kick_0_t1']);
+  assert.deepEqual(p.posted, [], 'no echo');
+});
+
+test('HEADLESS: the two sentences only the panel said go to `say` - the Kit line when only the Kit view is unmapped, the "could not be mapped" sentence when nothing is - and `\'\'` clears them when the Score goes or a good one arrives', () => {
+  const kit = headless({ kitProblems: ['x'] }); kit.insp.onShown(kit.d.host, kit.result);
+  assert.deepEqual(kit.said, ['Kit view: not mapped for this bar (use the multi-staff view to inspect).']);
+  kit.insp.onHidden(kit.d.host);
+  assert.equal(kit.said.at(-1), '', 'the Score went: the sentence goes');
+  const bad = headless({ map: {}, problems: ['kick: the Score\'s hits [0] are not the data\'s [1]'] }); bad.insp.onShown(bad.d.host, bad.result);
+  assert.equal(bad.said.length, 1);
+  assert.match(bad.said[0], /^This score could not be mapped to its note, so it cannot be inspected \(kick/);
+  const fine = headless(); fine.insp.onShown(fine.d.host, fine.result);
+  assert.deepEqual(fine.said, [''], 'a mapped Score says nothing');
+  // a headless inspector with no `say` is simply silent; a panel inspector never calls `say`
+  const said: string[] = [];
+  const d = dom(); const slot = d.doc.createElement('div'); d.doc.body.appendChild(slot);
+  createScoreInspector(slot, { say: (t) => said.push(t), noteId: 'bars/bar_001', openNote: () => {} }).onShown(d.host, { payload: {}, map: MAP, problems: [], kitProblems: ['x'] });
+  assert.deepEqual(said, [], 'not headless: the panel says it, `say` is never called');
+});

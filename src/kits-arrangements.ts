@@ -134,7 +134,7 @@ export class ArrangementView extends EditableFileView {
         },
       } : undefined,
       onShown: (host) => { ensureArrangementRows(host, this.rows); this.light(this.litByNotes()); },       // the rows are drawn into the SVG the moment it is shown, before the first click; what the notes pane's note played stays lit
-      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays, zoom: this.zoom, trace: (line) => console.info(line) }),
+      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays, compact: true, zoom: this.zoom, trace: (line) => console.info(line) }),
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       setTimer: (fn, ms) => window.setTimeout(fn, ms),
       clearTimer: (h) => window.clearTimeout(h as number),

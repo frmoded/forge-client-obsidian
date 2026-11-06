@@ -53,6 +53,11 @@ export interface ScoreInspectorPorts {
   previewOnHover?: boolean;
   /** The quiet line when only the Kit view is unmapped. */
   kitNote?: string;
+  /** 2026-11-05-1189 (a bar's tab): NO panel under the Score (no "Inspector" title, hint, lineage, "Notes in this score", "Open note" buttons). Everything that is not that panel works as ever: the hover, the pin and its
+   *  band, the arrow keys and Esc, the hover-link to the Beat Box grid (`postHighlight`, `gridHover`). The two sentences the panel was the only place for - "Kit view: not mapped ..." and "This score could not be mapped ..." -
+   *  go to `say` instead (the Score's own quiet line); `''` clears it. Absent = the panel, as every other tab has it. */
+  headless?: boolean;
+  say?(text: string): void;
   /** 2026-10-24-1100: elements with these roles (the phrase's bars) are ALSO selected by their box: a click on the unpainted part of a bar pins it (artifact-inspector-core `pointIds`). Absent = the old rule. */
   pointRoles?: readonly string[];
   /** 2026-10-24-1100: one `[forge-pin] click …` evidence line per click. Absent = nothing is printed. */
@@ -90,7 +95,8 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
   const notes = doc.createElement('div'); notes.className = 'forge-inspector-notes';
   const quiet = doc.createElement('div'); quiet.className = 'forge-inspector-quiet';
   root.append(title, body, notes, quiet);
-  slot.appendChild(root);
+  if (ports.headless !== true) slot.appendChild(root);       // headless: the same elements, built and updated as ever, never put on the page (so every code path below is the one the panel tabs run)
+  const say = (text: string): void => { if (ports.headless === true) ports.say?.(text); };
 
   let current: { host: HTMLElement; layer: ArtifactInspector; result: ProvenanceResult } | null = null;
   let lastPinned: string | null = null;                   // what was pinned when the Score was last redrawn (used only with `keepPin`)
@@ -177,10 +183,12 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
       quiet.textContent = '';
       if (result.problems.length > 0) {
         showHint(`This score could not be mapped to its note, so it cannot be inspected (${result.problems[0]}).`);
+        say(body.textContent ?? '');
         return;
       }
       if (result.kitProblems.length > 0) quiet.textContent = ports.kitNote ?? 'Kit view: not mapped for this bar (use the multi-staff view to inspect).';
       showHint(hint);
+      say(quiet.textContent ?? '');
       const map = result.map;
       const layer = attachArtifactInspector({
         root: host,
@@ -219,6 +227,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
       // does arrive (the usual redraw) onShown draws all of it again in the same tick, and \`lastPinned\` is kept for \`keepPin\`.
       body.textContent = ''; notes.textContent = ''; quiet.textContent = '';
       showHint(hint);
+      say('');
     },
     lightAll(ids) { current?.layer.highlightAll(ids); },
     gridHover(target) {

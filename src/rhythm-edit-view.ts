@@ -255,7 +255,7 @@ export class RhythmEditView extends EditableFileView {
   private mountScore(plan: ScorePanelPlan, file: TFile, data: unknown): void {
     this.scoreArea = attachScoreArea(this.contentEl, plan, {
       first: true,                                 // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the Beat Box (already mounted by now) goes under it
-      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays }),
+      renderInto: (host, payload) => musicEdition.renderTaggedMusicXML(host, payload, file.basename, { clickToPlay: scoreClickPlays, compact: true }),      // 2026-11-05-1189: this panel exists only in a score-first vault
       stopPlayers: (host) => musicEdition.stopPlayers(host, (m, e) => console.error(m, e)),
       compute: computeRhythmScoreViaEngine,
       title: file.basename,
@@ -265,6 +265,7 @@ export class RhythmEditView extends EditableFileView {
       onTiming: (t) => console.debug(`Forge: live score ${t.outcome} in ${Math.round(t.totalMs)} ms (engine ${Math.round(t.engineMs)} ms)`),
       // score_first M3: the Score is a map of the note (provenance, hover-link, inspector). `plan` is 'score' only in a score-first vault, music edition.
       inspector: plan === 'score' ? {
+        headless: true,                              // 2026-11-05-1189: a bar's tab has no Inspector section; the interaction (hover, pin, hover-link) stays, its two quiet sentences go under the Score's status line
         noteId: file.path.replace(/\.md$/, ''),
         openNote: (noteId) => {
           // This tab IS the note a single bar's lineage names: "Open note" shows its source (the JSON view — the same as the header's "Open as JSON"). Another note (extend and mix,

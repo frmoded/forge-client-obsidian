@@ -17,6 +17,7 @@ import { setTimeout as realSetTimeout } from 'node:timers';
 import { installHostClock, iterateAllLeavesLikeObsidian, type HostClock } from './test-support/host-workspace.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
+import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 import { ARRANGEMENT_VIEW_TYPE } from './arrangement-core.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -405,27 +406,22 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { (globalThis as any).__shimConstructed = savedConstructed; w.done(); }
   });
 
-  test(`[${edition}] a bar's tab (Beat Box) shows the phrases that use it as chips above it, from the resolved links; a click opens that phrase; no phrase = no chips; it is not added twice`, async () => {
+  test(`[${edition}] 2026-11-05-1189: a bar's tab (Beat Box AND Score) has NO "used by" strip, however many phrases use the bar and however often the workspace moves; the strip is still on the phrase tab (it is mounted by the phrase view, not from here)`, async () => {
+    // (this was the 2026-10-26-1270 test "a bar's tab shows the phrases that use it as chips above it"; the driver asked for the strip to go off the bar's tabs - R1 of 1189. The chips of a PHRASE tab are pinned in phrase-lineage-dom.test.ts.)
     const w = await world(SCORE_FIRST_TOML);
     try {
       const bar = w.makeLeaf(RHYTHM_EDIT_VIEW_TYPE, 'bars/bar_005.md');
+      const score = w.makeLeaf(RHYTHM_SCORE_VIEW_TYPE, 'bars/bar_005.md');
       w.resolvedLinks['phrases/phrase_003.md'] = { 'bars/bar_005.md': 1, 'bars/bar_001.md': 1 };
       w.resolvedLinks['phrases/phrase_001.md'] = { 'bars/bar_005.md': 1 };
       w.resolvedLinks['notes/other.md'] = { 'bars/bar_005.md': 1 };
       await w.fire('layout-change');
-      const host = bar.view.contentEl;
-      assert.deepEqual([...host.querySelectorAll('.forge-structure-strip')].map((s: any) => s.textContent), ['used by:phrase_001phrase_003'], 'one strip');
-      assert.equal(host.firstElementChild, host.querySelector('.forge-structure-strip'), 'above the view');
-      await w.fire('layout-change', 'file-open');
-      assert.equal(host.querySelectorAll('.forge-structure-strip').length, 1, 'not added twice');
-      assert.deepEqual(w.log.lines.filter((l) => l.startsWith('[forge-strip]')), ['[forge-strip] bar_005 used by phrase_001, phrase_003'], 'one evidence line, said when the answer changed');
-      host.querySelectorAll('button')[1].click(); await w.tick();
-      assert.equal(w.log.splits.length, 0);
-      const opened = [...w.leaves].flatMap((l) => l.states).filter((s: any) => s.type === PHRASE_VIEW_TYPE).map((s: any) => s.state.file);
-      assert.deepEqual(opened, ['phrases/phrase_003.md'], 'the chip opens that phrase as a Score');
-      const other = w.makeLeaf(RHYTHM_EDIT_VIEW_TYPE, 'bars/bar_099.md');
-      await w.fire('layout-change');
-      assert.equal(other.view.contentEl.querySelector('button'), null, 'a bar no phrase uses has no chips');
+      await w.fire('layout-change', 'file-open', 'active-leaf-change');
+      for (const [name, leaf] of [['Beat Box', bar], ['Score', score]] as const) {
+        assert.equal(leaf.view.contentEl.querySelector('.forge-structure-strip'), null, `${name}: no strip`);
+        assert.equal(leaf.view.contentEl.querySelectorAll('.forge-structure-chip').length, 0, `${name}: no chips`);
+      }
+      assert.deepEqual(w.log.lines.filter((l) => l.startsWith('[forge-strip]') && l.includes('used by')), [], 'and no "used by" evidence line');
       assert.deepEqual(w.log.errors, []);
     } finally { w.done(); }
   });

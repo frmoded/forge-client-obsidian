@@ -442,3 +442,55 @@ test('R6 P3: a vault that is not score-first - `first` changes nothing, the tab\
     assert.equal(tab.outerHTML, before, edition);
   }
 });
+
+// ---- 2026-11-05-1189 (R1): a bar's tab - the Score area with a HEADLESS inspector: no Inspector section, the interaction and the two quiet sentences stay --------------------------------------------------
+const headlessPorts = (over: Partial<ScoreAreaPorts> = {}) => {
+  const base = inspectorPorts(over);
+  (base.p as ScoreAreaPorts).inspector = { ...(base.p as ScoreAreaPorts).inspector!, headless: true };
+  return base;
+};
+
+test('1189: a headless Score area has NO Inspector on the page (no title, hint, "Notes in this score", lineage, "Open note"), the engraving is the last child of the panel, and the click, the pin and the grid hover-link still work', async () => {
+  const { tab, doc } = page(); const { p, posted } = headlessPorts();
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(KICK_BAR); await flush();
+  const panel = tab.querySelector(`.${SCORE_PANEL_CLASS}`)!;
+  assert.equal(panel.querySelector('.forge-inspector'), null, 'no Inspector section');
+  assert.doesNotMatch(panel.textContent ?? '', /Inspector|Click an engraved note|Notes in this score|Open note/);
+  const g = doc.getElementById('a_kick_8')!;
+  g.dispatchEvent(new (tab.ownerDocument.defaultView as any).MouseEvent('click', { bubbles: true }));
+  assert.ok(g.classList.contains('forge-artifact-pinned'), 'a click still pins the engraved note');
+  assert.equal(panel.querySelector('.forge-inspector-open'), null, 'and offers no button');
+  g.dispatchEvent(new (tab.ownerDocument.defaultView as any).MouseEvent('mouseover', { bubbles: true }));
+  assert.deepEqual(posted.at(-1), { channel: 'kick', step: 8 }, 'the hover-link to the Beat Box grid still talks');
+  area.gridHover({ channel: 'kick', step: 0 });
+  assert.ok(doc.getElementById('a_kick_0')!.classList.contains('forge-artifact-hot'), 'the grid step still lights the engraved note');
+  area.dispose();
+});
+
+test('1189: the Kit sentence the Inspector used to say is now the quiet line under the Score\'s status line (and goes with the Score)', async () => {
+  const { tab } = page();
+  const { p } = headlessPorts();
+  (p as any).compute = async (_d: unknown, title: string) => ({ type: 'musicxml', multi_staff_content: kickXml(String(title)), content: 'x', kit_content: '<score-partwise/>', has_percussion: true });
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(KICK_BAR); await flush();
+  const panel = tab.querySelector(`.${SCORE_PANEL_CLASS}`)!;
+  const quiet = panel.querySelector('.forge-rhythm-edit-score-quiet') as HTMLElement;
+  assert.ok(quiet, 'the quiet line exists');
+  assert.equal(panel.children[0].className, 'forge-rhythm-edit-score-status');
+  assert.equal(panel.children[1], quiet, 'directly under the status line');
+  assert.equal(quiet.getAttribute('aria-live'), 'polite', 'a screen reader hears the sentence without being interrupted');
+  assert.match(quiet.textContent ?? '', /^Kit view: not mapped for this bar/);
+  area.dispose();
+});
+
+test('1189: the other tabs keep their Inspector (a phrase / arrangement / composition Score area is not headless), with no quiet line text of its own', async () => {
+  const { tab } = page(); const { p } = inspectorPorts();
+  const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
+  area.showNow(KICK_BAR); await flush();
+  const panel = tab.querySelector(`.${SCORE_PANEL_CLASS}`)!;
+  assert.ok(panel.querySelector('.forge-inspector'), 'the Inspector is there');
+  assert.match(panel.textContent ?? '', /Inspector/);
+  assert.equal((panel.querySelector('.forge-rhythm-edit-score-quiet') as HTMLElement).textContent, '', 'the quiet line is empty (and hidden by CSS)');
+  area.dispose();
+});

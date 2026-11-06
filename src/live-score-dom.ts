@@ -54,8 +54,12 @@ export function scoreSlot(parent: HTMLElement): Node | null {
   return null;
 }
 
+export const SCORE_QUIET_CLASS = 'forge-rhythm-edit-score-quiet';
+
 export interface ScorePanel {
   readonly el: HTMLElement;
+  /** 2026-11-05-1189: one quiet sentence under the status line (the status line itself is cleared by every successful draw); `''` removes it. A bar's tab puts the two sentences its Inspector used to say here. */
+  quiet(text: string): void;
   /** Where the inspector goes: always the LAST child of the panel, so engravings (inserted before it) stay above it. */
   readonly slot: HTMLElement;
   readonly view: LiveScoreView;
@@ -74,6 +78,10 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   statusEl.className = SCORE_STATUS_CLASS;
   statusEl.setAttribute('aria-live', 'polite');
   el.appendChild(statusEl);
+  const quietEl = doc.createElement('div');
+  quietEl.className = SCORE_QUIET_CLASS;
+  quietEl.setAttribute('aria-live', 'polite');
+  el.appendChild(quietEl);
   const slot = doc.createElement('div');
   slot.className = 'forge-rhythm-inspector-slot';
   el.appendChild(slot);
@@ -142,6 +150,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
     el,
     slot,
     view,
+    quiet(text) { quietEl.textContent = text; },
     dispose() {
       dropPending();
       removeCurrent();
@@ -237,7 +246,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     onShown: (host, payload) => { messages?.drawSucceeded(); const r = results.get(payload); if (r && inspector) inspector.onShown(host, r); ports.onShown?.(host, payload); },
     onHidden: (host) => { inspector?.onHidden(host); ports.onHidden?.(host); },
   });
-  if (ports.inspector) inspector = createScoreInspector(panel.slot, ports.inspector);
+  if (ports.inspector) inspector = createScoreInspector(panel.slot, ports.inspector.headless === true ? { ...ports.inspector, say: (text) => { panel.quiet(text); } } : ports.inspector);
   if (ports.messages) messages = mountScoreMessages(panel.el.firstElementChild as HTMLElement, ports.messages, { setTimer: ports.setTimer, clearTimer: ports.clearTimer });
   const live: LiveScore = createLiveScore({
     compute,

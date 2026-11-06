@@ -23,7 +23,7 @@ async function getToolkit(): Promise<any> {
   return toolkitPromise;
 }
 
-function applyOptions(toolkit: any, hostWidthPx?: number) {
+function applyOptions(toolkit: any, hostWidthPx?: number, noHeader = false) {
   const targetWidth = pageWidthFor(hostWidthPx);   // M6 rider: a host that has not been laid out (16 px) used to ask for pageWidth 80, which Verovio refuses (minimum 100)
   toolkit.setOptions({
     adjustPageHeight: true,
@@ -34,6 +34,7 @@ function applyOptions(toolkit: any, hostWidthPx?: number) {
     pageMarginLeft: 50,
     pageMarginRight: 50,
     scale: 40,
+    ...(noHeader ? { header: 'none' } : {}),       // 2026-11-05-1189: no engraved title (the work title of the MusicXML) above a score-first Score
   });
 }
 
@@ -49,9 +50,9 @@ export interface RenderedScore {
   timeMap: TimeBucket[];
 }
 
-export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: number): Promise<RenderedScore> {
+export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: number, opts: { noHeader?: boolean } = {}): Promise<RenderedScore> {
   const toolkit = await getToolkit();
-  applyOptions(toolkit, hostWidthPx);
+  applyOptions(toolkit, hostWidthPx, opts.noHeader === true);
   toolkit.loadData(musicxml);
   // v0.2.140 — multi-page rendering. Pre-v0.2.140 only rendered
   // page 1; longer scores (e.g. forge-music/murmuration with ~30

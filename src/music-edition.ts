@@ -24,6 +24,9 @@ export interface RenderOptions {
   zoom?: { get(): number; set(index: number): void; reset(): void };
   /** 2026-10-26-1100: where the playback follower's evidence lines go (score-follower-trace-core.ts). Absent = it says nothing. */
   trace?: (line: string) => void;
+  /** 2026-11-05-1189 (score-first tabs only): the declutter. ONE toolbar row (the MIDI player, then the zoom buttons, then the Kit / multi-staff button, all in the player's own button style), no engraved title above the Score,
+   *  and the Score never wider than its pane (a horizontal scrollbar inside it). Absent = what every other surface (the output panel, an embedded Beat Box, a vault that is not score-first) always had. */
+  compact?: boolean;
 }
 
 export interface MusicEdition {

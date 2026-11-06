@@ -110,7 +110,7 @@ export class RhythmScoreView extends EditableFileView {
       return;
     }
     const host = this.contentEl.createDiv({ cls: 'forge-rhythm-score-host' });
-    if (!musicEdition.renderTaggedMusicXML(host, outcome.payload, file.basename, { clickToPlay: scoreClickPlays })) {
+    if (!musicEdition.renderTaggedMusicXML(host, outcome.payload, file.basename, messageDelivery.isScoreFirst() ? { clickToPlay: scoreClickPlays, compact: true } : { clickToPlay: scoreClickPlays })) {      // 2026-11-05-1189: the declutter is for the new surface only (P3)
       this.panel('The score view needs the music edition of the plugin.', true);
       return;
     }

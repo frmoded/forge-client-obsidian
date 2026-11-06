@@ -395,6 +395,87 @@
   width: 100%;
 }
 
+/* 2026-11-05-1189 (score-first Score tabs; the host carries `forge-score-compact`): ONE toolbar row - the MIDI player, then the zoom buttons, then the Kit / multi-staff button - the zoom and Kit buttons in the
+   player's OWN button style (read out of html-midi-player's shadow stylesheet under Obsidian's app.css: a 32 px round button, no border, transparent, `rgba(204,204,204,0.3)` on hover and 0.6 pressed, on a #f2f5f6 pill,
+   14 px sans-serif). The row wraps only when it cannot fit (below about 300 px); the Kit button loses its words, never its icon, in a narrow pane. */
+.forge-score-toolbar {
+  container-type: inline-size;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.forge-score-toolbar > .forge-midi-player {
+  flex: 1 1 130px;
+  min-width: 0;
+  width: auto;
+  margin: 0;
+}
+.forge-score-toolbar > .forge-zoom-bar,
+.forge-score-toolbar > .forge-kit-pill {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 0.25em;
+  border-radius: 100px;
+  background: #f2f5f6;
+  color: #2b2b2b;
+  font: 14px sans-serif;
+}
+.forge-score-toolbar .forge-zoom-button,
+.forge-score-toolbar .forge-kit-toggle {
+  box-sizing: border-box;
+  height: 32px;
+  min-width: 32px;
+  margin: 0 0.1em;
+  padding: 0 0.55em;
+  border: none;
+  border-radius: 100px;
+  box-shadow: none;
+  background: rgba(204, 204, 204, 0);
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.25s ease 0s;
+}
+.forge-score-toolbar .forge-zoom-button:hover,
+.forge-score-toolbar .forge-kit-toggle:hover {
+  background: rgba(204, 204, 204, 0.3);
+}
+.forge-score-toolbar .forge-zoom-button:active,
+.forge-score-toolbar .forge-kit-toggle:active {
+  background: rgba(204, 204, 204, 0.6);
+}
+.forge-score-toolbar .forge-zoom-reset {
+  min-width: 3.4em;
+  font-variant-numeric: tabular-nums;
+}
+.forge-score-toolbar .forge-kit-toggle-icon {
+  margin-right: 0.35em;
+}
+@container (max-width: 520px) {
+  .forge-score-toolbar .forge-kit-toggle-label { display: none; }
+  .forge-score-toolbar .forge-kit-toggle-icon { margin-right: 0; }
+  /* a narrow pane: the same buttons, tighter, so the one row still fits at 300 px (the player gives up its width last: its seek bar shrinks to nothing first) */
+  .forge-score-toolbar > .forge-midi-player { flex-basis: 80px; font-size: 12px; white-space: nowrap; }   /* both inherit into the player's shadow DOM: its time stays on ONE line and the pill clips it, never wraps it */
+  .forge-score-toolbar > .forge-zoom-bar,
+  .forge-score-toolbar > .forge-kit-pill { padding: 0 0.1em; font-size: 12px; }          /* the whole row at the player's narrow size, so the buttons still read as the player's own */
+  .forge-score-toolbar .forge-zoom-button,
+  .forge-score-toolbar .forge-kit-toggle { margin: 0; padding: 0 0.35em; min-width: 28px; }
+  .forge-score-toolbar .forge-zoom-reset { min-width: 2.7em; }
+}
+/* the Score is never wider than its pane: a horizontal scrollbar inside it when the engraving (or a zoom) is wider; no vertical box of its own (the pane scrolls) */
+.forge-score-compact .forge-output-score {
+  max-width: 100%;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .forge-output-score .note {
   cursor: pointer;
 }
@@ -2079,6 +2160,17 @@
   display: none;
 }
 
+/* 2026-11-05-1189: the sentence a bar's tab used to say in its Inspector ("Kit view: not mapped for this bar ...") - the status line's twin, same look, there only when there is something to say */
+.forge-rhythm-edit-score-quiet {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  padding-bottom: 4px;
+}
+
+.forge-rhythm-edit-score-quiet:empty {
+  display: none;
+}
+
 .forge-rhythm-edit-score-lean {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
@@ -2581,6 +2673,7 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-morph-sentence,
 .forge-transform-label,
 .forge-rhythm-edit-score-status,
+.forge-rhythm-edit-score-quiet,
 .forge-rhythm-score-message,
 .forge-player-message,
 .forge-source-layer-status,
