@@ -90,6 +90,88 @@ test('a press that starts in no bar (the margin) is not a drag', () => {
   assert.deepEqual(r.calls, []);
 });
 
+// 2026-11-06-1192: the fix named in 1190 item 3 (d). A press that starts where no bar is (the Score box's margin, the gap between systems) and is released on a bar is a drag the person did not mean as a pin: the browser's click lands at the release point.
+test('1192: a press in no bar, released on bar 3, pins nothing and tells nobody about a range (the click at the release point is swallowed)', () => {
+  const r = rig({ selectBars: true });
+  r.ev('mousedown', r.svg, 5, 200); r.ev('mousemove', r.svg, 150, 100); r.ev('mousemove', r.svg, 250, 30); r.ev('mouseup', r.svg, 250, 30); r.ev('click', r.svg, 250, 30);
+  assert.equal(r.layer.pinnedId(), null, 'a margin press released on a bar does not pin it');
+  assert.deepEqual(r.pins, []);
+  assert.deepEqual(r.calls, []);
+});
+
+test('1192: the swallowed click does not release a pin that was already there', () => {
+  const r = rig({ selectBars: true });
+  r.layer.pin('ph_bar_1');
+  r.ev('mousedown', r.svg, 150, 200); r.ev('mouseup', r.svg, 250, 30); r.ev('click', r.svg, 250, 30);
+  assert.equal(r.layer.pinnedId(), 'ph_bar_1');
+  assert.deepEqual(r.pins, ['ph_bar_1']);
+});
+
+test('1192: the swallow is once and only for that gesture: the next plain click on a bar pins', () => {
+  const r = rig({ selectBars: true });
+  r.ev('mousedown', r.svg, 5, 200); r.ev('mouseup', r.svg, 250, 30); r.ev('click', r.svg, 250, 30);
+  assert.equal(r.layer.pinnedId(), null);
+  r.ev('click', r.svg, 150);                                              // a bare click straight after (no press of its own): the swallowed gesture's press is spent
+  assert.equal(r.layer.pinnedId(), 'ph_bar_2');
+  const q = rig({ selectBars: true });
+  q.ev('mousedown', q.svg, 5, 200); q.ev('mouseup', q.svg, 250, 30); q.ev('click', q.svg, 250, 30);
+  q.ev('mousedown', q.svg, 150); q.ev('mouseup', q.svg, 150); q.ev('click', q.svg, 150);
+  assert.equal(q.layer.pinnedId(), 'ph_bar_2', 'and the next gesture, with its own press, pins');
+});
+
+test('1192: a margin press released OUTSIDE the root (no click reaches it) leaves nothing swallowing the next click', async () => {
+  const r = rig({ selectBars: true });
+  r.ev('mousedown', r.svg, 5, 200);
+  r.ev('mouseup', r.root.ownerDocument.body, 900);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  r.ev('click', r.svg, 150);                                              // e.g. a click with no press of its own (keyboard-activated, synthetic)
+  assert.equal(r.layer.pinnedId(), 'ph_bar_2');
+});
+
+test('1192: the slop is 4 px: a margin press released 4 px away on a bar still pins (an unsteady click), 5 px away is a drag', () => {
+  const near = rig({ selectBars: true });
+  near.ev('mousedown', near.svg, 150, 64); near.ev('mouseup', near.svg, 150, 60); near.ev('click', near.svg, 150, 60);   // bar box bottom is 60; the press is 4 px below it
+  assert.equal(near.layer.pinnedId(), 'ph_bar_2', 'exactly 4 px away is a click');
+  const far = rig({ selectBars: true });
+  far.ev('mousedown', far.svg, 150, 65); far.ev('mouseup', far.svg, 150, 60); far.ev('click', far.svg, 150, 60);
+  assert.equal(far.layer.pinnedId(), null, '5 px away is a drag');
+  const side = rig({ selectBars: true });
+  side.ev('mousedown', side.svg, 105, 30); side.ev('mouseup', side.svg, 109.5, 30); side.ev('click', side.svg, 109.5, 30);   // x 105-109.5 is the gap between bar 1 and 2: a click in the gap pins nothing
+  assert.equal(side.layer.pinnedId(), null);
+  const diag = rig({ selectBars: true });
+  diag.ev('mousedown', diag.svg, 150, 63); diag.ev('mouseup', diag.svg, 153, 59); diag.ev('click', diag.svg, 153, 59);    // 3 px across, 4 px down: 5 px apart in a straight line
+  assert.equal(diag.layer.pinnedId(), null, 'the distance is straight-line, not per axis');
+});
+
+test('1192: a plain click in the margin (press and release in one place) still unpins, as before', () => {
+  const r = rig({ selectBars: true });
+  r.layer.pin('ph_bar_2');
+  r.ev('mousedown', r.svg, 150, 200); r.ev('mouseup', r.svg, 150, 200); r.ev('click', r.svg, 150, 200);
+  assert.equal(r.layer.pinnedId(), null);
+});
+
+test('1192: a press that starts IN a bar and ends in the margin is unchanged (the click in the margin unpins; no range)', () => {
+  const r = rig({ selectBars: true });
+  r.layer.pin('ph_bar_2');
+  r.ev('mousedown', r.svg, 5); r.ev('mousemove', r.svg, 5, 200); r.ev('mouseup', r.svg, 5, 200); r.ev('click', r.svg, 5, 200);
+  assert.equal(r.layer.pinnedId(), null);
+  assert.deepEqual(r.calls, []);
+});
+
+test('1192: a shift press is not a stray press: Shift-click on a bar still extends, even after a margin press whose release never came', () => {
+  const r = rig({ selectBars: true });
+  r.ev('mousedown', r.svg, 5, 200);                                       // a margin press the window never saw the end of (focus lost)
+  r.ev('mousedown', r.svg, 250, 30, { shiftKey: true }); r.ev('mouseup', r.svg, 250, 30, { shiftKey: true }); r.ev('click', r.svg, 250, 30, { shiftKey: true });
+  assert.deepEqual(r.calls, ['shift 3']);
+  assert.equal(r.layer.pinnedId(), null);
+});
+
+test('1192 P3: where selectBars is not set a margin press released on a bar pins that bar by the old rule', () => {
+  const r = rig({ selectBars: false });
+  r.ev('mousedown', r.svg, 5, 200); r.ev('mouseup', r.svg, 250, 30); r.ev('click', r.svg, 250, 30);
+  assert.equal(r.layer.pinnedId(), 'ph_bar_3');
+});
+
 test('Shift-click on a bar asks to EXTEND (with that bar) and does not pin; Shift-click on the margin does nothing and keeps the pin', () => {
   const r = rig({ selectBars: true });
   r.layer.pin('ph_bar_1');

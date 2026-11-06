@@ -118,6 +118,13 @@ function mappedAncestor(root: HTMLElement, map: ProvenanceMap, t: EventTarget | 
   return null;
 }
 
+/** 2026-11-06-1192: how far (px) a click may land from where its press started, for a press that started in NO bar, before it is a drag the person did not mean as a pin. */
+export const STRAY_CLICK_SLOP_PX = 4;
+/** The pure decision: is the click at (x, y) the end of a drag that began at `press` (a press in no bar)? No recorded press = an ordinary click. Straight-line distance, more than the slop. */
+export function isStrayClick(press: { x: number; y: number } | null, x: number, y: number): boolean {
+  return press !== null && Math.hypot(x - press.x, y - press.y) > STRAY_CLICK_SLOP_PX;
+}
+
 export function attachArtifactInspector(opts: ArtifactInspectorOptions): ArtifactInspector {
   const { root, map } = opts;
   const order = (opts.order ?? Object.keys(map)).filter((id) => Object.prototype.hasOwnProperty.call(map, id));
@@ -221,14 +228,16 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   let pressedIn: number | null = null;                    // the bar a press started in (selectBars only); null = no press, or it started in no bar
   let draggedTo: number | null = null;                    // the bar the drag last reported
   let swallowClick = false;                               // the click a browser fires after a drag is not a pin gesture
+  let strayPress: { x: number; y: number } | null = null; // where a press that started in NO bar was (only ever set where selectBars is on - the listener is not attached otherwise): the browser's click lands where it is released, and pins the bar under it
   const onDown = (e: Event) => {
     const m = e as MouseEvent;
+    strayPress = null;
     if (m.button !== 0 || m.shiftKey === true) return;
     if (opts.keepPinOnControls === true && isPlayerControl(e.target)) return;
     pressedIn = barAt(e); draggedTo = null;
-    if (pressedIn === null) return;
     const doc = root.ownerDocument;
     doc.addEventListener('mouseup', onUp, true);
+    if (pressedIn === null) strayPress = { x: m.clientX, y: m.clientY };
   };
   const onMove = (e: Event) => {
     if (pressedIn === null) return;
@@ -245,9 +254,15 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
       setTimeout(() => { swallowClick = false; }, 0);      // a click fires right after the release; one released outside the root has none, and must not eat the next real click
     }
     pressedIn = null; draggedTo = null;
+    setTimeout(() => { strayPress = null; }, 0);            // the click (if any) fires before this; a release outside the root has none, and its press must not judge a later click
   };
   const onClick = (e: Event) => {
     if (swallowClick) { swallowClick = false; return; }
+    const stray = strayPress; strayPress = null;
+    if (isStrayClick(stray, (e as MouseEvent).clientX, (e as MouseEvent).clientY)) {
+      opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (the press began in no bar and was released ${Math.round(Math.hypot((e as MouseEvent).clientX - stray!.x, (e as MouseEvent).clientY - stray!.y))} px away: a drag, not a pin)`);
+      return;
+    }
     if (opts.selectBars && (e as MouseEvent).shiftKey === true) {
       const bar = barAt(e);
       if (bar !== null) opts.selectBars.onShiftClick(bar);
