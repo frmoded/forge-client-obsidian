@@ -53,7 +53,10 @@
   /* Every fret wire SEGMENT (one per course) and clickable point slides to its own position under
      the chosen tuning system independently, so a fret visibly breaks into a zigzag when the system
      is not rotationally symmetric (Pythagorean, meantone, well temperament). */
-  .wire-seg, .pt { transition: transform 400ms ease-out; }
+  .wire-seg, .pt, .inlay { transition: transform 400ms ease-out; }
+  /* Position markers (the inlay dots on the neck): very subtle, the text colour at a low opacity with
+     no stroke, drawn BEHIND the strings, fret wires and clickable points, and never a click target. */
+  .inlay { fill: var(--ink); fill-opacity: 0.16; stroke: none; pointer-events: none; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; align-items: center; }
   button {
     font: inherit; font-size: 13px; color: var(--ink);
@@ -177,10 +180,22 @@
       return { s: p.s, f: p.f, midi: midiAt(p.s, p.f), hz: hzAt(p.s, p.f, system), when: mode === "together" ? 0 : i * STAGGER };
     });
   }
+  // Position markers: the classic inlay dots at frets 3 5 7 9 12 15, a DOUBLE dot at the octave (12).
+  // Each dot sits between two ADJACENT courses (0 = G3 .. 3 = E5): singles between D4 and A4 (1, 2); the
+  // octave's two dots one between each outer pair, A4/E5 (2, 3) and D4/A4 (1, 2).
+  var INLAY_FRETS = [3, 5, 7, 9, 12, 15];
+  function inlayPlan() {
+    var out = [];
+    INLAY_FRETS.forEach(function (f) {
+      if (f === 12) { out.push({ fret: f, between: [2, 3] }); out.push({ fret: f, between: [1, 2] }); }
+      else out.push({ fret: f, between: [1, 2] });
+    });
+    return out;
+  }
   // --- end pure math -----------------------------------------------------
 
   if (typeof document === "undefined") {           // node test harness
-    module.exports = { A4_HZ: A4_HZ, TUNING: TUNING, FRETS: FRETS, STAGGER: STAGGER, SYSTEMS: SYSTEMS, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS, fifthChainCents: fifthChainCents, PURE_FIFTH: PURE_FIFTH, MEANTONE_FIFTH: MEANTONE_FIFTH, midiToHz: midiToHz, midiToName: midiToName, fretFraction: fretFraction, fretCents: fretCents, midiAt: midiAt, hzAt: hzAt, posKey: posKey, planPlay: planPlay };
+    module.exports = { INLAY_FRETS: INLAY_FRETS, inlayPlan: inlayPlan, A4_HZ: A4_HZ, TUNING: TUNING, FRETS: FRETS, STAGGER: STAGGER, SYSTEMS: SYSTEMS, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS, fifthChainCents: fifthChainCents, PURE_FIFTH: PURE_FIFTH, MEANTONE_FIFTH: MEANTONE_FIFTH, midiToHz: midiToHz, midiToName: midiToName, fretFraction: fretFraction, fretCents: fretCents, midiAt: midiAt, hzAt: hzAt, posKey: posKey, planPlay: planPlay };
     return;
   }
 
@@ -216,16 +231,18 @@
 
   // Static drawing first (under the clickable positions). Fret numbers and neck markers are
   // physical decorations on the neck, so they stay fixed at the BASE_SYSTEM geometry.
-  var MARKS = [0, 5, 7, 10, 12, 15];
+  var MARKS = [0].concat(INLAY_FRETS);
   MARKS.forEach(function (f) {           // fret numbers, top, in the Axis color
     var t = el("text", { x: posX(f), y: 16, "text-anchor": "middle", "font-size": 11, fill: "#666666" }, svg);
     t.textContent = String(f);          // String(): a bare 0 must still draw "0"
   });
-  [5, 7, 10, 15].forEach(function (f) {  // single markers
-    el("circle", { cx: posX(f), cy: (stringY(1) + stringY(2)) / 2, r: 5, fill: "#F2F2EC" }, svg);
-  });
-  [1, 2].forEach(function (i) {          // double marker at the octave, between the courses
-    el("circle", { cx: posX(12), cy: TOP + (i - 0.5) * GAP, r: 5, fill: "#F2F2EC" }, svg);
+  // Position markers (see inlayPlan): drawn here, before the strings, wires and points, so they sit behind all
+  // of them. `.inlay` is subtle and has pointer-events: none (the attribute too, for a renderer without the CSS).
+  var inlays = [];
+  inlayPlan().forEach(function (d) {
+    var c = el("circle", { "class": "inlay", "data-fret": d.fret, cx: posX(d.fret),
+                           cy: (stringY(d.between[0]) + stringY(d.between[1])) / 2, r: 5, "pointer-events": "none" }, svg);
+    inlays.push({ el: c, fret: d.fret, between: d.between });
   });
   el("line", { id: "nut", x1: NUT, y1: TOP - 10, x2: NUT, y2: stringY(0) + 10, stroke: "#2B2B2B", "stroke-width": 4 }, svg);   // the nut
   var END = fretXBase(FRETS) + 30;       // the drawn board ends a little past the last fret
@@ -304,6 +321,12 @@
         pts[posKey(s, f)].style.transform = "translateX(" + delta + "px)";
       }
     }
+    // A position marker follows its fret too: the mean of the two courses it sits between, so it stays
+    // centred in the cell its neighbouring points and wire segments have moved to.
+    inlays.forEach(function (d) {
+      var a = fretX(d.fret, sys, TUNING[d.between[0]] % 12), b = fretX(d.fret, sys, TUNING[d.between[1]] % 12);
+      d.el.style.transform = "translateX(" + ((a + b) / 2 - fretXBase(d.fret)) + "px)";
+    });
   }
 
   function toggle(key) {

@@ -1,7 +1,7 @@
 // 2026-11-09-1193 - the mandolin fretboard gadget (music-theory: music_instruments/resources/html/mandolin_fretboard.html, synced into the bundle).
 // The file is read from the CLIENT's own bundled copy (assets/vaults/music-theory/...), never from the sibling vault's working tree or HEAD (the sibling-pin rule); the bundle-lag step of the matrix is what ties that copy to its source.
 //   * the pitch math (the page's own pure block, run as the page runs it): open courses G3 D4 A4 E5 = MIDI 55 62 69 76, each a fifth above the last, the first 12 frets of each course, 15 frets drawn, every tuning system closes at the octave;
-//   * the page in a DOM (happy-dom): no console error, 4 courses x 16 positions, fret wires, markers at 5 7 10 12 15, the tuning dropdown (equal temperament default), a click holds a position, Play makes the right oscillators;
+//   * the page in a DOM (happy-dom): no console error, 4 courses x 16 positions, fret wires, the position markers (2026-11-10-1195: inlay dots at 3 5 7 9 12(double) 15, subtle, behind everything, never a click target, following the tuning), the tuning dropdown (equal temperament default), a click holds a position, Play makes the right oscillators;
 //   * a CONTROL that fails: the same checks on the page with one tuning constant wrong, and with the semitone ratio wrong, go red (so the checks can fail);
 //   * P3: the other gadgets are byte-identical to the commit this drain started from (a pinned commit of THIS repo, not a moving tree).
 import assert from 'node:assert/strict';
@@ -136,12 +136,75 @@ test('the page loads without a console error: 4 courses x 16 positions (frets 0-
   assert.match(p.doc.querySelector('svg').getAttribute('aria-label'), /G3 D4 A4 E5/);
 });
 
-test('fret markers at 5 7 10 12 15 (a double marker at 12), the fret numbers drawn on the neck', () => {
-  const p = openPage();
-  const nums = [...p.doc.querySelectorAll('svg > text')].map((t: any) => t.textContent).filter((t: string) => /^\d+$/.test(t));
-  assert.deepEqual(nums, ['0', '5', '7', '10', '12', '15']);
-  const dots = [...p.doc.querySelectorAll('svg > circle')].filter((c: any) => c.getAttribute('r') === '5' && c.getAttribute('fill') === '#F2F2EC');
-  assert.equal(dots.length, 4 + 2, 'four single markers (5 7 10 15) and the two of the octave marker');
+// ---- 2026-11-10-1195: the position markers (inlay dots) are subtle but there, behind everything, never a click target, and they follow the tuning ----
+
+/** Every claim about the position markers on a page's source, as a list of failures (empty = all hold): properties, not spellings of them. */
+function markerFailures(h: string): string[] {
+  const bad: string[] = [];
+  const p = openPage(h);
+  if (p.errors.length) bad.push(`console errors: ${p.errors.join(' | ')}`);
+  const svg = p.doc.querySelector('svg');
+  const kids = [...svg.children];
+  const dots = kids.filter((c: any) => (c.getAttribute('class') || '') === 'inlay');
+  const frets = dots.map((c: any) => +c.getAttribute('data-fret'));
+  if (JSON.stringify(frets) !== JSON.stringify([3, 5, 7, 9, 12, 12, 15])) bad.push(`marker frets (a double dot at 12): ${JSON.stringify(frets)}`);
+  const nums = kids.filter((t: any) => t.tagName.toLowerCase() === 'text').map((t: any) => t.textContent).filter((t: string) => /^\d+$/.test(t));
+  if (JSON.stringify(nums) !== JSON.stringify(['0', '3', '5', '7', '9', '12', '15'])) bad.push(`fret numbers: ${JSON.stringify(nums)}`);
+  // subtle: the CSS rule gives the text colour at an opacity of about 0.12 to 0.2, no stroke
+  const rule = /(?:^|\n)\s*\.inlay\s*\{([^}]*)\}/.exec(h)?.[1] ?? '';   // the rule for `.inlay` ALONE (not the shared transition rule that lists it)
+  const op = /fill-opacity:\s*([\d.]+)/.exec(rule)?.[1];
+  if (!(op !== undefined && +op >= 0.12 && +op <= 0.2)) bad.push(`fill-opacity ${op} is not within 0.12 to 0.2`);
+  if (!/fill:\s*var\(--ink\)/.test(rule)) bad.push('the markers are not the text colour (var(--ink))');
+  if (!/stroke:\s*none/.test(rule)) bad.push('a marker has a stroke');
+  // never a click target: the CSS and the attribute (a renderer without the CSS still gets it)
+  if (!/pointer-events:\s*none/.test(rule)) bad.push('.inlay does not say pointer-events: none');
+  for (const d of dots) if (d.getAttribute('pointer-events') !== 'none') bad.push(`marker at fret ${d.getAttribute('data-fret')} does not carry pointer-events="none"`);
+  // BEHIND the strings, the nut, the fret wires and every clickable point
+  const lastDot = Math.max(...dots.map((d: any) => kids.indexOf(d)));
+  const firstOther = Math.min(...kids.filter((c: any) => c.tagName.toLowerCase() === 'line' || (c.getAttribute('class') || '').split(' ').some((k: string) => k === 'pt' || k === 'wire-seg')).map((c: any) => kids.indexOf(c)));
+  if (!(lastDot < firstOther)) bad.push(`a marker is drawn after a string, wire or point (last marker ${lastDot}, first of those ${firstOther})`);
+  // the board does not change size
+  if (svg.getAttribute('viewBox') !== '0 0 760 186') bad.push(`viewBox ${svg.getAttribute('viewBox')} is not 0 0 760 186`);
+  // they follow the tuning dropdown like the wire segments and points do: the mean of the two courses they sit between
+  const sel = p.doc.getElementById('tuning');
+  const wire = (f: number, s: number): number => parseFloat(p.doc.querySelector(`.wire-seg[data-fret="${f}"][data-string="${s}"]`).style.transform.replace('translateX(', ''));
+  const tr = (d: any): number => parseFloat((d.style.transform || 'translateX(0px)').replace('translateX(', ''));
+  sel.value = 'pythagorean'; sel.dispatchEvent(new p.win.Event('change'));
+  const g = pure(scriptOf(h));
+  let moved = 0;
+  g.inlayPlan().forEach((plan: any, i: number) => {
+    const want = (wire(plan.fret, plan.between[0]) + wire(plan.fret, plan.between[1])) / 2;
+    if (Math.abs(tr(dots[i]) - want) > 1e-6) bad.push(`marker ${i} (fret ${plan.fret}) is at ${tr(dots[i])}, not ${want}`);
+    if (Math.abs(want) > 1e-6) moved++;
+  });
+  if (moved < 3) bad.push(`in Pythagorean only ${moved} markers moved: they do not follow the tuning`);
+  sel.value = 'equal'; sel.dispatchEvent(new p.win.Event('change'));
+  for (const d of dots) if (Math.abs(tr(d)) > 1e-9) bad.push(`equal temperament: the marker at fret ${d.getAttribute('data-fret')} is not back on the base line`);
+  return bad;
+}
+
+test('position markers: classic inlay dots at 3 5 7 9 12(double) 15 with their fret numbers; subtle (0.12-0.2 of the text colour, no stroke); behind strings, wires and points; never a click target; the board keeps its size; they follow the tuning dropdown', () => {
+  assert.deepEqual(markerFailures(html), []);
+});
+
+test('position markers: the plan puts every dot between two ADJACENT courses, singles between D4 and A4, the octave one between each outer pair', () => {
+  const g = pure();
+  assert.deepEqual([...g.INLAY_FRETS], [3, 5, 7, 9, 12, 15]);
+  const plan = [...g.inlayPlan()].map((d: any) => [d.fret, [...d.between]]);   // spread: the page's arrays come from the vm context
+  assert.deepEqual(plan, [[3, [1, 2]], [5, [1, 2]], [7, [1, 2]], [9, [1, 2]], [12, [2, 3]], [12, [1, 2]], [15, [1, 2]]]);
+  for (const d of g.inlayPlan()) assert.equal(d.between[1] - d.between[0], 1, `fret ${d.fret}: adjacent courses`);
+});
+
+// (That a click inside a marker really reaches the position under it is a HIT-TEST, which a DOM without layout cannot do: it was proved in real Chrome in 1195's FEEDBACK. Here the property that guarantees it, pointer-events none, is pinned above.)
+
+test('CONTROL: the marker checks can fail - fret 9 written as 10, a marker without pointer-events none, a marker drawn on top, a loud marker, or markers that ignore the tuning each go red', () => {
+  assert.deepEqual(markerFailures(html), [], 'the undamaged page passes');
+  const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
+  assert.ok(markerFailures(damaged('var INLAY_FRETS = [3, 5, 7, 9, 12, 15];', 'var INLAY_FRETS = [3, 5, 7, 10, 12, 15];')).length > 0, 'the old fret 10 instead of 9');
+  assert.ok(markerFailures(damaged('"pointer-events": "none" }, svg);\n    inlays.push', '}, svg);\n    inlays.push')).length > 0, 'no pointer-events attribute');
+  assert.ok(markerFailures(damaged('fill-opacity: 0.16; stroke: none; pointer-events: none;', 'fill-opacity: 0.9; stroke: none; pointer-events: none;')).length > 0, 'a loud marker');
+  assert.ok(markerFailures(damaged('fill-opacity: 0.16; stroke: none; pointer-events: none;', 'fill-opacity: 0.16; stroke: #000; pointer-events: none;')).length > 0, 'a marker with a stroke');
+  assert.ok(markerFailures(damaged('d.el.style.transform = "translateX(" + ((a + b) / 2 - fretXBase(d.fret)) + "px)";', '')).length > 0, 'markers that do not follow the tuning');
 });
 
 test('a click holds a position (and a second click lets it go), Clear releases all, Play together sounds the held pitches in equal temperament, ascending in order', () => {
