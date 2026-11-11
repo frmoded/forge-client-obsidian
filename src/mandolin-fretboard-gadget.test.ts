@@ -256,6 +256,131 @@ test('CONTROL: the DOM checks can fail - the page with the tuning constant wrong
   assert.notEqual(short.doc.querySelectorAll('.pt').length, 4 * 16);
 });
 
+// ---- 2026-11-10-1196 (EXPERIMENT): the score of the held notes - a small pure-JS treble staff under the fretboard ----------------------------------------------
+
+/** Pitch -> staff position from the published rule (treble clef, E4 on the bottom line, one step per line or space), written here independently of the page. */
+const LETTER_OF_PC = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6];                  // C C# D D# E F F# G G# A A# B -> C=0 .. B=6 (sharps only)
+const staffPosOf = (midi: number): number => 7 * (Math.floor(midi / 12) - 1) + LETTER_OF_PC[midi % 12] - 30;
+/** Every claim about the score on a page's source, as a list of failures (empty = all hold): where each head sits, the ledger lines, the sharps, the high-note names, the links, the toggle. */
+function scoreFailures(h: string): string[] {
+  try { return scoreFailuresOf(h); } catch (e) { return [`threw: ${String(e)}`]; }
+}
+function scoreFailuresOf(h: string): string[] {
+  const bad: string[] = [];
+  const ok = (what: string, cond: unknown) => { if (!cond) bad.push(what); };
+  const p = openPage(h);
+  const doc = p.doc, score = doc.getElementById('score');
+  ok('page loads clean', p.errors.length === 0);
+  ok('a Score toggle, ON by default, and the score visible', doc.getElementById('bS')?.getAttribute('aria-pressed') === 'true' && doc.getElementById('scoreWrap')?.hidden === false);
+  ok('empty: no noteheads, collapsed to 90', doc.querySelectorAll('.nh').length === 0 && score.getAttribute('viewBox') === '0 0 760 90');
+  const lineY = (): number[] => [...doc.querySelectorAll('.staffline')].map((l: any) => +l.getAttribute('y1'));
+  const headY = (label: string): number => +doc.querySelector(`.nh[aria-label^="${label}"] .head`).getAttribute('cy');
+  // the three positions of the prompt's proof: an open string (G3), fret 7 (B5) and the highest fret (G6) of the E course
+  for (const l of ['G3, course 1, fret 0', 'B5, course 4, fret 7', 'G6, course 4, fret 15']) click(p, `.pt[aria-label="${l}"]`);
+  const nhs = [...doc.querySelectorAll('.nh')];
+  ok('three noteheads, lowest first, aria-labelled with the neck position', JSON.stringify(nhs.map((n: any) => n.getAttribute('aria-label'))) === JSON.stringify(['G3, course 1, fret 0, below the staff', 'B5, course 4, fret 7, above the staff', 'G6, course 4, fret 15, above the staff']));
+  ok('written pitch spacing: each position is half a space (5) lower per step', headY('G6') - headY('B5') === -(staffPosOf(91) - staffPosOf(83)) * 5 && headY('G3') - headY('B5') === (staffPosOf(83) - staffPosOf(55)) * 5);
+  ok('the collapsed staff grew by exactly the ledger room (G3 .. G6 = 135)', score.getAttribute('viewBox') === '0 0 760 135');
+  ok('ledger lines for G3 (-2 -4) and G6 / B5 (10 12 14 16)', JSON.stringify([...doc.querySelectorAll('.ledger')].map((l: any) => +l.getAttribute('data-pos'))) === '[-4,-2,10,12,14,16]');
+  ok('the written name beside notes ABOVE the staff only', JSON.stringify([...doc.querySelectorAll('.nh')].map((n: any) => n.querySelector('.wname')?.textContent.trim() ?? null)) === '[null,"B5","G6"]');
+  ok('the neck-position labels', JSON.stringify([...doc.querySelectorAll('.nh .lab')].map((t: any) => t.textContent.replace(/\s+/g, ' ').trim())) === JSON.stringify(['course 1, fret 0', 'B5 course 4, fret 7', 'G6 course 4, fret 15']));
+  // heads sit ON the right line: E4 (bottom line), G4 (second line), F5 (top line), and C4 (middle C, on its ledger line)
+  click(p, '.pt[aria-label="G3, course 1, fret 0"]'); click(p, '.pt[aria-label="B5, course 4, fret 7"]'); click(p, '.pt[aria-label="G6, course 4, fret 15"]');
+  ok('released: empty again', doc.querySelectorAll('.nh').length === 0);
+  for (const l of ['E4, course 2, fret 2', 'G4, course 2, fret 5', 'F5, course 3, fret 8']) click(p, `.pt[aria-label="${l}"]`);
+  const ly = lineY();
+  ok('five staff lines, 10 apart', ly.length === 5 && ly.every((y, i) => i === 0 || Math.abs(ly[i - 1] - y) === 10));
+  ok('E4 on the bottom line, G4 on the second, F5 on the top', headY('E4') === ly[0] && headY('G4') === ly[1] && headY('F5') === ly[4]);
+  ok('no ledger line inside the staff', doc.querySelectorAll('.ledger').length === 0 && doc.getElementById('score').getAttribute('viewBox') === '0 0 760 90');
+  click(p, '.pt[aria-label="E4, course 2, fret 2"]'); click(p, '.pt[aria-label="G4, course 2, fret 5"]'); click(p, '.pt[aria-label="F5, course 3, fret 8"]');
+  // sharps: one spelling rule, sharps only; a sharp is drawn, a natural is not; a second and a unison do not overlap
+  for (const l of ['A#4, course 3, fret 1', 'A4, course 3, fret 0', 'G4, course 1, fret 12', 'G4, course 2, fret 5']) click(p, `.pt[aria-label="${l}"]`);
+  const sh = (label: string) => doc.querySelector(`.nh[aria-label^="${label}"]`).querySelectorAll('.sharp').length;
+  ok('a sharp glyph on A#4 only', sh('A#4') === 1 && sh('A4,') === 0);
+  ok('never a flat in any label', ![...doc.querySelectorAll('.nh')].some((n: any) => /\b[A-G]b\d/.test(n.getAttribute('aria-label'))));
+  const cx = (i: number) => +doc.querySelectorAll('.nh')[i].querySelector('.head').getAttribute('cx');
+  ok('the unison G4 / G4 and the second A4 / A#4 never share a column', cx(2) !== cx(3) && cx(0) !== cx(1));
+  // hover / focus lights the other side, both ways; leaving puts it out
+  const nh = doc.querySelector('.nh[aria-label^="G4, course 1"]'), pt = doc.querySelector('.pt[aria-label="G4, course 1, fret 12"]');
+  const fire = (el: any, t: string) => el.dispatchEvent(new p.win.MouseEvent(t));
+  fire(nh, 'mouseenter'); ok('hover a notehead lights its fretboard point', pt.classList.contains('link')); fire(nh, 'mouseleave'); ok('...and leaving puts it out', !pt.classList.contains('link'));
+  fire(pt, 'mouseenter'); ok('hover a fretboard point lights its notehead', doc.querySelector('.nh[aria-label^="G4, course 1"]').classList.contains('link')); fire(pt, 'mouseleave');
+  // keyboard: one Tab stop, arrow keys move; the toggle hides and restores
+  const stops = () => [...doc.querySelectorAll('.nh')].filter((n: any) => n.getAttribute('tabindex') === '0').length;
+  ok('the noteheads are a single Tab stop', stops() === 1);
+  const first = doc.querySelector('.nh'); first.dispatchEvent(new p.win.KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+  ok('ArrowUp moves to the next higher note and keeps one Tab stop', stops() === 1 && doc.querySelectorAll('.nh')[1].getAttribute('tabindex') === '0');
+  doc.getElementById('bS').click();
+  ok('the Score toggle hides it', doc.getElementById('scoreWrap').hidden === true && doc.getElementById('bS').getAttribute('aria-pressed') === 'false');
+  doc.getElementById('bS').click();
+  ok('...and shows it again, redrawn', doc.getElementById('scoreWrap').hidden === false && doc.querySelectorAll('.nh').length === 4);
+  doc.getElementById('bC').click();
+  ok('Clear empties the score', doc.querySelectorAll('.nh').length === 0 && !!doc.querySelector('.empty'));
+  ok('the page still loads clean after all that', p.errors.length === 0);
+  return bad;
+}
+
+test('score: staff positions follow the treble-clef rule for every position of the neck (G3 .. G6), ledger lines exactly where a note needs them, sharps only', () => {
+  const g = pure(), bad: string[] = [];
+  for (let s = 0; s < 4; s++) for (let f = 0; f <= 15; f++) {
+    const m = g.midiAt(s, f), pos = g.staffPos(m);
+    if (pos !== staffPosOf(m)) bad.push(`pos of ${g.midiToName(m)}: ${pos} !== ${staffPosOf(m)}`);
+    const led = [...g.ledgerPositions(pos)], want = [];
+    for (let q = -2; q >= pos; q -= 2) want.push(q);
+    for (let q = 10; q <= pos; q += 2) want.push(q);
+    if (JSON.stringify(led) !== JSON.stringify(want)) bad.push(`ledger of ${g.midiToName(m)}: ${led}`);
+    if (g.midiToName(m).includes('b')) bad.push(`a flat: ${g.midiToName(m)}`);
+  }
+  assert.deepEqual(bad, []);
+  // known anchors, from the definition of the clef (not from the page): E4 bottom line, F5 top line, middle C on a ledger, D4 just under the staff with none, A5 the first ledger above, G6 four above
+  const at = (m: number) => [g.staffPos(m), [...g.ledgerPositions(g.staffPos(m))]];
+  assert.deepEqual(at(64), [0, []]); assert.deepEqual(at(77), [8, []]); assert.deepEqual(at(60), [-2, [-2]]); assert.deepEqual(at(62), [-1, []]);
+  assert.deepEqual(at(81), [10, [10]]); assert.deepEqual(at(83), [11, [10]]); assert.deepEqual(at(91), [16, [10, 12, 14, 16]]); assert.deepEqual(at(55), [-5, [-2, -4]]);
+});
+
+test('score: the layout is 90 high until a note needs more room, stacks a chord in one column (a second or a unison steps aside), and keeps the labels apart', () => {
+  const g = pure(), L = (keys: string[]) => g.scoreLayout(new Set(keys));
+  assert.equal(L([]).height, 90);
+  assert.equal(L(['1:5', '2:0']).height, 90, 'G4 and A4, in the staff');
+  assert.equal(L(['1:2']).height, 90, 'E4 on the bottom line');
+  assert.equal(L(['0:0']).height, 105, 'G3: three more half-spaces below the collapsed room (15)');
+  assert.equal(L(['3:15']).height, 120, 'G6: six more above (30)');
+  assert.equal(L(['0:0', '3:15']).height, 135);
+  const c = L(['1:5', '0:12', '2:0', '2:1']);   // G4 twice (a unison), A4, A#4 (a second above A4)
+  assert.deepEqual(c.notes.map((n: any) => n.name), ['G4', 'G4', 'A4', 'A#4']);
+  assert.deepEqual([...new Set(c.notes.map((n: any) => n.x))].length > 1, true);
+  for (const a of c.notes) for (const b of c.notes) if (a !== b && a.x === b.x) assert.ok(Math.abs(a.pos - b.pos) >= 2, `${a.name} and ${b.name} overlap in one column`);
+  const ys = c.notes.map((n: any) => n.ly).sort((a: number, b: number) => a - b);
+  for (let i = 1; i < ys.length; i++) assert.ok(ys[i] - ys[i - 1] >= 12, 'labels at least 12 apart');
+  assert.ok(c.height >= ys[ys.length - 1], 'the labels fit inside the drawing');
+});
+
+test('score: on the page - the heads sit on the right lines, ledger lines, sharps, names beside the high notes, hover and focus link both ways, one Tab stop, the Score toggle', () => {
+  assert.deepEqual(scoreFailures(html), []);
+});
+
+test('score: self-contained - no network, no Verovio, no import, and it is marked EXPERIMENT so it is easy to remove; the tuning system does not change the notes written', () => {
+  const noNs = html.replace(/http:\/\/www\.w3\.org\/2000\/svg/g, '');
+  assert.ok(!/https?:|\/\/[a-z0-9.-]+\.[a-z]{2,}\/|fetch\(|XMLHttpRequest|import\(|<script[^>]+src|verovio/i.test(noNs), 'nothing is loaded from anywhere');
+  assert.ok(/EXPERIMENT 1196/.test(html) && /written pitch = sounding pitch/i.test(html), 'marked EXPERIMENT, and the written = sounding rule is stated');
+  const p = openPage();
+  click(p, '.pt[aria-label="B5, course 4, fret 7"]');
+  const before = p.doc.getElementById('score').innerHTML;
+  const sel = p.doc.getElementById('tuning'); sel.value = 'pythagorean'; sel.dispatchEvent(new p.win.Event('change'));
+  assert.equal(p.doc.getElementById('score').innerHTML, before, 'the score names equal-tempered pitches whatever the fret geometry');
+});
+
+test('CONTROL: the score checks can fail - every note a step off, no first ledger line above, no side-stepping of seconds, no names for high notes, a score that never updates, a dead hover link each go red', () => {
+  assert.deepEqual(scoreFailures(html), [], 'the undamaged page passes');
+  const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
+  assert.ok(scoreFailures(damaged('+ LETTER_STEP[name.charAt(0)] - 30;', '+ LETTER_STEP[name.charAt(0)] - 29;')).length > 0, 'a step off');
+  assert.ok(scoreFailures(damaged('for (p = 10; p <= pos; p += 2) out.push(p);', 'for (p = 12; p <= pos; p += 2) out.push(p);')).length > 0, 'no first ledger above');
+  assert.ok(scoreFailures(damaged('colTop[c] !== undefined && n.pos - colTop[c] < 2', 'false')).length > 0, 'seconds overlap');
+  assert.ok(scoreFailures(damaged('above: pos > 8', 'above: pos > 12')).length > 0, 'no name beside B5');
+  assert.ok(scoreFailures(damaged('if (!scoreWrap.hidden) drawScore();', '')).length > 0, 'a score that never updates');
+  assert.ok(scoreFailures(damaged('g.addEventListener("mouseenter", function () { lightPoint(q.key, true); });', '')).length > 0, 'a dead hover link');
+});
+
 // ---- P3: the other gadgets are untouched --------------------------------------------------------------------------------------------------------------------
 
 /** The commit of THIS repo the drain started from: the other gadgets are compared with their text there, never with a moving tree. */

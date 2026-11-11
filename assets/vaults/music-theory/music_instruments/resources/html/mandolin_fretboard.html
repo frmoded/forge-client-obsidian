@@ -77,6 +77,19 @@
     padding: 8px 12px; cursor: pointer; min-height: 40px;
   }
   select:hover { border-color: var(--ink); }
+  [hidden] { display: none !important; }
+  /* ===== EXPERIMENT 1196: the score of the held notes. Delete this block, #scoreWrap, #bS and the experiment script block to remove it. ===== */
+  #bS[aria-pressed="true"] { background: var(--grid); border-color: var(--ink); }
+  .nh { cursor: default; }
+  .nh:focus { outline: none; }
+  .nh .head { fill: var(--highlight); stroke: var(--ink); stroke-width: 1.6; }
+  .nh .lab { fill: var(--muted); font-size: 10px; opacity: 0.7; pointer-events: none; }
+  .nh.link .head, .nh:focus .head { stroke: var(--accent); stroke-width: 2.6; }
+  .nh.link .lab, .nh:focus .lab { opacity: 1; }
+  /* a held position lit from the score (and the reverse: a held position lights its notehead) */
+  .pt.link .disc { opacity: 1; stroke: var(--accent); stroke-width: 2.6; }
+  .pt.link text { opacity: 1; }
+  .pt.link .dot { opacity: 0; }
 </style>
 </head>
 <body>
@@ -84,11 +97,15 @@
 
 <div class="scroller"><svg id="svg" role="group" aria-label="Mandolin fretboard, four courses tuned G3 D4 A4 E5, frets 0 to 15. Click a position to hold it, then play the held notes. Arrow keys move between positions. In Pythagorean, meantone or well temperament each fret breaks into a zigzag, a different position per course, because one straight fret cannot be exactly right for four differently-tuned strings at once."></svg></div>
 
+<!-- EXPERIMENT 1196: the score of the held notes (a treble staff under the fretboard; written pitch = sounding pitch). Remove with its CSS, #bS and the script block. -->
+<div class="scroller" id="scoreWrap"><svg id="score" role="group" aria-label="Score: the held fretboard positions written on a treble staff, written pitch equal to sounding pitch. Arrow keys move between the notes; hovering or focusing a note lights its fretboard position."></svg></div>
+
 <div class="controls">
   <button class="both"  id="bT" title="All held notes at once, as a chord">Play together</button>
   <button class="left"  id="bU" title="Held notes one at a time, lowest to highest">Play ascending</button>
   <button class="right" id="bD" title="Held notes one at a time, highest to lowest">Play descending</button>
   <button id="bC" title="Release every held position">Clear</button>
+  <button id="bS" aria-pressed="true" title="Show or hide the score of the held notes (an experiment)">Score</button>
   <select id="tuning" aria-label="Tuning system" title="Equal temperament is rotationally symmetric, so one straight fret is correct for every course. Pythagorean, quarter-comma meantone and Werckmeister III well temperament are NOT: each course's own open pitch class determines where ITS fret lands, so the frets break into a zigzag. A real limitation of fretted instruments in a non-equal tuning, not a simplification.">
     <option value="equal" selected>Equal temperament</option>
     <option value="pythagorean">Pythagorean</option>
@@ -192,10 +209,75 @@
     });
     return out;
   }
+  // ===== EXPERIMENT 1196: the score of the held notes. Its layout is pure (no DOM) so it can be tested; the drawing is
+  // in the experiment block further down. Delete both, #scoreWrap, #bS and the CSS block to remove the experiment. =====
+  // TREBLE clef, and WRITTEN pitch = SOUNDING pitch (a mandolin is not a transposing instrument, unlike a guitar).
+  // SPELLING RULE: every black key is written as a SHARP (C# D# F# G# A#), never a flat: the very names midiToName
+  // already puts on the fretboard, so the score and the board always agree.
+  // Vertical unit: `pos` counts lines AND spaces upward from the bottom line (E4 = 0, G4 = 2, F5 = 8, middle C = -2).
+  var LETTER_STEP = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+  var SC = { half: 5, pad: 15, lo: -2, hi: 10, cx: 150, flipDx: 12, accDx: 12, accGap: 4, labelGap: 12 };
+  function staffPos(m) {
+    var name = midiToName(m), octave = Math.floor(m / 12) - 1;
+    return octave * 7 + LETTER_STEP[name.charAt(0)] - 30;     // E4 (midi 64): octave 4, letter step 2 -> 30
+  }
+  // Ledger line positions a note at `pos` needs: every even position from -2 down (below) or from 10 up (above).
+  function ledgerPositions(pos) {
+    var out = [], p;
+    for (p = -2; p >= pos; p -= 2) out.push(p);
+    for (p = 10; p <= pos; p += 2) out.push(p);
+    return out;
+  }
+  // Everything the drawing needs for a held set, in pixels of a viewBox that is W wide. The collapsed staff is 90 high
+  // (it already holds middle C and A5, the first ledger lines); it grows by one half-space per position past that.
+  function scoreLayout(held) {
+    var ps = sortedHeld(held), lo = SC.lo, hi = SC.hi;
+    var notes = ps.map(function (p) {
+      var m = midiAt(p.s, p.f), name = midiToName(m), pos = staffPos(m);
+      lo = Math.min(lo, pos); hi = Math.max(hi, pos);
+      return { key: posKey(p.s, p.f), s: p.s, f: p.f, midi: m, name: name, sharp: name.indexOf("#") >= 0, pos: pos,
+               above: pos > 8, ledger: ledgerPositions(pos), flip: false, col: 0, acc: -1, x: SC.cx, y: 0, ly: 0 };
+    });
+    function yOf(pos) { return SC.pad + (hi - pos) * SC.half; }
+    var height = 2 * SC.pad + (hi - lo) * SC.half;
+    // Seconds and unisons in a chord: a note goes in the first column (left, then right, then further right) whose last
+    // note is at least a third below it, so neighbouring heads never overlap, as in engraving.
+    var colTop = [];
+    notes.forEach(function (n) {
+      n.y = yOf(n.pos);
+      var c = 0;
+      while (colTop[c] !== undefined && n.pos - colTop[c] < 2) c++;
+      colTop[c] = n.pos; n.col = c; n.flip = c > 0; n.x = SC.cx + c * SC.flipDx;
+    });
+    // Sharps, highest first, each in the first column to the left whose previous sharp is far enough above.
+    var colLast = [];
+    notes.slice().reverse().forEach(function (n) {
+      if (!n.sharp) return;
+      var c = 0;
+      while (colLast[c] !== undefined && colLast[c] - n.pos < SC.accGap) c++;
+      colLast[c] = n.pos; n.acc = c;
+    });
+    // One label per note, to the right of the chord at the note's own height, pushed apart just enough not to touch
+    // (the chord is one column, so the labels cannot all sit under their noteheads); a pushed-apart group is then
+    // shifted back up by half of its largest displacement, so it stays centred on its notes.
+    var last = -Infinity, worst = 0;
+    notes.slice().reverse().forEach(function (n) {
+      n.ly = Math.max(n.y, last + SC.labelGap); last = n.ly; worst = Math.max(worst, n.ly - n.y);
+    });
+    var top = notes.length ? notes[notes.length - 1].ly : 0, lift = Math.min(worst / 2, Math.max(0, top - 8));
+    notes.forEach(function (n) { n.ly -= lift; });
+    last -= lift;
+    height = Math.max(height, last + SC.labelGap);
+    var ledgers = [];
+    notes.forEach(function (n) { n.ledger.forEach(function (p) { if (ledgers.indexOf(p) < 0) ledgers.push(p); }); });
+    ledgers.sort(function (a, b) { return a - b; });
+    return { notes: notes, height: height, hi: hi, lo: lo, yOf: yOf, ledgers: ledgers,
+             lineY: [0, 2, 4, 6, 8].map(yOf), columns: colTop.length };
+  }
   // --- end pure math -----------------------------------------------------
 
   if (typeof document === "undefined") {           // node test harness
-    module.exports = { INLAY_FRETS: INLAY_FRETS, inlayPlan: inlayPlan, A4_HZ: A4_HZ, TUNING: TUNING, FRETS: FRETS, STAGGER: STAGGER, SYSTEMS: SYSTEMS, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS, fifthChainCents: fifthChainCents, PURE_FIFTH: PURE_FIFTH, MEANTONE_FIFTH: MEANTONE_FIFTH, midiToHz: midiToHz, midiToName: midiToName, fretFraction: fretFraction, fretCents: fretCents, midiAt: midiAt, hzAt: hzAt, posKey: posKey, planPlay: planPlay };
+    module.exports = { SC: SC, staffPos: staffPos, ledgerPositions: ledgerPositions, scoreLayout: scoreLayout, INLAY_FRETS: INLAY_FRETS, inlayPlan: inlayPlan, A4_HZ: A4_HZ, TUNING: TUNING, FRETS: FRETS, STAGGER: STAGGER, SYSTEMS: SYSTEMS, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS, fifthChainCents: fifthChainCents, PURE_FIFTH: PURE_FIFTH, MEANTONE_FIFTH: MEANTONE_FIFTH, midiToHz: midiToHz, midiToName: midiToName, fretFraction: fretFraction, fretCents: fretCents, midiAt: midiAt, hzAt: hzAt, posKey: posKey, planPlay: planPlay };
     return;
   }
 
@@ -333,12 +415,105 @@
     if (held.has(key)) held.delete(key); else held.add(key);
     render();
   }
+
+  // ===== EXPERIMENT 1196: the score of the held notes (pure layout: scoreLayout, above). Draws a small treble staff
+  // under the fretboard: one whole-note head per held position, stacked as a chord, with ledger lines, sharps, the written
+  // name beside any note above the staff, and a faint "course N, fret F" label. Plain SVG, nothing loaded from anywhere. =====
+  var scoreSvg = $("score"), scoreWrap = $("scoreWrap"), nhs = {}, nhList = [];
+  function lightNote(key, on) { if (nhs[key]) nhs[key].classList.toggle("link", on); }     // fretboard -> score
+  function lightPoint(key, on) { if (pts[key]) pts[key].classList.toggle("link", on); }    // score -> fretboard
+  function drawSharp(x, y, parent) {
+    var g = el("g", { "class": "sharp", "pointer-events": "none" }, parent), st = { stroke: "#2B2B2B", fill: "none" };
+    el("line", { x1: x - 1.9, y1: y - 6.5, x2: x - 1.9, y2: y + 8.5, stroke: st.stroke, "stroke-width": 1 }, g);
+    el("line", { x1: x + 1.9, y1: y - 8.5, x2: x + 1.9, y2: y + 6.5, stroke: st.stroke, "stroke-width": 1 }, g);
+    el("line", { x1: x - 3.8, y1: y - 1.2, x2: x + 3.8, y2: y - 3.4, stroke: st.stroke, "stroke-width": 2 }, g);
+    el("line", { x1: x - 3.8, y1: y + 3.8, x2: x + 3.8, y2: y + 1.6, stroke: st.stroke, "stroke-width": 2 }, g);
+  }
+  function drawClef(y, parent) {      // a plain G clef, curled round the G line (y), drawn as strokes
+    el("path", { "class": "clef", fill: "none", stroke: "#2B2B2B", "stroke-width": 1.9, "stroke-linecap": "round", "stroke-linejoin": "round",
+                 "pointer-events": "none",
+                 d: "M" + 32 + " " + (y - 30) + " C" + 40 + " " + (y - 36) + " " + 42 + " " + (y - 24) + " " + 36 + " " + (y - 14) +
+                    " C" + 30 + " " + (y - 4) + " " + 22 + " " + (y + 2) + " " + 22 + " " + (y + 10) +
+                    " C" + 22 + " " + (y + 17) + " " + 32 + " " + (y + 17) + " " + 33 + " " + (y + 10) +
+                    " C" + 34 + " " + (y + 3) + " " + 24 + " " + (y - 2) + " " + 24 + " " + (y - 8) +
+                    " M" + 31 + " " + (y - 26) + " L" + 32 + " " + (y + 24) +
+                    " C" + 32 + " " + (y + 31) + " " + 24 + " " + (y + 32) + " " + 23 + " " + (y + 27) }, parent);
+  }
+  function drawScore() {
+    var L = scoreLayout(held), x0 = 10, x1 = W - 10;
+    while (scoreSvg.firstChild) scoreSvg.removeChild(scoreSvg.firstChild);
+    nhs = {}; nhList = [];
+    Object.keys(pts).forEach(function (k) { lightPoint(k, false); });
+    scoreSvg.setAttribute("viewBox", "0 0 " + W + " " + Math.ceil(L.height));
+    var n = L.notes.length;
+    scoreSvg.setAttribute("aria-label", "Score: " + (n ? n + (n === 1 ? " held note" : " held notes") + " on a treble staff, written pitch equal to sounding pitch, lowest to highest: " +
+      L.notes.map(function (q) { return q.name + ", course " + (q.s + 1) + ", fret " + q.f; }).join("; ") + ". Arrow keys move between the notes; hovering or focusing a note lights its fretboard position."
+      : "no notes held. Hold fretboard positions to see them written on a treble staff."));
+    L.lineY.forEach(function (y) { el("line", { "class": "staffline", x1: x0, y1: y, x2: x1, y2: y, stroke: "#A69B91", "stroke-width": 1 }, scoreSvg); });
+    drawClef(L.yOf(2), scoreSvg);
+    var lx = SC.cx - 15, rx = SC.cx + 15 + (L.columns - 1) * SC.flipDx;
+    L.ledgers.forEach(function (p) {      // ledger lines: the same faint style as the staff, one set for the whole chord
+      el("line", { "class": "ledger", "data-pos": p, x1: lx, y1: L.yOf(p), x2: rx, y2: L.yOf(p), stroke: "#A69B91", "stroke-width": 1 }, scoreSvg);
+    });
+    if (!n) {
+      var e = el("text", { "class": "empty", x: SC.cx - 30, y: L.yOf(4) + 4, fill: "#555555", "font-size": 11, opacity: 0.7 }, scoreSvg);
+      e.textContent = "Hold fretboard points to see them written here";
+    }
+    L.notes.forEach(function (q, i) {
+      var g = el("g", { "class": "nh", "data-key": q.key, "data-pos": q.pos, tabindex: i === 0 ? "0" : "-1", role: "img",
+                        "aria-label": q.name + ", course " + (q.s + 1) + ", fret " + q.f + (q.above ? ", above the staff" : q.pos < 0 ? ", below the staff" : "") }, scoreSvg);
+      if (q.sharp) drawSharp(SC.cx - SC.accDx - q.acc * 10 - 4, q.y, g);
+      el("ellipse", { "class": "head", cx: q.x, cy: q.y, rx: 6.4, ry: 4.7, transform: "rotate(-18 " + q.x + " " + q.y + ")" }, g);
+      el("rect", { x: q.x - 9, y: q.y - 6, width: 18, height: 12, fill: "transparent" }, g);         // a generous hover target
+      var lxl = rx + 18;
+      el("line", { "class": "lead", x1: rx + 4, y1: q.y, x2: lxl - 4, y2: q.ly, stroke: "#A69B91", "stroke-width": 0.8, "stroke-dasharray": "1.5 2.5", "pointer-events": "none" }, g);
+      var t = el("text", { "class": "lab", x: lxl, y: q.ly + 3.5 }, g);
+      if (q.above) {                       // the high-note aid: the written name beside a note above the staff
+        var nm = el("tspan", { "class": "wname", "font-weight": "bold" }, t);
+        nm.textContent = q.name + "  ";
+      }
+      var pos = el("tspan", {}, t);
+      pos.textContent = "course " + (q.s + 1) + ", fret " + q.f;
+      g.addEventListener("mouseenter", function () { lightPoint(q.key, true); });
+      g.addEventListener("mouseleave", function () { lightPoint(q.key, false); });
+      g.addEventListener("focus", function () { lightPoint(q.key, true); });
+      g.addEventListener("blur", function () { lightPoint(q.key, false); });
+      g.addEventListener("keydown", function (e) {
+        if (e.altKey || e.ctrlKey || e.metaKey) return;
+        var j = i;
+        if (e.key === "ArrowUp" || e.key === "ArrowRight") j = Math.min(nhList.length - 1, i + 1);
+        else if (e.key === "ArrowDown" || e.key === "ArrowLeft") j = Math.max(0, i - 1);
+        else if (e.key === "Home") j = 0;
+        else if (e.key === "End") j = nhList.length - 1;
+        else return;
+        e.preventDefault();
+        nhList[i].setAttribute("tabindex", "-1"); nhList[j].setAttribute("tabindex", "0"); nhList[j].focus();
+      });
+      nhs[q.key] = g; nhList.push(g);
+    });
+  }
+  Object.keys(pts).forEach(function (key) {
+    var g = pts[key];
+    g.addEventListener("mouseenter", function () { lightNote(key, true); });
+    g.addEventListener("mouseleave", function () { lightNote(key, false); });
+    g.addEventListener("focus", function () { lightNote(key, true); });
+    g.addEventListener("blur", function () { lightNote(key, false); });
+  });
+  $("bS").addEventListener("click", function () {
+    var show = $("bS").getAttribute("aria-pressed") !== "true";
+    $("bS").setAttribute("aria-pressed", show ? "true" : "false");
+    scoreWrap.hidden = !show;
+    if (show) drawScore();
+  });
+  // ===== end EXPERIMENT 1196 =====
+
   function render() {
     for (var k in pts) {
       var on = held.has(k);
       pts[k].classList.toggle("held", on);
       pts[k].setAttribute("aria-pressed", on ? "true" : "false");
     }
+    if (!scoreWrap.hidden) drawScore();                       // EXPERIMENT 1196
   }
 
   // --- Web Audio: OscillatorNode notes ----------------------------------
