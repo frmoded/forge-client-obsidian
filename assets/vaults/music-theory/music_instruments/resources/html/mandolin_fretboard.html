@@ -197,10 +197,10 @@
       return { s: p.s, f: p.f, midi: midiAt(p.s, p.f), hz: hzAt(p.s, p.f, system), when: mode === "together" ? 0 : i * STAGGER };
     });
   }
-  // Position markers: the classic inlay dots at frets 3 5 7 9 12 15, a DOUBLE dot at the octave (12).
+  // Position markers: the inlay dots at the mandolin frets 3 5 7 10 12 15, a DOUBLE dot at the octave (12).
   // Each dot sits between two ADJACENT courses (0 = G3 .. 3 = E5): singles between D4 and A4 (1, 2); the
   // octave's two dots one between each outer pair, A4/E5 (2, 3) and D4/A4 (1, 2).
-  var INLAY_FRETS = [3, 5, 7, 9, 12, 15];
+  var INLAY_FRETS = [3, 5, 7, 10, 12, 15];
   function inlayPlan() {
     var out = [];
     INLAY_FRETS.forEach(function (f) {

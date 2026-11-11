@@ -1,7 +1,7 @@
 // 2026-11-09-1193 - the mandolin fretboard gadget (music-theory: music_instruments/resources/html/mandolin_fretboard.html, synced into the bundle).
 // The file is read from the CLIENT's own bundled copy (assets/vaults/music-theory/...), never from the sibling vault's working tree or HEAD (the sibling-pin rule); the bundle-lag step of the matrix is what ties that copy to its source.
 //   * the pitch math (the page's own pure block, run as the page runs it): open courses G3 D4 A4 E5 = MIDI 55 62 69 76, each a fifth above the last, the first 12 frets of each course, 15 frets drawn, every tuning system closes at the octave;
-//   * the page in a DOM (happy-dom): no console error, 4 courses x 16 positions, fret wires, the position markers (2026-11-10-1195: inlay dots at 3 5 7 9 12(double) 15, subtle, behind everything, never a click target, following the tuning), the tuning dropdown (equal temperament default), a click holds a position, Play makes the right oscillators;
+//   * the page in a DOM (happy-dom): no console error, 4 courses x 16 positions, fret wires, the position markers (2026-11-10-1195, fret 9 corrected to 10 by 1197: inlay dots at 3 5 7 10 12(double) 15, subtle, behind everything, never a click target, following the tuning), the tuning dropdown (equal temperament default), a click holds a position, Play makes the right oscillators;
 //   * a CONTROL that fails: the same checks on the page with one tuning constant wrong, and with the semitone ratio wrong, go red (so the checks can fail);
 //   * P3: the other gadgets are byte-identical to the commit this drain started from (a pinned commit of THIS repo, not a moving tree).
 import assert from 'node:assert/strict';
@@ -147,9 +147,9 @@ function markerFailures(h: string): string[] {
   const kids = [...svg.children];
   const dots = kids.filter((c: any) => (c.getAttribute('class') || '') === 'inlay');
   const frets = dots.map((c: any) => +c.getAttribute('data-fret'));
-  if (JSON.stringify(frets) !== JSON.stringify([3, 5, 7, 9, 12, 12, 15])) bad.push(`marker frets (a double dot at 12): ${JSON.stringify(frets)}`);
+  if (JSON.stringify(frets) !== JSON.stringify([3, 5, 7, 10, 12, 12, 15])) bad.push(`marker frets (a double dot at 12): ${JSON.stringify(frets)}`);
   const nums = kids.filter((t: any) => t.tagName.toLowerCase() === 'text').map((t: any) => t.textContent).filter((t: string) => /^\d+$/.test(t));
-  if (JSON.stringify(nums) !== JSON.stringify(['0', '3', '5', '7', '9', '12', '15'])) bad.push(`fret numbers: ${JSON.stringify(nums)}`);
+  if (JSON.stringify(nums) !== JSON.stringify(['0', '3', '5', '7', '10', '12', '15'])) bad.push(`fret numbers: ${JSON.stringify(nums)}`);
   // subtle: the CSS rule gives the text colour at an opacity of about 0.12 to 0.2, no stroke
   const rule = /(?:^|\n)\s*\.inlay\s*\{([^}]*)\}/.exec(h)?.[1] ?? '';   // the rule for `.inlay` ALONE (not the shared transition rule that lists it)
   const op = /fill-opacity:\s*([\d.]+)/.exec(rule)?.[1];
@@ -183,24 +183,24 @@ function markerFailures(h: string): string[] {
   return bad;
 }
 
-test('position markers: classic inlay dots at 3 5 7 9 12(double) 15 with their fret numbers; subtle (0.12-0.2 of the text colour, no stroke); behind strings, wires and points; never a click target; the board keeps its size; they follow the tuning dropdown', () => {
+test('position markers: inlay dots at the mandolin frets 3 5 7 10 12(double) 15 with their fret numbers; subtle (0.12-0.2 of the text colour, no stroke); behind strings, wires and points; never a click target; the board keeps its size; they follow the tuning dropdown', () => {
   assert.deepEqual(markerFailures(html), []);
 });
 
 test('position markers: the plan puts every dot between two ADJACENT courses, singles between D4 and A4, the octave one between each outer pair', () => {
   const g = pure();
-  assert.deepEqual([...g.INLAY_FRETS], [3, 5, 7, 9, 12, 15]);
+  assert.deepEqual([...g.INLAY_FRETS], [3, 5, 7, 10, 12, 15]);
   const plan = [...g.inlayPlan()].map((d: any) => [d.fret, [...d.between]]);   // spread: the page's arrays come from the vm context
-  assert.deepEqual(plan, [[3, [1, 2]], [5, [1, 2]], [7, [1, 2]], [9, [1, 2]], [12, [2, 3]], [12, [1, 2]], [15, [1, 2]]]);
+  assert.deepEqual(plan, [[3, [1, 2]], [5, [1, 2]], [7, [1, 2]], [10, [1, 2]], [12, [2, 3]], [12, [1, 2]], [15, [1, 2]]]);
   for (const d of g.inlayPlan()) assert.equal(d.between[1] - d.between[0], 1, `fret ${d.fret}: adjacent courses`);
 });
 
 // (That a click inside a marker really reaches the position under it is a HIT-TEST, which a DOM without layout cannot do: it was proved in real Chrome in 1195's FEEDBACK. Here the property that guarantees it, pointer-events none, is pinned above.)
 
-test('CONTROL: the marker checks can fail - fret 9 written as 10, a marker without pointer-events none, a marker drawn on top, a loud marker, or markers that ignore the tuning each go red', () => {
+test('CONTROL: the marker checks can fail - fret 10 written as 9, a marker without pointer-events none, a marker drawn on top, a loud marker, or markers that ignore the tuning each go red', () => {
   assert.deepEqual(markerFailures(html), [], 'the undamaged page passes');
   const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
-  assert.ok(markerFailures(damaged('var INLAY_FRETS = [3, 5, 7, 9, 12, 15];', 'var INLAY_FRETS = [3, 5, 7, 10, 12, 15];')).length > 0, 'the old fret 10 instead of 9');
+  assert.ok(markerFailures(damaged('var INLAY_FRETS = [3, 5, 7, 10, 12, 15];', 'var INLAY_FRETS = [3, 5, 7, 9, 12, 15];')).length > 0, 'the guitar fret 9 instead of the mandolin 10');
   assert.ok(markerFailures(damaged('"pointer-events": "none" }, svg);\n    inlays.push', '}, svg);\n    inlays.push')).length > 0, 'no pointer-events attribute');
   assert.ok(markerFailures(damaged('fill-opacity: 0.16; stroke: none; pointer-events: none;', 'fill-opacity: 0.9; stroke: none; pointer-events: none;')).length > 0, 'a loud marker');
   assert.ok(markerFailures(damaged('fill-opacity: 0.16; stroke: none; pointer-events: none;', 'fill-opacity: 0.16; stroke: #000; pointer-events: none;')).length > 0, 'a marker with a stroke');
@@ -379,6 +379,15 @@ test('CONTROL: the score checks can fail - every note a step off, no first ledge
   assert.ok(scoreFailures(damaged('above: pos > 8', 'above: pos > 12')).length > 0, 'no name beside B5');
   assert.ok(scoreFailures(damaged('if (!scoreWrap.hidden) drawScore();', '')).length > 0, 'a score that never updates');
   assert.ok(scoreFailures(damaged('g.addEventListener("mouseenter", function () { lightPoint(q.key, true); });', '')).length > 0, 'a dead hover link');
+});
+
+// ---- 2026-11-11-1197: the mandolin page embeds the gadget tall enough for the score ----------------------------------------------------------------------------
+const PAGE = path.join(ROOT, 'assets/vaults/music-theory/music_instruments/mandolin.md');
+test('the mandolin page embeds the gadget at a height that holds the tallest score (pins a MEASURED value, real Chrome 2026-11-11: 457 with G3 and G6 held; if the gadget changes height this SHOULD go red - re-measure, do not just rewrite)', () => {
+  const m = /```html-embed\n(\S+mandolin_fretboard\.html)\n(\d+)\n```/.exec(fs.readFileSync(PAGE, 'utf8'));
+  assert.ok(m, 'the page embeds mandolin_fretboard.html with a height line');
+  assert.ok(+m![2] >= 457, `embed height ${m![2]} would clip the staff (tallest measured: 457)`);
+  assert.ok(+m![2] <= 500, `embed height ${m![2]} leaves a large blank (tallest measured: 457)`);
 });
 
 // ---- P3: the other gadgets are untouched --------------------------------------------------------------------------------------------------------------------
