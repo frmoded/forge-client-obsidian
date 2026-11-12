@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interval widget</title>
+<style>
+  /* Palette: forge_music_theory_style_guide.md, "Color scheme" (revised 2026-09-25).
+     Same values as piano_keyboard.html and mandolin_fretboard.html. */
+  :root {
+    --paper: #FDFCFA;   /* Vault Background (Paper) */
+    --ink: #2B2B2B;     /* Title Text */
+    --muted: #555555;   /* Body Text / Plot Labels */
+    --axis: #666666;    /* Axis Lines / Strong Ticks */
+    --grid: #F2F2EC;    /* Faint Gridlines / Fine Ticks */
+    --left: #2B2B2B;    /* Primary Signal / Input 1 */
+    --right: #B39373;   /* Secondary Signal / Input 2 */
+    --right-text: #7A644E; /* --right darkened for legible TEXT on the paper background */
+    --derived: #64748B; /* Combined / Derived Series */
+    --highlight: #F8C54B; /* Highlight: the root (anchor) key */
+    --accent: #D72027;  /* Primary Accent: keyboard focus */
+    --good: #2F7D4F;    /* a right answer */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--muted);
+    padding: 8px 10px 14px;
+    -webkit-text-size-adjust: 100%;
+  }
+  [hidden] { display: none !important; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  /* ---- the tab row: Explore / Chart / Trainer on the left, the tuning dropdown on the right ---- */
+  .top { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+  .top select { margin-left: auto; }
+  button, select {
+    font: inherit; font-size: 13px; color: var(--ink);
+    background: #fff; border: 1px solid var(--axis); border-radius: 6px;
+    padding: 6px 10px; cursor: pointer; min-height: 36px;
+  }
+  button:hover, select:hover { border-color: var(--ink); }
+  button:active { background: var(--grid); }
+  button:focus-visible, select:focus-visible, .key:focus, .minisvg:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tab { flex: 0 0 auto; font-weight: 600; }
+  .tab[aria-selected="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  select { flex: 1 1 auto; min-width: 0; max-width: 280px; text-overflow: ellipsis; padding: 6px 8px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; align-items: center; }
+  button.left  { border-color: var(--left);  color: var(--left); }
+  /* Role shows in COLOR only (same weight on every button); --right-text is the text-safe shade of the tan. */
+  button.right { border-color: var(--right-text); color: var(--right-text); }
+  button.both  { border-color: var(--derived); color: var(--derived); }
+  button[aria-pressed="true"] { background: var(--grid); border-color: var(--ink); }
+  /* ---- the piano strips ---- */
+  .scroller { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  svg.strip { display: block; width: 100%; max-width: 660px; min-width: 520px; height: auto; margin: 0 auto; user-select: none; -webkit-user-select: none; }
+  .key { cursor: pointer; }
+  .key:focus { outline: none; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.white.span rect { fill: #F4E6BE; }                       /* the span between the two notes */
+  .key.black.span rect { fill: #6B5B2E; }
+  .key.root rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2.5; }
+  .key.up rect   { fill: var(--right); stroke: var(--ink); stroke-width: 2.5; }
+  .key.down rect { fill: var(--derived); stroke: var(--ink); stroke-width: 2.5; }
+  .key:focus rect { stroke: var(--accent); stroke-width: 3; }
+  .key text { pointer-events: none; }
+  .key.white text { fill: var(--muted); font-size: 11px; }
+  .key.black text { fill: var(--paper); font-size: 8.5px; }
+  .key.up text, .key.down text { fill: #fff; }                 /* after the white/black rules: the label on a coloured target stays legible */
+  .key.black.root text { fill: var(--ink); }
+  .strip.masked .key text { opacity: 0; }                        /* the Trainer's Hide switch: labels masked until the answer */
+  .strip.static .key { cursor: default; }
+  /* ---- readout / plain text ---- */
+  .readout { margin: 6px 0 2px; min-height: 3.2em; color: var(--ink); }
+  .readout .big { font-size: 17px; font-weight: 600; }
+  .readout .plain { display: block; margin-top: 2px; color: var(--muted); font-size: 14px; }
+  .note { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
+  .legend { font-size: 12px; margin: 2px 0 6px; }
+  .sw { display: inline-block; width: 11px; height: 11px; border: 1px solid var(--ink); vertical-align: -1px; margin: 0 3px 0 8px; }
+  /* ---- the 13 name buttons ---- */
+  .names { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0; }
+  .names button { min-width: 62px; padding: 4px 6px; line-height: 1.15; text-align: center; }
+  .names button .sym { display: block; font-weight: 700; font-size: 14px; }
+  .names button .nm { display: block; font-size: 10.5px; color: var(--muted); }
+  .names button.right-answer { background: #E3F2E8; border-color: var(--good); }
+  .names button.wrong-answer { background: #FBE4E5; border-color: var(--accent); }
+  /* ---- the Chart ---- */
+  table.chart { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .chart th { text-align: left; font-weight: 600; color: var(--ink); border-bottom: 1px solid var(--axis); padding: 3px 6px; }
+  .chart td { border-bottom: 1px solid var(--grid); padding: 2px 6px; vertical-align: middle; }
+  .chart td.n { text-align: right; width: 2.2em; }
+  .chart td.cue { color: var(--muted); }
+  .chart td.cue:empty::after { content: "\2014"; color: var(--grid); }
+  svg.minisvg { display: block; width: 168px; height: 34px; cursor: pointer; }
+  .chart button.rowplay { min-height: 30px; padding: 2px 8px; }
+  /* ---- the Trainer ---- */
+  .score { margin: 6px 0; color: var(--ink); }
+  .done { display: inline-block; margin-left: 8px; padding: 2px 10px; border-radius: 12px; background: var(--good); color: #fff; font-weight: 700; }
+  .feedback { min-height: 2.6em; margin: 6px 0; color: var(--ink); font-size: 15px; }
+  .feedback.right { color: var(--good); }
+  .feedback.wrong { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="top">
+  <button class="tab" id="tabExplore" role="tab" aria-selected="true" aria-controls="pExplore" title="Explore: pick two keys, or an interval name, and see it">Explore</button>
+  <button class="tab" id="tabChart" role="tab" aria-selected="false" tabindex="-1" aria-controls="pChart" title="Chart: all 13 intervals with a song to remember each by">Chart</button>
+  <button class="tab" id="tabTrainer" role="tab" aria-selected="false" tabindex="-1" aria-controls="pTrainer" title="Trainer: hear an interval and name it">Trainer</button>
+  <select id="tuning" aria-label="Tuning system" title="Equal temperament: 12 identical semitones. Pythagorean: pure 3:2 fifths from C. Meantone: quarter-comma. Well temperament: Werckmeister III. The same four tunings as the Piano gadget; the notes always keep their names, only the sound moves.">
+    <option value="equal" selected>Equal temperament</option>
+    <option value="pythagorean">Pythagorean</option>
+    <option value="meantone">Meantone (1/4-comma)</option>
+    <option value="well">Well temperament (Werckmeister III)</option>
+  </select>
+</div>
+
+<!-- ============ EXPLORE ============ -->
+<section id="pExplore" role="tabpanel" aria-labelledby="tabExplore">
+  <div class="scroller"><svg class="strip" id="exSvg" role="group" aria-label="Piano strip, C3 to C5. Click a key to make it the root, then click a second key to read the interval between them. Nothing plays until you press Together, Up or Down."></svg></div>
+  <div class="legend" aria-hidden="true"><span class="sw" style="background:var(--highlight)"></span>root<span class="sw" style="background:var(--right)"></span>up target<span class="sw" style="background:var(--derived)"></span>down target<span class="sw" style="background:#F4E6BE"></span>span</div>
+  <div class="readout" id="exReadout" aria-live="polite"></div>
+  <div class="names" id="exNames" role="group" aria-label="Pick an interval: both the ascending and the descending note light up"></div>
+  <div class="controls">
+    <button class="both"  id="exT" aria-label="Play together" title="Play together: the root and the other note at once">Together</button>
+    <button class="left"  id="exU" aria-label="Play up" title="Play up: the root, then the other note (with a name picked: the note above)">Up</button>
+    <button class="right" id="exD" aria-label="Play down" title="Play down: the other note, then the root (with a name picked: the root, then the note below)">Down</button>
+    <button id="exC" aria-label="Clear" title="Clear: forget the root and the interval">Clear</button>
+  </div>
+  <!-- NOTE (author): only the tritone shows two names (d5 / A4). Other aliases (a minor third is also an augmented second, a major third a diminished fourth, ...) depend on how the notes are SPELLED, which this widget does not model; the spelling page covers them. -->
+</section>
+
+<!-- ============ CHART ============ -->
+<section id="pChart" role="tabpanel" aria-labelledby="tabChart" hidden>
+  <table class="chart" id="chartTable">
+    <thead><tr><th class="n" scope="col" title="half steps">Half steps</th><th scope="col">Interval</th><th scope="col">Symbol</th><th scope="col">From C</th><th scope="col">Play</th><th scope="col">Song cue</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<!-- ============ TRAINER ============ -->
+<section id="pTrainer" role="tabpanel" aria-labelledby="tabTrainer" hidden>
+  <div class="controls">
+    <label for="tDir" style="color:var(--ink)">Direction</label>
+    <select id="tDir" aria-label="Direction of the interval" style="flex:0 0 auto;margin-left:0">
+      <option value="up" selected>Up</option><option value="down">Down</option><option value="together">Together</option>
+    </select>
+    <button id="tW" title="Widen: from the easy set (3, 4 and 7 half steps) to every interval, 0 to 12">Widen</button>
+    <span id="tLevel" style="color:var(--ink)"></span>
+    <button id="tH" aria-pressed="false" title="Hide labels: mask the strip's note names and the lit span until you have answered">Hide labels</button>
+  </div>
+  <div class="controls">
+    <button class="both" id="tP" aria-label="Play again" title="Play the interval again">Play</button>
+    <button id="tN" aria-label="Next interval" title="Next: a new interval, played">Next</button>
+    <span class="score" id="tScore" aria-live="polite"></span><span class="done" id="tDone" hidden>Done: 10 in a row on All</span>
+  </div>
+  <div class="scroller"><svg class="strip static" id="trSvg" role="img" aria-label="Piano strip, C3 to C5, for the trainer."></svg></div>
+  <div class="feedback" id="tFb" aria-live="polite"></div>
+  <div class="names" id="tNames" role="group" aria-label="Name the interval you heard"></div>
+</section>
+
+</div>
+<script>
+(function () {
+  "use strict";
+
+  // --- pure functions (no DOM) -------------------------------------------
+  // Tuning math COPIED from piano_keyboard.html (same tables, same fifth-chain construction, same midiToHz), so the four tunings
+  // here are the Piano gadget's: copied, not imported, because a gadget is a self-contained iframe that cannot load a sibling.
+  var A4_HZ = 440;
+  var LOW = 48, HIGH = 72;                       // C3 .. C5 inclusive (MIDI numbers): the Piano gadget's range
+  var STAGGER = 0.2;                             // seconds between arpeggio onsets (the Piano gadget's)
+  var INTERVAL_GAP = 0.6;                        // seconds between the two notes of an interval, long enough to hear each
+  var NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  var PYTH_CENTS = [0, 113.69, 203.91, 294.13, 407.82, 498.04, 611.73, 701.96, 815.64, 905.87, 996.09, 1109.78];
+  var PURE_FIFTH = 1200 * Math.log2(3 / 2);                 // 701.9550... cents
+  var SYNTONIC_COMMA = 1200 * Math.log2(81 / 80);            // 21.5063... cents
+  var MEANTONE_FIFTH = PURE_FIFTH - SYNTONIC_COMMA / 4;       // ~696.578 cents
+  function fifthChainCents(fifthCents) {
+    var PC_ORDER = [3, 10, 5, 0, 7, 2, 9, 4, 11, 6, 1, 8];   // chain Eb Bb F C G D A E B F# C# G# -> pitch class
+    var cents = new Array(12);
+    for (var i = 0; i < 12; i++) {
+      var raw = (i - 3) * fifthCents;
+      cents[PC_ORDER[i]] = ((raw % 1200) + 1200) % 1200;
+    }
+    return cents;
+  }
+  var MEAN_CENTS = fifthChainCents(MEANTONE_FIFTH);
+  var WERCK_CENTS = [0, 90.225, 192.180, 294.135, 390.225, 498.045, 588.270, 696.090, 792.180, 888.270, 996.090, 1092.180];
+  var TUNING_TABLES = { pythagorean: PYTH_CENTS, meantone: MEAN_CENTS, well: WERCK_CENTS };
+  var TUNINGS = ["equal", "pythagorean", "meantone", "well"];
+  function midiToHz(m, system) {
+    var table = TUNING_TABLES[system];
+    if (!table) return A4_HZ * Math.pow(2, (m - 69) / 12);          // "equal", or no system given
+    var pc = m % 12, oct = Math.floor(m / 12) - 1;                   // C4 = MIDI 60 -> oct 4
+    return A4_HZ * Math.pow(2, (table[pc] - table[9]) / 1200 + (oct - 4));   // anchored at A4 = 440
+  }
+  function midiToName(m) { return NAMES[m % 12] + (Math.floor(m / 12) - 1); }   // scientific pitch notation: the key labels use SHARPS, like the Piano gadget
+  function isBlack(m) { return NAMES[m % 12].length === 2; }
+
+  // The 13 intervals, 0 to 12 half steps. `symbols` has TWO entries only for the tritone (d5 / A4, both shown); every other
+  // alias (m3 = A2, M3 = d4, ...) depends on how the notes are spelled, which this widget does not model, so it is NOT shown.
+  var INTERVALS = [
+    { n: 0,  name: "unison",         short: "unison",    symbols: ["P1"] },
+    { n: 1,  name: "minor second",   short: "minor 2nd", symbols: ["m2"] },
+    { n: 2,  name: "major second",   short: "major 2nd", symbols: ["M2"] },
+    { n: 3,  name: "minor third",    short: "minor 3rd", symbols: ["m3"] },
+    { n: 4,  name: "major third",    short: "major 3rd", symbols: ["M3"] },
+    { n: 5,  name: "perfect fourth", short: "perfect 4th", symbols: ["P4"] },
+    { n: 6,  name: "tritone",        short: "tritone",   symbols: ["d5", "A4"] },
+    { n: 7,  name: "perfect fifth",  short: "perfect 5th", symbols: ["P5"] },
+    { n: 8,  name: "minor sixth",    short: "minor 6th", symbols: ["m6"] },
+    { n: 9,  name: "major sixth",    short: "major 6th", symbols: ["M6"] },
+    { n: 10, name: "minor seventh",  short: "minor 7th", symbols: ["m7"] },
+    { n: 11, name: "major seventh",  short: "major 7th", symbols: ["M7"] },
+    { n: 12, name: "octave",         short: "octave",    symbols: ["P8"] }
+  ];
+  // Song cues, TITLES ONLY (never lyrics), the interval from the first two notes of the tune, ascending. ONE named array: edit the
+  // cues here and nowhere else. The two blanks stay blank on purpose (forge-core is not certain of a cue for the minor sixth or the major seventh).
+  var SONG_CUES = [
+    "Happy Birthday (its first two notes)",   // 0  unison
+    "Jaws",                                    // 1  minor second
+    "Frère Jacques",                      // 2  major second
+    "Greensleeves",                            // 3  minor third
+    "When the Saints Go Marching In",          // 4  major third
+    "Here Comes the Bride",                    // 5  perfect fourth
+    "Maria (West Side Story)",                 // 6  tritone
+    "Twinkle Twinkle Little Star",             // 7  perfect fifth
+    "",                                        // 8  minor sixth (blank)
+    "My Bonnie Lies Over the Ocean",           // 9  major sixth
+    "Somewhere (West Side Story)",             // 10 minor seventh
+    "",                                        // 11 major seventh (blank)
+    "Somewhere Over the Rainbow"               // 12 octave
+  ];
+  // The facts about a half-step count: {count, name, symbol, symbols}; ABOVE 12 it is "more than an octave" and is NOT named.
+  function intervalInfo(n) {
+    if (n >= 0 && n <= 12) {
+      var i = INTERVALS[n];
+      return { count: n, name: i.name, symbol: i.symbols.join(" / "), symbols: i.symbols.slice(), over: false };
+    }
+    return { count: n, name: null, symbol: null, symbols: [], over: true };
+  }
+  // Where the two notes land from a root: {up, down}, each null when it falls outside the strip (C3-C5), so it is simply not drawn.
+  function targetsFor(root, n, low, high) {
+    low = low === undefined ? LOW : low; high = high === undefined ? HIGH : high;
+    var up = root + n, down = root - n;
+    return { up: up <= high ? up : null, down: down >= low ? down : null };
+  }
+  // Every key from a to b inclusive (either order): the SPAN to highlight.
+  function spanKeys(a, b) {
+    var lo = Math.min(a, b), hi = Math.max(a, b), out = [];
+    for (var m = lo; m <= hi; m++) out.push(m);
+    return out;
+  }
+  // Plain reading of a note. ONE rule: black keys are spoken as FLATS ("E-flat"), because an interval is read up from its root and
+  // the common ones (m3, m6, m7) name the flat; the strip's own key labels stay sharps, like the Piano gadget.
+  var FLAT_WORDS = ["C", "D-flat", "D", "E-flat", "E", "F", "G-flat", "G", "A-flat", "A", "B-flat", "B"];
+  function plainName(m) { return FLAT_WORDS[m % 12]; }
+  function steps(n) { return n + (n === 1 ? " half step" : " half steps"); }
+  // "3 half steps up from C: E-flat" (more than an octave: the same line ends "(more than an octave)", no interval name).
+  function reading(root, other) {
+    var n = Math.abs(other - root);
+    if (n === 0) return "0 half steps: the same note, " + plainName(root);
+    var dir = other > root ? "up" : "down";
+    return steps(n) + " " + dir + " from " + plainName(root) + ": " + plainName(other) + (n > 12 ? " (more than an octave)" : "");
+  }
+  // Both targets of a picked interval, in one line: "3 half steps up from C: E-flat; down: A" (a side outside the strip is left out).
+  function readingForPick(root, n) {
+    var t = targetsFor(root, n);
+    if (n === 0) return reading(root, root);
+    var parts = [];
+    if (t.up !== null) parts.push(steps(n) + " up from " + plainName(root) + ": " + plainName(t.up));
+    if (t.down !== null) parts.push((parts.length ? "down: " : steps(n) + " down from " + plainName(root) + ": ") + plainName(t.down));
+    return parts.length ? parts.join("; ") : steps(n) + " from " + plainName(root) + ": outside C3 to C5";
+  }
+  // --- Explore: the state machine {root, target, pick} -------------------
+  // A click on a key: the first is the ROOT; the second (a different key) the TARGET; clicking the root again clears it; with both
+  // chosen, the next click starts over with that key as the new root. A picked name resets target, keeps the root (C4 if there is none).
+  function exploreClick(st, midi) {
+    if (st.root === null) return { root: midi, target: null, pick: null };
+    if (st.target === null && st.pick === null) return midi === st.root ? { root: null, target: null, pick: null } : { root: st.root, target: midi, pick: null };
+    return { root: midi, target: null, pick: null };
+  }
+  function explorePick(st, n) { return { root: st.root === null ? 60 : st.root, target: null, pick: n }; }
+  // What the readout and the strip show for a state: {count, info, text, root, up, down, span:[midi...]} or null with nothing chosen.
+  function exploreView(st) {
+    if (st.root === null) return null;
+    if (st.target !== null) {
+      var n = Math.abs(st.target - st.root);
+      return { count: n, info: intervalInfo(n), text: reading(st.root, st.target), root: st.root, up: st.target > st.root ? st.target : null, down: st.target < st.root ? st.target : null, span: spanKeys(st.root, st.target) };
+    }
+    if (st.pick !== null) {
+      var t = targetsFor(st.root, st.pick), span = [st.root];
+      if (t.up !== null) span = span.concat(spanKeys(st.root, t.up));
+      if (t.down !== null) span = span.concat(spanKeys(t.down, st.root));
+      return { count: st.pick, info: intervalInfo(st.pick), text: readingForPick(st.root, st.pick), root: st.root, up: t.up, down: t.down, span: span };
+    }
+    return { count: null, info: null, text: "Root " + midiToName(st.root) + ". Click a second key, or pick an interval below.", root: st.root, up: null, down: null, span: [st.root] };
+  }
+  // What the three play buttons sound for an Explore state: [{midi, hz, when}] ([] when there is nothing to play, or the side is off the strip).
+  function explorePlan(st, mode, system) {
+    if (st.root === null) return [];
+    var notes;
+    if (st.target !== null) notes = mode === "down" ? [st.target, st.root] : [st.root, st.target];     // Up = root then target, Down = target then root
+    else if (st.pick !== null) {
+      var t = targetsFor(st.root, st.pick), other = mode === "down" ? t.down : t.up;                     // a picked name: Up = the note above, Down = the note below
+      if (other === null) return [];
+      notes = [st.root, other];
+    } else return [];
+    return notes.map(function (m, i) { return { midi: m, hz: midiToHz(m, system), when: mode === "together" ? 0 : i * INTERVAL_GAP }; });
+  }
+  // --- Chart: a row's strip is one octave C4..C5 with the span from C4 --------
+  // Click = highlight + play: the two notes UP (C4 then the target), a pause, then TOGETHER.
+  function chartPlan(n, system) {
+    var a = 60, b = 60 + n, up2 = INTERVAL_GAP * 2 + 0.4;
+    return [
+      { midi: a, hz: midiToHz(a, system), when: 0 }, { midi: b, hz: midiToHz(b, system), when: INTERVAL_GAP },
+      { midi: a, hz: midiToHz(a, system), when: up2 }, { midi: b, hz: midiToHz(b, system), when: up2 }
+    ];
+  }
+  // --- Trainer ------------------------------------------------------------
+  var LEVELS = { easy: [3, 4, 7], all: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] };
+  var DONE_STREAK = 10;
+  function pick(list, rand) { return list[Math.min(list.length - 1, Math.floor(rand() * list.length))]; }
+  // The next question: a count from the level's set, never the one just asked (`prevCount`), and a root that keeps BOTH notes on the strip
+  // (down: the target is below the root). `rand` is injected (a function returning [0, 1)), so a test can fix it. Together plays the upward pair.
+  function nextQuestion(level, direction, prevCount, rand, low, high) {
+    low = low === undefined ? LOW : low; high = high === undefined ? HIGH : high;
+    var pool = LEVELS[level] || LEVELS.all;
+    var opts = pool.filter(function (c) { return c !== prevCount; });
+    if (!opts.length) opts = pool;
+    var count = pick(opts, rand), dir = direction === "down" ? "down" : "up", roots = [];
+    for (var m = low; m <= high; m++) { var t = dir === "down" ? m - count : m + count; if (t >= low && t <= high) roots.push(m); }
+    var root = pick(roots, rand);
+    return { count: count, root: root, target: dir === "down" ? root - count : root + count, direction: direction };
+  }
+  function trainerPlan(q, system) {
+    var together = q.direction === "together";
+    return [q.root, q.target].map(function (m, i) { return { midi: m, hz: midiToHz(m, system), when: together ? 0 : i * INTERVAL_GAP }; });
+  }
+  // The score after an answer: streak (in a row), best, allStreak (in a row ON the All level; a wrong answer or a return to Easy resets it).
+  function scoreAnswer(score, correct, level) {
+    var streak = correct ? score.streak + 1 : 0;
+    var allStreak = correct && level === "all" ? score.allStreak + 1 : 0;
+    return { streak: streak, best: Math.max(score.best, streak), allStreak: allStreak, done: score.done || allStreak >= DONE_STREAK };
+  }
+  function answerText(q, chosen) {
+    var right = intervalInfo(q.count), said = intervalInfo(chosen);
+    var nm = right.name + " (" + right.symbol + "), " + steps(q.count);
+    return chosen === q.count ? "Right: " + nm + "." : "Not quite: that was a " + nm + ", not a " + said.name + ".";
+  }
+  // --- end pure functions ------------------------------------------------
+
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { A4_HZ: A4_HZ, LOW: LOW, HIGH: HIGH, STAGGER: STAGGER, INTERVAL_GAP: INTERVAL_GAP, TUNINGS: TUNINGS, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS,
+      fifthChainCents: fifthChainCents, midiToHz: midiToHz, midiToName: midiToName, isBlack: isBlack, INTERVALS: INTERVALS, SONG_CUES: SONG_CUES, LEVELS: LEVELS, DONE_STREAK: DONE_STREAK,
+      intervalInfo: intervalInfo, targetsFor: targetsFor, spanKeys: spanKeys, plainName: plainName, reading: reading, readingForPick: readingForPick,
+      exploreClick: exploreClick, explorePick: explorePick, exploreView: exploreView, explorePlan: explorePlan, chartPlan: chartPlan,
+      nextQuestion: nextQuestion, trainerPlan: trainerPlan, scoreAnswer: scoreAnswer, answerText: answerText };
+    return;
+  }
+
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  var tuning = "equal";
+  function el(tag, attrs, parent) {
+    var n = document.createElementNS(NS, tag);
+    for (var a in attrs) n.setAttribute(a, attrs[a]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function html(tag, attrs, parent, text) {
+    var n = document.createElement(tag);
+    for (var a in attrs) n.setAttribute(a, attrs[a]);
+    if (text !== undefined) n.textContent = text;
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+
+  // --- a piano strip: white keys first, then black on top; dims = {WW, WH, BW, BH, PAD, labels} --------------------------------
+  function buildStrip(svg, low, high, dims, onKey) {
+    var keys = {}, whites = [], blacks = [], wi = 0, m;
+    for (m = low; m <= high; m++) {
+      if (isBlack(m)) blacks.push({ m: m, x: dims.PAD + wi * dims.WW - dims.BW / 2 });
+      else { whites.push({ m: m, x: dims.PAD + wi * dims.WW }); wi++; }
+    }
+    svg.setAttribute("viewBox", "0 0 " + (wi * dims.WW + 2 * dims.PAD) + " " + (dims.WH + 2 * dims.PAD));
+    function make(k, black) {
+      var attrs = { "class": "key " + (black ? "black" : "white"), "data-midi": k.m };
+      if (onKey) { attrs.tabindex = String(k.m - low + 1); attrs.role = "button"; attrs["aria-label"] = midiToName(k.m); }
+      var g = el("g", attrs, svg);
+      el("rect", { x: k.x, y: dims.PAD, width: black ? dims.BW : dims.WW, height: black ? dims.BH : dims.WH, rx: black ? 2 : 3 }, g);
+      if (dims.labels) { var t = el("text", { x: k.x + (black ? dims.BW : dims.WW) / 2, y: black ? dims.BH - 6 : dims.WH - 7, "text-anchor": "middle" }, g); t.textContent = midiToName(k.m); }
+      keys[k.m] = g;
+      if (onKey) {
+        g.addEventListener("click", function () { onKey(k.m); try { g.focus({ preventScroll: true }); } catch (_) {} });
+        g.addEventListener("keydown", function (e) {
+          if (e.altKey || e.ctrlKey || e.metaKey) return;
+          if (e.key === "Enter" || e.key === " ") { onKey(k.m); e.preventDefault(); }   // Space would otherwise scroll
+        });
+      }
+    }
+    whites.forEach(function (k) { make(k, false); });
+    blacks.forEach(function (k) { make(k, true); });
+    return keys;
+  }
+  function paintStrip(keys, view) {          // view = {root, up, down, span[]} or null: set root / up / down / span classes
+    var span = {};
+    if (view) view.span.forEach(function (m) { span[m] = true; });
+    for (var k in keys) {
+      var m = +k, c = keys[k].classList;
+      c.toggle("root", !!view && view.root === m);
+      c.toggle("up", !!view && view.up === m);
+      c.toggle("down", !!view && view.down === m);
+      c.toggle("span", !!view && !!span[m] && view.root !== m && view.up !== m && view.down !== m);
+      if (keys[k].hasAttribute("aria-label")) {
+        var role = view && view.root === m ? ", root" : view && view.up === m ? ", up target" : view && view.down === m ? ", down target" : "";
+        keys[k].setAttribute("aria-label", midiToName(m) + role);
+      }
+    }
+  }
+
+  // --- Web Audio: OscillatorNode notes (the Piano gadget's) ------------------------------------------------------------------
+  var ctx = null, wave = null;
+  function audio() {
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      var re = new Float32Array(7), im = new Float32Array(7);
+      for (var n = 1; n < 7; n++) im[n] = 1 / (n * n);
+      wave = ctx.createPeriodicWave(re, im);
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function pluck(hz, when, peak) {
+    var c = audio(); if (!c) return;
+    var t0 = c.currentTime + (when || 0);
+    var o = c.createOscillator(), g = c.createGain();
+    o.setPeriodicWave(wave); o.frequency.value = hz;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.4);
+    o.connect(g); g.connect(c.destination);
+    o.start(t0); o.stop(t0 + 2.6);
+  }
+  function playPlan(plan) {
+    if (!plan.length) return;
+    var peak = 0.28 / Math.sqrt(Math.max(1, plan.filter(function (n) { return n.when === 0; }).length));
+    plan.forEach(function (n) { pluck(n.hz, n.when, peak); });
+  }
+
+  // --- tabs ------------------------------------------------------------------------------------------------------------------
+  var TABS = [["Explore", "tabExplore", "pExplore"], ["Chart", "tabChart", "pChart"], ["Trainer", "tabTrainer", "pTrainer"]];
+  function setTab(name) {
+    TABS.forEach(function (t) {
+      var on = t[0] === name;
+      $(t[1]).setAttribute("aria-selected", on ? "true" : "false");
+      $(t[1]).setAttribute("tabindex", on ? "0" : "-1");
+      $(t[2]).hidden = !on;
+    });
+  }
+  TABS.forEach(function (t, i) {
+    $(t[1]).addEventListener("click", function () { setTab(t[0]); });
+    $(t[1]).addEventListener("keydown", function (e) {
+      var j = e.key === "ArrowRight" ? (i + 1) % 3 : e.key === "ArrowLeft" ? (i + 2) % 3 : -1;
+      if (j < 0) return;
+      e.preventDefault(); setTab(TABS[j][0]); $(TABS[j][1]).focus();
+    });
+  });
+  $("tuning").addEventListener("change", function (e) { tuning = e.target.value; });
+
+  // --- EXPLORE ---------------------------------------------------------------------------------------------------------------
+  var ex = { root: 60, target: null, pick: null };       // starts on C4 as the root, so the name buttons work at once
+  var exKeys = buildStrip($("exSvg"), LOW, HIGH, { WW: 40, WH: 150, BW: 24, BH: 92, PAD: 2, labels: true }, function (m) { ex = exploreClick(ex, m); renderExplore(); });
+  var exNames = $("exNames");
+  INTERVALS.forEach(function (i) {
+    var b = html("button", { id: "exN" + i.n, "data-count": i.n, "aria-pressed": "false", "aria-label": i.name + ", " + i.symbols.join(" or ") + ", " + steps(i.n), title: i.name + " (" + i.symbols.join(" / ") + "), " + steps(i.n) }, exNames);
+    html("span", { "class": "sym" }, b, i.symbols.join("/"));
+    html("span", { "class": "nm" }, b, i.n + " half");
+    b.addEventListener("click", function () { ex = explorePick(ex, i.n); renderExplore(); });
+  });
+  function renderExplore() {
+    var v = exploreView(ex), box = $("exReadout");
+    paintStrip(exKeys, v);
+    while (box.firstChild) box.removeChild(box.firstChild);
+    if (!v) html("span", { "class": "plain" }, box, "Click a key to make it the root.");
+    else if (v.info) {
+      html("span", { "class": "big", id: "exBig" }, box, steps(v.count) + " · " + (v.info.over ? "more than an octave" : v.info.name + " · " + v.info.symbol));
+      html("span", { "class": "plain", id: "exPlain" }, box, v.text);
+    } else html("span", { "class": "plain", id: "exPlain" }, box, v.text);
+    INTERVALS.forEach(function (i) { $("exN" + i.n).setAttribute("aria-pressed", ex.pick === i.n ? "true" : "false"); });
+  }
+  $("exT").addEventListener("click", function () { playPlan(explorePlan(ex, "together", tuning)); });
+  $("exU").addEventListener("click", function () { playPlan(explorePlan(ex, "up", tuning)); });
+  $("exD").addEventListener("click", function () { playPlan(explorePlan(ex, "down", tuning)); });
+  $("exC").addEventListener("click", function () { ex = { root: null, target: null, pick: null }; renderExplore(); });
+
+  // --- CHART -----------------------------------------------------------------------------------------------------------------
+  var chartBody = $("chartTable").getElementsByTagName("tbody")[0], chartKeys = {};
+  INTERVALS.forEach(function (i) {
+    var tr = html("tr", { "data-count": i.n }, chartBody);
+    html("td", { "class": "n" }, tr, String(i.n));
+    html("td", {}, tr, i.name);
+    html("td", { "class": "sym" }, tr, i.symbols.join(" / "));
+    var strip = html("td", {}, tr);
+    var svg = el("svg", { "class": "minisvg", role: "button", tabindex: "0", "aria-label": "Play the " + i.name + ", " + steps(i.n) + " up from C", "data-count": i.n }, strip);
+    var keys = buildStrip(svg, 60, 72, { WW: 20, WH: 28, BW: 12, BH: 17, PAD: 2, labels: false }, null);
+    chartKeys[i.n] = keys;
+    var span = {}; spanKeys(60, 60 + i.n).forEach(function (m) { span[m] = true; });
+    for (var k in keys) { keys[k].classList.toggle("span", !!span[+k] && +k !== 60 && +k !== 60 + i.n); keys[k].classList.toggle("root", +k === 60); keys[k].classList.toggle("up", +k === 60 + i.n && i.n > 0); }
+    var play = function () { playPlan(chartPlan(i.n, tuning)); };
+    svg.addEventListener("click", play);
+    svg.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); play(); } });
+    var pb = html("td", {}, tr), btn = html("button", { "class": "rowplay", "aria-label": "Play the " + i.name, title: "Play: C then the upper note, then both together" }, pb, "Play");
+    btn.addEventListener("click", play);
+    html("td", { "class": "cue", "data-cue": SONG_CUES[i.n] ? "1" : "0" }, tr, SONG_CUES[i.n]);
+  });
+
+  // --- TRAINER ---------------------------------------------------------------------------------------------------------------
+  var tr = { level: "easy", direction: "up", hide: false, q: null, answered: false, score: { streak: 0, best: 0, allStreak: 0, done: false } };
+  var rnd = function () { return (typeof window.__intervalRandom === "function" ? window.__intervalRandom : Math.random)(); };   // injectable: a test sets window.__intervalRandom
+  var trKeys = buildStrip($("trSvg"), LOW, HIGH, { WW: 40, WH: 150, BW: 24, BH: 92, PAD: 2, labels: true }, null);
+  var tNames = $("tNames");
+  INTERVALS.forEach(function (i) {
+    var b = html("button", { id: "tA" + i.n, "data-count": i.n, "aria-label": i.name + ", " + i.symbols.join(" or "), title: i.name + " (" + i.symbols.join(" / ") + ")" }, tNames);
+    html("span", { "class": "sym" }, b, i.symbols.join("/"));
+    html("span", { "class": "nm" }, b, i.short);
+    b.addEventListener("click", function () { answer(i.n); });
+  });
+  function newQuestion(play) {
+    tr.q = nextQuestion(tr.level, tr.direction, tr.q ? tr.q.count : null, rnd);
+    tr.answered = false;
+    INTERVALS.forEach(function (i) { $("tA" + i.n).classList.remove("right-answer", "wrong-answer"); });
+    $("tFb").className = "feedback"; $("tFb").textContent = play ? "Which interval was that?" : "Press Play to hear an interval, then choose its name.";
+    renderTrainer();
+    if (play) playPlan(trainerPlan(tr.q, tuning));
+  }
+  function answer(n) {
+    if (!tr.q || tr.answered) return;
+    tr.answered = true;
+    var ok = n === tr.q.count;
+    tr.score = scoreAnswer(tr.score, ok, tr.level);
+    $("tA" + n).classList.add(ok ? "right-answer" : "wrong-answer");
+    if (!ok) $("tA" + tr.q.count).classList.add("right-answer");
+    $("tFb").className = "feedback " + (ok ? "right" : "wrong"); $("tFb").textContent = answerText(tr.q, n);
+    renderTrainer();
+  }
+  function renderTrainer() {
+    var q = tr.q;
+    // before the answer: Reveal shows the labels and the ROOT key; Hide masks the labels and lights nothing. After it: everything shows.
+    var view = null;
+    if (q) {
+      if (tr.answered) view = { root: q.root, up: q.target > q.root ? q.target : null, down: q.target < q.root ? q.target : null, span: spanKeys(q.root, q.target) };
+      else if (!tr.hide) view = { root: q.root, up: null, down: null, span: [q.root] };
+    }
+    paintStrip(trKeys, view);
+    $("trSvg").classList.toggle("masked", tr.hide && !tr.answered);
+    $("trSvg").setAttribute("aria-label", tr.answered && q ? "Piano strip: " + midiToName(Math.min(q.root, q.target)) + " to " + midiToName(Math.max(q.root, q.target)) + ", " + steps(q.count) + "." : "Piano strip, C3 to C5, for the trainer.");
+    $("tLevel").textContent = tr.level === "easy" ? "Easy: 3, 4 and 7 half steps" : "All: 0 to 12 half steps";
+    $("tW").textContent = tr.level === "easy" ? "Widen" : "Narrow";
+    $("tW").setAttribute("title", tr.level === "easy" ? "Widen: every interval, 0 to 12 half steps" : "Narrow: back to the easy set, 3, 4 and 7 half steps");
+    $("tH").setAttribute("aria-pressed", tr.hide ? "true" : "false");
+    $("tH").textContent = tr.hide ? "Reveal labels" : "Hide labels";
+    $("tScore").textContent = "Streak " + tr.score.streak + " · Best " + tr.score.best;
+    $("tDone").hidden = !tr.score.done;
+  }
+  $("tP").addEventListener("click", function () { if (tr.q) playPlan(trainerPlan(tr.q, tuning)); });
+  $("tN").addEventListener("click", function () { newQuestion(true); });
+  $("tDir").addEventListener("change", function (e) { tr.direction = e.target.value; newQuestion(false); });
+  $("tW").addEventListener("click", function () {
+    tr.level = tr.level === "easy" ? "all" : "easy";
+    if (tr.level === "easy") tr.score = { streak: tr.score.streak, best: tr.score.best, allStreak: 0, done: tr.score.done };
+    newQuestion(false);
+  });
+  $("tH").addEventListener("click", function () { tr.hide = !tr.hide; renderTrainer(); });
+
+  renderExplore();
+  newQuestion(false);
+})();
+</script>
+</body>
+</html>
