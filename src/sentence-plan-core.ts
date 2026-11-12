@@ -21,7 +21,8 @@ export function planAvailable(input: { scoreFirst: boolean }): boolean {
 
 /** 2026-10-27-0720 (M14 slice 2): `selection` (a phrase, a bar range, an optional row) makes the sentence about THOSE bars; the service (0.2.41+) answers a `transform` plan and never chooses the bars. */
 export interface PlanSelection { phrase: string; first: number; last: number; row?: string }
-export interface PlanPayload { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string; selection?: PlanSelection }
+/** 2026-11-12-1206: `family` ("arrangement" | "composition", forge-transpile 0.2.48+) makes the sentence about THAT kind of note, with the vault's names for it: `kits` (arrangement), `arrangements` and `compositions` (composition), and `note`, the id of the composition being planned (`compositions/song_1`). Absent, the request is the one it always was. */
+export interface PlanPayload { sentence: string; bars: string[]; phrases: string[]; user_anthropic_key?: string; selection?: PlanSelection; family?: 'arrangement' | 'composition'; kits?: string[]; arrangements?: string[]; compositions?: string[]; note?: string }
 
 const EMPTY_SENTENCE = 'Say in a sentence what phrase you want, for example: extend bar_005 to 8 bars.';
 const NO_BARS = 'This vault has no bars yet, so there is nothing to build a phrase from. Make a bar in the Beat Box first.';

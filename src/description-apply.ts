@@ -15,6 +15,9 @@ import { COMMENTS_NOT_KEPT_BAR, bothEditedLineOf, pythonAppliedLine, pythonCusto
 import { CUSTOM_BANNER } from './phrase-notes-core.ts';
 import type { GrammarParams, GrammarVault } from './phrase-grammar-core.ts';
 import { buildPlanRequest, interpretPlanResponse, type PlanPayload } from './sentence-plan-core.ts';
+import { FAMILY_SERVICE_VERSION, OLD_FAMILY_SERVICE, buildFamilyPlanRequest, compositionLoopRefusal, familyRecipeSteps, interpretFamilyResponse } from './sentence-plan-families-core.ts';
+import { versionAtLeast } from './notebook-request-core.ts';
+import { readCompositionNote } from './composition-core.ts';
 import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import { extractDescription } from './v2-note-core.ts';
@@ -38,11 +41,13 @@ export interface DescriptionPorts {
   askPlan?(payload: PlanPayload): Promise<{ status: number; json: unknown }>;
   configured?(): boolean;
   ownKey?(): string | undefined;
+  /** 2026-11-12-1206: the service's /health version, or null. Asked only when an answer to an arrangement or composition sentence carried no version and was a refusal (a service before 0.2.42): to tell an old service from a sentence it cannot plan. */
+  serviceVersion?(): Promise<string | null>;
   /** Ask the person to confirm a step that loses something ("Revert to generated"); absent = it goes ahead. */
   confirm?(message: string): Promise<boolean>;
 }
 
-interface Ui { state: DescriptionState; message?: string; preview?: { params: PhraseParams; description: string; recipe: string; forSentence: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
+interface Ui { state: DescriptionState; message?: string; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
 
 export interface DescriptionController {
@@ -88,7 +93,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const st = u.state;
     if (u.preview) return { message: u.message ?? 'The sentence service suggests this. Nothing is written until you press Apply.', actions: ['apply-preview', 'cancel-preview'], preview: { description: u.preview.description, recipe: u.preview.recipe }, busy: u.busy };
     if (st.kind === 'rejected') {
-      const offer = family === 'phrase' && ports.askPlan !== undefined && ports.configured?.() !== false;
+      const offer = ports.askPlan !== undefined && ports.configured?.() !== false;               // 2026-11-12-1206: a phrase, an arrangement or a composition (forge-transpile 0.2.48 plans all three)
       return { message: u.message ?? st.message, actions: [...(u.fromBox ? [] : ['revert' as const]), ...(offer ? ['ask' as const] : [])], busy: u.busy };
     }
     if (st.kind === 'apply') return { message: u.message ?? `The Description changed (${st.change}); update the note from it.`, actions: ['update', 'revert'], busy: u.busy };
@@ -179,8 +184,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       const base = extractDescription(cur);
       set(path, { state, message: failure, fromBox: true, base });
       // 2026-11-12-1204: the GRAMMAR rejected the text (free, instant, exact: tried first, always). For a PHRASE, with the sentence service set up, Apply asks it ONCE, automatically, and shows the PREVIEW (nothing is written until it is
-      // applied). Never while typing, never when the grammar accepted the text, never for an arrangement or a composition.
-      if (st.kind === 'rejected' && family === 'phrase' && ports.askPlan !== undefined && ports.configured?.() !== false) await ask(path);
+      // applied). Never while typing, never when the grammar accepted the text. 2026-11-12-1206: for an arrangement and a composition too (the service is version-gated for them: an older one says so, in one sentence).
+      if (st.kind === 'rejected' && ports.askPlan !== undefined && ports.configured?.() !== false) await ask(path);
       return { ok: false };
     }
     told.delete(path); ports.trace(appliedLine(basename(path), change || 'unchanged')); set(path, null);
@@ -348,18 +353,45 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     told.delete(path); ports.trace(was === 'python-apply' || was === 'python-custom' ? pythonRevertedLine(basename(path)) : was === 'recipe-rejected' || was === 'recipe-apply' || was === 'both-edited' ? recipeRevertedLine(basename(path)) : revertedLine(basename(path))); set(path, null);
   }
 
+  type Asked = { ok: true; params: GrammarParams } | { ok: false; message: string };
+  /** 2026-11-12-1206: the service's answer for an ARRANGEMENT or a COMPOSITION sentence, read by the plugin's own validators and the vault's lists, gated on the service version, and (a composition) checked for loops through the vault. */
+  async function askNewKind(res: { status: number; json: unknown }, payload: PlanPayload): Promise<Asked> {
+    const family = payload.family!;
+    const fam = interpretFamilyResponse(res, { family, kits: payload.kits, phrases: payload.phrases, arrangements: payload.arrangements, compositions: payload.compositions, note: payload.note });
+    if (fam.ok === false) {
+      if (fam.suspectOld && ports.serviceVersion) {                                                      // no version in the answer: ask /health, once; a version that cannot be read is not "old"
+        let v: string | null = null; try { v = await ports.serviceVersion(); } catch { v = null; }
+        if (versionAtLeast(v, FAMILY_SERVICE_VERSION) === false) return { ok: false, message: OLD_FAMILY_SERVICE(v) };
+      }
+      return { ok: false, message: fam.message };
+    }
+    if (fam.params.kind === 'composition') {
+      const readSections = async (id: string) => { try { const r = readCompositionNote(await ports.read(`${id}.md`)); return r.ok ? r.value.sections : null; } catch { return null; } };
+      const loop = await compositionLoopRefusal(payload.note ?? '', fam.params, readSections);
+      if (loop !== null) return { ok: false, message: loop };
+    }
+    return { ok: true, params: fam.params };
+  }
+
   async function ask(path: string): Promise<void> {
     const u = ui.get(path);
-    if (!u || u.state.kind !== 'rejected' || familyOfPath(path) !== 'phrase' || !ports.askPlan) return;
+    const family = familyOfPath(path);
+    if (!u || u.state.kind !== 'rejected' || family === null || !ports.askPlan) return;
     if (u.busy) return;                                                                                    // ONE request in flight: a second ask while the service thinks does nothing
     const sentence = u.state.sentence;
-    const req = buildPlanRequest({ sentence, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() });
+    const v = ports.vault();
+    const req = family === 'phrase'
+      ? buildPlanRequest({ sentence, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() })
+      : buildFamilyPlanRequest({ family, sentence, kitNames: v.kits, phraseNames: ports.phraseNames(), arrangementNames: v.arrangements, compositionNames: v.compositions, note: path.replace(/\.md$/, ''), ownKey: ports.ownKey?.() });
     const keepBox = (x: Ui): Ui => (x.fromBox ? { ...x, fromBox: true, base: x.base } : x);
     if (req.ok === false) { set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); return; }
     set(path, { ...u, busy: true });
     if (u.fromBox) setBoxBusy(path, 'Asking the sentence service...');
-    let outcome: ReturnType<typeof interpretPlanResponse>;
-    try { outcome = interpretPlanResponse(await ports.askPlan(req.payload), req.payload.bars); }
+    let outcome: Asked;
+    try {
+      const res = await ports.askPlan(req.payload);
+      outcome = family === 'phrase' ? interpretPlanResponse(res, req.payload.bars) : await askNewKind(res, req.payload);
+    }
     catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
     if (u.fromBox) setBoxBusy(path, null);
     const now = ui.get(path);
@@ -371,8 +403,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));
     if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); return; }
     const name = basename(path);
-    set(path, { state: now.state, ...(now.fromBox ? { fromBox: true, base: now.base } : {}), preview: { params: outcome.params, forSentence: sentence, description: describe(outcome.params), recipe: phraseRecipeSteps(outcome.params).join('\n') } });
-    void phraseDescription(name, outcome.params);
+    const recipe = (outcome.params.kind === 'arrangement' || outcome.params.kind === 'composition' ? familyRecipeSteps(outcome.params) : phraseRecipeSteps(outcome.params as PhraseParams)).join('\n');
+    set(path, { state: now.state, ...(now.fromBox ? { fromBox: true, base: now.base } : {}), preview: { params: outcome.params, forSentence: sentence, description: describe(outcome.params), recipe } });
+    if (family === 'phrase') void phraseDescription(name, outcome.params as PhraseParams);
   }
 
   async function applyPreview(path: string): Promise<void> {

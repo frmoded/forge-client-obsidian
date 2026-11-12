@@ -60,7 +60,7 @@ function opsFromPlan(plan: Plan, source: string, runs: ReadonlyArray<readonly [n
 }
 
 /** The version an answer carries (forge-transpile 0.2.42+ puts `version` on every /plan answer): non-empty text, else null. A number, an empty string or a missing field is "no version": the caller falls back to /health. */
-function answerVersion(json: Plan): string | null {
+export function answerVersion(json: Record<string, unknown>): string | null {
   const v = json.version;
   return typeof v === 'string' && v.trim() !== '' ? v : null;
 }

@@ -1,6 +1,6 @@
 // 2026-11-12-1204 - the prompt box, part two: when the GRAMMAR rejects the text typed in the box, the note is a PHRASE and the sentence service is set up, Apply asks the service ONCE (the same `askPlan` path and request builder as the strip's
 // "Ask the sentence service" button) and shows the existing PREVIEW; nothing is written until the person applies it. The service costs money and needs a credential, so the whole file is about WHEN it is called: only on Apply, only after the
-// grammar said no, never while typing, never for an arrangement or a composition, never when it is not configured.
+// grammar said no, never while typing, never when it is not configured. (2026-11-12-1206: for an arrangement and a composition too, forge-transpile 0.2.48: see prompt-box-families.test.ts.)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -149,13 +149,15 @@ test('NOT configured, or no service at all: a rejected sentence is the plain err
   }
 });
 
-test('an ARRANGEMENT never asks the service (the service plans phrases only): the plain error, the text kept', async () => {
+test('an ARRANGEMENT asks the service too (2026-11-12-1206, replacing "never asks"): and a PHRASE plan in answer is refused as "not an arrangement" - nothing written, the text kept', async () => {
   const r = rig({ service: async () => OK(PLAN_EXTEND), path: 'arrangements/arr_001.md', note: newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }] }) });
   await r.ready();
   assert.ok(r.field(), 'the arrangement tab has its box');
   r.type('a rock groove with everything on'); await r.enter();
-  assert.deepEqual(r.asked, []);
-  assert.match(r.strip(), /line 1, column \d+/);
+  assert.equal(r.asked.length, 1);
+  assert.equal(r.asked[0].family, 'arrangement');
+  assert.match(r.strip(), /not an arrangement/);
+  assert.deepEqual(r.writes, []);
   assert.equal(r.field().value, 'a rock groove with everything on');
 });
 

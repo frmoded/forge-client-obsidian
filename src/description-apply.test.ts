@@ -306,13 +306,14 @@ test('a sentence is said again when it CHANGES (still wrong, differently), and t
   assert.equal(r.lines.filter((l) => l.includes('rejected')).length, 2);
 });
 
-test('the service\'s guards: not for an arrangement, not without a rejected sentence, not with an empty sentence plan; Cancel with nothing shown and Apply with no preview do nothing', async () => {
+test('the service\'s guards: an arrangement is offered the service (1206) but a vault with no kits sends nothing, not without a rejected sentence, not with an empty sentence plan; Cancel with nothing shown and Apply with no preview do nothing', async () => {
   const arr = newArr();
   const r = rig({ service: PLAN_OK({ kind: 'extend', bar: 'bar_007', bars: 12 }), extra: { [ARR_PATH]: arr } });
   const a = r.pane(ARR_PATH);
   r.store.set(ARR_PATH, arr.replace(extractDescription(arr), 'Play [[phrase_003]] on the [[rock]] kit')); await r.ctl.inspect(ARR_PATH);
-  assert.deepEqual(buttons(a), ['revert'], 'the service plans phrases only');
-  await r.ctl.ask(ARR_PATH); assert.deepEqual(r.asked, []);
+  assert.deepEqual(buttons(a), ['revert', 'ask'], '2026-11-12-1206: since forge-transpile 0.2.48 the service plans arrangements too');
+  await r.ctl.ask(ARR_PATH); assert.deepEqual(r.asked, [], 'this vault has no kits: nothing to plan from, so nothing leaves the machine');
+  assert.match(msg(a), /^This vault has no kits or no phrases yet/);    // (the round trip, the version gate and the loop check are in prompt-box-families.test.ts)
   await r.ctl.ask(PATH); assert.deepEqual(r.asked, [], 'no rejected sentence on that note');
   r.pane(PATH);
   r.store.set(PATH, edit(r.store.get(PATH)!, '8 bars', '8 barz')); await r.ctl.inspect(PATH);

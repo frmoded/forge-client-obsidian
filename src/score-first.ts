@@ -460,6 +460,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         askPlan: hooks.askPlan ? (payload) => hooks.askPlan!(payload) : undefined,
         configured: hooks.planConfigured,
         ownKey: () => hooks.ownKey?.(),
+        serviceVersion: () => (hooks.serviceVersion ? hooks.serviceVersion() : Promise.resolve(null)),      // 2026-11-12-1206: an arrangement or composition sentence answered without a version asks /health once
         confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
       });
       plugin.registerEvent(app.vault.on('modify', (f) => { descriptions.modified(f.path); }));
