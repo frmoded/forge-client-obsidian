@@ -46,7 +46,7 @@ proto.setText = function (t: string) { this.textContent = t; };
       const w = applyPhraseWrite(files.get(PATH)!, params, (opts as any).describe ? NAME : undefined);      // 2026-11-12-1201: `describe` = a Description-grammar note, written as phrase-view.ts writes it (with the note's name); off = the JSON-era rig, as before
       if (w.ok === false) return w;
       files.set(PATH, w.text);
-      queueMicrotask(() => handle.noteModified(PATH));            // Obsidian's vault `modify` for our own write
+      queueMicrotask(() => { handle.noteModified(PATH); (window as any).__descCtl?.modified(PATH); });            // Obsidian's vault `modify` for our own write (the tab hears it, and so does the description controller when the rig has one)
       return { ok: true };
     },
     compute: async (data, params, title) => {
@@ -76,6 +76,21 @@ proto.setText = function (t: string) { this.textContent = t; };
     clearTimer: (h) => window.clearTimeout(h as number),
   });
   (window as any).__phrase = handle;
+  // 2026-11-12-1203: with `describe`, the description controller of the plugin (score-first.ts) beside the tab: it draws the docked prompt box and the strip at the top, and answers the box's Apply with the plugin's own writers
+  if ((opts as any).describe) {
+    const { createDescriptionController } = await import('@client/description-apply.ts');
+    const names = (folder: string) => [...files.keys()].filter((k) => k.startsWith(folder + '/')).map((k) => k.slice(folder.length + 1, -3));
+    (window as any).__descCtl = createDescriptionController({
+      read: async (p) => { const t = files.get(p); if (t === undefined) throw new Error('gone'); return t; },
+      process: async (p, fn) => { await Promise.resolve(); const cur = files.get(p)!; const next = fn(cur); if (next !== cur) { files.set(p, next); queueMicrotask(() => { handle.noteModified(p); (window as any).__descCtl.modified(p); }); } },
+      vault: () => ({ bars: names('bars'), phrases: names('phrases'), arrangements: [], compositions: [], kits: [] }),
+      barNames: () => names('bars'), phraseNames: () => names('phrases'),
+      setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
+      trace: (line) => { console.info(line); },
+      panes: () => [{ path: PATH, contentEl: parent, tab: true }],
+    });
+    (window as any).__descCtl.inspect(PATH);
+  }
   await handle.load();
 };
 (window as any).__edit = (path: string, text: string) => { (window as any).__files.set(path, text); (window as any).__phrase.noteModified(path); };

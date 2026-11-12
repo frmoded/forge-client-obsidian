@@ -18,7 +18,9 @@ import { buildPlanRequest, interpretPlanResponse, type PlanPayload } from './sen
 import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import { extractDescription } from './v2-note-core.ts';
-import type { PhraseParams } from './phrase-core.ts';
+import { readPhraseKind, type PhraseParams } from './phrase-core.ts';
+import { mountPromptBox, type PromptBoxHandle } from './prompt-box-dom.ts';
+import { placeholderFor, replaceDescriptionSection } from './prompt-box-core.ts';
 
 export interface DescriptionPorts {
   read(path: string): Promise<string>;
@@ -31,7 +33,7 @@ export interface DescriptionPorts {
   clearTimer(handle: unknown): void;
   trace(line: string): void;
   /** Every pane that shows a note right now: its path and the element its content is drawn in (a tab, the notes pane, the text view). */
-  panes(): Array<{ path: string; contentEl: HTMLElement }>;
+  panes(): Array<{ path: string; contentEl: HTMLElement; /** 2026-11-12-1203: this pane is a score tab (the phrase, arrangement or composition Score), where the docked prompt box lives; the notes pane and the text view are not. */ tab?: boolean }>;
   /** POST /plan, as the sentence dialog sends it. Absent, or `configured()` false = the service is not offered. */
   askPlan?(payload: PlanPayload): Promise<{ status: number; json: unknown }>;
   configured?(): boolean;
@@ -40,7 +42,7 @@ export interface DescriptionPorts {
   confirm?(message: string): Promise<boolean>;
 }
 
-interface Ui { state: DescriptionState; message?: string; preview?: { params: PhraseParams; description: string; recipe: string; forSentence: string }; busy?: boolean }
+interface Ui { state: DescriptionState; message?: string; preview?: { params: PhraseParams; description: string; recipe: string; forSentence: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
 
 export interface DescriptionController {
@@ -59,6 +61,10 @@ export interface DescriptionController {
   canRevertGenerated(path: string): boolean;
   /** "Revert to generated" as a command: asks first, as the button does. */
   revertGenerated(path: string): Promise<void>;
+  /** 2026-11-12-1203: put the cursor in the docked prompt box of this note's tab (the first box when no path is given); false = there is none. */
+  focusBox(path?: string): boolean;
+  /** Apply this text as the note's Description, as the prompt box's Apply does (the existing "Update from Description" writers; a sentence that does not parse writes nothing and the strip says where). */
+  applyFromBox(path: string, text: string): Promise<{ ok: boolean; disk?: string }>;
   /** Is there something for "Update from Description" to do on this note (the command's availability)? */
   canUpdate(path: string): boolean;
   /** "Restore to last commit" is about to replace this note's text: whatever was pending (a hand edit waiting out its 600 ms) is DROPPED, never applied to the restored text. */
@@ -83,7 +89,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (u.preview) return { message: u.message ?? 'The sentence service suggests this. Nothing is written until you press Apply.', actions: ['apply-preview', 'cancel-preview'], preview: { description: u.preview.description, recipe: u.preview.recipe }, busy: u.busy };
     if (st.kind === 'rejected') {
       const offer = family === 'phrase' && ports.askPlan !== undefined && ports.configured?.() !== false;
-      return { message: u.message ?? st.message, actions: ['revert', ...(offer ? ['ask' as const] : [])], busy: u.busy };
+      return { message: u.message ?? st.message, actions: [...(u.fromBox ? [] : ['revert' as const]), ...(offer ? ['ask' as const] : [])], busy: u.busy };
     }
     if (st.kind === 'apply') return { message: u.message ?? `The Description changed (${st.change}); update the note from it.`, actions: ['update', 'revert'], busy: u.busy };
     if (st.kind === 'recipe-rejected') return { message: u.message ?? st.message, actions: ['revert'], busy: u.busy };               // no "Ask the sentence service" for a Recipe: no LLM, the person fixes it
@@ -109,8 +115,72 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       h.show(u ? viewOf(path, u) : { message: n!.message, actions: [] });
     }
     for (const [el, h] of [...bars]) if (!live.has(el)) { h.dispose(); bars.delete(el); }
+    syncBoxes();
   };
 
+  // ---- 2026-11-12-1203: the docked prompt box. An EDITOR VIEW of the Description facet on a score tab (the note on disk stays the only source of truth); the controls' writes reach it through the vault's `modify`.
+  const boxes = new Map<HTMLElement, { path: string; handle: PromptBoxHandle }>();
+  const descriptionOf = async (path: string): Promise<string | null> => { try { return extractDescription(await ports.read(path)); } catch { return null; } };
+  const boxKind = (text: string, family: Family): string => (family === 'phrase' ? readPhraseKind(text) ?? 'mix' : family);
+  const syncBoxes = (): void => {
+    if (disposed) return;
+    const live = new Set<HTMLElement>();
+    for (const { path, contentEl, tab } of ports.panes()) {
+      if (tab !== true || familyOfPath(path) === null) continue;
+      if (ui.get(path)?.state.kind === 'custom-note') continue;                                              // a custom note: its Python is the source, the Description is not applied: no box
+      live.add(contentEl);
+      const have = boxes.get(contentEl);
+      if (have && have.path === path && have.handle.el.parentElement === contentEl) { if (contentEl.lastElementChild !== have.handle.el) contentEl.appendChild(have.handle.el); continue; }
+      if (have) { have.handle.dispose(); boxes.delete(contentEl); }
+      void (async () => {
+        let note = ''; try { note = await ports.read(path); } catch { return; }
+        if (disposed || boxes.has(contentEl)) return;
+        const family = familyOfPath(path)!;
+        const handle = mountPromptBox(contentEl, { placeholder: placeholderFor(boxKind(note, family)), apply: (text) => applyFromBox(path, text) }, extractDescription(note));
+        boxes.set(contentEl, { path, handle });
+      })();
+    }
+    for (const [el, b] of [...boxes]) if (!live.has(el)) { b.handle.dispose(); boxes.delete(el); }
+  };
+  /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
+  const refreshBoxes = async (path: string): Promise<void> => {
+    if (disposed) return;
+    syncBoxes();                                                                                       // a tab that rebuilt itself took its box with it: draw it again
+    const targets = [...boxes.values()].filter((b) => b.path === path);
+    if (targets.length === 0) return;
+    const d = await descriptionOf(path);
+    if (d === null) return;
+    for (const b of targets) b.handle.setDisk(d);
+  };
+  /** Apply the box's text: the Description facet is replaced and the note made again from it in ONE `process` (the same writers the controls and "Update from Description" use). A sentence that does not parse, or a note whose Recipe or
+   *  Python were edited too, writes NOTHING: the strip at the top says where (line and column), and the box keeps the text. */
+  async function applyFromBox(path: string, text: string): Promise<{ ok: boolean; disk?: string }> {
+    const family = familyOfPath(path); if (family === null) return { ok: false };
+    let failure: string | null = null, change = '', sentence = text;
+    try {
+      await ports.process(path, (cur) => {
+        const edited = replaceDescriptionSection(cur, text);
+        if (edited === null) { failure = 'This note has no Description heading to write the sentence under.'; return cur; }
+        const st = descriptionState(edited, family, ports.vault());
+        if (st.kind === 'rejected' || st.kind === 'both-edited') { failure = st.message; sentence = st.kind === 'rejected' ? st.sentence : text; return cur; }
+        if (st.kind !== 'apply') { if (st.kind === 'synced') return cur; failure = 'This note has something else to say first; see the line at the top.'; return cur; }
+        const r = applyDescriptionText(edited, basename(path), family, ports.vault(), st.sentence);
+        if (r.ok === false) { failure = r.message; return cur; }
+        change = r.change;
+        return r.text;
+      });
+    } catch (e) { failure = `Update from Description: ${(e as Error)?.message ?? e}`; console.error('prompt-box: could not write the note', e); }
+    if (failure !== null) {
+      const cur = await ports.read(path).catch(() => '');
+      const st = descriptionState(replaceDescriptionSection(cur, text) ?? cur, family, ports.vault());
+      const state: DescriptionState = st.kind === 'rejected' ? st : { kind: 'rejected', sentence, error: { message: failure, line: 1, column: 1 }, message: failure };
+      set(path, { state, message: failure, fromBox: true });
+      return { ok: false };
+    }
+    told.delete(path); ports.trace(appliedLine(basename(path), change || 'unchanged')); set(path, null);
+    const disk = await descriptionOf(path);
+    return { ok: true, disk: disk ?? text };
+  }
   const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
 
   async function evaluate(path: string, auto: boolean): Promise<void> {
@@ -312,6 +382,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   return {
     modified(path) {
       if (disposed || familyOfPath(path) === null) return;
+      void refreshBoxes(path);                                                                         // a control wrote the Description (or a hand edit): the box follows at once, not after the debounce
       const prior = timers.get(path); if (prior !== undefined) ports.clearTimer(prior);
       timers.set(path, ports.setTimer(() => { timers.delete(path); void evaluate(path, true); }, DESCRIPTION_DEBOUNCE_MS));       // a second edit inside the wait replaces the first: the first is never written
     },
@@ -326,8 +397,10 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     },
     canRevertGenerated: (path) => { const st = ui.get(path)?.state; return st?.kind === 'custom-note' && st.canRevert; },
     revertGenerated,
+    focusBox(path) { for (const b of boxes.values()) if (path === undefined || b.path === path) { b.handle.focus(); return true; } return false; },
+    applyFromBox,
     update, revert, ask, syncBars,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
-    dispose() { disposed = true; notices.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); ui.clear(); },
+    dispose() { disposed = true; notices.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },
   };
 }

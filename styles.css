@@ -2660,6 +2660,31 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-description-message { flex: 1 1 24em; min-width: 0; overflow-wrap: anywhere; }
 .forge-description-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .forge-description-preview { flex: 1 1 100%; display: grid; gap: 4px; }
+
+/* 2026-11-12-1203: the docked prompt box at the bottom of a score tab (phrase, arrangement, composition): the note's Description as a field. STICKY at the bottom of the tab's scroll container, so it stays where it is whatever the
+   Score, the strip and the notebook above it do; it is the LAST child of the tab, never inside the Score slot, and never absolutely positioned: in the flow, at the end of the tab, nothing is covered; while the tab is scrolled
+   short of its end the box sits over whatever is below the fold (it is docked, as a chat box is) and scrolling reveals it. */
+.forge-prompt-box {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 6px 8px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.06);
+}
+.forge-prompt-box.is-edited { border-color: var(--text-warning, #c80); background: var(--background-secondary); }
+.forge-prompt-box-text { flex: 1 1 24em; min-width: 0; min-height: 2.6em; resize: vertical; font-size: var(--font-ui-small); }
+.forge-prompt-box-state { flex: 0 0 auto; font-size: var(--font-ui-smaller); color: var(--text-warning, #c80); }
+.forge-prompt-box-state:empty { display: none; }
+.forge-prompt-box-conflict { flex: 1 1 100%; font-size: var(--font-ui-smaller); }
+
 .forge-description-preview pre { margin: 0; padding: 4px 6px; white-space: pre-wrap; background: var(--background-primary); border-radius: 3px; }
 
 /* 2026-11-03-1155-9 (PRIORITY, driver: "make all the text tags selectable and copyable so I can copy them to you"): EVERY message the plugin draws is selectable text. Obsidian's leaf container inherits `user-select: none` from its chrome, so the

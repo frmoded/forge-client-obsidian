@@ -453,8 +453,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
         trace: (line) => { console.info(line); },
         panes: () => {
-          const out: Array<{ path: string; contentEl: HTMLElement }> = [];
-          app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && familyOfPath(v.file.path) !== null) out.push({ path: v.file.path, contentEl: v.contentEl }); });
+          const out: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = [];
+          app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && familyOfPath(v.file.path) !== null) out.push({ path: v.file.path, contentEl: v.contentEl, tab: plan === 'score' && SCORE_VIEW_TYPES.includes(leaf.view.getViewType()) }); });   // 2026-11-12-1203: the docked prompt box lives on a score tab of the music edition only (the lean edition's tabs are as they were: P3)
           return out;
         },
         askPlan: hooks.askPlan ? (payload) => hooks.askPlan!(payload) : undefined,
@@ -531,6 +531,17 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           const file = app.workspace.getActiveFile?.();
           if (!file || !descriptions.canRevertGenerated(file.path)) return false;
           if (!checking) void descriptions.revertGenerated(file.path);
+          return true;
+        },
+      });
+      // 2026-11-12-1203: the docked prompt box (the Description of the note, at the bottom of its tab): a command puts the cursor in it, so it can be reached without the mouse
+      plugin.addCommand({
+        id: 'focus-prompt-box',
+        name: 'Focus prompt box',
+        checkCallback: (checking) => {
+          const file = app.workspace.getActiveFile?.();
+          if (!file || familyOfPath(file.path) === null) return false;
+          if (!checking) descriptions.focusBox(file.path);
           return true;
         },
       });
