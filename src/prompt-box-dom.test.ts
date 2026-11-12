@@ -122,3 +122,21 @@ test('focus() puts the cursor in the field; dispose() removes the box', () => {
   r.handle.dispose();
   assert.equal(r.parent.querySelector('.forge-prompt-box'), null);
 });
+
+test('setBusy shows the message and holds Apply (the text stays editable); null puts it back; reset() shows what the note says now and drops the typing', async () => {
+  const r = rig();
+  r.type('free sentence');
+  r.handle.setBusy('Asking the sentence service...');
+  assert.equal(r.q('.forge-prompt-box-state').textContent, 'Asking the sentence service...');
+  assert.equal(r.q('.forge-prompt-box-apply').disabled, true);
+  r.key('Enter'); await r.flush();
+  assert.deepEqual(r.calls, [], 'Enter does nothing while a request runs');
+  r.type('free sentence, edited');
+  assert.equal(r.q('.forge-prompt-box-text').value, 'free sentence, edited', 'still editable');
+  r.handle.setBusy(null);
+  assert.equal(r.q('.forge-prompt-box-state').textContent, 'edited, not applied');
+  assert.equal(r.q('.forge-prompt-box-apply').disabled, false);
+  r.handle.reset('CANONICAL');
+  assert.equal(r.q('.forge-prompt-box-text').value, 'CANONICAL');
+  assert.equal(r.q('.forge-prompt-box').classList.contains('is-edited'), false);
+});

@@ -88,6 +88,8 @@ proto.setText = function (t: string) { this.textContent = t; };
       setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
       trace: (line) => { console.info(line); },
       panes: () => [{ path: PATH, contentEl: parent, tab: true }],
+      // 2026-11-12-1204: a stand-in for the sentence service (POST /plan): answers with `opts.plan` after `opts.planMs`, and counts every request in window.__asked (the real service is the driver's: it costs money and needs a token)
+      ...((opts as any).plan ? { askPlan: async (payload: any) => { ((window as any).__asked ??= []).push(payload.sentence); await new Promise((r) => setTimeout(r, (opts as any).planMs ?? 400)); return { status: 200, json: { ok: true, parsed_ok: true, plan: (opts as any).plan, error: null } }; }, configured: () => true } : {}),
     });
     (window as any).__descCtl.inspect(PATH);
   }

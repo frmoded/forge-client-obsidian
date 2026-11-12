@@ -17,7 +17,7 @@ const PATH = 'phrases/phrase_001.md';
 const MIX: PhraseParams = { kind: 'mix', a: 'bar_007', b: 'bar_008', weight: 0.5, threshold: 0.5, ghost: false };
 const VOTE_35 = 'Mix [[bar_007]] and [[bar_008]], 35 percent [[bar_007]], as a vote.';
 
-function rig(start: string = noteContentFor('phrase_001', MIX)) {
+function rig(start: string = noteContentFor('phrase_001', MIX), configured = true) {
   const store = new Map<string, string>([[PATH, start]]);
   const writes: string[] = [], lines: string[] = [], asked: unknown[] = [], timers: Array<() => void> = [];
   const panes: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = [];
@@ -28,7 +28,7 @@ function rig(start: string = noteContentFor('phrase_001', MIX)) {
     barNames: () => ['bar_007', 'bar_008'], phraseNames: () => ['phrase_001'],
     setTimer: (fn) => { timers.push(fn); return timers.length; }, clearTimer: () => {},                                // the debounce never fires on its own: a test that wants the auto path runs it by hand (`fire`)
     trace: (l) => lines.push(l), panes: () => panes,
-    askPlan: async (payload) => { asked.push(payload); return { status: 200, json: {} }; }, configured: () => true,
+    askPlan: async (payload) => { asked.push(payload); return { status: 200, json: {} }; }, configured: () => configured,
   };
   const ctl = createDescriptionController(ports);
   const pane = (p = PATH, tab = true) => { const el = win.document.createElement('div'); win.document.body.appendChild(el); const score = win.document.createElement('div'); score.className = 'forge-rhythm-edit-score'; el.appendChild(score); panes.push({ path: p, contentEl: el, tab }); return el as HTMLElement; };
@@ -85,8 +85,8 @@ test('typing a new sentence and applying (Enter) updates the note by ONE write t
   assert.equal(r.strip(el), '', 'nothing to say at the top');
 });
 
-test('a sentence that does not parse writes NOTHING: the strip at the top says the line and the column, the box keeps the text, and the sentence service is NOT asked on its own', async () => {
-  const r = rig(); const el = r.pane();
+test('a sentence that does not parse writes NOTHING: the strip at the top says the line and the column and the box keeps the text; with the sentence service NOT set up it is not asked and there is no button for it (2026-11-12-1204: with it set up, Apply asks once: prompt-box-service.test.ts)', async () => {
+  const r = rig(undefined, false); const el = r.pane();
   await r.ctl.inspect(PATH); await r.flush();
   const before = r.store.get(PATH)!;
   r.type(el, 'Mix [[bar_007]] and [[bar_008]] sideways');
@@ -96,8 +96,8 @@ test('a sentence that does not parse writes NOTHING: the strip at the top says t
   assert.match(r.strip(el), /Description, line 1, column \d+/);
   assert.equal(r.field(el).value, 'Mix [[bar_007]] and [[bar_008]] sideways', 'the box keeps the text');
   assert.ok(el.querySelector('.forge-prompt-box.is-edited'));
-  assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action')), ['ask'], 'only an explicit "Ask the sentence service" is offered (no Revert: nothing was written)');
-  assert.deepEqual(r.asked, [], 'the service costs money and needs a token: never called implicitly');
+  assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action')), [], 'no Revert (nothing was written) and no Ask (not set up)');
+  assert.deepEqual(r.asked, []);
   r.type(el, VOTE_35); await r.enter(el);
   assert.equal(r.store.get(PATH), noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'the fixed sentence applies');
   assert.equal(r.strip(el), '', 'and the strip clears');

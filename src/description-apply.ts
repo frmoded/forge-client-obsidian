@@ -42,7 +42,7 @@ export interface DescriptionPorts {
   confirm?(message: string): Promise<boolean>;
 }
 
-interface Ui { state: DescriptionState; message?: string; preview?: { params: PhraseParams; description: string; recipe: string; forSentence: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean }
+interface Ui { state: DescriptionState; message?: string; preview?: { params: PhraseParams; description: string; recipe: string; forSentence: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
 
 export interface DescriptionController {
@@ -142,6 +142,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     for (const [el, b] of [...boxes]) if (!live.has(el)) { b.handle.dispose(); boxes.delete(el); }
   };
+  const boxText = (path: string): string | undefined => { for (const b of boxes.values()) if (b.path === path) return b.handle.state().text; return undefined; };
+  const setBoxBusy = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setBusy(message); };
   /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
   const refreshBoxes = async (path: string): Promise<void> => {
     if (disposed) return;
@@ -174,7 +176,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       const cur = await ports.read(path).catch(() => '');
       const st = descriptionState(replaceDescriptionSection(cur, text) ?? cur, family, ports.vault());
       const state: DescriptionState = st.kind === 'rejected' ? st : { kind: 'rejected', sentence, error: { message: failure, line: 1, column: 1 }, message: failure };
-      set(path, { state, message: failure, fromBox: true });
+      const base = extractDescription(cur);
+      set(path, { state, message: failure, fromBox: true, base });
+      // 2026-11-12-1204: the GRAMMAR rejected the text (free, instant, exact: tried first, always). For a PHRASE, with the sentence service set up, Apply asks it ONCE, automatically, and shows the PREVIEW (nothing is written until it is
+      // applied). Never while typing, never when the grammar accepted the text, never for an arrangement or a composition.
+      if (st.kind === 'rejected' && family === 'phrase' && ports.askPlan !== undefined && ports.configured?.() !== false) await ask(path);
       return { ok: false };
     }
     told.delete(path); ports.trace(appliedLine(basename(path), change || 'unchanged')); set(path, null);
@@ -300,7 +306,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     else if (a === 'revert') await revert(path);
     else if (a === 'ask') await ask(path);
     else if (a === 'apply-preview') await applyPreview(path);
-    else if (a === 'cancel-preview') { const u = ui.get(path); if (u) set(path, { state: u.state }); }
+    else if (a === 'cancel-preview') { const u = ui.get(path); if (u) set(path, { state: u.state, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); }
   }
 
   async function update(path: string): Promise<void> {
@@ -345,19 +351,27 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function ask(path: string): Promise<void> {
     const u = ui.get(path);
     if (!u || u.state.kind !== 'rejected' || familyOfPath(path) !== 'phrase' || !ports.askPlan) return;
+    if (u.busy) return;                                                                                    // ONE request in flight: a second ask while the service thinks does nothing
     const sentence = u.state.sentence;
     const req = buildPlanRequest({ sentence, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() });
-    if (req.ok === false) { set(path, { state: u.state, message: req.message }); return; }
+    const keepBox = (x: Ui): Ui => (x.fromBox ? { ...x, fromBox: true, base: x.base } : x);
+    if (req.ok === false) { set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); return; }
     set(path, { ...u, busy: true });
+    if (u.fromBox) setBoxBusy(path, 'Asking the sentence service...');
     let outcome: ReturnType<typeof interpretPlanResponse>;
     try { outcome = interpretPlanResponse(await ports.askPlan(req.payload), req.payload.bars); }
     catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
+    if (u.fromBox) setBoxBusy(path, null);
     const now = ui.get(path);
     if (disposed || !now || now.state.kind !== 'rejected' || now.state.sentence !== sentence) return;     // the Description moved on while the service thought: its answer is for a sentence that is gone
+    if (now.fromBox && boxText(path) !== sentence) {                                                      // the person typed on in the box while the service thought: the answer is for a sentence that is gone
+      set(path, { state: now.state, message: 'The Description changed while the service was thinking; its suggestion was dropped.', fromBox: true, base: now.base });
+      return;
+    }
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));
-    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message }); return; }
+    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); return; }
     const name = basename(path);
-    set(path, { state: now.state, preview: { params: outcome.params, forSentence: sentence, description: describe(outcome.params), recipe: phraseRecipeSteps(outcome.params).join('\n') } });
+    set(path, { state: now.state, ...(now.fromBox ? { fromBox: true, base: now.base } : {}), preview: { params: outcome.params, forSentence: sentence, description: describe(outcome.params), recipe: phraseRecipeSteps(outcome.params).join('\n') } });
     void phraseDescription(name, outcome.params);
   }
 
@@ -366,17 +380,20 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (family === null || !u?.preview) return;                                                           // never without a preview
     const { params, forSentence } = u.preview;
     let failure: string | null = null, change = '';
+    // a suggestion for a sentence typed in the BOX: nothing was written for it, so the Description on disk must be what it was when the sentence was sent, and the box must still hold that sentence
+    if (u.fromBox && boxText(path) !== undefined && boxText(path) !== forSentence) { set(path, { state: u.state, message: 'The text in the box changed after the suggestion; ask again.', fromBox: true, base: u.base }); return; }
     try {
       await ports.process(path, (cur) => {
-        if (extractDescription(cur) !== forSentence) { failure = 'The Description changed while the service was thinking; its suggestion was dropped.'; return cur; }
+        if (extractDescription(cur) !== (u.fromBox ? u.base : forSentence)) { failure = 'The Description changed while the service was thinking; its suggestion was dropped.'; return cur; }
         const w = writeFromParams(cur, basename(path), family, params as GrammarParams);
         if (w.ok === false) { failure = w.message; return cur; }
         change = changeSummary(cacheParams(cur, family), params as GrammarParams);
         return w.text;
       });
     } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; }
-    if (failure !== null) { set(path, { state: u.state, message: failure }); return; }
+    if (failure !== null) { set(path, { state: u.state, message: failure, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); return; }
     told.delete(path); ports.trace(appliedLine(basename(path), change)); set(path, null);
+    if (u.fromBox) { const d = await descriptionOf(path); if (d !== null) for (const b of boxes.values()) if (b.path === path) b.handle.reset(d); }        // applied: the box shows the canonical grammar sentence, not the free one
   }
 
   return {

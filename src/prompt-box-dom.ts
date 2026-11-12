@@ -21,6 +21,10 @@ export interface PromptBoxHandle {
   /** The Description on disk is now this (a control wrote it, a hand edit, an apply). Never overwrites unapplied typing: it offers the choice. */
   setDisk(disk: string): void;
   focus(): void;
+  /** A request is running for this text (the sentence service): the box says so and Apply waits; the text stays editable. `null` = done. */
+  setBusy(message: string | null): void;
+  /** The note was updated from the suggestion: the box shows what the note says now (the canonical grammar sentence) and drops the unapplied typing. */
+  reset(disk: string): void;
   state(): BoxState;
   dispose(): void;
 }
@@ -51,18 +55,20 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
 
   let s: BoxState = initBox(initial);
   let busy = false;
+  let remote: string | null = null;                              // the busy message of a request somebody else is running (setBusy)
   let disposed = false;
   const paint = (): void => {
     if (text.value !== s.text) text.value = s.text;
     const edited = isEdited(s);
     el.classList.toggle('is-edited', edited);
     el.classList.toggle('has-conflict', s.conflict);
-    state.textContent = edited ? 'edited, not applied' : '';
-    apply.disabled = !edited || busy;
+    state.textContent = remote ?? (edited ? 'edited, not applied' : '');
+    el.classList.toggle('is-busy', remote !== null || busy);
+    apply.disabled = !edited || busy || remote !== null;
     conflict.style.display = s.conflict ? '' : 'none';
   };
   const run = async (): Promise<void> => {
-    if (busy || !isEdited(s)) return;
+    if (busy || remote !== null || !isEdited(s)) return;
     busy = true; paint();
     const sent = s.text;
     let result: { ok: boolean; disk?: string } = { ok: false };
@@ -90,6 +96,8 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     el,
     setDisk(disk) { s = diskChanged(s, disk); paint(); },
     focus() { try { text.focus(); } catch { /* not focusable (a hidden pane) */ } },
+    setBusy(message) { remote = message; paint(); },
+    reset(disk) { s = applied(disk); paint(); },
     state: () => s,
     dispose() { disposed = true; watch?.disconnect(); el.remove(); },
   };
