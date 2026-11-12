@@ -1,14 +1,11 @@
-An interval measures the distance between two pitches — numeric size (how many letter-names it spans) plus quality (how many semitones exactly). Chord construction and voice leading both already assume this vocabulary; this directory defines it from scratch.
+An interval is the distance between two of the 12 notes, and everything that follows in scales, the circle of fifths, triads and chords is built from patterns of intervals.
 
-- [[interval_size]] — numeric size: 2nd through octave and beyond, counted by letter name, not semitone count.
-- [[interval_quality]] — perfect, major, minor, augmented, diminished: the semitone-count refinement on top of size.
-- [[interval_inversion]] — flip an interval and its size and quality both change in a fixed, predictable way.
-- [[compound_interval]] — an interval larger than an octave, named by reducing it back inside one.
-- [[interval_history]] — where this two-part naming scheme actually comes from.
+1. [[counting_half_steps]] — what an interval is, and how to count one on a piano or a guitar.
+2. [[naming_intervals]] — the names and symbols, from unison to octave.
+3. [[intervals_reference_chart]] — one table to bookmark, with a song for most of them.
+4. [[hearing_intervals]] — practice naming them by ear.
 
-## Sources
-
-MT21C §5 Introduction to Intervals.
+And [[interval_history]] — where the names come from.
 
 
 <div style="
