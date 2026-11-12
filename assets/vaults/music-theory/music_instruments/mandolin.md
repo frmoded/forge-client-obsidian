@@ -6,7 +6,7 @@ Try it: click a position to hold it, then play the notes together, ascending or 
 
 ```html-embed
 music_instruments/resources/html/mandolin_fretboard.html
-460
+425
 ```
 
 The fretboard above draws 15 frets and sounds each pair as one note. The dropdown changes the tuning system (equal temperament by default, Pythagorean, quarter-comma meantone, Werckmeister III), which moves the frets slightly, most visibly at fret 6 in Pythagorean.

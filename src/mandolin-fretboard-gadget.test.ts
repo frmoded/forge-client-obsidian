@@ -381,13 +381,107 @@ test('CONTROL: the score checks can fail - every note a step off, no first ledge
   assert.ok(scoreFailures(damaged('g.addEventListener("mouseenter", function () { lightPoint(q.key, true); });', '')).length > 0, 'a dead hover link');
 });
 
-// ---- 2026-11-11-1197: the mandolin page embeds the gadget tall enough for the score ----------------------------------------------------------------------------
+// ---- 2026-11-12-1199: a real treble clef (Bravura outline, drawn on the G line) and ALL the controls in one row ---------------------------------------------------
+
+/** The bounding box of an SVG path `d` (M m L l H h V v C c Z z, implicit repeats; cubic curves flattened), written here so the test measures the DRAWN shape, not a constant the page declares. */
+function pathBBox(d: string): { minX: number; maxX: number; minY: number; maxY: number } {
+  const toks = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:e-?\d+)?/g) ?? [];
+  let i = 0, cmd = '', x = 0, y = 0, sx = 0, sy = 0;
+  const pts: number[][] = [], num = (): number => parseFloat(toks[i++]);
+  const cubic = (x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number) => {
+    for (let k = 0; k <= 24; k++) { const t = k / 24, u = 1 - t; pts.push([u*u*u*x0 + 3*u*u*t*x1 + 3*u*t*t*x2 + t*t*t*x3, u*u*u*y0 + 3*u*u*t*y1 + 3*u*t*t*y2 + t*t*t*y3]); }
+  };
+  while (i < toks.length) {
+    if (/[a-zA-Z]/.test(toks[i])) cmd = toks[i++];
+    const rel = cmd === cmd.toLowerCase(), C = cmd.toUpperCase();
+    if (C === 'Z') { x = sx; y = sy; continue; }
+    if (C === 'M') { const a = num(), b = num(); x = rel ? x + a : a; y = rel ? y + b : b; sx = x; sy = y; pts.push([x, y]); cmd = rel ? 'l' : 'L'; }
+    else if (C === 'L') { const a = num(), b = num(); x = rel ? x + a : a; y = rel ? y + b : b; pts.push([x, y]); }
+    else if (C === 'H') { const a = num(); x = rel ? x + a : a; pts.push([x, y]); }
+    else if (C === 'V') { const a = num(); y = rel ? y + a : a; pts.push([x, y]); }
+    else if (C === 'C') { const v = [num(), num(), num(), num(), num(), num()]; const w = rel ? [x + v[0], y + v[1], x + v[2], y + v[3], x + v[4], y + v[5]] : v; cubic(x, y, w[0], w[1], w[2], w[3], w[4], w[5]); x = w[4]; y = w[5]; }
+    else throw new Error(`unsupported path command ${cmd}`);
+  }
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+}
+/** `translate(a b) scale(c d)` of an element's transform attribute (missing parts: identity). */
+function transformOf(t: string | null): { tx: number; ty: number; sx: number; sy: number } {
+  const tr = /translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)\s*\)/.exec(t ?? ''), sc = /scale\(\s*(-?[\d.]+)(?:[ ,]+(-?[\d.]+))?\s*\)/.exec(t ?? '');
+  return { tx: tr ? +tr[1] : 0, ty: tr ? +tr[2] : 0, sx: sc ? +sc[1] : 1, sy: sc ? +(sc[2] ?? sc[1]) : 1 };
+}
+/** Every claim about the clef on a page's source, as a list of failures (empty = all hold). The clef is judged by the SHAPE it draws, in staff units, against the staff lines drawn next to it. */
+function clefFailures(h: string): string[] {
+  const bad: string[] = [];
+  const p = openPage(h), doc = p.doc;
+  const lines = [...doc.querySelectorAll('.staffline')].map((l: any) => +l.getAttribute('y1')).sort((a: number, b: number) => b - a);   // bottom line first (largest y)
+  const clefs = [...doc.querySelectorAll('.clef')];
+  if (lines.length !== 5) bad.push(`five staff lines, got ${lines.length}`);
+  if (clefs.length !== 1) { bad.push(`exactly one clef element, got ${clefs.length}`); return bad; }
+  const el: any = clefs[0], d = el.getAttribute('d') ?? '', t = transformOf(el.getAttribute('transform'));
+  const space = (lines[0] - lines[4]) / 4, gLine = lines[1];                                    // the G line is the SECOND line from the bottom
+  const b = pathBBox(d);
+  const ys = [t.ty + t.sy * b.minY, t.ty + t.sy * b.maxY], top = Math.min(...ys), bottom = Math.max(...ys);
+  if (Math.abs(t.ty - gLine) > 1) bad.push(`the clef's origin (the centre of its curl) is at y=${t.ty}, the G line is at ${gLine}`);
+  if (bottom < lines[0] + 1.5 * space - 1) bad.push(`the tail ends ${((bottom - lines[0]) / space).toFixed(2)} spaces below the bottom line, wants at least 1.5`);
+  if (top > lines[4] - 1.25 * space) bad.push(`the top reaches ${((lines[4] - top) / space).toFixed(2)} spaces above the top line, wants at least 1.25`);
+  if ((bottom - top) / space < 6.5 || (bottom - top) / space > 7.5) bad.push(`height ${((bottom - top) / space).toFixed(2)} spaces, wants about 7`);
+  if (el.tagName.toLowerCase() !== 'path' || /font-family|<text/i.test(el.outerHTML)) bad.push('the clef is an outline path, not text in a font');
+  if (!/Bravura/.test(h) || !/OFL|SIL Open Font/i.test(h)) bad.push('the outline names its source (Bravura) and licence (OFL) in a comment');
+  return bad;
+}
+/** Every claim about the control row on a page's source (layout itself is measured in real Chrome, 1199 FEEDBACK). */
+function controlsFailures(h: string): string[] {
+  const bad: string[] = [];
+  const p = openPage(h), doc = p.doc, css = /<style>([\s\S]*?)<\/style>/.exec(h)![1];
+  const rule = (sel: RegExp): string => (sel.exec(css)?.[1] ?? '');
+  const row = rule(/(?:^|\n)\s*\.controls\s*\{([^}]*)\}/);
+  if (!/flex-wrap:\s*nowrap/.test(row)) bad.push('.controls does not stay on one row (flex-wrap: nowrap)');
+  const sel = rule(/(?:^|\n)\s*select\s*\{([^}]*)\}/);
+  if (!/min-width:\s*0/.test(sel) || !/flex:\s*1 1 auto/.test(sel)) bad.push('the dropdown does not shrink (min-width: 0; flex: 1 1 auto)');
+  if (!/@media\s*\(max-width:\s*\d+px\)\s*\{[^}]*\.controls\s*\{[^}]*flex-wrap:\s*wrap/.test(css)) bad.push('no wrap fallback for a very narrow mount');
+  const want: Record<string, [string, string]> = { bT: ['Together', 'Play together'], bU: ['Up', 'Play ascending'], bD: ['Down', 'Play descending'], bC: ['Clear', 'Clear'], bS: ['Score', 'Score'] };
+  for (const [id, [text, full]] of Object.entries(want)) {
+    const b: any = doc.getElementById(id);
+    if (!b) { bad.push(`${id} missing`); continue; }
+    if (b.textContent.trim() !== text) bad.push(`${id} label ${JSON.stringify(b.textContent.trim())} !== ${JSON.stringify(text)}`);
+    if (!(b.getAttribute('title') ?? '').length || b.getAttribute('aria-label') !== full) bad.push(`${id} keeps its full name in aria-label ("${full}") and a title`);
+  }
+  if (!doc.getElementById('tuning')) bad.push('the tuning dropdown is gone');
+  return bad;
+}
+
+test('the clef is a real treble clef: an outline from Bravura (OFL) anchored on the G line, from 1.5 spaces below the bottom line to above the top line, about 7 spaces tall', () => {
+  assert.deepEqual(clefFailures(html), []);
+});
+
+test('the controls sit in ONE row (compact labels, full names kept in aria-label and title, a dropdown that shrinks, a wrap only for a very narrow mount); behaviour and ids unchanged', () => {
+  assert.deepEqual(controlsFailures(html), []);
+  const p = openPage();
+  click(p, '.pt[aria-label="A4, course 3, fret 0"]');
+  p.doc.getElementById('bT').click();
+  assert.deepEqual(p.osc.map((hz: number) => +hz.toFixed(2)), [440.0], 'Together still plays the held note');
+  p.doc.getElementById('bC').click();
+  assert.deepEqual(held(p), [], 'Clear still releases');
+});
+
+test('CONTROL: the clef and row checks can fail - the old stroke clef, a clef off the G line, a shrunk clef, a row that wraps, labels without their full names each go red', () => {
+  assert.deepEqual(clefFailures(html), [], 'the undamaged page passes');
+  assert.deepEqual(controlsFailures(html), [], 'the undamaged page passes');
+  const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
+  assert.ok(clefFailures(damaged('drawClef(L.yOf(2), scoreSvg);', 'drawClef(L.yOf(2) + 10, scoreSvg);')).length > 0, 'a clef one staff space off the G line');
+  assert.ok(clefFailures(damaged('var CLEF_SCALE = 0.04;', 'var CLEF_SCALE = 0.025;')).length > 0, 'a clef two thirds of its size');
+  assert.ok(controlsFailures(damaged('flex-wrap: nowrap', 'flex-wrap: wrap')).length > 0, 'a row that wraps');
+  assert.ok(controlsFailures(damaged('aria-label="Play together"', '')).length > 0, 'a button without its full name');
+});
+
+// ---- 2026-11-11-1197 (band re-measured by 1199): the mandolin page embeds the gadget tall enough for the score ----------------------------------------------------------------------------
 const PAGE = path.join(ROOT, 'assets/vaults/music-theory/music_instruments/mandolin.md');
-test('the mandolin page embeds the gadget at a height that holds the tallest score (pins a MEASURED value, real Chrome 2026-11-11: 457 with G3 and G6 held; if the gadget changes height this SHOULD go red - re-measure, do not just rewrite)', () => {
+test('the mandolin page embeds the gadget at a height that holds the tallest score (pins a MEASURED value, real Chrome 2026-11-12: 405 with G3 and G6 held at a 800-wide mount, one control row; allowed band 405..465; if the gadget changes height this SHOULD go red - re-measure, do not just rewrite)', () => {
   const m = /```html-embed\n(\S+mandolin_fretboard\.html)\n(\d+)\n```/.exec(fs.readFileSync(PAGE, 'utf8'));
   assert.ok(m, 'the page embeds mandolin_fretboard.html with a height line');
-  assert.ok(+m![2] >= 457, `embed height ${m![2]} would clip the staff (tallest measured: 457)`);
-  assert.ok(+m![2] <= 500, `embed height ${m![2]} leaves a large blank (tallest measured: 457)`);
+  assert.ok(+m![2] >= 405, `embed height ${m![2]} would clip the staff (tallest measured: 405)`);
+  assert.ok(+m![2] <= 465, `embed height ${m![2]} leaves a large blank (tallest measured: 405)`);
 });
 
 // ---- P3: the other gadgets are untouched --------------------------------------------------------------------------------------------------------------------

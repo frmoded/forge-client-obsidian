@@ -57,11 +57,13 @@
   /* Position markers (the inlay dots on the neck): very subtle, the text colour at a low opacity with
      no stroke, drawn BEHIND the strings, fret wires and clickable points, and never a click target. */
   .inlay { fill: var(--ink); fill-opacity: 0.16; stroke: none; pointer-events: none; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; align-items: center; }
+  /* 1199: every control on ONE row (compact buttons, a dropdown that shrinks); it wraps only on a very narrow mount. */
+  .controls { display: flex; flex-wrap: nowrap; gap: 6px; margin: 8px 0 10px; align-items: center; }
+  @media (max-width: 440px) { .controls { flex-wrap: wrap; } }
   button {
     font: inherit; font-size: 13px; color: var(--ink);
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
-    padding: 8px 12px; cursor: pointer; min-height: 40px;
+    padding: 6px 10px; cursor: pointer; min-height: 36px; flex: 0 0 auto;
   }
   button:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
@@ -74,7 +76,8 @@
   select {
     font: inherit; font-size: 13px; color: var(--ink);
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
-    padding: 8px 12px; cursor: pointer; min-height: 40px;
+    padding: 6px 8px; cursor: pointer; min-height: 36px;
+    flex: 1 1 auto; min-width: 0; max-width: 280px; text-overflow: ellipsis;
   }
   select:hover { border-color: var(--ink); }
   [hidden] { display: none !important; }
@@ -101,11 +104,11 @@
 <div class="scroller" id="scoreWrap"><svg id="score" role="group" aria-label="Score: the held fretboard positions written on a treble staff, written pitch equal to sounding pitch. Arrow keys move between the notes; hovering or focusing a note lights its fretboard position."></svg></div>
 
 <div class="controls">
-  <button class="both"  id="bT" title="All held notes at once, as a chord">Play together</button>
-  <button class="left"  id="bU" title="Held notes one at a time, lowest to highest">Play ascending</button>
-  <button class="right" id="bD" title="Held notes one at a time, highest to lowest">Play descending</button>
-  <button id="bC" title="Release every held position">Clear</button>
-  <button id="bS" aria-pressed="true" title="Show or hide the score of the held notes (an experiment)">Score</button>
+  <button class="both"  id="bT" aria-label="Play together" title="Play together: all held notes at once, as a chord">Together</button>
+  <button class="left"  id="bU" aria-label="Play ascending" title="Play ascending: held notes one at a time, lowest to highest">Up</button>
+  <button class="right" id="bD" aria-label="Play descending" title="Play descending: held notes one at a time, highest to lowest">Down</button>
+  <button id="bC" aria-label="Clear" title="Clear: release every held position">Clear</button>
+  <button id="bS" aria-label="Score" aria-pressed="true" title="Score: show or hide the held notes on a staff (an experiment)">Score</button>
   <select id="tuning" aria-label="Tuning system" title="Equal temperament is rotationally symmetric, so one straight fret is correct for every course. Pythagorean, quarter-comma meantone and Werckmeister III well temperament are NOT: each course's own open pitch class determines where ITS fret lands, so the frets break into a zigzag. A real limitation of fretted instruments in a non-equal tuning, not a simplification.">
     <option value="equal" selected>Equal temperament</option>
     <option value="pythagorean">Pythagorean</option>
@@ -429,15 +432,14 @@
     el("line", { x1: x - 3.8, y1: y - 1.2, x2: x + 3.8, y2: y - 3.4, stroke: st.stroke, "stroke-width": 2 }, g);
     el("line", { x1: x - 3.8, y1: y + 3.8, x2: x + 3.8, y2: y + 1.6, stroke: st.stroke, "stroke-width": 2 }, g);
   }
-  function drawClef(y, parent) {      // a plain G clef, curled round the G line (y), drawn as strokes
-    el("path", { "class": "clef", fill: "none", stroke: "#2B2B2B", "stroke-width": 1.9, "stroke-linecap": "round", "stroke-linejoin": "round",
-                 "pointer-events": "none",
-                 d: "M" + 32 + " " + (y - 30) + " C" + 40 + " " + (y - 36) + " " + 42 + " " + (y - 24) + " " + 36 + " " + (y - 14) +
-                    " C" + 30 + " " + (y - 4) + " " + 22 + " " + (y + 2) + " " + 22 + " " + (y + 10) +
-                    " C" + 22 + " " + (y + 17) + " " + 32 + " " + (y + 17) + " " + 33 + " " + (y + 10) +
-                    " C" + 34 + " " + (y + 3) + " " + 24 + " " + (y - 2) + " " + 24 + " " + (y - 8) +
-                    " M" + 31 + " " + (y - 26) + " L" + 32 + " " + (y + 24) +
-                    " C" + 32 + " " + (y + 31) + " " + 24 + " " + (y + 32) + " " + 23 + " " + (y + 27) }, parent);
+  // The treble clef is the Bravura (SMuFL) glyph U+E050 gClef, as an OUTLINE path (no font, nothing loaded). Source: the Bravura font
+  // by Steinberg (steinbergmedia/bravura on GitHub), SIL Open Font License 1.1; the outline is Bravura's own, bounding box and origin
+  // identical to the font's SMuFL metadata (gClef: 4.392 up, 2.632 down, 2.684 wide, in staff spaces). Glyph units: 1000 per em, an em = 4 staff spaces, the origin ON the G line (the clef's curl is centred there), y up.
+  var CLEF_D = "M376 415l25 -145c3 -18 3 -18 29 -18c147 0 241 -113 241 -241c0 -113 -67 -198 -168 -238c-14 -6 -15 -5 -13 -17c11 -62 29 -157 29 -214c0 -170 -130 -200 -197 -200c-151 0 -190 98 -190 163c0 62 40 115 107 115c61 0 96 -47 96 -102c0 -58 -36 -85 -67 -94 c-23 -7 -32 -10 -32 -17c0 -13 26 -29 80 -29c59 0 159 18 159 166c0 47 -15 134 -27 201c-2 12 -4 11 -15 9c-20 -4 -46 -6 -69 -6c-245 0 -364 165 -364 339c0 202 153 345 297 464c12 10 11 12 9 24c-7 41 -14 106 -14 164c0 104 24 229 98 311c20 22 51 48 65 48 c11 0 37 -28 52 -50c41 -60 65 -146 65 -233c0 -153 -82 -280 -190 -381c-6 -6 -8 -7 -6 -19zM470 943c-61 0 -133 -96 -133 -252c0 -32 2 -66 6 -92c2 -13 6 -14 13 -8c79 69 174 159 174 270c0 55 -27 82 -60 82zM361 262l-21 128c-2 11 -4 12 -14 4 c-47 -38 -93 -75 -153 -142c-83 -94 -93 -173 -93 -232c0 -139 113 -236 288 -236c20 0 40 2 56 5c15 3 16 3 14 14l-50 298c-2 11 -4 12 -20 8c-61 -17 -100 -60 -100 -117c0 -46 30 -89 72 -107c7 -3 15 -6 15 -13c0 -6 -4 -11 -12 -11c-7 0 -19 3 -27 6 c-68 23 -115 87 -115 177c0 85 57 164 145 194c18 6 18 5 15 24zM430 103l49 -285c2 -12 4 -12 16 -6c56 28 94 79 94 142c0 88 -67 156 -148 163c-12 1 -13 -2 -11 -14z";
+  var CLEF_SCALE = 0.04;                 // staff space here is 10 px = 250 glyph units, so 10 / 250
+  function drawClef(y, parent) {         // y = the G line (second line from the bottom)
+    el("path", { "class": "clef", fill: "#2B2B2B", stroke: "none", "pointer-events": "none",
+                 transform: "translate(14 " + y + ") scale(" + CLEF_SCALE + " " + (-CLEF_SCALE) + ")", d: CLEF_D }, parent);
   }
   function drawScore() {
     var L = scoreLayout(held), x0 = 10, x1 = W - 10;
