@@ -43,7 +43,7 @@ proto.setText = function (t: string) { this.textContent = t; };
     writePhrase: async (params) => {
       if ((window as any).__refuse) return { ok: false, message: (window as any).__refuse };      // 2026-11-03-1155-9: a refusal the note gives, said by the real strip (the sentence is the plugin's own: set by the measure)
       const { applyPhraseWrite } = await import('@client/phrase-core.ts');
-      const w = applyPhraseWrite(files.get(PATH)!, params);
+      const w = applyPhraseWrite(files.get(PATH)!, params, (opts as any).describe ? NAME : undefined);      // 2026-11-12-1201: `describe` = a Description-grammar note, written as phrase-view.ts writes it (with the note's name); off = the JSON-era rig, as before
       if (w.ok === false) return w;
       files.set(PATH, w.text);
       queueMicrotask(() => handle.noteModified(PATH));            // Obsidian's vault `modify` for our own write

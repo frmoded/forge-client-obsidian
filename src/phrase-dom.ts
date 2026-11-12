@@ -28,6 +28,7 @@ import type { ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
 import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
 import { paintMixHits } from './mix-hits-dom.ts';
+import { mixStateCount, mixStatesHint } from './mix-states-core.ts';
 import { MORPH_BAR_ROLE, MORPH_HIT_ROLE, annotateMorphPayload, morphLineageOf, morphTraceInspector } from './morph-lineage-core.ts';
 import { paintMorphHits } from './morph-hits-dom.ts';
 import { editThisBar, revertThisBar, type ForkPorts } from './phrase-fork-core.ts';
@@ -165,7 +166,7 @@ export interface MixControls {
  *  2026-10-26-0900: a **Mode** select (Vote, Path). In PATH mode the Weight slider walks the morph's single-hit steps: one stop per change (step 1/d, snapping on input, labelled `k of d changes`), Order and Seed appear
  *  (as the morph's), and Threshold and Ghost notes are greyed with a one-line note (kept in the note, ignored). `changes(a, b)` is how many single-hit changes lie between two bars (null = it could not be told); it is
  *  asked only in path mode, again whenever a bar changes. In vote mode the strip is what it was. */
-export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: MixPatch): void; listBars(): string[]; morph?(): void; changes?(a: string, b: string): Promise<number | null> }, before: Node | null = null): MixControls {
+export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: MixPatch): void; listBars(): string[]; morph?(): void; changes?(a: string, b: string): Promise<number | null>; states?(a: string, b: string, ghost: boolean): Promise<{ vote: number; path: number } | null> }, before: Node | null = null): MixControls {
   const doc = parent.ownerDocument;
   const el = doc.createElement('div');
   el.className = `${PHRASE_CONTROLS_CLASS} forge-mix-controls`;
@@ -240,6 +241,12 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   sentence.className = 'forge-mix-sentence';
   sentence.setAttribute('aria-live', 'polite');
   el.appendChild(sentence);
+  // 2026-11-12-1201: under a VOTE mix whose pair gives fewer than three different results (two bars one of which holds all the other's hits give two), one line says so and points at Path with its number of steps.
+  const hint = doc.createElement('div');
+  hint.className = 'forge-mix-states-hint';
+  hint.setAttribute('aria-live', 'polite');
+  hint.style.display = 'none';
+  el.appendChild(hint);
   const statusEl = doc.createElement('span');
   statusEl.className = 'forge-phrase-status';
   statusEl.setAttribute('role', 'status');
@@ -249,6 +256,19 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   let live: MixPhrase | null = null;              // what the controls show right now (ahead of the note while the person is dragging)
   let known: number | null = null;                // path mode: the number of single-hit changes between live.a and live.b, once asked
   let ask = 0;
+  let hintAsk = 0;
+  /** The hint, again: asked only for a vote mix with the caller's `states`; an answer for a pair (or ghost setting) the person has already left is dropped; no answer (a bar unreadable) or nothing to say = no hint. */
+  const refreshHint = (): void => {
+    const mine = ++hintAsk;
+    const hide = () => { hint.textContent = ''; hint.style.display = 'none'; };
+    if (!live || live.mode === 'path' || !ports.states) { hide(); return; }
+    const { a: x, b: y, ghost: g } = live;
+    void ports.states(x, y, g).then((s) => {
+      if (mine !== hintAsk || !live || live.mode === 'path' || live.a !== x || live.b !== y || live.ghost !== g) return;
+      const text = s ? mixStatesHint(s.vote, s.path) : null;
+      if (text) { hint.textContent = text; hint.style.display = ''; } else hide();
+    }, () => { if (mine === hintAsk) hide(); });
+  };
   const fill = (sel: HTMLSelectElement, current: string): void => {
     const names = Array.from(new Set([...ports.listBars(), current].filter((n) => n !== ''))).sort();
     sel.textContent = '';
@@ -281,6 +301,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
     paint(next);
     if (changed) ports.onChange(patch);
     if (modeChanged) refresh();
+    if ('a' in patch || 'b' in patch || 'ghost' in patch || 'mode' in patch) refreshHint();
   };
   /** Path mode: how many changes lie between the two bars, again (nothing is asked in vote mode). */
   const refresh = (): void => {
@@ -334,7 +355,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
       a.disabled = b.disabled = mode.disabled = weight.input.disabled = threshold.input.disabled = ghost.disabled = order.disabled = off;
       if (off) seed.disabled = true;
       if (morph) morph.disabled = off;
-      if (params) { fill(a, params.a); fill(b, params.b); paint(params); refresh(); } else { sentence.textContent = ''; }
+      if (params) { fill(a, params.a); fill(b, params.b); paint(params); refresh(); refreshHint(); } else { sentence.textContent = ''; refreshHint(); }
     },
     setStatus(text) { statusEl.textContent = text; },                           // a refusal is selectable text (styles.css)
     dispose() { el.remove(); },
@@ -699,6 +720,18 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       return null;
     }
   };
+  /** 2026-11-12-1201: how many different results the vote and the path of two bars can give (the mix strip's hint), read FRESH from the vault; null = a bar could not be read or the two are not on one grid. */
+  const mixStates = async (x: string, y: string, ghost: boolean): Promise<{ vote: number; path: number } | null> => {
+    try {
+      const ra = readRhythmNote(await ports.readNote(phraseSourcePath(x)));
+      const rb = readRhythmNote(await ports.readNote(phraseSourcePath(y)));
+      if (ra.ok === false || rb.ok === false) return null;
+      if (ra.value.data.steps !== rb.value.data.steps) return null;
+      return { vote: mixStateCount(ra.value.data, rb.value.data, 'vote', ghost), path: mixStateCount(ra.value.data, rb.value.data, 'path') };
+    } catch {
+      return null;
+    }
+  };
   /** The inspector's port for selecting bars ON the Score (2026-10-30-1020): only a tab that has a notebook gets one, so a tab without it is exactly what it was. */
   const selectBarsPort = (): ScoreInspectorPorts['selectBars'] => (ports.notebook ? { onRange: (a, b) => { notebookHandle?.selectRange(a, b); }, onRangeEnd: () => { notebookHandle?.reveal(); }, onShiftClick: (n) => { notebookHandle?.extendTo(n); } } : undefined);
   const build = (k: PhraseParams['kind']): void => {
@@ -708,7 +741,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       const morph = mountMorphControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
       strip = { el: morph.el, set: (params) => morph.set(params && params.kind === 'morph' ? params : null), setStatus: (t) => morph.setStatus(t), dispose: () => morph.dispose() };
     } else if (k === 'mix') {
-      const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph, changes: morphChanges });
+      const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph, changes: morphChanges, states: mixStates });
       strip = { el: mix.el, set: (params) => mix.set(params && params.kind === 'mix' ? params : null), setStatus: (t) => mix.setStatus(t), dispose: () => mix.dispose() };
     } else if (k === 'transform') {
       const t = mountTransformStrip(parent, { openSource: insp ? (id) => insp.openNote(id) : undefined });
