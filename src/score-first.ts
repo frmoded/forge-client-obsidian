@@ -17,6 +17,7 @@ import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePane
 import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-core.ts';
+import { descriptionPortsFor } from './description-wiring.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, morphChangesViaEngine } from './phrase-engine.ts';
 import { installNotePreflight, makeNotePreflight } from './note-preflight-core.ts';
@@ -443,26 +444,22 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // their own strips: they are mounted by phrase-dom.ts and arrangement-strip-dom.ts, not from this file.
       // 2026-10-31-1120 (M15c, "Update from Description"): the person edits the Description of a phrase, arrangement or composition by hand; once they stop typing the note is updated from it (or the bar says where the sentence is wrong).
       // Only in a score-first vault (this code runs after the gate). A `modify` is heard for the three families only; opening a note or moving a pane only LOOKS (the bar), it never writes.
-      const folderNames = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename).filter((n) => n !== 'README');
       const noteFile = (p: string): TFile => { const f = app.vault.getAbstractFileByPath(p); if (!(f instanceof TFile)) throw new Error('File not found'); return f; };
-      const descriptions = createDescriptionController({
+      // 2026-11-13-1211: the ports are built by description-wiring.ts (no obsidian import) so a test runs this very mapping: settings -> askPlan / configured, folders -> bar and phrase names.
+      const descriptions = createDescriptionController(descriptionPortsFor({
         read: async (p) => app.vault.read(noteFile(p)),
         process: async (p, fn) => { await app.vault.process(noteFile(p), fn); },
-        vault: () => ({ bars: folderNames(BAR_FOLDER_NAME), phrases: folderNames(PHRASE_FOLDER), arrangements: folderNames('arrangements'), compositions: folderNames('compositions'), kits: folderNames('kits') }),
-        barNames: () => folderNames(BAR_FOLDER_NAME), phraseNames: () => folderNames(PHRASE_FOLDER),
+        basenamesIn: (folder) => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename),
         setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
         trace: (line) => { console.info(line); },
+        warn: (line) => { console.warn(line); },
         panes: () => {
           const out: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = [];
           app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && familyOfPath(v.file.path) !== null) out.push({ path: v.file.path, contentEl: v.contentEl, tab: plan === 'score' && SCORE_VIEW_TYPES.includes(leaf.view.getViewType()) }); });   // 2026-11-12-1203: the docked prompt box lives on a score tab of the music edition only (the lean edition's tabs are as they were: P3)
           return out;
         },
-        askPlan: hooks.askPlan ? (payload) => hooks.askPlan!(payload) : undefined,
-        configured: hooks.planConfigured,
-        ownKey: () => hooks.ownKey?.(),
-        serviceVersion: () => (hooks.serviceVersion ? hooks.serviceVersion() : Promise.resolve(null)),      // 2026-11-12-1206: an arrangement or composition sentence answered without a version asks /health once
         confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
-      });
+      }, hooks));
       plugin.registerEvent(app.vault.on('modify', (f) => { descriptions.modified(f.path); }));
       plugin.registerEvent(app.workspace.on('file-open', (f) => { if (f) void descriptions.inspect(f.path); }));
       // 2026-11-03-1155-8 (C): the bar is computed from the note when a pane OPENS and when a restored layout settles, not only heard from a modify (a reload brought the panes back and a custom note had no banner until `touch`).

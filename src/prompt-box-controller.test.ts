@@ -81,7 +81,9 @@ test('typing a new sentence and applying (Enter) updates the note by ONE write t
   assert.equal(r.store.get(PATH), noteContentFor('phrase_001', { ...MIX, weight: 0.35 }));
   assert.equal(r.field(el).value, VOTE_35, 'the canonical sentence');
   assert.equal(el.querySelector('.forge-prompt-box.is-edited'), null);
-  assert.deepEqual(r.lines, ['[forge-description] applied phrase_001 (weight 0.5 -> 0.35)']);
+  assert.deepEqual(r.lines.filter((l: string) => !l.startsWith('[forge-promptbox]')), ['[forge-description] applied phrase_001 (weight 0.5 -> 0.35)']);
+  assert.deepEqual(r.lines.filter((l: string) => l.startsWith('[forge-promptbox]')).map((l: string) => l.replace(/ text=\d+ chars/, ' text=N chars')), [                       // 2026-11-13-1211: every decision of Apply is a line
+    '[forge-promptbox] box mounted: phrase_001 family=phrase askPlan=present configured=true', '[forge-promptbox] apply pressed: phrase_001 family=phrase text=N chars', '[forge-promptbox] grammar verdict: accepted']);
   assert.equal(r.strip(el), '', 'nothing to say at the top');
 });
 

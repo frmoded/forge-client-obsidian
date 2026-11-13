@@ -35,6 +35,8 @@ export interface DescriptionPorts {
   setTimer(fn: () => void, ms: number): unknown;
   clearTimer(handle: unknown): void;
   trace(line: string): void;
+  /** 2026-11-13-1211: console.warn for a `[forge-promptbox]` line of a path that gives up (absent = trace). */
+  warn?(line: string): void;
   /** Every pane that shows a note right now: its path and the element its content is drawn in (a tab, the notes pane, the text view). */
   panes(): Array<{ path: string; contentEl: HTMLElement; /** 2026-11-12-1203: this pane is a score tab (the phrase, arrangement or composition Score), where the docked prompt box lives; the notes pane and the text view are not. */ tab?: boolean }>;
   /** POST /plan, as the sentence dialog sends it. Absent, or `configured()` false = the service is not offered. */
@@ -87,6 +89,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const notices = new Map<string, { message: string; text: string }>();     // path -> a sentence that stays on the note's bar after a successful apply (D4: comments dropped), until the note's text changes
   const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
   let disposed = false;
+  // 2026-11-13-1211: every decision of the prompt box's Apply is ONE line at console.info with this prefix; a path that GIVES UP says so at console.warn too. No token or URL value is ever in a line.
+  const pb = (line: string): void => { ports.trace(`[forge-promptbox] ${line}`); };
+  const pbWarn = (line: string): void => { ports.trace(`[forge-promptbox] ${line}`); (ports.warn ?? (() => {}))(`[forge-promptbox] ${line}`); };
 
   const viewOf = (path: string, u: Ui): BarView => {
     const family = familyOfPath(path);
@@ -143,6 +148,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         const family = familyOfPath(path)!;
         const handle = mountPromptBox(contentEl, { placeholder: placeholderFor(boxKind(note, family)), apply: (text) => applyFromBox(path, text) }, extractDescription(note));
         boxes.set(contentEl, { path, handle });
+        pb(`box mounted: ${basename(path)} family=${family} askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`);       // 2026-11-13-1211: the first line the driver sees on opening a tab: this build is live and the service gate says what it will do before Apply is pressed
       })();
     }
     for (const [el, b] of [...boxes]) if (!live.has(el)) { b.handle.dispose(); boxes.delete(el); }
@@ -163,7 +169,17 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** Apply the box's text: the Description facet is replaced and the note made again from it in ONE `process` (the same writers the controls and "Update from Description" use). A sentence that does not parse, or a note whose Recipe or
    *  Python were edited too, writes NOTHING: the strip at the top says where (line and column), and the box keeps the text. */
   async function applyFromBox(path: string, text: string): Promise<{ ok: boolean; disk?: string }> {
-    const family = familyOfPath(path); if (family === null) return { ok: false };
+    pb(`apply pressed: ${basename(path)} family=${familyOfPath(path) ?? 'none'} text=${text.length} chars`);
+    try { return await applyFromBoxCore(path, text); }
+    catch (e) {                                                                                           // 2026-11-13-1211: the box used to swallow a throw here (the text stayed "edited, not applied", the console empty): it is said now, in the console and under the box
+      const why = (e as Error)?.message ?? String(e);
+      pbWarn(`apply failed: ${why}`); console.error('[forge-promptbox] apply failed', e);
+      setBoxNote(path, `Apply failed: ${why}`);
+      return { ok: false };
+    }
+  }
+  async function applyFromBoxCore(path: string, text: string): Promise<{ ok: boolean; disk?: string }> {
+    const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     let failure: string | null = null, change = '', sentence = text;
     try {
       await ports.process(path, (cur) => {
@@ -177,19 +193,28 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         change = r.change;
         return r.text;
       });
-    } catch (e) { failure = `Update from Description: ${(e as Error)?.message ?? e}`; console.error('prompt-box: could not write the note', e); }
+    } catch (e) { failure = `Update from Description: ${(e as Error)?.message ?? e}`; console.error('prompt-box: could not write the note', e); pbWarn(`could not write the note: ${(e as Error)?.message ?? e}`); }
     if (failure !== null) {
       const cur = await ports.read(path).catch(() => '');
       const st = descriptionState(replaceDescriptionSection(cur, text) ?? cur, family, ports.vault());
       const state: DescriptionState = st.kind === 'rejected' ? st : { kind: 'rejected', sentence, error: { message: failure, line: 1, column: 1 }, message: failure };
       const base = extractDescription(cur);
       set(path, { state, message: failure, fromBox: true, base });
+      pb(`grammar verdict: ${st.kind === 'rejected' || st.kind === 'both-edited' ? st.kind : `other:${st.kind}`}`);
+      const gateLine = `service gate: askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`;
+      setBoxNote(path, st.kind === 'rejected' ? `The grammar did not accept this sentence (line ${st.error.line}, column ${st.error.column}: ${st.error.message}).` : failure);
       // 2026-11-12-1204: the GRAMMAR rejected the text (free, instant, exact: tried first, always). For a PHRASE, with the sentence service set up, Apply asks it ONCE, automatically, and shows the PREVIEW (nothing is written until it is
       // applied). Never while typing, never when the grammar accepted the text. 2026-11-12-1206: for an arrangement and a composition too (the service is version-gated for them: an older one says so, in one sentence).
-      if (st.kind === 'rejected' && ports.askPlan !== undefined && ports.configured?.() !== false) await ask(path);
+      if (st.kind !== 'rejected') { pb(`ask skipped: the verdict is ${st.kind}, not a sentence the grammar rejected`); return { ok: false }; }
+      if (ports.askPlan === undefined) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not available in this build.'); return { ok: false }; }
+      if (ports.configured?.() === false) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not set up: add its URL and token in Settings -> Forge.'); return { ok: false }; }
+      pb(gateLine);
+      await ask(path);
       return { ok: false };
     }
+    pb('grammar verdict: accepted');
     told.delete(path); ports.trace(appliedLine(basename(path), change || 'unchanged')); set(path, null);
+    setBoxNote(path, change ? 'Applied.' : 'Nothing changed: the note already says this.');
     const disk = await descriptionOf(path);
     return { ok: true, disk: disk ?? text };
   }
@@ -382,15 +407,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function ask(path: string): Promise<void> {
     const u = ui.get(path);
     const family = familyOfPath(path);
-    if (!u || u.state.kind !== 'rejected' || family === null || !ports.askPlan) return;
-    if (u.busy) return;                                                                                    // ONE request in flight: a second ask while the service thinks does nothing
+    if (family === null) return;                                                                          // a note that is not ours costs nothing and says nothing
+    if (!u || u.state.kind !== 'rejected' || !ports.askPlan) { pb(`ask skipped: ${!u ? 'no pending sentence for this note' : u.state.kind !== 'rejected' ? `the note's state is ${u.state.kind}` : 'no sentence service in this build'}`); return; }
+    if (u.busy) { pb('ask skipped: a request is already in flight'); return; }                                                                                    // ONE request in flight: a second ask while the service thinks does nothing
     const sentence = u.state.sentence;
     const v = ports.vault();
     const req = family === 'phrase'
       ? buildPlanRequest({ sentence, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() })
       : buildFamilyPlanRequest({ family, sentence, kitNames: v.kits, phraseNames: ports.phraseNames(), arrangementNames: v.arrangements, compositionNames: v.compositions, note: path.replace(/\.md$/, ''), ownKey: ports.ownKey?.() });
     const keepBox = (x: Ui): Ui => (x.fromBox ? { ...x, fromBox: true, base: x.base } : x);
-    if (req.ok === false) { set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); return; }
+    if (req.ok === false) { pbWarn(`request not built: ${req.message}`); set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); if (u.fromBox) setBoxNote(path, req.message); return; }
     set(path, { ...u, busy: true });
     if (u.fromBox) setBoxBusy(path, 'Asking the sentence service...');
     ports.trace(askingServiceLine(basename(path)));                                                         // 2026-11-13-1209 (C): a request LEFT
@@ -418,10 +444,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return;
     }
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));
-    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); return; }
+    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) setBoxNote(path, `The service refused: ${outcome.message}`); return; }
     const name = basename(path);
     const recipe = (outcome.params.kind === 'arrangement' || outcome.params.kind === 'composition' ? familyRecipeSteps(outcome.params) : phraseRecipeSteps(outcome.params as PhraseParams)).join('\n');
     set(path, { state: now.state, ...(now.fromBox ? { fromBox: true, base: now.base } : {}), preview: { params: outcome.params, forSentence: sentence, description: describe(outcome.params), recipe } });
+    if (now.fromBox) setBoxNote(path, 'The service answered: see the preview at the top.');
     if (family === 'phrase') void phraseDescription(name, outcome.params as PhraseParams);
   }
 

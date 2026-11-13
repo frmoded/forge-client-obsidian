@@ -230,10 +230,14 @@ test('P3: a PHRASE request is exactly what it was - no family, no kits, no arran
   assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview'], 'an OLD service (0.2.47) still plans a phrase: the version gate is for the new kinds only');
 });
 
-test('WIRING: the plugin\'s description controller is given the service-version port (score-first.ts), so a version-less refusal asks /health in the real plugin too', async () => {
+test('WIRING: the plugin\'s description controller is given the service-version port (description-wiring.ts, called by score-first.ts with the plugin\'s hooks), so a version-less refusal asks /health in the real plugin too', async () => {
   const fs = await import('node:fs'); const path = await import('node:path');
+  const { descriptionPortsFor } = await import('./description-wiring.ts');
+  const env = { read: async () => '', process: async () => {}, basenamesIn: () => [], panes: () => [], setTimer: () => 0, clearTimer: () => {}, trace: () => {}, warn: () => {} };
+  assert.equal(await descriptionPortsFor(env, { serviceVersion: async () => '0.2.41' }).serviceVersion!(), '0.2.41');
+  assert.equal(await descriptionPortsFor(env, {}).serviceVersion!(), null, 'no hook: unknown, never old');
   const src = fs.readFileSync(path.resolve(import.meta.dirname, 'score-first.ts'), 'utf8');
-  const at = src.indexOf('createDescriptionController({');
-  assert.ok(at > 0);
-  assert.match(src.slice(at, at + 3500), /serviceVersion: \(\) => \(hooks\.serviceVersion \? hooks\.serviceVersion\(\) : Promise\.resolve\(null\)\)/);
+  const at = src.indexOf('createDescriptionController(descriptionPortsFor(');
+  assert.ok(at > 0, 'score-first.ts builds the controller through descriptionPortsFor');
+  assert.match(src.slice(at, at + 3500), /\}, hooks\)\);/, 'and hands it the plugin\'s hooks');
 });

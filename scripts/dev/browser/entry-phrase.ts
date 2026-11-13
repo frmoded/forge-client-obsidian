@@ -80,6 +80,28 @@ proto.setText = function (t: string) { this.textContent = t; };
   if ((opts as any).describe) {
     const { createDescriptionController } = await import('@client/description-apply.ts');
     const names = (folder: string) => [...files.keys()].filter((k) => k.startsWith(folder + '/')).map((k) => k.slice(folder.length + 1, -3));
+    // 2026-11-13-1211: with `settings` ({ url, token }) the controller is built through descriptionPortsFor, the SAME factory score-first.ts calls, with the plugin's own hooks (main.ts line 786: askPlan always there, planConfigured reads the settings).
+    // `plan` is what the stand-in service answers; no real request ever leaves the page.
+    const { descriptionPortsFor } = await import('@client/description-wiring.ts');
+    const settings = (opts as any).settings as { url?: string; token?: string } | undefined;
+    if (settings !== undefined) {
+      const hooks = {
+        askPlan: async (payload: any) => { ((window as any).__asked ??= []).push(payload.sentence); await new Promise((r) => setTimeout(r, (opts as any).planMs ?? 400)); return { status: 200, json: { ok: true, parsed_ok: true, plan: (opts as any).plan, error: null } }; },
+        planConfigured: () => !!settings.url?.trim() && !!settings.token?.trim(),
+        ownKey: () => undefined,
+      };
+      (window as any).__descCtl = createDescriptionController(descriptionPortsFor({
+        read: async (p) => { const t = files.get(p); if (t === undefined) throw new Error('gone'); return t; },
+        process: async (p, fn) => { await Promise.resolve(); const cur = files.get(p)!; const next = fn(cur); if (next !== cur) { files.set(p, next); queueMicrotask(() => { handle.noteModified(p); (window as any).__descCtl.modified(p); }); } },
+        basenamesIn: (folder) => names(folder === 'rhythm_bars' ? 'bars' : folder),
+        setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
+        trace: (line) => { console.info(line); }, warn: (line) => { console.warn(line); },
+        panes: () => [{ path: PATH, contentEl: parent, tab: true }],
+      }, hooks));
+      (window as any).__descCtl.inspect(PATH);
+      await handle.load();
+      return;
+    }
     (window as any).__descCtl = createDescriptionController({
       read: async (p) => { const t = files.get(p); if (t === undefined) throw new Error('gone'); return t; },
       process: async (p, fn) => { await Promise.resolve(); const cur = files.get(p)!; const next = fn(cur); if (next !== cur) { files.set(p, next); queueMicrotask(() => { handle.noteModified(p); (window as any).__descCtl.modified(p); }); } },

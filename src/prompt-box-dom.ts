@@ -75,7 +75,7 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     busy = true; paint();
     const sent = s.text;
     let result: { ok: boolean; disk?: string } = { ok: false };
-    try { result = await ports.apply(sent); } catch { result = { ok: false }; }
+    try { result = await ports.apply(sent); } catch (e) { result = { ok: false }; note = `Apply failed: ${(e as Error)?.message ?? e}`; console.error('[forge-promptbox] apply threw', e); }       // 2026-11-13-1211: never swallowed
     busy = false;
     if (disposed) return;
     if (result.ok && s.text === sent) s = applied(result.disk ?? sent);          // applied and not typed on since: the field shows what the note says now
