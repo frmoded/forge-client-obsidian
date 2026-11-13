@@ -23,6 +23,8 @@ export interface PromptBoxHandle {
   focus(): void;
   /** A request is running for this text (the sentence service): the box says so and Apply waits; the text stays editable. `null` = done. */
   setBusy(message: string | null): void;
+  /** 2026-11-13-1209: a plain line under the box (an answer that was dropped, and why). Apply is not disabled by it; typing, a new request or a reset clears it. `null` = clear. */
+  setNote(message: string | null): void;
   /** The note was updated from the suggestion: the box shows what the note says now (the canonical grammar sentence) and drops the unapplied typing. */
   reset(disk: string): void;
   state(): BoxState;
@@ -56,13 +58,14 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
   let s: BoxState = initBox(initial);
   let busy = false;
   let remote: string | null = null;                              // the busy message of a request somebody else is running (setBusy)
+  let note: string | null = null;                                // a plain line left by a dropped answer (setNote): not busy, Apply stays available
   let disposed = false;
   const paint = (): void => {
     if (text.value !== s.text) text.value = s.text;
     const edited = isEdited(s);
     el.classList.toggle('is-edited', edited);
     el.classList.toggle('has-conflict', s.conflict);
-    state.textContent = remote ?? (edited ? 'edited, not applied' : '');
+    state.textContent = remote ?? note ?? (edited ? 'edited, not applied' : '');
     el.classList.toggle('is-busy', remote !== null || busy);
     apply.disabled = !edited || busy || remote !== null;
     conflict.style.display = s.conflict ? '' : 'none';
@@ -78,7 +81,7 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     if (result.ok && s.text === sent) s = applied(result.disk ?? sent);          // applied and not typed on since: the field shows what the note says now
     paint();
   };
-  text.addEventListener('input', () => { s = typed(s, text.value); paint(); });
+  text.addEventListener('input', () => { note = null; s = typed(s, text.value); paint(); });
   text.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || (e as KeyboardEvent).isComposing) return;
     e.preventDefault();                                                       // Enter applies; Shift+Enter (the browser's own) is a new line
@@ -96,8 +99,9 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     el,
     setDisk(disk) { s = diskChanged(s, disk); paint(); },
     focus() { try { text.focus(); } catch { /* not focusable (a hidden pane) */ } },
-    setBusy(message) { remote = message; paint(); },
-    reset(disk) { s = applied(disk); paint(); },
+    setBusy(message) { remote = message; if (message !== null) note = null; paint(); },
+    setNote(message) { note = message; paint(); },
+    reset(disk) { note = null; s = applied(disk); paint(); },
     state: () => s,
     dispose() { disposed = true; watch?.disconnect(); el.remove(); },
   };

@@ -7,7 +7,7 @@
 // score-first vault: P3).
 import { mountDescriptionBar, type BarAction, type BarHandle, type BarView } from './description-bar-dom.ts';
 import {
-  DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, revertDescriptionText, revertToGeneratedText, revertedLine, writeFromParams, pythonCustomBarMessage,
+  DESCRIPTION_DEBOUNCE_MS, REVERT_GENERATED_CONFIRM, appliedLine, applyDescriptionText, applyPythonText, applyRecipeText, askedServiceLine, askingServiceLine, cacheParams, changeSummary, descriptionState, familyOfPath, rejectedLine, revertDescriptionText, revertToGeneratedText, revertedLine, writeFromParams, pythonCustomBarMessage,
   type DescriptionState, type Family,
 } from './description-apply-core.ts';
 import { bothEditedLine, recipeAppliedLine, recipeRejectedLine, recipeRevertedLine } from './recipe-apply-core.ts';
@@ -149,6 +149,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   };
   const boxText = (path: string): string | undefined => { for (const b of boxes.values()) if (b.path === path) return b.handle.state().text; return undefined; };
   const setBoxBusy = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setBusy(message); };
+  const setBoxNote = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setNote(message); };
   /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
   const refreshBoxes = async (path: string): Promise<void> => {
     if (disposed) return;
@@ -200,6 +201,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (family === null) return;
     let text: string;
     try { text = await ports.read(path); } catch { return; }                                             // the note went away: nothing to say
+    // 2026-11-13-1209 (A): a sentence typed in the BOX that the grammar rejected lives ONLY in `ui` (nothing was written for it). While it is waiting for the service (busy) or showing the service's PREVIEW, it is OWNED by the box:
+    // the Description on disk being unchanged (a vault `modify`, a file-open, a layout change all re-read it) is no reason to forget it. Without this, evaluate() found the note `synced` and deleted the entry, and the answer
+    // that came back 1 to 3 s later found nothing and was dropped without a word. The person releases it: Cancel, applying the preview, editing the box text, or applying the box.
+    const held = ui.get(path);
+    if (held?.fromBox && (held.busy || held.preview) && held.state.kind === 'rejected' && boxText(path) === held.state.sentence && extractDescription(text) === held.base) return;
     if (notices.get(path)?.text !== text) notices.delete(path);                                          // D4: a sentence about an apply is for the text that apply wrote; any other text has moved on
     const st = descriptionState(text, family, ports.vault());
     if (st.kind === 'synced') { told.delete(path); set(path, null); return; }
@@ -387,6 +393,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (req.ok === false) { set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); return; }
     set(path, { ...u, busy: true });
     if (u.fromBox) setBoxBusy(path, 'Asking the sentence service...');
+    ports.trace(askingServiceLine(basename(path)));                                                         // 2026-11-13-1209 (C): a request LEFT
     let outcome: Asked;
     try {
       const res = await ports.askPlan(req.payload);
@@ -394,10 +401,20 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
     if (u.fromBox) setBoxBusy(path, null);
+    // 2026-11-13-1209 (B): every way out after a request left ends VISIBLE and TRACED (a message under the box and in the strip, a `dropped: <why>` trace line), never silent.
+    const dropVisibly = async (why: string, message: string, strip?: Ui): Promise<void> => {
+      ports.trace(askedServiceLine(basename(path), `dropped: ${why}`));
+      if (disposed) return;
+      setBoxNote(path, message);
+      if (strip) { set(path, strip); return; }
+      let disk = ''; try { disk = await ports.read(path); } catch { /* the note went away: the notice keys on text that no longer exists, so it simply never shows */ }
+      notices.set(path, { message, text: disk }); syncBars();
+    };
     const now = ui.get(path);
-    if (disposed || !now || now.state.kind !== 'rejected' || now.state.sentence !== sentence) return;     // the Description moved on while the service thought: its answer is for a sentence that is gone
+    if (disposed || !now || now.state.kind !== 'rejected' || now.state.sentence !== sentence) { await dropVisibly('the note changed while the service thought', 'The answer came back after the text changed; ask again.'); return; }
     if (now.fromBox && boxText(path) !== sentence) {                                                      // the person typed on in the box while the service thought: the answer is for a sentence that is gone
-      set(path, { state: now.state, message: 'The Description changed while the service was thinking; its suggestion was dropped.', fromBox: true, base: now.base });
+      const message = 'The Description changed while the service was thinking; its suggestion was dropped.';
+      await dropVisibly('the text in the box changed', message, { state: now.state, message, fromBox: true, base: now.base });
       return;
     }
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));

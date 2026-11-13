@@ -89,7 +89,10 @@ proto.setText = function (t: string) { this.textContent = t; };
       trace: (line) => { console.info(line); },
       panes: () => [{ path: PATH, contentEl: parent, tab: true }],
       // 2026-11-12-1204: a stand-in for the sentence service (POST /plan): answers with `opts.plan` after `opts.planMs`, and counts every request in window.__asked (the real service is the driver's: it costs money and needs a token)
-      ...((opts as any).plan ? { askPlan: async (payload: any) => { ((window as any).__asked ??= []).push(payload.sentence); await new Promise((r) => setTimeout(r, (opts as any).planMs ?? 400)); return { status: 200, json: { ok: true, parsed_ok: true, plan: (opts as any).plan, error: null } }; }, configured: () => true } : {}),
+      ...((opts as any).plan ? { askPlan: async (payload: any) => { ((window as any).__asked ??= []).push(payload.sentence);
+        // 2026-11-13-1209: opt-in, what real Obsidian does while a request is out: `interleaveMs` after the request left the rig fires an `inspect` (a file-open / layout change) and a vault `modify` of the note (the controller hears it and its debounce re-reads the note)
+        if ((opts as any).interleaveMs !== undefined) window.setTimeout(() => { (window as any).__descCtl.inspect(PATH); handle.noteModified(PATH); (window as any).__descCtl.modified(PATH); }, (opts as any).interleaveMs);
+        await new Promise((r) => setTimeout(r, (opts as any).planMs ?? 400)); return { status: 200, json: { ok: true, parsed_ok: true, plan: (opts as any).plan, error: null } }; }, configured: () => true } : {}),
     });
     (window as any).__descCtl.inspect(PATH);
   }

@@ -664,7 +664,8 @@ test('the sentence service: its refusal is in the evidence line; the preview\'s 
   (ta.querySelector('[data-action="ask"]') as HTMLElement).click(); await t.advance(1);
   void thinking;
   assert.equal(ta.querySelector('.forge-description-preview'), null, 'the stale answer is not shown');
-  assert.ok(!t.lines.some((l) => /asked the service/.test(l)), 'and not reported as an answer');
+  assert.ok(!t.lines.some((l) => /asked the service about \S+ -> (?!dropped)/.test(l)), 'and not reported as an answer');
+  assert.ok(t.lines.some((l) => /asked the service about \S+ -> dropped: /.test(l)), '2026-11-13-1209: but it IS reported, as dropped, with the reason (a dropped answer is never silent)');
 });
 
 test('dispose: a timer that is pending never fires, a disposed controller says and writes nothing however it is asked, and its bars are taken away', async () => {
@@ -753,7 +754,8 @@ test('a button that is still in the hand of a script after its bar went away (a 
       t.store.set(PATH, typed); t.ctl.modified(PATH); await t.advance(DESCRIPTION_DEBOUNCE_MS);
       (ta.querySelector('[data-action="ask"]') as HTMLElement).click(); await t.advance(1);
       assert.equal(ta.querySelector('.forge-description-preview'), null, `${label}: the stale answer is not shown`);
-      assert.ok(!t.lines.some((l) => /asked the service/.test(l)), `${label}: and not reported as an answer`);
+      assert.ok(!t.lines.some((l) => /asked the service about \S+ -> (?!dropped)/.test(l)), `${label}: and not reported as an answer`);
+      assert.ok(t.lines.some((l) => /asked the service about \S+ -> dropped: /.test(l)), `${label}: 2026-11-13-1209: but it is reported, as dropped, with the reason`);
     }
     await r.advance(1);
   } finally { process.off('unhandledRejection', onRejection); }
