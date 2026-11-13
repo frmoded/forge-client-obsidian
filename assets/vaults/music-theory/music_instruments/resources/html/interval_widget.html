@@ -31,7 +31,7 @@
   }
   [hidden] { display: none !important; }
   .wrap { max-width: 760px; margin: 0 auto; }
-  /* ---- the tab row: Explore / Chart / Trainer on the left, the tuning dropdown on the right ---- */
+  /* ---- the tab row: Explore / Chart / Trainer / Shift on the left, the tuning dropdown on the right ---- */
   .top { display: flex; flex-wrap: nowrap; gap: 6px; align-items: center; margin: 0 0 10px; }
   .top select { margin-left: auto; }
   button, select {
@@ -100,6 +100,16 @@
   .feedback { min-height: 2.6em; margin: 6px 0; color: var(--ink); font-size: 15px; }
   .feedback.right { color: var(--good); }
   .feedback.wrong { color: var(--accent); }
+  /* ---- the Shift tab: the tune's notes lit in the highlight colour, the raised note of "Break one interval" in the accent colour ---- */
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button:disabled:hover { border-color: var(--axis); }
+  .key.tune rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
+  .key.broken rect { fill: var(--accent); stroke: var(--ink); stroke-width: 2.5; }
+  .key.black.tune text { fill: var(--ink); }
+  .key.broken text { fill: #fff; }
+  .irow { margin: 2px 0 4px; color: var(--ink); font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.6; }
+  .irow .iv { display: inline-block; min-width: 1.9em; text-align: center; }
+  .irow .iv.chg { color: var(--accent); font-weight: 700; text-decoration: underline; }   /* the raised note's two intervals: colour AND bold AND underlined, never colour alone */
 </style>
 </head>
 <body>
@@ -109,6 +119,7 @@
   <button class="tab" id="tabExplore" role="tab" aria-selected="true" aria-controls="pExplore" title="Explore: pick two keys, or an interval name, and see it">Explore</button>
   <button class="tab" id="tabChart" role="tab" aria-selected="false" tabindex="-1" aria-controls="pChart" title="Chart: all 13 intervals with a song to remember each by">Chart</button>
   <button class="tab" id="tabTrainer" role="tab" aria-selected="false" tabindex="-1" aria-controls="pTrainer" title="Trainer: hear an interval and name it">Trainer</button>
+  <button class="tab" id="tabShift" role="tab" aria-selected="false" tabindex="-1" aria-controls="pShift" title="Shift: move a tune up and down the piano; the notes change, the intervals do not">Shift</button>
   <select id="tuning" aria-label="Tuning system" title="Equal temperament: 12 identical semitones. Pythagorean: pure 3:2 fifths from C. Meantone: quarter-comma. Well temperament: Werckmeister III. The same four tunings as the Piano gadget; the notes always keep their names, only the sound moves.">
     <option value="equal" selected>Equal temperament</option>
     <option value="pythagorean">Pythagorean</option>
@@ -159,6 +170,29 @@
   <div class="scroller"><svg class="strip static" id="trSvg" role="img" aria-label="Piano strip, C3 to C5, for the trainer."></svg></div>
   <div class="feedback" id="tFb" aria-live="polite"></div>
   <div class="names" id="tNames" role="group" aria-label="Name the interval you heard"></div>
+</section>
+
+<!-- ============ SHIFT ============ -->
+<section id="pShift" role="tabpanel" aria-labelledby="tabShift" hidden>
+  <div class="controls">
+    <label for="shTune" style="color:var(--ink)">Tune</label>
+    <select id="shTune" aria-label="Tune" style="flex:0 0 auto;margin-left:0;max-width:290px"></select>
+    <button id="shDn" aria-label="Shift down one half step">Shift down</button>
+    <button id="shUp" aria-label="Shift up one half step">Shift up</button>
+    <button id="shOd" aria-label="Octave down">Octave down</button>
+    <button id="shOu" aria-label="Octave up">Octave up</button>
+  </div>
+  <div class="controls">
+    <button class="both" id="shPlay" aria-label="Play the tune from its current position" title="Play the tune from where it is now">Play</button>
+    <button id="shReset" aria-label="Back to start" title="Back to start: the tune where it began, the true tune">Back to start</button>
+    <button id="shBreak" aria-pressed="false" aria-label="Break one interval" title="Break one interval: replay the tune with its middle note raised a half step, then press again to restore the true tune">Break one interval</button>
+  </div>
+  <div class="scroller"><svg class="strip static" id="shSvg" role="img" aria-label="Piano strip, C3 to C5, for the Shift tab."></svg></div>
+  <div class="legend" aria-hidden="true"><span class="sw" style="background:var(--highlight)"></span>the tune's notes<span class="sw" style="background:var(--accent)"></span>the raised note</div>
+  <div class="readout" id="shReadout" aria-live="polite" style="min-height:3em"><span class="big" id="shStart"></span><span class="plain" id="shNames"></span></div>
+  <div class="note">Between each pair of neighbouring notes, in half steps (+ up, - down):</div>
+  <div class="irow" id="shIntervals" role="group" aria-label="Interval sizes in half steps between neighbouring notes"></div>
+  <div class="note" id="shCaption" hidden>the notes changed, the intervals did not</div>
 </section>
 
 </div>
@@ -351,6 +385,41 @@
     var nm = right.name + " (" + right.symbol + "), " + steps(q.count);
     return chosen === q.count ? "Right: " + nm + "." : "Not quite: that was a " + nm + ", not a " + said.name + ".";
   }
+  // --- Shift: a tune moved across the strip keeps its INTERVALS (2026-11-12-1207) ---------------------------------------------
+  var TUNE_NOTE = 0.45;                          // seconds per note; the last note of a tune is twice as long
+  // The three tunes, as MIDI note lists. Each is PUBLIC DOMAIN: Twinkle Twinkle Little Star and Frere Jacques are traditional melodies of
+  // the 18th century, Ode to Joy is Beethoven's (1824). Edit a tune here and nowhere else; keep every note inside LOW..HIGH (48..72).
+  var TUNES = [
+    { id: "twinkle", title: "Twinkle Twinkle Little Star", notes: [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60] },
+    { id: "jacques", title: "Fr\u00e8re Jacques", notes: [60, 62, 64, 60, 60, 62, 64, 60, 64, 65, 67, 64, 65, 67] },
+    { id: "ode", title: "Ode to Joy", notes: [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62] }
+  ];
+  function shiftTune(notes, semitones) { return notes.map(function (m) { return m + semitones; }); }
+  // A shift is allowed only when EVERY note stays on the strip (low..high): the lowest and the highest decide.
+  function canShift(notes, semitones, low, high) {
+    return Math.min.apply(null, notes) + semitones >= low && Math.max.apply(null, notes) + semitones <= high;
+  }
+  // The signed size of each step between neighbouring notes, in half steps (+ up, - down, 0 a repeated note). It does not change with a shift.
+  function tuneIntervals(notes) {
+    var out = [];
+    for (var i = 1; i < notes.length; i++) out.push(notes[i] - notes[i - 1]);
+    return out;
+  }
+  // "Break one interval" raises ONE note by one half step. The fixed rule, for every tune: the MIDDLE note, index floor(length / 2)
+  // (Twinkle: the 8th of 14, F; Frere Jacques: the 8th of 14, C; Ode to Joy: the 8th of 15, D). It is never the first or the last note,
+  // so exactly two interval sizes change: the one into the note (+1) and the one out of it (-1).
+  function breakIndex(notes) { return Math.floor(notes.length / 2); }
+  function breakOne(notes) {
+    var out = notes.slice(), i = breakIndex(notes);
+    out[i] = notes[i] + 1;
+    return out;
+  }
+  function noteNames(notes) { return notes.map(plainName); }          // flats for black keys: Explore's plain reading
+  function signed(d) { return (d > 0 ? "+" : "") + d; }
+  // What Play sounds: a note every TUNE_NOTE seconds, the last one twice as long.
+  function tunePlan(notes, system) {
+    return notes.map(function (m, i) { return { midi: m, hz: midiToHz(m, system), when: i * TUNE_NOTE, dur: i === notes.length - 1 ? 2 * TUNE_NOTE : TUNE_NOTE }; });
+  }
   // --- end pure functions ------------------------------------------------
 
   if (typeof document === "undefined") {           // node test harness
@@ -358,7 +427,8 @@
       fifthChainCents: fifthChainCents, midiToHz: midiToHz, midiToName: midiToName, isBlack: isBlack, INTERVALS: INTERVALS, SONG_CUES: SONG_CUES, LEVELS: LEVELS, DONE_STREAK: DONE_STREAK,
       intervalInfo: intervalInfo, targetsFor: targetsFor, spanKeys: spanKeys, plainName: plainName, reading: reading, readingForPick: readingForPick,
       exploreClick: exploreClick, explorePick: explorePick, exploreView: exploreView, explorePlan: explorePlan, chartPlan: chartPlan,
-      nextQuestion: nextQuestion, trainerPlan: trainerPlan, scoreAnswer: scoreAnswer, answerText: answerText };
+      nextQuestion: nextQuestion, trainerPlan: trainerPlan, scoreAnswer: scoreAnswer, answerText: answerText,
+      TUNE_NOTE: TUNE_NOTE, TUNES: TUNES, shiftTune: shiftTune, canShift: canShift, tuneIntervals: tuneIntervals, breakIndex: breakIndex, breakOne: breakOne, noteNames: noteNames, tunePlan: tunePlan };
     return;
   }
 
@@ -436,16 +506,17 @@
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
   }
-  function pluck(hz, when, peak) {
+  function pluck(hz, when, peak, len) {
+    len = len || 2.4;                               // seconds to fade out; the other tabs never pass it
     var c = audio(); if (!c) return;
     var t0 = c.currentTime + (when || 0);
     var o = c.createOscillator(), g = c.createGain();
     o.setPeriodicWave(wave); o.frequency.value = hz;
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(peak, t0 + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.4);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
     o.connect(g); g.connect(c.destination);
-    o.start(t0); o.stop(t0 + 2.6);
+    o.start(t0); o.stop(t0 + len + 0.2);
   }
   function playPlan(plan) {
     if (!plan.length) return;
@@ -453,8 +524,12 @@
     plan.forEach(function (n) { pluck(n.hz, n.when, peak); });
   }
 
+  function playTune(plan) {                         // a melody: each note fades out a little after the next one starts, so the notes stay distinct
+    plan.forEach(function (n) { pluck(n.hz, n.when, 0.28, n.dur * 1.4); });
+  }
+
   // --- tabs ------------------------------------------------------------------------------------------------------------------
-  var TABS = [["Explore", "tabExplore", "pExplore"], ["Chart", "tabChart", "pChart"], ["Trainer", "tabTrainer", "pTrainer"]];
+  var TABS = [["Explore", "tabExplore", "pExplore"], ["Chart", "tabChart", "pChart"], ["Trainer", "tabTrainer", "pTrainer"], ["Shift", "tabShift", "pShift"]];
   function setTab(name) {
     TABS.forEach(function (t) {
       var on = t[0] === name;
@@ -466,7 +541,7 @@
   TABS.forEach(function (t, i) {
     $(t[1]).addEventListener("click", function () { setTab(t[0]); });
     $(t[1]).addEventListener("keydown", function (e) {
-      var j = e.key === "ArrowRight" ? (i + 1) % 3 : e.key === "ArrowLeft" ? (i + 2) % 3 : -1;
+      var j = e.key === "ArrowRight" ? (i + 1) % TABS.length : e.key === "ArrowLeft" ? (i + TABS.length - 1) % TABS.length : -1;
       if (j < 0) return;
       e.preventDefault(); setTab(TABS[j][0]); $(TABS[j][1]).focus();
     });
@@ -578,8 +653,58 @@
   });
   $("tH").addEventListener("click", function () { tr.hide = !tr.hide; renderTrainer(); });
 
+  // --- SHIFT -----------------------------------------------------------------------------------------------------------------
+  // State: the tune, how far it has been moved (`offset`, half steps), whether it has been moved at all (`shifted`, for the caption), and
+  // whether the raised note is on (`broken`). Nothing here plays except Play and Break one interval; a shift is silent.
+  var sh = { tune: TUNES[0], offset: 0, shifted: false, broken: false };
+  var shKeys = buildStrip($("shSvg"), LOW, HIGH, { WW: 40, WH: 150, BW: 24, BH: 92, PAD: 2, labels: true }, null);
+  TUNES.forEach(function (t) { html("option", { value: t.id }, $("shTune"), t.title); });
+  function shBase() { return shiftTune(sh.tune.notes, sh.offset); }
+  function shShown() { var n = shBase(); return sh.broken ? breakOne(n) : n; }
+  function shiftButton(id, ok, enabledTitle, disabledTitle) {           // a shift that would leave the strip is disabled (grey) and its title says why
+    var b = $(id); b.disabled = !ok;
+    b.setAttribute("title", ok ? enabledTitle : disabledTitle);
+  }
+  function renderShift() {
+    var base = shBase(), shown = sh.broken ? breakOne(base) : base, bi = breakIndex(base), raised = sh.broken ? shown[bi] : null, lit = {};
+    shown.forEach(function (m, i) { if (!(sh.broken && i === bi)) lit[m] = true; });
+    for (var k in shKeys) { var m = +k, c = shKeys[k].classList; c.toggle("broken", raised === m); c.toggle("tune", !!lit[m] && raised !== m); }
+    $("shSvg").setAttribute("aria-label", "Piano strip, C3 to C5: " + sh.tune.title + " starting on " + plainName(base[0]) + (sh.broken ? ", with one note raised a half step" : "") + ".");
+    $("shStart").textContent = "starts on " + plainName(base[0]) + " (octave " + (Math.floor(base[0] / 12) - 1) + ")";
+    $("shNames").textContent = noteNames(shown).join(" ");
+    var row = $("shIntervals"), was = tuneIntervals(base), now = tuneIntervals(shown);
+    while (row.firstChild) row.removeChild(row.firstChild);
+    now.forEach(function (d, i) {
+      var changed = sh.broken && d !== was[i];
+      var span = html("span", changed ? { "class": "iv chg", "aria-label": signed(d) + ", changed by the raised note", title: "changed by the raised note (it was " + signed(was[i]) + ")" } : { "class": "iv" }, row, signed(d));
+      if (i < now.length - 1) row.appendChild(document.createTextNode(" "));
+    });
+    $("shCaption").hidden = !sh.shifted || sh.broken;           // once shifted at least once; not while the tune is broken (then the intervals DID change)
+    $("shBreak").setAttribute("aria-pressed", sh.broken ? "true" : "false");
+    shiftButton("shDn", canShift(sh.tune.notes, sh.offset - 1, LOW, HIGH), "Shift down: every note one half step lower", "Can't shift down: the lowest note would go below C3");
+    shiftButton("shUp", canShift(sh.tune.notes, sh.offset + 1, LOW, HIGH), "Shift up: every note one half step higher", "Can't shift up: the highest note would go above C5");
+    shiftButton("shOd", canShift(sh.tune.notes, sh.offset - 12, LOW, HIGH), "Octave down: every note twelve half steps lower", "Can't go an octave down: the lowest note would go below C3");
+    shiftButton("shOu", canShift(sh.tune.notes, sh.offset + 12, LOW, HIGH), "Octave up: every note twelve half steps higher", "Can't go an octave up: the highest note would go above C5");
+  }
+  function moveBy(d) {
+    if (!canShift(sh.tune.notes, sh.offset + d, LOW, HIGH)) return;       // a disabled button never gets here from a click; a keyboard or a script might
+    sh.offset += d; sh.shifted = true; renderShift();
+  }
+  $("shDn").addEventListener("click", function () { moveBy(-1); });
+  $("shUp").addEventListener("click", function () { moveBy(1); });
+  $("shOd").addEventListener("click", function () { moveBy(-12); });
+  $("shOu").addEventListener("click", function () { moveBy(12); });
+  $("shPlay").addEventListener("click", function () { playTune(tunePlan(shShown(), tuning)); });
+  $("shReset").addEventListener("click", function () { sh.offset = 0; sh.broken = false; renderShift(); });   // the tune where it began, the TRUE tune
+  $("shBreak").addEventListener("click", function () { sh.broken = !sh.broken; renderShift(); playTune(tunePlan(shShown(), tuning)); });   // on: the raised note; again: the true tune, and it sounds too
+  $("shTune").addEventListener("change", function (e) {
+    var t = TUNES.filter(function (x) { return x.id === e.target.value; })[0] || TUNES[0];
+    sh = { tune: t, offset: 0, shifted: false, broken: false }; renderShift();
+  });
+
   renderExplore();
   newQuestion(false);
+  renderShift();
 })();
 </script>
 </body>

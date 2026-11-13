@@ -229,14 +229,16 @@ test('the page in a DOM: tabs, the Explore flows (two keys, a picked name, clipp
 
 test('tabs are keyboard-operable (arrow keys), every control has an accessible name, and the keys are roving Tab stops', () => {
   const p = openPage();
-  const tabs = ['tabExplore', 'tabChart', 'tabTrainer'].map((i) => p.doc.getElementById(i));
-  assert.deepEqual(tabs.map((t: any) => t.getAttribute('role')), ['tab', 'tab', 'tab']);
+  const tabs = ['tabExplore', 'tabChart', 'tabTrainer', 'tabShift'].map((i) => p.doc.getElementById(i));         // 2026-11-12-1207: a fourth tab, Shift; the arrow keys wrap over four
+  assert.deepEqual(tabs.map((t: any) => t.getAttribute('role')), ['tab', 'tab', 'tab', 'tab']);
   tabs[0].dispatchEvent(new p.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
   assert.equal(tabs[1].getAttribute('aria-selected'), 'true');
   tabs[1].dispatchEvent(new p.win.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
   assert.equal(tabs[0].getAttribute('aria-selected'), 'true');
   tabs[0].dispatchEvent(new p.win.KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
-  assert.equal(tabs[2].getAttribute('aria-selected'), 'true', 'wraps round');
+  assert.equal(tabs[3].getAttribute('aria-selected'), 'true', 'wraps round (to the last tab, Shift)');
+  tabs[3].dispatchEvent(new p.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  assert.equal(tabs[0].getAttribute('aria-selected'), 'true', 'and round again');
   for (const b of p.doc.querySelectorAll('button')) assert.ok((b.getAttribute('aria-label') ?? b.textContent).trim().length > 0, `a button without a name: ${b.outerHTML.slice(0, 80)}`);
   const keys = [...p.doc.querySelectorAll('#exSvg .key')];
   assert.equal(keys.length, 25, 'C3..C5 = 25 keys');
@@ -265,6 +267,169 @@ test('CONTROL: the checks can fail - a wrong name in the table, no range clippin
   assert.ok(coreFailures(pure(scriptOf(damaged('notes = mode === "down" ? [st.target, st.root] : [st.root, st.target];', 'notes = [st.root, st.target];')))).length > 0, 'Down in the wrong order');
   assert.ok(pageFailures(damaged('"Frère Jacques",', '"Twinkle",')).length > 0, 'a wrong cue');
   assert.ok(pageFailures(damaged('if (tr.answered) view =', 'if (true) view =')).length > 0, 'the answer shown before it is given');
+});
+
+// ---- 2026-11-12-1207: the SHIFT tab - "a tune shifted across the piano up and down and still recognized: the interval is the only thing that matters" -------------------------------------------------------
+// Public-domain tunes as MIDI lists; shiftTune / canShift / tuneIntervals / breakOne / noteNames / tunePlan are the page's own pure functions; the intervals NEVER change with a shift, a broken tune changes exactly one note
+// (+1 half step, the middle one) and exactly two interval sizes. Expected values are the prompt's published ones, not read back from the page.
+const TUNES: Array<[string, number[]]> = [
+  ['Twinkle Twinkle Little Star', [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60]],
+  ['Frère Jacques', [60, 62, 64, 60, 60, 62, 64, 60, 64, 65, 67, 64, 65, 67]],
+  ['Ode to Joy', [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62]],
+];
+const TWINKLE_INTERVALS = [0, 7, 0, 2, 0, -2, -2, 0, -1, 0, -2, 0, -2];
+const FLATS = ['C', 'D-flat', 'D', 'E-flat', 'E', 'F', 'G-flat', 'G', 'A-flat', 'A', 'B-flat', 'B'];
+
+/** Every claim about the Shift tab's pure functions, as a list of failures (empty = all hold). */
+function shiftCoreFailures(g: any): string[] {
+  const bad: string[] = [];
+  const eq = (what: string, got: unknown, want: unknown) => { if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(`${what}: ${JSON.stringify(got)} !== ${JSON.stringify(want)}`); };
+  eq('three tunes, the titles', (g.TUNES ?? []).map((t: any) => t.title), TUNES.map(([title]) => title));
+  eq('the tunes\' notes, as the prompt lists them', (g.TUNES ?? []).map((t: any) => t.notes), TUNES.map(([, n]) => n));
+  eq('note counts 14, 14, 15', (g.TUNES ?? []).map((t: any) => t.notes.length), [14, 14, 15]);
+  for (const [title, notes] of TUNES) {
+    eq(`${title}: inside C3..C5 (48..72)`, [Math.min(...notes) >= 48, Math.max(...notes) <= 72], [true, true]);
+    const input = notes.slice(); g.shiftTune(input, 3);
+    eq(`${title}: shiftTune does not change its input`, input, notes);
+    eq(`${title}: shiftTune +3`, g.shiftTune(notes, 3), notes.map((m) => m + 3));
+    eq(`${title}: shiftTune 0 is the tune`, g.shiftTune(notes, 0), notes);
+    const lo = Math.min(...notes), hi = Math.max(...notes);
+    eq(`${title}: canShift at the edges`, [g.canShift(notes, 72 - hi, 48, 72), g.canShift(notes, 73 - hi, 48, 72), g.canShift(notes, 48 - lo, 48, 72), g.canShift(notes, 47 - lo, 48, 72)], [true, false, true, false]);
+    eq(`${title}: canShift 0`, g.canShift(notes, 0, 48, 72), true);
+    const base = g.tuneIntervals(notes);
+    eq(`${title}: one interval fewer than notes`, base.length, notes.length - 1);
+    let allowed = 0;
+    for (let d = -30; d <= 30; d++) {
+      if (!g.canShift(notes, d, 48, 72)) continue;
+      allowed++;
+      const sh = g.shiftTune(notes, d);
+      eq(`${title}: the intervals do not change at shift ${d}`, g.tuneIntervals(sh), base);
+      const broken = g.breakOne(sh), idx = g.breakIndex(sh);
+      const diff = broken.map((m: number, i: number) => m - sh[i]);
+      eq(`${title}: breakOne at shift ${d}: exactly one note, +1, the middle one`, [diff.filter((x: number) => x !== 0).length, diff[idx], idx], [1, 1, Math.floor(sh.length / 2)]);
+      const bi = g.tuneIntervals(broken), changed = bi.map((v: number, i: number) => v - base[i]);
+      eq(`${title}: breakOne at shift ${d}: exactly two interval sizes differ, by +1 into the note and -1 out of it`, [changed.filter((x: number) => x !== 0).length, changed[idx - 1], changed[idx]], [2, 1, -1]);
+      eq(`${title}: the broken note stays on the strip at shift ${d}`, Math.max(...broken) <= 72 && Math.min(...broken) >= 48, true);
+      eq(`${title}: breakOne does not change its input at shift ${d}`, sh, g.shiftTune(notes, d));
+    }
+    if (allowed < 10) bad.push(`${title}: only ${allowed} allowed shifts - the invariance was barely tested`);
+  }
+  eq('Twinkle\'s interval row, as the prompt gives it', g.tuneIntervals(TUNES[0][1]), TWINKLE_INTERVALS);
+  eq('Twinkle may go up 3 and down 12 and not further', [g.canShift(TUNES[0][1], 3, 48, 72), g.canShift(TUNES[0][1], 4, 48, 72), g.canShift(TUNES[0][1], -12, 48, 72), g.canShift(TUNES[0][1], -13, 48, 72)], [true, false, true, false]);
+  eq('noteNames: flats for black keys (Twinkle up 3)', g.noteNames(g.shiftTune(TUNES[0][1], 3)), ['E-flat', 'E-flat', 'B-flat', 'B-flat', 'C', 'C', 'B-flat', 'A-flat', 'A-flat', 'G', 'G', 'F', 'F', 'E-flat']);
+  eq('noteNames: every pitch class', g.noteNames([60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71]), FLATS);
+  eq('noteNames agrees with Explore\'s plain reading', [60, 61, 66, 70].map((m) => g.plainName(m)), g.noteNames([60, 61, 66, 70]));
+  const plan = g.tunePlan(TUNES[0][1], 'equal');
+  eq('tunePlan: onsets every 0.45 s, the last note twice as long', [plan.map((n: any) => +n.when.toFixed(2)), plan.map((n: any) => +n.dur.toFixed(2))], [TUNES[0][1].map((_, i) => +(i * 0.45).toFixed(2)), TUNES[0][1].map((_, i) => (i === TUNES[0][1].length - 1 ? 0.9 : 0.45))]);
+  eq('tunePlan: the Hz are the page\'s tuning', plan.map((n: any) => +n.hz.toFixed(2)), TUNES[0][1].map((m) => +g.midiToHz(m, 'equal').toFixed(2)));
+  eq('tunePlan follows the tuning dropdown', +g.tunePlan([67], 'pythagorean')[0].hz.toFixed(2), +g.midiToHz(67, 'pythagorean').toFixed(2));
+  return bad;
+}
+
+test('SHIFT, the pure functions: three public-domain tunes, shiftTune / canShift, the interval row that never changes (every allowed shift of every tune), breakOne (one note +1, two intervals), flats, the play plan', () => {
+  assert.deepEqual(shiftCoreFailures(pure()), []);
+  assert.match(html, /public domain/i, 'the tunes\' array says each tune is public domain');
+});
+
+const TWINKLE_ROW = '0 +7 0 +2 0 -2 -2 0 -1 0 -2 0 -2';
+const rowText = (p: Page): string => text(p, '#shIntervals').replace(/\s*\(.*$/, '');
+const litKeys = (p: Page, cl: string): number[] => [...p.doc.querySelectorAll(`#shSvg .key.${cl}`)].map((k: any) => +k.getAttribute('data-midi')).sort((a: number, b: number) => a - b);
+
+/** Every claim about the Shift tab in a DOM, as a list of failures (empty = all hold). */
+function shiftPageFailures(h: string): string[] {
+  const bad: string[] = [];
+  const ok = (what: string, cond: unknown) => { if (!cond) bad.push(what); };
+  const g = pure(scriptOf(h));
+  const p = openPage(h, () => 0);
+  ok('loads clean', p.errors.length === 0);
+  ok('four tabs, Shift last, its panel hidden until chosen', ['tabExplore', 'tabChart', 'tabTrainer', 'tabShift'].map((i) => p.doc.getElementById(i)?.getAttribute('role')).join() === 'tab,tab,tab,tab' && p.doc.getElementById('pShift').hidden);
+  ok('the page opens on Explore', p.doc.getElementById('tabExplore').getAttribute('aria-selected') === 'true' && p.osc.length === 0);
+  click(p, '#tabShift');
+  ok('the Shift tab shows its panel and hides the others', !p.doc.getElementById('pShift').hidden && p.doc.getElementById('pExplore').hidden && p.doc.getElementById('pChart').hidden && p.doc.getElementById('pTrainer').hidden && p.doc.getElementById('tabShift').getAttribute('aria-selected') === 'true');
+  ok('nothing plays on tab open', p.osc.length === 0);
+  ok('the picker lists the three tunes, Twinkle first', [...p.doc.querySelectorAll('#shTune option')].map((o: any) => o.textContent.trim()).join('|') === TUNES.map(([t]) => t).join('|') && p.doc.getElementById('shTune').value === 'twinkle');
+  ok('at the start: starts on C, the whole name line, the interval row', /^starts on C\b/.test(text(p, '#shStart')) && text(p, '#shNames') === 'C C G G A A G F F E E D D C' && rowText(p) === TWINKLE_ROW);
+  ok('the strip is the Explore strip: 25 keys, C3 to C5', p.doc.querySelectorAll('#shSvg .key').length === 25 && !!p.doc.querySelector('#shSvg .key[data-midi="48"]') && !!p.doc.querySelector('#shSvg .key[data-midi="72"]'));
+  ok('the tune\'s notes are lit at the start position', JSON.stringify(litKeys(p, 'tune')) === JSON.stringify([60, 62, 64, 65, 67, 69]) && litKeys(p, 'broken').length === 0);
+  ok('the caption is not shown before a shift', p.doc.getElementById('shCaption').hidden);
+  ok('at the start Shift up, Shift down and Octave down are possible; Octave up is not (A4 + 12 would leave the strip) and says why', ['shUp', 'shDn', 'shOd'].every((i) => !p.doc.getElementById(i).disabled) && p.doc.getElementById('shOu').disabled && /C5|highest|top|outside/i.test(p.doc.getElementById('shOu').getAttribute('title')));
+  // ---- three half steps up: the names change, the intervals do not
+  for (let i = 0; i < 3; i++) click(p, '#shUp');
+  ok('shifting plays nothing', p.osc.length === 0);
+  ok('up 3: starts on E-flat, the name line changed', /^starts on E-flat\b/.test(text(p, '#shStart')) && text(p, '#shNames') === 'E-flat E-flat B-flat B-flat C C B-flat A-flat A-flat G G F F E-flat');
+  ok('up 3: the interval row is the same', rowText(p) === TWINKLE_ROW);
+  ok('up 3: the strip moved with it', JSON.stringify(litKeys(p, 'tune')) === JSON.stringify([63, 65, 67, 68, 70, 72]));
+  ok('the caption says it, once shifted', !p.doc.getElementById('shCaption').hidden && text(p, '#shCaption') === 'the notes changed, the intervals did not');
+  ok('at the top edge Shift up is disabled with a title that says why, Shift down is not', p.doc.getElementById('shUp').disabled && /C5|highest|top|outside/i.test(p.doc.getElementById('shUp').getAttribute('title')) && !p.doc.getElementById('shDn').disabled && p.doc.getElementById('shOu').disabled);
+  click(p, '#shUp'); ok('a disabled Shift up changes nothing', /^starts on E-flat\b/.test(text(p, '#shStart')));
+  for (let i = 0; i < 8; i++) click(p, '#shDn');
+  ok('down 8 more (net down 5): starts on G, the row is still the same', /^starts on G\b/.test(text(p, '#shStart')) && text(p, '#shNames') === 'G G D D E E D C C B B A A G' && rowText(p) === TWINKLE_ROW);
+  ok('down 5: Octave down is disabled (G3 - 12 would leave the strip) and a click changes nothing', p.doc.getElementById('shOd').disabled && (click(p, '#shOd'), /^starts on G\b/.test(text(p, '#shStart'))));
+  // ---- the buttons play
+  click(p, '#shReset');
+  ok('Back to start: the tune is where it began', /^starts on C\b/.test(text(p, '#shStart')) && JSON.stringify(litKeys(p, 'tune')) === JSON.stringify([60, 62, 64, 65, 67, 69]) && p.doc.getElementById('shOu').disabled);
+  p.osc.length = 0; click(p, '#shPlay');
+  ok('Play sounds the whole tune from its position, in order', JSON.stringify(oscHz(p)) === JSON.stringify(hz(g, ...TUNES[0][1])));
+  click(p, '#shOd');
+  ok('Octave down: an octave lower on the strip, the same letters, the octave said, the same row', JSON.stringify(litKeys(p, 'tune')) === JSON.stringify([48, 50, 52, 53, 55, 57]) && /^starts on C\b.*octave 3/.test(text(p, '#shStart')) && text(p, '#shNames') === 'C C G G A A G F F E E D D C' && rowText(p) === TWINKLE_ROW && p.doc.getElementById('shDn').disabled);
+  click(p, '#shOu');
+  ok('Octave up: back where it was', JSON.stringify(litKeys(p, 'tune')) === JSON.stringify([60, 62, 64, 65, 67, 69]) && /octave 4/.test(text(p, '#shStart')));
+  // ---- break one interval
+  p.osc.length = 0; click(p, '#shBreak');
+  ok('Break one interval plays the tune with its middle note raised a half step', JSON.stringify(oscHz(p)) === JSON.stringify(hz(g, ...g.breakOne(TUNES[0][1]))));
+  ok('the changed note is marked in a second colour (one key), the tune still lit', JSON.stringify(litKeys(p, 'broken')) === JSON.stringify([66]) && litKeys(p, 'tune').includes(65));
+  ok('the row shows the two changed sizes, as text, marked', rowText(p) === '0 +7 0 +2 0 -2 -1 -1 -1 0 -2 0 -2' && p.doc.querySelectorAll('#shIntervals .chg').length === 2 && [...p.doc.querySelectorAll('#shIntervals .chg')].every((e: any) => /changed/i.test(e.getAttribute('aria-label') ?? e.getAttribute('title') ?? '')));
+  ok('the button says it is on', p.doc.getElementById('shBreak').getAttribute('aria-pressed') === 'true');
+  ok('while the tune is broken the caption is gone (the intervals DID change) - it comes back with the true tune', p.doc.getElementById('shCaption').hidden);
+  p.osc.length = 0; click(p, '#shBreak');
+  ok('pressing it again restores the true tune: no marked key, the true row, and it plays the true tune', litKeys(p, 'broken').length === 0 && !p.doc.getElementById('shCaption').hidden && rowText(p) === TWINKLE_ROW && p.doc.querySelectorAll('#shIntervals .chg').length === 0 && p.doc.getElementById('shBreak').getAttribute('aria-pressed') === 'false' && JSON.stringify(oscHz(p)) === JSON.stringify(hz(g, ...TUNES[0][1])));
+  // ---- another tune
+  click(p, '#shUp');
+  const sel = p.doc.getElementById('shTune'); sel.value = 'ode'; sel.dispatchEvent(new p.win.Event('change'));
+  ok('Ode to Joy: its own names and row, back at its start, the caption gone', text(p, '#shNames') === 'E E F G G F E D C C D E E D D' && rowText(p) === g.tuneIntervals(TUNES[2][1]).map((v: number) => (v > 0 ? '+' + v : String(v))).join(' ') && /^starts on E\b/.test(text(p, '#shStart')) && p.doc.getElementById('shCaption').hidden);
+  sel.value = 'jacques'; sel.dispatchEvent(new p.win.Event('change'));
+  ok('Frère Jacques: 14 names', text(p, '#shNames').split(' ').length === 14 && /^starts on C\b/.test(text(p, '#shStart')));
+  // ---- the tuning dropdown reaches the tune
+  const tun = p.doc.getElementById('tuning'); tun.value = 'pythagorean'; tun.dispatchEvent(new p.win.Event('change'));
+  p.osc.length = 0; click(p, '#shPlay');
+  ok('the tuning dropdown changes the tune\'s sound', +p.osc[1].toFixed(2) === +g.midiToHz(62, 'pythagorean').toFixed(2));
+  // ---- accessibility
+  ok('the interval row is text with its own accessible name, not colour alone', /Interval sizes/i.test(p.doc.getElementById('shIntervals').getAttribute('aria-label') ?? '') && /^[-+0-9 ]+$/.test(rowText(p)));
+  ok('the Shift controls have accessible names', ['shTune', 'shDn', 'shUp', 'shOd', 'shOu', 'shPlay', 'shReset', 'shBreak'].every((i) => ((p.doc.getElementById(i).getAttribute('aria-label') ?? p.doc.getElementById(i).textContent) ?? '').trim().length > 0));
+  ok('the page still loads clean after all that', p.errors.length === 0);
+  return bad;
+}
+
+test('SHIFT, the page in a DOM: the fourth tab, the picker, the strip, shifts (names change, the interval row does not, the caption appears), disabled edges with a reason, Play, Back to start, Break one interval (and again), the tuning dropdown, accessibility', () => {
+  assert.deepEqual(shiftPageFailures(html), []);
+});
+
+test('SHIFT, every allowed position of every tune in the page: the names line moves with a half-step shift and the interval row never does', () => {
+  const g = pure();
+  for (const t of g.TUNES) {
+    const p = openPage(html, () => 0);
+    click(p, '#tabShift'); p.doc.getElementById('shTune').value = t.id; p.doc.getElementById('shTune').dispatchEvent(new p.win.Event('change'));
+    const row = rowText(p); let seen = new Set<string>([text(p, '#shNames')]);
+    for (let i = 0; i < 40 && !p.doc.getElementById('shUp').disabled; i++) { click(p, '#shUp'); assert.equal(rowText(p), row, `${t.id}: row after up ${i + 1}`); seen.add(text(p, '#shNames')); }
+    for (let i = 0; i < 80 && !p.doc.getElementById('shDn').disabled; i++) { click(p, '#shDn'); assert.equal(rowText(p), row, `${t.id}: row after down ${i + 1}`); seen.add(text(p, '#shNames')); }
+    assert.ok(seen.size >= 10, `${t.id}: the name line took ${seen.size} different values across the strip`);
+    assert.equal(p.errors.length, 0);
+  }
+});
+
+test('SHIFT CONTROL: the checks can fail - a broken note that is not raised, a break note that is not the middle one, a shift that ignores the strip, intervals that follow the shift each go red', () => {
+  assert.deepEqual(shiftCoreFailures(pure()), [], 'the undamaged page passes');
+  assert.deepEqual(shiftPageFailures(html), [], 'the undamaged page passes');
+  const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
+  assert.ok(shiftCoreFailures(pure(scriptOf(damaged('out[i] = notes[i] + 1;', 'out[i] = notes[i];')))).length > 0, 'a break that raises nothing');
+  assert.ok(shiftCoreFailures(pure(scriptOf(damaged('return Math.floor(notes.length / 2);', 'return 1;')))).length > 0, 'a break note that is not the middle one');
+  assert.ok(shiftCoreFailures(pure(scriptOf(damaged('return Math.min.apply(null, notes) + semitones >= low && Math.max.apply(null, notes) + semitones <= high;', 'return true;')))).length > 0, 'a shift that ignores the strip');
+  assert.ok(shiftPageFailures(damaged('function signed(d) { return (d > 0 ? "+" : "") + d; }', 'function signed(d) { return String(Math.abs(d)); }')).length > 0, 'an interval row without its signs');
+  assert.ok(shiftPageFailures(damaged('$("shCaption").hidden = !sh.shifted || sh.broken;', '$("shCaption").hidden = true;')).length > 0, 'a caption that never shows');
+  assert.ok(shiftPageFailures(damaged('$("shCaption").hidden = !sh.shifted || sh.broken;', '$("shCaption").hidden = !sh.shifted;')).length > 0, 'a caption that stays while the tune is broken');
+  assert.ok(shiftPageFailures(damaged('sh.offset += d; sh.shifted = true; renderShift();', 'sh.offset += d; renderShift();')).length > 0, 'a caption that does not know a shift happened');
+  assert.ok(shiftPageFailures(damaged('b.disabled = !ok;', 'b.disabled = false;')).length > 0, 'edges that are never disabled');
+  assert.ok(shiftPageFailures(damaged('title: "Twinkle Twinkle Little Star"', 'title: "Twinkle"')).length > 0, 'a wrong tune title');
 });
 
 // ---- P3: the other gadgets are untouched --------------------------------------------------------------------------------------------------------------------
