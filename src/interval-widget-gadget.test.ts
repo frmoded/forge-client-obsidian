@@ -276,8 +276,8 @@ const TUNES: Array<[string, number[]]> = [
   ['Twinkle Twinkle Little Star', [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60]],
   ['Frère Jacques', [60, 62, 64, 60, 60, 62, 64, 60, 64, 65, 67, 64, 65, 67]],
   ['Ode to Joy', [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62]],
-  // 2026-11-13-1212: Bach, Cello Suite No. 1, Prelude, bar 1 (Mutopia LilyPond, Schirmer 1916, public domain: g d' b' a b d, b' d,) = G D B A B D B D; the cello sounds it an octave lower, the page writes it one octave UP (G3..B4), twice in a row.
-  ['Bach: Cello Suite No. 1, Prelude (opening)', [55, 62, 71, 69, 71, 62, 71, 62, 55, 62, 71, 69, 71, 62, 71, 62]],
+  // 2026-11-13-1213 (was 1212's repeat of bar 1): Bach, Cello Suite No. 1, Prelude, bar 1 (Mutopia LilyPond, Schirmer 1916, public domain: g d' b' a b d, b' d,) = G D B A B D B D, then bar 2 (g, e' c' b c e, c' e,) = G E C B C E C E; the cello sounds it an octave lower, the page writes it one octave UP (G3..B4), twice in a row.
+  ['Bach: Cello Suite No. 1, Prelude (bars 1-2)', [55, 62, 71, 69, 71, 62, 71, 62, 55, 64, 72, 71, 72, 64, 72, 64]],
 ];
 const BACH = TUNES[3][1];
 const TWINKLE_INTERVALS = [0, 7, 0, 2, 0, -2, -2, 0, -1, 0, -2, 0, -2];
@@ -315,16 +315,16 @@ function shiftCoreFailures(g: any): string[] {
       eq(`${title}: the broken note stays on the strip at shift ${d}`, Math.max(...broken) <= 72 && Math.min(...broken) >= 48, true);
       eq(`${title}: breakOne does not change its input at shift ${d}`, sh, g.shiftTune(notes, d));
     }
-    if (allowed < 9) bad.push(`${title}: only ${allowed} allowed shifts - the invariance was barely tested`);                // Bach spans 55..71: exactly 9 (-7..+1)
+    if (allowed < 8) bad.push(`${title}: only ${allowed} allowed shifts - the invariance was barely tested`);                // Bach spans 55..72: exactly 8 positions (-7..0), so the floor is 8
   }
   // 2026-11-13-1212: Bach. Eight pitches from the Mutopia LilyPond, twice; the row is COMPUTED from the list (the sign pattern is read off it, not typed); only -7..+1 half steps keep it on the strip.
-  eq('Bach: the cell is the source\'s eight pitches, G D B A B D B D, an octave above the cello (G2 D3 ...), twice', [BACH.slice(0, 8), BACH.slice(8)], [[55, 62, 71, 69, 71, 62, 71, 62], [55, 62, 71, 69, 71, 62, 71, 62]]);
-  eq('Bach: 16 notes, range 55..71, inside C3..C5', [BACH.length, Math.min(...BACH), Math.max(...BACH)], [16, 55, 71]);
+  eq('Bach: bar 1 is the source\'s G D B A B D B D and bar 2 is G E C B C E C E, each an octave above the cello (G2 D3 ... / G2 E3 ...)', [BACH.slice(0, 8), BACH.slice(8)], [[55, 62, 71, 69, 71, 62, 71, 62], [55, 64, 72, 71, 72, 64, 72, 64]]);
+  eq('Bach: 16 notes, range 55..72, inside C3..C5 (the top key)', [BACH.length, Math.min(...BACH), Math.max(...BACH)], [16, 55, 72]);
   eq('Bach: the signed row is the neighbour differences of the list, and its sign pattern (computed from the list)', [g.tuneIntervals(BACH), g.tuneIntervals(BACH).map((d: number) => (d > 0 ? '+' : d < 0 ? '-' : '0')).join('')], [BACH.slice(1).map((m, i) => m - BACH[i]), BACH.slice(1).map((m, i) => (m > BACH[i] ? '+' : m < BACH[i] ? '-' : '0')).join('')]);
-  eq('Bach: the row (computed)', g.tuneIntervals(BACH).join(' '), '7 9 -2 2 -9 9 -9 -7 7 9 -2 2 -9 9 -9');
-  eq('Bach may go up 1 and down 7 and not further', [1, 2, -7, -8].map((d) => g.canShift(BACH, d, 48, 72)), [true, false, true, false]);
+  eq('Bach: the row, from the list (bar 1: 7 9 -2 2 -9 9 -9; the join -7; bar 2: 9 8 -1 1 -8 8 -8)', g.tuneIntervals(BACH).join(' '), '7 9 -2 2 -9 9 -9 -7 9 8 -1 1 -8 8 -8');
+  eq('Bach may go down 7 and not further, and not up at all (the top note is already C5)', [0, 1, -7, -8].map((d) => g.canShift(BACH, d, 48, 72)), [true, false, true, false]);
   eq('Bach: the octave shifts are both off the strip', [g.canShift(BACH, 12, 48, 72), g.canShift(BACH, -12, 48, 72)], [false, false]);
-  eq('Bach: break one raises the 9th note (the G that starts the second cell), 55 -> 56, and nothing else', [g.breakIndex(BACH), g.breakOne(BACH)[8], g.breakOne(BACH).filter((m: number, i: number) => m !== BACH[i]).length], [8, 56, 1]);
+  eq('Bach: break one raises the 9th note (the G that starts bar 2), 55 -> 56, and nothing else', [g.breakIndex(BACH), g.breakOne(BACH)[8], g.breakOne(BACH).filter((m: number, i: number) => m !== BACH[i]).length], [8, 56, 1]);
   eq('Bach carries its own short step, 0.2 s; the other three have none', (g.TUNES ?? []).map((t: any) => t.step ?? null), [null, null, null, 0.2]);
   const bachPlan = g.tunePlan(BACH, 'equal', (g.TUNES ?? [])[3]?.step);
   eq('Bach plays short equal notes, the last one longer', [bachPlan.length, bachPlan.map((n: any) => +n.when.toFixed(2)).slice(0, 3), new Set(bachPlan.slice(0, 15).map((n: any) => +n.dur.toFixed(2))).size, +bachPlan[15].dur.toFixed(2), +bachPlan[0].dur.toFixed(2)], [16, [0, 0.2, 0.4], 1, 0.4, 0.2]);
@@ -347,7 +347,9 @@ test('SHIFT, the pure functions: four public-domain tunes, shiftTune / canShift,
   assert.match(html, /BWV 1007/, 'Bach\'s entry names the work');
   assert.match(html, /Mutopia/, 'and the source its pitches were read from');
   assert.match(html, /one octave UP from the cello/, 'and says it is transposed up an octave');
-  assert.match(html, /second bar is NOT a repeat/, 'and says honestly that Bach\'s real second bar differs');
+  assert.match(html, /Bar 2: g, e' c' b c e, c' e, = G E C B C E C E/, 'and names bar 2 with its source line');
+  assert.doesNotMatch(html, /second bar is NOT a repeat|Bach's real second bar/, 'the old "bar 2 differs" caveat is gone');
+  assert.match(html, /not the full two bars/, 'and says honestly that it is each bar\'s first half');
   assert.doesNotMatch(html, /Hey Jude/i, 'no tune that is in copyright');
 });
 
@@ -432,20 +434,21 @@ test('SHIFT, every allowed position of every tune in the page: the names line mo
     const row = rowText(p); let seen = new Set<string>([text(p, '#shNames')]);
     for (let i = 0; i < 40 && !p.doc.getElementById('shUp').disabled; i++) { click(p, '#shUp'); assert.equal(rowText(p), row, `${t.id}: row after up ${i + 1}`); seen.add(text(p, '#shNames')); }
     for (let i = 0; i < 80 && !p.doc.getElementById('shDn').disabled; i++) { click(p, '#shDn'); assert.equal(rowText(p), row, `${t.id}: row after down ${i + 1}`); seen.add(text(p, '#shNames')); }
-    assert.ok(seen.size >= 9, `${t.id}: the name line took ${seen.size} different values across the strip`);                  // Bach has 9 positions on the strip (-7..+1)
+    assert.ok(seen.size >= 8, `${t.id}: the name line took ${seen.size} different values across the strip`);                  // Bach has 8 positions on the strip (-7..0)
     assert.equal(p.errors.length, 0);
   }
 });
 
-test('SHIFT, the Bach tune in the page (2026-11-13-1212): picked fourth, its own names, row and start; down 7 is the last shift down (names change, the row does not), up 1 the last up, each disabled button says why; Play sounds 16 short notes; Break one raises the 9th', () => {
+test('SHIFT, the Bach tune in the page (2026-11-13-1212): picked fourth, its own names, row and start; down 7 is the last shift down (names change, the row does not), no shift up (the top note is C5), each disabled button says why; Play sounds 16 short notes; Break one raises the 9th', () => {
   const g = pure(); const p = openPage(html, () => 0);
   click(p, '#tabShift');
   const sel = p.doc.getElementById('shTune'); sel.value = 'bwv1007'; sel.dispatchEvent(new p.win.Event('change'));
   const row = BACH.slice(1).map((m, i) => { const d = m - BACH[i]; return d > 0 ? '+' + d : String(d); }).join(' ');
   assert.equal(rowText(p), row);
-  assert.equal(text(p, '#shNames'), 'G D B A B D B D G D B A B D B D');
+  assert.equal(text(p, '#shNames'), 'G D B A B D B D G E C B C E C E');
   assert.match(text(p, '#shStart'), /^starts on G \(octave 3\)/);
-  assert.deepEqual(litKeys(p, 'tune'), [55, 62, 69, 71]);
+  assert.deepEqual(litKeys(p, 'tune'), [55, 62, 64, 69, 71, 72]);
+  assert.ok(p.doc.getElementById('shUp').disabled && /highest note would go above C5/.test(p.doc.getElementById('shUp').getAttribute('title')), 'no shift up, and it says why');
   assert.equal(p.osc.length, 0, 'picking a tune is silent');
   // octave buttons: both off the strip, with their reasons
   assert.ok(p.doc.getElementById('shOd').disabled && /go an octave down/.test(p.doc.getElementById('shOd').getAttribute('title')));
@@ -453,15 +456,11 @@ test('SHIFT, the Bach tune in the page (2026-11-13-1212): picked fourth, its own
   for (let i = 0; i < 7; i++) { assert.equal(p.doc.getElementById('shDn').disabled, false, `down ${i + 1} is allowed`); click(p, '#shDn'); assert.equal(rowText(p), row, `the row after down ${i + 1}`); }
   assert.equal(text(p, '#shNames'), g.noteNames(g.shiftTune(BACH, -7)).join(' '), 'down 7: the names are the tune moved');
   assert.equal(text(p, '#shNames').split(' ')[0], 'C');
-  assert.notEqual(text(p, '#shNames'), 'G D B A B D B D G D B A B D B D');
+  assert.notEqual(text(p, '#shNames'), 'G D B A B D B D G E C B C E C E');
   assert.ok(p.doc.getElementById('shDn').disabled && /lowest note would go below C3/.test(p.doc.getElementById('shDn').getAttribute('title')), 'an 8th shift down is off, and says why');
-  assert.equal(litKeys(p, 'tune').join(), [48, 55, 62, 64].join());
+  assert.equal(litKeys(p, 'tune').join(), [48, 55, 57, 62, 64, 65].join());
   assert.match(text(p, '#shStart'), /^starts on C \(octave 3\)/);
   assert.equal(p.doc.getElementById('shCaption').hidden, false, 'the caption: the notes changed, the intervals did not');
-  // back to the start, then up 1 (the last shift up), and the reason
-  click(p, '#shReset'); click(p, '#shUp');
-  assert.equal(rowText(p), row); assert.ok(p.doc.getElementById('shUp').disabled && /highest note would go above C5/.test(p.doc.getElementById('shUp').getAttribute('title')));
-  assert.equal(Math.max(...[...p.doc.querySelectorAll('#shSvg .key.tune')].map((k: any) => +k.getAttribute('data-midi'))), 72);
   // Play: 16 notes, in order, from the shifted position
   click(p, '#shReset'); p.osc.length = 0; click(p, '#shPlay');
   assert.deepEqual(oscHz(p), hz(g, ...BACH), 'Play sounds all 16 pitches in order');
@@ -478,9 +477,9 @@ test('SHIFT CONTROL: the checks can fail - a broken note that is not raised, a b
   assert.deepEqual(shiftPageFailures(html), [], 'the undamaged page passes');
   const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
   assert.ok(shiftCoreFailures(pure(scriptOf(damaged('out[i] = notes[i] + 1;', 'out[i] = notes[i];')))).length > 0, 'a break that raises nothing');
-  assert.ok(shiftCoreFailures(pure(scriptOf(damaged('notes: [55, 62, 71, 69, 71, 62, 71, 62, 55,', 'notes: [55, 62, 71, 69, 71, 62, 71, 62, 56,')))).length > 0, 'a Bach pitch that is not the source\'s');
+  assert.ok(shiftCoreFailures(pure(scriptOf(damaged('notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 64,', 'notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 65,')))).length > 0, 'a Bach pitch that is not the source\'s');
   assert.ok(shiftCoreFailures(pure(scriptOf(damaged('step: 0.2, ', '')))).length > 0, 'a Bach tune that plays at the slow 0.45 s');
-  assert.ok(shiftCoreFailures(pure(scriptOf(damaged('notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 62, 71, 69, 71, 62, 71, 62] }', 'notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 62, 71, 69, 71, 62, 71, 74] }')))).length > 0, 'a note above the strip');
+  assert.ok(shiftCoreFailures(pure(scriptOf(damaged('notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 64, 72, 71, 72, 64, 72, 64] }', 'notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 64, 72, 71, 72, 64, 72, 74] }')))).length > 0, 'a note above the strip');
   assert.ok(shiftCoreFailures(pure(scriptOf(damaged('return Math.floor(notes.length / 2);', 'return 1;')))).length > 0, 'a break note that is not the middle one');
   assert.ok(shiftCoreFailures(pure(scriptOf(damaged('return Math.min.apply(null, notes) + semitones >= low && Math.max.apply(null, notes) + semitones <= high;', 'return true;')))).length > 0, 'a shift that ignores the strip');
   assert.ok(shiftPageFailures(damaged('function signed(d) { return (d > 0 ? "+" : "") + d; }', 'function signed(d) { return String(Math.abs(d)); }')).length > 0, 'an interval row without its signs');

@@ -390,16 +390,16 @@
   // The four tunes, as MIDI note lists. Each is PUBLIC DOMAIN: Twinkle Twinkle Little Star and Frere Jacques are traditional melodies of
   // the 18th century, Ode to Joy is Beethoven's (1824), the Prelude of the Cello Suite No. 1 is Bach's (BWV 1007, Bach died 1750). Edit a tune here and
   // nowhere else; keep every note inside LOW..HIGH (48..72). A tune may carry `step` (seconds per note; the default is TUNE_NOTE).
-  // Bach, Cello Suite No. 1 in G, BWV 1007, Prelude. SOURCE for the eight pitches: the Mutopia Project's LilyPond engraving of the Schirmer 1916 edition (public
-  // domain), bwv1007_prelude.ly, bar 1, sixteenth notes: g d' b' a b d, b' d, (relative to C4) = G D B A B D B D. The cello SOUNDS this an octave lower (G2 D3 B3 A3 B3 D3 B3 D3):
-  // it is written here at the file's own octave, one octave UP from the cello (G3 D4 B4 A4 B4 D4 B4 D4), because the keyboard strip starts at C3. The widget plays this ONE bar's
-  // eight-note cell TWICE in a row (16 notes) because a single bar is too short to recognise; honestly: Bach's real second bar is NOT a repeat (it is G E C B C E C E), so what plays
-  // here is the opening idea, not the first two bars. The notes span 55..71, so only shifts of -7..+1 half steps keep the tune on the strip.
+  // Bach, Cello Suite No. 1 in G, BWV 1007, Prelude, bars 1 and 2. SOURCE for the pitches: the Mutopia Project's LilyPond engraving of the Schirmer 1916 edition (public
+  // domain), bwv1007_prelude.ly, sixteenth notes, read as text (relative to C4). Bar 1: g d' b' a b d, b' d, = G D B A B D B D. Bar 2: g, e' c' b c e, c' e, = G E C B C E C E.
+  // In the source each of these bars is the same eight-note figure played twice; the widget plays the figure ONCE from each bar (16 notes, bar 1 then bar 2), so it is the opening
+  // two bars cut to their first half, not the full two bars. The cello SOUNDS the figures an octave lower (G2 D3 B3 ... and G2 E3 C4 ...); they are written here at the
+  // file's own octave, one octave UP from the cello, because the keyboard strip starts at C3. The notes span 55..72 (G3 to C5, the top key), so only shifts of -7..0 half steps keep the tune on the strip.
   var TUNES = [
     { id: "twinkle", title: "Twinkle Twinkle Little Star", notes: [60, 60, 67, 67, 69, 69, 67, 65, 65, 64, 64, 62, 62, 60] },
     { id: "jacques", title: "Fr\u00e8re Jacques", notes: [60, 62, 64, 60, 60, 62, 64, 60, 64, 65, 67, 64, 65, 67] },
     { id: "ode", title: "Ode to Joy", notes: [64, 64, 65, 67, 67, 65, 64, 62, 60, 60, 62, 64, 64, 62, 62] },
-    { id: "bwv1007", title: "Bach: Cello Suite No. 1, Prelude (opening)", step: 0.2, notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 62, 71, 69, 71, 62, 71, 62] }
+    { id: "bwv1007", title: "Bach: Cello Suite No. 1, Prelude (bars 1-2)", step: 0.2, notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 64, 72, 71, 72, 64, 72, 64] }
   ];
   function shiftTune(notes, semitones) { return notes.map(function (m) { return m + semitones; }); }
   // A shift is allowed only when EVERY note stays on the strip (low..high): the lowest and the highest decide.
@@ -413,7 +413,7 @@
     return out;
   }
   // "Break one interval" raises ONE note by one half step. The fixed rule, for every tune: the MIDDLE note, index floor(length / 2)
-  // (Twinkle: the 8th of 14, F; Frere Jacques: the 8th of 14, C; Ode to Joy: the 8th of 15, D; Bach: the 9th of 16, G, the start of the second cell). It is never the first or the last note,
+  // (Twinkle: the 8th of 14, F; Frere Jacques: the 8th of 14, C; Ode to Joy: the 8th of 15, D; Bach: the 9th of 16, G, the start of bar 2). It is never the first or the last note,
   // so exactly two interval sizes change: the one into the note (+1) and the one out of it (-1).
   function breakIndex(notes) { return Math.floor(notes.length / 2); }
   function breakOne(notes) {
