@@ -1,6 +1,6 @@
 # Hearing intervals (practice)
 
-With the names and the chart from [[intervals_reference_chart]] in hand, this page is about training your ear to match them.
+With the names from [[interval_notation_and_jargon]] and the distances from [[what_matters_is_intervals]] in hand, this page is about training your ear to match them.
 
 Pick any interval and play it three ways: going up, going down, and with both notes together. Each time, describe how it feels in your own words. Intervals tend to have a character (open, bright, tense, soft), but it is only a tendency, and it is yours to build.
 
@@ -30,6 +30,6 @@ Choose the Trainer tab: it plays an interval, you pick its name, and a streak co
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="intervals_reference_chart" href="intervals_reference_chart" style="color:#1963D1;">intervals_reference_chart</a></span>
+<span>&larr; <a class="internal-link" data-href="interval_notation_and_jargon" href="interval_notation_and_jargon" style="color:#1963D1;">interval_notation_and_jargon</a></span>
 <span>&uarr; <a class="internal-link" data-href="Intervals" href="Intervals" style="color:#1963D1;">Intervals</a></span>
 </div>

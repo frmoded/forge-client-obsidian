@@ -1,11 +1,10 @@
-An interval is the distance between two of the 12 notes, and everything that follows in scales, the circle of fifths, triads and chords is built from patterns of intervals.
+The distance between two notes is all that matters, and everything that follows in scales, the circle of fifths, triads and chords is a pattern of such distances.
 
-1. [[counting_half_steps]] — what an interval is, and how to count one on a piano or a guitar.
-2. [[naming_intervals]] — the names and symbols, from unison to octave.
-3. [[intervals_reference_chart]] — one table to bookmark, with a song for most of them.
-4. [[hearing_intervals]] — practice naming them by ear.
+1. [[what_matters_is_intervals]] — counting the distance between two notes, and why a tune stays the same in any key.
+2. [[interval_notation_and_jargon]] — the names and symbols, and the words you will meet.
+3. [[hearing_intervals]] — practice naming them by ear.
 
-And [[interval_history]] — where the names come from.
+And [[interval_history]] — where the names come from (optional).
 
 
 <div style="
