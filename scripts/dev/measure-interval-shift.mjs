@@ -118,6 +118,26 @@ try {
   await probe(`var s = document.getElementById('shTune'); s.value = 'ode'; s.dispatchEvent(new Event('change')); 0`);
   heights.Shift = Math.max(heights.Shift, await contentHeight());
 
+  // ---- 2026-11-13-1212: Bach, Cello Suite No. 1, Prelude (opening): the fourth tune, 16 notes
+  await probe(`var s = document.getElementById('shTune'); s.value = 'bwv1007'; s.dispatchEvent(new Event('change')); 0`);
+  await press('shReset'); await sleep(120);
+  const bw0 = await state();
+  verdict.bachStart = bw0.start === 'starts on G (octave 3)' && bw0.names === 'G D B A B D B D G D B A B D B D' && bw0.row === '+7 +9 -2 +2 -9 +9 -9 -7 +7 +9 -2 +2 -9 +9 -9' && bw0.tune.join() === '55,62,69,71';
+  const bwHeight = await contentHeight(); heights.ShiftBach = bwHeight;
+  await shot('shift-4-bach-start', Math.max(bwHeight, 520));
+  for (let i = 0; i < 7; i++) await press('shDn');
+  const bw7 = await state();
+  verdict.bachDown7NamesChangedRowSame = bw7.start === 'starts on C (octave 3)' && bw7.names === 'C G E D E G E G C G E D E G E G' && bw7.row === bw0.row && bw7.tune.join() === '48,55,62,64' && bw7.disabled.includes('shDn') && /below C3/.test(await probe(`document.getElementById('shDn').getAttribute('title')`)) && bw7.caption === 'the notes changed, the intervals did not';
+  heights.ShiftBach = Math.max(heights.ShiftBach, await contentHeight());
+  await shot('shift-5-bach-down-7', Math.max(heights.ShiftBach, 520));
+  await page.ev('window.__hz.length = 0');
+  await press('shPlay'); await sleep(450);
+  verdict.bachPlaysSixteenShiftedNotes = (await page.ev('window.__hz.join()')) === [48, 55, 64, 62, 64, 55, 64, 55, 48, 55, 64, 62, 64, 55, 64, 55].map(eq).join();
+  await press('shReset'); await press('shBreak'); await sleep(300);
+  const bwb = await state();
+  verdict.bachBreakMarksTheNinthNote = bwb.broken.join() === '56' && bwb.chg === 2;
+  await press('shBreak'); await sleep(150);
+
   // ---- the three older tabs still work
   await tab('tabChart'); verdict.chartStill13Rows = (await probe(`document.querySelectorAll('#chartTable tbody tr').length`)) === 13;
   await tab('tabTrainer'); verdict.trainerStill13Buttons = (await probe(`document.querySelectorAll('#tNames button').length`)) === 13;

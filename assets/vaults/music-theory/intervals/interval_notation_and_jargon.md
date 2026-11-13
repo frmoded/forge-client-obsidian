@@ -1,5 +1,3 @@
-# Interval notation and jargon
-
 Now that you can count an interval, this note gives each distance the name musicians use and explains the words you will meet.
 
 A name has two parts: a **size** (2nd, 3rd, 4th and so on) and a **quality** (minor, major, perfect, diminished or augmented). Together they are often shortened to a symbol: m3 for a minor third, M3 for a major third, P5 for a perfect fifth.

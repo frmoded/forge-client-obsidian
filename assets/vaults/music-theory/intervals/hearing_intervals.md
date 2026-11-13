@@ -1,5 +1,3 @@
-# Hearing intervals (practice)
-
 With the names from [[interval_notation_and_jargon]] and the distances from [[what_matters_is_intervals]] in hand, this page is about training your ear to match them.
 
 Pick any interval and play it three ways: going up, going down, and with both notes together. Each time, describe how it feels in your own words. Intervals tend to have a character (open, bright, tense, soft), but it is only a tendency, and it is yours to build.
