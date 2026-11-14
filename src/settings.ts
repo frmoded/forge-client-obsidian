@@ -53,6 +53,10 @@ export interface ForgeSettings {
   /** Beat-as-data Phase 5c (drain 2026-10-07-0100): open rhythm data notes (type: data, content_type: json, valid rhythm body) in the
    *  Beat Box by default. Off = Phase 5b behaviour (the "Open as Beat Box" header button only). */
   openRhythmNotesInBeatBox: boolean;
+  /** 2026-11-13-1214: the dialog above the prompt box: the last 50 entries per note (keyed by note path, never in the note), the dialog's height in px, and where it is docked ('bottom' | 'right'). Read through dialog-core's checks, never trusted as stored. */
+  dialogHistory: Record<string, unknown>;
+  dialogHeight: number;
+  dialogDock: 'bottom' | 'right';
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -68,6 +72,9 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   panelStripCollapsed: false,
   panelStripFraction: 0.33,
   openRhythmNotesInBeatBox: true,
+  dialogHistory: {},
+  dialogHeight: 112,
+  dialogDock: 'bottom',
 };
 
 export class ForgeSettingTab extends PluginSettingTab {

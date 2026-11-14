@@ -2661,23 +2661,65 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-description-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .forge-description-preview { flex: 1 1 100%; display: grid; gap: 4px; }
 
-/* 2026-11-12-1203: the docked prompt box at the bottom of a score tab (phrase, arrangement, composition): the note's Description as a field. STICKY at the bottom of the tab's scroll container, so it stays where it is whatever the
-   Score, the strip and the notebook above it do; it is the LAST child of the tab, never inside the Score slot, and never absolutely positioned: in the flow, at the end of the tab, nothing is covered; while the tab is scrolled
-   short of its end the box sits over whatever is below the fold (it is docked, as a chat box is) and scrolling reveals it. */
+/* 2026-11-13-1214: the chat-style panel of a score tab (chat-panel-dom.ts). A REAL flex layout, retiring the 1203 sticky overlay: the tab's content element is a flex column; its BODY (the Score first, then the strips, the controls, the
+   notebook) scrolls on its own; the PANEL (the dialog, then the prompt box LAST) is a flex item below it and never covers it. Nothing here is sticky, absolute or fixed. "Dock: right" turns the row: the body on the left (about 60 percent),
+   the panel a full-height column on the right. */
+.forge-chat-host {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.forge-chat-host.forge-chat-dock-right { flex-direction: row; }
+.forge-chat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.forge-chat-host.forge-chat-dock-right .forge-chat-body { flex: 3 1 0; }
+.forge-chat-panel {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 0 6px;
+  border-top: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+.forge-chat-host.forge-chat-dock-right .forge-chat-panel { flex: 2 1 0; min-width: 18em; border-top: 0; border-left: 1px solid var(--background-modifier-border); padding: 0 0 6px 8px; }
+.forge-chat-resize { flex: 0 0 auto; height: 8px; margin-top: -4px; cursor: ns-resize; position: relative; }
+.forge-chat-resize::after { content: ''; position: absolute; left: 50%; top: 3px; width: 36px; margin-left: -18px; height: 2px; border-radius: 1px; background: var(--background-modifier-border-hover); }
+.forge-chat-resize:focus-visible { outline: 2px solid var(--interactive-accent); }
+.forge-chat-head { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.forge-chat-dock { font-size: var(--font-ui-smaller); padding: 0 8px; height: 22px; }
+.forge-chat-current { flex: 0 0 auto; padding: 0 10px; font-size: var(--font-ui-smaller); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.forge-chat-current:empty { display: none; }
+.forge-chat-log { flex: 0 0 auto; overflow-y: auto; margin: 0 10px; padding: 2px 0; display: flex; flex-direction: column; gap: 4px; }
+.forge-chat-host.forge-chat-dock-right .forge-chat-log { flex: 1 1 0; min-height: 0; height: auto; }
+.forge-chat-msg { max-width: 92%; padding: 4px 8px; border-radius: 8px; background: var(--background-secondary); font-size: var(--font-ui-small); overflow-wrap: anywhere; user-select: text; }
+.forge-chat-msg.is-you { align-self: flex-end; background: var(--interactive-accent); color: var(--text-on-accent); }
+.forge-chat-msg.is-forge { align-self: flex-start; }
+.forge-chat-msg.is-control { border-left: 3px solid var(--interactive-accent); }
+.forge-chat-msg.is-rejected, .forge-chat-msg.is-refused, .forge-chat-msg.is-failed { border-left: 3px solid var(--text-error, #c33); }
+.forge-chat-meta { display: flex; gap: 6px; font-size: var(--font-ui-smaller); opacity: 0.75; }
+.forge-chat-text { white-space: pre-wrap; }
+.forge-chat-msg pre { margin: 4px 0 0; padding: 4px 6px; white-space: pre-wrap; background: var(--background-primary); color: var(--text-normal); border-radius: 3px; }
+.forge-chat-actions { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.forge-chat-chosen { font-size: var(--font-ui-smaller); color: var(--text-muted); }
 .forge-prompt-box {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 6px 8px;
-  margin: 8px 0 0;
+  margin: 0 10px;
   padding: 8px 10px;
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
   background: var(--background-primary);
-  box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.06);
 }
 .forge-prompt-box.is-edited { border-color: var(--text-warning, #c80); background: var(--background-secondary); }
 .forge-prompt-box-text { flex: 1 1 24em; min-width: 0; min-height: 2.6em; resize: vertical; font-size: var(--font-ui-small); }

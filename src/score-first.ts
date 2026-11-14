@@ -78,6 +78,8 @@ export interface ScoreFirstHooks {
   serviceVersion?(): Promise<string | null>;
   /** 2026-10-31-1120 (M15c): is the sentence service set up (a URL and a token)? "Ask the sentence service" is offered only then. Absent = offered (the answer to a missing token is the dialog's own sentence). */
   planConfigured?(): boolean;
+  /** 2026-11-13-1214: where the dialog's history, height and dock are kept (the plugin's data.json). Absent = the session's own memory. */
+  dialogStore?: import('./dialog-core.ts').DialogStore;
 }
 
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {

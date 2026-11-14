@@ -10,6 +10,7 @@ import { Window } from 'happy-dom';
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
 import { PHRASE_DEFAULTS, noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { isCustomNote } from './phrase-notes-core.ts';
+import { dialogEntries, dialogLast } from './test-support/dialog-view.ts';
 import { extractDescription } from './v2-note-core.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
@@ -47,8 +48,12 @@ test('a score tab gets the box, LAST in the tab and under the Score; it shows ex
   await r.ctl.inspect(PATH); await r.flush();
   assert.ok(r.box(el), 'the box is there');
   assert.equal(r.field(el).value, extractDescription(r.store.get(PATH)!));
-  assert.equal(el.lastElementChild, r.box(el), 'the box is the last thing in the tab');
-  assert.equal(el.firstElementChild!.className, 'forge-rhythm-edit-score', 'the Score is still first: the box is not in its slot');
+  // 2026-11-13-1214 (rewritten: it said "the box is the last thing in the tab", the 1203 overlay): the tab's content is a flex column, the body (the Score first) scrolls on its own, the panel (dialog, then the box LAST) is its sibling below
+  assert.equal(el.lastElementChild!.className, 'forge-chat-panel', 'the panel is the last thing in the tab');
+  assert.equal(r.box(el)!.parentElement, el.lastElementChild, 'the box is inside the panel');
+  assert.equal(el.lastElementChild!.lastElementChild, r.box(el), 'and the LAST thing in it: the input at the very bottom');
+  assert.equal(el.firstElementChild!.className, 'forge-chat-body');
+  assert.equal(el.firstElementChild!.firstElementChild!.className, 'forge-rhythm-edit-score', 'the Score is still first, in the body: the panel is not in its slot');
   assert.equal(el.querySelectorAll('.forge-prompt-box').length, 1);
 });
 
@@ -95,7 +100,8 @@ test('a sentence that does not parse writes NOTHING: the strip at the top says t
   await r.enter(el);
   assert.equal(r.store.get(PATH), before, 'not a byte written');
   assert.deepEqual(r.writes, []);
-  assert.match(r.strip(el), /Description, line 1, column \d+/);
+  assert.ok(dialogEntries(el).some((e) => e.kind === 'rejected' && /line 1, column \d+/.test(e.text)), '2026-11-13-1214: the DIALOG says the line and the column (it was the strip at the top)');
+  assert.equal(r.strip(el), '', 'and the strip at the top has nothing for a box sentence');
   assert.equal(r.field(el).value, 'Mix [[bar_007]] and [[bar_008]] sideways', 'the box keeps the text');
   assert.ok(el.querySelector('.forge-prompt-box.is-edited'));
   assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action')), [], 'no Revert (nothing was written) and no Ask (not set up)');
@@ -137,7 +143,7 @@ test('a note whose Recipe was edited by hand too is not overwritten by an apply 
   r.type(el, VOTE_35); await r.enter(el);
   assert.equal(r.store.get(PATH), before);
   assert.deepEqual(r.writes, []);
-  assert.ok(r.strip(el).length > 0, 'the strip says what to do');
+  assert.ok(dialogLast(el).length > 0, '2026-11-13-1214: the dialog says what to do (it was the strip)');
   assert.equal(r.field(el).value, VOTE_35, 'the text is kept');
 });
 
@@ -149,12 +155,14 @@ test('focusBox puts the cursor in the box of that note\'s tab (the "Focus prompt
   assert.equal(r.ctl.focusBox('phrases/phrase_999.md'), false);
 });
 
-test('the box is sticky at the bottom of the tab (a CSS rule: position sticky, bottom 0, never absolute or fixed): it stays put while the tab scrolls and is in the flow, last, so at the end of the tab it covers nothing', () => {
+test('the panel is a real FLEX layout (2026-11-13-1214, retiring the 1203 sticky overlay): the content element is a flex column, the body scrolls, the panel is a flex item that is never sticky, absolute or fixed, and the box is not positioned either', () => {
   const css = fs.readFileSync(path.resolve(import.meta.dirname, '../styles.css'), 'utf8');
-  const rule = /\.forge-prompt-box\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-  assert.match(rule, /position:\s*sticky/);
-  assert.match(rule, /bottom:\s*0/);
-  assert.doesNotMatch(rule, /position:\s*(absolute|fixed)/);
+  const rule = (sel: string) => new RegExp(`(?:^|\\n)${sel.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+  assert.match(rule('.forge-chat-host'), /display:\s*flex/); assert.match(rule('.forge-chat-host'), /flex-direction:\s*column/); assert.match(rule('.forge-chat-host'), /overflow:\s*hidden/);
+  assert.match(rule('.forge-chat-body'), /flex:\s*1 1 auto/); assert.match(rule('.forge-chat-body'), /overflow-y:\s*auto/); assert.match(rule('.forge-chat-body'), /min-height:\s*0/);
+  assert.match(rule('.forge-chat-panel'), /flex:\s*0 0 auto/);
+  for (const sel of ['.forge-chat-panel', '.forge-chat-body', '.forge-prompt-box']) assert.doesNotMatch(rule(sel), /position:\s*(sticky|absolute|fixed)/, sel);
+  assert.ok(rule('.forge-prompt-box').length > 0 && rule('.forge-chat-panel').length > 0, 'the rules exist');
 });
 
 test('CONTROL: the checks can fail - a box that overwrites typing, or applies a sentence that does not parse, is caught by the same assertions', async () => {

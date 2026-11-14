@@ -22,7 +22,9 @@ import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 import { readPhraseKind, type PhraseParams } from './phrase-core.ts';
-import { mountPromptBox, type PromptBoxHandle } from './prompt-box-dom.ts';
+import type { PromptBoxHandle } from './prompt-box-dom.ts';
+import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
+import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
 import { placeholderFor, replaceDescriptionSection } from './prompt-box-core.ts';
 
 export interface DescriptionPorts {
@@ -45,6 +47,10 @@ export interface DescriptionPorts {
   ownKey?(): string | undefined;
   /** 2026-11-12-1206: the service's /health version, or null. Asked only when an answer to an arrangement or composition sentence carried no version and was a refusal (a service before 0.2.42): to tell an old service from a sentence it cannot plan. */
   serviceVersion?(): Promise<string | null>;
+  /** 2026-11-13-1214: where the dialog's history is kept per note (the plugin's data.json); absent = the session's own memory. */
+  dialogStore?: DialogStore;
+  /** The clock of the dialog's time stamps (tests). */
+  now?(): number;
   /** Ask the person to confirm a step that loses something ("Revert to generated"); absent = it goes ahead. */
   confirm?(message: string): Promise<boolean>;
 }
@@ -86,9 +92,34 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const timers = new Map<string, unknown>();
   const told = new Map<string, string>();                         // path -> the sentence an evidence line was last written for (a rejected sentence is said once, not at every unrelated modify)
   const bars = new Map<HTMLElement, BarHandle>();
-  const notices = new Map<string, { message: string; text: string }>();     // path -> a sentence that stays on the note's bar after a successful apply (D4: comments dropped), until the note's text changes
+  const notices = new Map<string, { message: string; text: string; /** 2026-11-13-1214: it came from the box: said in the dialog, never in the strip */ fromBox?: boolean }>();     // path -> a sentence that stays on the note's bar after a successful apply (D4: comments dropped), until the note's text changes
   const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
   let disposed = false;
+  // ---- 2026-11-13-1214: the dialog. The history of what happened to a note's Description (per note, newest last, capped), the last note text we saw (to tell a control's change from a hand edit), the pinned "Current:" line.
+  const store: DialogStore = ports.dialogStore ?? memoryStore();
+  const dialogs = new Map<string, DialogEntry[]>();
+  const lastText = new Map<string, string>();
+  const nowMs = (): number => (ports.now ? ports.now() : Date.now());
+  const historyOf = (path: string): DialogEntry[] => { let l = dialogs.get(path); if (!l) { l = store.entries(path); dialogs.set(path, l); } return l; };
+  const currentOf = (path: string): string => { const t = lastText.get(path); return t === undefined ? '' : extractDescription(t).replace(/\s+/g, ' ').trim(); };
+  const drawDialog = (path: string): void => { const h = historyOf(path), c = currentOf(path); for (const b of boxes.values()) if (b.path === path) b.chat.render(h, c); };
+  /** ONE event stream: what the controller says happened to the Description. Only a box-origin outcome is drawn here (the strip keeps the text view's and the hand edits'). */
+  const say = (path: string, ev: DialogEvent): void => {
+    let l = historyOf(path);
+    if (ev.type === 'suggestion' || ev.type === 'you') l = expireOpen(l);                                  // a new sentence or a newer suggestion ends the older one
+    l = append(l, fromOutcome(ev), nowMs());
+    dialogs.set(path, l); store.setEntries(path, l); drawDialog(path);
+  };
+  const endSuggestion = (path: string, state: 'applied' | 'cancelled' | 'expired'): void => {
+    const l = historyOf(path), open = openSuggestion(l); if (!open) return;
+    const next = resolveSuggestion(l, open.id, state); dialogs.set(path, next); store.setEntries(path, next); drawDialog(path);
+  };
+  // 2026-11-13-1214: every write of the controller goes through here: the text it wrote is the last text seen, so the vault's own `modify` for it is never taken for a control's change.
+  const proc = async (path: string, fn: (cur: string) => string): Promise<void> => {
+    let out: string | undefined;
+    await ports.process(path, (cur) => { const next = fn(cur); out = next; return next; });
+    if (out !== undefined) lastText.set(path, out);
+  };
   // 2026-11-13-1211: every decision of the prompt box's Apply is ONE line at console.info with this prefix; a path that GIVES UP says so at console.warn too. No token or URL value is ever in a line.
   const pb = (line: string): void => { ports.trace(`[forge-promptbox] ${line}`); };
   const pbWarn = (line: string): void => { ports.trace(`[forge-promptbox] ${line}`); (ports.warn ?? (() => {}))(`[forge-promptbox] ${line}`); };
@@ -115,12 +146,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (disposed) return;
     const live = new Set<HTMLElement>();
     for (const { path, contentEl } of ports.panes()) {
-      const u = ui.get(path);
-      const n = notices.get(path);
+      const u0 = ui.get(path);
+      const u = u0 && !u0.fromBox ? u0 : undefined;                                                          // 2026-11-13-1214: what came from the BOX is said in the dialog; the strip keeps the text view's and the hand edits'
+      const n0 = notices.get(path);
+      const n = n0 && !n0.fromBox ? n0 : undefined;
       if ((!u || u.state.kind === 'synced') && !n) continue;
       live.add(contentEl);
       let h = bars.get(contentEl);
-      if (h && h.el.parentElement !== contentEl) { h = undefined; bars.delete(contentEl); }                  // the pane emptied itself (a reload): draw again
+      if (h && !contentEl.contains(h.el)) { h.dispose(); h = undefined; bars.delete(contentEl); }                // 2026-11-13-1214: a tab with the chat panel keeps its bar inside the body that scrolls, so `contains`, not `parentElement`                  // the pane emptied itself (a reload): draw again
       if (!h) { h = mountDescriptionBar(contentEl, (a) => { void act(path, a); }); bars.set(contentEl, h); }
       h.show(u ? viewOf(path, u) : { message: n!.message, actions: [] });
     }
@@ -129,7 +162,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   };
 
   // ---- 2026-11-12-1203: the docked prompt box. An EDITOR VIEW of the Description facet on a score tab (the note on disk stays the only source of truth); the controls' writes reach it through the vault's `modify`.
-  const boxes = new Map<HTMLElement, { path: string; handle: PromptBoxHandle }>();
+  const boxes = new Map<HTMLElement, { path: string; handle: PromptBoxHandle; chat: ChatPanelHandle }>();
   const descriptionOf = async (path: string): Promise<string | null> => { try { return extractDescription(await ports.read(path)); } catch { return null; } };
   const boxKind = (text: string, family: Family): string => (family === 'phrase' ? readPhraseKind(text) ?? 'mix' : family);
   const syncBoxes = (): void => {
@@ -140,18 +173,21 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       if (ui.get(path)?.state.kind === 'custom-note') continue;                                              // a custom note: its Python is the source, the Description is not applied: no box
       live.add(contentEl);
       const have = boxes.get(contentEl);
-      if (have && have.path === path && have.handle.el.parentElement === contentEl) { if (contentEl.lastElementChild !== have.handle.el) contentEl.appendChild(have.handle.el); continue; }
-      if (have) { have.handle.dispose(); boxes.delete(contentEl); }
+      if (have && have.path === path && have.chat.attached()) continue;
+      if (have) { have.chat.dispose(); boxes.delete(contentEl); }
       void (async () => {
         let note = ''; try { note = await ports.read(path); } catch { return; }
         if (disposed || boxes.has(contentEl)) return;
         const family = familyOfPath(path)!;
-        const handle = mountPromptBox(contentEl, { placeholder: placeholderFor(boxKind(note, family)), apply: (text) => applyFromBox(path, text) }, extractDescription(note));
-        boxes.set(contentEl, { path, handle });
+        if (!lastText.has(path)) lastText.set(path, note);                                                // 2026-11-13-1214: the text the first control change is compared with
+        const chat = mountChatPanel(contentEl, { box: { placeholder: placeholderFor(boxKind(note, family)), apply: (text) => applyFromBox(path, text) }, store, choose: (id, choice) => { void choose(path, id, choice); } }, extractDescription(note));
+        const handle = chat.box;
+        boxes.set(contentEl, { path, handle, chat });
+        drawDialog(path);
         pb(`box mounted: ${basename(path)} family=${family} askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`);       // 2026-11-13-1211: the first line the driver sees on opening a tab: this build is live and the service gate says what it will do before Apply is pressed
       })();
     }
-    for (const [el, b] of [...boxes]) if (!live.has(el)) { b.handle.dispose(); boxes.delete(el); }
+    for (const [el, b] of [...boxes]) if (!live.has(el)) { b.chat.dispose(); boxes.delete(el); }
   };
   const boxText = (path: string): string | undefined => { for (const b of boxes.values()) if (b.path === path) return b.handle.state().text; return undefined; };
   const setBoxBusy = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setBusy(message); };
@@ -165,7 +201,21 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const d = await descriptionOf(path);
     if (d === null) return;
     for (const b of targets) b.handle.setDisk(d);
+    await noticeControlChange(path);
+    drawDialog(path);
   };
+  /** 2026-11-13-1214: a control (not this controller, not a hand edit) changed the note: the Description on disk moved and the note says the same thing in every facet (synced). A hand edit is not synced at the moment it is heard. */
+  async function noticeControlChange(path: string): Promise<void> {
+    const family = familyOfPath(path); if (family === null) return;
+    let text: string; try { text = await ports.read(path); } catch { return; }
+    const prev = lastText.get(path); lastText.set(path, text);
+    if (prev === undefined || extractDescription(prev) === extractDescription(text)) return;
+    if (descriptionState(text, family, ports.vault()).kind !== 'synced') return;
+    const before = cacheParams(prev, family), after = cacheParams(text, family);
+    const summary = before && after ? changeSummary(before, after) : 'the Description changed';
+    pb(`control change: ${basename(path)} (${summary})`);
+    say(path, { type: 'control', summary, description: extractDescription(text) });
+  }
   /** Apply the box's text: the Description facet is replaced and the note made again from it in ONE `process` (the same writers the controls and "Update from Description" use). A sentence that does not parse, or a note whose Recipe or
    *  Python were edited too, writes NOTHING: the strip at the top says where (line and column), and the box keeps the text. */
   async function applyFromBox(path: string, text: string): Promise<{ ok: boolean; disk?: string }> {
@@ -174,15 +224,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     catch (e) {                                                                                           // 2026-11-13-1211: the box used to swallow a throw here (the text stayed "edited, not applied", the console empty): it is said now, in the console and under the box
       const why = (e as Error)?.message ?? String(e);
       pbWarn(`apply failed: ${why}`); console.error('[forge-promptbox] apply failed', e);
-      setBoxNote(path, `Apply failed: ${why}`);
+      setBoxNote(path, `Apply failed: ${why}`); say(path, { type: 'failed', message: why });
       return { ok: false };
     }
   }
   async function applyFromBoxCore(path: string, text: string): Promise<{ ok: boolean; disk?: string }> {
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
+    say(path, { type: 'you', text });                                                                      // 2026-11-13-1214: the sentence as typed, when Apply is pressed
     let failure: string | null = null, change = '', sentence = text;
     try {
-      await ports.process(path, (cur) => {
+      await proc(path, (cur) => {
         const edited = replaceDescriptionSection(cur, text);
         if (edited === null) { failure = 'This note has no Description heading to write the sentence under.'; return cur; }
         const st = descriptionState(edited, family, ports.vault());
@@ -203,11 +254,12 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       pb(`grammar verdict: ${st.kind === 'rejected' || st.kind === 'both-edited' ? st.kind : `other:${st.kind}`}`);
       const gateLine = `service gate: askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`;
       setBoxNote(path, st.kind === 'rejected' ? `The grammar did not accept this sentence (line ${st.error.line}, column ${st.error.column}: ${st.error.message}).` : failure);
+      if (st.kind === 'rejected') say(path, { type: 'rejected', line: st.error.line, column: st.error.column, message: st.error.message }); else say(path, { type: 'notice', message: failure });
       // 2026-11-12-1204: the GRAMMAR rejected the text (free, instant, exact: tried first, always). For a PHRASE, with the sentence service set up, Apply asks it ONCE, automatically, and shows the PREVIEW (nothing is written until it is
       // applied). Never while typing, never when the grammar accepted the text. 2026-11-12-1206: for an arrangement and a composition too (the service is version-gated for them: an older one says so, in one sentence).
       if (st.kind !== 'rejected') { pb(`ask skipped: the verdict is ${st.kind}, not a sentence the grammar rejected`); return { ok: false }; }
-      if (ports.askPlan === undefined) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not available in this build.'); return { ok: false }; }
-      if (ports.configured?.() === false) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not set up: add its URL and token in Settings -> Forge.'); return { ok: false }; }
+      if (ports.askPlan === undefined) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not available in this build.'); say(path, { type: 'notice', message: 'The sentence service is not available in this build.' }); return { ok: false }; }
+      if (ports.configured?.() === false) { pbWarn(gateLine); setBoxNote(path, 'The sentence service is not set up: add its URL and token in Settings -> Forge.'); say(path, { type: 'notice', message: 'The sentence service is not set up: add its URL and token in Settings -> Forge.' }); return { ok: false }; }
       pb(gateLine);
       await ask(path);
       return { ok: false };
@@ -216,6 +268,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     told.delete(path); ports.trace(appliedLine(basename(path), change || 'unchanged')); set(path, null);
     setBoxNote(path, change ? 'Applied.' : 'Nothing changed: the note already says this.');
     const disk = await descriptionOf(path);
+    say(path, { type: 'applied', change: change || 'unchanged', description: disk ?? text });
     return { ok: true, disk: disk ?? text };
   }
   const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
@@ -261,7 +314,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function doApplyPython(path: string, family: Family, st: Extract<DescriptionState, { kind: 'python-apply' | 'python-custom' }>): Promise<void> {
     let change = '', failure: string | null = null, stale = false, custom = false, dropped = false;
     try {
-      await ports.process(path, (cur) => {
+      await proc(path, (cur) => {
         const r = applyPythonText(cur, basename(path), family, ports.vault(), st.python);
         if (r.ok === false) { failure = r.message; stale = r.stale; return cur; }
         change = r.change; custom = r.custom; dropped = r.commentsDropped;
@@ -283,7 +336,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const family = familyOfPath(path); if (family === null) return;
     if (ports.confirm && !(await ports.confirm(REVERT_GENERATED_CONFIRM))) return;
     let failure: string | null = null;
-    try { await ports.process(path, (cur) => { const r = revertToGeneratedText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert to generated: ${(e as Error)?.message ?? e}`; }
+    try { await proc(path, (cur) => { const r = revertToGeneratedText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert to generated: ${(e as Error)?.message ?? e}`; }
     if (failure !== null) { const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: failure }); return; }
     told.delete(path); ports.trace(pythonRevertedLine(basename(path))); set(path, null);
   }
@@ -292,7 +345,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function doApplyRecipe(path: string, family: Family, st: Extract<DescriptionState, { kind: 'recipe-apply' }>): Promise<void> {
     let change = '', failure: string | null = null, stale = false;
     try {
-      await ports.process(path, (cur) => {
+      await proc(path, (cur) => {
         const r = applyRecipeText(cur, basename(path), family, ports.vault(), st.recipe);
         if (r.ok === false) { failure = r.message; stale = r.stale; return cur; }
         change = r.change;
@@ -308,7 +361,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function doApplyDescriptionOver(path: string, family: Family): Promise<void> {
     let change = '', failure: string | null = null;
     try {
-      await ports.process(path, (cur) => {
+      await proc(path, (cur) => {
         const r = applyDescriptionText(cur, basename(path), family, ports.vault(), extractDescription(cur), 'description');
         if (r.ok === false) { failure = r.message; return cur; }
         change = r.change;
@@ -322,7 +375,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function doApply(path: string, family: Family, st: Extract<DescriptionState, { kind: 'apply' }>): Promise<void> {
     let change = '', failure: string | null = null, stale = false;
     try {
-      await ports.process(path, (cur) => {
+      await proc(path, (cur) => {
         const r = applyDescriptionText(cur, basename(path), family, ports.vault(), st.sentence);
         if (r.ok === false) { failure = r.message; stale = r.stale; return cur; }
         change = r.change;
@@ -334,6 +387,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     set(path, { state: st, message: failure });                                                            // the sentence parsed but the note could not be written: the bar says why and still offers Update and Revert
   }
 
+  /** A button inside the dialog's suggestion message: the same two actions the strip's preview had. */
+  async function choose(path: string, id: number, choice: 'apply' | 'cancel'): Promise<void> {
+    const open = openSuggestion(historyOf(path));
+    if (!open || open.id !== id) return;                                                                  // not the one that is open: nothing to use
+    await act(path, choice === 'apply' ? 'apply-preview' : 'cancel-preview');
+  }
+
   async function act(path: string, a: BarAction): Promise<void> {
     if (a === 'update') await update(path);
     else if (a === 'update-recipe') await updateRecipe(path);
@@ -342,7 +402,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     else if (a === 'revert') await revert(path);
     else if (a === 'ask') await ask(path);
     else if (a === 'apply-preview') await applyPreview(path);
-    else if (a === 'cancel-preview') { const u = ui.get(path); if (u) set(path, { state: u.state, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); }
+    else if (a === 'cancel-preview') { const u = ui.get(path); if (u) { set(path, { state: u.state, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'cancelled'); setBoxNote(path, 'Cancelled.'); } } }
   }
 
   async function update(path: string): Promise<void> {
@@ -378,7 +438,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function revert(path: string): Promise<void> {
     const family = familyOfPath(path); if (family === null) return;
     let failure: string | null = null;
-    try { await ports.process(path, (cur) => { const r = revertDescriptionText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert: ${(e as Error)?.message ?? e}`; }
+    try { await proc(path, (cur) => { const r = revertDescriptionText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert: ${(e as Error)?.message ?? e}`; }
     if (failure !== null) { const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: failure }); return; }
     const was = ui.get(path)?.state.kind;
     told.delete(path); ports.trace(was === 'python-apply' || was === 'python-custom' ? pythonRevertedLine(basename(path)) : was === 'recipe-rejected' || was === 'recipe-apply' || was === 'both-edited' ? recipeRevertedLine(basename(path)) : revertedLine(basename(path))); set(path, null);
@@ -416,9 +476,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       ? buildPlanRequest({ sentence, barNames: ports.barNames(), phraseNames: ports.phraseNames(), ownKey: ports.ownKey?.() })
       : buildFamilyPlanRequest({ family, sentence, kitNames: v.kits, phraseNames: ports.phraseNames(), arrangementNames: v.arrangements, compositionNames: v.compositions, note: path.replace(/\.md$/, ''), ownKey: ports.ownKey?.() });
     const keepBox = (x: Ui): Ui => (x.fromBox ? { ...x, fromBox: true, base: x.base } : x);
-    if (req.ok === false) { pbWarn(`request not built: ${req.message}`); set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); if (u.fromBox) setBoxNote(path, req.message); return; }
+    if (req.ok === false) { pbWarn(`request not built: ${req.message}`); set(path, keepBox({ state: u.state, message: req.message, fromBox: u.fromBox, base: u.base })); if (u.fromBox) { setBoxNote(path, req.message); say(path, { type: 'notice', message: req.message }); } return; }
     set(path, { ...u, busy: true });
-    if (u.fromBox) setBoxBusy(path, 'Asking the sentence service...');
+    if (u.fromBox) { setBoxBusy(path, 'Asking the sentence service...'); say(path, { type: 'asking' }); }
     ports.trace(askingServiceLine(basename(path)));                                                         // 2026-11-13-1209 (C): a request LEFT
     let outcome: Asked;
     try {
@@ -431,10 +491,10 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const dropVisibly = async (why: string, message: string, strip?: Ui): Promise<void> => {
       ports.trace(askedServiceLine(basename(path), `dropped: ${why}`));
       if (disposed) return;
-      setBoxNote(path, message);
+      setBoxNote(path, message); say(path, { type: 'dropped', message: message.replace(/\.$/, '') }); endSuggestion(path, 'expired');
       if (strip) { set(path, strip); return; }
       let disk = ''; try { disk = await ports.read(path); } catch { /* the note went away: the notice keys on text that no longer exists, so it simply never shows */ }
-      notices.set(path, { message, text: disk }); syncBars();
+      notices.set(path, { message, text: disk, fromBox: true }); syncBars();
     };
     const now = ui.get(path);
     if (disposed || !now || now.state.kind !== 'rejected' || now.state.sentence !== sentence) { await dropVisibly('the note changed while the service thought', 'The answer came back after the text changed; ask again.'); return; }
@@ -444,11 +504,11 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return;
     }
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));
-    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) setBoxNote(path, `The service refused: ${outcome.message}`); return; }
+    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) { setBoxNote(path, `The service refused: ${outcome.message}`); say(path, { type: 'refused', message: outcome.message }); } return; }
     const name = basename(path);
     const recipe = (outcome.params.kind === 'arrangement' || outcome.params.kind === 'composition' ? familyRecipeSteps(outcome.params) : phraseRecipeSteps(outcome.params as PhraseParams)).join('\n');
     set(path, { state: now.state, ...(now.fromBox ? { fromBox: true, base: now.base } : {}), preview: { params: outcome.params, forSentence: sentence, description: describe(outcome.params), recipe } });
-    if (now.fromBox) setBoxNote(path, 'The service answered: see the preview at the top.');
+    if (now.fromBox) { setBoxNote(path, 'The service answered: the suggestion is in the dialog.'); say(path, { type: 'suggestion', description: describe(outcome.params), recipe }); }
     if (family === 'phrase') void phraseDescription(name, outcome.params as PhraseParams);
   }
 
@@ -458,9 +518,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const { params, forSentence } = u.preview;
     let failure: string | null = null, change = '';
     // a suggestion for a sentence typed in the BOX: nothing was written for it, so the Description on disk must be what it was when the sentence was sent, and the box must still hold that sentence
-    if (u.fromBox && boxText(path) !== undefined && boxText(path) !== forSentence) { set(path, { state: u.state, message: 'The text in the box changed after the suggestion; ask again.', fromBox: true, base: u.base }); return; }
+    if (u.fromBox && boxText(path) !== undefined && boxText(path) !== forSentence) { set(path, { state: u.state, message: 'The text in the box changed after the suggestion; ask again.', fromBox: true, base: u.base }); endSuggestion(path, 'expired'); say(path, { type: 'notice', message: 'The text in the box changed after the suggestion; ask again.' }); return; }
     try {
-      await ports.process(path, (cur) => {
+      await proc(path, (cur) => {
         if (extractDescription(cur) !== (u.fromBox ? u.base : forSentence)) { failure = 'The Description changed while the service was thinking; its suggestion was dropped.'; return cur; }
         const w = writeFromParams(cur, basename(path), family, params as GrammarParams);
         if (w.ok === false) { failure = w.message; return cur; }
@@ -468,9 +528,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         return w.text;
       });
     } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; }
-    if (failure !== null) { set(path, { state: u.state, message: failure, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); return; }
+    if (failure !== null) { set(path, { state: u.state, message: failure, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'expired'); say(path, { type: 'failed', message: failure }); } return; }
     told.delete(path); ports.trace(appliedLine(basename(path), change)); set(path, null);
-    if (u.fromBox) { const d = await descriptionOf(path); if (d !== null) for (const b of boxes.values()) if (b.path === path) b.handle.reset(d); }        // applied: the box shows the canonical grammar sentence, not the free one
+    if (u.fromBox) { const d = await descriptionOf(path); if (d !== null) for (const b of boxes.values()) if (b.path === path) b.handle.reset(d); endSuggestion(path, 'applied'); say(path, { type: 'applied', change, description: d ?? describe(params as GrammarParams) }); setBoxNote(path, 'Applied.'); }        // applied: the box shows the canonical grammar sentence, not the free one
   }
 
   return {

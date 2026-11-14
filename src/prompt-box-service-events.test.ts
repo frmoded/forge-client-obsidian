@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
+import { dialogButtons, dialogClick, dialogLast } from './test-support/dialog-view.ts';
 import { Window } from 'happy-dom';
 
 import { createDescriptionController as realFactory, type DescriptionController, type DescriptionPorts } from './description-apply.ts';
@@ -53,10 +54,10 @@ function rig(factory: Factory, opts: { path?: string; note?: string; plan?: unkn
   const field = () => el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
   const type = (t: string) => { field().value = t; field().dispatchEvent(new win.Event('input', { bubbles: true })); };
   const enter = () => { field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); };
-  const strip = () => (el.querySelector('.forge-description-message')?.textContent ?? '');
+  const strip = () => dialogLast(el);                // 2026-11-13-1214: a box sentence's outcome is said in the dialog, no longer in the strip
   const boxState = () => (el.querySelector('.forge-prompt-box-state')?.textContent ?? '');
-  const buttons = () => [...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action'));
-  const click = async (action: string) => { (el.querySelector(`[data-action="${action}"]`) as HTMLElement).click(); await flush(); };
+  const buttons = () => dialogButtons(el);
+  const click = async (action: string) => { dialogClick(el, action as 'apply-preview' | 'cancel-preview'); await flush(); };
   const answer = async (a: Answer) => { release(a); await flush(); };
   const start = async (sentence = FREE) => { await ctl.inspect(path); await flush(); type(sentence); enter(); await flush(); };      // the request is OUT, the service has not answered
   return { ctl, store, writes, lines, el, flush, fire, field, type, enter, strip, boxState, buttons, click, answer, start, requests: () => requests, path };
@@ -75,7 +76,7 @@ async function survives(factory: Factory, event: (r: Rig) => Promise<void>, labe
   await event(r);
   await r.answer(OK(PLAN_EXTEND));
   ok('the PREVIEW appears', JSON.stringify(r.buttons()) === JSON.stringify(['apply-preview', 'cancel-preview']));
-  ok('the preview is the plan\'s (12 bars)', /12 bars/.test(r.el.querySelector('.forge-description-preview-description')?.textContent ?? ''));
+  ok('the preview is the plan\'s (12 bars)', /12 bars/.test(r.el.querySelector('.forge-chat-suggestion-description')?.textContent ?? ''));
   ok('the trace says what came back', r.lines.some((l) => ASKED.test(l) && /extend/.test(l)));
   ok('busy is cleared: the box no longer says asking, Apply is not disabled by it', !/Asking/.test(r.boxState()) && !r.el.querySelector('.forge-prompt-box.is-busy'));
   ok('the box keeps the person\'s text', r.field().value === FREE);
@@ -116,7 +117,7 @@ async function dropsVisibly(factory: Factory): Promise<string[]> {
   const t = rig(factory); await t.start();
   t.type(FREE + ' and louder'); await t.answer(OK(PLAN_EXTEND));
   ok('typed on: no preview', !t.buttons().includes('apply-preview'));
-  ok('typed on: the strip says so', t.strip() === 'The Description changed while the service was thinking; its suggestion was dropped.');
+  ok('typed on: the DIALOG says so (2026-11-13-1214: no longer the strip)', /^Dropped: The Description changed while the service was thinking; its suggestion was dropped/.test(t.strip()));
   ok('typed on: the BOX says so too', /changed|ask again/i.test(t.boxState()) && !/Asking/.test(t.boxState()));
   ok('typed on: a trace line says it was dropped and why', t.lines.some((l) => ASKED.test(l) && /dropped: /.test(l)));
   ok('typed on: nothing written, the text kept', t.writes.length === 0 && t.field().value === FREE + ' and louder');
@@ -125,14 +126,14 @@ async function dropsVisibly(factory: Factory): Promise<string[]> {
   d.store.set(d.path, noteContentFor('phrase_001', { ...MIX, weight: 0.9 })); d.ctl.modified(d.path); await d.fire();
   await d.answer(OK(PLAN_EXTEND));
   ok('disk changed: no preview', !d.buttons().includes('apply-preview'));
-  ok('disk changed: the strip says the answer came back after the text changed', /The answer came back after the text changed; ask again\./.test(d.strip()));
+  ok('disk changed: the dialog says the answer came back after the text changed', /The answer came back after the text changed; ask again/.test(d.strip()));
   ok('disk changed: the box says it too', /after the text changed; ask again/.test(d.boxState()) && !/Asking/.test(d.boxState()));
   ok('disk changed: a trace line says dropped and why', d.lines.some((l) => ASKED.test(l) && /dropped: /.test(l)));
   ok('disk changed: nothing was written by the answer', d.writes.length === 0);
   // the service said no: still said, still traced (this path was already visible; it must stay so)
   const n = rig(factory); await n.start();
   await n.answer({ status: 200, json: { ok: false, parsed_ok: true, plan: null, error: 'That bar does not exist.' } });
-  ok('a refusal: said in the strip and traced, busy cleared', /That bar does not exist/.test(n.strip()) && n.lines.some((l) => ASKED.test(l) && /refused/.test(l)) && !/Asking/.test(n.boxState()));
+  ok('a refusal: said in the dialog and traced, busy cleared', /That bar does not exist/.test(n.strip()) && n.lines.some((l) => ASKED.test(l) && /refused/.test(l)) && !/Asking/.test(n.boxState()));
   return bad;
 }
 
@@ -176,8 +177,8 @@ test('a box-owned entry is released by the person, not by an event: Cancel, edit
   // a hand-wrong Description on disk (the strip flow, no box) is evaluated and shown exactly as before
   const bad = noteContentFor('phrase_001', MIX); const w = rig(realFactory, { note: bad.replace(extractDescription(bad), 'Mix the two bars somehow') });
   await w.ctl.inspect(w.path); await w.flush();
-  assert.match(w.strip(), /line 1, column \d+/);
-  assert.deepEqual(w.buttons(), ['revert', 'ask']);
+  assert.match(w.el.querySelector('.forge-description-message')?.textContent ?? '', /line 1, column \d+/);               // a hand edit (no box): the STRIP at the top, as before
+  assert.deepEqual([...w.el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action')), ['revert', 'ask']);
 });
 
 // ---- the CONTROL: the same scenarios against a copy of the controller with a fix removed must go red -------------------------------------------------------------------------------------------
@@ -203,10 +204,10 @@ test('CONTROL: without fix (A) the box-owned entry is deleted again and the even
   const traceB = "ports.trace(askedServiceLine(basename(path), `dropped: ${why}`));";  // fix (B): every drop is traced and said
   const noB = await damagedFactory(traceB, '/* no trace */');
   assert.ok((await dropsVisibly(noB)).length > 0, 'without (B) a drop leaves no trace');
-  const noBox = await damagedFactory('      setBoxNote(path, message);\n', '');                                  // fix (B), the message under the box
+  const noBox = await damagedFactory('      setBoxNote(path, message); say(', '      say(');                                  // fix (B), the message under the box
   assert.ok((await dropsVisibly(noBox)).length > 0, 'without the line under the box a drop is not said there');
-  const noStrip = await damagedFactory("      notices.set(path, { message, text: disk }); syncBars();", '      void disk;');       // fix (B), the message in the strip when the entry is gone
-  assert.ok((await dropsVisibly(noStrip)).length > 0, 'without the notice the strip says nothing when the entry is gone');
+  const noDialog = await damagedFactory("say(path, { type: 'dropped', message: message.replace(/\\.$/, '') });", '');       // fix (B), the message in the DIALOG (2026-11-13-1214: it was the strip)
+  assert.ok((await dropsVisibly(noDialog)).length > 0, 'without the dialog line the drop is not said where the person looks');
   const noSent = await damagedFactory('    ports.trace(askingServiceLine(basename(path)));', '');                               // fix (C), the send is traced
   assert.ok((await allSurvive(noSent)).length > 0, 'without (C) nothing says a request left');
   assert.deepEqual(await allSurvive(realFactory), [], 'the undamaged controller passes the survival scenarios');

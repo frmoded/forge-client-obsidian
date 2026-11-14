@@ -106,6 +106,7 @@ import { decideStaleMainJsCheck } from './stale-main-js-check-core.ts';
 import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
 import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts';
 import { registerScoreFirst } from './score-first.ts';
+import { settingsStore } from './dialog-core.ts';
 import { classifyMessageSource, messageDelivery, mirrorPanelErrors, routeMessage } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { EDITION } from './edition-selected.ts';
@@ -783,7 +784,7 @@ export default class ForgePlugin extends Plugin {
     // score_first_experiment M1 (drain 2026-10-21-1100): "New bar" — registered for every vault, offered only where forge.toml declares profile = "score_first".
     // 1155-91: the profile answer arrives after load; the markdown header is re-decided when it does (the edges button is not drawn in a score-first vault).
     this.register(messageDelivery.onScoreFirst(() => { this.syncAllHeaderActions(); }));
-    registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim() });
+    registerScoreFirst(this, { openRhythmNote: (file) => this.rhythmEdit?.openRhythmNote(file) ?? Promise.resolve(), markRhythmText: (leaf, path) => { this.rhythmEdit?.markAsText(leaf, path); }, holdRhythmText: (leaf, on) => { this.rhythmEdit?.holdAsText(leaf, on); }, askPlan: (payload) => planPhraseAlpha(this.settings.transpileServiceUrl, this.settings.transpileServiceToken, payload), ownKey: () => resolveUserAnthropicKey(this.settings), serviceVersion: () => fetchServiceVersion(this.settings.transpileServiceUrl), planConfigured: () => !!this.settings.transpileServiceUrl?.trim() && !!this.settings.transpileServiceToken?.trim(), dialogStore: settingsStore(this.settings, () => { this.saveDialogSoon(); }) });
     // v0.2.84 (replaces v0.2.83 polling) — register the facet-mutex
     // ViewPlugin once at onload. CM6 instantiates the plugin per
     // EditorView; per-view state lives on the plugin instance, the
@@ -1675,6 +1676,13 @@ export default class ForgePlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+
+  /** 2026-11-13-1214: the dialog's history is saved at most once a second (every message would otherwise rewrite data.json). */
+  private dialogSaveTimer: number | undefined;
+  saveDialogSoon(): void {
+    if (this.dialogSaveTimer !== undefined) window.clearTimeout(this.dialogSaveTimer);
+    this.dialogSaveTimer = window.setTimeout(() => { this.dialogSaveTimer = undefined; void this.saveSettings(); }, 1000);
   }
 
   async saveSettings() {

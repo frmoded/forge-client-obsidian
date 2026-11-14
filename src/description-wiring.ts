@@ -22,6 +22,7 @@ export interface DescriptionHooks {
   planConfigured?: () => boolean;
   ownKey?: () => string | undefined;
   serviceVersion?: () => Promise<string | null>;
+  dialogStore?: DescriptionPorts['dialogStore'];
 }
 
 export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks): DescriptionPorts {
@@ -38,6 +39,7 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     configured: hooks.planConfigured,
     ownKey: () => hooks.ownKey?.(),
     serviceVersion: () => (hooks.serviceVersion ? hooks.serviceVersion() : Promise.resolve(null)),      // 2026-11-12-1206: an arrangement or composition sentence answered without a version asks /health once
+    ...(hooks.dialogStore ? { dialogStore: hooks.dialogStore } : {}),
     ...(env.confirm ? { confirm: env.confirm } : {}),
   };
 }

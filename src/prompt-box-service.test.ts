@@ -3,6 +3,7 @@
 // grammar said no, never while typing, never when it is not configured. (2026-11-12-1206: for an arrangement and a composition too, forge-transpile 0.2.48: see prompt-box-families.test.ts.)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { dialogButtons, dialogClick, dialogEntries, dialogLast } from './test-support/dialog-view.ts';
 import { Window } from 'happy-dom';
 
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
@@ -40,9 +41,9 @@ function rig(opts: { service?: (payload: any) => Promise<Answer>; configured?: b
   const field = () => el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
   const type = (t: string) => { field().value = t; field().dispatchEvent(new win.Event('input', { bubbles: true })); };
   const enter = async () => { field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); };
-  const strip = () => (el.querySelector('.forge-description-message')?.textContent ?? '');
-  const buttons = () => [...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action'));
-  const click = async (action: string) => { (el.querySelector(`[data-action="${action}"]`) as HTMLElement).click(); await flush(); };
+  const strip = () => dialogLast(el);                // 2026-11-13-1214: a box sentence's outcome is said in the dialog, no longer in the strip
+  const buttons = () => dialogButtons(el);
+  const click = async (action: string) => { dialogClick(el, action as 'apply-preview' | 'cancel-preview'); await flush(); };
   const ready = async () => { await ctl.inspect(path); await flush(); };
   return { ctl, store, writes, asked, el, flush, field, type, enter, strip, buttons, click, ready, path };
 }
@@ -64,18 +65,19 @@ test('a rejected phrase sentence calls the service EXACTLY ONCE on Apply (the sa
   assert.deepEqual(r.asked[0].bars, ['bar_007', 'bar_008']);
   assert.deepEqual(r.writes, [], 'a preview writes nothing');
   assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
-  assert.match(r.el.querySelector('.forge-description-preview-description')!.textContent!, /12 bars/);
-  assert.match(r.el.querySelector('.forge-description-preview-recipe')!.textContent!, /12 bars/);
+  assert.match(r.el.querySelector('.forge-chat-suggestion-description')!.textContent!, /12 bars/);
+  assert.match(r.el.querySelector('.forge-chat-suggestion-recipe')!.textContent!, /12 bars/);
   assert.equal(r.field().value, FREE, 'the box keeps the text');
 });
 
-test('Cancel writes nothing and the box keeps the text; the strip is back to the plain error with the explicit Ask button, and no second request was made', async () => {
+test('Cancel writes nothing and the box keeps the text; the suggestion in the DIALOG says Cancelled and its buttons are off (2026-11-13-1214: no strip, no explicit Ask for a box sentence: pressing Apply again asks), and no second request was made', async () => {
   const r = rig({ service: async () => OK(PLAN_EXTEND) });
   await r.ready();
   r.type(FREE); await r.enter(); await r.click('cancel-preview');
   assert.deepEqual(r.writes, []);
   assert.equal(r.field().value, FREE);
-  assert.deepEqual(r.buttons(), ['ask'], 'no Revert (nothing was written); the explicit button is still there');
+  assert.deepEqual(r.buttons(), [], 'the suggestion was used: its buttons are off');
+  assert.equal(r.el.querySelector('.forge-chat-chosen')?.textContent, 'Cancelled.');
   assert.equal(r.asked.length, 1);
 });
 
@@ -90,7 +92,9 @@ test('applying the preview writes the note (one write, the phrase the suggestion
   assert.notEqual(r.field().value, FREE);
   assert.equal(r.el.querySelector('.forge-prompt-box.is-edited'), null);
   assert.equal(r.el.querySelector('.forge-prompt-box-conflict') === null || (r.el.querySelector('.forge-prompt-box-conflict') as HTMLElement).style.display === 'none', true, 'no leftover conflict');
-  assert.equal(r.strip(), '');
+  assert.match(r.strip(), /^Applied \(/, 'the dialog says what was applied (2026-11-13-1214: no longer the strip)');
+  assert.equal(r.el.querySelector('.forge-chat-chosen')?.textContent, 'Applied.');
+  assert.deepEqual(r.buttons(), []);
 });
 
 test('while the service thinks the box says so; a SECOND Apply does nothing (one request in flight); the answer then arrives once', async () => {
@@ -116,13 +120,13 @@ test('text edited in the box WHILE the service thinks: the answer is dropped wit
   r.type(FREE); r.field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await r.flush();
   r.type(FREE + ' and louder');                                                                            // typed on while it thinks
   release(OK(PLAN_EXTEND)); await r.flush();
-  assert.equal(r.strip(), 'The Description changed while the service was thinking; its suggestion was dropped.');
+  assert.match(r.strip(), /^Dropped: The Description changed while the service was thinking; its suggestion was dropped/);
   assert.ok(!r.buttons().includes('apply-preview'), 'no preview for a sentence that is gone');
   assert.deepEqual(r.writes, []);
   assert.equal(r.field().value, FREE + ' and louder');
 });
 
-test('an unreachable service and a refusal each say their one plain sentence in the strip, write nothing and leave the text; the explicit Ask button stays', async () => {
+test('an unreachable service and a refusal each say their one plain sentence in the DIALOG, write nothing and leave the text', async () => {
   for (const [service, expect] of [
     [async () => { throw new Error('offline'); }, /Could not reach the transpile service \(offline\)/],
     [async () => ({ status: 200, json: { ok: false, parsed_ok: true, plan: null, error: 'That bar does not exist.' } }), /./],
@@ -135,7 +139,7 @@ test('an unreachable service and a refusal each say their one plain sentence in 
     assert.deepEqual(r.writes, []);
     assert.equal(r.field().value, FREE, 'the text is kept');
     assert.ok(r.el.querySelector('.forge-prompt-box.is-edited'));
-    assert.deepEqual(r.buttons(), ['ask']);
+    assert.deepEqual(r.buttons(), []);                                                                      // 2026-11-13-1214: nothing to press in the dialog; the person presses Apply again to ask again
   }
 });
 
@@ -144,7 +148,8 @@ test('NOT configured, or no service at all: a rejected sentence is the plain err
     await r.ready();
     r.type(FREE); await r.enter();
     assert.deepEqual(r.asked, []);
-    assert.match(r.strip(), /Description, line 1, column \d+/);
+    assert.ok(dialogEntries(r.el).some((e) => e.kind === 'rejected' && /line 1, column \d+/.test(e.text)), 'the dialog says where (line and column)');
+    assert.match(r.strip(), /not set up|not available/, '2026-11-13-1214: and then why the service was not asked');
     assert.equal(r.field().value, FREE);
   }
 });

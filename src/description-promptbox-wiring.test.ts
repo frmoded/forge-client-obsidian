@@ -75,8 +75,8 @@ test('URL and token set: Apply logs every decision in order, says "Asking..." un
   assert.deepEqual(mounted(r.info), ['[forge-promptbox] box mounted: phrase_001 family=phrase askPlan=present configured=true'], 'the first line on opening the tab: this build is live and the gate says what Apply will do');
   assert.ok(r.info.some((l) => l === '[forge-description] asking the service about phrase_001'));
   assert.ok(r.info.some((l) => l.startsWith('[forge-description] asked the service about phrase_001 -> extend')));
-  assert.equal(b.state(), 'The service answered: see the preview at the top.');
-  assert.ok(r.el.querySelector('.forge-description-preview, [data-action="apply-preview"]'), 'the preview is there');
+  assert.equal(b.state(), 'The service answered: the suggestion is in the dialog.');
+  assert.ok(r.el.querySelector('.forge-chat-action[data-choice="apply"]'), 'the suggestion with its Apply is in the dialog (2026-11-13-1214: no longer the strip)');
   for (const l of [...r.info, ...r.warn]) assert.ok(!/x{10}|example\.test/.test(l), 'no token and no URL in any line');
 });
 
@@ -89,7 +89,7 @@ test('while the request is out the status line says "Asking the sentence service
   assert.equal(b.state(), 'Asking the sentence service...');
   assert.equal(r.sent.length, 1);
   release(); await settle();
-  assert.equal(b.state(), 'The service answered: see the preview at the top.');
+  assert.equal(b.state(), 'The service answered: the suggestion is in the dialog.');
 });
 
 test('the service REFUSES: the status line says so, with its message', async () => {

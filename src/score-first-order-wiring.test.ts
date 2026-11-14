@@ -43,7 +43,9 @@ const ROLES: Array<[string, string]> = [
   ['banner', 'forge-description-bar'], ['score', 'forge-rhythm-edit-score'], ['bracket', 'forge-phrase-bracket'], ['controls', 'forge-phrase-controls'], ['arrangement-controls', 'forge-arr-controls'],
   ['chips', 'forge-structure-strip'], ['tree', 'forge-composition-tree'], ['notebook', 'forge-notebook'], ['arrangement-header', 'forge-arrangement-header'], ['composition-header', 'forge-composition-header'], ['pin', 'forge-arrangement-pin'],
 ];
-const rolesOf = (el: any): string[] => [...el.children].map((c: any) => ROLES.find(([, cls]) => c.classList.contains(cls))?.[0] ?? `other:${String(c.className)}`);
+// 2026-11-13-1214 (rewritten: it read the tab's direct children): the tab's content is now the chat body (everything the tab drew, in its order) and the panel (the dialog and the box, a sibling below, not a part of the order); the roles are read through the body
+const partsOf = (el: any): any[] => [...el.children].flatMap((c: any) => (c.classList.contains('forge-chat-body') ? [...c.children] : c.classList.contains('forge-chat-panel') ? [] : [c]));
+const rolesOf = (el: any): string[] => partsOf(el).map((c: any) => ROLES.find(([, cls]) => c.classList.contains(cls))?.[0] ?? `other:${String(c.className)}`);
 /** The comparator: the Score is above every other part, and only the banner may stand above it. */
 const scoreFirst = (roles: string[]): boolean => roles.includes('score') && roles.slice(0, roles.indexOf('score')).every((r) => r === 'banner');
 
