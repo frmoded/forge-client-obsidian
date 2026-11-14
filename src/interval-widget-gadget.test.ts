@@ -14,6 +14,7 @@ import vm from 'node:vm';
 import { Window } from 'happy-dom';
 
 import { pinSkipReason } from './test-support/sibling-pin.ts';
+import { audioStub } from './test-support/web-audio-stub.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const HTML_DIR = 'assets/vaults/music-theory/music_instruments/resources/html';
@@ -126,23 +127,17 @@ test('the tuning math is the Piano gadget\'s: every key C3-C5 in every tuning so
 
 type Page = { win: any; doc: any; errors: string[]; osc: number[] };
 function openPage(h: string = html, rand?: () => number): Page {
-  const errors: string[] = [], osc: number[] = [];
+  const errors: string[] = [];
   const win: any = new Window({ url: 'http://localhost/' });
   win.console.error = (...a: unknown[]) => { errors.push(a.map(String).join(' ')); };
   win.addEventListener('error', (e: any) => errors.push(String(e.message ?? e)));
-  class Ctx {
-    currentTime = 0; state = 'running'; destination = {};
-    createPeriodicWave() { return {}; }
-    createGain() { const p = () => ({ value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} }); return { gain: p(), connect() {} }; }
-    createOscillator() { const o = { frequency: { value: 0 }, setPeriodicWave() {}, connect() {}, start() { osc.push(o.frequency.value); }, stop() {} }; return o; }
-    resume() {}
-  }
+  const stub = audioStub(); const Ctx = stub.Ctx;      // 2026-11-13-1214-1: the piano voice makes 20 oscillators a note; `osc` records ONE entry per note (the pitch asked for)
   win.AudioContext = Ctx; win.Float32Array = Float32Array;
   if (rand) win.__intervalRandom = rand;                    // the injected random source (the page reads it on every question)
   const m = /<script>([\s\S]*?)<\/script>/.exec(h)!;
   win.document.write(h.replace(m[0], ''));
   win.eval(m[1]);
-  return { win, doc: win.document, errors, osc };
+  return { win, doc: win.document, errors, osc: stub.osc };
 }
 const click = (p: Page, sel: string) => p.doc.querySelector(sel).dispatchEvent(new p.win.MouseEvent('click', { bubbles: true }));
 const hz = (g: any, ...ms: number[]) => ms.map((m) => +g.midiToHz(m, 'equal').toFixed(2));
@@ -495,7 +490,8 @@ test('SHIFT CONTROL: the checks can fail - a broken note that is not raised, a b
 /** The commit of THIS repo the drain started from: the other gadgets are compared with their text there, never with a moving tree. */
 const START_SHA = 'c6285f9';
 const skipReason = pinSkipReason(ROOT, START_SHA, 'this repo');
-for (const other of ['guitar_fretboard.html', 'lute_fretboard.html', 'monochord.html', 'piano_keyboard.html', 'piano_keyboard_c_major_triad.html', 'rhythm_box.html', 'mandolin_fretboard.html']) {
+// 2026-11-13-1214-1: piano_keyboard.html is NOT in this list any more: it got the new piano voice on purpose (src/piano-voice.test.ts pins what changed)
+for (const other of ['guitar_fretboard.html', 'lute_fretboard.html', 'monochord.html', 'piano_keyboard_c_major_triad.html', 'rhythm_box.html', 'mandolin_fretboard.html']) {
   test(`P3: ${other} is byte-identical to the commit the drain started from`, { skip: skipReason ?? false }, () => {
     const was = execFileSync('git', ['-C', ROOT, 'show', `${START_SHA}:${HTML_DIR}/${other}`], { maxBuffer: 64 * 1024 * 1024 });
     assert.ok(Buffer.compare(was, fs.readFileSync(path.join(ROOT, HTML_DIR, other))) === 0, `${other} changed`);

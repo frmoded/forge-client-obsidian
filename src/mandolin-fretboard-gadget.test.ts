@@ -489,7 +489,8 @@ test('the mandolin page embeds the gadget at a height that holds the tallest sco
 /** The commit of THIS repo the drain started from: the other gadgets are compared with their text there, never with a moving tree. */
 const START_SHA = 'a673d54';
 const skipReason = pinSkipReason(ROOT, START_SHA, 'this repo');
-for (const other of ['guitar_fretboard.html', 'lute_fretboard.html', 'monochord.html', 'piano_keyboard.html', 'piano_keyboard_c_major_triad.html', 'rhythm_box.html']) {
+// 2026-11-13-1214-1: piano_keyboard.html got the new piano voice on purpose (src/piano-voice.test.ts); it is not byte-identical to this drain's start any more
+for (const other of ['guitar_fretboard.html', 'lute_fretboard.html', 'monochord.html', 'piano_keyboard_c_major_triad.html', 'rhythm_box.html']) {
   test(`P3: ${other} is byte-identical to the commit the drain started from`, { skip: skipReason ?? false }, () => {
     const was = execFileSync('git', ['-C', ROOT, 'show', `${START_SHA}:${HTML_DIR}/${other}`], { maxBuffer: 64 * 1024 * 1024 });
     assert.ok(Buffer.compare(was, fs.readFileSync(path.join(ROOT, HTML_DIR, other))) === 0, `${other} changed`);
