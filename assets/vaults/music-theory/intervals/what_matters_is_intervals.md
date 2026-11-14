@@ -27,9 +27,9 @@ Try it: choose the Shift tab of the widget above, shift the tune up and down and
 
 ## What you really hear
 
-Perfect pitch (also called absolute pitch) is the rare ability to name or sing an exact note with no reference; common estimates say about one person in ten thousand has it. It seems to come from a mix of inheritance and very early musical training, and it is reported to be more common among speakers of tonal languages such as Mandarin, where the pitch of a word changes its meaning. People who have it often say they hear notes in everyday sounds, like a car horn or a humming fridge, and it can drift with age, so familiar music can start to sound a little off to someone who used to hear it exactly.
+Perfect pitch (also called absolute pitch) is the rare ability to name or sing an exact note with no reference; common estimates say about one person in ten thousand has it. It seems to come from a mix of inheritance and very early musical training, it is reported to be more common among speakers of tonal languages such as Mandarin, and it can drift with age.
 
-The rest of us, which is nearly everybody, hear intervals, not pitches: that is why a song sung in any key is still the same song.
+The rest of us, which is nearly everybody, hear intervals, not pitches. This is called relative pitch, and it is the skill this whole chapter is about. You already use it every time you recognise a song sung in any key, hum along to a tune you have just heard, or notice that a note sounds wrong. Musicians lean on it constantly: to play a song by ear, to sing a harmony above a melody, to tune one string to another, or to move a tune into a key that suits a voice. And unlike perfect pitch, relative pitch can be trained at any age: the more distances you can name, the more of what you hear turns into something you can play.
 
 ## Why start here?
 
