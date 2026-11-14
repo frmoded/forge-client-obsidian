@@ -12,7 +12,7 @@ import { audioStub } from './test-support/web-audio-stub.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DIR = path.join(ROOT, 'assets/vaults/music-theory/music_instruments/resources/html');
-const FILES = ['piano_voice_demo.html', 'piano_keyboard.html', 'interval_widget.html'] as const;
+const FILES = ['piano_voice_demo.html', 'piano_keyboard.html', 'interval_widget.html', 'interval_pair.html', 'tune_shifter.html'] as const;
 const html = Object.fromEntries(FILES.map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')])) as Record<(typeof FILES)[number], string>;
 const BEGIN = '// ==== piano voice BEGIN', END = '// ==== piano voice END';
 const blockOf = (h: string): string => { const a = h.indexOf(BEGIN), b = h.indexOf(END); assert.ok(a > 0 && b > a, 'the block is there'); return h.slice(a, h.indexOf('\n', b)); };
@@ -26,10 +26,9 @@ function voice(): any {
 }
 
 // ---- the same block in all three files -------------------------------------------------------------------------------------------------------------------------------------
-test('the voice block is IDENTICAL in the demo, the Piano gadget and the interval widget (a copy that drifts is a failure)', () => {
-  const [d, k, i] = FILES.map((f) => blockOf(html[f]));
-  assert.equal(k, d, 'piano_keyboard.html differs from the demo');
-  assert.equal(i, d, 'interval_widget.html differs from the demo');
+test('the voice block is IDENTICAL in the demo, the Piano gadget, the interval widget and the two mini gadgets (a copy that drifts is a failure)', () => {
+  const d = blockOf(html['piano_voice_demo.html']);
+  for (const f of FILES) assert.equal(blockOf(html[f]), d, `${f} differs from the demo`);                // 2026-11-13-1215: the two new gadgets carry the same block
   assert.ok(d.length > 3000, 'non-vacuity: it is the whole block');
   assert.doesNotMatch(d, /document|window/, 'the block is pure: no DOM');
 });

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Move the tune</title>
+<style>
+  /* Palette: the same values as piano_keyboard.html (forge_music_theory_style_guide.md). No margin, no padding, no fixed height: the page is exactly its content. */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --tune: #FBE7B0; --accent: #D72027; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
+  svg { display: block; width: 100%; max-width: 334px; height: auto; user-select: none; -webkit-user-select: none; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 0 0 3px; flex-wrap: wrap; min-height: 30px; }
+  button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 12px; cursor: pointer; min-height: 30px; }
+  button:hover { border-color: var(--ink); }
+  button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  #start { color: var(--ink); }
+  .key { cursor: pointer; }
+  .key:focus { outline: none; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.white.tunenote rect { fill: var(--tune); }
+  .key.black.tunenote rect { fill: #C9A24A; stroke: var(--ink); }
+  .key.white.startkey rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
+  .key.black.startkey rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
+  .key.dim { cursor: not-allowed; }
+  .key.dim rect { opacity: 0.3; }
+  .key.dim text { opacity: 0.3; }
+  .key:focus rect { stroke: var(--accent); stroke-width: 3; }
+  .key text { pointer-events: none; fill: var(--muted); font-size: 9px; }
+  .key.black text { fill: var(--paper); }
+  .key.black.startkey text { fill: var(--ink); }
+  .staffline, .ledger { stroke: #A69B91; stroke-width: 1; }
+  .head { fill: var(--ink); }
+  .acc { fill: var(--ink); font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="row" id="tunes" role="group" aria-label="Choose a tune"></div>
+<svg id="staff" role="img" aria-label="Treble staff"></svg>
+<div class="row" style="margin-top:3px"><button id="play" type="button">Play</button><span id="start"></span></div>
+<svg id="strip" role="group" aria-label="Piano keys, C3 to C5. Press a key to make the tune start on it."></svg>
+<script>
+(function () {
+  "use strict";
+  // GADGET 2 of 2026-11-13-1215: "move the tune". Two tunes. Press a key: the whole tune moves so its FIRST note is that key (every interval kept). Nothing plays on a key press; Play plays the tune.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  var LOW = 48, HIGH = 72, A4_HZ = 440;                         // C3 .. C5: both tunes fit, with room to move (Amazing Grace spans 62..71, Bach 55..72)
+  // The tunes, as MIDI lists. Each is PUBLIC DOMAIN. NOT Hey Jude: it is in copyright and this file would ship its melody as data.
+  //  - Amazing Grace, the first phrase "A-ma-zing grace, how sweet the sound" (an upbeat D, then G B G B A G E D): the traditional hymn, tune NEW BRITAIN (Virginia Harmony, 1831). SOURCE for the nine pitches:
+  //    the Mutopia Project's LilyPond engraving "New Britain (hymntune)" (public domain), soprano line in G major, read as text (relative to C4): d' g' b' g' b' a' g' e' d' = D4 G4 B4 G4 B4 A4 G4 E4 D4.
+  //  - Bach, Cello Suite No. 1 in G, BWV 1007, Prelude, bars 1 and 2 (Bach died 1750). SOURCE: the Mutopia Project's LilyPond engraving of the Schirmer 1916 edition (public domain), bwv1007_prelude.ly, read as text:
+  //    bar 1 = G D B A B D B D, bar 2 = G E C B C E C E; the first half of each bar is played (16 notes), at the file's own octave, one octave UP from the cello (G3 D4 B4 ...), `step` 0.2 s per note.
+  var TUNES = [
+    { id: "grace", title: "Amazing Grace", short: "Amazing Grace", notes: [62, 67, 71, 67, 71, 69, 67, 64, 62], step: 0.45 },
+    { id: "bwv1007", title: "Bach: Cello Suite No. 1, Prelude (bars 1-2)", short: "Bach: Cello Suite 1", notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 64, 72, 71, 72, 64, 72, 64], step: 0.2 }
+  ];
+  var FLATS = ["C", "D-flat", "D", "E-flat", "E", "F", "G-flat", "G", "A-flat", "A", "B-flat", "B"];      // the Shift tab's rule: flats for black keys, never sharps
+  function plainName(m) { return FLATS[((m % 12) + 12) % 12]; }
+  function isBlack(m) { return plainName(m).length > 1; }
+  function octaveOf(m) { return Math.floor(m / 12) - 1; }
+  function midiToHz(m) { return A4_HZ * Math.pow(2, (m - 69) / 12); }
+  // Move the tune so its first note is `start`: every note shifts by the same number of half steps, so every interval is kept.
+  function placeTune(tune, start) { var d = start - tune.notes[0]; return tune.notes.map(function (m) { return m + d; }); }
+  // The starts that keep EVERY note on the strip, lowest first.
+  function allowedStarts(tune, lo, hi) {
+    var out = [];
+    for (var s = lo; s <= hi; s++) { var p = placeTune(tune, s); if (Math.min.apply(null, p) >= lo && Math.max.apply(null, p) <= hi) out.push(s); }
+    return out;
+  }
+  // Why a key is off: the tune would leave the strip at the top or at the bottom.
+  function whyNot(tune, start, lo, hi) {
+    var p = placeTune(tune, start);
+    if (Math.max.apply(null, p) > hi) return "Too high: the tune would go above C5";
+    if (Math.min.apply(null, p) < lo) return "Too low: the tune would go below C3";
+    return null;
+  }
+  // The signed size of each step between neighbouring notes: it never changes when the tune moves.
+  function tuneIntervals(notes) { var out = []; for (var i = 1; i < notes.length; i++) out.push(notes[i] - notes[i - 1]); return out; }
+  // ---- the staff: a treble clef; `pos` counts lines AND spaces upward from the bottom line (E4 = 0, G4 = 2, F5 = 8, middle C = -2); a black key is written as a FLAT, on the letter above it ----
+  var LETTER_STEP = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+  function staffPos(m) { return octaveOf(m) * 7 + LETTER_STEP[plainName(m).charAt(0)] - 30; }          // E4 (midi 64): octave 4, letter step 2 -> 30
+  function ledgerPositions(pos) {                                  // every even position from -2 down (below the staff) or from 10 up (above it) that a note at `pos` needs
+    var out = [], p;
+    for (p = -2; p >= pos; p -= 2) out.push(p);
+    for (p = 10; p <= pos; p += 2) out.push(p);
+    return out;
+  }
+  var SC = { half: 4, top: 11, bottom: -10, left: 38, step: 17.5, width: 332, headRx: 5.2, headRy: 3.7, ledgerHalf: 8, accDx: 9 };   // the staff is as tall as C3..C5 and the clef need, so it never jumps
+  function yOf(pos) { return (SC.top - pos) * SC.half; }
+  SC.height = (SC.top - SC.bottom) * SC.half + SC.half;
+  function staffLayout(notes) {
+    var step = Math.min(SC.step, (SC.width - SC.left - 8) / notes.length);
+    return notes.map(function (m, i) { var pos = staffPos(m); return { midi: m, pos: pos, x: SC.left + (i + 0.5) * step, y: yOf(pos), flat: isBlack(m), ledger: ledgerPositions(pos) }; });
+  }
+  // What Play sounds: a note every `step` seconds, the last one twice as long.
+  function planPlay(tune, start) {
+    return placeTune(tune, start).map(function (m, i, a) { return { midi: m, hz: midiToHz(m), when: i * tune.step, dur: i === a.length - 1 ? 2 * tune.step : tune.step }; });
+  }
+  // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
+  // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
+  // A piano-like note by ADDITIVE SYNTHESIS: 10 partials per string with a slight inharmonic stretch (stiff strings: partial n at n*f*sqrt(1 + B*n*n), B from about 0.0003 in the treble to about 0.001
+  // in the bass, normalised so the fundamental is exactly f), each partial with its own decay (higher ones die faster, bass notes ring longer), TWO strings a couple of cents apart (the natural beating), a few
+  // ms of band-passed hammer noise scaled by velocity, a low-pass whose cutoff rises with velocity and falls with pitch, a quick release at the end of the note, and a soft limiter on the shared bus so a chord does not clip.
+  // `when` is an absolute time on the context's clock; `hz` is the pitch the gadget's tuning asks for (the pitch-dependent parts use the note number it is nearest to). Per note: 20 oscillators (string 1's partials 1..10, then string 2's) and no other source but the hammer noise.
+  var PIANO_PARTIALS = 10;
+  var PIANO_STRINGS = 2;
+  var PIANO_OSC_PER_NOTE = PIANO_PARTIALS * PIANO_STRINGS;
+  var PIANO_DETUNE_CENTS = [0, 2];                     // string 1 true, string 2 two cents sharp
+  var PIANO_ATTACK = 0.004;                            // s, the rise of the note
+  var PIANO_RELEASE = 0.02;                            // s, the end of a note is a quick fade, never a cut
+  function pianoClamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  function pianoMidi(hz) { return 69 + 12 * Math.log(hz / 440) / Math.LN2; }
+  function pianoB(midi) { return 0.0003 + 0.0007 * pianoClamp((84 - midi) / 60, 0, 1); }                               // C6 and above 0.0003, rising toward the bass (C2 about 0.00086, C1 and below 0.001)
+  function pianoPartialHz(f, n, B) { return n * f * Math.sqrt((1 + B * n * n) / (1 + B)); }                            // n = 1 is exactly f
+  function pianoDecay(midi, n) { return pianoClamp(4.2 - 0.045 * (midi - 36), 0.7, 4.2) / (1 + 0.8 * (n - 1)); }       // the time constant (s) of partial n: the bass rings longer, each higher partial dies faster
+  function pianoPartialAmp(n) { return 1 / Math.pow(n, 1.1); }                                                         // the spectrum falls off gently: a hammer-struck string keeps its upper partials
+  function pianoCutoff(midi, velocity) { return pianoClamp(1800 + 7200 * velocity - 35 * (midi - 60), 500, 12000); }  // Hz: harder = brighter, higher = darker
+  var pianoNoiseCache = null, pianoBusCache = null;
+  function pianoNoiseBuffer(ctx) {
+    if (!pianoNoiseCache || pianoNoiseCache.ctx !== ctx) {
+      var n = Math.max(1, Math.round(ctx.sampleRate * 0.012)), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0), seed = 1;
+      for (var i = 0; i < n; i++) { seed = (seed * 16807) % 2147483647; d[i] = seed / 1073741823.5 - 1; }        // a fixed noise burst: the same every time
+      pianoNoiseCache = { ctx: ctx, buffer: b };
+    }
+    return pianoNoiseCache.buffer;
+  }
+  function pianoBus(ctx) {                                                                                             // the shared output: a soft limiter, so a four-note chord does not clip
+    if (!pianoBusCache || pianoBusCache.ctx !== ctx) {
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      comp.connect(ctx.destination);
+      pianoBusCache = { ctx: ctx, node: comp };
+    }
+    return pianoBusCache.node;
+  }
+  function pianoVoice(ctx, destination, hz, when, length, velocity, level) {
+    var t0 = when, end = when + Math.max(0.05, length), midi = pianoMidi(hz), B = pianoB(midi);
+    var v = pianoClamp(velocity == null ? 0.8 : velocity, 0.05, 1), peak = pianoClamp(level == null ? 1 : level, 0, 2) * (0.1 + 0.2 * v);
+    var sumA = 0, n, s;
+    for (n = 1; n <= PIANO_PARTIALS; n++) sumA += pianoPartialAmp(n);
+    var out = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = pianoCutoff(midi, v); lp.Q.value = 0.7;
+    out.gain.setValueAtTime(0.0001, t0);
+    out.gain.linearRampToValueAtTime(peak, t0 + PIANO_ATTACK);
+    out.gain.setValueAtTime(peak, Math.max(end, t0 + PIANO_ATTACK + 0.001));
+    out.gain.setTargetAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001), PIANO_RELEASE / 4);                          // the quick release (about 20 ms to silence)
+    out.gain.setValueAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.15);
+    lp.connect(out); out.connect(destination);
+    for (s = 0; s < PIANO_STRINGS; s++) {
+      var fs = hz * Math.pow(2, PIANO_DETUNE_CENTS[s] / 1200);
+      for (n = 1; n <= PIANO_PARTIALS; n++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = pianoPartialHz(fs, n, B);
+        g.gain.setValueAtTime(pianoPartialAmp(n) / sumA / PIANO_STRINGS, t0);
+        g.gain.setTargetAtTime(0, t0 + PIANO_ATTACK, pianoDecay(midi, n));
+        o.connect(g); g.connect(lp);
+        o.start(t0); o.stop(Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.2);
+      }
+    }
+    var ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();                          // the hammer: a few ms of band-passed noise, harder = louder
+    ns.buffer = pianoNoiseBuffer(ctx);
+    bp.type = "bandpass"; bp.frequency.value = pianoClamp(1200 + 2400 * v + 12 * (midi - 60), 600, 6000); bp.Q.value = 1;
+    ng.gain.setValueAtTime(0.2 * v * v, t0); ng.gain.setTargetAtTime(0, t0 + 0.001, 0.003);
+    ns.connect(bp); bp.connect(ng); ng.connect(lp);
+    ns.start(t0); ns.stop(t0 + 0.02);
+  }
+  // ==== piano voice END ===========================================================================================================================
+
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { LOW: LOW, HIGH: HIGH, TUNES: TUNES, plainName: plainName, isBlack: isBlack, midiToHz: midiToHz, placeTune: placeTune, allowedStarts: allowedStarts, whyNot: whyNot, tuneIntervals: tuneIntervals,
+      staffPos: staffPos, ledgerPositions: ledgerPositions, SC: SC, yOf: yOf, staffLayout: staffLayout, planPlay: planPlay, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+  var tune = TUNES[0], start = tune.notes[0];
+  // The strip: 25 keys C3..C5, black keys on top.
+  var WW = 22, WH = 60, BW = 13, BH = 36, PAD = 1, keys = {}, whites = [], blacks = [], wi = 0, m;
+  for (m = LOW; m <= HIGH; m++) { if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 }); else { whites.push({ m: m, x: PAD + wi * WW }); wi++; } }
+  var strip = $("strip");
+  strip.setAttribute("viewBox", "0 0 " + (wi * WW + 2 * PAD) + " " + (WH + 2 * PAD));
+  function nameOf(m) { return plainName(m).replace("-flat", " flat") + " " + octaveOf(m); }
+  function makeKey(k, black) {
+    var g = el("g", { "class": "key " + (black ? "black" : "white"), "data-midi": k.m, tabindex: "0", role: "button", "aria-label": nameOf(k.m) }, strip);
+    el("rect", { x: k.x, y: PAD, width: black ? BW : WW, height: black ? BH : WH, rx: black ? 2 : 3 }, g);
+    if (!black && k.m % 12 === 0) { var t = el("text", { x: k.x + WW / 2, y: WH - 5, "text-anchor": "middle" }, g); t.textContent = "C" + octaveOf(k.m); }
+    keys[k.m] = g;
+    g.addEventListener("click", function () { press(k.m); try { g.focus({ preventScroll: true }); } catch (_) {} });
+    g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(k.m); } });
+  }
+  whites.forEach(function (k) { makeKey(k, false); });
+  blacks.forEach(function (k) { makeKey(k, true); });
+  function press(m) { if (whyNot(tune, m, LOW, HIGH) !== null) return; start = m; render(); }           // a key moves the tune, silently; a dimmed key does nothing
+  // The staff.
+  var staff = $("staff");
+  staff.setAttribute("viewBox", "0 0 " + SC.width + " " + SC.height);
+  // The treble clef is the Bravura (SMuFL) glyph U+E050 gClef, as an OUTLINE path (no font, nothing loaded), copied from mandolin_fretboard.html (1199). Source: the Bravura font by Steinberg (steinbergmedia/bravura on GitHub),
+  // SIL Open Font License 1.1 (OFL); the outline is Bravura's own: bounding box and origin as in the font's SMuFL metadata (4.392 spaces up, 2.632 down, 2.684 wide), glyph units 1000 per em, an em = 4 staff spaces, the origin ON the G line, y up.
+  var CLEF_D = "M376 415l25 -145c3 -18 3 -18 29 -18c147 0 241 -113 241 -241c0 -113 -67 -198 -168 -238c-14 -6 -15 -5 -13 -17c11 -62 29 -157 29 -214c0 -170 -130 -200 -197 -200c-151 0 -190 98 -190 163c0 62 40 115 107 115c61 0 96 -47 96 -102c0 -58 -36 -85 -67 -94 c-23 -7 -32 -10 -32 -17c0 -13 26 -29 80 -29c59 0 159 18 159 166c0 47 -15 134 -27 201c-2 12 -4 11 -15 9c-20 -4 -46 -6 -69 -6c-245 0 -364 165 -364 339c0 202 153 345 297 464c12 10 11 12 9 24c-7 41 -14 106 -14 164c0 104 24 229 98 311c20 22 51 48 65 48 c11 0 37 -28 52 -50c41 -60 65 -146 65 -233c0 -153 -82 -280 -190 -381c-6 -6 -8 -7 -6 -19zM470 943c-61 0 -133 -96 -133 -252c0 -32 2 -66 6 -92c2 -13 6 -14 13 -8c79 69 174 159 174 270c0 55 -27 82 -60 82zM361 262l-21 128c-2 11 -4 12 -14 4 c-47 -38 -93 -75 -153 -142c-83 -94 -93 -173 -93 -232c0 -139 113 -236 288 -236c20 0 40 2 56 5c15 3 16 3 14 14l-50 298c-2 11 -4 12 -20 8c-61 -17 -100 -60 -100 -117c0 -46 30 -89 72 -107c7 -3 15 -6 15 -13c0 -6 -4 -11 -12 -11c-7 0 -19 3 -27 6 c-68 23 -115 87 -115 177c0 85 57 164 145 194c18 6 18 5 15 24zM430 103l49 -285c2 -12 4 -12 16 -6c56 28 94 79 94 142c0 88 -67 156 -148 163c-12 1 -13 -2 -11 -14z";
+  var CLEF_SCALE = (2 * SC.half) / 250;                             // a staff space is 2*half px = 250 glyph units
+  function drawStaff(placed) {
+    while (staff.firstChild) staff.removeChild(staff.firstChild);
+    for (var p = 0; p <= 8; p += 2) el("line", { "class": "staffline", x1: 0, y1: yOf(p), x2: SC.width, y2: yOf(p) }, staff);
+    el("path", { "class": "clef", fill: "#2B2B2B", stroke: "none", "pointer-events": "none", transform: "translate(5 " + yOf(2) + ") scale(" + CLEF_SCALE + " " + (-CLEF_SCALE) + ")", d: CLEF_D }, staff);   // Bravura gClef, origin ON the G line
+    staffLayout(placed).forEach(function (n) {
+      n.ledger.forEach(function (lp) { el("line", { "class": "ledger", x1: n.x - SC.ledgerHalf, y1: yOf(lp), x2: n.x + SC.ledgerHalf, y2: yOf(lp) }, staff); });
+      el("ellipse", { "class": "head", cx: n.x, cy: n.y, rx: SC.headRx, ry: SC.headRy, transform: "rotate(-20 " + n.x + " " + n.y + ")" }, staff);
+      if (n.flat) { var t = el("text", { "class": "acc", x: n.x - SC.accDx - 5, y: n.y + 4, "text-anchor": "middle" }, staff); t.textContent = "♭"; }
+    });
+    staff.setAttribute("aria-label", "Treble staff, " + placed.map(nameOf).join(", "));
+  }
+  function render() {
+    var placed = placeTune(tune, start);
+    drawStaff(placed);
+    for (var k in keys) {
+      var mk = +k, why = whyNot(tune, mk, LOW, HIGH), c = keys[k].classList;
+      c.toggle("dim", why !== null); c.toggle("startkey", mk === start); c.toggle("tunenote", mk !== start && placed.indexOf(mk) >= 0);
+      if (why !== null) { keys[k].setAttribute("aria-disabled", "true"); keys[k].setAttribute("title", why); } else { keys[k].removeAttribute("aria-disabled"); keys[k].setAttribute("title", "Start the tune on " + nameOf(mk)); }
+    }
+    $("start").textContent = "starts on " + plainName(start).replace("-flat", " flat") + " (octave " + octaveOf(start) + ")";
+    TUNES.forEach(function (t) { $("tune-" + t.id).setAttribute("aria-pressed", t === tune ? "true" : "false"); });
+  }
+  TUNES.forEach(function (t) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "tune-" + t.id; b.textContent = t.short; b.title = t.title; b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () { tune = t; start = t.notes[0]; render(); });                     // a tune opens at its own start
+    $("tunes").appendChild(b);
+  });
+  // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
+  var ctx = null;
+  function audio() {
+    if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  $("play").addEventListener("click", function () {
+    var c = audio(); if (!c) return;
+    planPlay(tune, start).forEach(function (n) { pianoVoice(c, pianoBus(c), n.hz, c.currentTime + n.when, n.dur * 1.4, 0.8, 1); });
+  });
+  render();
+})();
+</script>
+</body>
+</html>
