@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scale player</title>
+<style>
+  /* Palette: the same values as piano_keyboard.html. No margin, no padding, no fixed height: the page is exactly its content, and its height is the same for every tonic and scale. */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --accent: #D72027; --chip: #F2F2EC; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 460px; }
+  svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
+  label { color: var(--ink); }
+  select, button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; min-height: 30px; }
+  button { cursor: pointer; padding: 4px 12px; }
+  button:hover:not(:disabled), select:hover { border-color: var(--ink); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
+  .chips { gap: 4px; min-height: 24px; }
+  .chip { min-width: 26px; text-align: center; background: var(--chip); border: 1px solid #DDDDD2; border-radius: 4px; color: var(--ink); font-size: 12px; line-height: 20px; padding: 0 5px; }
+  .chip.h { background: #E7EEF8; border-color: #C6D3E6; } .chip.w { background: #F2F2EC; } .chip.t { background: #F8E2D9; border-color: #E7C2B3; }
+  .caption { font-size: 12px; margin-left: 6px; }
+  .key { cursor: default; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.lit.white rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 1.5; }
+  .key.lit.black rect { fill: #B07F00; stroke: var(--ink); }
+  .key.tonic rect { stroke: var(--accent); stroke-width: 3; }
+  .key.sounding rect { fill: #9DD9B5; }
+  .key text { pointer-events: none; fill: var(--ink); font-size: 9px; }
+  .staffline, .ledger { stroke: #A69B91; stroke-width: 1; }
+  .head { fill: #fff; stroke: var(--ink); stroke-width: 1.4; }
+  .head.sounding { fill: #9DD9B5; }
+  .head.tonic { stroke: var(--accent); stroke-width: 2; }
+  .acc { fill: var(--ink); font-size: 14px; }
+  .letters { display: flex; gap: 4px; flex-wrap: nowrap; min-height: 28px; margin: 3px 0 0; }
+  .letter { flex: 0 0 auto; min-width: 34px; text-align: center; border: 1px solid #DDDDD2; border-radius: 5px; background: #fff; color: var(--ink); line-height: 24px; padding: 0 5px; font-weight: 600; }
+  .letter.sounding { background: #9DD9B5; }
+  .letter.tonic { border-color: var(--accent); }
+  #note { min-height: 34px; margin: 2px 0 0; font-size: 12px; line-height: 16px; }
+  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row"><label for="tonic">Tonic</label><select id="tonic" aria-label="Tonic"></select><label for="scale">Scale</label><select id="scale" aria-label="Scale"></select></div>
+<div class="row" id="form" role="group" aria-label="Direction of the scale"><span class="caption" style="margin:0">Form</span><button type="button" id="form-up">Up</button><button type="button" id="form-down">Down</button></div>
+<div class="row chips" id="chips" role="list" aria-label="The steps of the scale in half steps"></div>
+<svg id="strip" role="img" aria-label="Piano keys, C4 to C6"></svg>
+<svg id="staff" role="img" aria-label="Treble staff"></svg>
+<div class="letters" id="letters" role="list" aria-label="The notes of the scale"></div>
+<div id="note"></div>
+<div class="row"><button type="button" id="play-up">Play up</button><button type="button" id="play-down">Play down</button><button type="button" id="play-both">Play both</button></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-15-2102 - the SCALE PLAYER: pick a tonic and a scale; see its step recipe (W = 2 half steps, H = 1, 3H = 3), the notes lit on a piano strip with the tonic marked, the scale on a treble staff with PROPER spelling (one letter per degree for
+  // the seven-note scales, double sharps and double flats where the key needs them), the letters it uses once each, and play it up, down or both with the piano voice (the note that sounds lights up). Everything about the scale itself is the pure `scale core` below.
+  // The Up / Down switch matters for two kinds of scale only: the melodic minor (up with a raised 6th and 7th, down as the natural minor) and the symmetric scales (whole-tone, the two diminished scales: sharps going up, flats going down).
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.45, NOTE_LEN = 0.7;                 // the strip is C4..C6; a scale sits on the tonic's pitch class in the octave from C4 (so the staff and the strip agree)
+  function midiToHz(m) { return A4_HZ * Math.pow(2, (m - 69) / 12); }
+  function isBlack(m) { return [1, 3, 6, 8, 10].indexOf(((m % 12) + 12) % 12) >= 0; }
+  // ==== scale core BEGIN (2026-11-15-2102) ========================================================================================================
+  // The SAME block is in scale_player.html and scale_ear.html (each gadget is one self-contained file, so it is copied; a test pins them identical). Pure: no DOM, no Web Audio.
+  // A scale is a tonic (a pitch class 0..11, C = 0) and a step pattern in half steps (W = 2, H = 1, 3H = 3). SPELLING: a scale of seven notes takes ONE LETTER PER DEGREE, the letters in order from the tonic's (G-sharp harmonic minor is G# A# B C# D# E F-double-sharp, not G# A# B C# D# E G),
+  // with a double sharp or double flat where the key needs it. The tonic's own spelling is the conventional one for its KEY: a scale belongs to a parent major key (D Dorian to C major, G# minor to B major), the tonic is the right degree of that key, and the parent is the major key with the fewest
+  // accidentals (C, D-flat, D, E-flat, E, F, F-sharp, G, A-flat, A, B-flat, B). Pentatonic and blues scales keep the spelling of the seven-note scale they are cut from (major pentatonic from the major scale, minor pentatonic and blues from the natural minor; the blues' extra note is the flat fifth).
+  // The whole-tone and the two diminished scales have no parent: their notes go by sharps when the scale goes UP and by flats when it comes DOWN (the tonic as in its major key). The melodic minor goes up with a raised 6th and 7th and comes down as the natural minor.
+  var SC_SCALES = [
+    { id: "major",         name: "major",            group: "Major and minor", steps: [2, 2, 1, 2, 2, 2, 1], parent: 0, from: null },
+    { id: "natural_minor", name: "natural minor",    group: "Major and minor", steps: [2, 1, 2, 2, 1, 2, 2], parent: 9, from: null },
+    { id: "harmonic_minor", name: "harmonic minor",  group: "Major and minor", steps: [2, 1, 2, 2, 1, 3, 1], parent: 9, from: null },
+    { id: "melodic_minor", name: "melodic minor",    group: "Major and minor", steps: [2, 1, 2, 2, 2, 2, 1], down: [2, 1, 2, 2, 1, 2, 2], parent: 9, from: null },
+    { id: "ionian",        name: "Ionian",           group: "Modes", steps: [2, 2, 1, 2, 2, 2, 1], parent: 0, from: null },
+    { id: "dorian",        name: "Dorian",           group: "Modes", steps: [2, 1, 2, 2, 2, 1, 2], parent: 2, from: null },
+    { id: "phrygian",      name: "Phrygian",         group: "Modes", steps: [1, 2, 2, 2, 1, 2, 2], parent: 4, from: null },
+    { id: "lydian",        name: "Lydian",           group: "Modes", steps: [2, 2, 2, 1, 2, 2, 1], parent: 5, from: null },
+    { id: "mixolydian",    name: "Mixolydian",       group: "Modes", steps: [2, 2, 1, 2, 2, 1, 2], parent: 7, from: null },
+    { id: "aeolian",       name: "Aeolian",          group: "Modes", steps: [2, 1, 2, 2, 1, 2, 2], parent: 9, from: null },
+    { id: "locrian",       name: "Locrian",          group: "Modes", steps: [1, 2, 2, 1, 2, 2, 2], parent: 11, from: null },
+    { id: "major_pentatonic", name: "major pentatonic", group: "Pentatonic and blues", steps: [2, 2, 3, 2, 3], parent: 0, from: { scale: "major", degrees: [0, 1, 2, 4, 5] } },
+    { id: "minor_pentatonic", name: "minor pentatonic", group: "Pentatonic and blues", steps: [3, 2, 2, 3, 2], parent: 9, from: { scale: "natural_minor", degrees: [0, 2, 3, 4, 6] } },
+    { id: "blues",         name: "blues",            group: "Pentatonic and blues", steps: [3, 2, 1, 1, 3, 2], parent: 9, from: { scale: "natural_minor", degrees: [0, 2, 3, 4, 4, 6], flatten: 3 } },
+    { id: "whole_tone",    name: "whole-tone",       group: "Symmetric", steps: [2, 2, 2, 2, 2, 2], parent: 0, from: null, symmetric: true },
+    { id: "diminished_wh", name: "diminished (whole-half)", group: "Symmetric", steps: [2, 1, 2, 1, 2, 1, 2, 1], parent: 0, from: null, symmetric: true },
+    { id: "diminished_hw", name: "diminished (half-whole)", group: "Symmetric", steps: [1, 2, 1, 2, 1, 2, 1, 2], parent: 0, from: null, symmetric: true }
+  ];
+  var SC_LETTERS = ["C", "D", "E", "F", "G", "A", "B"], SC_LETTER_PC = [0, 2, 4, 5, 7, 9, 11];
+  var SC_MAJOR_KEYS = [{ l: 0, a: 0 }, { l: 1, a: -1 }, { l: 1, a: 0 }, { l: 2, a: -1 }, { l: 2, a: 0 }, { l: 3, a: 0 }, { l: 3, a: 1 }, { l: 4, a: 0 }, { l: 5, a: -1 }, { l: 5, a: 0 }, { l: 6, a: -1 }, { l: 6, a: 0 }];    // C D-flat D E-flat E F F-sharp G A-flat A B-flat B, by pitch class
+  function scMod(n, m) { return ((n % m) + m) % m; }
+  function scScale(id) { for (var i = 0; i < SC_SCALES.length; i++) if (SC_SCALES[i].id === id) return SC_SCALES[i]; return SC_SCALES[0]; }
+  function scSteps(id, form) { var s = scScale(id); return form === "down" && s.down ? s.down : s.steps; }
+  // The pitch classes of a scale from a tonic, in order, WITHOUT the octave note (the tonic again): [0, 2, 4, 5, 7, 9, 11] for C major.
+  function scaleNotes(tonic, id, form) {
+    var steps = scSteps(id, form), out = [], pc = scMod(tonic, 12), i;
+    for (i = 0; i < steps.length; i++) { out.push(pc); pc = scMod(pc + steps[i], 12); }
+    return out;
+  }
+  // The accidental that turns a letter into a pitch class, wrapped into -6..6 (a double sharp is +2).
+  function scAcc(letterIndex, pc) { var d = scMod(pc - SC_LETTER_PC[scMod(letterIndex, 7)], 12); return d > 6 ? d - 12 : d; }
+  // The seven-note spelling of a (tonic spelling, steps) pair: one letter per degree, in order from the tonic's letter.
+  function scHeptatonic(tonicLetter, tonicPc, steps) {
+    var out = [], pc = tonicPc, i;
+    for (i = 0; i < 7; i++) { out.push({ l: scMod(tonicLetter + i, 7), a: scAcc(tonicLetter + i, pc) }); pc = scMod(pc + steps[i], 12); }
+    return out;
+  }
+  // The conventional spelling of a tonic for a scale: the degree of its parent major key (the major key with the fewest accidentals) that the tonic is. Only the parent F-sharp / G-flat major ties (six each): then the key that gives the tonic the FEWEST accidentals wins
+  // (F Locrian is F, not E-sharp), and when that ties too, the minor family (natural, harmonic and melodic minor, Aeolian, the pentatonic minor, the blues) takes G-flat (E-flat minor) and every other scale F-sharp (F-sharp major).
+  function scTonicSpelling(tonic, id) {
+    var s = scScale(id), t = scMod(tonic, 12);
+    if (s.symmetric) return SC_MAJOR_KEYS[t];
+    var degree = [0, 2, 4, 5, 7, 9, 11].indexOf(s.parent), parentPc = scMod(t - s.parent, 12);
+    var cands = parentPc === 6 ? [{ l: 3, a: 1 }, { l: 4, a: -1 }] : [SC_MAJOR_KEYS[parentPc]], preferred = parentPc === 6 && s.parent === 9 ? 1 : 0, best = null, i, tn;
+    for (i = 0; i < cands.length; i++) {
+      tn = scHeptatonic(cands[i].l, parentPc, [2, 2, 1, 2, 2, 2, 1])[degree];
+      if (best === null || Math.abs(tn.a) < Math.abs(best.t.a) || (Math.abs(tn.a) === Math.abs(best.t.a) && i === preferred)) best = { t: tn, i: i };
+    }
+    return best.t;
+  }
+  // The spelled notes of a scale: [{ l (letter index 0..6 = C..B), a (accidental -2..2), pc }], one per note (no octave note). `form` is "up" (default) or "down": the melodic minor's descending form is the natural minor, and the symmetric scales are written with sharps going up and flats going down.
+  function spellScale(tonic, id, form) {
+    var s = scScale(id), pcs = scaleNotes(tonic, id, form), tp = scTonicSpelling(tonic, id), out = [], i;
+    if (s.symmetric) {
+      var names = form === "down" ? [[0, 0], [1, -1], [1, 0], [2, -1], [2, 0], [3, 0], [4, -1], [4, 0], [5, -1], [5, 0], [6, -1], [6, 0]] : [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [3, 0], [3, 1], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0]];
+      for (i = 0; i < pcs.length; i++) { var n = i === 0 ? tp : { l: names[pcs[i]][0], a: names[pcs[i]][1] }; out.push({ l: n.l, a: n.a, pc: pcs[i] }); }
+      return out;
+    }
+    if (s.from) {
+      var parent = scScale(s.from.scale), seven = scHeptatonic(tp.l, scMod(tonic, 12), scSteps(parent.id, form));
+      var tp7 = scTonicSpelling(tonic, parent.id); seven = scHeptatonic(tp7.l, scMod(tonic, 12), scSteps(parent.id, form));
+      for (i = 0; i < s.from.degrees.length; i++) {
+        var d = seven[s.from.degrees[i]], a = d.a - (s.from.flatten === i ? 1 : 0);
+        out.push({ l: d.l, a: a, pc: pcs[i] });
+      }
+      return out;
+    }
+    var hp = scHeptatonic(tp.l, scMod(tonic, 12), scSteps(id, form));
+    for (i = 0; i < hp.length; i++) out.push({ l: hp[i].l, a: hp[i].a, pc: pcs[i] });
+    return out;
+  }
+  function scAccText(a) { return a === 0 ? "" : a === 1 ? "♯" : a === -1 ? "♭" : a === 2 ? "♯♯" : a === -2 ? "♭♭" : ""; }
+  function scAccWords(a) { return a === 0 ? "" : a === 1 ? " sharp" : a === -1 ? " flat" : a === 2 ? " double sharp" : a === -2 ? " double flat" : ""; }
+  function noteName(n) { return SC_LETTERS[n.l] + scAccText(n.a); }                      // "G♯"
+  function noteWords(n) { return SC_LETTERS[n.l] + scAccWords(n.a); }                     // "G sharp"
+  function tonicName(tonic, id) { var t = scTonicSpelling(tonic, id); return noteName(t); }
+  function scaleTitle(tonic, id) { return tonicName(tonic, id) + " " + scScale(id).name; }
+  function scaleWords(tonic, id) { return noteWords(scTonicSpelling(tonic, id)) + " " + scScale(id).name; }
+  // The step recipe as chips: 2 -> "W", 1 -> "H", 3 -> "3H" (half steps 2, 1, 3), including the last step back up to the tonic.
+  function recipeOf(id, form) { var steps = scSteps(id, form); return steps.map(function (st) { return st === 2 ? "W" : st === 1 ? "H" : st === 3 ? "3H" : String(st); }); }
+  // MIDI numbers of a scale from a tonic placed at `base` (the octave note included): the tonic's pitch class sits at base + pc.
+  function scaleMidis(tonic, id, form, base) {
+    var steps = scSteps(id, form), m = base + scMod(tonic, 12), out = [m], i;
+    for (i = 0; i < steps.length; i++) { m += steps[i]; out.push(m); }
+    return out;
+  }
+  // ==== scale core END =============================================================================================================================
+
+  // The octave note is the tonic again: its spelling is the tonic's, one octave up.
+  function withOctave(spelled) { return spelled.concat([{ l: spelled[0].l, a: spelled[0].a, pc: spelled[0].pc }]); }
+  // Does the Up / Down switch change this scale? (the melodic minor and the symmetric scales)
+  function usesForm(id) { var s = scScale(id); return !!(s.down || s.symmetric); }
+  function effectiveForm(id, form) { return usesForm(id) && form === "down" ? "down" : "up"; }
+  // What a Play button sounds: a list of { midi, when, form, index }: `up` is the scale ascending (its own form), `down` descending (the down form), `both` up then down (for the melodic minor the two forms, the up form going up and the down form coming down; the top note once).
+  function planPlay(tonic, id, mode, form) {
+    var out = [], t = 0, up = scaleMidis(tonic, id, "up", BASE), down = scaleMidis(tonic, id, "down", BASE), f = effectiveForm(id, form), i;
+    function push(midis, fm, order) { for (var k = 0; k < order.length; k++) { out.push({ midi: midis[order[k]], when: t, form: fm, index: order[k] }); t += STEP_SECONDS; } }
+    var idx = function (n, rev) { var o = []; for (var j = 0; j < n; j++) o.push(rev ? n - 1 - j : j); return o; };
+    if (mode === "both") {
+      push(up, usesForm(id) ? "up" : "up", idx(up.length, false));
+      push(down, usesForm(id) ? "down" : "up", idx(down.length, true).slice(1));
+    } else {
+      var m = f === "down" ? down : up;
+      push(m, f, idx(m.length, mode === "down"));
+    }
+    return out;
+  }
+  // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
+  // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
+  // A piano-like note by ADDITIVE SYNTHESIS: 10 partials per string with a slight inharmonic stretch (stiff strings: partial n at n*f*sqrt(1 + B*n*n), B from about 0.0003 in the treble to about 0.001
+  // in the bass, normalised so the fundamental is exactly f), each partial with its own decay (higher ones die faster, bass notes ring longer), TWO strings a couple of cents apart (the natural beating), a few
+  // ms of band-passed hammer noise scaled by velocity, a low-pass whose cutoff rises with velocity and falls with pitch, a quick release at the end of the note, and a soft limiter on the shared bus so a chord does not clip.
+  // `when` is an absolute time on the context's clock; `hz` is the pitch the gadget's tuning asks for (the pitch-dependent parts use the note number it is nearest to). Per note: 20 oscillators (string 1's partials 1..10, then string 2's) and no other source but the hammer noise.
+  var PIANO_PARTIALS = 10;
+  var PIANO_STRINGS = 2;
+  var PIANO_OSC_PER_NOTE = PIANO_PARTIALS * PIANO_STRINGS;
+  var PIANO_DETUNE_CENTS = [0, 2];                     // string 1 true, string 2 two cents sharp
+  var PIANO_ATTACK = 0.004;                            // s, the rise of the note
+  var PIANO_RELEASE = 0.02;                            // s, the end of a note is a quick fade, never a cut
+  function pianoClamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  function pianoMidi(hz) { return 69 + 12 * Math.log(hz / 440) / Math.LN2; }
+  function pianoB(midi) { return 0.0003 + 0.0007 * pianoClamp((84 - midi) / 60, 0, 1); }                               // C6 and above 0.0003, rising toward the bass (C2 about 0.00086, C1 and below 0.001)
+  function pianoPartialHz(f, n, B) { return n * f * Math.sqrt((1 + B * n * n) / (1 + B)); }                            // n = 1 is exactly f
+  function pianoDecay(midi, n) { return pianoClamp(4.2 - 0.045 * (midi - 36), 0.7, 4.2) / (1 + 0.8 * (n - 1)); }       // the time constant (s) of partial n: the bass rings longer, each higher partial dies faster
+  function pianoPartialAmp(n) { return 1 / Math.pow(n, 1.1); }                                                         // the spectrum falls off gently: a hammer-struck string keeps its upper partials
+  function pianoCutoff(midi, velocity) { return pianoClamp(1800 + 7200 * velocity - 35 * (midi - 60), 500, 12000); }  // Hz: harder = brighter, higher = darker
+  var pianoNoiseCache = null, pianoBusCache = null;
+  function pianoNoiseBuffer(ctx) {
+    if (!pianoNoiseCache || pianoNoiseCache.ctx !== ctx) {
+      var n = Math.max(1, Math.round(ctx.sampleRate * 0.012)), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0), seed = 1;
+      for (var i = 0; i < n; i++) { seed = (seed * 16807) % 2147483647; d[i] = seed / 1073741823.5 - 1; }        // a fixed noise burst: the same every time
+      pianoNoiseCache = { ctx: ctx, buffer: b };
+    }
+    return pianoNoiseCache.buffer;
+  }
+  function pianoBus(ctx) {                                                                                             // the shared output: a soft limiter, so a four-note chord does not clip
+    if (!pianoBusCache || pianoBusCache.ctx !== ctx) {
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      comp.connect(ctx.destination);
+      pianoBusCache = { ctx: ctx, node: comp };
+    }
+    return pianoBusCache.node;
+  }
+  function pianoVoice(ctx, destination, hz, when, length, velocity, level) {
+    var t0 = when, end = when + Math.max(0.05, length), midi = pianoMidi(hz), B = pianoB(midi);
+    var v = pianoClamp(velocity == null ? 0.8 : velocity, 0.05, 1), peak = pianoClamp(level == null ? 1 : level, 0, 2) * (0.1 + 0.2 * v);
+    var sumA = 0, n, s;
+    for (n = 1; n <= PIANO_PARTIALS; n++) sumA += pianoPartialAmp(n);
+    var out = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = pianoCutoff(midi, v); lp.Q.value = 0.7;
+    out.gain.setValueAtTime(0.0001, t0);
+    out.gain.linearRampToValueAtTime(peak, t0 + PIANO_ATTACK);
+    out.gain.setValueAtTime(peak, Math.max(end, t0 + PIANO_ATTACK + 0.001));
+    out.gain.setTargetAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001), PIANO_RELEASE / 4);                          // the quick release (about 20 ms to silence)
+    out.gain.setValueAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.15);
+    lp.connect(out); out.connect(destination);
+    for (s = 0; s < PIANO_STRINGS; s++) {
+      var fs = hz * Math.pow(2, PIANO_DETUNE_CENTS[s] / 1200);
+      for (n = 1; n <= PIANO_PARTIALS; n++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = pianoPartialHz(fs, n, B);
+        g.gain.setValueAtTime(pianoPartialAmp(n) / sumA / PIANO_STRINGS, t0);
+        g.gain.setTargetAtTime(0, t0 + PIANO_ATTACK, pianoDecay(midi, n));
+        o.connect(g); g.connect(lp);
+        o.start(t0); o.stop(Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.2);
+      }
+    }
+    var ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();                          // the hammer: a few ms of band-passed noise, harder = louder
+    ns.buffer = pianoNoiseBuffer(ctx);
+    bp.type = "bandpass"; bp.frequency.value = pianoClamp(1200 + 2400 * v + 12 * (midi - 60), 600, 6000); bp.Q.value = 1;
+    ng.gain.setValueAtTime(0.2 * v * v, t0); ng.gain.setTargetAtTime(0, t0 + 0.001, 0.003);
+    ns.connect(bp); bp.connect(ng); ng.connect(lp);
+    ns.start(t0); ns.stop(t0 + 0.02);
+  }
+  // ==== piano voice END ===========================================================================================================================
+
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, STEP_SECONDS: STEP_SECONDS, SC_SCALES: SC_SCALES, SC_LETTERS: SC_LETTERS, scaleNotes: scaleNotes, spellScale: spellScale, tonicName: tonicName, scaleTitle: scaleTitle, scaleWords: scaleWords, recipeOf: recipeOf, scaleMidis: scaleMidis,
+      noteName: noteName, noteWords: noteWords, scScale: scScale, scSteps: scSteps, withOctave: withOctave, usesForm: usesForm, effectiveForm: effectiveForm, planPlay: planPlay, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+  var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
+  var tonic = 0, scaleId = "major", form = "up", timers = [], soundingIndex = -1, soundingForm = null;
+  // The strip: C4..C6, 15 white keys, black keys on top.
+  var WW = 22, WH = 56, BW = 13, BH = 34, PAD = 1, keys = {}, whites = [], blacks = [], wi = 0, m;
+  for (m = LOW; m <= HIGH; m++) { if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 }); else { whites.push({ m: m, x: PAD + wi * WW }); wi++; } }
+  var strip = $("strip"); strip.setAttribute("viewBox", "0 0 " + (wi * WW + 2 * PAD) + " " + (WH + 2 * PAD));
+  function makeKey(k, black) {
+    var g = el("g", { "class": "key " + (black ? "black" : "white"), "data-midi": k.m }, strip);
+    el("rect", { x: k.x, y: PAD, width: black ? BW : WW, height: black ? BH : WH, rx: black ? 2 : 3 }, g);
+    keys[k.m] = g;
+  }
+  whites.forEach(function (k) { makeKey(k, false); }); blacks.forEach(function (k) { makeKey(k, true); });
+  // The staff: a treble clef, notes as open heads left to right with their accidentals before them, ledger lines. A fixed height for every scale.
+  var ST = { half: 4.4, top: 14, bottom: -5, left: 44, right: 12, width: 460, headRx: 5.6, headRy: 3.9, ledgerHalf: 9 };
+  ST.height = (ST.top - ST.bottom + 1) * ST.half;
+  function yOf(pos) { return (ST.top - pos + 0.5) * ST.half; }
+  var staff = $("staff"); staff.setAttribute("viewBox", "0 0 " + ST.width + " " + ST.height);
+  var CLEF_D = "M376 415l25 -145c3 -18 3 -18 29 -18c147 0 241 -113 241 -241c0 -113 -67 -198 -168 -238c-14 -6 -15 -5 -13 -17c11 -62 29 -157 29 -214c0 -170 -130 -200 -197 -200c-151 0 -190 98 -190 163c0 62 40 115 107 115c61 0 96 -47 96 -102c0 -58 -36 -85 -67 -94 c-23 -7 -32 -10 -32 -17c0 -13 26 -29 80 -29c59 0 159 18 159 166c0 47 -15 134 -27 201c-2 12 -4 11 -15 9c-20 -4 -46 -6 -69 -6c-245 0 -364 165 -364 339c0 202 153 345 297 464c12 10 11 12 9 24c-7 41 -14 106 -14 164c0 104 24 229 98 311c20 22 51 48 65 48 c11 0 37 -28 52 -50c41 -60 65 -146 65 -233c0 -153 -82 -280 -190 -381c-6 -6 -8 -7 -6 -19zM470 943c-61 0 -133 -96 -133 -252c0 -32 2 -66 6 -92c2 -13 6 -14 13 -8c79 69 174 159 174 270c0 55 -27 82 -60 82zM361 262l-21 128c-2 11 -4 12 -14 4 c-47 -38 -93 -75 -153 -142c-83 -94 -93 -173 -93 -232c0 -139 113 -236 288 -236c20 0 40 2 56 5c15 3 16 3 14 14l-50 298c-2 11 -4 12 -20 8c-61 -17 -100 -60 -100 -117c0 -46 30 -89 72 -107c7 -3 15 -6 15 -13c0 -6 -4 -11 -12 -11c-7 0 -19 3 -27 6 c-68 23 -115 87 -115 177c0 85 57 164 145 194c18 6 18 5 15 24zM430 103l49 -285c2 -12 4 -12 16 -6c56 28 94 79 94 142c0 88 -67 156 -148 163c-12 1 -13 -2 -11 -14z";
+  var CLEF_SCALE = (2 * ST.half) / 250;
+  var LETTER_STEP = [0, 1, 2, 3, 4, 5, 6];
+  function staffPos(midi, n) { var oct = Math.floor((midi - n.a) / 12) - 1; return oct * 7 + n.l - 30; }          // E4 (octave 4, letter E = 2): 28 + 2 - 30 = 0, the bottom line; middle C = -2
+  function ledgersOf(pos) { var out = [], p; for (p = -2; p >= pos; p -= 2) out.push(p); for (p = 10; p <= pos; p += 2) out.push(p); return out; }
+  function drawStaff(notes, midis) {
+    while (staff.firstChild) staff.removeChild(staff.firstChild);
+    var p;
+    for (p = 0; p <= 8; p += 2) el("line", { "class": "staffline", x1: 0, y1: yOf(p), x2: ST.width, y2: yOf(p) }, staff);
+    el("path", { fill: "#2B2B2B", stroke: "none", "pointer-events": "none", transform: "translate(5 " + yOf(2) + ") scale(" + CLEF_SCALE + " " + (-CLEF_SCALE) + ")", d: CLEF_D }, staff);
+    var count = notes.length, room = ST.width - ST.left - ST.right, gap = room / count;
+    notes.forEach(function (n, i) {
+      var x = ST.left + gap * i + gap / 2 + 6, pos = staffPos(midis[i], n), y = yOf(pos);
+      ledgersOf(pos).forEach(function (lp) { el("line", { "class": "ledger", x1: x - ST.ledgerHalf, y1: yOf(lp), x2: x + ST.ledgerHalf, y2: yOf(lp) }, staff); });
+      el("ellipse", { "class": "head" + (i === 0 || i === count - 1 ? " tonic" : "") + (i === soundingIndex ? " sounding" : ""), "data-index": i, cx: x, cy: y, rx: ST.headRx, ry: ST.headRy, transform: "rotate(-20 " + x + " " + y + ")" }, staff);
+      if (n.a !== 0) { var t = el("text", { "class": "acc", x: x - ST.headRx - 9, y: y + 4.5, "text-anchor": "middle" }, staff); t.textContent = n.a === 1 ? "♯" : n.a === -1 ? "♭" : n.a === 2 ? "×" : "♭♭"; }
+    });
+    staff.setAttribute("aria-label", "Treble staff: " + notes.map(noteWords).join(", "));
+  }
+  function render(announce) {
+    var f = effectiveForm(scaleId, form), spelled = spellScale(tonic, scaleId, f), notes = withOctave(spelled), midis = scaleMidis(tonic, scaleId, f, BASE);
+    // the tonic select shows the tonic as THIS scale spells it
+    for (var i = 0; i < 12; i++) $("tonic").options[i].textContent = tonicName(i, scaleId);
+    $("tonic").value = String(tonic); $("scale").value = scaleId;
+    $("form-up").setAttribute("aria-pressed", f === "up" ? "true" : "false"); $("form-down").setAttribute("aria-pressed", f === "down" ? "true" : "false");
+    var uf = usesForm(scaleId); $("form-up").disabled = !uf; $("form-down").disabled = !uf;
+    $("form").setAttribute("title", uf ? "Up or down: the melodic minor rises with a raised 6th and 7th and falls as the natural minor; the symmetric scales are written with sharps going up and flats going down" : "Up and down are the same notes for this scale");
+    var chips = $("chips"); chips.textContent = "";
+    recipeOf(scaleId, f).forEach(function (c) { var s = document.createElement("span"); s.className = "chip " + (c === "W" ? "w" : c === "H" ? "h" : "t"); s.setAttribute("role", "listitem"); s.title = c === "W" ? "whole step: 2 half steps" : c === "H" ? "half step: 1 half step" : "three half steps"; s.textContent = c; chips.appendChild(s); });
+    for (var k in keys) { keys[k].classList.remove("lit", "tonic", "sounding"); var ts = keys[k].querySelectorAll("text"); for (var j = 0; j < ts.length; j++) keys[k].removeChild(ts[j]); }
+    midis.forEach(function (mm, idx) { var g = keys[mm]; if (!g) return; g.classList.add("lit"); if (idx === 0 || idx === midis.length - 1) g.classList.add("tonic"); if (idx === soundingIndex) g.classList.add("sounding"); });
+    drawStaff(notes, midis);
+    var letters = $("letters"); letters.textContent = "";
+    spelled.forEach(function (n, idx) { var b = document.createElement("span"); b.className = "letter" + (idx === 0 ? " tonic" : "") + (idx === soundingIndex ? " sounding" : ""); b.setAttribute("role", "listitem"); b.setAttribute("aria-label", noteWords(n)); b.textContent = noteName(n); letters.appendChild(b); });
+    var distinct = {}; spelled.forEach(function (n) { distinct[n.l] = true; });
+    var dn = Object.keys(distinct).length;
+    $("note").textContent = scScale(scaleId).symmetric ? spelled.length + " notes, no seven-note scale behind them: written with sharps going up and flats coming down (" + (f === "down" ? "flats" : "sharps") + " now)." : spelled.length === 7 ? "Seven notes, seven letters, each used once." : spelled.length + " notes, " + dn + " different letters, each kept from the seven-note scale they are cut from.";
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
+  var ctx = null;
+  function audio() { if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); } if (ctx.state === "suspended") ctx.resume(); return ctx; }
+  function stopTimers() { timers.forEach(function (t) { (window.__unschedule || clearTimeout)(t); }); timers = []; soundingIndex = -1; }
+  function play(mode) {
+    var c = audio(); stopTimers();
+    var plan = planPlay(tonic, scaleId, mode, form), t0 = c ? c.currentTime + 0.05 : 0;
+    if (c) plan.forEach(function (n) { pianoVoice(c, pianoBus(c), midiToHz(n.midi), t0 + n.when, NOTE_LEN, 0.8, 1); });
+    plan.forEach(function (n) { timers.push(schedule(function () { if (usesForm(scaleId) && n.form !== effectiveForm(scaleId, form)) form = n.form; soundingIndex = n.index; render(); }, Math.round(n.when * 1000))); });
+    var end = plan.length ? plan[plan.length - 1].when * 1000 + NOTE_LEN * 1000 : 0;
+    timers.push(schedule(function () { soundingIndex = -1; render(); }, Math.round(end)));
+    $("sr").textContent = "Playing " + scaleWords(tonic, scaleId) + (mode === "both" ? " up and down" : " " + mode) + ".";
+  }
+  // ---- the controls -------------------------------------------------------------------------------------------------------------------------------------------------------------
+  for (var pc = 0; pc < 12; pc++) { var o = document.createElement("option"); o.value = String(pc); $("tonic").appendChild(o); }
+  var groups = {}; SC_SCALES.forEach(function (s) { if (!groups[s.group]) { groups[s.group] = document.createElement("optgroup"); groups[s.group].label = s.group; $("scale").appendChild(groups[s.group]); } var op = document.createElement("option"); op.value = s.id; op.textContent = s.name; groups[s.group].appendChild(op); });
+  $("tonic").addEventListener("change", function () { stopTimers(); tonic = +$("tonic").value; render(scaleWords(tonic, scaleId) + "."); });
+  $("scale").addEventListener("change", function () { stopTimers(); scaleId = $("scale").value; render(scaleWords(tonic, scaleId) + "."); });
+  $("form-up").addEventListener("click", function () { stopTimers(); form = "up"; render("Up."); });
+  $("form-down").addEventListener("click", function () { stopTimers(); form = "down"; render("Down."); });
+  $("play-up").addEventListener("click", function () { play("up"); }); $("play-down").addEventListener("click", function () { play("down"); }); $("play-both").addEventListener("click", function () { play("both"); });
+  render();
+})();
+</script>
+</body>
+</html>
