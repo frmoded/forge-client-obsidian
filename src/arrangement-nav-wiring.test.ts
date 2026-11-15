@@ -64,7 +64,7 @@ for (const edition of ['lean', 'music'] as const) {
     const g: any = globalThis; const savedRaf = g.requestAnimationFrame; g.requestAnimationFrame = (fn: () => void) => setImmediate(fn);       // a browser global the renderer asks for
     try {
       const plugin = await loadRealOnload(real, app);
-      Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true });        // 2026-11-15-1217: these older whole-view tests are about the strips / the inspector: both switches ON (the default is off: music-tabs-flags.test.ts, score-first-order-wiring.test.ts)
+      Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true, showSourceChips: true });        // 2026-11-15-1217: these older whole-view tests are about the strips / the inspector: both switches ON (the default is off: music-tabs-flags.test.ts, score-first-order-wiring.test.ts)
       await clock.advance(60);
       const py = await engine();
       real.setPyodideHostSingleton({ getInstance: async () => ({ computePhraseScore: async (d: any, p: any, t: string) => computePhrase(py, d, p, t) }) });

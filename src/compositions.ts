@@ -84,7 +84,8 @@ export class CompositionView extends EditableFileView {
     if (this.structure && this.openNote) {
       const leaf = this.leaf, structure = this.structure, openNote = this.openNote;
       // hovering a chip lights the bars that note plays in the Score; with nothing hovered, the bars of the note the notes pane shows stay lit (a chip clicked, a link followed)
-      this.strip = mountCompositionStrip(this.contentEl, {
+      // 2026-11-15-2101: with the source chips off the strip is built and wired in a detached holder (hover and click still run), never put on the page
+      this.strip = mountCompositionStrip(uiFlags().showSourceChips ? this.contentEl : this.contentEl.ownerDocument.createElement('div'), {
         onClick: (row) => { void structure.goto(leaf, row.noteId).catch(() => false).then((handled) => { if (!handled) openNote(row.noteId); }); },
         onHover: (row) => { this.light(row ? barIdsPlayedFrom(this.lineage ?? [], row.noteId) : this.litByNotes()); },
       });

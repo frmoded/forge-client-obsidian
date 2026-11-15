@@ -58,7 +58,8 @@ test('removed: no palette wording in user-facing plugin strings (welcome note, p
 });
 
 test('removed: palette-only state — no setting, no stored key: settings.ts has nothing chip/palette related', () => {
-  assert.ok(!/chip|palette/i.test(read('src/settings.ts')));
+  // 2026-11-15-2101: ONE deliberate exception: the switch for the source chips row under the Score (the structure strip, not the retired palette): its field, its toggle and its description
+  assert.ok(!/chip|palette/i.test(read('src/settings.ts').replace(/showSourceChips|Show source chips|row of chips under the Score|the chips row under the Score that says where the note came from|chips under the Score/g, '')));
 });
 
 test('migration: a saved forge-chips pane is swept once at layout-ready, behind the pure helper', () => {

@@ -81,6 +81,7 @@ export class PhraseView extends EditableFileView {
     const flags = uiFlags();                           // 2026-11-15-1217: the two switches, read when the tab mounts
     this.handle = mountPhrase(this.contentEl, {
       legacyControllers: flags.showLegacyControllers,
+      sourceChips: flags.showSourceChips,
       showInspector: flags.showInspector,
       path: file.path,
       title: file.basename,

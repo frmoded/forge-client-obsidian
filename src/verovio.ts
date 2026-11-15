@@ -3,6 +3,7 @@
 // toolkit for subsequent renders.
 
 import { ENGRAVING_SCALE, FIT_PAGE_FACTOR, pageWidthFor } from './host-width-core.ts';
+import { dedupeTempoMarks } from './tempo-marks-core.ts';          // 2026-11-15-2101: the tempo is written above a bar only when it changes
 
 let toolkitPromise: Promise<any> | null = null;
 
@@ -53,7 +54,7 @@ export interface RenderedScore {
 export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: number, opts: { noHeader?: boolean; fit?: boolean } = {}): Promise<RenderedScore> {
   const toolkit = await getToolkit();
   applyOptions(toolkit, hostWidthPx, opts.noHeader === true, opts.fit === true);
-  toolkit.loadData(musicxml);
+  toolkit.loadData(dedupeTempoMarks(musicxml));
   // v0.2.140 — multi-page rendering. Pre-v0.2.140 only rendered
   // page 1; longer scores (e.g. forge-music/murmuration with ~30
   // bars) appeared truncated at the first page break (~9 bars
@@ -110,7 +111,7 @@ export async function renderMusicXMLToSVG(musicxml: string, hostWidthPx?: number
 // the panel.
 export async function getTimeForElement(musicxml: string, elementId: string): Promise<number> {
   const toolkit = await getToolkit();
-  toolkit.loadData(musicxml);
+  toolkit.loadData(dedupeTempoMarks(musicxml));
   return toolkit.getTimeForElement(elementId);
 }
 
@@ -118,7 +119,7 @@ export async function getTimeForElement(musicxml: string, elementId: string): Pr
 // calls operate on it. Used by the score-follower at playback start.
 export async function loadScore(musicxml: string): Promise<void> {
   const toolkit = await getToolkit();
-  toolkit.loadData(musicxml);
+  toolkit.loadData(dedupeTempoMarks(musicxml));
 }
 
 // Notes (and other elements) sounding at the given time in ms. Caller must

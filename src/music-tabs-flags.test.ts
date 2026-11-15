@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
-import { DEFAULT_UI_FLAGS, SHOW_INSPECTOR, SHOW_LEGACY_CONTROLLERS, readUiFlags, registerUiFlagsSource, uiFlags } from './ui-flags-core.ts';
+import { DEFAULT_UI_FLAGS, SHOW_INSPECTOR, SHOW_LEGACY_CONTROLLERS, SHOW_SOURCE_CHIPS, readUiFlags, registerUiFlagsSource, uiFlags } from './ui-flags-core.ts';
 import { COMPACT_SCORE_INSET_PX, ENGRAVING_SCALE, FIT_PAGE_FACTOR, MIN_HOST_WIDTH_PX, VEROVIO_MIN_PAGE_WIDTH, pageWidthFor } from './host-width-core.ts';
 import { RELAYOUT_DEBOUNCE_MS, RELAYOUT_MIN_DELTA_PX, SCORE_HOST_CLASS, attachScoreArea, type ScoreAreaPorts } from './live-score-dom.ts';
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
@@ -17,22 +17,22 @@ import { RHYTHM_STARTER } from './new-note-core.ts';
 const ROOT = path.resolve(import.meta.dirname, '..');
 
 // ---- the two switches ---------------------------------------------------------------------------------------------------------------------------------------------------
-test('both switches are OFF by default, in the constants, in the defaults and in the settings object a fresh install has', () => {
-  assert.equal(SHOW_LEGACY_CONTROLLERS, false); assert.equal(SHOW_INSPECTOR, false);
-  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false });
+test('all three switches are OFF by default, in the constants, in the defaults and in the settings object a fresh install has', () => {
+  assert.equal(SHOW_LEGACY_CONTROLLERS, false); assert.equal(SHOW_INSPECTOR, false); assert.equal(SHOW_SOURCE_CHIPS, false);
+  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false });
   assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS, 'with no source registered a view gets the defaults');
   const settings = fs.readFileSync(path.join(ROOT, 'src/settings.ts'), 'utf8');
-  assert.match(settings, /showLegacyControllers: false,\s*showInspector: false,/);
+  assert.match(settings, /showLegacyControllers: false,\s*showInspector: false,\s*showSourceChips: false,/);
 });
 test('readUiFlags takes only real booleans from the settings object: junk, null and absent are the default (off); a saved true survives data.json', () => {
   assert.deepEqual(readUiFlags(undefined), DEFAULT_UI_FLAGS); assert.deepEqual(readUiFlags(null), DEFAULT_UI_FLAGS);
-  assert.deepEqual(readUiFlags({ showLegacyControllers: 'true', showInspector: 1 }), DEFAULT_UI_FLAGS);
-  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false });
-  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true }))), { showLegacyControllers: true, showInspector: true });
+  assert.deepEqual(readUiFlags({ showLegacyControllers: 'true', showInspector: 1, showSourceChips: 'yes' }), DEFAULT_UI_FLAGS);
+  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false });
+  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true });
 });
 test('the source: a registered source is asked at every call (a change takes effect when a tab mounts), a throwing source is the default, and null puts the default back', () => {
   let on = false;
-  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on }));
+  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on, showSourceChips: on }));
   assert.equal(uiFlags().showLegacyControllers, false); on = true; assert.equal(uiFlags().showLegacyControllers, true);
   registerUiFlagsSource(() => { throw new Error('boom'); }); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);
   registerUiFlagsSource(null); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);
@@ -41,6 +41,7 @@ test('WIRING: the Forge settings tab has the two toggles, saved to the settings 
   const settings = fs.readFileSync(path.join(ROOT, 'src/settings.ts'), 'utf8');
   assert.match(settings, /setName\('Show legacy controllers \(editing strips\)'\)[\s\S]*?settings\.showLegacyControllers = value/);
   assert.match(settings, /setName\('Show the bar inspector'\)[\s\S]*?settings\.showInspector = value/);
+  assert.match(settings, /setName\('Show source chips'\)[\s\S]*?settings\.showSourceChips = value/);
   assert.match(fs.readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8'), /registerUiFlagsSource\(\(\) => readUiFlags\(this\.settings\)\)/);
   for (const f of ['phrase-view.ts', 'kits-arrangements.ts', 'compositions.ts']) assert.match(fs.readFileSync(path.join(ROOT, 'src', f), 'utf8'), /const flags = uiFlags\(\)/, f);
 });

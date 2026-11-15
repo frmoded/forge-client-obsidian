@@ -58,6 +58,8 @@ export interface ForgeSettings {
   showLegacyControllers: boolean;
   /** 2026-11-15-1217: show the "Where did this bar come from?" inspector box under the Score: off by default, read when a tab is (re)opened. */
   showInspector: boolean;
+  /** 2026-11-15-2101: show the chips row under the Score that says where the note came from (a phrase's sources, an arrangement's kits and phrases, a composition's sections): off by default, read when a tab is (re)opened. */
+  showSourceChips: boolean;
   dialogHistory: Record<string, unknown>;
   dialogHeight: number;
   dialogDock: 'bottom' | 'right';
@@ -78,6 +80,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   openRhythmNotesInBeatBox: true,
   showLegacyControllers: false,
   showInspector: false,
+  showSourceChips: false,
   dialogHistory: {},
   dialogHeight: 112,
   dialogDock: 'bottom',
@@ -236,6 +239,20 @@ export class ForgeSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.showInspector)
           .onChange(async (value) => {
             this.plugin.settings.showInspector = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Show source chips')
+      .setDesc(
+        'The row of chips under the Score that says where the note came from (the notes behind what is drawn). Off by default (hovering and clicking a bar still show it). Takes effect when a tab is reopened.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.showSourceChips)
+          .onChange(async (value) => {
+            this.plugin.settings.showSourceChips = value;
             await this.plugin.saveSettings();
           })
       );

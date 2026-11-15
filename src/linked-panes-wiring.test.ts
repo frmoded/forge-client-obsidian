@@ -693,7 +693,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] MECHANISM PIN 2026-10-29-0830 (if the design moves this SHOULD go red — reassess, do not just rewrite): the arrangement tab draws its strip from its own note and sends a chip to the pair through the SAME hooks as a phrase tab; the command finds the tab from the active view`, () => {
     const ka = code('kits-arrangements.ts');
-    assert.match(ka, /this\.strip = mountArrangementStrip\(this\.contentEl, \{ goto: \(noteId\) => structure\.goto\(leaf, noteId\), openNote, onHover: [^\n]*\}\);\s*\n\s*this\.strip\.show\(text\);/);       // 2026-10-30-1000, deliberate: + the hover that lights the rows of a kit or phrase
+    assert.match(ka, /this\.strip = mountArrangementStrip\(uiFlags\(\)\.showSourceChips \? this\.contentEl : this\.contentEl\.ownerDocument\.createElement\('div'\), \{ goto: \(noteId\) => structure\.goto\(leaf, noteId\), openNote, onHover: [^\n]*\}\);\s*\n\s*this\.strip\.show\(text\);/);       // 2026-10-30-1000, deliberate: + the hover that lights the rows of a kit or phrase
     // 2026-10-31-1110 (reassessed, deliberate): the chips are redrawn with the sentence and the controls, and the Score follows: at once when nothing plays, else after the debounce
     assert.match(ka, /this\.strip\?\.show\(text\);\s*\n[^\n]*\n[^\n]*this\.area\?\.update\(text\);/, 'a change to the note redraws the chips with the Score');
     assert.match(ka, /new ArrangementView\(leaf, opts\.plan, opts\.structure, opts\.openNote, opts\.onPin\)/);       // 2026-10-30-1000, deliberate: + the pin hook of a phrase tab as the view's last argument

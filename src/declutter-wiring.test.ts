@@ -44,6 +44,6 @@ test('the music edition draws the compact chrome only when asked: the Verovio he
 test('a bar\'s tab no longer mounts the "used by" strip: score-first.ts neither builds the chips nor mounts a strip; the phrase tab and the arrangement tab still mount theirs', () => {
   const sf = text('score-first.ts');
   for (const gone of ['usedByChips', 'mountStructureStrip', 'syncBarStrips', 'barStrips']) assert.doesNotMatch(sf, new RegExp(`\\b${gone}\\b`), `score-first.ts still has ${gone}`);
-  assert.match(text('phrase-dom.ts'), /mountStructureStrip\(parent,/);
+  assert.match(text('phrase-dom.ts'), /mountStructureStrip\(sourceChips === false \? parent\.ownerDocument\.createElement\('div'\) : parent,/);        // 2026-11-15-2101: the chips row is behind the source-chips switch (a detached holder when off)
   assert.match(text('arrangement-strip-dom.ts'), /mountStructureStrip\(parent,/);
 });

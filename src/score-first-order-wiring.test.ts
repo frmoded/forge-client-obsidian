@@ -63,7 +63,7 @@ for (const edition of ['lean', 'music'] as const) {
   let real: RealPlugin;
   let win: any;
 
-  async function world(flagsOn = true) {
+  async function world(flagsOn = true, chips?: boolean) {
     win ??= new Window({ url: 'http://localhost/' });
     Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
     real ??= await bundleRealPlugin(ROOT, edition);
@@ -99,7 +99,7 @@ for (const edition of ['lean', 'music'] as const) {
     (Object.prototype as any).addAction = function () { return { remove() {} }; };
     const g: any = globalThis; const savedRaf = g.requestAnimationFrame; g.requestAnimationFrame = (fn: () => void) => setImmediate(fn);
     const plugin = await loadRealOnload(real, app);
-    if (flagsOn) Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true });        // 2026-11-15-1217: the older whole-view tests are about the strips and the inspector: they run with both switches ON (the default is off: src/music-tabs-flags.test.ts)
+    if (flagsOn) Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true, showSourceChips: chips ?? true });        // 2026-11-15-1217: the older whole-view tests are about the strips and the inspector: they run with both switches ON (the default is off: src/music-tabs-flags.test.ts)
     await clock.advance(60);
     real.setPyodideHostSingleton({ getInstance: async () => ({ computePhraseScore: () => new Promise(() => {}) }) });         // the engine never answers: no Score is ever drawn, the tab is as it was built
     const open = async (type: string, file: string) => {
@@ -259,6 +259,25 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
+  test(`[${edition}] SOURCE CHIPS (2026-11-15-2101): off = no chip, no chips row and no tree in ANY of the three music tabs (the controllers and the inspector stay on in both runs, so only the chips differ); on = the chips are there as before`, async () => {
+    const CHIPS = '.forge-structure-chip, .forge-structure-strip, .forge-composition-tree, .forge-composition-row, .forge-arrangement-strip';
+    for (const [type, file] of [[PHRASE_VIEW_TYPE, PHRASE], [ARRANGEMENT_VIEW_TYPE, ARR], [COMPOSITION_VIEW_TYPE, COMP]] as const) {
+      const wOn = await world(true, true);
+      try {
+        const on = await wOn.open(type, file);
+        assert.ok(on.el.querySelectorAll('.forge-structure-chip').length > 0, `non-vacuity: with the chips on, the ${type} tab has chips`);
+        const onParts = rolesOf(on.el);
+        const wOff = await world(true, false);
+        try {
+          const off = await wOff.open(type, file);
+          assert.equal(off.el.querySelectorAll(CHIPS).length, 0, `off: nothing of the chips row is on the page of the ${type} tab`);
+          assert.ok(off.el.querySelectorAll('.forge-structure-chip').length === 0);
+          const offParts = rolesOf(off.el);
+          assert.deepEqual(offParts, onParts.filter((r) => !/chips|strip|tree/.test(r)), `every other part of the ${type} tab is still there, in the same order: ${onParts.join(' > ')} / ${offParts.join(' > ')}`);
+        } finally { wOff.done(); }
+      } finally { wOn.done(); }
+    }
+  });
   test(`[${edition}] the composition tab has NO write control to switch off: its only buttons are the chips of the tree, which open notes`, async () => {
     const w = await world();
     try {

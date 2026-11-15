@@ -85,7 +85,8 @@ export class ArrangementView extends EditableFileView {
     if (this.structure && this.openNote) {
       const leaf = this.leaf, structure = this.structure, openNote = this.openNote;
       // 2026-10-30-1000: hovering a chip lights the rows of that kit or phrase in the Score; with nothing hovered, the rows of the note the notes pane shows stay lit (a chip clicked, a link followed)
-      this.strip = mountArrangementStrip(this.contentEl, { goto: (noteId) => structure.goto(leaf, noteId), openNote, onHover: (chip) => { this.light(chip ? rowIdsPlayedBy(this.lineage ?? [], chip.noteId) : this.litByNotes()); } });
+      // 2026-11-15-2101: with the source chips off the strip is built and wired in a detached holder (hover and click still run), never put on the page
+      this.strip = mountArrangementStrip(uiFlags().showSourceChips ? this.contentEl : this.contentEl.ownerDocument.createElement('div'), { goto: (noteId) => structure.goto(leaf, noteId), openNote, onHover: (chip) => { this.light(chip ? rowIdsPlayedBy(this.lineage ?? [], chip.noteId) : this.litByNotes()); } });
       this.strip.show(text);
       this.stopListening = structure.onNotesNavigated(leaf, (notesPath) => {
         const noteId = notesPath.replace(/\.md$/, '');

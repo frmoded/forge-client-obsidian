@@ -550,6 +550,8 @@ export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'prod
   inspector?: PhraseInspectorPorts;
   /** 2026-11-15-1217 (SHOW_LEGACY_CONTROLLERS): `false` = the strips that INPUT a value (the extend, mix, morph and transform strips) and the notebook are built, wired and kept up to date but never put on the page (they live in a detached holder), so every code path is the one that always ran and the tab shows the Score, the bracket and what the shell adds. Absent or `true` = on the page, as before (every older test). */
   legacyControllers?: boolean;
+  /** 2026-11-15-2101: put the source chips row on the page (absent = yes, as every older test); false = it is built and wired in a detached holder, never in the document. */
+  sourceChips?: boolean;
   /** 2026-10-26-1270 (M13): the structure strip (chips under the Score, two-way highlight with the notes pane). */
   structure?: PhraseStructurePorts;
   /** The phrase note's path. */
@@ -687,7 +689,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { legacyControllers, path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, canWritePhrase: _canWrite, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { legacyControllers, sourceChips, path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, canWritePhrase: _canWrite, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
@@ -822,7 +824,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       selectBars: selectBarsPort(),
       kitNote: 'Kit view: not mapped for this morph (use the multi-staff view to inspect).',
     } : undefined;
-    structureStrip = ports.structure ? mountStructureStrip(parent, {
+    // 2026-11-15-2101: with the source chips off the strip is built and wired in a detached holder (hover, click and the two-way highlight all run), never put on the page
+    structureStrip = ports.structure ? mountStructureStrip(sourceChips === false ? parent.ownerDocument.createElement('div') : parent, {
       onHover: (chip) => { showLit(chip ? barsOfChip(chip) : notesLit); },
       onClick: (chip) => { void ports.structure!.goto(chip.noteId).catch(() => false).then((handled) => { if (!handled) insp?.openNote(chip.noteId); }); },
     }) : null;
