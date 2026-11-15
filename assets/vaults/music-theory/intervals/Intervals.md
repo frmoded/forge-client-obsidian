@@ -1,10 +1,10 @@
-The distance between two notes is all that matters, and everything that follows in scales, the circle of fifths, triads and chords is a pattern of such distances.
+Forget the notes for a second: the distance between two of them is the whole game. Scales, the circle of fifths, triads and chords are all patterns of those distances.
 
-1. [[what_matters_is_intervals]] — counting the distance between two notes, and why a tune stays the same in any key.
-2. [[interval_notation_and_jargon]] — the names and symbols, and the words you will meet.
-3. [[hearing_intervals]] — practice naming them by ear.
+1. [[what_matters_is_intervals]] — count the gap between two notes, and see why a tune survives any key.
+2. [[interval_notation_and_jargon]] — the names, the symbols, the jargon.
+3. [[hearing_intervals]] — train your ear to find them.
 
-And [[interval_history]] — where the names come from (optional).
+And [[interval_history]] — where the names came from, if you're curious (optional).
 
 
 <div style="

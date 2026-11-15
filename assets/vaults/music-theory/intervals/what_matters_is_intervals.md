@@ -1,29 +1,26 @@
-This is the first real page of the chapter, so it starts from the 12 notes that all music is made of.
+Music runs on 12 notes per octave. Step to the very next one, black keys included, and you've moved one **half step**, also called a [[semitone]]. On a [[guitar]], that's one fret. An **interval** is the distance between two of those notes, counted in half steps from 0 to 12. Always count up from the lower note. Start on C, go three half steps (C♯, D, then E♭) and you land on E-flat. Three half steps. Done.
 
-Music uses 12 notes per octave. The next note up, black keys included, is one **half step** (also called a [[semitone]]). On a guitar, one fret is exactly the same thing: move one fret up and you have gone up one half step.
+What each distance is called is on [[interval_notation_and_jargon]].
 
-An **interval** is the distance between two of those 12 notes, counted in half steps. The smallest distance is 1 half step, and after 12 half steps you land on the same note one octave higher, so intervals run from 0 to 12.
-
-To count an interval, start on the lower note and count up. Every key you pass, black or white, is one half step, and the key you land on is the last one you count. From C, 3 half steps up (C♯, D, then E♭) lands on E-flat, so C to E-flat is an interval of 3 half steps. On a [[guitar]] you would count three frets along one string.
-
-What each distance is called is on [[interval_notation_and_jargon]]. For a song to hum for each distance, open the Chart tab of the widget below.
-
-The widget has four tabs: Explore to count, Chart for every distance with a song, Trainer for practice, and Shift for the moving tune.
+Don't take my word for it. Click two keys, read the number of half steps, press Play.
 
 ```html-embed
-music_instruments/resources/html/interval_widget.html
-635
+music_instruments/resources/html/interval_pair.html
+128
 ```
 
 ## The tune that moves
 
-Play Twinkle Twinkle Little Star starting on C. Now play it starting on E-flat, and then starting on A. It is the same tune each time, because the distance between each neighbouring pair of notes stays the same. The notes change; the intervals do not.
+Amazing Grace. Start it on D, then on F, then on A. Same hymn every time, different notes. Your ear isn't listening to the notes; it's checking the gaps between them. Nudge one note up a half step and the tune dies on the spot. The gadget has two tunes: Amazing Grace and the opening of a Bach cello prelude.
 
-Now change just one note of the tune by a half step. It stops sounding like itself, even though you moved it by the smallest distance there is. What we recognise in a tune is not the notes themselves but the pattern of distances between them.
+No instrument handy? Hum Hey Jude from any note you like. Still Hey Jude.
 
-You can try it without any instrument: hum Hey Jude starting on any note you like; it is still Hey Jude.
+Press any key below and the tune starts there; watch the staff move while the gaps stay put.
 
-Try it: choose the Shift tab of the widget above, shift the tune up and down and watch the note names change while the row of distances stays the same, then press "Break one interval" to hear it go wrong. The Shift tab has four tunes to move: Twinkle Twinkle Little Star, Frère Jacques, Ode to Joy, and the opening of a Bach cello prelude.
+```html-embed
+music_instruments/resources/html/tune_shifter.html
+232
+```
 
 ## What you really hear
 
@@ -33,7 +30,7 @@ The rest of us, which is nearly everybody, hear intervals, not pitches. This is 
 
 ## Why start here?
 
-Every scale, chord and key you will meet later is just a pattern of intervals. Once you can count them, the rest is a matter of knowing which patterns to look for.
+Every scale, chord and key you'll meet later is just a pattern of intervals. Learn to count them and the rest is pattern-spotting.
 
 <div style="
   display:flex;

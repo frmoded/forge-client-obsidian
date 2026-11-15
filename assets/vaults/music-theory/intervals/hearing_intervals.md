@@ -1,23 +1,15 @@
-With the names from [[interval_notation_and_jargon]] and the distances from [[what_matters_is_intervals]] in hand, this page is about training your ear to match them.
+Names from [[interval_notation_and_jargon]], distances from [[what_matters_is_intervals]]: now use your ears.
 
-Pick any interval and play it three ways: going up, going down, and with both notes together. Each time, describe how it feels in your own words. Intervals tend to have a character (open, bright, tense, soft), but it is only a tendency, and it is yours to build.
+You hear two notes, but the piano only shows you the first. Your job is to find the second one and click it. The piano then shows you where it really was. Next gives you another pair, and it can go up or down. Replay plays the pair again.
 
-A simple drill:
+Start by humming the gap before you click. Words like bright or tense are only tendencies, and they're yours to build.
 
-1. Have someone, or a random choice, play one interval and keep the answer hidden.
-2. Listen, then name it.
-3. Check your answer on the piano below by counting half steps.
-
-You are done when you can name any interval from 0 to 12 half steps, both by ear and by counting.
-
-Try it: choose the Trainer tab, listen to the interval it plays, and pick its name before you count the half steps to check.
+You're done when you can land on the second note within a try or two, up or down, most of the time.
 
 ```html-embed
-music_instruments/resources/html/interval_widget.html
-490
+music_instruments/resources/html/interval_ear.html
+121
 ```
-
-Choose the Trainer tab: it plays an interval, you pick its name, and a streak counter tracks how many you get right in a row. Start on the easy set, then widen to all 13. Ten in a row on all of them means you have it.
 
 <div style="
   display:flex;

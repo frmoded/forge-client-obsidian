@@ -1,6 +1,6 @@
-Now that you can count an interval, this note gives each distance the name musicians use and explains the words you will meet.
+You can count an interval. Now for the names: every distance has one, and musicians use them without blinking. Not sure how to count? That's [[what_matters_is_intervals]].
 
-A name has two parts: a **size** (2nd, 3rd, 4th and so on) and a **quality** (minor, major, perfect, diminished or augmented). Together they are often shortened to a symbol: m3 for a minor third, M3 for a major third, P5 for a perfect fifth.
+A name has two parts: a **size** (2nd, 3rd, 4th and so on) and a **quality** (minor, major, perfect, diminished or augmented). Squash them together and you get a symbol: m3 for a minor third, M3 for a major third, P5 for a perfect fifth.
 
 Here is the whole list, from 0 to 12 half steps:
 
@@ -18,13 +18,11 @@ Here is the whole list, from 0 to 12 half steps:
 - 11: major 7th (M7)
 - 12: octave (P8)
 
-In the Explore tab of the widget on [[what_matters_is_intervals]] you can pick any of these names and see where it lands above and below a note.
-
-You do not need all of them at once. The perfect fifth (7) and the minor and major thirds (3 and 4) are the ones the next chapters lean on most, so learn those first. See [[thirds_and_fifths]] for how they sit on the staff.
+You don't need all of them at once. The perfect fifth (7) and the minor and major thirds (3 and 4) are what the next chapters lean on hardest, so learn those first. [[thirds_and_fifths]] shows how they sit on the staff.
 
 ## Size counts letters, quality counts half steps
 
-C up to E is a 3rd because it spans three letter names: C, D, E. Whether that 3rd is minor or major depends on the half steps: 3 half steps (C up to E-flat) make a minor 3rd, and 4 half steps (C up to E) make a major 3rd. Same size, different quality.
+C up to E is a 3rd because it spans three letter names: C, D, E. Whether it's minor or major depends on the half steps: 3 (C up to E-flat) makes a minor 3rd, 4 (C up to E) makes a major 3rd. Same size, different quality.
 
 ## Words you will meet
 
@@ -39,11 +37,11 @@ C up to E is a 3rd because it spans three letter names: C, D, E. Whether that 3r
 
 ## On the staff
 
-Here is C up to E, played one note after the other. This is a major 3rd, with the notes 4 half steps apart.
+C up to E, one note after the other: a major 3rd, 4 half steps apart.
 
 ![[intervals/resources/images/interval_c_to_e.svg]]
 
-And here is C up to G. This is a perfect 5th, with the notes 7 half steps apart.
+C up to G: a perfect 5th, 7 half steps apart.
 
 ![[intervals/resources/images/interval_c_to_g.svg]]
 
@@ -52,6 +50,15 @@ And here is C up to G. This is a perfect 5th, with the notes 7 half steps apart.
 > The tritone (6 half steps) is spelled d5 or A4 depending on the letters of the two notes: C up to G-flat is a diminished 5th, C up to F-sharp is an augmented 4th.
 > The same distance can be spelled another way: 3 half steps can also be an augmented 2nd. The scales chapter explains when each spelling is used.
 > For where these names come from, see [[interval_history]].
+
+## Every distance, with a song
+
+This is the reference. The Chart tab gives you a small keyboard and a song to hum for each distance, and Explore lets you pick a name and see where it lands above and below a note.
+
+```html-embed
+music_instruments/resources/html/interval_widget.html
+635
+```
 
 <div style="
   display:flex;
