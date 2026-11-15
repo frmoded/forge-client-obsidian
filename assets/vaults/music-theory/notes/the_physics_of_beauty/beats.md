@@ -113,6 +113,6 @@ That pulsing envelope is exactly $2\cos(\pi \Delta f\, t)$ from the derivation a
   margin:10px 0;
 ">
 <span>&larr; <a class="internal-link" data-href="ugly" href="ugly" style="color:#1963D1;">ugly</a></span>
-<span>&uarr; <a class="internal-link" data-href="the_physics_of_beauty" href="the_physics_of_beauty" style="color:#1963D1;">the_physics_of_beauty</a></span>
-<span><a class="internal-link" data-href="why_12_notes" href="why_12_notes" style="color:#1963D1;">why_12_notes</a> &rarr;</span>
+<span>&uarr; <a class="internal-link" data-href="the physics of beauty" href="the physics of beauty" style="color:#1963D1;">the physics of beauty</a></span>
+<span><a class="internal-link" data-href="why 12 notes" href="why 12 notes" style="color:#1963D1;">why 12 notes</a> &rarr;</span>
 </div>

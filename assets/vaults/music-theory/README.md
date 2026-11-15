@@ -14,10 +14,10 @@ Concept navigation, if you're starting from theory:
 - [[scales]] — scales as ordered pitch sequences built from interval patterns; hear one, then build one yourself.
 - [[melody]] — chord tones vs. decoration, motives, phrases.
 - [[chord]] — chords built by stacking thirds: triads, seventh chords, inversions, voicings, chord symbols and Roman numerals, and how chords function together in progressions and cadences.
-- [[voice_leading]] — how individual voices move from one chord to the next, and figured bass.
+- [[voice leading]] — how individual voices move from one chord to the next, and figured bass.
 - [[form]] — phrases combining into sections, and the large-scale forms built from them.
 - [[texture]] — how a chord's notes spread across time and register in actual accompaniment.
-- [[chromatic_harmony]] — chords borrowed from outside the diatonic set, and modulation.
+- [[chromatic harmony]] — chords borrowed from outside the diatonic set, and modulation.
 - [[counterpoint]] — independent melodic lines, from species exercises to the fugue.
 - [[jazz]] — extended voicings, the ii–V–I progression, chord-scale relationships.
 - [[modern]] — twentieth-century departures from tonal harmony: impressionism, set theory, serialism, minimalism.
@@ -76,7 +76,7 @@ Write new `.md` files in your vault root (vault-root files override bundled-libr
 
 - Frontmatter: `type: action` (or `data`).
 - One `# Description` section (intent-level prose), one `# Recipe` section (`Let X = Call [[name]] with k=v.` chains; implicit-locking generates `# Python` on first Forge-click).
-- Use `[[note_name]]` in Recipe to compose other notes — bare names resolve to siblings in your current subdir first, then walk the resolution order.
+- Use `[[note name]]` in Recipe to compose other notes — bare names resolve to siblings in your current subdir first, then walk the resolution order.
 
 ## Music-domain globals (pre-injected; do NOT import)
 

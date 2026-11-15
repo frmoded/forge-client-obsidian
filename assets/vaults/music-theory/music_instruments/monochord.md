@@ -11,7 +11,7 @@ music_instruments/resources/html/monochord.html
 
 Instruments built this way — sometimes with a graduated scale marked directly under the string, sometimes with several strings so more than one ratio can sound at once — were standard equipment for music theorists for roughly two thousand years, right up through the Renaissance, precisely because they let a claim about ratios be checked by ear on the spot rather than taken on faith.
 
-A fretted instrument is a monochord whose bridge positions are marked in advance: on the [[lute]], each tied gut fret is a fixed stopping point along the string, and moving a fret changes the tuning — see [[the_problem_with_frets]]. And Les Paul's [[railroad_guitar]] — one string over a piece of railroad steel — is a monochord too, only with a body built to stay silent instead of to sound.
+A fretted instrument is a monochord whose bridge positions are marked in advance: on the [[lute]], each tied gut fret is a fixed stopping point along the string, and moving a fret changes the tuning — see [[the problem with frets]]. And Les Paul's [[railroad guitar]] — one string over a piece of railroad steel — is a monochord too, only with a body built to stay silent instead of to sound.
 
 ## History
 
@@ -28,6 +28,6 @@ In the 17th century it moved from the theorist's desk toward the laboratory. Rob
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&uarr; <a class="internal-link" data-href="Music_instruments" href="Music_instruments" style="color:#1963D1;">Music_instruments</a></span>
-<span><a class="internal-link" data-href="railroad_guitar" href="railroad_guitar" style="color:#1963D1;">railroad_guitar</a> &rarr;</span>
+<span>&uarr; <a class="internal-link" data-href="Music instruments" href="Music instruments" style="color:#1963D1;">Music instruments</a></span>
+<span><a class="internal-link" data-href="railroad guitar" href="railroad guitar" style="color:#1963D1;">railroad guitar</a> &rarr;</span>
 </div>

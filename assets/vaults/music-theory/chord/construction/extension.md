@@ -4,7 +4,7 @@ Keep stacking thirds past the 7th and you get **extensions** — 9ths, 11ths, an
 
 Run [[build_seventh_chord]] with `tonic="C4"` and try `quality="dom9"`, then `"dom11"`, then `"dom13"` — each one adds exactly one more note on top of the last. Notice the chord gets denser but the underlying dominant-seventh function (still wanting to resolve) doesn't change.
 
-This is also the mechanism behind slash-chord voicings you might hear over a pedal bass note — a 9th or 11th sounding over a held root is often just an extension, spelled as a slash chord. See [[slash_chord]].
+This is also the mechanism behind slash-chord voicings you might hear over a pedal bass note — a 9th or 11th sounding over a held root is often just an extension, spelled as a slash chord. See [[slash chord]].
 
 <div style="
   display:flex;

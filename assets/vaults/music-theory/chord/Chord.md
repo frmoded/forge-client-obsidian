@@ -28,5 +28,5 @@ Press Run on [[build_triad]] right now if you want to hear a chord before readin
 ">
 <span>&larr; <a class="internal-link" data-href="Melody" href="Melody" style="color:#1963D1;">Melody</a></span>
 <span>&uarr; <a class="internal-link" data-href="README" href="README" style="color:#1963D1;">README</a></span>
-<span><a class="internal-link" data-href="Voice_leading" href="Voice_leading" style="color:#1963D1;">Voice_leading</a> &rarr;</span>
+<span><a class="internal-link" data-href="Voice leading" href="Voice leading" style="color:#1963D1;">Voice leading</a> &rarr;</span>
 </div>

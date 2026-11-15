@@ -20,7 +20,7 @@ In equal temperament each semitone is a [[frequency]] ratio of **2^(1/12) ≈ 1.
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="pitch_class" href="pitch_class" style="color:#1963D1;">pitch_class</a></span>
-<span>&uarr; <a class="internal-link" data-href="Note_notation" href="Note_notation" style="color:#1963D1;">Note_notation</a></span>
-<span><a class="internal-link" data-href="note_name" href="note_name" style="color:#1963D1;">note_name</a> &rarr;</span>
+<span>&larr; <a class="internal-link" data-href="pitch class" href="pitch class" style="color:#1963D1;">pitch class</a></span>
+<span>&uarr; <a class="internal-link" data-href="Note notation" href="Note notation" style="color:#1963D1;">Note notation</a></span>
+<span><a class="internal-link" data-href="note name" href="note name" style="color:#1963D1;">note name</a> &rarr;</span>
 </div>

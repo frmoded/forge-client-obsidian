@@ -5,7 +5,7 @@ How individual voices move from one chord to the next — which note goes where,
 - [[voice_leading_seventh_chords]] — the same principles, complicated by a fourth voice and the seventh's need to resolve.
 - [[parallel_fifths_octaves]] — the classic forbidden motion, and why it flattens the independence between voices.
 - [[non_chord_tone_voice_leading]] — how non-chord tones fit into voice-leading rules rather than breaking them.
-- [[voice_leading_history]] — where these rules actually come from.
+- [[voice leading history]] — where these rules actually come from.
 
 ## Sources
 

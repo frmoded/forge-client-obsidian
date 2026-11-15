@@ -1,6 +1,6 @@
 Every chord in this directory is, in one sense, a controlled violation — a note or a whole chord borrowed from somewhere the home key's scale doesn't reach. Secondary dominants and mode mixture are the mildest form: still tonal, still resolving the way a listener expects, just briefly quoting a different key's vocabulary. The Neapolitan and augmented sixth chords are older, more idiosyncratic exceptions — named for a semitone relationship and a specific interval respectively, both surviving from Baroque and Classical practice as fixed, almost ritualized gestures rather than a generalizable rule the way secondary dominants are.
 
-Modulation itself — actually re-centering a piece in a new key — is the technique Baroque and Classical composers used to give a piece harmonic drama across a long span: sonata form (see [[form_history]]) is inseparable from its habit of modulating to a new key for the second theme, then back for the recapitulation. Enharmonic modulation, reinterpreting a chord's spelling to pivot somewhere the original spelling couldn't reach, is the technique's most extreme form — a genuinely ambiguous chord, often a diminished seventh since it's symmetric, used as a hinge between keys with no simple common-chord relationship at all.
+Modulation itself — actually re-centering a piece in a new key — is the technique Baroque and Classical composers used to give a piece harmonic drama across a long span: sonata form (see [[form history]]) is inseparable from its habit of modulating to a new key for the second theme, then back for the recapitulation. Enharmonic modulation, reinterpreting a chord's spelling to pivot somewhere the original spelling couldn't reach, is the technique's most extreme form — a genuinely ambiguous chord, often a diminished seventh since it's symmetric, used as a hinge between keys with no simple common-chord relationship at all.
 
 **Listen for it:** in a Romantic-era piece, listen for a moment where the harmony suddenly feels like it's "somewhere else" for just a chord or two before snapping back — mode mixture or a secondary dominant, tonal harmony reaching just outside its own key without leaving it.
 
@@ -13,5 +13,5 @@ Modulation itself — actually re-centering a piece in a new key — is the tech
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&uarr; <a class="internal-link" data-href="Chromatic_harmony" href="Chromatic_harmony" style="color:#1963D1;">Chromatic_harmony</a></span>
+<span>&uarr; <a class="internal-link" data-href="Chromatic harmony" href="Chromatic harmony" style="color:#1963D1;">Chromatic harmony</a></span>
 </div>

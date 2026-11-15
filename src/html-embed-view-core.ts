@@ -11,7 +11,7 @@
 // every existing note's `html-embed` block (vault-relative path on
 // line 1, optional height in px on line 2 — confirmed against all
 // five shipped widget notes: monochord.md, piano.md, guitar.md,
-// lute.md, rhythm_box.md, all of which supply both lines) keeps
+// lute.md, rhythm box.md, all of which supply both lines) keeps
 // working unmodified. Verified directly against the installed
 // plugin's actual source (`.obsidian/plugins/local-html-embed/main.js`,
 // lines 151-160 as read this drain):

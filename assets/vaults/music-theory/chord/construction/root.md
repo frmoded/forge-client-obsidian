@@ -4,7 +4,7 @@ The **root** is the note a chord is generated from and named after — C major's
 
 In [[build_triad]], the root is exactly the `tonic` you type in — the note everything else is measured up from via [[chord_quality]]'s interval pattern. Change `tonic` and watch the whole triad transpose with it; the *shape* stays identical, only the root — and therefore the name — changes.
 
-Contrast this with the bass note in a [[slash_chord]]: a slash chord's bass can be a completely different note from its root. Fm/C is still rooted on F — C is just what's underneath it.
+Contrast this with the bass note in a [[slash chord]]: a slash chord's bass can be a completely different note from its root. Fm/C is still rooted on F — C is just what's underneath it.
 
 <div style="
   display:flex;
@@ -17,5 +17,5 @@ Contrast this with the bass note in a [[slash_chord]]: a slash chord's bass can 
 ">
 <span>&larr; <a class="internal-link" data-href="chord_quality" href="chord_quality" style="color:#1963D1;">chord_quality</a></span>
 <span>&uarr; <a class="internal-link" data-href="construction" href="construction" style="color:#1963D1;">construction</a></span>
-<span><a class="internal-link" data-href="chord_tone" href="chord_tone" style="color:#1963D1;">chord_tone</a> &rarr;</span>
+<span><a class="internal-link" data-href="chord tone" href="chord tone" style="color:#1963D1;">chord tone</a> &rarr;</span>
 </div>

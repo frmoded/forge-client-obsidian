@@ -4,7 +4,7 @@ How the notes of a chord get spread across time and register once you're not jus
 - [[block_chord_texture]] — the opposite: the whole chord struck at once, rhythmically with the melody or independently.
 - [[bass_line_texture]] — a single sustained or moving low voice carrying the harmonic root while other voices do something else above it.
 - [[clave_pattern]] — a fixed rhythmic accompaniment cell (Afro-Cuban clave and its relatives) that organizes a texture around a repeating pattern rather than the harmony directly.
-- [[texture_history]] — where these accompaniment patterns come from.
+- [[texture history]] — where these accompaniment patterns come from.
 
 Related, but a fully-worked piece rather than a concept directory: [[percussion/notation/notation|percussion notation]] and pieces like [[murmuration]] build entire textures out of exactly this vocabulary.
 
@@ -24,5 +24,5 @@ MT21C §14 Accompanimental Textures.
 ">
 <span>&larr; <a class="internal-link" data-href="Form" href="Form" style="color:#1963D1;">Form</a></span>
 <span>&uarr; <a class="internal-link" data-href="README" href="README" style="color:#1963D1;">README</a></span>
-<span><a class="internal-link" data-href="Chromatic_harmony" href="Chromatic_harmony" style="color:#1963D1;">Chromatic_harmony</a> &rarr;</span>
+<span><a class="internal-link" data-href="Chromatic harmony" href="Chromatic harmony" style="color:#1963D1;">Chromatic harmony</a> &rarr;</span>
 </div>

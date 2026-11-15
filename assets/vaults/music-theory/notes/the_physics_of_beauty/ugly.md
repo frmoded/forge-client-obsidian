@@ -36,6 +36,6 @@ See [[beats]] for exactly why summing two close frequencies produces that envelo
   margin:10px 0;
 ">
 <span>&larr; <a class="internal-link" data-href="nice" href="nice" style="color:#1963D1;">nice</a></span>
-<span>&uarr; <a class="internal-link" data-href="the_physics_of_beauty" href="the_physics_of_beauty" style="color:#1963D1;">the_physics_of_beauty</a></span>
+<span>&uarr; <a class="internal-link" data-href="the physics of beauty" href="the physics of beauty" style="color:#1963D1;">the physics of beauty</a></span>
 <span><a class="internal-link" data-href="beats" href="beats" style="color:#1963D1;">beats</a> &rarr;</span>
 </div>

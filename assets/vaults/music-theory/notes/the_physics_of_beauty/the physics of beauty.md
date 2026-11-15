@@ -4,8 +4,8 @@ Why some intervals sound settled and pleasant together, and others tense and cla
 - [[nice]] — the other classic consonant ratio, 2:3, worked out in the abstract.
 - [[ugly]] — dissonant intervals: frequencies close enough together to beat instead of blending. The minor second.
 - [[beats]] — the math behind that beating, worked out explicitly from sin(α) + sin(α + δ).
-- [[why_12_notes]] — what happens if you apply that same 2:3 ratio again and again: twelve notes, and a problem.
-- [[pythagorean_comma]] — the leftover gap that repetition never quite closes.
+- [[why 12 notes]] — what happens if you apply that same 2:3 ratio again and again: twelve notes, and a problem.
+- [[pythagorean comma]] — the leftover gap that repetition never quite closes.
 - [[Tuning]] — how later eras handled that gap: Pythagorean, meantone, well temperament, equal temperament.
 
 ## Nice sounds

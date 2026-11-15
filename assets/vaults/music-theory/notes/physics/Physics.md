@@ -8,9 +8,9 @@ The fields:
 - [[duration]] — how long the note lasts; the raw material of rhythm
 - [[timbre]] — tone color; the overtone spectrum that distinguishes instruments
 - [[loudness]] — perceived intensity (the brain's read-out of amplitude)
-- [[the_physics_of_beauty]] — why some intervals sound settled together (consonance) and others clash (dissonance): the physics, the math of beats, and the Pythagorean fifth
+- [[the physics of beauty]] — why some intervals sound settled together (consonance) and others clash (dissonance): the physics, the math of beats, and the Pythagorean fifth
 
-See [[note_notation]] for the names we attach to these sounds, and [[notes]] for the overview.
+See [[note notation]] for the names we attach to these sounds, and [[notes]] for the overview.
 
 
 <div style="
@@ -22,7 +22,7 @@ See [[note_notation]] for the names we attach to these sounds, and [[notes]] for
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="Note_notation" href="Note_notation" style="color:#1963D1;">Note_notation</a></span>
+<span>&larr; <a class="internal-link" data-href="Note notation" href="Note notation" style="color:#1963D1;">Note notation</a></span>
 <span>&uarr; <a class="internal-link" data-href="Notes" href="Notes" style="color:#1963D1;">Notes</a></span>
-<span><a class="internal-link" data-href="Music_instruments" href="Music_instruments" style="color:#1963D1;">Music_instruments</a> &rarr;</span>
+<span><a class="internal-link" data-href="Music instruments" href="Music instruments" style="color:#1963D1;">Music instruments</a> &rarr;</span>
 </div>

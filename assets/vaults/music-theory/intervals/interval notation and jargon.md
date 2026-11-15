@@ -1,4 +1,4 @@
-You can count an interval. Now for the names: every distance has one, and musicians use them without blinking. Not sure how to count? That's [[what_matters_is_intervals]].
+You can count an interval. Now for the names: every distance has one, and musicians use them without blinking. Not sure how to count? That's [[what matters is intervals]].
 
 A name has two parts: a **size** (2nd, 3rd, 4th and so on) and a **quality** (minor, major, perfect, diminished or augmented). Squash them together and you get a symbol: m3 for a minor third, M3 for a major third, P5 for a perfect fifth.
 
@@ -18,7 +18,7 @@ Here is the whole list, from 0 to 12 half steps:
 - 11: major 7th (M7)
 - 12: octave (P8)
 
-You don't need all of them at once. The perfect fifth (7) and the minor and major thirds (3 and 4) are what the next chapters lean on hardest, so learn those first. [[thirds_and_fifths]] shows how they sit on the staff.
+You don't need all of them at once. The perfect fifth (7) and the minor and major thirds (3 and 4) are what the next chapters lean on hardest, so learn those first. [[thirds and fifths]] shows how they sit on the staff.
 
 ## Size counts letters, quality counts half steps
 
@@ -44,7 +44,7 @@ C up to E is a 3rd because it spans three letter names: C, D, E. Whether it's mi
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="what_matters_is_intervals" href="what_matters_is_intervals" style="color:#1963D1;">what_matters_is_intervals</a></span>
+<span>&larr; <a class="internal-link" data-href="what matters is intervals" href="what matters is intervals" style="color:#1963D1;">what matters is intervals</a></span>
 <span>&uarr; <a class="internal-link" data-href="Intervals" href="Intervals" style="color:#1963D1;">Intervals</a></span>
-<span><a class="internal-link" data-href="hearing_intervals" href="hearing_intervals" style="color:#1963D1;">hearing_intervals</a> &rarr;</span>
+<span><a class="internal-link" data-href="hearing intervals" href="hearing intervals" style="color:#1963D1;">hearing intervals</a> &rarr;</span>
 </div>

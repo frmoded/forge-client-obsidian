@@ -4,7 +4,7 @@ How music organizes time: how beats group into meter, how note values subdivide 
 - [[note_value]] — whole, half, quarter, eighth… durations as fractions of a beat, and the dot and tie that extend them.
 - [[meter]] — the recurring pattern of strong and weak beats a time signature implies.
 - [[tuplet]] — borrowing a division that doesn't fit the meter's own grouping (three in the time of two, and its relatives).
-- [[rhythm_history]] — where measured rhythm notation itself came from.
+- [[rhythm history]] — where measured rhythm notation itself came from.
 - [[Rhythms]] — five rhythms from around the world, each playable in place, each with a challenge that asks you to break it a little.
 
 ## Sources

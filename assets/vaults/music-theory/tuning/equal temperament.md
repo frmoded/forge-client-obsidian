@@ -1,6 +1,6 @@
 ## How it's computed
 
-Divide the octave into twelve perfectly identical steps and be done with it. No ear-by-ear compromise, no wolf to hide, no key that gets treated better than another — every semitone is exactly 2^(1/12), the same ratio, twelve times in a row. And here's the part that should bother you a little: 2^(1/12) is irrational. No fraction of whole numbers ever equals it, so no rational division of a string ever lands there exactly. Every ratio this vault has worked with so far — 2:1, 3:2, all twelve points in [[why_12_notes]] — was a ratio of whole numbers. This one, on purpose, is not.
+Divide the octave into twelve perfectly identical steps and be done with it. No ear-by-ear compromise, no wolf to hide, no key that gets treated better than another — every semitone is exactly 2^(1/12), the same ratio, twelve times in a row. And here's the part that should bother you a little: 2^(1/12) is irrational. No fraction of whole numbers ever equals it, so no rational division of a string ever lands there exactly. Every ratio this vault has worked with so far — 2:1, 3:2, all twelve points in [[why 12 notes]] — was a ratio of whole numbers. This one, on purpose, is not.
 
 ## The tuning
 
@@ -15,7 +15,7 @@ That abandonment of rational lengths is also what makes the [[monochord]] obsole
 
 ![[notes/resources/images/why12_log.svg]]
 
-That tiny, accumulating drift above — every pure fifth landing a hair sharp of its equal-tempered slot — is exactly the unevenness [[meantone]] and [[well_temperament]] spent two centuries trying to manage. Equal temperament just... erased it. By fiat.
+That tiny, accumulating drift above — every pure fifth landing a hair sharp of its equal-tempered slot — is exactly the unevenness [[meantone]] and [[well temperament]] spent two centuries trying to manage. Equal temperament just... erased it. By fiat.
 
 ## Do the good
 
@@ -37,7 +37,7 @@ tuning/resources/html/piano_keyboard_equal_bad.html
 
 ## History
 
-Simon Stevin worked out the exact mathematics — the 2^(1/12) ratio itself — around the turn of the 17th century, decades after Galilei's [[rule_of_eighteen|practical approximation]] had already been getting fretted instruments most of the way there by feel. The idea took its time catching on: keyboards stuck with [[meantone]] and then [[well_temperament]] well into the 18th century, because a system that makes every key equally mediocre is a hard sell against one that makes most keys genuinely good. Equal temperament won anyway, gradually, as the de facto keyboard standard by the 19th century and universal by the 20th — not because it sounds better, but because it never sounds *worse* in any particular key, which turned out to matter more once music started wandering freely between them.
+Simon Stevin worked out the exact mathematics — the 2^(1/12) ratio itself — around the turn of the 17th century, decades after Galilei's [[rule of eighteen|practical approximation]] had already been getting fretted instruments most of the way there by feel. The idea took its time catching on: keyboards stuck with [[meantone]] and then [[well temperament]] well into the 18th century, because a system that makes every key equally mediocre is a hard sell against one that makes most keys genuinely good. Equal temperament won anyway, gradually, as the de facto keyboard standard by the 19th century and universal by the 20th — not because it sounds better, but because it never sounds *worse* in any particular key, which turned out to matter more once music started wandering freely between them.
 
 <div style="
   display:flex;
@@ -48,6 +48,6 @@ Simon Stevin worked out the exact mathematics — the 2^(1/12) ratio itself — 
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="well_temperament" href="well_temperament" style="color:#1963D1;">well_temperament</a></span>
+<span>&larr; <a class="internal-link" data-href="well temperament" href="well temperament" style="color:#1963D1;">well temperament</a></span>
 <span>&uarr; <a class="internal-link" data-href="Tuning" href="Tuning" style="color:#1963D1;">Tuning</a></span>
 </div>

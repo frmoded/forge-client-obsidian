@@ -1,4 +1,4 @@
-Stack twelve pure fifths and you land close to, but not on, seven pure octaves. That leftover is the **Pythagorean comma**: roughly a quarter of a semitone, about 23.5 cents. [[why_12_notes]] shows how the twelve strings get there; this note is about what is left over.
+Stack twelve pure fifths and you land close to, but not on, seven pure octaves. That leftover is the **Pythagorean comma**: roughly a quarter of a semitone, about 23.5 cents. [[why 12 notes]] shows how the twelve strings get there; this note is about what is left over.
 
 <div style="
   background:#FDFCFA;
@@ -56,7 +56,7 @@ Wrap that same pitch position around a circle instead of along a line, and the t
 
 This is the same relationship as [[nice]]'s 2:3 ratio, just run the other way: lengthening by 3/2 drops the pitch a step instead of raising it, but the same twelve-step mismatch shows up either direction.
 
-Every tuning system invented since — [[meantone]], [[well_temperament]], today's [[equal_temperament]] — is a different way of spreading or hiding that same twelve-step leftover; none of them make it genuinely vanish, because the arithmetic above doesn't allow it to. The [[Tuning]] chapter collects them all, from [[pythagorean_tuning]] to equal temperament.
+Every tuning system invented since — [[meantone]], [[well temperament]], today's [[equal temperament]] — is a different way of spreading or hiding that same twelve-step leftover; none of them make it genuinely vanish, because the arithmetic above doesn't allow it to. The [[Tuning]] chapter collects them all, from [[pythagorean tuning]] to equal temperament.
 
 ## History
 
@@ -71,7 +71,7 @@ Ancient Greek theory was not caught off guard by this. Euclid's *Sectio Canonis*
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="why_12_notes" href="why_12_notes" style="color:#1963D1;">why_12_notes</a></span>
-<span>&uarr; <a class="internal-link" data-href="the_physics_of_beauty" href="the_physics_of_beauty" style="color:#1963D1;">the_physics_of_beauty</a></span>
+<span>&larr; <a class="internal-link" data-href="why 12 notes" href="why 12 notes" style="color:#1963D1;">why 12 notes</a></span>
+<span>&uarr; <a class="internal-link" data-href="the physics of beauty" href="the physics of beauty" style="color:#1963D1;">the physics of beauty</a></span>
 <span><a class="internal-link" data-href="Tuning" href="Tuning" style="color:#1963D1;">Tuning</a> &rarr;</span>
 </div>

@@ -6,6 +6,6 @@ Every section comes back in the same **canonical voice order**: kick, snare, clo
 
 For actually reading the thing, all seven staves fold down onto one via **kit notation voicing**: stems **up** for whatever the hands play, stems **down** for the kick — the one instrument being worked by a foot instead of a stick.
 
-See [[percussion_clef]], [[kit_instruments]], [[canonical_voice_order]] and [[kit_notation_voicing]] for the full versions of each of these.
+See [[percussion clef]], [[kit instruments]], [[canonical voice order]] and [[kit notation voicing]] for the full versions of each of these.
 
 **Try it:** press Run on [[murmuration]] or [[loom]] to render a real folded kit score — a percussion clef, all ten instruments, stems doing exactly what the paragraph above says. No static picture here does that justice, because a pitched-notation renderer would put these instruments on the wrong kind of staff entirely, which is precisely the mistake this note exists to explain.

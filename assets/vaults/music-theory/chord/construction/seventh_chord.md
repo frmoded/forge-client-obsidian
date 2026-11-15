@@ -21,7 +21,7 @@ Keep stacking thirds past the seventh and you're into [[extension]] territory: 9
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="chord_tone" href="chord_tone" style="color:#1963D1;">chord_tone</a></span>
+<span>&larr; <a class="internal-link" data-href="chord tone" href="chord tone" style="color:#1963D1;">chord tone</a></span>
 <span>&uarr; <a class="internal-link" data-href="construction" href="construction" style="color:#1963D1;">construction</a></span>
 <span><a class="internal-link" data-href="extension" href="extension" style="color:#1963D1;">extension</a> &rarr;</span>
 </div>

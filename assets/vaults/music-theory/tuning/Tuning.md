@@ -1,18 +1,18 @@
-Every note name is a promise with a catch: it tells you *which* pitch, never the exact frequency to put there. That's tuning's whole job, and it's been unsolved, in the same specific way, since antiquity — because twelve pure fifths never quite close into seven octaves (see [[why_12_notes]] and the [[pythagorean_comma]]), every instrument has to put the leftover gap *somewhere*, and every era has answered that question differently. For the physics of why string length and tension set the pitch in the first place, see [[frequency]].
+Every note name is a promise with a catch: it tells you *which* pitch, never the exact frequency to put there. That's tuning's whole job, and it's been unsolved, in the same specific way, since antiquity — because twelve pure fifths never quite close into seven octaves (see [[why 12 notes]] and the [[pythagorean comma]]), every instrument has to put the leftover gap *somewhere*, and every era has answered that question differently. For the physics of why string length and tension set the pitch in the first place, see [[frequency]].
 
-Four systems, one unavoidable gap, four different places to hide it — plus one practical shortcut invented along the way for people who couldn't wait for the math. Read the two extremes back to back: [[pythagorean_tuning]] (pure fifths, everything else pays) against [[equal_temperament]] (nothing is pure, but nothing is punished either).
+Four systems, one unavoidable gap, four different places to hide it — plus one practical shortcut invented along the way for people who couldn't wait for the math. Read the two extremes back to back: [[pythagorean tuning]] (pure fifths, everything else pays) against [[equal temperament]] (nothing is pure, but nothing is punished either).
 
-- [[pythagorean_tuning]] — stack pure fifths and fold; simplest, and the one that surfaces the comma in the first place.
+- [[pythagorean tuning]] — stack pure fifths and fold; simplest, and the one that surfaces the comma in the first place.
 - [[meantone]] — spread the gap evenly across most fifths, and pay for it with one unplayable "wolf."
-- [[rule_of_eighteen]] — Galilei's 16th-century shortcut for fretted instruments, decades ahead of the math it was approximating.
-- [[well_temperament]] — spread the gap unevenly instead, so every key is at least usable.
-- [[equal_temperament]] — spread it with total mathematical evenness, and give up rational ratios entirely to do it.
+- [[rule of eighteen]] — Galilei's 16th-century shortcut for fretted instruments, decades ahead of the math it was approximating.
+- [[well temperament]] — spread the gap unevenly instead, so every key is at least usable.
+- [[equal temperament]] — spread it with total mathematical evenness, and give up rational ratios entirely to do it.
 
 ## How close is each system to the others?
 
 **Metric:** take each system's twelve chromatic pitches as cents above C (a cent is 1/100 of an equal-tempered semitone), then compute the **root-mean-square (RMS) difference** between two systems' twelve-note vectors — the standard way to put a number on "how different do these actually sound." Small RMS, same ballpark. Large RMS, real disagreement.
 
-For [[pythagorean_tuning]] and [[meantone]] the table below uses each system's own well-known conventional cent values (built from the nearest fifths in either direction), not the deliberately one-directional twelve-fifth chain from [[why_12_notes]] — that chain exists to expose the comma, not to represent how either tuning is actually built, and mixing the two would compare different things under the same name. Rows and columns run in chronological order, matching the timeline under History.
+For [[pythagorean tuning]] and [[meantone]] the table below uses each system's own well-known conventional cent values (built from the nearest fifths in either direction), not the deliberately one-directional twelve-fifth chain from [[why 12 notes]] — that chain exists to expose the comma, not to represent how either tuning is actually built, and mixing the two would compare different things under the same name. Rows and columns run in chronological order, matching the timeline under History.
 
 <div style="
   background:#FDFCFA;
@@ -86,7 +86,7 @@ For [[pythagorean_tuning]] and [[meantone]] the table below uses each system's o
 
 </div>
 
-A few things worth pulling out of that table. [[well_temperament|Well temperament]] and [[rule_of_eighteen|the Rule of Eighteen]] land closest to each other (4.7¢) — not a coincidence, since both were built, independently, to chase the same goal by two totally different routes: one by ear and careful compromise, one by a single repeated ratio and a straightedge. [[pythagorean_tuning|Pythagorean]] and [[meantone]] sit furthest apart (22.9¢) — the two most philosophically opposed choices on this whole page, pure fifths versus pure-ish thirds, and the numbers know it. And [[equal_temperament|equal temperament]] itself sits closest to [[rule_of_eighteen|the Rule of Eighteen]] (6.8¢), which makes total sense once you remember Galilei's rule was already reaching, blind, for exactly what equal temperament would later prove.
+A few things worth pulling out of that table. [[well temperament|Well temperament]] and [[rule of eighteen|the Rule of Eighteen]] land closest to each other (4.7¢) — not a coincidence, since both were built, independently, to chase the same goal by two totally different routes: one by ear and careful compromise, one by a single repeated ratio and a straightedge. [[pythagorean tuning|Pythagorean]] and [[meantone]] sit furthest apart (22.9¢) — the two most philosophically opposed choices on this whole page, pure fifths versus pure-ish thirds, and the numbers know it. And [[equal temperament|equal temperament]] itself sits closest to [[rule of eighteen|the Rule of Eighteen]] (6.8¢), which makes total sense once you remember Galilei's rule was already reaching, blind, for exactly what equal temperament would later prove.
 
 ## History
 
@@ -116,7 +116,7 @@ A few things worth pulling out of that table. [[well_temperament|Well temperamen
   <th style="text-align:left; padding:4px 8px; color:#2B2B2B; border-bottom:1px solid #666666;">Notes</th>
 </tr>
 <tr>
-  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="pythagorean_tuning" href="pythagorean_tuning">Pythagorean tuning</a></td>
+  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="pythagorean tuning" href="pythagorean tuning">Pythagorean tuning</a></td>
   <td style="padding:4px 8px; color:#555555;">Legendary origin ~6th century BCE; rigorously formalized by Euclid's <em>Sectio Canonis</em>, c. 300 BCE</td>
   <td style="padding:4px 8px; color:#555555;">Dominant through the medieval period</td>
 </tr>
@@ -126,17 +126,17 @@ A few things worth pulling out of that table. [[well_temperament|Well temperamen
   <td style="padding:4px 8px; color:#555555;">—</td>
 </tr>
 <tr>
-  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="rule_of_eighteen" href="rule_of_eighteen">Rule of Eighteen</a></td>
+  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="rule of eighteen" href="rule of eighteen">Rule of Eighteen</a></td>
   <td style="padding:4px 8px; color:#555555;">c. 1581 (Vincenzo Galilei)</td>
   <td style="padding:4px 8px; color:#555555;">For fretted instruments specifically</td>
 </tr>
 <tr>
-  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="well_temperament" href="well_temperament">well_temperament</a></td>
+  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="well temperament" href="well temperament">well temperament</a></td>
   <td style="padding:4px 8px; color:#555555;">Flourished 17th–18th centuries; Werckmeister's schemes published 1691, Bach's <em>Well-Tempered Clavier</em> 1722</td>
   <td style="padding:4px 8px; color:#555555;">—</td>
 </tr>
 <tr>
-  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="equal_temperament" href="equal_temperament">equal_temperament</a></td>
+  <td style="padding:4px 8px; color:#555555;"><a class="internal-link" data-href="equal temperament" href="equal temperament">equal temperament</a></td>
   <td style="padding:4px 8px; color:#555555;">Mathematically derived by Simon Stevin, c. 1585–1608; the de facto keyboard standard by the 19th century, universal by the 20th</td>
   <td style="padding:4px 8px; color:#555555;">—</td>
 </tr>
@@ -153,6 +153,6 @@ A few things worth pulling out of that table. [[well_temperament|Well temperamen
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="pythagorean_comma" href="pythagorean_comma" style="color:#1963D1;">pythagorean_comma</a></span>
-<span>&uarr; <a class="internal-link" data-href="the_physics_of_beauty" href="the_physics_of_beauty" style="color:#1963D1;">the_physics_of_beauty</a></span>
+<span>&larr; <a class="internal-link" data-href="pythagorean comma" href="pythagorean comma" style="color:#1963D1;">pythagorean comma</a></span>
+<span>&uarr; <a class="internal-link" data-href="the physics of beauty" href="the physics of beauty" style="color:#1963D1;">the physics of beauty</a></span>
 </div>

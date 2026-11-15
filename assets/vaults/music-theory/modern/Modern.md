@@ -4,7 +4,7 @@ Twentieth-century departures from the tonal system covered everywhere else in th
 - [[set_theory_pitch_class]] — analyzing pitch collections directly, without assuming triads or a key at all — the toolkit atonal music needs that a tonal vocabulary can't provide.
 - [[serialism]] — organizing a piece around a fixed ordered series of pitches (or other elements) rather than a key.
 - [[minimalism]] — process and repetition as the primary structure, often with very little harmonic motion at all.
-- [[modern_history]] — why tonal harmony stopped being assumed at all.
+- [[modern history]] — why tonal harmony stopped being assumed at all.
 
 ## Sources
 

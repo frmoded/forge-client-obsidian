@@ -1,11 +1,11 @@
 The instruments behind the notes: how real strings and keys turn pitch into something you can touch. Each note ends with a short history of the instrument.
 
 - [[monochord]] — one string and a movable bridge: the ruler for ratios.
-- [[railroad_guitar]] — Les Paul's single string on a piece of railroad track: a monochord built to stay silent.
+- [[railroad guitar]] — Les Paul's single string on a piece of railroad track: a monochord built to stay silent.
 - [[lute]] — a plucked, fretted instrument whose movable gut frets make tuning a choice.
 - [[mandolin]] — a small plucked instrument with eight strings in four pairs, tuned in fifths.
 - [[guitar]] — where every pitch class sits on a fretted fingerboard, and how it is tuned.
-- [[the_problem_with_frets]] — the one ratio every fret imposes on every string.
+- [[the problem with frets]] — the one ratio every fret imposes on every string.
 - [[piano]] — where every pitch class sits on the keys.
 
 

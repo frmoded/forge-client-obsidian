@@ -37,7 +37,7 @@ tuning/resources/html/piano_keyboard_meantone_bad.html
 
 ## History
 
-Meantone took over keyboards from the late 15th century onward and stayed the default for two centuries — Renaissance and early Baroque composers wrote *for* it, not around it. The trick was simple: build fewer keys that actually get played, and just don't build the ugly ones. Some organs went further and added split keys, a black key sawn in two, so a player could sneak in an extra pitch class without retuning the whole instrument. It worked, right up until composers started wanting to modulate into keys nobody had built for. That's the itch [[well_temperament]] eventually scratched.
+Meantone took over keyboards from the late 15th century onward and stayed the default for two centuries — Renaissance and early Baroque composers wrote *for* it, not around it. The trick was simple: build fewer keys that actually get played, and just don't build the ugly ones. Some organs went further and added split keys, a black key sawn in two, so a player could sneak in an extra pitch class without retuning the whole instrument. It worked, right up until composers started wanting to modulate into keys nobody had built for. That's the itch [[well temperament]] eventually scratched.
 
 <div style="
   display:flex;
@@ -48,7 +48,7 @@ Meantone took over keyboards from the late 15th century onward and stayed the de
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="pythagorean_tuning" href="pythagorean_tuning" style="color:#1963D1;">pythagorean_tuning</a></span>
+<span>&larr; <a class="internal-link" data-href="pythagorean tuning" href="pythagorean tuning" style="color:#1963D1;">pythagorean tuning</a></span>
 <span>&uarr; <a class="internal-link" data-href="Tuning" href="Tuning" style="color:#1963D1;">Tuning</a></span>
-<span><a class="internal-link" data-href="rule_of_eighteen" href="rule_of_eighteen" style="color:#1963D1;">rule_of_eighteen</a> &rarr;</span>
+<span><a class="internal-link" data-href="rule of eighteen" href="rule of eighteen" style="color:#1963D1;">rule of eighteen</a> &rarr;</span>
 </div>

@@ -1,5 +1,5 @@
 // 2026-11-13-1210 - the two Intervals pages that embed the interval widget, in real headless Chrome, in the SHIPPED mount (a blob: URL inside <iframe sandbox="allow-scripts"> in an 800-px column, as html-embed makes it), at the
-// heights the pages ask for: `what_matters_is_intervals` at 635 (the Chart tab unclipped; the Shift tab, 467 px of content, fits inside 635 with no scrollbar; Explore and Trainer too) and `hearing_intervals` at 490 (the Trainer tab, and Explore).
+// heights the pages ask for: `what matters is intervals` at 635 (the Chart tab unclipped; the Shift tab, 467 px of content, fits inside 635 with no scrollbar; Explore and Trainer too) and `hearing intervals` at 490 (the Trainer tab, and Explore).
 // "Not clipped" as in 1202: inside the iframe `scrollHeight` equals `clientHeight` (no vertical scrollbar) AND the last control or row ends above the bottom edge (the widget's content bottom + its 14 px body padding <= the iframe height).
 // The served copy has the same ONE instrumentation block as measure-interval-shift.mjs (the iframe's opaque origin cannot be read any other way); the widget file is untouched.
 //   node scripts/dev/measure-intervals-pages.mjs [--vault ~/projects/music-theory] [--out <dir for the screenshots>]     exit 0 = every verdict true
@@ -47,7 +47,7 @@ const shot = async (name, h) => { await page.shot(path.join(OUT, `${name}.png`),
 try {
   await sleep(700);
   verdict.noErrorsOnLoad = (await page.ev('window.__err.length')) === 0;
-  // ---- what_matters_is_intervals: 635
+  // ---- what matters is intervals: 635
   await setHeight(635);
   await tab('tabChart');
   const chart = await fit('#chartTable tbody tr:last-child td.cue'); numbers.chart635 = chart;
@@ -67,7 +67,7 @@ try {
   await press('shBreak');                                                                               // back to the true tune
   await tab('tabExplore'); const ex635 = await fit('#exNames'); numbers.explore635 = ex635; verdict.exploreAt635Unclipped = unclipped(ex635, 635);
   await tab('tabTrainer'); const tr635 = await fit('#tNames'); numbers.trainer635 = tr635; verdict.trainerAt635Unclipped = unclipped(tr635, 635);
-  // ---- hearing_intervals: 490
+  // ---- hearing intervals: 490
   await setHeight(490);
   await tab('tabTrainer');
   await press('tA7'); await press('tN');                                                                // an answered question, then a new one (the tallest Trainer states)

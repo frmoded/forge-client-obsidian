@@ -1,6 +1,6 @@
 ## How it's computed
 
-Stretch a string by exactly 3/2, fold the result back into one octave by halving as needed, and repeat. Do that twelve times — the full derivation lives in [[why_12_notes]] — and all twelve pitch classes just... show up. Nobody designed this. The ratio did. Kind of eerie, isn't it?
+Stretch a string by exactly 3/2, fold the result back into one octave by halving as needed, and repeat. Do that twelve times — the full derivation lives in [[why 12 notes]] — and all twelve pitch classes just... show up. Nobody designed this. The ratio did. Kind of eerie, isn't it?
 
 ## The tuning
 

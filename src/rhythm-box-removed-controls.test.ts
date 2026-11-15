@@ -77,8 +77,8 @@ test('the only question the confirm bar can still ask is about the meter or a ro
   assert.doesNotMatch(widgetScript, /Randomize the pattern|Clear the pattern|kind === "random"|kind === "clear"|kind: "random"|kind: "clear"/);
 });
 
-test('rhythm_box.md no longer promises the removed buttons', () => {
-  const md = process.env.RHYTHM_BOX_DOC_FILE ? fs.readFileSync(process.env.RHYTHM_BOX_DOC_FILE, 'utf8') : readVaultFile('music-theory', 'music_instruments/rhythm_box.md');
-  assert.ok(md !== null, 'rhythm_box.md is in neither the sibling vault nor the bundle');
+test('rhythm box.md no longer promises the removed buttons', () => {
+  const md = process.env.RHYTHM_BOX_DOC_FILE ? fs.readFileSync(process.env.RHYTHM_BOX_DOC_FILE, 'utf8') : readVaultFile('music-theory', 'music_instruments/rhythm box.md');
+  assert.ok(md !== null, 'rhythm box.md is in neither the sibling vault nor the bundle');
   assert.doesNotMatch(md, /Export JSON|\*\*Random\*\*|\*\*Clear\*\*|⋯/);
 });

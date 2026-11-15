@@ -176,13 +176,13 @@ Now take one more step. The thirteenth string, folded back into the octave, has 
 
 *"Almost" is the problem: the gap can never be closed.*
 
-The thirteenth string does not land exactly on the first, and it never can: twelve pure fifths overshoot seven octaves by a small gap, about a quarter of a semitone. That leftover is the [[pythagorean_comma]]. Every tuning system since is a different way of living with it — see the [[Tuning]] chapter.
+The thirteenth string does not land exactly on the first, and it never can: twelve pure fifths overshoot seven octaves by a small gap, about a quarter of a semitone. That leftover is the [[pythagorean comma]]. Every tuning system since is a different way of living with it — see the [[Tuning]] chapter.
 
-A guitar shows the most common solution, mechanically. Each fret is a fixed division point, and pressing a string down at a fret shortens the vibrating length, exactly what a monochord's movable bridge does. But modern frets are not cut at these Pythagorean ratios: they are cut for equal temperament (see [[equal_temperament]]), so a guitar's twelve frets per octave are twelve *identical* steps, with the gap spread evenly and hidden. See [[guitar]] for the layout and [[the_problem_with_frets]] for the ratio every fret imposes.
+A guitar shows the most common solution, mechanically. Each fret is a fixed division point, and pressing a string down at a fret shortens the vibrating length, exactly what a monochord's movable bridge does. But modern frets are not cut at these Pythagorean ratios: they are cut for equal temperament (see [[equal temperament]]), so a guitar's twelve frets per octave are twelve *identical* steps, with the gap spread evenly and hidden. See [[guitar]] for the layout and [[the problem with frets]] for the ratio every fret imposes.
 
 ## History
 
-Legend has Pythagoras noticing that a string stopped at two thirds of its length sounds remarkably settled against the open string — the observation credited with starting the idea that music is made of numbers — and the Pythagorean tradition asked what happens if you follow that step around again and again. The answer, twelve notes with a gap that never closes, shaped Western tuning for two and a half thousand years: [[pythagorean_tuning]] is the system you get by doing exactly this, and the [[pythagorean_comma]] note tells how the ancient Greeks already knew it would never close.
+Legend has Pythagoras noticing that a string stopped at two thirds of its length sounds remarkably settled against the open string — the observation credited with starting the idea that music is made of numbers — and the Pythagorean tradition asked what happens if you follow that step around again and again. The answer, twelve notes with a gap that never closes, shaped Western tuning for two and a half thousand years: [[pythagorean tuning]] is the system you get by doing exactly this, and the [[pythagorean comma]] note tells how the ancient Greeks already knew it would never close.
 
 <div style="
   display:flex;
@@ -194,6 +194,6 @@ Legend has Pythagoras noticing that a string stopped at two thirds of its length
   margin:10px 0;
 ">
 <span>&larr; <a class="internal-link" data-href="beats" href="beats" style="color:#1963D1;">beats</a></span>
-<span>&uarr; <a class="internal-link" data-href="the_physics_of_beauty" href="the_physics_of_beauty" style="color:#1963D1;">the_physics_of_beauty</a></span>
-<span><a class="internal-link" data-href="pythagorean_comma" href="pythagorean_comma" style="color:#1963D1;">pythagorean_comma</a> &rarr;</span>
+<span>&uarr; <a class="internal-link" data-href="the physics of beauty" href="the physics of beauty" style="color:#1963D1;">the physics of beauty</a></span>
+<span><a class="internal-link" data-href="pythagorean comma" href="pythagorean comma" style="color:#1963D1;">pythagorean comma</a> &rarr;</span>
 </div>

@@ -104,7 +104,7 @@ tuning/resources/html/piano_keyboard_well_bad.html
 
 ## History
 
-Werckmeister published his schemes in 1691, and Bach put one to the test the way Galilei had already tested the [[rule_of_eighteen|Rule of Eighteen]] a century earlier: the *Well-Tempered Clavier* (Book 1, 1722), 24 preludes and fugues, one pair in every major and minor key. The title says the whole argument out loud — *wohltemperirte*, well-tempered, playable everywhere. It worked, for about a century and a half, until [[equal_temperament]] offered the same universal playability with none of the color, and color turned out to be easier to give up than everyone expected.
+Werckmeister published his schemes in 1691, and Bach put one to the test the way Galilei had already tested the [[rule of eighteen|Rule of Eighteen]] a century earlier: the *Well-Tempered Clavier* (Book 1, 1722), 24 preludes and fugues, one pair in every major and minor key. The title says the whole argument out loud — *wohltemperirte*, well-tempered, playable everywhere. It worked, for about a century and a half, until [[equal temperament]] offered the same universal playability with none of the color, and color turned out to be easier to give up than everyone expected.
 
 <div style="
   display:flex;
@@ -115,7 +115,7 @@ Werckmeister published his schemes in 1691, and Bach put one to the test the way
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="rule_of_eighteen" href="rule_of_eighteen" style="color:#1963D1;">rule_of_eighteen</a></span>
+<span>&larr; <a class="internal-link" data-href="rule of eighteen" href="rule of eighteen" style="color:#1963D1;">rule of eighteen</a></span>
 <span>&uarr; <a class="internal-link" data-href="Tuning" href="Tuning" style="color:#1963D1;">Tuning</a></span>
-<span><a class="internal-link" data-href="equal_temperament" href="equal_temperament" style="color:#1963D1;">equal_temperament</a> &rarr;</span>
+<span><a class="internal-link" data-href="equal temperament" href="equal temperament" style="color:#1963D1;">equal temperament</a> &rarr;</span>
 </div>

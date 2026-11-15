@@ -60,11 +60,11 @@ A fret is a straight bar, so it stops every string at the same distance from the
 
 </div>
 
-Distances are for a 650 mm scale, read against the [[monochord]]. Fret 12 is the octave; frets 5 and 7 land almost on the pure fourth and fifth. Fret 4 misses the pure major third by about 14 cents — the same fixed compromise on every string, in every key. See [[thirds_and_fifths]].
+Distances are for a 650 mm scale, read against the [[monochord]]. Fret 12 is the octave; frets 5 and 7 land almost on the pure fourth and fifth. Fret 4 misses the pure major third by about 14 cents — the same fixed compromise on every string, in every key. See [[thirds and fifths]].
 
 ## Do The Problem
 
-A straight fret only works because Equal temperament and the [[rule_of_eighteen|Rule of Eighteen]] repeat one ratio identically from every string's own open note. [[pythagorean_tuning|Pythagorean tuning]] and [[well_temperament]] don't — each note sits at its own fixed spot instead, so one straight bar can't fret six differently-tuned strings correctly at once.
+A straight fret only works because Equal temperament and the [[rule of eighteen|Rule of Eighteen]] repeat one ratio identically from every string's own open note. [[pythagorean tuning|Pythagorean tuning]] and [[well temperament]] don't — each note sits at its own fixed spot instead, so one straight bar can't fret six differently-tuned strings correctly at once.
 
 Move the dropdown below through all four systems and watch the fret stay straight, then break into a zigzag — that zigzag is the problem, made visible.
 
@@ -75,9 +75,9 @@ music_instruments/resources/html/lute_fretboard.html
 
 ## History
 
-On the [[lute]] the frets were loops of gut, so a player could nudge them to suit a piece. Around 1581 Vincenzo Galilei proposed one fixed rule for all of them, 17/18 of the remaining length per fret — see [[rule_of_eighteen]] — about a cent per fret away from the exact ratio Simon Stevin worked out, c. 1585–1608, as [[equal_temperament]].
+On the [[lute]] the frets were loops of gut, so a player could nudge them to suit a piece. Around 1581 Vincenzo Galilei proposed one fixed rule for all of them, 17/18 of the remaining length per fret — see [[rule of eighteen]] — about a cent per fret away from the exact ratio Simon Stevin worked out, c. 1585–1608, as [[equal temperament]].
 
-The guitar's fixed metal frets locked that compromise into the instrument. A [[piano]] tuner can still choose how to spread the [[pythagorean_comma|comma]]; a fretless string player chooses every note by ear.
+The guitar's fixed metal frets locked that compromise into the instrument. A [[piano]] tuner can still choose how to spread the [[pythagorean comma|comma]]; a fretless string player chooses every note by ear.
 
 <div style="
   display:flex;
@@ -89,6 +89,6 @@ The guitar's fixed metal frets locked that compromise into the instrument. A [[p
   margin:10px 0;
 ">
 <span>&larr; <a class="internal-link" data-href="guitar" href="guitar" style="color:#1963D1;">guitar</a></span>
-<span>&uarr; <a class="internal-link" data-href="Music_instruments" href="Music_instruments" style="color:#1963D1;">Music_instruments</a></span>
+<span>&uarr; <a class="internal-link" data-href="Music instruments" href="Music instruments" style="color:#1963D1;">Music instruments</a></span>
 <span><a class="internal-link" data-href="piano" href="piano" style="color:#1963D1;">piano</a> &rarr;</span>
 </div>

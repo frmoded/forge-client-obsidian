@@ -23,6 +23,6 @@ Start with tresillo, because the others lean on it.
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="rhythm_history" href="rhythm_history" style="color:#1963D1;">rhythm_history</a></span>
+<span>&larr; <a class="internal-link" data-href="rhythm history" href="rhythm history" style="color:#1963D1;">rhythm history</a></span>
 <span>&uarr; <a class="internal-link" data-href="Rhythm" href="Rhythm" style="color:#1963D1;">Rhythm</a></span>
 </div>

@@ -4,7 +4,7 @@ What makes a line of single notes more than an arbitrary sequence: the notes tha
 - [[motive]] — the smallest recognizable melodic idea, repeated and varied across a piece.
 - [[melodic_alteration]] — repeating a motive with a change: transposed, inverted, extended, fragmented.
 - [[phrase]] and [[subphrase]] — the musical equivalent of a sentence and its clauses: where a melodic idea completes its thought, and where it merely pauses.
-- [[melody_history]] — how melodic analysis developed as its own discipline.
+- [[melody history]] — how melodic analysis developed as its own discipline.
 
 ## Sources
 

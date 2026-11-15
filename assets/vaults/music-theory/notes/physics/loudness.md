@@ -21,5 +21,5 @@ That's the physical side: amplitude is a direct, linear measurement — twice th
 ">
 <span>&larr; <a class="internal-link" data-href="timbre" href="timbre" style="color:#1963D1;">timbre</a></span>
 <span>&uarr; <a class="internal-link" data-href="Physics" href="Physics" style="color:#1963D1;">Physics</a></span>
-<span><a class="internal-link" data-href="the_physics_of_beauty" href="the_physics_of_beauty" style="color:#1963D1;">the_physics_of_beauty</a> &rarr;</span>
+<span><a class="internal-link" data-href="the physics of beauty" href="the physics of beauty" style="color:#1963D1;">the physics of beauty</a> &rarr;</span>
 </div>

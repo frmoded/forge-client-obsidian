@@ -1,8 +1,8 @@
 ## How it's computed
 
-Vincenzo Galilei — lutenist, music theorist, Galileo's father, and a man with a chip on his shoulder about his own teacher — worked out a fretting rule around 1581 that needed no math beyond a straightedge: place each fret at exactly **17/18** of the remaining string length from the one before it. That's it. No irrational roots, no theory of commas, just one ratio, repeated, fret after fret. He built it arguing directly against Gioseffo Zarlino, who preferred pure, just-intonation ratios — the [[pythagorean_tuning|Pythagorean]] and [[meantone]] road. Galilei bet on something cruder and, it turns out, more durable.
+Vincenzo Galilei — lutenist, music theorist, Galileo's father, and a man with a chip on his shoulder about his own teacher — worked out a fretting rule around 1581 that needed no math beyond a straightedge: place each fret at exactly **17/18** of the remaining string length from the one before it. That's it. No irrational roots, no theory of commas, just one ratio, repeated, fret after fret. He built it arguing directly against Gioseffo Zarlino, who preferred pure, just-intonation ratios — the [[pythagorean tuning|Pythagorean]] and [[meantone]] road. Galilei bet on something cruder and, it turns out, more durable.
 
-See [[the_problem_with_frets]] for why this was even a fight worth having: a fret is a straight bar across every string at once, so whatever compromise it makes has to be *one* compromise, applied uniformly, whether the mathematics behind it exists yet or not.
+See [[the problem with frets]] for why this was even a fight worth having: a fret is a straight bar across every string at once, so whatever compromise it makes has to be *one* compromise, applied uniformly, whether the mathematics behind it exists yet or not.
 
 ## The tuning
 
@@ -19,7 +19,7 @@ Here's the good part, and it's a big one: Galilei didn't just claim his rule wor
 
 ## Do the bad
 
-The catch: 17/18 is a close approximation, not the real thing, and approximations drift. Stack twelve of them and you land about 12.5 cents flat of a true octave — small on any one fret, real by the twelfth. Worse, gut frets are one straight bar across every string, so whatever this rule gets slightly wrong, it gets wrong on all six courses simultaneously, all the time — see [[the_problem_with_frets]] for exactly how that plays out with a genuinely non-uniform system.
+The catch: 17/18 is a close approximation, not the real thing, and approximations drift. Stack twelve of them and you land about 12.5 cents flat of a true octave — small on any one fret, real by the twelfth. Worse, gut frets are one straight bar across every string, so whatever this rule gets slightly wrong, it gets wrong on all six courses simultaneously, all the time — see [[the problem with frets]] for exactly how that plays out with a genuinely non-uniform system.
 
 Players had a workaround, and it's a good one: those frets were tied gut, not soldered metal, so a lutenist could nudge one for a particular piece, or tie in an extra "micro-fret" between two standard positions to reach a pitch neither neighbor quite gave. A fixed compromise, worked around by hand, piece by piece.
 
@@ -38,5 +38,5 @@ Bach's *Well-Tempered Clavier* (Book 1, 1722) is the famous version of this argu
 ">
 <span>&larr; <a class="internal-link" data-href="meantone" href="meantone" style="color:#1963D1;">meantone</a></span>
 <span>&uarr; <a class="internal-link" data-href="Tuning" href="Tuning" style="color:#1963D1;">Tuning</a></span>
-<span><a class="internal-link" data-href="well_temperament" href="well_temperament" style="color:#1963D1;">well_temperament</a> &rarr;</span>
+<span><a class="internal-link" data-href="well temperament" href="well temperament" style="color:#1963D1;">well temperament</a> &rarr;</span>
 </div>

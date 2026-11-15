@@ -24,7 +24,7 @@ The mandolin descends from the lute family, through the small Italian mandola an
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="railroad_guitar" href="railroad_guitar" style="color:#1963D1;">railroad_guitar</a></span>
-<span>&uarr; <a class="internal-link" data-href="Music_instruments" href="Music_instruments" style="color:#1963D1;">Music_instruments</a></span>
+<span>&larr; <a class="internal-link" data-href="railroad guitar" href="railroad guitar" style="color:#1963D1;">railroad guitar</a></span>
+<span>&uarr; <a class="internal-link" data-href="Music instruments" href="Music instruments" style="color:#1963D1;">Music instruments</a></span>
 <span><a class="internal-link" data-href="guitar" href="guitar" style="color:#1963D1;">guitar</a> &rarr;</span>
 </div>

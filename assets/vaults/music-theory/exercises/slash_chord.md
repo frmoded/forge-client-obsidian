@@ -9,7 +9,7 @@ recipe_version: 1
 
 # Description
 
-Return a slash-chord voicing: `bass` (dropped an octave, so it sits under everything else) followed by the `quality` triad built on `chord_tonic` — the sound behind notation like Fm/C. The chord's identity comes entirely from `chord_tonic` + `quality`; `bass` is controlled independently and doesn't have to be a note in the chord. Concept refresher: [[chord/notation/slash_chord]].
+Return a slash-chord voicing: `bass` (dropped an octave, so it sits under everything else) followed by the `quality` triad built on `chord_tonic` — the sound behind notation like Fm/C. The chord's identity comes entirely from `chord_tonic` + `quality`; `bass` is controlled independently and doesn't have to be a note in the chord. Concept refresher: [[chord/notation/slash chord]].
 
 ## Inputs
 

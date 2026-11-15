@@ -106,7 +106,7 @@ Add the two waves together and the combined signal is just as clean — the same
 
 ![[notes/resources/images/ratio_2to1_combined.svg]]
 
-The simpler the ratio, the sooner the two waves line up again. At 2 : 1 they realign every single cycle of the slower tone; at 3 : 2 every two cycles against three (see [[nice]]); at 6 : 5 only after five and six. Now drag the bridge somewhere off the table and watch the readout fill with big numbers such as 487 : 353. Pluck both: the waves never quite line up, and you hear the roughness of [[ugly]] and the pulsing of [[beats]]. Keep going with [[why_12_notes]], which stacks the 3 : 2 ratio twelve times.
+The simpler the ratio, the sooner the two waves line up again. At 2 : 1 they realign every single cycle of the slower tone; at 3 : 2 every two cycles against three (see [[nice]]); at 6 : 5 only after five and six. Now drag the bridge somewhere off the table and watch the readout fill with big numbers such as 487 : 353. Pluck both: the waves never quite line up, and you hear the roughness of [[ugly]] and the pulsing of [[beats]]. Keep going with [[why 12 notes]], which stacks the 3 : 2 ratio twelve times.
 
 <div style="
   display:flex;
@@ -117,6 +117,6 @@ The simpler the ratio, the sooner the two waves line up again. At 2 : 1 they rea
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&uarr; <a class="internal-link" data-href="the_physics_of_beauty" href="the_physics_of_beauty" style="color:#1963D1;">the_physics_of_beauty</a></span>
+<span>&uarr; <a class="internal-link" data-href="the physics of beauty" href="the physics of beauty" style="color:#1963D1;">the physics of beauty</a></span>
 <span><a class="internal-link" data-href="nice" href="nice" style="color:#1963D1;">nice</a> &rarr;</span>
 </div>

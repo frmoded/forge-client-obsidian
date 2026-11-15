@@ -4,7 +4,7 @@ How jazz extends and re-notates the chord and scale vocabulary built up elsewher
 - [[jazz_voicing]] — rootless and shell voicings built for a keyboard or guitar player comping in real time, not a four-part chorale.
 - [[ii_v_i]] — the single most common jazz progression, and why it shows up in some form in almost every standard.
 - [[chord_scale_relationship]] — which scale a soloist reaches for over a given chord, and why more than one often fits.
-- [[jazz_history]] — how this vocabulary diverged from classical harmony in the first place.
+- [[jazz history]] — how this vocabulary diverged from classical harmony in the first place.
 
 ## Sources
 

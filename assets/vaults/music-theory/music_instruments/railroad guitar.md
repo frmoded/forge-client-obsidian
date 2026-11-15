@@ -18,6 +18,6 @@ He kept the idea and traded the steel for wood. Around 1941, working Sundays at 
   margin:10px 0;
 ">
 <span>&larr; <a class="internal-link" data-href="monochord" href="monochord" style="color:#1963D1;">monochord</a></span>
-<span>&uarr; <a class="internal-link" data-href="Music_instruments" href="Music_instruments" style="color:#1963D1;">Music_instruments</a></span>
+<span>&uarr; <a class="internal-link" data-href="Music instruments" href="Music instruments" style="color:#1963D1;">Music instruments</a></span>
 <span><a class="internal-link" data-href="lute" href="lute" style="color:#1963D1;">lute</a> &rarr;</span>
 </div>

@@ -2,14 +2,14 @@ The **symbolic** side of a note — how we identify, name, and write it. These a
 
 The fields, roughly in build order:
 
-- [[pitch_class]] — a note's identity independent of octave (there are 12); pitch = (pitch class, octave)
+- [[pitch class]] — a note's identity independent of octave (there are 12); pitch = (pitch class, octave)
 - [[semitone]] — the smallest step, 1/12 of an octave; the grid everything is built on
-- [[note_name]] — the seven letters A–G (only 7 names for 12 pitch classes)
+- [[note name]] — the seven letters A–G (only 7 names for 12 pitch classes)
 - [[accidental]] — sharp / flat / natural; how 7 letters reach all 12 classes
-- [[enharmonic_equivalence]] — two names for one pitch (C♯ = D♭)
-- [[thirds_and_fifths]] — the two intervals that build triads: how a third and a fifth are counted and named
+- [[enharmonic equivalence]] — two names for one pitch (C♯ = D♭)
+- [[thirds and fifths]] — the two intervals that build triads: how a third and a fifth are counted and named
 
-See [[Music_instruments]] for where these pitch classes actually sit on a real instrument — piano, guitar, and the rest — and [[note]] for the overview.
+See [[Music instruments]] for where these pitch classes actually sit on a real instrument — piano, guitar, and the rest — and [[note]] for the overview.
 
 
 <div style="
