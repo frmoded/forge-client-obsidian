@@ -1,4 +1,4 @@
-// 2026-11-13-1216, three games and a score 2026-11-15-1219 - the ear gadget (interval_ear.html) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. Real mouse clicks (DevTools
+// 2026-11-13-1216, three games 2026-11-15-1219, levels 2026-11-15-2099 - the ear gadget (interval_ear.html) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. Real mouse clicks (DevTools
 // Input.dispatchMouseEvent at the real box of each control, found by asking the page: the sandboxed iframe is not in the DevTools DOM tree), the oscillators the real Web Audio graph is asked for (20 per note: the first of each is the pitch),
 // the CONTENT HEIGHT of each gadget at each width (the body's own height: no fixed height, no margin), no horizontal scroll, and light and dark shots (no gadget has a dark theme: dark = the same page under prefers-color-scheme: dark).
 //   node scripts/dev/measure-ear-gadget.mjs [--vault ~/projects/music-theory] [--out <dir>]        exit 0 = every verdict true
@@ -42,94 +42,69 @@ async function mount(file, width) {
       await page.shot(path.join(OUT, `${name}-${scheme}.png`), { x: 0, y: 0, width, height: h });
     }
   };
-  return { page, probe, press, height, overflow, shot, hz: () => page.ev('window.__hz.slice()'), times: () => page.ev('window.__t.slice()'), clear: () => page.ev('window.__hz.length = 0; window.__t.length = 0'), errs: () => page.ev('window.__err.slice()') };
+  const setHeight = (h) => page.ev(`document.getElementById('f').style.height = '${h}px'`);
+  const noScroll = () => probe(`document.documentElement.scrollHeight - document.documentElement.clientHeight`);
+  return { page, probe, press, height, overflow, shot, setHeight, noScroll, hz: () => page.ev('window.__hz.slice()'), times: () => page.ev('window.__t.slice()'), clear: () => page.ev('window.__hz.length = 0; window.__t.length = 0'), errs: () => page.ev('window.__err.slice()') };
 }
 const verdict = {}; const numbers = {};
 const notes = (hz) => hz.filter((_, i) => i % 20 === 0);                                    // the first oscillator of each note is its pitch
 const midiOf = (hz) => Math.round(69 + 12 * Math.log2(hz / 440));
 const keyBox = (g, m) => g.press(`.key[data-midi="${m}"]`);
-const status = (g) => g.probe(`JSON.stringify({ first: [].map.call(document.querySelectorAll('.key.first'), function (k) { return +k.getAttribute('data-midi'); }), right: [].map.call(document.querySelectorAll('.key.right'), function (k) { return +k.getAttribute('data-midi'); }), wrong: [].map.call(document.querySelectorAll('.key.wrong'), function (k) { return +k.getAttribute('data-midi'); }), hint: document.getElementById('hint').textContent, arcs: document.querySelectorAll('.arc').length, replayOff: document.getElementById('replay').disabled, cells: document.querySelectorAll('.cell').length, found: document.querySelectorAll('.cell.found').length, firsts: document.querySelectorAll('.cell.first').length, counter: document.getElementById('counter').textContent, sr: document.getElementById('sr').textContent, pressed: [1, 2, 3].filter(function (n) { return document.getElementById('game-' + n).getAttribute('aria-pressed') === 'true'; })[0] })`).then(JSON.parse);
-const ask = async (g) => { await g.clear(); await g.press('#next'); await sleep(350); const hz = notes(await g.hz()).map(midiOf); const t = await g.times(); return { lit: hz[0], targets: hz.slice(1), together: hz.length > 1 && t.slice(0, hz.length * 20).every((x, i) => i < 20 || Math.abs(x - t[0]) < 1e-6), gap: hz.length > 1 ? +(t[20] - t[0]).toFixed(2) : 0 }; };
+const status = (g) => g.probe(`JSON.stringify({ first: [].map.call(document.querySelectorAll('.key.first'), function (k) { return +k.getAttribute('data-midi'); }), right: [].map.call(document.querySelectorAll('.key.right'), function (k) { return +k.getAttribute('data-midi'); }), wrong: [].map.call(document.querySelectorAll('.key.wrong'), function (k) { return +k.getAttribute('data-midi'); }), hint: document.getElementById('hint').textContent, arcs: document.querySelectorAll('.arc').length, replayOff: document.getElementById('replay').disabled, cells: document.querySelectorAll('.cell, [data-key]').length, counter: document.getElementById('counter').textContent, board: document.getElementById('board').textContent, sr: document.getElementById('sr').textContent, game: [1, 2, 3].filter(function (n) { return document.getElementById('game-' + n).getAttribute('aria-pressed') === 'true'; })[0], level: ['easy', 'medium', 'hard'].filter(function (n) { return document.getElementById('level-' + n).getAttribute('aria-pressed') === 'true'; })[0] })`).then(JSON.parse);
+const ask = async (g) => { await g.clear(); await g.press('#next'); await sleep(350); const hz = notes(await g.hz()).map(midiOf); return { lit: hz[0], targets: hz.slice(1) }; };
 const wrongKey = (q, skip = []) => { for (let m = 48; m <= 72; m++) if (m !== q.lit && !q.targets.includes(m) && !skip.includes(m)) return m; };
-const NAMES = { 1: 'ear1', 2: 'ear2', 3: 'ear3' };
+const ATT = { 1: { easy: 5, medium: 3, hard: 1 }, 2: { easy: 5, medium: 3, hard: 1 }, 3: { easy: 6, medium: 4, hard: 2 } };
+const word = (n) => `${n} ${n === 1 ? 'attempt' : 'attempts'} left`;
+const heights = {}; const allHeights = new Set();
 for (const width of [800, 360]) {
   const g = await mount('interval_ear.html', width);
   try {
-    const hIdle = {}, hAsked = {}, hOver = {};
-    verdict[`ear${width}_noHorizontalScroll_idle`] = (await g.overflow()) <= 0;
+    verdict[`ear${width}_noHorizontalScroll`] = (await g.overflow()) <= 0;
     let s = await status(g);
-    verdict[`ear${width}_idle`] = s.hint === 'Press Next' && s.first.length === 0 && s.replayOff === true && (await g.hz()).length === 0 && s.cells === 24 && s.counter === 'found 0 of 24' && s.pressed === 1;
-    // ---------- game 1
-    hIdle[1] = await g.height(); if (width === 800) await g.shot('ear-1-0-idle', hIdle[1]);
-    await keyBox(g, 60); verdict[`ear${width}_g1_clickWhileIdleDoesNothing`] = (await g.hz()).length === 0 && (await status(g)).first.length === 0;
-    let q = await ask(g); s = await status(g);
-    verdict[`ear${width}_g1_nextLightsOnlyTheFirst`] = s.first.join() === String(q.lit) && s.right.length === 0 && s.wrong.length === 0 && q.targets.length === 1 && q.gap === 0.6;
-    hAsked[1] = await g.height();
-    await g.clear(); await g.press('#replay'); await sleep(300);
-    verdict[`ear${width}_g1_replayRevealsNothing`] = notes(await g.hz()).length === 2 && (await status(g)).right.length === 0;
-    const w1 = wrongKey(q); await g.clear(); await keyBox(g, w1); await sleep(250); s = await status(g);
-    verdict[`ear${width}_g1_oneWrongGuessDoesNotReveal`] = s.wrong.join() === String(w1) && s.right.length === 0 && s.arcs === 0 && s.hint === '2 tries left' && s.found === 0 && notes(await g.hz()).map(midiOf).join() === String(w1);
-    verdict[`ear${width}_g1_statusNeverNamesTheAnswer`] = !new RegExp(`\\b${['C','D flat','D','E flat','E','F','G flat','G','A flat','A','B flat','B'][q.targets[0] % 12]} ${Math.floor(q.targets[0] / 12) - 1}\\b`).test(s.sr);
-    if (width === 800) await g.shot('ear-1-1-one-wrong-guess', await g.height());
-    await keyBox(g, q.targets[0]); await sleep(250); s = await status(g);
-    verdict[`ear${width}_g1_findOnTry2Scores`] = s.right.join() === String(q.targets[0]) && s.arcs === 1 && s.found === 1 && s.firsts === 0 && s.counter === 'found 1 of 24';
-    hOver[1] = await g.height(); if (width === 800) await g.shot('ear-1-2-found-on-try-2', hOver[1]);
-    q = await ask(g); await keyBox(g, q.targets[0]); await sleep(200); s = await status(g);
-    verdict[`ear${width}_g1_findOnTry1IsMarkedFirstTry`] = s.found === 2 && s.firsts === 1;
-    q = await ask(g); const a = wrongKey(q), b = wrongKey(q, [a]), c = wrongKey(q, [a, b]); await keyBox(g, a); await keyBox(g, b); await g.clear(); await keyBox(g, c); await sleep(300); s = await status(g);
-    verdict[`ear${width}_g1_threeWrongGuessesRevealAndScoreNothing`] = s.right.join() === String(q.targets[0]) && s.wrong.length === 3 && s.arcs === 1 && s.found === 2 && notes(await g.hz()).length === 2;
-    if (width === 800) await g.shot('ear-1-3-given-up', await g.height());
-    // ---------- game 2
-    await g.press('#game-2'); await sleep(150); s = await status(g);
-    verdict[`ear${width}_g2_ownScoreboard`] = s.pressed === 2 && s.cells === 12 && s.counter === 'found 0 of 12' && s.first.length === 0 && s.hint === 'Press Next';
-    hIdle[2] = await g.height(); if (width === 800) await g.shot('ear-2-0-idle', hIdle[2]);
-    q = await ask(g); s = await status(g);
-    verdict[`ear${width}_g2_twoTogetherOnlyTheLowerLit`] = q.together && q.targets.length === 1 && q.targets[0] > q.lit && s.first.join() === String(q.lit) && s.right.length === 0;
-    hAsked[2] = await g.height();
-    const w2 = wrongKey(q); await keyBox(g, w2); await sleep(200); s = await status(g);
-    verdict[`ear${width}_g2_oneWrongGuessDoesNotReveal`] = s.right.length === 0 && s.wrong.join() === String(w2) && s.hint === '2 tries left';
-    if (width === 800) await g.shot('ear-2-1-one-wrong-guess', await g.height());
-    await keyBox(g, q.targets[0]); await sleep(250); s = await status(g);
-    verdict[`ear${width}_g2_find`] = s.right.join() === String(q.targets[0]) && s.found === 1 && s.counter === 'found 1 of 12' && s.arcs === 1;
-    hOver[2] = await g.height(); if (width === 800) await g.shot('ear-2-2-found', hOver[2]);
-    // ---------- game 3
-    await g.press('#game-3'); await sleep(150); s = await status(g);
-    verdict[`ear${width}_g3_ownScoreboard`] = s.pressed === 3 && s.cells === 4 && s.counter === 'found 0 of 4';
-    verdict[`ear${width}_g3_cellLabels`] = JSON.stringify(await g.probe(`[].map.call(document.querySelectorAll('.cell'), function (c) { return c.textContent.trim(); })`)) === JSON.stringify(['+4 +7', '+3 +7', '+3 +6', '+4 +8']);
-    hIdle[3] = await g.height(); if (width === 800) await g.shot('ear-3-0-idle', hIdle[3]);
-    q = await ask(g); s = await status(g);
-    verdict[`ear${width}_g3_threeTogetherOnlyTheLowestLit`] = q.together && q.targets.length === 2 && q.targets.every((t) => t > q.lit) && s.first.join() === String(q.lit) && s.right.length === 0;
-    hAsked[3] = await g.height();
-    await keyBox(g, q.targets[1]); await sleep(200); const w3 = wrongKey(q); await keyBox(g, w3); await sleep(200); s = await status(g);
-    verdict[`ear${width}_g3_midQuestion`] = s.right.join() === String(q.targets[1]) && s.wrong.join() === String(w3) && s.hint === '2 tries left' && s.found === 0 && s.arcs === 0;
-    if (width === 800) await g.shot('ear-3-1-mid-question', await g.height());
-    await keyBox(g, q.targets[0]); await sleep(250); s = await status(g);
-    verdict[`ear${width}_g3_bothFoundAnyOrder`] = s.right.length === 2 && s.found === 1 && s.firsts === 0 && s.counter === 'found 1 of 4';
-    hOver[3] = await g.height(); if (width === 800) await g.shot('ear-3-2-found', hOver[3]);
-    q = await ask(g); const x1 = wrongKey(q), x2 = wrongKey(q, [x1]), x3 = wrongKey(q, [x1, x2]); await keyBox(g, x1); await keyBox(g, x2); await g.clear(); await keyBox(g, x3); await sleep(300); s = await status(g);
-    verdict[`ear${width}_g3_threeMissesRevealAndScoreNothing`] = s.right.length === 2 && s.wrong.length === 3 && s.found === 1 && notes(await g.hz()).length === 3;
-    if (width === 800) await g.shot('ear-3-3-given-up', await g.height());
-    // ---------- switching keeps each game's score; Reset score clears only the current game
-    await g.press('#game-1'); s = await status(g); const k1 = s.counter; await g.press('#game-2'); s = await status(g); const k2 = s.counter; await g.press('#game-3'); s = await status(g);
-    verdict[`ear${width}_switchKeepsScores`] = k1 === 'found 2 of 24' && k2 === 'found 1 of 12' && s.counter === 'found 1 of 4';
-    await g.press('#reset'); s = await status(g); await g.press('#game-1'); const s1 = await status(g);
-    verdict[`ear${width}_resetClearsOnlyThisGame`] = s.found === 0 && s1.counter === 'found 2 of 24';
-    // ---------- a player who answers every game-1 question right fills the 24-cell board in 24 questions, with real random
-    await g.press('#reset'); let n = 0, repeats = 0, prev = null, outside = 0;
-    while (n < 60) { const qq = await ask(g); const d = qq.targets[0] - qq.lit; if (d === prev) repeats++; prev = d; if (qq.lit < 48 || qq.targets[0] > 72 || qq.targets[0] < 48) outside++; await keyBox(g, qq.targets[0]); n++; if ((await status(g)).counter === 'all found') break; }
-    verdict[`ear${width}_g1_allFoundIn24Questions`] = n === 24; numbers[`ear_${width}_g1_questions_to_all_found`] = n;
-    verdict[`ear${width}_g1_noRepeatNoneOutside`] = repeats === 0 && outside === 0;
-    if (width === 800) await g.shot('ear-1-4-all-found', await g.height());
-    await g.press('#game-2'); n = 0; await g.press('#reset'); while (n < 60) { const qq = await ask(g); await keyBox(g, qq.targets[0]); n++; if ((await status(g)).counter === 'all found') break; }
-    verdict[`ear${width}_g2_allFoundIn12Questions`] = n === 12;
-    await g.press('#game-3'); n = 0; await g.press('#reset'); while (n < 60) { const qq = await ask(g); await keyBox(g, qq.targets[0]); await keyBox(g, qq.targets[1]); n++; if ((await status(g)).counter === 'all found') break; }
-    verdict[`ear${width}_g3_allFoundIn4Questions`] = n === 4;
-    verdict[`ear${width}_noHorizontalScroll_end`] = (await g.overflow()) <= 0;
+    verdict[`ear${width}_idle`] = s.hint === 'Press Next' && s.first.length === 0 && s.replayOff === true && s.cells === 0 && s.counter === 'Medium: score 0 of 0 asked' && s.board === 'Easy 0/0 · Medium 0/0 · Hard 0/0' && s.game === 1 && s.level === 'medium';
+    // every game x level x state: the content height, and no vertical scroll when the embed is exactly that tall
+    for (const game of [1, 2, 3]) for (const level of ['easy', 'medium', 'hard']) {
+      await g.press(`#game-${game}`); await g.press(`#level-${level}`);
+      const key = `g${game}_${level}`; const hs = [];
+      const measure = async (label) => { const h = await g.height(); hs.push(h); allHeights.add(h); await g.setHeight(h); const sc = await g.noScroll(); verdict[`ear${width}_${key}_${label}_noVerticalScroll`] = sc <= 0; await g.setHeight(700); };
+      await measure('idle');
+      let q = await ask(g); s = await status(g);
+      verdict[`ear${width}_${key}_attempts`] = s.hint === word(ATT[game][level]) && s.first.join() === String(q.lit) && s.right.length === 0 && s.cells === 0;
+      await measure('asked');
+      /* a wrong guess first, only where the answer can still be found afterwards (game 3 hard has two attempts for two notes) */ if (ATT[game][level] - 1 >= q.targets.length) { await keyBox(g, wrongKey(q)); await sleep(150); s = await status(g); verdict[`ear${width}_${key}_wrongGuessUsesOneAttemptNoReveal`] = s.hint === word(ATT[game][level] - 1) && s.wrong.length === 1 && s.right.length === 0 && s.arcs === 0; await measure('oneWrong'); }
+      // finish: the right keys
+      for (const t of q.targets) { await keyBox(g, t); await sleep(120); }
+      s = await status(g); verdict[`ear${width}_${key}_solvedScores`] = s.right.length === q.targets.length && /score 1 of 1 asked/.test(s.counter) && s.hint === 'Press Next';
+      await measure('solved');
+      if (game === 1 && level === 'medium' && width === 800) await g.shot('ear-g1-medium-solved', await g.height());
+      // run out of attempts: wrong guesses until over
+      q = await ask(g); const skip = []; let over = false;
+      for (let i = 0; i < ATT[game][level] && !over; i++) { const w = wrongKey(q, skip); skip.push(w); await keyBox(g, w); await sleep(120); s = await status(g); over = s.sr.startsWith('Out of attempts'); }
+      s = await status(g); verdict[`ear${width}_${key}_runOutRevealsAndScoresNothing`] = over && s.right.length === q.targets.length && /score 1 of 2 asked/.test(s.counter);
+      await measure('gaveUp');
+      if (width === 800 && ((game === 1 && level === 'hard') || (game === 3 && level === 'medium'))) await g.shot(`ear-g${game}-${level}-given-up`, await g.height());
+      heights[key] = hs;
+    }
+    // game 3 specifics at the edge: hard needs both notes in exactly two guesses
+    await g.press('#game-3'); await g.press('#level-hard'); let q3 = await ask(g); await keyBox(g, q3.targets[0]); await sleep(120); await keyBox(g, wrongKey(q3)); await sleep(120); s = await status(g);
+    verdict[`ear${width}_g3_hard_rightThenMissGivesUp`] = s.sr.startsWith('Out of attempts') && s.right.length === 2;
+    // level change: ends every open question, keeps each level's score
+    await g.press('#game-1'); await g.press('#level-medium'); const qq = await ask(g); await g.press('#level-easy'); s = await status(g);
+    verdict[`ear${width}_levelChangeEndsOpenQuestionKeepsScores`] = s.first.length === 0 && s.hint === 'Press Next' && /Easy: score 1 of 2 asked/.test(s.counter) && s.board.includes('Medium 1/3') && qq.targets.length === 1;
+    // Reset clears the current game only
+    await g.press('#game-2'); const before2 = (await status(g)).board; await g.press('#game-1'); await g.press('#reset'); s = await status(g);
+    verdict[`ear${width}_resetClearsOnlyThisGame`] = s.board === 'Easy 0/0 · Medium 0/0 · Hard 0/0' && (await (async () => { await g.press('#game-2'); return (await status(g)).board === before2; })());
+    // a real-random run: 40 questions of game 1 on medium, answered right: the score counts them
+    await g.press('#game-1'); await g.press('#level-medium'); let n = 0, outside = 0;
+    for (let i = 0; i < 40; i++) { const t = await ask(g); if (t.lit < 48 || t.targets[0] > 72 || t.targets[0] < 48) outside++; await keyBox(g, t.targets[0]); n++; }
+    s = await status(g); verdict[`ear${width}_run40`] = outside === 0 && /score 40 of 40 asked/.test(s.counter);
     verdict[`ear${width}_noErrors`] = (await g.errs()).length === 0;
-    for (const k of [1, 2, 3]) numbers[`ear_${width}_game${k}_height_idle_asked_over`] = [hIdle[k], hAsked[k], hOver[k]];
-    numbers[`ear_${width}_max`] = Math.max(...[1, 2, 3].flatMap((k) => [hIdle[k], hAsked[k], hOver[k]]));
-    for (const k of [1, 2, 3]) numbers[`ear_${width}_game${k}_max`] = Math.max(hIdle[k], hAsked[k], hOver[k]);
+    verdict[`ear${width}_noHorizontalScrollAtTheEnd`] = (await g.overflow()) <= 0;
   } finally { g.page.close(); }
+  const flat = Object.values(heights).flat();
+  numbers[`ear_${width}_content_height_min_max`] = [Math.min(...flat), Math.max(...flat)];
+  verdict[`ear${width}_oneHeightInEveryGameLevelAndState`] = new Set(flat).size === 1;
+  numbers[`ear_${width}_distinct_heights`] = [...new Set(flat)];
 }
 console.log(JSON.stringify(numbers));
 console.log(JSON.stringify(verdict, null, 1));
