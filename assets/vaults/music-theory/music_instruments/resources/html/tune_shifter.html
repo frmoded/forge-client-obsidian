@@ -10,7 +10,7 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--paper); }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
-  svg { display: block; width: 100%; max-width: 334px; height: auto; user-select: none; -webkit-user-select: none; }
+  svg { display: block; width: 100%; max-width: 560px; height: auto; user-select: none; -webkit-user-select: none; }
   .row { display: flex; align-items: center; gap: 8px; margin: 0 0 3px; flex-wrap: wrap; min-height: 30px; }
   button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 12px; cursor: pointer; min-height: 30px; }
   button:hover { border-color: var(--ink); }
@@ -32,30 +32,46 @@
   .key text { pointer-events: none; fill: var(--muted); font-size: 9px; }
   .key.black text { fill: var(--paper); }
   .key.black.startkey text { fill: var(--ink); }
-  .staffline, .ledger { stroke: #A69B91; stroke-width: 1; }
-  .head { fill: var(--ink); }
-  .acc { fill: var(--ink); font-size: 15px; }
+  .staffline, .ledger, .barline { stroke: #A69B91; stroke-width: 1; }
+  .barline { stroke: #7C736B; }
+  .head { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .head.open { fill: var(--paper); stroke-width: 1.4; }
+  .stem { stroke: var(--ink); stroke-width: 1.1; }
+  .beam { stroke: var(--ink); stroke-width: 2.4; stroke-linecap: butt; }
+  .acc { fill: var(--ink); font-size: 13px; }
+  .timesig { fill: var(--ink); font-size: 15px; font-weight: 700; font-family: Georgia, "Times New Roman", serif; }
 </style>
 </head>
 <body>
 <div class="row" id="tunes" role="group" aria-label="Choose a tune"></div>
 <svg id="staff" role="img" aria-label="Treble staff"></svg>
 <div class="row" style="margin-top:3px"><button id="play" type="button">Play</button><span id="start"></span></div>
-<svg id="strip" role="group" aria-label="Piano keys, C3 to C5. Press a key to make the tune start on it."></svg>
+<svg id="strip" role="group" aria-label="Piano keys, C3 to G5. Press a key to make the tune start on it."></svg>
 <script>
 (function () {
   "use strict";
-  // GADGET 2 of 2026-11-13-1215: "move the tune". Two tunes. Press a key: the whole tune moves so its FIRST note is that key (every interval kept). Nothing plays on a key press; Play plays the tune.
+  // GADGET 2 of 2026-11-13-1215, extended by 2026-11-15-1218: "move the tune". Two tunes in their real metre, with bar lines on the staff. Press a key: the whole tune moves so its FIRST note is that key (every interval kept).
+  // Nothing plays on a key press; Play plays the tune in its own rhythm. The staff is two systems of a FIXED total height, so the page never jumps when a key is pressed.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
-  var LOW = 48, HIGH = 72, A4_HZ = 440;                         // C3 .. C5: both tunes fit, with room to move (Amazing Grace spans 62..71, Bach 55..72)
-  // The tunes, as MIDI lists. Each is PUBLIC DOMAIN. NOT Hey Jude: it is in copyright and this file would ship its melody as data.
-  //  - Amazing Grace, the first phrase "A-ma-zing grace, how sweet the sound" (an upbeat D, then G B G B A G E D): the traditional hymn, tune NEW BRITAIN (Virginia Harmony, 1831). SOURCE for the nine pitches:
-  //    the Mutopia Project's LilyPond engraving "New Britain (hymntune)" (public domain), soprano line in G major, read as text (relative to C4): d' g' b' g' b' a' g' e' d' = D4 G4 B4 G4 B4 A4 G4 E4 D4.
-  //  - Bach, Cello Suite No. 1 in G, BWV 1007, Prelude, bars 1 and 2 (Bach died 1750). SOURCE: the Mutopia Project's LilyPond engraving of the Schirmer 1916 edition (public domain), bwv1007_prelude.ly, read as text:
-  //    bar 1 = G D B A B D B D, bar 2 = G E C B C E C E; the first half of each bar is played (16 notes), at the file's own octave, one octave UP from the cello (G3 D4 B4 ...), `step` 0.2 s per note.
+  var LOW = 48, HIGH = 79, A4_HZ = 440;                         // C3 .. G5: the melody of Amazing Grace reaches D5 (and Bach's figure C5), so the strip is 2 octaves and a fifth; G5 is as high as the staff's headroom (the clef's) goes, so no ledger lines above
+  // The tunes. Each is PUBLIC DOMAIN. NOT Hey Jude: it is in copyright and this file would ship its melody as data.
+  // `notes` are MIDI numbers, `beats` the length of each note in beats (a quarter note = 1), `barStarts` the index of the first note of every bar after the first (so the bar lines), `systemStarts` the index of the first note of each of the two staff systems.
+  //  - Amazing Grace, the first two phrases "A-ma-zing grace, how sweet the sound / that saved a wretch like me": the traditional hymn, tune NEW BRITAIN (Virginia Harmony, 1831), 3/4 with a one-beat upbeat. SOURCE for the pitches and the rhythm:
+  //    the Mutopia Project's LilyPond engraving "New Britain (hymntune)" (public domain), the soprano line in G major, read as text (relative to C4): d'4 | g'2 b'8 g' | b'2 a'4 | g'2 e'4 | d'2 d'4 | g'2 b'8 g' | b'2 a'4 | d''2.
+  //    = D4 | G4 B4 G4 | B4 A4 | G4 E4 | D4 D4 | G4 B4 G4 | B4 A4 | D5. The second phrase's upbeat (the second D of bar 4) is the note that starts it. Only the MELODY is used (Mutopia credits the harmonisation to Excell, 1900).
+  //  - Bach, Cello Suite No. 1 in G, BWV 1007, Prelude, bars 1 to 4 (Bach died 1750), ALL the sixteenth notes of the four bars (each bar is one figure of eight notes played twice). SOURCE: the Mutopia Project's LilyPond engraving of the Schirmer 1916 edition (public
+  //    domain), bwv1007_prelude.ly, read as text (relative to C4). Bar 1: g d' b' a b d, b' d, (twice) = G D B A B D B D. Bar 2: g, e' c' b c e, c' e, (twice) = G E C B C E C E. Bar 3: g, fis' c' b c fis, c' fis, (twice) = G F# C B C F# C F#.
+  //    Bar 4: g, g' b a b g b g, then g, g' b a b g b fis = G G B A B G B G, then G G B A B G B F#. Written at the file's own octave, one octave UP from the cello (G3 D4 B4 ...), because the keyboard strip starts at C3. 4/4, a sixteenth is 0.2 s.
+  //    (The staff spells every black key as a FLAT, the Shift tab's rule, so Bach's F# in bar 3 and in the last note is written G-flat.)
   var TUNES = [
-    { id: "grace", title: "Amazing Grace", short: "Amazing Grace", notes: [62, 67, 71, 67, 71, 69, 67, 64, 62], step: 0.45 },
-    { id: "bwv1007", title: "Bach: Cello Suite No. 1, Prelude (bars 1-2)", short: "Bach: Cello Suite 1", notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 64, 72, 71, 72, 64, 72, 64], step: 0.2 }
+    { id: "grace", title: "Amazing Grace", short: "Amazing Grace", meter: [3, 4], beatSeconds: 0.6,
+      notes: [62, 67, 71, 67, 71, 69, 67, 64, 62, 62, 67, 71, 67, 71, 69, 74],
+      beats: [1, 2, 0.5, 0.5, 2, 1, 2, 1, 2, 1, 2, 0.5, 0.5, 2, 1, 3],
+      barStarts: [1, 4, 6, 8, 10, 13, 15], systemStarts: [0, 10] },
+    { id: "bwv1007", title: "Bach: Cello Suite No. 1, Prelude (bars 1-4)", short: "Bach: Cello Suite 1", meter: [4, 4], beatSeconds: 0.8,
+      notes: [55, 62, 71, 69, 71, 62, 71, 62, 55, 62, 71, 69, 71, 62, 71, 62, 55, 64, 72, 71, 72, 64, 72, 64, 55, 64, 72, 71, 72, 64, 72, 64, 55, 66, 72, 71, 72, 66, 72, 66, 55, 66, 72, 71, 72, 66, 72, 66, 55, 67, 71, 69, 71, 67, 71, 67, 55, 67, 71, 69, 71, 67, 71, 66],
+      beats: [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25],
+      barStarts: [16, 32, 48], systemStarts: [0, 32] }
   ];
   var FLATS = ["C", "D-flat", "D", "E-flat", "E", "F", "G-flat", "G", "A-flat", "A", "B-flat", "B"];      // the Shift tab's rule: flats for black keys, never sharps
   function plainName(m) { return FLATS[((m % 12) + 12) % 12]; }
@@ -73,7 +89,7 @@
   // Why a key is off: the tune would leave the strip at the top or at the bottom.
   function whyNot(tune, start, lo, hi) {
     var p = placeTune(tune, start);
-    if (Math.max.apply(null, p) > hi) return "Too high: the tune would go above C5";
+    if (Math.max.apply(null, p) > hi) return "Too high: the tune would go above G5";
     if (Math.min.apply(null, p) < lo) return "Too low: the tune would go below C3";
     return null;
   }
@@ -88,16 +104,40 @@
     for (p = 10; p <= pos; p += 2) out.push(p);
     return out;
   }
-  var SC = { half: 4, top: 11, bottom: -10, left: 38, step: 17.5, width: 332, headRx: 5.2, headRy: 3.7, ledgerHalf: 8, accDx: 9 };   // the staff is as tall as C3..C5 and the clef need, so it never jumps
-  function yOf(pos) { return (SC.top - pos) * SC.half; }
-  SC.height = (SC.top - SC.bottom) * SC.half + SC.half;
-  function staffLayout(notes) {
-    var step = Math.min(SC.step, (SC.width - SC.left - 8) / notes.length);
-    return notes.map(function (m, i) { var pos = staffPos(m); return { midi: m, pos: pos, x: SC.left + (i + 0.5) * step, y: yOf(pos), flat: isBlack(m), ledger: ledgerPositions(pos) }; });
+  // The geometry (px of the staff drawing, 560 wide): a staff space is 2 * half. Two systems of the SAME height, one above the other: the page never jumps.
+  var SC = { half: 3.5, top: 11, bottom: -10, left: 48, right: 10, width: 560, headRx: 4.7, headRy: 3.3, ledgerHalf: 7.5, accDx: 9, barGap: 9, stemPos: 6.5, systemGap: 2, sysCount: 2 };
+  SC.sysH = (SC.top - SC.bottom + 1) * SC.half;
+  SC.height = SC.sysCount * SC.sysH + (SC.sysCount - 1) * SC.systemGap;
+  function yOf(pos, sys) { return (sys || 0) * (SC.sysH + SC.systemGap) + (SC.top - pos + 0.5) * SC.half; }
+  function gapFor(beats) { return 9 + 22 * beats; }                 // the room a note takes: an eighth 20, a quarter 31, a half 53, a sixteenth 14.5
+  /** The notes of a tune at a position, laid out on its two systems: where each head, ledger line, accidental, stem and beam goes, and where the bar lines are. Pure: the DOM only draws it. */
+  function staffLayout(tune, placed) {
+    var n = placed.length, isBar = {}, i, s;
+    tune.barStarts.forEach(function (b) { isBar[b] = true; });
+    var systems = [];
+    for (s = 0; s < tune.systemStarts.length; s++) {
+      var from = tune.systemStarts[s], to = s + 1 < tune.systemStarts.length ? tune.systemStarts[s + 1] : n;
+      var x = SC.left, items = [], bars = [], acc = {}, inBar = 0;
+      for (i = from; i < to; i++) {
+        if (i > from && isBar[i]) { x += SC.barGap / 2; bars.push(x); x += SC.barGap / 2; acc = {}; inBar = 0; }
+        var m = placed[i], pos = staffPos(m), beats = tune.beats[i], key = pos, black = isBlack(m), sign = null;
+        if (black) { if (acc[key] !== "flat") { sign = "flat"; acc[key] = "flat"; } } else if (acc[key] === "flat") { sign = "natural"; acc[key] = "natural"; }          // an accidental holds to the end of the bar
+        items.push({ index: i, midi: m, pos: pos, y: yOf(pos, s), x: x + 5 + (sign ? SC.accDx : 0), beats: beats, open: beats >= 2, sign: sign, ledger: ledgerPositions(pos), stemUp: pos < 4, beat: Math.floor(inBar + 1e-9), level: beats < 0.5 ? 2 : beats < 1 ? 1 : 0, beamed: false });
+        if (sign) x += SC.accDx;
+        x += gapFor(beats); inBar += beats;
+      }
+      // beam groups: neighbours shorter than a beat that fall in the same beat of the same bar
+      var beams = [], g = [], flush = function () { if (g.length > 1) { var up = g.reduce(function (a, it) { return a + it.pos; }, 0) / g.length < 4, ys = g.map(function (it) { return it.y; }), L = SC.stemPos * SC.half; g.forEach(function (it) { it.stemUp = up; it.beamed = true; }); beams.push({ level: g[0].level, stemUp: up, items: g.map(function (it) { return it.index; }), x1: g[0].x + (up ? SC.headRx : -SC.headRx), x2: g[g.length - 1].x + (up ? SC.headRx : -SC.headRx), y: up ? Math.min.apply(null, ys) - L : Math.max.apply(null, ys) + L }); } g = []; };
+      items.forEach(function (it, k) { if (it.beats < 1 && g.length && it.beat === g[g.length - 1].beat && (k === 0 || !bars.some(function (b) { return b > g[g.length - 1].x && b < it.x; }))) g.push(it); else { flush(); if (it.beats < 1) g.push(it); } });
+      flush();
+      systems.push({ index: s, items: items, bars: bars, beams: beams, end: x, showTime: s === 0, finalBar: s === tune.systemStarts.length - 1 });
+    }
+    return systems;
   }
-  // What Play sounds: a note every `step` seconds, the last one twice as long.
+  // What Play sounds: each note in the tune's own rhythm (beats x the tune's beat length), a little legato.
   function planPlay(tune, start) {
-    return placeTune(tune, start).map(function (m, i, a) { return { midi: m, hz: midiToHz(m), when: i * tune.step, dur: i === a.length - 1 ? 2 * tune.step : tune.step }; });
+    var t = 0;
+    return placeTune(tune, start).map(function (m, i) { var when = t; t += tune.beats[i] * tune.beatSeconds; return { midi: m, hz: midiToHz(m), when: when, dur: tune.beats[i] * tune.beatSeconds }; });
   }
   // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
   // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
@@ -171,7 +211,7 @@
 
   if (typeof document === "undefined") {           // node test harness
     module.exports = { LOW: LOW, HIGH: HIGH, TUNES: TUNES, plainName: plainName, isBlack: isBlack, midiToHz: midiToHz, placeTune: placeTune, allowedStarts: allowedStarts, whyNot: whyNot, tuneIntervals: tuneIntervals,
-      staffPos: staffPos, ledgerPositions: ledgerPositions, SC: SC, yOf: yOf, staffLayout: staffLayout, planPlay: planPlay, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+      staffPos: staffPos, ledgerPositions: ledgerPositions, SC: SC, yOf: yOf, gapFor: gapFor, staffLayout: staffLayout, planPlay: planPlay, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
@@ -179,8 +219,8 @@
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
   var tune = TUNES[0], start = tune.notes[0];
-  // The strip: 25 keys C3..C5, black keys on top.
-  var WW = 22, WH = 60, BW = 13, BH = 36, PAD = 1, keys = {}, whites = [], blacks = [], wi = 0, m;
+  // The strip: 32 keys C3..G5, black keys on top.
+  var WW = 29, WH = 60, BW = 17, BH = 36, PAD = 1, keys = {}, whites = [], blacks = [], wi = 0, m;
   for (m = LOW; m <= HIGH; m++) { if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 }); else { whites.push({ m: m, x: PAD + wi * WW }); wi++; } }
   var strip = $("strip");
   strip.setAttribute("viewBox", "0 0 " + (wi * WW + 2 * PAD) + " " + (WH + 2 * PAD));
@@ -205,14 +245,25 @@
   var CLEF_SCALE = (2 * SC.half) / 250;                             // a staff space is 2*half px = 250 glyph units
   function drawStaff(placed) {
     while (staff.firstChild) staff.removeChild(staff.firstChild);
-    for (var p = 0; p <= 8; p += 2) el("line", { "class": "staffline", x1: 0, y1: yOf(p), x2: SC.width, y2: yOf(p) }, staff);
-    el("path", { "class": "clef", fill: "#2B2B2B", stroke: "none", "pointer-events": "none", transform: "translate(5 " + yOf(2) + ") scale(" + CLEF_SCALE + " " + (-CLEF_SCALE) + ")", d: CLEF_D }, staff);   // Bravura gClef, origin ON the G line
-    staffLayout(placed).forEach(function (n) {
-      n.ledger.forEach(function (lp) { el("line", { "class": "ledger", x1: n.x - SC.ledgerHalf, y1: yOf(lp), x2: n.x + SC.ledgerHalf, y2: yOf(lp) }, staff); });
-      el("ellipse", { "class": "head", cx: n.x, cy: n.y, rx: SC.headRx, ry: SC.headRy, transform: "rotate(-20 " + n.x + " " + n.y + ")" }, staff);
-      if (n.flat) { var t = el("text", { "class": "acc", x: n.x - SC.accDx - 5, y: n.y + 4, "text-anchor": "middle" }, staff); t.textContent = "♭"; }
+    var systems = staffLayout(tune, placed);
+    systems.forEach(function (sys) {
+      var s = sys.index;
+      for (var p = 0; p <= 8; p += 2) el("line", { "class": "staffline", x1: 0, y1: yOf(p, s), x2: SC.width, y2: yOf(p, s) }, staff);
+      el("path", { "class": "clef", fill: "#2B2B2B", stroke: "none", "pointer-events": "none", transform: "translate(5 " + yOf(2, s) + ") scale(" + CLEF_SCALE + " " + (-CLEF_SCALE) + ")", d: CLEF_D }, staff);   // Bravura gClef, origin ON the G line
+      if (sys.showTime) { var t1 = el("text", { "class": "timesig", x: 30, y: yOf(6, s) + 5, "text-anchor": "middle" }, staff); t1.textContent = String(tune.meter[0]); var t2 = el("text", { "class": "timesig", x: 30, y: yOf(2, s) + 5, "text-anchor": "middle" }, staff); t2.textContent = String(tune.meter[1]); }
+      sys.bars.forEach(function (bx) { el("line", { "class": "barline", x1: bx, y1: yOf(8, s), x2: bx, y2: yOf(0, s) }, staff); });
+      if (sys.finalBar) { el("line", { "class": "barline", x1: sys.end + 2, y1: yOf(8, s), x2: sys.end + 2, y2: yOf(0, s) }, staff); el("line", { "class": "barline", x1: sys.end + 5, y1: yOf(8, s), x2: sys.end + 5, y2: yOf(0, s), "stroke-width": 2.6 }, staff); }
+      var byIndex = {}; sys.items.forEach(function (it) { byIndex[it.index] = it; });
+      sys.beams.forEach(function (b) { b.items.forEach(function (idx) { var it = byIndex[idx]; var sx = it.x + (b.stemUp ? SC.headRx : -SC.headRx); el("line", { "class": "stem", x1: sx, y1: it.y, x2: sx, y2: b.y }, staff); });
+        for (var l = 0; l <= b.level - 1; l++) el("line", { "class": "beam", x1: b.x1 - 0.6, y1: b.y + (b.stemUp ? 1 : -1) * l * 4.2, x2: b.x2 + 0.6, y2: b.y + (b.stemUp ? 1 : -1) * l * 4.2 }, staff); });
+      sys.items.forEach(function (it) {
+        it.ledger.forEach(function (lp) { el("line", { "class": "ledger", x1: it.x - SC.ledgerHalf, y1: yOf(lp, s), x2: it.x + SC.ledgerHalf, y2: yOf(lp, s) }, staff); });
+        el("ellipse", { "class": it.open ? "head open" : "head", cx: it.x, cy: it.y, rx: SC.headRx, ry: SC.headRy, transform: "rotate(-20 " + it.x + " " + it.y + ")" }, staff);
+        if (!it.beamed && it.beats < 4) { var sx = it.x + (it.stemUp ? SC.headRx : -SC.headRx), L = SC.stemPos * SC.half; el("line", { "class": "stem", x1: sx, y1: it.y, x2: sx, y2: it.y + (it.stemUp ? -L : L) }, staff); }
+        if (it.sign) { var t = el("text", { "class": "acc", x: it.x - SC.accDx - 3, y: it.y + 4, "text-anchor": "middle" }, staff); t.textContent = it.sign === "flat" ? "♭" : "♮"; }
+      });
     });
-    staff.setAttribute("aria-label", "Treble staff, " + placed.map(nameOf).join(", "));
+    staff.setAttribute("aria-label", "Treble staff in " + tune.meter[0] + "/" + tune.meter[1] + " with bar lines, " + placed.map(nameOf).join(", "));
   }
   function render() {
     var placed = placeTune(tune, start);
@@ -239,7 +290,8 @@
   }
   $("play").addEventListener("click", function () {
     var c = audio(); if (!c) return;
-    planPlay(tune, start).forEach(function (n) { pianoVoice(c, pianoBus(c), n.hz, c.currentTime + n.when, n.dur * 1.4, 0.8, 1); });
+    var t0 = c.currentTime;                                                       // one clock reading for the whole tune: the rhythm is exact
+    planPlay(tune, start).forEach(function (n) { pianoVoice(c, pianoBus(c), n.hz, t0 + n.when, n.dur * 1.15, 0.8, 1); });
   });
   render();
 })();

@@ -1,6 +1,6 @@
 Music runs on 12 notes per octave. Step to the very next one, black keys included, and you've moved one **half step**, also called a [[semitone]]. On a [[guitar]], that's one fret. An **interval** is the distance between two of those notes, counted in half steps from 0 to 12. Always count up from the lower note. Start on C, go three half steps (C♯, D, then E♭) and you land on E-flat. Three half steps. Done.
 
-What each distance is called is on [[interval_notation_and_jargon]].
+What each distance is called is on [[interval notation and jargon]].
 
 Don't take my word for it. Click two keys, read the number of half steps, press Play.
 
@@ -11,9 +11,7 @@ music_instruments/resources/html/interval_pair.html
 
 ## The tune that moves
 
-Amazing Grace. Start it on D, then on F, then on A. Same hymn every time, different notes. Your ear isn't listening to the notes; it's checking the gaps between them. Nudge one note up a half step and the tune dies on the spot. The gadget has two tunes: Amazing Grace and the opening of a Bach cello prelude.
-
-No instrument handy? Hum Hey Jude from any note you like. Still Hey Jude.
+Sing Hey Jude starting on a low note, then a higher one, then your lowest. Same song every time, different notes. Your ear isn't listening to the notes; it's checking the gaps between them. Nudge one note up a half step and the song dies on the spot. The gadget below moves two other tunes: Amazing Grace and the opening of a Bach cello prelude.
 
 Press any key below and the tune starts there; watch the staff move while the gaps stay put.
 
@@ -42,5 +40,5 @@ Every scale, chord and key you'll meet later is just a pattern of intervals. Lea
   margin:10px 0;
 ">
 <span>&uarr; <a class="internal-link" data-href="Intervals" href="Intervals" style="color:#1963D1;">Intervals</a></span>
-<span><a class="internal-link" data-href="interval_notation_and_jargon" href="interval_notation_and_jargon" style="color:#1963D1;">interval_notation_and_jargon</a> &rarr;</span>
+<span><a class="internal-link" data-href="interval notation and jargon" href="interval notation and jargon" style="color:#1963D1;">interval notation and jargon</a> &rarr;</span>
 </div>

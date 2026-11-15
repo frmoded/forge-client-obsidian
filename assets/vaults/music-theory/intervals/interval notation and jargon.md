@@ -35,31 +35,6 @@ C up to E is a 3rd because it spans three letter names: C, D, E. Whether it's mi
 - **Octave**: 12 half steps, the same note higher or lower.
 - **Tritone**: 6 half steps, exactly halfway through the octave.
 
-## On the staff
-
-C up to E, one note after the other: a major 3rd, 4 half steps apart.
-
-![[intervals/resources/images/interval_c_to_e.svg]]
-
-C up to G: a perfect 5th, 7 half steps apart.
-
-![[intervals/resources/images/interval_c_to_g.svg]]
-
-> [!note]- Structural formula
-> For a given size, the quality comes from the half-step count: a 3rd is minor at 3 half steps and major at 4.
-> The tritone (6 half steps) is spelled d5 or A4 depending on the letters of the two notes: C up to G-flat is a diminished 5th, C up to F-sharp is an augmented 4th.
-> The same distance can be spelled another way: 3 half steps can also be an augmented 2nd. The scales chapter explains when each spelling is used.
-> For where these names come from, see [[interval_history]].
-
-## Every distance, with a song
-
-This is the reference. The Chart tab gives you a small keyboard and a song to hum for each distance, and Explore lets you pick a name and see where it lands above and below a note.
-
-```html-embed
-music_instruments/resources/html/interval_widget.html
-635
-```
-
 <div style="
   display:flex;
   justify-content:space-between;

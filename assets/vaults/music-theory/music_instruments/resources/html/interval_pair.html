@@ -26,19 +26,20 @@
   button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 14px; cursor: pointer; min-height: 30px; }
   button:hover:not(:disabled) { border-color: var(--ink); }
   button:disabled { opacity: 0.45; cursor: default; }
+  #mode { padding: 4px 10px; background: var(--paper); }
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
   #readout { color: var(--ink); font-size: 14px; }
 </style>
 </head>
 <body>
 <svg id="strip" role="group" aria-label="Piano keys, C4 to C5. Click one note, then a second note."></svg>
-<div class="row"><button id="play" type="button" disabled>Play</button><span id="readout" role="status" aria-live="polite"></span></div>
+<div class="row"><button id="play" type="button" disabled>Play</button><button id="mode" type="button"></button><span id="readout" role="status" aria-live="polite"></span></div>
 <script>
 (function () {
   "use strict";
   // GADGET 1 of 2026-11-13-1215: "two notes, and the distance between them". 13 keys C4 to C5, a Play button and a one-line readout. Nothing else.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
-  var LOW = 60, HIGH = 72, A4_HZ = 440, GAP = 0.6, TOGETHER_AT = 1.5, NOTE_LEN = 0.9;          // C4..C5; the second note 0.6 s after the first (the big widget's gap), then both together
+  var LOW = 60, HIGH = 72, A4_HZ = 440, GAP = 0.6, NOTE_LEN = 0.9;          // C4..C5; the second note 0.6 s after the first (the big widget's gap), then both together
   var NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   function midiToName(m) { return NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1); }
   function isBlack(m) { return NAMES[((m % 12) + 12) % 12].length === 2; }
@@ -59,12 +60,18 @@
     if (state.b === null) return m === state.a ? { a: null, b: null } : { a: state.a, b: m };
     return { a: m, b: null };
   }
-  // What Play sounds: the lower note, then the higher one 0.6 s later, then both together. Nothing plays until two keys are chosen.
-  function planPlay(state) {
+  // The play mode (2026-11-15-1218): ONE toggle chooses how Play sounds the two notes. "up": the lower note, then the higher one 0.6 s later (the same gap as before). "together": both at once. The default is "up".
+  var MODES = ["up", "together"];
+  var DEFAULT_MODE = "up";
+  function nextMode(mode) { return mode === "up" ? "together" : "up"; }
+  function modeLabel(mode) { return "Play: " + (mode === "together" ? "together" : "up"); }                        // the label shows the CURRENT mode
+  function modeTitle(mode) { return "Play the two notes " + (mode === "together" ? "together" : "one after the other, the lower first") + ". Press to change to " + nextMode(mode) + "."; }
+  // What Play sounds in the chosen mode. Nothing plays until two keys are chosen. The old behaviour (the lower note, then the higher, then both together) is gone.
+  function planPlay(state, mode) {
     if (state.a === null || state.b === null) return [];
     var lo = Math.min(state.a, state.b), hi = Math.max(state.a, state.b);
-    return [lo, hi].map(function (m, i) { return { midi: m, hz: midiToHz(m), when: i * GAP, dur: NOTE_LEN }; })
-      .concat([lo, hi].map(function (m) { return { midi: m, hz: midiToHz(m), when: TOGETHER_AT, dur: NOTE_LEN * 1.4 }; }));
+    if (mode === "together") return [lo, hi].map(function (m) { return { midi: m, hz: midiToHz(m), when: 0, dur: NOTE_LEN * 1.4 }; });
+    return [lo, hi].map(function (m, i) { return { midi: m, hz: midiToHz(m), when: i * GAP, dur: NOTE_LEN }; });
   }
   // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
   // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
@@ -137,7 +144,7 @@
   // ==== piano voice END ===========================================================================================================================
 
   if (typeof document === "undefined") {           // node test harness
-    module.exports = { LOW: LOW, HIGH: HIGH, GAP: GAP, TOGETHER_AT: TOGETHER_AT, midiToName: midiToName, isBlack: isBlack, midiToHz: midiToHz, halfSteps: halfSteps, readout: readout, select: select, planPlay: planPlay, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+    module.exports = { LOW: LOW, HIGH: HIGH, GAP: GAP, MODES: MODES, DEFAULT_MODE: DEFAULT_MODE, nextMode: nextMode, modeLabel: modeLabel, modeTitle: modeTitle, midiToName: midiToName, isBlack: isBlack, midiToHz: midiToHz, halfSteps: halfSteps, readout: readout, select: select, planPlay: planPlay, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
@@ -159,12 +166,14 @@
   }
   whites.forEach(function (k) { make(k, false); });
   blacks.forEach(function (k) { make(k, true); });                 // black keys last, so they are on top
-  var state = { a: null, b: null };
+  var state = { a: null, b: null }, mode = DEFAULT_MODE;
   function render() {
     for (var k in keys) { var on = +k === state.a || +k === state.b; keys[k].classList.toggle("held", on); keys[k].setAttribute("aria-pressed", on ? "true" : "false"); }
     $("readout").textContent = readout(state);
     $("play").disabled = state.a === null || state.b === null;
+    $("mode").textContent = modeLabel(mode); $("mode").setAttribute("title", modeTitle(mode)); $("mode").setAttribute("aria-label", modeLabel(mode) + ". Press to change to " + nextMode(mode) + ".");
   }
+  $("mode").addEventListener("click", function () { mode = nextMode(mode); render(); });            // a mode change plays nothing
   function choose(m) { state = select(state, m); render(); }            // choosing a key never plays
   // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
   var ctx = null;
@@ -174,9 +183,10 @@
     return ctx;
   }
   $("play").addEventListener("click", function () {
-    var plan = planPlay(state); if (!plan.length) return;
+    var plan = planPlay(state, mode); if (!plan.length) return;
     var c = audio(); if (!c) return;
-    plan.forEach(function (n) { pianoVoice(c, pianoBus(c), n.hz, c.currentTime + n.when, n.dur, 0.8, n.when === TOGETHER_AT ? 0.7 : 1); });
+    var t0 = c.currentTime;                                                       // one clock reading for the whole Play: "together" is exactly together
+    plan.forEach(function (n) { pianoVoice(c, pianoBus(c), n.hz, t0 + n.when, n.dur, 0.8, mode === "together" ? 0.7 : 1); });
   });
   render();
 })();
