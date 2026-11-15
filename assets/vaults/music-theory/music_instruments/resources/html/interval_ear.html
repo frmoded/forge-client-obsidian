@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Play the second note</title>
+<style>
+  /* Palette: the same values as piano_keyboard.html (forge_music_theory_style_guide.md). No margin, no padding, no fixed height: the page is exactly its content. */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --right: #2E8B57; --wrong: #D72027; --accent: #D72027; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
+  svg { display: block; width: 100%; max-width: 334px; height: auto; user-select: none; -webkit-user-select: none; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
+  button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 14px; cursor: pointer; min-height: 30px; }
+  button:hover:not(:disabled) { border-color: var(--ink); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  #hint { color: var(--ink); }
+  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .key { cursor: pointer; }
+  .key:focus { outline: none; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.first rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
+  .key.right rect { fill: #BFE3CD; stroke: var(--right); stroke-width: 3; }
+  .key.black.right rect { fill: var(--right); stroke: #1B5E3A; }
+  .key.wrong rect { fill: #F6C9CB; stroke: var(--wrong); stroke-width: 3; stroke-dasharray: 3 2; }
+  .key.black.wrong rect { fill: #8B1C20; stroke: var(--wrong); }
+  .key.idle { cursor: default; }
+  .key:focus rect { stroke: var(--accent); stroke-width: 3; }
+  .key.right:focus rect { stroke: var(--right); }                       /* a key the person just clicked keeps the answer's colour, not the focus ring's */
+  .key text { pointer-events: none; fill: var(--muted); font-size: 9px; }
+  .key text.mark { font-size: 15px; font-weight: 700; fill: var(--ink); }
+  .key.black text { fill: var(--paper); }
+  .key.black text.mark { fill: #fff; }
+  .arc { fill: none; stroke: var(--axis); stroke-width: 1.4; }
+  .arrowhead { fill: var(--axis); }
+</style>
+</head>
+<body>
+<svg id="strip" role="group" aria-label="Piano keys, C3 to C5. Press Next, listen to two notes, then click the key of the second one."></svg>
+<div class="row"><button id="next" type="button">Next</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-13-1216: "play the second note". Two notes are played, only the FIRST is shown on the piano, and the whole job is to click the second. Then Next gives a different interval (up OR down, -12..+12 half steps, never 0).
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  var LOW = 48, HIGH = 72, A4_HZ = 440, GAP = 0.6, NOTE_LEN = 0.9;                       // C3..C5 (the tune shifter's strip); the second note 0.6 s after the first (the interval widget's gap)
+  var FLATS = ["C", "D-flat", "D", "E-flat", "E", "F", "G-flat", "G", "A-flat", "A", "B-flat", "B"];
+  function plainName(m) { return FLATS[((m % 12) + 12) % 12]; }
+  function isBlack(m) { return plainName(m).length > 1; }
+  function octaveOf(m) { return Math.floor(m / 12) - 1; }
+  function nameOf(m) { return plainName(m).replace("-flat", " flat") + " " + octaveOf(m); }
+  function midiToHz(m) { return A4_HZ * Math.pow(2, (m - 69) / 12); }
+  // A question: a first note and a signed interval of -12..-1 or 1..12 half steps (never 0), DIFFERENT from the previous question's interval, with BOTH notes inside lo..hi.
+  // `rng` is a function returning [0, 1) (injected, so a test fixes it). Every interval is possible: with a strip of 25 keys each of them has at least 13 first notes.
+  function pickQuestion(rng, previousInterval, lo, hi) {
+    var intervals = [], i;
+    for (i = -12; i <= 12; i++) {
+      if (i === 0 || i === previousInterval) continue;
+      if (hi - lo >= Math.abs(i)) intervals.push(i);                                       // some first note exists
+    }
+    var interval = intervals[Math.min(intervals.length - 1, Math.floor(rng() * intervals.length))];
+    var firsts = [], f;
+    for (f = lo; f <= hi; f++) if (f + interval >= lo && f + interval <= hi) firsts.push(f);
+    var first = firsts[Math.min(firsts.length - 1, Math.floor(rng() * firsts.length))];
+    return { first: first, second: first + interval, interval: interval };
+  }
+  // The answer: right when the guessed key is the second note.
+  function judge(question, guess) { return { correct: guess === question.second, guess: guess, answer: question.second }; }
+  // The state machine: idle -> (Next) asked -> (a guess) answered -> (Next) asked ... A guess is only taken while a question is open; a second guess after the answer does nothing until Next.
+  function initial() { return { phase: "idle", question: null, guess: null, previous: null }; }
+  function next(state, rng) { var q = pickQuestion(rng, state.previous, LOW, HIGH); return { phase: "asked", question: q, guess: null, previous: q.interval }; }
+  function guess(state, midi) { return state.phase === "asked" ? { phase: "answered", question: state.question, guess: midi, previous: state.previous } : state; }
+  // What Next and Replay sound: the first note, then the second 0.6 s later. Replay never reveals anything.
+  function planQuestion(q) { return [{ midi: q.first, hz: midiToHz(q.first), when: 0, dur: NOTE_LEN }, { midi: q.second, hz: midiToHz(q.second), when: GAP, dur: NOTE_LEN }]; }
+  // The FEEDBACK sound after a guess: the guessed note, then the correct one 0.6 s later, so the ear hears the gap; when the guess was right the correct note sounds once.
+  function planFeedback(q, guessMidi) {
+    var out = [];
+    if (guessMidi !== q.second) out.push({ midi: guessMidi, hz: midiToHz(guessMidi), when: 0, dur: NOTE_LEN });
+    out.push({ midi: q.second, hz: midiToHz(q.second), when: guessMidi !== q.second ? GAP : 0, dur: NOTE_LEN });
+    return out;
+  }
+  // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
+  // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
+  // A piano-like note by ADDITIVE SYNTHESIS: 10 partials per string with a slight inharmonic stretch (stiff strings: partial n at n*f*sqrt(1 + B*n*n), B from about 0.0003 in the treble to about 0.001
+  // in the bass, normalised so the fundamental is exactly f), each partial with its own decay (higher ones die faster, bass notes ring longer), TWO strings a couple of cents apart (the natural beating), a few
+  // ms of band-passed hammer noise scaled by velocity, a low-pass whose cutoff rises with velocity and falls with pitch, a quick release at the end of the note, and a soft limiter on the shared bus so a chord does not clip.
+  // `when` is an absolute time on the context's clock; `hz` is the pitch the gadget's tuning asks for (the pitch-dependent parts use the note number it is nearest to). Per note: 20 oscillators (string 1's partials 1..10, then string 2's) and no other source but the hammer noise.
+  var PIANO_PARTIALS = 10;
+  var PIANO_STRINGS = 2;
+  var PIANO_OSC_PER_NOTE = PIANO_PARTIALS * PIANO_STRINGS;
+  var PIANO_DETUNE_CENTS = [0, 2];                     // string 1 true, string 2 two cents sharp
+  var PIANO_ATTACK = 0.004;                            // s, the rise of the note
+  var PIANO_RELEASE = 0.02;                            // s, the end of a note is a quick fade, never a cut
+  function pianoClamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  function pianoMidi(hz) { return 69 + 12 * Math.log(hz / 440) / Math.LN2; }
+  function pianoB(midi) { return 0.0003 + 0.0007 * pianoClamp((84 - midi) / 60, 0, 1); }                               // C6 and above 0.0003, rising toward the bass (C2 about 0.00086, C1 and below 0.001)
+  function pianoPartialHz(f, n, B) { return n * f * Math.sqrt((1 + B * n * n) / (1 + B)); }                            // n = 1 is exactly f
+  function pianoDecay(midi, n) { return pianoClamp(4.2 - 0.045 * (midi - 36), 0.7, 4.2) / (1 + 0.8 * (n - 1)); }       // the time constant (s) of partial n: the bass rings longer, each higher partial dies faster
+  function pianoPartialAmp(n) { return 1 / Math.pow(n, 1.1); }                                                         // the spectrum falls off gently: a hammer-struck string keeps its upper partials
+  function pianoCutoff(midi, velocity) { return pianoClamp(1800 + 7200 * velocity - 35 * (midi - 60), 500, 12000); }  // Hz: harder = brighter, higher = darker
+  var pianoNoiseCache = null, pianoBusCache = null;
+  function pianoNoiseBuffer(ctx) {
+    if (!pianoNoiseCache || pianoNoiseCache.ctx !== ctx) {
+      var n = Math.max(1, Math.round(ctx.sampleRate * 0.012)), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0), seed = 1;
+      for (var i = 0; i < n; i++) { seed = (seed * 16807) % 2147483647; d[i] = seed / 1073741823.5 - 1; }        // a fixed noise burst: the same every time
+      pianoNoiseCache = { ctx: ctx, buffer: b };
+    }
+    return pianoNoiseCache.buffer;
+  }
+  function pianoBus(ctx) {                                                                                             // the shared output: a soft limiter, so a four-note chord does not clip
+    if (!pianoBusCache || pianoBusCache.ctx !== ctx) {
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      comp.connect(ctx.destination);
+      pianoBusCache = { ctx: ctx, node: comp };
+    }
+    return pianoBusCache.node;
+  }
+  function pianoVoice(ctx, destination, hz, when, length, velocity, level) {
+    var t0 = when, end = when + Math.max(0.05, length), midi = pianoMidi(hz), B = pianoB(midi);
+    var v = pianoClamp(velocity == null ? 0.8 : velocity, 0.05, 1), peak = pianoClamp(level == null ? 1 : level, 0, 2) * (0.1 + 0.2 * v);
+    var sumA = 0, n, s;
+    for (n = 1; n <= PIANO_PARTIALS; n++) sumA += pianoPartialAmp(n);
+    var out = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = pianoCutoff(midi, v); lp.Q.value = 0.7;
+    out.gain.setValueAtTime(0.0001, t0);
+    out.gain.linearRampToValueAtTime(peak, t0 + PIANO_ATTACK);
+    out.gain.setValueAtTime(peak, Math.max(end, t0 + PIANO_ATTACK + 0.001));
+    out.gain.setTargetAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001), PIANO_RELEASE / 4);                          // the quick release (about 20 ms to silence)
+    out.gain.setValueAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.15);
+    lp.connect(out); out.connect(destination);
+    for (s = 0; s < PIANO_STRINGS; s++) {
+      var fs = hz * Math.pow(2, PIANO_DETUNE_CENTS[s] / 1200);
+      for (n = 1; n <= PIANO_PARTIALS; n++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = pianoPartialHz(fs, n, B);
+        g.gain.setValueAtTime(pianoPartialAmp(n) / sumA / PIANO_STRINGS, t0);
+        g.gain.setTargetAtTime(0, t0 + PIANO_ATTACK, pianoDecay(midi, n));
+        o.connect(g); g.connect(lp);
+        o.start(t0); o.stop(Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.2);
+      }
+    }
+    var ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();                          // the hammer: a few ms of band-passed noise, harder = louder
+    ns.buffer = pianoNoiseBuffer(ctx);
+    bp.type = "bandpass"; bp.frequency.value = pianoClamp(1200 + 2400 * v + 12 * (midi - 60), 600, 6000); bp.Q.value = 1;
+    ng.gain.setValueAtTime(0.2 * v * v, t0); ng.gain.setTargetAtTime(0, t0 + 0.001, 0.003);
+    ns.connect(bp); bp.connect(ng); ng.connect(lp);
+    ns.start(t0); ns.stop(t0 + 0.02);
+  }
+  // ==== piano voice END ===========================================================================================================================
+
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { LOW: LOW, HIGH: HIGH, GAP: GAP, plainName: plainName, isBlack: isBlack, midiToHz: midiToHz, pickQuestion: pickQuestion, judge: judge, initial: initial, next: next, guess: guess, planQuestion: planQuestion, planFeedback: planFeedback,
+      pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+  var rng = function () { return (window.__earRandom || Math.random)(); };               // an injected random source for tests; the page's own is Math.random
+  var WW = 22, WH = 60, BW = 13, BH = 36, PAD = 1, TOP = 13, keys = {}, whites = [], blacks = [], wi = 0, m;       // TOP: a thin band above the keys for the arc between the two notes (always there, so the page never jumps)
+  for (m = LOW; m <= HIGH; m++) { if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 }); else { whites.push({ m: m, x: PAD + wi * WW }); wi++; } }
+  var strip = $("strip");
+  strip.setAttribute("viewBox", "0 0 " + (wi * WW + 2 * PAD) + " " + (TOP + WH + 2 * PAD));
+  var arcLayer = el("g", { "class": "arcs", "aria-hidden": "true" }, strip);
+  function centreOf(mm) { var k = keys[mm]; var r = k.firstChild; return +r.getAttribute("x") + +r.getAttribute("width") / 2; }
+  function makeKey(k, black) {
+    var g = el("g", { "class": "key " + (black ? "black" : "white") + " idle", "data-midi": k.m, tabindex: "0", role: "button", "aria-label": nameOf(k.m) }, strip);
+    el("rect", { x: k.x, y: TOP + PAD, width: black ? BW : WW, height: black ? BH : WH, rx: black ? 2 : 3 }, g);
+    keys[k.m] = g;
+    g.addEventListener("click", function () { press(k.m); try { g.focus({ preventScroll: true }); } catch (_) {} });
+    g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(k.m); } });
+  }
+  whites.forEach(function (k) { makeKey(k, false); });
+  blacks.forEach(function (k) { makeKey(k, true); });
+  var state = initial();
+  function mark(mm, ch) { var g = keys[mm], r = g.firstChild, black = isBlack(mm); var t = el("text", { "class": "mark", x: +r.getAttribute("x") + +r.getAttribute("width") / 2, y: TOP + PAD + (black ? 26 : 50), "text-anchor": "middle" }, g); t.textContent = ch; }
+  function render() {
+    arcLayer.textContent = "";
+    for (var k in keys) { var g = keys[k]; var ts = g.querySelectorAll("text"); for (var i = 0; i < ts.length; i++) g.removeChild(ts[i]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (state.phase === "asked" ? "" : " idle")); g.setAttribute("aria-pressed", "false"); }
+    var q = state.question, hint = "", sr = "";
+    if (state.phase === "idle") hint = "Press Next";
+    if (state.phase === "asked") { keys[q.first].classList.add("first"); hint = ""; sr = "Two notes were played. The first is " + nameOf(q.first) + ". Click the second."; }
+    if (state.phase === "answered") {
+      var j = judge(q, state.guess);
+      keys[q.first].classList.add("first");
+      keys[q.second].classList.add("right"); mark(q.second, "✓");
+      if (!j.correct) { keys[state.guess].classList.add("wrong"); mark(state.guess, "×"); }
+      var x1 = centreOf(q.first), x2 = centreOf(q.second), top = 3, a = el("path", { "class": "arc", d: "M" + x1 + " " + (TOP - 1) + " Q" + ((x1 + x2) / 2) + " " + (top - 4) + " " + x2 + " " + (TOP - 1) }, arcLayer);   // a thin arc between the two keys
+      void a; el("path", { "class": "arrowhead", d: "M" + x2 + " " + (TOP + 1) + " l-3 -5 l6 0 z" }, arcLayer);
+      hint = "Press Next"; sr = j.correct ? "Correct: the second note was " + nameOf(q.second) + "." : "Not quite: you chose " + nameOf(state.guess) + "; the second note was " + nameOf(q.second) + ".";
+    }
+    $("hint").textContent = hint; $("sr").textContent = sr;
+    $("replay").disabled = state.phase === "idle";
+  }
+  // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
+  var ctx = null;
+  function audio() {
+    if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function sound(plan) { var c = audio(); if (!c) return; plan.forEach(function (n) { pianoVoice(c, pianoBus(c), n.hz, c.currentTime + n.when, n.dur, 0.8, 1); }); }
+  function press(mm) {
+    if (state.phase !== "asked") return;                                                   // no question open, or already answered: a click does nothing
+    state = guess(state, mm); render();
+    sound(planFeedback(state.question, mm));                                               // the feedback: the guessed note and the correct note, once, in that order (just the correct note when it was right)
+  }
+  $("next").addEventListener("click", function () { state = next(state, rng); render(); sound(planQuestion(state.question)); });
+  $("replay").addEventListener("click", function () { if (state.question) sound(planQuestion(state.question)); });       // never reveals the answer
+  render();
+})();
+</script>
+</body>
+</html>
