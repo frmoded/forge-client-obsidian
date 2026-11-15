@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import vm from 'node:vm';
 import { Window } from 'happy-dom';
 
+import { audioStub } from './test-support/web-audio-stub.ts';
 import { pinSkipReason } from './test-support/sibling-pin.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
@@ -99,20 +100,16 @@ test('CONTROL: the checks can fail - a wrong tuning constant, a wrong semitone r
 
 // ---- the page, in a DOM ---------------------------------------------------------------------------------------------------------------------------------------
 
+/** The pitch of each note the page sounded: the first oscillator is string 1 of the course's pair, 2.5 cents flat (the pair is centred on the pitch asked), so it is put back. */
+const centred = (p: { osc: number[] }, d = 2): number[] => p.osc.map((hz) => +(hz * Math.pow(2, 2.5 / 1200)).toFixed(d));
 type Page = { win: any; doc: any; errors: string[]; osc: number[] };
 function openPage(h: string = html): Page {
-  const errors: string[] = [], osc: number[] = [];
+  const errors: string[] = []; let osc: number[] = [];
   const win: any = new Window({ url: 'http://localhost/' });
   win.console.error = (...a: unknown[]) => { errors.push(a.map(String).join(' ')); };
   win.addEventListener('error', (e: any) => errors.push(String(e.message ?? e)));
-  class Ctx {
-    currentTime = 0; state = 'running'; destination = {};
-    createPeriodicWave() { return {}; }
-    createGain() { const p = () => ({ value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} }); return { gain: p(), connect() {} }; }
-    createOscillator() { const o = { frequency: { value: 0 }, setPeriodicWave() {}, connect() {}, start() { osc.push(o.frequency.value); }, stop() {} }; return o; }
-    resume() {}
-  }
-  win.AudioContext = Ctx; win.Float32Array = Float32Array;
+  const stub = audioStub(); osc = stub.osc;                               // 2026-11-15-1221: the shared Web Audio stand-in (the plucked voice needs biquads, a buffer, a compressor); `osc` holds the FIRST oscillator of each note: string 1, partial 1
+  win.AudioContext = stub.Ctx; win.Float32Array = Float32Array;
   const m = /<script>([\s\S]*?)<\/script>/.exec(h)!;
   win.document.write(h.replace(m[0], ''));
   win.eval(m[1]);
@@ -216,13 +213,13 @@ test('a click holds a position (and a second click lets it go), Clear releases a
   assert.deepEqual(held(p), ['G3, course 1, fret 0']);
   click(p, '.pt[aria-label="E5, course 4, fret 0"]');
   p.doc.getElementById('bT').click();
-  assert.deepEqual(p.osc.map((hz) => +hz.toFixed(2)), [196.0, 659.26], 'two oscillators: G3 and E5');
+  assert.deepEqual(centred(p), [196.0, 659.26], 'two oscillators: G3 and E5');
   p.osc.length = 0;
   p.doc.getElementById('bU').click();
-  assert.deepEqual(p.osc.map((hz) => +hz.toFixed(2)), [196.0, 659.26]);
+  assert.deepEqual(centred(p), [196.0, 659.26]);
   p.osc.length = 0;
   p.doc.getElementById('bD').click();
-  assert.deepEqual(p.osc.map((hz) => +hz.toFixed(2)), [659.26, 196.0], 'descending: the high one first');
+  assert.deepEqual(centred(p), [659.26, 196.0], 'descending: the high one first');
   p.doc.getElementById('bC').click();
   assert.deepEqual(held(p), []);
   p.osc.length = 0;
@@ -241,7 +238,7 @@ test('the tuning dropdown moves each course\'s own frets (a zigzag in Pythagorea
   assert.ok(new Set(row).size > 1, `fret 6 breaks into a zigzag across the courses: ${row}`);
   assert.deepEqual(held(p), ['B4, course 3, fret 2'], 'a held position survives a switch');
   p.doc.getElementById('bT').click();
-  assert.equal(+p.osc[0].toFixed(3), +(440 * Math.pow(2, (203.91 - 0) / 1200)).toFixed(3), 'the held B4 sounds as the Pythagorean second above A (203.91 cents)');
+  assert.equal(centred(p, 3)[0], +(440 * Math.pow(2, (203.91 - 0) / 1200)).toFixed(3), 'the held B4 sounds as the Pythagorean second above A (203.91 cents)');
   sel.value = 'equal'; sel.dispatchEvent(new p.win.Event('change'));
   for (let f = 1; f <= 15; f++) for (let s = 0; s < 4; s++) assert.match(shift(f, s), /^translateX\(-?0(\.0+)?px\)$/, `equal: fret ${f} course ${s + 1} is on the base line`);
   assert.deepEqual(p.errors, []);
@@ -460,7 +457,7 @@ test('the controls sit in ONE row (compact labels, full names kept in aria-label
   const p = openPage();
   click(p, '.pt[aria-label="A4, course 3, fret 0"]');
   p.doc.getElementById('bT').click();
-  assert.deepEqual(p.osc.map((hz: number) => +hz.toFixed(2)), [440.0], 'Together still plays the held note');
+  assert.deepEqual(centred(p), [440.0], 'Together still plays the held note');
   p.doc.getElementById('bC').click();
   assert.deepEqual(held(p), [], 'Clear still releases');
 });
@@ -490,7 +487,8 @@ test('the mandolin page embeds the gadget at a height that holds the tallest sco
 const START_SHA = 'a673d54';
 const skipReason = pinSkipReason(ROOT, START_SHA, 'this repo');
 // 2026-11-13-1214-1: piano_keyboard.html got the new piano voice on purpose (src/piano-voice.test.ts); it is not byte-identical to this drain's start any more
-for (const other of ['guitar_fretboard.html', 'lute_fretboard.html', 'monochord.html', 'piano_keyboard_c_major_triad.html', 'rhythm_box.html']) {
+// 2026-11-15-1221: guitar, lute, monochord and the C major triad keyboard got the plucked / piano voice on purpose (src/plucked-voice.test.ts, src/piano-voice.test.ts); only rhythm_box.html is still pinned
+for (const other of ['rhythm_box.html']) {
   test(`P3: ${other} is byte-identical to the commit the drain started from`, { skip: skipReason ?? false }, () => {
     const was = execFileSync('git', ['-C', ROOT, 'show', `${START_SHA}:${HTML_DIR}/${other}`], { maxBuffer: 64 * 1024 * 1024 });
     assert.ok(Buffer.compare(was, fs.readFileSync(path.join(ROOT, HTML_DIR, other))) === 0, `${other} changed`);

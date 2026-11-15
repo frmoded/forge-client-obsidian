@@ -491,7 +491,8 @@ test('SHIFT CONTROL: the checks can fail - a broken note that is not raised, a b
 const START_SHA = 'c6285f9';
 const skipReason = pinSkipReason(ROOT, START_SHA, 'this repo');
 // 2026-11-13-1214-1: piano_keyboard.html is NOT in this list any more: it got the new piano voice on purpose (src/piano-voice.test.ts pins what changed)
-for (const other of ['guitar_fretboard.html', 'lute_fretboard.html', 'monochord.html', 'piano_keyboard_c_major_triad.html', 'rhythm_box.html', 'mandolin_fretboard.html']) {
+// 2026-11-15-1221: guitar, lute, mandolin, monochord and the C major triad keyboard got the plucked / piano voice on purpose (src/plucked-voice.test.ts, src/piano-voice.test.ts); only rhythm_box.html is still pinned
+for (const other of ['rhythm_box.html']) {
   test(`P3: ${other} is byte-identical to the commit the drain started from`, { skip: skipReason ?? false }, () => {
     const was = execFileSync('git', ['-C', ROOT, 'show', `${START_SHA}:${HTML_DIR}/${other}`], { maxBuffer: 64 * 1024 * 1024 });
     assert.ok(Buffer.compare(was, fs.readFileSync(path.join(ROOT, HTML_DIR, other))) === 0, `${other} changed`);

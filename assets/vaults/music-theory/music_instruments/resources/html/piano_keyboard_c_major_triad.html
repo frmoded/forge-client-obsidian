@@ -151,8 +151,78 @@
   }
   // --- end pure math -----------------------------------------------------
 
+  // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
+  // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
+  // A piano-like note by ADDITIVE SYNTHESIS: 10 partials per string with a slight inharmonic stretch (stiff strings: partial n at n*f*sqrt(1 + B*n*n), B from about 0.0003 in the treble to about 0.001
+  // in the bass, normalised so the fundamental is exactly f), each partial with its own decay (higher ones die faster, bass notes ring longer), TWO strings a couple of cents apart (the natural beating), a few
+  // ms of band-passed hammer noise scaled by velocity, a low-pass whose cutoff rises with velocity and falls with pitch, a quick release at the end of the note, and a soft limiter on the shared bus so a chord does not clip.
+  // `when` is an absolute time on the context's clock; `hz` is the pitch the gadget's tuning asks for (the pitch-dependent parts use the note number it is nearest to). Per note: 20 oscillators (string 1's partials 1..10, then string 2's) and no other source but the hammer noise.
+  var PIANO_PARTIALS = 10;
+  var PIANO_STRINGS = 2;
+  var PIANO_OSC_PER_NOTE = PIANO_PARTIALS * PIANO_STRINGS;
+  var PIANO_DETUNE_CENTS = [0, 2];                     // string 1 true, string 2 two cents sharp
+  var PIANO_ATTACK = 0.004;                            // s, the rise of the note
+  var PIANO_RELEASE = 0.02;                            // s, the end of a note is a quick fade, never a cut
+  function pianoClamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  function pianoMidi(hz) { return 69 + 12 * Math.log(hz / 440) / Math.LN2; }
+  function pianoB(midi) { return 0.0003 + 0.0007 * pianoClamp((84 - midi) / 60, 0, 1); }                               // C6 and above 0.0003, rising toward the bass (C2 about 0.00086, C1 and below 0.001)
+  function pianoPartialHz(f, n, B) { return n * f * Math.sqrt((1 + B * n * n) / (1 + B)); }                            // n = 1 is exactly f
+  function pianoDecay(midi, n) { return pianoClamp(4.2 - 0.045 * (midi - 36), 0.7, 4.2) / (1 + 0.8 * (n - 1)); }       // the time constant (s) of partial n: the bass rings longer, each higher partial dies faster
+  function pianoPartialAmp(n) { return 1 / Math.pow(n, 1.1); }                                                         // the spectrum falls off gently: a hammer-struck string keeps its upper partials
+  function pianoCutoff(midi, velocity) { return pianoClamp(1800 + 7200 * velocity - 35 * (midi - 60), 500, 12000); }  // Hz: harder = brighter, higher = darker
+  var pianoNoiseCache = null, pianoBusCache = null;
+  function pianoNoiseBuffer(ctx) {
+    if (!pianoNoiseCache || pianoNoiseCache.ctx !== ctx) {
+      var n = Math.max(1, Math.round(ctx.sampleRate * 0.012)), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0), seed = 1;
+      for (var i = 0; i < n; i++) { seed = (seed * 16807) % 2147483647; d[i] = seed / 1073741823.5 - 1; }        // a fixed noise burst: the same every time
+      pianoNoiseCache = { ctx: ctx, buffer: b };
+    }
+    return pianoNoiseCache.buffer;
+  }
+  function pianoBus(ctx) {                                                                                             // the shared output: a soft limiter, so a four-note chord does not clip
+    if (!pianoBusCache || pianoBusCache.ctx !== ctx) {
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      comp.connect(ctx.destination);
+      pianoBusCache = { ctx: ctx, node: comp };
+    }
+    return pianoBusCache.node;
+  }
+  function pianoVoice(ctx, destination, hz, when, length, velocity, level) {
+    var t0 = when, end = when + Math.max(0.05, length), midi = pianoMidi(hz), B = pianoB(midi);
+    var v = pianoClamp(velocity == null ? 0.8 : velocity, 0.05, 1), peak = pianoClamp(level == null ? 1 : level, 0, 2) * (0.1 + 0.2 * v);
+    var sumA = 0, n, s;
+    for (n = 1; n <= PIANO_PARTIALS; n++) sumA += pianoPartialAmp(n);
+    var out = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = pianoCutoff(midi, v); lp.Q.value = 0.7;
+    out.gain.setValueAtTime(0.0001, t0);
+    out.gain.linearRampToValueAtTime(peak, t0 + PIANO_ATTACK);
+    out.gain.setValueAtTime(peak, Math.max(end, t0 + PIANO_ATTACK + 0.001));
+    out.gain.setTargetAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001), PIANO_RELEASE / 4);                          // the quick release (about 20 ms to silence)
+    out.gain.setValueAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.15);
+    lp.connect(out); out.connect(destination);
+    for (s = 0; s < PIANO_STRINGS; s++) {
+      var fs = hz * Math.pow(2, PIANO_DETUNE_CENTS[s] / 1200);
+      for (n = 1; n <= PIANO_PARTIALS; n++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = pianoPartialHz(fs, n, B);
+        g.gain.setValueAtTime(pianoPartialAmp(n) / sumA / PIANO_STRINGS, t0);
+        g.gain.setTargetAtTime(0, t0 + PIANO_ATTACK, pianoDecay(midi, n));
+        o.connect(g); g.connect(lp);
+        o.start(t0); o.stop(Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.2);
+      }
+    }
+    var ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();                          // the hammer: a few ms of band-passed noise, harder = louder
+    ns.buffer = pianoNoiseBuffer(ctx);
+    bp.type = "bandpass"; bp.frequency.value = pianoClamp(1200 + 2400 * v + 12 * (midi - 60), 600, 6000); bp.Q.value = 1;
+    ng.gain.setValueAtTime(0.2 * v * v, t0); ng.gain.setTargetAtTime(0, t0 + 0.001, 0.003);
+    ns.connect(bp); bp.connect(ng); ng.connect(lp);
+    ns.start(t0); ns.stop(t0 + 0.02);
+  }
+  // ==== piano voice END ===========================================================================================================================
+
   if (typeof document === "undefined") {           // node test harness
-    module.exports = { A4_HZ: A4_HZ, LOW: LOW, HIGH: HIGH, STAGGER: STAGGER, midiToHz: midiToHz, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS, fifthChainCents: fifthChainCents, PURE_FIFTH: PURE_FIFTH, MEANTONE_FIFTH: MEANTONE_FIFTH, TUNINGS: TUNINGS, midiToName: midiToName, isBlack: isBlack, planPlay: planPlay };
+    module.exports = { PIANO_PARTIALS: PIANO_PARTIALS, PIANO_STRINGS: PIANO_STRINGS, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE, PIANO_ATTACK: PIANO_ATTACK, PIANO_RELEASE: PIANO_RELEASE, pianoB: pianoB, pianoMidi: pianoMidi, pianoPartialHz: pianoPartialHz, pianoDecay: pianoDecay, pianoPartialAmp: pianoPartialAmp, pianoCutoff: pianoCutoff, pianoBus: pianoBus, pianoVoice: pianoVoice, A4_HZ: A4_HZ, LOW: LOW, HIGH: HIGH, STAGGER: STAGGER, midiToHz: midiToHz, PYTH_CENTS: PYTH_CENTS, MEAN_CENTS: MEAN_CENTS, WERCK_CENTS: WERCK_CENTS, fifthChainCents: fifthChainCents, PURE_FIFTH: PURE_FIFTH, MEANTONE_FIFTH: MEANTONE_FIFTH, TUNINGS: TUNINGS, midiToName: midiToName, isBlack: isBlack, planPlay: planPlay };
     return;
   }
 
@@ -209,31 +279,20 @@
     }
   }
 
-  // --- Web Audio: OscillatorNode notes ----------------------------------
-  var ctx = null, wave = null;
+  // --- Web Audio: the piano voice (the block above: additive synthesis, two strings, a hammer, a soft limiter) ---------------------
+  var ctx = null;
   function audio() {
     if (!ctx) {
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
       ctx = new AC();
-      // same plucked-string-ish spectrum as the monochord: harmonics falling off as 1/n^2
-      var re = new Float32Array(7), im = new Float32Array(7);
-      for (var n = 1; n < 7; n++) im[n] = 1 / (n * n);
-      wave = ctx.createPeriodicWave(re, im);
     }
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
   }
   function pluck(hz, when, peak) {
     var c = audio(); if (!c) return;
-    var t0 = c.currentTime + (when || 0);
-    var o = c.createOscillator(), g = c.createGain();
-    o.setPeriodicWave(wave); o.frequency.value = hz;
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(peak, t0 + 0.01);   // quick attack
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 4.4);  // ring out
-    o.connect(g); g.connect(c.destination);
-    o.start(t0); o.stop(t0 + 4.6);
+    pianoVoice(c, pianoBus(c), hz, c.currentTime + (when || 0), 4.4, 0.8, peak / 0.28);   // peak 0.28 is one note; a chord passes less, so the level scales the same way as before
   }
   function play(mode) {
     var plan = planPlay(held, mode, tuning);   // read at play time, so held keys re-sound in the current tuning

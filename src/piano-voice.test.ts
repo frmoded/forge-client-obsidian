@@ -14,6 +14,10 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 const DIR = path.join(ROOT, 'assets/vaults/music-theory/music_instruments/resources/html');
 const FILES = ['piano_voice_demo.html', 'piano_keyboard.html', 'interval_widget.html', 'interval_pair.html', 'tune_shifter.html', 'interval_ear.html'] as const;
 const html = Object.fromEntries(FILES.map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')])) as Record<(typeof FILES)[number], string>;
+// 2026-11-15-1221: the 13 other piano gadgets (the C major triad keyboard and the 12 tuning-teaching variants) carry the same block, read from their own folders
+const VAULT_ROOT = path.join(ROOT, 'assets/vaults/music-theory');
+const VARIANTS = ['music_instruments/resources/html/piano_keyboard_c_major_triad.html', ...['equal', 'pythagorean', 'meantone', 'well'].flatMap((t) => ['', '_good', '_bad'].map((s) => `tuning/resources/html/piano_keyboard_${t}${s}.html`))];
+const variantHtml = Object.fromEntries(VARIANTS.map((f) => [f, fs.readFileSync(path.join(VAULT_ROOT, f), 'utf8')])) as Record<string, string>;
 const BEGIN = '// ==== piano voice BEGIN', END = '// ==== piano voice END';
 const blockOf = (h: string): string => { const a = h.indexOf(BEGIN), b = h.indexOf(END); assert.ok(a > 0 && b > a, 'the block is there'); return h.slice(a, h.indexOf('\n', b)); };
 const scriptOf = (h: string): string => /<script>([\s\S]*?)<\/script>/.exec(h)![1];
@@ -31,6 +35,17 @@ test('the voice block is IDENTICAL in the demo, the Piano gadget, the interval w
   for (const f of FILES) assert.equal(blockOf(html[f]), d, `${f} differs from the demo`);                // 2026-11-13-1215: the two new gadgets carry the same block
   assert.ok(d.length > 3000, 'non-vacuity: it is the whole block');
   assert.doesNotMatch(d, /document|window/, 'the block is pure: no DOM');
+});
+test('the voice block is IDENTICAL in the C major triad keyboard and the 12 tuning variants too (13 files), they no longer make the old beep, and their tuning math is untouched (the voice takes hz)', () => {
+  const d = blockOf(html['piano_voice_demo.html']); assert.equal(VARIANTS.length, 13);
+  for (const f of VARIANTS) {
+    assert.equal(blockOf(variantHtml[f]), d, `${f} differs from the demo`);
+    assert.doesNotMatch(scriptOf(variantHtml[f]), /createPeriodicWave|setPeriodicWave/, `${f} still has the old wave`);
+    const mod: { exports: any } = { exports: {} }; vm.runInNewContext(scriptOf(variantHtml[f]), { module: mod, Math, Array, Set, Float32Array });
+    assert.equal(typeof mod.exports.pianoVoice, 'function', f); assert.equal(mod.exports.PIANO_OSC_PER_NOTE, 20, f);
+    assert.equal(typeof mod.exports.midiToHz, 'function', `${f} still exports its tuning math`);
+    assert.ok(Math.abs(mod.exports.midiToHz(69, 'equal') - 440) < 1e-9, `${f}: A4 is 440 Hz in equal temperament`);
+  }
 });
 test('the gadgets no longer make the old single-oscillator beep: no PeriodicWave in either; both export the voice for the node harness', () => {
   for (const f of ['piano_keyboard.html', 'interval_widget.html'] as const) {

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plucked voice demo</title>
+<style>
+  /* Palette: the same values as piano_keyboard.html. NOT embedded in any page: open it to compare the two sounds by ear. */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --grid: #F2F2EC; --accent: #D72027; --highlight: #F8C54B; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); padding: 10px 12px 14px; }
+  .wrap { max-width: 660px; margin: 0 auto; }
+  h1 { font-size: 16px; color: var(--ink); margin: 0 0 4px; }
+  p { margin: 0 0 8px; font-size: 13px; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+  .row .label { flex: 0 0 12em; font-size: 13px; color: var(--ink); }
+  button { font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 6px 14px; cursor: pointer; min-height: 32px; }
+  button:hover { border-color: var(--ink); }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  button.new { background: var(--highlight); }
+  pre { margin: 10px 0 0; padding: 8px 10px; background: #fff; border: 1px solid var(--grid); border-radius: 6px; font-size: 12px; white-space: pre-wrap; min-height: 2em; }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper: #1f1f1f; --ink: #ececec; --muted: #b8b8b8; --axis: #8a8a8a; --grid: #333; }
+    button, pre { background: #2a2a2a; color: var(--ink); }
+    button.new { background: #8a6a1f; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Plucked voice: Old and New</h1>
+  <p>The same notes, two voices. <b>Old</b> is the single-oscillator pluck the gadgets had (six harmonics, one fixed spectrum); <b>New</b> is the plucked-string voice (a string as a sum of partials that each decay on their own, a pick, a mute at the end). A mandolin note is a PAIR of strings 5 cents apart: listen for the slow shimmer. <b>Chord</b> plays three notes about 50 ms apart (a strum). Listen on headphones or speakers, not a laptop's.</p>
+  <div id="rows"></div>
+  <div class="row"><button id="measure" type="button">Measure Old and New (offline render)</button></div>
+  <pre id="numbers" aria-live="polite"></pre>
+</div>
+<script>
+(function () {
+  "use strict";
+  function hzOf(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+  // ==== plucked voice BEGIN (2026-11-15-1221) =====================================================================================================
+  // The SAME block is in guitar_fretboard.html, lute_fretboard.html, mandolin_fretboard.html, monochord.html and plucked_voice_demo.html (each gadget is one self-contained file, so it is copied; a test pins them identical).
+  // A plucked string by MODAL SYNTHESIS: the string is a sum of its partials, each a sine that decays on its own. The model is a physical one: a string plucked at a fraction `pos` of its length has partial n at the amplitude
+  // |sin(n*pi*pos)| / n^1.2 (a pluck near the bridge is bright, one near the middle is hollow), stiffness stretches the partials a little (n*f*sqrt(1 + B*n*n)), and the string's damping makes each HIGHER partial die faster
+  // (T60 of partial n = T60 of the fundamental / (1 + damp*(n-1)^1.3)), so the tone starts bright and darkens as it rings, which is what a Karplus-Strong loop does too. It is built from sines because a DelayNode feedback loop in Web Audio always adds one render quantum (128 samples) to its delay (measured in Chrome: a loop set for 220 Hz sounds at 134 Hz), so a Karplus-Strong string can be tuned
+  // only below about 344 Hz at 44.1 kHz, and the high courses of a mandolin or a guitar would sound a wrong note. `kind` picks the
+  // instrument: guitar, lute (softer, shorter, a touch of body resonance), mandolin (bright and short, each COURSE is TWO strings 5 cents apart, so the beating is natural: the gadget sounds one note per course and the voice makes the
+  // pair), monochord (one long string, a clear fundamental). `when` is an absolute time on the context's clock; `hz` is the pitch the gadget's tuning asks for; `velocity` 0..1 sets the brightness AND the level; `level` (optional,
+  // default 1) scales the note so that a strummed chord does not clip (the gadgets pass 1/sqrt(notes)); the note is allowed to ring for `length` seconds, then a quick mute (about 40 ms) ends it. Nothing is scheduled before `when`.
+  // `gain` is each kind's loudness trim (the mandolin's two detuned strings add less than one string would). Per note: one oscillator per partial per string (at most 24), a few ms of band-passed noise for the pick, a low-pass, and for the lute a peaking filter for the body.
+  var PLUCK_KINDS = {
+    guitar:    { gain: 1.2, partials: 14, detune: [0],        t60: 2.8, damp: 0.55, pos: 0.18, B: 0.00004, noise: 0.16, cutoff: [2600, 9500],  body: null },
+    lute:      { gain: 1.0, partials: 10, detune: [0],        t60: 1.6, damp: 0.90, pos: 0.22, B: 0.00008, noise: 0.10, cutoff: [1500, 5200],  body: { hz: 240, q: 3, gain: 5 } },
+    mandolin:  { gain: 1.7, partials: 12, detune: [-2.5, 2.5], t60: 1.1, damp: 0.70, pos: 0.12, B: 0.00005, noise: 0.18, cutoff: [3200, 11500], body: null },
+    monochord: { gain: 1.0, partials: 16, detune: [0],        t60: 6.0, damp: 0.25, pos: 0.30, B: 0.00001, noise: 0.08, cutoff: [2600, 9500],  body: null }
+  };
+  var PLUCK_ATTACK = 0.002;                            // s, the rise of the note: a pluck is almost instant
+  var PLUCK_RELEASE = 0.04;                            // s, the mute at the end of a note is a quick fade, never a cut
+  var PLUCK_MAX_OSC = 24;                              // oscillators per note, the most any kind uses
+  function pluckClamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  function pluckKind(kind) { return PLUCK_KINDS.hasOwnProperty(kind) ? PLUCK_KINDS[kind] : PLUCK_KINDS.guitar; }
+  function pluckPartialCount(k, hz, sampleRate) { return Math.max(1, Math.min(k.partials, Math.floor(0.45 * (sampleRate || 44100) / hz))); }   // never a partial near the Nyquist limit
+  function pluckPartialHz(f, n, B) { return n * f * Math.sqrt((1 + B * n * n) / (1 + B)); }                                                  // n = 1 is exactly f
+  function pluckPartialAmp(k, n) { return (0.15 + Math.abs(Math.sin(n * Math.PI * k.pos))) / 1.15 / Math.pow(n, 1.2); }                         // the pluck position's comb, with a floor so no partial is exactly silent
+  function pluckT60(k, hz, n) { return k.t60 * pluckClamp(Math.pow(220 / hz, 0.35), 0.4, 2) / (1 + k.damp * Math.pow(n - 1, 1.3)); }           // seconds to fall 60 dB: lower strings ring longer, each higher partial dies faster
+  function pluckCutoff(k, hz, velocity) { return pluckClamp((k.cutoff[0] + (k.cutoff[1] - k.cutoff[0]) * velocity) * (1 + 0.15 * Math.log(hz / 220) / Math.LN2), 600, 16000); }   // Hz: harder = brighter
+  function pluckStringHz(f, cents) { return f * Math.pow(2, cents / 1200); }
+  var pluckNoiseCache = null, pluckBusCache = null;
+  function pluckNoiseBuffer(ctx) {
+    if (!pluckNoiseCache || pluckNoiseCache.ctx !== ctx) {
+      var n = Math.max(1, Math.round(ctx.sampleRate * 0.015)), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0), seed = 7;
+      for (var i = 0; i < n; i++) { seed = (seed * 16807) % 2147483647; d[i] = seed / 1073741823.5 - 1; }            // a fixed noise burst: the same every time
+      pluckNoiseCache = { ctx: ctx, buffer: b };
+    }
+    return pluckNoiseCache.buffer;
+  }
+  function pluckedBus(ctx) {                                                                                         // the shared output: a soft limiter, so a strummed chord does not clip
+    if (!pluckBusCache || pluckBusCache.ctx !== ctx) {
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      comp.connect(ctx.destination);
+      pluckBusCache = { ctx: ctx, node: comp };
+    }
+    return pluckBusCache.node;
+  }
+  function pluckedVoice(ctx, destination, hz, when, length, velocity, kind, level) {
+    if (!isFinite(hz) || hz <= 0) return;
+    var k = pluckKind(kind), t0 = when, end = Math.max(when + Math.max(0.05, length), when + PLUCK_ATTACK + 0.001);
+    var v = pluckClamp(velocity == null ? 0.8 : velocity, 0.05, 1), peak = pluckClamp(level == null ? 1 : level, 0, 2) * (0.12 + 0.26 * v) * k.gain;
+    var N = pluckPartialCount(k, hz, ctx.sampleRate), strings = k.detune.length, sumA = 0, n, s;
+    for (n = 1; n <= N; n++) sumA += pluckPartialAmp(k, n);
+    var out = ctx.createGain(), lp = ctx.createBiquadFilter(), tail = lp;
+    lp.type = "lowpass"; lp.frequency.value = pluckCutoff(k, hz, v); lp.Q.value = 0.7;
+    if (k.body) { var body = ctx.createBiquadFilter(); body.type = "peaking"; body.frequency.value = k.body.hz; body.Q.value = k.body.q; body.gain.value = k.body.gain; lp.connect(body); tail = body; }
+    out.gain.setValueAtTime(0.0001, t0);
+    out.gain.linearRampToValueAtTime(peak, t0 + PLUCK_ATTACK);
+    out.gain.setValueAtTime(peak, end);
+    out.gain.setTargetAtTime(0, end, PLUCK_RELEASE / 4);                                                             // the mute (about 40 ms to silence)
+    out.gain.setValueAtTime(0, end + 0.25);
+    tail.connect(out); out.connect(destination);
+    for (s = 0; s < strings; s++) {
+      var fs = pluckStringHz(hz, k.detune[s]);
+      for (n = 1; n <= N; n++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = pluckPartialHz(fs, n, k.B);
+        g.gain.setValueAtTime(pluckPartialAmp(k, n) / sumA / strings, t0);
+        g.gain.setTargetAtTime(0, t0 + PLUCK_ATTACK, pluckT60(k, hz, n) / 6.9);                                      // exp(-t/tau) falls 60 dB at 6.9 tau
+        o.connect(g); g.connect(lp);
+        o.start(t0); o.stop(end + 0.3);
+      }
+    }
+    var ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();                         // the pick: a few ms of band-passed noise, harder = louder
+    ns.buffer = pluckNoiseBuffer(ctx);
+    bp.type = "bandpass"; bp.frequency.value = pluckClamp(1800 + 3000 * v + 0.5 * hz, 900, 7000); bp.Q.value = 0.9;
+    ng.gain.setValueAtTime(k.noise * v * v, t0); ng.gain.setTargetAtTime(0, t0 + 0.001, 0.004);
+    ns.connect(bp); bp.connect(ng); ng.connect(lp);
+    ns.start(t0); ns.stop(t0 + 0.03);
+  }
+  // ==== plucked voice END =========================================================================================================================
+
+  // ---- the OLD voice, as the gadgets had it: one oscillator with six harmonics at 1/n^2, a 10 ms attack, a 4.4 s ring (kept here only to compare) ------------------------------------------------------
+  function oldVoice(ctx, destination, hz, when, peak) {
+    var re = new Float32Array(7), im = new Float32Array(7);
+    for (var n = 1; n < 7; n++) im[n] = 1 / (n * n);
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.setPeriodicWave(ctx.createPeriodicWave(re, im)); o.frequency.value = hz;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.exponentialRampToValueAtTime(peak, when + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, when + 4.4);
+    o.connect(g); g.connect(destination);
+    o.start(when); o.stop(when + 4.6);
+  }
+  var INSTRUMENTS = [
+    { id: "guitar", label: "Guitar-like (G3)", midis: [55, 59, 62] },
+    { id: "lute", label: "Lute-like (G3)", midis: [55, 59, 62] },
+    { id: "mandolin", label: "Mandolin-like pair (D4)", midis: [62, 66, 69] },
+    { id: "monochord", label: "Monochord (A3)", midis: [57] }
+  ];
+  function playNew(ctx, ins, chord, t) { var ms = chord ? ins.midis : [ins.midis[0]]; ms.forEach(function (m, i) { pluckedVoice(ctx, pluckedBus(ctx), hzOf(m), t + i * 0.05, 4.4, 0.8, ins.id, 1 / Math.sqrt(ms.length)); }); }
+  function playOld(ctx, ins, chord, t) { var ms = chord ? ins.midis : [ins.midis[0]]; ms.forEach(function (m, i) { oldVoice(ctx, ctx.destination, hzOf(m), t + i * 0.05, 0.28 / Math.sqrt(ms.length)); }); }
+  var ctx = null;
+  function audio() { if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); } if (ctx.state === "suspended") ctx.resume(); return ctx; }
+  var rows = document.getElementById("rows");
+  INSTRUMENTS.forEach(function (ins) {
+    var row = document.createElement("div"); row.className = "row";
+    var lab = document.createElement("span"); lab.className = "label"; lab.textContent = ins.label; row.appendChild(lab);
+    [["Old", false, playOld, ""], ["New", false, playNew, "new"], ["Old chord", true, playOld, ""], ["New chord", true, playNew, "new"]].forEach(function (b) {
+      if (ins.midis.length < 2 && b[1]) return;
+      var btn = document.createElement("button"); btn.type = "button"; btn.textContent = b[0]; btn.className = b[3]; btn.id = ins.id + "-" + b[0].toLowerCase().replace(" ", "-");
+      btn.addEventListener("click", function () { var c = audio(); if (c) b[2](c, ins, b[1], c.currentTime + 0.02); });
+      row.appendChild(btn);
+    });
+    rows.appendChild(row);
+  });
+  // ---- the numbers: an offline render of Old and New for each instrument: the peak, the RMS fall, the spectral centroid early and late ---------------------------------------------------------------
+  function centroid(samples, from, to, sr) {                      // the spectral centroid (Hz) of samples[from, to), by a direct DFT at 8 Hz steps up to 8 kHz on a Hann window
+    var n = to - from, w = new Float32Array(n), i, k, num = 0, den = 0;
+    for (i = 0; i < n; i++) w[i] = samples[from + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (n - 1)));
+    for (k = 40; k <= 8000; k += 8) {
+      var re = 0, im = 0, a = 2 * Math.PI * k / sr;
+      for (i = 0; i < n; i += 2) { re += w[i] * Math.cos(a * i); im -= w[i] * Math.sin(a * i); }
+      var mag = Math.sqrt(re * re + im * im); num += k * mag; den += mag;
+    }
+    return den > 0 ? num / den : 0;
+  }
+  function rms(s, from, to) { var a = 0, i; for (i = from; i < to; i++) a += s[i] * s[i]; return Math.sqrt(a / Math.max(1, to - from)); }
+  function render(fn, seconds) {
+    var sr = 44100, oc = new OfflineAudioContext(1, Math.round(sr * seconds), sr);
+    fn(oc); return oc.startRendering().then(function (buf) { return buf.getChannelData(0); });
+  }
+  function measureOne(ins) {
+    var sr = 44100, hz = hzOf(ins.midis[0]), S = 5, out = {};
+    return render(function (oc) { oldVoice(oc, oc.destination, hz, 0.01, 0.28); }, S).then(function (old) {
+      return render(function (oc) { pluckedVoice(oc, pluckedBus(oc), hz, 0.01, 2.0, 0.8, ins.id, 1); }, S).then(function (nw) {
+        function stats(s) {
+          var peak = 0, i; for (i = 0; i < s.length; i++) peak = Math.max(peak, Math.abs(s[i]));
+          var jump = 0, endAt = Math.round(sr * 2.05); for (i = endAt; i < endAt + Math.round(sr * 0.3); i++) jump = Math.max(jump, Math.abs(s[i] - s[i - 1]));
+          return { peak: peak, rmsEarly: rms(s, Math.round(sr * 0.2), Math.round(sr * 0.4)), rmsLate: rms(s, Math.round(sr * 1.4), Math.round(sr * 1.6)), centroidEarly: centroid(s, Math.round(sr * 0.015), Math.round(sr * 0.115), sr), centroidLate: centroid(s, Math.round(sr * 1.0), Math.round(sr * 1.1), sr), maxStepAfterMute: jump, lastSample: Math.abs(s[Math.round(sr * 2.5)]) };
+        }
+        return { id: ins.id, hz: hz, old: stats(old), now: stats(nw) };
+      });
+    });
+  }
+  function measureAll() { var res = [], p = Promise.resolve(); INSTRUMENTS.forEach(function (ins) { p = p.then(function () { return measureOne(ins); }).then(function (r) { res.push(r); }); }); return p.then(function () { return res; }); }
+  window.__measure = measureAll;
+  document.getElementById("measure").addEventListener("click", function () {
+    var out = document.getElementById("numbers"); out.textContent = "rendering...";
+    measureAll().then(function (res) {
+      out.textContent = res.map(function (r) { function f(x) { return Math.round(x * 1000) / 1000; } function line(n, s) { return "  " + n + ": peak " + f(s.peak) + ", RMS 0.3 s " + f(s.rmsEarly) + " -> 1.5 s " + f(s.rmsLate) + ", centroid " + Math.round(s.centroidEarly) + " Hz -> " + Math.round(s.centroidLate) + " Hz"; } return r.id + " (" + Math.round(r.hz) + " Hz)\n" + line("old", r.old) + "\n" + line("new", r.now); }).join("\n");
+    });
+  });
+})();
+</script>
+</body>
+</html>
