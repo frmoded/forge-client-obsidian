@@ -107,6 +107,7 @@ import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
 import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts';
 import { registerScoreFirst } from './score-first.ts';
 import { settingsStore } from './dialog-core.ts';
+import { readUiFlags, registerUiFlagsSource } from './ui-flags-core.ts';
 import { classifyMessageSource, messageDelivery, mirrorPanelErrors, routeMessage } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { EDITION } from './edition-selected.ts';
@@ -489,6 +490,7 @@ export default class ForgePlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+    registerUiFlagsSource(() => readUiFlags(this.settings));          // 2026-11-15-1217: the music tabs read these two switches when they mount
 
     // Drains 2026-08-05-1500/-1530/-1600 — the run-input widgets (piano / guitar fretboard /
     // chord builder) are a music-edition feature: registered through the seam. In the lean

@@ -2,6 +2,7 @@
 // phrase-core.ts, the DOM and its freshness in phrase-dom.ts, both unit-tested without Obsidian). It is registered, and opened, ONLY in a score-first vault (score-first.ts).
 //
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.
+import { uiFlags } from './ui-flags-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
@@ -77,7 +78,10 @@ export class PhraseView extends EditableFileView {
     this.release();
     // The note's text first, so the surface drawn is the right one for its kind (a mix gets the mix strip at once, not the extend strip for a moment). Unreadable = the default surface; load() says why.
     const initial = await this.app.vault.read(file).catch(() => undefined);
+    const flags = uiFlags();                           // 2026-11-15-1217: the two switches, read when the tab mounts
     this.handle = mountPhrase(this.contentEl, {
+      legacyControllers: flags.showLegacyControllers,
+      showInspector: flags.showInspector,
       path: file.path,
       title: file.basename,
       titleChanged: () => { this.refreshTitle(); },

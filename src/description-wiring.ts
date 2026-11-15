@@ -23,6 +23,8 @@ export interface DescriptionHooks {
   ownKey?: () => string | undefined;
   serviceVersion?: () => Promise<string | null>;
   dialogStore?: DescriptionPorts['dialogStore'];
+  /** 2026-11-15-1217: is the status line under the box shown (the legacy view)? */
+  showBoxStatus?: () => boolean;
 }
 
 export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks): DescriptionPorts {
@@ -40,6 +42,7 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     ownKey: () => hooks.ownKey?.(),
     serviceVersion: () => (hooks.serviceVersion ? hooks.serviceVersion() : Promise.resolve(null)),      // 2026-11-12-1206: an arrangement or composition sentence answered without a version asks /health once
     ...(hooks.dialogStore ? { dialogStore: hooks.dialogStore } : {}),
+    ...(hooks.showBoxStatus ? { showBoxStatus: hooks.showBoxStatus } : {}),
     ...(env.confirm ? { confirm: env.confirm } : {}),
   };
 }

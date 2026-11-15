@@ -21,7 +21,7 @@ import {
 } from './view-mode-core.ts';
 import { stopMidiPlayersIn } from './midi-player-teardown-core.ts';
 import { guardPlayerSounds } from './player-sounds-core.ts';
-import { waitForWidth } from './host-width-core.ts';
+import { waitForWidth, COMPACT_SCORE_INSET_PX, MIN_HOST_WIDTH_PX } from './host-width-core.ts';
 import { registerWidget } from './input-widget-core.ts';
 import { pianoWidget } from './input-widget-piano.ts';
 import { guitarFretboardWidget } from './input-widget-guitar-fretboard.ts';
@@ -338,7 +338,8 @@ function renderMusicXML(
       const sameXml = midiSourceXml === undefined || midiSourceXml === musicxml;
       const midiXml = midiSourceXml ?? musicxml;
       // M6 rider: a host that has not been laid out yet (a background tab, a pane still opening) measures a few pixels; engrave for the width it will be shown at, not for that.
-      const displayRender = await renderMusicXMLAndMIDI(musicxml, await waitForWidth(host), { noHeader: opts.compact === true });
+      const hostWidth = await waitForWidth(host);
+      const displayRender = await renderMusicXMLAndMIDI(musicxml, opts.compact === true ? Math.max(MIN_HOST_WIDTH_PX, hostWidth - COMPACT_SCORE_INSET_PX) : hostWidth, { noHeader: opts.compact === true, fit: opts.compact === true });     // 2026-11-15-1217: a score-first tab (compact) engraves for the width of its pane: it wraps into systems
       const svg = displayRender.svg;
       let midiBase64: string;
       let midiTotalMs: number;

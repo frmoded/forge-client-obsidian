@@ -35,6 +35,10 @@ proto.setText = function (t: string) { this.textContent = t; };
   let handle: any;
   handle = mountPhrase(parent, {
     path: PATH, title: NAME, plan: opts.plan ?? 'score',
+    // 2026-11-15-1217: the two switches of the music tabs, as PhraseView passes them (absent = on, as every older rig); `inspector: true` gives the tab the inspector's ports (the pin, the highlight) the way the plugin's view does
+    ...((opts as any).legacyControllers !== undefined ? { legacyControllers: (opts as any).legacyControllers } : {}),
+    ...((opts as any).showInspector !== undefined ? { showInspector: (opts as any).showInspector } : {}),
+    ...((opts as any).inspector ? { inspector: { openNote: (id: string) => { console.info(`[rig] open ${id}`); }, onPin: (pin: unknown) => { ((window as any).__pins ??= []).push(pin ? 'pinned' : 'released'); } } } : {}),
     initial: opts.phrase,                                          // M7: the first surface is the right one for the note's kind
     listBars: () => [...files.keys()].filter((k) => /^bars\/bar_\d+\.md$/.test(k)).map((k) => k.slice(5, -3)).sort(),
     now: () => performance.now(),
@@ -97,7 +101,7 @@ proto.setText = function (t: string) { this.textContent = t; };
         setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
         trace: (line) => { console.info(line); }, warn: (line) => { console.warn(line); },
         panes: () => [{ path: PATH, contentEl: parent, tab: true }],
-      }, hooks));
+      }, (opts as any).hideStatus ? { ...hooks, showBoxStatus: () => false } : hooks));
       (window as any).__descCtl.inspect(PATH);
       await handle.load();
       return;

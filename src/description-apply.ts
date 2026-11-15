@@ -47,6 +47,8 @@ export interface DescriptionPorts {
   ownKey?(): string | undefined;
   /** 2026-11-12-1206: the service's /health version, or null. Asked only when an answer to an arrangement or composition sentence carried no version and was a refusal (a service before 0.2.42): to tell an old service from a sentence it cannot plan. */
   serviceVersion?(): Promise<string | null>;
+  /** 2026-11-15-1217: is the one status line under the box (2026-11-13-1211) shown? The dialog says every outcome in words, so the default view drops the duplicate; `false` = never drawn (the busy state and the dialog are untouched). Absent = shown, as before. Asked at every outcome (the setting is read live). */
+  showBoxStatus?(): boolean;
   /** 2026-11-13-1214: where the dialog's history is kept per note (the plugin's data.json); absent = the session's own memory. */
   dialogStore?: DialogStore;
   /** The clock of the dialog's time stamps (tests). */
@@ -191,7 +193,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   };
   const boxText = (path: string): string | undefined => { for (const b of boxes.values()) if (b.path === path) return b.handle.state().text; return undefined; };
   const setBoxBusy = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setBusy(message); };
-  const setBoxNote = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setNote(message); };
+  const setBoxNote = (path: string, message: string | null): void => { if (message !== null && ports.showBoxStatus && !ports.showBoxStatus()) return; for (const b of boxes.values()) if (b.path === path) b.handle.setNote(message); };        // 2026-11-15-1217: the status line is the legacy view; a clear (null) always goes through
   /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
   const refreshBoxes = async (path: string): Promise<void> => {
     if (disposed) return;

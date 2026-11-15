@@ -1,6 +1,7 @@
 // score_first M10 slice 1 (drain 2026-10-29-0820, design 4.10) - the Obsidian-coupled half of kits and arrangements: the arrangement tab (a Score drawn by the code that draws every phrase, nothing else on it), the two dialogs' Modal frames, and the commands **New kit**,
 // **New arrangement** and **Open arrangement as Score**. The decisions are in kit-core.ts / arrangement-core.ts / kit-arrangement-flow-core.ts, the dialogs' DOM in kit-dom.ts / arrangement-dom.ts, all unit-tested without Obsidian. Registered ONLY in a score-first vault
 // (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3). 2026-10-29-0910: the tab's one write is the row of controls per kit (Mute, Solo, volume), which edits the note through the builders New arrangement uses. An arrangement is otherwise edited as its note.
+import { uiFlags } from './ui-flags-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { handEditRefused, handEditStatusSettled } from './hand-edit-refusal-core.ts';
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
@@ -94,7 +95,9 @@ export class ArrangementView extends EditableFileView {
       });
     }
     // the row per kit sits under the strip (2026-11-03-1155-93: all of it under the Score, which is first); a change goes out as one batch after a quiet moment and is written to the note (writeSettings), which redraws everything below
-    this.controls = mountArrangementControls(this.contentEl, { commit: (patches) => { void this.writeSettings(patches); }, trace: (line) => { console.info(line); }, setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number) });
+    const flags = uiFlags();                           // 2026-11-15-1217: the two switches, read when the tab mounts
+    // the row per kit INPUTS (kit, volume, mute, solo): with the legacy controllers off it is built and wired in a detached holder, never put on the page
+    this.controls = mountArrangementControls(flags.showLegacyControllers ? this.contentEl : this.contentEl.ownerDocument.createElement('div'), { commit: (patches) => { void this.writeSettings(patches); }, trace: (line) => { console.info(line); }, setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number) });
     this.statusEl = this.contentEl.createDiv({ cls: 'forge-phrase-status' });             // 2026-10-31-1120: a write the note refused says why here, as a phrase tab's strip does
     this.statusEl.setAttribute('role', 'status');
     this.showControls(text);
@@ -105,6 +108,7 @@ export class ArrangementView extends EditableFileView {
     };
     const arrangementNote = phraseNoteId(file.path);
     this.area = attachScoreArea(this.contentEl, this.plan, {
+      showInspector: flags.showInspector,
       title: file.basename,
       first: true,                                      // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the sentence, the pin line, the strip and the controls go under it
       markPending: true,                                // 2026-10-31-1110: a render takes seconds; the Score on screen is dimmed from the moment the note changes until the new one replaces it

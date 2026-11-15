@@ -9,9 +9,18 @@ export const MIN_HOST_WIDTH_PX = 20;
 export const DEFAULT_PAGE_WIDTH = 2100;
 export const VEROVIO_MIN_PAGE_WIDTH = 100;
 
-export function pageWidthFor(hostWidthPx?: number): number {
+/** The engraving scale (Verovio `scale`, percent): the SVG is `pageWidth * scale / 100` px wide, so a page of `host * 100 / scale` is exactly as wide as its host. */
+export const ENGRAVING_SCALE = 40;
+/** 2026-11-15-1217: the page width that makes the engraving as wide as its host at its natural size (2.5 at scale 40): the Score then WRAPS into systems that fill the pane and the tab scrolls vertically. */
+export const FIT_PAGE_FACTOR = 100 / ENGRAVING_SCALE;
+
+/** 2026-11-15-1217: a compact (score-first) Score sits in `.forge-output-musicxml.forge-score-compact`, which has 8 px of padding each side (styles.css): the engraving is made that much narrower than its host, so it fills the pane without a horizontal scrollbar. */
+export const COMPACT_SCORE_INSET_PX = 16;
+
+/** The page width Verovio is asked for. `factor` is the multiple of the host's width: 5 (the default) engraves a page twice as wide as the host at natural size, which the CSS then shrinks to fit; FIT_PAGE_FACTOR engraves for the host's own width (the score-first tabs). */
+export function pageWidthFor(hostWidthPx?: number, factor = 5): number {
   if (typeof hostWidthPx !== 'number' || !Number.isFinite(hostWidthPx) || hostWidthPx < MIN_HOST_WIDTH_PX) return DEFAULT_PAGE_WIDTH;
-  return Math.max(VEROVIO_MIN_PAGE_WIDTH, hostWidthPx * 5);
+  return Math.max(VEROVIO_MIN_PAGE_WIDTH, hostWidthPx * factor);
 }
 
 export interface WidthHost {

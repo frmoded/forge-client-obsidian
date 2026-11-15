@@ -80,6 +80,7 @@ for (const edition of ['lean', 'music'] as const) {
     const plan = { kind: 'extend', bar: 'bar_007', bars: 12, tempo_change_pct: -10 };
     (globalThis as any).__shimFns = { requestUrl: async (req: any) => (String(req.url).endsWith('/plan') ? { status: 200, json: { ok: true, parsed_ok: true, plan, error: null } } : undefined) };
     const plugin = await loadRealOnload(real, app);
+    Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true });        // 2026-11-15-1217: the older whole-view tests are about the strips and the inspector: they run with both switches ON (the default is off: src/music-tabs-flags.test.ts)
     await clock.advance(60);
     if (opts.service) { plugin.target.settings.transpileServiceUrl = 'https://svc.example'; plugin.target.settings.transpileServiceToken = 'tok-123'; plugin.target.settings.useOwnAnthropicKey = false; plugin.target.settings.ownAnthropicKey = ''; }
     real.setPyodideHostSingleton({ getInstance: async () => ({ computePhraseScore: () => new Promise(() => {}) }) });

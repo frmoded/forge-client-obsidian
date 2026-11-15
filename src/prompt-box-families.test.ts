@@ -241,5 +241,5 @@ test('WIRING: the plugin\'s description controller is given the service-version 
   const src = fs.readFileSync(path.resolve(import.meta.dirname, 'score-first.ts'), 'utf8');
   const at = src.indexOf('createDescriptionController(descriptionPortsFor(');
   assert.ok(at > 0, 'score-first.ts builds the controller through descriptionPortsFor');
-  assert.match(src.slice(at, at + 3500), /\}, hooks\)\);/, 'and hands it the plugin\'s hooks');
+  assert.match(src.slice(at, at + 3500), /\}, \{ \.\.\.hooks, showBoxStatus: /, 'and hands it the plugin\'s hooks (2026-11-15-1217: plus the status-line switch)');
 });

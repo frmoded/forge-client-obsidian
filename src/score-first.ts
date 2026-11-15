@@ -4,6 +4,7 @@
 // person can see: no "New bar" command and no ribbon button are registered. The vault's profile is a constant, so both are added once, when the workspace is ready; a forge.toml
 // edited mid-session to ADD the profile takes effect on the next load.
 
+import { uiFlags } from './ui-flags-core.ts';
 import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { registerRestoreParticipants, type RestoreParticipant } from './restore-hold-core.ts';
 import { deferredTabName } from './deferred-tab-title-core.ts';
@@ -80,6 +81,8 @@ export interface ScoreFirstHooks {
   planConfigured?(): boolean;
   /** 2026-11-13-1214: where the dialog's history, height and dock are kept (the plugin's data.json). Absent = the session's own memory. */
   dialogStore?: import('./dialog-core.ts').DialogStore;
+  /** 2026-11-15-1217: is the status line under the prompt box shown? Absent = the default view (the legacy switch decides). */
+  showBoxStatus?(): boolean;
 }
 
 export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void {
@@ -461,7 +464,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return out;
         },
         confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
-      }, hooks));
+      }, { ...hooks, showBoxStatus: hooks.showBoxStatus ?? (() => uiFlags().showLegacyControllers) }));
       plugin.registerEvent(app.vault.on('modify', (f) => { descriptions.modified(f.path); }));
       plugin.registerEvent(app.workspace.on('file-open', (f) => { if (f) void descriptions.inspect(f.path); }));
       // 2026-11-03-1155-8 (C): the bar is computed from the note when a pane OPENS and when a restored layout settles, not only heard from a modify (a reload brought the panes back and a custom note had no banner until `touch`).

@@ -54,6 +54,10 @@ export interface ForgeSettings {
    *  Beat Box by default. Off = Phase 5b behaviour (the "Open as Beat Box" header button only). */
   openRhythmNotesInBeatBox: boolean;
   /** 2026-11-13-1214: the dialog above the prompt box: the last 50 entries per note (keyed by note path, never in the note), the dialog's height in px, and where it is docked ('bottom' | 'right'). Read through dialog-core's checks, never trusted as stored. */
+  /** 2026-11-15-1217: show the strips that INPUT a value (Bars / Style / Tempo, the mix and morph strips, the arrangement's rows, the notebooks): off by default, read when a tab is (re)opened. */
+  showLegacyControllers: boolean;
+  /** 2026-11-15-1217: show the "Where did this bar come from?" inspector box under the Score: off by default, read when a tab is (re)opened. */
+  showInspector: boolean;
   dialogHistory: Record<string, unknown>;
   dialogHeight: number;
   dialogDock: 'bottom' | 'right';
@@ -72,6 +76,8 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   panelStripCollapsed: false,
   panelStripFraction: 0.33,
   openRhythmNotesInBeatBox: true,
+  showLegacyControllers: false,
+  showInspector: false,
   dialogHistory: {},
   dialogHeight: 112,
   dialogDock: 'bottom',
@@ -198,6 +204,38 @@ export class ForgeSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.openRhythmNotesInBeatBox)
           .onChange(async (value) => {
             this.plugin.settings.openRhythmNotesInBeatBox = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // --- 2026-11-15-1217: the music tabs ---------------------------
+    new Setting(containerEl).setName('Music tabs').setHeading();
+
+    new Setting(containerEl)
+      .setName('Show legacy controllers (editing strips)')
+      .setDesc(
+        'The prompt box and the dialog do the inputting now. On: the strips that input a value come back under the Score of a phrase, arrangement and composition tab '
+        + '(Bars, Style, Tempo; the mix, morph and transform strips; the arrangement rows; the notebooks). Takes effect when a tab is reopened.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.showLegacyControllers)
+          .onChange(async (value) => {
+            this.plugin.settings.showLegacyControllers = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Show the bar inspector')
+      .setDesc(
+        'The "Where did this bar come from?" box under the Score. Off by default (clicking a bar still pins and highlights it). Takes effect when a tab is reopened.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.showInspector)
+          .onChange(async (value) => {
+            this.plugin.settings.showInspector = value;
             await this.plugin.saveSettings();
           })
       );

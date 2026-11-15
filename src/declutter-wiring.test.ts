@@ -27,16 +27,17 @@ test('the Beat Box tab asks for it inside the score panel, which exists only for
 });
 
 test('`headless` (no Inspector section) is the bar\'s Beat Box tab and nothing else; the phrase, arrangement and composition tabs keep their Inspector', () => {
-  assert.deepEqual(having(/\bheadless: true\b/), ['rhythm-edit-view.ts']);
-  for (const f of ['phrase-view.ts', 'kits-arrangements.ts', 'compositions.ts']) assert.doesNotMatch(text(f), /\bheadless:/, f);
+  // 2026-11-15-1217 (rewritten: the list said only rhythm-edit-view.ts): the default view of the phrase, arrangement and composition tabs has no inspector BOX (SHOW_INSPECTOR, off); that is ONE place, live-score-dom.ts, turning the inspector headless when `showInspector === false`. The three tabs still never set `headless` themselves: they pass the switch.
+  assert.deepEqual(having(/\bheadless: true\b/), ['live-score-dom.ts', 'rhythm-edit-view.ts']);
+  for (const f of ['phrase-view.ts', 'kits-arrangements.ts', 'compositions.ts']) { assert.doesNotMatch(text(f), /\bheadless:/, f); assert.match(text(f), /uiFlags\(\)/, `${f} reads the switch`); }
 });
 
 test('the music edition draws the compact chrome only when asked: the Verovio header is dropped, the toolbar made, the host marked, all from `opts.compact`', () => {
   const full = text('music-edition.full.ts');
   assert.equal((full.match(/opts\.compact === true/g) ?? []).length >= 3, true, 'every compact branch asks opts.compact');
-  assert.match(full, /renderMusicXMLAndMIDI\(musicxml, await waitForWidth\(host\), \{ noHeader: opts\.compact === true \}\)/);
+  assert.match(full, /renderMusicXMLAndMIDI\(musicxml, opts\.compact === true \? Math\.max\(MIN_HOST_WIDTH_PX, hostWidth - COMPACT_SCORE_INSET_PX\) : hostWidth, \{ noHeader: opts\.compact === true, fit: opts\.compact === true \}\)/);
   assert.match(text('verovio.ts'), /\.\.\.\(noHeader \? \{ header: 'none' \} : \{\}\)/);
-  assert.match(text('verovio.ts'), /applyOptions\(toolkit, hostWidthPx, opts\.noHeader === true\);/, 'the flag reaches the toolkit options (not dropped on the way)');
+  assert.match(text('verovio.ts'), /applyOptions\(toolkit, hostWidthPx, opts\.noHeader === true, opts\.fit === true\);/, 'the flag reaches the toolkit options (not dropped on the way)');
   assert.match(text('music-edition.ts'), /compact\?: boolean;/);
 });
 

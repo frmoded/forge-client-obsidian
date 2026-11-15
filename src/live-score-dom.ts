@@ -12,6 +12,7 @@
 // happens when an <svg> shows up in it (or after READY_TIMEOUT_MS, so a renderer that never produces one cannot freeze the old score forever): the old host's player is silenced
 // and the old host removed in the same tick the new one is revealed. A newer draw while one is pending replaces the pending one.
 
+import { MIN_HOST_WIDTH_PX } from './host-width-core.ts';
 import { createLiveScore, type LiveScore, type LiveScoreDeps, type LiveScoreTiming, type LiveScoreView } from './live-score-core.ts';
 import { LEAN_SCORE_NOTE, type ScorePanelPlan } from './score-first-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
@@ -55,6 +56,9 @@ export function scoreSlot(parent: HTMLElement): Node | null {
 }
 
 export const SCORE_QUIET_CLASS = 'forge-rhythm-edit-score-quiet';
+/** 2026-11-15-1217: a pane that changes width by less than this (a scrollbar) does not make the Score engrave again; the wait after the last change before it does. */
+export const RELAYOUT_MIN_DELTA_PX = 24;
+export const RELAYOUT_DEBOUNCE_MS = 250;
 
 export interface ScorePanel {
   readonly el: HTMLElement;
@@ -63,6 +67,10 @@ export interface ScorePanel {
   /** Where the inspector goes: always the LAST child of the panel, so engravings (inserted before it) stay above it. */
   readonly slot: HTMLElement;
   readonly view: LiveScoreView;
+  /** 2026-11-15-1217: engrave the Score that is on screen AGAIN (its own payload, no engine run) for the width the pane has now; the first system that was in view stays where it was (`keep` is told before and after). A no-op with nothing shown. */
+  redraw(keep?: { before(): void; after(): void }): void;
+  /** The width the Score was last engraved for (px of its host), 0 = nothing shown. */
+  readonly drawnWidth: () => number;
   dispose(): void;
 }
 
@@ -89,6 +97,9 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   let current: HTMLElement | null = null;
   let pending: { host: HTMLElement; cancel: () => void } | null = null;
   let stale = false;                                   // markPending: the score on screen is not the latest (the flag follows whichever host is current)
+  let shownPayload: Record<string, unknown> | null = null;    // the payload of the Score on screen (redraw engraves it again)
+  let shownWidth = 0;
+  let afterSwap: (() => void) | null = null;
 
   const dropPending = () => {
     if (!pending) return;
@@ -110,8 +121,10 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
     next.classList.toggle(SCORE_HOST_STALE_CLASS, stale);
     const old = current;
     current = next;
+    shownPayload = payload; shownWidth = next.clientWidth;
     if (old) { deps.onHidden?.(old); deps.stopPlayers(old); old.remove(); }
     deps.onShown?.(next, payload);                     // the map and the engraving arrive together
+    const f = afterSwap; afterSwap = null; f?.();
   };
 
   const view: LiveScoreView = {
@@ -151,6 +164,13 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
     slot,
     view,
     quiet(text) { quietEl.textContent = text; },
+    drawnWidth: () => shownWidth,
+    redraw(keep) {
+      if (!shownPayload || !current) return;
+      keep?.before();
+      if (keep) afterSwap = () => keep.after();
+      view.draw(shownPayload);
+    },
     dispose() {
       dropPending();
       removeCurrent();
@@ -193,6 +213,8 @@ export interface ScoreAreaPorts extends ScorePanelDeps {
   produce?: LiveScoreDeps['produce'];
   /** score_first M3: present = the Score gets its provenance map and the inspector (hover, pin, lineage, hover-link). Absent = the Score is exactly the M1 Score. */
   inspector?: ScoreInspectorPorts;
+  /** 2026-11-15-1217 (SHOW_INSPECTOR): `false` = the inspector runs exactly as ever (the map, hover, pin, the highlight, the arrow keys) but its box is never put on the page and it says nothing under the Score. Absent or `true` = as before. */
+  showInspector?: boolean;
   /** Optional: report how long the provenance map took to build (ms). */
   onProvenanceMs?(ms: number): void;
   /** score_first M4: present = the panel shows the message line (the output panel stays closed; see score-first-messages-core.ts). Absent = neither exists. */
@@ -246,8 +268,29 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     onShown: (host, payload) => { messages?.drawSucceeded(); const r = results.get(payload); if (r && inspector) inspector.onShown(host, r); ports.onShown?.(host, payload); },
     onHidden: (host) => { inspector?.onHidden(host); ports.onHidden?.(host); },
   });
-  if (ports.inspector) inspector = createScoreInspector(panel.slot, ports.inspector.headless === true ? { ...ports.inspector, say: (text) => { panel.quiet(text); } } : ports.inspector);
+  if (ports.inspector) {
+    const hidden = ports.showInspector === false && ports.inspector.headless !== true;                     // 2026-11-15-1217: the default view: the same inspector, its box not on the page, no sentence under the Score
+    inspector = createScoreInspector(panel.slot, ports.inspector.headless === true ? { ...ports.inspector, say: (text) => { panel.quiet(text); } } : hidden ? { ...ports.inspector, headless: true, say: () => {} } : ports.inspector);
+  }
   if (ports.messages) messages = mountScoreMessages(panel.el.firstElementChild as HTMLElement, ports.messages, { setTimer: ports.setTimer, clearTimer: ports.clearTimer });
+  // 2026-11-15-1217: the Score is engraved for the width of its pane (it wraps into systems and the tab scrolls vertically). When the pane's width changes (the window, the right dock) the Score on screen is engraved AGAIN for the new width, from its own payload (no engine run),
+  // after a quiet moment; a change smaller than RELAYOUT_MIN_DELTA_PX (a scrollbar appearing) is ignored, so it never chases itself. The tab's vertical scroll keeps its relative place. The dialog's height changes the height only: no width, no relayout.
+  const RO = (parent.ownerDocument.defaultView as (Window & { ResizeObserver?: typeof ResizeObserver }) | null)?.ResizeObserver;
+  let relayoutTimer: unknown = null;
+  const shownHostWidth = (): number => (panel.el.querySelector(`.${SCORE_HOST_CLASS}:not(.${SCORE_HOST_PENDING_CLASS})`) as HTMLElement | null)?.clientWidth ?? 0;
+  const relayout = (): void => {
+    relayoutTimer = null;
+    const now = shownHostWidth();
+    if (now < MIN_HOST_WIDTH_PX || Math.abs(now - panel.drawnWidth()) < RELAYOUT_MIN_DELTA_PX) return;
+    const scroller = panel.el.closest('.forge-chat-body') as HTMLElement | null;
+    let ratio = 0;
+    panel.redraw(scroller ? {
+      before: () => { const room = scroller.scrollHeight - scroller.clientHeight; ratio = room > 0 ? scroller.scrollTop / room : 0; },
+      after: () => { const room = scroller.scrollHeight - scroller.clientHeight; scroller.scrollTop = ratio * Math.max(0, room); },
+    } : undefined);
+  };
+  const resizeObserver = typeof RO === 'function' ? new RO(() => { if (relayoutTimer !== null) ports.clearTimer(relayoutTimer); relayoutTimer = ports.setTimer(relayout, RELAYOUT_DEBOUNCE_MS); }) : null;
+  resizeObserver?.observe(panel.el);
   const live: LiveScore = createLiveScore({
     compute,
     produce,
@@ -267,6 +310,6 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
     refuse: (data, message) => live.refuse(data, message),
     gridHover: (target) => inspector?.gridHover(target),
     lightAll: (ids) => inspector?.lightAll(ids),
-    dispose() { live.dispose(); inspector?.dispose(); messages?.dispose(); panel.dispose(); },
+    dispose() { resizeObserver?.disconnect(); if (relayoutTimer !== null) ports.clearTimer(relayoutTimer); live.dispose(); inspector?.dispose(); messages?.dispose(); panel.dispose(); },
   };
 }

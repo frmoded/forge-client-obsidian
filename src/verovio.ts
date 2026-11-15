@@ -2,7 +2,7 @@
 // async; we kick it off only when a MusicXML result arrives, then reuse the
 // toolkit for subsequent renders.
 
-import { pageWidthFor } from './host-width-core.ts';
+import { ENGRAVING_SCALE, FIT_PAGE_FACTOR, pageWidthFor } from './host-width-core.ts';
 
 let toolkitPromise: Promise<any> | null = null;
 
@@ -23,8 +23,8 @@ async function getToolkit(): Promise<any> {
   return toolkitPromise;
 }
 
-function applyOptions(toolkit: any, hostWidthPx?: number, noHeader = false) {
-  const targetWidth = pageWidthFor(hostWidthPx);   // M6 rider: a host that has not been laid out (16 px) used to ask for pageWidth 80, which Verovio refuses (minimum 100)
+function applyOptions(toolkit: any, hostWidthPx?: number, noHeader = false, fit = false) {
+  const targetWidth = pageWidthFor(hostWidthPx, fit ? FIT_PAGE_FACTOR : 5);          // 2026-11-15-1217: a score-first tab engraves for its own width (wrapped systems, vertical scroll)   // M6 rider: a host that has not been laid out (16 px) used to ask for pageWidth 80, which Verovio refuses (minimum 100)
   toolkit.setOptions({
     adjustPageHeight: true,
     breaks: 'auto',
@@ -33,7 +33,7 @@ function applyOptions(toolkit: any, hostWidthPx?: number, noHeader = false) {
     pageMarginBottom: 50,
     pageMarginLeft: 50,
     pageMarginRight: 50,
-    scale: 40,
+    scale: ENGRAVING_SCALE,
     ...(noHeader ? { header: 'none' } : {}),       // 2026-11-05-1189: no engraved title (the work title of the MusicXML) above a score-first Score
   });
 }
@@ -50,9 +50,9 @@ export interface RenderedScore {
   timeMap: TimeBucket[];
 }
 
-export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: number, opts: { noHeader?: boolean } = {}): Promise<RenderedScore> {
+export async function renderMusicXMLAndMIDI(musicxml: string, hostWidthPx?: number, opts: { noHeader?: boolean; fit?: boolean } = {}): Promise<RenderedScore> {
   const toolkit = await getToolkit();
-  applyOptions(toolkit, hostWidthPx, opts.noHeader === true);
+  applyOptions(toolkit, hostWidthPx, opts.noHeader === true, opts.fit === true);
   toolkit.loadData(musicxml);
   // v0.2.140 — multi-page rendering. Pre-v0.2.140 only rendered
   // page 1; longer scores (e.g. forge-music/murmuration with ~30

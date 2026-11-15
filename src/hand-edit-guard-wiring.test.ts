@@ -102,6 +102,7 @@ for (const edition of ['lean', 'music'] as const) {
     (Object.prototype as any).addAction = function () { return { remove() {} }; };
     const g: any = globalThis; const savedRaf = g.requestAnimationFrame; g.requestAnimationFrame = (fn: () => void) => setImmediate(fn);
     const plugin = await loadRealOnload(real, app);
+    Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true });        // 2026-11-15-1217: these older whole-view tests are about the strips / the inspector: both switches ON (the default is off: music-tabs-flags.test.ts, score-first-order-wiring.test.ts)
     await clock.advance(60);
     real.setPyodideHostSingleton({ getInstance: async () => ({ computePhraseScore: () => new Promise(() => {}), computeArrangementScore: () => new Promise(() => {}) }) });          // the engine never answers: no Score is drawn, the strip is what is tested
     const open = async (type: string, file: string) => {

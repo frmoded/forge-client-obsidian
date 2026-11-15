@@ -70,6 +70,7 @@ for (const edition of ['lean', 'music'] as const) {
       metadataCache: { resolvedLinks: {}, on: () => ({}) }, plugins: {},
     };
     const plugin = await loadRealOnload(real, app);
+    Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true });        // 2026-11-15-1217: these older whole-view tests are about the strips / the inspector: both switches ON (the default is off: music-tabs-flags.test.ts, score-first-order-wiring.test.ts)
     await clock.advance(60);
     // the stand-in Modal: open() builds the content element and calls onOpen, close() calls onClose, as Obsidian does
     const modals: any[] = [];
@@ -229,7 +230,7 @@ for (const edition of ['lean', 'music'] as const) {
 
   test(`[${edition}] the view mounts the row of controls between the strip and the Score, hands changes to writeSettings, and takes it down with the tab (a mechanism pin of the wiring that cannot run without Obsidian)`, () => {
     const ka = fs.readFileSync(path.join(ROOT, 'src/kits-arrangements.ts'), 'utf8');
-    const strip = ka.indexOf('mountArrangementStrip(this.contentEl'), controls = ka.indexOf('mountArrangementControls(this.contentEl'), score = ka.indexOf('attachScoreArea(this.contentEl');
+    const strip = ka.indexOf('mountArrangementStrip(this.contentEl'), controls = ka.indexOf('mountArrangementControls(flags.showLegacyControllers ? this.contentEl'), score = ka.indexOf('attachScoreArea(this.contentEl');
     assert.ok(strip > 0 && controls > strip && score > controls, 'strip, then controls, then the Score');
     assert.match(ka, /commit: \(patches\) => \{ void this\.writeSettings\(patches\); \}/);
     assert.match(ka, /const file = this\.file;\n    if \(!file \|\| this\.disposed \|\| patches\.length === 0\) return;/, 'the file is captured before the await (L59)');

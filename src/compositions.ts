@@ -2,6 +2,7 @@
 // of the sections, a click on a bar following its lineage to the section and then to the note the section plays), and the four commands: **New composition**, **Open composition as Score**, **Open the piece** (the root composition's
 // Score with its notes pane) and **Make this composition the root of the piece**. The decisions are in composition-core.ts / composition-nav-core.ts / composition-strip-core.ts / composition-flow-core.ts / composition-root-core.ts, the DOM in
 // composition-dialog-dom.ts / composition-strip-dom.ts, all unit-tested without Obsidian (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3).
+import { uiFlags } from './ui-flags-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
@@ -104,7 +105,9 @@ export class CompositionView extends EditableFileView {
     const compositionNote = phraseNoteId(file.path);
     const computeArrangement = (data: Parameters<typeof computeArrangementScoreViaEngine>[0], t: string) => computeArrangementScoreViaEngine(data, t);
     const computeComposition = (data: Parameters<typeof computeCompositionScoreViaEngine>[0], t: string) => computeCompositionScoreViaEngine(data, t);
+    const flags = uiFlags();                           // 2026-11-15-1217: the two switches, read when the tab mounts
     this.area = attachScoreArea(this.contentEl, this.plan, {
+      showInspector: flags.showInspector,
       title: file.basename,
       first: true,                                      // 2026-11-03-1155-93 (R6): the Score is the first thing in the tab; the header and the tree go under it
       // a click on a bar pins it (the inspector shared with the phrase tabs, with the opt-in flags a score-first surface sets: P3), and the notes pane follows. Only with the hooks a pair needs.
@@ -158,7 +161,7 @@ export class CompositionView extends EditableFileView {
     // 2026-11-05-1183 (M17c): the notebook below the Score and the tree - the same component as a phrase tab's. Its bars are the composition's own, 1..N across the piece, and its chip names the section a bar belongs to.
     if (this.notebookFor) {
       const told = this.notebookFor(file, (s) => compositionSelectionChip(s, this.shape?.sections ?? []));
-      this.notebook = mountNotebook(this.contentEl, {
+      this.notebook = mountNotebook(flags.showLegacyControllers ? this.contentEl : this.contentEl.ownerDocument.createElement('div'), {      // the notebook INPUTS (a typed request, the cells): detached with the legacy controllers off
         ...told,
         chip: (s) => compositionSelectionChip(s, this.shape?.sections ?? []),
         onSelection: (sel) => { this.selectedBars = new Set(sel.bars); if (this.tintHost && this.tintHost.isConnected !== false) paintSelectionTint(this.tintHost, this.tintMap ? this.tintedIds(this.tintMap) : []); told.onSelection?.(sel); },

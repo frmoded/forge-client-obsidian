@@ -63,7 +63,7 @@ for (const edition of ['lean', 'music'] as const) {
   let real: RealPlugin;
   let win: any;
 
-  async function world() {
+  async function world(flagsOn = true) {
     win ??= new Window({ url: 'http://localhost/' });
     Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
     real ??= await bundleRealPlugin(ROOT, edition);
@@ -99,6 +99,7 @@ for (const edition of ['lean', 'music'] as const) {
     (Object.prototype as any).addAction = function () { return { remove() {} }; };
     const g: any = globalThis; const savedRaf = g.requestAnimationFrame; g.requestAnimationFrame = (fn: () => void) => setImmediate(fn);
     const plugin = await loadRealOnload(real, app);
+    if (flagsOn) Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true });        // 2026-11-15-1217: the older whole-view tests are about the strips and the inspector: they run with both switches ON (the default is off: src/music-tabs-flags.test.ts)
     await clock.advance(60);
     real.setPyodideHostSingleton({ getInstance: async () => ({ computePhraseScore: () => new Promise(() => {}) }) });         // the engine never answers: no Score is ever drawn, the tab is as it was built
     const open = async (type: string, file: string) => {
@@ -181,6 +182,50 @@ for (const edition of ['lean', 'music'] as const) {
       bar.dispose();
       roles = rolesOf(el);
       assert.equal(roles[0], 'score', 'the banner goes: the Score is first: ' + roles.join(' > '));
+    } finally { w.done(); }
+  });
+
+  // ---- 2026-11-15-1217: the two switches, at their DEFAULT (both off) on the real wiring: a music tab shows the Score (and what points: the bracket, the chips, the tree), none of the strips that input a value, no notebook, no inspector box ----
+  const INPUTS = '.forge-phrase-controls, .forge-mix-controls, .forge-morph-controls, .forge-arr-controls, .forge-notebook, .forge-phrase-bars, .forge-phrase-style, .forge-phrase-pct';
+  const INSPECTOR_BOX = '.forge-inspector-title, .forge-inspector-body, .forge-inspector-notes';
+  test(`[${edition}] DEFAULT (both switches off): the phrase tab is the Score and its bracket - no strip that inputs a value is in the DOM, for an extend, a mix and a morph`, async () => {
+    const w = await world(false);
+    try {
+      for (const [path, text] of [[PHRASE, noteContentFor('phrase_003', extend('bar_007', 4))], ['phrases/phrase_010.md', noteContentFor('phrase_010', MIX)], ['phrases/phrase_011.md', noteContentFor('phrase_011', { kind: 'morph', a: 'bar_007', b: 'bar_008', bars: 4, order: 'musical', seed: 0 })]] as const) {
+        w.store.set(path, text);
+        const { el } = await w.open(PHRASE_VIEW_TYPE, path);
+        assert.equal(el.querySelectorAll(INPUTS).length, 0, `${path}: ${rolesOf(el).join(' > ')}`);
+        const roles = rolesOf(el);
+        assert.ok(scoreFirst(roles) && roles.includes('score'), roles.join(' > '));
+        assert.equal(roles.includes('controls'), false);
+        assert.equal(el.querySelectorAll(INSPECTOR_BOX).length, 0, 'no inspector box');
+      }
+    } finally { w.done(); }
+  });
+  test(`[${edition}] DEFAULT: the arrangement tab keeps its header, the pin line and the chips, and has no row of controls; the composition tab keeps its header and tree and has no notebook`, async () => {
+    const w = await world(false);
+    try {
+      const a = await w.open(ARRANGEMENT_VIEW_TYPE, ARR);
+      const ar = rolesOf(a.el);
+      assert.equal(a.el.querySelectorAll(INPUTS).length, 0, ar.join(' > '));
+      assert.ok(ar.includes('arrangement-header') && ar.includes('pin') && scoreFirst(ar), 'what points stays: ' + ar.join(' > '));
+      assert.equal(ar.includes('arrangement-controls'), false);
+      const c = await w.open(COMPOSITION_VIEW_TYPE, COMP);
+      const cr = rolesOf(c.el);
+      assert.equal(c.el.querySelectorAll(INPUTS).length, 0, cr.join(' > '));
+      assert.ok(cr.includes('composition-header') && scoreFirst(cr), cr.join(' > '));
+      assert.equal(a.el.querySelectorAll(INSPECTOR_BOX).length + c.el.querySelectorAll(INSPECTOR_BOX).length, 0, 'no inspector box');
+    } finally { w.done(); }
+  });
+  test(`[${edition}] with the switches ON the same tabs have everything back (the controls, the kit row), and the lean/none plans are untouched by them`, async () => {
+    const w = await world(true);
+    try {
+      const p = await w.open(PHRASE_VIEW_TYPE, PHRASE);
+      const a = await w.open(ARRANGEMENT_VIEW_TYPE, ARR);
+      if (edition === 'music') {
+        assert.ok(p.el.querySelector('.forge-phrase-controls'), 'the Bars / Style / Tempo strip is back');
+        assert.ok(a.el.querySelector('.forge-arr-controls'), 'the kit rows are back');
+      }
     } finally { w.done(); }
   });
 

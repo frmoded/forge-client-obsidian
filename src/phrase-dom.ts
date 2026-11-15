@@ -548,6 +548,8 @@ export const MORPH_INSPECTOR_HINT = 'Click a bar or a note to see where it came 
 
 export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'produce' | 'inspector'> {
   inspector?: PhraseInspectorPorts;
+  /** 2026-11-15-1217 (SHOW_LEGACY_CONTROLLERS): `false` = the strips that INPUT a value (the extend, mix, morph and transform strips) and the notebook are built, wired and kept up to date but never put on the page (they live in a detached holder), so every code path is the one that always ran and the tab shows the Score, the bracket and what the shell adds. Absent or `true` = on the page, as before (every older test). */
+  legacyControllers?: boolean;
   /** 2026-10-26-1270 (M13): the structure strip (chips under the Score, two-way highlight with the notes pane). */
   structure?: PhraseStructurePorts;
   /** The phrase note's path. */
@@ -685,7 +687,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
 
   const insp = ports.inspector;
-  const { path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, canWritePhrase: _canWrite, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
+  const { legacyControllers, path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, canWritePhrase: _canWrite, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
   let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
   let strip!: Strip;
@@ -734,20 +736,23 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   };
   /** The inspector's port for selecting bars ON the Score (2026-10-30-1020): only a tab that has a notebook gets one, so a tab without it is exactly what it was. */
   const selectBarsPort = (): ScoreInspectorPorts['selectBars'] => (ports.notebook ? { onRange: (a, b) => { notebookHandle?.selectRange(a, b); }, onRangeEnd: () => { notebookHandle?.reveal(); }, onShiftClick: (n) => { notebookHandle?.extendTo(n); } } : undefined);
+  // 2026-11-15-1217: with `legacyControllers: false` the input strips and the notebook are mounted into a detached holder: all the code runs, none of it is in the document.
+  const holder = legacyControllers === false ? parent.ownerDocument.createElement('div') : null;
+  const stripParent: HTMLElement = holder ?? parent;
   const build = (k: PhraseParams['kind']): void => {
     kind = k;
     tintRole = k === 'morph' ? MORPH_BAR_ROLE : k === 'mix' ? MIX_BAR_ROLE : PHRASE_BAR_ROLE;
     if (k === 'morph') {
-      const morph = mountMorphControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
+      const morph = mountMorphControls(stripParent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
       strip = { el: morph.el, set: (params) => morph.set(params && params.kind === 'morph' ? params : null), setStatus: (t) => morph.setStatus(t), dispose: () => morph.dispose() };
     } else if (k === 'mix') {
-      const mix = mountMixControls(parent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph, changes: morphChanges, states: mixStates });
+      const mix = mountMixControls(stripParent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], morph: ports.turnIntoMorph, changes: morphChanges, states: mixStates });
       strip = { el: mix.el, set: (params) => mix.set(params && params.kind === 'mix' ? params : null), setStatus: (t) => mix.setStatus(t), dispose: () => mix.dispose() };
     } else if (k === 'transform') {
-      const t = mountTransformStrip(parent, { openSource: insp ? (id) => insp.openNote(id) : undefined });
+      const t = mountTransformStrip(stripParent, { openSource: insp ? (id) => insp.openNote(id) : undefined });
       strip = { el: t.el, set: (params) => t.set(params), setStatus: (x) => t.setStatus(x), dispose: () => t.dispose() };
     } else {
-      const controls = mountPhraseControls(parent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
+      const controls = mountPhraseControls(stripParent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
       strip = { el: controls.el, set: (params) => controls.set(params && params.kind === 'extend' ? params : null), setStatus: (t) => controls.setStatus(t), dispose: () => controls.dispose() };
     }
     bracket = null;
@@ -849,7 +854,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     }
     if (ports.notebook) {
       const told = ports.notebook;
-      notebookHandle = mountNotebook(parent, {
+      notebookHandle = mountNotebook(stripParent, {
         ...told,
         onSelection: (sel) => { selectedBars = new Set(sel.bars); if (tintHost && tintHost.isConnected !== false) { paintSelectionTint(tintHost, tintMap ? tintedIds(tintMap) : []); } told.onSelection?.(sel); },
       });

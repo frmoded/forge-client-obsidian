@@ -76,6 +76,7 @@ for (const edition of ['lean', 'music'] as const) {
     Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
     const v = vaultOf(toml);
     const plugin = await loadRealOnload(real, v.app);
+    Object.assign(plugin.target.settings, { showLegacyControllers: true, showInspector: true });        // 2026-11-15-1217: these older whole-view tests are about the strips / the inspector: both switches ON (the default is off: music-tabs-flags.test.ts, score-first-order-wiring.test.ts)
     real.messageDelivery.resetForTests();
     await tick();
     return { v, plugin };
