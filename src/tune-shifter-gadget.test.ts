@@ -205,11 +205,81 @@ test('CONTROL: a move that changes an interval, an allowed start that lets a not
   const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `premise: ${from}`); return html.replace(from, to); };
   assert.ok(coreFailures(pure(scriptOf(damaged('return m + d;', 'return m + d + (m > tune.notes[0] ? 1 : 0);')))).length > 0, 'the move changes an interval');
   assert.ok(coreFailures(pure(scriptOf(damaged('Math.max.apply(null, p) <= hi', 'true')))).length > 0, 'the top is not checked');
-  assert.ok(coreFailures(pure(scriptOf(damaged('LETTER_STEP[plainName(m).charAt(0)] - 30', 'LETTER_STEP[plainName(m).charAt(0)] - 31')))).length > 0, 'staff position off by one');
+  assert.ok(coreFailures(pure(scriptOf(damaged('LETTER_STEP[sp ? sp.letter : plainName(m).charAt(0)] - 30', 'LETTER_STEP[sp ? sp.letter : plainName(m).charAt(0)] - 31')))).length > 0, 'staff position off by one');
   assert.ok(coreFailures(pure(scriptOf(damaged('barStarts: [1, 4, 6, 8, 10, 13, 15]', 'barStarts: [1, 4, 6, 9, 10, 13, 15]')))).length > 0, 'a bar line in the wrong place');
-  assert.ok(coreFailures(pure(scriptOf(damaged('if (acc[key] !== "flat") { sign = "flat"; acc[key] = "flat"; }', 'sign = "flat";')))).length > 0, 'an accidental repeated inside a bar');
+  assert.ok(coreFailures(pure(scriptOf(damaged('if (acc[key] !== want) { sign = want; acc[key] = want; }', 'sign = want;')))).length > 0, 'an accidental repeated inside a bar');
   assert.ok(coreFailures(pure(scriptOf(damaged('level: beats < 0.5 ? 2 : beats < 1 ? 1 : 0', 'level: 0')))).length > 0, 'beams without a level');
   assert.ok(pageFailures(damaged('function press(m) { if (whyNot(tune, m, LOW, HIGH) !== null) return; start = m; render(); }', 'function press(m) { start = m; render(); }')).length > 0, 'a dimmed key moves the tune');
   assert.ok(pageFailures(damaged('function press(m) { if (whyNot(tune, m, LOW, HIGH) !== null) return; start = m; render(); }', 'function press(m) { if (whyNot(tune, m, LOW, HIGH) !== null) return; start = m; render(); $("play").click(); }')).length > 0, 'a key press plays');
   assert.ok(clefFailures(damaged('yOf(2, s) + ") scale(" + CLEF_SCALE', 'yOf(0, s) + ") scale(" + CLEF_SCALE')).length > 0, 'the clef off the G line');
+});
+
+
+// ---- 2026-11-15-2100: the staff's spelling follows the key ----------------------------------------------------------------------------------------------------------------------
+// The expected spellings are written here from music theory, not read from the page: for each of the 12 major keys, the 12 pitch classes (C = 0 .. B = 11) as the staff writes them: a black key is a sharp in G D A E B F# and a flat in F Bb Eb Ab Db (and in C).
+const SHARPS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'], FLATS12 = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+const SHARP_KEY_ROOTS = [7, 2, 9, 4, 11, 6];                                 // G D A E B F#
+const SPELL = (root: number): string[] => (SHARP_KEY_ROOTS.includes(root) ? SHARPS : FLATS12);
+const spelled = (g: any, midi: number, root: number): string => { const sp = g.spellForKey(midi, root); return sp.letter + (sp.acc > 0 ? '#' : sp.acc < 0 ? 'b' : ''); };
+function spellingFailures(g: any): string[] {
+  const bad: string[] = []; const eq = (what: string, got: unknown, want: unknown) => { if (JSON.stringify(got) !== JSON.stringify(want)) bad.push(`${what}: ${JSON.stringify(got)} !== ${JSON.stringify(want)}`); };
+  // the table: all 12 key roots x all 12 pitch classes (in two octaves)
+  for (let root = 0; root < 12; root++) for (let pc = 0; pc < 12; pc++) for (const base of [48, 60]) { const m = base + pc; if (spelled(g, m, root) !== SPELL(root)[pc]) bad.push(`key ${root}, pitch class ${pc}: ${spelled(g, m, root)} !== ${SPELL(root)[pc]}`); }
+  eq('the keys that take sharps', [...Array(12).keys()].filter((r) => g.usesSharps(r)), [2, 4, 6, 7, 9, 11]);
+  eq('a black-key tonic takes the conventional major key: Db, Eb, F#, Ab, Bb', [1, 3, 6, 8, 10].map((r) => spelled(g, 60 + r, r)), ['Db', 'Eb', 'F#', 'Ab', 'Bb']);
+  eq('the octave of the letter is the key\'s own, sharp or flat', [spellForOctave(g, 61, 7), spellForOctave(g, 61, 1), spellForOctave(g, 70, 2), spellForOctave(g, 70, 10)], [4, 4, 4, 4]);
+  eq('a white key is its own letter in every key, no accidental', [...Array(12).keys()].every((r) => [60, 62, 64, 65, 67, 69, 71].every((m) => g.spellForKey(m, r).acc === 0)), true);
+  eq('keys outside 0..11 and a tune with no key behave (a negative root, a root over 11)', [g.usesSharps(-5), g.usesSharps(19), g.usesSharps(NaN)], [true, true, false]);
+  eq('spelled names', [g.spelledName(66, 7), g.spelledName(66, 1), g.spelledName(61, 2), g.spelledName(70, 10), g.spelledName(62, 7)], ['F sharp 4', 'G flat 4', 'C sharp 4', 'B flat 4', 'D 4']);
+  const bach = g.TUNES[1], grace = g.TUNES[0];
+  eq('both tunes are in G major (7)', [bach.keyRoot, grace.keyRoot], [7, 7]);
+  eq('the key follows the shift: the tonic moves with the first note', [g.tuneKeyRoot(bach, 55), g.tuneKeyRoot(bach, 56), g.tuneKeyRoot(bach, 54), g.tuneKeyRoot(bach, 48), g.tuneKeyRoot(bach, 79), g.tuneKeyRoot(grace, 62), g.tuneKeyRoot(grace, 61)], [7, 8, 6, 0, 7, 7, 6]);
+  // the staff at each position
+  const signs = (tune: any, start: number) => g.staffLayout(tune, g.placeTune(tune, start), g.tuneKeyRoot(tune, start)).flatMap((sys: any) => sys.items.filter((it: any) => it.sign).map((it: any) => `${it.index}:${it.sign}`));
+  eq('Bach at its own position (G major): F SHARP, at the first F# of bar 3 and at the last note, and the sharp is held to the bar line (the other F#s of bar 3 carry none)', signs(bach, 55), ['33:sharp', '63:sharp']);
+  eq('Bach moved up one half step (the key of A-flat): flats, never sharps', [...new Set(signs(bach, 56).map((x: string) => x.split(':')[1]))], ['flat']);
+  eq('Bach moved up one half step: a flat the first time each black key appears in a bar (bar 1 Ab Eb Bb, bar 2 Ab Db, bar 3 Ab Db, bar 4 Ab Ab Bb), then none while the bar goes on; a white key beside it needs no natural here', signs(bach, 56), ['0:flat', '1:flat', '3:flat', '16:flat', '18:flat', '32:flat', '34:flat', '48:flat', '49:flat', '51:flat']);
+  eq('Bach moved to D (a move of 7: D major): sharps and naturals only, at least one sharp', [signs(bach, 62).every((x: string) => /:(sharp|natural)$/.test(x)), signs(bach, 62).some((x: string) => x.endsWith(':sharp'))], [true, true]);
+  { const T = { notes: [61, 60, 61], beats: [1, 1, 1], barStarts: [], systemStarts: [0], keyRoot: 2 }; eq('a sharp, then the natural of the same letter, then the sharp again (in D major)', g.staffLayout(T, T.notes, 2)[0].items.map((it: any) => it.sign), ['sharp', 'natural', 'sharp']); }
+  eq('Bach shifted away and back is the original again (the page keeps no memory of the spelling)', [signs(bach, 57).length > 0, signs(bach, 55)], [true, ['33:sharp', '63:sharp']]);
+  eq('Amazing Grace at its own position: every note a white key, no accidental at all', [signs(grace, 62), g.placeTune(grace, 62).every((m: number) => ![1, 3, 6, 8, 10].includes(m % 12))], [[], true]);
+  // a sharp spelling sits on the letter BELOW the black key, a flat on the letter above: the same black key is on a different line
+  const pos = (m: number, root: number) => g.staffPos(m, g.spellForKey(m, root));
+  eq('staff position: C#4 (sharp, on C) is one step below D-flat4 (flat, on D)', [pos(61, 7), pos(61, 1)], [-2, -1]);
+  eq('staff position: F#4 (sharp, on F) is one step below G-flat4 (flat, on G)', [pos(66, 7), pos(66, 1)], [1, 2]);
+  eq('staffPos keeps its flat default for a note with no spelling given', [g.staffPos(66), g.staffPos(61)], [2, -1]);
+  eq('staffLayout with no key given uses the tune\'s own key at that position', JSON.stringify(g.staffLayout(bach, g.placeTune(bach, 55)).map((s: any) => s.items.map((i: any) => i.sign))), JSON.stringify(g.staffLayout(bach, g.placeTune(bach, 55), 7).map((s: any) => s.items.map((i: any) => i.sign))));
+  return bad;
+}
+function spellForOctave(g: any, m: number, root: number): number { return g.spellForKey(m, root).octave; }
+test('pure: spellForKey for all 12 key roots x all 12 pitch classes, the sharp and flat keys, black-key tonics, the key follows the shift, Bach in G shows F#, a shift of +1 shows flats (A-flat major), shift 0 and shift back are the original, Amazing Grace unchanged (naturals), staff positions of sharps and flats', () => {
+  assert.deepEqual(spellingFailures(pure()), []);
+});
+test('the page: Bach opens with F-sharp (a sharp sign, "F sharp" in the staff label), a start on G-flat/A-flat shows flats, a start on G again returns to the sharps; the labels use the key\'s spelling; Amazing Grace never shows an accidental at its own position', () => {
+  const p = open();
+  assert.equal(p.tuneButton('grace').getAttribute('aria-pressed'), 'true');
+  assert.deepEqual([...p.doc.querySelectorAll('#staff .acc')].map((e: any) => e.textContent), [], 'Grace at its own position: no accidental');
+  p.click(p.tuneButton('bwv1007'));
+  assert.deepEqual([...p.doc.querySelectorAll('#staff .acc')].map((e: any) => e.textContent), ['♯', '♯'], 'Bach in G: two sharp signs');
+  assert.match(p.doc.getElementById('staff')!.getAttribute('aria-label')!, /F sharp 4/); assert.doesNotMatch(p.doc.getElementById('staff')!.getAttribute('aria-label')!, /G flat/);
+  p.press(56);
+  const acc = [...p.doc.querySelectorAll('#staff .acc')].map((e: any) => e.textContent); assert.ok(acc.length > 0 && acc.every((x: string) => x === '♭' || x === '♮'), `a move of +1: flats and naturals only (${acc.join('')})`);
+  assert.match(p.doc.getElementById('start')!.textContent!, /A flat \(octave 3\)/);
+  p.press(55);
+  assert.deepEqual([...p.doc.querySelectorAll('#staff .acc')].map((e: any) => e.textContent), ['♯', '♯'], 'back on G: the original spelling');
+  assert.match(p.doc.getElementById('start')!.textContent!, /G \(octave 3\)/);
+  p.press(54);
+  assert.match(p.doc.getElementById('start')!.textContent!, /F sharp \(octave 3\)/, 'a start on the black key F# in the key of F#: a sharp');
+  assert.deepEqual(p.errors, []);
+  p.click(p.tuneButton('grace')); p.press(61);
+  const g2 = [...p.doc.querySelectorAll('#staff .acc')].map((e: any) => e.textContent); assert.ok(g2.length > 0 && g2.every((x: string) => x === '\u266F' || x === '\u266E'), 'Grace one half step down is in the key of F-sharp (six sharps): its black keys are sharps');
+});
+test('CONTROL: a spelling that is always flats, one that ignores the shift, a key table with a wrong sharp key, a sharp written on the wrong letter, a sharp repeated inside a bar each go red', () => {
+  assert.deepEqual(spellingFailures(pure()), []);
+  const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `premise: ${from}`); return html.replace(from, to); };
+  assert.ok(spellingFailures(pure(scriptOf(damaged('function usesSharps(keyRoot) { return SHARP_KEYS.indexOf(((keyRoot % 12) + 12) % 12) >= 0; }', 'function usesSharps(keyRoot) { return false; }')))).length > 0, 'always flats');
+  assert.ok(spellingFailures(pure(scriptOf(damaged('return ((((tune.keyRoot || 0) + (start - tune.notes[0])) % 12) + 12) % 12; }', 'return (tune.keyRoot || 0) % 12; }')))).length > 0, 'the key ignores the shift');
+  assert.ok(spellingFailures(pure(scriptOf(damaged('var SHARP_KEYS = [7, 2, 9, 4, 11, 6];', 'var SHARP_KEYS = [7, 2, 9, 4, 11];')))).length > 0, 'F-sharp major taken for a flat key');
+  assert.ok(spellingFailures(pure(scriptOf(damaged('var SHARP_LETTER = ["C", "C", "D", "D", "E", "F", "F", "G", "G", "A", "A", "B"]', 'var SHARP_LETTER = ["C", "D", "D", "E", "E", "F", "G", "G", "A", "A", "B", "B"]')))).length > 0, 'a sharp written on the letter above');
+  assert.ok(spellingFailures(pure(scriptOf(damaged('if (acc[key] !== want) { sign = want; acc[key] = want; }', 'sign = want;')))).length > 0, 'a sharp repeated inside a bar');
 });
