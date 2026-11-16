@@ -143,3 +143,68 @@ test('REFUSED with the reason: every action on nothing, and the greyed cases, in
   const over = planAction('copy', sel(2), full, 'phrase_007', 20);
   assert.ok(over.kind === 'refused' && /1 to 16 operations/.test(over.message), JSON.stringify(over));
 });
+
+// ---- 2026-11-16-1000, from the mutation pass (446 mutants on bar-structure-core.ts and this file: 404 killed, the logic ones that survived are killed by what follows) ----------------------------------------------------------------
+
+const B = (bars: number[], anchor: number | null, last: number | null): BarSelection => ({ bars, anchor, last });
+
+test('shift-click with no anchor, or no bars, starts over from that bar (whatever the other field says)', () => {
+  assert.deepEqual(extendSelection(B([3, 4], null, 4), 6), B([6], 6, 6));
+  assert.deepEqual(extendSelection(B([], 3, null), 6), B([6], 6, 6));
+});
+
+test('toggling a bar OUT keeps the anchor if that bar is still in, else the last bar left; `last` is the last bar left; toggling one IN makes it both', () => {
+  assert.deepEqual(toggleSelection(B([2, 5, 7], 7, 7), 7), B([2, 5], 5, 5));        // the anchor itself went out
+  assert.deepEqual(toggleSelection(B([2, 5, 7], 7, 7), 5), B([2, 7], 7, 7));        // another went out: the anchor stays
+  assert.deepEqual(toggleSelection(B([2, 5, 7], 2, 2), 5), B([2, 7], 2, 7));        // anchor stays, last is the last bar left
+  assert.deepEqual(toggleSelection(B([3, 4, 6], 9, 9), 6), B([3, 4], 4, 4));        // an anchor that is not even selected is not kept
+  assert.deepEqual(toggleSelection(B([3, 4, 6], null, null), 3), B([4, 6], 6, 6));
+  assert.deepEqual(toggleSelection(B([3, 4], 3, 4), 8), B([3, 4, 8], 8, 8));
+});
+
+test('selectionOf of one bar: that bar is the anchor and the last; limitTo keeps a bar AT the edge and drops the one past it, and falls back for the anchor and the last', () => {
+  assert.deepEqual(selectionOf([4]), B([4], 4, 4));
+  const edge = B([3, 5], 3, 5);
+  assert.equal(limitTo(edge, 5), edge, 'a bar at the edge stays');
+  assert.deepEqual(limitTo(B([3, 6], 3, 6), 5), B([3], 3, 3));
+  assert.deepEqual(limitTo(B([2, 4, 8], 8, 8), 5), B([2, 4], 2, 4), 'anchor and last past the edge: the first bar for the anchor, the last bar left for `last`');
+  assert.deepEqual(limitTo(B([2, 4, 8], 4, 2), 5), B([2, 4], 4, 2), 'anchor and last still there: kept');
+  assert.deepEqual(limitTo(B([2, 5, 8], 5, 5), 5), B([2, 5], 5, 5), 'an anchor exactly at the edge is still there');
+  assert.deepEqual(limitTo(B([2, 4, 8], 8, 4), 5), B([2, 4], 2, 4), 'only the anchor is past the edge');
+  assert.deepEqual(limitTo(B([2, 4, 8], 4, 8), 5), B([2, 4], 4, 4), 'only `last` is past the edge');
+  assert.deepEqual(limitTo(B([2, 8], 8, 8), 5), B([2], 2, 2), 'exactly one bar left: it is the anchor and the last');
+  assert.deepEqual(limitTo(B([2, 8], 2, 8), 5), B([2], 2, 2));
+  assert.deepEqual(limitTo(B([7, 8], 7, 8), 5), NO_SELECTION, 'nothing left: nothing');
+  assert.deepEqual(limitTo(B([7, 8], null, null), 5), NO_SELECTION);
+});
+
+test('menuRun at its edges: the range whose first or last bar was touched; a bar in no range, or no bar touched, gives the last range', () => {
+  const s = (last: number | null) => B([1, 2, 4, 5, 6, 9], 1, last);
+  assert.deepEqual(menuRun(s(4)), [4, 6]);                                       // the first bar of a range
+  assert.deepEqual(menuRun(s(6)), [4, 6]);                                       // the last bar of a range
+  assert.deepEqual(menuRun(s(5)), [4, 6]);
+  assert.deepEqual(menuRun(s(2)), [1, 2]);
+  assert.deepEqual(menuRun(s(3)), [9, 9], 'a bar in no range');
+  assert.deepEqual(menuRun(s(null)), [9, 9]);
+});
+
+test('disabledReason at its edges: a bar exactly on the last bar is fine; with the number of bars unknown (0) nothing about the end is judged; the singular "1 bar"', () => {
+  assert.equal(disabledReason('copy', sel(8), 8), null);
+  assert.equal(disabledReason('copy', sel(9), 0), null, 'unknown number of bars');
+  assert.equal(disabledReason('copy', sel(2), 1), 'Bar 2 is not on the Score (it has 1 bar).');
+  assert.equal(disabledReason('copy', sel(9), 8), 'Bar 9 is not on the Score (it has 8 bars).');
+  assert.equal(disabledReason('delete', sel(1, 2), 0), null, 'unknown number of bars: not judged');
+  assert.equal(disabledReason('delete', sel(1, 2), 3), null);
+  assert.equal(disabledReason('move-right', sel(5), 0), null, 'unknown number of bars: not judged');
+  assert.equal(disabledReason('move-right', sel(1), 1), 'Bar 1 is the last bar: it cannot move right.');
+});
+
+test('a phrase renamed to something else than phrase_N cannot be the source of a transform (the validator\'s rule): the menu says so instead of making a note that would not open; and why a new phrase was made is said exactly', () => {
+  const renamed = planAction('new-phrase', sel(2, 3), EXTEND, 'my groove', 8);
+  assert.equal(renamed.kind, 'refused');
+  assert.match((renamed as { message: string }).message, /source/i);
+  const made = planAction('new-phrase', sel(2, 3), EXTEND, 'phrase_007', 8);
+  assert.ok(made.kind === 'new-phrase' && made.because === 'new phrase');
+  const other = planAction('delete', sel(2), EXTEND, 'phrase_007', 8);
+  assert.ok(other.kind === 'new-phrase' && other.because === 'this phrase is not a transform: the change is made as a new phrase of it');
+});

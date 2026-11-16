@@ -71,14 +71,14 @@ export function applyStructure<T>(items: readonly T[], op: StructureOp): Structu
     return { ok: true, items: out };
   }
   const out = [...items];
-  const order = op.by === -1 ? op.runs : [...op.runs].reverse();                 // left: ascending, right: descending, so the numbers of the ranges still to do are what they were
+  const order = op.by === -1 ? op.runs : [...op.runs].reverse();                 // left: ascending, right: descending. (The ranges are apart, so each one swaps with a bar of its own and the order does not change the result; it is kept so the code reads in the order a person would do it.)
   for (const [a, b] of order) {
     const s = a - 1, e = b - 1;                                                  // 0-based, inclusive
     if (op.by === -1) {
       if (s < 1) return { ok: false, message: `${rangeWords(a, b)} cannot move left: ${a === 1 && b === 1 ? 'bar 1 is the first bar' : 'the range starts at bar 1'}.` };
       const x = out[s - 1]; out.splice(s - 1, 1); out.splice(e, 0, x);
     } else {
-      if (e > n - 2) return { ok: false, message: `${rangeWords(a, b)} cannot move right: ${b === n ? `the range ends at the last bar (bar ${n})` : 'there is no bar after it'}.` };
+      if (e > n - 2) return { ok: false, message: `${rangeWords(a, b)} cannot move right: the range ends at the last bar (bar ${n}).` };            // (e > n - 2 with b <= n means b === n)
       const x = out[e + 1]; out.splice(e + 1, 1); out.splice(s, 0, x);
     }
   }

@@ -36,9 +36,10 @@ test('THE TRUTH TABLE: what each step does to bars a..f (ranges are the bars as 
 test('REFUSED, in one sentence naming the bar: a range past the end, deleting everything, moving off either end', () => {
   assert.match(got(keep([5, 8])), /^ERR bars 5 to 8 asked for, but there are 6 bars\.$/);
   assert.match(got(del([1, 6])), /^ERR deleting bars 1 to 6 would leave no bars\.$/);
-  assert.match(got(move(-1, [1, 2])), /^ERR bars 1 to 2 cannot move left/);
-  assert.match(got(move(-1, [1, 1])), /^ERR bar 1 cannot move left: bar 1 is the first bar\./);
-  assert.match(got(move(1, [5, 6])), /^ERR bars 5 to 6 cannot move right/);
+  assert.equal(got(move(-1, [1, 2])), 'ERR bars 1 to 2 cannot move left: the range starts at bar 1.');
+  assert.equal(got(move(-1, [1, 1])), 'ERR bar 1 cannot move left: bar 1 is the first bar.');
+  assert.equal(got(move(1, [5, 6])), 'ERR bars 5 to 6 cannot move right: the range ends at the last bar (bar 6).');
+  assert.equal(got(move(1, [6, 6])), 'ERR bar 6 cannot move right: the range ends at the last bar (bar 6).');
   assert.match(got(keep([2, 2]), ['a']), /^ERR bar 2 asked for, but there is 1 bar\.$/);
   // a refusal changes nothing, and a good step never changes the list it is given
   const before = [...BARS];
