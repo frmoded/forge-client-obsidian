@@ -68,7 +68,7 @@ export interface ScoreInspectorPorts {
   onPinned?(entry: InspectorEntry | null): void;
   /** 2026-10-30-1020 (opt-in, see artifact-inspector-core `selectBars`): a drag across bars on the engraving is a range, a Shift-click on a bar extends it; neither pins. The bar number of an element is the `bar` of its provenance.
    *  Absent = the Score behaves exactly as it did (P3). */
-  selectBars?: { onRange(first: number, last: number): void; onRangeEnd?(): void; onShiftClick(bar: number): void };
+  selectBars?: { onRange(first: number, last: number): void; onRangeEnd?(): void; onShiftClick(bar: number): void; onToggleClick?(bar: number): void };
   /** 2026-10-30-1020: a Score was shown and mapped, and the inspector is attached to it (called once per Score, before any pin is carried over): a surface that paints a cue of its own learns its host and map, without waiting for a
    *  hover or a pin to make `decorate` run. Absent = nothing. */
   attached?(host: HTMLElement, map: ProvenanceMap): void;
@@ -203,7 +203,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
         pointIds: ports.pointRoles ? Object.keys(map).filter((id) => ports.pointRoles!.includes(map[id].role)) : undefined,
         trace: ports.trace,
         pinLabel: ports.pinLabel ? (id) => ports.pinLabel!(id, map[id]) : undefined,
-        selectBars: ports.selectBars ? { barOf: (prov) => (typeof prov.params.bar === 'number' ? prov.params.bar : null), onRange: ports.selectBars.onRange, onRangeEnd: ports.selectBars.onRangeEnd, onShiftClick: ports.selectBars.onShiftClick } : undefined,
+        selectBars: ports.selectBars ? { barOf: (prov) => (typeof prov.params.bar === 'number' ? prov.params.bar : null), onRange: ports.selectBars.onRange, onRangeEnd: ports.selectBars.onRangeEnd, onShiftClick: ports.selectBars.onShiftClick, onToggleClick: ports.selectBars.onToggleClick } : undefined,
         onHover: (e) => {
           if (ports.previewOnHover && !layer.pinnedId()) { if (e) renderStack(e, true); else showHint(hint); }
           if (!ports.postHighlight) return;

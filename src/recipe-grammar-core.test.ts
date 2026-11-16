@@ -247,8 +247,8 @@ test('the refusals are sentences a person can act on: each has a line and a colu
 });
 
 test('the openers table, exactly: the sentence an unknown step is refused with lists every step a Recipe may start with, in this order', () => {
-  assert.equal(RECIPE_OPENERS_TEXT, 'Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play');
-  assert.equal(RECIPE_STEPS.length, 17);
+  assert.equal(RECIPE_OPENERS_TEXT, 'Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Delete, Copy, Move, Bar, Play, Mute, Only, Together, For, Then play');
+  assert.equal(RECIPE_STEPS.length, 20);      // 2026-11-16-1000: Delete, Copy and Move are rows ("Keep" was one already: it also opens "Keep bars 3 to 5." of a transform)
 });
 
 test('the boundaries: a share of 100 percent and of 0, a tempo change of 0 either way, a threshold of 0 and of 1, a weight of 0 and of 1 are READ; a share of 101, a threshold of 1.01 and a weight of 1.01 are refused where they are', () => {

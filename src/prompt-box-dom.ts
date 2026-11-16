@@ -25,6 +25,8 @@ export interface PromptBoxHandle {
   setBusy(message: string | null): void;
   /** 2026-11-13-1209: a plain line under the box (an answer that was dropped, and why). Apply is not disabled by it; typing, a new request or a reset clears it. `null` = clear. */
   setNote(message: string | null): void;
+  /** 2026-11-16-1000: show this text in the field as if it had been typed: "edited, not applied", the Apply button ready. Nothing is written: the Description on disk stays the only source of truth until Apply. The field takes the focus. */
+  suggest(text: string): void;
   /** The note was updated from the suggestion: the box shows what the note says now (the canonical grammar sentence) and drops the unapplied typing. */
   reset(disk: string): void;
   state(): BoxState;
@@ -101,6 +103,7 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     focus() { try { text.focus(); } catch { /* not focusable (a hidden pane) */ } },
     setBusy(message) { remote = message; if (message !== null) note = null; paint(); },
     setNote(message) { note = message; paint(); },
+    suggest(next) { note = null; s = typed(s, next); paint(); try { text.focus(); } catch { /* a hidden pane */ } },
     reset(disk) { note = null; s = applied(disk); paint(); },
     state: () => s,
     dispose() { disposed = true; watch?.disconnect(); el.remove(); },

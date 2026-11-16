@@ -276,14 +276,17 @@ test('1020: a Score that is drawn again (the phrase changed) keeps its tint on t
   } finally { r.done(); }
 });
 
-test('1020 P3: a tab WITHOUT the notebook port drags and Shift-clicks exactly as before: the click after a drag pins the bar it lands on, no tint, nothing selected, nothing thrown', async () => {
+test('1020 P3, amended 2026-11-16-1000 (deliberate: the selection is no longer the notebook\'s alone): a tab WITHOUT the notebook port now selects and tints on a drag and a Shift-click like every phrase tab (bar-selection-wiring.test.ts), and nothing is thrown; the click after a drag is not a pin gesture', async () => {
   const r = await rig({ withNotebook: false });
   try {
     dragOnScore(r, 3, 5);
-    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_5']);
-    assert.deepEqual(tintedBars(r), []);
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), [], 'the click after a drag is not a pin gesture');
+    assert.deepEqual(tintedBars(r), ['ph_bar_3', 'ph_bar_4', 'ph_bar_5']);
     r.click(r.q('#ph_bar_2'), { shiftKey: true });
-    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_2'], 'a Shift-click is a click here, as it always was');
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), [], 'a Shift-click selects (from the anchor, bar 3, down to bar 2); it pins nothing');
+    assert.deepEqual(tintedBars(r), ['ph_bar_2', 'ph_bar_3']);
+    r.click(r.q('#ph_bar_4'));
+    assert.deepEqual(r.qa('.forge-artifact-pinned').map((e: any) => e.id), ['ph_bar_4'], 'a plain click is still the pin');
   } finally { r.done(); }
 });
 

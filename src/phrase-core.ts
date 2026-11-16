@@ -19,6 +19,8 @@ import { extendGridSentence } from './engine-refusal-core.ts';
 import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { TRANSFORM_DEFAULT_GRID, rangeWords } from './phrase-words-core.ts';
+import { applyStructureOps, isStructureOp } from './bar-structure-core.ts';
+export { isStructureOp };
 export { rangeWords, selectionWords, transformOpWords } from './phrase-words-core.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
 
@@ -110,8 +112,19 @@ export interface TransformPhrase {
 }
 export interface ThinOutOp { op: 'thin_out'; first: number; last: number; row?: string; amount: number; keep?: 'seeded'; seed?: number }
 export interface DoubleUpOp { op: 'double_up'; first: number; last: number; row?: string; grid: number }
-export type TransformOp = ThinOutOp | DoubleUpOp;
-export const TRANSFORM_OPS = ['thin_out', 'double_up'] as const;
+export type DensityOp = ThinOutOp | DoubleUpOp;
+/** 2026-11-16-1000: the four STRUCTURE ops (what the Score's selection menu writes): they change WHICH bars a transform has, never what is in a bar. `runs` are 1-based inclusive bar ranges of the bars as they are BEFORE the op,
+ *  ascending and apart (bar-structure-core.ts says what each does and runs it on the bars in TypeScript: the engine never sees them). */
+export type BarRun = [number, number];
+export interface KeepOp { op: 'keep'; runs: BarRun[] }
+export interface DeleteOp { op: 'delete'; runs: BarRun[] }
+export interface CopyOp { op: 'copy'; runs: BarRun[] }
+export interface MoveOp { op: 'move'; runs: BarRun[]; by: -1 | 1 }
+export type StructureOp = KeepOp | DeleteOp | CopyOp | MoveOp;
+export type TransformOp = DensityOp | StructureOp;
+export const STRUCTURE_OPS = ['keep', 'delete', 'copy', 'move'] as const;
+export const TRANSFORM_OPS = ['thin_out', 'double_up', ...STRUCTURE_OPS] as const;
+export const STRUCTURE_RUNS_MAX = 16;
 export const TRANSFORM_KEEPS = ['downbeat', 'seeded'] as const;
 export const TRANSFORM_DEFAULTS = { amount: 0.5, grid: TRANSFORM_DEFAULT_GRID };
 export const TRANSFORM_OPS_MAX = 16;
@@ -266,6 +279,7 @@ function validateTransform(raw: Record<string, unknown>): Validation<PhraseParam
   for (let i = 0; i < raw.ops.length; i++) {
     const op = validateTransformOp(raw.ops[i], i);
     if (typeof op === 'string') return bad(op);
+    if (isStructureOp(op) && ops.some((o) => !isStructureOp(o))) return bad(`ops[${i}]: a change of which bars there are (${op.op}) must come before the changes of what is in them (thin_out, double_up).`);
     ops.push(op);
   }
   const overrides = validateOverrides(raw.overrides, Number.MAX_SAFE_INTEGER);
@@ -273,10 +287,30 @@ function validateTransform(raw: Record<string, unknown>): Validation<PhraseParam
   return { ok: true, value: { kind: 'transform', source: raw.source, ops, ...(overrides ? { overrides } : {}) } };
 }
 
+/** A structure op: `runs` is 1 to 16 whole bar ranges, each 1 <= first <= last, ascending and apart (a gap of at least one bar); a move also says `by` -1 (left) or 1 (right). */
+function validateStructureOp(raw: Record<string, unknown>, at: string): StructureOp | string {
+  const op = raw.op as StructureOp['op'];
+  const allowed = op === 'move' ? ['op', 'runs', 'by'] : ['op', 'runs'];
+  for (const key of Object.keys(raw)) if (!allowed.includes(key)) return `${at}: unexpected field "${key}" (${op} holds only ${allowed.join(', ')}).`;
+  const whole = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v);
+  if (!Array.isArray(raw.runs) || raw.runs.length < 1 || raw.runs.length > STRUCTURE_RUNS_MAX) return `${at}.runs must be a list of 1 to ${STRUCTURE_RUNS_MAX} bar ranges like [3, 5], got ${JSON.stringify(raw.runs)}.`;
+  const runs: BarRun[] = [];
+  for (const r of raw.runs) {
+    if (!Array.isArray(r) || r.length !== 2 || !whole(r[0]) || !whole(r[1]) || r[0] < 1 || r[1] < r[0]) return `${at}.runs: each range must be [first, last] with whole bar numbers and 1 <= first <= last, got ${JSON.stringify(r)}.`;
+    const before = runs[runs.length - 1];
+    if (before !== undefined && r[0] <= before[1] + 1) return `${at}.runs: the ranges must be in order and apart (at least one bar between them), got ${JSON.stringify(before)} and ${JSON.stringify(r)}.`;
+    runs.push([r[0], r[1]]);
+  }
+  if (op !== 'move') return { op, runs };
+  if (raw.by !== -1 && raw.by !== 1) return `${at}.by must be -1 (one bar left) or 1 (one bar right), got ${JSON.stringify(raw.by)}.`;
+  return { op, runs, by: raw.by };
+}
+
 function validateTransformOp(raw: unknown, i: number): TransformOp | string {
   const at = `ops[${i}]`;
   if (!isPlainObject(raw)) return `${at} must be an object like {"op": "thin_out", "first": 3, "last": 5}, got ${JSON.stringify(raw)}.`;
-  if (raw.op !== 'thin_out' && raw.op !== 'double_up') return `${at}.op must be "thin_out" or "double_up", got ${JSON.stringify(raw.op)}.`;
+  if ((STRUCTURE_OPS as readonly unknown[]).includes(raw.op)) return validateStructureOp(raw, at);
+  if (raw.op !== 'thin_out' && raw.op !== 'double_up') return `${at}.op must be "thin_out", "double_up", "keep", "delete", "copy" or "move", got ${JSON.stringify(raw.op)}.`;
   const allowed = raw.op === 'thin_out' ? ['op', 'first', 'last', 'row', 'amount', 'keep', 'seed'] : ['op', 'first', 'last', 'row', 'grid'];
   for (const key of Object.keys(raw)) {
     if (allowed.includes(key)) continue;
@@ -467,6 +501,7 @@ export function readPhraseNote(text: string): Validation<PhraseParams> {
 
 /** One transform op as the json text shows it, on one line: {"op": "thin_out", "first": 3, "last": 5, "row": "kick", "amount": 0.5}. */
 export function formatTransformOp(o: TransformOp): string {
+  if (isStructureOp(o)) return `{"op": ${JSON.stringify(o.op)}, "runs": ${JSON.stringify(o.runs)}${o.op === 'move' ? `, "by": ${o.by}` : ''}}`;
   const parts = [`"op": ${JSON.stringify(o.op)}`, `"first": ${o.first}`, `"last": ${o.last}`];
   if (o.row !== undefined) parts.push(`"row": ${JSON.stringify(o.row)}`);
   if (o.op === 'double_up') parts.push(`"grid": ${o.grid}`);
@@ -1061,21 +1096,30 @@ async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, 
   if (made.kind !== 'score') return { kind: 'refusal', message: `Phrase: the source ${what} ${name} could not be drawn: ${made.message}` };
   const bars = barsOfPayload(made.payload);
   if (bars === null) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} gave no bars to change.` };
-  for (let i = 0; i < params.ops.length; i++) {
-    if (params.ops[i].last > bars.length) {
-      return { kind: 'refusal', message: `Phrase: ops[${i}] asks for ${rangeWords(params.ops[i].first, params.ops[i].last)}, but the source ${what} ${name} has ${bars.length} bar${bars.length === 1 ? '' : 's'}.` };
+  // 2026-11-16-1000: the steps that change WHICH bars there are (keep, delete, copy, move) run here, in TypeScript, on the bars the source made; the engine gets the bars that are left and only the density ops (it never sees a structure step)
+  const structure = params.ops.filter(isStructureOp);
+  let working: RhythmData[] = bars;
+  if (structure.length > 0) {
+    const done = applyStructureOps(bars, structure);
+    if (done.ok === false) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} has ${bars.length} bar${bars.length === 1 ? '' : 's'}; ${done.message}` };
+    working = done.items;
+  }
+  const density = params.ops.filter((o): o is DensityOp => !isStructureOp(o));
+  for (let i = 0; i < density.length; i++) {
+    if (density[i].last > working.length) {
+      return { kind: 'refusal', message: `Phrase: ops[${structure.length + i}] asks for ${rangeWords(density[i].first, density[i].last)}, but the source ${what} ${name} has ${working.length} bar${working.length === 1 ? '' : 's'}${structure.length > 0 ? ' after the changes of which bars there are' : ''}.` };
     }
   }
-  let asked: PhraseParams = params;
+  let asked: PhraseParams = structure.length > 0 ? { ...params, ops: density } : params;       // the engine is told only the density ops
   if (params.overrides) {
     const forks = await readForks(deps, params.overrides, bars[0], `the source ${what} ${name}`);
     if (typeof forks === 'string') return { kind: 'refusal', message: `Phrase: ${forks}` };
-    asked = { ...params, override_bars: forks } as unknown as PhraseParams;
+    asked = { ...asked, override_bars: forks } as unknown as PhraseParams;
   }
   let refused: string | null = null;
   const outcome = await computeScore(async (_data, t) => {
     try {
-      return await deps.compute({ bars }, asked, t);
+      return await deps.compute({ bars: working }, asked, t);
     } catch (e) {
       const line = regionRefusal((e as Error)?.message ?? String(e));
       if (line !== null) { refused = line; return null; }

@@ -2,6 +2,7 @@
 // words and numbers they use. Split out of phrase-grammar-core.ts so the note writers in phrase-core.ts and arrangement-core.ts can call `describe` without importing the parser (which imports them): this file takes from phrase-core.ts
 // only the three DEFAULTS objects, read INSIDE functions (never at load), so the two modules may load in either order (a test loads each first, in its own process). Pure: no Obsidian.
 import { MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, type MorphOrder, type PhraseParams, type PhraseStyle, type TransformOp } from './phrase-core.ts';
+import { structureSentence } from './bar-structure-core.ts';
 import type { ArrangementParams, ArrangementTrack } from './arrangement-core.ts';
 import type { CompositionParams, CompositionSection } from './composition-core.ts';
 
@@ -32,6 +33,8 @@ export const sortedOverrides = (o: Record<string, string> | undefined): { overri
   return { overrides: out };
 };
 function canonicalOp(o: TransformOp): TransformOp {
+  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy') return { op: o.op, runs: o.runs.map(([a, b]): [number, number] => [a, b]) };
+  if (o.op === 'move') return { op: 'move', runs: o.runs.map(([a, b]): [number, number] => [a, b]), by: o.by };
   const base = { first: o.first, last: o.last, ...(o.row !== undefined ? { row: o.row } : {}) };
   if (o.op === 'double_up') return { op: 'double_up', ...base, grid: o.grid };
   return o.keep === 'seeded' ? { op: 'thin_out', ...base, amount: noNegZero(o.amount), keep: 'seeded', seed: o.seed ?? 0 } : { op: 'thin_out', ...base, amount: noNegZero(o.amount) };
@@ -63,6 +66,7 @@ const forkSentences = (o: Record<string, string> | undefined): string[] => (o ? 
 const amountWords = (a: number): string => (a === 0.5 ? 'half' : `${percentOf(a)} percent`);
 const rangeText = (first: number, last: number): string => (first === last ? `bar ${first}` : `bars ${first} to ${last}`);
 function opSentence(o: TransformOp): string {
+  if (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move') return structureSentence(o);
   const where = `${rangeText(o.first, o.last)}${o.row !== undefined ? `, ${o.row} row` : ''}`;
   if (o.op === 'double_up') return `Double up ${where}${o.grid !== TRANSFORM_DEFAULTS.grid ? `, on a grid of ${o.grid}` : ''}.`;
   return `Thin out ${where}, by ${amountWords(o.amount)}, ${o.keep === 'seeded' ? `chosen by seed ${o.seed}` : 'keeping the downbeat'}.`;

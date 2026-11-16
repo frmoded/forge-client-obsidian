@@ -57,6 +57,8 @@ export interface ArtifactInspectorOptions {
     /** The pointer was released after a drag that selected bars (also when it was released outside the root). The surface may scroll now - never while the pointer is moving over the Score, which would slide it under the pointer. */
     onRangeEnd?(): void;
     onShiftClick(bar: number): void;
+    /** 2026-11-16-1000: a Ctrl-click (Cmd on a Mac) on a bar TOGGLES it in the selection (it may be apart from the others); it pins nothing. Absent = a Ctrl/Cmd-click is what it always was (a plain click). */
+    onToggleClick?(bar: number): void;
   };
 }
 
@@ -232,7 +234,7 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   const onDown = (e: Event) => {
     const m = e as MouseEvent;
     strayPress = null;
-    if (m.button !== 0 || m.shiftKey === true) return;
+    if (m.button !== 0 || m.shiftKey === true || (opts.selectBars?.onToggleClick !== undefined && (m.ctrlKey === true || m.metaKey === true))) return;
     if (opts.keepPinOnControls === true && isPlayerControl(e.target)) return;
     pressedIn = barAt(e); draggedTo = null;
     const doc = root.ownerDocument;
@@ -267,6 +269,12 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
       const bar = barAt(e);
       if (bar !== null) opts.selectBars.onShiftClick(bar);
       opts.trace?.(`[forge-pin] shift-click ${clickKind(e.target)} -> ${bar !== null ? `extend the selection to bar ${bar}` : 'none (not on a bar)'}, the pin is kept`);
+      return;
+    }
+    if (opts.selectBars?.onToggleClick && ((e as MouseEvent).ctrlKey === true || (e as MouseEvent).metaKey === true)) {          // 2026-11-16-1000: Ctrl/Cmd-click toggles the bar in the selection; the pin is kept
+      const bar = barAt(e);
+      if (bar !== null) opts.selectBars.onToggleClick(bar);
+      opts.trace?.(`[forge-pin] ctrl/cmd-click ${clickKind(e.target)} -> ${bar !== null ? `toggle bar ${bar} in the selection` : 'none (not on a bar)'}, the pin is kept`);
       return;
     }
     if (opts.keepPinOnControls === true && isPlayerControl(e.target)) { opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (a player control, the pin is kept)`); return; }

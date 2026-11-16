@@ -7,6 +7,7 @@ import type { PhraseParams } from './phrase-core.ts';
 import { complementOf100, describe, percentOf, plain } from './phrase-describe-core.ts';
 import { facetHashSync } from './facet-sync-hash-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
+import { isStructureOp, structurePython } from './bar-structure-core.ts';
 import { parseFrontmatter, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
 import { barOriginOf, withBarProvenance } from './bar-provenance-core.ts';
 import { extractDescription, extractPythonSection, extractRecipeSection } from './v2-note-core.ts';
@@ -90,6 +91,7 @@ export function phrasePython(p: PhraseParams): string {
   } else if (p.kind === 'transform') {
     out.push(`  bars = ${callNote(baseName(p.source))}`);
     for (const o of p.ops) {
+      if (isStructureOp(o)) { out.push(...structurePython(o)); continue; }                                  // 2026-11-16-1000: list work in plain Python (no engine function: bar-structure-core.ts runs the same steps in TypeScript)
       const row = o.row !== undefined ? `, row=${pyStr(o.row)}` : '';
       out.push(o.op === 'double_up'
         ? `  bars = double_up_bars(bars=bars, first=${o.first}, last=${o.last}${row}, grid=${o.grid})`

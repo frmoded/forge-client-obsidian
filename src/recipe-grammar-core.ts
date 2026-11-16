@@ -9,7 +9,7 @@
 // "Morph from the first to the second over 5 bars, in musical order.", "Mix them by vote: 70 % [[a]] and 30 % [[b]], threshold 0.50, ghost notes off."): those are read here, one reader per step shape. EVERY step shape the renderers write is in
 // RECIPE_STEPS below (the table the "I do not know the step" sentence is made from) and a property test (600 seeded cases per kind) pins that what is written is read back.
 import {
-  FOLDER_OF, Fail, Scan, followForks, note, orderFromWords, parse, placeOf, readRange, sentencesOf, type GrammarError, type GrammarVault, type ParseResult, type Sentence,
+  FOLDER_OF, Fail, Scan, followForks, note, orderFromWords, parse, placeOf, readRange, readStructureStep, sentencesOf, type GrammarError, type GrammarVault, type ParseResult, type Sentence,
 } from './phrase-grammar-core.ts';
 import {
   MIX_DEFAULTS, MORPH_DEFAULTS, MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, TRANSFORM_DEFAULTS, TRANSFORM_OPS_MAX, validatePhrase,
@@ -18,6 +18,7 @@ import {
 import { phraseRecipeSteps } from './phrase-notes-core.ts';
 import { arrangementRecipeSteps } from './arrangement-core.ts';
 import { compositionRecipeSteps } from './composition-core.ts';
+import { isStructureOp } from './bar-structure-core.ts';
 import { complementOf100, noNegZero, shiftDecimal, type GrammarParams } from './phrase-describe-core.ts';
 
 export type RecipeResult = ParseResult;
@@ -40,6 +41,9 @@ export const RECIPE_STEPS: ReadonlyArray<{ opener: string; re: RegExp; example: 
   { opener: 'With', re: /^with\b/i, example: 'With ghost notes.' },
   { opener: 'Thin out', re: /^thin\s+out\b/i, example: 'Thin out bars 3 to 5, kick row, by half, keeping the downbeat.' },
   { opener: 'Double up', re: /^double\s+up\b/i, example: 'Double up bars 3 to 5, kick row.' },
+  { opener: 'Delete', re: /^delete\b/i, example: 'Delete bars 3 to 5 and bar 8.' },
+  { opener: 'Copy', re: /^copy\b/i, example: 'Copy bars 3 to 5.' },
+  { opener: 'Move', re: /^move\b/i, example: 'Move bars 3 to 5 one bar left.' },
   { opener: 'Bar', re: /^bar\b/i, example: 'Bar 9 is replaced by [[bar_009]].' },
   { opener: 'Play', re: /^play\b/i, example: 'Play [[phrase_006]] on the [[rock]] kit.' },
   { opener: 'Mute', re: /^mute\b/i, example: 'Mute the [[latin]] kit.' },
@@ -223,8 +227,10 @@ function parseTransformRecipe(ss: Sentence[], vault: GrammarVault): TransformPhr
   for (const s of ss.slice(1)) {
     const f = new Scan(s.text, s.start);
     if (f.peekKw('bar')) { forks.push(s); continue; }
+    const structure = readStructureStep(f, ops.some((o) => !isStructureOp(o)));       // 2026-11-16-1000: the four steps that change which bars there are are said the same in the Recipe as in the Description
+    if (structure !== null) { ops.push(structure); continue; }
     const thin = f.kw('thin out');
-    if (!thin && !f.kw('double up')) f.fail('"Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]"');
+    if (!thin && !f.kw('double up')) f.fail('"Thin out ...", "Double up ...", "Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]"');
     const { first, last } = readRange(f);
     let row: string | undefined;
     if (f.comma()) {

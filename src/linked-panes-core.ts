@@ -34,6 +34,7 @@ export function pinnedNoteFor(prov: Provenance): PinnedNote | null {
     const fork = str(p.fork);
     if (fork) return { noteId: fork, reason: 'forked' };
     const source = str(p.source);
+    if (p.transform === true) return source ? { noteId: source, reason: pinnedLabel() } : null;        // 2026-11-16-1000: a transform's bar was taken from a PHRASE (a note id already), not from a bar of bars/
     return source ? { noteId: phraseSourceNoteId(source), reason: pinnedLabel() } : null;
   }
   if (prov.role === MORPH_BAR_ROLE || prov.role === MORPH_HIT_ROLE) {

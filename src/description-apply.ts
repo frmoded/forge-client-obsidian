@@ -78,6 +78,8 @@ export interface DescriptionController {
   revertGenerated(path: string): Promise<void>;
   /** 2026-11-12-1203: put the cursor in the docked prompt box of this note's tab (the first box when no path is given); false = there is none. */
   focusBox(path?: string): boolean;
+  /** 2026-11-16-1000: show `text` in this note's prompt box as a PREVIEW (edited, not applied; nothing is written until Apply). false = the note has no prompt box on screen. */
+  suggestInBox(path: string, text: string): boolean;
   /** Apply this text as the note's Description, as the prompt box's Apply does (the existing "Update from Description" writers; a sentence that does not parse writes nothing and the strip says where). */
   applyFromBox(path: string, text: string): Promise<{ ok: boolean; disk?: string }>;
   /** Is there something for "Update from Description" to do on this note (the command's availability)? */
@@ -554,6 +556,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     canRevertGenerated: (path) => { const st = ui.get(path)?.state; return st?.kind === 'custom-note' && st.canRevert; },
     revertGenerated,
     focusBox(path) { for (const b of boxes.values()) if (path === undefined || b.path === path) { b.handle.focus(); return true; } return false; },
+    suggestInBox(path, text) { for (const b of boxes.values()) if (b.path === path) { b.handle.suggest(text); return true; } return false; },
     applyFromBox,
     update, revert, ask, syncBars,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },

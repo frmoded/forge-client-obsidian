@@ -231,9 +231,9 @@ transform | step 1: cut after word 1 | 1:5 Expected the note to take, as [[a not
 transform | step 1: a name the vault does not have | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "nope_1" is not one.
 transform | step 1: a number that is not one | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "phrase_x" is not one.
 transform | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Thin".
-transform | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]", but found "Take".
+transform | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ...", "Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]", but found "Take".
 transform | step 2: junk after it | 2:86 Expected the end of the sentence, but found "banana".
-transform | step 2: cut after word 1 | 2:1 I do not know the step 'Thin'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform | step 2: cut after word 1 | 2:1 I do not know the step 'Thin'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Delete, Copy, Move, Bar, Play, Mute, Only, Together, For, Then play.
 transform | step 2: cut after word 2 | 2:9 Expected "bar N" or "bars N to M", but found the end of the sentence.
 transform | step 2: cut after word 3 | 2:14 Expected a bar number, but found the end of the sentence.
 transform | step 2: cut after word 4 | 2:16 Expected ":", but found the end of the sentence.
@@ -255,7 +255,7 @@ transform | step 2: the colon missing | 2:32 Expected ":", but found "remove".
 transform | step 2: missing | read
 transform | step 2: said twice | read
 transform | step 3: junk after it | 3:59 Expected the end of the sentence, but found "banana".
-transform | step 3: cut after word 1 | 3:1 I do not know the step 'Thin'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform | step 3: cut after word 1 | 3:1 I do not know the step 'Thin'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Delete, Copy, Move, Bar, Play, Mute, Only, Together, For, Then play.
 transform | step 3: cut after word 2 | 3:9 Expected "bar N" or "bars N to M", but found the end of the sentence.
 transform | step 3: cut after word 3 | 3:13 Expected a bar number, but found the end of the sentence.
 transform | step 3: cut after word 4 | 3:16 Expected "remove half of the hits", "remove N % of the hits", "remove all the hits" or "remove none of the hits", but found the end of the sentence.
@@ -274,7 +274,7 @@ transform | step 3: the colon missing | 3:16 Expected ":", but found "remove".
 transform | step 3: missing | read
 transform | step 3: said twice | read
 transform | step 4: junk after it | 4:85 Expected the end of the sentence, but found "banana".
-transform | step 4: cut after word 1 | 4:1 I do not know the step 'Double'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform | step 4: cut after word 1 | 4:1 I do not know the step 'Double'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Delete, Copy, Move, Bar, Play, Mute, Only, Together, For, Then play.
 transform | step 4: cut after word 2 | 4:10 Expected "bar N" or "bars N to M", but found the end of the sentence.
 transform | step 4: cut after word 3 | 4:15 Expected a bar number, but found the end of the sentence.
 transform | step 4: cut after word 4 | 4:17 Expected ":", but found the end of the sentence.
@@ -368,7 +368,7 @@ composition | step 1: a number that is not one | 1:6 Expected a phrase, an arran
 composition | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Then".
 composition | step 1: said twice | 2:1 Expected "Then play [[a note]] for N bars.", "For N bars play [[a note]]." or "Repeat that N more times.", but found "Play".
 composition | step 2: junk after it | 2:34 Expected the end of the sentence, but found "banana".
-composition | step 2: cut after word 1 | 2:1 I do not know the step 'Then'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+composition | step 2: cut after word 1 | 2:1 I do not know the step 'Then'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Delete, Copy, Move, Bar, Play, Mute, Only, Together, For, Then play.
 composition | step 2: cut after word 2 | 2:10 Expected the note to play, as [[a note]], but found the end of the sentence.
 composition | step 2: cut after word 3 | read
 composition | step 2: cut after word 4 | 2:26 Expected a number of bars, but found the end of the sentence.
@@ -418,15 +418,15 @@ a take with nothing after it | step 1: cut after word 1 | 1:5 Expected the note 
 a take with nothing after it | step 1: a name the vault does not have | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "nope_1" is not one.
 a take with nothing after it | step 1: a number that is not one | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "phrase_x" is not one.
 a take with nothing after it | step 1: missing | 1:1 Expected a Recipe (its first step is Take or Play), but found nothing.
-a take with nothing after it | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]", but found "Take".
+a take with nothing after it | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ...", "Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]", but found "Take".
 transform, a grid | step 1: junk after it | 1:21 Expected the end of the sentence, but found "banana".
 transform, a grid | step 1: cut after word 1 | 1:5 Expected the note to take, as [[a note]], but found the end of the sentence.
 transform, a grid | step 1: a name the vault does not have | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "nope_1" is not one.
 transform, a grid | step 1: a number that is not one | 1:6 Expected a phrase, an arrangement or a composition of this vault for the note to take, but "phrase_x" is not one.
 transform, a grid | step 1: missing | 1:1 Expected a Recipe that starts with "Take [[a note]]." or "Play [[a note]] ...", but found "Double".
-transform, a grid | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]", but found "Take".
+transform, a grid | step 1: said twice | 2:1 Expected "Thin out ...", "Double up ...", "Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]", but found "Take".
 transform, a grid | step 2: junk after it | 2:68 Expected the end of the sentence, but found "banana".
-transform, a grid | step 2: cut after word 1 | 2:1 I do not know the step 'Double'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Bar, Play, Mute, Only, Together, For, Then play.
+transform, a grid | step 2: cut after word 1 | 2:1 I do not know the step 'Double'. A step starts with Take, Repeat, Build, Morph, Mix, Keep, Threshold, With, Thin out, Double up, Delete, Copy, Move, Bar, Play, Mute, Only, Together, For, Then play.
 transform, a grid | step 2: cut after word 2 | 2:10 Expected "bar N" or "bars N to M", but found the end of the sentence.
 transform, a grid | step 2: cut after word 3 | 2:14 Expected a bar number, but found the end of the sentence.
 transform, a grid | step 2: cut after word 4 | 2:17 Expected "every hit gets a second one a step later", but found the end of the sentence.

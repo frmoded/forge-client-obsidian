@@ -98,6 +98,13 @@ export function phraseProvenance(phraseNote: string, params: ExtendPhrase, bars:
   return map;
 }
 
+/** 2026-11-16-1000: element id -> provenance for the bars of a TRANSFORM phrase's Score (so its bars can be pinned and selected like an extend's): the phrase made every bar, from the phrase it takes (`source`, a note id like `phrases/phrase_006`). */
+export function transformProvenance(phraseNote: string, source: string, bars: readonly PhraseBarInfo[]): ProvenanceMap {
+  const map: ProvenanceMap = {};
+  for (const b of bars) map[b.id] = { noteId: phraseNote, role: PHRASE_BAR_ROLE, params: { bar: b.index, bars: bars.length, tempo: b.tempo, source, transform: true } };
+  return map;
+}
+
 export function describeTempoChange(pct: number): string {
   if (pct < 0) return `slowing ${-pct} %`;
   if (pct > 0) return `speeding up ${pct} %`;
@@ -110,6 +117,16 @@ export function phraseLineageOf(prov: Provenance): LineageEntry[] {
   const p = prov.params;
   const name = prov.noteId.split('/').pop() ?? prov.noteId;
   const source = String(p.source);
+  if (p.transform === true) {                                        // 2026-11-16-1000: a bar of a transform phrase: which bar, which note made it, which phrase it was taken from
+    const from = source.split('/').pop() ?? source;
+    const out: LineageEntry[] = [
+      { kind: 'bar', text: `bar ${String(p.bar)} of ${String(p.bars)}`, covers: 'self' },
+      { kind: 'note', text: `made by ${name} (a transform of ${from})`, noteId: prov.noteId, openLabel: `Open ${name}`, covers: 'all' },
+      { kind: 'note', text: `from ${from}`, noteId: source, openLabel: `Open ${from}`, covers: 'all' },
+    ];
+    if (typeof p.tempo === 'number') out.push({ kind: 'tempo', text: `tempo ${p.tempo}`, covers: 'self' });
+    return out;
+  }
   if (typeof p.fork === 'string') {
     // M9: a forked bar — edited by hand in its own note; its tempo is that note's own
     const forkName = p.fork.split('/').pop() ?? p.fork;

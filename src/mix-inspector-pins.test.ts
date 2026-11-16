@@ -19,7 +19,7 @@ test('the mix tab\'s inspector options: the pin survives a redraw, arrows have n
 });
 
 test('the extend tab\'s inspector does NOT get the mix options (its pin, arrows and click targets are what they were)', () => {
-  const at = tab.indexOf("insp && k === 'extend' ? {");
+  const at = tab.indexOf("insp && (k === 'extend' || k === 'transform') ? {");      // 2026-11-16-1000 (deliberate): a transform's Score has the extend's inspector (its bars can be pinned and selected)
   const extend = tab.slice(at, tab.indexOf("} : insp && k === 'mix'", at));
   assert.ok(extend.length > 100);
   for (const opt of ['keepPin:', 'enlargeIds', 'order:', 'paintMixHits', 'paintMorphHits']) assert.ok(!extend.includes(opt), `the extend inspector has no ${opt}`);

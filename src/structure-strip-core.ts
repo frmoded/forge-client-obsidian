@@ -28,7 +28,7 @@ const forks = (p: PhraseParams): Array<{ bar: number; note: string }> => {
  *  (`known`); without it, the last bar any op names. */
 export function barCount(p: PhraseParams, known?: number): number {
   if (p.kind === 'mix') return 1;
-  if (p.kind === 'transform') return known ?? Math.max(...p.ops.map((o) => o.last));
+  if (p.kind === 'transform') return known ?? Math.max(...p.ops.flatMap((o) => (o.op === 'keep' || o.op === 'delete' || o.op === 'copy' || o.op === 'move' ? o.runs.map((r) => r[1]) : [o.last])));
   return p.bars;
 }
 

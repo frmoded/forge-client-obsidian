@@ -12,9 +12,11 @@
 // and is restored: extend bars 4, style repeat_with_fills, tempo 0; mix share 50, threshold 50, ghost off, vote; morph bars 5, musical order, seed 0; thin out by half keeping the downbeat; double up grid 16.
 // canonical(params) is what the text can carry: a field the text cannot say (a seed on an order that ignores it, `mode: "vote"` which is the same as no mode, a track with `mute: false`, `solo: false` or `volume: 100`, -0) is dropped.
 import {
-  MORPH_ORDERS, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
-  type ExtendPhrase, type MixPhrase, type MorphOrder, type MorphPhrase, type PhraseParams, type PhraseStyle, type TransformOp, type TransformPhrase,
+  MORPH_ORDERS, STRUCTURE_RUNS_MAX, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
+  type ExtendPhrase, type MixPhrase, type BarRun, type MorphOrder, type MorphPhrase, type PhraseParams, type StructureOp, type PhraseStyle, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
+import { isStructureOp } from './bar-structure-core.ts';
+import { rangeWords } from './phrase-words-core.ts';
 import { validateArrangement, type ArrangementParams, type ArrangementTrack } from './arrangement-core.ts';
 import { COMPOSITION_LENGTH_MAX, COMPOSITION_REPEAT_MAX, validateComposition, type CompositionParams, type CompositionSection } from './composition-core.ts';
 import { STYLE_WORDS, canonical, complementOf100, describe, link, noNegZero, orderWords, percentOf, plain, shiftDecimal, sortedOverrides, type GrammarParams } from './phrase-describe-core.ts';
@@ -39,6 +41,10 @@ export const VERBS: ReadonlyArray<{ verb: string; kind: 'extend' | 'mix' | 'morp
   { verb: 'play', kind: 'arrangement', example: 'Play [[phrase_006]] on the [[rock]] kit.' },
   { verb: 'thin out', kind: null, example: 'Thin out bars 3 to 5, kick row, by half, keeping the downbeat.' },
   { verb: 'double up', kind: null, example: 'Double up bars 3 to 5, kick row.' },
+  { verb: 'keep', kind: null, example: 'Keep bars 3 to 5 and bar 8.' },
+  { verb: 'delete', kind: null, example: 'Delete bars 3 to 5 and bar 8.' },
+  { verb: 'copy', kind: null, example: 'Copy bars 3 to 5.' },
+  { verb: 'move', kind: null, example: 'Move bars 3 to 5 one bar left.' },
   { verb: 'bar replaced', kind: null, example: 'Bar 9 is replaced by [[bar_009]].' },
   { verb: 'threshold', kind: null, example: 'Threshold 40 percent.' },
   { verb: 'ghost notes', kind: null, example: 'With ghost notes.' },
@@ -203,6 +209,35 @@ export function readRange(sc: Scan): { first: number; last: number } {
   return { first, last };
 }
 
+/**
+ * 2026-11-16-1000: a STRUCTURE step of a transform, read from the start of a sentence: "Keep bars 3 to 5 and bar 8.", "Delete bar 2.", "Copy bars 3 to 5.", "Move bars 3 to 5 one bar left." (words: bar-structure-core.ts). Returns null (nothing eaten) when the
+ * sentence starts with none of the four verbs. The ranges are ascending and apart; a structure step may not come after a Thin out or a Double up (it changes WHICH bars there are, and those two have already counted them).
+ */
+export function readStructureStep(f: Scan, afterDensity: boolean): StructureOp | null {
+  const start = f.i;
+  const verb = (['keep', 'delete', 'copy', 'move'] as const).find((v) => f.kw(v));
+  if (verb === undefined) { f.i = start; return null; }
+  if (afterDensity) f.failAt(`Expected "${verb[0].toUpperCase()}${verb.slice(1)}" to come before any "Thin out" or "Double up" (a change of which bars there are comes first), but it comes after one.`, start);
+  const runs: BarRun[] = [];
+  for (;;) {
+    const at = f.at;
+    const { first, last } = readRange(f);
+    const before = runs[runs.length - 1];
+    if (before !== undefined && first <= before[1] + 1) f.failAt(`Expected the bars in order with at least one bar between ranges, but ${rangeWords(first, last)} comes after ${rangeWords(before[0], before[1])}.`, at);
+    runs.push([first, last]);
+    if (runs.length > STRUCTURE_RUNS_MAX) f.failAt(`Expected at most ${STRUCTURE_RUNS_MAX} ranges of bars, but found more.`, at);
+    const more = f.comma();
+    if (f.kw('and')) continue;
+    if (more) continue;
+    break;
+  }
+  if (verb !== 'move') { f.end(); return { op: verb, runs }; }
+  let by: -1 | 1;
+  if (f.kw('one bar left')) by = -1; else if (f.kw('one bar right')) by = 1; else f.fail('"one bar left" or "one bar right"');
+  f.end();
+  return { op: 'move', runs, by };
+}
+
 /** The comma-separated segments of a head sentence, each at most once, in any order; `try` returns true when one was read. */
 function segments(sc: Scan, tries: Array<{ name: string; read: () => boolean }>, expected: string): void {
   const seen = new Set<string>();
@@ -341,6 +376,8 @@ function parseTransform(ss: Sentence[], vault: GrammarVault): TransformPhrase & 
     if (f.peekKw('bar')) {                                              // "Bar 9 is replaced by ..." (a one-bar RANGE starts with its verb, never with "bar"; "Bars" is not the word "bar")
       forks.push(s); continue;
     }
+    const structure = readStructureStep(f, ops.some((o) => !isStructureOp(o)));      // 2026-11-16-1000: Keep / Delete / Copy / Move
+    if (structure !== null) { ops.push(structure); continue; }
     if (f.kw('thin out')) {
       const { first, last } = readRange(f);
       let row: string | undefined, amount: number = TRANSFORM_DEFAULTS.amount, keep: 'seeded' | null = null, seed: number | null = null;
@@ -383,7 +420,7 @@ function parseTransform(ss: Sentence[], vault: GrammarVault): TransformPhrase & 
         tried.add(name);
       }
       ops.push({ op: 'double_up', first, last, ...(row !== undefined ? { row } : {}), grid });
-    } else f.fail('"Thin out ...", "Double up ..." or "Bar N is replaced by [[a bar]]"');
+    } else f.fail('"Thin out ...", "Double up ...", "Keep ...", "Delete ...", "Copy ...", "Move ..." or "Bar N is replaced by [[a bar]]"');
   }
   if (ops.length === 0) sc.failAt('Expected at least one change after "Take" (Thin out or Double up), but found none.', ss[0].start + ss[0].text.length);
   if (ops.length > TRANSFORM_OPS_MAX) sc.failAt(`Expected at most ${TRANSFORM_OPS_MAX} changes, but found ${ops.length}.`, ss[0].start);

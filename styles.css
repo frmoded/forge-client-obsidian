@@ -2792,3 +2792,38 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   cursor: text;
 }
 
+
+/* 2026-11-16-1000: the small floating menu on the bars selected on a phrase's Score (bar-selection-menu-dom.ts). It sits in the Score's area (positioned by the tab, above the first selected bar), quiet, in the theme's own colours. */
+.forge-bar-selection {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 8px);
+  padding: 3px 4px;
+  font-size: var(--font-ui-smaller, 12px);
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 6px);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.18));
+}
+.forge-bar-selection-count { padding: 0 6px; color: var(--text-muted); white-space: nowrap; }
+.forge-bar-selection button {
+  padding: 2px 8px;
+  height: auto;
+  font-size: inherit;
+  line-height: 1.4;
+  color: var(--text-normal);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s, 4px);
+  box-shadow: none;
+  cursor: pointer;
+}
+.forge-bar-selection button:hover:not(:disabled) { background: var(--background-modifier-hover); }
+.forge-bar-selection button:disabled, .forge-bar-selection button.is-disabled { opacity: 0.4; cursor: default; }
+.forge-bar-selection .forge-bar-selection-clear { padding: 2px 6px; color: var(--text-muted); }
+.forge-bar-selection .forge-bar-selection-note { flex-basis: 100%; order: 10; padding: 0 6px 2px; color: var(--text-muted); }

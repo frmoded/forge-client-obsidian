@@ -25,7 +25,13 @@ import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import { barsContributedBy, chipsFor, customChips, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import type { ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
-import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance } from './phrase-lineage-core.ts';
+import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance, transformProvenance } from './phrase-lineage-core.ts';
+import {
+  NO_SELECTION, SELECTION_MENU, disabledReason, extendSelection, limitTo, menuRun, planAction, sameSelection, selectRange as barsRange, selectionOf, selectionText, toggleSelection, type BarSelection, type SelectionAction,
+} from './bar-selection-core.ts';
+import { mountSelectionMenu, type SelectionMenuHandle } from './bar-selection-menu-dom.ts';
+import { barSelectionHost } from './bar-selection-bus.ts';
+import { isStructureOp } from './bar-structure-core.ts';
 import { MIX_BAR_ROLE, MIX_HIT_ROLE, annotateMixPayload, mixLineageOf } from './mix-lineage-core.ts';
 import { paintMixHits } from './mix-hits-dom.ts';
 import { mixStateCount, mixStatesHint } from './mix-states-core.ts';
@@ -601,6 +607,12 @@ export interface PhraseHandle {
 
 type NoteText = string | { unreadable: string };
 
+/** What makes the bars of a phrase's Score mean what they mean: a transform's source and its steps that change which bars there are (a Thin out or a Double up keeps every number); any other kind is just its kind (a different number of bars is the redraw's own `limitTo`). */
+function numberingKey(p: PhraseParams | null): string {
+  if (p === null) return '';
+  return p.kind === 'transform' ? JSON.stringify([p.source, p.ops.filter(isStructureOp)]) : p.kind;
+}
+
 function phraseSourceNote(source: string): string {
   return `bars/${source}`;
 }
@@ -610,6 +622,22 @@ function annotateForPhrase(path: string, note: NoteText, payload: Record<string,
   const none = (problem: string): ProvenanceResult => ({ payload, map: {}, problems: [problem], kitProblems: [] });
   const parsed = typeof note === 'string' ? readPhraseNote(note) : null;
   if (!parsed || parsed.ok === false) return none('the phrase could not be read');
+  if (parsed.value.kind === 'transform') {                                   // 2026-11-16-1000: the bars of a transform get ids too, so they can be pinned and selected
+    const transform = parsed.value;
+    const count = Array.isArray(payload.bars_data) ? payload.bars_data.length : 0;
+    const key = typeof payload.multi_staff_content === 'string' ? 'multi_staff_content' : typeof payload.content === 'string' ? 'content' : null;
+    if (key === null || count < 1) return none('the Score payload carries no MusicXML or no bars');
+    try {
+      const t = annotatePhraseXml(payload[key] as string, typeof payload.kit_content === 'string' ? payload.kit_content : null, count, PHRASE_BAR_SCOPE);
+      if (t.ok === false) return none(t.problems[0]);
+      const out: Record<string, unknown> = { ...payload, [key]: t.multiXml };
+      if (t.kitXml !== null) out.kit_content = t.kitXml;
+      return { payload: out, map: transformProvenance(phraseNoteId(path), transform.source, t.bars), problems: [], kitProblems: t.kitProblems };
+    } catch (e) {
+      console.error('annotateForPhrase failed', e);
+      return none(`the bars could not be tied to the phrase (${(e as Error)?.message ?? e})`);
+    }
+  }
   if (parsed.value.kind !== 'extend') return none('a mix has no bar lineage yet');
   const extend = parsed.value;
   const multiKey = typeof payload.multi_staff_content === 'string' ? 'multi_staff_content' : typeof payload.content === 'string' ? 'content' : null;
@@ -679,11 +707,12 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let tintRole = PHRASE_BAR_ROLE;
   let tintMap: ProvenanceMap | null = null;
   const tintedIds = (map: ProvenanceMap): string[] => Object.keys(map).filter((id) => map[id].role === tintRole && typeof map[id].params.bar === 'number' && selectedBars.has(map[id].params.bar as number));
-  const tintAttached = (host: HTMLElement, map: ProvenanceMap): void => { tintHost = host; tintMap = map; paintSelectionTint(host, tintedIds(map)); };
+  const tintAttached = (host: HTMLElement, map: ProvenanceMap): void => { tintHost = host; tintMap = map; paintSelectionTint(host, tintedIds(map)); paintSelectionMenu(); };
   const withTint = (inner?: (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null) => void) => (host: HTMLElement, map: ProvenanceMap, pinnedId: string | null): void => {
     tintHost = host; tintMap = map;
     inner?.(host, map, pinnedId);
     paintSelectionTint(host, tintedIds(map));
+    paintSelectionMenu();
   };
   let scoreBars: RhythmData[] | null = null;     // the bars of the Score on screen (the notebook's boxes and rows; a transform's bar count)
   let barsData: RhythmData[] | null = null;      // M9: the bars as the engine laid them out in the Score on screen (the data "Edit this bar" writes into the fork note)
@@ -736,8 +765,81 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       return null;
     }
   };
-  /** The inspector's port for selecting bars ON the Score (2026-10-30-1020): only a tab that has a notebook gets one, so a tab without it is exactly what it was. */
-  const selectBarsPort = (): ScoreInspectorPorts['selectBars'] => (ports.notebook ? { onRange: (a, b) => { notebookHandle?.selectRange(a, b); }, onRangeEnd: () => { notebookHandle?.reveal(); }, onShiftClick: (n) => { notebookHandle?.extendTo(n); } } : undefined);
+  // ---- 2026-11-16-1000: SELECT BARS on the Score, then act on them. The selection lives HERE (bar-selection-core.ts: the model, the words, what each action writes); the tint is the notebook's own (paintSelectionTint), the menu is bar-selection-menu-dom.ts
+  // in the Score's area. Shift-click extends, Ctrl/Cmd-click toggles, a drag is a range, Esc clears; a plain click is still the pin. A selection made here is told to the notebook when it is one range (the notebook is the other producer: what it
+  // selects arrives through `onSelection` below), and any change to the note or to the number of bars lets it go.
+  let selection: BarSelection = NO_SELECTION;
+  let selMenu: SelectionMenuHandle | null = null;
+  let selResize: { disconnect(): void } | null = null;                       // the Score's area changed size (a pane dragged, a narrower window): the bars moved, so does the menu
+  let selNote: string | null = null;                                           // a line the menu says after its count (a refusal, "no prompt box"): gone with the next change of selection
+  /** The box of the range of selected bars last touched, in the area's own coordinates (where the menu is placed), or undefined when none can be measured. */
+  const selectionBox = (): { left: number; top: number; right: number; bottom: number } | undefined => {
+    const run = menuRun(selection);
+    if (!area || !tintHost || !tintMap || run === null) return undefined;
+    const base = area.el.getBoundingClientRect();
+    let box: { left: number; top: number; right: number; bottom: number } | undefined;
+    for (const id of tintedIds(tintMap)) {
+      const bar = tintMap[id].params.bar as number;
+      if (bar < run[0] || bar > run[1]) continue;
+      const el = tintHost.querySelector(`[id="${id.replace(/"/g, '')}"]`) as Element | null;
+      const r = el?.getBoundingClientRect?.();
+      if (!r || !(r.width > 0 && r.height > 0)) continue;
+      const b = { left: r.left - base.left, top: r.top - base.top, right: r.right - base.left, bottom: r.bottom - base.top };
+      box = box ? { left: Math.min(box.left, b.left), top: Math.min(box.top, b.top), right: Math.max(box.right, b.right), bottom: Math.max(box.bottom, b.bottom) } : b;
+    }
+    return box;
+  };
+  const paintSelectionMenu = (): void => {
+    if (!selMenu) return;
+    if (selection.bars.length === 0) { selMenu.hide(); return; }
+    const total = scoreBars?.length ?? 0;
+    const disabled = Object.fromEntries(SELECTION_MENU.map((m) => [m.id, disabledReason(m.id, selection, total)])) as Record<SelectionAction, string | null>;
+    selMenu.show({ text: selectionText(selection), note: selNote, disabled, anchor: selectionBox() });
+  };
+  /** The selection is now `next` (from the Score's gestures, the notebook, Esc, or a redraw that dropped bars). Tint and menu follow; a one-range selection made on the Score is told to the notebook. */
+  const setSelection = (next: BarSelection, from: 'score' | 'notebook' | 'esc' | 'redraw'): void => {
+    if (sameSelection(next, selection)) { if (next.anchor !== selection.anchor) selection = next; return; }
+    selection = next; selNote = null;
+    selectedBars = new Set(next.bars);
+    if (tintHost && tintHost.isConnected !== false) paintSelectionTint(tintHost, tintMap ? tintedIds(tintMap) : []);
+    paintSelectionMenu();
+    const runs = next.bars.length > 0 && next.bars[next.bars.length - 1] - next.bars[0] + 1 === next.bars.length;
+    if (from !== 'notebook' && notebookHandle && (runs || next.bars.length === 0)) notebookHandle.selectRange(next.bars.length > 0 ? next.bars[0] : 1, next.bars.length > 0 ? next.bars[next.bars.length - 1] : 0);
+    console.info(`[forge-barsel] ${from}: ${selectionText(next)}`);
+  };
+  /** A menu action: plan it (bar-selection-core.ts), then PREVIEW the sentence in the prompt box (a transform phrase), or make the new phrase (everything else). Nothing is applied here. */
+  const runSelectionAction = async (action: SelectionAction): Promise<void> => {
+    const host = barSelectionHost();
+    const plan = planAction(action, selection, current, phraseName, scoreBars?.length ?? 0);
+    console.info(`[forge-barsel] action ${action} on ${selectionText(selection)} -> ${plan.kind}${plan.kind === 'refused' ? `: ${plan.message}` : `: ${plan.kind === 'preview' ? plan.sentence : plan.sentence}`}`);
+    const say = (line: string): void => { selNote = line; paintSelectionMenu(); };
+    if (plan.kind === 'refused') { say(plan.message); return; }
+    if (host === null) { say('no prompt box here to show it in.'); return; }
+    if (plan.kind === 'preview') {
+      if (!host.previewDescription(ports.path, plan.text)) say('this tab has no prompt box to show the sentence in.');
+      else say(`"${plan.sentence}" is in the prompt box: press Apply to do it.`);
+      return;
+    }
+    const made = await host.makePhrase(plan.params);
+    if (made.ok === false) { say(made.message); return; }
+    console.info(`[forge-barsel] new phrase ${made.path}: ${plan.sentence} (${plan.because})`);
+    setSelection(NO_SELECTION, 'esc');
+  };
+  const onSelectionEsc = (e: Event): void => {
+    const k = e as KeyboardEvent;
+    if (k.key !== 'Escape' || selection.bars.length === 0) return;
+    const t = k.target as HTMLElement | null;
+    if (t && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName ?? '')) return;       // the prompt box and the pickers keep their own Esc
+    setSelection(NO_SELECTION, 'esc');
+  };
+  parent.addEventListener('keydown', onSelectionEsc);
+  /** The inspector's port for selecting bars ON the Score: every phrase surface has it (2026-11-16-1000; it used to be only a tab with a notebook). */
+  const selectBarsPort = (): ScoreInspectorPorts['selectBars'] => ({
+    onRange: (a, b) => { setSelection(barsRange(a, b), 'score'); },
+    onRangeEnd: () => { notebookHandle?.reveal(); },
+    onShiftClick: (n) => { setSelection(extendSelection(selection, n), 'score'); },
+    onToggleClick: (n) => { setSelection(toggleSelection(selection, n), 'score'); },
+  });
   // 2026-11-15-1217: with `legacyControllers: false` the input strips and the notebook are mounted into a detached holder: all the code runs, none of it is in the document.
   const holder = legacyControllers === false ? parent.ownerDocument.createElement('div') : null;
   const stripParent: HTMLElement = holder ?? parent;
@@ -758,7 +860,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       strip = { el: controls.el, set: (params) => controls.set(params && params.kind === 'extend' ? params : null), setStatus: (t) => controls.setStatus(t), dispose: () => controls.dispose() };
     }
     bracket = null;
-    const inspectorPorts: ScoreInspectorPorts | undefined = insp && k === 'extend' ? {
+    const inspectorPorts: ScoreInspectorPorts | undefined = insp && (k === 'extend' || k === 'transform') ? {
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
       onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
@@ -840,11 +942,20 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
         const out = await producePhraseNote(deps, note as NoteText, title);
         if (out.kind === 'score' && !disposed) {
           const bars = barsOfPayload(out.payload);
-          if (bars !== null) { scoreBars = bars; notebookHandle?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels)))) }); }
+          if (bars !== null) { scoreBars = bars; notebookHandle?.setScore({ count: bars.length, rows: Array.from(new Set(bars.flatMap((b) => Object.keys(b.channels)))) }); setSelection(limitTo(selection, bars.length), 'redraw'); }
         }
         return out;
       },
     });
+    if (area && inspectorPorts) {                                                                // 2026-11-16-1000: the floating menu (only where there is an inspector: the lean edition's one line is what it was) of a selection lives in the Score's area (positioned over it), outside the engraving's own element
+      const view = area.el.ownerDocument.defaultView;
+      const position = view?.getComputedStyle?.(area.el)?.position;
+      if (!position || position === 'static') area.el.style.position = 'relative';
+      selMenu = mountSelectionMenu(area.el, { onAction: (a) => { void runSelectionAction(a); }, onClear: () => { setSelection(NO_SELECTION, 'esc'); } });
+      const RO = (view as unknown as { ResizeObserver?: new (cb: () => void) => { observe(el: Element): void; disconnect(): void } } | null)?.ResizeObserver;
+      if (RO) { const ro = new RO(() => { paintSelectionMenu(); }); ro.observe(area.el); selResize = ro; }
+      paintSelectionMenu();
+    }
     // The bracket under every bar made by this phrase note (hover lights them all, a click opens the phrase), directly under the Score it brackets (2026-11-03-1155-93: it used to sit over it, between the strip and the engraving). A mix has none (M8).
     if (insp && k === 'extend') {
       const doc = parent.ownerDocument;
@@ -859,7 +970,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       const told = ports.notebook;
       notebookHandle = mountNotebook(stripParent, {
         ...told,
-        onSelection: (sel) => { selectedBars = new Set(sel.bars); if (tintHost && tintHost.isConnected !== false) { paintSelectionTint(tintHost, tintMap ? tintedIds(tintMap) : []); } told.onSelection?.(sel); },
+        onSelection: (sel) => { setSelection(selectionOf(sel.bars), 'notebook'); told.onSelection?.(sel); },
       });
       void notebookHandle.refresh();
     }
@@ -874,6 +985,8 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     bracket = null;
     notebookHandle?.dispose();
     notebookHandle = null;
+    selResize?.disconnect(); selResize = null;
+    selMenu?.dispose(); selMenu = null; selection = NO_SELECTION; selNote = null;
     selectedBars = new Set(); tintHost = null; tintMap = null;       // the notebook mounts again empty
     strip.dispose();
   };
@@ -890,7 +1003,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     // 2026-10-26-1100: a phrase refused ONLY because a fork lies past Bars can be fixed from the strip, so the strip stays live for it: it shows the phrase without that fork, and every write carries the fork along (raising Bars
     // loses nothing). Any other refusal is what it was: every control disabled and the Score says why.
     const salvage = parsed && parsed.ok === false && typeof text === 'string' ? salvageOverrideRefusal(text) : null;
+    const before = numberingKey(current);
     current = parsed && parsed.ok ? parsed.value : salvage ? salvage.keep : null;
+    if (selection.bars.length > 0 && numberingKey(current) !== before) setSelection(NO_SELECTION, 'redraw');          // 2026-11-16-1000: the bars were renumbered (a Keep / Delete / Copy / Move applied, another source): the numbers of a selection mean other bars now. A change that keeps the numbers (a Thin out, a tempo) keeps the selection
     const title = phraseTabTitle(phraseName, current);
     if (title !== shownTitle) { shownTitle = title; ports.titleChanged?.(); }
     // The surface follows what the note SAYS it is, even when the rest of it is wrong (a mix with weight 3 still gets the mix strip, disabled, and the Score says what is wrong).
@@ -986,6 +1101,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     dispose() {
       disposed = true;
       stopListening?.();
+      parent.removeEventListener('keydown', onSelectionEsc);
       teardown();
     },
   };

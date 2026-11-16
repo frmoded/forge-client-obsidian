@@ -13,7 +13,7 @@ const IDS = [1, 2, 3].map((n) => `ph_bar_${n}`);
 const MAP = Object.fromEntries(IDS.map((id, i) => [id, { noteId: 'phrases/phrase_001', role: 'phrase-bar', params: { bar: i + 1 } }]));
 const barOf = (prov: { params: Record<string, unknown> }): number | null => (typeof prov.params.bar === 'number' ? prov.params.bar : null);
 
-function rig(opts: { selectBars?: boolean; keepPinOnControls?: boolean } = {}) {
+function rig(opts: { selectBars?: boolean; keepPinOnControls?: boolean; toggle?: boolean } = {}) {
   const win: any = new Window({ url: 'http://localhost/' });
   const doc = win.document;
   const root = doc.createElement('div'); doc.body.appendChild(root);
@@ -25,7 +25,7 @@ function rig(opts: { selectBars?: boolean; keepPinOnControls?: boolean } = {}) {
   const pins: Array<string | null> = [];
   const layer = attachArtifactInspector({
     root, map: MAP, onHover: () => {}, onPin: (e) => { pins.push(e ? e.id : null); }, pointIds: IDS, keepPinOnControls: opts.keepPinOnControls,
-    selectBars: opts.selectBars ? { barOf, onRange: (a: number, b: number) => { calls.push(`range ${a}-${b}`); }, onRangeEnd: () => { calls.push('end'); }, onShiftClick: (n: number) => { calls.push(`shift ${n}`); } } : undefined,
+    selectBars: opts.selectBars ? { barOf, onRange: (a: number, b: number) => { calls.push(`range ${a}-${b}`); }, onRangeEnd: () => { calls.push('end'); }, onShiftClick: (n: number) => { calls.push(`shift ${n}`); }, ...(opts.toggle ? { onToggleClick: (n: number) => { calls.push(`toggle ${n}`); } } : {}) } : undefined,
   } as any);
   const ev = (type: string, target: any, x: number, y = 30, extra: Record<string, unknown> = {}) => target.dispatchEvent(new win.MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, ...extra }));
   /** What a browser does for a press at `from`, a drag through `via` and a release at `to`: mousedown, mousemove(s), mouseup, then the click on the common ancestor (the svg root here). */
@@ -183,6 +183,30 @@ test('Shift-click on a bar asks to EXTEND (with that bar) and does not pin; Shif
   assert.equal(r.layer.pinnedId(), 'ph_bar_1');
 });
 
+test('2026-11-16-1000: Ctrl-click and Cmd-click on a bar ask to TOGGLE it (with that bar) and pin nothing; on the margin they do nothing and keep the pin; a press with Ctrl or Cmd is not a drag start', () => {
+  const r = rig({ selectBars: true, toggle: true });
+  r.layer.pin('ph_bar_1');
+  r.ev('mousedown', r.svg, 250, 30, { ctrlKey: true }); r.ev('mouseup', r.svg, 250, 30, { ctrlKey: true }); r.ev('click', r.svg, 250, 30, { ctrlKey: true });
+  r.ev('click', r.svg, 150, 30, { metaKey: true });
+  assert.deepEqual(r.calls, ['toggle 3', 'toggle 2']);
+  assert.equal(r.layer.pinnedId(), 'ph_bar_1', 'the pin is kept');
+  r.ev('click', r.svg, 250, 200, { ctrlKey: true });
+  assert.deepEqual(r.calls, ['toggle 3', 'toggle 2'], 'the margin: nobody is told');
+  assert.equal(r.layer.pinnedId(), 'ph_bar_1');
+  r.ev('click', r.svg, 150, 30);                                                          // a plain click is still the pin
+  assert.equal(r.layer.pinnedId(), 'ph_bar_2');
+  assert.deepEqual(r.calls, ['toggle 3', 'toggle 2']);
+});
+
+test('2026-11-16-1000, P3: a surface that selects bars but gives no `onToggleClick` sees a Ctrl/Cmd-click as the plain click it always was (it pins), and a drag with Ctrl held still selects', () => {
+  const r = rig({ selectBars: true });
+  r.ev('click', r.svg, 250, 30, { ctrlKey: true });
+  assert.equal(r.layer.pinnedId(), 'ph_bar_3');
+  assert.deepEqual(r.calls, []);
+  r.ev('mousedown', r.svg, 5, 30, { ctrlKey: true }); r.ev('mousemove', r.svg, 150, 30); r.ev('mouseup', r.svg, 150, 30);
+  assert.deepEqual(r.calls, ['range 1-2', 'end']);
+});
+
 test('a press on a control inside the root (the player) is not a drag start, with keepPinOnControls on', () => {
   const r = rig({ selectBars: true, keepPinOnControls: true });
   r.ev('mousedown', r.button, 5); r.ev('mousemove', r.svg, 250); r.ev('mouseup', r.svg, 250);
@@ -211,7 +235,7 @@ test('MECHANISM PIN 2026-10-30-1020 (if the design moves this SHOULD go red: rea
   assert.deepEqual(users, ['artifact-inspector-core.ts', 'compositions.ts', 'phrase-dom.ts', 'score-inspector.ts']);     // (M17c: the composition tab has the notebook too, so it turns the gesture on - and, as the phrase tab, only when it HAS one: asserted below)
   const dom = fs.readFileSync(path.join(dir, 'phrase-dom.ts'), 'utf8');
   assert.equal((dom.match(/selectBars: selectBarsPort\(\),/g) ?? []).length, 3, 'extend, mix and morph');
-  assert.match(dom, /const selectBarsPort = \(\): ScoreInspectorPorts\['selectBars'\] => \(ports\.notebook \? \{/, 'only a tab that HAS a notebook gets the gesture');
+  assert.match(dom, /const selectBarsPort = \(\): ScoreInspectorPorts\['selectBars'\] => \(\{/, '2026-11-16-1000 (deliberate): every phrase tab gets the gesture now (the selection and its menu are the tab\'s, the notebook is one more producer of it); it used to be only a tab that HAS a notebook');
   const comp = fs.readFileSync(path.join(dir, 'compositions.ts'), 'utf8');
   assert.equal((comp.match(/selectBars: \{/g) ?? []).length, 1, 'the composition tab turns it on once');
   assert.match(comp, /\.\.\.\(this\.notebookFor \? \{[\s\S]*?selectBars: \{[\s\S]*?\} : \{\}\)/, 'and only when the plugin gave it a notebook'); 
