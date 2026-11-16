@@ -3,6 +3,7 @@
 // Score with its notes pane) and **Make this composition the root of the piece**. The decisions are in composition-core.ts / composition-nav-core.ts / composition-strip-core.ts / composition-flow-core.ts / composition-root-core.ts, the DOM in
 // composition-dialog-dom.ts / composition-strip-dom.ts, all unit-tested without Obsidian (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3).
 import { uiFlags } from './ui-flags-core.ts';
+import { ICON_COMPOSITION } from './music-ribbon-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
@@ -345,6 +346,7 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
   plugin.addCommand({
     id: NEW_COMPOSITION_COMMAND_ID,
     name: NEW_COMPOSITION_COMMAND_NAME,
+    icon: ICON_COMPOSITION,
     checkCallback: (checking: boolean) => {
       const phrases = names(PHRASE_FOLDER), arrangements = names(ARRANGEMENT_FOLDER);
       if (!newCompositionAvailable({ scoreFirst: opts.scoreFirst(), phraseCount: phrases.length, arrangementCount: arrangements.length })) return false;

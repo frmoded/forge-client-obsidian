@@ -2,6 +2,7 @@
 // **New arrangement** and **Open arrangement as Score**. The decisions are in kit-core.ts / arrangement-core.ts / kit-arrangement-flow-core.ts, the dialogs' DOM in kit-dom.ts / arrangement-dom.ts, all unit-tested without Obsidian. Registered ONLY in a score-first vault
 // (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3). 2026-10-29-0910: the tab's one write is the row of controls per kit (Mute, Solo, volume), which edits the note through the builders New arrangement uses. An arrangement is otherwise edited as its note.
 import { uiFlags } from './ui-flags-core.ts';
+import { ICON_ARRANGEMENT } from './music-ribbon-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { handEditRefused, handEditStatusSettled } from './hand-edit-refusal-core.ts';
 import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
@@ -353,6 +354,7 @@ export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangemen
   plugin.addCommand({
     id: NEW_ARRANGEMENT_COMMAND_ID,
     name: NEW_ARRANGEMENT_COMMAND_NAME,
+    icon: ICON_ARRANGEMENT,
     checkCallback: (checking: boolean) => {
       const kits = names(KIT_FOLDER);
       const phrases = names(PHRASE_FOLDER);

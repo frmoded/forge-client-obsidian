@@ -11,7 +11,7 @@ import { deferredTabName } from './deferred-tab-title-core.ts';
 import { cacheFoldInfo, cacheFoldKind, shouldFoldCache, type FoldInfo } from './cache-fold-core.ts';
 import { ARRANGEMENT_VIEW_TYPE } from './arrangement-core.ts';
 import { COMPOSITION_VIEW_TYPE } from './composition-core.ts';
-import { MarkdownView, Notice, TFile, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Notice, TFile, addIcon, removeIcon, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
@@ -41,10 +41,14 @@ import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 import { PLAN_COMMAND_ID, PLAN_COMMAND_NAME, createSentencePlanner, planAvailable, type PlanPayload } from './sentence-plan-core.ts';
 import { SentencePlanModal } from './sentence-plan-modal.ts';
 import { NOTEBOOK_FOLDER, createNotebook, type Selection } from './notebook-core.ts';
+import { ICON_BAR, ICON_PHRASE, registerMusicIcons, registerMusicRibbon } from './music-ribbon-core.ts';
+import { createPhraseAnywhere } from './new-phrase-anywhere-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
 // score_first M5 (drain 2026-10-22-1850): phrases. Registered after the SAME gate as "New bar", never in another vault.
+export const NEW_PHRASE_ANYWHERE_COMMAND_ID = 'new-phrase';
+export const NEW_PHRASE_ANYWHERE_COMMAND_NAME = 'New phrase';
 export const NEW_PHRASE_COMMAND_ID = 'new-phrase-from-bar';
 export const NEW_PHRASE_COMMAND_NAME = 'New phrase from this bar';
 export const OPEN_PHRASE_COMMAND_ID = 'open-phrase-as-score';
@@ -118,8 +122,9 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
   });
 
   const activePath = (): string | null => app.workspace.getActiveFile()?.path ?? null;
-  const createPhrase = (): Promise<unknown> => createNewPhrase<TFile>({
-    activePath,
+  // 2026-11-16-0901: the flow takes the bar it is to start from as a function, so "New phrase" (any note) can hand it a bar it picked; "New phrase from this bar" still hands it the note you are on.
+  const phraseFrom = (barPath: () => string | null): Promise<unknown> => createNewPhrase<TFile>({
+    activePath: barPath,
     folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
     createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
     listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
@@ -129,6 +134,14 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     notify: (message) => { loggedNotice(message); },
     isAlreadyExists: isFileExistsError,
   });
+  const createPhrase = (): Promise<unknown> => phraseFrom(activePath);
+  // "New phrase": the bar you are on, else the first bar, else a new bar first; never a refusal (the palette entry and the ribbon button are this command)
+  const createPhraseAnyNote = (): Promise<unknown> => createPhraseAnywhere({
+    activePath,
+    barBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${BAR_FOLDER}/`)).map((f) => f.basename),
+    createBar: () => createBar() as Promise<{ ok: true; path: string } | { ok: false; message: string }>,
+    createPhraseFrom: (barPath) => phraseFrom(() => barPath),
+  }).then((r) => { if (r.kind === 'failed') loggedNotice(`New phrase: ${r.message}`); return r; });
 
   const createMix = (): Promise<unknown> => createNewMix<TFile>({
     activePath,
@@ -233,13 +246,31 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       plugin.addCommand({
         id: NEW_BAR_COMMAND_ID,
         name: NEW_BAR_COMMAND_NAME,
+        icon: ICON_BAR,
         checkCallback: (checking: boolean) => {
           if (!newBarAvailable(scoreFirst)) return false;
           if (!checking) void createBar();
           return true;
         },
       });
-      plugin.addRibbonIcon('plus-circle', NEW_BAR_COMMAND_NAME, () => { void createBar(); });
+      // 2026-11-16-0901: the four music buttons ("New phrase", "New arrangement", "New composition", "New bar") with icons of our own, registered ONCE here (only in a vault whose music tabs are on) and taken away when the plugin unloads.
+      plugin.register(registerMusicIcons({ addIcon, removeIcon }));
+      plugin.addCommand({
+        id: NEW_PHRASE_ANYWHERE_COMMAND_ID,
+        name: NEW_PHRASE_ANYWHERE_COMMAND_NAME,
+        icon: ICON_PHRASE,
+        checkCallback: (checking: boolean) => {
+          if (!newBarAvailable(scoreFirst)) return false;
+          if (!checking) void createPhraseAnyNote();
+          return true;
+        },
+      });
+      registerMusicRibbon({
+        pluginId: plugin.manifest.id,
+        addRibbonIcon: (icon, title, onClick) => plugin.addRibbonIcon(icon, title, onClick),
+        runCommand: (fullId) => (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById(fullId),
+        notify: (message) => { loggedNotice(message); },
+      });
       // M5: the phrase tab (a control strip over a live Score) and its two commands. The view type is registered here, after the gate, so no other vault knows it exists. Both commands still ask
       // the live answer when offered, like "New bar".
       const plan = scorePanelPlan({ scoreFirst: true, edition: musicEdition.id });
@@ -643,6 +674,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       plugin.addCommand({
         id: NEW_PHRASE_COMMAND_ID,
         name: NEW_PHRASE_COMMAND_NAME,
+        icon: ICON_PHRASE,
         checkCallback: (checking: boolean) => {
           if (!newPhraseAvailable({ scoreFirst, activePath: activePath() })) return false;
           if (!checking) void createPhrase();
