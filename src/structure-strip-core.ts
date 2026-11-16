@@ -2,7 +2,7 @@
 // chips of a bar's tab (the phrases that use it). The "which note made bar n" rule is the SAME rule a pin sends the notes pane by (linked-panes-core.ts pinnedNoteFor): structure-strip-core.test.ts cross-checks them for every
 // kind, so the two cannot drift apart. Runtime imports from phrase-core.ts are types only.
 import { callsInPython, noteKindOfName } from './custom-note-core.ts';
-import type { PhraseParams } from './phrase-core.ts';
+import { isPhrasePath, type PhraseParams } from './phrase-core.ts';
 import type { ArrangementParams } from './arrangement-core.ts';
 import { phraseBarId, PHRASE_BAR_SCOPE } from './phrase-lineage-core.ts';
 import { transformOpShort } from './phrase-words-core.ts';
@@ -131,7 +131,7 @@ export function stripText(chips: readonly Chip[]): string {
 export function usedByChips(barName: string, resolved: Record<string, Record<string, number>>): Chip[] {
   const target = `bars/${barName}.md`;
   return Object.keys(resolved)
-    .filter((src) => /^phrases\/phrase_\d+\.md$/.test(src) && (resolved[src][target] ?? 0) > 0)
+    .filter((src) => isPhrasePath(src) && (resolved[src][target] ?? 0) > 0)
     .sort()
     .map((src): Chip => { const name = baseName(src).replace(/\.md$/, ''); return { text: name, noteId: `phrases/${name}`, kind: 'phrase' }; });
 }

@@ -45,13 +45,13 @@ function world(over: { notes?: Record<string, string | undefined>; combined?: un
 const transformNote = (source: string, ops = OPS): string => noteContentFor('phrase_010', { kind: 'transform', source, ops });
 
 test('the validator takes a phrase OR an arrangement (and, since M17b, a composition) as the source of a transform, and refuses everything else in one sentence naming them', () => {
-  for (const source of ['phrases/phrase_006', 'arrangements/arr_001', 'arrangements/arr_12']) {
+  for (const source of ['phrases/phrase_006', 'arrangements/arr_001', 'arrangements/arr_12', 'phrases/bridge', 'phrases/my groove', 'phrases/arr_001']) {         // 2026-11-16-1100 (deliberate): any note of phrases/ (a renamed phrase) is a source; phrases/arr_001 is a phrase called arr_001
     const v = validatePhrase({ kind: 'transform', source, ops: OPS });
     assert.ok(v.ok, source);
     if (v.ok) assert.equal((v.value as TransformPhrase).source, source);
   }
   const SENTENCE = (got: string) => `source must be a phrase note without .md, like phrases/phrase_006, an arrangement note, like arrangements/arr_001, or a composition note, like compositions/intro, got ${got}.`;      // 2026-10-31-1100 (M17b, deliberate): a composition note too
-  for (const source of ['phrase_006', 'arr_001', 'phrases/phrase_006.md', 'arrangements/arr_001.md', 'bars/bar_005', 'arrangements/arr_x', 'phrases/arr_001', 'arrangements/phrase_001', 'arrangement/arr_001', 'kits/rock', 'arrangements/arr_001/x', '/arrangements/arr_001', ' arrangements/arr_001', 7, null]) {
+  for (const source of ['phrase_006', 'arr_001', 'phrases/phrase_006.md', 'arrangements/arr_001.md', 'bars/bar_005', 'arrangements/arr_x', 'arrangements/phrase_001', 'arrangement/arr_001', 'kits/rock', 'arrangements/arr_001/x', '/arrangements/arr_001', ' arrangements/arr_001', 7, null]) {
     const v = validatePhrase({ kind: 'transform', source, ops: OPS });
     assert.deepEqual(v, { ok: false, message: SENTENCE(JSON.stringify(source)) }, String(source));
   }

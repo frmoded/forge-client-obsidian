@@ -199,10 +199,12 @@ test('disabledReason at its edges: a bar exactly on the last bar is fine; with t
   assert.equal(disabledReason('move-right', sel(1), 1), 'Bar 1 is the last bar: it cannot move right.');
 });
 
-test('a phrase renamed to something else than phrase_N cannot be the source of a transform (the validator\'s rule): the menu says so instead of making a note that would not open; and why a new phrase was made is said exactly', () => {
+test('a phrase renamed to something else than phrase_N IS a source (2026-11-16-1100, amended on purpose: it was refused); a name no note can have is still refused in the menu\'s note instead of making a note that would not open; and why a new phrase was made is said exactly', () => {
   const renamed = planAction('new-phrase', sel(2, 3), EXTEND, 'my groove', 8);
-  assert.equal(renamed.kind, 'refused');
-  assert.match((renamed as { message: string }).message, /source/i);
+  assert.ok(renamed.kind === 'new-phrase' && renamed.sentence === 'Take [[my groove]]. Keep bars 2 to 3.');
+  const nonsense = planAction('new-phrase', sel(2, 3), EXTEND, 'a.b', 8);
+  assert.equal(nonsense.kind, 'refused');
+  assert.match((nonsense as { message: string }).message, /source/i);
   const made = planAction('new-phrase', sel(2, 3), EXTEND, 'phrase_007', 8);
   assert.ok(made.kind === 'new-phrase' && made.because === 'new phrase');
   const other = planAction('delete', sel(2), EXTEND, 'phrase_007', 8);

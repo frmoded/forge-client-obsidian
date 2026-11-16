@@ -306,7 +306,7 @@ test('what is not a description at all: an empty text, a sentence that opens not
   assert.deepEqual([bad('   \n ').line, bad('   \n ').column], [1, 1]);
   assert.match(bad('Dance with [[bar_005]].').message, /^Expected a description that starts with Extend, Mix, Morph, Take or Play, but found "Dance"\.$/);
   assert.match(bad('Extend [[bar_005 to 8 bars.').message, /Expected "\]\]" to close the link/);
-  assert.match(bad('Extend [[bars/bar_005]].').message, /Expected a note name \(letters, digits, _ and -, no folder\) inside the link, but found "bars\/bar_005"/);
+  assert.match(bad('Extend [[bars/bar_005]].').message, /Expected a note name \(letters, digits, spaces, _ and -, no folder\) inside the link, but found "bars\/bar_005"/);
   assert.match(bad('Extend bar_005 to 8 bars, dancing.').message, /Expected "to N bars", a style \(repeating with fills, building up, adding ghost notes\)/);
   assert.match(bad('Extend [[bar_005]] to 8 bars, building up, building up.').message, /the style to be said once, but it is said twice/);
   assert.match(bad('Extend [[bar_005]]. Threshold 40 percent.').message, /Expected "Bar N is replaced by \[\[a bar\]\]"/);
@@ -512,11 +512,12 @@ test('REFUSED: too many changes in a Take (more than 16) says so, and exactly 16
   assert.equal(parse(`Take [[phrase_006]]. ${ops(16)}`, VAULT).ok, true);
 });
 
-test('THE LAST GATE: what the grammar reads is also checked by the plugin\'s own validators, so a name the grammar accepts and the plugin does not is refused with the plugin\'s sentence (a phrase called "chorus" cannot be the source of a Take: the validator wants phrases/phrase_N or arrangements/arr_N)', () => {
-  const v: GrammarVault = { ...VAULT, phrases: [...VAULT.phrases, 'chorus'], kits: [...VAULT.kits!, '-odd'] };
+test('THE LAST GATE: what the grammar reads is also checked by the plugin\'s own validators, so a name the grammar accepts and the plugin does not is refused with the plugin\'s sentence (2026-11-16-1100, amended on purpose: a PHRASE called "chorus" is now a source of a Take, any note of phrases/ is; an ARRANGEMENT called "chorus" still is not: the validator wants arrangements/arr_N)', () => {
+  const v: GrammarVault = { ...VAULT, phrases: [...VAULT.phrases], arrangements: [...(VAULT.arrangements ?? []), 'chorus'], kits: [...VAULT.kits!, '-odd'] };
   const take = bad('Take [[chorus]]. Thin out bar 1.', v);
   assert.deepEqual([take.line, take.column], [1, 1]);
-  assert.match(take.message, /^source must be a phrase note without \.md, like phrases\/phrase_006, an arrangement note, like arrangements\/arr_001, or a composition note, like compositions\/intro, got "phrases\/chorus"\.$/);
+  assert.match(take.message, /^source must be a phrase note without \.md, like phrases\/phrase_006, an arrangement note, like arrangements\/arr_001, or a composition note, like compositions\/intro, got "arrangements\/chorus"\.$/);
+  assert.equal(parse('Take [[chorus]]. Thin out bar 1.', { ...VAULT, phrases: [...VAULT.phrases, 'chorus'] }).ok, true, 'a phrase called chorus is a source');
   const arr = bad('Play [[phrase_006]] on the [[-odd]] kit. Together.', v);
   assert.deepEqual([arr.line, arr.column], [1, 1]);
   assert.match(arr.message, /is not a kit name/);

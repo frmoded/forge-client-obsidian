@@ -5,7 +5,7 @@
 // (the phrase, the cell, Re-run, Delete cell) is the one write path the op picker uses.
 import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
 import {
-  createNewPhraseFromParams, formatTransformOp, noteContentFor, planNewPhraseFromParams, validatePhrase, type NewPhraseResult, type TransformOp, type TransformPhrase,
+  NOTE_NAME_PART, createNewPhraseFromParams, formatTransformOp, noteContentFor, planNewPhraseFromParams, validatePhrase, type NewPhraseResult, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
 import { askedLine, buildTransformRequest, interpretTransformResponse, oneLine, versionAtLeast, OLD_SERVICE, REQUEST_NEEDS_VERSION, NO_BARS_SELECTED, type TransformOutcome } from './notebook-request-core.ts';
 import { extractPhraseJsonBlock } from './phrase-notes-core.ts';
@@ -17,7 +17,7 @@ export const NOTEBOOK_FOLDER = 'notebook';
 const CELL_NAME = /^cell_(\d+)$/;
 const PHRASE_NOTE = /^phrases\/phrase_\d+$/;
 /** What a cell may have been made FROM: a phrase (as ever) or, since the notebook is on a composition's tab too (M17c), a composition note. A cell's RESULT is always a phrase. */
-const CELL_SOURCE = /^(?:phrases\/phrase_\d+|compositions\/[A-Za-z0-9_-]+)$/;
+const CELL_SOURCE = new RegExp(`^(?:phrases/(?!README$)${NOTE_NAME_PART}|compositions/[A-Za-z0-9_-]+)$`, 'u');       // 2026-11-16-1100: a renamed phrase has a notebook too (its RESULT is always a made phrase_NNN)
 
 // ---- the selection --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 

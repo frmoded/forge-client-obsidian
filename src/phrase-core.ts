@@ -29,7 +29,10 @@ export const PHRASE_VIEW_TYPE = 'forge-phrase';
 const BAR_FOLDER = 'bars';                       // the same folder score-first-core.ts names; kept here so this file stays free of the profile gate's module
 export const BAR_FOLDER_NAME = BAR_FOLDER;
 const BAR_PATH = /^bars\/(bar_\d+)\.md$/;
-const PHRASE_PATH = /^phrases\/phrase_\d+\.md$/;
+/** 2026-11-16-1100: what a NOTE may be called where a name goes into a sentence or a source: words of letters (any language), digits, _ and -, joined by single spaces (no leading, trailing or doubled space, no dot, no folder, no bracket). `phrase_007`, `bridge`, `my groove` are names; a phrase the driver renames keeps being a phrase. */
+export const NOTE_NAME_PART = '[\\p{L}\\p{N}_-]+(?: [\\p{L}\\p{N}_-]+)*';
+export const NOTE_NAME = new RegExp(`^${NOTE_NAME_PART}$`, 'u');
+const PHRASE_PATH = new RegExp(`^phrases/(?!README\\.md$)${NOTE_NAME_PART}\\.md$`, 'u');
 const PHRASE_NAME = /^phrase_(\d+)$/;
 const BAR_NAME = /^bar_(\d+)$/;
 const SOURCE_NAME = /^[A-Za-z0-9_-]+$/;
@@ -129,7 +132,7 @@ export const TRANSFORM_KEEPS = ['downbeat', 'seeded'] as const;
 export const TRANSFORM_DEFAULTS = { amount: 0.5, grid: TRANSFORM_DEFAULT_GRID };
 export const TRANSFORM_OPS_MAX = 16;
 export const TRANSFORM_KEYS = ['kind', 'source', 'ops', 'overrides'] as const;
-const TRANSFORM_SOURCE = /^(?:(?:phrases\/phrase|arrangements\/arr)_\d+|compositions\/[A-Za-z0-9_-]+)$/;
+const TRANSFORM_SOURCE = new RegExp(`^(?:phrases/(?!README$)${NOTE_NAME_PART}|arrangements/arr_\\d+|compositions/[A-Za-z0-9_-]+)$`, 'u');       // 2026-11-16-1100: any note of phrases/ (it was phrase_N only: a renamed phrase could not be taken)
 /** 2026-10-30-1050 (M15b): a transform may take an ARRANGEMENT as its source as well as a phrase (`Take [[arr_001]].`). */
 export const isArrangementSource = (source: string): boolean => source.startsWith('arrangements/');
 /** 2026-10-31-1100 (M17b): and a COMPOSITION too (`Take [[intro]].`). */
@@ -670,7 +673,7 @@ export function nextPhraseName(existingBasenames: Iterable<string>): string {
   }
   return phraseName(max + 1);
 }
-/** Is this path a phrase (`phrases/phrase_NNN.md`, directly in the folder)? The folder's README and anything else is not. */
+/** Is this path a phrase (`phrases/<name>.md`, directly in the folder, `phrase_NNN` or a name the driver gave it: NOTE_NAME)? The folder's README and anything else is not. */
 export function isPhrasePath(path: string | null | undefined): boolean {
   return typeof path === 'string' && PHRASE_PATH.test(path);
 }

@@ -71,7 +71,8 @@ test('readPhraseKind sees a morph even when the rest of it is wrong; isPhrasePat
   assert.equal(readPhraseKind(note({ kind: 'morph', a: 'x', bars: 0 })), 'morph');
   assert.equal(readPhraseKind(note({ kind: 'blend' })), null);
   assert.equal(isPhrasePath('phrases/phrase_004.md'), true);
-  assert.equal(isPhrasePath('phrases/morph_004.md'), false);
+  assert.equal(isPhrasePath('phrases/morph_004.md'), true, '2026-11-16-1100 (deliberate): any name in the folder is a phrase now (a phrase the driver renamed stays one); the folder\'s README is still not');
+  assert.equal(isPhrasePath('phrases/README.md'), false);
 });
 
 test('a control-strip write is a rewrite of the json block only, and a read-only morph note refuses', () => {

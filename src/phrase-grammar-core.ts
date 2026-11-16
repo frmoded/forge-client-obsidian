@@ -12,7 +12,7 @@
 // and is restored: extend bars 4, style repeat_with_fills, tempo 0; mix share 50, threshold 50, ghost off, vote; morph bars 5, musical order, seed 0; thin out by half keeping the downbeat; double up grid 16.
 // canonical(params) is what the text can carry: a field the text cannot say (a seed on an order that ignores it, `mode: "vote"` which is the same as no mode, a track with `mute: false`, `solo: false` or `volume: 100`, -0) is dropped.
 import {
-  MORPH_ORDERS, STRUCTURE_RUNS_MAX, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
+  MORPH_ORDERS, NOTE_NAME, STRUCTURE_RUNS_MAX, PHRASE_BARS_MAX, PHRASE_BARS_MIN, PHRASE_DEFAULTS, PHRASE_PCT_MAX, PHRASE_PCT_MIN, PHRASE_STYLES, MIX_DEFAULTS, MORPH_DEFAULTS, TRANSFORM_DEFAULTS, TRANSFORM_KEEPS, TRANSFORM_OPS_MAX, validatePhrase,
   type ExtendPhrase, type MixPhrase, type BarRun, type MorphOrder, type MorphPhrase, type PhraseParams, type StructureOp, type PhraseStyle, type TransformOp, type TransformPhrase,
 } from './phrase-core.ts';
 import { isStructureOp } from './bar-structure-core.ts';
@@ -65,7 +65,7 @@ export class Fail extends Error {
   at: number;
   constructor(at: number, message: string) { super(message); this.at = at; }
 }
-const NAME = /^[A-Za-z0-9_-]+$/;
+const NAME = NOTE_NAME;                                        // 2026-11-16-1100: words joined by single spaces (a renamed phrase: [[my groove]]); see phrase-core.ts
 
 export class Scan {
   s: string;
@@ -138,7 +138,7 @@ export function note(sc: Scan, vault: GrammarVault, kinds: NoteKind[], what: str
     const close = sc.s.indexOf(']]', sc.i);
     if (close === -1) sc.failAt(`Expected "]]" to close the link, but found ${sc.found()}.`, at);
     name = sc.s.slice(sc.i + 2, close);
-    if (!NAME.test(name)) sc.failAt(`Expected a note name (letters, digits, _ and -, no folder) inside the link, but found "${name}".`, at);
+    if (!NAME.test(name)) sc.failAt(`Expected a note name (letters, digits, spaces, _ and -, no folder) inside the link, but found "${name}".`, at);
     sc.i = close + 2;
   } else {
     const m = /^[A-Za-z0-9_-]+/.exec(sc.s.slice(sc.i));
