@@ -17,22 +17,22 @@ import { RHYTHM_STARTER } from './new-note-core.ts';
 const ROOT = path.resolve(import.meta.dirname, '..');
 
 // ---- the two switches ---------------------------------------------------------------------------------------------------------------------------------------------------
-test('all three switches are OFF by default, in the constants, in the defaults and in the settings object a fresh install has', () => {
+test('the three music-tab switches are OFF by default and the bar numbers (2026-11-16-0902) are ON, in the constants, in the defaults and in the settings object a fresh install has', () => {
   assert.equal(SHOW_LEGACY_CONTROLLERS, false); assert.equal(SHOW_INSPECTOR, false); assert.equal(SHOW_SOURCE_CHIPS, false);
-  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false });
+  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false, showBarNumbers: true });
   assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS, 'with no source registered a view gets the defaults');
   const settings = fs.readFileSync(path.join(ROOT, 'src/settings.ts'), 'utf8');
-  assert.match(settings, /showLegacyControllers: false,\s*showInspector: false,\s*showSourceChips: false,/);
+  assert.match(settings, /showLegacyControllers: false,\s*showInspector: false,\s*showSourceChips: false,\s*showBarNumbers: true,/);
 });
 test('readUiFlags takes only real booleans from the settings object: junk, null and absent are the default (off); a saved true survives data.json', () => {
   assert.deepEqual(readUiFlags(undefined), DEFAULT_UI_FLAGS); assert.deepEqual(readUiFlags(null), DEFAULT_UI_FLAGS);
-  assert.deepEqual(readUiFlags({ showLegacyControllers: 'true', showInspector: 1, showSourceChips: 'yes' }), DEFAULT_UI_FLAGS);
-  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false });
-  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true });
+  assert.deepEqual(readUiFlags({ showLegacyControllers: 'true', showInspector: 1, showSourceChips: 'yes', showBarNumbers: 0 }), DEFAULT_UI_FLAGS);
+  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false, showBarNumbers: true });
+  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true, showBarNumbers: true });
 });
 test('the source: a registered source is asked at every call (a change takes effect when a tab mounts), a throwing source is the default, and null puts the default back', () => {
   let on = false;
-  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on, showSourceChips: on }));
+  registerUiFlagsSource(() => ({ showLegacyControllers: on, showInspector: on, showSourceChips: on, showBarNumbers: true }));
   assert.equal(uiFlags().showLegacyControllers, false); on = true; assert.equal(uiFlags().showLegacyControllers, true);
   registerUiFlagsSource(() => { throw new Error('boom'); }); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);
   registerUiFlagsSource(null); assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS);

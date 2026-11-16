@@ -60,6 +60,8 @@ export interface ForgeSettings {
   showInspector: boolean;
   /** 2026-11-15-2101: show the chips row under the Score that says where the note came from (a phrase's sources, an arrangement's kits and phrases, a composition's sections): off by default, read when a tab is (re)opened. */
   showSourceChips: boolean;
+  /** 2026-11-16-0902: a bar number (1, 2, 3 ...) above the top staff at the start of every bar of the Score: ON by default, read when a Score is engraved. */
+  showBarNumbers: boolean;
   dialogHistory: Record<string, unknown>;
   dialogHeight: number;
   dialogDock: 'bottom' | 'right';
@@ -81,6 +83,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   showLegacyControllers: false,
   showInspector: false,
   showSourceChips: false,
+  showBarNumbers: true,
   dialogHistory: {},
   dialogHeight: 112,
   dialogDock: 'bottom',
@@ -253,6 +256,20 @@ export class ForgeSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.showSourceChips)
           .onChange(async (value) => {
             this.plugin.settings.showSourceChips = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Show bar numbers')
+      .setDesc(
+        'A small number (1, 2, 3 ...) above the top staff at the start of every bar of a Score: the bar\'s position in what is drawn. On by default. Takes effect the next time a Score is drawn.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.showBarNumbers)
+          .onChange(async (value) => {
+            this.plugin.settings.showBarNumbers = value;
             await this.plugin.saveSettings();
           })
       );

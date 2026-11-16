@@ -372,6 +372,14 @@
   gap: 12px;
 }
 
+/* 2026-11-16-0902: the bar number Verovio prints above the top staff at the start of every bar: small and quiet, and RIGHT-ALIGNED to the bar line so that it sits to the left of it, clear of the tempo mark, which starts to the right of the bar line (a number centred on the line met the tempo mark's first character). */
+.forge-output-musicxml g.mNum text,
+.forge-output-score g.mNum text,
+.forge-verovio-pages g.mNum text { text-anchor: end; opacity: 0.6; }
+.forge-output-musicxml g.mNum tspan,
+.forge-output-score g.mNum tspan,
+.forge-verovio-pages g.mNum tspan { font-size: 290px; font-style: normal; }
+
 .forge-output-musicxml svg,
 .forge-output-score svg,
 .forge-verovio-pages svg {

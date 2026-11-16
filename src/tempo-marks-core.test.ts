@@ -66,7 +66,7 @@ function test_pure(): void {
   });
   baseTest('WIRING: every load of a score into Verovio goes through the rule (no raw loadData), and the music tabs draw through verovio.ts only', () => {
     const v = fs.readFileSync(path.join(ROOT, 'src/verovio.ts'), 'utf8').replace(/\/\/.*$/gm, '');
-    assert.equal((v.match(/loadData\(/g) ?? []).length, 3); assert.equal((v.match(/loadData\(dedupeTempoMarks\(musicxml\)\)/g) ?? []).length, 3);
+    assert.equal((v.match(/loadData\(/g) ?? []).length, 3); assert.equal((v.match(/loadData\(prepareScore\(musicxml\)\)/g) ?? []).length, 3); assert.match(v, /function prepareScore\(musicxml: string\): string \{ return dedupeTempoMarks\(renumberMeasures\(musicxml\)\); \}/);   // 2026-11-16-0902: the one place a score is prepared
     for (const f of ['music-edition.full.ts', 'scale-explorer-view.ts']) assert.match(fs.readFileSync(path.join(ROOT, 'src', f), 'utf8'), /from '\.\/verovio\.ts'/, f);
     for (const f of fs.readdirSync(path.join(ROOT, 'src')).filter((n) => n.endsWith('.ts') && !n.includes('.test.') && !n.includes('generated') && n !== 'verovio.ts')) assert.doesNotMatch(fs.readFileSync(path.join(ROOT, 'src', f), 'utf8').replace(/\/\/.*$/gm, ''), /toolkit\.loadData\(/, `${f} loads Verovio itself`);
   });
