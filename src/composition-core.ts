@@ -5,7 +5,7 @@
 //   * the Recipe is those same sentences, one per line; the Python is `def compute(context):` reading each source by calling its name and returning compose_sections(...), the BAR LIST (forge/music/lib.py);
 //   * the Score is drawn from the json by the code that draws every phrase (produceComposition -> the engine glue's `composition` branch -> rhythm_bars_to_stream); the Python text is never run to draw it (P4).
 // A section of `length` N bars is REPEATED to fill N or CUT to N (never padded, never stretched), no `length` is all its bars once; `repeat` R plays the whole section R more times (the sentence "Repeat that R times."). Every bar keeps its tempo.
-import { barsOfPayload, producePhrase, readPhraseNote, TRANSFORM_DEPTH_MAX, type PhraseScoreDeps } from './phrase-core.ts';
+import { NOTE_NAME_PART, barsOfPayload, producePhrase, readPhraseNote, TRANSFORM_DEPTH_MAX, type PhraseScoreDeps } from './phrase-core.ts';
 import { callNote, extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, pyStr, renderSourceChainNote, type SourceChainParts } from './phrase-notes-core.ts';
 import { produceCustomScore, type CustomDeps } from './custom-note-core.ts';
 import { describe, compositionSentences } from './phrase-describe-core.ts';
@@ -34,7 +34,7 @@ export const compositionPath = (name: string): string => `${COMPOSITION_FOLDER}/
 export const isCompositionPath = (path: string): boolean => /^compositions\/[^/]+\.md$/.test(path) && path !== `${COMPOSITION_FOLDER}/README.md`;
 /** The name a composition note is given when the person does not choose one, and the pattern a chosen one must match (a file in a flat folder: letters, digits, _ and -). */
 export const COMPOSITION_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
-const SECTION_SOURCE = /^(?:phrases\/phrase_\d+|arrangements\/arr_\d+|compositions\/[A-Za-z0-9_-]+)$/;
+const SECTION_SOURCE = new RegExp(`^(?:phrases/(?!README$)${NOTE_NAME_PART}|arrangements/arr_\\d+|compositions/[A-Za-z0-9_-]+)$`, 'u');       // 2026-11-16-1102: any note of phrases/ (a renamed phrase), as a transform's source since 1100; it was phrase_N only
 const baseName = (id: string): string => id.split('/').pop() ?? id;
 
 export function validateComposition(raw: unknown): Validation<CompositionParams> {

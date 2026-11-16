@@ -11,7 +11,7 @@ import { deferredTabName } from './deferred-tab-title-core.ts';
 import { cacheFoldInfo, cacheFoldKind, shouldFoldCache, type FoldInfo } from './cache-fold-core.ts';
 import { ARRANGEMENT_VIEW_TYPE } from './arrangement-core.ts';
 import { COMPOSITION_VIEW_TYPE } from './composition-core.ts';
-import { MarkdownView, Notice, TFile, addIcon, removeIcon, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Menu, Notice, TFile, addIcon, removeIcon, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
@@ -43,7 +43,9 @@ import { RHYTHM_SCORE_VIEW_TYPE } from './rhythm-mode-core.ts';
 import { PLAN_COMMAND_ID, PLAN_COMMAND_NAME, createSentencePlanner, planAvailable, type PlanPayload } from './sentence-plan-core.ts';
 import { SentencePlanModal } from './sentence-plan-modal.ts';
 import { NOTEBOOK_FOLDER, createNotebook, type Selection } from './notebook-core.ts';
-import { ICON_BAR, ICON_PHRASE, registerMusicIcons, registerMusicRibbon } from './music-ribbon-core.ts';
+import { ICON_BAR, ICON_PHRASE, MUSIC_RIBBON, NOT_MUSIC_VAULT_REASON, registerMusicIcons, registerMusicRibbon, ribbonNotRegisteredLine, ribbonProbe, ribbonStatus } from './music-ribbon-core.ts';
+import { registerMusicRibbonStatus } from './music-ribbon-status.ts';
+import { NEW_MENU_VIEW_TYPES, createNewMenuSync, newMenuItems, runNewMenuItem, type NewMenuView } from './new-menu-core.ts';
 import { createPhraseAnywhere } from './new-phrase-anywhere-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
@@ -242,8 +244,16 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
   // score-first. In any other vault they are not registered at all: not in the palette, not in Settings -> Hotkeys, not in the ribbon. The command still asks the live answer
   // when run, so a forge.toml that stops declaring the profile mid-session turns it off at once.
   plugin.registerEvent(app.vault.on('modify', (f) => { if (f.path === 'forge.toml') void refresh(); }));
+  // 2026-11-16-1102: what Settings -> Forge -> Music tabs says about the four ribbon buttons ("shown" / "hidden because ..."), read live from Obsidian's left ribbon; and the one trace line at registration
+  let profileKnown = false, ribbonMade = 0;
+  plugin.register(registerMusicRibbonStatus(() => {
+    const probe = ribbonProbe((app.workspace as unknown as { leftRibbon?: never }).leftRibbon, plugin.manifest.id, MUSIC_RIBBON.map((m) => m.title));
+    return ribbonStatus({ musicVault: profileKnown ? scoreFirst : null, registered: ribbonMade > 0, probes: probe.probes, fits: probe.fits }).text;
+  }));
   app.workspace.onLayoutReady(() => {
     void refresh().then(() => {
+      profileKnown = true;
+      if (!newBarAvailable(scoreFirst)) console.info(ribbonNotRegisteredLine(NOT_MUSIC_VAULT_REASON));          // 2026-11-16-1102: the reason, said once; the gate line below is the one it always was
       if (!newBarAvailable(scoreFirst)) return;
       plugin.addCommand({
         id: NEW_BAR_COMMAND_ID,
@@ -267,12 +277,25 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return true;
         },
       });
-      registerMusicRibbon({
+      const ribbonRunDeps = {
         pluginId: plugin.manifest.id,
+        runCommand: (fullId: string) => (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById(fullId),
+        notify: (message: string) => { loggedNotice(message); },
+      };
+      ribbonMade = registerMusicRibbon({
+        ...ribbonRunDeps,
         addRibbonIcon: (icon, title, onClick) => plugin.addRibbonIcon(icon, title, onClick),
-        runCommand: (fullId) => (app as unknown as { commands: { executeCommandById(id: string): boolean } }).commands.executeCommandById(fullId),
-        notify: (message) => { loggedNotice(message); },
+        trace: (line) => { console.info(line); },
       });
+      // 2026-11-16-1102: the same four actions in a "+ New" menu in the header of every music tab (it does not depend on the ribbon, which has no scrolling: an icon below its box is cut off)
+      const newMenu = createNewMenuSync<NewMenuView>({
+        isMusicVault: () => newBarAvailable(scoreFirst),
+        show: (_view, evt) => { const menu = new Menu(); for (const item of newMenuItems()) menu.addItem((i) => i.setTitle(item.title).setIcon(item.icon).onClick(() => { runNewMenuItem(item, ribbonRunDeps); })); menu.showAtMouseEvent(evt); },
+      });
+      const syncNewMenu = (): void => { newMenu.sync(NEW_MENU_VIEW_TYPES.flatMap((t) => app.workspace.getLeavesOfType(t).map((l) => l.view as unknown as NewMenuView))); };
+      syncNewMenu();
+      plugin.registerEvent(app.workspace.on('layout-change', syncNewMenu));
+      plugin.registerEvent(app.workspace.on('active-leaf-change', syncNewMenu));
       // M5: the phrase tab (a control strip over a live Score) and its two commands. The view type is registered here, after the gate, so no other vault knows it exists. Both commands still ask
       // the live answer when offered, like "New bar".
       const plan = scorePanelPlan({ scoreFirst: true, edition: musicEdition.id });

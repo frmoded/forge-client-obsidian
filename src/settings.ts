@@ -1,4 +1,5 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
+import { musicRibbonStatusText } from './music-ribbon-status.ts';
 import { BUILD_STAMP } from './build-stamp.generated.ts';
 import { formatBuildStamp } from './build-stamp-core.ts';
 import type ForgePlugin from './main.ts';
@@ -273,6 +274,11 @@ export class ForgeSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    // 2026-11-16-1102: are the four music buttons in the left ribbon? Read live from Obsidian's ribbon when this page is drawn.
+    new Setting(containerEl)
+      .setName('Music ribbon buttons')
+      .setDesc(musicRibbonStatusText());
 
     // --- Local engine (dev, secondary endpoints) ------------------
     new Setting(containerEl).setName('Local engine (dev)').setHeading();

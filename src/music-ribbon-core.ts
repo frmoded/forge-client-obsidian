@@ -61,7 +61,69 @@ export interface RibbonDeps {
   /** Run a command by its full id; false when it is not offered right now. */
   runCommand(fullId: string): boolean;
   notify(message: string): void;
+  /** 2026-11-16-1102: one evidence line (`[forge-music-ribbon] registered 4 buttons`, and a line per button that could not be made). Absent = nothing is said. */
+  trace?(line: string): void;
 }
-export function registerMusicRibbon(deps: RibbonDeps): void {
-  for (const item of MUSIC_RIBBON) deps.addRibbonIcon(item.icon, item.title, () => { if (!deps.runCommand(`${deps.pluginId}:${item.commandId}`)) deps.notify(item.unavailable); });
+/** Register the four buttons; returns how many Obsidian took. A button that throws is a trace line naming it (the others still go in). */
+export function registerMusicRibbon(deps: RibbonDeps): number {
+  let made = 0;
+  for (const item of MUSIC_RIBBON) {
+    try { deps.addRibbonIcon(item.icon, item.title, () => { if (!deps.runCommand(`${deps.pluginId}:${item.commandId}`)) deps.notify(item.unavailable); }); made++; }
+    catch (e) { deps.trace?.(`${RIBBON_TRACE} could not make "${item.title}": ${(e as Error)?.message ?? e}`); }
+  }
+  deps.trace?.(ribbonRegisteredLine(made));
+  return made;
+}
+
+// ---- 2026-11-16-1102: what the plugin SAYS about the buttons -----------------------------------------------------------------------------------------------------------------------------
+export const RIBBON_TRACE = '[forge-music-ribbon]';
+export const ribbonRegisteredLine = (n: number): string => `${RIBBON_TRACE} registered ${n} buttons`;
+export const ribbonNotRegisteredLine = (reason: string): string => `${RIBBON_TRACE} not registered: ${reason}`;
+export const NOT_MUSIC_VAULT_REASON = 'this vault is not a music vault (its forge.toml does not turn the music tabs on), so the music buttons are not made here';
+
+/** One of our buttons as Obsidian's left ribbon has it: `present` = Obsidian lists it, `hidden` = turned off in the ribbon's Manage list, `shown` = its button is inside the ribbon's box (false = clipped below it; null = could not be measured). */
+export interface RibbonProbe { id: string; title: string; present: boolean; hidden: boolean; shown: boolean | null }
+interface Boxed { getBoundingClientRect(): { top: number; bottom: number; height: number } }
+interface RibbonLike { items?: Array<{ id: string; hidden?: boolean; buttonEl?: Boxed }>; containerEl?: Boxed }
+/**
+ * Read Obsidian's left ribbon (its internals, as app.js of Obsidian 1.15 keeps them: `items` of `{ id, hidden, buttonEl }`, `containerEl`; the ribbon has no scrolling, so an icon below the box of the ribbon is cut off). `fits` counts every icon that is
+ * not turned off: how many of them are inside the box. Never throws: what cannot be read is `shown: null`.
+ */
+export function ribbonProbe(ribbon: RibbonLike | null | undefined, pluginId: string, titles: readonly string[]): { probes: RibbonProbe[]; fits: { fit: number; total: number } | null } {
+  const items = Array.isArray(ribbon?.items) ? ribbon!.items! : [];
+  let box: { top: number; bottom: number } | null = null;
+  try { const r = ribbon?.containerEl?.getBoundingClientRect(); if (r && r.bottom > r.top) box = r; } catch { box = null; }
+  const inside = (el: Boxed | undefined): boolean | null => {
+    if (!el || !box) return null;
+    try { const r = el.getBoundingClientRect(); return r.height > 0 && r.top >= box.top - 1 && r.bottom <= box.bottom + 1; } catch { return null; }
+  };
+  const probes = titles.map((title): RibbonProbe => {
+    const id = `${pluginId}:${title}`; const it = items.find((x) => x.id === id);
+    if (!it) return { id, title, present: false, hidden: false, shown: null };
+    const hidden = it.hidden === true;
+    return { id, title, present: true, hidden, shown: hidden ? false : inside(it.buttonEl) };
+  });
+  const live = items.filter((x) => x.hidden !== true && x.buttonEl !== undefined);
+  const fits = box ? { fit: live.filter((x) => inside(x.buttonEl) === true).length, total: live.length } : null;
+  return { probes, fits };
+}
+
+export type RibbonState = 'shown' | 'not-music-vault' | 'loading' | 'not-registered' | 'turned-off' | 'too-short' | 'unmeasured';
+export interface RibbonStatusInput { musicVault: boolean | null; registered: boolean; probes: readonly RibbonProbe[]; fits?: { fit: number; total: number } | null }
+/** The Settings row's text, one sentence: shown, or hidden because ... (the cause that can be told apart from the outside). */
+export function ribbonStatus(i: RibbonStatusInput): { state: RibbonState; text: string } {
+  const say = (state: RibbonState, text: string) => ({ state, text: `Music ribbon buttons: ${text}` });
+  if (i.musicVault === null) return say('loading', 'not known yet (Obsidian is still loading this vault).');
+  if (i.musicVault === false) return say('not-music-vault', 'hidden because this vault is not a music vault (its forge.toml does not turn the music tabs on).');
+  const present = i.probes.filter((p) => p.present);
+  if (!i.registered || present.length === 0) return say('not-registered', `hidden because they were not made (the console line ${RIBBON_TRACE} says why).`);
+  const off = present.filter((p) => p.hidden), live = present.filter((p) => !p.hidden);
+  if (live.length === 0) return say('turned-off', "hidden because you turned them off in the ribbon's Manage list (right-click the ribbon, Manage).");
+  if (live.some((p) => p.shown === false)) {
+    const f = i.fits;
+    return say('too-short', `hidden because the ribbon is too short for them: only ${f ? `${f.fit} of ${f.total}` : 'some'} icons fit. Make the window taller, or turn off icons you do not use (right-click the ribbon, Manage).`);
+  }
+  if (live.every((p) => p.shown === null)) return say('unmeasured', 'made, but I could not measure whether the ribbon shows them (look at the left ribbon; the "+ New" button in the tab header does the same).');
+  if (off.length > 0) return say('turned-off', `${off.length} of ${present.length} are turned off in the ribbon's Manage list (${off.map((p) => p.title).join(', ')}); the others are shown.`);
+  return say('shown', `shown (${live.length} of ${present.length} are in the left ribbon).`);
 }

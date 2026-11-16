@@ -15,6 +15,7 @@ import { parseRecipe, renderRecipe } from './recipe-grammar-core.ts';
 import { planAction, selectionOf } from './bar-selection-core.ts';
 import { applyStructureOps } from './bar-structure-core.ts';
 import { callNote } from './phrase-notes-core.ts';
+import { validateComposition } from './composition-core.ts';
 
 const NAMES = ['bridge', 'my groove', 'Bridge 2', 'phrase_007', 'zwei Takte', 'bar-b_2', 'été'];
 const take = (name: string, ops: unknown[] = [{ op: 'keep', runs: [[2, 3]] }]): PhraseParams => ({ kind: 'transform', source: `phrases/${name}`, ops }) as PhraseParams;
@@ -77,4 +78,18 @@ ptest('ON THE REAL ENGINE: a phrase renamed bridge (and one called "my groove") 
     const back = parse(describe(t), { bars: ['bar_005'], phrases: [name] }); assert.ok(back.ok);
     assert.deepEqual(await draw(back.ok ? (back.params as PhraseParams) : t), want.ok ? want.items : [], 'the sentence read back draws the same Score');
   }
+});
+
+// ---- 2026-11-16-1102 (Part B): a composition's sections take a renamed phrase too ---------------------------------------------------------------------------------------------------------
+test('A COMPOSITION TAKES A RENAMED PHRASE: "Play [[bridge]] for 8 bars." validates and reads back (Description and Recipe); phrase_N, arr_N and composition sentences are byte-for-byte what they were; a name that is not one is still refused', () => {
+  const comp = (...sources: string[]): PhraseParams => ({ kind: 'composition', sections: sources.map((source, i) => ({ source, ...(i === 0 ? { length: 8 } : {}) })) }) as never;
+  const V = { bars: [], phrases: NAMES, arrangements: ['arr_001'], compositions: ['intro'] };
+  for (const n of NAMES) {
+    const p = comp(`phrases/${n}`, 'arrangements/arr_001'); assert.ok(validateComposition(p).ok, n);
+    const text = describe(p); assert.ok(text.startsWith(`Play [[${n}]] for 8 bars. Then play [[arr_001]].`), text);
+    const back = parse(text, V); assert.ok(back.ok, `${text}: ${JSON.stringify(back)}`); assert.deepEqual(back.ok && back.params, canonical(p), text);
+    const r = parseRecipe(renderRecipe(p), V); assert.ok(r.ok, renderRecipe(p)); assert.deepEqual(r.ok && r.params, canonical(p));
+  }
+  assert.equal(describe(comp('phrases/phrase_006', 'arrangements/arr_001', 'compositions/intro')), 'Play [[phrase_006]] for 8 bars. Then play [[arr_001]]. Then play [[intro]].');
+  for (const bad of ['phrases/', 'phrases/a/b', 'phrases/a.b', 'phrases/ lead', 'phrases/README', 'arrangements/bridge', 'bars/bar_005']) assert.ok(!validateComposition(comp(bad)).ok, bad);
 });
