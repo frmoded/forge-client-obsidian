@@ -79,11 +79,11 @@ test('B rises toward the bass: 0.0003 at C6 and above, about 0.001 at C1 and bel
   let prev = Infinity; for (let m = 24; m <= 84; m++) { const b = g.pianoB(m); assert.ok(b <= prev + 1e-15 && b >= 0.0003 && b <= 0.001, `m=${m}`); prev = b; }
   assert.ok(g.pianoB(36) > g.pianoB(60) && g.pianoB(60) > g.pianoB(84));
 });
-test('the decay table: higher partials die faster (strictly), bass notes ring longer than treble notes at every partial, every time constant is positive and the bass fundamental rings about 4 s', () => {
+test('the decay table (2026-11-16-1001: amended on purpose, the voice rang 14 to 29 s): higher partials die faster (strictly), bass notes ring longer than treble notes at every partial, every time constant is positive and the bass fundamental is the table\'s decayLow', () => {
   const g = voice();
   for (const m of [24, 36, 48, 60, 72, 84, 96]) { let prev = Infinity; for (let n = 1; n <= g.PIANO_PARTIALS; n++) { const t = g.pianoDecay(m, n); assert.ok(t > 0 && t < prev, `m=${m} n=${n}`); prev = t; } }
   for (let n = 1; n <= g.PIANO_PARTIALS; n++) assert.ok(g.pianoDecay(36, n) > g.pianoDecay(84, n), `bass rings longer (n=${n})`);
-  assert.ok(Math.abs(g.pianoDecay(36, 1) - 4.2) < 1e-9); assert.ok(g.pianoDecay(36, 10) < g.pianoDecay(36, 1) / 6);
+  assert.ok(Math.abs(g.pianoDecay(36, 1) - 0.8) < 1e-9); assert.ok(g.pianoDecay(36, 10) < g.pianoDecay(36, 1) / 6);
   for (let n = 1; n < g.PIANO_PARTIALS; n++) assert.ok(g.pianoPartialAmp(n) > g.pianoPartialAmp(n + 1), 'the spectrum falls off');
 });
 test('velocity to cutoff: harder is brighter, higher notes are darker, and it is clamped to 500..12000 Hz', () => {
@@ -131,15 +131,15 @@ test('SCHEDULING never starts before `when`: every start, every automation time 
     assert.ok((noise.buffer as any).length <= 0.012 * 44100 + 1);
   }
 });
-test('the END of the note is a quick release, never a cut: the note gain is set to its peak, targets zero from the end with a tau of about 5 ms, and is exactly 0 before any oscillator stops', () => {
+test('the END of the note is a quick release, never a cut (2026-11-16-1001: 80 ms, tau 20 ms, was 20 ms): the note gain is set to its peak, targets zero from the end with a tau of about 20 ms, and is exactly 0 before any oscillator stops', () => {
   const g = voice(), r = recorder(); g.pianoVoice(r.ctx, r.destination, F, 1.0, 1.0, 0.8);
   const out = r.of('gain')[0]; const calls = out.gain.calls;
   assert.equal(calls[0].fn, 'setValueAtTime'); assert.ok(calls[0].v < 0.001 && calls[0].t === 1.0, 'it starts silent at `when`');
   const ramp = calls.find((c) => c.fn === 'linearRampToValueAtTime')!; assert.ok(ramp.t - 1.0 <= 0.005 && ramp.v > 0.05, 'the attack is a few ms');
   const target = calls.find((c) => c.fn === 'setTargetAtTime')!;
-  assert.equal(target.v, 0); assert.ok(Math.abs(target.t - 2.0) < 1e-9, 'the release starts when the note ends'); assert.ok(target.tau! >= 0.002 && target.tau! <= 0.01, `tau ${target.tau}`);
+  assert.equal(target.v, 0); assert.ok(Math.abs(target.t - 2.0) < 1e-9, 'the release starts when the note ends'); assert.ok(target.tau! >= 0.01 && target.tau! <= 0.03, `tau ${target.tau}`);
   const zero = calls.filter((c) => c.fn === 'setValueAtTime').at(-1)!; assert.equal(zero.v, 0); assert.ok(zero.t > target.t + 0.05 && zero.t < Math.min(...r.of('oscillator').map((o) => o.stops[0])), 'exactly silent before the oscillators stop');
-  const rel = 4 * target.tau!; assert.ok(rel >= 0.01 && rel <= 0.03, 'about 20 ms to silence');
+  const rel = 4 * target.tau!; assert.ok(rel >= 0.05 && rel <= 0.12, 'about 80 ms to silence');
 });
 test('each partial has its OWN decay: the time constant of partial n is pianoDecay(midi, n), and the fundamental starts louder than the tenth', () => {
   const g = voice(), r = recorder(); g.pianoVoice(r.ctx, r.destination, F, 0, 1.0, 0.8);
