@@ -32,7 +32,7 @@ test('the shared pure block is IDENTICAL in the three interval files and in the 
   assert.ok(i0.length > 3000 && s0.length > 6000, 'non-vacuity: the whole blocks');
   assert.doesNotMatch(i0, /document|window/); assert.doesNotMatch(s0, /document|window/);
   const voice = (h: string): string => block(h, '// ==== piano voice BEGIN', '// ==== piano voice END');
-  const ref = voice(read(INTERVAL_DIR, 'interval_ear.html'));
+  const ref = voice(read(INTERVAL_DIR, INTERVAL[0][0]));        // 2026-11-16-1101: the old three-game page is gone; the first split file is the reference
   for (const [f] of INTERVAL) assert.equal(voice(read(INTERVAL_DIR, f)), ref, f);
   for (const [f] of SCALE) assert.equal(voice(read(SCALE_DIR, f)), ref, f);
 });

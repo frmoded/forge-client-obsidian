@@ -4,12 +4,30 @@ You hear two notes, but the piano only shows you the first. Your job is to find 
 
 Start by humming the gap before you click. Words like bright or tense are only tendencies, and they're yours to build.
 
-You're done when you can land on the second note within a try or two, up or down, most of the time.
+Each game has an easy, medium and hard level: 5, 3 or 1 tries per question, and the triads get one more. Every right answer inside your tries scores a point, and the score lives on the page until you reload.
+
+One after the other: you hear two notes in turn, the first is lit, and you find the second, up or down.
 
 ```html-embed
-music_instruments/resources/html/interval_ear.html
-121
+music_instruments/resources/html/interval_ear_one_after_the_other.html
+194
 ```
+
+Both at once: two notes sound together, the lower is lit, and you find the higher.
+
+```html-embed
+music_instruments/resources/html/interval_ear_both_at_once.html
+194
+```
+
+Three at once: a triad sounds, the lowest note is lit, and you find the other two.
+
+```html-embed
+music_instruments/resources/html/interval_ear_triads.html
+181
+```
+
+You're done when you can land on the second note within a try or two, up or down, most of the time.
 
 <div style="
   display:flex;

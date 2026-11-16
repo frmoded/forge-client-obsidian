@@ -122,11 +122,11 @@ test('SCHEDULING with every preset: nothing starts, stops or is automated before
 
 // ---- the block is the same in EVERY gadget of the vault that has one -----------------------------------------------------------------------------------------------------------
 function walk(dir: string): string[] { return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : e.name.endsWith('.html') ? [path.join(dir, e.name)] : [])); }
-test('THE BLOCK IS IDENTICAL IN EVERY GADGET THAT HAS ONE (the vault is walked, so a gadget added later is held to it): 26 gadgets, the lab among them', () => {
+test('THE BLOCK IS IDENTICAL IN EVERY GADGET THAT HAS ONE (the vault is walked, so a gadget added later is held to it): 25 gadgets, the lab among them (2026-11-16-1101: was 26; interval_ear.html was deleted)', () => {
   const have = walk(VAULT).filter((f) => fs.readFileSync(f, 'utf8').includes(BEGIN));
   const want = blockOf(labHtml);
   assert.ok(want.length > 5000, 'non-vacuity: the whole block');
-  assert.ok(have.length >= 26, `${have.length} gadgets carry the piano voice`);
+  assert.ok(have.length >= 25, `${have.length} gadgets carry the piano voice`);
   assert.ok(have.some((f) => f === LAB), 'the lab is one of them');
   for (const f of have) assert.equal(blockOf(fs.readFileSync(f, 'utf8')), want, `${path.relative(VAULT, f)} differs from the lab`);
   assert.doesNotMatch(want, /document|window/, 'the block is pure: no DOM');

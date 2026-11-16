@@ -12,7 +12,7 @@ import { audioStub } from './test-support/web-audio-stub.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DIR = path.join(ROOT, 'assets/vaults/music-theory/music_instruments/resources/html');
-const FILES = ['piano_voice_demo.html', 'piano_keyboard.html', 'interval_widget.html', 'interval_pair.html', 'tune_shifter.html', 'interval_ear.html'] as const;
+const FILES = ['piano_voice_demo.html', 'piano_keyboard.html', 'interval_widget.html', 'interval_pair.html', 'tune_shifter.html'] as const       // 2026-11-16-1101: interval_ear.html was deleted (the three split ear gadgets carry the block: ear-gadgets-split.test.ts and the vault walk of piano-voice-lab.test.ts hold them);
 const html = Object.fromEntries(FILES.map((f) => [f, fs.readFileSync(path.join(DIR, f), 'utf8')])) as Record<(typeof FILES)[number], string>;
 // 2026-11-15-1221: the 13 other piano gadgets (the C major triad keyboard and the 12 tuning-teaching variants) carry the same block, read from their own folders
 const VAULT_ROOT = path.join(ROOT, 'assets/vaults/music-theory');
@@ -30,7 +30,7 @@ function voice(): any {
 }
 
 // ---- the same block in all three files -------------------------------------------------------------------------------------------------------------------------------------
-test('the voice block is IDENTICAL in the demo, the Piano gadget, the interval widget, the two mini gadgets and the ear gadget (a copy that drifts is a failure)', () => {
+test('the voice block is IDENTICAL in the demo, the Piano gadget, the interval widget and the two mini gadgets (the ear gadgets are held by ear-gadgets-split.test.ts; a copy that drifts is a failure)', () => {
   const d = blockOf(html['piano_voice_demo.html']);
   for (const f of FILES) assert.equal(blockOf(html[f]), d, `${f} differs from the demo`);                // 2026-11-13-1215: the two new gadgets carry the same block
   assert.ok(d.length > 3000, 'non-vacuity: it is the whole block');
