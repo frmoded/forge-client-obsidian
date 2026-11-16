@@ -3,6 +3,7 @@
 // checks of the old interval ear gadget run against every new interval file. How TALL each is, and that none scrolls, is measured in real Chrome (scripts/dev/measure-ear-split.mjs).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -150,14 +151,15 @@ test('PIXELS (all five): no margin or padding on html and body, no fixed page he
 });
 test('CONTROL: a level that gives game 3 no extra attempt, a build whose right taps cost an attempt, a name game whose wrong answer is free, a level change that erases the scores, a Reset that leaves a level each go red', () => {
   const damagedPage = (dir: string, file: string, from: string, to: string): string => { const h = read(dir, file); assert.ok(h.includes(from), `premise: ${from}`); return h.replace(from, to); };
-  const dump = (dir: string, file: string, from: string, to: string) => { const d = fs.mkdtempSync(path.join(path.resolve(import.meta.dirname, '..', 'scripts/dev/scratch'), 'ctl-')); fs.writeFileSync(path.join(d, file), damagedPage(dir, file, from, to)); return d; };
+  const made: string[] = [];
+  const dump = (dir: string, file: string, from: string, to: string) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ear-ctl-')); made.push(d); fs.writeFileSync(path.join(d, file), damagedPage(dir, file, from, to)); return d; };
   const run = (d: string, file: string) => pureOf(scriptOf(fs.readFileSync(path.join(d, file), 'utf8')));
   try {
-    const a = dump(INTERVAL_DIR, INTERVAL[2][0], 'BASE_ATTEMPTS[level] + (game === 3 ? 1 : 0)', 'BASE_ATTEMPTS[level]'); assert.ok(coreFailures(run(a, INTERVAL[2][0])).length > 0, 'game 3 without its extra attempt'); fs.rmSync(a, { recursive: true, force: true });
+    const a = dump(INTERVAL_DIR, INTERVAL[2][0], 'BASE_ATTEMPTS[level] + (game === 3 ? 1 : 0)', 'BASE_ATTEMPTS[level]'); assert.ok(coreFailures(run(a, INTERVAL[2][0])).length > 0, 'game 3 without its extra attempt');
     const b = dump(SCALE_DIR, SCALE[1][0], 'var wrong = state.wrong.concat([midi]), left = state.triesLeft - 1;', 'var wrong = state.wrong.concat([midi]), left = state.triesLeft;'); const gb = run(b, SCALE[1][0]); const q = { notes: [60, 62, 64, 65, 67, 69, 71, 72], scale: 'major', sound: [] };
-    let st = gb.ask(q, 1); st = gb.tapKey(st, 61).state; assert.equal(st.phase, 'asked', 'a wrong tap that costs nothing never ends a hard question (the control is red: the real one ends it)'); fs.rmSync(b, { recursive: true, force: true });
+    let st = gb.ask(q, 1); st = gb.tapKey(st, 61).state; assert.equal(st.phase, 'asked', 'a wrong tap that costs nothing never ends a hard question (the control is red: the real one ends it)');
     const c = pureOf(scriptOf(read(SCALE_DIR, SCALE[1][0]))); let s2 = c.ask(q, 1); s2 = c.tapKey(s2, 61).state; assert.equal(s2.phase, 'answered', 'the real build: one wrong tap on hard ends it');
     s2 = c.ask(q, 1); s2 = c.tapKey(s2, 62).state; assert.equal(s2.phase, 'asked', 'a right tap is free even on hard');
     const sc = c.award(c.markAsked(c.emptyScores(), 'hard'), 'hard'); assert.equal(c.counterText(sc, 'hard'), 'Hard: score 1 of 1 asked'); assert.equal(c.boardText(c.resetScores()).join(' '), 'Easy 0/0 Medium 0/0 Hard 0/0'); assert.equal(c.boardText(sc).join(' '), 'Easy 0/0 Medium 0/0 Hard 1/1');
-  } finally { for (const e of fs.readdirSync(path.join(path.resolve(import.meta.dirname, '..'), 'scripts/dev/scratch')).filter((n) => n.startsWith('ctl-'))) fs.rmSync(path.join(path.resolve(import.meta.dirname, '..'), 'scripts/dev/scratch', e), { recursive: true, force: true }); }
+  } finally { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); }       // only the directories this test made, in the system temp folder
 });
