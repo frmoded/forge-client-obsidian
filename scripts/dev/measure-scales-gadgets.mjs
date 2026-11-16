@@ -1,4 +1,4 @@
-// 2026-11-15-2102 - the Scales chapter gadgets (scale_player.html, scale_ear.html) (interval_ear.html) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. Real mouse clicks (DevTools
+// 2026-11-15-2102 - the Scale player (scale_player.html) in real headless Chrome (the ear gadgets are measured by measure-ear-split.mjs since 2026-11-16-0900), in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. Real mouse clicks (DevTools
 // Input.dispatchMouseEvent at the real box of each control, found by asking the page: the sandboxed iframe is not in the DevTools DOM tree), the oscillators the real Web Audio graph is asked for (20 per note: the first of each is the pitch),
 // the CONTENT HEIGHT of each gadget at each width (the body's own height: no fixed height, no margin), no horizontal scroll, and light and dark shots (no gadget has a dark theme: dark = the same page under prefers-color-scheme: dark).
 //   node scripts/dev/measure-ear-gadget.mjs [--vault ~/projects/music-theory] [--out <dir>]        exit 0 = every verdict true
@@ -91,43 +91,8 @@ for (const width of [800, 360]) {
     await setValue(g, 'scale', 'whole_tone'); await setValue(g, 'tonic', '0'); s = await pstate(g); verdict[`player${width}_wholeToneConvention`] = /sharps going up and flats coming down/.test(s.note);
     verdict[`player${width}_noErrors`] = (await g.errs()).length === 0;
   } finally { g.page.close(); }
-  // ---------------- the ear gadget
-  const e = await mount('scale_ear.html', width);
-  try {
-    verdict[`ear${width}_noHorizontalScroll_start`] = (await e.overflow()) <= 0;
-    const hs = []; const sample = async () => { const h = await e.height(); hs.push(h); allHeights.ear.add(h); if ((await e.overflow()) > 0) verdict[`ear${width}_horizontalScroll`] = true; };
-    await sample(); let s = await estate(e);
-    verdict[`ear${width}_idle`] = s.hint === 'Press Next' && s.counter === 'Score 0 of 0 asked' && s.answers.join('|') === 'major|natural minor|Dorian|Mixolydian|pentatonic';
-    // game 1
-    await e.clear(); await e.press('#next'); await sleep(900); let hz = notes(await e.hz()).map(midiOf); s = await estate(e); await sample();
-    verdict[`ear${width}_g1_nextPlaysAScale`] = (hz.length === 6 || hz.length === 8) && s.tonic.join() === String(hz[0]) && s.hint === '3 tries left' && s.counter === 'Score 0 of 1 asked';
-    const buttons = await e.probe(`[].map.call(document.querySelectorAll('#answers button'), function (b) { return b.getAttribute('data-scale'); })`);
-    // find the answer by the size of the scale (a pentatonic has 5 notes), then guess a wrong one first
-    const size = hz.length - 1; const wrongId = buttons.find((id) => (id === 'major_pentatonic') !== (size === 5));
-    await e.press(`#answers button[data-scale="${wrongId}"]`); await sleep(200); s = await estate(e); await sample();
-    verdict[`ear${width}_g1_wrongGuessRevealsNothing`] = s.hint === '2 tries left' && s.answers.some((t) => t.endsWith('×')) && !s.answers.some((t) => t.endsWith('✓'));
-    if (width === 800) await e.shot('scales-ear-1-one-wrong', await e.height());
-    // try the others until it is solved or over (the one right answer is among them)
-    let guesses = 0; for (const id of buttons) { s = await estate(e); if (/^(Correct|Out of tries)/.test(s.sr)) break; if (s.answers.some((t) => t.startsWith(id === 'natural_minor' ? 'natural minor' : id === 'major_pentatonic' ? 'pentatonic' : id[0].toUpperCase() === id[0] ? id : id)) && false) continue; await e.press(`#answers button[data-scale="${id}"]`); await sleep(120); guesses++; }
-    s = await estate(e); await sample(); verdict[`ear${width}_g1_endsWithTheAnswerShown`] = /^(Correct|Out of tries)/.test(s.sr) && s.answers.some((t) => t.endsWith('✓')) && /It was /.test(s.prompt);
-    if (width === 800) await e.shot('scales-ear-2-answered', await e.height());
-    // game 2: build
-    await e.press('#game-2'); await sleep(100); s = await estate(e); await sample();
-    verdict[`ear${width}_g2_ownScoreAndEmptyAnswerRow`] = s.counter === 'Score 0 of 0 asked' && s.answers.length === 0;
-    await e.clear(); await e.press('#next'); await sleep(300); s = await estate(e); await sample(); const tonic = s.tonic[0];
-    verdict[`ear${width}_g2_theTonicIsLitAndOneNoteSounds`] = (await e.hz()).length === 20 && Number.isFinite(tonic) && /^Build .+: tap its other notes/.test(s.prompt) && s.hint === '3 tries left';
-    await keyBox(e, tonic); await sleep(100); s = await estate(e); verdict[`ear${width}_g2_tappingTheTonicDoesNothing`] = s.hint === '3 tries left' && s.right.length === 0 && s.wrong.length === 0;
-    // tap every key of the octave above the tonic in order: right ones go green, wrong ones are misses; the question must end (solved or three misses)
-    let ended = false; for (let m = tonic + 1; m < tonic + 12 && !ended; m++) { await keyBox(e, m); await sleep(80); const st = await estate(e); ended = /^(All found|Out of tries)/.test(st.sr) || st.hint === 'Press Next'; if (m === tonic + 4 && width === 800) await e.shot('scales-ear-3-building', await e.height()); }
-    s = await estate(e); await sample(); verdict[`ear${width}_g2_theQuestionEnds`] = s.hint === 'Press Next' && (s.right.length > 0);
-    if (width === 800) await e.shot('scales-ear-4-built-or-revealed', await e.height());
-    await e.press('#game-1'); const c1 = (await estate(e)).counter; await e.press('#game-2'); await e.press('#reset'); const c2 = (await estate(e)).counter; await e.press('#game-1'); const c3 = (await estate(e)).counter;
-    verdict[`ear${width}_resetClearsOnlyTheCurrentGame`] = c2 === 'Score 0 of 0 asked' && c3 === c1 && /asked/.test(c1);
-    numbers[`ear_${width}_distinct_heights`] = [...new Set(hs)]; verdict[`ear${width}_oneHeightInEveryGameAndState`] = new Set(hs).size === 1;
-    verdict[`ear${width}_noErrors`] = (await e.errs()).length === 0;
-  } finally { e.page.close(); }
 }
-numbers.player_heights_all = [...allHeights.player]; numbers.ear_heights_all = [...allHeights.ear];
+numbers.player_heights_all = [...allHeights.player];
 console.log(JSON.stringify(numbers));
 console.log(JSON.stringify(verdict, null, 1));
 const ok = Object.values(verdict).every((v) => v === true);

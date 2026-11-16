@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hear the scale</title>
+<title>Build the scale</title>
 <style>
   /* Palette: the same values as piano_keyboard.html. No margin, no padding, no fixed height: the page is exactly its content, and every game and state has the SAME content height. */
   :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --right: #2E8B57; --wrong: #D72027; --accent: #D72027; }
@@ -21,7 +21,7 @@
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
   .switch button { padding: 3px 8px; min-height: 26px; font-size: 11px; white-space: nowrap; }
   .switch button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
-  #answers { min-height: 70px; align-content: flex-start; }
+  #answers { display: none; }                                  /* this game has no answer buttons: the keys are the answer, so the row takes no height */
   #answers button { padding: 3px 9px; min-height: 30px; font-size: 12px; }
   #answers button.wrong { border-color: var(--wrong); border-style: dashed; background: #F6C9CB; }
   #answers button.right { border-color: var(--right); background: #BFE3CD; }
@@ -47,27 +47,33 @@
   #counter { color: var(--ink); }
   .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
   .linkbtn:hover { color: var(--ink); }
+  #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #board b { color: var(--ink); }
 </style>
 </head>
 <body>
 <div class="wrap">
-<div class="row switch" id="games" role="group" aria-label="Choose a game"></div>
+<div class="row switch" id="levels" role="group" aria-label="Choose a level"></div>
 <div id="prompt" aria-live="off"></div>
 <svg id="strip" role="group" aria-label="Piano keys, C4 to C6"></svg>
 <div class="row" id="answers" role="group" aria-label="Answers"></div>
 <div class="row"><button id="next" type="button">Next</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
 <div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset score</button></div>
+<div id="board" aria-label="Score of each level"></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
 </div>
 <script>
 (function () {
   "use strict";
-  // 2026-11-15-2102 - HEAR THE SCALE (practice, the Scales chapter), the interval ear gadget's pattern for scales. Two games, each scored (memory only: the sandboxed page has no storage), THREE TRIES a question:
+  // 2026-11-16-0900: THIS FILE IS ONE GAME OF THE SCALE EAR TRAINER, game 2 (Build the scale), split out of scale_ear.html so that each widget is exactly as tall as it needs, with the level switch of the interval ear gadgets (easy / medium / hard = 5 / 3 / 1 attempts a question).
+  // 2026-11-15-2102 - HEAR THE SCALE (practice, the Scales chapter), the interval ear gadget's pattern for scales. Two games, each scored (memory only: the sandboxed page has no storage), a number of ATTEMPTS a question (by level):
   //   game 1  Name the scale: a scale is played from a tonic; pick major / natural minor / Dorian / Mixolydian / pentatonic (the major pentatonic) from the row. Every guess uses a try; the right one scores; three wrong ends the question and shows the answer.
   //   game 2  Build the scale: the tonic is given (lit) and a scale is named; tap the piano keys of its other notes (in the octave above the tonic). A right key turns green, a wrong key is a miss (red); three misses end the question and show the notes; all found scores.
   // "Reset score" clears the current game's score. The score is the number found right and the number of questions asked.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
-  var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, TRIES = 3, STEP_SECONDS = 0.42, NOTE_LEN = 0.7;
+  // ==== scale ear core BEGIN (2026-11-16-0900) ====================================================================================================
+  // The SAME block is in scale_ear_name_the_scale.html and scale_ear_build_the_scale.html (each gadget is one self-contained file, so it is copied; a test pins the two identical). It holds the logic of both games; each file plays one.
+  var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.42, NOTE_LEN = 0.7;
   function midiToHz(m) { return A4_HZ * Math.pow(2, (m - 69) / 12); }
   function isBlack(m) { return [1, 3, 6, 8, 10].indexOf(((m % 12) + 12) % 12) >= 0; }
   var FLATS = ["C", "D-flat", "D", "E-flat", "E", "F", "G-flat", "G", "A-flat", "A", "B-flat", "B"];
@@ -169,6 +175,10 @@
   var HEAR = ["major", "natural_minor", "dorian", "mixolydian", "major_pentatonic"];                                  // game 1: the five answers
   var HEAR_LABEL = { major: "major", natural_minor: "natural minor", dorian: "Dorian", mixolydian: "Mixolydian", major_pentatonic: "pentatonic" };
   var BUILD = ["major", "natural_minor", "harmonic_minor", "dorian", "mixolydian", "major_pentatonic", "minor_pentatonic"];      // game 2: the scales to build
+  // The LEVELS (the same as the interval ear gadgets): easy 5, medium 3, hard 1 ATTEMPTS a question. In "name the scale" every guess uses one; in "build the scale" the attempts are the WRONG TAPS (a right key is free): the question ends when they are used up, and scores 1 when the scale is built before.
+  var LEVELS = ["easy", "medium", "hard"], BASE_ATTEMPTS = { easy: 5, medium: 3, hard: 1 }, DEFAULT_LEVEL = "medium";
+  function levelName(l) { return l.charAt(0).toUpperCase() + l.slice(1); }
+  function attemptsFor(level) { return BASE_ATTEMPTS.hasOwnProperty(level) ? BASE_ATTEMPTS[level] : BASE_ATTEMPTS[DEFAULT_LEVEL]; }
   function pick(list, rng) { return list[Math.min(list.length - 1, Math.floor(rng() * list.length))]; }
   // The next question of a game: a tonic (a pitch class) and a scale, never the same pair as `previous`. { game, tonic, scale, notes (the midis: the tonic placed from C4, the octave note included), sound }
   function pickQuestion(game, rng, previous) {
@@ -181,7 +191,7 @@
   function targetsOf(q) { return q.notes.slice(1, q.notes.length - 1); }
   // The state of a question: idle -> asked -> answered. `triesLeft` counts down on a wrong guess (game 1) or a wrong key (game 2); `found` are the keys found (game 2), `wrong` what was guessed wrong, `outcome` "solved" or "gaveup".
   function initial() { return { phase: "idle", question: null, triesLeft: 0, found: [], wrong: [], outcome: null }; }
-  function ask(q) { return { phase: "asked", question: q, triesLeft: TRIES, found: [], wrong: [], outcome: null }; }
+  function ask(q, attempts) { return { phase: "asked", question: q, triesLeft: attempts, found: [], wrong: [], outcome: null }; }
   function over(state, outcome, found, wrong, triesLeft) { return { phase: "answered", question: state.question, triesLeft: triesLeft, found: found, wrong: wrong, outcome: outcome }; }
   // Game 1: one guess (a scale id). Returns { state, event, scored }: "ignored", "solved" (scored), "wrong" (a try used), "gaveup" (the third wrong: the answer is shown, nothing scores).
   function guessScale(state, id) {
@@ -202,19 +212,21 @@
       return { state: { phase: "asked", question: q, triesLeft: state.triesLeft, found: found, wrong: state.wrong, outcome: null }, event: "right", scored: false };
     }
     var wrong = state.wrong.concat([midi]), left = state.triesLeft - 1;
-    if (left <= 0) return { state: over(state, "gaveup", targets.slice(), wrong, 0), event: "gaveup", scored: false };
+    if (left <= 0) return { state: over(state, "gaveup", state.found, wrong, 0), event: "gaveup", scored: false };
     return { state: { phase: "asked", question: q, triesLeft: left, found: state.found, wrong: wrong, outcome: null }, event: "wrong", scored: false };
   }
-  // The scores: scores[game] = { score, asked }. Immutable.
-  function emptyScores() { return { 1: { score: 0, asked: 0 }, 2: { score: 0, asked: 0 } }; }
-  function bump(scores, game, dScore, dAsked) { var out = { 1: { score: scores[1].score, asked: scores[1].asked }, 2: { score: scores[2].score, asked: scores[2].asked } }; out[game].score += dScore; out[game].asked += dAsked; return out; }
-  function markAsked(scores, game) { return bump(scores, game, 0, 1); }
-  function award(scores, game) { return bump(scores, game, 1, 0); }
-  function resetGame(scores, game) { var out = bump(scores, game, 0, 0); out[game] = { score: 0, asked: 0 }; return out; }
-  function counterText(scores, game) { var c = scores[game]; return "Score " + c.score + " of " + c.asked + " asked"; }
-  function hintText(state) { if (state.phase !== "asked") return "Press Next"; return state.triesLeft + (state.triesLeft === 1 ? " try left" : " tries left"); }
+  // The scores, per LEVEL (this file is one game): scores[level] = { score, asked }. Immutable. Memory only.
+  function emptyScores() { var s = {}; LEVELS.forEach(function (l) { s[l] = { score: 0, asked: 0 }; }); return s; }
+  function bump(scores, level, dScore, dAsked) { var out = {}; LEVELS.forEach(function (l) { out[l] = { score: scores[l].score, asked: scores[l].asked }; }); out[level].score += dScore; out[level].asked += dAsked; return out; }
+  function markAsked(scores, level) { return bump(scores, level, 0, 1); }
+  function award(scores, level) { return bump(scores, level, 1, 0); }
+  function resetScores() { return emptyScores(); }
+  function counterText(scores, level) { var c = scores[level]; return levelName(level) + ": score " + c.score + " of " + c.asked + " asked"; }
+  function boardText(scores) { return LEVELS.map(function (l) { return levelName(l) + " " + scores[l].score + "/" + scores[l].asked; }); }
+  function hintText(state) { if (state.phase !== "asked") return "Press Next"; return state.triesLeft + (state.triesLeft === 1 ? " attempt left" : " attempts left"); }
   // What a key tap sounds: the note tapped, right or wrong (it never says which). A given-up question is played again.
   function planFeedback(q, midi, event) { if (event === "ignored") return []; if (event === "gaveup") return q.sound.map(function (n) { return { midi: n.midi, when: n.when }; }); return midi === null ? [] : [{ midi: midi, when: 0 }]; }
+  // ==== scale ear core END =====================================================================================================================
   // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
   // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
   // A piano-like note by ADDITIVE SYNTHESIS: 10 partials per string with a slight inharmonic stretch (stiff strings: partial n at n*f*sqrt(1 + B*n*n), B from about 0.0003 in the treble to about 0.001
@@ -286,8 +298,8 @@
   // ==== piano voice END ===========================================================================================================================
 
   if (typeof document === "undefined") {           // node test harness
-    module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, TRIES: TRIES, HEAR: HEAR, BUILD: BUILD, HEAR_LABEL: HEAR_LABEL, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, scaleMidis: scaleMidis, tonicName: tonicName, noteName: noteName,
-      pickQuestion: pickQuestion, targetsOf: targetsOf, initial: initial, ask: ask, guessScale: guessScale, tapKey: tapKey, emptyScores: emptyScores, markAsked: markAsked, award: award, resetGame: resetGame, counterText: counterText, hintText: hintText, planFeedback: planFeedback,
+    module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, LEVELS: LEVELS, DEFAULT_LEVEL: DEFAULT_LEVEL, attemptsFor: attemptsFor, HEAR: HEAR, BUILD: BUILD, HEAR_LABEL: HEAR_LABEL, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, scaleMidis: scaleMidis, tonicName: tonicName, noteName: noteName,
+      pickQuestion: pickQuestion, targetsOf: targetsOf, initial: initial, ask: ask, guessScale: guessScale, tapKey: tapKey, emptyScores: emptyScores, markAsked: markAsked, award: award, resetScores: resetScores, boardText: boardText, counterText: counterText, hintText: hintText, planFeedback: planFeedback,
       midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
@@ -308,8 +320,9 @@
     g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(k.m); } });
   }
   whites.forEach(function (k) { makeKey(k, false); }); blacks.forEach(function (k) { makeKey(k, true); });
-  var GAMES = [{ id: 1, title: "1 Name the scale", tip: "A scale is played: say which one" }, { id: 2, title: "2 Build the scale", tip: "The tonic is given: tap the other notes of the named scale" }];
-  var games = {}, current = 1, scores = emptyScores();
+  var GAME = 2;                                        // 2026-11-16-0900: THIS file is one game; there is no game switch
+  var GAMES = [{ id: 2, title: "Build the scale", tip: "The tonic is given: tap the other notes of the named scale" }];
+  var games = {}, current = GAME, level = DEFAULT_LEVEL, scores = emptyScores();
   GAMES.forEach(function (g) { games[g.id] = { state: initial(), previous: null }; });
   function mark(mm, ch) { var g = keys[mm], r = g.firstChild, black = isBlack(mm); var t = el("text", { "class": "mark", x: +r.getAttribute("x") + +r.getAttribute("width") / 2, y: PAD + (black ? 26 : 48), "text-anchor": "middle" }, g); t.textContent = ch; }
   function renderAnswers() {
@@ -339,11 +352,14 @@
       }
     }
     $("prompt").textContent = current === 1 ? (st.phase === "idle" ? "Press Next: a scale will play." : st.phase === "asked" ? "Which scale was it? The yellow key is its first note." : "It was " + scaleTitle(q.tonic, q.scale) + ".") :
-      (st.phase === "idle" ? "Press Next: you will be asked to build a scale." : "Build " + scaleTitle(q.tonic, q.scale) + (st.phase === "asked" ? ": tap its other notes in the octave above the yellow key (" + (targetsOf(q).length - st.found.length) + " to find)." : st.outcome === "solved" ? ". All found." : ". Out of tries: the dashed keys were its notes."));
+      (st.phase === "idle" ? "Press Next: you will be asked to build a scale." : "Build " + scaleTitle(q.tonic, q.scale) + (st.phase === "asked" ? ": tap its other notes in the octave above the yellow key (" + (targetsOf(q).length - st.found.length) + " to find)." : st.outcome === "solved" ? ". All found." : ". Out of attempts: the dashed keys were its notes."));
     $("hint").textContent = hintText(st);
     $("replay").disabled = st.phase === "idle" || false;
-    GAMES.forEach(function (g) { $("game-" + g.id).setAttribute("aria-pressed", g.id === current ? "true" : "false"); });
-    $("counter").textContent = counterText(scores, current);
+    LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
+    $("counter").textContent = counterText(scores, level);
+    var board = $("board"), parts = boardText(scores); board.textContent = "";
+    parts.forEach(function (p, i) { var n = document.createElement(LEVELS[i] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (i < parts.length - 1) board.appendChild(document.createTextNode(" \u00B7 ")); });
+    board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
     renderAnswers();
     if (announce !== undefined) $("sr").textContent = announce;
   }
@@ -351,27 +367,31 @@
   function audio() { if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); } if (ctx.state === "suspended") ctx.resume(); return ctx; }
   function sound(plan) { var c = audio(); if (!c || !plan.length) return; var t0 = c.currentTime; plan.forEach(function (n) { pianoVoice(c, pianoBus(c), midiToHz(n.midi), t0 + n.when, NOTE_LEN, 0.8, 1); }); }
   function after(r, gm, midiOrNull) {
-    gm.state = r.state; if (r.scored) scores = award(scores, current);
-    var q = gm.state.question, left = gm.state.triesLeft, tl = left + (left === 1 ? " try left." : " tries left."), text;
+    gm.state = r.state; if (r.scored) scores = award(scores, gm.state.question.level);
+    var q = gm.state.question, left = gm.state.triesLeft, tl = left + (left === 1 ? " attempt left." : " attempts left."), text;
     if (r.event === "solved") text = current === 1 ? "Correct. Press Next." : "All found. Press Next.";
     else if (r.event === "right") text = "That note is in the scale. " + tl;
-    else if (r.event === "gaveup") text = "Out of tries. It was " + scaleWords(q.tonic, q.scale) + ". Press Next.";
+    else if (r.event === "gaveup") text = "Out of attempts. It was " + scaleWords(q.tonic, q.scale) + ". Press Next.";
     else text = "Not that one. " + tl;
     render(text); sound(planFeedback(q, midiOrNull, r.event));
   }
   function guess(id) { var gm = games[current], r = guessScale(gm.state, id); if (r.event === "ignored") return; after(r, gm, null); }
   function tap(mm) { if (current !== 2) return; var gm = games[current], r = tapKey(gm.state, mm); if (r.event === "ignored") return; after(r, gm, mm); }
   $("next").addEventListener("click", function () {
-    var gm = games[current], q = pickQuestion(current, rng, gm.previous); gm.previous = q; gm.state = ask(q); scores = markAsked(scores, current);
-    render(current === 1 ? "A scale was played from " + nameOfKey(q.notes[0]) + ". Which scale was it? " + TRIES + " tries." : "Build " + scaleWords(q.tonic, q.scale) + ". The tonic is " + nameOfKey(q.notes[0]) + ". " + TRIES + " tries.");
+    var gm = games[current], q = pickQuestion(current, rng, gm.previous); q.level = level; gm.previous = q; gm.state = ask(q, attemptsFor(level)); scores = markAsked(scores, level);
+    render(current === 1 ? "A scale was played from " + nameOfKey(q.notes[0]) + ". Which scale was it? " + attemptsFor(level) + " attempts." : "Build " + scaleWords(q.tonic, q.scale) + ". The tonic is " + nameOfKey(q.notes[0]) + ". " + attemptsFor(level) + " attempts.");
     sound(current === 1 ? q.sound : [{ midi: q.notes[0], when: 0 }]);
   });
   $("replay").addEventListener("click", function () { var q = games[current].state.question; if (q) sound(current === 1 ? q.sound : [{ midi: q.notes[0], when: 0 }]); });       // never reveals the answer
-  $("reset").addEventListener("click", function () { scores = resetGame(scores, current); render("Score cleared for this game."); });
-  GAMES.forEach(function (g) {
-    var b = document.createElement("button"); b.type = "button"; b.id = "game-" + g.id; b.textContent = g.title; b.title = g.tip; b.setAttribute("aria-pressed", "false");
-    b.addEventListener("click", function () { current = g.id; render(g.title + "."); });
-    $("games").appendChild(b);
+  $("reset").addEventListener("click", function () { scores = resetScores(); render("Score cleared."); });
+  LEVELS.forEach(function (l) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = levelName(l); b.title = levelName(l) + ": " + BASE_ATTEMPTS[l] + (BASE_ATTEMPTS[l] === 1 ? " attempt" : " attempts") + " a question" + (GAME === 2 ? " (wrong taps)" : ""); b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () {                                                            // a new level: the open question ends (it counted as asked, with no point), each level keeps its own score
+      if (l === level) return;
+      level = l; games[GAME].state = initial();
+      render(levelName(l) + ": " + attemptsFor(l) + " attempts a question. Press Next.");
+    });
+    $("levels").appendChild(b);
   });
   render();
 })();

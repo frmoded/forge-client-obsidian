@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Find the triad notes</title>
+<style>
+  /* Palette: the same values as piano_keyboard.html (forge_music_theory_style_guide.md). No margin, no padding, no fixed height: the page is exactly its content, and every game, level and state has the SAME content height (the embed is set from it). */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --right: #2E8B57; --wrong: #D72027; --accent: #D72027; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
+  svg { display: block; width: 100%; max-width: 334px; height: auto; user-select: none; -webkit-user-select: none; }
+  .wrap { max-width: 360px; }
+  .wrap > :not(.switch) { max-width: 334px; }                    /* the strip and the rows are 334 px at most; the two switch rows are allowed 360 so that their buttons stay on ONE row */
+  .row { display: flex; align-items: center; gap: 8px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
+  .switch { margin: 0 0 3px; gap: 4px; min-height: 26px; }
+  button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 14px; cursor: pointer; min-height: 30px; }
+  button:hover:not(:disabled) { border-color: var(--ink); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .switch button { padding: 3px 6px; min-height: 26px; font-size: 11px; white-space: nowrap; }
+  .switch button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
+  #hint { color: var(--ink); }
+  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .key { cursor: pointer; }
+  .key:focus { outline: none; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.first rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
+  .key.right rect { fill: #BFE3CD; stroke: var(--right); stroke-width: 3; }
+  .key.black.right rect { fill: var(--right); stroke: #1B5E3A; }
+  .key.wrong rect { fill: #F6C9CB; stroke: var(--wrong); stroke-width: 3; stroke-dasharray: 3 2; }
+  .key.black.wrong rect { fill: #8B1C20; stroke: var(--wrong); }
+  .key.idle { cursor: default; }
+  .key:focus rect { stroke: var(--accent); stroke-width: 3; }
+  .key.right:focus rect { stroke: var(--right); }
+  .key text { pointer-events: none; fill: var(--muted); font-size: 9px; }
+  .key text.mark { font-size: 15px; font-weight: 700; fill: var(--ink); }
+  .key.black text { fill: var(--paper); }
+  .key.black text.mark { fill: #fff; }
+  .arc { fill: none; stroke: var(--axis); stroke-width: 1.4; }
+  .arrowhead { fill: var(--axis); }
+  /* the score: one line for the current level, one line for the three levels of this game (earlier scores stay visible); both lines have a reserved height so nothing moves */
+  .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
+  #counter { color: var(--ink); }
+  .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
+  .linkbtn:hover { color: var(--ink); }
+  #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #board b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row switch" id="levels" role="group" aria-label="Choose a level"></div>
+<svg id="strip" role="group" aria-label="Piano keys, C3 to C5. Press Next, listen, then click the key or keys you hear."></svg>
+<div class="row"><button id="next" type="button">Next</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
+<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset score</button></div>
+<div id="board" aria-label="Score of each level in this game"></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-16-0900: THIS FILE IS ONE GAME OF THE EAR TRAINER, game 3 (Three at once), split out of interval_ear.html so that each widget is exactly as tall as it needs. The rules are unchanged: easy / medium / hard = 5 / 3 / 1 attempts a question (game 3: 6 / 4 / 2), every guess uses one, a find within the attempts scores 1.
+  // 2026-11-13-1216 "play the second note", three games with a score 2026-11-15-1219, scored BY LEVEL 2026-11-15-2099. Two or three notes sound, only the LOWEST is lit, the person clicks the others. Nothing is shown until the question is over.
+  //   game 1  One after the other: the two notes one after the other, the first lit, the second found (it may be higher or lower, -12..-1 and +1..+12).
+  //   game 2  Both at once: the two notes TOGETHER, only the LOWER note lit, the person finds the higher one (+1..+12).
+  //   game 3  Three at once: a triad in root position (0-4-7, 0-3-7, 0-3-6, 0-4-8), the lowest lit, the person clicks the other TWO in any order.
+  // THE RULE: a level gives a number of ATTEMPTS a question; EVERY click on a key (right or wrong) uses one attempt. Finding the answer within the attempts adds 1 to the score; running out of attempts adds 0, the question ends and the answer is shown.
+  //   easy 5, medium 3, hard 1 attempts; game 3 (two notes to find, so two of the clicks are the right ones) gets ONE more: easy 6, medium 4, hard 2.
+  // The score is kept per game and per level (memory only: the sandboxed page has no storage), with the number of questions asked; changing the level never erases another level's score; Reset clears the current game's scores (all three levels).
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  // ==== interval ear core BEGIN (2026-11-16-0900) ===================================================================================================
+  // The SAME block is in interval_ear_one_after_the_other.html, interval_ear_both_at_once.html and interval_ear_triads.html (each gadget is one self-contained file, so it is copied; a test pins the three identical). It holds the logic of all three games; each file plays one.
+  var LOW = 48, HIGH = 72, A4_HZ = 440, GAP = 0.6, NOTE_LEN = 0.9;                                       // C3..C5; the second note 0.6 s after the first (the interval widget's gap)
+  var LEVELS = ["easy", "medium", "hard"], BASE_ATTEMPTS = { easy: 5, medium: 3, hard: 1 }, DEFAULT_LEVEL = "medium";
+  var SHAPES = [[4, 7], [3, 7], [3, 6], [4, 8]];                                                         // the four triads in root position: the deltas of the two upper notes above the lowest
+  var FLATS = ["C", "D-flat", "D", "E-flat", "E", "F", "G-flat", "G", "A-flat", "A", "B-flat", "B"];
+  function plainName(m) { return FLATS[((m % 12) + 12) % 12]; }
+  function isBlack(m) { return plainName(m).length > 1; }
+  function octaveOf(m) { return Math.floor(m / 12) - 1; }
+  function nameOf(m) { return plainName(m).replace("-flat", " flat") + " " + octaveOf(m); }
+  function midiToHz(m) { return A4_HZ * Math.pow(2, (m - 69) / 12); }
+  function shapeKey(shape) { return shape[0] + "," + shape[1]; }
+  function levelName(l) { return l.charAt(0).toUpperCase() + l.slice(1); }
+  function attemptsFor(game, level) { return BASE_ATTEMPTS[level] + (game === 3 ? 1 : 0); }               // a name that is not a level gets the default's attempts
+  // The scores: scores[game][level] = { score, asked }. Immutable: every function returns a new object.
+  function emptyScores() { var s = {}; [1, 2, 3].forEach(function (g) { s[g] = {}; LEVELS.forEach(function (l) { s[g][l] = { score: 0, asked: 0 }; }); }); return s; }
+  function bump(scores, game, level, dScore, dAsked) {
+    var out = {}, g, l;
+    for (g in scores) { out[g] = {}; for (l in scores[g]) out[g][l] = { score: scores[g][l].score, asked: scores[g][l].asked }; }
+    out[game][level].score += dScore; out[game][level].asked += dAsked; return out;
+  }
+  function markAsked(scores, game, level) { return bump(scores, game, level, 0, 1); }                      // Next: a question is asked (an unfinished one stays asked, with no point)
+  function award(scores, game, level) { return bump(scores, game, level, 1, 0); }                         // the answer was found within the attempts
+  function resetGame(scores, game) { var out = bump(scores, game, "easy", 0, 0); LEVELS.forEach(function (l) { out[game][l] = { score: 0, asked: 0 }; }); return out; }
+  function counterText(scores, game, level) { var c = scores[game][level]; return levelName(level) + ": score " + c.score + " of " + c.asked + " asked"; }
+  function boardText(scores, game) { return LEVELS.map(function (l) { return levelName(l) + " " + scores[game][l].score + "/" + scores[game][l].asked; }); }   // ["Easy 3/5", "Medium 1/2", "Hard 0/0"]
+  function pick(list, rng) { return list[Math.min(list.length - 1, Math.floor(rng() * list.length))]; }
+  function soundOf(game, lit, targets) {
+    if (game === 1) return [{ midi: lit, when: 0 }, { midi: targets[0], when: GAP }];
+    return [lit].concat(targets).map(function (m) { return { midi: m, when: 0 }; });
+  }
+  // The next question of a game: never the same signed delta (games 1 and 2) or the same shape on the same root (game 3) as `previous`, every note inside lo..hi. `rng` returns [0, 1).
+  function pickQuestion(game, rng, previous, lo, hi) {
+    var options = [], d, r;
+    if (game === 3) {
+      SHAPES.forEach(function (s) {
+        var roots = []; for (r = lo; r + s[1] <= hi; r++) { if (!(previous && previous.key === shapeKey(s) && previous.lit === r)) roots.push(r); }
+        if (roots.length) options.push({ key: shapeKey(s), shape: s, roots: roots });
+      });
+    } else {
+      for (d = game === 1 ? -12 : 1; d <= 12; d++) {
+        if (d === 0 || (previous && previous.key === String(d))) continue;
+        var firsts = []; for (r = lo; r <= hi; r++) { if (r + d >= lo && r + d <= hi) firsts.push(r); }
+        if (firsts.length) options.push({ key: String(d), delta: d, roots: firsts });
+      }
+    }
+    var chosen = pick(options, rng), root = pick(chosen.roots, rng);
+    if (game === 3) { var t3 = [root + chosen.shape[0], root + chosen.shape[1]]; return { game: 3, lit: root, targets: t3, key: chosen.key, sound: soundOf(3, root, t3) }; }
+    var t = [root + chosen.delta]; return { game: game, lit: root, targets: t, key: chosen.key, sound: soundOf(game, root, t) };
+  }
+  // The state of one question: idle -> asked -> answered. `attemptsLeft` counts down on EVERY guess; `found` are the target notes found so far (green), `wrong` the keys guessed wrong (dashed red); `outcome` is "solved" or "gaveup".
+  function initial() { return { phase: "idle", question: null, attemptsLeft: 0, found: [], wrong: [], outcome: null }; }
+  function ask(question, attempts) { return { phase: "asked", question: question, attemptsLeft: attempts, found: [], wrong: [], outcome: null }; }
+  // One click on a key. Returns { state, event, scored }: event is "ignored" (no question open, the lit note, a key already marked), "right" / "wrong" (an attempt used, the question goes on), "solved" (every target found within the attempts:
+  // scored true) or "gaveup" (the attempts ran out: the answer is revealed, scored false). A wrong click never reveals anything while attempts remain.
+  function guess(state, midi) {
+    var q = state.question;
+    if (state.phase !== "asked" || midi === q.lit || state.found.indexOf(midi) >= 0 || state.wrong.indexOf(midi) >= 0) return { state: state, event: "ignored", scored: false };
+    var left = state.attemptsLeft - 1, hit = q.targets.indexOf(midi) >= 0;
+    var found = hit ? state.found.concat([midi]) : state.found, wrong = hit ? state.wrong : state.wrong.concat([midi]);
+    if (hit && found.length === q.targets.length) return { state: { phase: "answered", question: q, attemptsLeft: left, found: found, wrong: wrong, outcome: "solved" }, event: "solved", scored: true };
+    if (left <= 0) return { state: { phase: "answered", question: q, attemptsLeft: 0, found: q.targets.slice(), wrong: wrong, outcome: "gaveup" }, event: "gaveup", scored: false };
+    return { state: { phase: "asked", question: q, attemptsLeft: left, found: found, wrong: wrong, outcome: null }, event: hit ? "right" : "wrong", scored: false };
+  }
+  // What a click sounds: the note clicked (it never says whether it is right); when the attempts run out the whole question is played again, now that the answer is known.
+  function planFeedback(q, midi, event) {
+    if (event === "ignored") return [];
+    if (event === "gaveup") return q.sound.map(function (n) { return { midi: n.midi, when: n.when }; });
+    return [{ midi: midi, when: 0 }];
+  }
+  // The hint beside Next: it never gives the answer. Idle or over: Press Next. A question open: the attempts left.
+  function hintText(state) {
+    if (state.phase !== "asked") return "Press Next";
+    return state.attemptsLeft + (state.attemptsLeft === 1 ? " attempt left" : " attempts left");
+  }
+  // ==== interval ear core END =====================================================================================================================
+  // ==== piano voice BEGIN (2026-11-13-1214-1) ====================================================================================================
+  // The SAME block is in piano_voice_demo.html, piano_keyboard.html and interval_widget.html (each gadget is one self-contained file, so it is copied; a test pins the three identical).
+  // A piano-like note by ADDITIVE SYNTHESIS: 10 partials per string with a slight inharmonic stretch (stiff strings: partial n at n*f*sqrt(1 + B*n*n), B from about 0.0003 in the treble to about 0.001
+  // in the bass, normalised so the fundamental is exactly f), each partial with its own decay (higher ones die faster, bass notes ring longer), TWO strings a couple of cents apart (the natural beating), a few
+  // ms of band-passed hammer noise scaled by velocity, a low-pass whose cutoff rises with velocity and falls with pitch, a quick release at the end of the note, and a soft limiter on the shared bus so a chord does not clip.
+  // `when` is an absolute time on the context's clock; `hz` is the pitch the gadget's tuning asks for (the pitch-dependent parts use the note number it is nearest to). Per note: 20 oscillators (string 1's partials 1..10, then string 2's) and no other source but the hammer noise.
+  var PIANO_PARTIALS = 10;
+  var PIANO_STRINGS = 2;
+  var PIANO_OSC_PER_NOTE = PIANO_PARTIALS * PIANO_STRINGS;
+  var PIANO_DETUNE_CENTS = [0, 2];                     // string 1 true, string 2 two cents sharp
+  var PIANO_ATTACK = 0.004;                            // s, the rise of the note
+  var PIANO_RELEASE = 0.02;                            // s, the end of a note is a quick fade, never a cut
+  function pianoClamp(x, lo, hi) { return Math.min(hi, Math.max(lo, x)); }
+  function pianoMidi(hz) { return 69 + 12 * Math.log(hz / 440) / Math.LN2; }
+  function pianoB(midi) { return 0.0003 + 0.0007 * pianoClamp((84 - midi) / 60, 0, 1); }                               // C6 and above 0.0003, rising toward the bass (C2 about 0.00086, C1 and below 0.001)
+  function pianoPartialHz(f, n, B) { return n * f * Math.sqrt((1 + B * n * n) / (1 + B)); }                            // n = 1 is exactly f
+  function pianoDecay(midi, n) { return pianoClamp(4.2 - 0.045 * (midi - 36), 0.7, 4.2) / (1 + 0.8 * (n - 1)); }       // the time constant (s) of partial n: the bass rings longer, each higher partial dies faster
+  function pianoPartialAmp(n) { return 1 / Math.pow(n, 1.1); }                                                         // the spectrum falls off gently: a hammer-struck string keeps its upper partials
+  function pianoCutoff(midi, velocity) { return pianoClamp(1800 + 7200 * velocity - 35 * (midi - 60), 500, 12000); }  // Hz: harder = brighter, higher = darker
+  var pianoNoiseCache = null, pianoBusCache = null;
+  function pianoNoiseBuffer(ctx) {
+    if (!pianoNoiseCache || pianoNoiseCache.ctx !== ctx) {
+      var n = Math.max(1, Math.round(ctx.sampleRate * 0.012)), b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0), seed = 1;
+      for (var i = 0; i < n; i++) { seed = (seed * 16807) % 2147483647; d[i] = seed / 1073741823.5 - 1; }        // a fixed noise burst: the same every time
+      pianoNoiseCache = { ctx: ctx, buffer: b };
+    }
+    return pianoNoiseCache.buffer;
+  }
+  function pianoBus(ctx) {                                                                                             // the shared output: a soft limiter, so a four-note chord does not clip
+    if (!pianoBusCache || pianoBusCache.ctx !== ctx) {
+      var comp = ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 12; comp.attack.value = 0.002; comp.release.value = 0.12;
+      comp.connect(ctx.destination);
+      pianoBusCache = { ctx: ctx, node: comp };
+    }
+    return pianoBusCache.node;
+  }
+  function pianoVoice(ctx, destination, hz, when, length, velocity, level) {
+    var t0 = when, end = when + Math.max(0.05, length), midi = pianoMidi(hz), B = pianoB(midi);
+    var v = pianoClamp(velocity == null ? 0.8 : velocity, 0.05, 1), peak = pianoClamp(level == null ? 1 : level, 0, 2) * (0.1 + 0.2 * v);
+    var sumA = 0, n, s;
+    for (n = 1; n <= PIANO_PARTIALS; n++) sumA += pianoPartialAmp(n);
+    var out = ctx.createGain(), lp = ctx.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = pianoCutoff(midi, v); lp.Q.value = 0.7;
+    out.gain.setValueAtTime(0.0001, t0);
+    out.gain.linearRampToValueAtTime(peak, t0 + PIANO_ATTACK);
+    out.gain.setValueAtTime(peak, Math.max(end, t0 + PIANO_ATTACK + 0.001));
+    out.gain.setTargetAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001), PIANO_RELEASE / 4);                          // the quick release (about 20 ms to silence)
+    out.gain.setValueAtTime(0, Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.15);
+    lp.connect(out); out.connect(destination);
+    for (s = 0; s < PIANO_STRINGS; s++) {
+      var fs = hz * Math.pow(2, PIANO_DETUNE_CENTS[s] / 1200);
+      for (n = 1; n <= PIANO_PARTIALS; n++) {
+        var o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = "sine"; o.frequency.value = pianoPartialHz(fs, n, B);
+        g.gain.setValueAtTime(pianoPartialAmp(n) / sumA / PIANO_STRINGS, t0);
+        g.gain.setTargetAtTime(0, t0 + PIANO_ATTACK, pianoDecay(midi, n));
+        o.connect(g); g.connect(lp);
+        o.start(t0); o.stop(Math.max(end, t0 + PIANO_ATTACK + 0.001) + 0.2);
+      }
+    }
+    var ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();                          // the hammer: a few ms of band-passed noise, harder = louder
+    ns.buffer = pianoNoiseBuffer(ctx);
+    bp.type = "bandpass"; bp.frequency.value = pianoClamp(1200 + 2400 * v + 12 * (midi - 60), 600, 6000); bp.Q.value = 1;
+    ng.gain.setValueAtTime(0.2 * v * v, t0); ng.gain.setTargetAtTime(0, t0 + 0.001, 0.003);
+    ns.connect(bp); bp.connect(ng); ng.connect(lp);
+    ns.start(t0); ns.stop(t0 + 0.02);
+  }
+  // ==== piano voice END ===========================================================================================================================
+
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { LOW: LOW, HIGH: HIGH, GAP: GAP, LEVELS: LEVELS, DEFAULT_LEVEL: DEFAULT_LEVEL, SHAPES: SHAPES, plainName: plainName, isBlack: isBlack, midiToHz: midiToHz, attemptsFor: attemptsFor, emptyScores: emptyScores, markAsked: markAsked, award: award, resetGame: resetGame,
+      counterText: counterText, boardText: boardText, pickQuestion: pickQuestion, initial: initial, ask: ask, guess: guess, planFeedback: planFeedback, hintText: hintText, shapeKey: shapeKey, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+  var rng = function () { return (window.__earRandom || Math.random)(); };               // an injected random source for tests; the page's own is Math.random
+  var WW = 22, WH = 60, BW = 13, BH = 36, PAD = 1, TOP = 0, keys = {}, whites = [], blacks = [], wi = 0, m;       // TOP: a thin band above the keys for the arc between the two notes (always there, so the page never jumps)
+  for (m = LOW; m <= HIGH; m++) { if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 }); else { whites.push({ m: m, x: PAD + wi * WW }); wi++; } }
+  var strip = $("strip");
+  strip.setAttribute("viewBox", "0 0 " + (wi * WW + 2 * PAD) + " " + (TOP + WH + 2 * PAD));
+  var arcLayer = el("g", { "class": "arcs", "aria-hidden": "true" }, strip);
+  function centreOf(mm) { var k = keys[mm]; var r = k.firstChild; return +r.getAttribute("x") + +r.getAttribute("width") / 2; }
+  function makeKey(k, black) {
+    var g = el("g", { "class": "key " + (black ? "black" : "white") + " idle", "data-midi": k.m, tabindex: "0", role: "button", "aria-label": nameOf(k.m) }, strip);
+    el("rect", { x: k.x, y: TOP + PAD, width: black ? BW : WW, height: black ? BH : WH, rx: black ? 2 : 3 }, g);
+    keys[k.m] = g;
+    g.addEventListener("click", function () { press(k.m); try { g.focus({ preventScroll: true }); } catch (_) {} });
+    g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(k.m); } });
+  }
+  whites.forEach(function (k) { makeKey(k, false); });
+  blacks.forEach(function (k) { makeKey(k, true); });
+  // Each game keeps its own open question and its own previous question; the LEVEL is one setting for the page and the scores are kept per game and level.
+  var GAME = 3;                                        // 2026-11-16-0900: THIS file is one game; there is no game switch, the level switch is all there is
+  var GAMES = [{ id: 3, title: "3 Three at once", tip: "Three notes together: find the other two" }];
+  var games = {}, current = GAME, level = DEFAULT_LEVEL, scores = emptyScores();
+  GAMES.forEach(function (g) { games[g.id] = { state: initial(), previous: null }; });
+  function mark(mm, ch) { var g = keys[mm], r = g.firstChild, black = isBlack(mm); var t = el("text", { "class": "mark", x: +r.getAttribute("x") + +r.getAttribute("width") / 2, y: TOP + PAD + (black ? 26 : 50), "text-anchor": "middle" }, g); t.textContent = ch; }
+  function renderScore() {
+    $("counter").textContent = counterText(scores, current, level);
+    var board = $("board"), parts = boardText(scores, current); board.textContent = "";
+    parts.forEach(function (p, i) { var n = document.createElement(LEVELS[i] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (i < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
+    board.setAttribute("aria-label", "Score of each level in this game: " + parts.join(", "));
+  }
+  function render(announce) {
+    var state = games[current].state, q = state.question;
+    arcLayer.textContent = "";
+    for (var k in keys) { var g = keys[k]; var ts = g.querySelectorAll("text"); for (var i = 0; i < ts.length; i++) g.removeChild(ts[i]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (state.phase === "asked" ? "" : " idle")); }
+    if (state.phase !== "idle") {
+      keys[q.lit].classList.add("first");
+      state.found.forEach(function (mm) { keys[mm].classList.add("right"); mark(mm, "✓"); });
+      state.wrong.forEach(function (mm) { keys[mm].classList.add("wrong"); mark(mm, "×"); });
+      if (state.phase === "answered" && q.game !== 3) {
+        var x1 = centreOf(q.lit), x2 = centreOf(q.targets[0]), top = 3;
+        el("path", { "class": "arc", d: "M" + x1 + " " + (TOP - 1) + " Q" + ((x1 + x2) / 2) + " " + (top - 4) + " " + x2 + " " + (TOP - 1) }, arcLayer);   // a thin arc between the two keys (the answer is over)
+        el("path", { "class": "arrowhead", d: "M" + x2 + " " + (TOP + 1) + " l-3 -5 l6 0 z" }, arcLayer);
+      }
+    }
+    $("hint").textContent = hintText(state);
+    $("replay").disabled = state.phase === "idle";
+    LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
+    renderScore();
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
+  var ctx = null;
+  function audio() {
+    if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  function sound(plan, together) { var c = audio(); if (!c || !plan.length) return; var t0 = c.currentTime; plan.forEach(function (n) { pianoVoice(c, pianoBus(c), midiToHz(n.midi), t0 + n.when, NOTE_LEN * (together ? 1.4 : 1), 0.8, together ? 0.58 : 1); }); }
+  function attemptsText(s) { return s.attemptsLeft + (s.attemptsLeft === 1 ? " attempt left." : " attempts left."); }
+  function press(mm) {
+    var gm = games[current];
+    var r = guess(gm.state, mm);
+    if (r.event === "ignored") return;                                                     // no question open, the lit note, or a key already marked: nothing
+    gm.state = r.state;
+    if (r.scored) scores = award(scores, current, gm.state.question.level);
+    var q = gm.state.question, text;
+    if (r.event === "solved") text = "Correct. Press Next.";
+    else if (r.event === "right") text = "That note is right. " + attemptsText(gm.state) + " Find the other.";
+    else if (r.event === "gaveup") text = "Out of attempts. The notes were " + q.targets.map(nameOf).join(" and ") + ". Press Next.";
+    else text = "Not that one. " + attemptsText(gm.state);                                  // a wrong guess never says what the answer is
+    render(text);
+    sound(planFeedback(q, mm, r.event), r.event === "gaveup" && q.game !== 1);
+  }
+  $("next").addEventListener("click", function () {
+    var gm = games[current], q = pickQuestion(current, rng, gm.previous, LOW, HIGH);
+    q.level = level; gm.previous = q; gm.state = ask(q, attemptsFor(current, level)); scores = markAsked(scores, current, level);
+    render((current === 3 ? "Three notes were played. The lowest is " + nameOf(q.lit) + ". Click the other two." : current === 2 ? "Two notes were played together. The lower is " + nameOf(q.lit) + ". Click the other." : "Two notes were played. The first is " + nameOf(q.lit) + ". Click the second.") + " " + attemptsText(gm.state));
+    sound(q.sound, current !== 1);
+  });
+  $("replay").addEventListener("click", function () { var q = games[current].state.question; if (q) sound(q.sound, current !== 1); });       // never reveals the answer
+  $("reset").addEventListener("click", function () { scores = resetGame(scores, current); render("Score cleared for this game."); });
+  LEVELS.forEach(function (l) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = levelName(l); b.title = levelName(l) + ": " + BASE_ATTEMPTS[l] + (BASE_ATTEMPTS[l] === 1 ? " attempt" : " attempts") + " a question (" + (BASE_ATTEMPTS[l] + 1) + " for three notes)"; b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () {                                                            // a new level: every open question ends (it counted as asked, with no point), each level keeps its own score
+      if (l === level) return;
+      level = l; GAMES.forEach(function (g) { games[g.id].state = initial(); });
+      render(levelName(l) + ": " + attemptsFor(current, l) + " attempts a question. Press Next.");
+    });
+    $("levels").appendChild(b);
+  });
+  render();
+})();
+</script>
+</body>
+</html>
