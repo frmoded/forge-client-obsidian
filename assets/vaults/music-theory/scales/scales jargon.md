@@ -4,7 +4,7 @@ A scale uses one letter per note, A to G, in order, no repeats. That's not a sug
 
 Sometimes one sharp isn't enough. A **double sharp** (written 𝄪) raises a note by two half steps, one whole step, so F𝄪 sounds like G and still counts as an F. This is the one place in this chapter where double sharps are explained; every other page links back here.
 
-Try it: open the player on [[what a scale is]], pick G♯ harmonic minor and watch the last note turn into F double sharp. (Harmonic minor shows up on [[modes and minor scales]].)
+Try it: open the player on [[Scales]], pick G♯ harmonic minor, press Play and watch the last note turn into F double sharp. (Harmonic minor shows up on [[modes and minor scales]].)
 
 ## Words you will meet
 

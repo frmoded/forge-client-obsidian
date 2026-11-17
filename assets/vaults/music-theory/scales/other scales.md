@@ -24,7 +24,7 @@ Whole-tone and diminished repeat letters, because the one-letter-per-note rule c
 
 To check any of these, count the notes (five for pentatonic, six for blues and whole-tone, eight for diminished) and make sure the steps add up to an octave.
 
-To see any scale on a keyboard and a staff, use the explorer on [[Scales]]. It also states the spelling convention for those two.
+To see any scale on a keyboard and a staff, use the player on [[Scales]]. It also states the spelling convention for those two.
 
 > [!note]- Structural formula
 > Major pentatonic from C: C D E G A (2 2 3 2 3 half steps).

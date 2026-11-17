@@ -28,8 +28,6 @@ C up to E is a 3rd because it spans three letter names: C, D, E. Whether it's mi
 
 A half step is the next key on the piano, black keys count. Call it H. A whole step is two half steps. Call it W. Scale recipes get written in those two letters, and major is W W H W W W H. Three half steps? That's a whole step and a half.
 
-A small gadget below lets you play two notes and see the gap as W and H.
-
 Try it: click two keys and watch the gap show up as whole and half steps. Click the same key twice and you get zero steps.
 
 ```html-embed

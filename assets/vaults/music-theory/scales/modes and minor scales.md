@@ -26,7 +26,7 @@ Minor has two relatives with an agenda.
 
 **Melodic minor** raises both the 6th and 7th going up: W-H-W-W-W-W-H. From C: C D E♭ F G A B. Next to major, only the 3rd is lowered. Coming down, classical practice goes back to natural minor (C B♭ A♭ G F E♭ D C), while jazz keeps the raised notes both ways.
 
-To see any scale on a keyboard and a staff, use the explorer on [[Scales]].
+To see any scale on a keyboard and a staff, use the player on [[Scales]].
 
 > [!note]- Structural formula
 > Natural minor: W-H-W-W-H-W-W, in half steps 2 1 2 2 1 2 2.

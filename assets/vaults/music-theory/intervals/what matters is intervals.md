@@ -2,13 +2,6 @@ Music runs on 12 notes per octave. Step to the very next one, black keys include
 
 What each distance is called is on [[interval notation and jargon]].
 
-Don't take my word for it. Click two keys, read the number of half steps, press Play.
-
-```html-embed
-music_instruments/resources/html/interval_pair.html
-128
-```
-
 ## The tune that moves
 
 Sing Hey Jude starting on a low note, then a higher one, then your lowest. Same song every time, different notes. Your ear isn't listening to the notes; it's checking the gaps between them. Nudge one note up a half step and the song dies on the spot. The gadget below moves two other tunes: Amazing Grace and the opening of a Bach cello prelude.

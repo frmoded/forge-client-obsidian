@@ -24,7 +24,7 @@ Build it from A and you again never touch a black key: W to B, H to C, W to D, W
 
 Two tests. Count the half steps between neighbouring notes and hold them against the recipe: a whole step is two, a half step is one. Then read the letters: each of the seven notes gets its own letter, none twice, none skipped. G A B C D E F♯ passes. G A B C D E G♭ fails: two Gs, no F.
 
-To see any scale on a keyboard and a staff, use the explorer on [[Scales]].
+To see any scale on a keyboard and a staff, use the player on [[Scales]].
 
 Build it: you get a home note and either major or natural minor, and you tap the notes. A wrong tap costs you a try, so count your steps first.
 
