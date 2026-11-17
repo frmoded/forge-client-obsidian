@@ -59,6 +59,10 @@ const FILES = [
   { file: 'music_instruments/resources/html/interval_ear_triads.html', kind: 'interval', game: 3 },
   { file: 'scales/resources/html/scale_ear_name_the_scale.html', kind: 'name', game: 1 },
   { file: 'scales/resources/html/scale_ear_build_the_scale.html', kind: 'build', game: 2 },
+  // 2026-11-17-1200: the per-note build widgets; `scales` = the scales of the file, each one is asked in turn (see the per-scale block below)
+  { file: 'scales/resources/html/scale_build_major_and_minor.html', kind: 'build', game: 2, scales: ['major', 'natural_minor'] },
+  { file: 'scales/resources/html/scale_build_modes_and_minor.html', kind: 'build', game: 2, scales: ['ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian', 'natural_minor', 'harmonic_minor', 'melodic_minor'] },
+  { file: 'scales/resources/html/scale_build_other_scales.html', kind: 'build', game: 2, scales: ['major_pentatonic', 'minor_pentatonic', 'blues', 'whole_tone', 'diminished_wh', 'diminished_hw'] },
 ];
 const ATT = (f, level) => ({ easy: 5, medium: 3, hard: 1 }[level] + (f.kind === 'interval' && f.game === 3 ? 1 : 0));
 const word = (n) => `${n} ${n === 1 ? 'attempt' : 'attempts'} left`;
@@ -72,7 +76,17 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     try {
       let s = await status(g);
       verdict[`${name}${width}_noGameSwitchAndLevelMedium`] = !s.games && s.pressed === 'medium' && s.hint === 'Press Next' && /^Medium: score 0 of 0 asked/.test(s.counter);
-      await sample('idle');
+      const idleHeight = await sample('idle');
+      // 2026-11-17-1200: EVERY scale of a per-note build file, one question each (the tonic differs per scale), in real Chrome: no vertical scroll, the same height as idle, asked and over; the question names the scale
+      if (f.scales) for (const [i, id] of f.scales.entries()) {
+        const tonicIdx = (i * 5) % 12, n = f.scales.length;
+        await g.probe(`window.__earRandom = (function () { var k = 0; return function () { return k++ % 2 === 0 ? ${tonicIdx + 0.5} / 12 : ${i + 0.5} / ${n}; }; })(); 0`);
+        await g.press('#level-medium'); await g.press('#next'); await sleep(250);
+        const sa = await status(g); const pr = await g.probe(`document.getElementById('prompt').textContent`);
+        const hAsked = await sample(`scale_${id}_asked`); verdict[`${name}${width}_scale_${id}_asked_noScrollSameHeight`] = hAsked === idleHeight && /^Build /.test(pr) && sa.first.length === 1 && sa.first[0] % 12 === tonicIdx;
+        const tonic = sa.first[0]; for (let m = tonic + 1; m < tonic + 12; m++) { const st = await status(g); if (st.hint === 'Press Next') break; await keyBox(g, m); await sleep(60); }
+        const hOver = await sample(`scale_${id}_over`); verdict[`${name}${width}_scale_${id}_over_noScrollSameHeight`] = hOver === idleHeight;
+      }
       for (const level of ['easy', 'medium', 'hard']) {
         await g.press(`#level-${level}`); await g.clear(); await g.press('#next'); await sleep(350); s = await status(g); const hz = notes(await g.hz()).map(midiOf);
         verdict[`${name}${width}_${level}_attempts`] = s.hint === word(ATT(f, level)) && s.pressed === level;
