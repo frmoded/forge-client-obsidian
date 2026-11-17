@@ -115,7 +115,8 @@ test('MECHANISM PIN (the real-Chrome study scripts/dev/measure-polish.ts is the 
   assert.match(full, /let zoomIdx = opts\.zoom \? opts\.zoom\.get\(\) : ZOOM_LEVELS\.indexOf\(1\.0\);/);
   assert.equal((full.match(/opts\.zoom\?\.set\(zoomIdx\)/g) ?? []).length, 2, 'zoom out and zoom in write it');
   assert.match(full, /opts\.zoom\?\.reset\(\)/, 'the reset button too');
-  assert.match(full, /attachScoreFollower\(scoreWrap, player, timeMap, opts\.trace\)/);
+  // 2026-11-17-2000 (amended on purpose): the follower also takes the tempo now playing (the Score's one row has a tempo), as an optional last argument
+  assert.match(full, /attachScoreFollower\(scoreWrap, player, timeMap, opts\.trace(, \(\) => transport\?\.tempoPct\(\) \?\? 100)?\)/);
   const view = code('phrase-view.ts');
   assert.match(view, /private readonly zoom = createZoomMemory\(SCORE_ZOOM_LEVELS, 1\.0\);/);
   assert.match(view, /zoom: this\.zoom, trace:/);

@@ -31,6 +31,9 @@ import type { MusicEdition, RenderOptions } from './music-edition.ts';
 import { attachClickToPlay } from './score-click-play-dom.ts';
 import { SCORE_ZOOM_LEVELS } from './zoom-memory-core.ts';
 import { followerEvidence } from './score-follower-trace-core.ts';
+import { mountScoreTransport, disposeScoreTransports, type TransportPlayer } from './score-transport-dom.ts';
+import { createTransportPlayer, type TransportPlayerHandle } from './score-player-adapter.ts';
+import { exportItems, scoreSecondsAt, type ExportItem } from './score-transport-core.ts';
 import { registerScaleExplorer } from './scale-explorer-view.ts';
 
 // html-midi-player registers <midi-player> as a custom element on import. We
@@ -392,15 +395,17 @@ function renderMusicXML(
       if (compact) {
         toolbar = externalZoomBar?.parentElement ?? host.createDiv({ cls: 'forge-score-toolbar' });
         for (const old of Array.from(toolbar.querySelectorAll('.forge-midi-player'))) old.remove();      // a re-render (the kit toggle) replaces the player it had
+        disposeScoreTransports(toolbar);                                                                // ... and the row (2026-11-17-2000) with its listeners
       }
 
       // Download links — always available, even if playback init fails.
       // Downloads the displayed XML + its corresponding MIDI (canonical).
-      host.appendChild(makeDownloadBar(snippetId, musicxml, midiBase64));
+      if (!compact) host.appendChild(makeDownloadBar(snippetId, musicxml, midiBase64));      // 2026-11-17-2000: the compact Score (score-first tabs) has them in the row's Export menu instead
 
       // Try to mount the player; if it fails, render the SVG without
       // playback rather than dropping the whole entry.
       let player: any = null;
+      let transport: TransportPlayerHandle | null = null;
       try {
         await ensureMidiPlayerLoaded();
         const noteSequence = await midiBase64ToNoteSequence(midiBase64);
@@ -414,10 +419,22 @@ function renderMusicXML(
         player.soundFont = 'https://storage.googleapis.com/magentadata/js/soundfonts/sgm_plus';
         player.noteSequence = noteSequence;
         player.classList.add('forge-midi-player');
+        if (compact) player.classList.add('forge-midi-player-headless');                 // 2026-11-17-2000: the element plays the sound; its own button, seek bar and time are not shown (the row below is the control)
+        transport = createTransportPlayer(player, noteSequence, PLAYBACK_LEAD_IN_SECS);
         if (toolbar) toolbar.insertBefore(player, toolbar.firstChild); else host.appendChild(player);     // compact: the player is the first thing of the one row
         host.appendChild(soundsNote);
       } catch (e) {
         console.error('renderMusicXML: MIDI player init failed; score will render without playback.', e);
+      }
+
+      // 2026-11-17-2000 — the Score's ONE gentle row (score-transport-dom.ts): Play / Pause, Back to the start, tempo, Export. Only in the compact Score of the score-first tabs; every other Score keeps its player and download links.
+      if (compact && toolbar) {
+        mountScoreTransport(toolbar, {
+          player: transport?.player ?? NO_SOUND_PLAYER, playable: transport !== null,
+          exportItems: exportItems({ macDesktop: isMacDesktop() }),
+          runExport: (id) => { runScoreExport(id, snippetId, musicxml, midiBase64); },
+          log: (line) => { opts.trace?.(line); },
+        });
       }
 
       // v0.2.152 — zoom controls. Sit above the score so the user
@@ -527,11 +544,11 @@ function renderMusicXML(
                     ? (midiRender.timeMap[midiRender.timeMap.length - 1].ms
                        / Math.max(1, displayRender.timeMap[displayRender.timeMap.length - 1].ms))
                     : 1);
-            return scaledMs / 1000;
+            return transport ? transport.clockForScoreSeconds(scaledMs / 1000) : scaledMs / 1000;       // 2026-11-17-2000: at another tempo the clock runs at another speed
           },
         });
 
-        attachScoreFollower(scoreWrap, player, timeMap, opts.trace);
+        attachScoreFollower(scoreWrap, player, timeMap, opts.trace, () => transport?.tempoPct() ?? 100);
       }
     } catch (e) {
       console.error('Forge: Verovio render failed', e);
@@ -573,36 +590,7 @@ function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string
         text: 'Open in Garage Band',
         cls: 'forge-output-download',
       });
-      gbBtn.addEventListener('click', async () => {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
-          const fs = require('fs');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
-          const os = require('os');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
-          const path = require('path');
-          // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
-          const { exec } = require('child_process');
-          // Sanitize snippetId for filesystem — keep only alnum + dash + underscore.
-          const safeId = snippetId.replace(/[^a-zA-Z0-9_-]/g, '_');
-          const tmpDir = os.tmpdir();
-          const filePath = path.join(tmpDir, `forge-${safeId}.mid`);
-          fs.writeFileSync(filePath, Buffer.from(midiBase64, 'base64'));
-          exec(`open -a "GarageBand" "${filePath}"`, (err: any) => {
-            if (err) {
-              // Fall back to default app (Logic, MainStage, QuickTime, etc.)
-              // so the user gets *some* app to open in even without GB.
-              exec(`open "${filePath}"`, (err2: any) => {
-                if (err2) {
-                  console.error('Forge: failed to open MIDI in any app', err2);
-                }
-              });
-            }
-          });
-        } catch (e) {
-          console.error('Forge: GarageBand open failed', e);
-        }
-      });
+      gbBtn.addEventListener('click', () => { openMidiInGarageBand(snippetId, midiBase64); });
     }
   } catch (_e) {
     // process global unavailable (e.g., Obsidian mobile) — no button.
@@ -611,7 +599,63 @@ function makeDownloadBar(snippetId: string, musicxml: string, midiBase64: string
   return bar;
 }
 
-function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeBucket[], trace?: (line: string) => void): void {
+/** The macOS desktop check the Open in GarageBand button has always used (Obsidian on Electron has Node; iOS, Android, Windows and Linux do not show it). */
+function isMacDesktop(): boolean {
+  try { return (typeof process !== 'undefined') && process.platform === 'darwin'; } catch (_e) { return false; }
+}
+
+/** The old button's handler, unchanged, as a function (2026-11-17-2000: the compact Score's Export menu runs it too). */
+function openMidiInGarageBand(snippetId: string, midiBase64: string): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
+    const fs = require('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
+    const os = require('os');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
+    const path = require('path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- desktop-only Node builtin, loaded via require so bundlers don't try to resolve it for non-desktop targets.
+    const { exec } = require('child_process');
+    // Sanitize snippetId for filesystem — keep only alnum + dash + underscore.
+    const safeId = snippetId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const tmpDir = os.tmpdir();
+    const filePath = path.join(tmpDir, `forge-${safeId}.mid`);
+    fs.writeFileSync(filePath, Buffer.from(midiBase64, 'base64'));
+    exec(`open -a "GarageBand" "${filePath}"`, (err: any) => {
+      if (err) {
+        // Fall back to default app (Logic, MainStage, QuickTime, etc.)
+        // so the user gets *some* app to open in even without GB.
+        exec(`open "${filePath}"`, (err2: any) => {
+          if (err2) {
+            console.error('Forge: failed to open MIDI in any app', err2);
+          }
+        });
+      }
+    });
+  } catch (e) {
+    console.error('Forge: GarageBand open failed', e);
+  }
+}
+
+/** One Export menu choice of the compact Score: MusicXML and MIDI download as a file named after the note, GarageBand opens the MIDI. */
+function runScoreExport(id: ExportItem['id'], snippetId: string, musicxml: string, midiBase64: string): void {
+  try {
+    if (id === 'garageband') { openMidiInGarageBand(snippetId, midiBase64); return; }
+    const blob = id === 'musicxml'
+      ? new Blob([musicxml], { type: 'application/vnd.recordare.musicxml+xml' })
+      : new Blob([Uint8Array.from(atob(midiBase64), (c) => c.charCodeAt(0))], { type: 'audio/midi' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = id === 'musicxml' ? `${snippetId}.musicxml` : `${snippetId}.mid`;
+    document.body.appendChild(a); a.click(); a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) {
+    console.error('Forge: score export failed', e);
+  }
+}
+
+/** The row's player when the sound could not be mounted (the row then shows only Export). */
+const NO_SOUND_PLAYER: TransportPlayer = { playing: false, start() {}, stop() {}, reset() {}, setTempo() {}, onStateChange() { return () => {}; } };
+
+function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeBucket[], trace?: (line: string) => void, tempoPct: () => number = () => 100): void {
   let highlighted: Element[] = [];
   let timer: number | null = null;
   let startedSaid = false;
@@ -640,7 +684,7 @@ function attachScoreFollower(scoreWrap: HTMLElement, player: any, timeMap: TimeB
   const highlight = () => {
     // Subtract the same lead-in we added to the noteSequence so timeMap
     // (which is in original Verovio MIDI time) lines up with player time.
-    const sec = ((player.currentTime ?? 0) as number) - PLAYBACK_LEAD_IN_SECS;
+    const sec = scoreSecondsAt((player.currentTime ?? 0) as number, tempoPct(), PLAYBACK_LEAD_IN_SECS);       // 2026-11-17-2000: the clock reading, less the lead-in, at the tempo now playing
     if (sec < 0) {
       // Still in the silent lead-in — no notes are sounding yet.
       clearHighlights();

@@ -403,78 +403,124 @@
   width: 100%;
 }
 
-/* 2026-11-05-1189 (score-first Score tabs; the host carries `forge-score-compact`): ONE toolbar row - the MIDI player, then the zoom buttons, then the Kit / multi-staff button - the zoom and Kit buttons in the
-   player's OWN button style (read out of html-midi-player's shadow stylesheet under Obsidian's app.css: a 32 px round button, no border, transparent, `rgba(204,204,204,0.3)` on hover and 0.6 pressed, on a #f2f5f6 pill,
-   14 px sans-serif). The row wraps only when it cannot fit (below about 300 px); the Kit button loses its words, never its icon, in a narrow pane. */
+/* 2026-11-17-2000 - the Score's ONE gentle row (score-first Score tabs; the host carries `forge-score-compact`; design doc checklists/music_tabs_chat_ui_design.md section 4). Left to right: the row of
+   score-transport-dom.ts (Play / Pause, Back to the start, Slower, the tempo value, Faster, Export), then the zoom buttons, then the Kit / multi-staff toggle of a percussion Score. The
+   <midi-player> element stays in the row but is not shown: it plays the sound, its own button, seek bar and time are gone (the playhead on the Score is the progress). Small 16 px icons, no borders
+   (a soft hover tint), the playing state is the icon swapped to pause with a gentle tint, Obsidian CSS variables only (light, dark and community themes follow). The row wraps only when it cannot fit (below about 320 px). */
 .forge-score-toolbar {
   container-type: inline-size;
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
-  gap: 6px;
-  margin: 0 0 6px;
-}
-.forge-score-toolbar > .forge-midi-player {
-  flex: 1 1 130px;
-  min-width: 0;
-  width: auto;
-  margin: 0;
-}
-.forge-score-toolbar > .forge-zoom-bar,
-.forge-score-toolbar > .forge-kit-pill {
-  display: flex;
   align-items: center;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0 0.25em;
-  border-radius: 100px;
-  background: #f2f5f6;
-  color: #2b2b2b;
-  font: 14px sans-serif;
+  gap: 2px 14px;                                           /* a thin gap between the groups: the row, the zoom, the Kit toggle */
+  margin: 0 0 6px;
+  color: var(--text-muted);
 }
+.forge-score-toolbar > .forge-midi-player-headless { display: none; }
+.forge-score-transport {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0 8px;
+  flex: 0 0 auto;
+}
+.forge-tp-tempo-group, .forge-tp-export { display: inline-flex; align-items: center; position: relative; }
+.forge-score-toolbar .forge-tp-btn,
 .forge-score-toolbar .forge-zoom-button,
 .forge-score-toolbar .forge-kit-toggle {
   box-sizing: border-box;
-  height: 32px;
-  min-width: 32px;
-  margin: 0 0.1em;
-  padding: 0 0.55em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  min-width: 26px;
+  margin: 0;
+  padding: 0 4px;
   border: none;
-  border-radius: 100px;
+  border-radius: var(--radius-s, 6px);
   box-shadow: none;
-  background: rgba(204, 204, 204, 0);
-  color: inherit;
+  background: transparent;
+  color: var(--text-muted);
   font: inherit;
+  font-size: var(--font-ui-smaller, 12px);
   line-height: 1;
   cursor: pointer;
-  transition: background-color 0.25s ease 0s;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
+.forge-score-toolbar .forge-tp-btn:hover:not(:disabled),
 .forge-score-toolbar .forge-zoom-button:hover,
-.forge-score-toolbar .forge-kit-toggle:hover {
-  background: rgba(204, 204, 204, 0.3);
-}
+.forge-score-toolbar .forge-kit-toggle:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.forge-score-toolbar .forge-tp-btn:active:not(:disabled),
 .forge-score-toolbar .forge-zoom-button:active,
-.forge-score-toolbar .forge-kit-toggle:active {
-  background: rgba(204, 204, 204, 0.6);
-}
-.forge-score-toolbar .forge-zoom-reset {
-  min-width: 3.4em;
+.forge-score-toolbar .forge-kit-toggle:active { background: var(--background-modifier-active-hover, var(--background-modifier-hover)); }
+.forge-score-toolbar .forge-tp-btn:focus-visible,
+.forge-score-toolbar .forge-zoom-button:focus-visible,
+.forge-score-toolbar .forge-kit-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--background-modifier-border-focus, var(--interactive-accent)); }
+.forge-score-toolbar .forge-tp-btn:disabled { opacity: 0.35; cursor: default; }
+.forge-score-toolbar .forge-tp-btn svg { display: block; width: 16px; height: 16px; }
+.forge-score-toolbar .forge-tp-play.is-playing { color: var(--interactive-accent); background: var(--background-modifier-hover); }
+.forge-score-toolbar .forge-tp-tempo, .forge-score-toolbar .forge-zoom-reset { min-width: 3em; font-variant-numeric: tabular-nums; }
+.forge-score-toolbar .forge-tp-tempo-input {
+  box-sizing: border-box;
+  width: 3.4em;
+  height: 24px;
+  margin: 1px 0;
+  padding: 0 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s, 6px);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font: inherit;
+  font-size: var(--font-ui-smaller, 12px);
   font-variant-numeric: tabular-nums;
+  text-align: center;
+  box-shadow: none;
 }
-.forge-score-toolbar .forge-kit-toggle-icon {
-  margin-right: 0.35em;
+.forge-score-toolbar .forge-tp-tempo-input:focus { outline: none; border-color: var(--interactive-accent); }
+.forge-tp-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  min-width: 9.5em;
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.15));
 }
+.forge-tp-menu[hidden] { display: none; }
+.forge-score-toolbar .forge-tp-menuitem {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-s, 6px);
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-normal);
+  font: inherit;
+  font-size: var(--font-ui-small, 13px);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.forge-score-toolbar .forge-tp-menuitem:hover, .forge-score-toolbar .forge-tp-menuitem:focus-visible { outline: none; background: var(--background-modifier-hover); }
+.forge-score-toolbar > .forge-zoom-bar,
+.forge-score-toolbar > .forge-kit-pill { display: inline-flex; align-items: center; flex: 0 0 auto; margin: 0; padding: 0; background: transparent; }
+.forge-score-toolbar .forge-kit-toggle-icon { margin-right: 0.35em; }
 @container (max-width: 520px) {
   .forge-score-toolbar .forge-kit-toggle-label { display: none; }
   .forge-score-toolbar .forge-kit-toggle-icon { margin-right: 0; }
-  /* a narrow pane: the same buttons, tighter, so the one row still fits at 300 px (the player gives up its width last: its seek bar shrinks to nothing first) */
-  .forge-score-toolbar > .forge-midi-player { flex-basis: 80px; font-size: 12px; white-space: nowrap; }   /* both inherit into the player's shadow DOM: its time stays on ONE line and the pill clips it, never wraps it */
-  .forge-score-toolbar > .forge-zoom-bar,
-  .forge-score-toolbar > .forge-kit-pill { padding: 0 0.1em; font-size: 12px; }          /* the whole row at the player's narrow size, so the buttons still read as the player's own */
-  .forge-score-toolbar .forge-zoom-button,
-  .forge-score-toolbar .forge-kit-toggle { margin: 0; padding: 0 0.35em; min-width: 28px; }
-  .forge-score-toolbar .forge-zoom-reset { min-width: 2.7em; }
+}
+@container (max-width: 400px) {
+  .forge-score-toolbar { column-gap: 6px; }
+  .forge-score-transport { gap: 0 4px; }
+  .forge-score-toolbar .forge-tp-btn, .forge-score-toolbar .forge-zoom-button, .forge-score-toolbar .forge-kit-toggle { min-width: 24px; padding: 0 3px; }
+  .forge-score-toolbar .forge-tp-tempo, .forge-score-toolbar .forge-zoom-reset { min-width: 2.6em; }
 }
 /* the Score is never wider than its pane: a horizontal scrollbar inside it when the engraving (or a zoom) is wider; no vertical box of its own (the pane scrolls) */
 .forge-score-compact .forge-output-score {
