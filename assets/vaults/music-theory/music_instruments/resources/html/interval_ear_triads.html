@@ -33,6 +33,8 @@
   .key.wrong rect { fill: #F6C9CB; stroke: var(--wrong); stroke-width: 3; stroke-dasharray: 3 2; }
   .key.black.wrong rect { fill: #8B1C20; stroke: var(--wrong); }
   .key.idle { cursor: default; }
+  .key.inactive { cursor: not-allowed; }
+  .key.black.inactive rect { fill: #B9B9B9; stroke: #9A9A9A; }
   .key:focus rect { stroke: var(--accent); stroke-width: 3; }
   .key.right:focus rect { stroke: var(--right); }
   .key text { pointer-events: none; fill: var(--muted); font-size: 9px; }
@@ -103,17 +105,20 @@
     return [lit].concat(targets).map(function (m) { return { midi: m, when: 0 }; });
   }
   // The next question of a game: never the same signed delta (games 1 and 2) or the same shape on the same root (game 3) as `previous`, every note inside lo..hi. `rng` returns [0, 1).
-  function pickQuestion(game, rng, previous, lo, hi) {
+  // `whiteOnly` (the EASY level, 2026-11-17-1100): every note of the question is a white key (the lit note, the answers): games 1 and 2 pick a white start and a white answer, whatever the delta; game 3 asks only the seven
+  // white-key root-position triads (C, F, G major; D, E, A minor; B diminished). Omitted or false: exactly as before.
+  function pickQuestion(game, rng, previous, lo, hi, whiteOnly) {
     var options = [], d, r;
+    var ok = function (m) { return !whiteOnly || !isBlack(m); };
     if (game === 3) {
       SHAPES.forEach(function (s) {
-        var roots = []; for (r = lo; r + s[1] <= hi; r++) { if (!(previous && previous.key === shapeKey(s) && previous.lit === r)) roots.push(r); }
+        var roots = []; for (r = lo; r + s[1] <= hi; r++) { if (ok(r) && ok(r + s[0]) && ok(r + s[1]) && !(previous && previous.key === shapeKey(s) && previous.lit === r)) roots.push(r); }
         if (roots.length) options.push({ key: shapeKey(s), shape: s, roots: roots });
       });
     } else {
       for (d = game === 1 ? -12 : 1; d <= 12; d++) {
         if (d === 0 || (previous && previous.key === String(d))) continue;
-        var firsts = []; for (r = lo; r <= hi; r++) { if (r + d >= lo && r + d <= hi) firsts.push(r); }
+        var firsts = []; for (r = lo; r <= hi; r++) { if (r + d >= lo && r + d <= hi && ok(r) && ok(r + d)) firsts.push(r); }
         if (firsts.length) options.push({ key: String(d), delta: d, roots: firsts });
       }
     }
@@ -145,6 +150,15 @@
   function hintText(state) {
     if (state.phase !== "asked") return "Press Next";
     return state.attemptsLeft + (state.attemptsLeft === 1 ? " attempt left" : " attempts left");
+  }
+  // EASY (2026-11-17-1100): the black keys stay drawn (the keyboard keeps its shape and the page its height) but are inactive: greyed, silent, no attempt, never part of a question.
+  function isInactive(level, midi) { return level === "easy" && isBlack(midi); }
+  // A repeated click (2026-11-17-1100): while a question is open, a click on the lit note or on a key already marked (found or wrong) plays that note again in easy and medium: no attempt, no score. In hard it stays silent;
+  // with no question open it stays silent too. `guess` is untouched: it still says "ignored", the page asks this for the sound.
+  function replayPlan(state, midi, level) {
+    var q = state.question;
+    if (level === "hard" || state.phase !== "asked" || !(midi === q.lit || state.found.indexOf(midi) >= 0 || state.wrong.indexOf(midi) >= 0)) return [];
+    return [{ midi: midi, when: 0 }];
   }
   // ==== interval ear core END =====================================================================================================================
   // ==== piano voice BEGIN (2026-11-16-1001) ======================================================================================================
@@ -248,7 +262,7 @@
 
   if (typeof document === "undefined") {           // node test harness
     module.exports = { LOW: LOW, HIGH: HIGH, GAP: GAP, LEVELS: LEVELS, DEFAULT_LEVEL: DEFAULT_LEVEL, SHAPES: SHAPES, plainName: plainName, isBlack: isBlack, midiToHz: midiToHz, attemptsFor: attemptsFor, emptyScores: emptyScores, markAsked: markAsked, award: award, resetGame: resetGame,
-      counterText: counterText, boardText: boardText, pickQuestion: pickQuestion, initial: initial, ask: ask, guess: guess, planFeedback: planFeedback, hintText: hintText, shapeKey: shapeKey, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+      counterText: counterText, boardText: boardText, pickQuestion: pickQuestion, initial: initial, ask: ask, guess: guess, planFeedback: planFeedback, hintText: hintText, isInactive: isInactive, replayPlan: replayPlan, shapeKey: shapeKey, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
@@ -286,7 +300,8 @@
   function render(announce) {
     var state = games[current].state, q = state.question;
     arcLayer.textContent = "";
-    for (var k in keys) { var g = keys[k]; var ts = g.querySelectorAll("text"); for (var i = 0; i < ts.length; i++) g.removeChild(ts[i]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (state.phase === "asked" ? "" : " idle")); }
+    for (var k in keys) { var g = keys[k]; var ts = g.querySelectorAll("text"); for (var i = 0; i < ts.length; i++) g.removeChild(ts[i]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (state.phase === "asked" ? "" : " idle") + (isInactive(level, +k) ? " inactive" : ""));
+      if (isInactive(level, +k)) { g.setAttribute("aria-disabled", "true"); g.setAttribute("tabindex", "-1"); } else { g.removeAttribute("aria-disabled"); g.setAttribute("tabindex", "0"); } }
     if (state.phase !== "idle") {
       keys[q.lit].classList.add("first");
       state.found.forEach(function (mm) { keys[mm].classList.add("right"); mark(mm, "✓"); });
@@ -313,9 +328,10 @@
   function sound(plan, together) { var c = audio(); if (!c || !plan.length) return; var t0 = c.currentTime; plan.forEach(function (n) { pianoVoice(c, pianoBus(c), midiToHz(n.midi), t0 + n.when, NOTE_LEN * (together ? 1.4 : 1), 0.8, together ? 0.58 : 1); }); }
   function attemptsText(s) { return s.attemptsLeft + (s.attemptsLeft === 1 ? " attempt left." : " attempts left."); }
   function press(mm) {
+    if (isInactive(level, mm)) return;                                                      // easy: a black key is off: no sound, no attempt, nothing said
     var gm = games[current];
     var r = guess(gm.state, mm);
-    if (r.event === "ignored") return;                                                     // no question open, the lit note, or a key already marked: nothing
+    if (r.event === "ignored") { sound(replayPlan(gm.state, mm, level), false); return; }   // a repeated click: the note again (easy, medium), no attempt, no score                                                     // no question open, the lit note, or a key already marked: nothing
     gm.state = r.state;
     if (r.scored) scores = award(scores, current, gm.state.question.level);
     var q = gm.state.question, text;
@@ -327,7 +343,7 @@
     sound(planFeedback(q, mm, r.event), r.event === "gaveup" && q.game !== 1);
   }
   $("next").addEventListener("click", function () {
-    var gm = games[current], q = pickQuestion(current, rng, gm.previous, LOW, HIGH);
+    var gm = games[current], q = pickQuestion(current, rng, gm.previous, LOW, HIGH, level === "easy");
     q.level = level; gm.previous = q; gm.state = ask(q, attemptsFor(current, level)); scores = markAsked(scores, current, level);
     render((current === 3 ? "Three notes were played. The lowest is " + nameOf(q.lit) + ". Click the other two." : current === 2 ? "Two notes were played together. The lower is " + nameOf(q.lit) + ". Click the other." : "Two notes were played. The first is " + nameOf(q.lit) + ". Click the second.") + " " + attemptsText(gm.state));
     sound(q.sound, current !== 1);
