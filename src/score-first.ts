@@ -46,6 +46,7 @@ import { NOTEBOOK_FOLDER, createNotebook, type Selection } from './notebook-core
 import { ICON_BAR, ICON_PHRASE, MUSIC_RIBBON, NOT_MUSIC_VAULT_REASON, registerMusicIcons, registerMusicRibbon, ribbonNotRegisteredLine, ribbonProbe, ribbonStatus } from './music-ribbon-core.ts';
 import { registerMusicRibbonStatus } from './music-ribbon-status.ts';
 import { NEW_MENU_VIEW_TYPES, createNewMenuSync, newMenuItems, runNewMenuItem, type NewMenuView } from './new-menu-core.ts';
+import { pickNoteLink } from './note-picker-modal.ts';
 import { createPhraseAnywhere } from './new-phrase-anywhere-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
@@ -520,7 +521,16 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return out;
         },
         confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
-      }, { ...hooks, showBoxStatus: hooks.showBoxStatus ?? (() => uiFlags().showLegacyControllers) }));
+      }, {
+        ...hooks, showBoxStatus: hooks.showBoxStatus ?? (() => uiFlags().showLegacyControllers),
+        // 2026-11-17-2001: the composer's switch and its "+" menu: the same four New actions as the header menu and the ribbon (ONE list, newMenuItems), and a note picker for "Insert a link to a note"
+        composerAutoApply: () => uiFlags().composerAutoApply,
+        composerMenu: () => ({
+          items: newMenuItems().map((item) => ({ id: item.commandId, label: item.title })),
+          run: (id) => { const item = newMenuItems().find((i) => i.commandId === id); if (item) runNewMenuItem(item, ribbonRunDeps); },
+          pickNote: () => pickNoteLink(app),
+        }),
+      }));
       // 2026-11-16-1000: what the Score's selection menu needs from the plugin: a sentence shown in the note's prompt box (a preview: nothing is applied until Apply), and a new transform phrase (the next free phrase_NNN, no dialog, opened, its title offered for renaming)
       plugin.register(registerBarSelectionHost({
         previewDescription: (path, text) => descriptions.suggestInBox(path, text),

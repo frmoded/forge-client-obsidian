@@ -39,8 +39,9 @@ function rig(start: string = noteContentFor('phrase_001', MIX), configured = tru
   const field = (el: HTMLElement) => el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
   const type = (el: HTMLElement, text: string) => { field(el).value = text; field(el).dispatchEvent(new win.Event('input', { bubbles: true })); };
   const enter = async (el: HTMLElement) => { field(el).dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); };
+  const send = async (el: HTMLElement) => { await enter(el); await enter(el); };                                          // 2026-11-17-2001: the first Enter previews (nothing written), the second applies
   const strip = (el: HTMLElement) => (el.querySelector('.forge-description-message')?.textContent ?? '');
-  return { ctl, store, writes, lines, asked, pane, flush, fire, box, field, type, enter, strip };
+  return { ctl, store, writes, lines, asked, pane, flush, fire, box, field, type, enter, send, strip };
 }
 
 test('a score tab gets the box, LAST in the tab and under the Score; it shows exactly the Description facet', async () => {
@@ -51,7 +52,8 @@ test('a score tab gets the box, LAST in the tab and under the Score; it shows ex
   // 2026-11-13-1214 (rewritten: it said "the box is the last thing in the tab", the 1203 overlay): the tab's content is a flex column, the body (the Score first) scrolls on its own, the panel (dialog, then the box LAST) is its sibling below
   assert.equal(el.lastElementChild!.className, 'forge-chat-panel', 'the panel is the last thing in the tab');
   assert.equal(r.box(el)!.parentElement, el.lastElementChild, 'the box is inside the panel');
-  assert.equal(el.lastElementChild!.lastElementChild, r.box(el), 'and the LAST thing in it: the input at the very bottom');
+  assert.equal(r.box(el)!.nextElementSibling!.classList.contains('forge-composer-error'), true, 'and the LAST thing in it but the one muted line under it: the input at the very bottom');
+  assert.equal(el.lastElementChild!.lastElementChild, r.box(el)!.nextElementSibling);
   assert.equal(el.firstElementChild!.className, 'forge-chat-body');
   assert.equal(el.firstElementChild!.firstElementChild!.className, 'forge-rhythm-edit-score', 'the Score is still first, in the body: the panel is not in its slot');
   assert.equal(el.querySelectorAll('.forge-prompt-box').length, 1);
@@ -82,13 +84,16 @@ test('typing a new sentence and applying (Enter) updates the note by ONE write t
   r.type(el, 'Mix  [[bar_007]] and [[bar_008]],  35 percent [[bar_007]] as a vote');
   assert.ok(el.querySelector('.forge-prompt-box.is-edited'));
   await r.enter(el);
+  assert.deepEqual(r.writes, [], 'the first Enter only previews: nothing is written');
+  assert.ok(el.querySelector('.forge-prompt-box.is-previewing'));
+  await r.enter(el);
   assert.deepEqual(r.writes, [PATH], 'one write');
   assert.equal(r.store.get(PATH), noteContentFor('phrase_001', { ...MIX, weight: 0.35 }));
   assert.equal(r.field(el).value, VOTE_35, 'the canonical sentence');
   assert.equal(el.querySelector('.forge-prompt-box.is-edited'), null);
   assert.deepEqual(r.lines.filter((l: string) => !l.startsWith('[forge-promptbox]')), ['[forge-description] applied phrase_001 (weight 0.5 -> 0.35)']);
   assert.deepEqual(r.lines.filter((l: string) => l.startsWith('[forge-promptbox]')).map((l: string) => l.replace(/ text=\d+ chars/, ' text=N chars')), [                       // 2026-11-13-1211: every decision of Apply is a line
-    '[forge-promptbox] box mounted: phrase_001 family=phrase askPlan=present configured=true', '[forge-promptbox] apply pressed: phrase_001 family=phrase text=N chars', '[forge-promptbox] grammar verdict: accepted']);
+    '[forge-promptbox] box mounted: phrase_001 family=phrase askPlan=present configured=true', '[forge-promptbox] preview asked: phrase_001 family=phrase text=N chars', '[forge-promptbox] grammar verdict: accepted (preview, nothing written)', '[forge-promptbox] apply pressed: phrase_001 family=phrase text=N chars via=grammar', '[forge-promptbox] grammar verdict: accepted']);
   assert.equal(r.strip(el), '', 'nothing to say at the top');
 });
 
@@ -106,7 +111,7 @@ test('a sentence that does not parse writes NOTHING: the strip at the top says t
   assert.ok(el.querySelector('.forge-prompt-box.is-edited'));
   assert.deepEqual([...el.querySelectorAll('.forge-description-button')].map((b) => b.getAttribute('data-action')), [], 'no Revert (nothing was written) and no Ask (not set up)');
   assert.deepEqual(r.asked, []);
-  r.type(el, VOTE_35); await r.enter(el);
+  r.type(el, VOTE_35); await r.send(el);
   assert.equal(r.store.get(PATH), noteContentFor('phrase_001', { ...MIX, weight: 0.35 }), 'the fixed sentence applies');
   assert.equal(r.strip(el), '', 'and the strip clears');
 });
@@ -162,7 +167,8 @@ test('the panel is a real FLEX layout (2026-11-13-1214, retiring the 1203 sticky
   assert.match(rule('.forge-chat-body'), /flex:\s*1 1 auto/); assert.match(rule('.forge-chat-body'), /overflow-y:\s*auto/); assert.match(rule('.forge-chat-body'), /min-height:\s*0/);
   assert.match(rule('.forge-chat-panel'), /flex:\s*0 0 auto/);
   for (const sel of ['.forge-chat-panel', '.forge-chat-body', '.forge-prompt-box']) assert.doesNotMatch(rule(sel), /position:\s*(sticky|absolute|fixed)/, sel);
-  assert.ok(rule('.forge-prompt-box').length > 0 && rule('.forge-chat-panel').length > 0, 'the rules exist');
+  assert.ok(rule('.forge-prompt-box.forge-composer').length > 0 && rule('.forge-chat-panel').length > 0, 'the rules exist');
+  assert.doesNotMatch(rule('.forge-prompt-box.forge-composer'), /position:\s*(sticky|absolute|fixed)/, 'the card');
 });
 
 test('CONTROL: the checks can fail - a box that overwrites typing, or applies a sentence that does not parse, is caught by the same assertions', async () => {

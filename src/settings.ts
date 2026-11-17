@@ -66,6 +66,8 @@ export interface ForgeSettings {
   dialogHistory: Record<string, unknown>;
   dialogHeight: number;
   dialogDock: 'bottom' | 'right';
+  /** 2026-11-17-2001: MUSIC_COMPOSER_AUTO_APPLY (default off): a sentence the grammar reads exactly is applied on the first Enter, without a preview. */
+  composerAutoApply: boolean;
 }
 
 export const DEFAULT_SETTINGS: ForgeSettings = {
@@ -88,6 +90,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   dialogHistory: {},
   dialogHeight: 112,
   dialogDock: 'bottom',
+  composerAutoApply: false,
 };
 
 export class ForgeSettingTab extends PluginSettingTab {
@@ -229,6 +232,35 @@ export class ForgeSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.showLegacyControllers)
           .onChange(async (value) => {
             this.plugin.settings.showLegacyControllers = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Composer: apply a sentence the grammar reads exactly without a preview')
+      .setDesc(
+        'Off (default): Enter shows what the sentence would do and a second Enter applies it; nothing is written before the second Enter. '
+        + 'On: a sentence the grammar reads exactly is applied on the first Enter (the sentence service always previews first). Takes effect when a tab is reopened.'
+      )
+      .addToggle(toggle =>
+        toggle
+          .setValue(this.plugin.settings.composerAutoApply)
+          .onChange(async (value) => {
+            this.plugin.settings.composerAutoApply = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName('Composer position')
+      .setDesc('Bottom (default): under the Score. Right: beside the Score. Takes effect when a tab is reopened. (There is no button for this in the tab.)')
+      .addDropdown(dropdown =>
+        dropdown
+          .addOption('bottom', 'Bottom')
+          .addOption('right', 'Right')
+          .setValue(this.plugin.settings.dialogDock)
+          .onChange(async (value) => {
+            this.plugin.settings.dialogDock = value === 'right' ? 'right' : 'bottom';
             await this.plugin.saveSettings();
           })
       );

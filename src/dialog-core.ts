@@ -23,7 +23,7 @@ export type DialogEvent =
   | { type: 'applied'; change: string; description: string }
   | { type: 'rejected'; line: number; column: number; message: string }
   | { type: 'asking' }
-  | { type: 'suggestion'; description: string; recipe: string }
+  | { type: 'suggestion'; description: string; recipe: string; via?: 'grammar' | 'service' }
   | { type: 'refused'; message: string }
   | { type: 'dropped'; message: string }
   | { type: 'notice'; message: string }
@@ -47,7 +47,7 @@ export function fromOutcome(ev: DialogEvent): Omit<DialogEntry, 'id' | 'at'> {
     case 'applied': return { kind: 'applied', text: redact(`Applied (${ev.change}): ${ONE(ev.description)}`) };
     case 'rejected': return { kind: 'rejected', text: redact(`The grammar did not accept this sentence (line ${ev.line}, column ${ev.column}: ${ev.message}).`) };
     case 'asking': return { kind: 'asking', text: 'Asking the sentence service...' };
-    case 'suggestion': return { kind: 'suggestion', text: 'The service suggests this. Nothing is written until you press Apply.', suggestion: { description: redact(ev.description), recipe: redact(ev.recipe), state: 'open' } };
+    case 'suggestion': return { kind: 'suggestion', text: ev.via === 'grammar' ? 'The grammar read your sentence. This is what would be written.' : 'The service suggests this.', suggestion: { description: redact(ev.description), recipe: redact(ev.recipe), state: 'open' } };
     case 'refused': return { kind: 'refused', text: redact(`The service refused: ${ev.message}`) };
     case 'dropped': return { kind: 'dropped', text: redact(`Dropped: ${ev.message}`) };
     case 'notice': return { kind: 'notice', text: redact(ev.message) };

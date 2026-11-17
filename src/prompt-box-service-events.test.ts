@@ -55,7 +55,7 @@ function rig(factory: Factory, opts: { path?: string; note?: string; plan?: unkn
   const type = (t: string) => { field().value = t; field().dispatchEvent(new win.Event('input', { bubbles: true })); };
   const enter = () => { field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); };
   const strip = () => dialogLast(el);                // 2026-11-13-1214: a box sentence's outcome is said in the dialog, no longer in the strip
-  const boxState = () => (el.querySelector('.forge-prompt-box-state')?.textContent ?? '');
+  const boxState = () => (el.querySelector('.forge-prompt-box-state')?.textContent || el.querySelector('.forge-composer-error')?.textContent || '');        // 2026-11-17-2001: what the card says: the working line, else the one muted line under it
   const buttons = () => dialogButtons(el);
   const click = async (action: string) => { dialogClick(el, action as 'apply-preview' | 'cancel-preview'); await flush(); };
   const answer = async (a: Answer) => { release(a); await flush(); };
@@ -204,7 +204,7 @@ test('CONTROL: without fix (A) the box-owned entry is deleted again and the even
   const traceB = "ports.trace(askedServiceLine(basename(path), `dropped: ${why}`));";  // fix (B): every drop is traced and said
   const noB = await damagedFactory(traceB, '/* no trace */');
   assert.ok((await dropsVisibly(noB)).length > 0, 'without (B) a drop leaves no trace');
-  const noBox = await damagedFactory('      setBoxNote(path, message); say(', '      say(');                                  // fix (B), the message under the box
+  const noBox = await damagedFactory('      askMessage.set(path, message); setBoxNote(path, message); say(', '      say(');                                  // fix (B), the message under the box
   assert.ok((await dropsVisibly(noBox)).length > 0, 'without the line under the box a drop is not said there');
   const noDialog = await damagedFactory("say(path, { type: 'dropped', message: message.replace(/\\.$/, '') });", '');       // fix (B), the message in the DIALOG (2026-11-13-1214: it was the strip)
   assert.ok((await dropsVisibly(noDialog)).length > 0, 'without the dialog line the drop is not said where the person looks');

@@ -26,6 +26,8 @@ import type { PromptBoxHandle } from './prompt-box-dom.ts';
 import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
 import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
 import { placeholderFor, replaceDescriptionSection } from './prompt-box-core.ts';
+import type { ComposerMenuItem, PreviewResult } from './prompt-box-dom.ts';
+import type { Proposal } from './composer-core.ts';
 
 export interface DescriptionPorts {
   read(path: string): Promise<string>;
@@ -55,6 +57,10 @@ export interface DescriptionPorts {
   now?(): number;
   /** Ask the person to confirm a step that loses something ("Revert to generated"); absent = it goes ahead. */
   confirm?(message: string): Promise<boolean>;
+  /** 2026-11-17-2001: MUSIC_COMPOSER_AUTO_APPLY (default off): a sentence the grammar reads exactly skips the preview. */
+  composerAutoApply?(): boolean;
+  /** 2026-11-17-2001: the composer's "+" menu (the New actions; `pickNote` gives "Insert a link to a note"); absent = no "+". */
+  composerMenu?(): { items: readonly ComposerMenuItem[]; run(id: string): void; pickNote?(): Promise<string | null> } | undefined;
 }
 
 interface Ui { state: DescriptionState; message?: string; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
@@ -82,6 +88,10 @@ export interface DescriptionController {
   suggestInBox(path: string, text: string): boolean;
   /** Apply this text as the note's Description, as the prompt box's Apply does (the existing "Update from Description" writers; a sentence that does not parse writes nothing and the strip says where). */
   applyFromBox(path: string, text: string): Promise<{ ok: boolean; disk?: string }>;
+  /** 2026-11-17-2001: what would this sentence do? The grammar first, the sentence service when it cannot read it; NOTHING is written. */
+  previewFromBox(path: string, text: string): Promise<PreviewResult>;
+  /** 2026-11-17-2001: write what the person saw (the second Enter). */
+  applyProposal(path: string, text: string, proposal: Proposal): Promise<{ ok: boolean; disk?: string; message?: string }>;
   /** Is there something for "Update from Description" to do on this note (the command's availability)? */
   canUpdate(path: string): boolean;
   /** "Restore to last commit" is about to replace this note's text: whatever was pending (a hand edit waiting out its 600 ms) is DROPPED, never applied to the restored text. */
@@ -97,6 +107,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const told = new Map<string, string>();                         // path -> the sentence an evidence line was last written for (a rejected sentence is said once, not at every unrelated modify)
   const bars = new Map<HTMLElement, BarHandle>();
   const notices = new Map<string, { message: string; text: string; /** 2026-11-13-1214: it came from the box: said in the dialog, never in the strip */ fromBox?: boolean }>();     // path -> a sentence that stays on the note's bar after a successful apply (D4: comments dropped), until the note's text changes
+  const sentHistory = new Map<string, string[]>();                // 2026-11-17-2001: the sentences sent from each note (Up recalls them), in memory
+  const askMessage = new Map<string, string>();                   // 2026-11-17-2001: why the last service request ended without a preview (a drop, a refusal): the preview's answer to the composer
+  const cancelledAsk = new Set<string>();                         // 2026-11-17-2001: Esc while the service thinks: its answer is dropped
   const looked = new WeakMap<HTMLElement, string>();              // pane element -> the note path it was last looked at for (a pane is read once per note it shows)
   let disposed = false;
   // ---- 2026-11-13-1214: the dialog. The history of what happened to a note's Description (per note, newest last, capped), the last note text we saw (to tell a control's change from a hand edit), the pinned "Current:" line.
@@ -184,7 +197,19 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         if (disposed || boxes.has(contentEl)) return;
         const family = familyOfPath(path)!;
         if (!lastText.has(path)) lastText.set(path, note);                                                // 2026-11-13-1214: the text the first control change is compared with
-        const chat = mountChatPanel(contentEl, { box: { placeholder: placeholderFor(boxKind(note, family)), apply: (text) => applyFromBox(path, text) }, store, choose: (id, choice) => { void choose(path, id, choice); } }, extractDescription(note));
+        const chat = mountChatPanel(contentEl, {
+          box: {
+            placeholder: placeholderFor(boxKind(note, family)),
+            preview: (text) => previewFromBox(path, text),
+            apply: (text, proposal) => applyProposal(path, text, proposal),
+            cancel: () => { cancelledAsk.add(path); },
+            discard: () => { discardPreview(path); },
+            autoApply: () => ports.composerAutoApply?.() === true,
+            menu: ports.composerMenu?.(),
+            history: { get: () => sentHistory.get(path) ?? [], set: (next) => { sentHistory.set(path, [...next]); } },
+          },
+          store,
+        }, extractDescription(note));
         const handle = chat.box;
         boxes.set(contentEl, { path, handle, chat });
         drawDialog(path);
@@ -232,9 +257,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return { ok: false };
     }
   }
-  async function applyFromBoxCore(path: string, text: string): Promise<{ ok: boolean; disk?: string }> {
+  async function applyFromBoxCore(path: string, text: string, said = false): Promise<{ ok: boolean; disk?: string }> {
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
-    say(path, { type: 'you', text });                                                                      // 2026-11-13-1214: the sentence as typed, when Apply is pressed
+    if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
     let failure: string | null = null, change = '', sentence = text;
     try {
       await proc(path, (cur) => {
@@ -491,11 +516,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
     catch (e) { outcome = { ok: false, message: `Could not reach the transpile service (${(e as Error)?.message ?? e}). Check your connection and Settings → Forge → Transpile service URL.` }; }
     if (u.fromBox) setBoxBusy(path, null);
+    if (cancelledAsk.has(path)) {                                                                        // 2026-11-17-2001: Esc while the service thought: the answer is dropped, said once
+      ports.trace(askedServiceLine(basename(path), 'dropped: cancelled'));
+      if (!disposed) { say(path, { type: 'dropped', message: 'cancelled' }); set(path, { state: u.state, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); }
+      return;
+    }
     // 2026-11-13-1209 (B): every way out after a request left ends VISIBLE and TRACED (a message under the box and in the strip, a `dropped: <why>` trace line), never silent.
     const dropVisibly = async (why: string, message: string, strip?: Ui): Promise<void> => {
       ports.trace(askedServiceLine(basename(path), `dropped: ${why}`));
       if (disposed) return;
-      setBoxNote(path, message); say(path, { type: 'dropped', message: message.replace(/\.$/, '') }); endSuggestion(path, 'expired');
+      askMessage.set(path, message); setBoxNote(path, message); say(path, { type: 'dropped', message: message.replace(/\.$/, '') }); endSuggestion(path, 'expired');
       if (strip) { set(path, strip); return; }
       let disk = ''; try { disk = await ports.read(path); } catch { /* the note went away: the notice keys on text that no longer exists, so it simply never shows */ }
       notices.set(path, { message, text: disk, fromBox: true }); syncBars();
@@ -508,7 +538,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return;
     }
     ports.trace(askedServiceLine(basename(path), outcome.ok === false ? `refused: ${outcome.message}` : `${outcome.params.kind}`));
-    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) { setBoxNote(path, `The service refused: ${outcome.message}`); say(path, { type: 'refused', message: outcome.message }); } return; }
+    if (outcome.ok === false) { set(path, { state: now.state, message: outcome.message, ...(now.fromBox ? { fromBox: true, base: now.base } : {}) }); if (now.fromBox) { askMessage.set(path, `The service refused: ${outcome.message}`); setBoxNote(path, `The service refused: ${outcome.message}`); say(path, { type: 'refused', message: outcome.message }); } return; }
     const name = basename(path);
     const recipe = (outcome.params.kind === 'arrangement' || outcome.params.kind === 'composition' ? familyRecipeSteps(outcome.params) : phraseRecipeSteps(outcome.params as PhraseParams)).join('\n');
     set(path, { state: now.state, ...(now.fromBox ? { fromBox: true, base: now.base } : {}), preview: { params: outcome.params, forSentence: sentence, description: describe(outcome.params), recipe } });
@@ -516,13 +546,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (family === 'phrase') void phraseDescription(name, outcome.params as PhraseParams);
   }
 
-  async function applyPreview(path: string): Promise<void> {
+  async function applyPreview(path: string): Promise<{ ok: boolean; disk?: string; message?: string }> {
     const family = familyOfPath(path); const u = ui.get(path);
-    if (family === null || !u?.preview) return;                                                           // never without a preview
+    if (family === null || !u?.preview) return { ok: false, message: 'There is nothing to apply.' };                // never without a preview
     const { params, forSentence } = u.preview;
     let failure: string | null = null, change = '';
     // a suggestion for a sentence typed in the BOX: nothing was written for it, so the Description on disk must be what it was when the sentence was sent, and the box must still hold that sentence
-    if (u.fromBox && boxText(path) !== undefined && boxText(path) !== forSentence) { set(path, { state: u.state, message: 'The text in the box changed after the suggestion; ask again.', fromBox: true, base: u.base }); endSuggestion(path, 'expired'); say(path, { type: 'notice', message: 'The text in the box changed after the suggestion; ask again.' }); return; }
+    if (u.fromBox && boxText(path) !== undefined && boxText(path) !== forSentence) { set(path, { state: u.state, message: 'The text in the box changed after the suggestion; ask again.', fromBox: true, base: u.base }); endSuggestion(path, 'expired'); say(path, { type: 'notice', message: 'The text in the box changed after the suggestion; ask again.' }); return { ok: false, message: 'The text in the box changed after the suggestion; ask again.' }; }
     try {
       await proc(path, (cur) => {
         if (extractDescription(cur) !== (u.fromBox ? u.base : forSentence)) { failure = 'The Description changed while the service was thinking; its suggestion was dropped.'; return cur; }
@@ -532,9 +562,85 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         return w.text;
       });
     } catch (e) { failure = `Apply: ${(e as Error)?.message ?? e}`; }
-    if (failure !== null) { set(path, { state: u.state, message: failure, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'expired'); say(path, { type: 'failed', message: failure }); } return; }
+    if (failure !== null) { set(path, { state: u.state, message: failure, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'expired'); say(path, { type: 'failed', message: failure }); } return { ok: false, message: failure }; }
     told.delete(path); ports.trace(appliedLine(basename(path), change)); set(path, null);
-    if (u.fromBox) { const d = await descriptionOf(path); if (d !== null) for (const b of boxes.values()) if (b.path === path) b.handle.reset(d); endSuggestion(path, 'applied'); say(path, { type: 'applied', change, description: d ?? describe(params as GrammarParams) }); setBoxNote(path, 'Applied.'); }        // applied: the box shows the canonical grammar sentence, not the free one
+    if (u.fromBox) { const d = await descriptionOf(path); if (d !== null) for (const b of boxes.values()) if (b.path === path) b.handle.reset(d); endSuggestion(path, 'applied'); say(path, { type: 'applied', change, description: d ?? describe(params as GrammarParams) }); setBoxNote(path, 'Applied.'); return { ok: true, ...(d !== null ? { disk: d } : {}) }; }        // applied: the box shows the canonical grammar sentence, not the free one
+    return { ok: true };
+  }
+
+  /** 2026-11-17-2001 - the composer's FIRST Enter: what would this sentence do? Nothing is written. The grammar reads it first (free, instant, exact); when it cannot, the sentence service is asked ONCE (the same gates as
+   *  before). The answer is a proposal (its canonical wording) the person sees in the dialog and applies with a second Enter, or a reason it cannot be one (the line under the card says it). */
+  async function previewFromBox(path: string, text: string): Promise<PreviewResult> {
+    try { return await previewFromBoxCore(path, text); }
+    catch (e) {                                                                                           // never silent (2026-11-13-1211): the console, the dialog and the line under the card say it
+      const why = (e as Error)?.message ?? String(e);
+      pbWarn(`preview failed: ${why}`); console.error('[forge-promptbox] preview failed', e);
+      say(path, { type: 'failed', message: why });
+      return { ok: false, message: `Could not ask: ${why}` };
+    }
+  }
+  async function previewFromBoxCore(path: string, text: string): Promise<PreviewResult> {
+    const family = familyOfPath(path);
+    if (family === null) { pbWarn(`preview skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false, message: 'This note is not a phrase, arrangement or composition.' }; }
+    pb(`preview asked: ${basename(path)} family=${family} text=${text.length} chars`);
+    say(path, { type: 'you', text });
+    cancelledAsk.delete(path);
+    let cur = '';
+    try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
+    const edited = replaceDescriptionSection(cur, text);
+    if (edited === null) { const m = 'This note has no Description heading to write the sentence under.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
+    const st = descriptionState(edited, family, ports.vault());
+    if (st.kind === 'apply') {
+      if (st.unchanged) { const m = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
+      const description = describe(st.params as never);
+      pb('grammar verdict: accepted (preview, nothing written)');
+      say(path, { type: 'suggestion', description, recipe: '', via: 'grammar' });
+      return { ok: true, proposal: { description, via: 'grammar' } };
+    }
+    if (st.kind === 'synced') { const m = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
+    if (st.kind !== 'rejected' && st.kind !== 'both-edited') { const m = 'This note has something else to say first; see the line at the top.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
+    // the grammar did not accept it (or the note's other facets were edited too): the same strip, trace and dialog lines as before, then the service, once
+    const failure = st.kind === 'rejected' ? st.message : st.message;
+    const sentence = st.kind === 'rejected' ? st.sentence : text;
+    const state: DescriptionState = st.kind === 'rejected' ? st : { kind: 'rejected', sentence, error: { message: failure, line: 1, column: 1 }, message: failure };
+    set(path, { state, message: failure, fromBox: true, base: extractDescription(cur) });
+    pb(`grammar verdict: ${st.kind}`);
+    const rejectedText = st.kind === 'rejected' ? `The grammar did not accept this sentence (line ${st.error.line}, column ${st.error.column}: ${st.error.message}).` : failure;
+    if (st.kind === 'rejected') say(path, { type: 'rejected', line: st.error.line, column: st.error.column, message: st.error.message }); else say(path, { type: 'notice', message: failure });
+    if (st.kind !== 'rejected') return { ok: false, message: rejectedText };
+    const gateLine = `service gate: askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`;
+    if (ports.askPlan === undefined) { pbWarn(gateLine); const m = 'The sentence service is not available in this build.'; say(path, { type: 'notice', message: m }); return { ok: false, message: `${rejectedText} ${m}` }; }
+    if (ports.configured?.() === false) { pbWarn(gateLine); const m = 'The sentence service is not set up: add its URL and token in Settings -> Forge.'; say(path, { type: 'notice', message: m }); return { ok: false, message: `${rejectedText} ${m}` }; }
+    pb(gateLine);
+    askMessage.delete(path);
+    await ask(path);
+    if (cancelledAsk.delete(path)) return { ok: false, message: 'Cancelled.' };
+    const after = ui.get(path);
+    if (after?.preview && after.preview.forSentence === sentence) return { ok: true, proposal: { description: after.preview.description, via: 'service' } };
+    return { ok: false, message: askMessage.get(path) ?? after?.message ?? 'The service did not suggest anything.' };
+  }
+
+  /** 2026-11-17-2001 - Esc on a preview (or typing over it): drop the proposal, nothing was written. */
+  function discardPreview(path: string): void {
+    const u = ui.get(path); if (u?.preview) { const rest = { ...u }; delete rest.preview; set(path, rest); }
+    endSuggestion(path, 'cancelled');
+  }
+
+  /** 2026-11-17-2001 - the composer's SECOND Enter: write what the person saw. A service proposal goes through the preview the service made; a grammar proposal through the same writers "Update from Description" uses. */
+  async function applyProposal(path: string, text: string, proposal: Proposal): Promise<{ ok: boolean; disk?: string; message?: string }> {
+    pb(`apply pressed: ${basename(path)} family=${familyOfPath(path) ?? 'none'} text=${text.length} chars via=${proposal.via}`);
+    try {
+      if (proposal.via === 'service') return await applyPreview(path);
+      const r = await applyFromBoxCore(path, text, true);
+      const fail = ui.get(path)?.message;
+      if (r.ok) endSuggestion(path, 'applied');
+      return r.ok ? r : { ok: false, message: fail ?? 'It did not go through.' };
+    } catch (e) {                                                                                         // never silent (2026-11-13-1211): the console, the dialog and the line under the card say it
+      const why = (e as Error)?.message ?? String(e);
+      pbWarn(`apply failed: ${why}`); console.error('[forge-promptbox] apply failed', e);
+      say(path, { type: 'failed', message: why });
+      return { ok: false, message: `Apply failed: ${why}` };
+    }
   }
 
   return {
@@ -557,7 +663,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     revertGenerated,
     focusBox(path) { for (const b of boxes.values()) if (path === undefined || b.path === path) { b.handle.focus(); return true; } return false; },
     suggestInBox(path, text) { for (const b of boxes.values()) if (b.path === path) { b.handle.suggest(text); return true; } return false; },
-    applyFromBox,
+    applyFromBox, previewFromBox, applyProposal,
     update, revert, ask, syncBars,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
     dispose() { disposed = true; notices.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },

@@ -50,7 +50,8 @@ test('on the real phrase tab: moving the Weight slider changes the box text; app
   await r.ctl.inspect(PATH); await flush();
   assert.ok(r.q('.forge-prompt-box'), 'the box is on the tab');
   assert.equal(r.parent.lastElementChild.className, 'forge-chat-panel', '2026-11-13-1214 (it said "the box is the last child of the tab"): the panel is the last thing in the tab, below the body that holds the strip and the Score');
-  assert.equal(r.parent.lastElementChild.lastElementChild, r.q('.forge-prompt-box'), 'and the box is the LAST thing in it: at the bottom');
+  assert.equal(r.parent.lastElementChild.lastElementChild, r.q('.forge-composer-error'), 'and the card is the LAST thing in it but the one muted line under it: at the bottom');
+  assert.equal(r.q('.forge-prompt-box').nextElementSibling, r.q('.forge-composer-error'));
   assert.equal(r.q('.forge-prompt-box-text').value, 'Mix [[bar_005]] and [[bar_006]], 50 percent [[bar_005]], as a vote.');
   // a control change -> the box
   r.q('.forge-mix-weight').value = '0.35'; r.q('.forge-mix-weight').dispatchEvent(new r.win.Event('input', { bubbles: true })); await flush();
@@ -60,7 +61,7 @@ test('on the real phrase tab: moving the Weight slider changes the box text; app
   // the box -> the controls
   const f = r.q('.forge-prompt-box-text');
   f.value = 'Mix [[bar_005]] and [[bar_006]], 80 percent [[bar_005]], as a vote. Threshold 65 percent.'; f.dispatchEvent(new r.win.Event('input', { bubbles: true }));
-  f.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush();
+  for (let n = 0; n < 2; n++) { f.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); }                  // 2026-11-17-2001: the first Enter previews, the second applies
   assert.equal(r.q('.forge-mix-weight').value, '0.8', 'the Weight slider shows the new value');
   assert.equal(r.q('.forge-mix-threshold').value, '0.65', 'and the Threshold');
   assert.equal(extractDescription(r.files.get(PATH)!), 'Mix [[bar_005]] and [[bar_006]], 80 percent [[bar_005]], as a vote. Threshold 65 percent.');
@@ -79,7 +80,7 @@ test('the Path switch of a mix writes the path sentence and the box follows; a v
   assert.match(r.q('.forge-prompt-box-text').value, /as a path, in musical order/);
   const f = r.q('.forge-prompt-box-text');
   f.value = 'Mix [[bar_005]] and [[bar_006]], 50 percent [[bar_005]], as a vote.'; f.dispatchEvent(new r.win.Event('input', { bubbles: true }));
-  f.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush();
+  for (let n = 0; n < 2; n++) { f.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); }                  // 2026-11-17-2001: the first Enter previews, the second applies
   assert.equal(r.q('.forge-mix-mode').value, 'vote', 'the Mode select shows Vote again');
 });
 
@@ -90,6 +91,7 @@ test('a tab that rebuilds itself for a new kind of note (a mix hand-edited into 
   r.handle.noteModified(PATH); r.ctl.modified(PATH); await flush(); await flush();
   assert.ok(r.q('.forge-morph-controls'), 'the premise: the tab now shows a morph strip');
   assert.equal(r.parent.querySelectorAll('.forge-prompt-box').length, 1, 'one box');
-  assert.equal(r.parent.lastElementChild.lastElementChild, r.q('.forge-prompt-box'), 'and it is still the last thing in the panel (2026-11-13-1214)');
+  assert.equal(r.q('.forge-prompt-box').nextElementSibling, r.q('.forge-composer-error'), 'and it is still the last thing in the panel (2026-11-13-1214)');
+  assert.equal(r.parent.lastElementChild.lastElementChild, r.q('.forge-composer-error'));
   assert.equal(r.q('.forge-prompt-box-text').value, 'Morph [[bar_005]] into [[bar_006]] over 5 bars, in musical order.');
 });

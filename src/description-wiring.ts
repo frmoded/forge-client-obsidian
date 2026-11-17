@@ -25,6 +25,9 @@ export interface DescriptionHooks {
   dialogStore?: DescriptionPorts['dialogStore'];
   /** 2026-11-15-1217: is the status line under the box shown (the legacy view)? */
   showBoxStatus?: () => boolean;
+  /** 2026-11-17-2001: the composer's switch (MUSIC_COMPOSER_AUTO_APPLY, default off) and its "+" menu. */
+  composerAutoApply?: DescriptionPorts['composerAutoApply'];
+  composerMenu?: DescriptionPorts['composerMenu'];
 }
 
 export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks): DescriptionPorts {
@@ -43,6 +46,8 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     serviceVersion: () => (hooks.serviceVersion ? hooks.serviceVersion() : Promise.resolve(null)),      // 2026-11-12-1206: an arrangement or composition sentence answered without a version asks /health once
     ...(hooks.dialogStore ? { dialogStore: hooks.dialogStore } : {}),
     ...(hooks.showBoxStatus ? { showBoxStatus: hooks.showBoxStatus } : {}),
+    ...(hooks.composerAutoApply ? { composerAutoApply: hooks.composerAutoApply } : {}),
+    ...(hooks.composerMenu ? { composerMenu: hooks.composerMenu } : {}),
     ...(env.confirm ? { confirm: env.confirm } : {}),
   };
 }

@@ -39,8 +39,9 @@ function plugin(opts: { url?: string; token?: string; answer?: { status: number;
   const el = win.document.createElement('div'); win.document.body.appendChild(el); panes.push({ path: PATH, contentEl: el, tab: true });
   return { ctl, store, info, warn, sent, el: el as HTMLElement };
 }
-const boxOf = (el: HTMLElement) => ({ text: el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement, apply: el.querySelector('.forge-prompt-box-apply') as HTMLButtonElement, state: () => el.querySelector('.forge-prompt-box-state')?.textContent ?? '' });
+const boxOf = (el: HTMLElement) => ({ text: el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement, send: el.querySelector('.forge-composer-send') as HTMLButtonElement, state: () => el.querySelector('.forge-composer-error')?.textContent ?? '', working: () => el.querySelector('.forge-prompt-box-state')?.textContent ?? '', enter: () => { (el.querySelector('.forge-prompt-box-text') as HTMLElement).dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); } });
 const type = (b: ReturnType<typeof boxOf>, text: string) => { b.text.value = text; b.text.dispatchEvent(new win.Event('input', { bubbles: true })); };
+const el = (b: ReturnType<typeof boxOf>): HTMLElement => b.text.closest('.forge-prompt-box') as HTMLElement;
 const promptbox = (lines: string[]) => lines.filter((l) => l.startsWith('[forge-promptbox]') && !l.startsWith('[forge-promptbox] box mounted'));
 const mounted = (lines: string[]) => lines.filter((l) => l.startsWith('[forge-promptbox] box mounted'));
 
@@ -61,14 +62,14 @@ test('URL and token set: Apply logs every decision in order, says "Asking..." un
   const r = plugin({ url: 'https://example.test', token: 'x'.repeat(10) });
   const b = await open(r);
   type(b, SENTENCE);
-  assert.equal(b.state(), 'edited, not applied');
-  const pending = (async () => { b.apply.click(); })();
+  assert.equal(el(b).classList.contains('is-edited'), true);
+  const pending = (async () => { b.enter(); })();
   await Promise.resolve(); await Promise.resolve();
   await pending; await settle();
   assert.equal(r.sent.length, 1, 'ONE request left');
   const lines = promptbox(r.info);
   assert.deepEqual(lines.map((l) => l.replace(/\d+ chars/, 'N chars')), [
-    '[forge-promptbox] apply pressed: phrase_001 family=phrase text=N chars',
+    '[forge-promptbox] preview asked: phrase_001 family=phrase text=N chars',
     '[forge-promptbox] grammar verdict: rejected',
     '[forge-promptbox] service gate: askPlan=present configured=true',
   ]);
@@ -76,7 +77,8 @@ test('URL and token set: Apply logs every decision in order, says "Asking..." un
   assert.ok(r.info.some((l) => l === '[forge-description] asking the service about phrase_001'));
   assert.ok(r.info.some((l) => l.startsWith('[forge-description] asked the service about phrase_001 -> extend')));
   assert.equal(b.state(), 'The service answered: the suggestion is in the dialog.');
-  assert.ok(r.el.querySelector('.forge-chat-action[data-choice="apply"]'), 'the suggestion with its Apply is in the dialog (2026-11-13-1214: no longer the strip)');
+  assert.equal(r.el.querySelector('.forge-chat-msg[data-kind="suggestion"] .forge-chat-chosen')!.textContent, 'Press Enter to apply, Esc to discard', 'the preview is in the dialog (2026-11-13-1214: no longer the strip)');
+  assert.equal(r.store.get(PATH), noteContentFor('phrase_001', EXTEND), 'nothing written: the second Enter applies');
   for (const l of [...r.info, ...r.warn]) assert.ok(!/x{10}|example\.test/.test(l), 'no token and no URL in any line');
 });
 
@@ -85,8 +87,8 @@ test('while the request is out the status line says "Asking the sentence service
   const r = plugin({ url: 'https://example.test', token: 'tok-tok-tok', hold });
   const b = await open(r);
   type(b, SENTENCE);
-  b.apply.click(); await settle(10);
-  assert.equal(b.state(), 'Asking the sentence service...');
+  b.enter(); await settle(10);
+  assert.equal(b.working(), 'Asking the sentence service...');
   assert.equal(r.sent.length, 1);
   release(); await settle();
   assert.equal(b.state(), 'The service answered: the suggestion is in the dialog.');
@@ -95,8 +97,8 @@ test('while the request is out the status line says "Asking the sentence service
 test('the service REFUSES: the status line says so, with its message', async () => {
   const r = plugin({ url: 'https://example.test', token: 'tok-tok-tok', answer: { status: 422, json: { detail: 'I cannot plan that sentence.' } } });
   const b = await open(r);
-  type(b, SENTENCE); b.apply.click(); await settle();
-  assert.match(b.state(), /^The service refused: /);
+  type(b, SENTENCE); b.enter(); await settle();
+  assert.match(b.state(), /^The service refused/);
   assert.ok(promptbox(r.info).length >= 3);
 });
 
@@ -104,9 +106,9 @@ test('settings EMPTY: Apply says the service is not set up (under the box) and w
   const r = plugin({});
   const b = await open(r);
   type(b, SENTENCE);
-  b.apply.click(); await settle();
+  b.enter(); await settle();
   assert.equal(r.sent.length, 0);
-  assert.equal(b.state(), 'The sentence service is not set up: add its URL and token in Settings -> Forge.');
+  assert.match(b.state(), /The sentence service is not set up: add its URL and token in Settings -> Forge\.$/);
   assert.ok(r.warn.includes('[forge-promptbox] service gate: askPlan=present configured=false'), r.warn.join('\n'));
   assert.ok(promptbox(r.info).includes('[forge-promptbox] grammar verdict: rejected'));
 });
@@ -117,24 +119,25 @@ test('a throw anywhere in Apply is never silent: console.warn names it, the stat
   const box = b ?? boxOf(r.el);
   if (!box.text) { assert.fail('the box did not mount: the throwing listing broke the tab, which is a finding of its own'); }
   type(box, SENTENCE);
-  box.apply.click(); await settle();
-  assert.match(box.state(), /^Apply failed: /);
-  assert.ok(r.warn.some((l) => l.startsWith('[forge-promptbox] apply failed')), r.warn.join('\n'));
+  box.enter(); await settle();
+  assert.match(box.state(), /vault listing failed/);
+  assert.ok(r.warn.some((l) => l.startsWith('[forge-promptbox] preview failed')), r.warn.join('\n'));
 });
 
-test('the empty sentence and an unchanged text do not reach the controller (the box says nothing, Apply is disabled): no lines', async () => {
+test('the empty sentence and an unchanged text do not reach the controller (the box says nothing, the return glyph is dimmed): no lines', async () => {
   const r = plugin({ url: 'https://example.test', token: 'tok-tok-tok' });
   const b = await open(r);
-  assert.equal(b.apply.disabled, true);
-  b.apply.click(); await settle();
+  assert.equal(b.send.getAttribute('aria-disabled'), 'true');
+  b.enter(); b.send.click(); await settle();
   assert.deepEqual(promptbox(r.info), []);
 });
 
 test('editing the box text clears the status line', async () => {
   const r = plugin({});
   const b = await open(r);
-  type(b, SENTENCE); b.apply.click(); await settle();
-  assert.notEqual(b.state(), 'edited, not applied');
+  type(b, SENTENCE); b.enter(); await settle();
+  assert.notEqual(b.state(), '');
   type(b, SENTENCE + ' x');
-  assert.equal(b.state(), 'edited, not applied');
+  assert.equal(b.state(), '');
+  assert.equal(el(b).classList.contains('is-edited'), true);
 });

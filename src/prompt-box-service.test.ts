@@ -41,17 +41,18 @@ function rig(opts: { service?: (payload: any) => Promise<Answer>; configured?: b
   const field = () => el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
   const type = (t: string) => { field().value = t; field().dispatchEvent(new win.Event('input', { bubbles: true })); };
   const enter = async () => { field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); };
+  const send = async () => { await enter(); await enter(); };                                  // 2026-11-17-2001: the first Enter previews, the second applies
   const strip = () => dialogLast(el);                // 2026-11-13-1214: a box sentence's outcome is said in the dialog, no longer in the strip
   const buttons = () => dialogButtons(el);
   const click = async (action: string) => { dialogClick(el, action as 'apply-preview' | 'cancel-preview'); await flush(); };
   const ready = async () => { await ctl.inspect(path); await flush(); };
-  return { ctl, store, writes, asked, el, flush, field, type, enter, strip, buttons, click, ready, path };
+  return { ctl, store, writes, asked, el, flush, field, type, enter, send, strip, buttons, click, ready, path };
 }
 
 test('grammar-accepted text NEVER calls the service (a counting stub): it applies as in 1203', async () => {
   const r = rig({ service: async () => OK(PLAN_EXTEND) });
   await r.ready();
-  r.type('Mix [[bar_007]] and [[bar_008]], 35 percent [[bar_007]], as a vote.'); await r.enter();
+  r.type('Mix [[bar_007]] and [[bar_008]], 35 percent [[bar_007]], as a vote.'); await r.send();
   assert.deepEqual(r.asked, []);
   assert.equal(r.writes.length, 1, 'applied by the grammar');
 });
@@ -77,7 +78,7 @@ test('Cancel writes nothing and the box keeps the text; the suggestion in the DI
   assert.deepEqual(r.writes, []);
   assert.equal(r.field().value, FREE);
   assert.deepEqual(r.buttons(), [], 'the suggestion was used: its buttons are off');
-  assert.equal(r.el.querySelector('.forge-chat-chosen')?.textContent, 'Cancelled.');
+  assert.equal(r.el.querySelector('.forge-chat-chosen')?.textContent, 'Discarded.');
   assert.equal(r.asked.length, 1);
 });
 
@@ -92,7 +93,7 @@ test('applying the preview writes the note (one write, the phrase the suggestion
   assert.notEqual(r.field().value, FREE);
   assert.equal(r.el.querySelector('.forge-prompt-box.is-edited'), null);
   assert.equal(r.el.querySelector('.forge-prompt-box-conflict') === null || (r.el.querySelector('.forge-prompt-box-conflict') as HTMLElement).style.display === 'none', true, 'no leftover conflict');
-  assert.match(r.strip(), /^Applied \(/, 'the dialog says what was applied (2026-11-13-1214: no longer the strip)');
+  assert.match(r.strip(), /^✓ Applied \(/, 'the dialog says what was applied (2026-11-13-1214: no longer the strip)');
   assert.equal(r.el.querySelector('.forge-chat-chosen')?.textContent, 'Applied.');
   assert.deepEqual(r.buttons(), []);
 });
@@ -104,8 +105,8 @@ test('while the service thinks the box says so; a SECOND Apply does nothing (one
   r.type(FREE);
   r.field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await r.flush();
   assert.match(r.el.querySelector('.forge-prompt-box-state')!.textContent!, /Asking the sentence service/);
-  assert.equal((r.el.querySelector('.forge-prompt-box-apply') as HTMLButtonElement).disabled, true);
-  await r.enter(); (r.el.querySelector('.forge-prompt-box-apply') as HTMLElement).click(); await r.flush();
+  assert.equal(r.el.querySelector('.forge-prompt-box')!.classList.contains('is-busy'), true);
+  await r.enter(); (r.el.querySelector('.forge-composer-send') as HTMLElement).click(); await r.flush();
   assert.equal(r.asked.length, 1, 'a second Apply while busy does nothing');
   release(OK(PLAN_EXTEND)); await r.flush();
   assert.equal(r.asked.length, 1);

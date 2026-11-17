@@ -46,11 +46,12 @@ function rig(opts: { service?: (payload: any) => Promise<Answer>; configured?: b
   const field = () => el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
   const type = (t: string) => { field().value = t; field().dispatchEvent(new win.Event('input', { bubbles: true })); };
   const enter = async () => { field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); };
+  const send = async () => { await enter(); await enter(); };                                  // 2026-11-17-2001: the first Enter previews, the second applies
   const strip = () => dialogLast(el);                // 2026-11-13-1214: a box sentence's outcome is said in the dialog, no longer in the strip
   const buttons = () => dialogButtons(el);
   const click = async (action: string) => { dialogClick(el, action as 'apply-preview' | 'cancel-preview'); await flush(); };
   const ready = async () => { await ctl.inspect(opts.path); await flush(); };
-  return { ctl, store, writes, asked, reads, el, flush, field, type, enter, strip, buttons, click, ready, path: opts.path };
+  return { ctl, store, writes, asked, reads, el, flush, field, type, enter, send, strip, buttons, click, ready, path: opts.path };
 }
 
 test('ARRANGEMENT: a free sentence the grammar rejects calls the service ONCE on Apply, with the arrangement request (family, kits, phrases, no bars); the PREVIEW is the description and recipe of the plan; nothing is written', async () => {
@@ -77,7 +78,7 @@ test('ARRANGEMENT: applying the preview writes the note once (the arrangement th
   assert.ok(read.ok); assert.deepEqual(read.value.tracks, PLAN_ARR.tracks);
   assert.equal(r.field().value, extractDescription(r.store.get(ARR)!));
   assert.notEqual(r.field().value, FREE_ARR);
-  assert.match(r.strip(), /^Applied \(/, '2026-11-13-1214: the dialog says what was applied, the strip has nothing');
+  assert.match(r.strip(), /^✓ Applied \(/, '2026-11-13-1214: the dialog says what was applied, the strip has nothing');
 });
 
 test('COMPOSITION: the same path - one request (family, phrases, arrangements, compositions, the note being planned), a preview, one write, the canonical sentence in the box', async () => {
@@ -111,11 +112,11 @@ test('Cancel writes nothing, the text stays, and no second request was made (arr
 test('grammar-accepted text NEVER calls the service for an arrangement or a composition: it applies as in 1203', async () => {
   const a = rig({ path: ARR, note: ARR_NOTE(), service: async () => OK(PLAN_ARR) });
   await a.ready();
-  a.type('Play [[phrase_001]] on the [[rock]] kit. Play [[phrase_002]] on the [[latin]] kit. Together.'); await a.enter();
+  a.type('Play [[phrase_001]] on the [[rock]] kit. Play [[phrase_002]] on the [[latin]] kit. Together.'); await a.send();
   assert.deepEqual(a.asked, []); assert.equal(a.writes.length, 1);
   const c = rig({ path: COMP, note: COMP_NOTE(), service: async () => OK(PLAN_COMP) });
   await c.ready();
-  c.type('Play [[phrase_001]]. Then play [[phrase_002]].'); await c.enter();
+  c.type('Play [[phrase_001]]. Then play [[phrase_002]].'); await c.send();
   assert.deepEqual(c.asked, []); assert.equal(c.writes.length, 1);
 });
 
@@ -215,7 +216,7 @@ test('ONE request in flight: a second Apply while the service thinks does nothin
   await r.ready(); r.type(FREE_ARR);
   r.field().dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await r.flush();
   assert.match(r.el.querySelector('.forge-prompt-box-state')!.textContent!, /Asking the sentence service/);
-  await r.enter(); (r.el.querySelector('.forge-prompt-box-apply') as HTMLElement).click(); await r.flush();
+  await r.enter(); (r.el.querySelector('.forge-composer-send') as HTMLElement).click(); await r.flush();
   assert.equal(r.asked.length, 1);
   release(OK(PLAN_ARR)); await r.flush();
   assert.equal(r.asked.length, 1);
@@ -241,5 +242,5 @@ test('WIRING: the plugin\'s description controller is given the service-version 
   const src = fs.readFileSync(path.resolve(import.meta.dirname, 'score-first.ts'), 'utf8');
   const at = src.indexOf('createDescriptionController(descriptionPortsFor(');
   assert.ok(at > 0, 'score-first.ts builds the controller through descriptionPortsFor');
-  assert.match(src.slice(at, at + 3500), /\}, \{ \.\.\.hooks, showBoxStatus: /, 'and hands it the plugin\'s hooks (2026-11-15-1217: plus the status-line switch)');
+  assert.match(src.slice(at, at + 3500), /\}, \{\s*\.\.\.hooks, showBoxStatus: /, 'and hands it the plugin\'s hooks (2026-11-15-1217: plus the status-line switch; 2026-11-17-2001: and the composer\'s)');
 });

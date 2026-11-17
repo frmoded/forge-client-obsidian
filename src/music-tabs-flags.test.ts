@@ -19,16 +19,17 @@ const ROOT = path.resolve(import.meta.dirname, '..');
 // ---- the two switches ---------------------------------------------------------------------------------------------------------------------------------------------------
 test('the three music-tab switches are OFF by default and the bar numbers (2026-11-16-0902) are ON, in the constants, in the defaults and in the settings object a fresh install has', () => {
   assert.equal(SHOW_LEGACY_CONTROLLERS, false); assert.equal(SHOW_INSPECTOR, false); assert.equal(SHOW_SOURCE_CHIPS, false);
-  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false, showBarNumbers: true });
+  assert.deepEqual(DEFAULT_UI_FLAGS, { showLegacyControllers: false, showInspector: false, showSourceChips: false, showBarNumbers: true, composerAutoApply: false });
   assert.deepEqual(uiFlags(), DEFAULT_UI_FLAGS, 'with no source registered a view gets the defaults');
   const settings = fs.readFileSync(path.join(ROOT, 'src/settings.ts'), 'utf8');
   assert.match(settings, /showLegacyControllers: false,\s*showInspector: false,\s*showSourceChips: false,\s*showBarNumbers: true,/);
+  assert.match(settings, /composerAutoApply: false,/, 'auto-apply is off in a fresh install');
 });
 test('readUiFlags takes only real booleans from the settings object: junk, null and absent are the default (off); a saved true survives data.json', () => {
   assert.deepEqual(readUiFlags(undefined), DEFAULT_UI_FLAGS); assert.deepEqual(readUiFlags(null), DEFAULT_UI_FLAGS);
   assert.deepEqual(readUiFlags({ showLegacyControllers: 'true', showInspector: 1, showSourceChips: 'yes', showBarNumbers: 0 }), DEFAULT_UI_FLAGS);
-  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false, showBarNumbers: true });
-  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true, showBarNumbers: true });
+  assert.deepEqual(readUiFlags({ showLegacyControllers: true, showInspector: false }), { showLegacyControllers: true, showInspector: false, showSourceChips: false, showBarNumbers: true, composerAutoApply: false });
+  assert.deepEqual(readUiFlags(JSON.parse(JSON.stringify({ showLegacyControllers: true, showInspector: true, showSourceChips: true }))), { showLegacyControllers: true, showInspector: true, showSourceChips: true, showBarNumbers: true, composerAutoApply: false });
 });
 test('the source: a registered source is asked at every call (a change takes effect when a tab mounts), a throwing source is the default, and null puts the default back', () => {
   let on = false;
@@ -178,13 +179,13 @@ test('the status line under the prompt box: shown when `showBoxStatus` is absent
     await ctl.inspect('phrases/phrase_001.md'); for (let i = 0; i < 40; i++) await Promise.resolve();
     const field = el.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement;
     field.value = 'Extend [[bar_007]] to 6 bars, repeating with fills.'; field.dispatchEvent(new win.Event('input', { bubbles: true }));
-    field.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); for (let i = 0; i < 40; i++) await Promise.resolve();
-    return { status: (el.querySelector('.forge-prompt-box-state') as HTMLElement).textContent ?? '', said: [...el.querySelectorAll('.forge-chat-msg')].map((m: any) => m.getAttribute('data-kind')) };
+    for (let n = 0; n < 2; n++) { field.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); for (let i = 0; i < 40; i++) await Promise.resolve(); }       // 2026-11-17-2001: the first Enter previews, the second applies
+    return { status: (el.querySelector('.forge-composer-error') as HTMLElement).textContent ?? '', said: [...el.querySelectorAll('.forge-chat-msg')].map((m: any) => m.getAttribute('data-kind')) };
   };
   const shown = await run(), alsoShown = await run(() => true), hidden = await run(() => false);
   assert.equal(shown.status, 'Applied.'); assert.equal(alsoShown.status, 'Applied.');
   assert.equal(hidden.status, '', 'off: the line is not drawn');
-  assert.deepEqual(hidden.said, ['you', 'applied'], 'the dialog says it');
+  assert.deepEqual(hidden.said, ['you', 'suggestion', 'applied'], 'the dialog says it: the sentence, the preview, the outcome');
   assert.deepEqual(shown.said, hidden.said);
 });
 test('WIRING: score-first.ts reads the legacy switch for the status line (the plugin\'s own default for `showBoxStatus`)', () => {
