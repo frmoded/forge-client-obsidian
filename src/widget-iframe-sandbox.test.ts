@@ -30,12 +30,13 @@ test('no production source grants allow-same-origin — in any spelling', () => 
 });
 
 test('the one helper grants exactly allow-scripts', () => {
-  const helper = productionSources.find((s) => s.f === 'html-embed-view.ts')!.text;
+  // 2026-11-17-1000 (amended on purpose): the helper moved, unchanged in what it grants, to widget-iframe-core.ts (no obsidian import, so it is unit-tested); html-embed-view.ts re-exports it.
+  const helper = productionSources.find((s) => s.f === 'widget-iframe-core.ts')!.text;
   const adds = [...helper.matchAll(/sandbox\.add\('([^']+)'\)/g)].map((m) => m[1]);
   assert.deepEqual(adds, ['allow-scripts']);
   // and every `<iframe` / createEl('iframe') in production code lives in that helper (or moda-view's own bundled-asset frame)
   const makers = productionSources.filter(({ text }) => /createEl\('iframe'|createElement\('iframe'|<iframe/.test(text)).map(({ f }) => f).sort();
-  assert.deepEqual(makers, ['html-embed-view.ts', 'moda-view.ts']);
+  assert.deepEqual(makers, ['moda-view.ts', 'widget-iframe-core.ts']);
 });
 
 test('the HOST never reads into a widget frame: only contentWindow.postMessage and event.source checks', () => {

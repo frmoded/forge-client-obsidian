@@ -27,7 +27,7 @@ export async function openPage({ dir, width = 900, height = 1200, pageHtml, rout
   process.once('exit', killChrome);
   let targets = null; for (let i = 0; i < 60 && !targets; i++) { try { targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); } catch { await sleep(250); } }
   const ws = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl); await new Promise((ok) => ws.addEventListener('open', ok));
-  let id = 0; const pending = new Map(); ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } });
+  let id = 0; const pending = new Map(); const events = []; ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } else if (m.method) events.push(m); });  // 2026-11-17-1000: DevTools events (Log.entryAdded, Runtime.consoleAPICalled, Runtime.exceptionThrown ...) are kept in `events`: the browser's own console messages ("Blocked script execution ...") never reach window.console
   const send = (method, params = {}) => new Promise((ok) => { const i = ++id; pending.set(i, ok); ws.send(JSON.stringify({ id: i, method, params })); });
   const ev = async (expression) => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true }); if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 600)); return r.result?.result?.value; };
   await send('Page.enable'); await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
@@ -45,7 +45,7 @@ export async function openPage({ dir, width = 900, height = 1200, pageHtml, rout
     findNode, boxCenter,
     click: async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 }); await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 }); await sleep(150); },
     attrs: async (nodeId) => { const a = (await send('DOM.getAttributes', { nodeId })).result.attributes; return Object.fromEntries(a.reduce((acc, v, i) => (i % 2 ? acc : [...acc, [v, a[i + 1]]]), [])); },
-    ev, send, sleep,
+    ev, send, sleep, events,
     hover: async (x, y) => { await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y }); await sleep(150); },
     shot: async (file, clip) => { const r = await send('Page.captureScreenshot', { format: 'png', ...(clip ? { clip: { ...clip, scale: 1 } } : {}) }); fs.writeFileSync(file, Buffer.from(r.result.data, 'base64')); },
     close: () => { try { ws.close(); } catch {} killChrome(); srv.close(); dropProfile(); reaper.remove(chrome.pid); reaper.stop(); },

@@ -65,7 +65,6 @@ for (const edition of ['lean', 'music'] as const) {
     contentEl.addClass = (c: string) => contentEl.classList.add(c);
     contentEl.createEl = (tag: string, o: { cls?: string } = {}) => {
       const el: any = doc.createElement(tag); if (o.cls) el.className = o.cls; contentEl.appendChild(el);
-      if (tag === 'iframe') Object.defineProperty(el, 'contentWindow', { value: { postMessage: (m: unknown) => { posted.push(JSON.parse(JSON.stringify(m))); } }, configurable: true });
       return el;
     };
     contentEl.createDiv = (o: { cls?: string } = {}) => contentEl.createEl('div', o);
@@ -78,6 +77,9 @@ for (const edition of ['lean', 'music'] as const) {
       await tick();
       const iframe = contentEl.querySelector('iframe');
       assert.ok(iframe, 'the tab built the widget iframe');
+      // 2026-11-17-1000 (amended on purpose): the widget iframe is no longer made through the host's `createEl` (which attaches at once, before the sandbox is set: widget-iframe-core.ts), so the stand-in for its window
+      // is attached here, once the tab has built it; the tab reads `iframe.contentWindow` only when it posts or checks a message source.
+      Object.defineProperty(iframe, 'contentWindow', { value: { postMessage: (m: unknown) => { posted.push(JSON.parse(JSON.stringify(m))); } }, configurable: true });
       // the widget says ready; the tab answers with the load message
       win.dispatchEvent(new win.MessageEvent('message', { data: { type: 'forge-rhythm-ready' }, source: iframe.contentWindow }));
       await tick();

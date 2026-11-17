@@ -68,6 +68,7 @@
 import { TFile } from 'obsidian';
 import { HTML_EMBED_LANGUAGE, parseHtmlEmbedSource } from './html-embed-view-core.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
+import { createSandboxedWidgetIframe } from './widget-iframe-core.ts';
 
 /** Narrow structural slice of `Plugin` + `App` this file actually
  *  needs, per this repo's structural-adapter-type convention — keeps
@@ -153,30 +154,9 @@ async function renderHtmlEmbed(
   plugin.register(() => URL.revokeObjectURL(blobUrl));
 }
 
-/**
- * The ONE place a vault-authored .html widget gets its iframe: a `blob:` URL of the file's content, sandboxed with `allow-scripts`
- * ONLY — never `allow-same-origin` (see the SANDBOXING note at the top of this file) — no wider flags. Extracted
- * (Beat-as-data Phase 5, drain 2026-10-05-2100) so the "Edit rhythm in Rhythm Box" view hosts the widget through the SAME code
- * instead of building a second iframe with its own, possibly looser, settings. Behaviour of the html-embed processor is unchanged.
- * The caller owns revoking `blobUrl` when its host goes away.
- */
-export function createSandboxedWidgetIframe(
-  parent: HTMLElement,
-  html: string,
-  heightCss: string,
-): { iframe: HTMLIFrameElement; blobUrl: string } {
-  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-  const blobUrl = URL.createObjectURL(blob);
-
-  const iframe = parent.createEl('iframe', { cls: 'forge-html-embed-iframe' });
-  iframe.src = blobUrl;
-  iframe.sandbox.add('allow-scripts');
-  // Drain 2026-10-14-0900 §6 — NOT 'allow-same-origin': with it the widget is same-origin with the app (see the note at the top).
-  iframe.style.height = heightCss;
-  iframe.setAttribute('loading', 'lazy');
-  iframe.setAttribute('referrerpolicy', 'no-referrer');
-  return { iframe, blobUrl };
-}
+// createSandboxedWidgetIframe (the ONE place a vault-authored .html widget gets its iframe) lives in widget-iframe-core.ts (2026-11-17-1000: no obsidian import, so it is unit-tested);
+// re-exported here so every caller imports it from where it always did.
+export { createSandboxedWidgetIframe };
 
 function renderEmbedError(el: HTMLElement, title: string, detail: string): void {
   const box = el.createDiv({ cls: 'forge-html-embed-error' });

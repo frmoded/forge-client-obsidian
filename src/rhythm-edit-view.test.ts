@@ -12,6 +12,7 @@ import { resolveVaultFile } from './test-support/vault-source.ts';
 const read = (rel: string) => fs.readFileSync(path.resolve(process.cwd(), rel), 'utf-8');
 const view = read('src/rhythm-edit-view.ts');
 const embed = read('src/html-embed-view.ts');
+const iframeCore = read('src/widget-iframe-core.ts');   // 2026-11-17-1000 (amended on purpose): the shared helper moved here, unchanged in what it grants; html-embed-view.ts re-exports it
 
 const main = read('src/main.ts');
 const code = (src: string) => src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');   // comments out, so a pin cannot be satisfied by prose
@@ -19,10 +20,10 @@ const switchSrc = code(read('src/rhythm-mode-switch.ts'));
 const scoreSrc = code(read('src/rhythm-score-view.ts'));
 
 test('sandbox: the shared iframe helper adds exactly allow-scripts — never allow-same-origin, nothing wider (drain 2026-10-14-0900 §6; pins the MECHANISM, widget-iframe-sandbox.test.ts pins the property)', () => {
-  const adds = [...code(embed).matchAll(/sandbox\.add\('([^']+)'\)/g)].map((m) => m[1]);
+  const adds = [...code(iframeCore).matchAll(/sandbox\.add\('([^']+)'\)/g)].map((m) => m[1]);
   assert.deepEqual(adds, ['allow-scripts']);
-  assert.ok(!/sandbox\s*=|setAttribute\('sandbox'/.test(code(embed)), 'no other way of setting the sandbox');
-  assert.match(code(embed), /setAttribute\('referrerpolicy', 'no-referrer'\)/);
+  assert.ok(!/sandbox\s*=|setAttribute\('sandbox'/.test(code(iframeCore)) && !/sandbox/.test(code(embed).replace(/createSandboxedWidgetIframe|SANDBOX/g, '')), 'no other way of setting the sandbox');
+  assert.match(code(iframeCore), /setAttribute\('referrerpolicy', 'no-referrer'\)/);
 });
 
 test('sandbox: the Rhythm Box view hosts the widget through that helper and builds no iframe of its own', () => {
