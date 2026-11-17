@@ -1,21 +1,30 @@
-Major and the minors use seven notes. Plenty of music gets by on fewer, or on stranger recipes, and these are the ones worth knowing.
+Major and the minors use seven notes. Plenty of music gets by on fewer, or on stranger recipes, and these are the ones worth knowing. A half step is the next piano key (black keys count) or the next fret; a whole step is two of them.
 
-Try it: pick pentatonic, blues, whole-tone or diminished from the second select and press Play.
+## Pentatonic
 
-```html-embed
-scales/resources/html/scale_player.html
-371
-```
+Five notes, and it's hard to hit a wrong one, which is why it's the improviser's safety net.
 
-**Pentatonic** has five notes, and it's hard to hit a wrong one, which is why it's the improviser's safety net. Major pentatonic and minor pentatonic are the two flavours.
+**Major pentatonic** is the major scale without its 4th and 7th. From C: C D E G A. The recipe is W-W, a step and a half, W, a step and a half. Those two big gaps sit where the 4th and 7th used to be.
 
-**Blues** is the minor pentatonic plus one in-between note, the flat fifth. That one extra note is where the smoky sound comes from.
+**Minor pentatonic** grows out of natural minor with its 2nd and 6th dropped. From C: C E♭ F G B♭. The recipe is a step and a half, W, W, a step and a half, W. From A it's A C D E G, and look: those are the same five notes as major pentatonic, just starting on A. The two flavours are one set of notes with two homes.
 
-**Whole-tone** is all whole steps: six notes, dreamy, and no clear home note, because every step looks the same.
+## Blues
 
-**Diminished** alternates whole and half steps: eight notes, tense and symmetrical. Treat this one as something to recognise, not memorise.
+**Blues** is the minor pentatonic plus one in-between note, the flat fifth: the black key between F and G in C. From C: C E♭ F G♭ G B♭, six notes, with a recipe of a step and a half, W, H, H, a step and a half, W. That one extra note is where the smoky sound comes from.
 
-The symmetric scales (whole-tone and diminished) repeat letters, because the one-letter-per-note rule can't work when the pattern repeats. The player's spelling convention for them is stated on its page. To hear any of these, open the player above and pick them.
+## Whole-tone
+
+All whole steps: W-W-W-W-W-W. Six notes, dreamy, and no clear home note, because every step looks the same. Count six whole steps and you're back where you started.
+
+## Diminished
+
+Alternate whole and half steps. Start with a whole step and you get W-H-W-H-W-H-W-H; start with a half step and you get H-W-H-W-H-W-H-W. Eight notes, tense and symmetrical. Treat this one as something to recognise, not memorise.
+
+Whole-tone and diminished repeat letters, because the one-letter-per-note rule can't work when the pattern repeats. That's why I'm giving you the step pattern and no note names for those two.
+
+To check any of these, count the notes (five for pentatonic, six for blues and whole-tone, eight for diminished) and make sure the steps add up to an octave.
+
+To see any scale on a keyboard and a staff, use the explorer on [[Scales]]. It also states the spelling convention for those two.
 
 > [!note]- Structural formula
 > Major pentatonic from C: C D E G A (2 2 3 2 3 half steps).
@@ -23,6 +32,13 @@ The symmetric scales (whole-tone and diminished) repeat letters, because the one
 > Blues from C: C E♭ F G♭ G B♭ (minor pentatonic plus the flat fifth).
 > Whole-tone: 2 2 2 2 2 2.
 > Diminished: alternating 2 1 2 1 2 1 2 1 (or starting with the half step).
+
+Build it: you're handed a home note and one of these scales, and you tap its notes.
+
+```html-embed
+scales/resources/html/scale_build_other_scales.html
+201
+```
 
 <div style="
   display:flex;

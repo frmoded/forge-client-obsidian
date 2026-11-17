@@ -1,18 +1,19 @@
 A scale is a recipe of steps that starts from a home note: change the home note and the recipe stays.
 
-1. [[what a scale is]] — the recipe, and why major is the parent.
+By the end of this chapter you'll know how to build every one of these scales: major, natural, harmonic and melodic minor, the seven modes, pentatonic, blues, whole-tone and diminished. No guessing, just counting steps.
+
+1. [[what a scale is]] — the recipe, and major and natural minor built by hand.
 2. [[scales jargon]] — one letter per note, and the words you'll meet.
-3. [[modes and minor scales]] — start somewhere else, or bend the 6th and 7th.
+3. [[modes and minor scales]] — the seven modes and the three minors, built step by step.
 4. [[other scales]] — pentatonic, blues, whole-tone and diminished.
-5. [[hearing scales]] — two games to train your ear.
+5. [[hearing scales]] — one game to train your ear: name the scale.
+6. [[building scales]] — the last exercise: build any scale in the chapter.
 
-Try it: pick another tonic or scale type and press Play.
+Try it: pick a home note and a scale, press Play, and hear the recipe.
 
-```forge-scale
-tonic: C
-scale: major
-show: piano, staff, numbers, intervals
-controls: yes
+```html-embed
+scales/resources/html/scale_player.html
+371
 ```
 
 **Practice:**
