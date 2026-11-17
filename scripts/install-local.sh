@@ -48,4 +48,8 @@ rsync -a --delete "$SRC/assets/" "$PLUGIN_DIR/assets/"
 echo "install-local: installed the $EDITION edition into $PLUGIN_DIR"
 echo "install-local: built from $SHA, tree $TREE"
 head -c 120 "$PLUGIN_DIR/main.js" | head -1
-echo "Now reopen Obsidian; the console banner reads: FORGE CLIENT v… LOADED (edition: $EDITION, $SHA)"
+# 2026-11-17-0901 A: the INSTALLED main.js must carry the commit just built (it is stamped from the scratch copy's commit, never from a stale src/build-stamp.generated.ts in the working tree).
+node scripts/installed-builds.mjs --verify "$PLUGIN_DIR/main.js" "$SHA" "$TREE" || { echo "install-local: the install check failed: this vault would still load the old build" >&2; exit 1; }
+echo "install-local: check passed. To check by hand:   grep -m1 '^var BUILD_STAMP' \"$PLUGIN_DIR/main.js\"     (the sha there is $SHA)"
+node scripts/installed-builds.mjs --head "$SHA" || true      # every vault keeps its OWN copy: the others are listed here, an OLDER one loads its own older build
+echo "Now reopen Obsidian (Cmd+Q first); the console banner reads: FORGE CLIENT v… LOADED (edition: $EDITION, $SHA, vault: $(basename "$(dirname "$(dirname "$(dirname "$PLUGIN_DIR")")")"))"

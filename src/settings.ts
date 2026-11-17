@@ -1,7 +1,7 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import { musicRibbonStatusText } from './music-ribbon-status.ts';
 import { BUILD_STAMP } from './build-stamp.generated.ts';
-import { formatBuildStamp } from './build-stamp-core.ts';
+import { formatBuildLine, vaultNameOf } from './build-stamp-core.ts';
 import type ForgePlugin from './main.ts';
 
 export interface ForgeSettings {
@@ -105,7 +105,7 @@ export class ForgeSettingTab extends PluginSettingTab {
     // --- Build identifier (drain 2026-10-09-2200): the version string is not one; three builds can all say v0.6.1.
     new Setting(containerEl)
       .setName('Build')
-      .setDesc(`${formatBuildStamp(BUILD_STAMP)} — the git commit this plugin was built from (+dirty = uncommitted changes), and when. Quote this when reporting a bug.`);
+      .setDesc(`${formatBuildLine(BUILD_STAMP, vaultNameOf(this.app))} — the git commit this plugin was built from (+dirty = uncommitted changes), and when. Quote this when reporting a bug.`);
 
     // --- Transpile service (hosted /generate) ---------------------
     // First section — the token field is the one thing students must

@@ -122,7 +122,7 @@ import {
 } from './expanded-state-core.ts';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
 import { BUILD_STAMP } from './build-stamp.generated.ts';
-import { formatBuildSha, formatBuildStamp, setStatusBarTooltip, statusBarTooltip } from './build-stamp-core.ts';
+import { formatBuildStamp, formatLoadBanner, setStatusBarTooltip, statusBarTooltip, vaultNameOf } from './build-stamp-core.ts';
 import { EVENT_WRITE_SETTLE_MS, createDeletionTracker, guardedFrontMatterWrite } from './frontmatter-write-guard-core.ts';
 import {
   decideForgeRouting,
@@ -633,7 +633,7 @@ export default class ForgePlugin extends Plugin {
     // yellow/highlighted in DevTools instead of mixing in with the
     // ~1000 routine console.log lines an Obsidian session generates.
     console.warn(
-      `%c FORGE CLIENT v${this.manifest.version} LOADED (edition: ${EDITION}, ${formatBuildSha(BUILD_STAMP)}) `,
+      `%c ${formatLoadBanner({ version: this.manifest.version, edition: EDITION, stamp: BUILD_STAMP, vaultName: vaultNameOf(this.app) })} `,
       'background: #4caf50; color: white; padding: 6px 10px; font-weight: bold; font-size: 13px;',
     );
 

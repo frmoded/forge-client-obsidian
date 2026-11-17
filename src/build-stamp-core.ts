@@ -44,3 +44,26 @@ export function setStatusBarTooltip(
 export function formatBuildSha(stamp: Pick<BuildStamp, 'sha' | 'dirty'>): string {
   return stamp.sha === 'unknown' ? 'unknown build' : `${stamp.sha}${stamp.dirty ? '+dirty' : ''}`;
 }
+
+/** 2026-11-17-0901 A: the console banner. Every vault keeps its OWN copy of the plugin, so the banner names the vault whose copy is running: the commit alone cannot say
+ *  "this is the old copy in the other vault". No vault name (or a blank one) leaves the line as it was. */
+export function formatLoadBanner(i: { version: string; edition: string; stamp: Pick<BuildStamp, 'sha' | 'dirty'>; vaultName?: string }): string {
+  const vault = i.vaultName?.trim();
+  return `FORGE CLIENT v${i.version} LOADED (edition: ${i.edition}, ${formatBuildSha(i.stamp)}${vault ? `, vault: ${vault}` : ''})`;
+}
+
+/** 2026-11-17-0901 A: the Settings "Build" line: the commit (+dirty), when, and whose copy this is. */
+export function formatBuildLine(stamp: BuildStamp, vaultName?: string): string {
+  const vault = vaultName?.trim();
+  return `${formatBuildStamp(stamp)}${vault ? ` · this vault (${vault}) has its own copy of the plugin` : ''}`;
+}
+
+/** 2026-11-17-0901 A: the open vault's name, or undefined. Never throws: the host's vault is a stub in tests and may not have a name yet, and a banner must not be able to stop onload. */
+export function vaultNameOf(app: { vault?: { getName?: () => unknown } } | undefined): string | undefined {
+  try {
+    const name = app?.vault?.getName?.();
+    return typeof name === 'string' ? name : undefined;
+  } catch {
+    return undefined;
+  }
+}

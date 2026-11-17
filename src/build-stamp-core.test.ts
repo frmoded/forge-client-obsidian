@@ -21,7 +21,8 @@ test('wiring: the stamp is shown in the status-bar tooltip and in the settings t
   // Drain 2026-10-11-0900 §6: the tooltip text is built by the pure `statusBarTooltip` from the same formatter, and applied as an
   // Obsidian tooltip (aria-label), not the native `title` that never showed in the status bar.
   assert.match(main, /statusBarTooltip\(\{[\s\S]*?build: formatBuildStamp\(BUILD_STAMP\),/);
-  assert.match(settings, /setName\('Build'\)\s*\.setDesc\(`\$\{formatBuildStamp\(BUILD_STAMP\)\}/);
+  // 2026-11-17-0901 A (amended on purpose): the Settings line goes through formatBuildLine (= formatBuildStamp + the vault whose copy this is).
+  assert.match(settings, /setName\('Build'\)\s*\.setDesc\(`\$\{formatBuildLine\(BUILD_STAMP, /);
 });
 
 test('the generated stamp is gitignored and written by the version-inline script', () => {
@@ -71,4 +72,57 @@ test('2026-10-31-1115: the banner names the commit alone: the sha, +dirty for a 
   assert.equal(formatBuildSha({ sha: '904d575c7', dirty: false }), '904d575c7');
   assert.equal(formatBuildSha({ sha: '904d575c7', dirty: true }), '904d575c7+dirty');
   assert.equal(formatBuildSha({ sha: 'unknown', dirty: false }), 'unknown build');
+});
+
+// ---- 2026-11-17-0901 A: the banner and the Settings "Build" line say WHICH vault's plugin copy is running --------------------------------------
+// The driver installed f6390ce into music-playground and read "a2d1f0385" in the banner: that was music-theory's own, older copy (installed 2026-11-10; every vault keeps its own
+// plugin folder). The stamp was true; nothing said whose copy it was. Now the banner and the Settings line carry the vault name, and `dirty` is a word, not a symbol.
+import { formatBuildLine, formatLoadBanner } from './build-stamp-core.ts';
+
+test('0901 A: the load banner names the version, the edition, the commit and the vault whose copy of the plugin is running', () => {
+  const stamp = { sha: 'f6390ce12', dirty: false, builtAt: '2026-11-17T01:50:08.507Z' };
+  assert.equal(formatLoadBanner({ version: '0.6.1', edition: 'music', stamp, vaultName: 'music-theory' }), 'FORGE CLIENT v0.6.1 LOADED (edition: music, f6390ce12, vault: music-theory)');
+  assert.equal(formatLoadBanner({ version: '0.6.1', edition: 'music', stamp: { ...stamp, dirty: true }, vaultName: 'music-playground' }), 'FORGE CLIENT v0.6.1 LOADED (edition: music, f6390ce12+dirty, vault: music-playground)');
+});
+
+test('0901 A: no vault name (or a blank one) leaves the banner exactly as it was before; an unknown sha says "unknown build"', () => {
+  const stamp = { sha: 'f6390ce12', dirty: false, builtAt: '2026-11-17T01:50:08.507Z' };
+  const before = 'FORGE CLIENT v0.6.1 LOADED (edition: music, f6390ce12)';
+  assert.equal(formatLoadBanner({ version: '0.6.1', edition: 'music', stamp }), before);
+  assert.equal(formatLoadBanner({ version: '0.6.1', edition: 'music', stamp, vaultName: '   ' }), before);
+  assert.equal(formatLoadBanner({ version: '0.6.1', edition: 'lean', stamp: { sha: 'unknown', dirty: false, builtAt: '' }, vaultName: 'v' }), 'FORGE CLIENT v0.6.1 LOADED (edition: lean, unknown build, vault: v)');
+});
+
+test('0901 A: the Settings Build line is the commit, +dirty, the time and the vault: one sentence the driver can quote', () => {
+  const stamp = { sha: 'f6390ce12', dirty: true, builtAt: '2026-11-17T01:50:08.507Z' };
+  assert.equal(formatBuildLine(stamp, 'music-theory'), 'f6390ce12+dirty · built 2026-11-17 01:50 UTC · this vault (music-theory) has its own copy of the plugin');
+  assert.equal(formatBuildLine({ ...stamp, dirty: false }, undefined), 'f6390ce12 · built 2026-11-17 01:50 UTC');
+});
+
+test('0901 A: main.ts and settings.ts use them (the banner is not a hand-built string any more)', () => {
+  const main = fs.readFileSync(path.join(import.meta.dirname, 'main.ts'), 'utf8');
+  const settings = fs.readFileSync(path.join(import.meta.dirname, 'settings.ts'), 'utf8');
+  assert.match(main, /formatLoadBanner\(\{/);
+  assert.doesNotMatch(main, /LOADED \(edition: \$\{EDITION\}/);
+  assert.match(settings, /formatBuildLine\(BUILD_STAMP,/);
+});
+
+// 2026-11-17-0901 A (found by the whole npm test: 398 failures): the host's vault is a stub in most tests and may lack getName; reading the vault's name must never be able to stop onload or the Settings tab.
+import { vaultNameOf } from './build-stamp-core.ts';
+
+test('0901 A: vaultNameOf returns the name, and undefined (never a throw) when the vault has no getName, getName throws, or it returns a non-string', () => {
+  assert.equal(vaultNameOf({ vault: { getName: () => 'music-theory' } }), 'music-theory');
+  assert.equal(vaultNameOf({ vault: {} }), undefined);
+  assert.equal(vaultNameOf({}), undefined);
+  assert.equal(vaultNameOf(undefined), undefined);
+  assert.equal(vaultNameOf({ vault: { getName: () => { throw new Error('no vault yet'); } } }), undefined);
+  assert.equal(vaultNameOf({ vault: { getName: () => 42 as unknown as string } }), undefined);
+});
+
+test('0901 A: main.ts and settings.ts read the name only through vaultNameOf', () => {
+  const main = fs.readFileSync(path.join(import.meta.dirname, 'main.ts'), 'utf8');
+  const settings = fs.readFileSync(path.join(import.meta.dirname, 'settings.ts'), 'utf8');
+  assert.match(main, /vaultName: vaultNameOf\(this\.app\)/);
+  assert.match(settings, /formatBuildLine\(BUILD_STAMP, vaultNameOf\(this\.app\)\)/);
+  assert.doesNotMatch(main + settings, /vault\.getName\(\)/);
 });

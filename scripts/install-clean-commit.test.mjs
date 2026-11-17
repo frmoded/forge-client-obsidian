@@ -92,7 +92,10 @@ test("the REAL build writes the commit on the first line of main.js, and the gua
 
 test("the banner names the commit: (edition: music, <sha>) from the build stamp, in the source main.ts reads", () => {
   const main = fs.readFileSync(path.join(ROOT, "src", "main.ts"), "utf8");
-  assert.match(main, /LOADED \(edition: \$\{EDITION\}, \$\{formatBuildSha\(BUILD_STAMP\)\}\)/);
+  // 2026-11-17-0901 A (amended on purpose): the banner is built by formatLoadBanner (src/build-stamp-core.ts), which still prints (edition: <edition>, <sha>[+dirty]) and now adds ", vault: <name>".
+  assert.match(main, /formatLoadBanner\(\{[^}]*stamp: BUILD_STAMP/);
+  const core = fs.readFileSync(path.join(ROOT, "src", "build-stamp-core.ts"), "utf8");
+  assert.match(core, /LOADED \(edition: \$\{i\.edition\}, \$\{formatBuildSha\(i\.stamp\)\}/);
 });
 
 test("DEFAULT install: a clean copy of origin/main, NOT the working tree: the dirty file is ignored, the sha is origin/main's, the copy is a throw-away directory, the repo is untouched", async () => {
