@@ -1,4 +1,4 @@
-With the spelling rule from [[spelling and jargon]] in hand, you can start bending the major scale.
+With the spelling rule from [[scales jargon]] in hand, you can start bending the major scale.
 
 Play the major scale but start on a different note of it, and you get a **mode**. Same notes, new home base, different feel. There are seven: Ionian, Dorian, Phrygian, Lydian, Mixolydian, Aeolian and Locrian. Ionian is plain old major. The rest are its cousins.
 
@@ -28,7 +28,7 @@ scales/resources/html/scale_player.html
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="spelling and jargon" href="spelling and jargon" style="color:#1963D1;">spelling and jargon</a></span>
+<span>&larr; <a class="internal-link" data-href="scales jargon" href="scales jargon" style="color:#1963D1;">scales jargon</a></span>
 <span>&uarr; <a class="internal-link" data-href="Scales" href="Scales" style="color:#1963D1;">Scales</a></span>
 <span><a class="internal-link" data-href="other scales" href="other scales" style="color:#1963D1;">other scales</a> &rarr;</span>
 </div>

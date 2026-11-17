@@ -2,7 +2,7 @@ You have the recipe from [[what a scale is]]; now the rule that decides what eac
 
 A scale uses one letter per note, A to G, in order, no repeats. That's not a suggestion. It's why F♯ major has E♯ as its seventh note and not F: F♯ G♯ A♯ B C♯ D♯ E♯. E♯ sounds exactly like F, and it's still the right name, because the letter F has already been used up by F♯ at the start. Letters go in order; accidentals sort out the step sizes.
 
-Sometimes one sharp isn't enough. A **double sharp** (written 𝄪) raises a note by two half steps, one whole step, so F𝄪 sounds like G and still counts as an F. This is the one place on this chapter where double sharps are explained; every other page links back here.
+Sometimes one sharp isn't enough. A **double sharp** (written 𝄪) raises a note by two half steps, one whole step, so F𝄪 sounds like G and still counts as an F. This is the one place in this chapter where double sharps are explained; every other page links back here.
 
 Try it: open the player on [[what a scale is]], pick G♯ harmonic minor and watch the last note turn into F double sharp. (Harmonic minor shows up on [[modes and minor scales]].)
 

@@ -1,5 +1,12 @@
 Major and the minors use seven notes. Plenty of music gets by on fewer, or on stranger recipes, and these are the ones worth knowing.
 
+Try it: pick pentatonic, blues, whole-tone or diminished from the second select and press Play.
+
+```html-embed
+scales/resources/html/scale_player.html
+371
+```
+
 **Pentatonic** has five notes, and it's hard to hit a wrong one, which is why it's the improviser's safety net. Major pentatonic and minor pentatonic are the two flavours.
 
 **Blues** is the minor pentatonic plus one in-between note, the flat fifth. That one extra note is where the smoky sound comes from.
@@ -8,7 +15,7 @@ Major and the minors use seven notes. Plenty of music gets by on fewer, or on st
 
 **Diminished** alternates whole and half steps: eight notes, tense and symmetrical. Treat this one as something to recognise, not memorise.
 
-The symmetric scales (whole-tone and diminished) repeat letters, because the one-letter-per-note rule can't work when the pattern repeats. The player's spelling convention for them is stated on its page. To hear any of these, open the player on [[what a scale is]] and pick them.
+The symmetric scales (whole-tone and diminished) repeat letters, because the one-letter-per-note rule can't work when the pattern repeats. The player's spelling convention for them is stated on its page. To hear any of these, open the player above and pick them.
 
 > [!note]- Structural formula
 > Major pentatonic from C: C D E G A (2 2 3 2 3 half steps).

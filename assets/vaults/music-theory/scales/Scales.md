@@ -1,7 +1,7 @@
 A scale is a recipe of steps that starts from a home note: change the home note and the recipe stays.
 
 1. [[what a scale is]] — the recipe, and why major is the parent.
-2. [[spelling and jargon]] — one letter per note, and the words you'll meet.
+2. [[scales jargon]] — one letter per note, and the words you'll meet.
 3. [[modes and minor scales]] — start somewhere else, or bend the 6th and 7th.
 4. [[other scales]] — pentatonic, blues, whole-tone and diminished.
 5. [[hearing scales]] — two games to train your ear.
@@ -14,10 +14,6 @@ scale: major
 show: piano, staff, numbers, intervals
 controls: yes
 ```
-
-Hear a full C major scale climb from C to the C an octave above:
-
-![[scales/resources/audio/c_major_scale.mp3]]
 
 **Practice:**
 
