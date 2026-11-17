@@ -57,7 +57,7 @@
 <div id="prompt" aria-live="off"></div>
 <svg id="strip" role="group" aria-label="Piano keys, C4 to C6"></svg>
 <div class="row" id="answers" role="group" aria-label="Answers"></div>
-<div class="row"><button id="next" type="button">Next</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
+<div class="row"><button id="next" type="button">Play</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
 <div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset score</button></div>
 <div id="board" aria-label="Score of each level"></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
@@ -223,7 +223,7 @@
   function resetScores() { return emptyScores(); }
   function counterText(scores, level) { var c = scores[level]; return levelName(level) + ": score " + c.score + " of " + c.asked + " asked"; }
   function boardText(scores) { return LEVELS.map(function (l) { return levelName(l) + " " + scores[l].score + "/" + scores[l].asked; }); }
-  function hintText(state) { if (state.phase !== "asked") return "Press Next"; return state.triesLeft + (state.triesLeft === 1 ? " attempt left" : " attempts left"); }
+  function hintText(state) { if (state.phase !== "asked") return "Press Play"; return state.triesLeft + (state.triesLeft === 1 ? " attempt left" : " attempts left"); }
   // What a key tap sounds: the note tapped, right or wrong (it never says which). A given-up question is played again.
   function planFeedback(q, midi, event) { if (event === "ignored") return []; if (event === "gaveup") return q.sound.map(function (n) { return { midi: n.midi, when: n.when }; }); return midi === null ? [] : [{ midi: midi, when: 0 }]; }
   // ==== scale ear core END =====================================================================================================================
@@ -380,8 +380,8 @@
         if (st.phase === "answered") q.notes.slice(1).forEach(function (mm) { keys[mm].classList.add("right"); });
       }
     }
-    $("prompt").textContent = current === 1 ? (st.phase === "idle" ? "Press Next: a scale will play." : st.phase === "asked" ? "Which scale was it? The yellow key is its first note." : "It was " + scaleTitle(q.tonic, q.scale) + ".") :
-      (st.phase === "idle" ? "Press Next: you will be asked to build a scale." : "Build " + buildTitle(q) + (st.phase === "asked" ? ": tap its other notes in the octave above the yellow key (" + (targetsOf(q).length - st.found.length) + " to find)." : st.outcome === "solved" ? ". All found." : ". Out of attempts: the dashed keys were its notes."));
+    $("prompt").textContent = current === 1 ? (st.phase === "idle" ? "Press Play: a scale will play." : st.phase === "asked" ? "Which scale was it? The yellow key is its first note." : "It was " + scaleTitle(q.tonic, q.scale) + ".") :
+      (st.phase === "idle" ? "Press Play: you will be asked to build a scale." : "Build " + buildTitle(q) + (st.phase === "asked" ? ": tap its other notes in the octave above the yellow key (" + (targetsOf(q).length - st.found.length) + " to find)." : st.outcome === "solved" ? ". All found." : ". Out of attempts: the dashed keys were its notes."));
     $("hint").textContent = hintText(st);
     $("replay").disabled = st.phase === "idle" || false;
     LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
@@ -402,9 +402,9 @@
   function after(r, gm, midiOrNull) {
     gm.state = r.state; if (r.scored) scores = award(scores, gm.state.question.level);
     var q = gm.state.question, left = gm.state.triesLeft, tl = left + (left === 1 ? " attempt left." : " attempts left."), text;
-    if (r.event === "solved") text = current === 1 ? "Correct. Press Next." : "All found. Press Next.";
+    if (r.event === "solved") text = current === 1 ? "Correct. Press Play." : "All found. Press Play.";
     else if (r.event === "right") text = "That note is in the scale. " + tl;
-    else if (r.event === "gaveup") text = "Out of attempts. It was " + buildWords(q) + ". Press Next.";
+    else if (r.event === "gaveup") text = "Out of attempts. It was " + buildWords(q) + ". Press Play.";
     else text = "Not that one. " + tl;
     render(text); sound(planFeedback(q, midiOrNull, r.event));
   }
@@ -422,7 +422,7 @@
     b.addEventListener("click", function () {                                                            // a new level: the open question ends (it counted as asked, with no point), each level keeps its own score
       if (l === level) return;
       level = l; games[GAME].state = initial();
-      render(levelName(l) + ": " + attemptsFor(l) + " attempts a question. Press Next.");
+      render(levelName(l) + ": " + attemptsFor(l) + " attempts a question. Press Play.");
     });
     $("levels").appendChild(b);
   });

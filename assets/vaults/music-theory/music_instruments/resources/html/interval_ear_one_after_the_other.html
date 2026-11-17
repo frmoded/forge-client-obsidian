@@ -55,8 +55,8 @@
 <body>
 <div class="wrap">
 <div class="row switch" id="levels" role="group" aria-label="Choose a level"></div>
-<svg id="strip" role="group" aria-label="Piano keys, C3 to C5. Press Next, listen, then click the key or keys you hear."></svg>
-<div class="row"><button id="next" type="button">Next</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
+<svg id="strip" role="group" aria-label="Piano keys, C3 to C5. Press Play, listen, then click the key or keys you hear."></svg>
+<div class="row"><button id="next" type="button">Play</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
 <div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset score</button></div>
 <div id="board" aria-label="Score of each level in this game"></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
@@ -94,7 +94,7 @@
     for (g in scores) { out[g] = {}; for (l in scores[g]) out[g][l] = { score: scores[g][l].score, asked: scores[g][l].asked }; }
     out[game][level].score += dScore; out[game][level].asked += dAsked; return out;
   }
-  function markAsked(scores, game, level) { return bump(scores, game, level, 0, 1); }                      // Next: a question is asked (an unfinished one stays asked, with no point)
+  function markAsked(scores, game, level) { return bump(scores, game, level, 0, 1); }                      // Play: a question is asked (an unfinished one stays asked, with no point)
   function award(scores, game, level) { return bump(scores, game, level, 1, 0); }                         // the answer was found within the attempts
   function resetGame(scores, game) { var out = bump(scores, game, "easy", 0, 0); LEVELS.forEach(function (l) { out[game][l] = { score: 0, asked: 0 }; }); return out; }
   function counterText(scores, game, level) { var c = scores[game][level]; return levelName(level) + ": score " + c.score + " of " + c.asked + " asked"; }
@@ -146,9 +146,9 @@
     if (event === "gaveup") return q.sound.map(function (n) { return { midi: n.midi, when: n.when }; });
     return [{ midi: midi, when: 0 }];
   }
-  // The hint beside Next: it never gives the answer. Idle or over: Press Next. A question open: the attempts left.
+  // The hint beside Play: it never gives the answer. Idle or over: Press Play. A question open: the attempts left.
   function hintText(state) {
-    if (state.phase !== "asked") return "Press Next";
+    if (state.phase !== "asked") return "Press Play";
     return state.attemptsLeft + (state.attemptsLeft === 1 ? " attempt left" : " attempts left");
   }
   // EASY (2026-11-17-1100): the black keys stay drawn (the keyboard keeps its shape and the page its height) but are inactive: greyed, silent, no attempt, never part of a question.
@@ -335,9 +335,9 @@
     gm.state = r.state;
     if (r.scored) scores = award(scores, current, gm.state.question.level);
     var q = gm.state.question, text;
-    if (r.event === "solved") text = "Correct. Press Next.";
+    if (r.event === "solved") text = "Correct. Press Play.";
     else if (r.event === "right") text = "That note is right. " + attemptsText(gm.state) + " Find the other.";
-    else if (r.event === "gaveup") text = "Out of attempts. The notes were " + q.targets.map(nameOf).join(" and ") + ". Press Next.";
+    else if (r.event === "gaveup") text = "Out of attempts. The notes were " + q.targets.map(nameOf).join(" and ") + ". Press Play.";
     else text = "Not that one. " + attemptsText(gm.state);                                  // a wrong guess never says what the answer is
     render(text);
     sound(planFeedback(q, mm, r.event), r.event === "gaveup" && q.game !== 1);
@@ -355,7 +355,7 @@
     b.addEventListener("click", function () {                                                            // a new level: every open question ends (it counted as asked, with no point), each level keeps its own score
       if (l === level) return;
       level = l; GAMES.forEach(function (g) { games[g.id].state = initial(); });
-      render(levelName(l) + ": " + attemptsFor(current, l) + " attempts a question. Press Next.");
+      render(levelName(l) + ": " + attemptsFor(current, l) + " attempts a question. Press Play.");
     });
     $("levels").appendChild(b);
   });

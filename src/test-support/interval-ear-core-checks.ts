@@ -75,6 +75,6 @@ export function coreFailures(g: any): string[] {
   for (let i = 0; i < 200; i++) { const q = g.pickQuestion(1, seeded(i), null, 60, 64); if ([q.lit, ...q.targets].some((n: number) => n < 60 || n > 64)) { bad.push(`narrow strip: ${JSON.stringify(q)}`); break; } }
   const q1 = { game: 1, lit: 60, targets: [67], key: '7', sound: [{ midi: 60, when: 0 }, { midi: 67, when: 0.6 }] };
   eq('feedback: a click plays the clicked note, an ignored click nothing, running out of attempts plays the question again', [g.planFeedback(q1, 66, 'wrong'), g.planFeedback(q1, 67, 'solved'), g.planFeedback(q1, 60, 'ignored'), g.planFeedback(q1, 66, 'gaveup')], [[{ midi: 66, when: 0 }], [{ midi: 67, when: 0 }], [], [{ midi: 60, when: 0 }, { midi: 67, when: 0.6 }]]);
-  eq('hint: Press Next when idle or over; the attempts left while a question is open (never the answer)', [g.hintText(g.initial()), g.hintText(g.ask(q1, 3)), g.hintText(g.guess(g.ask(q1, 3), 66).state), g.hintText(g.guess(g.guess(g.ask(q1, 3), 66).state, 65).state), g.hintText(g.guess(g.ask(q1, 3), 67).state)], ['Press Next', '3 attempts left', '2 attempts left', '1 attempt left', 'Press Next']);
+  eq('hint: Press Play when idle or over; the attempts left while a question is open (never the answer)', [g.hintText(g.initial()), g.hintText(g.ask(q1, 3)), g.hintText(g.guess(g.ask(q1, 3), 66).state), g.hintText(g.guess(g.guess(g.ask(q1, 3), 66).state, 65).state), g.hintText(g.guess(g.ask(q1, 3), 67).state)], ['Press Play', '3 attempts left', '2 attempts left', '1 attempt left', 'Press Play']);
   return bad;
 }

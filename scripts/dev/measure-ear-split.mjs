@@ -75,7 +75,7 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     const sample = async (label) => { const h = await g.height(); hs.add(h); await setHeight(g, h); const sc = await noScroll(g); await setHeight(g, 700); if (sc > 0) verdict[`${name}${width}_${label}_verticalScroll`] = false; if ((await g.overflow()) > 0) verdict[`${name}${width}_${label}_horizontalScroll`] = false; return h; };
     try {
       let s = await status(g);
-      verdict[`${name}${width}_noGameSwitchAndLevelMedium`] = !s.games && s.pressed === 'medium' && s.hint === 'Press Next' && /^Medium: score 0 of 0 asked/.test(s.counter);
+      verdict[`${name}${width}_noGameSwitchAndLevelMedium`] = !s.games && s.pressed === 'medium' && s.hint === 'Press Play' && /^Medium: score 0 of 0 asked/.test(s.counter);
       const idleHeight = await sample('idle');
       // 2026-11-17-1200: EVERY scale of a per-note build file, one question each (the tonic differs per scale), in real Chrome: no vertical scroll, the same height as idle, asked and over; the question names the scale
       if (f.scales) for (const [i, id] of f.scales.entries()) {
@@ -84,7 +84,7 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
         await g.press('#level-medium'); await g.press('#next'); await sleep(250);
         const sa = await status(g); const pr = await g.probe(`document.getElementById('prompt').textContent`);
         const hAsked = await sample(`scale_${id}_asked`); verdict[`${name}${width}_scale_${id}_asked_noScrollSameHeight`] = hAsked === idleHeight && /^Build /.test(pr) && sa.first.length === 1 && sa.first[0] % 12 === tonicIdx;
-        const tonic = sa.first[0]; for (let m = tonic + 1; m < tonic + 12; m++) { const st = await status(g); if (st.hint === 'Press Next') break; await keyBox(g, m); await sleep(60); }
+        const tonic = sa.first[0]; for (let m = tonic + 1; m < tonic + 12; m++) { const st = await status(g); if (st.hint === 'Press Play') break; await keyBox(g, m); await sleep(60); }
         const hOver = await sample(`scale_${id}_over`); verdict[`${name}${width}_scale_${id}_over_noScrollSameHeight`] = hOver === idleHeight;
       }
       for (const level of ['easy', 'medium', 'hard']) {
@@ -100,21 +100,21 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
           if (level === 'hard') { await g.clear(); await keyBox(g, lit); await sleep(250); verdict[`${name}${width}_hard_litNoteSilent`] = (await g.hz()).length === 0; }
           if (ATT(f, level) > 1) { await keyBox(g, wrong); await sleep(120); s = await status(g); verdict[`${name}${width}_${level}_wrongKeyUsesOneAndRevealsNothing`] = s.hint === word(ATT(f, level) - 1) && s.wrong === 1 && s.right === 0; await sample(`${level}_oneWrong`); if (width === 800 && level === 'medium') await g.shot(`${name}-2-one-wrong`, await g.height()); }
           for (const t of targets) { await keyBox(g, t); await sleep(100); }
-          s = await status(g); const over = /^(Correct|Out of attempts)/.test(s.sr); verdict[`${name}${width}_${level}_endsAndCounts`] = over && s.hint === 'Press Next'; await sample(`${level}_over`);
+          s = await status(g); const over = /^(Correct|Out of attempts)/.test(s.sr); verdict[`${name}${width}_${level}_endsAndCounts`] = over && s.hint === 'Press Play'; await sample(`${level}_over`);
         } else if (f.kind === 'name') {
           const sc = s.answers; const wrongFirst = ATT(f, level) > 1; let used = 0;
           for (const id of sc) { const st = await status(g); if (/^(Correct|Out of attempts)/.test(st.sr)) break; await g.press(`#answers button[data-scale="${id}"]`); await sleep(100); used++; if (wrongFirst && used === 1) { const st2 = await status(g); if (!/^Correct/.test(st2.sr)) { verdict[`${name}${width}_${level}_wrongAnswerUsesOne`] = st2.hint === word(ATT(f, level) - 1); await sample(`${level}_oneWrong`); } } }
-          s = await status(g); verdict[`${name}${width}_${level}_endsAndCounts`] = /^(Correct|Out of attempts)/.test(s.sr) && s.hint === 'Press Next'; await sample(`${level}_over`);
+          s = await status(g); verdict[`${name}${width}_${level}_endsAndCounts`] = /^(Correct|Out of attempts)/.test(s.sr) && s.hint === 'Press Play'; await sample(`${level}_over`);
         } else {
           const tonic = s.first[0]; let wrongTaps = 0, tapped = 0;
-          for (let m = tonic + 1; m < tonic + 12; m++) { const st = await status(g); if (st.hint === 'Press Next') break; await keyBox(g, m); await sleep(80); tapped++; if (tapped === 3) { const st3 = await status(g); if (st3.hint !== 'Press Next') await sample(`${level}_midBuild`); if (width === 800 && level === 'medium') await g.shot(`${name}-2-building`, await g.height()); } }
-          s = await status(g); verdict[`${name}${width}_${level}_endsAndCounts`] = s.hint === 'Press Next' && /^(All found|Out of attempts)/.test(s.sr); await sample(`${level}_over`); void wrongTaps;
+          for (let m = tonic + 1; m < tonic + 12; m++) { const st = await status(g); if (st.hint === 'Press Play') break; await keyBox(g, m); await sleep(80); tapped++; if (tapped === 3) { const st3 = await status(g); if (st3.hint !== 'Press Play') await sample(`${level}_midBuild`); if (width === 800 && level === 'medium') await g.shot(`${name}-2-building`, await g.height()); } }
+          s = await status(g); verdict[`${name}${width}_${level}_endsAndCounts`] = s.hint === 'Press Play' && /^(All found|Out of attempts)/.test(s.sr); await sample(`${level}_over`); void wrongTaps;
           if (width === 800 && level === 'hard') await g.shot(`${name}-3-over`, await g.height());
         }
       }
       // the level change ends an open question and keeps the scores; Reset clears them
       await g.press('#level-medium'); await g.press('#next'); await sleep(200); await g.press('#level-easy'); s = await status(g);
-      verdict[`${name}${width}_levelChangeEndsTheQuestion`] = s.hint === 'Press Next' && s.pressed === 'easy' && /Medium \d+\/\d+/.test(s.board);
+      verdict[`${name}${width}_levelChangeEndsTheQuestion`] = s.hint === 'Press Play' && s.pressed === 'easy' && /Medium \d+\/\d+/.test(s.board);
       await g.press('#reset'); s = await status(g); verdict[`${name}${width}_resetClearsEveryLevel`] = s.board === 'Easy 0/0 · Medium 0/0 · Hard 0/0';
       verdict[`${name}${width}_noErrors`] = (await g.errs()).length === 0;
     } finally { g.page.close(); }

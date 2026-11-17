@@ -66,12 +66,12 @@ function open(dir: string, file: string, seed = 11) {
 const wrongKeyFor = (p: ReturnType<typeof open>, t: { lit: number; targets: number[] }, skip: number[] = []): number => { for (let m = p.g.LOW; m <= p.g.HIGH; m++) if (m !== t.lit && !t.targets.includes(m) && !skip.includes(m)) return m; throw new Error('no wrong key'); };
 
 for (const [file, game, title] of INTERVAL) {
-  test(`${file}: one game (${title}): no game switch row, a level switch Easy / Medium / Hard, Next / Replay / Reset score; the attempts by level; every guess uses one; a find scores; running out reveals; a level change ends the question and keeps every level's score; Reset clears them`, () => {
+  test(`${file}: one game (${title}): no game switch row, a level switch Easy / Medium / Hard, Play / Replay / Reset score; the attempts by level; every guess uses one; a find scores; running out reveals; a level change ends the question and keeps every level's score; Reset clears them`, () => {
     const p = open(INTERVAL_DIR, file); const WANT: Record<string, number> = { easy: game === 3 ? 6 : 5, medium: game === 3 ? 4 : 3, hard: game === 3 ? 2 : 1 };
     assert.deepEqual(p.errors, []); assert.match(p.h, new RegExp(`<title>${title}</title>`));
     assert.equal(p.doc.getElementById('games'), null, 'no game switch row'); assert.equal(p.doc.querySelectorAll('[id^="game-"]').length, 0);
-    assert.deepEqual(p.buttons().filter((b) => !['Next', 'Replay', 'Reset score'].includes(b)), ['Easy', 'Medium', 'Hard']); assert.equal(p.pressedLevel(), 'medium');
-    assert.equal(p.doc.querySelectorAll('.key').length, 25); assert.equal(p.text('hint'), 'Press Next'); assert.equal(p.text('counter'), 'Medium: score 0 of 0 asked'); assert.equal(p.text('board'), 'Easy 0/0 · Medium 0/0 · Hard 0/0');
+    assert.deepEqual(p.buttons().filter((b) => !['Play', 'Replay', 'Reset score'].includes(b)), ['Easy', 'Medium', 'Hard']); assert.equal(p.pressedLevel(), 'medium');
+    assert.equal(p.doc.querySelectorAll('.key').length, 25); assert.equal(p.text('hint'), 'Press Play'); assert.equal(p.text('counter'), 'Medium: score 0 of 0 asked'); assert.equal(p.text('board'), 'Easy 0/0 · Medium 0/0 · Hard 0/0');
     assert.equal(p.doc.querySelectorAll('.cell, [data-key]').length, 0, 'no chip cells');
     // the question: two notes (one after the other / together) or three together, only the lowest lit, the attempts of the level
     for (const level of LEVELS) {
@@ -86,9 +86,9 @@ for (const [file, game, title] of INTERVAL) {
     }
     // a find scores
     p.level('medium'); const before = p.text('counter'); const n2 = p.next(); n2.slice(1).forEach((m) => p.tap(m));
-    assert.match(p.text('counter'), /Medium: score 1 of \d+ asked/); assert.notEqual(p.text('counter'), before); assert.equal(p.text('hint'), 'Press Next');
+    assert.match(p.text('counter'), /Medium: score 1 of \d+ asked/); assert.notEqual(p.text('counter'), before); assert.equal(p.text('hint'), 'Press Play');
     // the levels keep their own scores and a level change ends the open question
-    p.level('hard'); assert.equal(p.text('counter').startsWith('Hard: score 0 of 1 asked'), true, 'hard already had one question asked above'); p.next(); p.level('easy'); assert.equal(p.q('.key.first, .key.right, .key.wrong').length, 0, 'the open question ended'); assert.equal(p.text('hint'), 'Press Next');
+    p.level('hard'); assert.equal(p.text('counter').startsWith('Hard: score 0 of 1 asked'), true, 'hard already had one question asked above'); p.next(); p.level('easy'); assert.equal(p.q('.key.first, .key.right, .key.wrong').length, 0, 'the open question ended'); assert.equal(p.text('hint'), 'Press Play');
     assert.match(p.text('board'), /Medium 1\/\d/); p.reset(); assert.equal(p.text('board'), 'Easy 0/0 · Medium 0/0 · Hard 0/0'); assert.deepEqual(p.errors, []);
   });
 }
@@ -96,7 +96,7 @@ for (const [file, game, title] of INTERVAL) {
 const ANSWER_ORDER = ['major', 'natural_minor', 'dorian', 'mixolydian', 'major_pentatonic'];
 test('scale_ear_name_the_scale.html: one game: no game switch, the level switch, five answers; every guess uses an attempt (5 / 3 / 1); a wrong answer is marked and reveals nothing; the right one scores; running out shows the answer and scores nothing; a level change ends the question; Reset clears', () => {
   const p = open(SCALE_DIR, SCALE[0][0], 7); const g = p.g; assert.deepEqual(p.errors, []); assert.match(p.h, /<title>Name the scale<\/title>/);
-  assert.equal(p.doc.getElementById('games'), null); assert.deepEqual(p.buttons().filter((b) => !['Next', 'Replay', 'Reset score'].includes(b)).slice(0, 8), ['Easy', 'Medium', 'Hard', 'major', 'natural minor', 'Dorian', 'Mixolydian', 'pentatonic']);
+  assert.equal(p.doc.getElementById('games'), null); assert.deepEqual(p.buttons().filter((b) => !['Play', 'Replay', 'Reset score'].includes(b)).slice(0, 8), ['Easy', 'Medium', 'Hard', 'major', 'natural minor', 'Dorian', 'Mixolydian', 'pentatonic']);
   assert.equal(p.text('counter'), 'Medium: score 0 of 0 asked'); assert.equal(p.text('board'), 'Easy 0/0 · Medium 0/0 · Hard 0/0');
   const rng = seeded(7); let prev: any = null; const nextQ = () => { prev = g.pickQuestion(1, rng, prev); return prev; };
   const attempts: Record<string, number> = { easy: 5, medium: 3, hard: 1 };
@@ -117,7 +117,7 @@ test('scale_ear_name_the_scale.html: one game: no game switch, the level switch,
 });
 test('scale_ear_build_the_scale.html: one game: no game switch, the level switch; the attempts are WRONG TAPS (5 / 3 / 1), a right key is free; the scale built within them scores; the last wrong tap ends the question and shows the notes; the tonic and out-of-octave taps are free; a level change ends the question; Reset clears', () => {
   const p = open(SCALE_DIR, SCALE[1][0], 7); const g = p.g; assert.deepEqual(p.errors, []); assert.match(p.h, /<title>Build the scale<\/title>/); assert.equal(p.doc.getElementById('games'), null);
-  assert.deepEqual(p.buttons().filter((b) => !['Next', 'Replay', 'Reset score'].includes(b)), ['Easy', 'Medium', 'Hard']);
+  assert.deepEqual(p.buttons().filter((b) => !['Play', 'Replay', 'Reset score'].includes(b)), ['Easy', 'Medium', 'Hard']);
   const rng = seeded(7); let prev: any = null; const nextQ = () => { prev = g.pickQuestion(2, rng, prev); return prev; };
   const wrongs = (q: any): number[] => { const t = g.targetsOf(q) as number[]; const w: number[] = []; for (let m = q.notes[0] + 1; m < q.notes[q.notes.length - 1]; m++) if (!t.includes(m)) w.push(m); return w; };
   // medium (3): two wrong taps leave one attempt; every note found then still scores
@@ -133,7 +133,7 @@ test('scale_ear_build_the_scale.html: one game: no game switch, the level switch
   q = nextQ(); p.next(); for (const m of g.targetsOf(q) as number[]) p.tap(m); assert.equal(p.text('counter'), 'Hard: score 1 of 2 asked');
   // easy (5): four wrong taps leave one attempt
   p.level('easy'); q = nextQ(); p.next(); const w3 = wrongs(q); for (let i = 0; i < 4; i++) p.tap(w3[i]); assert.equal(p.text('hint'), '1 attempt left');
-  p.level('medium'); assert.equal(p.q('.key.wrong').length, 0, 'a level change ends the open question'); assert.equal(p.text('hint'), 'Press Next');
+  p.level('medium'); assert.equal(p.q('.key.wrong').length, 0, 'a level change ends the open question'); assert.equal(p.text('hint'), 'Press Play');
   assert.match(p.text('board'), /Hard 1\/2/); p.reset(); assert.equal(p.text('board'), 'Easy 0/0 · Medium 0/0 · Hard 0/0'); assert.deepEqual(p.errors, []);
 });
 
