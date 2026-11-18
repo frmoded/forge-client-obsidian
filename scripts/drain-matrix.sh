@@ -42,11 +42,11 @@ set -euo pipefail
 
 # 2026-11-19-0915: THE MATRIX RUNS A COPY OF ITSELF. bash reads a script as it goes, so an edit of this file while a matrix is running it moves the bytes under the shell and the run dies with a syntax error (it did, 2026-11-19, when comments of this file were edited mid-run).
 # The first thing it does is copy itself to a temp file and run THAT; FORGE_MATRIX_SCRIPT_DIR keeps the original directory (where dev/ lives), FORGE_MATRIX_COPY names the copy, which cleanup removes at the end. FORGE_MATRIX_SELF_COPY=off: run the file itself (the old behaviour; the control of the test).
-if [ -z "${FORGE_MATRIX_COPY:-}" ] && [ "${FORGE_MATRIX_SELF_COPY:-}" != "off" ]; then
+if [ "${FORGE_MATRIX_COPY:-}" != "$0" ] && [ "${FORGE_MATRIX_SELF_COPY:-}" != "off" ]; then          # "I am the copy" = FORGE_MATRIX_COPY is MY OWN path (a matrix started inside another one, as the tests do, inherits the outer's variable and must still copy itself)
   SELF_DIR="$(cd "$(dirname "$0")" && pwd)"; SELF_COPY="$(mktemp "${TMPDIR:-/tmp}/drain-matrix-copy.XXXXXX")"
   cp "$0" "$SELF_COPY" && FORGE_MATRIX_COPY="$SELF_COPY" FORGE_MATRIX_SCRIPT_DIR="$SELF_DIR" exec bash "$SELF_COPY" "$@"
 fi
-SCRIPT_DIR="${FORGE_MATRIX_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+if [ "${FORGE_MATRIX_COPY:-}" = "$0" ]; then SCRIPT_DIR="$FORGE_MATRIX_SCRIPT_DIR"; else SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"; fi
 
 # 2026-10-31-1125: ONE HEAVY THING AT A TIME. The first thing this script does is take $TMPDIR/forge-heavy.lock (scripts/dev/heavy-lock.mjs): when a mutation pass, a real-Chrome measure or another matrix holds it, this one WAITS and
 # says who holds it; a stale lock (its holder gone, kill -9 included) is taken over. Whatever the lock starts is told so (FORGE_HEAVY_LOCK_HELD), so a heavy tool inside the matrix does not wait for the matrix. FORGE_HEAVY_LOCK=off: no lock.
@@ -99,7 +99,7 @@ FAILED=0
 fail()  { red "FAIL: $*"; FAILED=1; }
 die()   { red "FAIL: $*"; cleanup; exit 1; }
 cleanup() {
-  [ -n "${FORGE_MATRIX_COPY:-}" ] && [ -f "$FORGE_MATRIX_COPY" ] && unlink "$FORGE_MATRIX_COPY" 2>/dev/null || true       # the temp copy of this script (a file, never a tree)
+  [ "${FORGE_MATRIX_COPY:-}" = "$0" ] && [ -f "$0" ] && unlink "$0" 2>/dev/null || true       # the temp copy of this script (a file, never a tree)
   [ -n "$CAFF" ] && kill "$CAFF" 2>/dev/null || true
   [ "${KEEP:-0}" = "1" ] && { echo "worktrees kept in $WORK"; return; }
   rm -f "$LEAN/forge-client-obsidian/node_modules" "$LEAN/forge-client-obsidian/assets/wheels" 2>/dev/null || true

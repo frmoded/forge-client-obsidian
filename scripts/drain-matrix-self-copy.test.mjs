@@ -40,6 +40,11 @@ test('a matrix that is running survives an edit of the original script: it finis
   } finally { r.p.done(); }
 });
 
+test('a matrix started INSIDE another matrix (this very test, run by the outer matrix: the outer one exports FORGE_MATRIX_COPY and FORGE_MATRIX_SCRIPT_DIR) still runs a copy of itself: "I am the copy" means FORGE_MATRIX_COPY is MY OWN path, not that the variable is set', { skip }, async () => {
+  const r = await runAndEdit({ FORGE_MATRIX_COPY: '/tmp/a-copy-of-the-OUTER-matrix', FORGE_MATRIX_SCRIPT_DIR: '/nonexistent/outer/scripts' });
+  try { assert.equal(r.code, 0, r.out.slice(-600)); assert.match(r.out, /MATRIX GREEN/); assert.deepEqual(r.leftCopies, []); } finally { r.p.done(); }
+});
+
 test('CONTROL: with the self-copy off (the behaviour before 2026-11-19) the very same edit hurts the run, so the test above can fail', { skip }, async () => {
   const r = await runAndEdit({ FORGE_MATRIX_SELF_COPY: 'off' });
   try { assert.ok(r.code !== 0 || /syntax error|command not found/.test(r.out) || !/MATRIX GREEN/.test(r.out), `the edit was harmless without the copy: the control proves nothing (code ${r.code})`); } finally { r.p.done(); }
