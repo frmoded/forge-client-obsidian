@@ -7,9 +7,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
+import { EXERCISE_DIR } from './test-support/scale-exercise-dir.ts';
 import { pureOf } from './test-support/interval-ear-core-checks.ts';
 
-const DIR = path.resolve(import.meta.dirname, '../assets/vaults/music-theory/scales/resources/html');
+const DIR = EXERCISE_DIR;                                   // the bundled vault, or the vault source when SCALE_EXERCISE_VAULT is set (src/test-support/scale-exercise-dir.ts)
 const FILES: { file: string; scales: string[] }[] = [
   { file: 'scale_build_major.html', scales: ['major'] },
   { file: 'scale_build_natural_minor.html', scales: ['natural_minor'] },

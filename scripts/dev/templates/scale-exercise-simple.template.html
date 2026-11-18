@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@@TITLE@@</title>
+<style>
+  /* The look of the Scales hub player (scale_player.html): the same palette, controls row, piano strip, staff, letters and chips. No margin, no padding, no fixed height: the page is exactly its content, and every state has the SAME content height (the rows that fill in later reserve their space). */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --accent: #D72027; --chip: #F2F2EC; --wrong: #D72027; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 460px; }
+  svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
+  button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 12px; min-height: 30px; cursor: pointer; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .chips { gap: 4px; min-height: 24px; }
+  .chip { min-width: 26px; text-align: center; background: var(--chip); border: 1px solid #DDDDD2; border-radius: 4px; color: var(--ink); font-size: 12px; line-height: 20px; padding: 0 5px; }
+  .chip.h { background: #E7EEF8; border-color: #C6D3E6; } .chip.w { background: #F2F2EC; } .chip.t { background: #F8E2D9; border-color: #E7C2B3; }
+  .key { cursor: pointer; }
+  .key:focus { outline: none; }
+  .key.idle { cursor: default; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.lit.white rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 1.5; }
+  .key.lit.black rect { fill: #B07F00; stroke: var(--ink); }
+  .key.tonic rect { stroke: var(--accent); stroke-width: 3; }
+  .key.wrong rect { fill: #F6C9CB; stroke: var(--wrong); stroke-width: 2; stroke-dasharray: 3 2; }
+  .key.black.wrong rect { fill: #8B1C20; stroke: var(--wrong); }
+  .key.reveal rect { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 2; }
+  .key.sounding rect { fill: #9DD9B5; }
+  .key:focus rect { stroke: var(--accent); stroke-width: 3; }
+  .key text { pointer-events: none; fill: var(--ink); font-size: 9px; }
+  .key text.mark { font-size: 15px; font-weight: 700; }
+  .key.black text.mark { fill: #fff; }
+  .staffline, .ledger { stroke: #A69B91; stroke-width: 1; }
+  .head { fill: #fff; stroke: var(--ink); stroke-width: 1.4; }
+  .head.sounding { fill: #9DD9B5; }
+  .head.tonic { stroke: var(--accent); stroke-width: 2; }
+  .head.ghost { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 3 2; }
+  .acc { fill: var(--ink); font-size: 14px; }
+  .acc.ghost { fill: var(--muted); }
+  .letters { display: flex; gap: 4px; flex-wrap: nowrap; min-height: 28px; margin: 3px 0 0; }
+  .letter { flex: 0 0 auto; min-width: 34px; text-align: center; border: 1px solid #DDDDD2; border-radius: 5px; background: #fff; color: var(--ink); line-height: 24px; padding: 0 5px; font-weight: 600; }
+  .letter.sounding { background: #9DD9B5; }
+  .letter.tonic { border-color: var(--accent); }
+  .completed { min-height: 18px; margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+  /* The twelve home notes at the top: the chooser. One grid row of twelve at every width (a chip is at least 24 px wide from a 320 px screen up), so the page keeps one height. A completed key stays filled; the key being built has its border in the accent colour. Nothing changes when the pointer rests on a chip. */
+  #homes { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin: 0; min-height: 30px; }
+  .home { min-width: 0; min-height: 30px; padding: 0; text-align: center; background: #fff; border: 1px solid #DDDDD2; border-radius: 4px; color: var(--muted); font-size: 12px; line-height: 20px; }
+  .home.done { background: #BFE6CD; border-color: var(--ink); color: var(--ink); font-weight: 600; }
+  .home.current { border-color: var(--accent); }
+  #prompt { min-height: 36px; margin: 3px 0 0; color: var(--ink); font-size: 13px; }
+  #hint { color: var(--ink); font-size: 12px; }
+  .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
+  #wrongs { color: var(--ink); }
+  .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
+  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div id="homes" role="group" aria-label="Home notes: tap one to build its scale"></div>
+<div id="prompt" aria-live="off"></div>
+<svg id="strip" role="group" aria-label="Piano keys, C4 to C6"></svg>
+<svg id="staff" role="img" aria-label="Treble staff"></svg>
+<div class="row chips" id="chips" role="list" aria-label="The steps of the scale in half steps"></div>
+<div class="letters" id="letters" role="list" aria-label="The notes of the scale"></div>
+<div id="completed" class="completed"></div>
+<div class="row"><button type="button" id="play" disabled>Play</button><span id="hint"></span></div>
+<div class="score"><span id="wrongs"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // ==== config BEGIN (2026-11-17-2003): the scales this exercise offers: the ONLY lines that differ between the scale exercise files (and the <title>); a test pins everything else identical ====
+  var SCALES = @@SCALES@@;
+  // ==== config END ====================================================================================================================
+  // 2026-11-18-0930 - the SCALE EXERCISE, simple variant (scale_build_major, scale_build_natural_minor): build a scale on the piano, with the staff filling in beside it. NO levels, NO New exercise, NO Random: one rule. The twelve home notes at the top are the chooser; tapping one starts that key at once, a fresh build (a tap on any chip restarts that key, whether it is the current one, completed, failed or new). On first open nothing is started ("Pick a home note."). The tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling; a wrong key is marked and puts nothing on the staff. The THIRD wrong tap ends the build as failed (the key is not counted); all notes found within 3 wrong taps = completed (counted once per key, kept when the key is failed later). When the build ends (completed, or failed) the whole scale is on the staff (the notes you missed dashed), the letters and the whole and half steps appear (they are the answer, so only now), the answer stays on screen until you tap a chip, and Play plays the scale up.
+  // It looks like the Scales hub player (scale_player.html) and shares its blocks, byte for byte (pinned by a test): the scale core, the piano voice and the scale view (strip and staff). The exercise core is the one of the three other exercise files minus the level machinery (src/scale-build-simple.test.ts pins both). Memory only: the sandboxed page has no storage.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  @@PRELUDE@@
+@@SCALE_CORE@@
+  // ==== exercise core BEGIN (2026-11-18-0930, simple variant) ======================================================================================
+  // The state of one exercise, pure. `notes` are the midis of the scale from the tonic up to its octave (the tonic placed from C4, the same as the player); the tonic is given and the octave note is not asked, so the notes to find are `notes` without its ends.
+  // ONE rule: the third wrong tap ends the build as failed.
+  var EX_WRONG_TAPS = 3;
+  function exCopy(s, patch) { var o = {}, k; for (k in s) o[k] = s[k]; for (k in patch) o[k] = patch[k]; return o; }
+  // A fresh exercise: phase "building" until it is built or the wrong taps run out ("done"). `left` = the wrong taps still allowed.
+  function exStart(tonic, scaleId) { return { phase: "building", tonic: tonic, scale: scaleId, notes: scaleMidis(tonic, scaleId, "up", BASE), left: EX_WRONG_TAPS, found: [], wrong: [], outcome: null }; }
+  function exTargets(s) { return s.notes.slice(1, s.notes.length - 1); }
+  // One tapped key. Ignored: the exercise is over, the tonic, the octave note, a key outside the octave above the tonic, a key already marked. A key of the scale is found (free); another key is a wrong tap; the last note found builds it; the third wrong tap ends it.
+  function exTap(s, midi) {
+    if (s.phase !== "building" || midi <= s.notes[0] || midi >= s.notes[s.notes.length - 1] || s.found.indexOf(midi) >= 0 || s.wrong.indexOf(midi) >= 0) return { state: s, event: "ignored" };
+    if (exTargets(s).indexOf(midi) >= 0) {
+      var found = s.found.concat([midi]), built = found.length === exTargets(s).length;
+      return { state: exCopy(s, { phase: built ? "done" : "building", found: found, outcome: built ? "built" : null }), event: built ? "built" : "right" };
+    }
+    var wrong = s.wrong.concat([midi]), left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "building", wrong: wrong, left: Math.max(0, left), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong" };
+  }
+  function exRemaining(s) { return exTargets(s).length - s.found.length; }
+  // The octave note is the tonic again: its spelling is the tonic's, one octave up (the player's `withOctave`).
+  function exWithOctave(spelled) { return spelled.concat([{ l: spelled[0].l, a: spelled[0].a, pc: spelled[0].pc }]); }
+  // The notes of the staff, in order, with the octave note last: `hidden` = not found yet (not drawn: the staff never shows an answer early); `ghost` = missed, shown dashed once the exercise is over.
+  function exStaffNotes(s) {
+    var spelled = exWithOctave(spellScale(s.tonic, s.scale, "up")), done = s.phase === "done";
+    return spelled.map(function (n, i) {
+      var o = { l: n.l, a: n.a, pc: n.pc }, ends = i === 0 || i === spelled.length - 1, got = s.found.indexOf(s.notes[i]) >= 0;
+      if (i === 0 || done || got) { if (done && !ends && !got) o.ghost = true; } else o.hidden = true;
+      return o;
+    });
+  }
+  // The words. An exercise, never a test. Nothing is started on first open (state null): "Pick a home note."
+  function exTitle(s) { return scaleTitle(s.tonic, s.scale); }
+  function exWrongText(s) { return s ? "Wrong taps: " + s.wrong.length + " of " + EX_WRONG_TAPS : ""; }
+  function exPrompt(s) {
+    if (!s) return "Pick a home note.";
+    if (s.phase === "building") return "Exercise: build " + exTitle(s) + ". Tap the other " + exTargets(s).length + " notes on the keys, in any order.";
+    return s.outcome === "built" ? "Exercise done: you built " + exTitle(s) + ". All " + exTargets(s).length + " notes found." : "Exercise over: out of wrong taps. The notes you missed are dashed.";
+  }
+  function exHint(s) {
+    if (!s) return "";
+    if (s.phase !== "building") return "Press Play to hear it.";
+    return exRemaining(s) + " to find";
+  }
+  function exAnnounce(s, event) {
+    if (event === "start") return "Exercise: build " + scaleWords(s.tonic, s.scale) + ". The tonic is marked. " + exWrongText(s) + ".";
+    if (event === "right") return "That note is in the scale. " + exRemaining(s) + " to find.";
+    if (event === "wrong") return "Not in the scale. " + exWrongText(s) + ".";
+    if (event === "built") return "You built " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
+    if (event === "gaveup") return "Out of wrong taps. " + exWrongText(s) + ". The scale is " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
+    return "";
+  }
+  function exKeyName(m) { return ["C", "C sharp", "D", "D sharp", "E", "F", "F sharp", "G", "G sharp", "A", "A sharp", "B"][((m % 12) + 12) % 12] + " " + (Math.floor(m / 12) - 1); }
+  // Play: the scale up, one note after the other (only when the exercise is over: playing it earlier would be the answer).
+  function exPlayPlan(s) { return !s || s.phase !== "done" ? [] : s.notes.map(function (m, i) { return { midi: m, when: i * STEP_SECONDS, index: i }; }); }
+  // 2026-11-19-0850 - the COMPLETED count: which (scale, home note) pairs have been built within the 3 wrong taps. Memory only (a reload resets it). A pair stays completed when it is failed later; the count is per file (N = the scales this file offers x 12 home notes).
+  function exPairKey(tonic, scaleId) { return scaleId + ":" + tonic; }
+  function exCompletedAdd(done, tonic, scaleId) { var o = {}, k; for (k in done) o[k] = true; if (SCALES.indexOf(scaleId) >= 0 && tonic >= 0 && tonic <= 11 && Math.floor(tonic) === tonic) o[exPairKey(tonic, scaleId)] = true; return o; }
+  function exCompletedCount(done) { var n = 0, k; for (k in done) if (done[k]) n++; return n; }
+  function exTotal(scales) { return scales.length * 12; }
+  function exAllDone(done, scales) { return exCompletedCount(done) >= exTotal(scales); }
+  function exHomesDone(done, scaleId) { var out = [], t; for (t = 0; t < 12; t++) out.push(!!done[exPairKey(t, scaleId)]); return out; }
+  function exCompletedText(done, scales) {
+    var n = exCompletedCount(done), total = exTotal(scales);
+    if (n >= total) return total === 12 ? "All twelve built." : "All " + total + " built.";
+    return "Completed " + n + " of " + total + (scales.length > 1 ? " (" + scales.length + " scales, 12 home notes each)" : "");
+  }
+  // ==== exercise core END ==========================================================================================================================
+@@PIANO_VOICE@@
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, STEP_SECONDS: STEP_SECONDS, SCALES: SCALES, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, tonicName: tonicName, recipeOf: recipeOf, noteName: noteName, noteWords: noteWords, scScale: scScale, exWithOctave: exWithOctave, scaleMidis: scaleMidis,
+      EX_WRONG_TAPS: EX_WRONG_TAPS, exStart: exStart, exTargets: exTargets, exTap: exTap, exRemaining: exRemaining, exStaffNotes: exStaffNotes, exTitle: exTitle, exPrompt: exPrompt, exHint: exHint, exAnnounce: exAnnounce, exKeyName: exKeyName, exPlayPlan: exPlayPlan, exWrongText: exWrongText,
+      exPairKey: exPairKey, exCompletedAdd: exCompletedAdd, exCompletedCount: exCompletedCount, exTotal: exTotal, exAllDone: exAllDone, exHomesDone: exHomesDone, exCompletedText: exCompletedText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
+  var scaleId = SCALES[0], completed = {}, state = null, timers = [];                                       // state null = nothing started yet ("Pick a home note.")
+@@SCALE_VIEW@@
+  // the keys of the strip are the answer buttons (idle until a home note is picked and again once the build has ended)
+  var keyEls = Object.keys(keys);
+  function tap(mm) {
+    if (!state) return;
+    var r = exTap(state, mm); if (r.event === "ignored") return;
+    state = r.state; if (r.event === "built") completed = exCompletedAdd(completed, state.tonic, state.scale);
+    stopTimers(); render(exAnnounce(state, r.event)); sound([{ midi: mm, when: 0 }]);
+  }
+  keyEls.forEach(function (k) {
+    var g = keys[k], mm = +k;
+    g.classList.add("idle"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button"); g.setAttribute("aria-label", exKeyName(mm));
+    g.addEventListener("click", function () { tap(mm); try { g.focus({ preventScroll: true }); } catch (_) {} });
+    g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(mm); } });
+  });
+  function mark(mm, ch) { var g = keys[mm], r = g.firstChild, black = isBlack(mm); var t = el("text", { "class": "mark", x: +r.getAttribute("x") + +r.getAttribute("width") / 2, y: PAD + (black ? 26 : 48), "text-anchor": "middle" }, g); t.textContent = ch; }
+  var homeChips = [];
+  function render(announce) {
+    var building = !!state && state.phase === "building", done = !!state && !building;
+    var k, g, ts, j;
+    for (k in keys) { g = keys[k]; ts = g.querySelectorAll("text"); for (j = 0; j < ts.length; j++) g.removeChild(ts[j]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (building ? "" : " idle")); }
+    var chips = $("chips"), letters = $("letters"); chips.textContent = ""; letters.textContent = "";
+    if (!state) { drawStaff([], []); staff.setAttribute("aria-label", "Treble staff"); }
+    else {
+      var last = state.notes.length - 1;
+      keys[state.notes[0]].classList.add("lit", "tonic");
+      state.found.forEach(function (mm) { keys[mm].classList.add("lit"); mark(mm, "\u2713"); });
+      state.wrong.forEach(function (mm) { keys[mm].classList.add("wrong"); mark(mm, "\u00D7"); });
+      if (done) { keys[state.notes[last]].classList.add("lit", "tonic"); exTargets(state).forEach(function (mm) { if (state.found.indexOf(mm) < 0) keys[mm].classList.add("reveal"); }); }
+      if (soundingIndex >= 0 && keys[state.notes[soundingIndex]]) keys[state.notes[soundingIndex]].classList.add("sounding");
+      drawStaff(exStaffNotes(state), state.notes);
+      if (done) {
+        recipeOf(state.scale, "up").forEach(function (c) { var s = document.createElement("span"); s.className = "chip " + (c === "W" ? "w" : c === "H" ? "h" : "t"); s.setAttribute("role", "listitem"); s.setAttribute("aria-description", c === "W" ? "whole step: 2 half steps" : c === "H" ? "half step: 1 half step" : "3 half steps"); s.textContent = c; chips.appendChild(s); });
+        spellScale(state.tonic, state.scale, "up").forEach(function (n, idx) { var b = document.createElement("span"); b.className = "letter" + (idx === 0 ? " tonic" : "") + (idx === soundingIndex ? " sounding" : ""); b.setAttribute("role", "listitem"); b.setAttribute("aria-label", noteWords(n)); b.textContent = noteName(n); letters.appendChild(b); });
+      }
+    }
+    $("prompt").textContent = exPrompt(state); $("hint").textContent = exHint(state);
+    $("play").disabled = !done;
+    $("wrongs").textContent = exWrongText(state);
+    $("completed").textContent = exCompletedText(completed, SCALES);
+    exHomesDone(completed, scaleId).forEach(function (d, t) {
+      var c = homeChips[t], cur = !!state && state.tonic === t;
+      c.setAttribute("class", "home" + (d ? " done" : "") + (cur ? " current" : "")); c.setAttribute("aria-label", scaleWords(t, scaleId) + (d ? ", completed" : ""));
+      if (cur) c.setAttribute("aria-current", "true"); else c.removeAttribute("aria-current");
+    });
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
+  var ctx = null;
+  function audio() { if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); } if (ctx.state === "suspended") ctx.resume(); return ctx; }
+  function sound(plan) { var c = audio(); if (!c || !plan.length) return; var t0 = c.currentTime + 0.02; plan.forEach(function (n) { pianoVoice(c, pianoBus(c), midiToHz(n.midi), t0 + n.when, NOTE_LEN, 0.8, 1); }); }
+  function stopTimers() { timers.forEach(function (t) { (window.__unschedule || clearTimeout)(t); }); timers = []; soundingIndex = -1; }
+  function play() {
+    var plan = exPlayPlan(state); if (!plan.length) return;
+    stopTimers(); sound(plan);
+    plan.forEach(function (n) { timers.push(schedule(function () { soundingIndex = n.index; render(); }, Math.round(n.when * 1000))); });
+    timers.push(schedule(function () { soundingIndex = -1; render(); }, Math.round(plan[plan.length - 1].when * 1000 + NOTE_LEN * 1000)));
+    $("sr").textContent = "Playing " + scaleWords(state.tonic, state.scale) + ".";
+  }
+  // ---- the controls -------------------------------------------------------------------------------------------------------------------------------------------------------------
+  // the twelve home notes are the chooser: a tap on any chip (the current key, a completed one, a failed one, a new one) starts a FRESH build of that key at once
+  function start(t) { stopTimers(); state = exStart(t, scaleId); render(exAnnounce(state, "start")); }
+  for (var ht = 0; ht < 12; ht++) (function (t) {
+    var b = document.createElement("button"); b.type = "button"; b.className = "home"; b.textContent = tonicName(t, scaleId);
+    b.addEventListener("click", function () { start(t); }); $("homes").appendChild(b); homeChips.push(b);
+  })(ht);
+  $("play").addEventListener("click", function () { play(); });
+  $("reset").addEventListener("click", function () { stopTimers(); completed = {}; state = null; render("Count cleared. Pick a home note."); });         // clears the count and the build on screen
+  render();
+})();
+</script>
+</body>
+</html>

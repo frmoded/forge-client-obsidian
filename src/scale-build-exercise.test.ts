@@ -1,7 +1,8 @@
-// 2026-11-17-2003 - the "build the scale" widgets redesigned as EXERCISES that look like the Scales hub player. Five files, generated from ONE template and the player's blocks (scripts/dev/make-scale-exercises.mjs):
-//   scale_build_major, scale_build_natural_minor (new, one scale each), scale_build_modes_and_minor, scale_build_other_scales, scale_ear_build_the_scale (redesigned). Pinned here: the three shared blocks (scale core, piano voice,
-//   scale view = strip and staff) are byte-identical with scale_player.html; the exercise core and everything but the config block and the title are identical in the five; the generator reproduces the files; the exercise's
-//   state machine; the staff spells every scale on all twelve tonics exactly as the player does and never shows an answer early; the words ("Exercise", never test, quiz, game or question); the DOM flows with real clicks.
+// 2026-11-17-2003 - the "build the scale" widgets redesigned as EXERCISES that look like the Scales hub player. Five files, generated from TWO templates and the player's blocks (scripts/dev/make-scale-exercises.mjs):
+//   FULL (levels, New exercise, Random, selects): scale_build_modes_and_minor, scale_build_other_scales, scale_ear_build_the_scale; SIMPLE (2026-11-18-0930: no levels, no New exercise, no Random, the twelve home-note chips are the chooser, one rule of
+//   3 wrong taps): scale_build_major, scale_build_natural_minor, pinned in src/scale-build-simple.test.ts. Pinned here: the three shared blocks (scale core, piano voice, scale view = strip and staff) are byte-identical with scale_player.html in ALL FIVE;
+//   the exercise core and everything but the config block and the title are identical WITHIN each group (3 files / 2 files); the generator reproduces all five files; the FULL files' state machine; the staff spells every scale on all twelve tonics exactly
+//   as the player does and never shows an answer early; the words ("Exercise", never test, quiz, game or question); the FULL files' DOM flows with real clicks (their level, Random and select driving; the SIMPLE files' chip driving is in the other test).
 // How TALL each file is (no vertical scroll at 800 and 360 px, every scale and tonic, every state) is measured in real Chrome: scripts/dev/measure-scale-exercises.mjs.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,11 +13,11 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { audioStub } from './test-support/web-audio-stub.ts';
+import { EXERCISE_DIR } from './test-support/scale-exercise-dir.ts';
 import { pureOf, seeded } from './test-support/interval-ear-core-checks.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const VAULT = path.join(ROOT, 'assets/vaults/music-theory');
-const DIR = path.join(VAULT, 'scales/resources/html');
+const DIR = EXERCISE_DIR;                                   // the bundled vault, or the vault source when SCALE_EXERCISE_VAULT is set (src/test-support/scale-exercise-dir.ts)
 const FILES: Array<[string, string[], string]> = [
   ['scale_build_major.html', ['major'], 'Exercise: build the major scale'],
   ['scale_build_natural_minor.html', ['natural_minor'], 'Exercise: build the natural minor scale'],
@@ -30,6 +31,8 @@ const read = (f: string): string => fs.readFileSync(path.join(DIR, f), 'utf8');
 const scriptOf = (h: string): string => /<script>([\s\S]*?)<\/script>/.exec(h)![1];
 const block = (h: string, name: string): string => { const a = h.indexOf(`  // ==== ${name} BEGIN`), e = h.indexOf(`  // ==== ${name} END`); assert.ok(a > 0 && e > a, `no "${name}" block`); return h.slice(a, h.indexOf('\n', e)); };
 const player = read('scale_player.html');
+const SIMPLE = FILES.slice(0, 2), FULL = FILES.slice(2);                         // the two groups: one template each
+const FULL_MAJOR = 'scale_ear_build_the_scale.html';                             // a FULL file whose first scale is major: the flows that need a major page with selects and levels run on it
 const MIDI_NAMES = ['C', 'C sharp', 'D', 'D sharp', 'E', 'F', 'F sharp', 'G', 'G sharp', 'A', 'A sharp', 'B'];
 
 // ---- the files and the pins ---------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -49,12 +52,15 @@ test('the scale core, the piano voice and the scale view (strip and staff) are b
   }
 });
 
-test('the exercise core is identical in the five files, and the five files differ ONLY in the config block and the title (a copy that drifts is a failure)', () => {
+test('the exercise core is identical within each group (the 3 FULL files; the 2 SIMPLE files), and the files of a group differ ONLY in the config block and the title (a copy that drifts is a failure); the two groups\' cores differ (non-vacuity)', () => {
   const strip = (h: string): string => h.replace(/  \/\/ ==== config BEGIN[\s\S]*?  \/\/ ==== config END =+\n/, '').replace(/<title>.*<\/title>/, '<title>T</title>');
-  const ref = strip(read(FILES[0][0]));
-  assert.ok(ref.length > 30000, 'non-vacuity: the whole file');
-  for (const [f] of FILES) assert.equal(strip(read(f)), ref, `${f} differs outside config and title`);
-  const core = block(read(FILES[0][0]), 'exercise core'); assert.ok(core.length > 4000); assert.doesNotMatch(core, /document|window/, 'the exercise core is pure');
+  for (const group of [FULL, SIMPLE]) {
+    const ref = strip(read(group[0][0]));
+    assert.ok(ref.length > (group === FULL ? 30000 : 25000), 'non-vacuity: the whole file');
+    for (const [f] of group) assert.equal(strip(read(f)), ref, `${f} differs outside config and title`);
+    const core = block(read(group[0][0]), 'exercise core'); assert.ok(core.length > 3500); assert.doesNotMatch(core, /document|window/, 'the exercise core is pure');
+  }
+  assert.notEqual(block(read(FULL[0][0]), 'exercise core'), block(read(SIMPLE[0][0]), 'exercise core'));
 });
 
 test('the generator reproduces the five files from the template and the player (the template and the files cannot drift)', () => {
@@ -74,6 +80,7 @@ test('the words: an exercise, never a test, quiz, game or question: not in the s
     const code = h.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'])\/\/[^\n]*/g, '$1');
     assert.doesNotMatch(code, FORBIDDEN, `${f}: a forbidden word in the code`);
     assert.doesNotMatch(h, /Next/, `${f}: no Next`);
+    if (SIMPLE.some(([sf]) => sf === f)) continue;                      // the SIMPLE files' words in every state are in scale-build-simple.test.ts
     const p = open(f);
     const seen = (): string => [p.doc.body.textContent, ...[...p.doc.querySelectorAll('[aria-label],[title]')].map((e: any) => `${e.getAttribute('aria-label') ?? ''} ${e.getAttribute('title') ?? ''}`), p.doc.getElementById('sr').textContent].join(' ');
     assert.doesNotMatch(seen(), FORBIDDEN, `${f}: fresh`);
@@ -142,11 +149,11 @@ test('every scale of the player, all twelve tonics: the finished exercise puts o
   assert.equal(combos, 17 * 12, 'non-vacuity: every scale, every tonic');
 });
 
-test('Random never repeats the pair on screen and reaches every scale of the page and all twelve tonics; a page with one scale still changes the tonic', () => {
+test('Random (the FULL files) never repeats the pair on screen and reaches every scale of the page and all twelve tonics', () => {
   const x = g(); const rng = seeded(5); const seenScales = new Set<string>(), seenTonics = new Set<number>(); let cur = { tonic: 0, scale: 'ionian' };
   for (let i = 0; i < 600; i++) { const r = x.exRandom(x.SCALES, rng, cur); assert.ok(!(r.tonic === cur.tonic && r.scale === cur.scale)); assert.ok(x.SCALES.includes(r.scale)); seenScales.add(r.scale); seenTonics.add(r.tonic); cur = r; }
   assert.equal(seenScales.size, x.SCALES.length); assert.equal(seenTonics.size, 12);
-  const one = g(FILES[0][0]); let c = { tonic: 3, scale: 'major' }; for (let i = 0; i < 50; i++) { const r = one.exRandom(one.SCALES, rng, c); assert.equal(r.scale, 'major'); assert.notEqual(r.tonic, c.tonic); c = r; }
+  // (2026-11-18-0930: the single-scale pages that this test also covered, major and natural minor, have no Random any more)
 });
 
 test('the scores: a first tap counts the exercise as tried, building it scores; each level keeps its own; the words say "exercises"', () => {
@@ -189,7 +196,7 @@ function open(file: string, seed = 7) {
   return p;
 }
 
-for (const [f, scales] of FILES) {
+for (const [f, scales] of FULL) {
   test(`${f}: a fresh exercise: the tonic is marked on the keys and on the staff, nothing else is on the staff, no letters and no step chips yet, Play is off, the words say Exercise and the wrong taps left`, () => {
     const p = open(f); same(p.errors, []);
     assert.equal(p.doc.querySelectorAll('.key').length, 25); assert.equal(p.doc.querySelectorAll('.key.tonic').length, 1);
@@ -208,7 +215,7 @@ for (const [f, scales] of FILES) {
 }
 
 test('a right key lights, is marked, and puts its note on the staff with the scale\'s spelling (F sharp for D major); a wrong key is marked and puts nothing on the staff; the tonic, the octave note and the keys outside the octave do nothing', () => {
-  const p = open('scale_build_major.html'); p.sel('tonic', '2');                      // D major: D E F# G A B C# D
+  const p = open(FULL_MAJOR); p.sel('tonic', '2');                      // D major: D E F# G A B C# D
   assert.equal(p.text('prompt').startsWith('Exercise: build D major'), true);
   const notes = p.model ? [] : []; void notes;
   p.tap(66); assert.ok(p.key(66).classList.contains('lit')); assert.equal(p.key(66).querySelector('text.mark')!.textContent, '\u2713');
@@ -223,7 +230,7 @@ test('a right key lights, is marked, and puts its note on the staff with the sca
 });
 
 test('finishing: building it shows the whole scale on the staff, the letters and the whole and half step chips, enables Play and scores; out of wrong taps shows the missed notes dashed (ghosts), the keys of the missed notes dashed too', () => {
-  const p = open('scale_build_major.html'); p.finish();
+  const p = open(FULL_MAJOR); p.finish();
   assert.equal(p.heads(), 8); assert.equal(p.ghosts(), 0); assert.equal(p.doc.querySelectorAll('#letters .letter').length, 7); assert.equal(p.doc.querySelectorAll('#chips .chip').length, 7);
   same([...p.doc.querySelectorAll('#letters .letter')].map((l: any) => l.textContent), ['C', 'D', 'E', 'F', 'G', 'A', 'B']);
   same([...p.doc.querySelectorAll('#chips .chip')].map((l: any) => l.textContent), ['W', 'W', 'H', 'W', 'W', 'W', 'H']);
@@ -237,7 +244,7 @@ test('finishing: building it shows the whole scale on the staff, the letters and
 });
 
 test('Play after the end: the scale sounds up with the piano voice (every note, the octave note too) and each note lights in turn on the keys and the staff; before the end the button is off and does nothing', () => {
-  const p = open('scale_build_major.html'); p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 0, 'disabled: nothing sounds');
+  const p = open(FULL_MAJOR); p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length, 0, 'disabled: nothing sounds');
   p.finish(); p.stub.osc.length = 0; p.queue.length = 0; p.click(p.doc.getElementById('play'));
   assert.ok(p.stub.osc.length >= 8, 'at least one oscillator per note'); assert.equal(p.queue.length, 9, 'one highlight per note and the end');
   p.queue[2].fn(); assert.ok(p.key(64).classList.contains('sounding')); assert.equal(p.doc.querySelectorAll('#staff .head.sounding').length, 1);
@@ -256,11 +263,11 @@ test('choosing: a tonic or a scale starts a fresh exercise (the score stays), Ne
   p.click(p.doc.getElementById('reset')); assert.equal(p.text('counter'), 'Medium: score 0 of 0 exercises'); assert.equal(p.text('sr'), 'Score cleared.');
 });
 
-test('keyboard: a key answers Enter and Space; the keys are buttons with names; no vertical padding or fixed height on the page, no storage, no network, no Forge words', () => {
+test('keyboard (all five: the source; the FULL major page: the keys): a key answers Enter and Space; the keys are buttons with names; no vertical padding or fixed height on the page, no storage, no network, no Forge words', () => {
   for (const [f] of FILES) {
     const h = read(f); assert.match(h, /html, body \{ margin: 0; padding: 0;/); assert.doesNotMatch(h, /localStorage|sessionStorage|indexedDB|XMLHttpRequest|fetch\(|https?:\/\/(?!www\.w3\.org)/); assert.doesNotMatch(h, /\bForge\b|forge-/i);
   }
-  const p = open('scale_build_major.html'); const k = p.key(64); assert.equal(k.getAttribute('role'), 'button'); assert.equal(k.getAttribute('aria-label'), 'E 4'); assert.equal(MIDI_NAMES[4], 'E');
+  const p = open(FULL_MAJOR); const k = p.key(64); assert.equal(k.getAttribute('role'), 'button'); assert.equal(k.getAttribute('aria-label'), 'E 4'); assert.equal(MIDI_NAMES[4], 'E');
   k.dispatchEvent(new p.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); assert.ok(k.classList.contains('lit'));
   const k2 = p.key(67); k2.dispatchEvent(new p.win.KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })); assert.ok(k2.classList.contains('lit'));
 });

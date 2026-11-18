@@ -13,12 +13,10 @@ Build it from C and you never touch a black key. W to D, W to E, H to F, W to G,
 ![[scales/resources/images/c_major_scale.svg]]
 *C major: the white keys from C to C, no sharps or flats.*
 
-Now start on G, same recipe: W to A, W to B, H to C, W to D, W to E, W to F♯, H back to G. The white keys fail you at the seventh step: F is a whole step under G, and the recipe wants a half. So you take the black key and spell it F♯, not G♭, because a scale uses each letter once and G is already home. [[scales jargon]] has the rule. The notes moved. The shape didn't.
+Now start on G, same recipe: W to A, W to B, H to C, W to D, W to E, W to F♯, H back to G. The white keys fail you at the seventh step: F is a whole step under G, and the recipe wants a half. So you take the black key and spell it F♯, not G♭, because a scale uses each letter once and G is already home. [[scales jargon]] has the rule.
 
 ![[scales/resources/images/g_major_scale.svg]]
 *G major: the same recipe from G; the seventh note is F-sharp, shown here as a sharp sign on the staff.*
-
-Major is the parent scale. Later keys and chords get measured against it.
 
 ## Sharp or flat?
 
@@ -35,11 +33,11 @@ Keys a fifth up from C (G, D, A, E, B) collect sharps; keys a fourth up (F, B♭
 
 ## Time to work
 
-Two checks. Count the half steps against the recipe, then read the letters: seven notes, seven different letters, none twice, none skipped. G A B C D E F♯ passes. G A B C D E G♭ fails: two Gs, no F.
+Two checks: count the half steps against the recipe, then read the letters: seven notes, seven letters, none twice. G A B C D E F♯ passes. G A B C D E G♭ fails: two Gs, no F.
 
 Don't stop at C and G. Build all twelve majors in the exercise below; it counts how many you've finished.
 
-To see any scale on a keyboard and a staff, use the player on [[Scales]].
+To see any scale, use the player on [[Scales]].
 
 **W – W – H – W – W – W – H**
 

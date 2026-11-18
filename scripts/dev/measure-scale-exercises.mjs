@@ -1,4 +1,4 @@
-// 2026-11-17-2003 - the five SCALE EXERCISE widgets (scale_build_major, _natural_minor, _modes_and_minor, _other_scales, scale_ear_build_the_scale) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px
+// 2026-11-17-2003 (2026-11-18-0930: the three FULL files only; scale_build_major and _natural_minor are the SIMPLE variant, measured by scripts/dev/measure-scale-build-simple.mjs) - the SCALE EXERCISE widgets (_modes_and_minor, _other_scales, scale_ear_build_the_scale) in real headless Chrome, in the SHIPPED mount: a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px
 // and at 360 px wide. Measured: the CONTENT HEIGHT of each file (the body's own height) in every state for EVERY scale of the file on all twelve tonics (fresh, half built, built, out of wrong taps), that it is ONE height, that the page
 // does not scroll vertically when the iframe is exactly that tall, and not horizontally; one full exercise per file with REAL mouse clicks (DevTools Input.dispatchMouseEvent at the real box of each key): a right key lights and puts a head
 // on the staff, a wrong key marks and puts none, the end shows the letters and the whole and half steps, Play sounds every note of the scale with the real Web Audio graph; light and dark shots (no gadget has a dark theme: dark = the same page).
@@ -46,8 +46,6 @@ async function mount(file, width) {
   };
 }
 const FILES = [
-  { file: 'scales/resources/html/scale_build_major.html', scales: ['major'] },
-  { file: 'scales/resources/html/scale_build_natural_minor.html', scales: ['natural_minor'] },
   { file: 'scales/resources/html/scale_build_modes_and_minor.html', scales: ['ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian', 'natural_minor', 'harmonic_minor', 'melodic_minor'] },
   { file: 'scales/resources/html/scale_build_other_scales.html', scales: ['major_pentatonic', 'minor_pentatonic', 'blues', 'whole_tone', 'diminished_wh', 'diminished_hw'] },
   { file: 'scales/resources/html/scale_ear_build_the_scale.html', scales: ['major', 'natural_minor', 'harmonic_minor', 'dorian', 'mixolydian', 'major_pentatonic', 'minor_pentatonic'] },
