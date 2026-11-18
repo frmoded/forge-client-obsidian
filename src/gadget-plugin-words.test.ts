@@ -37,3 +37,13 @@ test('the 21 rewordings changed only the comment: every one still opens its pale
   const groups = new Map<string, number>(); for (const f of palette) { const k = fs.readFileSync(f, 'utf8').split('\n').slice(7, 12).join('\n'); groups.set(k, (groups.get(k) ?? 0) + 1); }
   assert.ok(Math.max(...groups.values()) >= 14, `the biggest group of identical comment blocks has ${Math.max(...groups.values())} files`);
 });
+
+// 2026-11-19-0865 - the walk above only looked for the style-guide FILE name, so a comment saying "forge-core" in interval_widget.html (line 255) was not caught: the stricter words check (the one the four gadgets above and theory-site's lint use) ran on four named files only. It now walks every bundled gadget.
+// The one exception is listed with its reason: rhythm_box.html names the plugin's own `forge-rhythm-*` messages, which are real code (the plugin and the widget talk to each other by them) and not prose; that gadget is not published by any chapter and theory-site's lint fails an embed of it.
+const PLUGIN_WORDS_ALLOWED: Record<string, string> = { 'rhythm_box.html': 'the forge-rhythm-* messages between the widget and the plugin are real code, and no chapter embeds this gadget (theory-site\'s lint fails an embed of it)' };
+test('no bundled gadget names the plugin or its style guide anywhere (code, text, titles, comments), except the one listed with its reason', () => {
+  const all = gadgetsIn(VAULT); assert.ok(all.length >= 30, `non-vacuity: walked ${all.length} gadget files`);
+  const named = all.filter((f) => !(path.basename(f) in PLUGIN_WORDS_ALLOWED)).filter((f) => WORDS.test(fs.readFileSync(f, 'utf8'))).map((f) => `${path.relative(VAULT, f)}: ${WORDS.exec(fs.readFileSync(f, 'utf8'))?.[0]}`);
+  assert.deepEqual(named, [], 'these gadgets still name the plugin');
+  for (const f of Object.keys(PLUGIN_WORDS_ALLOWED)) { const hit = all.filter((x) => path.basename(x) === f); assert.equal(hit.length, 1, `the allow-list names ${f}: it exists`); assert.match(fs.readFileSync(hit[0], 'utf8'), WORDS, `${f} is allowed because it has such a word: remove the entry when it has none`); }
+});
