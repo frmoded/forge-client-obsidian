@@ -56,6 +56,9 @@
   .letter { flex: 0 0 auto; min-width: 34px; text-align: center; border: 1px solid #DDDDD2; border-radius: 5px; background: #fff; color: var(--ink); line-height: 24px; padding: 0 5px; font-weight: 600; }
   .letter.sounding { background: #9DD9B5; }
   .letter.tonic { border-color: var(--accent); }
+  .completed { min-height: 18px; margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+  .home { min-width: 26px; text-align: center; background: #fff; border: 1px solid #DDDDD2; border-radius: 4px; color: var(--muted); font-size: 12px; line-height: 20px; padding: 0 5px; }
+  .home.done { background: #BFE6CD; border-color: var(--ink); color: var(--ink); font-weight: 600; }
   #prompt { min-height: 36px; margin: 3px 0 0; color: var(--ink); font-size: 13px; }
   #hint { color: var(--ink); font-size: 12px; }
   .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
@@ -75,6 +78,8 @@
 <svg id="staff" role="img" aria-label="Treble staff"></svg>
 <div class="row chips" id="chips" role="list" aria-label="The steps of the scale in half steps"></div>
 <div class="letters" id="letters" role="list" aria-label="The notes of the scale"></div>
+<div id="completed" class="completed"></div>
+<div class="row chips" id="homes" role="list" aria-label="Home notes completed"></div>
 <div class="row"><button type="button" id="play" disabled>Play</button><button type="button" id="again">New exercise</button><span id="hint"></span></div>
 <div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
 <div id="board" aria-label="Score of each level"></div>
@@ -253,6 +258,18 @@
   function exBuilt(scores, level) { return exBump(scores, level, 1, 0); }
   function exCounterText(scores, level) { var c = scores[level]; return exLevelName(level) + ": score " + c.score + " of " + c.tried + (c.tried === 1 ? " exercise" : " exercises"); }
   function exBoardText(scores) { return EX_LEVELS.map(function (l) { return exLevelName(l) + " " + scores[l].score + "/" + scores[l].tried; }); }
+  // 2026-11-19-0850 - the COMPLETED count: which (scale, home note) pairs have been built within the level's wrong taps, at any level. Memory only (a reload resets it, like the score). A pair stays completed when it is failed later; the count is per file (N = the scales this file offers x 12 home notes).
+  function exPairKey(tonic, scaleId) { return scaleId + ":" + tonic; }
+  function exCompletedAdd(done, tonic, scaleId) { var o = {}, k; for (k in done) o[k] = true; if (SCALES.indexOf(scaleId) >= 0 && tonic >= 0 && tonic <= 11 && Math.floor(tonic) === tonic) o[exPairKey(tonic, scaleId)] = true; return o; }
+  function exCompletedCount(done) { var n = 0, k; for (k in done) if (done[k]) n++; return n; }
+  function exTotal(scales) { return scales.length * 12; }
+  function exAllDone(done, scales) { return exCompletedCount(done) >= exTotal(scales); }
+  function exHomesDone(done, scaleId) { var out = [], t; for (t = 0; t < 12; t++) out.push(!!done[exPairKey(t, scaleId)]); return out; }
+  function exCompletedText(done, scales) {
+    var n = exCompletedCount(done), total = exTotal(scales);
+    if (n >= total) return total === 12 ? "All twelve built." : "All " + total + " built.";
+    return "Completed " + n + " of " + total + (scales.length > 1 ? " (" + scales.length + " scales, 12 home notes each)" : "");
+  }
   // ==== exercise core END ==========================================================================================================================
   // ==== piano voice BEGIN (2026-11-16-1001) ======================================================================================================
   // The SAME block is in every gadget that plays the piano (a test walks the vault and pins them identical; each gadget is one self-contained file, so it is copied) and in piano_voice_lab.html, where it can be tried with other numbers.
@@ -355,13 +372,13 @@
   if (typeof document === "undefined") {           // node test harness
     module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, STEP_SECONDS: STEP_SECONDS, SCALES: SCALES, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, tonicName: tonicName, recipeOf: recipeOf, noteName: noteName, noteWords: noteWords, scScale: scScale, exWithOctave: exWithOctave, scaleMidis: scaleMidis,
       EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exStart: exStart, exTargets: exTargets, exTap: exTap, exRemaining: exRemaining, exStaffNotes: exStaffNotes, exRandom: exRandom, exTitle: exTitle, exPrompt: exPrompt, exHint: exHint, exAnnounce: exAnnounce, exKeyName: exKeyName, exPlayPlan: exPlayPlan,
-      exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+      exEmptyScores: exEmptyScores, exPairKey: exPairKey, exCompletedAdd: exCompletedAdd, exCompletedCount: exCompletedCount, exTotal: exTotal, exAllDone: exAllDone, exHomesDone: exHomesDone, exCompletedText: exCompletedText, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
   var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
   var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
-  var tonic = 0, scaleId = SCALES[0], level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, timers = [];
+  var tonic = 0, scaleId = SCALES[0], level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), completed = {}, state = null, timers = [];
   // ==== scale view BEGIN (2026-11-17-2003) =========================================================================================================
   // The SAME block is in scale_player.html and in the five scale exercise widgets (scale_build_major / _natural_minor / _modes_and_minor / _other_scales and scale_ear_build_the_scale; a test pins them identical): the piano strip (C4..C6) and the treble staff. A note given to drawStaff may be `hidden` (not drawn: the exercise has not found it yet) or `ghost` (drawn dashed: the exercise shows what was missed); the player never sets either.
   var NS = "http://www.w3.org/2000/svg";
@@ -408,7 +425,7 @@
   var keyEls = Object.keys(keys);
   function tap(mm) {
     var r = exTap(state, mm); if (r.event === "ignored") return;
-    state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level);
+    state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") { scores = exBuilt(scores, level); completed = exCompletedAdd(completed, state.tonic, state.scale); }
     stopTimers(); render(exAnnounce(state, r.event)); sound([{ midi: mm, when: 0 }]);
   }
   keyEls.forEach(function (k) {
@@ -440,6 +457,8 @@
     $("play").disabled = building;
     EX_LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
     $("counter").textContent = exCounterText(scores, level);
+    $("completed").textContent = exCompletedText(completed, SCALES);
+    exHomesDone(completed, SCALES[0]).forEach(function (d, t) { if (homeChips[t]) homeChips[t].setAttribute("class", "home" + (d ? " done" : "")); });
     var board = $("board"), parts = exBoardText(scores); board.textContent = "";
     parts.forEach(function (p, idx) { var n = document.createElement(EX_LEVELS[idx] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (idx < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
     board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
@@ -467,12 +486,15 @@
   $("random").addEventListener("click", function () { var r = exRandom(SCALES, rng, { tonic: tonic, scale: scaleId }); tonic = r.tonic; scaleId = r.scale; fresh(); });
   $("again").addEventListener("click", function () { fresh(); });
   $("play").addEventListener("click", function () { play(); });
-  $("reset").addEventListener("click", function () { scores = exEmptyScores(); render("Score cleared."); });
+  $("reset").addEventListener("click", function () { scores = exEmptyScores(); completed = {}; render("Score cleared."); });
   EX_LEVELS.forEach(function (l) {
     var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = exLevelName(l); b.setAttribute("aria-description", exLevelName(l) + ": " + EX_ATTEMPTS[l] + (EX_ATTEMPTS[l] === 1 ? " wrong tap" : " wrong taps") + " allowed");
     b.addEventListener("click", function () { if (l === level) return; level = l; fresh(); });         // a new level starts a fresh exercise; each level keeps its own score
     $("levels").appendChild(b);
   });
+  // the twelve home notes of a single-scale file, as quiet chips that fill in when completed (not buttons, nothing happens when the pointer rests on them)
+  var homeChips = [];
+  if (SCALES.length === 1) for (var ht = 0; ht < 12; ht++) { var hc = document.createElement("span"); hc.className = "home"; hc.setAttribute("role", "listitem"); hc.textContent = tonicName(ht, SCALES[0]); $("homes").appendChild(hc); homeChips.push(hc); } else $("homes").style.display = "none";
   fresh(false);
 })();
 </script>
