@@ -81,7 +81,7 @@ function pageFailures(h: string): string[] {
   ok('every key is keyboard operable with an aria-label of its note name and number', keys.every((k: any) => k.getAttribute('tabindex') === '0' && k.getAttribute('role') === 'button' && /^[A-G]#?\d, note number \d+$/.test(k.getAttribute('aria-label'))) && p.key(60).getAttribute('aria-label') === 'C4, note number 60');
   ok('nothing else on the page: two buttons (Play and the mode toggle), no dropdown, no tabs, no Clear, no input', p.doc.querySelectorAll('button').length === 2 && p.doc.querySelectorAll('select, input, textarea, [role="tab"]').length === 0 && p.play.textContent.trim() === 'Play');
   const mode = p.doc.getElementById('mode');
-  ok('the toggle sits in the SAME row as Play, shows the current mode (up by default) and has a title and an aria-label that say what pressing does', mode.parentElement === p.play.parentElement && mode.textContent === 'Play: up' && /change to together/.test(mode.getAttribute('title')) && /change to together/.test(mode.getAttribute('aria-label')));
+  ok('the toggle sits in the SAME row as Play, shows the current mode (up by default) and has an aria-description and an aria-label that say what pressing does', mode.parentElement === p.play.parentElement && mode.textContent === 'Play: up' && /change to together/.test(mode.getAttribute('aria-description')) && /change to together/.test(mode.getAttribute('aria-label')));
   ok('the toggle is enabled before any key (a mode can be chosen first)', mode.disabled === false);
   ok('opens idle: hint, Play disabled, nothing playing', p.readout() === 'Click a key, then a second key.' && p.play.disabled === true && p.stub.all.length === 0 && p.lit().length === 0);
   p.pick(64);
@@ -102,7 +102,7 @@ function pageFailures(h: string): string[] {
   p.play.dispatchEvent(new p.win.MouseEvent('click', { bubbles: true }));
   ok('Play in the default mode (up) sounds two notes: the lower, then the higher 0.6 s later (the first oscillator of each note = its pitch)', JSON.stringify(p.stub.osc.map((x) => +x.toFixed(2))) === JSON.stringify([261.63, 392]) && p.stub.all.length === 2 * 20 && JSON.stringify(p.stub.times.map((t) => +t.toFixed(2))) === JSON.stringify([0, 0.6]));
   p.stub.osc.length = 0; p.stub.times.length = 0; p.stub.all.length = 0; p.click(mode);
-  ok('pressing the toggle changes the label, the title and the aria-label, keeps the two chosen keys and the readout, and plays NOTHING', mode.textContent === 'Play: together' && /change to up/.test(mode.getAttribute('title')) && /change to up/.test(mode.getAttribute('aria-label')) && p.lit().join() === '60,67' && p.readout() === '7 half steps' && p.stub.all.length === 0);
+  ok('pressing the toggle changes the label, the description and the aria-label, keeps the two chosen keys and the readout, and plays NOTHING', mode.textContent === 'Play: together' && /change to up/.test(mode.getAttribute('aria-description')) && /change to up/.test(mode.getAttribute('aria-label')) && p.lit().join() === '60,67' && p.readout() === '7 half steps' && p.stub.all.length === 0);
   p.play.dispatchEvent(new p.win.MouseEvent('click', { bubbles: true }));
   ok('Play in together mode sounds the same two notes at ONE instant', JSON.stringify(p.stub.osc.map((x) => +x.toFixed(2))) === JSON.stringify([261.63, 392]) && p.stub.all.length === 2 * 20 && JSON.stringify(p.stub.times.map((t) => +t.toFixed(2))) === JSON.stringify([0, 0]));
   p.stub.osc.length = 0; p.stub.times.length = 0; p.stub.all.length = 0; p.click(mode);

@@ -311,10 +311,6 @@
   color: var(--text-normal);
 }
 
-.forge-output-toolbar .forge-kit-toggle:hover {
-  background: var(--background-modifier-hover);
-}
-
 /* v0.2.150 — host for view-mode-toggled score; gives renderMusicXML
    a clean slot to mount into and tear down on each toggle. */
 .forge-output-musicxml-host {
@@ -339,10 +335,6 @@
   color: var(--text-normal);
   font-family: inherit;
   min-width: 28px;
-}
-
-.forge-zoom-bar .forge-zoom-button:hover {
-  background: var(--background-modifier-hover);
 }
 
 .forge-zoom-bar .forge-zoom-reset {
@@ -447,9 +439,6 @@
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
-.forge-score-toolbar .forge-tp-btn:hover:not(:disabled),
-.forge-score-toolbar .forge-zoom-button:hover,
-.forge-score-toolbar .forge-kit-toggle:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .forge-score-toolbar .forge-tp-btn:active:not(:disabled),
 .forge-score-toolbar .forge-zoom-button:active,
 .forge-score-toolbar .forge-kit-toggle:active { background: var(--background-modifier-active-hover, var(--background-modifier-hover)); }
@@ -508,7 +497,7 @@
   white-space: nowrap;
   cursor: pointer;
 }
-.forge-score-toolbar .forge-tp-menuitem:hover, .forge-score-toolbar .forge-tp-menuitem:focus-visible { outline: none; background: var(--background-modifier-hover); }
+.forge-score-toolbar .forge-tp-menuitem:focus-visible  { outline: none; background: var(--background-modifier-hover); }
 .forge-score-toolbar > .forge-zoom-bar,
 .forge-score-toolbar > .forge-kit-pill { display: inline-flex; align-items: center; flex: 0 0 auto; margin: 0; padding: 0; background: transparent; }
 .forge-score-toolbar .forge-kit-toggle-icon { margin-right: 0.35em; }
@@ -532,10 +521,6 @@
 
 .forge-output-score .note {
   cursor: pointer;
-}
-
-.forge-output-score .note:hover {
-  fill: var(--interactive-accent);
 }
 
 .forge-output-score .note.is-playing,
@@ -577,11 +562,6 @@
   border-radius: 4px;
   color: var(--text-muted);
   text-decoration: none;
-}
-
-.forge-output-download:hover {
-  color: var(--text-normal);
-  border-color: var(--interactive-accent);
 }
 
 /* Forge Edges side panel */
@@ -852,10 +832,6 @@
   text-decoration: underline;
 }
 
-.forge-edge-popover-open:hover {
-  color: var(--text-normal);
-}
-
 /* Binary asset drop zone in the New Snippet modal. Shown when the selected
    data content_type is binary (image/*, audio/*, video/*). */
 .forge-modal-drop {
@@ -924,11 +900,6 @@
   color: var(--text-muted);
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
-}
-
-.forge-output-save-btn:hover {
-  color: var(--text-normal);
-  border-color: var(--interactive-accent);
 }
 
 .forge-modal-meta {
@@ -1222,9 +1193,9 @@
   font-family: var(--font-monospace);
   color: var(--text-muted);
 }
-.markdown-source-view .cm-line.HyperMD-frontmatter:hover,
-.markdown-source-view .cm-line.HyperMD-codeblock.HyperMD-frontmatter:hover,
-.markdown-source-view .cm-line:has(span.cm-hmd-frontmatter):hover {
+.markdown-source-view .cm-line.HyperMD-frontmatter.cm-active,
+.markdown-source-view .cm-line.HyperMD-codeblock.HyperMD-frontmatter.cm-active,
+.markdown-source-view .cm-line:has(span.cm-hmd-frontmatter).cm-active {
   opacity: 1.0;
 }
 
@@ -1237,10 +1208,6 @@
   background-color: rgba(255, 235, 59, 0.4);
   border-radius: 2px;
   cursor: help;
-}
-
-.forge-slot-unresolved:hover {
-  background-color: rgba(255, 235, 59, 0.6);
 }
 
 /* v0.2.264 — Constitution V2a v11.6 hexa-state visibility.
@@ -1259,26 +1226,14 @@
   font-style: italic;
 }
 
-.forge-facet-derived:hover {
-  opacity: 0.8;
-}
-
 .forge-facet-out-of-date {
   opacity: 0.5;
   font-style: italic;
 }
 
-.forge-facet-out-of-date:hover {
-  opacity: 0.75;
-}
-
 .forge-facet-ignored {
   opacity: 0.4;
   font-style: italic;
-}
-
-.forge-facet-ignored:hover {
-  opacity: 0.65;
 }
 
 /* Suffix widgets. Base style shared; per-state color signals level. */
@@ -1558,14 +1513,6 @@
 
 .forge-piano-key-black {
   fill: var(--text-normal);
-}
-
-.forge-piano-key-white:hover {
-  fill: var(--background-modifier-hover);
-}
-
-.forge-piano-key-black:hover {
-  fill: var(--text-muted);
 }
 
 /* Selection reads the same on both key colours: the accent fills the
@@ -1922,14 +1869,6 @@
   cursor: default;
 }
 
-.forge-scale-svg .forge-piano-key-white:not(.is-scale):hover {
-  fill: var(--background-primary);
-}
-
-.forge-scale-svg .forge-piano-key-black:not(.is-scale):hover {
-  fill: var(--text-normal);
-}
-
 .forge-scale-key.is-scale {
   fill: var(--interactive-accent);
   stroke: var(--interactive-accent-hover);
@@ -2059,10 +1998,6 @@
   transition: opacity 80ms ease-in-out;
 }
 
-[data-forge-guitar-pos]:hover .forge-guitar-dot {
-  opacity: 0.3;
-}
-
 [data-forge-guitar-pos][data-selected="true"] .forge-guitar-dot {
   opacity: 1;
 }
@@ -2140,10 +2075,6 @@
   transition: opacity 80ms ease-in-out;
 }
 
-[data-forge-guitar-pos]:hover .forge-guitar-open-ring {
-  opacity: 0.3;
-}
-
 [data-forge-guitar-pos][data-selected="true"] .forge-guitar-open-ring {
   opacity: 1;
 }
@@ -2157,11 +2088,6 @@
   cursor: row-resize;
   background: transparent;
   flex: 0 0 auto;
-}
-
-.forge-panel-split-divider:hover {
-  background: var(--interactive-accent);
-  opacity: 0.4;
 }
 
 /* Drain 2026-09-29-1030 — native html-embed code-block processor,
@@ -2425,7 +2351,6 @@
 .forge-inspector-notes { margin-top: 6px; }
 .forge-inspector-notes-title { color: var(--text-muted); }
 .forge-inspector-notes ul { margin: 2px 0 0; padding-left: 1.2em; }
-.forge-inspector-note:hover { color: var(--interactive-accent); }
 .forge-inspector-quiet { margin-top: 4px; color: var(--text-faint); }
 .forge-inspector-quiet:empty { display: none; }
 
@@ -2482,8 +2407,7 @@
   font-size: var(--font-ui-smaller);
   cursor: pointer;
 }
-.forge-phrase-bracket:hover,
-.forge-phrase-bracket:focus-visible {
+.forge-phrase-bracket:focus-visible  {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
   outline: none;
@@ -2582,11 +2506,6 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   cursor: pointer;
   user-select: none;
 }
-.forge-notebook-bar:hover,
-.forge-notebook-row:hover {
-  background: var(--background-modifier-hover);
-  border-color: var(--interactive-accent);
-}
 .forge-notebook-bar:active,
 .forge-notebook-row:active {
   transform: translateY(1px);
@@ -2645,10 +2564,6 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   color: var(--text-normal);
   font-size: var(--font-ui-small);
   cursor: pointer;
-}
-.forge-arr-mute:hover,
-.forge-arr-solo:hover {
-  background: var(--background-modifier-hover);
 }
 .forge-arr-mute[aria-pressed="true"] {
   background: var(--background-modifier-error, #d04255);
@@ -2793,7 +2708,6 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   cursor: pointer;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
-.forge-prompt-box .forge-composer-plus:hover, .forge-prompt-box .forge-composer-send:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
 .forge-prompt-box .forge-composer-plus:focus-visible, .forge-prompt-box .forge-composer-send:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--background-modifier-border-focus, var(--interactive-accent)); }
 .forge-prompt-box .forge-composer-plus svg, .forge-prompt-box .forge-composer-send svg { display: block; width: 16px; height: 16px; }
 .forge-prompt-box .forge-composer-send { margin-left: auto; opacity: 0.55; }
@@ -2822,7 +2736,7 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   display: block; width: 100%; height: auto; margin: 0; padding: 5px 8px; border: none; border-radius: var(--radius-s, 6px); box-shadow: none; background: transparent;
   color: var(--text-normal); font: inherit; font-size: var(--font-ui-small, 13px); text-align: left; white-space: nowrap; cursor: pointer;
 }
-.forge-prompt-box .forge-composer-menuitem:hover, .forge-prompt-box .forge-composer-menuitem:focus-visible { outline: none; background: var(--background-modifier-hover); }
+.forge-prompt-box .forge-composer-menuitem:focus-visible  { outline: none; background: var(--background-modifier-hover); }
 .forge-prompt-box-conflict { font-size: var(--font-ui-smaller); color: var(--text-muted); }
 .forge-composer-error { flex: 0 0 auto; padding: 0 6px; font-size: var(--font-ui-smaller); color: var(--text-error); opacity: 0.85; }
 .forge-composer-error.is-empty { display: none; }
@@ -2920,7 +2834,6 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
   box-shadow: none;
   cursor: pointer;
 }
-.forge-bar-selection button:hover:not(:disabled) { background: var(--background-modifier-hover); }
 .forge-bar-selection button:disabled, .forge-bar-selection button.is-disabled { opacity: 0.4; cursor: default; }
 .forge-bar-selection .forge-bar-selection-clear { padding: 2px 6px; color: var(--text-muted); }
 .forge-bar-selection .forge-bar-selection-note { flex-basis: 100%; order: 10; padding: 0 6px 2px; color: var(--text-muted); }

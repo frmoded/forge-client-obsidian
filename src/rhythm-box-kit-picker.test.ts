@@ -60,7 +60,7 @@ test('P3 control: a load with no `kits` has no kit dropdown, and "Add instrument
   assert.ok(h.el('kitPick'), 'the (hidden) control exists in the page');
   assert.equal(shown(h.el('kitPick')), false);
   assert.deepEqual(values(h, 'addInstrument'), ['', 'bell', 'claves', 'conga_high', 'conga_low']);
-  assert.equal(h.el('addInstrument').getAttribute('title'), 'Add a row for another instrument (bell, claves, congas)', 'the tooltip is the one it always had');
+  assert.equal(h.el('addInstrument').getAttribute('aria-description'), 'Add a row for another instrument (bell, claves, congas)', 'the description is the one the tooltip always had (2026-11-19-0800: aria-description, no hover tooltip)');
   for (const kits of [undefined, [], [{ name: 'x', channels: ['cowbell'] }], 'rock']) {
     const g = await loaded(ROCK_BAR, kits === undefined ? {} : { kits });
     assert.equal(shown(g.el('kitPick')), false, `kits ${JSON.stringify(kits)}: no dropdown`);
@@ -77,7 +77,7 @@ test('a load with `kits`: the dropdown lists the kits in the host\'s order with 
   await pick(h, 'kitPick', 'latin');
   assert.equal(shown(h.el('addInstrument')), true);
   assert.deepEqual(values(h, 'addInstrument'), ['', 'bell', 'claves', 'conga_high', 'conga_low'], 'latin shows its four percussion channels');
-  assert.equal(h.el('addInstrument').getAttribute('title'), 'Add a row for another instrument of the latin kit', 'the tooltip names the kit');
+  assert.equal(h.el('addInstrument').getAttribute('aria-description'), 'Add a row for another instrument of the latin kit', 'the description names the kit');
   await pick(h, 'kitPick', 'rock');
   assert.equal(shown(h.el('addInstrument')), false);
   assert.equal(saves(h).length, 0, 'choosing a kit is not a data change: nothing is saved');
@@ -139,7 +139,7 @@ test('the circle keeps its four-ring limit with a kit: "Add instrument" is disab
   await pick(h, 'kitPick', 'latin');
   h.el('bViewCircle').click(); await tick();
   assert.equal(h.el('addInstrument').disabled, true);
-  assert.match(h.el('addInstrument').getAttribute('title'), /up to 4 instruments/i);
+  assert.match(h.el('addInstrument').getAttribute('aria-description'), /up to 4 instruments/i);
   h.el('bViewGrid').click(); await tick();
   assert.equal(h.el('addInstrument').disabled, false);
 });

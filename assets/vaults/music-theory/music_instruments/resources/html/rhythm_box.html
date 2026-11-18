@@ -37,7 +37,6 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 5px 10px; cursor: pointer; min-height: 32px;
   }
-  button:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   button.play { border-color: var(--derived); color: var(--derived); font-weight: 600; min-width: 76px; }
@@ -62,7 +61,6 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 4px 8px; cursor: pointer; min-height: 32px;
   }
-  #timeSig:hover { border-color: var(--ink); }
   .grid-wrap { min-width: 620px; }
   .channel-row { display: grid; grid-template-columns: 110px repeat(16, 1fr); gap: 3px; align-items: center; margin-bottom: 2px; }
   .channel-label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
@@ -84,7 +82,6 @@
   .rhythm-tools select[hidden] { display: none; }   /* the property "a hidden element computes display: none" holds for the selects too (the kit dropdown is hidden unless the host sent kits) */
   /* The grid's row selector (the circle's is the ring chips): the instrument's name is a button; the selected one is highlighted like a chip. */
   .channel-label .row-pick { flex: 1; min-width: 0; min-height: 24px; padding: 1px 6px; font-size: 12px; text-align: left; color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 4px; }
-  .channel-label .row-pick:hover { border-color: var(--axis); }
   .channel-label .row-pick[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); color: var(--ink); font-weight: 600; }
   .mini-btn.on.mute { background: var(--right-text); color: #fff; border-color: var(--right-text); }
   .mini-btn.on.solo { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -93,7 +90,6 @@
     cursor: pointer; padding: 0; position: relative;
     transition: transform 150ms ease-out;   /* smooths the swing-preview nudge as the slider moves */
   }
-  .step:hover { border-color: var(--axis); }
   .step:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   /* Hover-link (drain 2026-10-21-1230): only ever present when the host asked for it (`hoverLink: true`) — an outline, so it never moves anything. */
   .step.link-hot { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -172,8 +168,8 @@
   <span class="host-msg playground-label" id="playgroundLabel" hidden>Playground &mdash; edits are not saved</span>
   <span class="host-msg" id="loadMsg" role="status" aria-live="polite"></span>
   <span class="host-msg" id="saveMsg" role="status" aria-live="polite"></span>
-  <button id="bReload" hidden title="Discard what is on screen and load the note as it is on disk now">Reload from note</button>
-  <button id="bReset" hidden title="Put the rhythm back exactly as it is in the note">Reset</button>
+  <button id="bReload" hidden aria-description="Discard what is on screen and load the note as it is on disk now">Reload from note</button>
+  <button id="bReset" hidden aria-description="Put the rhythm back exactly as it is in the note">Reset</button>
 </div>
 <div class="confirm-bar" id="confirmBar" role="alertdialog" aria-label="Confirm change to the note" hidden>
   <span id="confirmText"></span>
@@ -182,14 +178,14 @@
 </div>
 
 <div class="transport">
-  <button class="play" id="bPlay" title="Start or stop the sequencer" aria-pressed="false">Play</button>
+  <button class="play" id="bPlay" aria-description="Start or stop the sequencer" aria-pressed="false">Play</button>
   <div class="bpm">
-    <button id="bBpmDown" title="Decrease BPM" aria-label="Decrease BPM">−</button>
+    <button id="bBpmDown" aria-label="Decrease BPM">−</button>
     <span class="val" id="bpmVal">120 BPM</span>
-    <button id="bBpmUp" title="Increase BPM" aria-label="Increase BPM">+</button>
+    <button id="bBpmUp" aria-label="Increase BPM">+</button>
   </div>
   <span class="step-pos" id="stepPos" aria-live="polite">-- / 16</span>
-  <select id="timeSig" aria-label="Time signature" title="Switching time signature stops playback and clears all four pattern banks (a 4/4 pattern has no meaningful 3/4 equivalent to preserve). Applies to every bank, not just the current one.">
+  <select id="timeSig" aria-label="Time signature" aria-description="Switching time signature stops playback and clears all four pattern banks (a 4/4 pattern has no meaningful 3/4 equivalent to preserve). Applies to every bank, not just the current one.">
     <option value="4/4" selected>4/4</option>
     <option value="4/4@8">4/4 (eighth notes)</option>
     <option value="3/4">3/4 (waltz)</option>
@@ -198,15 +194,15 @@
     <option value="5/4">5/4</option>
   </select>
   <div class="view-switch" id="viewSwitch" role="group" aria-label="View">
-    <button type="button" id="bViewGrid" aria-pressed="true" title="Show the pattern as a step grid">Grid</button>
-    <button type="button" id="bViewCircle" aria-pressed="false" title="Show the same pattern as a circle (a rhythm necklace)">Circle</button>
+    <button type="button" id="bViewGrid" aria-pressed="true" aria-description="Show the pattern as a step grid">Grid</button>
+    <button type="button" id="bViewCircle" aria-pressed="false" aria-description="Show the same pattern as a circle (a rhythm necklace)">Circle</button>
   </div>
   <span class="view-msg" id="viewMsg" role="status" aria-live="polite"></span>
 </div>
 
 <div class="sliders">
-  <label class="slider-field" title="Swing: delays every off-beat 16th note. Try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells nudge right as a preview, even while stopped.">Swing
-    <input type="range" id="swing" min="0" max="100" value="0" aria-label="Swing amount" aria-describedby="swingCaption" title="Swing: delays every off-beat 16th note. Try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells nudge right as a preview, even while stopped.">
+  <label class="slider-field" aria-description="Swing: delays every off-beat 16th note. Try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells nudge right as a preview, even while stopped.">Swing
+    <input type="range" id="swing" min="0" max="100" value="0" aria-label="Swing amount" aria-describedby="swingCaption" aria-description="Swing: delays every off-beat 16th note. Try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells nudge right as a preview, even while stopped.">
     <span id="swingVal">0%</span>
   </label>
   <p class="swing-caption sr-only" id="swingCaption">Delays every off-beat 16th note &mdash; try 50&ndash;100% while playing a steady pattern to hear the shuffle. The off-beat step cells below nudge right as a preview, even while stopped.</p>
@@ -224,13 +220,13 @@
 </div>
 
 <div class="rhythm-tools" id="rhythmTools" role="toolbar" aria-label="Rhythm tools">
-  <select id="kitPick" aria-label="Kit" title="Choose a kit: Add instrument then offers that kit's instruments" hidden></select>
-  <select id="addInstrument" aria-label="Add instrument" title="Add a row for another instrument (bell, claves, congas)"></select>
+  <select id="kitPick" aria-label="Kit" aria-description="Choose a kit: Add instrument then offers that kit's instruments" hidden></select>
+  <select id="addInstrument" aria-label="Add instrument" aria-description="Add a row for another instrument (bell, claves, congas)"></select>
   <span class="tool-group" id="transformTools" role="group" aria-label="Transform the pattern"></span>
   <span class="tool-group" id="circleExtras" role="group" aria-label="Circle tools" hidden>
-    <button type="button" id="bRingOut" title="Move this ring outward (one place toward the outer edge)" aria-label="Move this ring outward">&#8593;</button>
-    <button type="button" id="bRingIn" title="Move this ring inward (one place toward the center)" aria-label="Move this ring inward">&#8595;</button>
-    <button type="button" id="bShape" class="shape-toggle" aria-pressed="true" title="Show shape: draw the polygon through the selected ring's hits" aria-label="Show shape">&#9651;</button>
+    <button type="button" id="bRingOut" aria-description="Move this ring outward (one place toward the outer edge)" aria-label="Move this ring outward">&#8593;</button>
+    <button type="button" id="bRingIn" aria-description="Move this ring inward (one place toward the center)" aria-label="Move this ring inward">&#8595;</button>
+    <button type="button" id="bShape" class="shape-toggle" aria-pressed="true" aria-description="Show shape: draw the polygon through the selected ring's hits" aria-label="Show shape">&#9651;</button>
     <span class="ring-legend" id="ringLegend" role="group" aria-label="Pick a ring (its hits make the shape)"></span>
   </span>
 </div>
@@ -676,7 +672,7 @@ if (typeof document === "undefined") {           // node test harness
       var nameBtn = document.createElement("button");
       nameBtn.type = "button"; nameBtn.className = "name row-pick"; nameBtn.textContent = CHANNEL_LABEL[ch];
       nameBtn.setAttribute("data-row", ch); nameBtn.setAttribute("aria-pressed", "false");
-      nameBtn.title = "Select " + CHANNEL_LABEL[ch] + ": the rotate buttons turn only the selected instrument";
+      nameBtn.setAttribute("aria-description", "Select " + CHANNEL_LABEL[ch] + ": the rotate buttons turn only the selected instrument");
       nameBtn.addEventListener("click", function () { selectChannel(ch); });
       var mBtn = document.createElement("button");
       mBtn.className = "mini-btn mute"; mBtn.textContent = "M"; mBtn.setAttribute("aria-label", "Mute " + CHANNEL_LABEL[ch]); mBtn.setAttribute("aria-pressed", "false");
@@ -684,7 +680,7 @@ if (typeof document === "undefined") {           // node test harness
       sBtn.className = "mini-btn solo"; sBtn.textContent = "S"; sBtn.setAttribute("aria-label", "Solo " + CHANNEL_LABEL[ch]); sBtn.setAttribute("aria-pressed", "false");
       var rBtn = document.createElement("button");
       rBtn.className = "mini-btn remove"; rBtn.textContent = "\u00d7"; rBtn.setAttribute("data-remove", ch);
-      rBtn.setAttribute("aria-label", "Remove " + CHANNEL_LABEL[ch] + " row"); rBtn.title = "Remove this instrument row";
+      rBtn.setAttribute("aria-label", "Remove " + CHANNEL_LABEL[ch] + " row"); rBtn.setAttribute("aria-description", "Remove this instrument row");
       rBtn.disabled = rows.length <= 1;                // a note must keep at least one channel
       rBtn.addEventListener("click", function () { requestRemoveRow(ch); });
       label.appendChild(nameBtn); label.appendChild(mBtn); label.appendChild(sBtn); label.appendChild(rBtn);
@@ -745,7 +741,7 @@ if (typeof document === "undefined") {           // node test harness
     // At the circle's ring limit the control is DISABLED IN CIRCLE (and says why), not hidden and not a silent no-op; the grid has no limit.
     var full = viewMode === "circle" && rows.length >= CIRCLE_MAX_RINGS;
     sel.disabled = full;
-    sel.title = full ? CIRCLE_FULL_MSG : (currentKit() ? "Add a row for another instrument of the " + kitName + " kit" : "Add a row for another instrument (bell, claves, congas)");
+    sel.setAttribute("aria-description", full ? CIRCLE_FULL_MSG : (currentKit() ? "Add a row for another instrument of the " + kitName + " kit" : "Add a row for another instrument (bell, claves, congas)"));
   }
   buildGrid();
 
@@ -951,7 +947,7 @@ if (typeof document === "undefined") {           // node test harness
       b.type = "button"; b.className = "ring-pick"; b.setAttribute("data-ring", ch);
       b.textContent = CHANNEL_LABEL[ch];
       b.setAttribute("aria-pressed", ch === chosen ? "true" : "false");
-      b.setAttribute("title", "Show the shape of the " + CHANNEL_LABEL[ch] + " ring");
+      b.setAttribute("aria-description", "Show the shape of the " + CHANNEL_LABEL[ch] + " ring");
       b.addEventListener("click", function () { selectChannel(ch); });
       legend.appendChild(b);
     });
@@ -1049,12 +1045,12 @@ if (typeof document === "undefined") {           // node test harness
     var ch = selectedRow(), i = rows.indexOf(ch), who = CHANNEL_LABEL[ch];
     TRANSFORM_TOOLS.forEach(function (t) {
       var b = $(t.domId), x = transformToolText(t, who);
-      b.setAttribute("title", x.title); b.setAttribute("aria-label", x.label);
+      b.setAttribute("aria-description", x.title); b.setAttribute("aria-label", x.label);
       if (t.scope === "selected") b.disabled = i < 0;
     });
     [["bRingOut", "Move the " + (who || "this") + " ring outward (one place toward the outer edge)", "Move the " + (who || "this") + " ring outward"],
      ["bRingIn", "Move the " + (who || "this") + " ring inward (one place toward the center)", "Move the " + (who || "this") + " ring inward"]
-    ].forEach(function (t) { $(t[0]).setAttribute("title", t[1]); $(t[0]).setAttribute("aria-label", t[2]); });
+    ].forEach(function (t) { $(t[0]).setAttribute("aria-description", t[1]); $(t[0]).setAttribute("aria-label", t[2]); });
     $("bRingOut").disabled = i <= 0;
     $("bRingIn").disabled = i < 0 || i >= rows.length - 1;
   }
@@ -1340,24 +1336,9 @@ if (typeof document === "undefined") {           // node test harness
       scheduleHeight();
     } else if (autoHeightObserver) { autoHeightObserver.disconnect(); autoHeightObserver = null; }
   }
-  // Hover-link (drain 2026-10-21-1230, score_first M3). A host that says `hoverLink: true` on the load message gets two things: (1) `forge-rhythm-hover`
-  // {channel, step} when the pointer is over a grid step or ring cell, and {channel: null} when it leaves; (2) `forge-rhythm-highlight` {channel, step} from the
-  // host lights that step (an outline, never a layout change), {channel: null} clears it. Without the flag NOTHING here runs: no listener acts, no message is
-  // posted, a highlight message is ignored. (Every other vault's host never sends it.)
-  var hoverLink = false, lastHover = "", linkHot = [];
-  function stepTarget(t) {
-    var el = t && t.closest ? t.closest(".step, .cell") : null;
-    if (!el) return null;
-    var ch = el.getAttribute("data-channel"), st = el.getAttribute("data-step");
-    return ch === null || st === null ? null : { channel: ch, step: Number(st) };
-  }
-  function reportHover(t) {
-    if (!hoverLink) return;
-    var x = stepTarget(t), key = x ? x.channel + ":" + x.step : "";
-    if (key === lastHover) return;
-    lastHover = key;
-    postToHost({ type: "forge-rhythm-hover", channel: x ? x.channel : null, step: x ? x.step : null });
-  }
+  // Highlight link (drain 2026-10-21-1230, score_first M3; 2026-11-19-0800: the widget no longer reports where the pointer rests). A host that says `hoverLink: true` on the load message may send
+  // `forge-rhythm-highlight` {channel, step}: that step lights (an outline, never a layout change), {channel: null} clears it. Without the flag NOTHING here runs and a highlight message is ignored.
+  var hoverLink = false, linkHot = [];
   function clearHighlight() {
     linkHot.forEach(function (el) { el.classList.remove("link-hot"); });
     linkHot = [];
@@ -1372,11 +1353,8 @@ if (typeof document === "undefined") {           // node test harness
   function setHoverLink(on) {
     if (on === hoverLink) return;
     hoverLink = on;
-    lastHover = "";
     if (!on) clearHighlight();
   }
-  document.addEventListener("mouseover", function (e) { reportHover(e.target); });
-  document.addEventListener("mouseout", function (e) { if (!e.relatedTarget) reportHover(null); else reportHover(e.relatedTarget); });
   function applyLoad(msg) {
     setAutoHeight(msg.autoHeight === true);          // only the exact true; a later load without it switches it off again. BEFORE the parse: a refused note's message needs room too
     var r = parseRhythmLoad(msg.data);

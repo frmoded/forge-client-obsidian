@@ -206,10 +206,10 @@ class RhythmEmbed extends MarkdownRenderChild {
       this.hintEl = null;
       for (const item of embedToolbarItems({ music: musicEdition.id === 'music' })) {
         if (item.kind === 'hint') {
-          this.hintEl = bar.createSpan({ cls: 'forge-rhythm-embed-hint', text: item.text, attr: { role: 'note', title: item.title, 'aria-label': item.ariaLabel ?? item.title } });
+          this.hintEl = bar.createSpan({ cls: 'forge-rhythm-embed-hint', text: item.text, attr: { role: 'note', 'aria-description': item.title, 'aria-label': item.ariaLabel ?? item.title } });
           continue;
         }
-        const btn = bar.createEl('button', { text: item.text, attr: { title: item.title, ...(item.ariaLabel ? { 'aria-label': item.ariaLabel } : {}) } });
+        const btn = bar.createEl('button', { text: item.text, attr: { 'aria-description': item.title, ...(item.ariaLabel ? { 'aria-label': item.ariaLabel } : {}) } });
         if (item.id === 'open-note') btn.addEventListener('click', () => { this.hooks.openNote(this.file); });
         else if (item.id === 'score') { this.scoreBtn = btn; btn.addEventListener('click', () => { void this.toggleScore(); }); }
         else if (item.id === 'reset') { this.resetBtn = btn; btn.addEventListener('click', () => { void this.resetPlayground(); }); }
@@ -292,13 +292,13 @@ class RhythmEmbed extends MarkdownRenderChild {
     const state = embedToolbarState(dirty);
     if (this.hintEl) {
       this.hintEl.toggleClass('forge-rhythm-embed-quiet', state.hintHidden);
-      this.hintEl.setAttribute('title', state.hintTitle);
+      this.hintEl.setAttribute('aria-description', state.hintTitle);
       this.hintEl.setAttribute('aria-label', state.hintAriaLabel);
       this.hintEl.setAttribute('aria-hidden', state.hintHidden ? 'true' : 'false');
     }
     if (this.resetBtn) {
       this.resetBtn.disabled = state.resetDisabled;
-      this.resetBtn.setAttribute('title', state.resetTitle);
+      this.resetBtn.setAttribute('aria-description', state.resetTitle);
       this.resetBtn.setAttribute('aria-label', state.resetAriaLabel);
     }
   }

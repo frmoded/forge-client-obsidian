@@ -10,19 +10,19 @@ export function setControlsOff(root: HTMLElement, off: boolean): void {
   const controls = Array.from(root.querySelectorAll<HTMLElement>(CONTROLS));
   if (off) {
     root.setAttribute('aria-disabled', 'true');
-    root.setAttribute('title', CUSTOM_BANNER);
+    root.setAttribute('aria-description', CUSTOM_BANNER);
     for (const c of controls) {
       const el = c as HTMLButtonElement;
       if (!el.disabled) { el.disabled = true; el.setAttribute(CUSTOM_OFF_ATTR, ''); }
-      el.setAttribute('title', CUSTOM_BANNER);
+      el.setAttribute('aria-description', CUSTOM_BANNER);
     }
     return;
   }
-  if (root.getAttribute('title') === CUSTOM_BANNER) root.removeAttribute('title');
+  if (root.getAttribute('aria-description') === CUSTOM_BANNER) root.removeAttribute('aria-description');
   root.removeAttribute('aria-disabled');
   for (const c of controls) {
     const el = c as HTMLButtonElement;
     if (el.hasAttribute(CUSTOM_OFF_ATTR)) { el.disabled = false; el.removeAttribute(CUSTOM_OFF_ATTR); }
-    if (el.getAttribute('title') === CUSTOM_BANNER) el.removeAttribute('title');
+    if (el.getAttribute('aria-description') === CUSTOM_BANNER) el.removeAttribute('aria-description');
   }
 }

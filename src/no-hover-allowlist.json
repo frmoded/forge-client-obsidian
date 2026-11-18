@@ -1,0 +1,45 @@
+{
+  "role": "Everything src/no-hover-behavior.test.ts lets through, and why. A move handler is a drag only while a button is held; nothing here may light, show or open anything because the pointer rests. An entry that matches nothing fails the test (remove the line).",
+  "allowed": [
+    {
+      "file": "src/artifact-inspector-core.ts",
+      "pattern": "'mousemove', onMove",
+      "reason": "bar-range selection by dragging: onMove returns at once unless a press started in a bar (pressedIn), so a resting pointer does nothing"
+    },
+    {
+      "file": "src/output-view.ts",
+      "pattern": "'pointermove', move",
+      "reason": "the pane divider drag: the move listener is added on pointerdown and removed on pointerup, so it only runs while the button is held"
+    },
+    {
+      "file": "src/build-stamp-core.ts",
+      "pattern": "data-tooltip-position",
+      "reason": "positions Obsidian's own status-bar tooltip, which Obsidian draws from the item's aria-label (its core feature, not a tooltip this plugin draws)"
+    },
+    {
+      "file": "src/build-stamp-core.ts",
+      "pattern": "el.title = undefined",
+      "reason": "clears a native title so two tooltips cannot stack; it never sets one"
+    },
+    {
+      "file": "src/main.ts",
+      "pattern": "sourceLayerStatusBarItem.title = ''",
+      "reason": "clears a native title (Obsidian draws the status-bar tooltip itself); it never sets one"
+    },
+    {
+      "file": "src/output-view.ts",
+      "pattern": ".setTooltip('Reset to defaults')",
+      "reason": "an Obsidian ButtonComponent's accessible name: Obsidian's own tooltip API, not a hover handler of this plugin (said in the FEEDBACK as the one place Obsidian's core hover remains)"
+    },
+    {
+      "file": "src/score-first.ts",
+      "pattern": "l.view.title = name",
+      "reason": "not a tooltip: the workspace leaf's tab title, set so the tab reads as the note"
+    },
+    {
+      "file": "assets/vaults/music-theory/music_instruments/resources/html/monochord.html",
+      "pattern": "addEventListener(\"pointermove\", move)",
+      "reason": "dragging the bridge: move() returns at once unless the pointer is held down (the dragging flag is set on pointerdown, cleared on pointerup), so a resting pointer does nothing"
+    }
+  ]
+}

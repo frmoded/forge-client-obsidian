@@ -41,7 +41,6 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 8px 12px; cursor: pointer; min-height: 40px;
   }
-  button:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
   /* 2026-09-29: driver replaced the earlier per-segment button/readout color-coding (left/right/
      both each in their own hue) with two flat colors instead — one shared color for every button,
@@ -101,7 +100,7 @@
   <button id="bL">Pluck left</button>
   <button id="bR">Pluck right</button>
   <button id="bB">Pluck both</button>
-  <button id="bO" title="The whole string, open, at the base pitch">Pluck open string</button>
+  <button id="bO" aria-description="The whole string, open, at the base pitch">Pluck open string</button>
 </div>
 
 <div class="readout">

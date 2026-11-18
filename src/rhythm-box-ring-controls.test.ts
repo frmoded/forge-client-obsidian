@@ -73,23 +73,23 @@ test('rotating ONE channel with rotatePattern(pattern, [ch], ...) leaves the oth
 // ---- the buttons: labels, enabled state ------------------------------------------------------------------------------------------
 
 // Drain 2026-10-20-0900: the two Rotate buttons are in the toolbar BOTH views share (the grid has a selected row now: click its name); Move ring out / in
-// stay circle-only extras, after the five. All four are icons whose tooltip and aria-label NAME the selected instrument.
+// stay circle-only extras, after the five. All four are icons whose description (aria-description; no hover tooltip since 2026-11-19-0800) and aria-label NAME the selected instrument.
 test('the Rotate buttons are in the shared toolbar (both views); Move ring out / in are circle-only extras; all four are icons that NAME the selected instrument', { skip }, async () => {
   const h = await circle(ROCK);
   for (const id of ['bRingRotLeft', 'bRingRotRight', 'bRingOut', 'bRingIn']) {
     const b = h.el(id);
     assert.ok(b, id);
     assert.ok(h.el('rhythmTools').contains(b), `${id} rides in the one toolbar row`);
-    assert.ok(b.getAttribute('title') && b.getAttribute('aria-label'), id);
+    assert.ok(b.getAttribute('aria-description') && b.getAttribute('aria-label'), id);
     assert.ok(b.textContent.trim().length <= 2, `${id} is an icon, not a word`);
     assert.ok(shown(b), `${id} is on screen in Circle`);
   }
   assert.match(h.el('bRingRotLeft').getAttribute('aria-label'), /Kick/, 'the default selection is the first ring');
-  assert.match(h.el('bRingOut').getAttribute('title'), /Kick/);
+  assert.match(h.el('bRingOut').getAttribute('aria-description'), /Kick/);
   await pick(h, 'hihat');
   for (const id of ['bRingRotLeft', 'bRingRotRight', 'bRingOut', 'bRingIn']) {
     assert.match(h.el(id).getAttribute('aria-label'), /Hi-hat/, `${id} now names the Hi-hat ring`);
-    assert.match(h.el(id).getAttribute('title'), /Hi-hat/);
+    assert.match(h.el(id).getAttribute('aria-description'), /Hi-hat/);
   }
   h.el('bViewGrid').click(); await tick();
   assert.ok(shown(h.el('bRingRotLeft')) && shown(h.el('bRingRotRight')), 'Rotate is in Grid too (the grid selects a row by its name)');

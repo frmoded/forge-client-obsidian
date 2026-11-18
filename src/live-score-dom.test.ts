@@ -450,7 +450,7 @@ const headlessPorts = (over: Partial<ScoreAreaPorts> = {}) => {
   return base;
 };
 
-test('1189: a headless Score area has NO Inspector on the page (no title, hint, "Notes in this score", lineage, "Open note"), the engraving is the last child of the panel, and the click, the pin and the grid hover-link still work', async () => {
+test('1189: a headless Score area has NO Inspector on the page (no title, hint, "Notes in this score", lineage, "Open note"), the engraving is the last child of the panel, and the click, the pin and the keyboard link to the grid still work (the pointer resting does nothing, 2026-11-19-0800)', async () => {
   const { tab, doc } = page(); const { p, posted } = headlessPorts();
   const area = attachScoreArea(tab, scorePanelPlan({ scoreFirst: true, edition: 'music' }), p)!;
   area.showNow(KICK_BAR); await flush();
@@ -461,8 +461,14 @@ test('1189: a headless Score area has NO Inspector on the page (no title, hint, 
   g.dispatchEvent(new (tab.ownerDocument.defaultView as any).MouseEvent('click', { bubbles: true }));
   assert.ok(g.classList.contains('forge-artifact-pinned'), 'a click still pins the engraved note');
   assert.equal(panel.querySelector('.forge-inspector-open'), null, 'and offers no button');
+  const before = posted.length;
   g.dispatchEvent(new (tab.ownerDocument.defaultView as any).MouseEvent('mouseover', { bubbles: true }));
-  assert.deepEqual(posted.at(-1), { channel: 'kick', step: 8 }, 'the hover-link to the Beat Box grid still talks');
+  g.dispatchEvent(new (tab.ownerDocument.defaultView as any).MouseEvent('mouseenter', { bubbles: true }));
+  assert.equal(posted.length, before, '2026-11-19-0800: the pointer resting on a note posts nothing to the Beat Box grid');
+  assert.ok(!g.classList.contains('forge-artifact-hot'), 'and lights nothing');
+  g.dispatchEvent(new (tab.ownerDocument.defaultView as any).KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  assert.equal(posted.length, before + 1, 'CONTROL: the keyboard (an arrow key) still talks to the Beat Box grid');
+  assert.ok(posted.at(-1) && typeof posted.at(-1)!.channel === 'string' && typeof posted.at(-1)!.step === 'number', 'with the step it is on');
   area.gridHover({ channel: 'kick', step: 0 });
   assert.ok(doc.getElementById('a_kick_0')!.classList.contains('forge-artifact-hot'), 'the grid step still lights the engraved note');
   area.dispose();

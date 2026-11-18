@@ -229,33 +229,33 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
-  // ---- 2026-11-03-1160 (c): the controls of a CUSTOM note are off, on the arrangement tab (kits) and the phrase tab (strip), with the banner's sentence as tooltip ----
+  // ---- 2026-11-03-1160 (c): the controls of a CUSTOM note are off, on the arrangement tab (kits) and the phrase tab (strip), with the banner's sentence as `aria-description` (2026-11-19-0800: it was a native `title` tooltip; nothing appears because the pointer rests any more) ----
   const TIP = 'Custom Python: the controls are off for this note.';
-  test(`[${edition}] a CUSTOM arrangement: the kit controls are drawn DISABLED with the tooltip; a plain arrangement's are enabled (the CONTROL: the check can fail)`, async () => {
+  test(`[${edition}] a CUSTOM arrangement: the kit controls are drawn DISABLED with the sentence as aria-description; a plain arrangement's are enabled (the CONTROL: the check can fail)`, async () => {
     const w = await world();
     try {
       const { el } = await w.open(ARRANGEMENT_VIEW_TYPE, ARR_CUSTOM);
       const controls = [...el.querySelectorAll('.forge-arr-controls button, .forge-arr-controls input')];
       assert.ok(controls.length >= 6, `non-vacuity: two kits x (Mute, Solo, volume) = ${controls.length} controls`);
-      assert.ok(controls.every((c: any) => c.disabled === true && c.getAttribute('title') === TIP), 'every control is disabled and says why');
+      assert.ok(controls.every((c: any) => c.disabled === true && c.getAttribute('aria-description') === TIP && !c.hasAttribute('title')), 'every control is disabled and says why');
       assert.equal(el.querySelector('.forge-arr-controls').getAttribute('aria-disabled'), 'true');
       const plain = await w.open(ARRANGEMENT_VIEW_TYPE, ARR);
       const on = [...plain.el.querySelectorAll('.forge-arr-controls button, .forge-arr-controls input')];
-      assert.ok(on.length >= 6 && on.every((c: any) => c.disabled === false && !c.hasAttribute('title')), 'CONTROL: a note that is not custom has its controls on');
+      assert.ok(on.length >= 6 && on.every((c: any) => c.disabled === false && !c.hasAttribute('aria-description') && !c.hasAttribute('title')), 'CONTROL: a note that is not custom has its controls on');
     } finally { w.done(); }
   });
 
-  test(`[${edition}] a CUSTOM phrase: the strip is off with the same tooltip (one helper), a plain phrase's strip is on`, async () => {
+  test(`[${edition}] a CUSTOM phrase: the strip is off with the same aria-description (one helper), a plain phrase's strip is on`, async () => {
     const w = await world();
     try {
       const { el } = await w.open(PHRASE_VIEW_TYPE, PHRASE_CUSTOM);
       const strip = el.querySelector('.forge-phrase-controls');
       const fields = [...strip.querySelectorAll('input, select, button')];
       assert.ok(fields.length >= 3, 'non-vacuity');
-      assert.ok(fields.every((c: any) => c.disabled === true && c.getAttribute('title') === TIP), 'disabled, with the sentence');
+      assert.ok(fields.every((c: any) => c.disabled === true && c.getAttribute('aria-description') === TIP && !c.hasAttribute('title')), 'disabled, with the sentence');
       const plain = await w.open(PHRASE_VIEW_TYPE, PHRASE);
       const on = [...plain.el.querySelectorAll('.forge-phrase-controls input, .forge-phrase-controls select')];
-      assert.ok(on.length >= 3 && on.every((c: any) => c.disabled === false && !c.hasAttribute('title')), 'CONTROL: not custom, on');
+      assert.ok(on.length >= 3 && on.every((c: any) => c.disabled === false && !c.hasAttribute('aria-description') && !c.hasAttribute('title')), 'CONTROL: not custom, on');
     } finally { w.done(); }
   });
 

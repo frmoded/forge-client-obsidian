@@ -127,8 +127,9 @@ test('the Mirror button is labelled and focusable, in the toolbar both views sha
   const el = h.el('bMirror');
   assert.equal(el.tagName, 'BUTTON');
   assert.equal(el.getAttribute('aria-label'), 'Mirror (reverse the rhythm in time)');
-  assert.match(el.title, /Mirror/);
-  assert.match(el.title, /reverse the rhythm in time/i);
+  assert.equal(el.getAttribute('title'), null, '2026-11-19-0800: no native tooltip, the description is aria-description');
+  assert.match(el.getAttribute('aria-description'), /Mirror/);
+  assert.match(el.getAttribute('aria-description'), /reverse the rhythm in time/i);
   assert.ok(el.tabIndex >= 0 && !el.disabled);
   assert.ok(el.textContent.trim().length <= 3, 'bMirror: an icon, not a word');
   assert.ok(h.el('rhythmTools').contains(el), 'in the shared toolbar (so in Grid and in Circle)');

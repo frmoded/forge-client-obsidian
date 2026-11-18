@@ -61,19 +61,21 @@ test('it is mounted where the owner asks (before the given element) and dispose 
 });
 
 
-// ---- 2026-10-30-1000 (M10 slice 3): hover lights the rows of a kit or phrase; the pinned row's chips are emphasised ----------------------------------------------------------------------------
+// ---- 2026-10-30-1000 (M10 slice 3): focus (2026-11-19-0800: no longer the pointer resting) lights the rows of a kit or phrase; the pinned row's chips are emphasised ----------------------------------------------------------------------------
 
-test('hover and focus on a chip tell the owner which chip (so the Score can light the rows of that kit or phrase), leaving tells null; without an owner that listens nothing happens', () => {
+test('focus on a chip tells the owner which chip (so the Score can light the rows of that kit or phrase), blur tells null, and the pointer resting on a chip tells nobody (2026-11-19-0800); without an owner that listens nothing happens', () => {
   const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
   const seen: Array<string | null> = [];
   const s = mountArrangementStrip(parent, { goto: async () => true, openNote: () => {}, onHover: (chip) => seen.push(chip ? `${chip.kind}:${chip.noteId}` : null) });
   s.show(TWO);
   const b = [...s.el.querySelectorAll('button')] as any[];
-  b[1].dispatchEvent(new win.Event('mouseenter')); b[1].dispatchEvent(new win.Event('mouseleave'));
+  b[1].dispatchEvent(new win.Event('mouseenter')); b[1].dispatchEvent(new win.Event('mouseover')); b[1].dispatchEvent(new win.Event('mouseleave'));
+  assert.deepEqual(seen, [], 'the pointer resting on (or leaving) a chip tells nobody');
+  b[1].dispatchEvent(new win.Event('focus')); b[1].dispatchEvent(new win.Event('blur'));
   b[2].dispatchEvent(new win.Event('focus')); b[2].dispatchEvent(new win.Event('blur'));
   assert.deepEqual(seen, ['kit:kits/rock', null, 'phrase:phrases/phrase_006', null]);
   const quiet = rig(); quiet.s.show(TWO);
-  quiet.buttons()[0].dispatchEvent(new win.Event('mouseenter'));        // no onHover given: nothing to call, nothing thrown
+  quiet.buttons()[0].dispatchEvent(new win.Event('focus')); quiet.buttons()[0].dispatchEvent(new win.Event('blur'));        // no onHover given: nothing to call, nothing thrown
   assert.equal(quiet.buttons().length, 4);
 });
 

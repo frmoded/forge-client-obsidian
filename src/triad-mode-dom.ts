@@ -150,7 +150,7 @@ export function mountTriadMode(el: HTMLElement, options: ScaleExplorerOptions, d
   readout.setAttribute('aria-live', 'polite');
   root.appendChild(readout);
   const legend = h('div', 'forge-triad-legend', TRIAD_LEGEND);
-  legend.title = TRIAD_LEGEND;
+  legend.setAttribute('aria-description', TRIAD_LEGEND);
   root.appendChild(legend);
 
   // ---- drawing -------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -164,7 +164,7 @@ export function mountTriadMode(el: HTMLElement, options: ScaleExplorerOptions, d
       b.setAttribute('aria-pressed', c.degree === degree ? 'true' : 'false');
       b.setAttribute('aria-label', `${c.numeral}: ${c.label}, degree ${c.degree} of the scale`);
       const numeral = h('span', 'forge-triad-chip-numeral', c.numeral);
-      numeral.title = TRIAD_LEGEND;
+      numeral.setAttribute('aria-description', TRIAD_LEGEND);
       b.append(numeral, h('span', 'forge-triad-chip-name', c.label));
       b.addEventListener('click', () => { pick(c.degree); });
       degreeChips.appendChild(b);

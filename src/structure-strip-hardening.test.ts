@@ -132,14 +132,15 @@ test('emphasis is inline: bold and an accent outline on the chip of that note, e
   assert.deepEqual(style(chips()[0]), ['', '', '', '', '']);
 });
 
-test('hover, focus, blur and click on a chip reach the owner with that chip', () => {
+test('focus, blur and click on a chip reach the owner with that chip; the pointer resting on it reaches nobody (2026-11-19-0800)', () => {
   const { parent } = parentWith(0);
   const p = ports();
   const h = mountStructureStrip(parent, p.p);
   h.set(chipsFor('phrase_002', MORPH));
   const b = (h.el.querySelectorAll('button')[0]) as any;
-  b.dispatchEvent(new win.MouseEvent('mouseenter')); b.dispatchEvent(new win.MouseEvent('mouseleave'));
+  b.dispatchEvent(new win.MouseEvent('mouseenter')); b.dispatchEvent(new win.MouseEvent('mouseover')); b.dispatchEvent(new win.MouseEvent('mouseleave'));
+  assert.deepEqual(p.events, [], 'the pointer resting on (or leaving) a chip tells nobody');
   b.dispatchEvent(new win.Event('focus')); b.dispatchEvent(new win.Event('blur'));
   b.click();
-  assert.deepEqual(p.events, ['hover bars/bar_007', 'hover none', 'hover bars/bar_007', 'hover none', 'click bars/bar_007']);
+  assert.deepEqual(p.events, ['hover bars/bar_007', 'hover none', 'click bars/bar_007']);
 });

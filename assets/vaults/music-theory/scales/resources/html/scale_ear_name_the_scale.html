@@ -16,7 +16,6 @@
   .row { display: flex; align-items: center; gap: 6px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
   .switch { margin: 0 0 3px; gap: 4px; min-height: 26px; }
   button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 12px; cursor: pointer; min-height: 30px; }
-  button:hover:not(:disabled) { border-color: var(--ink); }
   button:disabled { opacity: 0.45; cursor: default; }
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
   .switch button { padding: 3px 8px; min-height: 26px; font-size: 11px; white-space: nowrap; }
@@ -46,7 +45,6 @@
   .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
   #counter { color: var(--ink); }
   .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
-  .linkbtn:hover { color: var(--ink); }
   #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
   #board b { color: var(--ink); }
 </style>
@@ -414,7 +412,7 @@
   $("replay").addEventListener("click", function () { var q = games[current].state.question; if (q) sound(current === 1 ? q.sound : [{ midi: q.notes[0], when: 0 }]); });       // never reveals the answer
   $("reset").addEventListener("click", function () { scores = resetScores(); render("Score cleared."); });
   LEVELS.forEach(function (l) {
-    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = levelName(l); b.title = levelName(l) + ": " + BASE_ATTEMPTS[l] + (BASE_ATTEMPTS[l] === 1 ? " attempt" : " attempts") + " a question" + (GAME === 2 ? " (wrong taps)" : ""); b.setAttribute("aria-pressed", "false");
+    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = levelName(l); b.setAttribute("aria-description", levelName(l) + ": " + BASE_ATTEMPTS[l] + (BASE_ATTEMPTS[l] === 1 ? " attempt" : " attempts") + " a question" + (GAME === 2 ? " (wrong taps)" : "")); b.setAttribute("aria-pressed", "false");
     b.addEventListener("click", function () {                                                            // a new level: the open question ends (it counted as asked, with no point), each level keeps its own score
       if (l === level) return;
       level = l; games[GAME].state = initial();

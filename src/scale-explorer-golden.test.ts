@@ -36,8 +36,12 @@ test('scale mode is byte for byte what 1170 drew: three scales, their DOM and th
   if (process.env.UPDATE_GOLDEN === '1') { fs.writeFileSync(GOLDEN, JSON.stringify(now, null, 2) + '\n'); return; }
   const golden = JSON.parse(fs.readFileSync(GOLDEN, 'utf8'));
   assert.deepEqual(Object.keys(now), Object.keys(golden));
+  // 2026-11-19-0800 (drain "remove ALL hover behavior"): the ONE allowed difference from the 1170 recording is that the step chips' hover tooltip (title="2 semitones") became aria-description="2 semitones";
+  // everything else is still byte for byte. The golden file is left as recorded and is read through that one mechanical rewrite; the new DOM must carry no native title tooltip at all.
+  const noTooltip = (html: string): string => html.replace(/ title="/g, ' aria-description="');
   for (const name of Object.keys(golden)) {
-    assert.ok(now[name].html === golden[name].html, `${name}: the DOM differs from the 1170 golden`);
+    assert.ok(!/ title="/.test(now[name].html), `${name}: no native title tooltip in the DOM`);
+    assert.ok(now[name].html === noTooltip(golden[name].html), `${name}: the DOM differs from the 1170 golden`);
     assert.deepEqual(now[name].staffXml, golden[name].staffXml, `${name}: the staff MusicXML differs`);
     assert.ok(golden[name].html.length > 2000, `${name}: non-vacuity: the golden holds a real picture`);
   }

@@ -16,7 +16,6 @@
   label { color: var(--ink); }
   select, button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; min-height: 30px; }
   button { cursor: pointer; padding: 4px 12px; }
-  button:hover:not(:disabled), select:hover { border-color: var(--ink); }
   button:disabled { opacity: 0.45; cursor: default; }
   button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
   .chips { gap: 4px; min-height: 24px; }
@@ -329,7 +328,7 @@
     for (var i = 0; i < 12; i++) $("tonic").options[i].textContent = tonicName(i, scaleId);
     $("tonic").value = String(tonic); $("scale").value = scaleId;
     var chips = $("chips"); chips.textContent = "";
-    recipeOf(scaleId, f).forEach(function (c) { var s = document.createElement("span"); s.className = "chip " + (c === "W" ? "w" : c === "H" ? "h" : "t"); s.setAttribute("role", "listitem"); s.title = c === "W" ? "whole step: 2 half steps" : c === "H" ? "half step: 1 half step" : "three half steps"; s.textContent = c; chips.appendChild(s); });
+    recipeOf(scaleId, f).forEach(function (c) { var s = document.createElement("span"); s.className = "chip " + (c === "W" ? "w" : c === "H" ? "h" : "t"); s.setAttribute("role", "listitem"); s.setAttribute("aria-description", c === "W" ? "whole step: 2 half steps" : c === "H" ? "half step: 1 half step" : "three half steps"); s.textContent = c; chips.appendChild(s); });
     for (var k in keys) { keys[k].classList.remove("lit", "tonic", "sounding"); var ts = keys[k].querySelectorAll("text"); for (var j = 0; j < ts.length; j++) keys[k].removeChild(ts[j]); }
     midis.forEach(function (mm, idx) { var g = keys[mm]; if (!g) return; g.classList.add("lit"); if (idx === 0 || idx === midis.length - 1) g.classList.add("tonic"); if (idx === soundingIndex) g.classList.add("sounding"); });
     drawStaff(notes, midis);

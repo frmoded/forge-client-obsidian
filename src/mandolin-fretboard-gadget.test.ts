@@ -297,11 +297,15 @@ function scoreFailuresOf(h: string): string[] {
   ok('never a flat in any label', ![...doc.querySelectorAll('.nh')].some((n: any) => /\b[A-G]b\d/.test(n.getAttribute('aria-label'))));
   const cx = (i: number) => +doc.querySelectorAll('.nh')[i].querySelector('.head').getAttribute('cx');
   ok('the unison G4 / G4 and the second A4 / A#4 never share a column', cx(2) !== cx(3) && cx(0) !== cx(1));
-  // hover / focus lights the other side, both ways; leaving puts it out
+  // 2026-11-19-0800 (drain "remove ALL hover behavior"): the pointer resting on a notehead or a fretboard point lights NOTHING; only focus / blur light the other side, both ways
   const nh = doc.querySelector('.nh[aria-label^="G4, course 1"]'), pt = doc.querySelector('.pt[aria-label="G4, course 1, fret 12"]');
   const fire = (el: any, t: string) => el.dispatchEvent(new p.win.MouseEvent(t));
-  fire(nh, 'mouseenter'); ok('hover a notehead lights its fretboard point', pt.classList.contains('link')); fire(nh, 'mouseleave'); ok('...and leaving puts it out', !pt.classList.contains('link'));
-  fire(pt, 'mouseenter'); ok('hover a fretboard point lights its notehead', doc.querySelector('.nh[aria-label^="G4, course 1"]').classList.contains('link')); fire(pt, 'mouseleave');
+  const focus = (el: any, t: string) => el.dispatchEvent(new p.win.FocusEvent(t));
+  const lit = () => pt.classList.contains('link') || doc.querySelector('.nh[aria-label^="G4, course 1"]').classList.contains('link');
+  fire(nh, 'mouseenter'); fire(nh, 'mouseover'); ok('the pointer resting on a notehead lights nothing', !lit()); fire(nh, 'mouseleave');
+  fire(pt, 'mouseenter'); fire(pt, 'mouseover'); ok('the pointer resting on a fretboard point lights nothing', !lit()); fire(pt, 'mouseleave');
+  focus(nh, 'focus'); ok('focusing a notehead lights its fretboard point', pt.classList.contains('link')); focus(nh, 'blur'); ok('...and leaving it puts it out', !pt.classList.contains('link'));
+  focus(pt, 'focus'); ok('focusing a fretboard point lights its notehead', doc.querySelector('.nh[aria-label^="G4, course 1"]').classList.contains('link')); focus(pt, 'blur'); ok('...and leaving it puts it out', !lit());
   // keyboard: one Tab stop, arrow keys move; the toggle hides and restores
   const stops = () => [...doc.querySelectorAll('.nh')].filter((n: any) => n.getAttribute('tabindex') === '0').length;
   ok('the noteheads are a single Tab stop', stops() === 1);
@@ -352,7 +356,7 @@ test('score: the layout is 90 high until a note needs more room, stacks a chord 
   assert.ok(c.height >= ys[ys.length - 1], 'the labels fit inside the drawing');
 });
 
-test('score: on the page - the heads sit on the right lines, ledger lines, sharps, names beside the high notes, hover and focus link both ways, one Tab stop, the Score toggle', () => {
+test('score: on the page - the heads sit on the right lines, ledger lines, sharps, names beside the high notes, focus links both ways and the pointer lights nothing, one Tab stop, the Score toggle', () => {
   assert.deepEqual(scoreFailures(html), []);
 });
 
@@ -367,7 +371,7 @@ test('score: self-contained - no network, no Verovio, no import, and it is marke
   assert.equal(p.doc.getElementById('score').innerHTML, before, 'the score names equal-tempered pitches whatever the fret geometry');
 });
 
-test('CONTROL: the score checks can fail - every note a step off, no first ledger line above, no side-stepping of seconds, no names for high notes, a score that never updates, a dead hover link each go red', () => {
+test('CONTROL: the score checks can fail - every note a step off, no first ledger line above, no side-stepping of seconds, no names for high notes, a score that never updates, a dead focus link, a hover link that came back each go red', () => {
   assert.deepEqual(scoreFailures(html), [], 'the undamaged page passes');
   const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
   assert.ok(scoreFailures(damaged('+ LETTER_STEP[name.charAt(0)] - 30;', '+ LETTER_STEP[name.charAt(0)] - 29;')).length > 0, 'a step off');
@@ -375,7 +379,8 @@ test('CONTROL: the score checks can fail - every note a step off, no first ledge
   assert.ok(scoreFailures(damaged('colTop[c] !== undefined && n.pos - colTop[c] < 2', 'false')).length > 0, 'seconds overlap');
   assert.ok(scoreFailures(damaged('above: pos > 8', 'above: pos > 12')).length > 0, 'no name beside B5');
   assert.ok(scoreFailures(damaged('if (!scoreWrap.hidden) drawScore();', '')).length > 0, 'a score that never updates');
-  assert.ok(scoreFailures(damaged('g.addEventListener("mouseenter", function () { lightPoint(q.key, true); });', '')).length > 0, 'a dead hover link');
+  assert.ok(scoreFailures(damaged('g.addEventListener("focus", function () { lightPoint(q.key, true); });', '')).length > 0, 'a dead focus link');
+  assert.ok(scoreFailures(damaged('g.addEventListener("blur", function () { lightPoint(q.key, false); });', 'g.addEventListener("mouseenter", function () { lightPoint(q.key, true); });')).length > 0, 'a hover link that lights because the pointer rests');
 });
 
 // ---- 2026-11-12-1199: a real treble clef (Bravura outline, drawn on the G line) and ALL the controls in one row ---------------------------------------------------
@@ -442,7 +447,8 @@ function controlsFailures(h: string): string[] {
     const b: any = doc.getElementById(id);
     if (!b) { bad.push(`${id} missing`); continue; }
     if (b.textContent.trim() !== text) bad.push(`${id} label ${JSON.stringify(b.textContent.trim())} !== ${JSON.stringify(text)}`);
-    if (!(b.getAttribute('title') ?? '').length || b.getAttribute('aria-label') !== full) bad.push(`${id} keeps its full name in aria-label ("${full}") and a title`);
+    // 2026-11-19-0800: the description rides in aria-description; a native `title` would open a tooltip because the pointer rests
+    if (!(b.getAttribute('aria-description') ?? '').length || b.getAttribute('aria-label') !== full || b.hasAttribute('title')) bad.push(`${id} keeps its full name in aria-label ("${full}") and an aria-description, with no title tooltip`);
   }
   if (!doc.getElementById('tuning')) bad.push('the tuning dropdown is gone');
   return bad;
@@ -452,7 +458,7 @@ test('the clef is a real treble clef: an outline from Bravura (OFL) anchored on 
   assert.deepEqual(clefFailures(html), []);
 });
 
-test('the controls sit in ONE row (compact labels, full names kept in aria-label and title, a dropdown that shrinks, a wrap only for a very narrow mount); behaviour and ids unchanged', () => {
+test('the controls sit in ONE row (compact labels, full names kept in aria-label and aria-description (no title tooltip), a dropdown that shrinks, a wrap only for a very narrow mount); behaviour and ids unchanged', () => {
   assert.deepEqual(controlsFailures(html), []);
   const p = openPage();
   click(p, '.pt[aria-label="A4, course 3, fret 0"]');
@@ -462,7 +468,7 @@ test('the controls sit in ONE row (compact labels, full names kept in aria-label
   assert.deepEqual(held(p), [], 'Clear still releases');
 });
 
-test('CONTROL: the clef and row checks can fail - the old stroke clef, a clef off the G line, a shrunk clef, a row that wraps, labels without their full names each go red', () => {
+test('CONTROL: the clef and row checks can fail - the old stroke clef, a clef off the G line, a shrunk clef, a row that wraps, labels without their full names, a title tooltip that came back each go red', () => {
   assert.deepEqual(clefFailures(html), [], 'the undamaged page passes');
   assert.deepEqual(controlsFailures(html), [], 'the undamaged page passes');
   const damaged = (from: string, to: string): string => { assert.ok(html.includes(from), `the control's premise: the page contains ${from}`); return html.replace(from, to); };
@@ -470,6 +476,7 @@ test('CONTROL: the clef and row checks can fail - the old stroke clef, a clef of
   assert.ok(clefFailures(damaged('var CLEF_SCALE = 0.04;', 'var CLEF_SCALE = 0.025;')).length > 0, 'a clef two thirds of its size');
   assert.ok(controlsFailures(damaged('flex-wrap: nowrap', 'flex-wrap: wrap')).length > 0, 'a row that wraps');
   assert.ok(controlsFailures(damaged('aria-label="Play together"', '')).length > 0, 'a button without its full name');
+  assert.ok(controlsFailures(damaged('aria-description="Clear: release', 'title="Clear: release')).length > 0, 'a native title tooltip instead of the description');
 });
 
 // ---- 2026-11-11-1197 (band re-measured by 1199): the mandolin page embeds the gadget tall enough for the score ----------------------------------------------------------------------------
@@ -487,8 +494,10 @@ test('the mandolin page embeds the gadget at a height that holds the tallest sco
 const START_SHA = 'a673d54';
 const skipReason = pinSkipReason(ROOT, START_SHA, 'this repo');
 // 2026-11-13-1214-1: piano_keyboard.html got the new piano voice on purpose (src/piano-voice.test.ts); it is not byte-identical to this drain's start any more
-// 2026-11-15-1221: guitar, lute, monochord and the C major triad keyboard got the plucked / piano voice on purpose (src/plucked-voice.test.ts, src/piano-voice.test.ts); only rhythm_box.html is still pinned
-for (const other of ['rhythm_box.html']) {
+// 2026-11-15-1221: guitar, lute, monochord and the C major triad keyboard got the plucked / piano voice on purpose (src/plucked-voice.test.ts, src/piano-voice.test.ts)
+// 2026-11-19-0800: rhythm_box.html lost its hover link on purpose (drain "remove ALL hover behavior"; src/rhythm-box-hover-link.test.ts pins what changed), so no gadget is pinned any more
+const STILL_PINNED: string[] = [];
+for (const other of STILL_PINNED) {
   test(`P3: ${other} is byte-identical to the commit the drain started from`, { skip: skipReason ?? false }, () => {
     const was = execFileSync('git', ['-C', ROOT, 'show', `${START_SHA}:${HTML_DIR}/${other}`], { maxBuffer: 64 * 1024 * 1024 });
     // 2026-11-18-1200: the ONE allowed difference is the palette comment, which named the style-guide file and now does not (src/gadget-plugin-words.test.ts); everything else is still byte for byte

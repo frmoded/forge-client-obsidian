@@ -1,6 +1,6 @@
 // 2026-10-30-1000 (M10 slice 3) - the rows of an arrangement's Score in a DOM (happy-dom has no layout, so each staff answers getBBox with a box the test chooses): one row group per (bar, channel), in the staff of that part, behind its
 // drawing; made once; none where the SVG has no such measure or staff or the staff cannot be measured. Then the same rows under the REAL inspector: a click on a row (or, by the box rule, on a point inside it that nothing is drawn on)
-// pins it, and the pin is the note the notes pane is sent to (pinnedNoteFor); Esc lets go; a hover shows the stack.
+// pins it, and the pin is the note the notes pane is sent to (pinnedNoteFor); Esc lets go; a click shows the stack (2026-11-19-0800: not the pointer resting).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -160,12 +160,16 @@ test('a click OUTSIDE the Score (the row of Mute / Solo / volume sits in the pan
   assert.equal(r.pins.length, 1, 'the inspector listens on the Score only: a control of the pane is not a gesture on it');
 });
 
-test('hovering a row with nothing pinned shows its stack (the preview), leaving shows the hint again', () => {
+test('2026-11-19-0800: the pointer resting on a row with nothing pinned shows NOTHING (no preview of its stack, the hint stays, nothing lit); a click shows the stack', () => {
   const r = rig();
-  r.host.querySelector('[id="ph_bar_1_bell"] rect')!.dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true }));
-  assert.match(r.text(), /bar 1 of 3 · latin kit · phrase_009 bar 1/);
-  r.host.querySelector('[id="ph_bar_1_bell"] rect')!.dispatchEvent(new win.MouseEvent('mouseout', { bubbles: true }));
+  const rect = r.host.querySelector('[id="ph_bar_1_bell"] rect')!;
+  rect.dispatchEvent(new win.MouseEvent('mouseover', { bubbles: true })); rect.dispatchEvent(new win.MouseEvent('mouseenter', { bubbles: true }));
+  assert.equal(r.text(), 'hint', 'no preview: the hint stays');
+  assert.equal(r.host.querySelectorAll('.forge-artifact-hot').length, 0, 'nothing lit');
+  rect.dispatchEvent(new win.MouseEvent('mouseout', { bubbles: true }));
   assert.equal(r.text(), 'hint');
+  rect.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  assert.match(r.text(), /bar 1 of 3 · latin kit · phrase_009 bar 1/, 'CONTROL: a click does show the stack');
 });
 
 

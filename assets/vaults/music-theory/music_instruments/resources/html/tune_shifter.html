@@ -13,7 +13,6 @@
   svg { display: block; width: 100%; max-width: 560px; height: auto; user-select: none; -webkit-user-select: none; }
   .row { display: flex; align-items: center; gap: 8px; margin: 0 0 3px; flex-wrap: wrap; min-height: 30px; }
   button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 12px; cursor: pointer; min-height: 30px; }
-  button:hover { border-color: var(--ink); }
   button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
   #start { color: var(--ink); }
@@ -313,13 +312,13 @@
     for (var k in keys) {
       var mk = +k, why = whyNot(tune, mk, LOW, HIGH), c = keys[k].classList;
       c.toggle("dim", why !== null); c.toggle("startkey", mk === start); c.toggle("tunenote", mk !== start && placed.indexOf(mk) >= 0);
-      if (why !== null) { keys[k].setAttribute("aria-disabled", "true"); keys[k].setAttribute("title", why); } else { keys[k].removeAttribute("aria-disabled"); keys[k].setAttribute("title", "Start the tune on " + spelledName(mk, tuneKeyRoot(tune, mk))); }
+      if (why !== null) { keys[k].setAttribute("aria-disabled", "true"); keys[k].setAttribute("aria-description", why); } else { keys[k].removeAttribute("aria-disabled"); keys[k].setAttribute("aria-description", "Start the tune on " + spelledName(mk, tuneKeyRoot(tune, mk))); }
     }
     $("start").textContent = "starts on " + spelledName(start, tuneKeyRoot(tune, start)).replace(/ (\d+)$/, " (octave $1)");
     TUNES.forEach(function (t) { $("tune-" + t.id).setAttribute("aria-pressed", t === tune ? "true" : "false"); });
   }
   TUNES.forEach(function (t) {
-    var b = document.createElement("button"); b.type = "button"; b.id = "tune-" + t.id; b.textContent = t.short; b.title = t.title; b.setAttribute("aria-pressed", "false");
+    var b = document.createElement("button"); b.type = "button"; b.id = "tune-" + t.id; b.textContent = t.short; b.setAttribute("aria-description", t.title); b.setAttribute("aria-pressed", "false");
     b.addEventListener("click", function () { tune = t; start = t.notes[0]; render(); });                     // a tune opens at its own start
     $("tunes").appendChild(b);
   });

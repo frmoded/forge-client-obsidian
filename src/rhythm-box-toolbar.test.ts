@@ -47,7 +47,7 @@ const press = async (h: Harness, id: string) => { h.el(id).click(); await tick()
 /** Is the element on screen: no ancestor (or itself) carries `hidden`. */
 const shown = (el: any): boolean => { for (let e = el; e && e.tagName !== 'BODY'; e = e.parentElement) if (e.hidden) return false; return true; };
 const FIVE = ['bRotLeft', 'bRotRight', 'bMirror', 'bRingRotLeft', 'bRingRotRight'];
-const snapshot = (h: Harness, id: string) => { const b = h.el(id); return { id, text: b.textContent.trim(), title: b.getAttribute('title'), aria: b.getAttribute('aria-label'), disabled: !!b.disabled, shown: shown(b) }; };
+const snapshot = (h: Harness, id: string) => { const b = h.el(id); return { id, text: b.textContent.trim(), title: b.getAttribute('aria-description'), aria: b.getAttribute('aria-label'), disabled: !!b.disabled, shown: shown(b) }; };
 
 // ---- §3 Tap tempo is gone ---------------------------------------------------------------------------------------------------------
 
@@ -156,7 +156,8 @@ test('§4 GENERATED FROM THE DEFINITION: every control\'s icon, tooltip and aria
     const b = h.el(t.domId);
     const want = transformToolText(t, 'Kick');                       // Kick is the first row, so the default selection
     assert.equal(b.textContent.trim(), t.icon, t.id);
-    assert.equal(b.getAttribute('title'), want.title, t.id);
+    assert.equal(b.getAttribute('aria-description'), want.title, t.id);
+    assert.equal(b.getAttribute('title'), null, t.id + ': 2026-11-19-0800 the text rides in aria-description; a native hover tooltip would open because the pointer rests');
     assert.equal(b.getAttribute('aria-label'), want.label, t.id);
   }
   // the static markup does not carry the five (they would be a second, drifting copy)
@@ -184,7 +185,7 @@ test('§4 GRID SELECTION: every row\'s name is a button; the FIRST row is select
   const picks = [...h.doc.querySelectorAll('.channel-label .row-pick')];
   assert.deepEqual(picks.map((b: any) => b.getAttribute('data-row')), ['kick', 'snare', 'hihat']);
   assert.deepEqual(picks.map((b: any) => b.textContent.trim()), ['Kick', 'Snare', 'Hi-hat']);
-  for (const b of picks) assert.ok((b as any).getAttribute('title') && (b as any).tagName === 'BUTTON');
+  for (const b of picks) assert.ok((b as any).getAttribute('aria-description') && (b as any).tagName === 'BUTTON');
   assert.deepEqual(selectedRows(h), ['kick']);
   await pick(h, 'hihat');
   assert.deepEqual(selectedRows(h), ['hihat']);
@@ -233,11 +234,11 @@ test('§4 SELECTION IS ONE STATE: a row picked in Grid is the ring selected in C
 test('§4 THE SAME TEXT IN BOTH VIEWS: the rotate buttons name the selected instrument, wherever it was picked', { skip }, async () => {
   const h = await loaded(ROCK);
   await pick(h, 'snare');
-  assert.match(h.el('bRingRotLeft').getAttribute('title'), /Snare/);
+  assert.match(h.el('bRingRotLeft').getAttribute('aria-description'), /Snare/);
   assert.match(h.el('bRingRotRight').getAttribute('aria-label'), /Snare/);
-  const gridText = [h.el('bRingRotLeft').getAttribute('title'), h.el('bRingRotRight').getAttribute('aria-label')];
+  const gridText = [h.el('bRingRotLeft').getAttribute('aria-description'), h.el('bRingRotRight').getAttribute('aria-label')];
   await press(h, 'bViewCircle');
-  assert.deepEqual([h.el('bRingRotLeft').getAttribute('title'), h.el('bRingRotRight').getAttribute('aria-label')], gridText);
+  assert.deepEqual([h.el('bRingRotLeft').getAttribute('aria-description'), h.el('bRingRotRight').getAttribute('aria-label')], gridText);
 });
 
 test('§4 a removed selected row falls back to the first row (the buttons never point at nothing)', { skip }, async () => {
@@ -248,7 +249,7 @@ test('§4 a removed selected row falls back to the first row (the buttons never 
   assert.equal(h.el('confirmBar').hidden, false);
   h.el('confirmOk').click(); await tick();
   assert.deepEqual(selectedRows(h), ['kick']);
-  assert.match(h.el('bRingRotLeft').getAttribute('title'), /Kick/);
+  assert.match(h.el('bRingRotLeft').getAttribute('aria-description'), /Kick/);
 });
 
 test('§4 selection is not data: picking a row posts nothing and changes nothing in the note', { skip }, async () => {
@@ -281,11 +282,11 @@ test('§5 ADD INSTRUMENT at the circle\'s four-ring limit: DISABLED in Circle wi
   assert.equal(sel.disabled, false, 'grid: no limit');
   await press(h, 'bViewCircle');
   assert.equal(sel.disabled, true);
-  assert.match(sel.getAttribute('title'), /up to 4 instruments/i);
+  assert.match(sel.getAttribute('aria-description'), /up to 4 instruments/i);
   assert.ok(shown(sel), 'visible, so the reason can be read');
   await press(h, 'bViewGrid');
   assert.equal(sel.disabled, false);
-  assert.doesNotMatch(sel.getAttribute('title'), /up to 4/i);
+  assert.doesNotMatch(sel.getAttribute('aria-description'), /up to 4/i);
 });
 
 // ---- §1 (widget half): Reset and the reminder belong to the host's toolbar when it says so --------------------------------------------

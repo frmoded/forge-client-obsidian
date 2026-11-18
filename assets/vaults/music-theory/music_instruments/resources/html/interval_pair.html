@@ -24,7 +24,6 @@
   .key.black.held text { fill: var(--ink); }
   .row { display: flex; align-items: center; gap: 10px; margin: 4px 0 0; min-height: 30px; flex-wrap: wrap; }
   button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 14px; cursor: pointer; min-height: 30px; }
-  button:hover:not(:disabled) { border-color: var(--ink); }
   button:disabled { opacity: 0.45; cursor: default; }
   #mode { padding: 4px 10px; background: var(--paper); }
   button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
@@ -200,7 +199,7 @@
     for (var k in keys) { var on = +k === state.a || +k === state.b; keys[k].classList.toggle("held", on); keys[k].setAttribute("aria-pressed", on ? "true" : "false"); }
     $("readout").textContent = readout(state);
     $("play").disabled = state.a === null || state.b === null;
-    $("mode").textContent = modeLabel(mode); $("mode").setAttribute("title", modeTitle(mode)); $("mode").setAttribute("aria-label", modeLabel(mode) + ". Press to change to " + nextMode(mode) + ".");
+    $("mode").textContent = modeLabel(mode); $("mode").setAttribute("aria-description", modeTitle(mode)); $("mode").setAttribute("aria-label", modeLabel(mode) + ". Press to change to " + nextMode(mode) + ".");
   }
   $("mode").addEventListener("click", function () { mode = nextMode(mode); render(); });            // a mode change plays nothing
   function choose(m) { state = select(state, m); render(); }            // choosing a key never plays

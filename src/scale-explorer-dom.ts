@@ -259,7 +259,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
     for (const step of intervalPattern(scale)) {
       const chip = h('span', 'forge-scale-step');
       chip.setAttribute('data-semitones', String(step.semitones));
-      chip.title = `${step.semitones} semitone${step.semitones === 1 ? '' : 's'}`;
+      chip.setAttribute('aria-description', `${step.semitones} semitone${step.semitones === 1 ? '' : 's'}`);
       chip.append(h('span', 'forge-scale-step-letter', step.letter), h('span', 'forge-scale-step-semis', String(step.semitones)));
       intervalsHost.appendChild(chip);
     }

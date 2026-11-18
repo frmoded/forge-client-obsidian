@@ -35,13 +35,11 @@
   svg { display: block; width: 100%; min-width: 600px; height: auto; user-select: none; -webkit-user-select: none; }
   .pt { cursor: pointer; }
   .pt:focus { outline: none; }
-  /* Each position is a small dot; hovering, focusing or holding it swaps in a
+  /* Each position is a small dot; focusing or holding it swaps in a
      disc that carries the note name, so 78 labels never clutter the board. */
   .pt .dot { fill: var(--axis); opacity: 0.35; }
   .pt .disc { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; opacity: 0; }
   .pt text { fill: var(--ink); font-size: 9px; opacity: 0; pointer-events: none; }
-  .pt:hover .disc, .pt:hover text { opacity: 1; }
-  .pt:hover .dot { opacity: 0; }
   .pt.held .disc { opacity: 1; fill: var(--highlight); stroke: var(--ink); stroke-width: 1.5; }
   .pt.held text { opacity: 1; }
   .pt.held .dot { opacity: 0; }
@@ -61,7 +59,6 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 8px 12px; cursor: pointer; min-height: 40px;
   }
-  button:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
   button.left  { border-color: var(--left);  color: var(--left); }
   /* Role shows in COLOR only: same border weight, radius and text weight on every button.
@@ -74,7 +71,6 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 8px 12px; cursor: pointer; min-height: 40px;
   }
-  select:hover { border-color: var(--ink); }
 </style>
 </head>
 <body>
@@ -83,11 +79,11 @@
 <div class="scroller"><svg id="svg" role="group" aria-label="Lute fretboard, six courses. Click a position to hold it, then play the held notes. Arrow keys move between positions. In Pythagorean, meantone or well temperament each fret breaks into a zigzag, a different position per course, because one straight fret cannot be exactly right for six differently-tuned strings at once."></svg></div>
 
 <div class="controls">
-  <button class="both"  id="bT" title="All held notes at once, as a chord">Play together</button>
-  <button class="left"  id="bU" title="Held notes one at a time, lowest to highest">Play ascending</button>
-  <button class="right" id="bD" title="Held notes one at a time, highest to lowest">Play descending</button>
-  <button id="bC" title="Release every held position">Clear</button>
-  <select id="tuning" aria-label="Tuning system" title="Rule of Eighteen and Equal temperament are rotationally symmetric, so one straight fret is correct for every course. Pythagorean, quarter-comma meantone and Werckmeister III well temperament are NOT: each course's own open pitch class determines where ITS fret lands, so the frets break into a zigzag — a real limitation of fretted instruments in a non-equal tuning, not a simplification.">
+  <button class="both"  id="bT" aria-description="All held notes at once, as a chord">Play together</button>
+  <button class="left"  id="bU" aria-description="Held notes one at a time, lowest to highest">Play ascending</button>
+  <button class="right" id="bD" aria-description="Held notes one at a time, highest to lowest">Play descending</button>
+  <button id="bC" aria-description="Release every held position">Clear</button>
+  <select id="tuning" aria-label="Tuning system" aria-description="Rule of Eighteen and Equal temperament are rotationally symmetric, so one straight fret is correct for every course. Pythagorean, quarter-comma meantone and Werckmeister III well temperament are NOT: each course's own open pitch class determines where ITS fret lands, so the frets break into a zigzag — a real limitation of fretted instruments in a non-equal tuning, not a simplification.">
     <option value="roe" selected>Rule of Eighteen</option>
     <option value="equal">Equal temperament</option>
     <option value="pythagorean">Pythagorean</option>

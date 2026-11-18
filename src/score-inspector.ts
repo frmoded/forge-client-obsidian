@@ -142,8 +142,9 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
       if (l.covers !== undefined && !preview) {
         // the hover-link of a stack entry: it lights the bars it covers (never calls back into the inspector's own onHover, so there is no echo)
         const covers = l.covers; const pinnedId = entry.id;
-        li.addEventListener('mouseenter', () => current?.layer.highlightAll(barsCoveredBy(current.result.map, pinnedId, covers)));
-        li.addEventListener('mouseleave', () => current?.layer.highlightAll([]));
+        li.tabIndex = 0;                                    // 2026-11-19-0800: no pointer-rest light any more; the keyboard still lights the bars (focus), a click on the line does the same and keeps it lit until the next click or blur
+        li.addEventListener('focus', () => current?.layer.highlightAll(barsCoveredBy(current.result.map, pinnedId, covers)));
+        li.addEventListener('blur', () => current?.layer.highlightAll([]));
       }
       list.appendChild(li);
     }
@@ -162,8 +163,9 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
     for (const n of notesInMap(result.map)) {
       const li = doc.createElement('li'); li.className = 'forge-inspector-note';
       li.textContent = n.noteId;
-      li.addEventListener('mouseenter', () => current?.layer.highlightAll(n.ids));
-      li.addEventListener('mouseleave', () => current?.layer.highlightAll([]));
+      li.tabIndex = 0;                                      // 2026-11-19-0800: lit by keyboard focus, never by the pointer resting
+      li.addEventListener('focus', () => current?.layer.highlightAll(n.ids));
+      li.addEventListener('blur', () => current?.layer.highlightAll([]));
       ul.appendChild(li);
     }
     notes.append(head, ul);

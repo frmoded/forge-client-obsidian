@@ -491,12 +491,14 @@ test('1020: a pick of a number and a Shift-click bring the Run row into view (th
   } finally { if (saved === undefined) delete proto.scrollIntoView; else proto.scrollIntoView = saved; }
 });
 
-test('1020: the numbered buttons are drawn as buttons, and the selected range is drawn filled - the plugin stylesheet says so for `.forge-notebook-bar` (border, hover, pressed, selected fill), and for the row buttons', () => {
+test('1020: the numbered buttons are drawn as buttons, and the selected range is drawn filled - the plugin stylesheet says so for `.forge-notebook-bar` (border, pressed, selected fill, keyboard focus ring - and NO `:hover` rule: 2026-11-19-0800, nothing changes because the pointer rests), and for the row buttons', () => {
   const css = fs.readFileSync(path.join(import.meta.dirname, '../styles.css'), 'utf8');
   const rule = (selector: string): string => [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter((m) => m[1].replace(/\/\*[\s\S]*?\*\//g, '').split(',').some((x) => x.trim() === selector)).map((m) => m[2]).join('\n');       // every block whose selector LIST holds the selector
   assert.match(rule('.forge-notebook-bar'), /border:\s*1px solid/, 'a border: bare numbers do not look pressable');
   assert.match(rule('.forge-notebook-bar'), /cursor:\s*pointer/);
-  assert.match(rule('.forge-notebook-bar:hover'), /background/);
+  assert.equal(rule('.forge-notebook-bar:hover'), '', 'no hover rule for the bars (2026-11-19-0800)');
+  assert.equal(rule('.forge-notebook-row:hover'), '', 'no hover rule for the rows');
+  assert.match(rule('.forge-notebook-bar:focus-visible'), /outline:\s*2px solid/, 'the keyboard focus ring is what shows where you are');
   assert.match(rule('.forge-notebook-bar:active'), /(transform|background)/, 'a pressed state');
   assert.match(rule('.forge-notebook-bar[aria-pressed="true"]'), /background:\s*var\(--interactive-accent/, 'the selected range is filled with the accent');
   assert.match(rule('.forge-notebook-row'), /border:\s*1px solid/);

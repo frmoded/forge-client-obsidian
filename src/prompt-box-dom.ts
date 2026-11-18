@@ -83,11 +83,11 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
   text.setAttribute('aria-label', COMPOSER_LABELS.field);
   text.placeholder = ports.placeholder;
   const bar = doc.createElement('div'); bar.className = 'forge-composer-bar';
-  const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'forge-composer-plus'; plus.setAttribute('aria-label', COMPOSER_LABELS.plus); plus.setAttribute('title', COMPOSER_LABELS.plus);
+  const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'forge-composer-plus'; plus.setAttribute('aria-label', COMPOSER_LABELS.plus);
   plus.setAttribute('aria-haspopup', 'menu'); plus.setAttribute('aria-expanded', 'false'); plus.appendChild(icon(doc, ICON_PLUS));
   const menu = doc.createElement('div'); menu.className = 'forge-composer-menu'; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', COMPOSER_LABELS.menu); menu.hidden = true;
   const state = doc.createElement('span'); state.className = 'forge-prompt-box-state'; state.setAttribute('aria-live', 'polite');
-  const send = doc.createElement('button'); send.type = 'button'; send.className = 'forge-composer-send'; send.setAttribute('aria-label', COMPOSER_LABELS.send); send.setAttribute('title', COMPOSER_LABELS.send); send.appendChild(icon(doc, ICON_RETURN));
+  const send = doc.createElement('button'); send.type = 'button'; send.className = 'forge-composer-send'; send.setAttribute('aria-label', COMPOSER_LABELS.send); send.appendChild(icon(doc, ICON_RETURN));
   bar.append(plus, menu, state, send);
   const conflict = doc.createElement('div');
   conflict.className = 'forge-prompt-box-conflict'; conflict.setAttribute('role', 'status');

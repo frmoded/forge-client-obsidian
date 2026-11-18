@@ -1,5 +1,7 @@
 // score_first M3 (drain 2026-10-21-1230) — the Beat Box widget's hover-link, the WIDGET half. It is inert unless the host's load message says `hoverLink: true`
 // (only the score-first Beat Box tab does): without the flag the widget posts nothing on hover, ignores a highlight message and its DOM is unchanged (principle P3).
+// 2026-11-19-0800 (drain "remove ALL hover behavior"): the widget -> host half is GONE on purpose. The widget never reports where the pointer rests, flag or no flag
+// (nothing may happen because the pointer RESTS on something); only the host -> widget half (`forge-rhythm-highlight`) remains, and it is pinned below.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -26,13 +28,17 @@ test('without hoverLink: hovering posts nothing, a highlight message changes not
   over(falsy, falsy.cell('kick', 0)); assert.deepEqual(hovers(falsy), [], 'only the exact true switches it on');
 });
 
-test('with hoverLink: hovering a grid step posts {channel, step}; moving to another posts again; leaving posts nulls; the same step twice posts once', { skip }, async () => {
+test('with hoverLink: the pointer resting on or moving over a grid step posts NOTHING (the widget -> host hover report is gone, 2026-11-19-0800) and lights nothing', { skip }, async () => {
   const h = await loadWidget(true);
   await h.send(load({ hoverLink: true }));
+  const before = h.posted.length, dom = html(h);
   over(h, h.cell('kick', 0)); over(h, h.cell('kick', 0));
   over(h, h.cell('snare', 4), h.cell('kick', 0));
   out(h, h.cell('snare', 4), null);
-  assert.deepEqual(hovers(h).map((m) => [m.channel, m.step]), [['kick', 0], ['snare', 4], [null, null]]);
+  assert.deepEqual(hovers(h), [], 'no forge-rhythm-hover, whichever step the pointer rests on or leaves');
+  assert.equal(h.posted.length, before, 'and no other message either: a resting pointer tells the host nothing');
+  assert.deepEqual(hot(h), [], 'the pointer lights nothing; only a host highlight message does');
+  assert.equal(html(h), dom, 'the page is untouched by the pointer');
 });
 
 test('with hoverLink: a highlight message outlines that step (class only, one at a time), {channel: null} or junk clears, and nothing is saved', { skip }, async () => {
@@ -50,16 +56,17 @@ test('with hoverLink: a highlight message outlines that step (class only, one at
   assert.equal(h.posted.slice(before).filter((m) => m.type === 'forge-rhythm-save').length, 0, 'a highlight is not an edit');
 });
 
-test('with hoverLink in the circle view: ring cells report and light too', { skip }, async () => {
+test('with hoverLink in the circle view: a pointer over a ring cell posts nothing and lights nothing, but a host highlight message still lights the cell', { skip }, async () => {
   const h = await loadWidget(true);
   await h.send({ ...load({ hoverLink: true, mode: 'playground' }), view: 'circle' });
   const cell: any = h.doc.querySelector('#circle .cell[data-channel][data-step]');
   assert.ok(cell, 'the ring has cells');
   const ch = cell.getAttribute('data-channel'), st = Number(cell.getAttribute('data-step'));
   over(h, cell);
-  assert.deepEqual(hovers(h).map((m) => [m.channel, m.step]), [[ch, st]]);
+  assert.deepEqual(hovers(h), [], '2026-11-19-0800: the ring does not report the pointer any more');
+  assert.ok(!cell.classList.contains('link-hot'), 'and the pointer does not light the cell');
   await h.send({ type: 'forge-rhythm-highlight', channel: ch, step: st });
-  assert.ok(cell.classList.contains('link-hot'));
+  assert.ok(cell.classList.contains('link-hot'), 'the host -> widget highlight still lights it');
 });
 
 test('a later load WITHOUT the flag switches the link off and clears any outline (a reload for another host or note)', { skip }, async () => {
@@ -70,7 +77,7 @@ test('a later load WITHOUT the flag switches the link off and clears any outline
   await h.send(load());
   assert.deepEqual(hot(h), []);
   const n = hovers(h).length;
-  over(h, h.cell('snare', 4)); assert.equal(hovers(h).length, n, 'no hover posts any more');
+  over(h, h.cell('snare', 4)); assert.equal(hovers(h).length, n, 'no hover posts (none ever, since 2026-11-19-0800)');
   await h.send({ type: 'forge-rhythm-highlight', channel: 'kick', step: 0 });
   assert.deepEqual(hot(h), []);
 });

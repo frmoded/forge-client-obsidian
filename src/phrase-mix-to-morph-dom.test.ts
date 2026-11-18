@@ -46,7 +46,8 @@ test('a mix tab with the action has a "Morph this mix" button in its strip; clic
   assert.equal(b.textContent, 'Morph this mix');
   assert.equal(b.tagName, 'BUTTON');
   assert.equal(b.type, 'button');
-  assert.match(b.title, /morph/i);
+  assert.match(b.getAttribute('aria-description'), /morph/i, '2026-11-19-0800: the extra sentence is the aria-description (it was a native title tooltip)');
+  assert.equal(b.hasAttribute('title'), false, 'no native tooltip');
   assert.equal(b.disabled, false);
   assert.ok(r.q('.forge-mix-controls').contains(b), 'inside the mix strip');
   b.click(); await flush();

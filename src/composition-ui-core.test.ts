@@ -202,7 +202,7 @@ test('the tree: one row per section of the json with its note, bars and plays; t
   assert.deepEqual(treeRows(P({ source: 'compositions/gone' }), null, { 'compositions/gone': undefined }).map((r) => r.depth), [0], 'a composition that cannot be read has no children');
 });
 
-test('the strip DOM: a row per section with its chip, indented one level for a nested one; hovering and clicking a chip tell the owner; the note a pin came from is emphasised; none hides it', () => {
+test('the strip DOM: a row per section with its chip, indented one level for a nested one; focusing and clicking a chip tell the owner and the pointer resting tells nobody (2026-11-19-0800); the note a pin came from is emphasised; none hides it', () => {
   const doc = win.document;
   const parent = doc.createElement('div'); doc.body.appendChild(parent);
   const told: string[] = [];
@@ -220,8 +220,10 @@ test('the strip DOM: a row per section with its chip, indented one level for a n
   const chip = rows[0].querySelector('button');
   assert.equal(chip.textContent, 'phrase_003'); assert.equal(chip.dataset.note, 'phrases/phrase_003'); assert.equal(chip.getAttribute('aria-label'), 'Open phrase_003');
   assert.equal(rows[0].querySelector('.forge-composition-detail').textContent, '2 bars · bars 1-2');
-  chip.dispatchEvent(new win.Event('mouseenter')); chip.dispatchEvent(new win.Event('mouseleave')); chip.dispatchEvent(new win.Event('focus')); chip.dispatchEvent(new win.Event('blur')); chip.dispatchEvent(new win.Event('click', { bubbles: true }));
-  assert.deepEqual(told, ['hover phrases/phrase_003', 'hover none', 'hover phrases/phrase_003', 'hover none', 'click phrases/phrase_003']);
+  chip.dispatchEvent(new win.Event('mouseenter')); chip.dispatchEvent(new win.Event('mouseover')); chip.dispatchEvent(new win.Event('mouseleave'));
+  assert.deepEqual(told, [], '2026-11-19-0800: the pointer resting on a chip (or leaving it) tells the owner nothing');
+  chip.dispatchEvent(new win.Event('focus')); chip.dispatchEvent(new win.Event('blur')); chip.dispatchEvent(new win.Event('click', { bubbles: true }));
+  assert.deepEqual(told, ['hover phrases/phrase_003', 'hover none', 'click phrases/phrase_003']);
   strip.emphasise(['phrases/phrase_003']);
   assert.equal(chip.style.fontWeight, '700'); assert.ok(chip.classList.contains('forge-structure-chip-on'));
   assert.equal(rows[1].querySelector('button').style.fontWeight, '');

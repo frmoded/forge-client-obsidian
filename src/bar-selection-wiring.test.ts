@@ -160,7 +160,7 @@ test('GREYED: moving bar 1 left and the last bar right, deleting every bar; clic
     r.click(r.bars()[0], { shiftKey: true });
     const dis = (id: string) => (r.menu().querySelector(`[data-action="${id}"]`) as any).disabled;
     assert.ok(dis('move-left')); assert.ok(!dis('move-right')); assert.ok(!dis('delete'));
-    assert.equal((r.menu().querySelector('[data-action="move-left"]') as any).title, 'Bar 1 cannot move left.');
+    assert.equal((r.menu().querySelector('[data-action="move-left"]') as any).getAttribute('aria-description'), 'Bar 1 cannot move left.', '2026-11-19-0800: the why is the aria-description, not a native title');
     await r.act('move-left');
     assert.deepEqual(r.made, []);
     r.click(r.bars()[7], { shiftKey: true });                                   // bars 1 to 8

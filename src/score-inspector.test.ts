@@ -1,4 +1,4 @@
-// score_first M3 (drain 2026-10-21-1230) — the interaction layer (generic) and the panel (score-specific), in happy-dom with a hand-made SVG: hover, click-pin, Esc, arrows,
+// score_first M3 (drain 2026-10-21-1230) — the interaction layer (generic) and the panel (score-specific), in happy-dom with a hand-made SVG: click-pin (hover was removed 2026-11-19-0800: the pointer resting does nothing), Esc, arrows,
 // the grid -> note direction without an echo, the lineage with "Open note", the notes list, the quiet Kit line, and that a score that could not be mapped says so.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -25,26 +25,34 @@ function dom(ids = Object.keys(MAP)) {
 }
 const hot = (d: ReturnType<typeof dom>) => [...d.doc.querySelectorAll(`.${HOT_CLASS}`)].map((e: Element) => e.id).sort();
 
-test('hover lights the mapped note and tells the host; leaving clears; a child path counts as its note; an unmapped element is ignored', () => {
+// 2026-11-19-0800: the driver ordered "remove ALL hover behavior" - a pointer RESTING on a note lights nothing and tells nobody; only the keyboard (arrows), a click and the outside `highlight()` light a note.
+test('2026-11-19-0800: the pointer resting on a note does nothing - mouseover/mouseenter/mouseout on a note, on its child path or on an unmapped element light nothing and never call onHover', () => {
   const d = dom(); const told: any[] = [];
   attachArtifactInspector({ root: d.host, map: MAP, onHover: (e) => told.push(e?.id ?? null), onPin: () => {} });
-  d.fire(d.el('a_snare_4-p'), 'mouseover');
-  assert.deepEqual(hot(d), ['a_snare_4']);
+  for (const type of ['mouseover', 'mouseenter', 'mousemove']) {
+    d.fire(d.el('a_snare_4-p'), type); assert.deepEqual(hot(d), [], `${type} on a child path of a mapped note`);
+    d.fire(d.el('a_snare_4'), type); assert.deepEqual(hot(d), [], `${type} on a mapped note`);
+    d.fire(d.el('decoy'), type); assert.deepEqual(hot(d), [], `${type} on an unmapped element`);
+  }
   d.fire(d.el('a_snare_4'), 'mouseout', { relatedTarget: d.el('decoy') });
-  assert.deepEqual(hot(d), []);
-  d.fire(d.el('decoy'), 'mouseover');
-  assert.deepEqual(hot(d), [], 'no map entry: nothing lights');
-  assert.deepEqual(told, ['a_snare_4', null]);
+  d.fire(d.el('a_snare_4'), 'mouseleave');
+  assert.deepEqual(told, [], 'the host is never told by the pointer resting');
+  assert.equal(d.doc.querySelectorAll(`.${PINNED_CLASS}`).length, 0, 'and nothing is pinned either');
+  // CONTROL: the keyboard path still lights the note and tells the host (the assertions above can fail)
+  d.key(d.host, 'ArrowRight');
+  assert.deepEqual(hot(d), ['a_kick_0']);
+  assert.deepEqual(told, ['a_kick_0']);
 });
 
-test('click pins (class + callback), a click on empty space or Esc unpins; the pinned note stays pinned while hover moves', () => {
+test('click pins (class + callback), a click on empty space or Esc unpins; the pinned note stays pinned while the pointer moves over another note', () => {
   const d = dom(); const pins: any[] = [];
   const layer = attachArtifactInspector({ root: d.host, map: MAP, onHover: () => {}, onPin: (e) => pins.push(e?.id ?? null) });
   d.fire(d.el('a_kick_8'), 'click');
   assert.equal(layer.pinnedId(), 'a_kick_8');
   assert.ok(d.el('a_kick_8').classList.contains(PINNED_CLASS));
   d.fire(d.el('a_snare_4'), 'mouseover');
-  assert.ok(d.el('a_kick_8').classList.contains(PINNED_CLASS), 'hovering another note does not unpin');
+  assert.ok(d.el('a_kick_8').classList.contains(PINNED_CLASS), 'the pointer over another note does not unpin');
+  assert.deepEqual(hot(d), [], 'and does not light it either (2026-11-19-0800)');
   d.key(d.host, 'Escape');
   assert.equal(layer.pinnedId(), null);
   assert.ok(!d.el('a_kick_8').classList.contains(PINNED_CLASS));
@@ -71,7 +79,7 @@ test('highlight() from outside lights without echoing onHover; unknown ids and n
   layer.highlight('a_kick_8'); layer.pin('a_snare_4');
   layer.dispose();
   assert.deepEqual(hot(d), []); assert.equal(d.doc.querySelectorAll(`.${PINNED_CLASS}`).length, 0);
-  d.fire(d.el('a_kick_0'), 'mouseover'); assert.deepEqual(hot(d), [], 'listeners are gone');
+  d.key(d.host, 'ArrowRight'); assert.deepEqual(hot(d), [], 'listeners are gone (the keyboard layer too)');
   assert.deepEqual(told, [], 'no echo');
 });
 
@@ -83,8 +91,9 @@ test('enlarged targets: each mapped note gets an invisible rect (bounding box + 
   assert.equal(rects.length, Object.keys(MAP).length);
   const r = d.el('a_snare_4').querySelector(`.${HITBOX_CLASS}`)!;
   assert.deepEqual(['x', 'y', 'width', 'height', 'fill', 'pointer-events'].map((a) => r.getAttribute(a)), ['5', '17', '20', '36', 'transparent', 'all']);
-  d.fire(r, 'mouseover'); assert.deepEqual(told, ['a_snare_4'], 'a hover on the padding is a hover on the note');
-  d.fire(r, 'click'); assert.equal(layer.pinnedId(), 'a_snare_4');
+  d.fire(r, 'mouseover'); assert.deepEqual(told, [], '2026-11-19-0800: the pointer resting on the padding does nothing, as on the note');
+  assert.deepEqual(hot(d), []);
+  d.fire(r, 'click'); assert.equal(layer.pinnedId(), 'a_snare_4', 'a click on the padding is a click on the note');
   assert.equal(d.el('decoy').querySelector(`.${HITBOX_CLASS}`), null, 'only mapped notes');
   layer.dispose(); assert.equal(d.host.querySelectorAll(`.${HITBOX_CLASS}`).length, 0);
 });
@@ -146,15 +155,23 @@ test('the panel: a hint until something is pinned; pinning shows the lineage; "O
   assert.equal(p.slot.querySelector('.forge-inspector-open'), null);
 });
 
-test('hovering an engraved note posts the grid step to light; leaving posts null; the notes list lights every note of that file', () => {
+test('2026-11-19-0800: the pointer resting on an engraved note or on a notes-list line does nothing (no grid step posted, nothing lit); an arrow key posts the step; focusing a notes-list line lights every note of that file and blur clears', () => {
   const p = panel(); p.insp.onShown(p.d.host, p.result);
   p.d.fire(p.d.el('a_kick_8'), 'mouseover');
   p.d.fire(p.d.el('a_kick_8'), 'mouseout', { relatedTarget: p.d.el('decoy') });
-  assert.deepEqual(p.posted, [{ channel: 'kick', step: 8 }, null]);
+  assert.deepEqual(p.posted, [], 'the pointer on an engraved note posts nothing to the grid');
+  assert.deepEqual(hot(p.d), []);
   const li = p.slot.querySelector('.forge-inspector-note')!; assert.equal(li.textContent, 'bars/bar_001');
-  p.d.fire(li, 'mouseenter');
-  assert.equal(hot(p.d).length, 5, 'all five elements of the note');
-  p.d.fire(li, 'mouseleave'); assert.deepEqual(hot(p.d), []);
+  assert.equal((li as HTMLElement).tabIndex, 0, 'the line is reachable by keyboard');
+  p.d.fire(li, 'mouseenter'); p.d.fire(li, 'mouseover');
+  assert.deepEqual(hot(p.d), [], 'the pointer resting on the line lights nothing');
+  p.d.fire(li, 'mouseleave');
+  li.dispatchEvent(new p.d.win.FocusEvent('focus'));
+  assert.equal(hot(p.d).length, 5, 'focus lights all five elements of the note');
+  li.dispatchEvent(new p.d.win.FocusEvent('blur')); assert.deepEqual(hot(p.d), []);
+  // the keyboard path posts the step to the grid
+  p.d.key(p.d.host, 'ArrowRight');
+  assert.deepEqual(p.posted, [{ channel: 'kick', step: 0 }]);
 });
 
 test('gridHover lights the engraved note (and its tied tail), without posting back; null clears', () => {
@@ -228,17 +245,18 @@ test('HEADLESS: nothing of the panel is on the page (no "Inspector" title, hint,
   assert.ok(control.slot.querySelector('.forge-inspector') && control.text().includes(INSPECTOR_HINT), 'the panel tabs keep their Inspector');
 });
 
-test('HEADLESS: the interaction stays - hover lights the note and tells the grid, a click pins (band class) and Esc lets go, the arrow keys walk, the grid lights the engraved note without an echo, and the pin is told to whoever listens', () => {
+test('HEADLESS: the interaction stays - the pointer resting does nothing (2026-11-19-0800), a click pins (band class) and Esc lets go, the arrow keys walk, the grid lights the engraved note without an echo, and the pin is told to whoever listens', () => {
   const p = headless(); p.insp.onShown(p.d.host, p.result);
   p.d.fire(p.d.el('a_kick_8'), 'mouseover');
-  assert.deepEqual(hot(p.d), ['a_kick_8']);
+  assert.deepEqual(hot(p.d), [], 'the pointer resting lights nothing');
   p.d.fire(p.d.el('a_kick_8'), 'mouseout', { relatedTarget: p.d.el('decoy') });
-  assert.deepEqual(p.posted, [{ channel: 'kick', step: 8 }, null]);
+  assert.deepEqual(p.posted, [], 'and tells the grid nothing');
   p.d.fire(p.d.el('a_snare_4'), 'click');
   assert.ok(p.d.el('a_snare_4').classList.contains(PINNED_CLASS));
   assert.deepEqual(p.pins, ['a_snare_4'], 'onPinned still hears it');
   p.d.key(p.d.host, 'ArrowRight');
   assert.ok(!p.d.el('a_snare_4').classList.contains(PINNED_CLASS), 'the arrow key moved the pin');
+  assert.deepEqual(p.posted.at(-1), { channel: 'kick', step: 8 }, 'and told the grid which step it is on');
   p.d.key(p.d.host, 'Escape');
   assert.equal(p.d.doc.querySelectorAll(`.${PINNED_CLASS}`).length, 0);
   p.posted.length = 0;

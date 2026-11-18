@@ -41,7 +41,7 @@ function svgIcon(doc: Document, key: keyof typeof TRANSPORT_ICONS): Node {
 
 function button(doc: Document, cls: string, label: string): HTMLButtonElement {
   const b = doc.createElement('button');
-  b.type = 'button'; b.className = `forge-tp-btn ${cls}`; b.setAttribute('aria-label', label); b.setAttribute('title', label);
+  b.type = 'button'; b.className = `forge-tp-btn ${cls}`; b.setAttribute('aria-label', label);
   return b;
 }
 
@@ -56,7 +56,7 @@ export function mountScoreTransport(toolbar: HTMLElement, deps: TransportDeps): 
   const play = button(doc, 'forge-tp-play', TRANSPORT_LABELS.play); play.setAttribute('aria-pressed', 'false'); play.appendChild(svgIcon(doc, 'play'));
   const reset = button(doc, 'forge-tp-reset', TRANSPORT_LABELS.reset); reset.appendChild(svgIcon(doc, 'reset'));
   const showPlaying = (playing: boolean): void => {
-    const label = playPauseLabel(playing); play.setAttribute('aria-label', label); play.setAttribute('title', label); play.setAttribute('aria-pressed', playing ? 'true' : 'false'); play.classList.toggle('is-playing', playing);
+    const label = playPauseLabel(playing); play.setAttribute('aria-label', label); play.setAttribute('aria-pressed', playing ? 'true' : 'false'); play.classList.toggle('is-playing', playing);
     play.replaceChildren(svgIcon(doc, playing ? 'pause' : 'play'));
   };
   on(play, 'click', () => { if (player.playing) { player.stop(); log('[forge-score-row] pause'); } else { player.start(); log('[forge-score-row] play'); } showPlaying(player.playing); });

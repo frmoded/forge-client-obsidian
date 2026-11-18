@@ -16,7 +16,6 @@
   p { margin: 0 0 8px; font-size: 13px; line-height: 1.4; }
   .row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
   button, select { font: inherit; font-size: 13px; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 6px 12px; cursor: pointer; min-height: 36px; }
-  button:hover { border-color: var(--ink); }
   button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
   button.on { background: var(--highlight); border-color: var(--ink); }
   .slot { display: inline-flex; align-items: center; gap: 4px; }
@@ -58,7 +57,7 @@
     <button type="button" id="playA">Play A</button>
     <button type="button" id="playB">Play B</button>
     <button type="button" id="playAB">A, then B</button>
-    <button type="button" id="flip" aria-pressed="false" title="The keys below play through this setting">Keys play: <b id="flipName">B</b> (switch)</button>
+    <button type="button" id="flip" aria-pressed="false" aria-description="The keys below play through this setting">Keys play: <b id="flipName">B</b> (switch)</button>
   </div>
   <div class="keys" id="keys" role="group" aria-label="Keyboard, C3 to C5"></div>
   <p class="status" id="status" aria-live="polite"></p>
@@ -253,7 +252,7 @@
     });
     var pBox = $("presets"); pBox.textContent = "";
     PIANO_PRESETS.forEach(function (pr, i) {
-      var b = document.createElement("button"); b.type = "button"; b.textContent = pr.name; b.title = pr.note; b.id = "preset" + i;
+      var b = document.createElement("button"); b.type = "button"; b.textContent = pr.name; b.setAttribute("aria-description", pr.note); b.id = "preset" + i;
       b.setAttribute("aria-pressed", String(slots[editing].preset === i)); if (slots[editing].preset === i) b.className = "on";
       b.addEventListener("click", function () { slots[editing] = { params: pianoParams(pr.params), preset: i }; paintHead(); paintSliders(); $("status").textContent = editing + " is now: " + pr.name + ". " + pr.note; });
       pBox.appendChild(b);

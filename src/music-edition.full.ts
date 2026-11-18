@@ -228,9 +228,9 @@ function renderMusicXMLWithToggle(
     } else {
       button.setText(m === 'kit' ? '🎼 Multi-staff' : '🥁 Kit');
     }
-    button.title = m === 'kit'
+    button.setAttribute('aria-description', m === 'kit'
       ? 'Switch to multi-staff orchestral percussion view'
-      : 'Switch to drum-kit single-staff view';
+      : 'Switch to drum-kit single-staff view');
   };
   updateLabel(mode);
   // Zoom-bar slot — renderMusicXML populates it per render.

@@ -1,5 +1,5 @@
 // score_first M13 (drain 2026-10-26-1270, DEMO profile) — the structure strip's DOM: the chips of structure-strip-core.ts as buttons joined by arrows. Plain DOM, no obsidian import (a happy-dom test mounts this very code).
-// It tells its owner which chip is hovered or clicked and nothing else; what a click or a hover DOES (navigate the notes pane, light bars) is the owner's.
+// It tells its owner which chip has the keyboard focus or is clicked and nothing else (2026-11-19-0800: the pointer resting on a chip does nothing); what a click or a focus DOES (navigate the notes pane, light bars) is the owner's.
 import { stripTokens, type Chip } from './structure-strip-core.ts';
 
 export const STRIP_CLASS = 'forge-structure-strip';
@@ -76,8 +76,6 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
         b.dataset.note = t.noteId;
         b.setAttribute('aria-label', `Open ${t.noteId.split('/').pop()}`);
         const chip = t;
-        b.addEventListener('mouseenter', () => ports.onHover(chip));
-        b.addEventListener('mouseleave', () => ports.onHover(null));
         b.addEventListener('focus', () => ports.onHover(chip));
         b.addEventListener('blur', () => ports.onHover(null));
         b.addEventListener('click', () => ports.onClick(chip));

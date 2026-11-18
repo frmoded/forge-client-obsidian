@@ -65,7 +65,7 @@ class FacetStateSuffixWidget extends WidgetType {
     const el = document.createElement('span');
     el.textContent = ` ${suffixTextForState(this.state)}`;
     el.className = `forge-facet-suffix forge-facet-suffix-${this.state}`;
-    el.title = TITLE_BY_STATE[this.state];
+    el.setAttribute('aria-description', TITLE_BY_STATE[this.state]);
     return el;
   }
   eq(other: WidgetType): boolean {

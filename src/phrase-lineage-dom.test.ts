@@ -1,6 +1,6 @@
 // score_first M6 (drain 2026-10-22-1950) — the phrase tab's inspector, on the surface a person uses: happy-dom, the real mountPhrase + live Score area + the REUSED bar inspector (score-inspector.ts),
 // a fake renderer that draws `g.measure` elements with the ids found in the annotated MusicXML (as Verovio does, measured in real Chrome), a fake vault. Click a bar -> the stack; click the links ->
-// the notes open; hover -> the fan; the bracket; the source link. Without the `inspector` port the tab is exactly the M5 tab (phrase-dom.test.ts).
+// the notes open; focus (never the pointer resting, 2026-11-19-0800) -> the fan; the bracket; the source link. Without the `inspector` port the tab is exactly the M5 tab (phrase-dom.test.ts).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -84,50 +84,58 @@ test('the two links open their notes: the phrase entry opens phrase_001, the bar
   assert.deepEqual(r.opened, ['phrases/phrase_001', 'bars/bar_005']);
 });
 
-test('HOVER A BAR with nothing pinned shows its stack (a preview), leaving restores the hint; a pinned bar is not replaced by hovering another', async () => {
+test('2026-11-19-0800: THE POINTER RESTING ON A BAR shows NOTHING (no preview of its stack, the hint stays, no bar lit); a click still shows the stack and the pin is not replaced by the pointer resting on another bar', async () => {
   const r = rig();
   await r.handle.load(); await flush();
-  r.fire(r.q('#ph_bar_2'), 'mouseover');
-  assert.equal(r.stack()[0], 'bar 2 of 8');
-  assert.ok(r.q('.forge-inspector-lineage').classList.contains('forge-inspector-preview'));
+  r.fire(r.q('#ph_bar_2'), 'mouseover'); r.fire(r.q('#ph_bar_2'), 'mouseenter');
+  assert.deepEqual(r.stack(), [], 'no stack is drawn for a bar the pointer merely rests on');
+  assert.equal(r.qa('.forge-inspector-preview').length, 0, 'no preview');
+  assert.match(r.q('.forge-inspector-body').textContent, /^Click a bar/, 'the hint stays');
+  assert.deepEqual(r.qa('g.measure.forge-artifact-hot'), [], 'no bar is lit');
   r.fire(r.q('#ph_bar_2'), 'mouseout', { relatedTarget: r.parent });
   assert.match(r.q('.forge-inspector-body').textContent, /^Click a bar/);
   r.fire(r.q('#ph_bar_4'), 'click');
+  assert.equal(r.stack()[0], 'bar 4 of 8', 'a click still shows the stack (CONTROL: the stack can appear)');
   r.fire(r.q('#ph_bar_6'), 'mouseover');
   assert.equal(r.stack()[0], 'bar 4 of 8', 'the pinned bar stays');
 });
 
-test('THE FAN: hovering "from bar_005" or "made by phrase_001" lights every bar; hovering "bar 5 of 8" or the tempo lights only that bar; leaving clears', async () => {
+test('THE FAN (2026-11-19-0800: by keyboard focus, not by the pointer resting): focusing "from bar_005" or "made by phrase_001" lights every bar; focusing "bar 5 of 8" or the tempo lights only that bar; blur clears; the pointer resting lights nothing', async () => {
   const r = rig();
   await r.handle.load(); await flush();
   r.fire(r.q('#ph_bar_5'), 'click');
   const lis = r.qa('.forge-inspector-lineage > li');
   const hot = () => r.qa('g.measure.forge-artifact-hot').map((g) => g.id);
-  r.fire(lis[2], 'mouseenter');
+  const focus = (el: any) => el.dispatchEvent(new r.win.Event('focus')); const blur = (el: any) => el.dispatchEvent(new r.win.Event('blur'));
+  const before = hot();                                   // the pinned bar itself may be lit by the pin
+  for (const li of lis) { r.fire(li, 'mouseenter'); r.fire(li, 'mouseover'); r.fire(li, 'mouseleave'); }
+  assert.deepEqual(hot(), before, 'the pointer resting on (or leaving) an entry lights and clears nothing');
+  assert.ok(lis.every((li: any) => li.tabIndex === 0), 'every entry is reachable by keyboard');
+  focus(lis[2]);
   assert.equal(hot().length, 8, 'the source covers all eight bars');
-  r.fire(lis[2], 'mouseleave');
+  blur(lis[2]);
   assert.deepEqual(hot(), []);
-  r.fire(lis[1], 'mouseenter');
+  focus(lis[1]);
   assert.equal(hot().length, 8, 'the phrase covers all eight bars');
-  r.fire(lis[1], 'mouseleave');
-  r.fire(lis[0], 'mouseenter');
+  blur(lis[1]);
+  focus(lis[0]);
   assert.deepEqual(hot(), ['ph_bar_5']);
-  r.fire(lis[0], 'mouseleave');
-  r.fire(lis[3], 'mouseenter');
+  blur(lis[0]);
+  focus(lis[3]);
   assert.deepEqual(hot(), ['ph_bar_5']);
-  r.fire(lis[3], 'mouseleave');
+  blur(lis[3]);
   assert.deepEqual(hot(), []);
 });
 
-test('THE BRACKET over the bars: labelled with the phrase and its bar count; hover or focus lights all bars; a click or Enter opens the phrase note', async () => {
+test('THE BRACKET over the bars: labelled with the phrase and its bar count; focus (not the pointer resting, 2026-11-19-0800) lights all bars; a click or Enter opens the phrase note', async () => {
   const r = rig();
   await r.handle.load(); await flush();
   const b = r.q('.forge-phrase-bracket');
   assert.equal(b.textContent, 'phrase_001 · 8 bars');
   assert.equal(b.getAttribute('role'), 'button'); assert.equal(b.getAttribute('tabindex'), '0');
   assert.ok(b.getAttribute('aria-label'));
-  r.fire(b, 'mouseenter');
-  assert.equal(r.qa('g.measure.forge-artifact-hot').length, 8);
+  r.fire(b, 'mouseenter'); r.fire(b, 'mouseover');
+  assert.equal(r.qa('g.measure.forge-artifact-hot').length, 0, 'the pointer resting on the bracket lights nothing');
   r.fire(b, 'mouseleave');
   assert.equal(r.qa('g.measure.forge-artifact-hot').length, 0);
   b.dispatchEvent(new r.win.Event('focus')); assert.equal(r.qa('g.measure.forge-artifact-hot').length, 8);
@@ -213,7 +221,7 @@ test('dispose removes the bracket and the inspector with the rest', async () => 
   assert.equal(r.parent.children.length, 0);
 });
 
-test('P3: the BAR inspector (no phrase options) is exactly what it was: its hint, its lineage (a hit, then the note), plain "Open note" buttons with no aria-label, no hover-link on its entries, no preview on hover', async () => {
+test('P3: the BAR inspector (no phrase options) is exactly what it was: its hint, its lineage (a hit, then the note), plain "Open note" buttons with no aria-label, no hover-link on its entries, no preview on hover (and, 2026-11-19-0800, its entries are not focusable lights either)', async () => {
   const { createScoreInspector, INSPECTOR_HINT } = await import('./score-inspector.ts');
   const win: any = new Window({ url: 'http://localhost/' });
   const doc = win.document;
@@ -235,27 +243,32 @@ test('P3: the BAR inspector (no phrase options) is exactly what it was: its hint
   assert.equal(button.textContent, 'Open note'); assert.equal(button.hasAttribute('aria-label'), false);
   const hotBefore = host.querySelectorAll('.forge-artifact-hot').length;          // the pinned note itself may be hot from the pointer that clicked it
   lis[1].dispatchEvent(new win.MouseEvent('mouseenter'));
-  assert.equal(host.querySelectorAll('.forge-artifact-hot').length, hotBefore, 'no hover-link on the bar\'s entries');
+  lis[1].dispatchEvent(new win.Event('focus'));
+  assert.equal(host.querySelectorAll('.forge-artifact-hot').length, hotBefore, 'no hover-link (and no focus-link) on the bar\'s entries');
   button.click(); assert.deepEqual(opened, ['bars/bar_001']);
 });
 
 
-test('2300: the phrase tab lights bars with the BAND (visible whatever the stylesheet or theme does): a pin, a hover and the fan each put a band in the right bars, and the others are dimmed while one is pinned', async () => {
+test('2300: the phrase tab lights bars with the BAND (visible whatever the stylesheet or theme does): a pin, the fan and the bracket (by focus) each put a band in the right bars, the pointer resting puts none, and the others are dimmed while one is pinned', async () => {
   const r = rig();
   await r.handle.load(); await flush();
   const bands = () => r.qa('.forge-artifact-band').map((b: any) => b.parentElement.id);
   r.fire(r.q('#ph_bar_3'), 'mouseover');
-  assert.deepEqual(bands(), ['ph_bar_3'], 'hover');
+  assert.deepEqual(bands(), [], '2026-11-19-0800: the pointer resting puts no band');
   r.fire(r.q('#n_ph_bar_3'), 'click');
   assert.deepEqual(bands(), ['ph_bar_3'], 'pin');
   assert.equal(r.q('#ph_bar_1').style.opacity, '0.45');
   assert.equal(r.q('#ph_bar_3').style.opacity, '');
   const lis = r.qa('.forge-inspector-lineage > li');
   r.fire(lis[2], 'mouseenter');
+  assert.deepEqual(bands(), ['ph_bar_3'], 'the pointer on a fan entry puts no band');
+  lis[2].dispatchEvent(new r.win.Event('focus'));
   assert.equal(bands().length, 8, 'the fan: every bar');
-  r.fire(lis[2], 'mouseleave');
+  lis[2].dispatchEvent(new r.win.Event('blur'));
   assert.deepEqual(bands(), ['ph_bar_3']);
   const b = r.q('.forge-phrase-bracket'); r.fire(b, 'mouseenter');
+  assert.deepEqual(bands(), ['ph_bar_3'], 'the pointer on the bracket puts no band');
+  b.dispatchEvent(new r.win.Event('focus'));
   assert.equal(bands().length, 8, 'the bracket');
 });
 
@@ -323,16 +336,18 @@ test('M13: with the structure port the phrase tab has a strip (UNDER the Score s
   assert.equal(plain.q('.forge-structure-strip'), null);
 });
 
-test('M13: hovering the source chip lights the bars it contributed to (all eight of an extend), the phrase chip lights all; leaving clears; keyboard focus does the same', async () => {
+test('M13 (2026-11-19-0800: focus, not the pointer resting): the pointer resting on the source chip lights nothing; keyboard focus on it lights the bars it contributed to (all eight of an extend), on the phrase chip all; blur clears', async () => {
   const r = rig({ structure: true });
   await r.handle.load(); await flush();
   const [src, phrase] = r.qa('.forge-structure-strip button');
-  r.fire(src, 'mouseenter'); assert.equal(hotBars(r).length, 8);
+  r.fire(src, 'mouseenter'); assert.deepEqual(hotBars(r), []);
   r.fire(src, 'mouseleave'); assert.deepEqual(hotBars(r), []);
-  r.fire(phrase, 'mouseenter'); assert.equal(hotBars(r).length, 8);
+  r.fire(phrase, 'mouseenter'); assert.deepEqual(hotBars(r), []);
   r.fire(phrase, 'mouseleave'); assert.deepEqual(hotBars(r), []);
   src.dispatchEvent(new r.win.Event('focus')); assert.equal(hotBars(r).length, 8);
   src.dispatchEvent(new r.win.Event('blur')); assert.deepEqual(hotBars(r), []);
+  phrase.dispatchEvent(new r.win.Event('focus')); assert.equal(hotBars(r).length, 8);
+  phrase.dispatchEvent(new r.win.Event('blur')); assert.deepEqual(hotBars(r), []);
 });
 
 test('M13: a chip click goes to the notes pane (goto); with no pair (goto answers false) the plugin\'s own opener opens the note', async () => {
@@ -346,14 +361,14 @@ test('M13: a chip click goes to the notes pane (goto); with no pair (goto answer
   assert.deepEqual(none.opened, ['phrases/phrase_001']);
 });
 
-test('M13: the notes pane navigated by the person lights the bars that note contributed and KEEPS them lit (hover on and off a chip does not clear them) until the next navigation; a stranger note clears; one evidence line each', async () => {
+test('M13: the notes pane navigated by the person lights the bars that note contributed and KEEPS them lit (the pointer on and off a chip does nothing, 2026-11-19-0800) until the next navigation; a stranger note clears; one evidence line each', async () => {
   const r = rig({ structure: true });
   await r.handle.load(); await flush();
   r.navigate('bars/bar_005.md');
   assert.equal(hotBars(r).length, 8);
   const [src] = r.qa('.forge-structure-strip button');
   r.fire(src, 'mouseenter'); r.fire(src, 'mouseleave');
-  assert.equal(hotBars(r).length, 8, 'still lit after a hover came and went');
+  assert.equal(hotBars(r).length, 8, 'still lit after the pointer came and went (it does nothing)');
   r.navigate('notes/other.md'); assert.deepEqual(hotBars(r), []);
   r.navigate('phrases/phrase_001.md'); assert.equal(hotBars(r).length, 8, 'this phrase\'s own note lights all of its bars');
   r.navigate('phrases/phrase_009.md'); assert.deepEqual(hotBars(r), [], 'another phrase lights nothing here');

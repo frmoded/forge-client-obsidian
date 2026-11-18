@@ -3,8 +3,8 @@
 //
 //   <div class="forge-bar-selection" role="toolbar" aria-label="Selected bars">
 //     <span class="forge-bar-selection-count" aria-live="polite">3 bars selected: bars 3 to 5</span>
-//     <button class="forge-bar-selection-action" data-action="new-phrase" title="...">New phrase from these bars</button> ... (Copy, Delete, Move left, Move right)
-//     <button class="forge-bar-selection-clear" aria-label="Clear the selection" title="Clear the selection (Esc)">×</button>
+//     <button class="forge-bar-selection-action" data-action="new-phrase" aria-description="...">New phrase from these bars</button> ... (Copy, Delete, Move left, Move right)
+//     <button class="forge-bar-selection-clear" aria-label="Clear the selection" aria-description="Clear the selection (Esc)">×</button>
 //     <div class="forge-bar-selection-note" role="status">…</div>            (only when there is something to say: a refusal, "the sentence is in the prompt box")
 //   </div>
 import { SELECTION_MENU, type SelectionAction } from './bar-selection-core.ts';
@@ -41,12 +41,12 @@ export function mountSelectionMenu(host: HTMLElement, ports: SelectionMenuPorts)
   const buttons = new Map<SelectionAction, HTMLButtonElement>();
   for (const m of SELECTION_MENU) {
     const b = doc.createElement('button');
-    b.type = 'button'; b.className = 'forge-bar-selection-action'; b.setAttribute('data-action', m.id); b.textContent = m.label; b.title = m.title;
+    b.type = 'button'; b.className = 'forge-bar-selection-action'; b.setAttribute('data-action', m.id); b.textContent = m.label; b.setAttribute('aria-description', m.title);
     b.addEventListener('click', (e) => { e.stopPropagation(); if (!b.disabled) ports.onAction(m.id); });
     buttons.set(m.id, b); el.appendChild(b);
   }
   const clear = doc.createElement('button');
-  clear.type = 'button'; clear.className = 'forge-bar-selection-clear'; clear.textContent = '×'; clear.setAttribute('aria-label', 'Clear the selection'); clear.title = 'Clear the selection (Esc)';
+  clear.type = 'button'; clear.className = 'forge-bar-selection-clear'; clear.textContent = '×'; clear.setAttribute('aria-label', 'Clear the selection'); clear.setAttribute('aria-description', 'Clear the selection (Esc)');
   clear.addEventListener('click', (e) => { e.stopPropagation(); ports.onClear(); });
   el.appendChild(clear);
   const noteEl = doc.createElement('div');
@@ -72,7 +72,7 @@ export function mountSelectionMenu(host: HTMLElement, ports: SelectionMenuPorts)
       for (const [id, b] of buttons) {
         const why = view.disabled[id];
         b.disabled = why !== null;
-        b.title = why ?? SELECTION_MENU.find((m) => m.id === id)!.title;
+        b.setAttribute('aria-description', why ?? SELECTION_MENU.find((m) => m.id === id)!.title);
         b.classList.toggle('is-disabled', why !== null);
       }
       el.style.display = ''; shown = true;

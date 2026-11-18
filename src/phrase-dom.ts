@@ -233,7 +233,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   if (morph && ports.morph) {
     const ask = ports.morph;
     morph.type = 'button'; morph.className = 'forge-mix-morph'; morph.textContent = 'Morph this mix';
-    morph.title = 'Make a new morph phrase from these two bars: a path of single-hit changes, one per bar, instead of a vote';
+    morph.setAttribute('aria-description', 'Make a new morph phrase from these two bars: a path of single-hit changes, one per bar, instead of a vote');
     morph.setAttribute('aria-label', 'Morph this mix: make a new morph phrase from these two bars');
     morph.addEventListener('click', () => { if (!morph.disabled) ask(); });
     el.appendChild(morph);
@@ -421,7 +421,7 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
   const bars = number('forge-morph-bars', 'Bars: how many bars the morph is drawn in', PHRASE_BARS_MIN, PHRASE_BARS_MAX);
   const atomic = doc.createElement('button');
   atomic.type = 'button'; atomic.className = 'forge-morph-atomic'; atomic.textContent = 'Atomic';
-  atomic.title = 'Set Bars to the number of single-hit changes + 1, so every bar differs from the one before by exactly one hit';
+  atomic.setAttribute('aria-description', 'Set Bars to the number of single-hit changes + 1, so every bar differs from the one before by exactly one hit');
   atomic.setAttribute('aria-label', 'Atomic: one bar per single-hit change');
   field('Bars', bars, atomic);
   const order = select('forge-morph-order', 'Order of the single-hit changes');
@@ -673,11 +673,9 @@ function annotateForMorph(path: string, note: NoteText, payload: Record<string, 
   return result;
 }
 
-/** The bracket: hovering or focusing it lights every bar the phrase made; leaving clears; a click (or Enter / Space) opens the phrase note. */
+/** The bracket: focusing it lights every bar the phrase made; leaving (blur) clears; a click (or Enter / Space) opens the phrase note. */
 function wireBracket(el: HTMLElement, current: () => ExtendPhrase | null, area: () => ScoreArea | null, open: () => void): void {
   const ids = () => { const p = current(); return p ? Array.from({ length: p.bars }, (_, i) => phraseBarId(PHRASE_BAR_SCOPE, i + 1)) : []; };
-  el.addEventListener('mouseenter', () => area()?.lightAll(ids()));
-  el.addEventListener('mouseleave', () => area()?.lightAll([]));
   el.addEventListener('focus', () => area()?.lightAll(ids()));
   el.addEventListener('blur', () => area()?.lightAll([]));
   el.addEventListener('click', open);

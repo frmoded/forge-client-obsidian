@@ -51,14 +51,12 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 8px 12px; cursor: pointer; min-height: 40px;
   }
-  select:hover { border-color: var(--ink); }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; }
   button {
     font: inherit; font-size: 13px; color: var(--ink);
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 8px 12px; cursor: pointer; min-height: 40px;
   }
-  button:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
   button.left  { border-color: var(--left);  color: var(--left); }
   /* Role shows in COLOR only: same border weight, radius and text weight on every button.
@@ -74,11 +72,11 @@
 <div class="scroller"><svg id="svg" role="group" aria-label="Piano keyboard, C3 to C5. Click a key to hold it, then play the held notes."></svg></div>
 
 <div class="controls">
-  <button class="both"  id="bT" title="All held notes at once, as a chord">Play together</button>
-  <button class="left"  id="bU" title="Held notes one at a time, lowest to highest">Play ascending</button>
-  <button class="right" id="bD" title="Held notes one at a time, highest to lowest">Play descending</button>
-  <button id="bC" title="Release every held key">Clear</button>
-  <select id="tuning" aria-label="Tuning system" title="Equal temperament: 12 identical semitones. Pythagorean: pure 3:2 fifths from C; the wolf fifth falls between G# and Eb (the D# key is really Eb here). Meantone: fifths narrowed for pure major thirds. Well temperament (Werckmeister III): four fifths narrowed, the rest pure, so every key is usable but each sounds a little different.">
+  <button class="both"  id="bT" aria-description="All held notes at once, as a chord">Play together</button>
+  <button class="left"  id="bU" aria-description="Held notes one at a time, lowest to highest">Play ascending</button>
+  <button class="right" id="bD" aria-description="Held notes one at a time, highest to lowest">Play descending</button>
+  <button id="bC" aria-description="Release every held key">Clear</button>
+  <select id="tuning" aria-label="Tuning system" aria-description="Equal temperament: 12 identical semitones. Pythagorean: pure 3:2 fifths from C; the wolf fifth falls between G# and Eb (the D# key is really Eb here). Meantone: fifths narrowed for pure major thirds. Well temperament (Werckmeister III): four fifths narrowed, the rest pure, so every key is usable but each sounds a little different.">
     <option value="equal">Equal temperament</option>
     <option value="pythagorean">Pythagorean</option>
     <option value="meantone" selected>Meantone (1/4-comma)</option>

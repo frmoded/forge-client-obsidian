@@ -217,12 +217,15 @@ test('the pin survives a redraw: moving a control draws the Score again and the 
   r.done();
 });
 
-test('a hover with nothing pinned previews the stack but offers no button', async () => {
+test('2026-11-19-0800: the pointer resting on a bar with nothing pinned shows nothing (no preview of the stack, no button); a click shows the stack (CONTROL)', async () => {
   const r = rig();
   await r.handle.load(); await r.settle();
-  r.fire(r.q('#ph_bar_3'), 'mouseover');
-  assert.equal(r.stack()[0], 'bar 3 of 5');
+  r.fire(r.q('#ph_bar_3'), 'mouseover'); r.fire(r.q('#ph_bar_3'), 'mouseenter');
+  assert.deepEqual(r.stack(), [], 'no stack for a bar the pointer merely rests on');
   assert.equal(button(r), null);
+  assert.deepEqual(r.pinned(), [], 'and nothing is pinned');
+  pinBar(r, 3);
+  assert.equal(r.stack()[0], 'bar 3 of 5', 'CONTROL: a click does show the stack');
   r.done();
 });
 

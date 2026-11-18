@@ -1,4 +1,4 @@
-// 2026-11-03-1160 (c) - the shared helper that switches a tab's controls off for a CUSTOM note: disabled, with the banner's sentence as tooltip; back on it restores only what it switched off. Plain DOM (happy-dom).
+// 2026-11-03-1160 (c) - the shared helper that switches a tab's controls off for a CUSTOM note: disabled, with the banner's sentence as its `aria-description` (2026-11-19-0800: no native `title` tooltip any more - nothing appears because the pointer rests); back on it restores only what it switched off. Plain DOM (happy-dom).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -18,29 +18,36 @@ const q = (root: HTMLElement, sel: string) => root.querySelector(sel) as HTMLBut
 
 test('the sentence is the banner\'s own, word for word', () => { assert.equal(CUSTOM_BANNER, TIP); });
 
-test('off: every button, input and select is disabled with the tooltip; the root says it too; text is left alone', () => {
+test('off: every button, input and select is disabled with the sentence as aria-description (no title); the root says it too; text is left alone', () => {
   const root = strip();
   setControlsOff(root, true);
-  for (const sel of ['.a', '.b', '.c', '.own']) { assert.equal(q(root, sel).disabled, true, sel); assert.equal(q(root, sel).getAttribute('title'), TIP, sel); }
-  assert.equal(root.getAttribute('aria-disabled'), 'true'); assert.equal(root.getAttribute('title'), TIP);
-  assert.equal(q(root, '.note').hasAttribute('title'), false, 'a label is not a control');
+  for (const sel of ['.a', '.b', '.c', '.own']) { assert.equal(q(root, sel).disabled, true, sel); assert.equal(q(root, sel).getAttribute('aria-description'), TIP, sel); assert.equal(q(root, sel).hasAttribute('title'), false, `${sel}: no native tooltip`); }
+  assert.equal(root.getAttribute('aria-disabled'), 'true'); assert.equal(root.getAttribute('aria-description'), TIP); assert.equal(root.hasAttribute('title'), false);
+  assert.equal(q(root, '.note').hasAttribute('aria-description'), false, 'a label is not a control');
   assert.equal(q(root, '.a').hasAttribute(CUSTOM_OFF_ATTR), true); assert.equal(q(root, '.own').hasAttribute(CUSTOM_OFF_ATTR), false, 'a control the tab itself keeps disabled is not marked as ours');
 });
 
-test('on again: only what the helper switched off comes back, the tooltips go, and a control the tab keeps disabled stays disabled; calling it twice changes nothing', () => {
+test('on again: only what the helper switched off comes back, the aria-descriptions go, and a control the tab keeps disabled stays disabled; calling it twice changes nothing', () => {
   const root = strip();
   setControlsOff(root, true); setControlsOff(root, true);
   setControlsOff(root, false);
-  for (const sel of ['.a', '.b', '.c']) { assert.equal(q(root, sel).disabled, false, sel); assert.equal(q(root, sel).hasAttribute('title'), false, sel); }
+  for (const sel of ['.a', '.b', '.c']) { assert.equal(q(root, sel).disabled, false, sel); assert.equal(q(root, sel).hasAttribute('aria-description'), false, sel); }
   assert.equal(q(root, '.own').disabled, true, 'the tab\'s own disabled control stays');
-  assert.equal(q(root, '.own').hasAttribute('title'), false);
-  assert.equal(root.hasAttribute('aria-disabled'), false); assert.equal(root.hasAttribute('title'), false);
+  assert.equal(q(root, '.own').hasAttribute('aria-description'), false);
+  assert.equal(root.hasAttribute('aria-disabled'), false); assert.equal(root.hasAttribute('aria-description'), false);
   const before = root.outerHTML; setControlsOff(root, false); assert.equal(root.outerHTML, before, 'off(false) on a quiet root is a no-op');
 });
 
-test('a title the tab set itself is not touched when switching on', () => {
+test('a description the tab set itself is not touched when switching on (only the banner\'s own sentence is removed)', () => {
   const root = strip();
-  q(root, '.a').setAttribute('title', 'Mute the kit');
+  q(root, '.a').setAttribute('aria-description', 'Mute the kit');
   setControlsOff(root, false);
-  assert.equal(q(root, '.a').getAttribute('title'), 'Mute the kit');
+  assert.equal(q(root, '.a').getAttribute('aria-description'), 'Mute the kit');
+  root.setAttribute('aria-description', 'something else'); setControlsOff(root, false);
+  assert.equal(root.getAttribute('aria-description'), 'something else', 'the root keeps a description that is not the banner');
+});
+
+test('2026-11-19-0800: switching off never writes a native `title` tooltip (nothing appears because the pointer rests)', () => {
+  const root = strip(); setControlsOff(root, true);
+  assert.equal(root.querySelectorAll('[title]').length, 0);
 });

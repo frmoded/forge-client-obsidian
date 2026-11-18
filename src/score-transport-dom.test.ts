@@ -22,12 +22,12 @@ function setup(opts: { mac?: boolean; tempo?: number } = {}) {
   return { win, doc, toolbar, row, player, calls, exported, q, click, key, finishPlaying: stop };
 }
 
-test('the row: one toolbar with a name, the controls in the order Play, Back to the start, Slower, the tempo value, Faster, Export; every one labelled in plain words with a tooltip; each is a real button', () => {
+test('the row: one toolbar with a name, the controls in the order Play, Back to the start, Slower, the tempo value, Faster, Export; every one labelled in plain words (aria-label) with NO native tooltip and no extra description (2026-11-19-0800: nothing appears because the pointer rests); each is a real button', () => {
   const t = setup();
   assert.equal(t.q('.forge-score-transport').getAttribute('role'), 'toolbar'); assert.equal(t.q('.forge-score-transport').getAttribute('aria-label'), 'Score controls');
   const buttons = [...t.toolbar.querySelectorAll('.forge-score-transport button')].filter((b: any) => !b.closest('.forge-tp-menu'));
   assert.deepEqual(buttons.map((b: any) => b.getAttribute('aria-label')), ['Play', 'Back to the start', 'Slower', 'Tempo, click to type a percent', 'Faster', 'Export']);
-  for (const b of buttons as any[]) { assert.equal(b.tagName, 'BUTTON'); assert.equal(b.getAttribute('type'), 'button'); assert.equal(b.getAttribute('title'), b.getAttribute('aria-label'), 'a plain-word tooltip'); }
+  for (const b of buttons as any[]) { assert.equal(b.tagName, 'BUTTON'); assert.equal(b.getAttribute('type'), 'button'); assert.ok(b.getAttribute('aria-label'), 'a plain-word label'); assert.equal(b.hasAttribute('title'), false, 'no native tooltip'); assert.equal(b.hasAttribute('aria-description'), false, 'the description would only repeat the label'); }
   const icons = t.toolbar.querySelectorAll('.forge-score-transport svg'); assert.equal(icons.length, 5, 'five 16 px icons (the tempo value is text)');
   for (const svg of icons as any[]) { assert.equal(svg.getAttribute('viewBox'), '0 0 100 100'); assert.equal(svg.getAttribute('width'), '16'); assert.equal(svg.getAttribute('aria-hidden'), 'true'); }
   assert.equal(t.q('.forge-tp-tempo').textContent.trim(), '100%');
@@ -39,10 +39,10 @@ test('no progress bar, no time readout, no slider and no elapsed text anywhere i
   assert.doesNotMatch(row.textContent, /\d+:\d\d|elapsed|remaining/i); assert.equal(row.querySelectorAll('input').length, 0, 'the tempo field is a button until clicked');
 });
 
-test('Play toggles to Pause and back: the label, the tooltip, the icon and a gentle "is-playing" tint follow the player (also when the player stops by itself at the end), Reset stops and goes back to the start', () => {
+test('Play toggles to Pause and back: the label (and never a title), the icon and a gentle "is-playing" tint follow the player (also when the player stops by itself at the end), Reset stops and goes back to the start', () => {
   const t = setup(); const play = t.q('.forge-tp-play'); const iconBefore = play.innerHTML;
   assert.equal(play.getAttribute('aria-pressed'), 'false'); t.click(play); assert.deepEqual(t.calls, ['start']);
-  assert.equal(play.getAttribute('aria-label'), 'Pause'); assert.equal(play.getAttribute('title'), 'Pause'); assert.equal(play.getAttribute('aria-pressed'), 'true'); assert.ok(play.classList.contains('is-playing')); assert.notEqual(play.innerHTML, iconBefore, 'the icon swapped to pause');
+  assert.equal(play.getAttribute('aria-label'), 'Pause'); assert.equal(play.hasAttribute('title'), false, 'no native tooltip while playing either'); assert.equal(play.getAttribute('aria-pressed'), 'true'); assert.ok(play.classList.contains('is-playing')); assert.notEqual(play.innerHTML, iconBefore, 'the icon swapped to pause');
   t.click(play); assert.deepEqual(t.calls, ['start', 'stop']); assert.equal(play.getAttribute('aria-label'), 'Play'); assert.ok(!play.classList.contains('is-playing')); assert.equal(play.innerHTML, iconBefore);
   t.click(play); t.finishPlaying(); assert.equal(play.getAttribute('aria-label'), 'Play', 'the end of the score returns the button to Play'); assert.ok(!play.classList.contains('is-playing'));
   t.click(play); t.click(t.q('.forge-tp-reset')); assert.equal(t.calls[t.calls.length - 1], 'reset'); assert.equal(play.getAttribute('aria-label'), 'Play');

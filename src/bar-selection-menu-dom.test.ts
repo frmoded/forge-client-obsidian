@@ -18,7 +18,7 @@ function rig() {
 }
 const view = (over: Partial<SelectionMenuView> = {}): SelectionMenuView => ({ text: '3 bars selected: bars 3 to 5', disabled: { ...NONE }, ...over });
 
-test('hidden until shown; shows the count, the five entries in order with their tooltips, and a clear button', () => {
+test('hidden until shown; shows the count, the five entries in order with their descriptions (aria-description, never a native title: 2026-11-19-0800), and a clear button', () => {
   const r = rig();
   assert.equal(r.menu.visible(), false);
   assert.equal(r.menu.el.style.display, 'none');
@@ -31,9 +31,11 @@ test('hidden until shown; shows the count, the five entries in order with their 
   const acts = [...r.menu.el.querySelectorAll('.forge-bar-selection-action')] as any[];
   assert.deepEqual(acts.map((b) => b.textContent), SELECTION_MENU.map((m) => m.label));
   assert.deepEqual(acts.map((b) => b.getAttribute('data-action')), SELECTION_MENU.map((m) => m.id));
-  assert.deepEqual(acts.map((b) => b.title), SELECTION_MENU.map((m) => m.title));
+  assert.deepEqual(acts.map((b) => b.getAttribute('aria-description')), SELECTION_MENU.map((m) => m.title));
+  assert.ok(acts.every((b) => !b.hasAttribute('title')), 'no native tooltip on an action');
   assert.ok(acts.every((b) => !b.disabled));
-  assert.equal(r.menu.el.querySelector('.forge-bar-selection-clear')!.getAttribute('aria-label'), 'Clear the selection');
+  const clear = r.menu.el.querySelector('.forge-bar-selection-clear')!;
+  assert.equal(clear.getAttribute('aria-label'), 'Clear the selection'); assert.equal(clear.getAttribute('aria-description'), 'Clear the selection (Esc)'); assert.equal(clear.hasAttribute('title'), false, 'no native tooltip on the clear button');
   r.menu.hide();
   assert.equal(r.menu.visible(), false);
   assert.equal(r.menu.el.style.display, 'none');
@@ -60,16 +62,16 @@ test('a click on an entry hands the caller its action, once; the clear button sa
   assert.deepEqual(r.log.slice(-1), ['clear']);
 });
 
-test('a greyed entry is disabled, says why in its tooltip, and does nothing when clicked; it is enabled and has its own tooltip again after', () => {
+test('a greyed entry is disabled, says why in its aria-description (no native title, 2026-11-19-0800), and does nothing when clicked; it is enabled and has its own description again after', () => {
   const r = rig();
   r.menu.show(view({ disabled: { ...NONE, 'move-left': 'Bar 1 cannot move left.', delete: 'That would leave no bars.' } }));
   const left = r.menu.el.querySelector('[data-action="move-left"]') as any;
-  assert.ok(left.disabled); assert.equal(left.title, 'Bar 1 cannot move left.'); assert.ok(left.classList.contains('is-disabled'));
+  assert.ok(left.disabled); assert.equal(left.getAttribute('aria-description'), 'Bar 1 cannot move left.'); assert.equal(left.hasAttribute('title'), false); assert.ok(left.classList.contains('is-disabled'));
   left.click();
   (r.menu.el.querySelector('[data-action="delete"]') as any).click();
   assert.deepEqual(r.log, []);
   r.menu.show(view());
-  assert.ok(!left.disabled); assert.equal(left.title, SELECTION_MENU.find((m) => m.id === 'move-left')!.title);
+  assert.ok(!left.disabled); assert.equal(left.getAttribute('aria-description'), SELECTION_MENU.find((m) => m.id === 'move-left')!.title); assert.equal(left.hasAttribute('title'), false);
 });
 
 test('its presses and clicks stay inside it: they are not clicks on the Score (the host above never hears them)', () => {

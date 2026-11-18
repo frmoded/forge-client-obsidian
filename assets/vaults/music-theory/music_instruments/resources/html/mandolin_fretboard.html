@@ -35,13 +35,11 @@
   svg { display: block; width: 100%; min-width: 660px; height: auto; user-select: none; -webkit-user-select: none; }
   .pt { cursor: pointer; }
   .pt:focus { outline: none; }
-  /* Each position is a small dot; hovering, focusing or holding it swaps in a
+  /* Each position is a small dot; focusing or holding it swaps in a
      disc that carries the note name, so 64 labels never clutter the board. */
   .pt .dot { fill: var(--axis); opacity: 0.35; }
   .pt .disc { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; opacity: 0; }
   .pt text { fill: var(--ink); font-size: 9px; opacity: 0; pointer-events: none; }
-  .pt:hover .disc, .pt:hover text { opacity: 1; }
-  .pt:hover .dot { opacity: 0; }
   .pt.held .disc { opacity: 1; fill: var(--highlight); stroke: var(--ink); stroke-width: 1.5; }
   .pt.held text { opacity: 1; }
   .pt.held .dot { opacity: 0; }
@@ -65,7 +63,6 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 6px 10px; cursor: pointer; min-height: 36px; flex: 0 0 auto;
   }
-  button:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
   button.left  { border-color: var(--left);  color: var(--left); }
   /* Role shows in COLOR only: same border weight, radius and text weight on every button.
@@ -79,7 +76,6 @@
     padding: 6px 8px; cursor: pointer; min-height: 36px;
     flex: 1 1 auto; min-width: 0; max-width: 280px; text-overflow: ellipsis;
   }
-  select:hover { border-color: var(--ink); }
   [hidden] { display: none !important; }
   /* ===== EXPERIMENT 1196: the score of the held notes. Delete this block, #scoreWrap, #bS and the experiment script block to remove it. ===== */
   #bS[aria-pressed="true"] { background: var(--grid); border-color: var(--ink); }
@@ -101,15 +97,15 @@
 <div class="scroller"><svg id="svg" role="group" aria-label="Mandolin fretboard, four courses tuned G3 D4 A4 E5, frets 0 to 15. Click a position to hold it, then play the held notes. Arrow keys move between positions. In Pythagorean, meantone or well temperament each fret breaks into a zigzag, a different position per course, because one straight fret cannot be exactly right for four differently-tuned strings at once."></svg></div>
 
 <!-- EXPERIMENT 1196: the score of the held notes (a treble staff under the fretboard; written pitch = sounding pitch). Remove with its CSS, #bS and the script block. -->
-<div class="scroller" id="scoreWrap"><svg id="score" role="group" aria-label="Score: the held fretboard positions written on a treble staff, written pitch equal to sounding pitch. Arrow keys move between the notes; hovering or focusing a note lights its fretboard position."></svg></div>
+<div class="scroller" id="scoreWrap"><svg id="score" role="group" aria-label="Score: the held fretboard positions written on a treble staff, written pitch equal to sounding pitch. Arrow keys move between the notes; focusing a note lights its fretboard position."></svg></div>
 
 <div class="controls">
-  <button class="both"  id="bT" aria-label="Play together" title="Play together: all held notes at once, as a chord">Together</button>
-  <button class="left"  id="bU" aria-label="Play ascending" title="Play ascending: held notes one at a time, lowest to highest">Up</button>
-  <button class="right" id="bD" aria-label="Play descending" title="Play descending: held notes one at a time, highest to lowest">Down</button>
-  <button id="bC" aria-label="Clear" title="Clear: release every held position">Clear</button>
-  <button id="bS" aria-label="Score" aria-pressed="true" title="Score: show or hide the held notes on a staff (an experiment)">Score</button>
-  <select id="tuning" aria-label="Tuning system" title="Equal temperament is rotationally symmetric, so one straight fret is correct for every course. Pythagorean, quarter-comma meantone and Werckmeister III well temperament are NOT: each course's own open pitch class determines where ITS fret lands, so the frets break into a zigzag. A real limitation of fretted instruments in a non-equal tuning, not a simplification.">
+  <button class="both"  id="bT" aria-label="Play together" aria-description="Play together: all held notes at once, as a chord">Together</button>
+  <button class="left"  id="bU" aria-label="Play ascending" aria-description="Play ascending: held notes one at a time, lowest to highest">Up</button>
+  <button class="right" id="bD" aria-label="Play descending" aria-description="Play descending: held notes one at a time, highest to lowest">Down</button>
+  <button id="bC" aria-label="Clear" aria-description="Clear: release every held position">Clear</button>
+  <button id="bS" aria-label="Score" aria-pressed="true" aria-description="Score: show or hide the held notes on a staff (an experiment)">Score</button>
+  <select id="tuning" aria-label="Tuning system" aria-description="Equal temperament is rotationally symmetric, so one straight fret is correct for every course. Pythagorean, quarter-comma meantone and Werckmeister III well temperament are NOT: each course's own open pitch class determines where ITS fret lands, so the frets break into a zigzag. A real limitation of fretted instruments in a non-equal tuning, not a simplification.">
     <option value="equal" selected>Equal temperament</option>
     <option value="pythagorean">Pythagorean</option>
     <option value="meantone">Meantone (1/4-comma)</option>
@@ -449,7 +445,7 @@
     scoreSvg.setAttribute("viewBox", "0 0 " + W + " " + Math.ceil(L.height));
     var n = L.notes.length;
     scoreSvg.setAttribute("aria-label", "Score: " + (n ? n + (n === 1 ? " held note" : " held notes") + " on a treble staff, written pitch equal to sounding pitch, lowest to highest: " +
-      L.notes.map(function (q) { return q.name + ", course " + (q.s + 1) + ", fret " + q.f; }).join("; ") + ". Arrow keys move between the notes; hovering or focusing a note lights its fretboard position."
+      L.notes.map(function (q) { return q.name + ", course " + (q.s + 1) + ", fret " + q.f; }).join("; ") + ". Arrow keys move between the notes; focusing a note lights its fretboard position."
       : "no notes held. Hold fretboard positions to see them written on a treble staff."));
     L.lineY.forEach(function (y) { el("line", { "class": "staffline", x1: x0, y1: y, x2: x1, y2: y, stroke: "#A69B91", "stroke-width": 1 }, scoreSvg); });
     drawClef(L.yOf(2), scoreSvg);
@@ -466,7 +462,7 @@
                         "aria-label": q.name + ", course " + (q.s + 1) + ", fret " + q.f + (q.above ? ", above the staff" : q.pos < 0 ? ", below the staff" : "") }, scoreSvg);
       if (q.sharp) drawSharp(SC.cx - SC.accDx - q.acc * 10 - 4, q.y, g);
       el("ellipse", { "class": "head", cx: q.x, cy: q.y, rx: 6.4, ry: 4.7, transform: "rotate(-18 " + q.x + " " + q.y + ")" }, g);
-      el("rect", { x: q.x - 9, y: q.y - 6, width: 18, height: 12, fill: "transparent" }, g);         // a generous hover target
+      el("rect", { x: q.x - 9, y: q.y - 6, width: 18, height: 12, fill: "transparent" }, g);         // a generous target to press
       var lxl = rx + 18;
       el("line", { "class": "lead", x1: rx + 4, y1: q.y, x2: lxl - 4, y2: q.ly, stroke: "#A69B91", "stroke-width": 0.8, "stroke-dasharray": "1.5 2.5", "pointer-events": "none" }, g);
       var t = el("text", { "class": "lab", x: lxl, y: q.ly + 3.5 }, g);
@@ -476,8 +472,6 @@
       }
       var pos = el("tspan", {}, t);
       pos.textContent = "course " + (q.s + 1) + ", fret " + q.f;
-      g.addEventListener("mouseenter", function () { lightPoint(q.key, true); });
-      g.addEventListener("mouseleave", function () { lightPoint(q.key, false); });
       g.addEventListener("focus", function () { lightPoint(q.key, true); });
       g.addEventListener("blur", function () { lightPoint(q.key, false); });
       g.addEventListener("keydown", function (e) {
@@ -496,8 +490,6 @@
   }
   Object.keys(pts).forEach(function (key) {
     var g = pts[key];
-    g.addEventListener("mouseenter", function () { lightNote(key, true); });
-    g.addEventListener("mouseleave", function () { lightNote(key, false); });
     g.addEventListener("focus", function () { lightNote(key, true); });
     g.addEventListener("blur", function () { lightNote(key, false); });
   });

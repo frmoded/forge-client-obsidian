@@ -39,7 +39,6 @@
     background: #fff; border: 1px solid var(--axis); border-radius: 6px;
     padding: 6px 10px; cursor: pointer; min-height: 36px;
   }
-  button:hover, select:hover { border-color: var(--ink); }
   button:active { background: var(--grid); }
   button:focus-visible, select:focus-visible, .key:focus, .minisvg:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .tab { flex: 0 0 auto; font-weight: 600; }
@@ -102,7 +101,6 @@
   .feedback.wrong { color: var(--accent); }
   /* ---- the Shift tab: the tune's notes lit in the highlight colour, the raised note of "Break one interval" in the accent colour ---- */
   button:disabled { opacity: 0.4; cursor: not-allowed; }
-  button:disabled:hover { border-color: var(--axis); }
   .key.tune rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
   .key.broken rect { fill: var(--accent); stroke: var(--ink); stroke-width: 2.5; }
   .key.black.tune text { fill: var(--ink); }
@@ -116,11 +114,11 @@
 <div class="wrap">
 
 <div class="top">
-  <button class="tab" id="tabExplore" role="tab" aria-selected="true" aria-controls="pExplore" title="Explore: pick two keys, or an interval name, and see it">Explore</button>
-  <button class="tab" id="tabChart" role="tab" aria-selected="false" tabindex="-1" aria-controls="pChart" title="Chart: all 13 intervals with a song to remember each by">Chart</button>
-  <button class="tab" id="tabTrainer" role="tab" aria-selected="false" tabindex="-1" aria-controls="pTrainer" title="Trainer: hear an interval and name it">Trainer</button>
-  <button class="tab" id="tabShift" role="tab" aria-selected="false" tabindex="-1" aria-controls="pShift" title="Shift: move a tune up and down the piano; the notes change, the intervals do not">Shift</button>
-  <select id="tuning" aria-label="Tuning system" title="Equal temperament: 12 identical semitones. Pythagorean: pure 3:2 fifths from C. Meantone: quarter-comma. Well temperament: Werckmeister III. The same four tunings as the Piano gadget; the notes always keep their names, only the sound moves.">
+  <button class="tab" id="tabExplore" role="tab" aria-selected="true" aria-controls="pExplore" aria-description="Explore: pick two keys, or an interval name, and see it">Explore</button>
+  <button class="tab" id="tabChart" role="tab" aria-selected="false" tabindex="-1" aria-controls="pChart" aria-description="Chart: all 13 intervals with a song to remember each by">Chart</button>
+  <button class="tab" id="tabTrainer" role="tab" aria-selected="false" tabindex="-1" aria-controls="pTrainer" aria-description="Trainer: hear an interval and name it">Trainer</button>
+  <button class="tab" id="tabShift" role="tab" aria-selected="false" tabindex="-1" aria-controls="pShift" aria-description="Shift: move a tune up and down the piano; the notes change, the intervals do not">Shift</button>
+  <select id="tuning" aria-label="Tuning system" aria-description="Equal temperament: 12 identical semitones. Pythagorean: pure 3:2 fifths from C. Meantone: quarter-comma. Well temperament: Werckmeister III. The same four tunings as the Piano gadget; the notes always keep their names, only the sound moves.">
     <option value="equal" selected>Equal temperament</option>
     <option value="pythagorean">Pythagorean</option>
     <option value="meantone">Meantone (1/4-comma)</option>
@@ -135,10 +133,10 @@
   <div class="readout" id="exReadout" aria-live="polite"></div>
   <div class="names" id="exNames" role="group" aria-label="Pick an interval: both the ascending and the descending note light up"></div>
   <div class="controls">
-    <button class="both"  id="exT" aria-label="Play together" title="Play together: the root and the other note at once">Together</button>
-    <button class="left"  id="exU" aria-label="Play up" title="Play up: the root, then the other note (with a name picked: the note above)">Up</button>
-    <button class="right" id="exD" aria-label="Play down" title="Play down: the other note, then the root (with a name picked: the root, then the note below)">Down</button>
-    <button id="exC" aria-label="Clear" title="Clear: forget the root and the interval">Clear</button>
+    <button class="both"  id="exT" aria-label="Play together" aria-description="Play together: the root and the other note at once">Together</button>
+    <button class="left"  id="exU" aria-label="Play up" aria-description="Play up: the root, then the other note (with a name picked: the note above)">Up</button>
+    <button class="right" id="exD" aria-label="Play down" aria-description="Play down: the other note, then the root (with a name picked: the root, then the note below)">Down</button>
+    <button id="exC" aria-label="Clear" aria-description="Clear: forget the root and the interval">Clear</button>
   </div>
   <!-- NOTE (author): only the tritone shows two names (d5 / A4). Other aliases (a minor third is also an augmented second, a major third a diminished fourth, ...) depend on how the notes are SPELLED, which this widget does not model; the spelling page covers them. -->
 </section>
@@ -146,7 +144,7 @@
 <!-- ============ CHART ============ -->
 <section id="pChart" role="tabpanel" aria-labelledby="tabChart" hidden>
   <table class="chart" id="chartTable">
-    <thead><tr><th class="n" scope="col" title="half steps">Half steps</th><th scope="col">Interval</th><th scope="col">Symbol</th><th scope="col">From C</th><th scope="col">Play</th><th scope="col">Song cue</th></tr></thead>
+    <thead><tr><th class="n" scope="col" aria-description="half steps">Half steps</th><th scope="col">Interval</th><th scope="col">Symbol</th><th scope="col">From C</th><th scope="col">Play</th><th scope="col">Song cue</th></tr></thead>
     <tbody></tbody>
   </table>
 </section>
@@ -158,13 +156,13 @@
     <select id="tDir" aria-label="Direction of the interval" style="flex:0 0 auto;margin-left:0">
       <option value="up" selected>Up</option><option value="down">Down</option><option value="together">Together</option>
     </select>
-    <button id="tW" title="Widen: from the easy set (3, 4 and 7 half steps) to every interval, 0 to 12">Widen</button>
+    <button id="tW" aria-description="Widen: from the easy set (3, 4 and 7 half steps) to every interval, 0 to 12">Widen</button>
     <span id="tLevel" style="color:var(--ink)"></span>
-    <button id="tH" aria-pressed="false" title="Hide labels: mask the strip's note names and the lit span until you have answered">Hide labels</button>
+    <button id="tH" aria-pressed="false" aria-description="Hide labels: mask the strip's note names and the lit span until you have answered">Hide labels</button>
   </div>
   <div class="controls">
-    <button class="both" id="tP" aria-label="Play again" title="Play the interval again">Play</button>
-    <button id="tN" aria-label="Next interval" title="Next: a new interval, played">Next</button>
+    <button class="both" id="tP" aria-label="Play again" aria-description="Play the interval again">Play</button>
+    <button id="tN" aria-label="Next interval" aria-description="Next: a new interval, played">Next</button>
     <span class="score" id="tScore" aria-live="polite"></span><span class="done" id="tDone" hidden>Done: 10 in a row on All</span>
   </div>
   <div class="scroller"><svg class="strip static" id="trSvg" role="img" aria-label="Piano strip, C3 to C5, for the trainer."></svg></div>
@@ -183,9 +181,9 @@
     <button id="shOu" aria-label="Octave up">Octave up</button>
   </div>
   <div class="controls">
-    <button class="both" id="shPlay" aria-label="Play the tune from its current position" title="Play the tune from where it is now">Play</button>
-    <button id="shReset" aria-label="Back to start" title="Back to start: the tune where it began, the true tune">Back to start</button>
-    <button id="shBreak" aria-pressed="false" aria-label="Break one interval" title="Break one interval: replay the tune with its middle note raised a half step, then press again to restore the true tune">Break one interval</button>
+    <button class="both" id="shPlay" aria-label="Play the tune from its current position" aria-description="Play the tune from where it is now">Play</button>
+    <button id="shReset" aria-label="Back to start" aria-description="Back to start: the tune where it began, the true tune">Back to start</button>
+    <button id="shBreak" aria-pressed="false" aria-label="Break one interval" aria-description="Break one interval: replay the tune with its middle note raised a half step, then press again to restore the true tune">Break one interval</button>
   </div>
   <div class="scroller"><svg class="strip static" id="shSvg" role="img" aria-label="Piano strip, C3 to C5, for the Shift tab."></svg></div>
   <div class="legend" aria-hidden="true"><span class="sw" style="background:var(--highlight)"></span>the tune's notes<span class="sw" style="background:var(--accent)"></span>the raised note</div>
@@ -734,7 +732,7 @@
     $("trSvg").setAttribute("aria-label", tr.answered && q ? "Piano strip: " + midiToName(Math.min(q.root, q.target)) + " to " + midiToName(Math.max(q.root, q.target)) + ", " + steps(q.count) + "." : "Piano strip, C3 to C5, for the trainer.");
     $("tLevel").textContent = tr.level === "easy" ? "Easy: 3, 4 and 7 half steps" : "All: 0 to 12 half steps";
     $("tW").textContent = tr.level === "easy" ? "Widen" : "Narrow";
-    $("tW").setAttribute("title", tr.level === "easy" ? "Widen: every interval, 0 to 12 half steps" : "Narrow: back to the easy set, 3, 4 and 7 half steps");
+    $("tW").setAttribute("aria-description", tr.level === "easy" ? "Widen: every interval, 0 to 12 half steps" : "Narrow: back to the easy set, 3, 4 and 7 half steps");
     $("tH").setAttribute("aria-pressed", tr.hide ? "true" : "false");
     $("tH").textContent = tr.hide ? "Reveal labels" : "Hide labels";
     $("tScore").textContent = "Streak " + tr.score.streak + " · Best " + tr.score.best;
@@ -760,7 +758,7 @@
   function shShown() { var n = shBase(); return sh.broken ? breakOne(n) : n; }
   function shiftButton(id, ok, enabledTitle, disabledTitle) {           // a shift that would leave the strip is disabled (grey) and its title says why
     var b = $(id); b.disabled = !ok;
-    b.setAttribute("title", ok ? enabledTitle : disabledTitle);
+    b.setAttribute("aria-description", ok ? enabledTitle : disabledTitle);
   }
   function renderShift() {
     var base = shBase(), shown = sh.broken ? breakOne(base) : base, bi = breakIndex(base), raised = sh.broken ? shown[bi] : null, lit = {};

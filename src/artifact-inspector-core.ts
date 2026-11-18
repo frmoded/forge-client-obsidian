@@ -185,19 +185,6 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     opts.onPin(pinned === null ? null : entry(pinned));
   };
 
-  const onOver = (e: Event) => {
-    const el = mappedAncestor(root, map, e.target);
-    if (!el) return;
-    setHot(el.id);
-    opts.onHover(entry(el.id));
-  };
-  const onOut = (e: Event) => {
-    const to = (e as MouseEvent).relatedTarget;
-    if (mappedAncestor(root, map, to)) return;            // moving to another mapped element: its own mouseover takes over
-    if (hot.length === 0) return;
-    setHot(null);
-    opts.onHover(null);
-  };
   /** The point-selectable element whose box holds the click point, the smallest box winning (boxes of neighbouring bars may overlap a little). */
   const boxAt = (e: Event): Element | null => {
     const m = e as MouseEvent;
@@ -305,8 +292,6 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
   arrival = typeof MO === 'function' ? new MO(() => { growTargets(); reapplyMarks(); }) : null;
   arrival?.observe(root, { childList: true, subtree: true });
   if (!root.hasAttribute('tabindex')) root.setAttribute('tabindex', '0');
-  root.addEventListener('mouseover', onOver);
-  root.addEventListener('mouseout', onOut);
   root.addEventListener('click', onClick);
   if (opts.selectBars) { root.addEventListener('mousedown', onDown); root.addEventListener('mousemove', onMove); }
   root.addEventListener('keydown', onKey);
@@ -323,8 +308,6 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     pin(id) { setPinned(id !== null && Object.prototype.hasOwnProperty.call(map, id) ? id : null); },
     pinnedId: () => pinned,
     dispose() {
-      root.removeEventListener('mouseover', onOver);
-      root.removeEventListener('mouseout', onOut);
       root.removeEventListener('click', onClick);
       root.removeEventListener('mousedown', onDown);
       root.removeEventListener('mousemove', onMove);

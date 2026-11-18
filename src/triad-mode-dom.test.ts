@@ -56,11 +56,12 @@ test('the block: controls, the scale staff, the chips under it, the piano, the t
   assert.equal(m.q('.forge-scale-sevenths'), null, 'no 7ths switch');
 });
 
-test('the legend is always there, in the driver\'s words, with the same words as a tooltip on the legend and on every Roman numeral', async () => {
+test('the legend is always there, in the driver\'s words, with the same words as the aria-description of the legend and of every Roman numeral (2026-11-19-0800: no native title tooltip)', async () => {
   const m = mount('mode: triad'); await m.tick();
   assert.equal(m.q('.forge-triad-legend').textContent, TRIAD_LEGEND);
-  assert.equal(m.q('.forge-triad-legend').title, TRIAD_LEGEND);
-  for (const n of m.qa('.forge-triad-chip-numeral')) assert.equal(n.title, TRIAD_LEGEND);
+  assert.equal(m.q('.forge-triad-legend').getAttribute('aria-description'), TRIAD_LEGEND); assert.equal(m.q('.forge-triad-legend').hasAttribute('title'), false);
+  assert.ok(m.qa('.forge-triad-chip-numeral').length > 0, 'non-vacuity');
+  for (const n of m.qa('.forge-triad-chip-numeral')) { assert.equal(n.getAttribute('aria-description'), TRIAD_LEGEND); assert.equal(n.hasAttribute('title'), false); }
   m.click(m.qa('.forge-triad-chip')[3]); await m.tick();
   assert.equal(m.q('.forge-triad-legend').textContent, TRIAD_LEGEND, 'still there after a pick');
 });

@@ -78,7 +78,7 @@ test('circle: at the 4-ring limit the control is DISABLED with an explanation �
   await toCircle(h);
   const sel = h.el('addInstrument') as HTMLSelectElement;
   assert.equal(sel.disabled, true);
-  assert.match(sel.title, /4 instruments/i, 'the tooltip says why');
+  assert.match(sel.getAttribute('aria-description'), /4 instruments/i, 'the description says why (2026-11-19-0800: aria-description, no hover tooltip)');
   assert.match(h.el('viewMsg').textContent ?? '', /4 instruments/i, 'and the reason is on screen, not only in a tooltip');
   assert.equal(sel.hidden, false);
   assert.equal(types(h, 'forge-rhythm-save').length, 0, 'rendering the disabled control saved nothing');
@@ -177,7 +177,7 @@ test('compact: time signature and the view switch live in the transport row (one
   assert.ok(transport.contains(h.el('bPlay')) && transport.contains(h.el('bBpmUp')) && transport.contains(h.el('bBpmDown')));
 });
 
-test('compact: Swing and Volume share one row, and the long swing caption is a tooltip + description, not a paragraph block', { skip }, async () => {
+test('compact: Swing and Volume share one row, and the long swing caption is a description, not a paragraph block', { skip }, async () => {
   const h = await editing();
   const sliders = h.doc.querySelector('.sliders') as HTMLElement;
   assert.ok(sliders.contains(h.el('swing')) && sliders.contains(h.el('volume')));
@@ -191,12 +191,13 @@ test('compact: Swing and Volume share one row, and the long swing caption is a t
   assert.match(srOnly, /clip: rect\(0 0 0 0\)/);
   assert.match(srOnly, /overflow: hidden/);
   assert.equal(h.el('swing').getAttribute('aria-describedby'), caption.id, 'it still describes the slider to assistive tech');
-  assert.match(h.el('swing').getAttribute('title') ?? '', /off-beat/i, 'and sighted users get it on hover');
+  assert.match(h.el('swing').getAttribute('aria-description') ?? '', /off-beat/i, 'and it is the slider\'s description, read by assistive tech (2026-11-19-0800: no hover tooltip any more)');
+  assert.equal(h.el('swing').getAttribute('title'), null, 'no native tooltip: nothing appears because the pointer rests');
 });
 
 // (drain 2026-10-19-1500: 'compact: Random, Clear and Export JSON sit behind ONE "more" menu' deleted with the menu; rhythm-box-removed-controls.test.ts pins their absence.)
 
-test('compact: the toolbar is icon buttons with tooltips and aria-labels — short visible text, full names for assistive tech', { skip }, async () => {
+test('compact: the toolbar is icon buttons with descriptions and aria-labels — short visible text, full names for assistive tech', { skip }, async () => {
   const h = await editing();
   await toCircle(h);                                   // so the circle-only extras are on screen too
   for (const [id, label] of [['bRotLeft', /left/i], ['bRotRight', /right/i], ['bMirror', /mirror/i], ['bRingRotLeft', /counter-clockwise/i],
@@ -205,7 +206,8 @@ test('compact: the toolbar is icon buttons with tooltips and aria-labels — sho
     assert.ok(b, id);
     const visible = (b.textContent ?? '').trim();
     assert.ok(visible.length <= 3, `${id}: visible text "${visible}" is an icon, not a word`);
-    assert.match(b.getAttribute('title') ?? '', label, `${id} has a tooltip`);
+    assert.match(b.getAttribute('aria-description') ?? '', label, `${id} has a description (aria-description since 2026-11-19-0800; a hover tooltip is gone)`);
+    assert.equal(b.getAttribute('title'), null, `${id} has no native tooltip`);
     assert.match(b.getAttribute('aria-label') ?? '', label, `${id} keeps a full accessible name`);
   }
 });

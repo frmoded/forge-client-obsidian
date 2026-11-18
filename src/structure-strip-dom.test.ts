@@ -1,4 +1,4 @@
-// score_first M13 (drain 2026-10-26-1270, DEMO profile) — the structure strip's DOM on its own (happy-dom): the tokens of structure-strip-core become buttons and arrows in the order the golden text pins, hover / focus / click are
+// score_first M13 (drain 2026-10-26-1270, DEMO profile) — the structure strip's DOM on its own (happy-dom): the tokens of structure-strip-core become buttons and arrows in the order the golden text pins, (2026-11-19-0800: the pointer resting tells nobody) focus / blur / click are
 // told to the owner, emphasis follows a note, an empty strip is hidden, a redraw keeps nothing of the old chips.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -26,14 +26,15 @@ test('a morph strip: bar_007 → phrase_004 morph, 17 bars → bar_008, as butto
   assert.equal(r.h.el.style.display, '');
 });
 
-test('hover, focus, blur and click are told to the owner with the chip', () => {
+test('2026-11-19-0800: the pointer resting on a chip tells the owner nothing; focus, blur and click are told with the chip', () => {
   const r = rig();
   r.h.set(chipsFor('phrase_004', MORPH));
   const [a, , b] = r.buttons();
-  a.dispatchEvent(new win.MouseEvent('mouseenter')); a.dispatchEvent(new win.MouseEvent('mouseleave'));
+  a.dispatchEvent(new win.MouseEvent('mouseenter')); a.dispatchEvent(new win.MouseEvent('mouseover')); a.dispatchEvent(new win.MouseEvent('mouseleave'));
+  assert.deepEqual(r.events, [], 'the pointer resting on (or leaving) a chip tells nobody');
   b.dispatchEvent(new win.Event('focus')); b.dispatchEvent(new win.Event('blur'));
   b.click();
-  assert.deepEqual(r.events, ['hover bar_007', 'hover none', 'hover bar_008', 'hover none', 'click bars/bar_008']);
+  assert.deepEqual(r.events, ['hover bar_008', 'hover none', 'click bars/bar_008']);
 });
 
 test('emphasis marks the chip of that note (and survives a redraw of the same chips); null clears; an unknown note marks nothing', () => {
@@ -84,13 +85,14 @@ test('the strip goes before a given sibling (above the Score), else last', () =>
 
 const TWO_KITS = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009' }, { kit: 'brush', phrase: 'phrase_003' }] } as const;
 
-test('chips that carry a row are drawn one block per row, in the order of the chips, each button still a chip (hover, focus and click as ever)', () => {
+test('chips that carry a row are drawn one block per row, in the order of the chips, each button still a chip (focus and click as ever; the pointer resting tells nobody)', () => {
   const r = rig();
   r.h.set(arrangementChips(TWO_KITS as any));
   const rows = [...r.h.el.children] as any[];
   assert.deepEqual(rows.map((c) => c.className), [STRIP_ROW_CLASS, STRIP_ROW_CLASS, STRIP_ROW_CLASS]);
   assert.deepEqual(rows.map((row) => [...row.children].map((c: any) => c.textContent)), [['phrase_003', 'rock kit'], ['phrase_009', 'latin kit'], ['brush kit']], 'phrase_003 is one chip, in the first row that plays it');
-  r.buttons()[3].dispatchEvent(new win.Event('mouseenter')); r.buttons()[3].click();
+  r.buttons()[3].dispatchEvent(new win.Event('mouseenter')); assert.deepEqual(r.events, [], '2026-11-19-0800: the pointer resting tells nobody');
+  r.buttons()[3].dispatchEvent(new win.Event('focus')); r.buttons()[3].click();
   assert.deepEqual(r.events, ['hover latin kit', 'click kits/latin']);
 });
 

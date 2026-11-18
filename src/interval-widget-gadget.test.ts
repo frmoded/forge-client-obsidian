@@ -4,7 +4,7 @@
 //   * the tuning math is the Piano gadget's, copied: a test compares it with piano_keyboard.html AT A PINNED COMMIT of this repo for every key and tuning;
 //   * the page in a DOM (happy-dom): the three tabs, the Explore flows (two keys, a picked name, clipping, the tritone's two names, more than an octave, nothing plays on a bare click), the Chart rows and cues, the Trainer (a wrong and a right answer, streak, Hide/Reveal, Widen, the Done badge);
 //   * a CONTROL that fails: the same checks on pages with the name table, the clipping, the repeat rule, the Done threshold or the play order damaged go red;
-//   * P3: every other gadget is byte-identical to the commit this drain started from.
+//   * P3: every other gadget is byte-identical to the commit this drain started from (2026-11-19-0800: none is pinned any more, only the control that proves the comparison can fail remains).
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -369,7 +369,7 @@ function shiftPageFailures(h: string): string[] {
   ok('the strip is the Explore strip: 25 keys, C3 to C5', p.doc.querySelectorAll('#shSvg .key').length === 25 && !!p.doc.querySelector('#shSvg .key[data-midi="48"]') && !!p.doc.querySelector('#shSvg .key[data-midi="72"]'));
   ok('the tune\'s notes are lit at the start position', JSON.stringify(litKeys(p, 'tune')) === JSON.stringify([60, 62, 64, 65, 67, 69]) && litKeys(p, 'broken').length === 0);
   ok('the caption is not shown before a shift', p.doc.getElementById('shCaption').hidden);
-  ok('at the start Shift up, Shift down and Octave down are possible; Octave up is not (A4 + 12 would leave the strip) and says why', ['shUp', 'shDn', 'shOd'].every((i) => !p.doc.getElementById(i).disabled) && p.doc.getElementById('shOu').disabled && /C5|highest|top|outside/i.test(p.doc.getElementById('shOu').getAttribute('title')));
+  ok('at the start Shift up, Shift down and Octave down are possible; Octave up is not (A4 + 12 would leave the strip) and says why', ['shUp', 'shDn', 'shOd'].every((i) => !p.doc.getElementById(i).disabled) && p.doc.getElementById('shOu').disabled && /C5|highest|top|outside/i.test(p.doc.getElementById('shOu').getAttribute('aria-description')));
   // ---- three half steps up: the names change, the intervals do not
   for (let i = 0; i < 3; i++) click(p, '#shUp');
   ok('shifting plays nothing', p.osc.length === 0);
@@ -377,7 +377,7 @@ function shiftPageFailures(h: string): string[] {
   ok('up 3: the interval row is the same', rowText(p) === TWINKLE_ROW);
   ok('up 3: the strip moved with it', JSON.stringify(litKeys(p, 'tune')) === JSON.stringify([63, 65, 67, 68, 70, 72]));
   ok('the caption says it, once shifted', !p.doc.getElementById('shCaption').hidden && text(p, '#shCaption') === 'the notes changed, the intervals did not');
-  ok('at the top edge Shift up is disabled with a title that says why, Shift down is not', p.doc.getElementById('shUp').disabled && /C5|highest|top|outside/i.test(p.doc.getElementById('shUp').getAttribute('title')) && !p.doc.getElementById('shDn').disabled && p.doc.getElementById('shOu').disabled);
+  ok('at the top edge Shift up is disabled with a description (aria-description, not a hover tooltip: 2026-11-19-0800) that says why, Shift down is not', p.doc.getElementById('shUp').disabled && /C5|highest|top|outside/i.test(p.doc.getElementById('shUp').getAttribute('aria-description')) && !p.doc.getElementById('shDn').disabled && p.doc.getElementById('shOu').disabled);
   click(p, '#shUp'); ok('a disabled Shift up changes nothing', /^starts on E-flat\b/.test(text(p, '#shStart')));
   for (let i = 0; i < 8; i++) click(p, '#shDn');
   ok('down 8 more (net down 5): starts on G, the row is still the same', /^starts on G\b/.test(text(p, '#shStart')) && text(p, '#shNames') === 'G G D D E E D C C B B A A G' && rowText(p) === TWINKLE_ROW);
@@ -395,7 +395,7 @@ function shiftPageFailures(h: string): string[] {
   p.osc.length = 0; click(p, '#shBreak');
   ok('Break one interval plays the tune with its middle note raised a half step', JSON.stringify(oscHz(p)) === JSON.stringify(hz(g, ...g.breakOne(TUNES[0][1]))));
   ok('the changed note is marked in a second colour (one key), the tune still lit', JSON.stringify(litKeys(p, 'broken')) === JSON.stringify([66]) && litKeys(p, 'tune').includes(65));
-  ok('the row shows the two changed sizes, as text, marked', rowText(p) === '0 +7 0 +2 0 -2 -1 -1 -1 0 -2 0 -2' && p.doc.querySelectorAll('#shIntervals .chg').length === 2 && [...p.doc.querySelectorAll('#shIntervals .chg')].every((e: any) => /changed/i.test(e.getAttribute('aria-label') ?? e.getAttribute('title') ?? '')));
+  ok('the row shows the two changed sizes, as text, marked', rowText(p) === '0 +7 0 +2 0 -2 -1 -1 -1 0 -2 0 -2' && p.doc.querySelectorAll('#shIntervals .chg').length === 2 && [...p.doc.querySelectorAll('#shIntervals .chg')].every((e: any) => /changed/i.test(e.getAttribute('aria-label') ?? e.getAttribute('aria-description') ?? '')));
   ok('the button says it is on', p.doc.getElementById('shBreak').getAttribute('aria-pressed') === 'true');
   ok('while the tune is broken the caption is gone (the intervals DID change) - it comes back with the true tune', p.doc.getElementById('shCaption').hidden);
   p.osc.length = 0; click(p, '#shBreak');
@@ -443,16 +443,16 @@ test('SHIFT, the Bach tune in the page (2026-11-13-1212): picked fourth, its own
   assert.equal(text(p, '#shNames'), 'G D B A B D B D G E C B C E C E');
   assert.match(text(p, '#shStart'), /^starts on G \(octave 3\)/);
   assert.deepEqual(litKeys(p, 'tune'), [55, 62, 64, 69, 71, 72]);
-  assert.ok(p.doc.getElementById('shUp').disabled && /highest note would go above C5/.test(p.doc.getElementById('shUp').getAttribute('title')), 'no shift up, and it says why');
+  assert.ok(p.doc.getElementById('shUp').disabled && /highest note would go above C5/.test(p.doc.getElementById('shUp').getAttribute('aria-description')), 'no shift up, and it says why');
   assert.equal(p.osc.length, 0, 'picking a tune is silent');
   // octave buttons: both off the strip, with their reasons
-  assert.ok(p.doc.getElementById('shOd').disabled && /go an octave down/.test(p.doc.getElementById('shOd').getAttribute('title')));
-  assert.ok(p.doc.getElementById('shOu').disabled && /go an octave up/.test(p.doc.getElementById('shOu').getAttribute('title')));
+  assert.ok(p.doc.getElementById('shOd').disabled && /go an octave down/.test(p.doc.getElementById('shOd').getAttribute('aria-description')));
+  assert.ok(p.doc.getElementById('shOu').disabled && /go an octave up/.test(p.doc.getElementById('shOu').getAttribute('aria-description')));
   for (let i = 0; i < 7; i++) { assert.equal(p.doc.getElementById('shDn').disabled, false, `down ${i + 1} is allowed`); click(p, '#shDn'); assert.equal(rowText(p), row, `the row after down ${i + 1}`); }
   assert.equal(text(p, '#shNames'), g.noteNames(g.shiftTune(BACH, -7)).join(' '), 'down 7: the names are the tune moved');
   assert.equal(text(p, '#shNames').split(' ')[0], 'C');
   assert.notEqual(text(p, '#shNames'), 'G D B A B D B D G E C B C E C E');
-  assert.ok(p.doc.getElementById('shDn').disabled && /lowest note would go below C3/.test(p.doc.getElementById('shDn').getAttribute('title')), 'an 8th shift down is off, and says why');
+  assert.ok(p.doc.getElementById('shDn').disabled && /lowest note would go below C3/.test(p.doc.getElementById('shDn').getAttribute('aria-description')), 'an 8th shift down is off, and says why');
   assert.equal(litKeys(p, 'tune').join(), [48, 55, 57, 62, 64, 65].join());
   assert.match(text(p, '#shStart'), /^starts on C \(octave 3\)/);
   assert.equal(p.doc.getElementById('shCaption').hidden, false, 'the caption: the notes changed, the intervals did not');
@@ -491,8 +491,10 @@ test('SHIFT CONTROL: the checks can fail - a broken note that is not raised, a b
 const START_SHA = 'c6285f9';
 const skipReason = pinSkipReason(ROOT, START_SHA, 'this repo');
 // 2026-11-13-1214-1: piano_keyboard.html is NOT in this list any more: it got the new piano voice on purpose (src/piano-voice.test.ts pins what changed)
-// 2026-11-15-1221: guitar, lute, mandolin, monochord and the C major triad keyboard got the plucked / piano voice on purpose (src/plucked-voice.test.ts, src/piano-voice.test.ts); only rhythm_box.html is still pinned
-for (const other of ['rhythm_box.html']) {
+// 2026-11-15-1221: guitar, lute, mandolin, monochord and the C major triad keyboard got the plucked / piano voice on purpose (src/plucked-voice.test.ts, src/piano-voice.test.ts)
+// 2026-11-19-0800: rhythm_box.html lost its hover link on purpose (drain "remove ALL hover behavior"; src/rhythm-box-hover-link.test.ts pins what changed), so no gadget is pinned any more
+const STILL_PINNED: string[] = [];
+for (const other of STILL_PINNED) {
   test(`P3: ${other} is byte-identical to the commit the drain started from`, { skip: skipReason ?? false }, () => {
     const was = execFileSync('git', ['-C', ROOT, 'show', `${START_SHA}:${HTML_DIR}/${other}`], { maxBuffer: 64 * 1024 * 1024 });
     // 2026-11-18-1200: the ONE allowed difference is the palette comment, which named the style-guide file and now does not (src/gadget-plugin-words.test.ts); everything else is still byte for byte
