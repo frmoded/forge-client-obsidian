@@ -65,7 +65,6 @@ export interface ForgeSettings {
   showBarNumbers: boolean;
   dialogHistory: Record<string, unknown>;
   dialogHeight: number;
-  dialogDock: 'bottom' | 'right';
   /** 2026-11-17-2001: MUSIC_COMPOSER_AUTO_APPLY (default off): a sentence the grammar reads exactly is applied on the first Enter, without a preview. */
   composerAutoApply: boolean;
 }
@@ -89,7 +88,6 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   showBarNumbers: true,
   dialogHistory: {},
   dialogHeight: 112,
-  dialogDock: 'bottom',
   composerAutoApply: false,
 };
 
@@ -247,20 +245,6 @@ export class ForgeSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.composerAutoApply)
           .onChange(async (value) => {
             this.plugin.settings.composerAutoApply = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName('Composer position')
-      .setDesc('Bottom (default): under the Score. Right: beside the Score. Takes effect when a tab is reopened. (There is no button for this in the tab.)')
-      .addDropdown(dropdown =>
-        dropdown
-          .addOption('bottom', 'Bottom')
-          .addOption('right', 'Right')
-          .setValue(this.plugin.settings.dialogDock)
-          .onChange(async (value) => {
-            this.plugin.settings.dialogDock = value === 'right' ? 'right' : 'bottom';
             await this.plugin.saveSettings();
           })
       );

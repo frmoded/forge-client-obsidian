@@ -12,7 +12,7 @@ export type DialogKind = 'you' | 'applied' | 'rejected' | 'asking' | 'suggestion
 export type SuggestionState = 'open' | 'applied' | 'cancelled' | 'expired';
 export interface DialogEntry {
   id: number;
-  at: number;                                         // ms since the epoch
+  at: number;                                         // ms since the epoch the entry was made (the dialog shows its age: relative-time-core.ts); 0 = an old entry that never had one: it shows no counter
   kind: DialogKind;
   text: string;
   suggestion?: { description: string; recipe: string; state: SuggestionState };
@@ -81,8 +81,9 @@ export function sanitizeLoaded(raw: unknown): DialogEntry[] {
   for (const e of raw) {
     if (typeof e !== 'object' || e === null) continue;
     const r = e as Record<string, unknown>;
-    if (typeof r.id !== 'number' || typeof r.at !== 'number' || typeof r.text !== 'string' || !kinds.includes(r.kind as DialogKind)) continue;
-    const entry: DialogEntry = { id: r.id, at: r.at, kind: r.kind as DialogKind, text: redact(r.text) };
+    if (typeof r.id !== 'number' || typeof r.text !== 'string' || !kinds.includes(r.kind as DialogKind)) continue;
+    const at = typeof r.at === 'number' && Number.isFinite(r.at) && r.at > 0 ? r.at : 0;                   // 2026-11-18: an entry saved before the time was kept (or with a broken one) still restores; it shows no "minutes ago"
+    const entry: DialogEntry = { id: r.id, at, kind: r.kind as DialogKind, text: redact(r.text) };
     const s = r.suggestion as Record<string, unknown> | undefined;
     if (s && typeof s.description === 'string' && typeof s.recipe === 'string') entry.suggestion = { description: redact(s.description), recipe: redact(s.recipe), state: s.state === 'applied' || s.state === 'cancelled' ? s.state : 'expired' };
     out.push(entry);
@@ -97,8 +98,6 @@ export function sanitizeStore(raw: unknown): Record<string, DialogEntry[]> {
   return Object.fromEntries(items.slice(0, DIALOG_NOTES_CAP));
 }
 export const clampHeight = (n: unknown): number => (typeof n === 'number' && Number.isFinite(n) ? Math.min(DIALOG_HEIGHT_MAX, Math.max(DIALOG_HEIGHT_MIN, Math.round(n))) : DIALOG_HEIGHT_DEFAULT);
-export type DialogDock = 'bottom' | 'right';
-export const clampDock = (d: unknown): DialogDock => (d === 'right' ? 'right' : 'bottom');
 
 /** The persistence the plugin provides (data.json, keyed by note path: never in the note, never in the vault's files). */
 export interface DialogStore {
@@ -106,17 +105,15 @@ export interface DialogStore {
   setEntries(path: string, list: DialogEntry[]): void;
   height(): number;
   setHeight(px: number): void;
-  dock(): DialogDock;
-  setDock(d: DialogDock): void;
 }
 /** An in-memory store (the session's own history; tests; the lean fallback). */
-export function memoryStore(init: { entries?: Record<string, DialogEntry[]>; height?: number; dock?: DialogDock } = {}): DialogStore {
+export function memoryStore(init: { entries?: Record<string, DialogEntry[]>; height?: number } = {}): DialogStore {
   const map = new Map<string, DialogEntry[]>(Object.entries(init.entries ?? {}));
-  let height = clampHeight(init.height), dock: DialogDock = clampDock(init.dock);
-  return { entries: (p) => map.get(p) ?? [], setEntries: (p, l) => { map.set(p, l); }, height: () => height, setHeight: (n) => { height = clampHeight(n); }, dock: () => dock, setDock: (d) => { dock = clampDock(d); } };
+  let height = clampHeight(init.height);
+  return { entries: (p) => map.get(p) ?? [], setEntries: (p, l) => { map.set(p, l); }, height: () => height, setHeight: (n) => { height = clampHeight(n); } };
 }
 /** A store over the plugin's settings object (data.json): the same object the plugin saves; `save` is the plugin's own debounced saveSettings. */
-export interface DialogSettingsSlice { dialogHistory?: unknown; dialogHeight?: unknown; dialogDock?: unknown }
+export interface DialogSettingsSlice { dialogHistory?: unknown; dialogHeight?: unknown }
 export function settingsStore(settings: DialogSettingsSlice, save: () => void): DialogStore {
   const store = (): Record<string, DialogEntry[]> => (settings.dialogHistory = typeof settings.dialogHistory === 'object' && settings.dialogHistory !== null ? settings.dialogHistory : {}) as Record<string, DialogEntry[]>;
   return {
@@ -128,7 +125,5 @@ export function settingsStore(settings: DialogSettingsSlice, save: () => void): 
     },
     height: () => clampHeight(settings.dialogHeight),
     setHeight(px) { settings.dialogHeight = clampHeight(px); save(); },
-    dock: () => clampDock(settings.dialogDock),
-    setDock(d) { settings.dialogDock = clampDock(d); save(); },
   };
 }

@@ -3,18 +3,24 @@
 //
 // 2026-11-17-2001: the chat-style composer. The dialog above is collapsed while empty (a fresh note shows only the Score and the card); there is no dock button, no resize bar and no "Current:" line any more.
 //
-//   <div class="… forge-chat-host forge-chat-dock-bottom|right">                 the tab's content element, now a flex container (the right dock is a setting only)
+// 2026-11-18 (R1): the layout follows the TAB's width (chat-layout-core.ts): from 900 px up the host is TWO COLUMNS (`forge-chat-wide`: the dialog and the card on the LEFT, the Score on the RIGHT, each scrolling on its own),
+// narrower it is the stacked layout (the Score above, the dialog and the card below). The old bottom | right position switch and its setting are gone. Each entry shows a small muted "minutes ago" (relative-time-core.ts)
+// that ONE timer per tab recounts every 30 s (cleared on dispose); the refusal lines are plain text with a neutral "!" glyph, never red.
+//
+//   <div class="… forge-chat-host forge-chat-wide|forge-chat-stacked">           the tab's content element, a flex container
 //     <div class="forge-chat-body">…everything the tab drew…</div>              scrolls on its own
 //     <div class="forge-chat-panel" role="group" aria-label="Composer and dialog">
-//       <div class="forge-chat-log [is-empty]" role="log" aria-live="polite">…<div class="forge-chat-msg is-you|is-forge">…</div></div>     your sentence: a soft right-aligned bubble; the reply: plain text on the left
+//       <div class="forge-chat-log [is-empty]" role="log" aria-live="polite">…<div class="forge-chat-msg is-you|is-forge"><div class="forge-chat-line">[<span class="forge-chat-bang">!</span>]<div class="forge-chat-text">…</div></div>…<div class="forge-chat-meta"><span class="forge-chat-time">7 minutes ago</span></div></div></div>     your sentence: a soft right-aligned gray bubble; the reply: plain text on the left
 //       <div class="forge-prompt-box forge-composer">…</div>                     the card (prompt-box-dom.ts)
 //       <div class="forge-composer-error">…</div>                                one muted line
 //     </div>
 //   </div>
 import { DESCRIPTION_BAR_CLASS } from './description-bar-dom.ts';
 import { mountPromptBox, type PromptBoxHandle, type PromptBoxPorts } from './prompt-box-dom.ts';
-import { type DialogDock, type DialogEntry, type DialogStore } from './dialog-core.ts';
+import { type DialogEntry, type DialogStore } from './dialog-core.ts';
 import { PREVIEW_HINT } from './composer-core.ts';
+import { CHAT_WIDE_CLASS, layoutFor, type ChatLayout } from './chat-layout-core.ts';
+import { TICK_MS, relativeTime } from './relative-time-core.ts';
 
 export const CHAT_HOST_CLASS = 'forge-chat-host';
 const CHOSEN = { applied: 'Applied.', cancelled: 'Discarded.', expired: 'No longer current.' } as const;
@@ -22,7 +28,11 @@ const CHOSEN = { applied: 'Applied.', cancelled: 'Discarded.', expired: 'No long
 export interface ChatPanelPorts {
   box: PromptBoxPorts;
   store: DialogStore;
-  now?: () => Date;
+  /** The clock of the "minutes ago" labels (ms since the epoch; default `Date.now`). */
+  now?: () => number;
+  /** The ONE recount timer of this tab (default `window.setTimeout` / `clearTimeout`); tests pass the host clock's. */
+  setTimer?(fn: () => void, ms: number): unknown;
+  clearTimer?(handle: unknown): void;
 }
 export interface ChatPanelHandle {
   readonly el: HTMLElement;
@@ -31,10 +41,15 @@ export interface ChatPanelHandle {
   render(entries: readonly DialogEntry[], current: string): void;
   /** Is the panel still where it was mounted (a tab that emptied its content took it away)? */
   attached(): boolean;
-  dock(): DialogDock;
+  /** 'wide' = two columns (the tab is 900 px or wider), 'narrow' = stacked. Follows the tab's width live (no reload). */
+  layout(): ChatLayout;
+  /** Recount every "minutes ago" label now (the timer does it every 30 s). */
+  refreshTimes(): void;
   dispose(): void;
 }
 
+/** The lines that are errors: they get a small neutral "!" (muted colour) in front of their wording; no red anywhere in the dialog (src/no-red-music-tabs.test.ts). */
+const NEUTRAL_ERROR_KINDS: ReadonlySet<DialogEntry['kind']> = new Set(['rejected', 'refused', 'failed']);
 const LABEL: Record<DialogEntry['kind'], string> = { you: 'You', applied: 'Forge', rejected: 'Forge', asking: 'Forge', suggestion: 'Forge', refused: 'Forge', dropped: 'Forge', control: 'Controls', notice: 'Forge', failed: 'Forge' };
 
 export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial: string): ChatPanelHandle {
@@ -47,12 +62,35 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
   host.append(body, panel);
   host.classList.add(CHAT_HOST_CLASS);
 
-  // 2026-11-17-2001: no dock button and no resize bar any more; the right-hand layout is the setting `dialogDock` (read when the tab mounts), the bottom is the default.
-  const dock: DialogDock = ports.store.dock();
-  host.classList.add(dock === 'right' ? 'forge-chat-dock-right' : 'forge-chat-dock-bottom');
   let disposed = false;
+  const nowMs = (): number => (ports.now ? ports.now() : Date.now());
 
-  const stamp = (at: number): string => { const d = new Date(at); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+  // ---- the layout follows the TAB's width: two columns from 900 px, stacked below; no reload, no setting ---------------------------------------------------------------------------------------------------
+  let layout: ChatLayout = 'narrow';
+  const setLayout = (width: number): void => {
+    layout = layoutFor(width);
+    host.classList.toggle(CHAT_WIDE_CLASS, layout === 'wide'); host.classList.toggle('forge-chat-stacked', layout === 'narrow');
+  };
+  setLayout(host.clientWidth || host.getBoundingClientRect?.().width || 0);
+  const Resize = (doc.defaultView as unknown as { ResizeObserver?: typeof ResizeObserver } | null)?.ResizeObserver;
+  const layoutWatch = Resize ? new Resize((entries) => { const w = entries[0]?.contentRect.width ?? host.clientWidth; if (!disposed && w > 0) setLayout(w); }) : null;
+  layoutWatch?.observe(host);
+
+  // ---- the "minutes ago" labels: ONE timer for the open tab (a chain of 30 s timeouts), never one per entry; it is cleared when the tab closes ---------------------------------------------------------------
+  const refreshTimes = (): void => {
+    const now = nowMs();
+    for (const t of Array.from(log.querySelectorAll('.forge-chat-time'))) {
+      const label = relativeTime(Number(t.getAttribute('data-at')), now);
+      if (t.textContent !== label) t.textContent = label;
+      (t as HTMLElement).hidden = label === '';
+    }
+  };
+  // a host without a window of its own (a test's) must not be kept alive by the recount: `unref` where the timer has one (node), nothing in a browser
+  const arm = ports.setTimer ?? ((fn: () => void, ms: number) => { const h = (doc.defaultView as Window).setTimeout(fn, ms); (h as unknown as { unref?: () => void })?.unref?.(); return h; });
+  const disarm = ports.clearTimer ?? ((h: unknown) => { (doc.defaultView as Window).clearTimeout(h as number); });
+  let timer: unknown = null;
+  const tick = (): void => { timer = null; if (disposed) return; refreshTimes(); timer = arm(tick, TICK_MS); };
+  timer = arm(tick, TICK_MS);
   const render = (entries: readonly DialogEntry[], _cur: string): void => {
     if (disposed) return;
     const atEnd = log.scrollHeight - log.scrollTop - (log.clientHeight || 0) < 40 || log.childElementCount === 0;
@@ -62,12 +100,16 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
       const m = doc.createElement('div'); m.className = `forge-chat-msg is-${e.kind}${e.kind === 'you' ? ' is-you' : ' is-forge'}`; m.setAttribute('data-id', String(e.id)); m.setAttribute('data-kind', e.kind);
       const meta = doc.createElement('div'); meta.className = 'forge-chat-meta';
       const who = doc.createElement('span'); who.className = 'forge-chat-who'; who.textContent = LABEL[e.kind];
-      const when = doc.createElement('span'); when.className = 'forge-chat-time'; when.textContent = stamp(e.at);
+      const label = relativeTime(e.at, nowMs());
+      const when = doc.createElement('span'); when.className = 'forge-chat-time'; when.setAttribute('data-at', String(e.at)); when.setAttribute('aria-live', 'off'); when.textContent = label; when.hidden = label === '';           // an old entry without a time: no counter
       meta.append(who, when);
+      const line = doc.createElement('div'); line.className = 'forge-chat-line';
+      if (NEUTRAL_ERROR_KINDS.has(e.kind)) { const bang = doc.createElement('span'); bang.className = 'forge-chat-bang'; bang.setAttribute('aria-hidden', 'true'); bang.textContent = '!'; line.append(bang); }     // an error is told by its wording and a small muted "!", never by colour
       const text = doc.createElement('div'); text.className = 'forge-chat-text';
       if (e.kind === 'applied') { const check = doc.createElement('span'); check.className = 'forge-chat-check'; check.setAttribute('aria-hidden', 'true'); check.textContent = '✓'; text.append(check, doc.createTextNode(` ${e.text}`)); }
       else text.textContent = e.text;
-      m.append(meta, text);
+      line.append(text);
+      m.append(line);
       if (e.suggestion) {
         const s = e.suggestion;
         const d = doc.createElement('div'); d.className = 'forge-chat-suggestion-description'; d.textContent = s.description;
@@ -77,6 +119,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
         status.textContent = s.state === 'open' ? PREVIEW_HINT : CHOSEN[s.state];
         m.append(status);
       }
+      m.append(meta);
       log.appendChild(m);
     }
     if (atEnd) log.scrollTop = log.scrollHeight;
@@ -111,13 +154,14 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
     el: panel, box,
     render,
     attached: () => !disposed && panel.parentElement === host && body.parentElement === host,
-    dock: () => dock,
+    layout: () => layout,
+    refreshTimes,
     dispose() {
       if (disposed) return;
-      disposed = true; watch?.disconnect(); host.removeEventListener('keydown', onKey); box.dispose();
+      disposed = true; if (timer !== null) disarm(timer); timer = null; layoutWatch?.disconnect(); watch?.disconnect(); host.removeEventListener('keydown', onKey); box.dispose();
       if (body.parentElement === host) while (body.firstChild) host.insertBefore(body.firstChild, body);                // the tab's content goes back where it was
       body.remove(); panel.remove();
-      host.classList.remove(CHAT_HOST_CLASS, 'forge-chat-dock-bottom', 'forge-chat-dock-right');
+      host.classList.remove(CHAT_HOST_CLASS, CHAT_WIDE_CLASS, 'forge-chat-stacked');
     },
   };
 }

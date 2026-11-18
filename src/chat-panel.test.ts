@@ -64,7 +64,7 @@ test('the panel is a FLEX SIBLING below the body: the tab\'s content moves into 
   const panel = host.lastElementChild as HTMLElement;
   assert.deepEqual([...panel.children].map((c: any) => c.className.split(' ')[0]), ['forge-chat-log', 'forge-prompt-box', 'forge-composer-error']);
   for (const c of [host.firstElementChild!, panel, panel.lastElementChild!]) assert.doesNotMatch((c as HTMLElement).getAttribute('style') ?? '', /position:\s*(sticky|absolute|fixed)/);
-  assert.ok(host.classList.contains('forge-chat-host') && host.classList.contains('forge-chat-dock-bottom'));
+  assert.ok(host.classList.contains('forge-chat-host') && host.classList.contains('forge-chat-stacked'), 'an unmeasured tab is the stacked layout');
   h.dispose();
   assert.deepEqual([...host.children], [score]); assert.equal(host.classList.contains('forge-chat-host'), false);
 });
@@ -89,7 +89,7 @@ test('the dialog draws entries oldest first with who and time, there is no pinne
   assert.equal(msgs.length, 2);
   assert.deepEqual(msgs.map((m) => m.getAttribute('data-kind')), ['you', 'control']);
   assert.equal(msgs[0]!.querySelector('.forge-chat-who')!.textContent, 'You'); assert.equal(msgs[1]!.querySelector('.forge-chat-who')!.textContent, 'Controls');
-  assert.match(msgs[0]!.querySelector('.forge-chat-time')!.textContent!, /^\d\d:\d\d$/);
+  assert.match(msgs[0]!.querySelector('.forge-chat-time')!.textContent!, /ago$|^just now$/, 'a relative time, not a clock time (2026-11-18)');
   assert.equal(msgs[0]!.querySelector('.forge-chat-text')!.textContent, 'make [[bar_007]] <b>longer</b>'); assert.equal(msgs[0]!.querySelector('b'), null);
   assert.equal(host.querySelector('.forge-chat-current'), null, 'the Description is in the composer, not repeated above it');
   assert.equal((host.querySelector('.forge-chat-log') as HTMLElement).classList.contains('is-empty'), false);
@@ -107,16 +107,12 @@ test('no resize bar, no dock button, no "Current:" line: the dialog is collapsed
   assert.ok(log.classList.contains('is-empty'));
   h.dispose();
 });
-test('the right-hand layout is a SETTING only (dialogDock): the bottom is the default; "right" makes the host a row; there is no toggle on the panel', () => {
+test('the position switch is gone (2026-11-18): no dock class, no dock() on the handle, no toggle on the panel; the layout is decided by the tab width (chat-layout.test.ts)', () => {
   const host = win.document.createElement('div'); win.document.body.appendChild(host);
   const h = mountChatPanel(host, { box: BOX, store: memoryStore() }, '');
-  assert.equal(h.dock(), 'bottom'); assert.ok(host.classList.contains('forge-chat-dock-bottom') && !host.classList.contains('forge-chat-dock-right'));
+  assert.equal((h as any).dock, undefined); assert.ok(!/forge-chat-dock/.test(host.className)); assert.equal(host.querySelector('.forge-chat-dock'), null);
+  assert.equal(h.layout(), 'narrow');
   h.dispose();
-  const host2 = win.document.createElement('div'); win.document.body.appendChild(host2);
-  const h2 = mountChatPanel(host2, { box: BOX, store: memoryStore({ dock: 'right' }) }, '');
-  assert.equal(h2.dock(), 'right'); assert.ok(host2.classList.contains('forge-chat-dock-right') && !host2.classList.contains('forge-chat-dock-bottom'));
-  assert.equal(host2.querySelector('.forge-chat-dock'), null);
-  h2.dispose();
 });
 test('Cmd/Ctrl+K anywhere in the tab focuses the composer', () => {
   const host = win.document.createElement('div'); win.document.body.appendChild(host); win.document.body.appendChild(host);
@@ -260,5 +256,7 @@ test('WIRING: the plugin hands the controller the settings-backed store (main.ts
   const main = fs.readFileSync(path.resolve(import.meta.dirname, 'main.ts'), 'utf8');
   assert.match(main, /dialogStore: settingsStore\(this\.settings, \(\) => \{ this\.saveDialogSoon\(\); \}\)/);
   const settings = fs.readFileSync(path.resolve(import.meta.dirname, 'settings.ts'), 'utf8');                      // settings.ts imports obsidian: read as text
-  assert.match(settings, /dialogHistory: \{\},\s*dialogHeight: 112,\s*dialogDock: 'bottom',/);
+  assert.match(settings, /dialogHistory: \{\},\s*dialogHeight: 112,\s*composerAutoApply: false,/);
+  assert.doesNotMatch(settings, /dialogDock|Composer position/, 'the position switch and its setting are gone (2026-11-18)');
+  assert.match(main, /withoutDialogDock\(/, 'an old value is dropped silently when the settings load');
 });

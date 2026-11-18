@@ -2630,25 +2630,40 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-description-buttons { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .forge-description-preview { flex: 1 1 100%; display: grid; gap: 4px; }
 
-/* 2026-11-17-2001 - the music tab's chat-style composer (chat-panel-dom.ts + prompt-box-dom.ts; design doc checklists/music_tabs_chat_ui_design.md section 3). The tab's content element is a flex column; its BODY (the Score first,
-   then any strips) scrolls on its own; the PANEL (the dialog, then the card, then one muted error line) is a flex item below it and never covers it. The card: radius 16, 1 px border, soft shadow, the text area on top (it grows to
-   about 8 lines, then scrolls inside), a quiet "+" at the bottom left, a muted return glyph at the bottom right (the Enter hint and a button). Obsidian CSS variables only. The dialog above is collapsed while it is empty. The right
-   dock is a setting only (`forge-chat-dock-right`): the panel is then a column beside the Score. */
+/* 2026-11-17-2001 - the music tab's chat-style composer (chat-panel-dom.ts + prompt-box-dom.ts; design doc checklists/music_tabs_chat_ui_design.md section 3). The tab's content element is a flex container; its BODY (the Score first,
+   then any strips) scrolls on its own; the PANEL (the dialog, then the card, then one muted line) is its flex sibling and never covers it. The card: radius 16, 1 px border, soft shadow, the text area on top (it grows to about 8
+   lines, then scrolls inside), a quiet "+" at the bottom left, a muted return glyph at the bottom right (the Enter hint and a button). Obsidian CSS variables only. The dialog is collapsed while it is empty.
+   2026-11-18 (R1, like Claude's chat + document): the layout follows the TAB's width (chat-panel-dom.ts sets the class from a ResizeObserver; chat-layout-core.ts: 900 px). STACKED (narrower; the default until measured): a column, the
+   Score above, the dialog and the card below. WIDE (`forge-chat-wide`): two columns, the dialog and the card on the LEFT (40 %), the Score on the RIGHT (60 %), each scrolling on its own, the card at the bottom of the left column.
+   NO RED anywhere here: an error line is plain muted-or-normal text with a small neutral "!" glyph; your sentence is a gray bubble (the background-secondary token, a little deeper so it shows on a near-white page). */
 .forge-chat-host { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
-.forge-chat-host.forge-chat-dock-right { flex-direction: row; }
 .forge-chat-body { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; }
-.forge-chat-host.forge-chat-dock-right .forge-chat-body { flex: 3 1 0; }
 .forge-chat-panel { flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 4px 12px 10px; background: transparent; container-type: inline-size; }
-.forge-chat-host.forge-chat-dock-right .forge-chat-panel { flex: 2 1 0; min-width: 18em; padding: 4px 8px 10px 12px; }
-.forge-chat-log { flex: 0 1 auto; max-height: 14em; overflow-y: auto; margin: 0; padding: 2px 2px 0; display: flex; flex-direction: column; gap: 6px; }
+.forge-chat-log { flex: 0 1 auto; max-height: 14em; overflow-y: auto; margin: 0; padding: 2px 2px 0; display: flex; flex-direction: column; gap: 10px; }
 .forge-chat-log.is-empty { display: none; }
-.forge-chat-host.forge-chat-dock-right .forge-chat-log { flex: 1 1 0; min-height: 0; max-height: none; }
-.forge-chat-msg { max-width: 92%; font-size: var(--font-ui-small); overflow-wrap: anywhere; user-select: text; }
-.forge-chat-msg.is-you { align-self: flex-end; padding: 6px 12px; border-radius: 16px; background: var(--background-secondary); color: var(--text-normal); }
-.forge-chat-msg.is-forge, .forge-chat-msg.is-control { align-self: flex-start; padding: 0 2px; color: var(--text-normal); }
-.forge-chat-msg.is-rejected, .forge-chat-msg.is-refused, .forge-chat-msg.is-failed { color: var(--text-error); }
-.forge-chat-meta { display: none; }
-.forge-chat-text { white-space: pre-wrap; }
+.forge-chat-host.forge-chat-wide { flex-direction: row; }
+.forge-chat-host.forge-chat-wide > .forge-chat-panel { order: 1; flex: 0 0 40%; min-width: 18em; max-width: 40%; min-height: 0; justify-content: flex-end; padding: 8px 12px 12px 14px; border-right: 1px solid var(--background-modifier-border); }
+.forge-chat-host.forge-chat-wide > .forge-chat-body { order: 2; flex: 1 1 60%; min-width: 0; padding-left: 4px; }
+.forge-chat-host.forge-chat-wide .forge-chat-log { flex: 1 1 0; min-height: 0; max-height: none; padding-bottom: 4px; }
+.forge-chat-msg { display: flex; flex-direction: column; gap: 2px; max-width: 100%; font-size: var(--font-ui-small); overflow-wrap: anywhere; user-select: text; }
+.forge-chat-msg.is-you { align-self: flex-end; align-items: flex-end; max-width: 80%; }
+.forge-chat-msg.is-forge, .forge-chat-msg.is-control { align-self: flex-start; align-items: flex-start; padding: 0 2px; color: var(--text-normal); }
+.forge-chat-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+/* your sentence: Claude's gray bubble. The background-secondary token first; where color-mix exists it is mixed a few percent toward the text colour, so the gray shows in a light theme whose secondary is almost white */
+.forge-chat-msg.is-you .forge-chat-text {
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: var(--background-secondary);
+  background: color-mix(in srgb, var(--background-secondary) 90%, var(--text-normal));
+  color: var(--text-normal);
+}
+/* an error line: the normal text colour, never red; recognised by its wording and a small neutral "!" in the muted colour */
+.forge-chat-msg.is-rejected, .forge-chat-msg.is-refused, .forge-chat-msg.is-failed { color: var(--text-normal); }
+.forge-chat-bang { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 1.25em; height: 1.25em; border: 1px solid var(--text-muted); border-radius: 50%; color: var(--text-muted); font-size: 0.8em; font-weight: 600; line-height: 1; }
+.forge-chat-who { display: none; }
+.forge-chat-meta { font-size: var(--font-ui-smaller); line-height: 1.3; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.forge-chat-time[hidden] { display: none; }
+.forge-chat-text { white-space: pre-wrap; min-width: 0; }
 .forge-chat-check { color: var(--text-success, var(--interactive-accent)); font-weight: 600; }
 .forge-chat-suggestion-description { margin-top: 2px; padding: 6px 10px; border-left: 2px solid var(--background-modifier-border); color: var(--text-normal); white-space: pre-wrap; }
 .forge-chat-msg pre { margin: 4px 0 0; padding: 4px 6px; white-space: pre-wrap; background: var(--background-secondary); color: var(--text-normal); border-radius: var(--radius-s, 4px); }
@@ -2738,7 +2753,9 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 }
 .forge-prompt-box .forge-composer-menuitem:focus-visible  { outline: none; background: var(--background-modifier-hover); }
 .forge-prompt-box-conflict { font-size: var(--font-ui-smaller); color: var(--text-muted); }
-.forge-composer-error { flex: 0 0 auto; padding: 0 6px; font-size: var(--font-ui-smaller); color: var(--text-error); opacity: 0.85; }
+.forge-composer-error { flex: 0 0 auto; padding: 0 6px; font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.forge-composer-error::before { content: "!"; content: "!" / ""; display: inline-flex; align-items: center; justify-content: center; width: 1.25em; height: 1.25em; margin-right: 0.5em; border: 1px solid var(--text-muted); border-radius: 50%; color: var(--text-muted); font-size: 0.85em; font-weight: 600; line-height: 1; vertical-align: 0.05em; }
+.forge-composer-error.is-empty::before { content: none; }
 .forge-composer-error.is-empty { display: none; }
 .forge-composer-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 @container (max-width: 420px) {

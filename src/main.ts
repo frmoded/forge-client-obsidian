@@ -107,6 +107,7 @@ import { registerHtmlEmbedProcessor } from './html-embed-view.ts';
 import { registerRhythmEdit, type RhythmEditHandle } from './rhythm-edit-view.ts';
 import { registerScoreFirst } from './score-first.ts';
 import { settingsStore } from './dialog-core.ts';
+import { withoutDialogDock } from './chat-layout-core.ts';
 import { readUiFlags, registerUiFlagsSource } from './ui-flags-core.ts';
 import { classifyMessageSource, messageDelivery, mirrorPanelErrors, routeMessage } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
@@ -1677,7 +1678,10 @@ export default class ForgePlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    // 2026-11-18 (R1): the composer position switch (bottom | right) is gone (a wide tab is two columns by itself): an old `dialogDock` value is dropped silently, no notice
+    const saved = withoutDialogDock((await this.loadData()) as Record<string, unknown> | null);
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved.data);
+    if (saved.changed) void this.saveSettings();
   }
 
   /** 2026-11-13-1214: the dialog's history is saved at most once a second (every message would otherwise rewrite data.json). */

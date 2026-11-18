@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { DIALOG_CAP, DIALOG_NOTES_CAP, DIALOG_HEIGHT_DEFAULT, DIALOG_HEIGHT_MAX, DIALOG_HEIGHT_MIN, append, clampDock, clampHeight, expireOpen, fromControlChange, fromOutcome, memoryStore, openSuggestion, redact, resolveSuggestion, sanitizeLoaded, sanitizeStore, settingsStore, type DialogEntry } from './dialog-core.ts';
+import { DIALOG_CAP, DIALOG_NOTES_CAP, DIALOG_HEIGHT_DEFAULT, DIALOG_HEIGHT_MAX, DIALOG_HEIGHT_MIN, append, clampHeight, expireOpen, fromControlChange, fromOutcome, memoryStore, openSuggestion, redact, resolveSuggestion, sanitizeLoaded, sanitizeStore, settingsStore, type DialogEntry } from './dialog-core.ts';
 
 const say = (list: DialogEntry[], text: string, at: number): DialogEntry[] => append(list, fromOutcome({ type: 'you', text }), at);
 
@@ -72,24 +72,36 @@ test('the whole store keeps the DIALOG_NOTES_CAP most recent notes (by their las
   assert.ok(`phrases/p${DIALOG_NOTES_CAP + 6}.md` in out && !('phrases/p0.md' in out));
   assert.deepEqual(sanitizeStore(null), {}); assert.deepEqual(sanitizeStore([1]), {});
 });
-test('height and dock are clamped: junk is the default', () => {
+test('height is clamped: junk is the default', () => {
   assert.equal(clampHeight(undefined), DIALOG_HEIGHT_DEFAULT); assert.equal(clampHeight(NaN), DIALOG_HEIGHT_DEFAULT);
   assert.equal(clampHeight(1), DIALOG_HEIGHT_MIN); assert.equal(clampHeight(99999), DIALOG_HEIGHT_MAX); assert.equal(clampHeight(200.4), 200);
-  assert.equal(clampDock('right'), 'right'); assert.equal(clampDock('left'), 'bottom'); assert.equal(clampDock(undefined), 'bottom');
 });
-test('the store over the settings object: a round trip per note, the save hook runs, height and dock are kept, and the object is the plugin\'s own (data.json shape)', () => {
+test('the store over the settings object: a round trip per note, the save hook runs, height is kept, and the object is the plugin\'s own (data.json shape)', () => {
   const settings: any = {}; let saves = 0;
   const s = settingsStore(settings, () => { saves++; });
-  s.setEntries('phrases/phrase_001.md', say([], 'hello', 5)); s.setHeight(200); s.setDock('right');
-  assert.equal(saves, 3);
+  s.setEntries('phrases/phrase_001.md', say([], 'hello', 5)); s.setHeight(200);
+  assert.equal(saves, 2);
   const again = settingsStore(JSON.parse(JSON.stringify(settings)), () => {});            // what data.json round-trips to
   assert.deepEqual(again.entries('phrases/phrase_001.md').map((e) => e.text), ['hello']);
   assert.deepEqual(again.entries('phrases/other.md'), []);
-  assert.equal(again.height(), 200); assert.equal(again.dock(), 'right');
-  assert.deepEqual(Object.keys(settings).sort(), ['dialogDock', 'dialogHeight', 'dialogHistory']);
+  assert.equal(again.height(), 200); assert.equal((again as any).dock, undefined, 'the position switch is gone (2026-11-18)');
+  assert.deepEqual(Object.keys(settings).sort(), ['dialogHeight', 'dialogHistory']);
   assert.ok(!JSON.stringify(settings).includes('Token'), 'no token key rides along');
 });
 test('memoryStore is a store too (the session\'s own history)', () => {
-  const m = memoryStore(); m.setEntries('a.md', say([], 'x', 1)); m.setHeight(5); m.setDock('right');
-  assert.deepEqual([m.entries('a.md').length, m.height(), m.dock()], [1, DIALOG_HEIGHT_MIN, 'right']);
+  const m = memoryStore(); m.setEntries('a.md', say([], 'x', 1)); m.setHeight(5);
+  assert.deepEqual([m.entries('a.md').length, m.height()], [1, DIALOG_HEIGHT_MIN]);
+});
+
+test('2026-11-18: an entry saved WITHOUT a time (or with a broken one) still restores, with at = 0 (it shows no "minutes ago"); one with a time keeps it', () => {
+  const raw = [{ id: 1, kind: 'you', text: 'old' }, { id: 2, kind: 'you', text: 'nan', at: 'x' }, { id: 3, kind: 'applied', text: 'neg', at: -4 }, { id: 4, kind: 'you', text: 'new', at: 1_700_000_000_000 }];
+  const out = sanitizeLoaded(raw);
+  assert.deepEqual(out.map((e) => [e.id, e.at]), [[1, 0], [2, 0], [3, 0], [4, 1_700_000_000_000]]);
+  assert.deepEqual(out.map((e) => e.text), ['old', 'nan', 'neg', 'new']);
+});
+test('2026-11-18: the real time of each entry survives the store round trip (a restored log shows the right age)', () => {
+  const settings: any = {}; const s = settingsStore(settings, () => {});
+  s.setEntries('a.md', append(append([], fromOutcome({ type: 'you', text: 'hi' }), 1_700_000_000_000), fromOutcome({ type: 'asking' }), 1_700_000_090_000));
+  const again = settingsStore(JSON.parse(JSON.stringify(settings)), () => {});
+  assert.deepEqual(again.entries('a.md').map((e) => e.at), [1_700_000_000_000, 1_700_000_090_000]);
 });
