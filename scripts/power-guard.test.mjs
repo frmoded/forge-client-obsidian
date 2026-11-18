@@ -17,7 +17,8 @@ const CHECK = path.resolve(import.meta.dirname, 'dev/power-check.mjs');
 const LOW_ON_AC = "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1)\t18%; charging; 1:50 remaining present: true\n";
 const LOW_ON_BATTERY = "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=1)\t10%; discharging; 0:40 remaining present: true\n";
 const DESKTOP = "Now drawing from 'AC Power'\n";
-const SENTENCE = /the Mac is (on battery power|at \d+ % charge)[^\n]*: the matrix is not started[^\n]*FORGE_POWER_GUARD=off/;
+const SENTENCE = /the Mac is on battery below 20 % \(\d+ % charge\): the matrix is not started[^\n]*FORGE_POWER_GUARD=off/;
+const batt = (source, pct) => `Now drawing from '${source === 'ac' ? 'AC Power' : 'Battery Power'}'\n -InternalBattery-0 (id=1)\t${pct}%; ${source === 'ac' ? 'charging' : 'discharging'}; 1:00 remaining present: true\n`;
 
 test('parsePmsetBatt reads the source and the charge from `pmset -g batt`, and says unknown for anything else', () => {
   assert.deepEqual(parsePmsetBatt(AC_POWER), { source: 'ac', percent: 86 });
@@ -31,24 +32,26 @@ test('parsePmsetBatt reads the source and the charge from `pmset -g batt`, and s
   assert.deepEqual(parsePmsetBatt("Now drawing from 'AC Power'\n -InternalBattery-0 (id=1)\t100%; charged; 0:00 remaining present: true\n"), { source: 'ac', percent: 100 });
 });
 
-test('powerVerdict: battery refuses at any charge; below 30 % refuses even on AC; 30 % itself is fine; a reading that is missing never refuses', () => {
-  assert.equal(MIN_CHARGE_PERCENT, 30);
-  assert.deepEqual(powerVerdict({ source: 'battery', percent: 99 }), { ok: false, reason: 'battery' });
-  assert.deepEqual(powerVerdict({ source: 'battery', percent: null }), { ok: false, reason: 'battery' });
-  assert.deepEqual(powerVerdict({ source: 'ac', percent: 29 }), { ok: false, reason: 'low-charge' });
-  assert.deepEqual(powerVerdict({ source: 'ac', percent: 30 }), { ok: true, reason: null });
+test('powerVerdict (the driver\'s rule, 2026-11-18: "not block things due to power if the battery has 20 % or more"): refuse ONLY on battery below 20 %; 20 and 21 are fine; AC never refuses, at any charge; a reading that is missing never refuses', () => {
+  assert.equal(MIN_CHARGE_PERCENT, 20);
+  assert.deepEqual(powerVerdict({ source: 'battery', percent: 19 }), { ok: false, reason: 'low-battery' });
+  assert.deepEqual(powerVerdict({ source: 'battery', percent: 0 }), { ok: false, reason: 'low-battery' });
+  assert.deepEqual(powerVerdict({ source: 'battery', percent: 20 }), { ok: true, reason: null }, '20 % itself is fine');
+  assert.deepEqual(powerVerdict({ source: 'battery', percent: 21 }), { ok: true, reason: null });
+  assert.deepEqual(powerVerdict({ source: 'battery', percent: 99 }), { ok: true, reason: null }, 'battery power as such is no reason to refuse');
+  assert.deepEqual(powerVerdict({ source: 'battery', percent: null }), { ok: true, reason: null }, 'a charge that cannot be read is silence, never a refusal');
+  assert.deepEqual(powerVerdict({ source: 'ac', percent: 5 }), { ok: true, reason: null }, 'on AC power nothing is refused, not even 5 %');
   assert.deepEqual(powerVerdict({ source: 'ac', percent: 100 }), { ok: true, reason: null });
   assert.deepEqual(powerVerdict({ source: 'ac', percent: null }), { ok: true, reason: null });
   assert.deepEqual(powerVerdict({ source: 'unknown', percent: null }), { ok: true, reason: null }, 'a machine that cannot be read is silence, never a refusal');
-  assert.deepEqual(powerVerdict({ source: 'ac', percent: 40 }, 50), { ok: false, reason: 'low-charge' }, 'the limit is a parameter');
+  assert.deepEqual(powerVerdict({ source: 'battery', percent: 40 }, 50), { ok: false, reason: 'low-battery' }, 'the limit is a parameter');
 });
 
 test('refusalSentence names what was read, why it matters, what to do, and the one switch', () => {
-  const b = refusalSentence({ source: 'battery', percent: 10 }, { ok: false, reason: 'battery' });
-  const l = refusalSentence({ source: 'ac', percent: 18 }, { ok: false, reason: 'low-charge' });
-  assert.ok(b.startsWith('the Mac is ')); assert.match(b, SENTENCE); assert.match(b, /10 %/); assert.match(b, /plug in/i);
-  assert.match(l, SENTENCE); assert.match(l, /18 %/); assert.match(l, /30 %/);
+  const b = refusalSentence({ source: 'battery', percent: 19 }, { ok: false, reason: 'low-battery' });
+  assert.ok(b.startsWith('the Mac is on battery below 20 % (19 % charge): ')); assert.match(b, SENTENCE); assert.match(b, /plug in/i);
   assert.equal(refusalSentence({ source: 'ac', percent: 86 }, { ok: true, reason: null }), '', 'no sentence when nothing is refused');
+  assert.equal(refusalSentence({ source: 'battery', percent: 52 }, { ok: true, reason: null }), '');
 });
 
 function check(reading, env = {}) {
@@ -57,11 +60,13 @@ function check(reading, env = {}) {
   finally { fs.rmSync(path.dirname(f), { recursive: true, force: true }); }
 }
 
-test('power-check.mjs: exit 1 and the sentence on stderr when refused, exit 0 and one line saying what it saw when not; FORGE_POWER_GUARD=off passes; an unreadable stand-in file is silence', () => {
+test('power-check.mjs: exit 1 and the sentence on stderr only on battery below 20 %, exit 0 and one line saying what it saw otherwise (19 refuses, 20 and 21 pass, AC at 5 % passes); FORGE_POWER_GUARD=off passes; an unreadable stand-in file is silence', () => {
   const a = check(AC_POWER); assert.equal(a.status, 0); assert.match(a.out, /^power: on AC power, 86 % charge$/); assert.equal(a.err, '');
   const d = check(DESKTOP); assert.equal(d.status, 0); assert.match(d.out, /^power: on AC power$/);
-  const b = check(BATTERY_POWER); assert.equal(b.status, 1); assert.match(b.err, SENTENCE); assert.match(b.err, /52 %/);
-  const l = check(LOW_ON_AC); assert.equal(l.status, 1); assert.match(l.err, /18 %/);
+  const b = check(BATTERY_POWER); assert.equal(b.status, 0, 'on battery at 52 %: runs'); assert.match(b.out, /^power: on battery, 52 % charge$/);
+  const l = check(LOW_ON_BATTERY); assert.equal(l.status, 1); assert.match(l.err, SENTENCE); assert.match(l.err, /10 %/);
+  assert.equal(check(batt('battery', 19)).status, 1, '19 % on battery refuses'); assert.equal(check(batt('battery', 20)).status, 0, '20 % passes'); assert.equal(check(batt('battery', 21)).status, 0);
+  const lowAc = check(LOW_ON_AC); assert.equal(lowAc.status, 0, 'AC power is never refused'); assert.equal(check(batt('ac', 5)).status, 0);
   const off = check(LOW_ON_BATTERY, { FORGE_POWER_GUARD: 'off' }); assert.equal(off.status, 0); assert.match(off.out, /guard is off/);
   const missing = check(null); assert.equal(missing.status, 0, 'a stand-in file that is not there is a reading that is missing, never a refusal');
 });
@@ -75,15 +80,16 @@ test('the real `pmset -g batt` on THIS machine parses to a reading (the format t
 
 const worktreesOf = (p, r) => git(path.join(p.dir, r), 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9));
 
-test('the matrix refuses on battery BEFORE any worktree exists, and runs when the charger is in; FORGE_POWER_GUARD=off runs it on battery', { skip }, () => {
-  const p = projects();
+test('the matrix refuses on battery below 20 % BEFORE any worktree exists, and runs on battery at 20 % or more and on AC; FORGE_POWER_GUARD=off runs it on a flat battery', { skip }, () => {
+  const p = projects(); const reading = (txt) => { const f = path.join(p.dir, 'b.txt'); fs.writeFileSync(f, txt); return f; };
   try {
-    const refused = matrix(p, ['--no-forge'], { FORGE_POWER_READ_FILE: (fs.writeFileSync(path.join(p.dir, 'b.txt'), BATTERY_POWER), path.join(p.dir, 'b.txt')) });
-    assert.notEqual(refused.status, 0); assert.match(refused.err, SENTENCE); assert.match(refused.err, /52 %/);
+    const refused = matrix(p, ['--no-forge'], { FORGE_POWER_READ_FILE: reading(LOW_ON_BATTERY) });
+    assert.notEqual(refused.status, 0); assert.match(refused.err, SENTENCE); assert.match(refused.err, /10 %/);
     assert.ok(REPOS.every((r) => worktreesOf(p, r).length === 1), 'nothing was created in any repo');
     assert.equal(fs.readdirSync(p.dir).filter((n) => n.startsWith('drain-matrix.')).length, 0, 'no work directory is left behind');
     const ok = matrix(p, ['--no-forge'], { TEST_MS: '100' }); assert.equal(ok.status, 0, ok.out + ok.err); assert.match(ok.out, /power: on AC power, 86 % charge/);
-    const forced = matrix(p, ['--no-forge'], { TEST_MS: '100', FORGE_POWER_READ_FILE: path.join(p.dir, 'b.txt'), FORGE_POWER_GUARD: 'off' }); assert.equal(forced.status, 0, forced.out + forced.err); assert.match(forced.out, /guard is off/);
+    const onBattery = matrix(p, ['--no-forge'], { TEST_MS: '100', FORGE_POWER_READ_FILE: reading(BATTERY_POWER) }); assert.equal(onBattery.status, 0, onBattery.out + onBattery.err); assert.match(onBattery.out, /power: on battery, 52 % charge/);
+    const forced = matrix(p, ['--no-forge'], { TEST_MS: '100', FORGE_POWER_READ_FILE: reading(LOW_ON_BATTERY), FORGE_POWER_GUARD: 'off' }); assert.equal(forced.status, 0, forced.out + forced.err); assert.match(forced.out, /guard is off/);
   } finally { p.done(); }
 });
 

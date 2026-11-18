@@ -34,7 +34,7 @@
 #     has since drain 2026-10-27-0900 (was 40, then 10: the seven left are percussion-lab tests that need Python >= 3.10); a ratchet, so a NEW skip cannot hide behind a green line; lower it when skips are fixed). Skip reasons are printed when the ceiling is crossed.
 #   * the push of a drain that ran this leg stays conditional on the matrix's exit status.
 # The power guard (2026-11-18-1200; a matrix started on battery at 10 % slept twice, timed out nested tests and hung for hours): BEFORE it creates anything the matrix reads `pmset -g batt` (scripts/dev/power-check.mjs, rules in power-core.mjs) and
-#   REFUSES to start on battery power (any charge) or below 30 % charge (exit 1, one sentence, FORGE_POWER_GUARD=off to run anyway); a Mac it cannot read (no pmset, a desktop) is not refused. It then holds the Mac awake for as long as it runs:
+#   REFUSES to start ONLY on battery power below 20 % charge (the driver's rule, 2026-11-18: exit 1, one sentence, FORGE_POWER_GUARD=off to run anyway); on AC power it never refuses, a battery at 20 % or more runs, and a Mac it cannot read (no pmset, a desktop) is not refused. It then holds the Mac awake for as long as it runs:
 #   `caffeinate -i -s -w <its own pid>` (idle and system sleep; it ends with the matrix however that ends; FORGE_CAFFEINATE=off to skip). A killed matrix (kill -9, a closed terminal) leaves its worktrees registered: the next start prints how many and
 #   the command, `bash scripts/drain-matrix.sh --cleanup-worktrees`, which removes exactly the worktrees git has registered under a drain-matrix.* directory (it waits for the heavy lock like everything here, so it cannot run under a live matrix).
 # Output: one summary table at the end; full logs under $LOGDIR (default: <worktrees>/logs).
@@ -130,7 +130,7 @@ reap_leftovers                                   # what an EARLIER killed run le
 step() { echo; echo "== $* ($(( $(date +%s) - T0 ))s)"; }
 
 # ---- 0. preconditions: loud, before anything is built --------------------------------------------------------------------------------------------------------------
-# 2026-11-18-1200: the power guard (see the header): refuse on battery or below 30 % charge, hold the Mac awake, and say how many worktrees an earlier KILLED matrix left registered.
+# 2026-11-18-1200 (rule changed by the driver 2026-11-18): the power guard (see the header): refuse only on battery below 20 % charge, hold the Mac awake, and say how many worktrees an earlier KILLED matrix left registered.
 set +e; power_out="$(node "$(cd "$(dirname "$0")" && pwd)/dev/power-check.mjs" 2>&1)"; power_rc=$?; set -e
 case "$power_rc" in 0) echo "$power_out" ;; 1) die "$power_out" ;; *) echo "power: the check could not run (exit $power_rc), not checked" ;; esac
 if [ "${FORGE_CAFFEINATE:-}" != "off" ] && command -v caffeinate >/dev/null 2>&1; then caffeinate -i -s -w $$ >/dev/null 2>&1 & CAFF=$!; fi
