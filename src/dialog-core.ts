@@ -1,6 +1,8 @@
 // 2026-11-13-1214 - the DIALOG above the prompt box: a short, ephemeral-first log of what happened to a note's Description (the person's sentences, the outcomes, the service's suggestions, a control's changes). Pure (no DOM, no
 // obsidian): the controller feeds it events, the DOM draws it, the plugin's data.json keeps the last entries per note. The Description on disk stays the single source of truth; the dialog holds NO state that matters.
 
+import { sanitizeRatio } from './chat-layout-core.ts';
+
 export const DIALOG_CAP = 50;                         // entries kept per note
 export const DIALOG_NOTES_CAP = 40;                   // notes with a kept history in data.json (the least recently used go first)
 export const ENTRY_TEXT_MAX = 600;                    // characters per kept text (a long Recipe is cut, with an ellipsis)
@@ -105,15 +107,18 @@ export interface DialogStore {
   setEntries(path: string, list: DialogEntry[]): void;
   height(): number;
   setHeight(px: number): void;
+  /** 2026-11-18 (0935): the left column's share of a two-column music tab (the draggable divider), per vault. Always a sane number (0.1 to 0.9, default 0.40). */
+  ratio(): number;
+  setRatio(r: number): void;
 }
 /** An in-memory store (the session's own history; tests; the lean fallback). */
-export function memoryStore(init: { entries?: Record<string, DialogEntry[]>; height?: number } = {}): DialogStore {
+export function memoryStore(init: { entries?: Record<string, DialogEntry[]>; height?: number; ratio?: number } = {}): DialogStore {
   const map = new Map<string, DialogEntry[]>(Object.entries(init.entries ?? {}));
-  let height = clampHeight(init.height);
-  return { entries: (p) => map.get(p) ?? [], setEntries: (p, l) => { map.set(p, l); }, height: () => height, setHeight: (n) => { height = clampHeight(n); } };
+  let height = clampHeight(init.height), ratio = sanitizeRatio(init.ratio);
+  return { entries: (p) => map.get(p) ?? [], setEntries: (p, l) => { map.set(p, l); }, height: () => height, setHeight: (n) => { height = clampHeight(n); }, ratio: () => ratio, setRatio: (r) => { ratio = sanitizeRatio(r); } };
 }
 /** A store over the plugin's settings object (data.json): the same object the plugin saves; `save` is the plugin's own debounced saveSettings. */
-export interface DialogSettingsSlice { dialogHistory?: unknown; dialogHeight?: unknown }
+export interface DialogSettingsSlice { dialogHistory?: unknown; dialogHeight?: unknown; dialogRatio?: unknown }
 export function settingsStore(settings: DialogSettingsSlice, save: () => void): DialogStore {
   const store = (): Record<string, DialogEntry[]> => (settings.dialogHistory = typeof settings.dialogHistory === 'object' && settings.dialogHistory !== null ? settings.dialogHistory : {}) as Record<string, DialogEntry[]>;
   return {
@@ -125,5 +130,7 @@ export function settingsStore(settings: DialogSettingsSlice, save: () => void): 
     },
     height: () => clampHeight(settings.dialogHeight),
     setHeight(px) { settings.dialogHeight = clampHeight(px); save(); },
+    ratio: () => sanitizeRatio(settings.dialogRatio),
+    setRatio(r) { settings.dialogRatio = sanitizeRatio(r); save(); },
   };
 }

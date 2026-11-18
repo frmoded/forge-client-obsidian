@@ -256,7 +256,7 @@ test('WIRING: the plugin hands the controller the settings-backed store (main.ts
   const main = fs.readFileSync(path.resolve(import.meta.dirname, 'main.ts'), 'utf8');
   assert.match(main, /dialogStore: settingsStore\(this\.settings, \(\) => \{ this\.saveDialogSoon\(\); \}\)/);
   const settings = fs.readFileSync(path.resolve(import.meta.dirname, 'settings.ts'), 'utf8');                      // settings.ts imports obsidian: read as text
-  assert.match(settings, /dialogHistory: \{\},\s*dialogHeight: 112,\s*composerAutoApply: false,/);
+  assert.match(settings, /dialogHistory: \{\},\s*dialogHeight: 112,\s*dialogRatio: 0\.4,\s*composerAutoApply: false,/);
   assert.doesNotMatch(settings, /dialogDock|Composer position/, 'the position switch and its setting are gone (2026-11-18)');
   assert.match(main, /withoutDialogDock\(/, 'an old value is dropped silently when the settings load');
 });

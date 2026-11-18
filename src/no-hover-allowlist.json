@@ -7,6 +7,11 @@
       "reason": "bar-range selection by dragging: onMove returns at once unless a press started in a bar (pressedIn), so a resting pointer does nothing"
     },
     {
+      "file": "src/chat-divider-dom.ts",
+      "pattern": "el.addEventListener('pointermove'",
+      "reason": "the dialog | Score divider drag: the handler returns at once unless a press started on the handle (drag is set on pointerdown, cleared on pointerup / cancel), so a resting pointer does nothing"
+    },
+    {
       "file": "src/output-view.ts",
       "pattern": "'pointermove', move",
       "reason": "the pane divider drag: the move listener is added on pointerdown and removed on pointerup, so it only runs while the button is held"

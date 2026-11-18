@@ -281,6 +281,7 @@ export function attachScoreArea(parent: HTMLElement, plan: ScorePanelPlan, ports
   const shownHostWidth = (): number => (panel.el.querySelector(`.${SCORE_HOST_CLASS}:not(.${SCORE_HOST_PENDING_CLASS})`) as HTMLElement | null)?.clientWidth ?? 0;
   const relayout = (): void => {
     relayoutTimer = null;
+    if (panel.el.closest('.forge-chat-dragging')) { relayoutTimer = ports.setTimer(relayout, RELAYOUT_DEBOUNCE_MS); return; }          // 2026-11-18 (0935): the divider is being dragged: wait for the release, then engrave ONCE
     const now = shownHostWidth();
     if (now < MIN_HOST_WIDTH_PX || Math.abs(now - panel.drawnWidth()) < RELAYOUT_MIN_DELTA_PX) return;
     const scroller = panel.el.closest('.forge-chat-body') as HTMLElement | null;

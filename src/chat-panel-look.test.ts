@@ -70,7 +70,7 @@ test('(3) the dock switch is gone from the plugin: no setting, no dock class, no
   assert.doesNotMatch(settings, /dialogDock|Composer position/);
   assert.doesNotMatch(CSS, /forge-chat-dock/);
   assert.match(CSS, /\.forge-chat-host\.forge-chat-wide\s*\{[^}]*flex-direction:\s*row/);
-  assert.match(CSS, /\.forge-chat-host\.forge-chat-wide\s*>\s*\.forge-chat-panel\s*\{[^}]*order:\s*1[^}]*flex:\s*0 0 40%/);
+  assert.match(CSS, /\.forge-chat-host\.forge-chat-wide\s*>\s*\.forge-chat-panel\s*\{[^}]*order:\s*1[^}]*flex:\s*0 0 var\(--forge-chat-left,\s*40%\)/);
   assert.match(CSS, /\.forge-chat-host\.forge-chat-wide\s*>\s*\.forge-chat-body\s*\{[^}]*order:\s*2[^}]*flex:\s*1 1 60%/);
 });
 
@@ -197,7 +197,7 @@ test('P3: the Forge output panel (the surface every vault has) still draws an er
   assert.equal(isRed(win.getComputedStyle(cause).color), true, 'non-vacuity: the detector sees this one as red');
   // opt-in: the shared look is reachable only through the score-first panel (description-apply.ts mounts it; score-first.ts is its only gate)
   const users = fs.readdirSync(path.join(ROOT, 'src')).filter((f) => /\.ts$/.test(f) && !/\.test\.ts$/.test(f) && !/\.generated\.ts$/.test(f)).filter((f) => /forge-chat-|forge-composer-error|mountChatPanel|chat-panel-dom|chat-layout-core/.test(fs.readFileSync(path.join(ROOT, 'src', f), 'utf8')));
-  assert.deepEqual(users.sort(), ['chat-layout-core.ts', 'chat-panel-dom.ts', 'description-apply.ts', 'live-score-dom.ts', 'main.ts', 'prompt-box-dom.ts', 'relative-time-core.ts'], 'only the chat panel, its layout core, the prompt box, the controller that mounts it, the settings migration, the Score area (it looks for the panel\'s scroller, null-safe) and a comment');
+  assert.deepEqual(users.sort(), ['chat-divider-dom.ts', 'chat-layout-core.ts', 'chat-panel-dom.ts', 'description-apply.ts', 'dialog-core.ts', 'live-score-dom.ts', 'main.ts', 'prompt-box-dom.ts', 'relative-time-core.ts'], 'only the chat panel, its layout core, the prompt box, the controller that mounts it, the settings migration, the Score area (it looks for the panel\'s scroller, null-safe) and a comment');
   // and none of the everywhere-surface rules was touched: the red rules of the output panel and the Score message line are still there
   assert.match(CSS, /\.forge-output-entry\.is-error\s*\{\s*border-left-color:\s*var\(--text-error/);
   assert.match(CSS, /\.forge-output-error\s*\{[^}]*color:\s*var\(--text-error/);

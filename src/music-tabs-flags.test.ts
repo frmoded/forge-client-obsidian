@@ -110,6 +110,19 @@ test('RELAYOUT: the Score on screen is engraved AGAIN (its own payload, no engin
   pg.setWidth(900); settle1(); await settle(); assert.equal(drawn.length, 3, 'the right dock turning back to the bottom: wider again');
   a.dispose(); assert.equal(pg.observers.length, 0, 'disposed: the observer is gone');
 });
+test('RELAYOUT and the divider (0935): while the tab carries forge-chat-dragging the Score is NOT engraved again however many moves and quiet moments pass (zero re-engraves), and exactly ONE engraving follows the release', async () => {
+  const pg = page(700); const { a, drawn, timers, computes } = area(pg);
+  a.showNow(RHYTHM_STARTER); await settle(); assert.equal(drawn.length, 1);
+  pg.doc.body.classList.add('forge-chat-dragging');                                          // the host of a tab (an ancestor of the Score's pane) while the handle is held
+  for (let move = 0; move < 30; move++) { pg.setWidth(700 - move * 10); pg.fire(); if (move % 5 === 4) { fireTimers(timers); await settle(); } }
+  fireTimers(timers); await settle();
+  assert.equal(drawn.length, 1, 'zero re-engraves during the drag, even after quiet moments');
+  pg.doc.body.classList.remove('forge-chat-dragging');
+  fireTimers(timers); await settle();
+  assert.equal(drawn.length, 2, 'ONE re-engrave after the release'); assert.equal(computes(), 1, 'no engine run'); assert.equal(pg.body.querySelectorAll(`.${SCORE_HOST_CLASS}`).length >= 1, true);
+  fireTimers(timers); await settle(); assert.equal(drawn.length, 2, 'and nothing more');
+  a.dispose();
+});
 test('RELAYOUT keeps the tab\'s scroll where it was, relative to its height: halfway down stays halfway down when the Score gets taller; nothing shown = no redraw', async () => {
   const pg = page(700); let draws = 0;
   const seen: unknown[] = [];

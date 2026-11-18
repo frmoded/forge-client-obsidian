@@ -2642,9 +2642,12 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-chat-log { flex: 0 1 auto; max-height: 14em; overflow-y: auto; margin: 0; padding: 2px 2px 0; display: flex; flex-direction: column; gap: 10px; }
 .forge-chat-log.is-empty { display: none; }
 .forge-chat-host.forge-chat-wide { flex-direction: row; }
-.forge-chat-host.forge-chat-wide > .forge-chat-panel { order: 1; flex: 0 0 40%; min-width: 18em; max-width: 40%; min-height: 0; justify-content: flex-end; padding: 8px 12px 12px 14px; border-right: 1px solid var(--background-modifier-border); }
+.forge-chat-host.forge-chat-wide > .forge-chat-panel { order: 1; flex: 0 0 var(--forge-chat-left, 40%); min-width: 280px; max-width: var(--forge-chat-left, 40%); min-height: 0; position: relative; justify-content: flex-end; padding: 8px 12px 12px 14px; border-right: 1px solid var(--background-modifier-border); }
 .forge-chat-host.forge-chat-wide > .forge-chat-body { order: 2; flex: 1 1 60%; min-width: 0; padding-left: 4px; }
 .forge-chat-host.forge-chat-wide .forge-chat-log { flex: 1 1 0; min-height: 0; max-height: none; padding-bottom: 4px; }
+/* 2026-11-18 (0935): the draggable divider: a 6 px hit area straddling the 1 px border between the dialog and the Score (the border stays the only thing seen at rest); only in the two-column layout (the element does not exist when stacked). */
+.forge-chat-resizer { position: absolute; top: 0; bottom: 0; right: -3px; width: 6px; z-index: 3; cursor: col-resize; touch-action: none; user-select: none; background: transparent; outline: none; }
+.forge-chat-resizer:focus-visible, .forge-chat-host.forge-chat-dragging .forge-chat-resizer { background: linear-gradient(to right, transparent 2px, var(--interactive-accent) 2px, var(--interactive-accent) 4px, transparent 4px); }
 .forge-chat-msg { display: flex; flex-direction: column; gap: 2px; max-width: 100%; font-size: var(--font-ui-small); overflow-wrap: anywhere; user-select: text; }
 .forge-chat-msg.is-you { align-self: flex-end; align-items: flex-end; max-width: 80%; }
 .forge-chat-msg.is-forge, .forge-chat-msg.is-control { align-self: flex-start; align-items: flex-start; padding: 0 2px; color: var(--text-normal); }

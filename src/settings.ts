@@ -65,6 +65,8 @@ export interface ForgeSettings {
   showBarNumbers: boolean;
   dialogHistory: Record<string, unknown>;
   dialogHeight: number;
+  /** 2026-11-18 (0935): the left column's share of a two-column music tab (the draggable divider), per vault (this is the vault's own plugin data). No control in this page. Read through sanitizeRatio. */
+  dialogRatio: number;
   /** 2026-11-17-2001: MUSIC_COMPOSER_AUTO_APPLY (default off): a sentence the grammar reads exactly is applied on the first Enter, without a preview. */
   composerAutoApply: boolean;
 }
@@ -88,6 +90,7 @@ export const DEFAULT_SETTINGS: ForgeSettings = {
   showBarNumbers: true,
   dialogHistory: {},
   dialogHeight: 112,
+  dialogRatio: 0.4,
   composerAutoApply: false,
 };
 

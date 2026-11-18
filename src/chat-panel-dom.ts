@@ -22,6 +22,7 @@ import { type DialogEntry, type DialogStore } from './dialog-core.ts';
 import { PREVIEW_HINT } from './composer-core.ts';
 import { CHAT_WIDE_CLASS, layoutFor, type ChatLayout } from './chat-layout-core.ts';
 import { TICK_MS, relativeTime } from './relative-time-core.ts';
+import { mountDivider } from './chat-divider-dom.ts';
 
 export const CHAT_HOST_CLASS = 'forge-chat-host';
 const CHOSEN = { applied: 'Applied.', cancelled: 'Discarded.', expired: 'No longer current.' } as const;
@@ -68,9 +69,11 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
 
   // ---- the layout follows the TAB's width: two columns from 900 px, stacked below; no reload, no setting ---------------------------------------------------------------------------------------------------
   let layout: ChatLayout = 'narrow';
+  const divider = mountDivider(host, panel, ports.store);                          // 2026-11-18 (0935): the draggable divider: a handle and a variable in the wide layout only
   const setLayout = (width: number): void => {
     layout = layoutFor(width);
     host.classList.toggle(CHAT_WIDE_CLASS, layout === 'wide'); host.classList.toggle('forge-chat-stacked', layout === 'narrow');
+    divider.sync(layout === 'wide', width);
   };
   setLayout(host.clientWidth || host.getBoundingClientRect?.().width || 0);
   const Resize = (doc.defaultView as unknown as { ResizeObserver?: typeof ResizeObserver } | null)?.ResizeObserver;
@@ -159,7 +162,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
     refreshTimes,
     dispose() {
       if (disposed) return;
-      disposed = true; if (timer !== null) disarm(timer); timer = null; layoutWatch?.disconnect(); watch?.disconnect(); host.removeEventListener('keydown', onKey); box.dispose();
+      disposed = true; if (timer !== null) disarm(timer); timer = null; layoutWatch?.disconnect(); divider.dispose(); watch?.disconnect(); host.removeEventListener('keydown', onKey); box.dispose();
       if (body.parentElement === host) while (body.firstChild) host.insertBefore(body.firstChild, body);                // the tab's content goes back where it was
       body.remove(); panel.remove();
       host.classList.remove(CHAT_HOST_CLASS, CHAT_WIDE_CLASS, 'forge-chat-stacked');
