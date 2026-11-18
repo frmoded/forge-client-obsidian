@@ -1,5 +1,5 @@
 // 2026-11-17-2002 - the ear widgets' button that starts the next question says "Play", not "Next" (driver 2026-11-17: "have the wording of the next button either try or play or play button, not Next"). It plays the new
-// question's notes, so the label is the action. The eight files: the three interval ear widgets and the five scale widgets with the same button. Replay keeps its own label; the hint says "Press Play"; no "Next" string is
+// question's notes, so the label is the action. The four files: the three interval ear widgets and name-the-scale (the five scale build widgets became exercises in 2003 with their own labels). Replay keeps its own label; the hint says "Press Play"; no "Next" string is
 // left in any of the eight (the button, the hints, the live-region texts, the aria-label of the keys, a code comment). The ids and function names (`id="next"`, `$("next")`) are not words the person sees and stay: the pure
 // core is an identical block across a family (pinned in ear-gadgets-split.test.ts), and the tests that drive the button by id keep working. How TALL each widget is (unchanged at 800 and 360 px) is measured in real Chrome
 // (scripts/dev/measure-ear-split.mjs, scripts/dev/measure-ear-button-wording.mjs).
@@ -16,9 +16,10 @@ const VAULT = path.resolve(import.meta.dirname, '../assets/vaults/music-theory')
 const INTERVAL_DIR = path.join(VAULT, 'music_instruments/resources/html'), SCALE_DIR = path.join(VAULT, 'scales/resources/html');
 const FILES: Array<[string, string]> = [
   [INTERVAL_DIR, 'interval_ear_one_after_the_other.html'], [INTERVAL_DIR, 'interval_ear_both_at_once.html'], [INTERVAL_DIR, 'interval_ear_triads.html'],
-  [SCALE_DIR, 'scale_ear_name_the_scale.html'], [SCALE_DIR, 'scale_ear_build_the_scale.html'],
-  [SCALE_DIR, 'scale_build_major_and_minor.html'], [SCALE_DIR, 'scale_build_modes_and_minor.html'], [SCALE_DIR, 'scale_build_other_scales.html'],
+  [SCALE_DIR, 'scale_ear_name_the_scale.html'],
 ];
+// 2026-11-17-2003: the five scale "build" widgets are EXERCISES now (their own labels: Play, New exercise, Random, Reset; scale-build-exercise.test.ts), so the rename of 2002 is pinned here for the four ear widgets that are
+// still questions (the three interval widgets and name-the-scale). The old scale_build_major_and_minor.html stays in the vault until the sync prompt removes it, and keeps its 2002 wording; it is not pinned any more.
 const read = (dir: string, f: string): string => fs.readFileSync(path.join(dir, f), 'utf8');
 
 function open(dir: string, file: string) {
@@ -28,12 +29,12 @@ function open(dir: string, file: string) {
   return { win, doc: win.document, stub };
 }
 
-test('non-vacuity: all eight files exist and each has the button that starts a question (id next) and a Replay button', () => {
-  assert.equal(FILES.length, 8);
+test('non-vacuity: all four files exist and each has the button that starts a question (id next) and a Replay button', () => {
+  assert.equal(FILES.length, 4);
   for (const [d, f] of FILES) { const h = read(d, f); assert.match(h, /<button id="next"/, f); assert.match(h, /<button id="replay"/, f); }
 });
 
-test('no "Next" string remains in any of the eight files (the button, the hints, the live texts, the keys\' aria-label, the comments)', () => {
+test('no "Next" string remains in any of the four files (the button, the hints, the live texts, the keys\' aria-label, the comments)', () => {
   for (const [d, f] of FILES) assert.doesNotMatch(read(d, f), /Next/, `${f} still says Next`);
 });
 

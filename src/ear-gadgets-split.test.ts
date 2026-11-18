@@ -14,7 +14,8 @@ import { coreFailures, pureOf, seeded } from './test-support/interval-ear-core-c
 const VAULT = path.resolve(import.meta.dirname, '../assets/vaults/music-theory');
 const INTERVAL_DIR = path.join(VAULT, 'music_instruments/resources/html'), SCALE_DIR = path.join(VAULT, 'scales/resources/html');
 const INTERVAL = [['interval_ear_one_after_the_other.html', 1, 'Play the second note'], ['interval_ear_both_at_once.html', 2, 'Find the higher note'], ['interval_ear_triads.html', 3, 'Find the triad notes']] as const;
-const SCALE = [['scale_ear_name_the_scale.html', 1, 'Name the scale'], ['scale_ear_build_the_scale.html', 2, 'Build the scale']] as const;
+// 2026-11-17-2003: scale_ear_build_the_scale.html (and the per-note build files) are EXERCISES now, pinned in scale-build-exercise.test.ts; the name-the-scale widget keeps its game here
+const SCALE = [['scale_ear_name_the_scale.html', 1, 'Name the scale']] as const;
 const read = (dir: string, f: string): string => fs.readFileSync(path.join(dir, f), 'utf8');
 const scriptOf = (h: string): string => /<script>([\s\S]*?)<\/script>/.exec(h)![1];
 const block = (h: string, a: string, b: string): string => { const i = h.indexOf(a), j = h.indexOf(b); assert.ok(i > 0 && j > i, a); return h.slice(i, h.indexOf('\n', j)); };
@@ -115,28 +116,6 @@ test('scale_ear_name_the_scale.html: one game: no game switch, the level switch,
   for (const id of ANSWER_ORDER.filter((i) => i !== q.scale)) p.answer(id); assert.equal(p.text('hint'), '1 attempt left', 'four wrong answers used four of the five attempts'); p.answer(q.scale); assert.equal(p.text('counter'), 'Easy: score 1 of 1 asked', 'the right answer on the last attempt still scores'); void attempts;
   p.reset(); assert.equal(p.text('board'), 'Easy 0/0 · Medium 0/0 · Hard 0/0'); assert.deepEqual(p.errors, []);
 });
-test('scale_ear_build_the_scale.html: one game: no game switch, the level switch; the attempts are WRONG TAPS (5 / 3 / 1), a right key is free; the scale built within them scores; the last wrong tap ends the question and shows the notes; the tonic and out-of-octave taps are free; a level change ends the question; Reset clears', () => {
-  const p = open(SCALE_DIR, SCALE[1][0], 7); const g = p.g; assert.deepEqual(p.errors, []); assert.match(p.h, /<title>Build the scale<\/title>/); assert.equal(p.doc.getElementById('games'), null);
-  assert.deepEqual(p.buttons().filter((b) => !['Play', 'Replay', 'Reset score'].includes(b)), ['Easy', 'Medium', 'Hard']);
-  const rng = seeded(7); let prev: any = null; const nextQ = () => { prev = g.pickQuestion(2, rng, prev); return prev; };
-  const wrongs = (q: any): number[] => { const t = g.targetsOf(q) as number[]; const w: number[] = []; for (let m = q.notes[0] + 1; m < q.notes[q.notes.length - 1]; m++) if (!t.includes(m)) w.push(m); return w; };
-  // medium (3): two wrong taps leave one attempt; every note found then still scores
-  let q = nextQ(); p.next(); assert.equal(p.text('hint'), '3 attempts left'); assert.equal(p.q('.key.tonic').join(), String(q.notes[0]));
-  const t = g.targetsOf(q) as number[]; const w = wrongs(q); p.tap(w[0]); p.tap(w[1]); assert.equal(p.text('hint'), '1 attempt left'); assert.equal(p.q('.key.right').length, 0, 'a miss reveals nothing');
-  for (const m of t) p.tap(m); assert.equal(p.text('counter'), 'Medium: score 1 of 1 asked'); assert.match(p.text('prompt'), /All found/);
-  // the free taps: the tonic, the octave note, a key outside the octave, a right key
-  q = nextQ(); p.next(); p.tap(q.notes[0]); p.tap(q.notes[q.notes.length - 1]); assert.equal(p.text('hint'), '3 attempts left'); p.tap((g.targetsOf(q) as number[])[0]); assert.equal(p.text('hint'), '3 attempts left', 'a right key is free');
-  // medium: three wrong taps end it, show the notes, no point
-  const w2 = wrongs(q); p.tap(w2[0]); p.tap(w2[1]); p.tap(w2[2]); assert.match(p.text('sr'), /Out of attempts/); assert.equal(p.text('counter'), 'Medium: score 1 of 2 asked'); assert.ok(p.doc.querySelectorAll('.key.reveal').length > 0, 'the missing notes shown');
-  // hard (1): ONE wrong tap ends it; the perfect build scores
-  p.level('hard'); q = nextQ(); p.next(); assert.equal(p.text('hint'), '1 attempt left'); p.tap(wrongs(q)[0]); assert.match(p.text('sr'), /Out of attempts/); assert.equal(p.text('counter'), 'Hard: score 0 of 1 asked');
-  q = nextQ(); p.next(); for (const m of g.targetsOf(q) as number[]) p.tap(m); assert.equal(p.text('counter'), 'Hard: score 1 of 2 asked');
-  // easy (5): four wrong taps leave one attempt
-  p.level('easy'); q = nextQ(); p.next(); const w3 = wrongs(q); for (let i = 0; i < 4; i++) p.tap(w3[i]); assert.equal(p.text('hint'), '1 attempt left');
-  p.level('medium'); assert.equal(p.q('.key.wrong').length, 0, 'a level change ends the open question'); assert.equal(p.text('hint'), 'Press Play');
-  assert.match(p.text('board'), /Hard 1\/2/); p.reset(); assert.equal(p.text('board'), 'Easy 0/0 · Medium 0/0 · Hard 0/0'); assert.deepEqual(p.errors, []);
-});
-
 // ---- the pixel rules --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 test('PIXELS (all five): no margin or padding on html and body, no fixed page height, the strip sized by its viewBox, every row that can change reserves its height, no storage', () => {
   for (const [dir, files] of [[INTERVAL_DIR, INTERVAL.map((x) => x[0])], [SCALE_DIR, SCALE.map((x) => x[0])]] as const) for (const f of files) {
@@ -146,20 +125,14 @@ test('PIXELS (all five): no margin or padding on html and body, no fixed page he
     assert.doesNotMatch(scriptOf(h).replace(/\/\/.*$/gm, ''), /localStorage|sessionStorage|indexedDB/, f);
   }
   assert.match(read(SCALE_DIR, SCALE[0][0]), /#answers \{[^}]*min-height: 70px/);
-  assert.match(read(SCALE_DIR, SCALE[1][0]), /#answers \{ display: none; \}/, 'the build game has no answer row, so it takes no height');
   assert.match(read(INTERVAL_DIR, INTERVAL[2][0]), /TOP = 0,/, 'the triads have no arc band');
 });
-test('CONTROL: a level that gives game 3 no extra attempt, a build whose right taps cost an attempt, a name game whose wrong answer is free, a level change that erases the scores, a Reset that leaves a level each go red', () => {
+test('CONTROL: a level that gives game 3 no extra attempt goes red (the build exercises have their own controls in scale-build-exercise.test.ts)', () => {
   const damagedPage = (dir: string, file: string, from: string, to: string): string => { const h = read(dir, file); assert.ok(h.includes(from), `premise: ${from}`); return h.replace(from, to); };
   const made: string[] = [];
   const dump = (dir: string, file: string, from: string, to: string) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ear-ctl-')); made.push(d); fs.writeFileSync(path.join(d, file), damagedPage(dir, file, from, to)); return d; };
   const run = (d: string, file: string) => pureOf(scriptOf(fs.readFileSync(path.join(d, file), 'utf8')));
   try {
     const a = dump(INTERVAL_DIR, INTERVAL[2][0], 'BASE_ATTEMPTS[level] + (game === 3 ? 1 : 0)', 'BASE_ATTEMPTS[level]'); assert.ok(coreFailures(run(a, INTERVAL[2][0])).length > 0, 'game 3 without its extra attempt');
-    const b = dump(SCALE_DIR, SCALE[1][0], 'var wrong = state.wrong.concat([midi]), left = state.triesLeft - 1;', 'var wrong = state.wrong.concat([midi]), left = state.triesLeft;'); const gb = run(b, SCALE[1][0]); const q = { notes: [60, 62, 64, 65, 67, 69, 71, 72], scale: 'major', sound: [] };
-    let st = gb.ask(q, 1); st = gb.tapKey(st, 61).state; assert.equal(st.phase, 'asked', 'a wrong tap that costs nothing never ends a hard question (the control is red: the real one ends it)');
-    const c = pureOf(scriptOf(read(SCALE_DIR, SCALE[1][0]))); let s2 = c.ask(q, 1); s2 = c.tapKey(s2, 61).state; assert.equal(s2.phase, 'answered', 'the real build: one wrong tap on hard ends it');
-    s2 = c.ask(q, 1); s2 = c.tapKey(s2, 62).state; assert.equal(s2.phase, 'asked', 'a right tap is free even on hard');
-    const sc = c.award(c.markAsked(c.emptyScores(), 'hard'), 'hard'); assert.equal(c.counterText(sc, 'hard'), 'Hard: score 1 of 1 asked'); assert.equal(c.boardText(c.resetScores()).join(' '), 'Easy 0/0 Medium 0/0 Hard 0/0'); assert.equal(c.boardText(sc).join(' '), 'Easy 0/0 Medium 0/0 Hard 1/1');
   } finally { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); }       // only the directories this test made, in the system temp folder
 });

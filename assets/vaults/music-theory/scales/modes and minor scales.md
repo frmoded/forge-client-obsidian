@@ -39,7 +39,7 @@ Build it: you're handed a home note and a scale from this page, and you tap its 
 
 ```html-embed
 scales/resources/html/scale_build_modes_and_minor.html
-201
+406
 ```
 
 <div style="

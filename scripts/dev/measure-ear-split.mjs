@@ -58,11 +58,8 @@ const FILES = [
   { file: 'music_instruments/resources/html/interval_ear_both_at_once.html', kind: 'interval', game: 2 },
   { file: 'music_instruments/resources/html/interval_ear_triads.html', kind: 'interval', game: 3 },
   { file: 'scales/resources/html/scale_ear_name_the_scale.html', kind: 'name', game: 1 },
-  { file: 'scales/resources/html/scale_ear_build_the_scale.html', kind: 'build', game: 2 },
-  // 2026-11-17-1200: the per-note build widgets; `scales` = the scales of the file, each one is asked in turn (see the per-scale block below)
-  { file: 'scales/resources/html/scale_build_major_and_minor.html', kind: 'build', game: 2, scales: ['major', 'natural_minor'] },
-  { file: 'scales/resources/html/scale_build_modes_and_minor.html', kind: 'build', game: 2, scales: ['ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian', 'natural_minor', 'harmonic_minor', 'melodic_minor'] },
-  { file: 'scales/resources/html/scale_build_other_scales.html', kind: 'build', game: 2, scales: ['major_pentatonic', 'minor_pentatonic', 'blues', 'whole_tone', 'diminished_wh', 'diminished_hw'] },
+
+  // 2026-11-17-2003: the scale BUILD widgets are exercises now: scripts/dev/measure-scale-exercises.mjs measures them
 ];
 const ATT = (f, level) => ({ easy: 5, medium: 3, hard: 1 }[level] + (f.kind === 'interval' && f.game === 3 ? 1 : 0));
 const word = (n) => `${n} ${n === 1 ? 'attempt' : 'attempts'} left`;

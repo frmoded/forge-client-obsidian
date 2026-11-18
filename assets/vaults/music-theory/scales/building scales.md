@@ -4,7 +4,7 @@ You get a home note and a scale name, and you tap the notes. Easy, medium and ha
 
 ```html-embed
 scales/resources/html/scale_ear_build_the_scale.html
-201
+406
 ```
 
 You are done when you can build any scale of this chapter from any note.

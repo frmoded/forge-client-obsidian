@@ -37,7 +37,7 @@ Build it: you're handed a home note and one of these scales, and you tap its not
 
 ```html-embed
 scales/resources/html/scale_build_other_scales.html
-201
+406
 ```
 
 <div style="

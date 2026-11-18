@@ -286,11 +286,14 @@
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
+  var tonic = 0, scaleId = "major", form = "up", timers = [], soundingForm = null;
+  // ==== scale view BEGIN (2026-11-17-2003) =========================================================================================================
+  // The SAME block is in scale_player.html and in the five scale exercise widgets (scale_build_major / _natural_minor / _modes_and_minor / _other_scales and scale_ear_build_the_scale; a test pins them identical): the piano strip (C4..C6) and the treble staff. A note given to drawStaff may be `hidden` (not drawn: the exercise has not found it yet) or `ghost` (drawn dashed: the exercise shows what was missed); the player never sets either.
   var NS = "http://www.w3.org/2000/svg";
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
-  var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
-  var tonic = 0, scaleId = "major", form = "up", timers = [], soundingIndex = -1, soundingForm = null;
+  var soundingIndex = -1;
   // The strip: C4..C6, 15 white keys, black keys on top.
   var WW = 22, WH = 56, BW = 13, BH = 34, PAD = 1, keys = {}, whites = [], blacks = [], wi = 0, m;
   for (m = LOW; m <= HIGH; m++) { if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 }); else { whites.push({ m: m, x: PAD + wi * WW }); wi++; } }
@@ -318,13 +321,15 @@
     el("path", { fill: "#2B2B2B", stroke: "none", "pointer-events": "none", transform: "translate(5 " + yOf(2) + ") scale(" + CLEF_SCALE + " " + (-CLEF_SCALE) + ")", d: CLEF_D }, staff);
     var count = notes.length, room = ST.width - ST.left - ST.right, gap = room / count;
     notes.forEach(function (n, i) {
+      if (n.hidden) return;
       var x = ST.left + gap * i + gap / 2 + 6, pos = staffPos(midis[i], n), y = yOf(pos);
       ledgersOf(pos).forEach(function (lp) { el("line", { "class": "ledger", x1: x - ST.ledgerHalf, y1: yOf(lp), x2: x + ST.ledgerHalf, y2: yOf(lp) }, staff); });
-      el("ellipse", { "class": "head" + (i === 0 || i === count - 1 ? " tonic" : "") + (i === soundingIndex ? " sounding" : ""), "data-index": i, cx: x, cy: y, rx: ST.headRx, ry: ST.headRy, transform: "rotate(-20 " + x + " " + y + ")" }, staff);
-      if (n.a !== 0) { var t = el("text", { "class": "acc", x: x - ST.headRx - 9, y: y + 4.5, "text-anchor": "middle" }, staff); t.textContent = n.a === 1 ? "♯" : n.a === -1 ? "♭" : n.a === 2 ? "×" : "♭♭"; }
+      el("ellipse", { "class": "head" + (i === 0 || i === count - 1 ? " tonic" : "") + (i === soundingIndex ? " sounding" : "") + (n.ghost ? " ghost" : ""), "data-index": i, cx: x, cy: y, rx: ST.headRx, ry: ST.headRy, transform: "rotate(-20 " + x + " " + y + ")" }, staff);
+      if (n.a !== 0) { var t = el("text", { "class": "acc" + (n.ghost ? " ghost" : ""), x: x - ST.headRx - 9, y: y + 4.5, "text-anchor": "middle" }, staff); t.textContent = n.a === 1 ? "♯" : n.a === -1 ? "♭" : n.a === 2 ? "×" : "♭♭"; }
     });
-    staff.setAttribute("aria-label", "Treble staff: " + notes.map(noteWords).join(", "));
+    staff.setAttribute("aria-label", "Treble staff: " + notes.filter(function (n) { return !n.hidden; }).map(noteWords).join(", "));
   }
+  // ==== scale view END ============================================================================================================================
   function render(announce) {
     var f = effectiveForm(scaleId, form), spelled = spellScale(tonic, scaleId, f), notes = withOctave(spelled), midis = scaleMidis(tonic, scaleId, f, BASE);
     // the tonic select shows the tonic as THIS scale spells it

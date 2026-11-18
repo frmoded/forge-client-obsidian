@@ -3,80 +3,97 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Build the scale</title>
+<title>Exercise: build a scale</title>
 <style>
-  /* Palette: the same values as piano_keyboard.html. No margin, no padding, no fixed height: the page is exactly its content, and every game and state has the SAME content height. */
-  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --right: #2E8B57; --wrong: #D72027; --accent: #D72027; }
+  /* The look of the Scales hub player (scale_player.html): the same palette, controls row, piano strip, staff, letters and chips. No margin, no padding, no fixed height: the page is exactly its content, and every state has the SAME content height (the rows that fill in later reserve their space). */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --accent: #D72027; --chip: #F2F2EC; --wrong: #D72027; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: var(--paper); }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
-  svg { display: block; width: 100%; max-width: 334px; height: auto; user-select: none; -webkit-user-select: none; }
-  .wrap { max-width: 360px; }
-  .wrap > :not(.switch) { max-width: 334px; }
-  .row { display: flex; align-items: center; gap: 6px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
-  .switch { margin: 0 0 3px; gap: 4px; min-height: 26px; }
-  button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 12px; cursor: pointer; min-height: 30px; }
-  button:hover:not(:disabled) { border-color: var(--ink); }
+  .wrap { max-width: 460px; }
+  svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
+  #choose { margin-top: 0; flex-wrap: nowrap; }      /* one line at every width: the scale select shrinks (an ellipsis) instead of wrapping the row, so the page keeps one height whatever the spelling of the tonics */
+  #choose select { min-width: 0; }
+  #tonic { flex: 0 0 auto; }
+  #scale { flex: 1 1 0; max-width: 230px; text-overflow: ellipsis; }
+  #choose label, #choose button { flex: 0 0 auto; }                         /* the first row's top margin would collapse through the body and push the page's content 3 px past its own height */
+  label { color: var(--ink); }
+  select, button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; min-height: 30px; }
+  button { cursor: pointer; padding: 4px 12px; }
+  button:hover:not(:disabled), select:hover { border-color: var(--ink); }
   button:disabled { opacity: 0.45; cursor: default; }
-  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
+  .switch { gap: 4px; }
   .switch button { padding: 3px 8px; min-height: 26px; font-size: 11px; white-space: nowrap; }
-  .switch button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
-  #answers { display: none; }                                  /* this game has no answer buttons: the keys are the answer, so the row takes no height */
-  #answers button { padding: 3px 9px; min-height: 30px; font-size: 12px; }
-  #answers button.wrong { border-color: var(--wrong); border-style: dashed; background: #F6C9CB; }
-  #answers button.right { border-color: var(--right); background: #BFE3CD; }
-  #prompt { min-height: 36px; color: var(--ink); margin: 3px 0 0; font-size: 13px; }
-  #hint { color: var(--ink); }
-  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .chips { gap: 4px; min-height: 24px; }
+  .chip { min-width: 26px; text-align: center; background: var(--chip); border: 1px solid #DDDDD2; border-radius: 4px; color: var(--ink); font-size: 12px; line-height: 20px; padding: 0 5px; }
+  .chip.h { background: #E7EEF8; border-color: #C6D3E6; } .chip.w { background: #F2F2EC; } .chip.t { background: #F8E2D9; border-color: #E7C2B3; }
   .key { cursor: pointer; }
   .key:focus { outline: none; }
+  .key.idle { cursor: default; }
   .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
   .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
-  .key.tonic rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
-  .key.right rect { fill: #BFE3CD; stroke: var(--right); stroke-width: 3; }
-  .key.black.right rect { fill: var(--right); stroke: #1B5E3A; }
-  .key.reveal rect { stroke: var(--right); stroke-width: 3; stroke-dasharray: 4 2; }
-  .key.wrong rect { fill: #F6C9CB; stroke: var(--wrong); stroke-width: 3; stroke-dasharray: 3 2; }
+  .key.lit.white rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 1.5; }
+  .key.lit.black rect { fill: #B07F00; stroke: var(--ink); }
+  .key.tonic rect { stroke: var(--accent); stroke-width: 3; }
+  .key.wrong rect { fill: #F6C9CB; stroke: var(--wrong); stroke-width: 2; stroke-dasharray: 3 2; }
   .key.black.wrong rect { fill: #8B1C20; stroke: var(--wrong); }
-  .key.idle { cursor: default; }
+  .key.reveal rect { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 2; }
+  .key.sounding rect { fill: #9DD9B5; }
   .key:focus rect { stroke: var(--accent); stroke-width: 3; }
-  .key text { pointer-events: none; fill: var(--muted); font-size: 9px; }
-  .key text.mark { font-size: 15px; font-weight: 700; fill: var(--ink); }
+  .key text { pointer-events: none; fill: var(--ink); font-size: 9px; }
+  .key text.mark { font-size: 15px; font-weight: 700; }
   .key.black text.mark { fill: #fff; }
+  .staffline, .ledger { stroke: #A69B91; stroke-width: 1; }
+  .head { fill: #fff; stroke: var(--ink); stroke-width: 1.4; }
+  .head.sounding { fill: #9DD9B5; }
+  .head.tonic { stroke: var(--accent); stroke-width: 2; }
+  .head.ghost { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 3 2; }
+  .acc { fill: var(--ink); font-size: 14px; }
+  .acc.ghost { fill: var(--muted); }
+  .letters { display: flex; gap: 4px; flex-wrap: nowrap; min-height: 28px; margin: 3px 0 0; }
+  .letter { flex: 0 0 auto; min-width: 34px; text-align: center; border: 1px solid #DDDDD2; border-radius: 5px; background: #fff; color: var(--ink); line-height: 24px; padding: 0 5px; font-weight: 600; }
+  .letter.sounding { background: #9DD9B5; }
+  .letter.tonic { border-color: var(--accent); }
+  #prompt { min-height: 36px; margin: 3px 0 0; color: var(--ink); font-size: 13px; }
+  #hint { color: var(--ink); font-size: 12px; }
   .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
   #counter { color: var(--ink); }
   .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
   .linkbtn:hover { color: var(--ink); }
   #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
   #board b { color: var(--ink); }
+  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 </style>
 </head>
 <body>
 <div class="wrap">
+<div class="row" id="choose"><label for="tonic">Tonic</label><select id="tonic" aria-label="Tonic"></select><label for="scale" id="scale-label">Scale</label><select id="scale" aria-label="Scale"></select><button type="button" id="random">Random</button></div>
 <div class="row switch" id="levels" role="group" aria-label="Choose a level"></div>
 <div id="prompt" aria-live="off"></div>
 <svg id="strip" role="group" aria-label="Piano keys, C4 to C6"></svg>
-<div class="row" id="answers" role="group" aria-label="Answers"></div>
-<div class="row"><button id="next" type="button">Play</button><button id="replay" type="button" disabled>Replay</button><span id="hint"></span></div>
-<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset score</button></div>
+<svg id="staff" role="img" aria-label="Treble staff"></svg>
+<div class="row chips" id="chips" role="list" aria-label="The steps of the scale in half steps"></div>
+<div class="letters" id="letters" role="list" aria-label="The notes of the scale"></div>
+<div class="row"><button type="button" id="play" disabled>Play</button><button type="button" id="again">New exercise</button><span id="hint"></span></div>
+<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
 <div id="board" aria-label="Score of each level"></div>
 <span id="sr" class="sr" role="status" aria-live="polite"></span>
 </div>
 <script>
 (function () {
   "use strict";
-  // 2026-11-16-0900: THIS FILE IS ONE GAME OF THE SCALE EAR TRAINER, game 2 (Build the scale), split out of scale_ear.html so that each widget is exactly as tall as it needs, with the level switch of the interval ear gadgets (easy / medium / hard = 5 / 3 / 1 attempts a question).
-  // 2026-11-15-2102 - HEAR THE SCALE (practice, the Scales chapter), the interval ear gadget's pattern for scales. Two games, each scored (memory only: the sandboxed page has no storage), a number of ATTEMPTS a question (by level):
-  //   game 1  Name the scale: a scale is played from a tonic; pick major / natural minor / Dorian / Mixolydian / pentatonic (the major pentatonic) from the row. Every guess uses a try; the right one scores; three wrong ends the question and shows the answer.
-  //   game 2  Build the scale: the tonic is given (lit) and a scale is named; tap the piano keys of its other notes (in the octave above the tonic). A right key turns green, a wrong key is a miss (red); three misses end the question and show the notes; all found scores.
-  // "Reset score" clears the current game's score. The score is the number found right and the number of questions asked.
+  // ==== config BEGIN (2026-11-17-2003): the scales this exercise offers: the ONLY lines that differ between the scale exercise files (and the <title>); a test pins everything else identical ====
+  var SCALES = ["major", "natural_minor", "harmonic_minor", "dorian", "mixolydian", "major_pentatonic", "minor_pentatonic"];
+  // ==== config END ====================================================================================================================
+  // 2026-11-17-2003 - the SCALE EXERCISE: build a scale on the piano, with the staff filling in beside it. Choose a tonic (and, when the page offers more than one scale, a scale) or press Random; the tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling (one letter per degree for the seven-note scales); a wrong key is marked and puts nothing on the staff. Easy / Medium / Hard allow 5 / 3 / 1 wrong taps. When the exercise ends (built, or out of wrong taps) the whole scale is on the staff (the notes you missed dashed), the letters and the whole and half steps appear (they are the answer, so only now) and Play plays the scale up.
+  // It looks like the Scales hub player (scale_player.html) and shares its blocks, byte for byte (pinned by a test): the scale core, the piano voice and the scale view (strip and staff). Memory only: the sandboxed page has no storage.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
-  // ==== scale ear core BEGIN (2026-11-16-0900) ====================================================================================================
-  // The SAME block is in scale_ear_name_the_scale.html and scale_ear_build_the_scale.html (each gadget is one self-contained file, so it is copied; a test pins the two identical). It holds the logic of both games; each file plays one.
-  var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.42, NOTE_LEN = 0.7;
+  var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.45, NOTE_LEN = 0.7;                 // the strip is C4..C6; a scale sits on the tonic's pitch class in the octave from C4 (so the staff and the strip agree)
   function midiToHz(m) { return A4_HZ * Math.pow(2, (m - 69) / 12); }
   function isBlack(m) { return [1, 3, 6, 8, 10].indexOf(((m % 12) + 12) % 12) >= 0; }
-  var FLATS = ["C", "D-flat", "D", "E-flat", "E", "F", "G-flat", "G", "A-flat", "A", "B-flat", "B"];
   // ==== scale core BEGIN (2026-11-15-2102) ========================================================================================================
   // The SAME block is in scale_player.html and scale_ear.html (each gadget is one self-contained file, so it is copied; a test pins them identical). Pure: no DOM, no Web Audio.
   // A scale is a tonic (a pitch class 0..11, C = 0) and a step pattern in half steps (W = 2, H = 1, 3H = 3). SPELLING: a scale of seven notes takes ONE LETTER PER DEGREE, the letters in order from the tonic's (G-sharp harmonic minor is G# A# B C# D# E F-double-sharp, not G# A# B C# D# E G),
@@ -171,62 +188,74 @@
     return out;
   }
   // ==== scale core END =============================================================================================================================
-
-  var HEAR = ["major", "natural_minor", "dorian", "mixolydian", "major_pentatonic"];                                  // game 1: the five answers
-  var HEAR_LABEL = { major: "major", natural_minor: "natural minor", dorian: "Dorian", mixolydian: "Mixolydian", major_pentatonic: "pentatonic" };
-  var BUILD = ["major", "natural_minor", "harmonic_minor", "dorian", "mixolydian", "major_pentatonic", "minor_pentatonic"];      // game 2: the scales to build
-  // The LEVELS (the same as the interval ear gadgets): easy 5, medium 3, hard 1 ATTEMPTS a question. In "name the scale" every guess uses one; in "build the scale" the attempts are the WRONG TAPS (a right key is free): the question ends when they are used up, and scores 1 when the scale is built before.
-  var LEVELS = ["easy", "medium", "hard"], BASE_ATTEMPTS = { easy: 5, medium: 3, hard: 1 }, DEFAULT_LEVEL = "medium";
-  function levelName(l) { return l.charAt(0).toUpperCase() + l.slice(1); }
-  function attemptsFor(level) { return BASE_ATTEMPTS.hasOwnProperty(level) ? BASE_ATTEMPTS[level] : BASE_ATTEMPTS[DEFAULT_LEVEL]; }
-  function pick(list, rng) { return list[Math.min(list.length - 1, Math.floor(rng() * list.length))]; }
-  // The next question of a game: a tonic (a pitch class) and a scale, never the same pair as `previous`. { game, tonic, scale, notes (the midis: the tonic placed from C4, the octave note included), sound }
-  function pickQuestion(game, rng, previous) {
-    var list = game === 1 ? HEAR : BUILD, t, s, tries = 0;
-    do { t = Math.min(11, Math.floor(rng() * 12)); s = pick(list, rng); tries++; } while (previous && previous.tonic === t && previous.scale === s && tries < 50);
-    var notes = scaleMidis(t, s, "up", BASE);
-    return { game: game, tonic: t, scale: s, notes: notes, sound: notes.map(function (m, i) { return { midi: m, when: i * STEP_SECONDS }; }) };
-  }
-  // The keys a builder must find: the scale's notes above the tonic and below its octave (the tonic is given, the octave note is not asked).
-  function targetsOf(q) { return q.notes.slice(1, q.notes.length - 1); }
-  // The state of a question: idle -> asked -> answered. `triesLeft` counts down on a wrong guess (game 1) or a wrong key (game 2); `found` are the keys found (game 2), `wrong` what was guessed wrong, `outcome` "solved" or "gaveup".
-  function initial() { return { phase: "idle", question: null, triesLeft: 0, found: [], wrong: [], outcome: null }; }
-  function ask(q, attempts) { return { phase: "asked", question: q, triesLeft: attempts, found: [], wrong: [], outcome: null }; }
-  function over(state, outcome, found, wrong, triesLeft) { return { phase: "answered", question: state.question, triesLeft: triesLeft, found: found, wrong: wrong, outcome: outcome }; }
-  // Game 1: one guess (a scale id). Returns { state, event, scored }: "ignored", "solved" (scored), "wrong" (a try used), "gaveup" (the third wrong: the answer is shown, nothing scores).
-  function guessScale(state, id) {
-    if (state.phase !== "asked" || state.wrong.indexOf(id) >= 0) return { state: state, event: "ignored", scored: false };
-    if (id === state.question.scale) return { state: over(state, "solved", [id], state.wrong, state.triesLeft), event: "solved", scored: true };
-    var wrong = state.wrong.concat([id]), left = state.triesLeft - 1;
-    if (left <= 0) return { state: over(state, "gaveup", [state.question.scale], wrong, 0), event: "gaveup", scored: false };
-    return { state: { phase: "asked", question: state.question, triesLeft: left, found: [], wrong: wrong, outcome: null }, event: "wrong", scored: false };
-  }
-  // Game 2: one tapped key. Ignored: no question, the tonic, the octave note, a key outside the octave above the tonic, a key already marked. A key of the scale is found (green); another key is a miss (a try used); all found scores; the third miss ends it.
-  function tapKey(state, midi) {
-    var q = state.question;
-    if (state.phase !== "asked" || midi <= q.notes[0] || midi >= q.notes[q.notes.length - 1] || state.found.indexOf(midi) >= 0 || state.wrong.indexOf(midi) >= 0) return { state: state, event: "ignored", scored: false };
-    var targets = targetsOf(q);
-    if (targets.indexOf(midi) >= 0) {
-      var found = state.found.concat([midi]);
-      if (found.length === targets.length) return { state: over(state, "solved", found, state.wrong, state.triesLeft), event: "solved", scored: true };
-      return { state: { phase: "asked", question: q, triesLeft: state.triesLeft, found: found, wrong: state.wrong, outcome: null }, event: "right", scored: false };
+  // ==== exercise core BEGIN (2026-11-17-2003) ======================================================================================================
+  // The state of one exercise, pure. `notes` are the midis of the scale from the tonic up to its octave (the tonic placed from C4, the same as the player); the tonic is given and the octave note is not asked, so the notes to find are `notes` without its ends.
+  var EX_LEVELS = ["easy", "medium", "hard"], EX_ATTEMPTS = { easy: 5, medium: 3, hard: 1 }, EX_DEFAULT_LEVEL = "medium";
+  function exLevelName(l) { return l.charAt(0).toUpperCase() + l.slice(1); }
+  function exAttempts(level) { return EX_ATTEMPTS.hasOwnProperty(level) ? EX_ATTEMPTS[level] : EX_ATTEMPTS[EX_DEFAULT_LEVEL]; }
+  function exCopy(s, patch) { var o = {}, k; for (k in s) o[k] = s[k]; for (k in patch) o[k] = patch[k]; return o; }
+  // A fresh exercise: phase "building" until it is built or the wrong taps run out ("done").
+  function exStart(tonic, scaleId, level) { return { phase: "building", tonic: tonic, scale: scaleId, level: level, notes: scaleMidis(tonic, scaleId, "up", BASE), left: exAttempts(level), found: [], wrong: [], outcome: null }; }
+  function exTargets(s) { return s.notes.slice(1, s.notes.length - 1); }
+  // One tapped key. Ignored: the exercise is over, the tonic, the octave note, a key outside the octave above the tonic, a key already marked. A key of the scale is found (free); another key is a wrong tap; the last note found builds it; the last wrong tap ends it. `first`: this was the exercise's first tap.
+  function exTap(s, midi) {
+    if (s.phase !== "building" || midi <= s.notes[0] || midi >= s.notes[s.notes.length - 1] || s.found.indexOf(midi) >= 0 || s.wrong.indexOf(midi) >= 0) return { state: s, event: "ignored", first: false };
+    var first = s.found.length === 0 && s.wrong.length === 0;
+    if (exTargets(s).indexOf(midi) >= 0) {
+      var found = s.found.concat([midi]), built = found.length === exTargets(s).length;
+      return { state: exCopy(s, { phase: built ? "done" : "building", found: found, outcome: built ? "built" : null }), event: built ? "built" : "right", first: first };
     }
-    var wrong = state.wrong.concat([midi]), left = state.triesLeft - 1;
-    if (left <= 0) return { state: over(state, "gaveup", state.found, wrong, 0), event: "gaveup", scored: false };
-    return { state: { phase: "asked", question: q, triesLeft: left, found: state.found, wrong: wrong, outcome: null }, event: "wrong", scored: false };
+    var wrong = s.wrong.concat([midi]), left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "building", wrong: wrong, left: Math.max(0, left), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
   }
-  // The scores, per LEVEL (this file is one game): scores[level] = { score, asked }. Immutable. Memory only.
-  function emptyScores() { var s = {}; LEVELS.forEach(function (l) { s[l] = { score: 0, asked: 0 }; }); return s; }
-  function bump(scores, level, dScore, dAsked) { var out = {}; LEVELS.forEach(function (l) { out[l] = { score: scores[l].score, asked: scores[l].asked }; }); out[level].score += dScore; out[level].asked += dAsked; return out; }
-  function markAsked(scores, level) { return bump(scores, level, 0, 1); }
-  function award(scores, level) { return bump(scores, level, 1, 0); }
-  function resetScores() { return emptyScores(); }
-  function counterText(scores, level) { var c = scores[level]; return levelName(level) + ": score " + c.score + " of " + c.asked + " asked"; }
-  function boardText(scores) { return LEVELS.map(function (l) { return levelName(l) + " " + scores[l].score + "/" + scores[l].asked; }); }
-  function hintText(state) { if (state.phase !== "asked") return "Press Play"; return state.triesLeft + (state.triesLeft === 1 ? " attempt left" : " attempts left"); }
-  // What a key tap sounds: the note tapped, right or wrong (it never says which). A given-up question is played again.
-  function planFeedback(q, midi, event) { if (event === "ignored") return []; if (event === "gaveup") return q.sound.map(function (n) { return { midi: n.midi, when: n.when }; }); return midi === null ? [] : [{ midi: midi, when: 0 }]; }
-  // ==== scale ear core END =====================================================================================================================
+  function exRemaining(s) { return exTargets(s).length - s.found.length; }
+  // The octave note is the tonic again: its spelling is the tonic's, one octave up (the player's `withOctave`).
+  function exWithOctave(spelled) { return spelled.concat([{ l: spelled[0].l, a: spelled[0].a, pc: spelled[0].pc }]); }
+  // The notes of the staff, in order, with the octave note last: `hidden` = not found yet (not drawn: the staff never shows an answer early); `ghost` = missed, shown dashed once the exercise is over.
+  function exStaffNotes(s) {
+    var spelled = exWithOctave(spellScale(s.tonic, s.scale, "up")), done = s.phase === "done";
+    return spelled.map(function (n, i) {
+      var o = { l: n.l, a: n.a, pc: n.pc }, ends = i === 0 || i === spelled.length - 1, got = s.found.indexOf(s.notes[i]) >= 0;
+      if (i === 0 || done || got) { if (done && !ends && !got) o.ghost = true; } else o.hidden = true;
+      return o;
+    });
+  }
+  // A random tonic and scale from the page's list, never the pair that is on screen (a list of one scale still changes the tonic).
+  function exRandom(scales, rng, current) {
+    var t, id, tries = 0;
+    do { t = Math.min(11, Math.floor(rng() * 12)); id = scales[Math.min(scales.length - 1, Math.floor(rng() * scales.length))]; tries++; } while (current && current.tonic === t && current.scale === id && tries < 50);
+    return { tonic: t, scale: id };
+  }
+  // The words. An exercise, never a test: "wrong taps" are what the level allows.
+  function exTitle(s) { return scaleTitle(s.tonic, s.scale); }
+  function exPrompt(s) {
+    if (s.phase === "building") return "Exercise: build " + exTitle(s) + ". Tap the other " + exTargets(s).length + " notes on the keys, in any order.";
+    return s.outcome === "built" ? "Exercise done: you built " + exTitle(s) + ". All " + exTargets(s).length + " notes found." : "Exercise over: out of wrong taps. The notes you missed are dashed.";
+  }
+  function exHint(s) {
+    if (s.phase !== "building") return "Press Play to hear it.";
+    return exRemaining(s) + " to find, " + s.left + (s.left === 1 ? " wrong tap left" : " wrong taps left");
+  }
+  function exAnnounce(s, event) {
+    var tl = s.left + (s.left === 1 ? " wrong tap left." : " wrong taps left.");
+    if (event === "start") return "New exercise: build " + scaleWords(s.tonic, s.scale) + ". The tonic is marked. " + tl;
+    if (event === "right") return "That note is in the scale. " + exRemaining(s) + " to find.";
+    if (event === "wrong") return "Not in the scale. " + tl;
+    if (event === "built") return "You built " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
+    if (event === "gaveup") return "Out of wrong taps. The scale is " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
+    return "";
+  }
+  function exKeyName(m) { return ["C", "C sharp", "D", "D sharp", "E", "F", "F sharp", "G", "G sharp", "A", "A sharp", "B"][((m % 12) + 12) % 12] + " " + (Math.floor(m / 12) - 1); }
+  // Play: the scale up, one note after the other (only when the exercise is over: playing it earlier would be the answer).
+  function exPlayPlan(s) { return s.phase !== "done" ? [] : s.notes.map(function (m, i) { return { midi: m, when: i * STEP_SECONDS, index: i }; }); }
+  // The scores, per LEVEL: score = exercises built, tried = exercises started (a first tap). Immutable. Memory only.
+  function exEmptyScores() { var s = {}; EX_LEVELS.forEach(function (l) { s[l] = { score: 0, tried: 0 }; }); return s; }
+  function exBump(scores, level, dScore, dTried) { var out = {}; EX_LEVELS.forEach(function (l) { out[l] = { score: scores[l].score, tried: scores[l].tried }; }); out[level].score += dScore; out[level].tried += dTried; return out; }
+  function exTried(scores, level) { return exBump(scores, level, 0, 1); }
+  function exBuilt(scores, level) { return exBump(scores, level, 1, 0); }
+  function exCounterText(scores, level) { var c = scores[level]; return exLevelName(level) + ": score " + c.score + " of " + c.tried + (c.tried === 1 ? " exercise" : " exercises"); }
+  function exBoardText(scores) { return EX_LEVELS.map(function (l) { return exLevelName(l) + " " + scores[l].score + "/" + scores[l].tried; }); }
+  // ==== exercise core END ==========================================================================================================================
   // ==== piano voice BEGIN (2026-11-16-1001) ======================================================================================================
   // The SAME block is in every gadget that plays the piano (a test walks the vault and pins them identical; each gadget is one self-contained file, so it is copied) and in piano_voice_lab.html, where it can be tried with other numbers.
   // A piano-like note by ADDITIVE SYNTHESIS: 10 partials per string with a slight inharmonic stretch (stiff strings: partial n at n*f*sqrt(1 + B*n*n), B from about 0.0003 in the treble to about 0.001
@@ -325,108 +354,128 @@
     ns.start(t0); ns.stop(t0 + 0.02);
   }
   // ==== piano voice END ===========================================================================================================================
-
   if (typeof document === "undefined") {           // node test harness
-    module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, LEVELS: LEVELS, DEFAULT_LEVEL: DEFAULT_LEVEL, attemptsFor: attemptsFor, HEAR: HEAR, BUILD: BUILD, HEAR_LABEL: HEAR_LABEL, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, scaleMidis: scaleMidis, tonicName: tonicName, noteName: noteName,
-      pickQuestion: pickQuestion, targetsOf: targetsOf, initial: initial, ask: ask, guessScale: guessScale, tapKey: tapKey, emptyScores: emptyScores, markAsked: markAsked, award: award, resetScores: resetScores, boardText: boardText, counterText: counterText, hintText: hintText, planFeedback: planFeedback,
-      midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+    module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, STEP_SECONDS: STEP_SECONDS, SCALES: SCALES, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, tonicName: tonicName, recipeOf: recipeOf, noteName: noteName, noteWords: noteWords, scScale: scScale, exWithOctave: exWithOctave, scaleMidis: scaleMidis,
+      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exStart: exStart, exTargets: exTargets, exTap: exTap, exRemaining: exRemaining, exStaffNotes: exStaffNotes, exRandom: exRandom, exTitle: exTitle, exPrompt: exPrompt, exHint: exHint, exAnnounce: exAnnounce, exKeyName: exKeyName, exPlayPlan: exPlayPlan,
+      exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
+  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
+  var tonic = 0, scaleId = SCALES[0], level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, timers = [];
+  // ==== scale view BEGIN (2026-11-17-2003) =========================================================================================================
+  // The SAME block is in scale_player.html and in the five scale exercise widgets (scale_build_major / _natural_minor / _modes_and_minor / _other_scales and scale_ear_build_the_scale; a test pins them identical): the piano strip (C4..C6) and the treble staff. A note given to drawStaff may be `hidden` (not drawn: the exercise has not found it yet) or `ghost` (drawn dashed: the exercise shows what was missed); the player never sets either.
   var NS = "http://www.w3.org/2000/svg";
   var $ = function (id) { return document.getElementById(id); };
   function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
-  var rng = function () { return (window.__earRandom || Math.random)(); };               // an injected random source for tests
+  var soundingIndex = -1;
+  // The strip: C4..C6, 15 white keys, black keys on top.
   var WW = 22, WH = 56, BW = 13, BH = 34, PAD = 1, keys = {}, whites = [], blacks = [], wi = 0, m;
   for (m = LOW; m <= HIGH; m++) { if (isBlack(m)) blacks.push({ m: m, x: PAD + wi * WW - BW / 2 }); else { whites.push({ m: m, x: PAD + wi * WW }); wi++; } }
   var strip = $("strip"); strip.setAttribute("viewBox", "0 0 " + (wi * WW + 2 * PAD) + " " + (WH + 2 * PAD));
-  function nameOfKey(mm) { return FLATS[mm % 12].replace("-flat", " flat") + " " + (Math.floor(mm / 12) - 1); }
   function makeKey(k, black) {
-    var g = el("g", { "class": "key " + (black ? "black" : "white") + " idle", "data-midi": k.m, tabindex: "0", role: "button", "aria-label": nameOfKey(k.m) }, strip);
+    var g = el("g", { "class": "key " + (black ? "black" : "white"), "data-midi": k.m }, strip);
     el("rect", { x: k.x, y: PAD, width: black ? BW : WW, height: black ? BH : WH, rx: black ? 2 : 3 }, g);
     keys[k.m] = g;
-    g.addEventListener("click", function () { tap(k.m); try { g.focus({ preventScroll: true }); } catch (_) {} });
-    g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(k.m); } });
   }
   whites.forEach(function (k) { makeKey(k, false); }); blacks.forEach(function (k) { makeKey(k, true); });
-  var GAME = 2;                                        // 2026-11-16-0900: THIS file is one game; there is no game switch
-  var GAMES = [{ id: 2, title: "Build the scale", tip: "The tonic is given: tap the other notes of the named scale" }];
-  var games = {}, current = GAME, level = DEFAULT_LEVEL, scores = emptyScores();
-  GAMES.forEach(function (g) { games[g.id] = { state: initial(), previous: null }; });
-  function mark(mm, ch) { var g = keys[mm], r = g.firstChild, black = isBlack(mm); var t = el("text", { "class": "mark", x: +r.getAttribute("x") + +r.getAttribute("width") / 2, y: PAD + (black ? 26 : 48), "text-anchor": "middle" }, g); t.textContent = ch; }
-  function renderAnswers() {
-    var a = $("answers"), gm = games[current], st = gm.state; a.textContent = "";
-    if (current !== 1) return;
-    HEAR.forEach(function (id) {
-      var b = document.createElement("button"); b.type = "button"; b.setAttribute("data-scale", id); b.textContent = HEAR_LABEL[id];
-      b.disabled = st.phase !== "asked";
-      if (st.wrong.indexOf(id) >= 0) { b.classList.add("wrong"); b.textContent = HEAR_LABEL[id] + " ×"; }
-      if (st.phase === "answered" && id === st.question.scale) { b.classList.add("right"); b.textContent = HEAR_LABEL[id] + " ✓"; }
-      b.addEventListener("click", function () { guess(id); });
-      a.appendChild(b);
+  // The staff: a treble clef, notes as open heads left to right with their accidentals before them, ledger lines. A fixed height for every scale.
+  var ST = { half: 4.4, top: 14, bottom: -5, left: 44, right: 12, width: 460, headRx: 5.6, headRy: 3.9, ledgerHalf: 9 };
+  ST.height = (ST.top - ST.bottom + 1) * ST.half;
+  function yOf(pos) { return (ST.top - pos + 0.5) * ST.half; }
+  var staff = $("staff"); staff.setAttribute("viewBox", "0 0 " + ST.width + " " + ST.height);
+  var CLEF_D = "M376 415l25 -145c3 -18 3 -18 29 -18c147 0 241 -113 241 -241c0 -113 -67 -198 -168 -238c-14 -6 -15 -5 -13 -17c11 -62 29 -157 29 -214c0 -170 -130 -200 -197 -200c-151 0 -190 98 -190 163c0 62 40 115 107 115c61 0 96 -47 96 -102c0 -58 -36 -85 -67 -94 c-23 -7 -32 -10 -32 -17c0 -13 26 -29 80 -29c59 0 159 18 159 166c0 47 -15 134 -27 201c-2 12 -4 11 -15 9c-20 -4 -46 -6 -69 -6c-245 0 -364 165 -364 339c0 202 153 345 297 464c12 10 11 12 9 24c-7 41 -14 106 -14 164c0 104 24 229 98 311c20 22 51 48 65 48 c11 0 37 -28 52 -50c41 -60 65 -146 65 -233c0 -153 -82 -280 -190 -381c-6 -6 -8 -7 -6 -19zM470 943c-61 0 -133 -96 -133 -252c0 -32 2 -66 6 -92c2 -13 6 -14 13 -8c79 69 174 159 174 270c0 55 -27 82 -60 82zM361 262l-21 128c-2 11 -4 12 -14 4 c-47 -38 -93 -75 -153 -142c-83 -94 -93 -173 -93 -232c0 -139 113 -236 288 -236c20 0 40 2 56 5c15 3 16 3 14 14l-50 298c-2 11 -4 12 -20 8c-61 -17 -100 -60 -100 -117c0 -46 30 -89 72 -107c7 -3 15 -6 15 -13c0 -6 -4 -11 -12 -11c-7 0 -19 3 -27 6 c-68 23 -115 87 -115 177c0 85 57 164 145 194c18 6 18 5 15 24zM430 103l49 -285c2 -12 4 -12 16 -6c56 28 94 79 94 142c0 88 -67 156 -148 163c-12 1 -13 -2 -11 -14z";
+  var CLEF_SCALE = (2 * ST.half) / 250;
+  var LETTER_STEP = [0, 1, 2, 3, 4, 5, 6];
+  function staffPos(midi, n) { var oct = Math.floor((midi - n.a) / 12) - 1; return oct * 7 + n.l - 30; }          // E4 (octave 4, letter E = 2): 28 + 2 - 30 = 0, the bottom line; middle C = -2
+  function ledgersOf(pos) { var out = [], p; for (p = -2; p >= pos; p -= 2) out.push(p); for (p = 10; p <= pos; p += 2) out.push(p); return out; }
+  function drawStaff(notes, midis) {
+    while (staff.firstChild) staff.removeChild(staff.firstChild);
+    var p;
+    for (p = 0; p <= 8; p += 2) el("line", { "class": "staffline", x1: 0, y1: yOf(p), x2: ST.width, y2: yOf(p) }, staff);
+    el("path", { fill: "#2B2B2B", stroke: "none", "pointer-events": "none", transform: "translate(5 " + yOf(2) + ") scale(" + CLEF_SCALE + " " + (-CLEF_SCALE) + ")", d: CLEF_D }, staff);
+    var count = notes.length, room = ST.width - ST.left - ST.right, gap = room / count;
+    notes.forEach(function (n, i) {
+      if (n.hidden) return;
+      var x = ST.left + gap * i + gap / 2 + 6, pos = staffPos(midis[i], n), y = yOf(pos);
+      ledgersOf(pos).forEach(function (lp) { el("line", { "class": "ledger", x1: x - ST.ledgerHalf, y1: yOf(lp), x2: x + ST.ledgerHalf, y2: yOf(lp) }, staff); });
+      el("ellipse", { "class": "head" + (i === 0 || i === count - 1 ? " tonic" : "") + (i === soundingIndex ? " sounding" : "") + (n.ghost ? " ghost" : ""), "data-index": i, cx: x, cy: y, rx: ST.headRx, ry: ST.headRy, transform: "rotate(-20 " + x + " " + y + ")" }, staff);
+      if (n.a !== 0) { var t = el("text", { "class": "acc" + (n.ghost ? " ghost" : ""), x: x - ST.headRx - 9, y: y + 4.5, "text-anchor": "middle" }, staff); t.textContent = n.a === 1 ? "♯" : n.a === -1 ? "♭" : n.a === 2 ? "×" : "♭♭"; }
     });
+    staff.setAttribute("aria-label", "Treble staff: " + notes.filter(function (n) { return !n.hidden; }).map(noteWords).join(", "));
   }
+  // ==== scale view END ============================================================================================================================
+  // the keys of the strip are the answer buttons
+  var keyEls = Object.keys(keys);
+  function tap(mm) {
+    var r = exTap(state, mm); if (r.event === "ignored") return;
+    state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level);
+    stopTimers(); render(exAnnounce(state, r.event)); sound([{ midi: mm, when: 0 }]);
+  }
+  keyEls.forEach(function (k) {
+    var g = keys[k], mm = +k;
+    g.classList.add("idle"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button"); g.setAttribute("aria-label", exKeyName(mm));
+    g.addEventListener("click", function () { tap(mm); try { g.focus({ preventScroll: true }); } catch (_) {} });
+    g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tap(mm); } });
+  });
+  function mark(mm, ch) { var g = keys[mm], r = g.firstChild, black = isBlack(mm); var t = el("text", { "class": "mark", x: +r.getAttribute("x") + +r.getAttribute("width") / 2, y: PAD + (black ? 26 : 48), "text-anchor": "middle" }, g); t.textContent = ch; }
   function render(announce) {
-    var gm = games[current], st = gm.state, q = st.question;
-    for (var k in keys) { var g = keys[k]; var ts = g.querySelectorAll("text"); for (var i = 0; i < ts.length; i++) g.removeChild(ts[i]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (current === 2 && st.phase === "asked" ? "" : " idle")); }
-    if (st.phase !== "idle") {
-      if (current === 2) {
-        keys[q.notes[0]].classList.add("tonic");
-        st.found.forEach(function (mm) { keys[mm].classList.add("right"); mark(mm, "✓"); });
-        st.wrong.forEach(function (mm) { keys[mm].classList.add("wrong"); mark(mm, "×"); });
-        if (st.phase === "answered") targetsOf(q).forEach(function (mm) { if (st.found.indexOf(mm) < 0) keys[mm].classList.add("reveal"); });
-      } else {
-        keys[q.notes[0]].classList.add("tonic");
-        if (st.phase === "answered") q.notes.slice(1).forEach(function (mm) { keys[mm].classList.add("right"); });
-      }
+    var building = state.phase === "building", done = !building;
+    for (var i = 0; i < 12; i++) $("tonic").options[i].textContent = tonicName(i, scaleId);
+    $("tonic").value = String(tonic); $("scale").value = scaleId;
+    var k, g, ts, j;
+    for (k in keys) { g = keys[k]; ts = g.querySelectorAll("text"); for (j = 0; j < ts.length; j++) g.removeChild(ts[j]); g.setAttribute("class", "key " + (isBlack(+k) ? "black" : "white") + (building ? "" : " idle")); }
+    var last = state.notes.length - 1;
+    keys[state.notes[0]].classList.add("lit", "tonic");
+    state.found.forEach(function (mm) { keys[mm].classList.add("lit"); mark(mm, "✓"); });
+    state.wrong.forEach(function (mm) { keys[mm].classList.add("wrong"); mark(mm, "×"); });
+    if (done) { keys[state.notes[last]].classList.add("lit", "tonic"); exTargets(state).forEach(function (mm) { if (state.found.indexOf(mm) < 0) keys[mm].classList.add("reveal"); }); }
+    if (soundingIndex >= 0 && keys[state.notes[soundingIndex]]) keys[state.notes[soundingIndex]].classList.add("sounding");
+    drawStaff(exStaffNotes(state), state.notes);
+    var chips = $("chips"), letters = $("letters"); chips.textContent = ""; letters.textContent = "";
+    if (done) {
+      recipeOf(scaleId, "up").forEach(function (c) { var s = document.createElement("span"); s.className = "chip " + (c === "W" ? "w" : c === "H" ? "h" : "t"); s.setAttribute("role", "listitem"); s.title = c === "W" ? "whole step: 2 half steps" : c === "H" ? "half step: 1 half step" : "3 half steps"; s.textContent = c; chips.appendChild(s); });
+      spellScale(tonic, scaleId, "up").forEach(function (n, idx) { var b = document.createElement("span"); b.className = "letter" + (idx === 0 ? " tonic" : "") + (idx === soundingIndex ? " sounding" : ""); b.setAttribute("role", "listitem"); b.setAttribute("aria-label", noteWords(n)); b.textContent = noteName(n); letters.appendChild(b); });
     }
-    $("prompt").textContent = current === 1 ? (st.phase === "idle" ? "Press Play: a scale will play." : st.phase === "asked" ? "Which scale was it? The yellow key is its first note." : "It was " + scaleTitle(q.tonic, q.scale) + ".") :
-      (st.phase === "idle" ? "Press Play: you will be asked to build a scale." : "Build " + buildTitle(q) + (st.phase === "asked" ? ": tap its other notes in the octave above the yellow key (" + (targetsOf(q).length - st.found.length) + " to find)." : st.outcome === "solved" ? ". All found." : ". Out of attempts: the dashed keys were its notes."));
-    $("hint").textContent = hintText(st);
-    $("replay").disabled = st.phase === "idle" || false;
-    LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
-    $("counter").textContent = counterText(scores, level);
-    var board = $("board"), parts = boardText(scores); board.textContent = "";
-    parts.forEach(function (p, i) { var n = document.createElement(LEVELS[i] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (i < parts.length - 1) board.appendChild(document.createTextNode(" \u00B7 ")); });
+    $("prompt").textContent = exPrompt(state); $("hint").textContent = exHint(state);
+    $("play").disabled = building;
+    EX_LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
+    $("counter").textContent = exCounterText(scores, level);
+    var board = $("board"), parts = exBoardText(scores); board.textContent = "";
+    parts.forEach(function (p, idx) { var n = document.createElement(EX_LEVELS[idx] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (idx < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
     board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
-    renderAnswers();
     if (announce !== undefined) $("sr").textContent = announce;
   }
+  // ---- sound: the piano voice (the block above, the same as the other gadgets) ------------------------------------------------------------------------------
   var ctx = null;
   function audio() { if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; ctx = new AC(); } if (ctx.state === "suspended") ctx.resume(); return ctx; }
-  function sound(plan) { var c = audio(); if (!c || !plan.length) return; var t0 = c.currentTime; plan.forEach(function (n) { pianoVoice(c, pianoBus(c), midiToHz(n.midi), t0 + n.when, NOTE_LEN, 0.8, 1); }); }
-  // 2026-11-17-1200: the melodic minor is built in its ASCENDING form (the raised 6th and 7th going up); the question says so. The general widget never asks it; the per-note files do (modes and minor scales).
-  function ascendingNote(q) { return q.scale === "melodic_minor" ? " (ascending form)" : ""; }
-  function buildTitle(q) { return scaleTitle(q.tonic, q.scale) + ascendingNote(q); }
-  function buildWords(q) { return scaleWords(q.tonic, q.scale) + ascendingNote(q); }
-  function after(r, gm, midiOrNull) {
-    gm.state = r.state; if (r.scored) scores = award(scores, gm.state.question.level);
-    var q = gm.state.question, left = gm.state.triesLeft, tl = left + (left === 1 ? " attempt left." : " attempts left."), text;
-    if (r.event === "solved") text = current === 1 ? "Correct. Press Play." : "All found. Press Play.";
-    else if (r.event === "right") text = "That note is in the scale. " + tl;
-    else if (r.event === "gaveup") text = "Out of attempts. It was " + buildWords(q) + ". Press Play.";
-    else text = "Not that one. " + tl;
-    render(text); sound(planFeedback(q, midiOrNull, r.event));
+  function sound(plan) { var c = audio(); if (!c || !plan.length) return; var t0 = c.currentTime + 0.02; plan.forEach(function (n) { pianoVoice(c, pianoBus(c), midiToHz(n.midi), t0 + n.when, NOTE_LEN, 0.8, 1); }); }
+  function stopTimers() { timers.forEach(function (t) { (window.__unschedule || clearTimeout)(t); }); timers = []; soundingIndex = -1; }
+  function play() {
+    var plan = exPlayPlan(state); if (!plan.length) return;
+    stopTimers(); sound(plan);
+    plan.forEach(function (n) { timers.push(schedule(function () { soundingIndex = n.index; render(); }, Math.round(n.when * 1000))); });
+    timers.push(schedule(function () { soundingIndex = -1; render(); }, Math.round(plan[plan.length - 1].when * 1000 + NOTE_LEN * 1000)));
+    $("sr").textContent = "Playing " + scaleWords(tonic, scaleId) + ".";
   }
-  function guess(id) { var gm = games[current], r = guessScale(gm.state, id); if (r.event === "ignored") return; after(r, gm, null); }
-  function tap(mm) { if (current !== 2) return; var gm = games[current], r = tapKey(gm.state, mm); if (r.event === "ignored") return; after(r, gm, mm); }
-  $("next").addEventListener("click", function () {
-    var gm = games[current], q = pickQuestion(current, rng, gm.previous); q.level = level; gm.previous = q; gm.state = ask(q, attemptsFor(level)); scores = markAsked(scores, level);
-    render(current === 1 ? "A scale was played from " + nameOfKey(q.notes[0]) + ". Which scale was it? " + attemptsFor(level) + " attempts." : "Build " + buildWords(q) + ". The tonic is " + nameOfKey(q.notes[0]) + ". " + attemptsFor(level) + " attempts.");
-    sound(current === 1 ? q.sound : [{ midi: q.notes[0], when: 0 }]);
-  });
-  $("replay").addEventListener("click", function () { var q = games[current].state.question; if (q) sound(current === 1 ? q.sound : [{ midi: q.notes[0], when: 0 }]); });       // never reveals the answer
-  $("reset").addEventListener("click", function () { scores = resetScores(); render("Score cleared."); });
-  LEVELS.forEach(function (l) {
-    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = levelName(l); b.title = levelName(l) + ": " + BASE_ATTEMPTS[l] + (BASE_ATTEMPTS[l] === 1 ? " attempt" : " attempts") + " a question" + (GAME === 2 ? " (wrong taps)" : ""); b.setAttribute("aria-pressed", "false");
-    b.addEventListener("click", function () {                                                            // a new level: the open question ends (it counted as asked, with no point), each level keeps its own score
-      if (l === level) return;
-      level = l; games[GAME].state = initial();
-      render(levelName(l) + ": " + attemptsFor(l) + " attempts a question. Press Play.");
-    });
+  // ---- the controls -------------------------------------------------------------------------------------------------------------------------------------------------------------
+  function fresh(announce) { stopTimers(); state = exStart(tonic, scaleId, level); render(announce === false ? undefined : exAnnounce(state, "start")); }
+  for (var pc = 0; pc < 12; pc++) { var o = document.createElement("option"); o.value = String(pc); $("tonic").appendChild(o); }
+  SCALES.forEach(function (id) { var op = document.createElement("option"); op.value = id; op.textContent = scScale(id).name; $("scale").appendChild(op); });
+  if (SCALES.length < 2) { $("scale").style.display = "none"; $("scale-label").style.display = "none"; }
+  $("tonic").addEventListener("change", function () { tonic = +$("tonic").value; fresh(); });
+  $("scale").addEventListener("change", function () { scaleId = $("scale").value; fresh(); });
+  $("random").addEventListener("click", function () { var r = exRandom(SCALES, rng, { tonic: tonic, scale: scaleId }); tonic = r.tonic; scaleId = r.scale; fresh(); });
+  $("again").addEventListener("click", function () { fresh(); });
+  $("play").addEventListener("click", function () { play(); });
+  $("reset").addEventListener("click", function () { scores = exEmptyScores(); render("Score cleared."); });
+  EX_LEVELS.forEach(function (l) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = exLevelName(l); b.title = exLevelName(l) + ": " + EX_ATTEMPTS[l] + (EX_ATTEMPTS[l] === 1 ? " wrong tap" : " wrong taps") + " allowed";
+    b.addEventListener("click", function () { if (l === level) return; level = l; fresh(); });         // a new level starts a fresh exercise; each level keeps its own score
     $("levels").appendChild(b);
   });
-  render();
+  fresh(false);
 })();
 </script>
 </body>
