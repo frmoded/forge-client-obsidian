@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@@TITLE@@</title>
+<style>
+  /* The look of the Scales hub player (scale_player.html): the same palette, controls row, piano strip, staff and chips. No margin, no padding, no fixed height: the page is exactly its content. Nothing changes when the pointer rests on anything: a control looks pressable by its shape and its pointer cursor. */
+  :root { --paper: #FDFCFA; --ink: #2B2B2B; --muted: #555555; --axis: #666666; --highlight: #F8C54B; --accent: #D72027; --chip: #F2F2EC; --wrong: #D72027; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--muted); font-size: 13px; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 460px; }
+  .wrap > :first-child { margin-top: 0; }
+  svg { display: block; width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 3px 0 0; flex-wrap: wrap; min-height: 30px; }
+  label { color: var(--ink); }
+  select, button { font: inherit; color: var(--ink); background: #fff; border: 1px solid var(--axis); border-radius: 6px; padding: 4px 8px; min-height: 30px; }
+  button { cursor: pointer; padding: 4px 12px; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  button[aria-pressed="true"] { background: var(--highlight); border-color: var(--ink); }
+  .sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .key { cursor: default; }
+  .key.white rect { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .key.black rect { fill: var(--ink); stroke: var(--ink); stroke-width: 1; }
+  .key.lit.white rect { fill: var(--highlight); stroke: var(--ink); stroke-width: 1.5; }
+  .key.lit.black rect { fill: #B07F00; stroke: var(--ink); }
+  .key.tonic rect { stroke: var(--accent); stroke-width: 3; }
+  .key.sounding rect { fill: #9DD9B5; }
+  .key text { pointer-events: none; fill: var(--ink); font-size: 9px; }
+  .staffline, .ledger { stroke: #A69B91; stroke-width: 1; }
+  .head { fill: #fff; stroke: var(--ink); stroke-width: 1.4; }
+  .head.tonic { stroke: var(--accent); stroke-width: 2; }
+  .acc { fill: var(--ink); font-size: 14px; }
+  .acc.sig { font-size: 18px; }
+  .wheelbox { max-width: 300px; margin: 3px 0 0; }
+  .seg { cursor: pointer; }
+  .seg path { fill: #FFFFFF; stroke: var(--axis); stroke-width: 1; }
+  .seg.minor path { fill: #F7F5F0; }
+  .seg.nb path { fill: #FBEFC4; }
+  .seg.opp path { fill: #DCE7F6; }
+  .seg.lit path { fill: var(--highlight); stroke: var(--ink); stroke-width: 2; }
+  .seg.tonic path { stroke: var(--accent); stroke-width: 3; }
+  .seg.found path { fill: #BFE6CD; stroke: var(--ink); stroke-width: 2; }
+  .seg.wrong path { fill: #F6C9CB; stroke: var(--wrong); stroke-width: 2; stroke-dasharray: 3 2; }
+  .seg.reveal path { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 2; }
+  .seg:focus path { stroke: var(--accent); stroke-width: 3; }
+  .seg:focus { outline: none; }
+  .seg text { pointer-events: none; fill: var(--ink); text-anchor: middle; font-weight: 600; }
+  .seg text.name { font-size: 16px; }
+  .seg text.name.both { font-size: 11px; }
+  .seg text.name.small { font-size: 12px; font-weight: 500; }
+  .seg text.count { font-size: 10px; font-weight: 500; fill: var(--muted); }
+  #title { min-height: 36px; margin: 3px 0 0; color: var(--ink); font-size: 13px; }
+  #detail, #prompt { min-height: 34px; margin: 2px 0 0; font-size: 12px; line-height: 16px; color: var(--ink); }
+  #prompt { min-height: 36px; font-size: 13px; line-height: 18px; margin: 3px 0 0; }

@@ -1,0 +1,108 @@
+@@HEAD@@
+  #prompt { min-height: 92px; }
+  .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
+  #counter { color: var(--ink); }
+  #hint { color: var(--ink); font-size: 12px; }
+  .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
+  #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #board b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row" id="levels" role="group" aria-label="Choose a level"></div>
+<div id="prompt" aria-live="off"></div>
+<svg id="strip" role="img" aria-label="Piano keys" aria-hidden="true" style="display:none"></svg>
+<svg id="staff" role="img" aria-label="Treble staff"></svg>
+<div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: major keys on the outer ring, their relative minors on the inner ring"></svg></div>
+<div class="row"><button type="button" id="again">New exercise</button><span id="hint"></span></div>
+<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
+<div id="board" aria-label="Score of each level"></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-19-0900 - the CIRCLE EXERCISE "signature to key": a key signature is shown on the staff; tap the major key on the outer ring of the wheel, and its relative minor on the inner ring. Levels easy / medium / hard allow 5 / 3 / 1 wrong taps; "New exercise" gives another signature.
+  // An exercise, never a test: when it ends the answer is said in words. It looks like the Scales exercises and shares their blocks, byte for byte (pinned by a test): the scale core and the scale view (staff); the circle core, the exercise core, the wheel and the staff block are shared with the other circle gadgets. Memory only.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  @@PRELUDE@@
+@@SCALE_CORE@@
+@@CIRCLE_CORE@@
+@@CIRCLE_EXERCISE_CORE@@
+  // ==== signature to key core BEGIN (2026-11-19-0900) ================================================================================================
+  // One exercise, pure. The signature of sector i (spelling alt) is on the staff; two taps are asked: the major key (outer ring) and its relative minor (inner ring), each on the sector whose signature this is. Sector 6 holds both spellings, so either sharp or flat signature points at it.
+  // A right tap is free; a tap in the wrong sector uses one of the level's wrong taps (once per sector and ring); the last wrong tap ends the exercise ("gaveup").
+  function s2Start(i, alt, level) { return { phase: "playing", i: i, alt: alt, level: level, left: exAttempts(level), major: false, minor: false, wrong: [], outcome: null }; }
+  function s2Tap(s, ring, sector) {
+    var key = ring + ":" + sector;
+    if (s.phase !== "playing" || (ring === "major" && s.major) || (ring === "minor" && s.minor) || s.wrong.indexOf(key) >= 0) return { state: s, event: "ignored", first: false };
+    var first = !s.major && !s.minor && s.wrong.length === 0;
+    if (ciSector(sector) === ciSector(s.i)) {
+      var major = s.major || ring === "major", minor = s.minor || ring === "minor", built = major && minor;
+      return { state: exCopy(s, { phase: built ? "done" : "playing", major: major, minor: minor, outcome: built ? "built" : null }), event: built ? "built" : "right", first: first };
+    }
+    var left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "playing", wrong: s.wrong.concat([key]), left: Math.max(0, left), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
+  }
+  function s2Answer(s) { var sig = ciSignature(s.i, s.alt); return "This signature has " + ciCountWords(s.i, s.alt) + (sig.length ? " (" + sig.map(function (x) { return noteName({ l: x.l, a: x.a }); }).join(", ") + ")" : "") + ": it is " + ciKeyTitle(s.i, s.alt) + (s.i === 6 ? " (or " + ciKeyTitle(6, !s.alt) + ")" : "") + ", and its relative minor is " + ciMinorTitle(s.i, s.alt) + (s.i === 6 ? " (or " + ciMinorTitle(6, !s.alt) + ")" : "") + "."; }
+  function s2Prompt(s) {
+    if (s.phase === "playing") return "Exercise: what key is this signature? Tap the major key on the outer ring and its relative minor on the inner ring" + (s.major || s.minor ? " (" + (s.major ? "major found" : "minor found") + ")" : "") + ".";
+    return (s.outcome === "built" ? "Exercise done. " : "Exercise over: out of wrong taps. ") + s2Answer(s);
+  }
+  function s2Hint(s) { return s.phase === "done" ? "Press New exercise for another signature." : exLeftText(s.left); }
+  function s2Announce(s, event) {
+    if (event === "start") return "New exercise: a key signature on the staff. Tap the major key and its relative minor on the wheel. " + exLeftText(s.left) + ".";
+    if (event === "right") return "Right. " + (s.major && !s.minor ? "Now the relative minor." : "Now the major key.");
+    if (event === "wrong") return "Not that sector. " + exLeftText(s.left) + ".";
+    if (event === "built") return "Done. " + s2Answer(s);
+    if (event === "gaveup") return "Out of wrong taps. " + s2Answer(s);
+    return "";
+  }
+  // ==== signature to key core END ===================================================================================================================
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { BASE: BASE, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scHeptatonic: scHeptatonic, noteName: noteName, noteWords: noteWords,
+      CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciMinorPc: ciMinorPc, ciTonic: ciTonic, ciScale: ciScale, ciSigned: ciSigned, ciSignature: ciSignature, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords, ciMinorTitle: ciMinorTitle, ciMinorName: ciMinorName, ciCountText: ciCountText, ciCountWords: ciCountWords, ciNeighbours: ciNeighbours, ciOpposite: ciOpposite, ciShared: ciShared,
+      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, exRandomKey: exRandomKey,
+      s2Start: s2Start, s2Tap: s2Tap, s2Answer: s2Answer, s2Prompt: s2Prompt, s2Hint: s2Hint, s2Announce: s2Announce };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
+  var level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, soundingForm = null;
+@@SCALE_VIEW@@
+@@CIRCLE_STAFF@@
+@@CIRCLE_WHEEL@@
+  var segs = buildWheel($("wheel"), { counts: false, onPick: function (ring, k) { var r = s2Tap(state, ring, k); if (r.event === "ignored") return; state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level); render(s2Announce(state, r.event)); } });
+  Object.keys(segs).forEach(function (r) { segs[r].forEach(function (g, k) { g.setAttribute("aria-label", r === "major" ? (k === 6 ? ciName(6, false) + " or " + ciName(6, true) + " major" : ciKeyTitle(k, false)) : (k === 6 ? ciMinorName(6, false) + " or " + ciMinorName(6, true) + " minor" : ciMinorTitle(k, false))); }); });
+  function render(announce) {
+    var done = state.phase === "done", r, k, g, cls;
+    for (r in segs) for (k = 0; k < 12; k++) {
+      g = segs[r][k]; cls = "seg " + r;
+      if (state[r] && k === ciSector(state.i)) cls += " found";
+      if (state.wrong.indexOf(r + ":" + k) >= 0) cls += " wrong";
+      if (done && !state[r] && k === ciSector(state.i)) cls += " reveal";
+      g.setAttribute("class", cls);
+    }
+    ciDrawSignature(state.i, state.alt, "Treble staff: a key signature with " + ciCountWords(state.i, state.alt) + (done ? "" : " (name the key on the wheel)"));
+    $("prompt").textContent = s2Prompt(state); $("hint").textContent = s2Hint(state);
+    EX_LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
+    $("counter").textContent = exCounterText(scores, level);
+    var board = $("board"), parts = exBoardText(scores); board.textContent = "";
+    parts.forEach(function (p, idx) { var n = document.createElement(EX_LEVELS[idx] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (idx < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
+    board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  function fresh(announce) { var k = exRandomKey(rng, state ? state.i : null); state = s2Start(k.i, k.alt, level); render(announce === false ? undefined : s2Announce(state, "start")); }
+  $("again").addEventListener("click", function () { fresh(); });
+  $("reset").addEventListener("click", function () { scores = exEmptyScores(); render("Score cleared."); });
+  EX_LEVELS.forEach(function (l) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = exLevelName(l); b.setAttribute("aria-description", exLevelName(l) + ": " + EX_ATTEMPTS[l] + (EX_ATTEMPTS[l] === 1 ? " wrong tap" : " wrong taps") + " allowed");
+    b.addEventListener("click", function () { if (l === level) return; level = l; fresh(); });         // a new level starts a fresh exercise; each level keeps its own score
+    $("levels").appendChild(b);
+  });
+  fresh(false);
+})();
+</script>
+</body>
+</html>

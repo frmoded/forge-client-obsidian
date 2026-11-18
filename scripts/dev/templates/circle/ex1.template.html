@@ -1,0 +1,149 @@
+@@HEAD@@
+  #counts { gap: 4px; }
+  #counts button { padding: 4px 0; min-width: 31px; text-align: center; }
+  .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
+  #counter { color: var(--ink); }
+  #hint { color: var(--ink); font-size: 12px; }
+  .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
+  #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #board b { color: var(--ink); }
+  .pick { cursor: pointer; }
+  .pick .hit { fill: transparent; }
+  .pick:focus { outline: none; }
+  .pick:focus .head { stroke: var(--accent); stroke-width: 3; }
+  .head.found { fill: #BFE6CD; }
+  .head.wrong { fill: #F6C9CB; stroke: var(--wrong); }
+  .head.ghost { fill: none; stroke: var(--muted); stroke-dasharray: 3 2; }
+  .lett { fill: var(--muted); font-size: 11px; text-anchor: middle; pointer-events: none; }
+  .wrongbtn { background: #F6C9CB; border-color: var(--wrong); }
+  .rightbtn { background: #BFE6CD; border-color: var(--ink); }
+  .acc.ghost { fill: var(--muted); }
+  .mark { fill: var(--ink); font-size: 13px; font-weight: 700; text-anchor: middle; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row" id="levels" role="group" aria-label="Choose a level"></div>
+<div id="prompt" aria-live="off"></div>
+<div class="row" id="counts" role="group" aria-label="How many sharps or flats?"></div>
+<svg id="strip" role="img" aria-label="Piano keys" aria-hidden="true" style="display:none"></svg>
+<svg id="staff" role="group" aria-label="Treble staff"></svg>
+<div class="row"><button type="button" id="again">New exercise</button><span id="hint"></span></div>
+<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
+<div id="board" aria-label="Score of each level"></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-19-0900 - the CIRCLE EXERCISE "key to signature": a major key is given; tap how many sharps or flats it has, then tap the notes on the staff that carry them. Levels easy / medium / hard allow 5 / 3 / 1 wrong taps; Random is "New exercise". An exercise, never a test:
+  // when it ends the answer is said in words. It looks like the Scales exercises and shares their blocks, byte for byte (pinned by a test): the scale core and the scale view (staff); the circle core, the exercise core and the staff block are shared with the other circle gadgets. Memory only.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  @@PRELUDE@@
+@@SCALE_CORE@@
+@@CIRCLE_CORE@@
+@@CIRCLE_EXERCISE_CORE@@
+  // ==== key to signature core BEGIN (2026-11-19-0900) ================================================================================================
+  // One exercise, pure. Phase "count" (tap how many) -> "notes" (tap the notes that carry them) -> "done". The key is a sector i (and, for sector 6, its spelling alt); the answer to the first part is the signed count (sharps positive, flats negative: 3 sharps is +3), to the second the letters of the signature.
+  // A wrong tap uses one of the level's wrong taps (a count that is wrong, a note that is not in the signature); a right tap is free; the last wrong tap ends the exercise ("gaveup"); a key with no sharps or flats is built by the right count alone.
+  var LETTER_NAMES = ["C", "D", "E", "F", "G", "A", "B"], PICK_LETTERS = [2, 3, 4, 5, 6, 0, 1];                  // the seven notes on offer, low to high from E4 (staff position 0 .. 6)
+  function k1Start(i, alt, level) { return { phase: "count", i: i, alt: alt, level: level, left: exAttempts(level), wrongCounts: [], found: [], wrong: [], outcome: null }; }
+  function k1Targets(s) { return ciSignature(s.i, s.alt).map(function (x) { return x.l; }); }
+  function k1Tap(s, signed) {
+    if (s.phase !== "count" || s.wrongCounts.indexOf(signed) >= 0) return { state: s, event: "ignored", first: false };
+    var first = s.wrongCounts.length === 0 && s.found.length === 0 && s.wrong.length === 0;
+    if (signed === ciSigned(s.i, s.alt)) { var none = signed === 0; return { state: exCopy(s, { phase: none ? "done" : "notes", outcome: none ? "built" : null }), event: none ? "built" : "count", first: first }; }
+    var left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "count", wrongCounts: s.wrongCounts.concat([signed]), left: Math.max(0, left), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
+  }
+  function k1TapNote(s, letter) {
+    if (s.phase !== "notes" || s.found.indexOf(letter) >= 0 || s.wrong.indexOf(letter) >= 0) return { state: s, event: "ignored", first: false };
+    var targets = k1Targets(s);
+    if (targets.indexOf(letter) >= 0) { var found = s.found.concat([letter]), built = found.length === targets.length; return { state: exCopy(s, { phase: built ? "done" : "notes", found: found, outcome: built ? "built" : null }), event: built ? "built" : "right", first: false }; }
+    var left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "notes", wrong: s.wrong.concat([letter]), left: Math.max(0, left), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: false };
+  }
+  function k1Words(s) { return ciKeyWords(s.i, s.alt); }
+  function k1Prompt(s) {
+    if (s.phase === "count") return "Exercise: " + ciKeyTitle(s.i, s.alt) + ". How many sharps or flats does it have?";
+    if (s.phase === "notes") return "Right: " + ciCountWords(s.i, s.alt) + ". Now tap the notes on the staff that have " + (ciSigned(s.i, s.alt) > 0 ? "a sharp" : "a flat") + " in " + ciKeyTitle(s.i, s.alt) + ".";
+    var sig = ciSignature(s.i, s.alt);
+    if (s.outcome === "built") return "Exercise done: " + ciKeyTitle(s.i, s.alt) + " has " + ciCountWords(s.i, s.alt) + (sig.length ? ": " + sig.map(function (x) { return noteName({ l: x.l, a: x.a }); }).join(", ") + "." : ".");
+    return "Exercise over: out of wrong taps. " + ciKeyTitle(s.i, s.alt) + " has " + ciCountWords(s.i, s.alt) + (sig.length ? ": " + sig.map(function (x) { return noteName({ l: x.l, a: x.a }); }).join(", ") + "." : ".");
+  }
+  function k1Hint(s) { return s.phase === "done" ? "Press New exercise for another key." : exLeftText(s.left); }
+  function k1Announce(s, event) {
+    if (event === "start") return "New exercise: " + k1Words(s) + ". How many sharps or flats? " + exLeftText(s.left) + ".";
+    if (event === "count") return "Right: " + ciCountWords(s.i, s.alt) + ". Now tap the notes on the staff that carry them.";
+    if (event === "right") return "That note is in the signature.";
+    if (event === "wrong") return "Not that one. " + exLeftText(s.left) + ".";
+    if (event === "built") return "Done: " + k1Words(s) + " has " + ciCountWords(s.i, s.alt) + ".";
+    if (event === "gaveup") return "Out of wrong taps. " + k1Words(s) + " has " + ciCountWords(s.i, s.alt) + ".";
+    return "";
+  }
+  // The count buttons, in the order they are drawn: none, then 1..6 sharps, then 1..6 flats (the key's own spelling decides which 6 is right).
+  var K1_COUNTS = [0, 1, 2, 3, 4, 5, 6, -1, -2, -3, -4, -5, -6];
+  function k1CountText(n) { return n === 0 ? "0" : Math.abs(n) + (n > 0 ? "♯" : "♭"); }
+  function k1CountWords(n) { var k = Math.abs(n); return n === 0 ? "No sharps or flats" : k + (n > 0 ? " sharp" : " flat") + (k === 1 ? "" : "s"); }
+  // ==== key to signature core END ===================================================================================================================
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { BASE: BASE, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scHeptatonic: scHeptatonic, noteName: noteName, noteWords: noteWords,
+      CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciMinorPc: ciMinorPc, ciTonic: ciTonic, ciScale: ciScale, ciSigned: ciSigned, ciSignature: ciSignature, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords, ciCountText: ciCountText, ciCountWords: ciCountWords, ciNeighbours: ciNeighbours, ciOpposite: ciOpposite, ciShared: ciShared,
+      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, exRandomKey: exRandomKey,
+      k1Start: k1Start, k1Targets: k1Targets, k1Tap: k1Tap, k1TapNote: k1TapNote, k1Prompt: k1Prompt, k1Hint: k1Hint, k1Announce: k1Announce, K1_COUNTS: K1_COUNTS, k1CountText: k1CountText, k1CountWords: k1CountWords, PICK_LETTERS: PICK_LETTERS };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
+  var level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null, soundingForm = null;
+@@SCALE_VIEW@@
+@@CIRCLE_STAFF@@
+  var countBtns = {};
+  K1_COUNTS.forEach(function (n) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "count-" + (n < 0 ? "f" + -n : n > 0 ? "s" + n : "0"); b.textContent = k1CountText(n); b.setAttribute("aria-label", k1CountWords(n));
+    b.addEventListener("click", function () { tapCount(n); }); $("counts").appendChild(b); countBtns[n] = b;
+  });
+  function apply(r) { if (r.event === "ignored") return; state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level); render(k1Announce(state, r.event)); }
+  function tapCount(n) { apply(k1Tap(state, n)); }
+  // the staff of the notes phase: the seven notes on offer as heads on the treble staff, E4 up to D5; a found one shows its sharp or flat, a wrong one a cross, the missed ones are dashed at the end
+  function drawPick() {
+    ciStaffBase();
+    var room = ST.width - ST.left - ST.right, gap = room / 7, sig = ciSignature(state.i, state.alt), done = state.phase === "done";
+    PICK_LETTERS.forEach(function (l, idx) {
+      var x = ST.left + gap * idx + gap / 2 + 6, y = yOf(idx), isTarget = k1Targets(state).indexOf(l) >= 0, got = state.found.indexOf(l) >= 0, bad = state.wrong.indexOf(l) >= 0, show = got || (done && isTarget);
+      var g = el("g", { "class": "pick", "data-letter": l, role: "button", tabindex: state.phase === "notes" ? "0" : "-1", "aria-label": LETTER_NAMES[l] }, staff);
+      el("rect", { "class": "hit", x: x - 16, y: 0, width: 32, height: ST.height }, g);
+      el("ellipse", { "class": "head" + (got ? " found" : "") + (bad ? " wrong" : "") + (done && isTarget && !got ? " ghost" : ""), cx: x, cy: y, rx: ST.headRx, ry: ST.headRy }, g);
+      var lt = el("text", { "class": "lett", x: x, y: ST.height - 1 }, g); lt.textContent = LETTER_NAMES[l];
+      if (show) { var s = sig.filter(function (q) { return q.l === l; })[0], t = el("text", { "class": "acc" + (got ? "" : " ghost"), x: x - ST.headRx - 9, y: y + 4.5, "text-anchor": "middle" }, g); t.textContent = s.a === 1 ? "♯" : "♭"; }
+      if (bad) { var m = el("text", { "class": "mark", x: x, y: y + 4.5 }, g); m.textContent = "×"; }
+      g.addEventListener("click", function () { apply(k1TapNote(state, l)); });
+      g.addEventListener("keydown", function (e) { if (e.altKey || e.ctrlKey || e.metaKey) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); apply(k1TapNote(state, l)); } });
+    });
+    staff.setAttribute("aria-label", "Treble staff: the seven notes E F G A B C D, to tap");
+  }
+  function render(announce) {
+    var phase = state.phase;
+    if (phase === "count") { ciStaffBase(); staff.setAttribute("aria-label", "Treble staff, empty: first say how many sharps or flats"); } else drawPick();
+    K1_COUNTS.forEach(function (n) { var b = countBtns[n]; b.disabled = phase !== "count"; b.setAttribute("class", state.wrongCounts.indexOf(n) >= 0 ? "wrongbtn" : (phase !== "count" && n === ciSigned(state.i, state.alt) ? "rightbtn" : "")); });
+    $("prompt").textContent = k1Prompt(state); $("hint").textContent = k1Hint(state);
+    EX_LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
+    $("counter").textContent = exCounterText(scores, level);
+    var board = $("board"), parts = exBoardText(scores); board.textContent = "";
+    parts.forEach(function (p, idx) { var n = document.createElement(EX_LEVELS[idx] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (idx < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
+    board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  function fresh(announce) { var k = exRandomKey(rng, state ? state.i : null); state = k1Start(k.i, k.alt, level); render(announce === false ? undefined : k1Announce(state, "start")); }
+  $("again").addEventListener("click", function () { fresh(); });
+  $("reset").addEventListener("click", function () { scores = exEmptyScores(); render("Score cleared."); });
+  EX_LEVELS.forEach(function (l) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = exLevelName(l); b.setAttribute("aria-description", exLevelName(l) + ": " + EX_ATTEMPTS[l] + (EX_ATTEMPTS[l] === 1 ? " wrong tap" : " wrong taps") + " allowed");
+    b.addEventListener("click", function () { if (l === level) return; level = l; fresh(); });         // a new level starts a fresh exercise; each level keeps its own score
+    $("levels").appendChild(b);
+  });
+  fresh(false);
+})();
+</script>
+</body>
+</html>

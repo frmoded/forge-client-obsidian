@@ -1,0 +1,108 @@
+@@HEAD@@
+  #prompt { min-height: 92px; }
+  .score { display: flex; align-items: center; gap: 10px; margin: 3px 0 0; min-height: 22px; font-size: 12px; }
+  #counter { color: var(--ink); }
+  #hint { color: var(--ink); font-size: 12px; }
+  .linkbtn { background: none; border: 0; padding: 0; min-height: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 12px; }
+  #board { margin: 1px 0 0; min-height: 18px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  #board b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="row" id="levels" role="group" aria-label="Choose a level"></div>
+<div id="prompt" aria-live="off"></div>
+<div class="wheelbox"><svg id="wheel" role="group" aria-label="The circle of fifths: major keys on the outer ring, their relative minors on the inner ring"></svg></div>
+<div class="row"><button type="button" id="again">New exercise</button><span id="hint"></span></div>
+<div class="score"><span id="counter"></span><button id="reset" class="linkbtn" type="button">Reset</button></div>
+<div id="board" aria-label="Score of each level"></div>
+<span id="sr" class="sr" role="status" aria-live="polite"></span>
+</div>
+<script>
+(function () {
+  "use strict";
+  // 2026-11-19-0900 - the CIRCLE EXERCISE "neighbours": a major key is marked on the wheel; tap its two neighbours (one fifth down and one fifth up) and its opposite. Levels easy / medium / hard allow 5 / 3 / 1 wrong taps; "New exercise" gives another key.
+  // An exercise, never a test: when it ends the answer is said in words. It looks like the Scales exercises and shares their blocks, byte for byte (pinned by a test): the scale core; the circle core, the exercise core and the wheel are shared with the other circle gadgets. Memory only.
+  // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
+  @@PRELUDE@@
+@@SCALE_CORE@@
+@@CIRCLE_CORE@@
+@@CIRCLE_EXERCISE_CORE@@
+  // ==== neighbours core BEGIN (2026-11-19-0900) ======================================================================================================
+  // One exercise, pure. The key (sector i) is given and marked; the three sectors to find are its two neighbours and its opposite, in either ring. A right tap is free; a tap on any other sector uses one of the level's wrong taps (once per sector); the given sector is ignored; the last wrong tap ends the exercise ("gaveup").
+  function n3Start(i, alt, level) { var nb = ciNeighbours(i); return { phase: "playing", i: i, alt: alt, level: level, left: exAttempts(level), targets: [nb[0], nb[1], ciOpposite(i)], found: [], wrong: [], outcome: null }; }
+  function n3Tap(s, sector) {
+    var k = ciSector(sector);
+    if (s.phase !== "playing" || k === ciSector(s.i) || s.found.indexOf(k) >= 0 || s.wrong.indexOf(k) >= 0) return { state: s, event: "ignored", first: false };
+    var first = s.found.length === 0 && s.wrong.length === 0;
+    if (s.targets.indexOf(k) >= 0) { var found = s.found.concat([k]), built = found.length === s.targets.length; return { state: exCopy(s, { phase: built ? "done" : "playing", found: found, outcome: built ? "built" : null }), event: built ? "built" : "right", first: first }; }
+    var left = s.left - 1;
+    return { state: exCopy(s, { phase: left <= 0 ? "done" : "playing", wrong: s.wrong.concat([k]), left: Math.max(0, left), outcome: left <= 0 ? "gaveup" : null }), event: left <= 0 ? "gaveup" : "wrong", first: first };
+  }
+  function n3Remaining(s) { return s.targets.length - s.found.length; }
+  function n3Title(k, alt) { return k === 6 ? ciName(6, false) + "/" + ciName(6, true) + " major" : ciKeyTitle(k, alt); }
+  function n3Answer(s) {
+    var nb = ciNeighbours(s.i), op = ciOpposite(s.i);
+    return "The neighbours of " + ciKeyTitle(s.i, s.alt) + " are " + n3Title(nb[0], false) + " (one fifth down) and " + n3Title(nb[1], false) + " (one fifth up): each shares " + ciShared(s.i, nb[0]) + " of its 7 notes. The opposite is " + n3Title(op, false) + ", which shares " + ciShared(s.i, op) + ".";
+  }
+  function n3Prompt(s) {
+    if (s.phase === "playing") return "Exercise: " + ciKeyTitle(s.i, s.alt) + " is marked. Tap its two neighbours and its opposite on the wheel.";
+    return (s.outcome === "built" ? "Exercise done. " : "Exercise over: out of wrong taps. ") + n3Answer(s);
+  }
+  function n3Hint(s) { return s.phase === "done" ? "Press New exercise for another key." : n3Remaining(s) + " to find, " + exLeftText(s.left); }
+  function n3Announce(s, event) {
+    if (event === "start") return "New exercise: " + ciKeyWords(s.i, s.alt) + " is marked. Tap its two neighbours and its opposite. " + exLeftText(s.left) + ".";
+    if (event === "right") return "Right. " + n3Remaining(s) + " to find.";
+    if (event === "wrong") return "Not that one. " + exLeftText(s.left) + ".";
+    if (event === "built") return "Done. " + n3Answer(s);
+    if (event === "gaveup") return "Out of wrong taps. " + n3Answer(s);
+    return "";
+  }
+  // ==== neighbours core END =========================================================================================================================
+  if (typeof document === "undefined") {           // node test harness
+    module.exports = { BASE: BASE, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scHeptatonic: scHeptatonic, noteName: noteName, noteWords: noteWords,
+      CIRCLE_TONICS: CIRCLE_TONICS, ciPc: ciPc, ciMinorPc: ciMinorPc, ciTonic: ciTonic, ciScale: ciScale, ciSigned: ciSigned, ciSignature: ciSignature, ciName: ciName, ciKeyTitle: ciKeyTitle, ciKeyWords: ciKeyWords, ciMinorTitle: ciMinorTitle, ciMinorName: ciMinorName, ciCountText: ciCountText, ciCountWords: ciCountWords, ciNeighbours: ciNeighbours, ciOpposite: ciOpposite, ciShared: ciShared,
+      EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exEmptyScores: exEmptyScores, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, exRandomKey: exRandomKey,
+      n3Start: n3Start, n3Tap: n3Tap, n3Answer: n3Answer, n3Prompt: n3Prompt, n3Hint: n3Hint, n3Announce: n3Announce };
+    return;
+  }
+  // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
+  var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
+  var level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), state = null;
+  var NS = "http://www.w3.org/2000/svg";
+  var $ = function (id) { return document.getElementById(id); };
+  function el(tag, attrs, parent) { var n = document.createElementNS(NS, tag); for (var a in attrs) n.setAttribute(a, attrs[a]); if (parent) parent.appendChild(n); return n; }
+@@CIRCLE_WHEEL@@
+  var segs = buildWheel($("wheel"), { counts: false, onPick: function (ring, k) { var r = n3Tap(state, k); if (r.event === "ignored") return; state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") scores = exBuilt(scores, level); render(n3Announce(state, r.event)); } });
+  Object.keys(segs).forEach(function (r) { segs[r].forEach(function (g, k) { g.setAttribute("aria-label", r === "major" ? (k === 6 ? ciName(6, false) + " or " + ciName(6, true) + " major" : ciKeyTitle(k, false)) : (k === 6 ? ciMinorName(6, false) + " or " + ciMinorName(6, true) + " minor" : ciMinorTitle(k, false))); }); });
+  function render(announce) {
+    var done = state.phase === "done", r, k, g, cls;
+    for (r in segs) for (k = 0; k < 12; k++) {
+      g = segs[r][k]; cls = "seg " + r;
+      if (k === ciSector(state.i)) cls += " tonic lit";
+      if (state.found.indexOf(k) >= 0) cls += " found";
+      if (state.wrong.indexOf(k) >= 0) cls += " wrong";
+      if (done && state.targets.indexOf(k) >= 0 && state.found.indexOf(k) < 0) cls += " reveal";
+      g.setAttribute("class", cls);
+    }
+    $("prompt").textContent = n3Prompt(state); $("hint").textContent = n3Hint(state);
+    EX_LEVELS.forEach(function (l) { $("level-" + l).setAttribute("aria-pressed", l === level ? "true" : "false"); });
+    $("counter").textContent = exCounterText(scores, level);
+    var board = $("board"), parts = exBoardText(scores); board.textContent = "";
+    parts.forEach(function (p, idx) { var n = document.createElement(EX_LEVELS[idx] === level ? "b" : "span"); n.textContent = p; board.appendChild(n); if (idx < parts.length - 1) board.appendChild(document.createTextNode(" · ")); });
+    board.setAttribute("aria-label", "Score of each level: " + parts.join(", "));
+    if (announce !== undefined) $("sr").textContent = announce;
+  }
+  function fresh(announce) { var k = exRandomKey(rng, state ? state.i : null); state = n3Start(k.i, k.alt, level); render(announce === false ? undefined : n3Announce(state, "start")); }
+  $("again").addEventListener("click", function () { fresh(); });
+  $("reset").addEventListener("click", function () { scores = exEmptyScores(); render("Score cleared."); });
+  EX_LEVELS.forEach(function (l) {
+    var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = exLevelName(l); b.setAttribute("aria-description", exLevelName(l) + ": " + EX_ATTEMPTS[l] + (EX_ATTEMPTS[l] === 1 ? " wrong tap" : " wrong taps") + " allowed");
+    b.addEventListener("click", function () { if (l === level) return; level = l; fresh(); });         // a new level starts a fresh exercise; each level keeps its own score
+    $("levels").appendChild(b);
+  });
+  fresh(false);
+})();
+</script>
+</body>
+</html>
