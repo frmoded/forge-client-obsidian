@@ -4,6 +4,7 @@
 //
 // The piano is input-widget-piano.ts's own keyboard (buildKeyboard / keyboardWidth / centerXOf / initialScrollLeft / KEYBOARD_HEIGHT, and its CSS classes), not a copy: 88 keys in a horizontal scroller, 146 px tall, opened on the scale.
 
+import { setSrLabel } from './sr-label-core.ts';
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
 import { mountFreeMode } from './free-mode-dom.ts';
 import { mountTriadMode } from './triad-mode-dom.ts';
@@ -117,11 +118,11 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
     const bar = h('div', 'forge-scale-controls');
     const tLabel = h('label', 'forge-scale-field', 'Tonic ');
     tonicSelect = h('select', 'forge-scale-tonic');
-    tonicSelect.setAttribute('aria-label', 'Tonic');
+    setSrLabel(tonicSelect, 'Tonic', { host: bar, key: 'tonic' });
     tLabel.appendChild(tonicSelect);
     const sLabel = h('label', 'forge-scale-field', chordMode ? 'Chord ' : 'Scale ');
     typeSelect = h('select', chordMode ? 'forge-scale-type forge-chord-quality' : 'forge-scale-type');
-    typeSelect.setAttribute('aria-label', chordMode ? 'Chord quality' : 'Scale type');
+    setSrLabel(typeSelect, chordMode ? 'Chord quality' : 'Scale type', { host: bar, key: 'type' });
     for (const t of chordMode ? CHORD_QUALITIES : SCALE_TYPES) {
       const o = h('option', undefined, chordMode ? CHORD_QUALITY_LABELS[t as ChordQuality] : SCALE_TYPE_LABELS[t as ScaleType]);
       o.value = t;
@@ -255,7 +256,7 @@ export function mountScaleExplorer(el: HTMLElement, options: ScaleExplorerOption
     if (!intervalsHost) return;
     intervalsHost.textContent = '';
     intervalsHost.setAttribute('role', 'group');
-    intervalsHost.setAttribute('aria-label', 'Interval pattern: the steps between the degrees, W whole tone, H half tone');
+    setSrLabel(intervalsHost, 'Interval pattern: the steps between the degrees, W whole tone, H half tone');
     for (const step of intervalPattern(scale)) {
       const chip = h('span', 'forge-scale-step');
       chip.setAttribute('data-semitones', String(step.semitones));

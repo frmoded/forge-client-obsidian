@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { mountPromptBox, type PreviewResult, type PromptBoxPorts } from './prompt-box-dom.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const SENTENCE = 'Mix [[bar_005]] and [[bar_006]], 50 percent [[bar_005]], as a vote.';
 type Apply = PromptBoxPorts['apply'];
@@ -36,10 +37,10 @@ test('on mount the field is exactly the Description, the card is not edited, not
   assert.equal(r.q('.forge-composer-send').getAttribute('aria-disabled'), 'true');
   assert.equal(r.q('.forge-prompt-box-state').textContent, '');
   assert.equal(r.q('.forge-prompt-box-text').placeholder, 'Describe it…');
-  assert.ok(r.q('.forge-prompt-box-text').getAttribute('aria-label'));
+  assert.ok(accessibleName(r.q('.forge-prompt-box-text')));
   assert.equal(r.q('.forge-prompt-box').getAttribute('role'), 'group');
-  assert.ok(r.q('.forge-prompt-box').getAttribute('aria-label'));
-  assert.ok(r.q('.forge-composer-send').getAttribute('aria-label'));
+  assert.ok(accessibleName(r.q('.forge-prompt-box')));
+  assert.ok(accessibleName(r.q('.forge-composer-send')));
 });
 
 test('typing brightens the return glyph (can-send) and the card shows as edited', () => {
@@ -206,7 +207,7 @@ test('no "Apply" anywhere in the card: not as a label, a title or an aria-label'
   const strings = all.flatMap((n) => [n.textContent ?? '', n.getAttribute?.('aria-label') ?? '', n.getAttribute?.('title') ?? '']);
   // the preview hint says "Press Enter to apply" in the dialog and the live region (lower case, an instruction, not a button): the card has no button called Apply
   assert.equal(r.parent.querySelector('.forge-prompt-box-apply'), null);
-  for (const b of r.parent.querySelectorAll('button')) assert.doesNotMatch(`${b.textContent} ${b.getAttribute('aria-label') ?? ''} ${b.getAttribute('title') ?? ''}`, /\bApply\b/);
+  for (const b of r.parent.querySelectorAll('button')) assert.doesNotMatch(`${b.textContent} ${accessibleName(b) ?? ''} ${b.getAttribute('title') ?? ''}`, /\bApply\b/);
   assert.ok(strings.length > 0);
 });
 

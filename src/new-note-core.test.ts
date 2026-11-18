@@ -203,7 +203,7 @@ test('dialog + toolbar copy is content-type-agnostic: "New Forge note", "Note na
   assert.match(modal, /\.setName\('Note name'\)/);
   assert.match(modal, /\.setName\('Note type'\)/);
   assert.ok(!/text: 'New action note'/.test(modal), 'the old action-specific title is back');
-  assert.match(read('src/main.ts'), /view\.addAction\('file-plus', 'New Forge note'/);
+  assert.match(read('src/main.ts'), /addQuietAction\(view, 'file-plus', 'New Forge note'/);
 });
 
 test('the dialog places notes via newNotePath and checks collisions via checkNewNotePath (no ad-hoc path literal for the text path)', () => {

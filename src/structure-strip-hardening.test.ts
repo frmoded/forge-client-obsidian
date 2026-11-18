@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 import type { PhraseParams } from './phrase-core.ts';
 import { barParent, barsContributedBy, chipsFor, type Chip } from './structure-strip-core.ts';
 import { mountStructureStrip, STRIP_CHIP_CLASS, STRIP_CHIP_ON_CLASS, STRIP_CLASS } from './structure-strip-dom.ts';
+import { accessibleName, shownChildren, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 
@@ -59,7 +60,7 @@ test('the strip is a hidden navigation landmark named Structure, with the class 
   assert.equal(STRIP_CLASS, 'forge-structure-strip');
   assert.equal(h.el.className, 'forge-structure-strip');
   assert.equal(h.el.getAttribute('role'), 'navigation');
-  assert.equal(h.el.getAttribute('aria-label'), 'Structure');
+  assert.equal(accessibleName(h.el), 'Structure'); assert.equal(h.el.hasAttribute('aria-label'), false);
   assert.equal(h.el.style.display, 'none', 'hidden until it has chips');
   assert.equal(h.el.parentNode, parent);
 });
@@ -83,14 +84,14 @@ test('what set() draws: buttons typed "button" with class, text, data-note and a
   const { parent } = parentWith(0);
   const h = mountStructureStrip(parent, ports().p);
   h.set(chipsFor('phrase_002', MORPH));
-  const kids = [...h.el.children] as any[];
+  const kids = shownChildren(h.el) as any[];
   assert.deepEqual(kids.map((k) => k.tagName.toLowerCase()), ['button', 'span', 'button', 'span', 'button', 'button']);
   const btn = kids[0];
   assert.equal(btn.type, 'button');
   assert.equal(btn.className, `${STRIP_CHIP_CLASS} ${STRIP_CHIP_CLASS}-bar`);
-  assert.equal(btn.textContent, 'bar_007');
+  assert.equal(visibleText(btn), 'bar_007');
   assert.equal(btn.dataset.note, 'bars/bar_007');
-  assert.equal(btn.getAttribute('aria-label'), 'Open bar_007');
+  assert.equal(accessibleName(btn), 'Open bar_007'); assert.equal(btn.hasAttribute('aria-label'), false);
   assert.equal(kids[2].className, `${STRIP_CHIP_CLASS} ${STRIP_CHIP_CLASS}-phrase`);
   assert.equal(kids[5].className, `${STRIP_CHIP_CLASS} ${STRIP_CHIP_CLASS}-fork`);
   const arrow = kids[1];
@@ -99,13 +100,13 @@ test('what set() draws: buttons typed "button" with class, text, data-note and a
   assert.equal(arrow.getAttribute('aria-hidden'), 'true');
   assert.equal(h.el.style.display, '');
   h.set([{ text: 'phrase_001', noteId: 'phrases/phrase_001', kind: 'phrase' }]);
-  const used = [...h.el.children] as any[];
-  assert.deepEqual(used.map((k) => k.textContent), ['used by:', 'phrase_001']);
+  const used = shownChildren(h.el) as any[];
+  assert.deepEqual(used.map((k) => visibleText(k)), ['used by:', 'phrase_001']);
   assert.equal(used[0].className, 'forge-structure-label');
   assert.equal(used[0].getAttribute('aria-hidden'), 'false');
   assert.equal(used[0].tagName.toLowerCase(), 'span');
   h.set([]);
-  assert.equal(h.el.children.length, 0);
+  assert.equal(shownChildren(h.el).length, 0);
   assert.equal(h.el.style.display, 'none');
   h.set(chipsFor('phrase_002', MORPH));
   assert.equal(h.el.style.display, '', 'shown again with chips');

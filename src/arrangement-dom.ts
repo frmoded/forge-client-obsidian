@@ -1,5 +1,6 @@
 // score_first M10 slice 1 (drain 2026-10-29-0820) - the dialog of "New arrangement" (plain DOM, no obsidian import): one row per track, each a kit and a phrase from the vault's own lists; a kit plays one phrase, so a row's kit list holds only
 // the kits the other rows do not use and "Add track" goes when every kit is in use. Create hands the rows to the flow; a refusal comes back as one sentence and is shown; success closes the dialog.
+import { setSrLabel } from './sr-label-core.ts';
 import type { CreateResult } from './kit-arrangement-flow-core.ts';
 import type { ArrangementTrack } from './arrangement-core.ts';
 
@@ -44,8 +45,8 @@ export function mountArrangementDialog(parent: HTMLElement, ports: ArrangementDi
   const addRow = (): void => {
     const used = new Set(rowEls().map((r) => r.kit.value));
     const row = el('div', 'forge-arr-track');
-    const kit = el('select', 'forge-arr-kit'); kit.setAttribute('aria-label', 'Kit');
-    const phrase = el('select', 'forge-arr-phrase'); phrase.setAttribute('aria-label', 'Phrase');
+    const kit = el('select', 'forge-arr-kit'); setSrLabel(kit, 'Kit', { host: row, key: 'kit' });
+    const phrase = el('select', 'forge-arr-phrase'); setSrLabel(phrase, 'Phrase', { host: row, key: 'phrase' });
     options(kit, ports.kits.filter((k) => !used.has(k)), '');
     options(phrase, ports.phrases, '');
     const remove = el('button', 'forge-arr-remove', 'Remove'); remove.type = 'button';

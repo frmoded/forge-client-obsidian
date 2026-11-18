@@ -18,6 +18,7 @@ import { noteContentFor, phraseNoteContent, refreshPhraseNoteText } from './phra
 import { newArrangementNote, refreshArrangementNoteText } from './arrangement-core.ts';
 import { newCompositionNote, refreshCompositionNoteText } from './composition-core.ts';
 import { parseFrontmatter } from './rhythm-edit-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const baseApp = () => ({
   vault: { adapter: { exists: async () => false, read: async () => '' }, on: () => ({}), getMarkdownFiles: () => [], getAbstractFileByPath: () => null, configDir: '.obsidian' },
@@ -117,7 +118,7 @@ for (const edition of ['lean', 'music'] as const) {
     view.addAction = (icon: string, title: string, cb: () => void) => { const el = doc.createElement('button'); el.setAttribute('aria-label', title); el.dataset.icon = icon; el.onclick = cb; el.addClass = (c: string) => el.classList.add(c); el.removeClass = (c: string) => el.classList.remove(c); view.containerEl.prepend(el); return el; };
     view.leaf = { view };
     app.workspace.getLeavesOfType = (t: string) => (t === 'markdown' ? [view.leaf] : []);
-    return { view, titles: () => [...view.containerEl.querySelectorAll('button')].map((b: any) => b.getAttribute('aria-label')), dispose: () => view.containerEl.remove() };
+    return { view, titles: () => [...view.containerEl.querySelectorAll('button')].map((b: any) => accessibleName(b)), dispose: () => view.containerEl.remove() };
   }
   const withApp = () => { const app: any = baseApp(); app.workspace = { ...app.workspace }; plugin.target.app = app; plugin.target.headerSignatures = new WeakMap(); return app; };
 
@@ -160,7 +161,7 @@ for (const edition of ['lean', 'music'] as const) {
     const made: any[] = []; const unsubs: Array<() => void> = [];
     EV.addAction = function (icon: string, title: string) { const el = doc.createElement('button'); el.setAttribute('aria-label', title); this.__els = [...(this.__els ?? []), el]; made.push(el); return el; };
     EV.register = function (f: () => void) { unsubs.push(f); };
-    const build = () => { const v = plugin.views.get('forge-rhythm-edit')!({}) as any; return { v, titles: () => (v.__els ?? []).filter((e: any) => !e.removed).map((e: any) => e.getAttribute('aria-label')) }; };
+    const build = () => { const v = plugin.views.get('forge-rhythm-edit')!({}) as any; return { v, titles: () => (v.__els ?? []).filter((e: any) => !e.removed).map((e: any) => accessibleName(e)) }; };
     const outside = build();
     assert.ok(outside.titles().includes('Toggle edges panel'), `P3: ${outside.titles().join(' | ')}`);
     real.messageDelivery.setScoreFirst(true);

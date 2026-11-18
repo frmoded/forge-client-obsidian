@@ -13,6 +13,7 @@ import { iterateAllLeavesLikeObsidian } from './test-support/host-workspace.ts';
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { PHRASE_VIEW_TYPE, readPhraseNote } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
+import { visibleText } from './test-support/accessible-name.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const FX = path.join(ROOT, 'test/fixtures/score-first');
@@ -164,7 +165,7 @@ for (const edition of ['lean', 'music'] as const) {
       const mix = await open(MIX);
       const button = mix.host.querySelector('.forge-mix-morph');
       assert.ok(button, 'the mix strip has the button');
-      assert.equal(button.textContent, 'Morph this mix');
+      assert.equal(visibleText(button), 'Morph this mix');
       button.click(); await tick();
       assert.deepEqual(w.created, ['phrases/phrase_003.md']);
       assert.equal((readPhraseNote(w.files.get('phrases/phrase_003.md')!) as any).value.kind, 'morph');

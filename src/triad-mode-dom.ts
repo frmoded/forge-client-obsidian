@@ -7,6 +7,7 @@
 // Notehead hit areas: the engraved SVG's own `g.note` elements are the targets (a click on a notehead bubbles to the staff host); a click on the staff that misses every notehead by a few pixels picks the NEAREST one by its rendered box.
 // Nothing is laid over the engraving, so nothing has to be re-placed when the pane is resized. The chips are the route that never depends on the engraving.
 
+import { setSrLabel } from './sr-label-core.ts';
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
 import { stackedMusicXML } from './chord-names-core.ts';
 import { clefFor } from './free-mode-core.ts';
@@ -74,11 +75,11 @@ export function mountTriadMode(el: HTMLElement, options: ScaleExplorerOptions, d
     const bar = h('div', 'forge-scale-controls');
     const tLabel = h('label', 'forge-scale-field', 'Tonic ');
     tonicSelect = h('select', 'forge-scale-tonic');
-    tonicSelect.setAttribute('aria-label', 'Tonic');
+    setSrLabel(tonicSelect, 'Tonic', { host: bar, key: 'tonic' });
     tLabel.appendChild(tonicSelect);
     const sLabel = h('label', 'forge-scale-field', 'Scale ');
     typeSelect = h('select', 'forge-scale-type');
-    typeSelect.setAttribute('aria-label', 'Scale type');
+    setSrLabel(typeSelect, 'Scale type', { host: bar, key: 'type' });
     for (const t of SCALE_TYPES) { const o = h('option', undefined, SCALE_TYPE_LABELS[t]); o.value = t; typeSelect.appendChild(o); }
     typeSelect.value = scale;
     sLabel.appendChild(typeSelect);
@@ -105,7 +106,7 @@ export function mountTriadMode(el: HTMLElement, options: ScaleExplorerOptions, d
   if (scaleStaffHost) root.appendChild(scaleStaffHost);
   const degreeChips = h('div', 'forge-triad-chips');
   degreeChips.setAttribute('role', 'group');
-  degreeChips.setAttribute('aria-label', 'Root of the triad: a degree of the scale, by its Roman numeral');
+  setSrLabel(degreeChips, 'Root of the triad: a degree of the scale, by its Roman numeral');
   root.appendChild(degreeChips);
 
   // ---- the piano ----------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -155,14 +156,14 @@ export function mountTriadMode(el: HTMLElement, options: ScaleExplorerOptions, d
 
   // ---- drawing -------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const drawChips = (): void => {
-    degreeChips.textContent = '';
+    degreeChips.textContent = ''; setSrLabel(degreeChips, 'Root of the triad: a degree of the scale, by its Roman numeral');   // the clear takes the hidden name away: put it back
     for (const c of diatonicChords(tonic, scale, false, options.octave)) {
       const b = h('button', 'forge-triad-chip');
       b.type = 'button';
       b.setAttribute('data-degree', String(c.degree));
       b.setAttribute('data-numeral', c.numeral);
       b.setAttribute('aria-pressed', c.degree === degree ? 'true' : 'false');
-      b.setAttribute('aria-label', `${c.numeral}: ${c.label}, degree ${c.degree} of the scale`);
+      setSrLabel(b, `${c.numeral}: ${c.label}, degree ${c.degree} of the scale`);
       const numeral = h('span', 'forge-triad-chip-numeral', c.numeral);
       numeral.setAttribute('aria-description', TRIAD_LEGEND);
       b.append(numeral, h('span', 'forge-triad-chip-name', c.label));

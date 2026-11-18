@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 
 import { mountScaleBlock } from './scale-explorer-dom.ts';
 import { TRIAD_LEGEND } from './triad-mode-core.ts';
+import { visibleText } from './test-support/accessible-name.ts';
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -143,7 +144,7 @@ test('NO sevenths anywhere: no "7" and no "seventh" in the whole block text for 
   for (const type of ['major', 'natural minor', 'harmonic minor', 'dorian']) {
     for (let d = 1; d <= 7; d++) {
       const m = mount(`mode: triad\nscale: ${type}\ndegree: ${d}`); await m.tick();
-      const text = String(m.q('.forge-scale').textContent);
+      const text = visibleText(m.q('.forge-scale'));
       assert.ok(!/seventh|7ths/i.test(text), `${type} ${d}: ${text}`);
       const stripped = text.replace(/degrees \d, \d and \d/, '');
       assert.ok(!/7/.test(stripped), `${type} ${d}: "${stripped}"`);

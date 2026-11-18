@@ -2,6 +2,7 @@
 // of the sections, a click on a bar following its lineage to the section and then to the note the section plays), and the four commands: **New composition**, **Open composition as Score**, **Open the piece** (the root composition's
 // Score with its notes pane) and **Make this composition the root of the piece**. The decisions are in composition-core.ts / composition-nav-core.ts / composition-strip-core.ts / composition-flow-core.ts / composition-root-core.ts, the DOM in
 // composition-dialog-dom.ts / composition-strip-dom.ts, all unit-tested without Obsidian (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3).
+import { addQuietAction } from './sr-label-core.ts';
 import { uiFlags } from './ui-flags-core.ts';
 import { ICON_COMPOSITION } from './music-ribbon-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
@@ -56,8 +57,8 @@ export class CompositionView extends EditableFileView {
   /** `structure` sends a chip click to the notes pane of this tab's pair (the hooks of a phrase tab), `openNote` opens the note when there is no pair; `onPin` is told the note that made the bar the person pinned (or null: let go). */
   constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void, private readonly notebookFor?: (file: TFile, chip: (selection: Selection) => string | null) => NotebookDomPorts) {
     super(leaf);
-    this.addAction('file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
-    this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
+    addQuietAction(this, 'file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
+    addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
   }
 
   getViewType(): string { return COMPOSITION_VIEW_TYPE; }

@@ -4,6 +4,7 @@
 // person can see: no "New bar" command and no ribbon button are registered. The vault's profile is a constant, so both are added once, when the workspace is ready; a forge.toml
 // edited mid-session to ADD the profile takes effect on the next load.
 
+import { addQuietRibbonIcon } from './sr-label-core.ts';
 import { uiFlags } from './ui-flags-core.ts';
 import { onHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { registerRestoreParticipants, type RestoreParticipant } from './restore-hold-core.ts';
@@ -285,7 +286,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       };
       ribbonMade = registerMusicRibbon({
         ...ribbonRunDeps,
-        addRibbonIcon: (icon, title, onClick) => plugin.addRibbonIcon(icon, title, onClick),
+        addRibbonIcon: (icon, title, onClick) => addQuietRibbonIcon(plugin, icon, title, onClick),
         trace: (line) => { console.info(line); },
       });
       // 2026-11-16-1102: the same four actions in a "+ New" menu in the header of every music tab (it does not depend on the ribbon, which has no scrolling: an icon below its box is cut off)

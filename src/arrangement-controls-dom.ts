@@ -1,6 +1,7 @@
 // score_first M10 slice 2 (drain 2026-10-29-0910) - the row per kit above an arrangement's Score: Mute, Solo and a volume slider (plain DOM, no obsidian import). The person never edits the Recipe text: a change is shown at once, then
 // handed to `commit` as ONE batch after a quiet moment (debounced, so a drag of the slider is one write), and the view writes the arrangement note through the same builders New arrangement uses. A redraw from the note never undoes
 // a change that has not been written yet; once it has, the rows show what the note says. Every hand-off is one evidence line.
+import { setSrLabel } from './sr-label-core.ts';
 import type { ArrangementParams } from './arrangement-core.ts';
 
 export const ARRANGEMENT_CONTROLS_DELAY_MS = 250;
@@ -18,7 +19,7 @@ export interface ArrangementControls { /** The row of kits (2026-11-03-1160: the
 export function mountArrangementControls(parent: HTMLElement, ports: ArrangementControlsPorts): ArrangementControls {
   const doc = parent.ownerDocument;
   const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] => { const e = doc.createElement(tag); e.className = cls; if (text !== undefined) e.textContent = text; return e; };
-  const root = el('div', 'forge-arr-controls'); root.setAttribute('role', 'group'); root.setAttribute('aria-label', 'Kits');
+  const root = el('div', 'forge-arr-controls'); root.setAttribute('role', 'group');
   parent.appendChild(root);
 
   let kits: string[] = [];
@@ -42,14 +43,14 @@ export function mountArrangementControls(parent: HTMLElement, ports: Arrangement
   };
 
   const build = (p: ArrangementParams): void => {
-    root.textContent = '';
+    root.textContent = ''; setSrLabel(root, 'Kits');                      // the clear above takes the hidden name away: put it back
     kits = p.tracks.map((t) => t.kit);
     p.tracks.forEach((t, index) => {
       const row = el('div', 'forge-arr-control');
       row.appendChild(el('span', 'forge-arr-control-kit', t.kit));
-      const mute = el('button', 'forge-arr-mute', 'Mute'); mute.type = 'button'; mute.setAttribute('aria-label', `Mute ${t.kit}`);
-      const solo = el('button', 'forge-arr-solo', 'Solo'); solo.type = 'button'; solo.setAttribute('aria-label', `Solo ${t.kit}`);
-      const volume = el('input', 'forge-arr-volume'); volume.type = 'range'; volume.min = '0'; volume.max = '100'; volume.step = '1'; volume.setAttribute('aria-label', `Volume of ${t.kit}`);
+      const mute = el('button', 'forge-arr-mute', 'Mute'); mute.type = 'button'; setSrLabel(mute, `Mute ${t.kit}`);
+      const solo = el('button', 'forge-arr-solo', 'Solo'); solo.type = 'button'; setSrLabel(solo, `Solo ${t.kit}`);
+      const volume = el('input', 'forge-arr-volume'); volume.type = 'range'; volume.min = '0'; volume.max = '100'; volume.step = '1'; setSrLabel(volume, `Volume of ${t.kit}`, { host: row });
       const shown = el('span', 'forge-arr-volume-value');
       mute.addEventListener('click', () => { const on = mute.getAttribute('aria-pressed') !== 'true'; mute.setAttribute('aria-pressed', String(on)); queue(index, { mute: on }, `mute ${on ? 'on' : 'off'}`); });
       solo.addEventListener('click', () => { const on = solo.getAttribute('aria-pressed') !== 'true'; solo.setAttribute('aria-pressed', String(on)); queue(index, { solo: on }, `solo ${on ? 'on' : 'off'}`); });
@@ -60,7 +61,7 @@ export function mountArrangementControls(parent: HTMLElement, ports: Arrangement
   };
   /** The rows say what the note says (a row with a change still waiting to be written keeps the person's value until it is). */
   const paint = (p: ArrangementParams): void => {
-    const rows = Array.from(root.children) as HTMLElement[];
+    const rows = (Array.from(root.children) as HTMLElement[]).filter((c) => c.classList.contains('forge-arr-control'));   // the hidden name of the group is a child too
     p.tracks.forEach((t, index) => {
       if (pending.some(([i]) => i === index)) return;
       const row = rows[index];
@@ -76,7 +77,7 @@ export function mountArrangementControls(parent: HTMLElement, ports: Arrangement
     el: root,
     show(p) {
       if (disposed) return;
-      if (p === null) { root.textContent = ''; kits = []; return; }
+      if (p === null) { root.textContent = ''; setSrLabel(root, 'Kits'); kits = []; return; }
       const same = kits.length === p.tracks.length && kits.every((k, i) => k === p.tracks[i].kit);
       if (!same) { pending = []; if (timer !== null) { ports.clearTimer(timer); timer = null; } build(p); }
       paint(p);

@@ -6,6 +6,7 @@ import { Window } from 'happy-dom';
 
 import { newArrangementNote } from './arrangement-core.ts';
 import { mountArrangementStrip } from './arrangement-strip-dom.ts';
+import { accessibleName, shownChildren, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const TWO = newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_006' }] });
@@ -21,10 +22,10 @@ function rig(goto: (id: string) => Promise<boolean> = async () => true) {
 test('an arrangement note: a button per phrase and per kit in the order of its Recipe, no arrow and no label between them; the accessible names say what a click opens; 2026-10-30-1000: with more than one kit each track is its own ROW (its phrase, then its kit)', () => {
   const r = rig();
   r.s.show(TWO);
-  assert.deepEqual([...r.s.el.children].map((c: any) => c.className), ['forge-structure-row', 'forge-structure-row'], 'one block per kit');
-  assert.deepEqual([...r.s.el.children].map((row: any) => [...row.children].map((c: any) => c.textContent)), [['phrase_003', 'rock kit'], ['phrase_006', 'latin kit']]);
-  assert.deepEqual([...r.s.el.querySelectorAll('button')].map((c: any) => c.textContent), ['phrase_003', 'rock kit', 'phrase_006', 'latin kit'], 'still in the order of the Recipe');
-  assert.deepEqual(r.buttons().map((b) => b.getAttribute('aria-label')), ['Open phrase_003', 'Open rock', 'Open phrase_006', 'Open latin']);
+  assert.deepEqual(shownChildren(r.s.el).map((c: any) => c.className), ['forge-structure-row', 'forge-structure-row'], 'one block per kit');
+  assert.deepEqual(shownChildren(r.s.el).map((row: any) => [...row.children].map((c: any) => visibleText(c))), [['phrase_003', 'rock kit'], ['phrase_006', 'latin kit']]);
+  assert.deepEqual([...r.s.el.querySelectorAll('button')].map((c: any) => visibleText(c)), ['phrase_003', 'rock kit', 'phrase_006', 'latin kit'], 'still in the order of the Recipe');
+  assert.deepEqual(r.buttons().map((b) => accessibleName(b)), ['Open phrase_003', 'Open rock', 'Open phrase_006', 'Open latin']);
   assert.deepEqual(r.buttons().map((b) => b.dataset.note), ['phrases/phrase_003', 'kits/rock', 'phrases/phrase_006', 'kits/latin']);
   assert.equal(r.s.el.style.display, '');
 });
@@ -48,7 +49,7 @@ test('an unreadable note, a refused note and text with no json have NO strip (hi
   r.s.show(TWO); assert.equal(r.buttons().length, 4);
   r.s.show('# not an arrangement\n'); assert.equal(r.buttons().length, 0); assert.equal(r.s.el.style.display, 'none');
   r.s.show(newArrangementNote('arr_002', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_006' }] }));
-  assert.deepEqual(r.buttons().map((b) => b.textContent), ['phrase_006', 'rock kit'], 'the old chips are gone');
+  assert.deepEqual(r.buttons().map((b) => visibleText(b)), ['phrase_006', 'rock kit'], 'the old chips are gone');
 });
 
 test('it is mounted where the owner asks (before the given element) and dispose removes it', () => {

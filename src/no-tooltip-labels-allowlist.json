@@ -1,0 +1,10 @@
+{
+  "role": "Everything src/no-tooltip-labels.test.ts lets through, and why. Obsidian draws its own tooltip from any element with an aria-label and from setTooltip, so the plugin's own UI sets neither (a control names itself with aria-labelledby, src/sr-label-core.ts). The aim is an EMPTY list; the one entry is the wrapper through which every view action is added. An entry that matches nothing fails the test (remove the line); each entry carries a one-sentence reason.",
+  "allowed": [
+    {
+      "file": "src/sr-label-core.ts",
+      "pattern": "host.addAction(icon, title, callback)",
+      "reason": "This is the one call of Obsidian's addAction in the plugin, and the line after it takes away the aria-label Obsidian wrote from the title (addQuietAction)."
+    }
+  ]
+}

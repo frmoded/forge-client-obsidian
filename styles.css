@@ -2758,6 +2758,9 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-composer-error.is-empty::before { content: none; }
 .forge-composer-error.is-empty { display: none; }
 .forge-composer-sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* 2026-11-19-0925: the accessible name of a control, with no tooltip. Obsidian draws a tooltip from any aria-label, so a control names itself with aria-labelledby pointing at this span (src/sr-label-core.ts).
+   The standard clip pattern, NOT display:none or visibility:hidden (those would hide the name from a screen reader too): 1 px, clipped away, out of the flow so it adds no gap, no row and no scroll. */
+.forge-sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
 @container (max-width: 420px) {
   .forge-prompt-box.forge-composer { padding: 10px 12px 6px; }
   .forge-prompt-box .forge-prompt-box-text { font-size: 14px; }

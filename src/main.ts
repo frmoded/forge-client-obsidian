@@ -1,3 +1,4 @@
+import { addQuietAction, addQuietRibbonIcon } from './sr-label-core.ts';
 import { Plugin, Notice, DataAdapter, FileSystemAdapter, MarkdownView, TFile, TFolder, WorkspaceLeaf, parseYaml } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import type { EditorView } from '@codemirror/view';
@@ -123,7 +124,7 @@ import {
 } from './expanded-state-core.ts';
 import { PLUGIN_VERSION_AT_BUILD } from './version-constant.generated';
 import { BUILD_STAMP } from './build-stamp.generated.ts';
-import { formatBuildStamp, formatLoadBanner, setStatusBarTooltip, statusBarTooltip, vaultNameOf } from './build-stamp-core.ts';
+import { formatBuildStamp, formatLoadBanner, setStatusBarLabel, statusBarLabelText, vaultNameOf } from './build-stamp-core.ts';
 import { EVENT_WRITE_SETTLE_MS, createDeletionTracker, guardedFrontMatterWrite } from './frontmatter-write-guard-core.ts';
 import {
   decideForgeRouting,
@@ -681,9 +682,9 @@ export default class ForgePlugin extends Plugin {
     // are settings-tab territory, not status-bar territory).
     const statusBarItem = this.addStatusBarItem();
     statusBarItem.setText(`Forge v${this.manifest.version}`);
-    // Drain 2026-10-11-0900 §6: an Obsidian tooltip (aria-label + data-tooltip-position). The bare `title` this used to set never
-    // showed on a status-bar item, so hovering "Forge v…" displayed nothing.
-    setStatusBarTooltip(statusBarItem, statusBarTooltip({
+    // 2026-11-19-0925: no tooltip, Obsidian's own included (driver 2026-11-18). The build text is the item's accessible name for a screen reader (a hidden span
+    // + aria-labelledby); a sighted user reads the build in Settings. Set once, after setText.
+    setStatusBarLabel(statusBarItem, statusBarLabelText({
       version: this.manifest.version,
       build: formatBuildStamp(BUILD_STAMP),
       pluginId: this.manifest.id,
@@ -1071,7 +1072,7 @@ export default class ForgePlugin extends Plugin {
     // spec). Dispatches by forge.toml state: absent → init wizard;
     // present-without-domains → legacy menu; declared → scoped action
     // menu. Distinct from the per-snippet Run button (generate+run).
-    this.addRibbonIcon('package', 'Forge', (evt: MouseEvent) => {
+    addQuietRibbonIcon(this, 'package', 'Forge', (evt: MouseEvent) => {
       openForgeAction(this.forgeHost(), evt);
     });
 
@@ -1289,7 +1290,7 @@ export default class ForgePlugin extends Plugin {
     // without knowing to open the palette. Icon `clipboard-copy` is
     // Lucide default in Obsidian. Delegates to executeCommandById so
     // command and ribbon share ONE behavior contract.
-    this.addRibbonIcon(
+    addQuietRibbonIcon(this, 
       'clipboard-copy',
       'Copy note source with headings',
       async () => {
@@ -1766,7 +1767,7 @@ export default class ForgePlugin extends Plugin {
     // only. The command's own git call already reports "nothing to
     // restore" via Notice when clicked on a clean note — reused as-is
     // rather than duplicated here as a disabled-state precheck.
-    const restoreBtn = view.addAction(
+    const restoreBtn = addQuietAction(view, 
       'history', 'Restore to last commit',
       () => { void restoreActiveNoteToLastCommit(this.app); });
     restoreBtn.addClass(RESTORE_BTN_CLASS);
@@ -1774,11 +1775,11 @@ export default class ForgePlugin extends Plugin {
     // are inherently per-snippet (caller→callee dependency graph);
     // toggling the edges panel from a plain note is meaningless.
     if (edgesToggleShouldShow({ type: typeof fm?.type === 'string' ? fm.type : undefined }) && headerActionShown('edges-toggle', messageDelivery.hasBeenScoreFirst())) {   // 1155-91: not in a score-first vault
-      const edgesBtn = view.addAction('network', 'Toggle edges panel', () => { this.toggleEdgesView(); });
+      const edgesBtn = addQuietAction(view, 'network', 'Toggle edges panel', () => { this.toggleEdgesView(); });
       edgesBtn.addClass(EDGES_BTN_CLASS);
     }
 
-    const snippetBtn = view.addAction('file-plus', 'New Forge note', () => { this.createNewSnippet(); });
+    const snippetBtn = addQuietAction(view, 'file-plus', 'New Forge note', () => { this.createNewSnippet(); });
     snippetBtn.addClass(SNIPPET_BTN_CLASS);
 
     // v0.2.77 — Forge button only on snippet files (type: action|data).
@@ -1804,7 +1805,7 @@ export default class ForgePlugin extends Plugin {
       // so the glyph goes back to a making gesture (`hammer`) and the
       // verb to `Forge this note`. Running is the panel's Run button,
       // and only that.
-      const forgeBtn = view.addAction('hammer', 'Forge this note', () => {
+      const forgeBtn = addQuietAction(view, 'hammer', 'Forge this note', () => {
         // v0.2.218 — wrap with status-bar spinner. 200ms grace so
         // fast snippets don't flash.
         const op = () => this.forgeSnippet();

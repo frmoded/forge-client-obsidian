@@ -1,6 +1,7 @@
 // score_first M10 slice 1 (drain 2026-10-29-0820, design 4.10) - the Obsidian-coupled half of kits and arrangements: the arrangement tab (a Score drawn by the code that draws every phrase, nothing else on it), the two dialogs' Modal frames, and the commands **New kit**,
 // **New arrangement** and **Open arrangement as Score**. The decisions are in kit-core.ts / arrangement-core.ts / kit-arrangement-flow-core.ts, the dialogs' DOM in kit-dom.ts / arrangement-dom.ts, all unit-tested without Obsidian. Registered ONLY in a score-first vault
 // (score-first.ts calls this after its gate; the commands also ask the live answer when offered), so no other vault gets a command, a view or a byte of this (P3). 2026-10-29-0910: the tab's one write is the row of controls per kit (Mute, Solo, volume), which edits the note through the builders New arrangement uses. An arrangement is otherwise edited as its note.
+import { addQuietAction } from './sr-label-core.ts';
 import { uiFlags } from './ui-flags-core.ts';
 import { ICON_ARRANGEMENT } from './music-ribbon-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
@@ -59,8 +60,8 @@ export class ArrangementView extends EditableFileView {
    *  that made the row the person pinned (or null: let go), for the notes pane beside this Score, exactly as a phrase tab's. */
   constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void) {
     super(leaf);
-    this.addAction('file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
-    this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
+    addQuietAction(this, 'file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
+    addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
   }
 
   getViewType(): string { return ARRANGEMENT_VIEW_TYPE; }

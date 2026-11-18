@@ -3,6 +3,7 @@
 // phrase note is shown as text in a score-first vault the tab's header carries "Open as Score" (the Beat Box's own label), and it goes away when the tab shows anything else.
 //
 // Pure (the markdown views are injected): which note gets it, and the add / remove / re-add bookkeeping for views Obsidian REUSES when a tab navigates. The Obsidian half is in score-first.ts.
+import { addQuietAction } from './sr-label-core.ts';
 import { isPhrasePath } from './phrase-core.ts';
 
 export const PHRASE_HEADER_TITLE = 'Open as Score';
@@ -21,7 +22,7 @@ export function rhythmHeaderApplies(isCandidate: boolean, scoreFirst: boolean, p
 
 export interface HeaderView {
   file: { path: string } | null | undefined;
-  addAction(icon: string, title: string, callback: () => void): HTMLElement;
+  addAction(icon: string, title: string, callback: (evt: MouseEvent) => void): HTMLElement;
 }
 
 export interface PhraseHeaderDeps<V extends HeaderView> {
@@ -41,7 +42,7 @@ export function createPhraseHeaderSync<V extends HeaderView>(deps: PhraseHeaderD
         const want = wantsPhraseHeader(scoreFirst, path);
         const els = have.get(view);
         if (want && !els) {
-          have.set(view, [view.addAction(PHRASE_HEADER_ICON, PHRASE_HEADER_TITLE, () => { const p = view.file?.path; if (p && wantsPhraseHeader(deps.isScoreFirst(), p)) deps.open(view, p); })]);
+          have.set(view, [addQuietAction(view, PHRASE_HEADER_ICON, PHRASE_HEADER_TITLE, () => { const p = view.file?.path; if (p && wantsPhraseHeader(deps.isScoreFirst(), p)) deps.open(view, p); })]);
         } else if (!want && els) {
           els.forEach((el) => el.remove());
           have.delete(view);

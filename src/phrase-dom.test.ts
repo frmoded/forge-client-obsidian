@@ -9,6 +9,7 @@ import { applyPhraseWrite, readPhraseNote, type PhraseParams } from './phrase-co
 import { messageDelivery } from './score-first-messages-core.ts';
 import { LEAN_SCORE_NOTE } from './score-first-core.ts';
 import { LIVE_SCORE_DEBOUNCE_MS } from './live-score-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const PHRASE_PATH = 'phrases/phrase_001.md';
 const phraseText = (p: Partial<PhraseParams> = {}) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify({ kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20, ...p }, null, 2)}\n\`\`\`\n`;
@@ -78,7 +79,7 @@ test('the controls offer exactly the three styles, bars 1-64 and -90..+100 %, ea
   assert.deepEqual(opts, ['repeat_with_fills', 'building', 'ghost_notes']);
   assert.equal(r.q('.forge-phrase-bars').min, '1'); assert.equal(r.q('.forge-phrase-bars').max, '64');
   assert.equal(r.q('.forge-phrase-pct').min, '-90'); assert.equal(r.q('.forge-phrase-pct').max, '100');
-  for (const sel of ['.forge-phrase-bars', '.forge-phrase-style', '.forge-phrase-pct']) assert.ok(r.q(sel).getAttribute('aria-label'), `${sel} has an aria-label`);
+  for (const sel of ['.forge-phrase-bars', '.forge-phrase-style', '.forge-phrase-pct']) assert.ok(accessibleName(r.q(sel)), `${sel} has an aria-label`);
   assert.equal(r.q('.forge-phrase-controls').getAttribute('role'), 'group');
 });
 

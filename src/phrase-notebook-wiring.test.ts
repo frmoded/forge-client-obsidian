@@ -9,6 +9,7 @@ import { mountPhrase, type PhraseMountPorts } from './phrase-dom.ts';
 import { noteContentFor, type PhraseParams } from './phrase-core.ts';
 import { createNotebook, readCellNote } from './notebook-core.ts';
 import { installHostClock } from './test-support/host-workspace.ts';
+import { visibleText } from './test-support/accessible-name.ts';
 
 const PATH = 'phrases/phrase_006.md';
 const BAR = `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify({ time_signature: '4/4', steps: 16, group_size: 4, swing_pct: 0, tempo_bpm: 100, channels: { kick: Array(16).fill(false) } })}\n\`\`\`\n`;
@@ -181,7 +182,7 @@ test('a transform tab: the read-only strip, no controls, the Score drawn from it
   const r = await rig({ path: 'phrases/phrase_007.md', phrase: TRANSFORM, extraFiles: { 'notebook/cell_001.md': cell } });
   try {
     assert.ok(r.q('.forge-transform-strip'));
-    assert.equal(r.q('button.forge-phrase-source').textContent, 'phrase_006');
+    assert.equal(visibleText(r.q('button.forge-phrase-source')), 'phrase_006');
     assert.equal(r.parent.querySelectorAll('.forge-phrase-controls input, .forge-phrase-controls select').length, 0);
     assert.equal(r.qa('g.measure').length, 8, 'drawn from the source\'s eight bars');
     assert.ok(r.computes.includes('transform') && r.computes.includes('extend'), r.computes.join(','));
@@ -211,7 +212,7 @@ test('the transform redraws when its SOURCE phrase changes; a change in notebook
 // ---- 2026-10-30-1020: selecting bars ON the Score (the driver could not pick bars 3 to 5), through the real surface ---------------------------------------------------------------------------------------------------------
 const mouse = (el: any, type: string, init: object = {}) => el.dispatchEvent(new win.MouseEvent(type, { bubbles: true, button: 0, ...init }));
 const tintedBars = (r: any): string[] => r.qa('.forge-selected-bar').map((e: any) => e.parentNode.id);
-const pressed = (r: any): number[] => r.qa('.forge-notebook-bar').filter((b: any) => b.getAttribute('aria-pressed') === 'true').map((b: any) => Number(b.textContent));
+const pressed = (r: any): number[] => r.qa('.forge-notebook-bar').filter((b: any) => b.getAttribute('aria-pressed') === 'true').map((b: any) => Number(visibleText(b)));
 /** A drag on the engraving as a browser sends it: press in one bar, move into the others, release, then the click. */
 const dragOnScore = (r: any, from: number, to: number): void => {
   mouse(r.q(`#ph_bar_${from}`), 'mousedown');

@@ -8,6 +8,7 @@ import { mountPhrase, type PhraseMountPorts } from './phrase-dom.ts';
 import { applyPhraseWrite, readPhraseNote, type ExtendPhrase, type PhraseParams } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
 import { LIVE_SCORE_DEBOUNCE_MS } from './live-score-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const PATH = 'phrases/phrase_001.md';
 const phraseText = (p: Record<string, unknown> = {}) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify({ kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20, ...p }, null, 2)}\n\`\`\`\n`;
@@ -112,7 +113,7 @@ test('after the fork the Score is asked again with the override, bar 3\'s stack 
   pinBar(r, 3);
   assert.deepEqual(r.stack(), ['bar 3 of 8', 'forked: edited in bar_007 (was made by phrase_001, repeat_with_fills)', 'tempo 140 (the fork\'s own)', 'Revert to generated']);
   const open = r.q('.forge-inspector-lineage button.forge-inspector-open');
-  assert.equal(open.getAttribute('aria-label'), 'Open bar_007');
+  assert.equal(accessibleName(open), 'Open bar_007');
   open.dispatchEvent(new (open.ownerDocument.defaultView).MouseEvent('click', { bubbles: true }));
   assert.equal(r.opened.at(-1), 'bars/bar_007');
   pinBar(r, 4);

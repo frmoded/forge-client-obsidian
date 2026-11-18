@@ -14,6 +14,7 @@
 // Hosting: the widget is rendered through createSandboxedWidgetIframe (html-embed-view.ts) — the same blob-URL iframe and flags as
 // every html-embed widget and the Beat Box tab. The widget is found by the bundled-aware lookup (resolveWidgetFile); not copied.
 
+import { setSrLabel } from './sr-label-core.ts';
 import { MarkdownRenderChild, TFile, type App, type MarkdownPostProcessorContext, type Plugin } from 'obsidian';
 import { createSandboxedWidgetIframe, releaseWidgetBlob } from './html-embed-view.ts';
 import { attachAutoHeight } from './widget-auto-height.ts';
@@ -206,10 +207,12 @@ class RhythmEmbed extends MarkdownRenderChild {
       this.hintEl = null;
       for (const item of embedToolbarItems({ music: musicEdition.id === 'music' })) {
         if (item.kind === 'hint') {
-          this.hintEl = bar.createSpan({ cls: 'forge-rhythm-embed-hint', text: item.text, attr: { role: 'note', 'aria-description': item.title, 'aria-label': item.ariaLabel ?? item.title } });
+          this.hintEl = bar.createSpan({ cls: 'forge-rhythm-embed-hint', text: item.text, attr: { role: 'note', 'aria-description': item.title } });
+          setSrLabel(this.hintEl, item.name ?? item.title);         // 2026-11-19-0925: a hidden name, no aria-label (Obsidian would draw a tooltip from it)
           continue;
         }
-        const btn = bar.createEl('button', { text: item.text, attr: { 'aria-description': item.title, ...(item.ariaLabel ? { 'aria-label': item.ariaLabel } : {}) } });
+        const btn = bar.createEl('button', { text: item.text, attr: { 'aria-description': item.title } });
+        if (item.name) setSrLabel(btn, item.name);
         if (item.id === 'open-note') btn.addEventListener('click', () => { this.hooks.openNote(this.file); });
         else if (item.id === 'score') { this.scoreBtn = btn; btn.addEventListener('click', () => { void this.toggleScore(); }); }
         else if (item.id === 'reset') { this.resetBtn = btn; btn.addEventListener('click', () => { void this.resetPlayground(); }); }
@@ -293,13 +296,13 @@ class RhythmEmbed extends MarkdownRenderChild {
     if (this.hintEl) {
       this.hintEl.toggleClass('forge-rhythm-embed-quiet', state.hintHidden);
       this.hintEl.setAttribute('aria-description', state.hintTitle);
-      this.hintEl.setAttribute('aria-label', state.hintAriaLabel);
+      setSrLabel(this.hintEl, state.hintName);
       this.hintEl.setAttribute('aria-hidden', state.hintHidden ? 'true' : 'false');
     }
     if (this.resetBtn) {
       this.resetBtn.disabled = state.resetDisabled;
       this.resetBtn.setAttribute('aria-description', state.resetTitle);
-      this.resetBtn.setAttribute('aria-label', state.resetAriaLabel);
+      setSrLabel(this.resetBtn, state.resetName);
     }
   }
 

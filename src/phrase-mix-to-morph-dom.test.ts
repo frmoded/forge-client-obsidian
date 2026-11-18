@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 
 import { mountPhrase, type PhraseMountPorts } from './phrase-dom.ts';
 import type { PhraseParams } from './phrase-core.ts';
+import { visibleText } from './test-support/accessible-name.ts';
 
 const PHRASE_PATH = 'phrases/phrase_002.md';
 const text = (p: Record<string, unknown>) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify(p, null, 2)}\n\`\`\`\n`;
@@ -43,7 +44,7 @@ test('a mix tab with the action has a "Morph this mix" button in its strip; clic
   await r.handle.load(); await flush();
   const b = r.q('.forge-mix-morph');
   assert.ok(b, 'the button is there');
-  assert.equal(b.textContent, 'Morph this mix');
+  assert.equal(visibleText(b), 'Morph this mix');
   assert.equal(b.tagName, 'BUTTON');
   assert.equal(b.type, 'button');
   assert.match(b.getAttribute('aria-description'), /morph/i, '2026-11-19-0800: the extra sentence is the aria-description (it was a native title tooltip)');

@@ -8,6 +8,7 @@
 //   * clicking pins the note: the panel shows its lineage stack (the hit, then the note it came from, with an "Open note" action); Esc unpins; the arrow keys walk the notes;
 //   * "Notes in this score" lists the distinct notes (one today); hovering one lights all its engraved notes.
 // If the map could not be built, the panel says why (never a guess); if only the Kit view is unmapped, one quiet line says so.
+import { labelBy, setSrLabel } from './sr-label-core.ts';
 import { attachArtifactInspector, lineageOf, notesInMap, orderByStepThenChannel, type ArtifactInspector, type InspectorEntry, type LineageEntry } from './artifact-inspector-core.ts';
 import { barsCoveredBy } from './phrase-lineage-core.ts';
 import { CANONICAL_CHANNELS, hitId, type Provenance, type ProvenanceMap, type ProvenanceResult } from './provenance-core.ts';
@@ -89,8 +90,8 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
   const root = doc.createElement('div');
   root.className = INSPECTOR_CLASS;
   root.setAttribute('role', 'region');
-  root.setAttribute('aria-label', 'Inspector');
   const title = doc.createElement('div'); title.className = 'forge-inspector-title'; title.textContent = 'Inspector';
+  labelBy(root, title);                                           // the region is named by its own visible title: no aria-label (Obsidian would draw a tooltip from it), no hidden span needed
   const body = doc.createElement('div'); body.className = 'forge-inspector-body'; body.setAttribute('aria-live', 'polite');
   const notes = doc.createElement('div'); notes.className = 'forge-inspector-notes';
   const quiet = doc.createElement('div'); quiet.className = 'forge-inspector-quiet';
@@ -134,7 +135,7 @@ export function createScoreInspector(slot: HTMLElement, ports: ScoreInspectorPor
       const span = doc.createElement('span'); span.textContent = l.text; li.appendChild(span);
       if (l.kind === 'note' && l.noteId) {
         const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-inspector-open'; b.textContent = 'Open note';
-        if (l.openLabel) b.setAttribute('aria-label', l.openLabel);
+        if (l.openLabel) setSrLabel(b, l.openLabel);
         const id = l.noteId;
         b.addEventListener('click', () => ports.openNote(id));
         li.appendChild(b);

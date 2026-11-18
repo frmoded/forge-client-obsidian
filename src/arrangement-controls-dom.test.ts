@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 
 import { mountArrangementControls, ARRANGEMENT_CONTROLS_DELAY_MS } from './arrangement-controls-dom.ts';
 import type { ArrangementParams } from './arrangement-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const ARR: ArrangementParams = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009', mute: true, volume: 40 }] };
@@ -46,8 +47,8 @@ test('one row per kit in track order, each with Mute, Solo (aria-pressed) and a 
   const sliders = [rock, latin].map((row) => row.querySelector('.forge-arr-volume'));
   assert.deepEqual(sliders.map((s) => [s.type, s.min, s.max, s.value]), [['range', '0', '100', '100'], ['range', '0', '100', '40']]);
   assert.deepEqual([rock, latin].map((row) => row.querySelector('.forge-arr-volume-value').textContent), ['100%', '40%']);
-  assert.equal(sliders[0].getAttribute('aria-label'), 'Volume of rock');
-  assert.equal(rock.querySelector('.forge-arr-mute').getAttribute('aria-label'), 'Mute rock');
+  assert.equal(accessibleName(sliders[0]), 'Volume of rock'); assert.equal(sliders[0].hasAttribute('aria-label'), false, 'named by a hidden span, no aria-label (Obsidian would draw a tooltip from it: 2026-11-19-0925)');
+  assert.equal(accessibleName(rock.querySelector('.forge-arr-mute')), 'Mute rock');
 });
 
 test('a click on Mute shows the new state AT ONCE, and the change is committed once, after the quiet moment, not before', () => {
@@ -117,11 +118,11 @@ test('the plain facts of the markup: a labelled group, real buttons with their w
   r.handle.show(ARR);
   assert.equal(ARRANGEMENT_CONTROLS_DELAY_MS, 250);
   const root = r.q('.forge-arr-controls');
-  assert.deepEqual([root.getAttribute('role'), root.getAttribute('aria-label')], ['group', 'Kits']);
+  assert.deepEqual([root.getAttribute('role'), accessibleName(root)], ['group', 'Kits']); assert.equal(root.hasAttribute('aria-label'), false);
   const [rock] = r.rows();
   const [mute, solo] = [rock.querySelector('.forge-arr-mute'), rock.querySelector('.forge-arr-solo')];
-  assert.deepEqual([mute.textContent, mute.type, solo.textContent, solo.type], ['Mute', 'button', 'Solo', 'button']);
-  assert.equal(solo.getAttribute('aria-label'), 'Solo rock');
+  assert.deepEqual([visibleText(mute), mute.type, visibleText(solo), solo.type], ['Mute', 'button', 'Solo', 'button']);
+  assert.equal(accessibleName(solo), 'Solo rock');
   assert.equal(rock.querySelector('.forge-arr-volume').step, '1');
 });
 
@@ -190,10 +191,10 @@ test('after dispose, show builds nothing in the (detached) container, not even i
   const r = rig();
   const container = r.q('.forge-arr-controls');
   r.handle.show(ARR);
-  assert.equal(container.children.length, 2);
+  assert.equal(container.querySelectorAll('.forge-arr-control').length, 2);
   r.handle.dispose();
   r.handle.show({ kind: 'arrangement', tracks: [{ kit: 'brush', phrase: 'p' }] });
-  assert.equal(container.children.length, 2, 'untouched after dispose (a disposed tab never draws)');
+  assert.equal(container.querySelectorAll('.forge-arr-control').length, 2, 'untouched after dispose (a disposed tab never draws)');
   assert.equal(container.parentNode, null, 'and it is out of the page');
 });
 

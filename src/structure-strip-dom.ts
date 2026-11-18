@@ -1,5 +1,6 @@
 // score_first M13 (drain 2026-10-26-1270, DEMO profile) — the structure strip's DOM: the chips of structure-strip-core.ts as buttons joined by arrows. Plain DOM, no obsidian import (a happy-dom test mounts this very code).
 // It tells its owner which chip has the keyboard focus or is clicked and nothing else (2026-11-19-0800: the pointer resting on a chip does nothing); what a click or a focus DOES (navigate the notes pane, light bars) is the owner's.
+import { setSrLabel } from './sr-label-core.ts';
 import { stripTokens, type Chip } from './structure-strip-core.ts';
 
 export const STRIP_CLASS = 'forge-structure-strip';
@@ -28,7 +29,7 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
   const el = doc.createElement('div');
   el.className = STRIP_CLASS;
   el.setAttribute('role', 'navigation');
-  el.setAttribute('aria-label', 'Structure');
+  setSrLabel(el, 'Structure');
   el.style.display = 'none';
   if (before && before.parentNode === parent) parent.insertBefore(el, before); else parent.appendChild(el);
 
@@ -48,7 +49,7 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
   return {
     el,
     set(chips) {
-      el.textContent = '';
+      el.textContent = ''; setSrLabel(el, 'Structure');                // the clear takes the hidden name away: put it back
       const tokens = stripTokens(chips);
       el.style.display = tokens.length === 0 ? 'none' : '';
       // 2026-10-30-1000: chips that carry a `row` (an arrangement of several kits) are grouped into one block per row; every other strip is flat, as before
@@ -74,7 +75,7 @@ export function mountStructureStrip(parent: HTMLElement, ports: StripPorts, befo
         b.className = `${STRIP_CHIP_CLASS} ${STRIP_CHIP_CLASS}-${t.kind}`;
         b.textContent = t.text;
         b.dataset.note = t.noteId;
-        b.setAttribute('aria-label', `Open ${t.noteId.split('/').pop()}`);
+        setSrLabel(b, `Open ${t.noteId.split('/').pop()}`);
         const chip = t;
         b.addEventListener('focus', () => ports.onHover(chip));
         b.addEventListener('blur', () => ports.onHover(null));

@@ -1,5 +1,6 @@
 // 2026-11-16-1102 - a "+ New" button in the header of the music tabs (the phrase, the bar, the arrangement and the composition tab): the same four actions as the ribbon's buttons (New phrase, New arrangement, New composition, New bar) with the same icons,
 // for the driver who does not see the ribbon's (the ribbon has no scrolling: an icon below its box is cut off). It runs the plugin's own commands by id, like the ribbon, and says why when one is not offered. Pure: no obsidian (the views and the menu are injected).
+import { addQuietAction } from './sr-label-core.ts';
 import { MUSIC_RIBBON, type RibbonDeps, type RibbonItem } from './music-ribbon-core.ts';
 import { PHRASE_VIEW_TYPE } from './phrase-core.ts';
 import { RHYTHM_EDIT_VIEW_TYPE } from './rhythm-edit-core.ts';
@@ -34,7 +35,7 @@ export function createNewMenuSync<V extends NewMenuView>(deps: NewMenuDeps<V>): 
       let n = 0;
       for (const view of views) {
         if (have.has(view) || typeof view.addAction !== 'function') continue;                      // a tab that has no header actions is not an error
-        try { view.addAction(NEW_MENU_ICON, NEW_MENU_TITLE, (evt) => { deps.show(view, evt); }); have.add(view); n++; }
+        try { addQuietAction(view, NEW_MENU_ICON, NEW_MENU_TITLE, (evt) => { deps.show(view, evt); }); have.add(view); n++; }
         catch (e) { console.error('createNewMenuSync: a tab could not take the "+ New" button', e); }
       }
       return n;

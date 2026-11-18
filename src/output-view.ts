@@ -1,3 +1,4 @@
+import { setSrLabel } from './sr-label-core.ts';
 import { ItemView, MarkdownRenderer, Notice, Setting, WorkspaceLeaf } from 'obsidian';
 import { messageDelivery } from './score-first-messages-core.ts';
 import {
@@ -214,7 +215,7 @@ export class ForgeOutputView extends ItemView {
       cls: 'forge-panel-inputs-toggle',
       text: collapsed ? '▸' : '▾',
     });
-    toggle.setAttribute('aria-label', collapsed ? 'Expand inputs' : 'Collapse inputs');
+    setSrLabel(toggle, collapsed ? 'Expand inputs' : 'Collapse inputs');          // 2026-11-19-0925: a hidden name, no aria-label: Obsidian would draw a tooltip from it
     toggle.onclick = () => {
       this.stripHost?.setCollapsed(!collapsed);
       this.renderStrip();
@@ -234,11 +235,12 @@ export class ForgeOutputView extends ItemView {
 
     const actions = new Setting(body).setClass('forge-panel-inputs-actions');
     if (state.snippetId) {
-      actions.addExtraButton(btn =>
+      actions.addExtraButton(btn => {
         btn.setIcon('rotate-ccw')
-          .setTooltip('Reset to defaults')
           .setDisabled(state.disabled)
-          .onClick(() => this.resetStripToDefaults()));
+          .onClick(() => this.resetStripToDefaults());
+        setSrLabel(btn.extraSettingsEl, 'Reset to defaults');            // 2026-11-19-0925: the name for a screen reader, no tooltip (Obsidian's setTooltip is gone: driver 2026-11-18); set after setIcon, which rewrites the button's children
+      });
     }
     actions.addButton(btn => {
       btn.setButtonText('Run').setCta().onClick(() => this.runFromStrip());
@@ -785,7 +787,7 @@ export class ForgeOutputView extends ItemView {
     const panel = strip.parentElement;
     if (!panel) return;
     const divider = strip.createDiv({ cls: 'forge-panel-split-divider' });
-    divider.setAttribute('aria-label', 'Resize input strip (double-click to reset)');
+    setSrLabel(divider, 'Resize input strip (double-click to reset)');
 
     const applyFromPointer = (clientY: number) => {
       const box = panel.getBoundingClientRect();

@@ -4,6 +4,7 @@
 // one REPLACES the toggled notes with that chord, lights the keys and plays it.
 // Reached through mountScaleExplorer (which dispatches here for `mode: free`); no `obsidian`, no engine: the sound and the staff are injected, exactly as in scale-explorer-dom.ts.
 
+import { setSrLabel } from './sr-label-core.ts';
 import { KEYBOARD_HEIGHT, buildKeyboard, centerXOf, initialScrollLeft, keyboardWidth } from './input-widget-piano.ts';
 import { stackedMusicXML } from './chord-names-core.ts';
 import { diatonicChords, keyName } from './diatonic-chords-core.ts';
@@ -51,11 +52,11 @@ export function mountFreeMode(el: HTMLElement, options: ScaleExplorerOptions, de
   // ---- controls: the key (tonic, scale) and Clear ---------------------------------------------------------------------------------------------------------------------------------
   const bar = h('div', 'forge-scale-controls');
   const tonicSelect = h('select', 'forge-scale-tonic');
-  tonicSelect.setAttribute('aria-label', 'Tonic');
+  setSrLabel(tonicSelect, 'Tonic', { host: bar, key: 'tonic' });
   const tLabel = h('label', 'forge-scale-field', 'Key ');
   tLabel.appendChild(tonicSelect);
   const typeSelect = h('select', 'forge-scale-type');
-  typeSelect.setAttribute('aria-label', 'Scale type');
+  setSrLabel(typeSelect, 'Scale type', { host: bar, key: 'type' });
   for (const t of SCALE_TYPES) { const o = h('option', undefined, SCALE_TYPE_LABELS[t]); o.value = t; typeSelect.appendChild(o); }
   typeSelect.value = scale;
   const sLabel = h('label', 'forge-scale-field', 'Scale ');

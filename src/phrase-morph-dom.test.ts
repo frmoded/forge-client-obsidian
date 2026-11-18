@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 
 import { MIX_SCORE_DEBOUNCE_MS, mountMorphControls, mountPhrase, type PhraseMountPorts } from './phrase-dom.ts';
 import { applyPhraseWrite, readPhraseNote, type MorphPhrase, type PhraseParams } from './phrase-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const PATH = 'phrases/phrase_004.md';
 const noteOf = (json: object) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify(json, null, 2)}\n\`\`\`\n`;
@@ -75,14 +76,14 @@ test('a morph phrase shows the morph strip: Bar a, Bar b, Bars + Atomic, Order, 
   assert.equal(r.q('.forge-morph-b').value, 'bar_006');
   const bars = r.q('.forge-morph-bars');
   assert.equal(bars.type, 'number'); assert.equal(bars.min, '1'); assert.equal(bars.max, '64'); assert.equal(bars.value, '5');
-  assert.equal(r.q('.forge-morph-atomic').textContent, 'Atomic');
+  assert.equal(visibleText(r.q('.forge-morph-atomic')), 'Atomic');
   assert.deepEqual([...r.q('.forge-morph-order').querySelectorAll('option')].map((o: any) => [o.value, o.textContent]), [['musical', 'musical'], ['seeded', 'seeded'], ['by_channel', 'by channel']]);
   assert.equal(r.q('.forge-morph-order').value, 'musical');
   assert.equal(r.q('.forge-morph-seed').value, '0');
   assert.equal(r.q('.forge-morph-seed').disabled, true, 'a seed only matters for the seeded order');
   assert.equal(r.q('.forge-morph-position').closest('label').style.display, 'none', 'no Position while Bars is 5');
   assert.equal(r.q('.forge-morph-sentence').textContent, 'Morph from bar_005 to bar_006 in 5 bars: 4 single-hit changes (musical order).');
-  for (const sel of ['.forge-morph-a', '.forge-morph-b', '.forge-morph-bars', '.forge-morph-atomic', '.forge-morph-order', '.forge-morph-seed', '.forge-morph-position']) assert.ok(r.q(sel).getAttribute('aria-label'), `${sel} has an accessible name`);
+  for (const sel of ['.forge-morph-a', '.forge-morph-b', '.forge-morph-bars', '.forge-morph-atomic', '.forge-morph-order', '.forge-morph-seed', '.forge-morph-position']) assert.ok(accessibleName(r.q(sel)), `${sel} has an accessible name`);
   assert.equal(r.computes.length, 1);
   assert.deepEqual(r.computes[0].params, { kind: 'morph', a: 'bar_005', b: 'bar_006', bars: 5, order: 'musical', seed: 0 });
   assert.equal(r.computes[0].data.a.tempo_bpm, 100); assert.equal(r.computes[0].data.b.tempo_bpm, 120);

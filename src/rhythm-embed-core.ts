@@ -184,17 +184,17 @@ export const PLAYGROUND_HINT_TITLE = PLAYGROUND_SENTENCE;
 /** What the hint and Reset look like in each state. Pristine (the embed shows the note as it is): the hint is hidden and Reset is disabled; dirty: the hint shows and Reset works. The sentence is
  *  in the tooltip AND the accessible name of both, in both states; the Reset tooltip says what Reset will do NOW. The accessible name of Reset starts with its visible word. */
 export function embedToolbarState(dirty: boolean): {
-  hintHidden: boolean; resetDisabled: boolean; hintTitle: string; hintAriaLabel: string; resetTitle: string; resetAriaLabel: string;
+  hintHidden: boolean; resetDisabled: boolean; hintTitle: string; hintName: string; resetTitle: string; resetName: string;
 } {
   return {
     hintHidden: !dirty,
     resetDisabled: !dirty,
     hintTitle: PLAYGROUND_SENTENCE,
-    hintAriaLabel: PLAYGROUND_SENTENCE,
+    hintName: PLAYGROUND_SENTENCE,
     resetTitle: dirty
       ? `Reset: put the rhythm back exactly as it is in the note. ${PLAYGROUND_SENTENCE}`
       : `Nothing to reset: this embed shows the note as it is. ${PLAYGROUND_SENTENCE}`,
-    resetAriaLabel: dirty
+    resetName: dirty
       ? `Reset \u2014 put the rhythm back as it is in the note. ${PLAYGROUND_SENTENCE}`
       : `Reset \u2014 nothing to reset yet. ${PLAYGROUND_SENTENCE}`,
   };
@@ -206,7 +206,7 @@ export interface EmbedToolbarItem {
   text: string;
   title: string;
   /** Present when the visible text is not the whole accessible name. */
-  ariaLabel?: string;
+  name?: string;
 }
 
 /** The ONE row's items, left to right (the title and the "Updated from note" pill come first, from the view): Open note, Score (music edition only),
@@ -217,8 +217,8 @@ export function embedToolbarItems(opts: { music: boolean }): EmbedToolbarItem[] 
   ];
   if (opts.music) items.push({ id: 'score', kind: 'button', text: 'Score', title: 'Engrave the rhythm as it is on screen right now' });
   items.push(
-    { id: 'reset', kind: 'button', text: 'Reset', title: embedToolbarState(false).resetTitle, ariaLabel: embedToolbarState(false).resetAriaLabel },
-    { id: 'hint', kind: 'hint', text: PLAYGROUND_HINT_TEXT, title: PLAYGROUND_HINT_TITLE, ariaLabel: PLAYGROUND_HINT_TITLE },
+    { id: 'reset', kind: 'button', text: 'Reset', title: embedToolbarState(false).resetTitle, name: embedToolbarState(false).resetName },
+    { id: 'hint', kind: 'hint', text: PLAYGROUND_HINT_TEXT, title: PLAYGROUND_HINT_TITLE, name: PLAYGROUND_HINT_TITLE },
   );
   return items;
 }

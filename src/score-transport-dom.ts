@@ -1,6 +1,7 @@
 // 2026-11-17-2000 - the Score's one gentle row: the DOM (design doc checklists/music_tabs_chat_ui_design.md section 4). Plain DOM only (no obsidian import, no createEl): a test builds it in happy-dom and
 // real Chrome measures it. Left to right: Play / Pause, Back to the start | Slower, the tempo value (a click opens a field; Enter applies, Esc cancels), Faster | Export (an icon with a menu).
-// Small 16 px icons of our own family, no borders (a soft hover tint, styles.css), plain-word tooltips. No progress bar and no time readout: the playhead on the Score is the progress.
+// Small 16 px icons of our own family, no borders, no tooltip of any kind (2026-11-19-0925: the name of each button is a hidden span it points at with aria-labelledby, src/sr-label-core.ts; all the spans live in the row, so the code that replaces a button's children cannot lose them). No progress bar and no time readout: the playhead on the Score is the progress.
+import { setSrLabel } from './sr-label-core.ts';
 import { parseSvgMarkup } from './svg-markup-core.ts';
 import {
   TEMPO_DEFAULT, TEMPO_MAX, TEMPO_MIN, TRANSPORT_ICONS, TRANSPORT_LABELS, clampTempo, formatTempo, parseTempoText, playPauseLabel, stepTempo, type ExportItem,
@@ -39,24 +40,24 @@ function svgIcon(doc: Document, key: keyof typeof TRANSPORT_ICONS): Node {
   return doc.importNode(nodes[0], true);
 }
 
-function button(doc: Document, cls: string, label: string): HTMLButtonElement {
+function button(doc: Document, cls: string, label: string, row: HTMLElement, key: string): HTMLButtonElement {
   const b = doc.createElement('button');
-  b.type = 'button'; b.className = `forge-tp-btn ${cls}`; b.setAttribute('aria-label', label);
+  b.type = 'button'; b.className = `forge-tp-btn ${cls}`; setSrLabel(b, label, { host: row, key });
   return b;
 }
 
 export function mountScoreTransport(toolbar: HTMLElement, deps: TransportDeps): MountedTransport {
   const doc = toolbar.ownerDocument; const { player } = deps; const log = deps.log ?? ((): void => {});
-  const row = doc.createElement('div'); row.className = 'forge-score-transport'; row.setAttribute('role', 'toolbar'); row.setAttribute('aria-label', TRANSPORT_LABELS.row);
+  const row = doc.createElement('div'); row.className = 'forge-score-transport'; row.setAttribute('role', 'toolbar'); setSrLabel(row, TRANSPORT_LABELS.row);
   let tempo = clampTempo(deps.initialTempo ?? TEMPO_DEFAULT); let menuOpen = false;
   const cleanups: (() => void)[] = [];
   const on = <K extends keyof HTMLElementEventMap>(el: Node, type: K | string, fn: (e: any) => void): void => { el.addEventListener(type, fn); cleanups.push(() => el.removeEventListener(type, fn)); };
 
   // ---- Play / Pause, Back to the start ------------------------------------------------------------------------------------------------------------------------------------------
-  const play = button(doc, 'forge-tp-play', TRANSPORT_LABELS.play); play.setAttribute('aria-pressed', 'false'); play.appendChild(svgIcon(doc, 'play'));
-  const reset = button(doc, 'forge-tp-reset', TRANSPORT_LABELS.reset); reset.appendChild(svgIcon(doc, 'reset'));
+  const play = button(doc, 'forge-tp-play', TRANSPORT_LABELS.play, row, 'play'); play.setAttribute('aria-pressed', 'false'); play.appendChild(svgIcon(doc, 'play'));
+  const reset = button(doc, 'forge-tp-reset', TRANSPORT_LABELS.reset, row, 'reset'); reset.appendChild(svgIcon(doc, 'reset'));
   const showPlaying = (playing: boolean): void => {
-    const label = playPauseLabel(playing); play.setAttribute('aria-label', label); play.setAttribute('aria-pressed', playing ? 'true' : 'false'); play.classList.toggle('is-playing', playing);
+    const label = playPauseLabel(playing); setSrLabel(play, label, { host: row, key: 'play' }); play.setAttribute('aria-pressed', playing ? 'true' : 'false'); play.classList.toggle('is-playing', playing);
     play.replaceChildren(svgIcon(doc, playing ? 'pause' : 'play'));
   };
   on(play, 'click', () => { if (player.playing) { player.stop(); log('[forge-score-row] pause'); } else { player.start(); log('[forge-score-row] play'); } showPlaying(player.playing); });
@@ -64,12 +65,12 @@ export function mountScoreTransport(toolbar: HTMLElement, deps: TransportDeps): 
   cleanups.push(player.onStateChange((p) => showPlaying(p)));
 
   // ---- tempo -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  const group = doc.createElement('div'); group.className = 'forge-tp-tempo-group'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', 'Tempo');
-  const slower = button(doc, 'forge-tp-slower', TRANSPORT_LABELS.slower); slower.appendChild(svgIcon(doc, 'minus'));
-  const faster = button(doc, 'forge-tp-faster', TRANSPORT_LABELS.faster); faster.appendChild(svgIcon(doc, 'plus'));
+  const group = doc.createElement('div'); group.className = 'forge-tp-tempo-group'; group.setAttribute('role', 'group'); setSrLabel(group, 'Tempo');
+  const slower = button(doc, 'forge-tp-slower', TRANSPORT_LABELS.slower, row, 'slower'); slower.appendChild(svgIcon(doc, 'minus'));
+  const faster = button(doc, 'forge-tp-faster', TRANSPORT_LABELS.faster, row, 'faster'); faster.appendChild(svgIcon(doc, 'plus'));
   let valueEl: HTMLElement = makeValue();
   function makeValue(): HTMLButtonElement {
-    const v = button(doc, 'forge-tp-tempo', TRANSPORT_LABELS.tempo); v.textContent = formatTempo(tempo); on(v, 'click', openField); return v;
+    const v = button(doc, 'forge-tp-tempo', TRANSPORT_LABELS.tempo, row, 'tempo'); v.textContent = formatTempo(tempo); on(v, 'click', openField); return v;
   }
   const syncEnds = (): void => { slower.disabled = tempo <= TEMPO_MIN; faster.disabled = tempo >= TEMPO_MAX; };
   const applyTempo = (pct: number): void => { const next = clampTempo(pct); if (next === tempo) { syncEnds(); return; } tempo = next; valueEl.textContent = formatTempo(tempo); syncEnds(); player.setTempo(tempo); log(`[forge-score-row] tempo ${tempo}%`); };
@@ -88,8 +89,8 @@ export function mountScoreTransport(toolbar: HTMLElement, deps: TransportDeps): 
     } finally { closing = false; }
   }
   function openField(): void {
-    const input = doc.createElement('input'); input.type = 'text'; input.className = 'forge-tp-tempo-input'; input.setAttribute('inputmode', 'numeric'); input.setAttribute('aria-label', TRANSPORT_LABELS.tempoField); input.value = String(tempo); input.size = 4;
-    valueEl.replaceWith(input); valueEl = input; input.focus(); input.select();
+    const input = doc.createElement('input'); input.type = 'text'; input.className = 'forge-tp-tempo-input'; input.setAttribute('inputmode', 'numeric'); input.value = String(tempo); input.size = 4;
+    valueEl.replaceWith(input); valueEl = input; setSrLabel(input, TRANSPORT_LABELS.tempoField, { host: row, key: 'tempo-field' }); input.focus(); input.select();
     input.addEventListener('keydown', (e: KeyboardEvent) => {
       if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); closeField(input, true); }
       else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeField(input, false); (valueEl as HTMLElement).focus(); }
@@ -101,8 +102,8 @@ export function mountScoreTransport(toolbar: HTMLElement, deps: TransportDeps): 
 
   // ---- Export -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
   const exp = doc.createElement('div'); exp.className = 'forge-tp-export';
-  const expBtn = button(doc, 'forge-tp-export-btn', TRANSPORT_LABELS.export); expBtn.setAttribute('aria-haspopup', 'menu'); expBtn.setAttribute('aria-expanded', 'false'); expBtn.appendChild(svgIcon(doc, 'export'));
-  const menu = doc.createElement('div'); menu.className = 'forge-tp-menu'; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', TRANSPORT_LABELS.export); menu.hidden = true;
+  const expBtn = button(doc, 'forge-tp-export-btn', TRANSPORT_LABELS.export, row, 'export'); expBtn.setAttribute('aria-haspopup', 'menu'); expBtn.setAttribute('aria-expanded', 'false'); expBtn.appendChild(svgIcon(doc, 'export'));
+  const menu = doc.createElement('div'); menu.className = 'forge-tp-menu'; menu.setAttribute('role', 'menu'); setSrLabel(menu, TRANSPORT_LABELS.export, { host: row, key: 'export-menu' }); menu.hidden = true;
   const items: HTMLButtonElement[] = deps.exportItems.map((it) => {
     const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-tp-menuitem'; b.setAttribute('role', 'menuitem'); b.textContent = it.label;
     on(b, 'click', (e: Event) => { e.stopPropagation(); setMenu(false); deps.runExport(it.id); log(`[forge-score-row] export ${it.id}`); expBtn.focus(); });

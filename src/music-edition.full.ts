@@ -11,6 +11,7 @@
 // file). The lean build never reaches this module, so verovio / html-midi-player and their
 // transitive audio chain are absent from lean main.js.
 
+import { setSrLabel } from './sr-label-core.ts';
 import { renderMusicXMLAndMIDI, getTimeForElement, TimeBucket } from './verovio.ts';
 import {
   readScoreViewMode,
@@ -215,13 +216,12 @@ function renderMusicXMLWithToggle(
   const toolbar = entry.createDiv({ cls: compact ? 'forge-score-toolbar' : 'forge-output-toolbar' });
   const zoomSlotFirst = compact ? toolbar.createDiv({ cls: 'forge-zoom-bar' }) : null;
   const buttonHost = compact ? toolbar.createDiv({ cls: 'forge-kit-pill' }) : toolbar;
-  const button = buttonHost.createEl('button', {
-    cls: 'forge-kit-toggle',
-    attr: { 'aria-label': 'Toggle drum notation view' },
-  });
+  const button = buttonHost.createEl('button', { cls: 'forge-kit-toggle' });
+  // 2026-11-19-0925: the name is a hidden span in the button's host (updateLabel below empties the button), pointed at by aria-labelledby: no aria-label, so Obsidian draws no tooltip
+  setSrLabel(button, 'Toggle drum notation view', { host: buttonHost, key: 'kit-toggle' });
   const updateLabel = (m: ScoreViewMode) => {
     if (compact) {
-      // the icon stays (the driver likes it), the words go in a span a narrow pane hides (styles.css container query); the title and the aria-label carry the meaning at any width
+      // the icon stays (the driver likes it), the words go in a span a narrow pane hides (styles.css container query); the hidden name (aria-labelledby) carries the meaning at any width
       button.empty();
       button.createSpan({ cls: 'forge-kit-toggle-icon', text: m === 'kit' ? '🎼' : '🥁' });
       button.createSpan({ cls: 'forge-kit-toggle-label', text: m === 'kit' ? 'Multi-staff' : 'Kit' });
@@ -454,22 +454,14 @@ function renderMusicXML(
       const ZOOM_LEVELS = SCORE_ZOOM_LEVELS;
       // 2026-10-26-1100: a tab that keeps a zoom memory gets its Score back at the zoom the person chose (every redraw used to start again at 100%)
       let zoomIdx = opts.zoom ? opts.zoom.get() : ZOOM_LEVELS.indexOf(1.0);
-      // compact: each button also says what it is as a tooltip (the aria-label was always there)
-      const zoomOutBtn = zoomBar.createEl('button', {
-        text: '−',
-        cls: 'forge-zoom-button',
-        attr: compact ? { 'aria-label': 'Zoom out', title: 'Zoom out' } : { 'aria-label': 'Zoom out' },
-      });
-      const zoomLabel = zoomBar.createEl('button', {
-        text: '100%',
-        cls: 'forge-zoom-button forge-zoom-reset',
-        attr: compact ? { 'aria-label': 'Reset zoom to 100%', title: 'Reset zoom to 100%' } : { 'aria-label': 'Reset zoom to 100%' },
-      });
-      const zoomInBtn = zoomBar.createEl('button', {
-        text: '+',
-        cls: 'forge-zoom-button',
-        attr: compact ? { 'aria-label': 'Zoom in', title: 'Zoom in' } : { 'aria-label': 'Zoom in' },
-      });
+      // 2026-11-19-0925: no tooltip of any kind (driver 2026-11-18), not the native `title` the compact row had and not the aria-label Obsidian draws one from: each button is named by a hidden span
+      // kept in the zoom bar (the reset button's text changes with the zoom, which would take a span inside it away) and pointed at by aria-labelledby.
+      const zoomOutBtn = zoomBar.createEl('button', { text: '−', cls: 'forge-zoom-button' });
+      setSrLabel(zoomOutBtn, 'Zoom out', { host: zoomBar, key: 'zoom-out' });
+      const zoomLabel = zoomBar.createEl('button', { text: '100%', cls: 'forge-zoom-button forge-zoom-reset' });
+      setSrLabel(zoomLabel, 'Reset zoom to 100%', { host: zoomBar, key: 'zoom-reset' });
+      const zoomInBtn = zoomBar.createEl('button', { text: '+', cls: 'forge-zoom-button' });
+      setSrLabel(zoomInBtn, 'Zoom in', { host: zoomBar, key: 'zoom-in' });
       const scoreWrap = host.createDiv({ cls: 'forge-output-score' });
       scoreWrap.append(...parseSvgMarkup(svg, new DOMParser()));
       // v0.2.153 — zoom scales the SVG elements' width/height

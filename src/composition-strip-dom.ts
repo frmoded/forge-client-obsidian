@@ -1,6 +1,7 @@
 // 2026-10-31-1100 (M17b, item 4) - the structure strip of a COMPOSITION: the tree of treeRows (composition-strip-core.ts), one row per section, the note it plays as a chip (the same chip the other strips draw), a nested composition's
 // sections one level below it. Plain DOM, no obsidian import (a happy-dom test mounts this very code). It tells its owner which chip has the keyboard focus or is clicked and nothing else (2026-11-19-0800: the pointer resting on a chip does nothing): a click sends the notes pane to that note (or opens it when
 // there is no pair), focusing it lights the bars of that note in the Score; both are the owner's.
+import { setSrLabel } from './sr-label-core.ts';
 import { STRIP_CHIP_CLASS, STRIP_CHIP_ON_CLASS } from './structure-strip-dom.ts';
 import type { TreeRow } from './composition-strip-core.ts';
 
@@ -30,7 +31,7 @@ export function mountCompositionStrip(parent: HTMLElement, ports: CompositionStr
   const el = doc.createElement('div');
   el.className = COMPOSITION_TREE_CLASS;
   el.setAttribute('role', 'navigation');
-  el.setAttribute('aria-label', 'Sections');
+  setSrLabel(el, 'Sections');
   el.style.display = 'none';
   if (before && before.parentNode === parent) parent.insertBefore(el, before); else parent.appendChild(el);
 
@@ -48,7 +49,7 @@ export function mountCompositionStrip(parent: HTMLElement, ports: CompositionStr
   return {
     el,
     show(rows) {
-      el.textContent = '';
+      el.textContent = ''; setSrLabel(el, 'Sections');                 // the clear takes the hidden name away: put it back
       el.style.display = rows.length === 0 ? 'none' : '';
       for (const r of rows) {
         const row = doc.createElement('div');
@@ -70,7 +71,7 @@ export function mountCompositionStrip(parent: HTMLElement, ports: CompositionStr
         b.className = `${STRIP_CHIP_CLASS} ${STRIP_CHIP_CLASS}-${r.kind}`;
         b.textContent = r.label;
         b.dataset.note = r.noteId;
-        b.setAttribute('aria-label', `Open ${r.label}`);
+        setSrLabel(b, `Open ${r.label}`);
         b.addEventListener('focus', () => ports.onHover(r));
         b.addEventListener('blur', () => ports.onHover(null));
         b.addEventListener('click', () => ports.onClick(r));

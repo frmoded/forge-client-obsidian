@@ -2,6 +2,7 @@
 // a row picker, the selection ALWAYS shown as chips, an op with its one number, Run; and below, the cells, each showing exactly what it received, its Recipe, Re-run and Delete cell. 2026-10-27-0720 (slice 2): the request box works:
 // type what should happen ("make this half as busy, keep the downbeat") and press Run (or Enter) and the sentence, not the op picker, makes the cell; the picker is dimmed while a sentence is typed, so it is plain which one Run will use.
 // The area sits OUTSIDE the Score's inspector root, so a click here is never a pin gesture (the 1800 rule is kept by where this is mounted, and tested in phrase-notebook-wiring.test.ts).
+import { setSrLabel } from './sr-label-core.ts';
 import { extendSelection, selectionChip, toggleBar, withRow, type Notebook, type NotebookCell, type Selection } from './notebook-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
 
@@ -47,18 +48,18 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   root.appendChild(el('summary', 'forge-notebook-summary', 'Notebook'));
 
   const cellsEl = el('div', 'forge-notebook-cells');
-  const barsEl = el('div', 'forge-notebook-bars'); barsEl.setAttribute('role', 'group'); barsEl.setAttribute('aria-label', 'Bars');
-  const rowsEl = el('div', 'forge-notebook-rows'); rowsEl.setAttribute('role', 'group'); rowsEl.setAttribute('aria-label', 'Row');
+  const barsEl = el('div', 'forge-notebook-bars'); barsEl.setAttribute('role', 'group'); setSrLabel(barsEl, 'Bars');
+  const rowsEl = el('div', 'forge-notebook-rows'); rowsEl.setAttribute('role', 'group'); setSrLabel(rowsEl, 'Row');
   const chipsEl = el('div', 'forge-notebook-chips'); chipsEl.style.minHeight = '1.8em';   // 2026-10-29-0900 (f): the line is there before the first chip, so choosing a bar moves nothing
   const doEl = el('div', 'forge-notebook-do');
-  const op = el('select', 'forge-notebook-op'); op.setAttribute('aria-label', 'What to do with the selection');
+  const op = el('select', 'forge-notebook-op'); setSrLabel(op, 'What to do with the selection', { host: doEl, key: 'op' });
   for (const [value, text] of [['thin_out', 'Thin out'], ['double_up', 'Double up']] as const) { const o = doc.createElement('option'); o.value = value; o.textContent = text; op.appendChild(o); }
   const numberLabel = el('label', 'forge-notebook-number-label');
   const number = el('input', 'forge-notebook-number'); number.type = 'number';
   const run = el('button', 'forge-notebook-run', 'Run'); run.type = 'button'; run.disabled = true;
   doEl.append(op, numberLabel, number, run);
   const request = el('input', 'forge-notebook-request');
-  request.setAttribute('placeholder', REQUEST_PLACEHOLDER); request.setAttribute('aria-label', REQUEST_LABEL); request.setAttribute('autocomplete', 'off');   // a remembered value must not look like a typed sentence (smoke 8)
+  request.setAttribute('placeholder', REQUEST_PLACEHOLDER); setSrLabel(request, REQUEST_LABEL, { host: root, key: 'request' }); request.setAttribute('autocomplete', 'off');   // a remembered value must not look like a typed sentence (smoke 8)
   const hint = el('p', 'forge-notebook-hint', HINT);
   const message = el('div', 'forge-notebook-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
   root.append(cellsEl, barsEl, rowsEl, chipsEl, doEl, request, hint, message);
@@ -89,15 +90,15 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   request.addEventListener('keydown', (e) => { const k = e as KeyboardEvent; if (k.key === 'Enter' && !k.isComposing) { k.preventDefault(); run.click(); } });
 
   const paint = (): void => {
-    for (const b of Array.from(barsEl.children) as HTMLElement[]) b.setAttribute('aria-pressed', String(selection.bars.includes(Number(b.textContent))));
-    for (const b of Array.from(rowsEl.children) as HTMLElement[]) b.setAttribute('aria-pressed', String((b.textContent === 'all' ? null : b.textContent) === selection.row));
+    for (const b of Array.from(barsEl.querySelectorAll('.forge-notebook-bar')) as HTMLElement[]) b.setAttribute('aria-pressed', String(selection.bars.includes(Number(b.getAttribute('data-bar')))));
+    for (const b of Array.from(rowsEl.querySelectorAll('.forge-notebook-row')) as HTMLElement[]) b.setAttribute('aria-pressed', String((b.textContent === 'all' ? null : b.textContent) === selection.row));
     const chip = chipOf(selection);
     chipsEl.textContent = '';
     if (chip !== null) chipsEl.appendChild(el('span', 'forge-notebook-chip', chip));
     hint.textContent = chip !== null ? HINT_SELECTED : HINT;
     run.disabled = busy || chip === null;
     request.disabled = busy || derived;
-    request.setAttribute('placeholder', derived ? DERIVED_REASON : REQUEST_PLACEHOLDER); request.setAttribute('aria-label', derived ? DERIVED_REASON : REQUEST_LABEL);
+    request.setAttribute('placeholder', derived ? DERIVED_REASON : REQUEST_PLACEHOLDER); setSrLabel(request, derived ? DERIVED_REASON : REQUEST_LABEL, { host: root, key: 'request' });
     const typed = request.value.trim() !== '';
     op.disabled = typed; number.disabled = typed;                       // a typed sentence is what Run will use: the picker is dimmed, not hidden
     doEl.setAttribute('data-mode', typed ? 'sentence' : 'picker');
@@ -128,10 +129,10 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
   parent.addEventListener('keydown', onKey);
 
   const buildScore = (): void => {
-    barsEl.textContent = ''; rowsEl.textContent = '';
+    barsEl.textContent = ''; rowsEl.textContent = ''; setSrLabel(barsEl, 'Bars'); setSrLabel(rowsEl, 'Row');   // the clear takes the hidden names away: put them back
     for (let n = 1; n <= score.count; n++) {
       const b = el('button', 'forge-notebook-bar', String(n)); b.type = 'button';
-      b.setAttribute('aria-label', `Bar ${n}`); b.setAttribute('aria-pressed', 'false');
+      b.setAttribute('data-bar', String(n)); setSrLabel(b, `Bar ${n}`); b.setAttribute('aria-pressed', 'false');
       b.addEventListener('click', (e) => {
         selection = (e as MouseEvent).shiftKey ? extendSelection(selection, anchor, n) : toggleBar(selection, n);
         anchor = n;
@@ -159,7 +160,7 @@ export function mountNotebook(parent: HTMLElement, ports: NotebookDomPorts): Not
     cell.appendChild(recipe);
     const other = c.role === 'result' ? c.source : c.result;
     const open = el('button', 'forge-notebook-open', other.split('/').pop() ?? other); open.type = 'button';
-    open.setAttribute('aria-label', `Open ${other.split('/').pop()}`);
+    setSrLabel(open, `Open ${other.split('/').pop()}`);
     open.addEventListener('click', () => { ports.openPhrase?.(`${other}.md`); });
     const result = el('small', 'forge-notebook-result', c.role === 'result' ? 'Source: ' : 'Result: ');
     result.appendChild(open);

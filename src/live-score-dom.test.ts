@@ -10,6 +10,7 @@ import {
 import { DESCRIPTION_BAR_CLASS } from './description-bar-dom.ts';
 import { LEAN_SCORE_NOTE, scorePanelPlan } from './score-first-core.ts';
 import { RHYTHM_STARTER } from './new-note-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 function page() {
   const win: any = new Window({ url: 'http://localhost/' });
@@ -62,7 +63,7 @@ test('score-first, music edition: a labelled region with a status line, under th
   const panel = tab.children[1] as HTMLElement;
   assert.equal(panel.className, SCORE_PANEL_CLASS);
   assert.equal(panel.getAttribute('role'), 'region');
-  assert.equal(panel.getAttribute('aria-label'), SCORE_PANEL_LABEL);
+  assert.equal(accessibleName(panel), SCORE_PANEL_LABEL); assert.equal(panel.hasAttribute('aria-label'), false);
   assert.equal((panel.children[0] as HTMLElement).className, SCORE_STATUS_CLASS);
   assert.equal(panel.children[0].getAttribute('aria-live'), 'polite');
   area.showNow(RHYTHM_STARTER);

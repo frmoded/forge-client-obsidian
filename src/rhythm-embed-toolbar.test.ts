@@ -35,7 +35,7 @@ test('toolbar model: the hint is the short words "not saved"; the full sentence 
   assert.equal(hint.text, PLAYGROUND_HINT_TEXT);
   assert.equal(PLAYGROUND_HINT_TEXT, 'not saved');
   assert.equal(hint.title, PLAYGROUND_HINT_TITLE);
-  assert.equal(hint.ariaLabel, PLAYGROUND_HINT_TITLE);
+  assert.equal(hint.name, PLAYGROUND_HINT_TITLE);
   assert.match(PLAYGROUND_HINT_TITLE, /not saved/i);
   assert.match(PLAYGROUND_HINT_TITLE, /Open note/, 'the sentence says where to edit for real (drain 2026-10-20-2100 wording)');
   assert.ok(PLAYGROUND_HINT_TITLE.length > PLAYGROUND_HINT_TEXT.length * 4, 'the tooltip carries the sentence the label no longer does');

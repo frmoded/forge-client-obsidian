@@ -218,7 +218,7 @@ test('the strip DOM: a row per section with its chip, indented one level for a n
   assert.deepEqual(rows.map((r) => r.querySelector('.forge-composition-index').textContent), ['1', '2', '↳']);
   assert.deepEqual(rows.map((r) => r.querySelector('.forge-composition-index').style.width), ['20px', '20px', '20px'], 'the same width for every number, so the chips line up (found in real Chrome: the arrow was wider than the 1)');
   const chip = rows[0].querySelector('button');
-  assert.equal(chip.textContent, 'phrase_003'); assert.equal(chip.dataset.note, 'phrases/phrase_003'); assert.equal(chip.getAttribute('aria-label'), 'Open phrase_003');
+  assert.equal(visibleText(chip), 'phrase_003'); assert.equal(chip.dataset.note, 'phrases/phrase_003'); assert.equal(accessibleName(chip), 'Open phrase_003'); assert.equal(chip.hasAttribute('aria-label'), false);
   assert.equal(rows[0].querySelector('.forge-composition-detail').textContent, '2 bars · bars 1-2');
   chip.dispatchEvent(new win.Event('mouseenter')); chip.dispatchEvent(new win.Event('mouseover')); chip.dispatchEvent(new win.Event('mouseleave'));
   assert.deepEqual(told, [], '2026-11-19-0800: the pointer resting on a chip (or leaving it) tells the owner nothing');
@@ -230,7 +230,7 @@ test('the strip DOM: a row per section with its chip, indented one level for a n
   strip.emphasise(null);
   assert.equal(chip.style.fontWeight, '');
   strip.show([]);
-  assert.equal(strip.el.style.display, 'none'); assert.equal(strip.el.children.length, 0);
+  assert.equal(strip.el.style.display, 'none'); assert.equal(strip.el.querySelectorAll('.forge-composition-row').length, 0, 'no row left'); assert.equal(auditLabels(strip.el).length, 0, 'the strip\'s own hidden name is still there and still points at itself');
   strip.dispose();
   assert.equal(parent.children.length, 0);
 });
@@ -325,6 +325,7 @@ test('what the dialog hands over makes the note the writer makes: through create
 
 import { NEW_COMPOSITION_COMMAND_ID, NEW_COMPOSITION_COMMAND_NAME, OPEN_COMPOSITION_COMMAND_ID, OPEN_COMPOSITION_COMMAND_NAME } from './composition-flow-core.ts';
 import { COMPOSITION_INSPECTOR_HINT } from './composition-nav-core.ts';
+import { accessibleName, auditLabels, visibleText } from './test-support/accessible-name.ts';
 
 test('the root mark goes right after content_type even when content_type is the first line', () => {
   assert.equal(withRoot('---\ncontent_type: json\ndescription: x\n---\nbody', true), '---\ncontent_type: json\nroot: true\ndescription: x\n---\nbody');

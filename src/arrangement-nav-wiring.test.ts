@@ -17,6 +17,7 @@ import { ARRANGEMENT_VIEW_TYPE, newArrangementNote } from './arrangement-core.ts
 import { ARRANGEMENT_INSPECTOR_HINT } from './arrangement-nav-core.ts';
 import { noteContentFor } from './phrase-core.ts';
 import { newKitNote } from './kit-core.ts';
+import { visibleText } from './test-support/accessible-name.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const SCORE_FIRST_TOML = fs.readFileSync(path.join(ROOT, 'test/fixtures/score-first/music-playground.forge.toml'), 'utf8');
@@ -80,7 +81,7 @@ for (const edition of ['lean', 'music'] as const) {
       if (edition === 'music') { const t0 = performance.now(); while (performance.now() - t0 < 60_000 && !/100 bpm/.test(el.querySelector('.forge-arrangement-header')?.textContent ?? '')) { await clock.advance(300); await new Promise((r) => setImmediate(r)); } }
 
       const rows = [...el.querySelectorAll('.forge-structure-strip > .forge-structure-row')] as any[];
-      assert.deepEqual(rows.map((r) => [...r.children].map((c: any) => c.textContent)), [['phrase_003', 'rock kit'], ['phrase_009', 'latin kit']], 'one row per kit above the Score');
+      assert.deepEqual(rows.map((r) => [...r.children].map((c: any) => visibleText(c))), [['phrase_003', 'rock kit'], ['phrase_009', 'latin kit']], 'one row per kit above the Score');
       const hint = el.querySelector('.forge-inspector-body')?.textContent ?? null;
       if (edition === 'music') assert.equal(hint, ARRANGEMENT_INSPECTOR_HINT, 'the Score has the arrangement\'s inspector, with its own words');
       else assert.equal(el.querySelector('.forge-inspector'), null, 'the lean edition\'s Score is a one-line note: no inspector, nothing to pin');

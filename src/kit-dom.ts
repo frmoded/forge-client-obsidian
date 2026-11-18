@@ -1,5 +1,6 @@
 // score_first M10 slice 1 (drain 2026-10-29-0820) - the dialog of "New kit" (plain DOM, no obsidian import; the Modal around it is a few lines in kits-arrangements.ts): two presets that fill the name and the channels, a name box, one box per channel of
 // the engine's vocabulary, Create and Cancel. Refusals come back from the flow as one sentence and are shown, the dialog stays open; success closes it. The channel boxes are the vocabulary, not a list of this file (kit-core.ts).
+import { setSrLabel } from './sr-label-core.ts';
 import { RHYTHM_CHANNELS } from './rhythm-edit-core.ts';
 import { KIT_NAME_RULE, KIT_PRESETS, channelWords } from './kit-core.ts';
 import type { CreateResult } from './kit-arrangement-flow-core.ts';
@@ -17,7 +18,7 @@ export function mountKitDialog(parent: HTMLElement, ports: KitDialogPorts): { di
   root.appendChild(el('p', 'forge-kit-hint', 'A kit says which rows of a bar a track may play. Start from a preset, or name it and tick the channels.'));
 
   const name = el('input', 'forge-kit-name');
-  name.type = 'text'; name.maxLength = 40; name.setAttribute('aria-label', 'Kit name'); name.setAttribute('placeholder', 'for example: rock');
+  name.type = 'text'; name.maxLength = 40; setSrLabel(name, 'Kit name', { host: root, key: 'name' }); name.setAttribute('placeholder', 'for example: rock');
   const boxes = new Map<string, HTMLInputElement>();
   const channels = el('div', 'forge-kit-channels');
   for (const c of RHYTHM_CHANNELS) {

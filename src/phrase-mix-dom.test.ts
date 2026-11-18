@@ -9,6 +9,7 @@ import { MIX_SCORE_DEBOUNCE_MS, mountPhrase, type PhraseMountPorts } from './phr
 import { applyPhraseWrite, readPhraseNote, type PhraseParams } from './phrase-core.ts';
 import { LIVE_SCORE_DEBOUNCE_MS } from './live-score-core.ts';
 import { LEAN_SCORE_NOTE } from './score-first-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const PHRASE_PATH = 'phrases/phrase_002.md';
 const mixText = (p: Record<string, unknown> = {}) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify({ kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.5, threshold: 0.5, ghost: false, ...p }, null, 2)}\n\`\`\`\n`;
@@ -90,7 +91,7 @@ test('a mix phrase shows the mix strip: two bar dropdowns, a Weight slider 0..1 
   assert.equal(r.q('.forge-mix-threshold-value').textContent, '0.50');
   assert.equal(r.q('.forge-mix-ghost').type, 'checkbox'); assert.equal(r.q('.forge-mix-ghost').checked, false);
   assert.equal(r.q('.forge-mix-sentence').textContent, 'Mix of bar_005 and bar_006: 50 % bar_005; a hit appears where the weights say it should (threshold 0.50).');
-  for (const sel of ['.forge-mix-a', '.forge-mix-b', '.forge-mix-weight', '.forge-mix-threshold', '.forge-mix-ghost']) assert.ok(r.q(sel).getAttribute('aria-label'), `${sel} has an accessible name`);
+  for (const sel of ['.forge-mix-a', '.forge-mix-b', '.forge-mix-weight', '.forge-mix-threshold', '.forge-mix-ghost']) assert.ok(accessibleName(r.q(sel)), `${sel} has an accessible name`);
   assert.equal(r.computes.length, 1);
   assert.equal(r.computes[0].data.a.tempo_bpm, 100, 'bar a\'s data');
   assert.equal(r.computes[0].data.b.tempo_bpm, 120, 'bar b\'s data');

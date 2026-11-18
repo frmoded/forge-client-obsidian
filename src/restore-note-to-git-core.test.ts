@@ -257,7 +257,7 @@ test('0900 WIRED: the toolbar button calls restoreActiveNoteToLastCommit directl
     main.indexOf('syncButtons(target?: MarkdownView) {') + main.slice(main.indexOf('syncButtons(target?: MarkdownView) {')).indexOf('\n  }\n') + 4,
   );
   assert.match(
-    syncButtons, /addAction\(\s*'history'/,
+    syncButtons, /addQuietAction\(view,\s*'history'/,
     "the restore button is not registered with the 'history' icon",
   );
   assert.match(
@@ -305,10 +305,10 @@ test('0900 NON-VACUITY: syncButtons still registers the edges, new-note and Forg
     main.indexOf('syncButtons(target?: MarkdownView) {'),
     main.indexOf('syncButtons(target?: MarkdownView) {') + main.slice(main.indexOf('syncButtons(target?: MarkdownView) {')).indexOf('\n  }\n') + 4,
   );
-  assert.match(syncButtons, /addAction\('network'/, 'the edges button is gone');
-  assert.match(syncButtons, /addAction\('file-plus'/, 'the new-note button is gone');
-  assert.ok(!/addAction\(\s*'puzzle'/.test(syncButtons), 'the retired chips button came back');
-  assert.match(syncButtons, /addAction\(\s*'hammer'/, 'the Forge button is gone');
+  assert.match(syncButtons, /addQuietAction\(view, 'network'/, 'the edges button is gone');
+  assert.match(syncButtons, /addQuietAction\(view, 'file-plus'/, 'the new-note button is gone');
+  assert.ok(!/addQuietAction\(view,\s*'puzzle'/.test(syncButtons), 'the retired chips button came back');
+  assert.match(syncButtons, /addQuietAction\(view,\s*'hammer'/, 'the Forge button is gone');
 });
 
 // ---- 2026-11-04-1175 (C): Restore right after typing --------------------------------------------------------------------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import { Window } from 'happy-dom';
 
 import { disposeScoreTransports, mountScoreTransport, type TransportPlayer } from './score-transport-dom.ts';
 import { exportItems } from './score-transport-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 function setup(opts: { mac?: boolean; tempo?: number } = {}) {
   const win: any = new Window({ url: 'http://localhost/' }); const doc = win.document; const toolbar = doc.createElement('div'); doc.body.appendChild(toolbar);
@@ -24,10 +25,10 @@ function setup(opts: { mac?: boolean; tempo?: number } = {}) {
 
 test('the row: one toolbar with a name, the controls in the order Play, Back to the start, Slower, the tempo value, Faster, Export; every one labelled in plain words (aria-label) with NO native tooltip and no extra description (2026-11-19-0800: nothing appears because the pointer rests); each is a real button', () => {
   const t = setup();
-  assert.equal(t.q('.forge-score-transport').getAttribute('role'), 'toolbar'); assert.equal(t.q('.forge-score-transport').getAttribute('aria-label'), 'Score controls');
+  assert.equal(t.q('.forge-score-transport').getAttribute('role'), 'toolbar'); assert.equal(accessibleName(t.q('.forge-score-transport')), 'Score controls'); assert.equal(t.toolbar.querySelectorAll('[aria-label]').length, 0, 'no aria-label anywhere in the row: Obsidian would draw a tooltip from it (2026-11-19-0925)'); assert.equal(t.toolbar.querySelectorAll('[title]').length, 0);
   const buttons = [...t.toolbar.querySelectorAll('.forge-score-transport button')].filter((b: any) => !b.closest('.forge-tp-menu'));
-  assert.deepEqual(buttons.map((b: any) => b.getAttribute('aria-label')), ['Play', 'Back to the start', 'Slower', 'Tempo, click to type a percent', 'Faster', 'Export']);
-  for (const b of buttons as any[]) { assert.equal(b.tagName, 'BUTTON'); assert.equal(b.getAttribute('type'), 'button'); assert.ok(b.getAttribute('aria-label'), 'a plain-word label'); assert.equal(b.hasAttribute('title'), false, 'no native tooltip'); assert.equal(b.hasAttribute('aria-description'), false, 'the description would only repeat the label'); }
+  assert.deepEqual(buttons.map((b: any) => accessibleName(b)), ['Play', 'Back to the start', 'Slower', 'Tempo, click to type a percent', 'Faster', 'Export']);
+  for (const b of buttons as any[]) { assert.equal(b.tagName, 'BUTTON'); assert.equal(b.getAttribute('type'), 'button'); assert.ok(accessibleName(b), 'a plain-word label'); assert.equal(b.hasAttribute('title'), false, 'no native tooltip'); assert.equal(b.hasAttribute('aria-description'), false, 'the description would only repeat the label'); }
   const icons = t.toolbar.querySelectorAll('.forge-score-transport svg'); assert.equal(icons.length, 5, 'five 16 px icons (the tempo value is text)');
   for (const svg of icons as any[]) { assert.equal(svg.getAttribute('viewBox'), '0 0 100 100'); assert.equal(svg.getAttribute('width'), '16'); assert.equal(svg.getAttribute('aria-hidden'), 'true'); }
   assert.equal(t.q('.forge-tp-tempo').textContent.trim(), '100%');
@@ -42,10 +43,10 @@ test('no progress bar, no time readout, no slider and no elapsed text anywhere i
 test('Play toggles to Pause and back: the label (and never a title), the icon and a gentle "is-playing" tint follow the player (also when the player stops by itself at the end), Reset stops and goes back to the start', () => {
   const t = setup(); const play = t.q('.forge-tp-play'); const iconBefore = play.innerHTML;
   assert.equal(play.getAttribute('aria-pressed'), 'false'); t.click(play); assert.deepEqual(t.calls, ['start']);
-  assert.equal(play.getAttribute('aria-label'), 'Pause'); assert.equal(play.hasAttribute('title'), false, 'no native tooltip while playing either'); assert.equal(play.getAttribute('aria-pressed'), 'true'); assert.ok(play.classList.contains('is-playing')); assert.notEqual(play.innerHTML, iconBefore, 'the icon swapped to pause');
-  t.click(play); assert.deepEqual(t.calls, ['start', 'stop']); assert.equal(play.getAttribute('aria-label'), 'Play'); assert.ok(!play.classList.contains('is-playing')); assert.equal(play.innerHTML, iconBefore);
-  t.click(play); t.finishPlaying(); assert.equal(play.getAttribute('aria-label'), 'Play', 'the end of the score returns the button to Play'); assert.ok(!play.classList.contains('is-playing'));
-  t.click(play); t.click(t.q('.forge-tp-reset')); assert.equal(t.calls[t.calls.length - 1], 'reset'); assert.equal(play.getAttribute('aria-label'), 'Play');
+  assert.equal(accessibleName(play), 'Pause'); assert.equal(play.hasAttribute('title'), false, 'no native tooltip while playing either'); assert.equal(play.getAttribute('aria-pressed'), 'true'); assert.ok(play.classList.contains('is-playing')); assert.notEqual(play.innerHTML, iconBefore, 'the icon swapped to pause');
+  t.click(play); assert.deepEqual(t.calls, ['start', 'stop']); assert.equal(accessibleName(play), 'Play'); assert.ok(!play.classList.contains('is-playing')); assert.equal(play.innerHTML, iconBefore);
+  t.click(play); t.finishPlaying(); assert.equal(accessibleName(play), 'Play', 'the end of the score returns the button to Play'); assert.ok(!play.classList.contains('is-playing'));
+  t.click(play); t.click(t.q('.forge-tp-reset')); assert.equal(t.calls[t.calls.length - 1], 'reset'); assert.equal(accessibleName(play), 'Play');
 });
 
 test('tempo buttons: Faster and Slower go in steps of 5 percent, the value shows it, both stop at the ends and say so (disabled), and the player is told every change', () => {
@@ -58,7 +59,7 @@ test('tempo buttons: Faster and Slower go in steps of 5 percent, the value shows
 
 test('tempo field: a click on the value opens a field with the number selected; Enter applies (and gives the focus back), Esc cancels, a number outside the range is clamped, text that is not a number is refused and the old value stays', () => {
   const t = setup(); const open = () => { t.click(t.q('.forge-tp-tempo')); return t.q('.forge-tp-tempo-input'); };
-  let input = open(); assert.ok(input, 'a field'); assert.equal(input.value, '100'); assert.equal(input.getAttribute('aria-label'), 'Tempo, percent'); assert.equal(input.getAttribute('inputmode'), 'numeric'); assert.equal(t.q('.forge-tp-tempo'), null, 'the value button is replaced while typing');
+  let input = open(); assert.ok(input, 'a field'); assert.equal(input.value, '100'); assert.equal(accessibleName(input), 'Tempo, percent'); assert.equal(input.getAttribute('inputmode'), 'numeric'); assert.equal(t.q('.forge-tp-tempo'), null, 'the value button is replaced while typing');
   assert.equal(t.doc.activeElement, input);
   input.value = '120'; t.key(input, 'Enter'); assert.equal(t.q('.forge-tp-tempo-input'), null); assert.equal(t.q('.forge-tp-tempo').textContent.trim(), '120%'); assert.equal(t.calls[t.calls.length - 1], 'tempo 120'); assert.equal(t.doc.activeElement, t.q('.forge-tp-tempo'), 'the focus is back on the value');
   input = open(); input.value = '300'; t.key(input, 'Enter'); assert.equal(t.q('.forge-tp-tempo').textContent.trim(), '200%'); assert.equal(t.calls[t.calls.length - 1], 'tempo 200');
@@ -93,7 +94,7 @@ test('a Score that has no sound (the player failed to mount) still has the Expor
   const win: any = new Window({ url: 'http://localhost/' }); const toolbar = win.document.createElement('div'); win.document.body.appendChild(toolbar);
   const dead: TransportPlayer = { playing: false, start() { throw new Error('no sound'); }, stop() {}, reset() {}, setTempo() {}, onStateChange() { return () => {}; } };
   mountScoreTransport(toolbar, { player: dead, exportItems: exportItems({ macDesktop: false }), runExport: () => {}, playable: false });
-  const visible = [...toolbar.querySelectorAll('button')].filter((b: any) => !b.hidden && !b.closest('[hidden]') && b.getAttribute('role') !== 'menuitem').map((b: any) => b.getAttribute('aria-label'));
+  const visible = [...toolbar.querySelectorAll('button')].filter((b: any) => !b.hidden && !b.closest('[hidden]') && b.getAttribute('role') !== 'menuitem').map((b: any) => accessibleName(b));
   assert.deepEqual(visible, ['Export']);
 });
 
@@ -116,5 +117,5 @@ test('Back to the start shows Play even when the player says nothing about it (a
   let playing = false; const quiet: TransportPlayer = { get playing() { return playing; }, start() { playing = true; }, stop() { playing = false; }, reset() { playing = false; }, setTempo() {}, onStateChange() { return () => {}; } };
   mountScoreTransport(toolbar, { player: quiet, exportItems: exportItems({ macDesktop: false }), runExport: () => {} });
   const click = (e: any) => e.dispatchEvent(new win.MouseEvent('click', { bubbles: true })); const play = toolbar.querySelector('.forge-tp-play') as any;
-  click(play); assert.equal(play.getAttribute('aria-label'), 'Pause'); click(toolbar.querySelector('.forge-tp-reset')); assert.equal(play.getAttribute('aria-label'), 'Play'); assert.ok(!play.classList.contains('is-playing'));
+  click(play); assert.equal(accessibleName(play), 'Pause'); click(toolbar.querySelector('.forge-tp-reset')); assert.equal(accessibleName(play), 'Play'); assert.ok(!play.classList.contains('is-playing'));
 });

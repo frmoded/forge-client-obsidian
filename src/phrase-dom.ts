@@ -1,7 +1,7 @@
 // score_first M5 (drain 2026-10-22-1850; M7 Phase A 2026-10-22-2330 adds the mix strip) — the phrase surface, plain DOM (no obsidian import, so a happy-dom test mounts the very code the tab runs): a small control strip under the live Score (2026-11-03-1155-93: the Score is the first thing in the tab).
 //
 //   <div class="forge-rhythm-edit-score">…the live Score, the same panel the Beat Box tab has… (2026-11-03-1155-93: FIRST in the tab, then the bracket under it)</div>
-//   <div class="forge-phrase-controls" role="group" aria-label="Phrase">
+//   <div class="forge-phrase-controls" role="group" aria-labelledby=(hidden name: Phrase)>
 //     Source <span class="forge-phrase-source">bar_005</span>
 //     Bars <input class="forge-phrase-bars">   Style <select class="forge-phrase-style">   Tempo change (%) <input class="forge-phrase-pct">
 //     <span class="forge-phrase-status" role="status">…</span>                                  a write the note refused ('' = nothing to say)
@@ -14,6 +14,7 @@
 // the Score redraws when the vault's modify event for that note arrives (ONE path: a hand edit of the JSON, a sync and a control all redraw the same way). The Score is the live Score
 // controller with a `produce` step of its own — no second scheduler: debounce, one render in flight, the latest request queued.
 
+import { setSrLabel } from './sr-label-core.ts';
 import { handEditStatusSettled, isHandEditRefusal } from './hand-edit-refusal-core.ts';
 import { isCustomNote, pythonTextOf } from './phrase-notes-core.ts';
 import { setControlsOff } from './custom-controls-off-dom.ts';
@@ -75,7 +76,7 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
   const el = doc.createElement('div');
   el.className = PHRASE_CONTROLS_CLASS;
   el.setAttribute('role', 'group');
-  el.setAttribute('aria-label', 'Phrase');
+  setSrLabel(el, 'Phrase');
 
   const field = (label: string, control: HTMLElement): void => {
     const wrap = doc.createElement('label');
@@ -102,12 +103,10 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
 
   const bars = doc.createElement('input');
   bars.type = 'number'; bars.className = 'forge-phrase-bars'; bars.min = String(PHRASE_BARS_MIN); bars.max = String(PHRASE_BARS_MAX); bars.step = '1';
-  bars.setAttribute('aria-label', 'Bars');
   field('Bars', bars);
 
   const style = doc.createElement('select');
   style.className = 'forge-phrase-style';
-  style.setAttribute('aria-label', 'Style');
   for (const s of PHRASE_STYLES) { const o = doc.createElement('option'); o.value = s; o.textContent = s.replace(/_/g, ' '); style.appendChild(o); }
   field('Style', style);
   // What the chosen style does, in plain words (2100). It follows the select at once and the note's own style on every reload.
@@ -118,7 +117,7 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
 
   const pct = doc.createElement('input');
   pct.type = 'number'; pct.className = 'forge-phrase-pct'; pct.min = String(PHRASE_PCT_MIN); pct.max = String(PHRASE_PCT_MAX); pct.step = '1';
-  pct.setAttribute('aria-label', 'Tempo change (%): negative slows down, positive speeds up');
+  setSrLabel(pct, 'Tempo change (%): negative slows down, positive speeds up', { host: el, key: 'pct' });
   field('Tempo change (%)', pct);
 
   const statusEl = doc.createElement('span');
@@ -149,7 +148,7 @@ export function mountPhraseControls(parent: HTMLElement, ports: { onChange(patch
       const off = params === null;
       bars.disabled = style.disabled = pct.disabled = off;
       sourceEl.textContent = params ? params.source : '';
-      if (ports.openSource) { (sourceEl as HTMLButtonElement).disabled = params === null; if (params) sourceEl.setAttribute('aria-label', `Open ${params.source}`); }
+      if (ports.openSource) { (sourceEl as HTMLButtonElement).disabled = params === null; if (params) setSrLabel(sourceEl, `Open ${params.source}`, { host: el, key: 'source' }); }
       if (params) revert();
       showStyleNote(params ? params.style : '');
     },
@@ -177,7 +176,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   const el = doc.createElement('div');
   el.className = `${PHRASE_CONTROLS_CLASS} forge-mix-controls`;
   el.setAttribute('role', 'group');
-  el.setAttribute('aria-label', 'Mix');
+  setSrLabel(el, 'Mix');
 
   const field = (label: string, ...controls: HTMLElement[]): HTMLElement => {
     const wrap = doc.createElement('label');
@@ -192,13 +191,13 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   const barSelect = (cls: string, label: string): HTMLSelectElement => {
     const sel = doc.createElement('select');
     sel.className = cls;
-    sel.setAttribute('aria-label', label);
+    setSrLabel(sel, label, { host: el, key: cls });
     return sel;
   };
   const slider = (cls: string, label: string): { input: HTMLInputElement; value: HTMLElement } => {
     const input = doc.createElement('input');
     input.type = 'range'; input.className = cls; input.min = '0'; input.max = '1'; input.step = '0.05';
-    input.setAttribute('aria-label', label);
+    setSrLabel(input, label, { host: el, key: cls });
     const value = doc.createElement('span');
     value.className = `${cls}-value`;
     return { input, value };
@@ -219,14 +218,13 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
   field('Threshold', threshold.input, threshold.value);
   const ghost = doc.createElement('input');
   ghost.type = 'checkbox'; ghost.className = 'forge-mix-ghost';
-  ghost.setAttribute('aria-label', 'Ghost notes');
   field('Ghost notes', ghost);
   const order = barSelect('forge-mix-order', 'Order of the single-hit changes (path mode)');
   for (const o of MORPH_ORDERS) { const opt = doc.createElement('option'); opt.value = o; opt.textContent = MIX_ORDER_LABELS[o]; order.appendChild(opt); }
   const orderField = field('Order', order);
   const seed = doc.createElement('input');
   seed.type = 'number'; seed.className = 'forge-mix-seed'; seed.min = '0'; seed.step = '1';
-  seed.setAttribute('aria-label', 'Seed: shuffles the changes (seeded order only)');
+  setSrLabel(seed, 'Seed: shuffles the changes (seeded order only)', { host: el, key: 'forge-mix-seed' });
   const seedField = field('Seed', seed);
   // 2026-10-25-1000: the way to this mix's morph (the path of single-hit changes). Only when the caller gives the action; it writes nothing itself (the action makes a NEW phrase note).
   const morph = ports.morph ? doc.createElement('button') : null;
@@ -234,7 +232,7 @@ export function mountMixControls(parent: HTMLElement, ports: { onChange(patch: M
     const ask = ports.morph;
     morph.type = 'button'; morph.className = 'forge-mix-morph'; morph.textContent = 'Morph this mix';
     morph.setAttribute('aria-description', 'Make a new morph phrase from these two bars: a path of single-hit changes, one per bar, instead of a vote');
-    morph.setAttribute('aria-label', 'Morph this mix: make a new morph phrase from these two bars');
+    setSrLabel(morph, 'Morph this mix: make a new morph phrase from these two bars');
     morph.addEventListener('click', () => { if (!morph.disabled) ask(); });
     el.appendChild(morph);
   }
@@ -388,7 +386,7 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
   const el = doc.createElement('div');
   el.className = `${PHRASE_CONTROLS_CLASS} forge-morph-controls`;
   el.setAttribute('role', 'group');
-  el.setAttribute('aria-label', 'Morph');
+  setSrLabel(el, 'Morph');
 
   const field = (label: string, ...controls: HTMLElement[]): HTMLElement => {
     const wrap = doc.createElement('label');
@@ -403,14 +401,14 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
   const select = (cls: string, label: string): HTMLSelectElement => {
     const sel = doc.createElement('select');
     sel.className = cls;
-    sel.setAttribute('aria-label', label);
+    setSrLabel(sel, label, { host: el, key: cls });
     return sel;
   };
   const number = (cls: string, label: string, min: number, max?: number): HTMLInputElement => {
     const input = doc.createElement('input');
     input.type = 'number'; input.className = cls; input.min = String(min); input.step = '1';
     if (max !== undefined) input.max = String(max);
-    input.setAttribute('aria-label', label);
+    setSrLabel(input, label, { host: el, key: cls });
     return input;
   };
 
@@ -422,7 +420,7 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
   const atomic = doc.createElement('button');
   atomic.type = 'button'; atomic.className = 'forge-morph-atomic'; atomic.textContent = 'Atomic';
   atomic.setAttribute('aria-description', 'Set Bars to the number of single-hit changes + 1, so every bar differs from the one before by exactly one hit');
-  atomic.setAttribute('aria-label', 'Atomic: one bar per single-hit change');
+  setSrLabel(atomic, 'Atomic: one bar per single-hit change');
   field('Bars', bars, atomic);
   const order = select('forge-morph-order', 'Order of the single-hit changes');
   for (const o of MORPH_ORDERS) { const opt = doc.createElement('option'); opt.value = o; opt.textContent = ORDER_LABELS[o]; order.appendChild(opt); }
@@ -431,7 +429,7 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
   field('Seed', seed);
   const position = doc.createElement('input');
   position.type = 'range'; position.className = 'forge-morph-position'; position.min = '0'; position.step = '1'; position.max = '0';
-  position.setAttribute('aria-label', 'Position: how many single-hit changes this one bar has had');
+  setSrLabel(position, 'Position: how many single-hit changes this one bar has had', { host: el, key: 'forge-morph-position' });
   const positionValue = doc.createElement('span');
   positionValue.className = 'forge-morph-position-value';
   const positionField = field('Position', position, positionValue);
@@ -1020,7 +1018,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       if (ext) {
         const name = phraseNoteId(ports.path).split('/').pop() ?? '';
         bracket.textContent = `${name} · ${ext.bars} bar${ext.bars === 1 ? '' : 's'}`;
-        bracket.setAttribute('aria-label', `Open ${name} (hover to light its ${ext.bars} bar${ext.bars === 1 ? '' : 's'})`);
+        setSrLabel(bracket, `Open ${name}: its ${ext.bars} bar${ext.bars === 1 ? '' : 's'}`);   // re-put after the textContent above (no 'hover to light': 2026-11-19-0800 took the hover away)
       }
     }
   };

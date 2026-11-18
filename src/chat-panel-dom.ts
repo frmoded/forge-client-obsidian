@@ -9,12 +9,13 @@
 //
 //   <div class="… forge-chat-host forge-chat-wide|forge-chat-stacked">           the tab's content element, a flex container
 //     <div class="forge-chat-body">…everything the tab drew…</div>              scrolls on its own
-//     <div class="forge-chat-panel" role="group" aria-label="Composer and dialog">
+//     <div class="forge-chat-panel" role="group" aria-labelledby=(hidden name: Composer and dialog)>
 //       <div class="forge-chat-log [is-empty]" role="log" aria-live="polite">…<div class="forge-chat-msg is-you|is-forge"><div class="forge-chat-line">[<span class="forge-chat-bang">!</span>]<div class="forge-chat-text">…</div></div>…<div class="forge-chat-meta"><span class="forge-chat-time">7 minutes ago</span></div></div></div>     your sentence: a soft right-aligned gray bubble; the reply: plain text on the left
 //       <div class="forge-prompt-box forge-composer">…</div>                     the card (prompt-box-dom.ts)
 //       <div class="forge-composer-error">…</div>                                one muted line
 //     </div>
 //   </div>
+import { setSrLabel } from './sr-label-core.ts';
 import { DESCRIPTION_BAR_CLASS } from './description-bar-dom.ts';
 import { mountPromptBox, type PromptBoxHandle, type PromptBoxPorts } from './prompt-box-dom.ts';
 import { type DialogEntry, type DialogStore } from './dialog-core.ts';
@@ -56,8 +57,8 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
   const doc = host.ownerDocument;
   const body = doc.createElement('div'); body.className = 'forge-chat-body';
   while (host.firstChild) body.appendChild(host.firstChild);                      // everything the tab drew goes into the body that scrolls
-  const panel = doc.createElement('div'); panel.className = 'forge-chat-panel'; panel.setAttribute('role', 'group'); panel.setAttribute('aria-label', 'Composer and dialog');
-  const log = doc.createElement('div'); log.className = 'forge-chat-log is-empty'; log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite'); log.setAttribute('aria-label', 'What happened to this Description');
+  const panel = doc.createElement('div'); panel.className = 'forge-chat-panel'; panel.setAttribute('role', 'group'); setSrLabel(panel, 'Composer and dialog');
+  const log = doc.createElement('div'); log.className = 'forge-chat-log is-empty'; log.setAttribute('role', 'log'); log.setAttribute('aria-live', 'polite'); setSrLabel(log, 'What happened to this Description', { host: panel, key: 'log' });   // the name sits in the panel, not in the log: the log is redrawn and its children are the entries
   panel.append(log);
   host.append(body, panel);
   host.classList.add(CHAT_HOST_CLASS);

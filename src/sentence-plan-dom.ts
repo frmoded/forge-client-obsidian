@@ -1,5 +1,6 @@
 // 2026-10-27-1015 — the dialog of "New phrase from a sentence": plain DOM, no obsidian import (a happy-dom test drives it; sentence-plan-modal.ts puts it in an Obsidian Modal). It tells the planner (sentence-plan-core.ts) what the person
 // typed and pressed and shows what comes back: a preview (Description, Recipe, the file Create would make) or one sentence saying why not. A plan belongs to the sentence it was made for: editing the sentence withdraws it.
+import { setSrLabel } from './sr-label-core.ts';
 import { SENTENCE_MAX, type SentencePlanner } from './sentence-plan-core.ts';
 
 export interface SentencePlanDomPorts {
@@ -24,7 +25,7 @@ export function mountSentencePlan(parent: HTMLElement, ports: SentencePlanDomPor
   input.maxLength = SENTENCE_MAX;
   input.rows = 3;
   input.setAttribute('placeholder', 'for example: extend bar_005 to 8 bars');
-  input.setAttribute('aria-label', 'Describe the phrase in one sentence');
+  setSrLabel(input, 'Describe the phrase in one sentence', { host: root, key: 'input' });
   root.appendChild(input);
 
   const shown = ports.barNames.slice(0, NAMES_SHOWN);

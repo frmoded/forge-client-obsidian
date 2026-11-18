@@ -123,7 +123,7 @@ test('toggle: every mode switch changes the note\'s OWN leaf through ONE helper 
 // drain 2026-10-22-2200, deliberate: the click handler first refuses a phrase in a score-first vault BY NAME (phrase-registration.test.ts drives it); the rest is what it was.
 test('toggle: the mode buttons on the markdown view switch view.leaf (the note\'s own tab); the command passes the active markdown leaf', () => {
   const body = code(view);
-  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => view\.addAction\(a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(file && wantsPhraseHeader\(messageDelivery\.hasBeenScoreFirst\(\), file\.path\)\) \{ loggedNotice\([^\n]*\); return; \}\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
+  assert.match(body, /\[\.\.\.headerActionsFor\('json', edition\)\]\.reverse\(\)\.map\(\(a\) => addQuietAction\(view, a\.icon, a\.title, \(\) => \{\s*const file = view\.file;\s*if \(file && wantsPhraseHeader\(messageDelivery\.hasBeenScoreFirst\(\), file\.path\)\) \{ loggedNotice\([^\n]*\); return; \}\s*if \(isCandidateFile\(app, file\)\) void switchLeafToMode\(app, view\.leaf, file, 'json', a\.mode, hooks\);/);
   assert.match(body, /void openRhythmEditor\(app, file, hooks, app\.workspace\.getActiveViewOfType\(MarkdownView\)\?\.leaf\)/);
 });
 
@@ -138,7 +138,7 @@ test('header actions appear only for matching notes: added when the note is a ca
 
 test('toggle back: "Open as JSON" is a header action of the Beat Box view, comes from the mode table and returns the SAME leaf to markdown; no JSON editor of our own', () => {
   const body = code(view);
-  assert.match(body, /for \(const a of \[\.\.\.headerActionsFor\('beatbox', musicEdition\.id\)\]\.reverse\(\)\) \{\s*this\.addAction\(a\.icon, a\.title, \(\) => \{ void this\.switchMode\(a\.mode\); \}\);/);
+  assert.match(body, /for \(const a of \[\.\.\.headerActionsFor\('beatbox', musicEdition\.id\)\]\.reverse\(\)\) \{\s*addQuietAction\(this, a\.icon, a\.title, \(\) => \{ void this\.switchMode\(a\.mode\); \}\);/);
   assert.ok(!/CodeMirror|EditorView|new Editor|createEl\('textarea'/.test(body), 'the view builds no editor of our own');
 });
 
@@ -269,8 +269,8 @@ test('restore: the header action targets the Beat Box\'s own file explicitly, an
 test('hammer: the Forge button is gated on forgeButtonShouldShow (action only); the edges toggle on its own predicate; the Beat Box never has a hammer', () => {
   const m = code(main);
   const sync = /syncButtons\(target\?: MarkdownView\) \{[\s\S]*?\n  \}\n/.exec(m)![0];
-  assert.match(sync, /if \(edgesToggleShouldShow\(\{ type: typeof fm\?\.type === 'string' \? fm\.type : undefined \}\) && headerActionShown\('edges-toggle', messageDelivery\.hasBeenScoreFirst\(\)\)\) \{\s*const edgesBtn = view\.addAction\('network'/);
-  assert.match(sync, /if \(forgeButtonShouldShow\(\{ type: typeof fm\?\.type === 'string' \? fm\.type : undefined \}\)\) \{[\s\S]*?view\.addAction\('hammer', 'Forge this note'/);
+  assert.match(sync, /if \(edgesToggleShouldShow\(\{ type: typeof fm\?\.type === 'string' \? fm\.type : undefined \}\) && headerActionShown\('edges-toggle', messageDelivery\.hasBeenScoreFirst\(\)\)\) \{\s*const edgesBtn = addQuietAction\(view, 'network'/);
+  assert.match(sync, /if \(forgeButtonShouldShow\(\{ type: typeof fm\?\.type === 'string' \? fm\.type : undefined \}\)\) \{[\s\S]*?addQuietAction\(view, 'hammer', 'Forge this note'/);
   assert.ok(!/hammer/.test(code(view)), 'no hammer in the Beat Box view');
 });
 

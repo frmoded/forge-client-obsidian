@@ -1,5 +1,6 @@
 // Drain 2026-10-09-2200 (rider d) — how the build stamp (short git SHA + build time, from the gitignored src/build-stamp.generated.ts that
 // scripts/inline-plugin-version.mjs writes on every build) is shown. Pure so the formatting is tested.
+import { setSrLabel } from './sr-label-core.ts';
 
 export interface BuildStamp {
   readonly sha: string;
@@ -15,7 +16,7 @@ export function formatBuildStamp(stamp: BuildStamp): string {
   return `${stamp.sha}${stamp.dirty ? '+dirty' : ''}${time}`;
 }
 
-export interface StatusBarTooltipInput {
+export interface StatusBarLabelInput {
   version: string;
   /** `formatBuildStamp(BUILD_STAMP)`. */
   build: string;
@@ -23,21 +24,16 @@ export interface StatusBarTooltipInput {
   minAppVersion: string;
 }
 
-/** The status-bar item's hover text, on ONE line (separators, not newlines), so it reads the same however the tooltip wraps. */
-export function statusBarTooltip(i: StatusBarTooltipInput): string {
+/** The status-bar item's full name for a screen reader, on ONE line (separators, not newlines). Nobody sees it: the item shows only "Forge v...", and the build is in Settings (the driver took the tooltip away, 2026-11-18). */
+export function statusBarLabelText(i: StatusBarLabelInput): string {
   return `Forge Client v${i.version} · Build: ${i.build} · Plugin ID: ${i.pluginId} · Min app version: ${i.minAppVersion}`;
 }
 
-/** Obsidian draws its own tooltip from `aria-label`, positioned by `data-tooltip-position`; a bare `title` on a status-bar item never
- *  showed there (drain 2026-10-11-0900 §6). Any native `title` is cleared so two tooltips cannot stack. */
-export function setStatusBarTooltip(
-  el: { setAttribute(name: string, value: string): void; removeAttribute?(name: string): void; title?: string },
-  text: string,
-): void {
-  el.setAttribute('aria-label', text);
-  el.setAttribute('data-tooltip-position', 'top');
-  el.removeAttribute?.('title');
-  if ('title' in el) el.title = undefined;
+/** 2026-11-19-0925: no tooltip, Obsidian's own included. Obsidian draws one from the item's `aria-label` (positioned by `data-tooltip-position`), so neither is set: the text lives in a hidden span inside the item and
+ *  the item points at it with `aria-labelledby` (src/sr-label-core.ts). Any native `title` is cleared too, so nothing can stack. Call it ONCE, after `setText`: a later `setText` would replace the span. */
+export function setStatusBarLabel(el: HTMLElement, text: string): void {
+  setSrLabel(el, text);
+  el.removeAttribute('title');
 }
 
 /** 2026-10-31-1115: the commit alone, for the onload banner: "904d575c7" or "904d575c7+dirty" ("unknown" when it could not be read). */

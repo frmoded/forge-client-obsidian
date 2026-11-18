@@ -81,8 +81,8 @@ test('toolbar state: pristine = hint hidden and Reset disabled; dirty = hint sho
   assert.deepEqual([dirty.hintHidden, dirty.resetDisabled], [false, false]);
   assert.equal(PLAYGROUND_SENTENCE, 'This embed is a playground: edits are not saved to the note; Open note to edit it.');
   for (const s of [pristine, dirty]) {
-    for (const t of [s.resetTitle, s.resetAriaLabel, s.hintTitle, s.hintAriaLabel]) assert.ok(t.includes(PLAYGROUND_SENTENCE), t);
-    assert.match(s.resetAriaLabel, /^Reset/, 'the accessible name starts with the visible text');
+    for (const t of [s.resetTitle, s.resetName, s.hintTitle, s.hintName]) assert.ok(t.includes(PLAYGROUND_SENTENCE), t);
+    assert.match(s.resetName, /^Reset/, 'the accessible name starts with the visible text');
   }
   assert.notEqual(pristine.resetTitle, dirty.resetTitle, 'the tooltip says what Reset will do NOW');
   assert.match(pristine.resetTitle, /nothing to reset/i);
@@ -271,6 +271,6 @@ test('the view toggles exactly that class and the disabled state', () => {
   assert.ok(m);
   assert.match(m![0], /toggleClass\('forge-rhythm-embed-quiet', state\.hintHidden\)/);
   assert.match(m![0], /\.disabled = state\.resetDisabled/);
-  assert.match(m![0], /setAttribute\('aria-label', state\.hintAriaLabel\)/);
+  assert.match(m![0], /setSrLabel\(this\.hintEl, state\.hintName\)/);        // 2026-11-19-0925: the name is a hidden span (aria-labelledby), never an aria-label
   assert.match(m![0], /setAttribute\('aria-hidden', state\.hintHidden \? 'true' : 'false'\)/);
 });

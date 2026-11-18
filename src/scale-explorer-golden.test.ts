@@ -39,9 +39,18 @@ test('scale mode is byte for byte what 1170 drew: three scales, their DOM and th
   // 2026-11-19-0800 (drain "remove ALL hover behavior"): the ONE allowed difference from the 1170 recording is that the step chips' hover tooltip (title="2 semitones") became aria-description="2 semitones";
   // everything else is still byte for byte. The golden file is left as recorded and is read through that one mechanical rewrite; the new DOM must carry no native title tooltip at all.
   const noTooltip = (html: string): string => html.replace(/ title="/g, ' aria-description="');
+  // 2026-11-19-0925 (drain "zero tooltips"): the SECOND allowed difference: a control's name is no longer an aria-label (Obsidian draws a tooltip from it) but a hidden `.forge-sr-only` span that aria-labelledby points at.
+  // The new DOM is read through the one mechanical inverse (the spans go, each aria-labelledby becomes the aria-label it replaced), and must carry no aria-label of its own; the rest is byte for byte.
+  const hiddenNames = (html: string): string => {
+    const names = new Map<string, string>();
+    const bare = html.replace(/<span class="forge-sr-only" id="(forge-sr-\d+)"(?: data-sr-key="[^"]*")?>([^<]*)<\/span>/g, (_m, id: string, text: string) => { names.set(id, text); return ''; });
+    return bare.replace(/ aria-labelledby="(forge-sr-\d+)"/g, (_m, id: string) => ` aria-label="${names.get(id) ?? 'MISSING'}"`);
+  };
   for (const name of Object.keys(golden)) {
     assert.ok(!/ title="/.test(now[name].html), `${name}: no native title tooltip in the DOM`);
-    assert.ok(now[name].html === noTooltip(golden[name].html), `${name}: the DOM differs from the 1170 golden`);
+    assert.ok(!/ aria-label="/.test(now[name].html), `${name}: no aria-label in the DOM (a tooltip in Obsidian)`);
+    assert.ok(now[name].html.includes('forge-sr-only') === /aria-label="/.test(golden[name].html), `${name}: a hidden name stands for every aria-label the golden had`);
+    assert.ok(hiddenNames(now[name].html) === noTooltip(golden[name].html), `${name}: the DOM differs from the 1170 golden`);
     assert.deepEqual(now[name].staffXml, golden[name].staffXml, `${name}: the staff MusicXML differs`);
     assert.ok(golden[name].html.length > 2000, `${name}: non-vacuity: the golden holds a real picture`);
   }

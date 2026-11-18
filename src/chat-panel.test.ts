@@ -62,7 +62,7 @@ test('the panel is a FLEX SIBLING below the body: the tab\'s content moves into 
   assert.deepEqual([...host.children].map((c: any) => c.className), ['forge-chat-body', 'forge-chat-panel']);
   assert.equal(host.firstElementChild!.firstElementChild, score);
   const panel = host.lastElementChild as HTMLElement;
-  assert.deepEqual([...panel.children].map((c: any) => c.className.split(' ')[0]), ['forge-chat-log', 'forge-prompt-box', 'forge-composer-error']);
+  assert.deepEqual([...panel.children].filter((c: any) => !c.classList.contains('forge-sr-only')).map((c: any) => c.className.split(' ')[0]), ['forge-chat-log', 'forge-prompt-box', 'forge-composer-error']);   // the hidden names (2026-11-19-0925) are out of the flow: not a box of the panel
   for (const c of [host.firstElementChild!, panel, panel.lastElementChild!]) assert.doesNotMatch((c as HTMLElement).getAttribute('style') ?? '', /position:\s*(sticky|absolute|fixed)/);
   assert.ok(host.classList.contains('forge-chat-host') && host.classList.contains('forge-chat-stacked'), 'an unmeasured tab is the stacked layout');
   h.dispose();

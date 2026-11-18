@@ -1,5 +1,6 @@
 // 2026-10-27-1030 (M14 slice 1) - the strip of a TRANSFORM tab: plain DOM, no obsidian import. Read-only: a transform is made and unmade by the notebook below the Score, so this names the source phrase (a button that opens it) and lists
 // the ops in words. Same group, same status line as the other strips (phrase-dom.ts), so the tab looks like its siblings.
+import { setSrLabel } from './sr-label-core.ts';
 import { transformOpWords } from './phrase-words-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 
@@ -15,7 +16,7 @@ export function mountTransformStrip(parent: HTMLElement, ports: { openSource?(so
   const el = doc.createElement('div');
   el.className = 'forge-phrase-controls forge-transform-strip';
   el.setAttribute('role', 'group');
-  el.setAttribute('aria-label', 'Phrase');
+  setSrLabel(el, 'Phrase');
   const head = doc.createElement('div');
   const label = doc.createElement('span'); label.className = 'forge-transform-label';
   const ops = doc.createElement('ul'); ops.className = 'forge-transform-ops';
@@ -38,7 +39,7 @@ export function mountTransformStrip(parent: HTMLElement, ports: { openSource?(so
       source.type = 'button';
       source.className = 'forge-phrase-source';
       source.textContent = name;
-      source.setAttribute('aria-label', `Open ${name}`);
+      setSrLabel(source, `Open ${name}`);
       source.addEventListener('click', () => { ports.openSource?.(sourceId); });
       head.appendChild(source);
       for (const o of params.ops) { const li = doc.createElement('li'); li.textContent = transformOpWords(o); ops.appendChild(li); }

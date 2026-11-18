@@ -4,12 +4,12 @@
 //   Enter = a PREVIEW (the reply shows in the dialog above: "Press Enter to apply, Esc to discard"), a second Enter applies, Esc discards or cancels, typing replaces the preview, Shift+Enter is a new line, Enter in an
 //   IME composition only confirms it, Up in an empty composer recalls the previous sentence (per note), Cmd/Ctrl+K focuses the composer (the tab's own handler: `focusComposer`). Nothing is written before the second Enter.
 //
-//   <div class="forge-prompt-box forge-composer [is-edited] [is-previewing] [is-busy] [has-conflict]" role="group" aria-label="Composer">
-//     <textarea class="forge-prompt-box-text" aria-label="Describe what you want, in a sentence">…</textarea>
+//   <div class="forge-prompt-box forge-composer [is-edited] [is-previewing] [is-busy] [has-conflict]" role="group" aria-labelledby=(hidden name: Composer)>
+//     <textarea class="forge-prompt-box-text" aria-labelledby=(hidden name: Describe what you want, in a sentence)>…</textarea>
 //     <div class="forge-composer-bar">
 //       <button class="forge-composer-plus" aria-haspopup="menu">+</button><div class="forge-composer-menu" role="menu" hidden>…</div>
 //       <span class="forge-prompt-box-state" aria-live="polite">Working... Esc cancels</span>
-//       <button class="forge-composer-send" aria-label="Send, Enter">↵</button>
+//       <button class="forge-composer-send" aria-labelledby=(hidden name: Send, Enter)>↵</button>
 //     </div>
 //     <div class="forge-prompt-box-conflict">The controls changed the Description. <button data-choice="keep">Keep my text</button> <button data-choice="use">Use the new one</button></div>
 //   </div>
@@ -18,6 +18,7 @@ import { applied, diskChanged, initBox, isEdited, keepMine, typed, useNew, type 
 import {
   COMPOSER_LABELS, WORKING_TEXT, announcement, canSubmit, errorLine, initComposer, isWorking, pushHistory, recallNewer, recallOlder, step, upRecalls, type ComposerEffect, type ComposerEvent, type ComposerState, type Proposal,
 } from './composer-core.ts';
+import { setSrLabel } from './sr-label-core.ts';
 import { parseSvgMarkup } from './svg-markup-core.ts';
 
 export const PROMPT_BOX_CLASS = 'forge-prompt-box';
@@ -77,17 +78,17 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
   const el = doc.createElement('div');
   el.className = `${PROMPT_BOX_CLASS} forge-composer`;
   el.setAttribute('role', 'group');
-  el.setAttribute('aria-label', COMPOSER_LABELS.region);
+  setSrLabel(el, COMPOSER_LABELS.region);                         // 2026-11-19-0925: named by a hidden span, no tooltip; the spans of this card all live in `el`
   const text = doc.createElement('textarea');
   text.className = 'forge-prompt-box-text'; text.rows = 1; text.spellcheck = false;
-  text.setAttribute('aria-label', COMPOSER_LABELS.field);
+  setSrLabel(text, COMPOSER_LABELS.field, { host: el, key: 'field' });
   text.placeholder = ports.placeholder;
   const bar = doc.createElement('div'); bar.className = 'forge-composer-bar';
-  const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'forge-composer-plus'; plus.setAttribute('aria-label', COMPOSER_LABELS.plus);
+  const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'forge-composer-plus'; setSrLabel(plus, COMPOSER_LABELS.plus, { host: el, key: 'plus' });
   plus.setAttribute('aria-haspopup', 'menu'); plus.setAttribute('aria-expanded', 'false'); plus.appendChild(icon(doc, ICON_PLUS));
-  const menu = doc.createElement('div'); menu.className = 'forge-composer-menu'; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', COMPOSER_LABELS.menu); menu.hidden = true;
+  const menu = doc.createElement('div'); menu.className = 'forge-composer-menu'; menu.setAttribute('role', 'menu'); setSrLabel(menu, COMPOSER_LABELS.menu, { host: el, key: 'menu' }); menu.hidden = true;
   const state = doc.createElement('span'); state.className = 'forge-prompt-box-state'; state.setAttribute('aria-live', 'polite');
-  const send = doc.createElement('button'); send.type = 'button'; send.className = 'forge-composer-send'; send.setAttribute('aria-label', COMPOSER_LABELS.send); send.appendChild(icon(doc, ICON_RETURN));
+  const send = doc.createElement('button'); send.type = 'button'; send.className = 'forge-composer-send'; setSrLabel(send, COMPOSER_LABELS.send, { host: el, key: 'send' }); send.appendChild(icon(doc, ICON_RETURN));
   bar.append(plus, menu, state, send);
   const conflict = doc.createElement('div');
   conflict.className = 'forge-prompt-box-conflict'; conflict.setAttribute('role', 'status');
@@ -95,7 +96,7 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
   const keep = doc.createElement('button'); keep.type = 'button'; keep.setAttribute('data-choice', 'keep'); keep.textContent = 'Keep my text';
   const use = doc.createElement('button'); use.type = 'button'; use.setAttribute('data-choice', 'use'); use.textContent = 'Use the new one';
   conflict.append(msg, keep, use);
-  const live = doc.createElement('span'); live.className = 'forge-composer-sr'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); live.setAttribute('aria-label', COMPOSER_LABELS.sr);
+  const live = doc.createElement('span'); live.className = 'forge-composer-sr'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); setSrLabel(live, COMPOSER_LABELS.sr, { host: el, key: 'status' });
   el.append(text, bar, conflict, live);
   const errorEl = doc.createElement('div'); errorEl.className = COMPOSER_ERROR_CLASS; errorEl.setAttribute('role', 'status');
   parent.append(el, errorEl);

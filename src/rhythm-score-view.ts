@@ -8,6 +8,7 @@
 //
 // Every decision is in rhythm-score-core.ts (produceScore, createScoreScheduler) and rhythm-mode-core.ts (the mode table).
 
+import { addQuietAction } from './sr-label-core.ts';
 import { EditableFileView, type TFile, type WorkspaceLeaf } from 'obsidian';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
@@ -27,10 +28,10 @@ export class RhythmScoreView extends EditableFileView {
     super(leaf);
     // Obsidian's addAction PREPENDS: add right-to-left so the rendered order is the table's order (Beat Box, JSON).
     for (const a of [...headerActionsFor('score', musicEdition.id)].reverse()) {
-      this.addAction(a.icon, a.title, () => { void this.switchMode(a.mode); });
+      addQuietAction(this, a.icon, a.title, () => { void this.switchMode(a.mode); });
     }
     // 2026-11-03-1155-92 (R4): the bar's Score tab in a SCORE-FIRST vault carries "Restore to last commit" too (the Beat Box and the text view already do); another vault's tab is unchanged (P3). The profile answer can arrive after the tab is built.
-    const addRestore = (): void => { this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); }); };
+    const addRestore = (): void => { addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); }); };
     if (messageDelivery.isScoreFirst()) addRestore(); else this.register(messageDelivery.onScoreFirst(addRestore));
   }
 

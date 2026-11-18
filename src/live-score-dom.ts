@@ -1,7 +1,7 @@
 // score_first_experiment M1 (drain 2026-10-21-1100) — the DOM of the live Score panel (above the Beat Box since 2026-11-03-1155-93). Plain DOM, no obsidian import (so a happy-dom test mounts the very
 // code the tab runs): the Obsidian-only parts — drawing a MusicXML payload with Verovio and silencing the player — arrive as two injected functions.
 //
-//   <div class="forge-rhythm-edit-score" role="region" aria-label="Score of this bar">
+//   <div class="forge-rhythm-edit-score" role="region" aria-labelledby=(hidden name: Score of this bar)>
 //     <div class="forge-rhythm-edit-score-status" aria-live="polite">…</div>        one line: progress, a refusal, an error ('' = nothing shown)
 //     <div class="forge-rhythm-score-host">…engraving…</div>                        the same class the Score tab uses, so it is styled the same
 //   </div>
@@ -12,6 +12,7 @@
 // happens when an <svg> shows up in it (or after READY_TIMEOUT_MS, so a renderer that never produces one cannot freeze the old score forever): the old host's player is silenced
 // and the old host removed in the same tick the new one is revealed. A newer draw while one is pending replaces the pending one.
 
+import { setSrLabel } from './sr-label-core.ts';
 import { MIN_HOST_WIDTH_PX } from './host-width-core.ts';
 import { createLiveScore, type LiveScore, type LiveScoreDeps, type LiveScoreTiming, type LiveScoreView } from './live-score-core.ts';
 import { LEAN_SCORE_NOTE, type ScorePanelPlan } from './score-first-core.ts';
@@ -81,7 +82,6 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   const el = doc.createElement('div');
   el.className = SCORE_PANEL_CLASS;
   el.setAttribute('role', 'region');
-  el.setAttribute('aria-label', SCORE_PANEL_LABEL);
   const statusEl = doc.createElement('div');
   statusEl.className = SCORE_STATUS_CLASS;
   statusEl.setAttribute('aria-live', 'polite');
@@ -90,6 +90,7 @@ export function mountScorePanel(parent: HTMLElement, deps: ScorePanelDeps): Scor
   quietEl.className = SCORE_QUIET_CLASS;
   quietEl.setAttribute('aria-live', 'polite');
   el.appendChild(quietEl);
+  setSrLabel(el, SCORE_PANEL_LABEL);                         // after the two lines: the status line stays the panel's first child (the messages mount into it)
   const slot = doc.createElement('div');
   slot.className = 'forge-rhythm-inspector-slot';
   el.appendChild(slot);

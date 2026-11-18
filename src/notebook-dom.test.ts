@@ -9,6 +9,7 @@ import { Window } from 'happy-dom';
 
 import { mountNotebook } from './notebook-dom.ts';
 import type { Notebook, NotebookCell, RunResult, Selection } from './notebook-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const CELL: NotebookCell = { id: 'cell_001', path: 'notebook/cell_001.md', source: 'phrases/phrase_006', result: 'phrases/phrase_007', selection: 'bars 3 to 5, kick row', ops: [{ op: 'thin_out', first: 3, last: 5, row: 'kick', amount: 0.5 }], role: 'source' };
@@ -41,14 +42,14 @@ test('what is on the page when it opens: a collapsible Notebook, one box per bar
   assert.equal(details.open, true);
   assert.equal(r.q('details.forge-notebook > summary').textContent, 'Notebook');
   assert.equal(r.qa('.forge-notebook-bar').length, 17);
-  assert.deepEqual(r.qa('.forge-notebook-bar').slice(0, 3).map((b: any) => [b.textContent, b.getAttribute('aria-pressed'), b.getAttribute('aria-label')]), [['1', 'false', 'Bar 1'], ['2', 'false', 'Bar 2'], ['3', 'false', 'Bar 3']]);
+  assert.deepEqual(r.qa('.forge-notebook-bar').slice(0, 3).map((b: any) => [visibleText(b), b.getAttribute('aria-pressed'), accessibleName(b)]), [['1', 'false', 'Bar 1'], ['2', 'false', 'Bar 2'], ['3', 'false', 'Bar 3']]);
   assert.deepEqual(r.qa('.forge-notebook-rows button').map((b: any) => [b.textContent, b.getAttribute('aria-pressed')]), [['all', 'true'], ['kick', 'false'], ['snare', 'false'], ['hihat', 'false']]);
   assert.deepEqual(r.chips(), []);
   assert.equal(r.q('.forge-notebook-run').disabled, true);
   const request = r.q('.forge-notebook-request');
   assert.equal(request.disabled, false, 'the request box works (slice 2)');
   assert.equal(request.getAttribute('placeholder'), 'or say it: make this half as busy, keep the downbeat');
-  assert.equal(request.getAttribute('aria-label'), 'What to do with the selected bars, in a sentence');
+  assert.equal(accessibleName(request), 'What to do with the selected bars, in a sentence'); assert.equal(request.hasAttribute('aria-label'), false, 'named by a hidden span, no aria-label (2026-11-19-0925)');
   assert.ok(!/needs a sentence service/.test(r.parent.textContent + request.getAttribute('placeholder')), 'the slice 1 placeholder is gone');
   assert.equal(r.q('.forge-notebook-do').getAttribute('data-mode'), 'picker');
   assert.equal(r.q('.forge-notebook-hint').textContent, 'Select bars: click a number below (Shift-click a second number for a range, e.g. 3 then Shift-click 5).');       // 2026-10-30-1020: "click bars above" was read as the bars of the Score
@@ -62,7 +63,7 @@ test('clicking bars selects them, a second click unselects; Shift-click extends 
   assert.equal(r.bar(3).getAttribute('aria-pressed'), 'true');
   r.click(r.bar(5), { shiftKey: true });
   assert.deepEqual(r.chips(), ['bars 3 to 5']);
-  assert.deepEqual(r.qa('.forge-notebook-bar').filter((b: any) => b.getAttribute('aria-pressed') === 'true').map((b: any) => b.textContent), ['3', '4', '5']);
+  assert.deepEqual(r.qa('.forge-notebook-bar').filter((b: any) => b.getAttribute('aria-pressed') === 'true').map((b: any) => visibleText(b)), ['3', '4', '5']);
   r.click(r.bar(4));
   assert.deepEqual(r.chips(), ['bars 3, 5']);
   r.click(r.bar(9));
@@ -147,7 +148,7 @@ test('a cell shows exactly what it received (the chip), its Recipe line(s), its 
   assert.equal(cell.querySelector('.forge-notebook-chip').textContent, 'bars 3 to 5, kick row');
   assert.equal(cell.querySelector('.forge-notebook-recipe').textContent, 'Thin out bars 3 to 5, kick row: remove half of the hits, keeping the strongest beats.');
   const result = cell.querySelector('.forge-notebook-open');
-  assert.equal(result.textContent, 'phrase_007');
+  assert.equal(visibleText(result), 'phrase_007');
   r.click(result);
   assert.deepEqual(r.opened, ['phrases/phrase_007.md']);
   r.click(cell.querySelector('.forge-notebook-rerun')); await r.flush();
@@ -166,7 +167,7 @@ test('on the tab of the phrase a cell MADE, the cell reads as made this phrase, 
   assert.equal(cell.getAttribute('data-role'), 'result');
   assert.equal(cell.querySelector('.forge-notebook-cell-head').textContent, 'cell 1 · made this phrase from:');
   const open = cell.querySelector('.forge-notebook-open');
-  assert.equal(open.textContent, 'phrase_006');
+  assert.equal(visibleText(open), 'phrase_006');
   r.click(open);
   assert.deepEqual(r.opened, ['phrases/phrase_006.md']);
   assert.equal(r.q('.forge-notebook-problem').textContent, 'notebook/cell_009.md: The json block is not valid JSON: x');
@@ -328,7 +329,7 @@ test('(a) on a derived (transform) phrase the request box is DISABLED and says w
   const box = derived.q('.forge-notebook-request');
   assert.equal(box.disabled, true, 'a transform phrase is not asked for another change');
   assert.match(box.getAttribute('placeholder'), /derived|source/i, 'the reason is on the box');
-  assert.match(box.getAttribute('aria-label'), /derived|source/i);
+  assert.match(accessibleName(box), /derived|source/i);
   const source = rig({ cells: [CELL] });
   await source.h.refresh();
   assert.equal(source.q('.forge-notebook-request').disabled, false, 'P3: a source phrase keeps its working box');

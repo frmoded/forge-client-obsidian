@@ -37,16 +37,16 @@ test('idempotent: a view whose header is present and current is skipped; otherwi
   assert.match(syncBody, /const present = view\.containerEl\.querySelector\(`\.\$\{RESTORE_BTN_CLASS\}`\) !== null;/);
   const guard = syncBody.indexOf('needsHeaderSync(');
   const sweep = syncBody.indexOf('.forEach(el => el.remove());');
-  const firstAdd = syncBody.indexOf('view.addAction(');
+  const firstAdd = syncBody.indexOf('addQuietAction(view,');
   assert.ok(guard > 0 && sweep > guard && firstAdd > sweep, 'guard, then sweep, then add');
   assert.equal([...syncBody.matchAll(/RESTORE_BTN_CLASS\}`\s*\n?\s*\)\.forEach|\.forEach\(el => el\.remove\(\)\)/g)].length >= 1, true);
 });
 
 test('Restore and New Forge note stay UNGATED by type (the failure was not a gate evaluating false)', () => {
-  const restore = /view\.addAction\(\s*'history'[\s\S]*?\);/.exec(syncBody)![0];
+  const restore = /addQuietAction\(view,\s*'history'[\s\S]*?\);/.exec(syncBody)![0];
   const before = syncBody.slice(0, syncBody.indexOf(restore));
   assert.ok(!/if \(.*(forgeButtonShouldShow|edgesToggleShouldShow)/.test(before.slice(before.lastIndexOf('\n\n'))), 'restore is not inside a type gate');
-  assert.match(syncBody, /const snippetBtn = view\.addAction\('file-plus', 'New Forge note'/);
+  assert.match(syncBody, /const snippetBtn = addQuietAction\(view, 'file-plus', 'New Forge note'/);
   assert.ok(!/if \([^)]*\) \{\s*const snippetBtn/.test(syncBody));
 });
 

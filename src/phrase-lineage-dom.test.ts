@@ -8,6 +8,7 @@ import { Window } from 'happy-dom';
 import { mountPhrase, type PhraseMountPorts } from './phrase-dom.ts';
 import type { PhraseParams } from './phrase-core.ts';
 import { LIVE_SCORE_DEBOUNCE_MS } from './live-score-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const PATH = 'phrases/phrase_001.md';
 const phraseText = (p: Partial<PhraseParams> = {}) => `---\ntype: data\ncontent_type: json\n---\n\n\`\`\`json\n${JSON.stringify({ kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: -20, ...p }, null, 2)}\n\`\`\`\n`;
@@ -79,7 +80,7 @@ test('the two links open their notes: the phrase entry opens phrase_001, the bar
   await r.handle.load(); await flush();
   r.fire(r.q('#ph_bar_3'), 'click');
   const buttons = r.qa('.forge-inspector-lineage button.forge-inspector-open');
-  assert.deepEqual(buttons.map((b) => b.getAttribute('aria-label')), ['Open phrase_001', 'Open bar_005']);
+  assert.deepEqual(buttons.map((b) => accessibleName(b)), ['Open phrase_001', 'Open bar_005']);
   buttons[0].click(); buttons[1].click();
   assert.deepEqual(r.opened, ['phrases/phrase_001', 'bars/bar_005']);
 });
@@ -131,9 +132,9 @@ test('THE BRACKET over the bars: labelled with the phrase and its bar count; foc
   const r = rig();
   await r.handle.load(); await flush();
   const b = r.q('.forge-phrase-bracket');
-  assert.equal(b.textContent, 'phrase_001 · 8 bars');
+  assert.equal(visibleText(b), 'phrase_001 · 8 bars');
   assert.equal(b.getAttribute('role'), 'button'); assert.equal(b.getAttribute('tabindex'), '0');
-  assert.ok(b.getAttribute('aria-label'));
+  assert.ok(accessibleName(b));
   r.fire(b, 'mouseenter'); r.fire(b, 'mouseover');
   assert.equal(r.qa('g.measure.forge-artifact-hot').length, 0, 'the pointer resting on the bracket lights nothing');
   r.fire(b, 'mouseleave');
@@ -152,7 +153,7 @@ test('THE BRACKET over the bars: labelled with the phrase and its bar count; foc
 test('a one-bar phrase says "1 bar"; a phrase the tab cannot read has no bracket', async () => {
   const r = rig({ phrase: phraseText({ bars: 1 }) });
   await r.handle.load(); await flush();
-  assert.equal(r.q('.forge-phrase-bracket').textContent, 'phrase_001 · 1 bar');
+  assert.equal(visibleText(r.q('.forge-phrase-bracket')), 'phrase_001 · 1 bar');
   const bad = rig({ phrase: phraseText({ bars: 99 }) });
   await bad.handle.load(); await flush();
   assert.equal(bad.q('.forge-phrase-bracket').style.display, 'none');
@@ -162,7 +163,7 @@ test('FROM THE PHRASE BACK: the source in the strip is a link to bar_005 with it
   const r = rig();
   await r.handle.load(); await flush();
   const link = r.q('.forge-phrase-source');
-  assert.equal(link.tagName, 'BUTTON'); assert.equal(link.textContent, 'bar_005'); assert.equal(link.getAttribute('aria-label'), 'Open bar_005');
+  assert.equal(link.tagName, 'BUTTON'); assert.equal(visibleText(link), 'bar_005'); assert.equal(accessibleName(link), 'Open bar_005');
   link.click();
   assert.deepEqual(r.opened, ['bars/bar_005']);
   const bad = rig({ phrase: phraseText({ bars: 99 }) });
@@ -202,7 +203,7 @@ test('FRESHNESS: a changed parameter redraws and the stack follows the NEW phras
   assert.deepEqual(r.qa('g.measure').map((g) => g.id), ['ph_bar_1', 'ph_bar_2', 'ph_bar_3', 'ph_bar_4']);
   r.fire(r.q('#ph_bar_2'), 'click');
   assert.deepEqual(r.stack().slice(0, 2), ['bar 2 of 4', 'made by phrase_001 (extend, speeding up 30 %, style repeat_with_fills)']);
-  assert.equal(r.q('.forge-phrase-bracket').textContent, 'phrase_001 · 4 bars');
+  assert.equal(visibleText(r.q('.forge-phrase-bracket')), 'phrase_001 · 4 bars');
 });
 
 test('WITHOUT the inspector port the tab is exactly the M5 tab: no bracket, no inspector, the source is plain text, bars carry no ids', async () => {
@@ -323,7 +324,7 @@ test('M12: without the onPin port the tab is exactly what it was (the pin works,
 // ---- M13 (drain 2026-10-26-1270): the structure strip above the Score ------------------------------------------------------------------------------------------------------------------------
 
 const hotBars = (r: any) => r.qa('g.measure.forge-artifact-hot').map((g: any) => g.id);
-const chipTexts = (r: any) => r.qa('.forge-structure-strip button').map((b: any) => b.textContent);
+const chipTexts = (r: any) => r.qa('.forge-structure-strip button').map((b: any) => visibleText(b));
 
 test('M13: with the structure port the phrase tab has a strip (UNDER the Score since 2026-11-03-1155-93) naming bar_005 -> phrase_001 extend 8 bars; without the port there is no strip at all (the tab is what it was)', async () => {
   const r = rig({ structure: true });

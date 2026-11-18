@@ -7,6 +7,7 @@ import { Window } from 'happy-dom';
 import { arrangementChips, chipsFor, usedByChips } from './structure-strip-core.ts';
 import { mountStructureStrip, STRIP_CHIP_ON_CLASS, STRIP_ROW_CLASS } from './structure-strip-dom.ts';
 import type { Chip } from './structure-strip-core.ts';
+import { accessibleName, shownChildren, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const MORPH = { kind: 'morph', a: 'bar_007', b: 'bar_008', bars: 17, order: 'musical', seed: 0 } as const;
@@ -21,8 +22,8 @@ function rig() {
 test('a morph strip: bar_007 → phrase_004 morph, 17 bars → bar_008, as buttons joined by arrows; accessible names say what a click opens', () => {
   const r = rig();
   r.h.set(chipsFor('phrase_004', MORPH));
-  assert.deepEqual([...r.h.el.children].map((c: any) => c.textContent), ['bar_007', '→', 'phrase_004 morph, 17 bars', '→', 'bar_008']);
-  assert.deepEqual(r.buttons().map((b) => b.getAttribute('aria-label')), ['Open bar_007', 'Open phrase_004', 'Open bar_008']);
+  assert.deepEqual(shownChildren(r.h.el).map((c: any) => visibleText(c)), ['bar_007', '→', 'phrase_004 morph, 17 bars', '→', 'bar_008']);
+  assert.deepEqual(r.buttons().map((b) => accessibleName(b)), ['Open bar_007', 'Open phrase_004', 'Open bar_008']);
   assert.equal(r.h.el.style.display, '');
 });
 
@@ -68,7 +69,7 @@ test('no chips = hidden; a redraw replaces the old chips; dispose removes the st
   assert.equal(r.h.el.style.display, 'none');
   const used: Chip[] = [{ text: 'phrase_001', noteId: 'phrases/phrase_001', kind: 'phrase' }, { text: 'phrase_003', noteId: 'phrases/phrase_003', kind: 'phrase' }];
   r.h.set(used);
-  assert.deepEqual([...r.h.el.children].map((c: any) => c.textContent), ['used by:', 'phrase_001', 'phrase_003']);
+  assert.deepEqual(shownChildren(r.h.el).map((c: any) => visibleText(c)), ['used by:', 'phrase_001', 'phrase_003']);
   r.h.set(chipsFor('phrase_004', MORPH)); assert.equal(r.buttons().length, 3);
   r.h.dispose(); assert.equal(r.parent.querySelector('.forge-structure-strip'), null);
 });
@@ -88,9 +89,9 @@ const TWO_KITS = { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_
 test('chips that carry a row are drawn one block per row, in the order of the chips, each button still a chip (focus and click as ever; the pointer resting tells nobody)', () => {
   const r = rig();
   r.h.set(arrangementChips(TWO_KITS as any));
-  const rows = [...r.h.el.children] as any[];
+  const rows = shownChildren(r.h.el) as any[];
   assert.deepEqual(rows.map((c) => c.className), [STRIP_ROW_CLASS, STRIP_ROW_CLASS, STRIP_ROW_CLASS]);
-  assert.deepEqual(rows.map((row) => [...row.children].map((c: any) => c.textContent)), [['phrase_003', 'rock kit'], ['phrase_009', 'latin kit'], ['brush kit']], 'phrase_003 is one chip, in the first row that plays it');
+  assert.deepEqual(rows.map((row) => shownChildren(row).map((c: any) => visibleText(c))), [['phrase_003', 'rock kit'], ['phrase_009', 'latin kit'], ['brush kit']], 'phrase_003 is one chip, in the first row that plays it');
   r.buttons()[3].dispatchEvent(new win.Event('mouseenter')); assert.deepEqual(r.events, [], '2026-11-19-0800: the pointer resting tells nobody');
   r.buttons()[3].dispatchEvent(new win.Event('focus')); r.buttons()[3].click();
   assert.deepEqual(r.events, ['hover latin kit', 'click kits/latin']);
@@ -100,18 +101,18 @@ test('P3 through the everywhere consumers: a phrase tab\'s strip and a bar tab\'
   const phrase = rig();
   phrase.h.set(chipsFor('phrase_004', MORPH));
   assert.equal(phrase.h.el.querySelector(`.${STRIP_ROW_CLASS}`), null);
-  assert.deepEqual([...phrase.h.el.children].map((c: any) => c.tagName + ':' + c.textContent), ['BUTTON:bar_007', 'SPAN:→', 'BUTTON:phrase_004 morph, 17 bars', 'SPAN:→', 'BUTTON:bar_008']);
+  assert.deepEqual(shownChildren(phrase.h.el).map((c: any) => c.tagName + ':' + visibleText(c)), ['BUTTON:bar_007', 'SPAN:→', 'BUTTON:phrase_004 morph, 17 bars', 'SPAN:→', 'BUTTON:bar_008']);
   const bar = rig();
   bar.h.set(usedByChips('bar_007', { 'phrases/phrase_001.md': { 'bars/bar_007.md': 1 }, 'phrases/phrase_003.md': { 'bars/bar_007.md': 2 } }));
   assert.equal(bar.h.el.querySelector(`.${STRIP_ROW_CLASS}`), null);
-  assert.deepEqual([...bar.h.el.children].map((c: any) => c.tagName + ':' + c.textContent), ['SPAN:used by:', 'BUTTON:phrase_001', 'BUTTON:phrase_003']);
+  assert.deepEqual(shownChildren(bar.h.el).map((c: any) => c.tagName + ':' + visibleText(c)), ['SPAN:used by:', 'BUTTON:phrase_001', 'BUTTON:phrase_003']);
 });
 
 test('an arrangement of one kit stays one flat row of chips (no block to wrap a single row)', () => {
   const r = rig();
   r.h.set(arrangementChips({ kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_003' }] }));
   assert.equal(r.h.el.querySelector(`.${STRIP_ROW_CLASS}`), null);
-  assert.deepEqual([...r.h.el.children].map((c: any) => c.textContent), ['phrase_003', 'rock kit']);
+  assert.deepEqual(shownChildren(r.h.el).map((c: any) => visibleText(c)), ['phrase_003', 'rock kit']);
 });
 
 test('emphasise takes one note (as ever), a list of notes (every chip of those notes), or null; a redraw keeps the emphasis of the notes it still draws', () => {

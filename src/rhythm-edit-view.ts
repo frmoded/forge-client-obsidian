@@ -19,6 +19,7 @@
 // warning and never written. A write is validated BEFORE it happens, made with one atomic `vault.process`, replaces ONLY the
 // note's json block, and is refused if the note changed on disk since the baseline or if it is marked `read_only: true` (D7).
 
+import { addQuietAction } from './sr-label-core.ts';
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { createSandboxedWidgetIframe, releaseWidgetBlob } from './html-embed-view.ts';
@@ -124,15 +125,15 @@ export class RhythmEditView extends EditableFileView {
     // Obsidian's addAction PREPENDS, so these are added right-to-left; the rendered order is the one in header-actions-core.ts.
     // The mode buttons (Phase 6) come from the pure table: Open as Score (music edition only), then Open as JSON, rightmost.
     for (const a of [...headerActionsFor('beatbox', musicEdition.id)].reverse()) {
-      this.addAction(a.icon, a.title, () => { void this.switchMode(a.mode); });
+      addQuietAction(this, a.icon, a.title, () => { void this.switchMode(a.mode); });
     }
-    this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });
+    addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });
     // 1155-91: no edges button in a score-first vault. The profile answer can arrive after this view was built, so the button is also taken away the moment it does.
     if (headerActionShown('edges-toggle', messageDelivery.hasBeenScoreFirst())) {
-      const edges = this.addAction('network', 'Toggle edges panel', () => { this.hooks.toggleEdgesPanel(); });
+      const edges = addQuietAction(this, 'network', 'Toggle edges panel', () => { this.hooks.toggleEdgesPanel(); });
       this.register(messageDelivery.onScoreFirst((on) => { if (on && !headerActionShown('edges-toggle', true)) edges.remove(); }));
     }
-    this.addAction('file-plus', 'New Forge note', () => { this.hooks.createNewNote(); });
+    addQuietAction(this, 'file-plus', 'New Forge note', () => { this.hooks.createNewNote(); });
   }
 
   getViewType(): string { return RHYTHM_EDIT_VIEW_TYPE; }
@@ -527,7 +528,7 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
       const have = headerActions.get(view);
       if (want && !have) {
         // addAction PREPENDS: add right-to-left so the rendered order is the table's order
-        const els = [...headerActionsFor('json', edition)].reverse().map((a) => view.addAction(a.icon, a.title, () => {
+        const els = [...headerActionsFor('json', edition)].reverse().map((a) => addQuietAction(view, a.icon, a.title, () => {
           const file = view.file;
           // 2200: a button that outlived the profile answer (it was added while the answer was still unknown) must not send a phrase down the rhythm path and fail with "missing time signature":
           // in a score-first vault a phrase is not a bar, and it says so by name.

@@ -6,6 +6,7 @@ import { Window } from 'happy-dom';
 
 import type { PlanView, SentencePlanner } from './sentence-plan-core.ts';
 import { mountSentencePlan } from './sentence-plan-dom.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const OK: PlanView = { ok: true, kind: 'morph', name: 'phrase_004', path: 'phrases/phrase_004.md', description: 'phrase_004 — a morph from [[bar_001]] to [[bar_008]] in 5 bars, musical order.', recipe: 'morph_rhythm([[bar_001]], [[bar_008]], bars=5, order="musical", seed=0)' };
@@ -33,7 +34,7 @@ test('what the dialog shows when it opens: the title, a sentence box with its li
   const box = r.q('textarea');
   assert.equal(box.maxLength, 500);
   assert.equal(box.getAttribute('placeholder'), 'for example: extend bar_005 to 8 bars');
-  assert.equal(box.getAttribute('aria-label'), 'Describe the phrase in one sentence');
+  assert.equal(accessibleName(box), 'Describe the phrase in one sentence');
   assert.equal(r.q('.forge-sentence-plan-bars').textContent, 'Bars you can name: bar_001, bar_008');
   assert.equal(r.planBtn().textContent, 'Plan');
   assert.equal(r.planBtn().disabled, false);

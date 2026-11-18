@@ -183,11 +183,11 @@ test('forgeSnippet derives but does not execute', () => {
 test('the toolbar button says Forge, not Run', () => {
   const main = src('src/main.ts');
   assert.match(
-    main, /view\.addAction\(\s*'hammer',\s*'Forge this note'/,
+    main, /addQuietAction\(view,\s*'hammer',\s*'Forge this note'/,
     'the note toolbar button must read "Forge this note" — it no longer runs',
   );
   assert.ok(
-    !/view\.addAction\('play', 'Run'/.test(main),
+    !/addQuietAction\(view, 'play', 'Run'/.test(main),
     'the play-triangle "Run" affordance is retired from the note toolbar',
   );
 });
@@ -232,7 +232,7 @@ test('the Python-canonical notices point the cohort at the panel', () => {
 
 test('the spinner verb matches the gesture', () => {
   const main = src('src/main.ts');
-  const forgeBtn = main.slice(main.indexOf("view.addAction('hammer'"));
+  const forgeBtn = main.slice(main.indexOf("addQuietAction(view, 'hammer'"));
   const head = forgeBtn.slice(0, 600);
   assert.match(head, /🔨 forging …/, 'the Forge button spinner must say forging');
   assert.ok(

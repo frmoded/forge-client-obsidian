@@ -8,6 +8,7 @@ import { RHYTHM_CHANNELS } from './rhythm-edit-core.ts';
 import { mountKitDialog } from './kit-dom.ts';
 import { mountArrangementDialog } from './arrangement-dom.ts';
 import type { CreateResult } from './kit-arrangement-flow-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const flush = () => new Promise((r) => setImmediate(r));
@@ -30,7 +31,7 @@ test('New kit: what the dialog shows - the title, two presets, a name box, one b
   assert.deepEqual(r.qa('.forge-kit-preset').map((b) => b.textContent), ['Rock kit', 'Latin kit']);
   assert.deepEqual(r.qa('.forge-kit-channel-box').map((b) => b.getAttribute('data-channel')), [...RHYTHM_CHANNELS]);
   assert.deepEqual(r.qa('.forge-kit-channel').map((l) => l.textContent.trim()), ['kick', 'snare', 'hi-hat', 'bell', 'claves', 'high conga', 'low conga']);
-  assert.equal(r.q('.forge-kit-name').getAttribute('aria-label'), 'Kit name');
+  assert.equal(accessibleName(r.q('.forge-kit-name')), 'Kit name'); assert.equal(r.q('.forge-kit-name').hasAttribute('aria-label'), false);
   assert.equal(r.create().textContent, 'Create');
   assert.equal(r.q('.forge-kit-cancel').textContent, 'Cancel');
   assert.deepEqual(r.ticked(), [], 'nothing ticked until a choice');

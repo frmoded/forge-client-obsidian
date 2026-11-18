@@ -1,13 +1,14 @@
 // 2026-11-16-1000 - the small floating menu on a selection of bars (plain DOM, no obsidian import): a count ("3 bars selected: bars 3 to 5"), the five actions and a close button. It sits in the Score's area, ABOVE the first selected bar
 // (below it when there is no room), and never inside the engraving's own element, so its clicks are not pin gestures. The pure part is bar-selection-core.ts; what an action DOES is the caller's (`onAction`).
 //
-//   <div class="forge-bar-selection" role="toolbar" aria-label="Selected bars">
+//   <div class="forge-bar-selection" role="toolbar" aria-labelledby=(hidden name: Selected bars)>
 //     <span class="forge-bar-selection-count" aria-live="polite">3 bars selected: bars 3 to 5</span>
 //     <button class="forge-bar-selection-action" data-action="new-phrase" aria-description="...">New phrase from these bars</button> ... (Copy, Delete, Move left, Move right)
-//     <button class="forge-bar-selection-clear" aria-label="Clear the selection" aria-description="Clear the selection (Esc)">×</button>
+//     <button class="forge-bar-selection-clear" aria-labelledby=(hidden name: Clear the selection) aria-description="Clear the selection (Esc)">×</button>
 //     <div class="forge-bar-selection-note" role="status">…</div>            (only when there is something to say: a refusal, "the sentence is in the prompt box")
 //   </div>
 import { SELECTION_MENU, type SelectionAction } from './bar-selection-core.ts';
+import { setSrLabel } from './sr-label-core.ts';
 
 export const SELECTION_MENU_CLASS = 'forge-bar-selection';
 export interface SelectionMenuPorts { onAction(action: SelectionAction): void; onClear(): void }
@@ -33,7 +34,7 @@ export function mountSelectionMenu(host: HTMLElement, ports: SelectionMenuPorts)
   const doc = host.ownerDocument;
   const el = doc.createElement('div');
   el.className = SELECTION_MENU_CLASS;
-  el.setAttribute('role', 'toolbar'); el.setAttribute('aria-label', 'Selected bars');
+  el.setAttribute('role', 'toolbar'); setSrLabel(el, 'Selected bars');
   el.style.display = 'none';
   const count = doc.createElement('span');
   count.className = 'forge-bar-selection-count'; count.setAttribute('aria-live', 'polite');
@@ -46,7 +47,7 @@ export function mountSelectionMenu(host: HTMLElement, ports: SelectionMenuPorts)
     buttons.set(m.id, b); el.appendChild(b);
   }
   const clear = doc.createElement('button');
-  clear.type = 'button'; clear.className = 'forge-bar-selection-clear'; clear.textContent = '×'; clear.setAttribute('aria-label', 'Clear the selection'); clear.setAttribute('aria-description', 'Clear the selection (Esc)');
+  clear.type = 'button'; clear.className = 'forge-bar-selection-clear'; clear.textContent = '×'; setSrLabel(clear, 'Clear the selection'); clear.setAttribute('aria-description', 'Clear the selection (Esc)');
   clear.addEventListener('click', (e) => { e.stopPropagation(); ports.onClear(); });
   el.appendChild(clear);
   const noteEl = doc.createElement('div');

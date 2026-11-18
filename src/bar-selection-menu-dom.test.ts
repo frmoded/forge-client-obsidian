@@ -5,6 +5,7 @@ import { Window } from 'happy-dom';
 
 import { mountSelectionMenu, SELECTION_MENU_CLASS, type SelectionMenuView } from './bar-selection-menu-dom.ts';
 import { SELECTION_MENU, type SelectionAction } from './bar-selection-core.ts';
+import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
 const win: any = new Window({ url: 'http://localhost/' });
 const NONE: Record<SelectionAction, string | null> = { 'new-phrase': null, copy: null, delete: null, 'move-left': null, 'move-right': null };
@@ -35,7 +36,7 @@ test('hidden until shown; shows the count, the five entries in order with their 
   assert.ok(acts.every((b) => !b.hasAttribute('title')), 'no native tooltip on an action');
   assert.ok(acts.every((b) => !b.disabled));
   const clear = r.menu.el.querySelector('.forge-bar-selection-clear')!;
-  assert.equal(clear.getAttribute('aria-label'), 'Clear the selection'); assert.equal(clear.getAttribute('aria-description'), 'Clear the selection (Esc)'); assert.equal(clear.hasAttribute('title'), false, 'no native tooltip on the clear button');
+  assert.equal(accessibleName(clear), 'Clear the selection'); assert.equal(clear.hasAttribute('aria-label'), false, 'no aria-label: Obsidian would draw a tooltip from it (2026-11-19-0925)'); assert.equal(visibleText(clear), '×'); assert.equal(clear.getAttribute('aria-description'), 'Clear the selection (Esc)'); assert.equal(clear.hasAttribute('title'), false, 'no native tooltip on the clear button');
   r.menu.hide();
   assert.equal(r.menu.visible(), false);
   assert.equal(r.menu.el.style.display, 'none');

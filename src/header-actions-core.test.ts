@@ -27,7 +27,7 @@ test('every markdown-view header action has an explicit decision with a reason',
 
 test('audit vs source: syncButtons() registers exactly the actions the audit lists (icon + tooltip)', () => {
   const sync = /syncButtons\(target\?: MarkdownView\) \{[\s\S]*?\n  \}\n/.exec(main)![0];
-  const found = [...sync.matchAll(/view\.addAction\(\s*'([^']+)',\s*'([^']+)'/g)].map((m) => `${m[1]}|${m[2]}`).sort();
+  const found = [...sync.matchAll(/addQuietAction\(view,\s*'([^']+)',\s*'([^']+)'/g)].map((m) => `${m[1]}|${m[2]}`).sort();
   const audited = MARKDOWN_HEADER_ACTIONS.map((a) => `${a.icon}|${a.title}`).sort();
   assert.deepEqual(found, audited, 'a markdown-view action was added or removed without updating src/header-actions-core.ts');
 });
@@ -50,7 +50,7 @@ test('the specific decisions: restore + new note + edges ADDED; the hammer NOT a
 test('the Beat Box view registers the three shared actions in order with the markdown view\'s icon and tooltip, then the mode buttons from the table', () => {
   // addAction PREPENDS, so the view adds right-to-left: mode buttons first (rightmost), then restore, edges, new note (leftmost)
   assert.match(view, /for \(const a of \[\.\.\.headerActionsFor\('beatbox', musicEdition\.id\)\]\.reverse\(\)\) \{/);
-  const adds = [...view.matchAll(/this\.addAction\('([^']+)', '([^']+)'/g)].map((m) => `${m[1]}|${m[2]}`);
+  const adds = [...view.matchAll(/addQuietAction\(this, '([^']+)', '([^']+)'/g)].map((m) => `${m[1]}|${m[2]}`);
   const shared = BEAT_BOX_ACTIONS.filter((a) => !BEAT_BOX_ONLY_ACTIONS.some((o) => o.id === a.id)).reverse().map((a) => `${a.icon}|${a.title}`);
   assert.deepEqual(adds, shared);
 });

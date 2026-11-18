@@ -2,6 +2,7 @@
 // phrase-core.ts, the DOM and its freshness in phrase-dom.ts, both unit-tested without Obsidian). It is registered, and opened, ONLY in a score-first vault (score-first.ts).
 //
 // It writes ONE thing: the phrase note's json block, when a person edits a control (`vault.process`, so the rewrite is atomic against the note's current text). It never writes the source bar.
+import { addQuietAction } from './sr-label-core.ts';
 import { uiFlags } from './ui-flags-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type WorkspaceLeaf } from 'obsidian';
@@ -39,8 +40,8 @@ export class PhraseView extends EditableFileView {
    *  gone, for the notes pane beside this Score (linked-panes-core.ts). */
   constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly openNote: (noteId: string) => void, private readonly chooseJson?: (leaf: WorkspaceLeaf, path: string) => void, private readonly morphThis?: (file: TFile) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void, private readonly structure?: PhraseStructureHooks, private readonly notebookFor?: (file: TFile) => NotebookDomPorts) {
     super(leaf);
-    this.addAction('file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
-    this.addAction('history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
+    addQuietAction(this, 'file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
+    addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
   }
 
   getViewType(): string { return PHRASE_VIEW_TYPE; }

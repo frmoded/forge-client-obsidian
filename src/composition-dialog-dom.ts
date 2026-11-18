@@ -1,6 +1,7 @@
 // 2026-10-31-1100 (M17b, item 3) - the dialog of "New composition" (plain DOM, no obsidian import): a name (optional), one row per section - the note it plays (a phrase, an arrangement or a composition of the vault), how many bars it is to
 // fill (optional: empty is all of its bars, once), how many more times to play it (optional) - with Move up / Move down / Remove per row and "Add section", and whether this is the root of the piece. Create hands the choice to the flow; a refusal
 // comes back as one sentence and is shown; success closes the dialog.
+import { setSrLabel } from './sr-label-core.ts';
 import type { NewCompositionChoice, NewCompositionResult } from './composition-flow-core.ts';
 import type { CompositionSection } from './composition-core.ts';
 
@@ -24,7 +25,7 @@ export function mountCompositionDialog(parent: HTMLElement, ports: CompositionDi
   root.appendChild(el('h3', '', 'New composition'));
   root.appendChild(el('p', 'forge-comp-hint', 'A composition is a piece made of sections played one after another. Each section plays a phrase, an arrangement or another composition; give it a number of bars to repeat or cut it to that length, or leave the bars empty to play all of it once.'));
   const nameLabel = el('label', 'forge-comp-name-label', 'Name (optional) ');
-  const name = el('input', 'forge-comp-name'); name.type = 'text'; name.placeholder = ports.nextName; name.setAttribute('aria-label', 'Name');
+  const name = el('input', 'forge-comp-name'); name.type = 'text'; name.placeholder = ports.nextName; // the wrapping label (Name, optional) names it: no aria-label
   nameLabel.appendChild(name);
   const rows = el('div', 'forge-comp-sections');
   const message = el('div', 'forge-comp-message'); message.setAttribute('role', 'status');
@@ -65,12 +66,12 @@ export function mountCompositionDialog(parent: HTMLElement, ports: CompositionDi
   const addRow = (source = ''): void => {
     const row = el('div', 'forge-comp-section');
     const lead = el('span', 'forge-comp-lead', 'Play ');
-    const note = el('select', 'forge-comp-note'); note.setAttribute('aria-label', 'Note to play');
+    const note = el('select', 'forge-comp-note'); setSrLabel(note, 'Note to play', { host: row, key: 'note' });
     fill(note, source);
-    const length = el('input', 'forge-comp-length'); length.type = 'number'; length.min = '1'; length.placeholder = 'all'; length.setAttribute('aria-label', 'Bars (empty is all of it)');
-    const repeat = el('input', 'forge-comp-repeat'); repeat.type = 'number'; repeat.min = '1'; repeat.placeholder = '0'; repeat.setAttribute('aria-label', 'More times');
-    const up = el('button', 'forge-comp-up', '↑'); up.type = 'button'; up.setAttribute('aria-label', 'Move up');
-    const down = el('button', 'forge-comp-down', '↓'); down.type = 'button'; down.setAttribute('aria-label', 'Move down');
+    const length = el('input', 'forge-comp-length'); length.type = 'number'; length.min = '1'; length.placeholder = 'all'; setSrLabel(length, 'Bars (empty is all of it)', { host: row, key: 'length' });
+    const repeat = el('input', 'forge-comp-repeat'); repeat.type = 'number'; repeat.min = '1'; repeat.placeholder = '0'; setSrLabel(repeat, 'More times', { host: row, key: 'repeat' });
+    const up = el('button', 'forge-comp-up', '↑'); up.type = 'button'; setSrLabel(up, 'Move up');
+    const down = el('button', 'forge-comp-down', '↓'); down.type = 'button'; setSrLabel(down, 'Move down');
     const remove = el('button', 'forge-comp-remove', 'Remove'); remove.type = 'button';
     up.addEventListener('click', () => { const prev = row.previousElementSibling; if (prev) rows.insertBefore(row, prev); refit(); });
     down.addEventListener('click', () => { const next = row.nextElementSibling; if (next) rows.insertBefore(next, row); refit(); });
