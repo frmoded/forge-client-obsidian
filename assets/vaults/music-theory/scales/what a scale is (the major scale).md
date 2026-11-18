@@ -45,7 +45,7 @@ To see any scale on a keyboard and a staff, use the player on [[Scales]].
 
 ```html-embed
 scales/resources/html/scale_build_major.html
-406
+454
 ```
 *Exercise: choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play.*
 

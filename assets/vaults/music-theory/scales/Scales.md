@@ -2,7 +2,7 @@ A scale is a recipe of steps that starts from a home note: change the home note 
 
 By the end of this chapter you'll know how to build every one of these scales: major, natural, harmonic and melodic minor, the seven modes, pentatonic, blues, whole-tone and diminished. No guessing, just counting steps.
 
-1. [[what a scale is]] — the recipe, and major built by hand.
+1. [[what a scale is (the major scale)]] — the recipe, and major built by hand.
 2. [[natural minor scale]] — the same recipe with three notes lowered.
 3. [[scales jargon]] — one letter per note, and the words you'll meet.
 4. [[modes and minor scales]] — the seven modes, plus harmonic and melodic minor.

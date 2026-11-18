@@ -4,7 +4,7 @@ You get a home note and a scale name, or press Random, and you find the notes on
 
 ```html-embed
 scales/resources/html/scale_ear_build_the_scale.html
-406
+427
 ```
 *Exercise: choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play. Any scale of this chapter can come up.*
 
@@ -21,4 +21,5 @@ You are done when you can build any scale of this chapter from any note.
 ">
 <span>&larr; <a class="internal-link" data-href="hearing scales" href="hearing scales" style="color:#1963D1;">hearing scales</a></span>
 <span>&uarr; <a class="internal-link" data-href="Scales" href="Scales" style="color:#1963D1;">Scales</a></span>
+<span><a class="internal-link" data-href="Circle of fifths" href="Circle of fifths" style="color:#1963D1;">Circle of fifths</a> &rarr;</span>
 </div>

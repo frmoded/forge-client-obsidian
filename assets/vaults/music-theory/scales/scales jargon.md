@@ -1,4 +1,4 @@
-You have the major recipe from [[what a scale is]] and the natural minor recipe from [[natural minor scale]]; now the rule that decides what each note gets called.
+You have the major recipe from [[what a scale is (the major scale)]] and the natural minor recipe from [[natural minor scale]]; now the rule that decides what each note gets called.
 
 A scale uses one letter per note, A to G, in order, no repeats. That's not a suggestion. It's why F♯ major has E♯ as its seventh note and not F: F♯ G♯ A♯ B C♯ D♯ E♯. E♯ sounds exactly like F, and it's still the right name, because the letter F has already been used up by F♯ at the start. Letters go in order; accidentals sort out the step sizes.
 
