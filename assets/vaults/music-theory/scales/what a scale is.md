@@ -14,24 +14,20 @@ Now start on G and follow the same recipe: W to A, W to B, H to C, W to D, W to 
 
 Major is the parent scale. Later keys and chords get measured against it, so get friendly.
 
-## Natural minor
-
-Natural minor is major's moodier sibling: whole, half, whole, whole, half, whole, whole, or W-H-W-W-H-W-W. Next to major, it lowers the 3rd, 6th and 7th notes.
-
-Build it from A and you again never touch a black key: W to B, H to C, W to D, W to E, H to F, W to G, W to A. A B C D E F G A, the white keys. They're the same seven notes as C major, which sits a minor third above A, only the home note changed.
-
 ## Check your work
 
-Two tests. Count the half steps between neighbouring notes and hold them against the recipe: a whole step is two, a half step is one. Then read the letters: each of the seven notes gets its own letter, none twice, none skipped. G A B C D E F♯ passes. G A B C D E G♭ fails: two Gs, no F.
+Two checks. Count the half steps between neighbouring notes and hold them against the recipe: a whole step is two, a half step is one. Then read the letters: each of the seven notes gets its own letter, none twice, none skipped. G A B C D E F♯ passes. G A B C D E G♭ fails: two Gs, no F.
 
 To see any scale on a keyboard and a staff, use the player on [[Scales]].
 
-Build it: you get a home note and either major or natural minor, and you tap the notes. A wrong tap costs you a try, so count your steps first.
+Exercise: pick a home note or press Random, then build the major scale on the keys. The staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps, so count your steps first. When it ends you get the whole scale, its letters and its steps, and Play lets you hear it.
 
 ```html-embed
-scales/resources/html/scale_build_major_and_minor.html
-201
+scales/resources/html/scale_build_major.html
+406
 ```
+
+Natural minor is next: [[natural minor scale]].
 
 <div style="
   display:flex;
@@ -43,5 +39,5 @@ scales/resources/html/scale_build_major_and_minor.html
   margin:10px 0;
 ">
 <span>&uarr; <a class="internal-link" data-href="Scales" href="Scales" style="color:#1963D1;">Scales</a></span>
-<span><a class="internal-link" data-href="scales jargon" href="scales jargon" style="color:#1963D1;">scales jargon</a> &rarr;</span>
+<span><a class="internal-link" data-href="natural minor scale" href="natural minor scale" style="color:#1963D1;">natural minor scale</a> &rarr;</span>
 </div>

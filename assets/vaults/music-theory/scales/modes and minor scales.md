@@ -18,9 +18,7 @@ Another way in: take a major scale and start on its 2nd note for Dorian, its 3rd
 
 ## Three minors
 
-Aeolian is the one you'll meet most, better known as **natural minor**, and it tends to sound sad or dark. Its recipe is W-H-W-W-H-W-W, and from C that's C D E♭ F G A♭ B♭. Natural minor from A is just the white keys, the same notes as C major.
-
-Minor has two relatives with an agenda.
+Aeolian is natural minor, and it has its own page: [[natural minor scale]]. Minor has two relatives with an agenda.
 
 **Harmonic minor** raises the 7th of natural minor, so the ending pulls hard toward home: W-H-W-W-H, then a step and a half, then H. From C it's C D E♭ F G A♭ B. The gap between A♭ and B is three half steps, an augmented second, and that's the signature. Next to major, it has the 3rd and 6th lowered.
 
@@ -35,7 +33,7 @@ To see any scale on a keyboard and a staff, use the player on [[Scales]].
 > Modes in half steps: Ionian 2 2 1 2 2 2 1, Dorian 2 1 2 2 2 1 2, Phrygian 1 2 2 2 1 2 2, Lydian 2 2 2 1 2 2 1, Mixolydian 2 2 1 2 2 1 2, Aeolian 2 1 2 2 1 2 2, Locrian 1 2 2 1 2 2 2.
 > Modes of C major, each starting on the next white key: Ionian from C, Dorian from D, Phrygian from E, Lydian from F, Mixolydian from G, Aeolian from A, Locrian from B.
 
-Build it: you're handed a home note and a scale from this page, and you tap its notes. The exercise asks melodic minor in its ascending form, so no coming down.
+Exercise: pick a home note or press Random, choose a mode or a minor scale from this page, and find its notes on the keys. The staff fills in as you go, and a wrong tap costs you a try. The melodic minor is built in its ascending form, so no coming down.
 
 ```html-embed
 scales/resources/html/scale_build_modes_and_minor.html

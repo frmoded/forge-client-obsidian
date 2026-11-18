@@ -19,7 +19,7 @@ const FILES: Array<[string, string]> = [
   [SCALE_DIR, 'scale_ear_name_the_scale.html'],
 ];
 // 2026-11-17-2003: the five scale "build" widgets are EXERCISES now (their own labels: Play, New exercise, Random, Reset; scale-build-exercise.test.ts), so the rename of 2002 is pinned here for the four ear widgets that are
-// still questions (the three interval widgets and name-the-scale). The old scale_build_major_and_minor.html stays in the vault until the sync prompt removes it, and keeps its 2002 wording; it is not pinned any more.
+// still questions (the three interval widgets and name-the-scale). The old scale_build_major_and_minor.html was retired and deleted on 2026-11-18 (prompt 1000), once no page embedded it.
 const read = (dir: string, f: string): string => fs.readFileSync(path.join(dir, f), 'utf8');
 
 function open(dir: string, file: string) {

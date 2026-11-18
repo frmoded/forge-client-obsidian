@@ -29,7 +29,7 @@ Try it: open the player on [[Scales]], pick G♯ harmonic minor, press Play and 
   padding:6px 2px;
   margin:10px 0;
 ">
-<span>&larr; <a class="internal-link" data-href="what a scale is" href="what a scale is" style="color:#1963D1;">what a scale is</a></span>
+<span>&larr; <a class="internal-link" data-href="natural minor scale" href="natural minor scale" style="color:#1963D1;">natural minor scale</a></span>
 <span>&uarr; <a class="internal-link" data-href="Scales" href="Scales" style="color:#1963D1;">Scales</a></span>
 <span><a class="internal-link" data-href="modes and minor scales" href="modes and minor scales" style="color:#1963D1;">modes and minor scales</a> &rarr;</span>
 </div>

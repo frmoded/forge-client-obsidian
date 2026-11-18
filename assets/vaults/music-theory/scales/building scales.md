@@ -1,6 +1,6 @@
-This is the exercise that ties the chapter together: the same build game, but now any scale of the chapter can come up, whether it's major, one of the three minors, any of the seven modes, pentatonic, blues, whole-tone or diminished.
+This is the exercise that ties the chapter together: the same build exercise, but now any scale of the chapter can come up, whether it's major, one of the three minors, any of the seven modes, pentatonic, blues, whole-tone or diminished.
 
-You get a home note and a scale name, and you tap the notes. Easy, medium and hard give you 5, 3 or 1 wrong taps per question, and the score lives on the page until you reload.
+You get a home note and a scale name, or press Random, and you find the notes on the keys while the staff fills in. Easy, medium and hard allow 5, 3 or 1 wrong taps, and the score lives on the page until you reload. When an exercise ends you see the whole scale, its letters and its steps, and Play lets you hear it.
 
 ```html-embed
 scales/resources/html/scale_ear_build_the_scale.html
