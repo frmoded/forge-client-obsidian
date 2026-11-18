@@ -21,7 +21,7 @@
 
 import { EditableFileView, MarkdownView, Notice, TFile, type App, type Menu, type Plugin, type ViewState, type ViewStateResult, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
-import { createSandboxedWidgetIframe } from './html-embed-view.ts';
+import { createSandboxedWidgetIframe, releaseWidgetBlob } from './html-embed-view.ts';
 import { attachAutoHeight } from './widget-auto-height.ts';
 import { parseWidgetResize, type AutoHeightController } from './widget-auto-height-core.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
@@ -205,7 +205,7 @@ export class RhythmEditView extends EditableFileView {
     this.releaseScore();
     this.autoHeight?.dispose();
     this.autoHeight = null;
-    if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
+    if (this.blobUrl) releaseWidgetBlob(this.blobUrl, 'rhythm edit released', { iframe: this.iframe });
     this.blobUrl = null;
     this.iframe = null;
   }
@@ -241,7 +241,7 @@ export class RhythmEditView extends EditableFileView {
     const plan: ScorePanelPlan = scorePanelPlan({ scoreFirst: await isScoreFirstVault(this.app.vault), edition: musicEdition.id });
     this.releaseIframe();
     this.contentEl.empty();
-    const { iframe, blobUrl } = createSandboxedWidgetIframe(this.contentEl, html, '100%');
+    const { iframe, blobUrl } = createSandboxedWidgetIframe(this.contentEl, html, '100%', { label: 'rhythm box (edit view)' });
     if (widgetFillsPane(plan)) iframe.style.minHeight = '100%';   // a short rhythm still fills the pane; a tall one grows the iframe and the PANE scrolls (styles.css)
     this.iframe = iframe;
     this.blobUrl = blobUrl;

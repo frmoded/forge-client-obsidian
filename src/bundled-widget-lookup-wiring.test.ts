@@ -25,7 +25,7 @@ test('the Rhythm Box view resolves its widget through the tiered lookup, and the
   assert.match(rhythmView, /await resolveWidgetFile\(this\.app, RHYTHM_BOX_WIDGET_PATH\)/);
   assert.ok(!/getAbstractFileByPath\(RHYTHM_BOX_WIDGET_PATH\)/.test(rhythmView), 'the root-absolute lookup is gone');
   assert.match(rhythmView, /Edit rhythm: the Rhythm Box widget was \$\{widget\.message\}/);
-  assert.match(rhythmView, /createSandboxedWidgetIframe\(this\.contentEl, widget\.html, '100%'\)|const html = widget\.html;[\s\S]*createSandboxedWidgetIframe\(this\.contentEl, html, '100%'\)/);
+  assert.match(rhythmView, /createSandboxedWidgetIframe\(this\.contentEl, widget\.html, '100%'(?:, \{ label: [^}]*\})?\)|const html = widget\.html;[\s\S]*createSandboxedWidgetIframe\(this\.contentEl, html, '100%'(?:, \{ label: [^}]*\})?\)/);
 });
 
 test('a note that is not valid rhythm data is still refused BEFORE any widget lookup (refusal not weakened)', () => {

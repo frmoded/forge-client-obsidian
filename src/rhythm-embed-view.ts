@@ -15,7 +15,7 @@
 // every html-embed widget and the Beat Box tab. The widget is found by the bundled-aware lookup (resolveWidgetFile); not copied.
 
 import { MarkdownRenderChild, TFile, type App, type MarkdownPostProcessorContext, type Plugin } from 'obsidian';
-import { createSandboxedWidgetIframe } from './html-embed-view.ts';
+import { createSandboxedWidgetIframe, releaseWidgetBlob } from './html-embed-view.ts';
 import { attachAutoHeight } from './widget-auto-height.ts';
 import { createUpdatedLabel, isLabelAttentive, type UpdatedLabel } from './updated-label-core.ts';
 import { parseWidgetResize, type AutoHeightController } from './widget-auto-height-core.ts';
@@ -136,7 +136,7 @@ class RhythmEmbed extends MarkdownRenderChild {
   private releaseIframe(): void {
     this.autoHeight?.dispose();
     this.autoHeight = null;
-    if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
+    if (this.blobUrl) releaseWidgetBlob(this.blobUrl, 'rhythm embed released', { iframe: this.iframe });
     this.blobUrl = null;
     this.iframe = null;
   }
@@ -238,7 +238,7 @@ class RhythmEmbed extends MarkdownRenderChild {
       // Drain 2026-10-15-2230 — an explicit `height:` is used as written; otherwise the default follows what is IN the note (the compact
       // layout's height depends on its instrument / ring count — rhythm-embed-core.ts embedHeightFor, measured in real Chromium).
       const heightPx = options.heightExplicit ? options.heightPx : embedHeightFor(options.view, Object.keys(note.value.data.channels).length);
-      const { iframe, blobUrl } = createSandboxedWidgetIframe(this.bodyEl, widget.html, `${heightPx}px`);
+      const { iframe, blobUrl } = createSandboxedWidgetIframe(this.bodyEl, widget.html, `${heightPx}px`, { label: RHYTHM_BOX_WIDGET_PATH });
       this.iframe = iframe;
       this.blobUrl = blobUrl;
       // Drain 2026-10-18-1800 — without an explicit `height:` the widget measures itself and the iframe follows (the height above is the first paint).

@@ -68,7 +68,7 @@
 import { TFile } from 'obsidian';
 import { HTML_EMBED_LANGUAGE, parseHtmlEmbedSource } from './html-embed-view-core.ts';
 import { resolveWidgetFile } from './bundled-widget-lookup.ts';
-import { createSandboxedWidgetIframe } from './widget-iframe-core.ts';
+import { createSandboxedWidgetIframe, releaseWidgetBlob } from './widget-iframe-core.ts';
 
 /** Narrow structural slice of `Plugin` + `App` this file actually
  *  needs, per this repo's structural-adapter-type convention — keeps
@@ -145,18 +145,18 @@ async function renderHtmlEmbed(
   // block's own source) is the height — everything static lives in
   // styles.css's .forge-html-embed-iframe rule instead, per this repo's
   // inline-styles convention (see styles.css's own comment at that rule).
-  const { blobUrl } = createSandboxedWidgetIframe(el, html, `${parsed.heightPx}px`);
+  const { iframe, blobUrl } = createSandboxedWidgetIframe(el, html, `${parsed.heightPx}px`, { label: parsed.path });
 
   // Matches the third-party plugin's own cleanup: revoke the blob URL
   // when this component unloads (note closed/re-rendered, plugin
   // unloaded) rather than leaking it for the life of the Obsidian
   // process.
-  plugin.register(() => URL.revokeObjectURL(blobUrl));
+  plugin.register(() => releaseWidgetBlob(blobUrl, 'plugin unload', { iframe }));
 }
 
 // createSandboxedWidgetIframe (the ONE place a vault-authored .html widget gets its iframe) lives in widget-iframe-core.ts (2026-11-17-1000: no obsidian import, so it is unit-tested);
 // re-exported here so every caller imports it from where it always did.
-export { createSandboxedWidgetIframe };
+export { createSandboxedWidgetIframe, releaseWidgetBlob };
 
 function renderEmbedError(el: HTMLElement, title: string, detail: string): void {
   const box = el.createDiv({ cls: 'forge-html-embed-error' });

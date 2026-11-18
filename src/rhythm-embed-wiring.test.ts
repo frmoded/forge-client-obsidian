@@ -41,8 +41,8 @@ test('trust: only OUR iframe\'s window is listened to, checked BEFORE the payloa
 });
 
 test('sandbox: the iframe comes from the shared helper (allow-scripts only); no iframe or sandbox flag of its own', () => {
-  assert.match(view, /import \{ createSandboxedWidgetIframe \} from '\.\/html-embed-view\.ts'/);
-  assert.match(view, /createSandboxedWidgetIframe\(this\.bodyEl, widget\.html, `\$\{heightPx\}px`\)/);
+  assert.match(view, /import \{ createSandboxedWidgetIframe(?:, releaseWidgetBlob)? \} from '\.\/html-embed-view\.ts'/);
+  assert.match(view, /createSandboxedWidgetIframe\(this\.bodyEl, widget\.html, `\$\{heightPx\}px`(?:, \{ label: [^}]*\})?\)/);
   assert.ok(!/createEl\('iframe'|createElement\('iframe'|<iframe|sandbox/.test(view.replace(/createSandboxedWidgetIframe/g, '')));
 });
 
@@ -52,7 +52,7 @@ test('the block\'s view option reaches the session (and so every load, Reset inc
 
 test('the embed height: an explicit `height:` is used as written; otherwise the default follows the note\'s instrument count', () => {
   assert.match(view, /options\.heightExplicit \? options\.heightPx : embedHeightFor\(options\.view, Object\.keys\(note\.value\.data\.channels\)\.length\)/);
-  assert.match(view, /createSandboxedWidgetIframe\(this\.bodyEl, widget\.html, `\$\{heightPx\}px`\)/);
+  assert.match(view, /createSandboxedWidgetIframe\(this\.bodyEl, widget\.html, `\$\{heightPx\}px`(?:, \{ label: [^}]*\})?\)/);
 });
 
 test('no native dialogs: the sandbox blocks them, so there is no confirm / alert / prompt', () => {
@@ -111,7 +111,7 @@ test('unload cleans up: listener removed, session disposed, blob URL revoked, sc
   const body = view.slice(view.indexOf('onunload(): void'));
   assert.match(body, /window\.removeEventListener\('message', this\.onMessage\)/);
   assert.match(body, /this\.session\?\.dispose\(\)/);
-  assert.match(body, /URL\.revokeObjectURL\(this\.blobUrl\)/);
+  assert.match(body, /releaseWidgetBlob\(this\.blobUrl, /);
   assert.match(body, /musicEdition\.stopPlayers\(/);
 });
 

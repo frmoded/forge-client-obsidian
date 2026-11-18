@@ -27,13 +27,13 @@ test('sandbox: the shared iframe helper adds exactly allow-scripts — never all
 });
 
 test('sandbox: the Rhythm Box view hosts the widget through that helper and builds no iframe of its own', () => {
-  assert.match(code(view), /createSandboxedWidgetIframe\(this\.contentEl, html, '100%'\)/);
+  assert.match(code(view), /createSandboxedWidgetIframe\(this\.contentEl, html, '100%'(?:, \{ label: [^}]*\})?\)/);
   assert.ok(!/createEl\('iframe'|createElement\('iframe'|<iframe/.test(code(view)));
   assert.ok(!/sandbox/.test(code(view).replace(/createSandboxedWidgetIframe/g, '')), 'the view never touches sandbox flags itself');
 });
 
 test('sandbox: the html-embed processor still uses the same helper (behaviour unchanged by the extraction)', () => {
-  assert.match(code(embed), /createSandboxedWidgetIframe\(el, html, `\$\{parsed\.heightPx\}px`\)/);
+  assert.match(code(embed), /createSandboxedWidgetIframe\(el, html, `\$\{parsed\.heightPx\}px`(?:, \{ label: [^}]*\})?\)/);
 });
 
 test('trust: only messages whose event.source is the view\'s own iframe are considered — checked BEFORE the payload is parsed', () => {
