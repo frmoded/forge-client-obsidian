@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { powerEnv } from './test-support/matrix-stubs.mjs';
 
 // the ceiling the script ships with is READ from the script (2026-10-27-0900 lowered it 10 -> 7; a copy here went stale at once): the property is "the line reports the ceiling in force", not its spelling
 const DEFAULT_CEILING = /FORGE_PYTEST_SKIP_MAX:-(\d+)/.exec(fs.readFileSync(new URL('./drain-matrix.sh', import.meta.url), 'utf8'))[1];
@@ -56,7 +57,7 @@ function projects(opts = {}) {
 function matrix(p, args = [], env = {}) {
   const r = spawnSync('bash', [SCRIPT, ...args], {
     encoding: 'utf8', timeout: 240_000,
-    env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, ...env },
+    env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, ...powerEnv(p.dir), ...env },
   });
   const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
   return { status: r.status, out: strip(r.stdout ?? ''), err: strip(r.stderr ?? '') };

@@ -495,7 +495,11 @@ const skipReason = pinSkipReason(ROOT, START_SHA, 'this repo');
 for (const other of ['rhythm_box.html']) {
   test(`P3: ${other} is byte-identical to the commit the drain started from`, { skip: skipReason ?? false }, () => {
     const was = execFileSync('git', ['-C', ROOT, 'show', `${START_SHA}:${HTML_DIR}/${other}`], { maxBuffer: 64 * 1024 * 1024 });
-    assert.ok(Buffer.compare(was, fs.readFileSync(path.join(ROOT, HTML_DIR, other))) === 0, `${other} changed`);
+    // 2026-11-18-1200: the ONE allowed difference is the palette comment, which named the style-guide file and now does not (src/gadget-plugin-words.test.ts); everything else is still byte for byte
+    const palette = (b: Buffer): string => b.toString('utf8').replace(/\/\* Palette: (?:forge_music_theory_style_guide\.md, "Color scheme"|the vault's "Color scheme")/, '/* Palette: <the colour-scheme comment>');
+    const now = fs.readFileSync(path.join(ROOT, HTML_DIR, other));
+    assert.ok(palette(was).includes('<the colour-scheme comment>') && palette(now).includes('<the colour-scheme comment>'), `${other}: the palette comment is where the pin expects it`);
+    assert.ok(palette(was) === palette(now), `${other} changed`);
   });
 }
 test('P3 control: the comparison can fail - a gadget compared with a DIFFERENT gadget\'s text is not byte-identical', { skip: skipReason ?? false }, () => {

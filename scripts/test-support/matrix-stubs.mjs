@@ -85,12 +85,20 @@ export function projects() {
 
 /** 2026-11-05-1176: a calm machine, for the tests that pin how the legs run (at once, or not): the matrix reads the machine's load and swap at its start and runs --serial on a thrashing one, so a test that ran on such a machine would pin the weather. */
 export const CALM_MACHINE = { load1: 0.5, cores: 8, swapUsedMb: 100, swapTotalMb: 8192, availableMb: 8192, freePercent: 60 };
+/** 2026-11-18-1200: the power guard reads the machine's power; the tests stand a charger in (an AC reading in a file) and keep the real `caffeinate` out of the way, so a test run never depends on (or is refused by) the battery of the Mac it runs on. */
+export const AC_POWER = "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1234567)\t86%; charging; 0:45 remaining present: true\n";
+export const BATTERY_POWER = "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=1234567)\t52%; discharging; 3:10 remaining present: true\n";
+export function powerEnv(dir, reading = AC_POWER) {
+  const f = path.join(dir, '.power-reading.txt');
+  fs.writeFileSync(f, reading);
+  return { FORGE_POWER_READ_FILE: f, FORGE_CAFFEINATE: 'off' };
+}
 export function matrix(p, args = [], env = {}) {
   const calm = path.join(p.dir, '.calm-machine.json');
   if (!fs.existsSync(calm)) fs.writeFileSync(calm, JSON.stringify(CALM_MACHINE));
   const r = spawnSync('bash', [SCRIPT, ...args], {
     encoding: 'utf8', timeout: 240_000,
-    env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, FORGE_MACHINE_READ_FILE: calm, ...env },
+    env: { ...process.env, PROJECTS: p.dir, TMPDIR: p.dir, LOGKEEP: p.dir, MARKS: p.marks, FORGE_MACHINE_READ_FILE: calm, ...powerEnv(p.dir), ...env },
   });
   const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, '');
   return { status: r.status, out: strip(r.stdout ?? ''), err: strip(r.stderr ?? '') };

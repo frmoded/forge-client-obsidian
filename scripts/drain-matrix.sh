@@ -7,6 +7,8 @@
 #          --forge | --no-forge | --auto (default)     # the forge-pytest leg: always / never / only when the drain touched forge Python (see below)
 #          --forge-only                                # run ONLY the forge-pytest leg (no client sync, build or tests): the quick check for an engine-only drain
 #          --serial                                    # run the legs one after the other (the pre-2026-10-26 behaviour; for a machine that cannot take three at once)
+#          --cleanup-worktrees                         # take back the git worktrees a KILLED matrix left registered in the seven repos (`git worktree remove --force` on each one registered under a drain-matrix.* directory, then `git worktree prune`; never a recursive delete of a tree), then exit
+#          FORGE_POWER_GUARD=off / FORGE_CAFFEINATE=off  # the two switches of the power guard below
 #          --full-lean                                 # the LEAN leg runs the WHOLE suite again (the behaviour before 2026-11-04-1174); by default it runs only the edition-sensitive files (below)
 #
 # What it does: worktrees (detached, committed state only) of forge-client-obsidian, music-theory, forge-tutorial, forge-moda, music-core, forge and music-playground
@@ -31,6 +33,10 @@
 #   * it FAILS the matrix (exit non-zero) on: a failed or errored test, a pytest exit code other than 0, no summary line, no test passed, or MORE skips than FORGE_PYTEST_SKIP_MAX (default 7, the skips tests/music
 #     has since drain 2026-10-27-0900 (was 40, then 10: the seven left are percussion-lab tests that need Python >= 3.10); a ratchet, so a NEW skip cannot hide behind a green line; lower it when skips are fixed). Skip reasons are printed when the ceiling is crossed.
 #   * the push of a drain that ran this leg stays conditional on the matrix's exit status.
+# The power guard (2026-11-18-1200; a matrix started on battery at 10 % slept twice, timed out nested tests and hung for hours): BEFORE it creates anything the matrix reads `pmset -g batt` (scripts/dev/power-check.mjs, rules in power-core.mjs) and
+#   REFUSES to start on battery power (any charge) or below 30 % charge (exit 1, one sentence, FORGE_POWER_GUARD=off to run anyway); a Mac it cannot read (no pmset, a desktop) is not refused. It then holds the Mac awake for as long as it runs:
+#   `caffeinate -i -s -w <its own pid>` (idle and system sleep; it ends with the matrix however that ends; FORGE_CAFFEINATE=off to skip). A killed matrix (kill -9, a closed terminal) leaves its worktrees registered: the next start prints how many and
+#   the command, `bash scripts/drain-matrix.sh --cleanup-worktrees`, which removes exactly the worktrees git has registered under a drain-matrix.* directory (it waits for the heavy lock like everything here, so it cannot run under a live matrix).
 # Output: one summary table at the end; full logs under $LOGDIR (default: <worktrees>/logs).
 set -euo pipefail
 
@@ -42,7 +48,7 @@ fi
 
 PROJECTS="${PROJECTS:-$HOME/projects}"
 REPOS=(forge-client-obsidian music-theory forge-tutorial forge-moda music-core forge music-playground)
-FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD; SERIAL=0; LEAN_FULL=0
+FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD; SERIAL=0; LEAN_FULL=0; CLEANUP_ONLY=0; CAFF=""
 for arg in "$@"; do
   case "$arg" in
     --forge) FORGE_MODE=on ;;
@@ -51,10 +57,28 @@ for arg in "$@"; do
     --auto) FORGE_MODE=auto ;;
     --serial) SERIAL=1 ;;
     --full-lean) LEAN_FULL=1 ;;
+    --cleanup-worktrees) CLEANUP_ONLY=1 ;;
     --*) echo "unknown option: $arg" >&2; exit 2 ;;
     *) CLIENT_REF="$arg" ;;
   esac
 done
+# 2026-11-18-1200: the worktrees git has registered for <repo> under a directory a matrix made (drain-matrix.XXXXXX, the mktemp name below); this is git's own record, not a sweep of the temp directory by name.
+matrix_worktrees() { git -C "$PROJECTS/$1" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p' | grep -E '/drain-matrix\.[A-Za-z0-9]+/' || true; }
+cleanup_worktrees() {
+  local r wt l n=0 bad=0
+  for r in "${REPOS[@]}"; do
+    [ -e "$PROJECTS/$r/.git" ] || continue
+    while IFS= read -r wt; do
+      [ -n "$wt" ] || continue
+      for l in node_modules .venv assets/wheels; do [ -L "$wt/$l" ] && unlink "$wt/$l"; done      # the links a matrix puts in a worktree go first, as links (unlink removes one link, never a directory; what it pointed at is untouched)
+      if git -C "$PROJECTS/$r" worktree remove --force "$wt" >/dev/null 2>&1; then n=$((n+1)); echo "removed ($r): $wt"; else bad=$((bad+1)); echo "could not remove ($r): $wt" >&2; fi
+    done < <(matrix_worktrees "$r")
+    git -C "$PROJECTS/$r" worktree prune >/dev/null 2>&1 || true
+  done
+  echo "cleanup-worktrees: $n removed, $bad could not be removed (the logs of a killed run stay in its drain-matrix.* directory under the temp directory: read them, then delete it by hand)"
+  [ "$bad" -eq 0 ]
+}
+if [ "$CLEANUP_ONLY" = "1" ]; then cleanup_worktrees; exit $?; fi
 FORGE_PYTEST_SKIP_MAX="${FORGE_PYTEST_SKIP_MAX:-7}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/drain-matrix.XXXXXX")"
 LOGDIR="${LOGDIR:-$WORK/logs}"
@@ -67,6 +91,7 @@ FAILED=0
 fail()  { red "FAIL: $*"; FAILED=1; }
 die()   { red "FAIL: $*"; cleanup; exit 1; }
 cleanup() {
+  [ -n "$CAFF" ] && kill "$CAFF" 2>/dev/null || true
   [ "${KEEP:-0}" = "1" ] && { echo "worktrees kept in $WORK"; return; }
   rm -f "$LEAN/forge-client-obsidian/node_modules" "$LEAN/forge-client-obsidian/assets/wheels" 2>/dev/null || true
   [ -d "$LEAN/forge-client-obsidian" ] && { git -C "$PROJECTS/forge-client-obsidian" worktree remove --force "$LEAN/forge-client-obsidian" >/dev/null 2>&1 || true; }
@@ -105,6 +130,12 @@ reap_leftovers                                   # what an EARLIER killed run le
 step() { echo; echo "== $* ($(( $(date +%s) - T0 ))s)"; }
 
 # ---- 0. preconditions: loud, before anything is built --------------------------------------------------------------------------------------------------------------
+# 2026-11-18-1200: the power guard (see the header): refuse on battery or below 30 % charge, hold the Mac awake, and say how many worktrees an earlier KILLED matrix left registered.
+set +e; power_out="$(node "$(cd "$(dirname "$0")" && pwd)/dev/power-check.mjs" 2>&1)"; power_rc=$?; set -e
+case "$power_rc" in 0) echo "$power_out" ;; 1) die "$power_out" ;; *) echo "power: the check could not run (exit $power_rc), not checked" ;; esac
+if [ "${FORGE_CAFFEINATE:-}" != "off" ] && command -v caffeinate >/dev/null 2>&1; then caffeinate -i -s -w $$ >/dev/null 2>&1 & CAFF=$!; fi
+stale=0; for r in "${REPOS[@]}"; do [ -e "$PROJECTS/$r/.git" ] && stale=$(( stale + $(matrix_worktrees "$r" | grep -c . || true) )); done
+[ "$stale" -gt 0 ] && red "WARN: $stale worktree(s) of an earlier matrix are still registered (a killed run): bash scripts/drain-matrix.sh --cleanup-worktrees"
 for r in "${REPOS[@]}"; do [ -d "$PROJECTS/$r/.git" ] || die "repo $PROJECTS/$r is missing"; done
 CLIENT="$PROJECTS/forge-client-obsidian"
 [ -d "$PROJECTS/forge/.venv" ] || die "$PROJECTS/forge/.venv is missing (the engine's Python env)"
