@@ -139,7 +139,7 @@ test('loop check: a composition that plays only phrases and arrangements reads n
 test('loop check: the note itself (direct), and a chain that comes back to it through other compositions (indirect), are refused with the draw-time words', async () => {
   const read = vaultOf({ 'compositions/song_2': sections('phrases/phrase_001', 'compositions/song_3'), 'compositions/song_3': sections('compositions/song_1') });
   assert.equal(await compositionLoopRefusal('compositions/song_1', { kind: 'composition', sections: sections('compositions/song_1') }, read), 'The composition "song_1" cannot play itself; that would loop.');
-  assert.equal(await compositionLoopRefusal('compositions/song_1', { kind: 'composition', sections: sections('compositions/song_2') }, read), 'The composition song_1 loops back to this composition or is nested more than 6 deep.');
+  assert.equal(await compositionLoopRefusal('compositions/song_1', { kind: 'composition', sections: sections('compositions/song_2') }, read), 'The composition song_2 loops back to this composition: song_1 → song_2 → song_3 → song_1.', '2026-11-19-0910: the words name the note the sentence plays and the whole trail, so BOTH notes of the loop are in the sentence');
   const twice = vaultOf({ 'compositions/song_2': sections('compositions/song_2') });
   assert.match(String(await compositionLoopRefusal('compositions/song_1', { kind: 'composition', sections: sections('compositions/song_2') }, twice)), /^The composition song_2 loops back to this composition/);
 });
@@ -150,9 +150,9 @@ test('loop check: a chain exactly at the limit passes and one deeper is refused 
   // song_1 -> c1 -> c2 ...: a section of c_k is drawn with the chain [song_1, c1 .. c_k], k + 1 long, and drawing refuses a chain of 6 (any source, a phrase too). So c4 may hold a phrase (chain 5) and c5 may not (chain 6).
   assert.equal(await compositionLoopRefusal('compositions/song_1', { kind: 'composition', sections: sections('compositions/c1') }, vaultOf(chainOf(4))), null);
   const deep = await compositionLoopRefusal('compositions/song_1', { kind: 'composition', sections: sections('compositions/c1') }, vaultOf(chainOf(5)));
-  assert.equal(deep, 'The phrase phrase_001 loops back to this composition or is nested more than 6 deep.');
+  assert.equal(deep, 'The composition c1 is nested more than 6 deep: song_1 → c1 → c2 → c3 → c4 → c5 → phrase_001.');
   const deeper = await compositionLoopRefusal('compositions/song_1', { kind: 'composition', sections: sections('compositions/c1') }, vaultOf({ ...chainOf(5), 'compositions/c5': sections('compositions/c6'), 'compositions/c6': sections('phrases/phrase_001') }));
-  assert.equal(deeper, 'The composition c6 loops back to this composition or is nested more than 6 deep.');
+  assert.equal(deeper, 'The composition c1 is nested more than 6 deep: song_1 → c1 → c2 → c3 → c4 → c5 → c6.');
 });
 
 test('loop check: a composition the vault lists but cannot be read is a refusal in one sentence, an arrangement or phrase section is never read', async () => {

@@ -95,21 +95,25 @@ const baseName = (id: string): string => id.split('/').pop() ?? id;
 /** The draw-time rule of composition-core.ts (barsOfSource) asked BEFORE anything is written: starting from the note being planned, a section that is already in the chain, or that would make the chain COMPOSITION_DEPTH_MAX long, is a refusal.
  *  `readSections` gives the sections of a composition note in the vault (`compositions/<name>`), or null when it cannot be read. A phrase or an arrangement section is never read: only a composition can send the chain on. Null = fine. */
 export async function compositionLoopRefusal(self: string, params: CompositionParams, readSections: (id: string) => Promise<CompositionSection[] | null>): Promise<string | null> {
-  const walk = async (sections: readonly CompositionSection[], chain: readonly string[]): Promise<string | null> => {
+  // 2026-11-19-0910: the words NAME the note the sentence plays (`top`) and the whole trail, so both notes of the loop are in the sentence: "The composition song_2 loops back to this composition: song_1 -> song_2 -> song_1."
+  const trail = (chain: readonly string[], last: string): string => [...chain, last].map(baseName).join(' → ');
+  const walk = async (sections: readonly CompositionSection[], chain: readonly string[], top: string | null): Promise<string | null> => {
     for (const s of sections) {
       if (chain.length === 1 && s.source === self) return selfLoop(baseName(self));
       const kind = s.source.split('/')[0];
       const what = FOLDER_OF[kind] ?? 'composition';
-      if (chain.includes(s.source) || chain.length >= COMPOSITION_DEPTH_MAX) return `The ${what} ${baseName(s.source)} loops back to this composition or is nested more than ${COMPOSITION_DEPTH_MAX} deep.`;
+      const named = top ?? s.source;                                                                       // the note the typed sentence plays: the one the person can change
+      if (chain.includes(s.source)) return `The ${FOLDER_OF[named.split('/')[0]] ?? 'composition'} ${baseName(named)} loops back to this composition: ${trail(chain, s.source)}.`;
+      if (chain.length >= COMPOSITION_DEPTH_MAX) return `The ${FOLDER_OF[named.split('/')[0]] ?? what} ${baseName(named)} is nested more than ${COMPOSITION_DEPTH_MAX} deep: ${trail(chain, s.source)}.`;
       if (kind !== 'compositions') continue;
       const inner = await readSections(s.source);
       if (inner === null) return `The composition ${baseName(s.source)} could not be read, so it cannot be played from here.`;
-      const found = await walk(inner, [...chain, s.source]);
+      const found = await walk(inner, [...chain, s.source], named);
       if (found !== null) return found;
     }
     return null;
   };
-  return walk(params.sections, [self]);
+  return walk(params.sections, [self], null);
 }
 
 // ---- the preview -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------

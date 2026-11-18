@@ -186,7 +186,7 @@ test('LOOP THROUGH THE VAULT: song_2 plays song_1, so a plan that makes song_1 p
   const song2 = newCompositionNote('song_2', { kind: 'composition', sections: [{ source: 'compositions/song_1' }] });
   const r = rig({ path: COMP, note: COMP_NOTE(), extra: { 'compositions/song_2.md': song2 }, service: async () => OK({ kind: 'composition', sections: [{ source: 'compositions/song_2' }] }) });
   await r.ready(); r.type(FREE_COMP); await r.enter();
-  assert.match(r.strip(), /^The service refused: The composition song_1 loops back to this composition or is nested more than 6 deep\.$/);
+  assert.match(r.strip(), /^The service refused: The composition song_2 loops back to this composition: song_1 → song_2 → song_1\.$/);
   assert.deepEqual(r.writes, []); assert.ok(!r.buttons().includes('apply-preview'));
   assert.ok(r.reads.includes('compositions/song_2.md'), 'the vault was asked');
   // the same plan is fine when song_2 does not loop back

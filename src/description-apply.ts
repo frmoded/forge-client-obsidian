@@ -257,10 +257,16 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       return { ok: false };
     }
   }
-  async function applyFromBoxCore(path: string, text: string, said = false): Promise<{ ok: boolean; disk?: string }> {
+  async function applyFromBoxCore(path: string, text: string, said = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
     let failure: string | null = null, change = '', sentence = text;
+    {                                                                                                       // 2026-11-19-0910: the box's apply (the second Enter, or an apply with no preview) asks the same loop check before it writes
+      let now = ''; try { now = await ports.read(path); } catch { /* the write below says so */ }
+      const edited0 = now === '' ? null : replaceDescriptionSection(now, text); const st0 = edited0 === null ? null : descriptionState(edited0, family, ports.vault());
+      const loop = st0 !== null && st0.kind === 'apply' ? await loopRefusalOf(noteId(path), st0.params) : null;
+      if (loop !== null) { pb(`apply refused: ${loop}`); say(path, { type: 'refused', message: loop, by: 'plugin' }); setBoxNote(path, `Refused: ${loop}`); return { ok: false, message: `Refused: ${loop}` } as { ok: boolean; disk?: string; message?: string }; }
+    }
     try {
       await proc(path, (cur) => {
         const edited = replaceDescriptionSection(cur, text);
@@ -342,6 +348,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** The Python was edited: a known shape maps back (the same `process` as for a Description or a Recipe, then the note is Python-sourced); anything else makes the note CUSTOM (its Python is kept as typed). */
   async function doApplyPython(path: string, family: Family, st: Extract<DescriptionState, { kind: 'python-apply' | 'python-custom' }>): Promise<void> {
     let change = '', failure: string | null = null, stale = false, custom = false, dropped = false;
+    if (st.kind === 'python-apply') { const loop = await loopRefusalOf(noteId(path), st.params); if (loop !== null) { ports.trace(`[forge-description] refused ${basename(path)}: ${loop}`); set(path, { state: st, message: `Not applied: ${loop}` }); return; } }
     try {
       await proc(path, (cur) => {
         const r = applyPythonText(cur, basename(path), family, ports.vault(), st.python);
@@ -373,6 +380,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** The Recipe parsed: ONE `process` makes every derived part again from it (the plan re-decided on the CURRENT text inside the write, against the Recipe that was planned). */
   async function doApplyRecipe(path: string, family: Family, st: Extract<DescriptionState, { kind: 'recipe-apply' }>): Promise<void> {
     let change = '', failure: string | null = null, stale = false;
+    { const loop = await loopRefusalOf(noteId(path), st.params); if (loop !== null) { ports.trace(`[forge-description] refused ${basename(path)}: ${loop}`); set(path, { state: st, message: `Not applied: ${loop}` }); return; } }
     try {
       await proc(path, (cur) => {
         const r = applyRecipeText(cur, basename(path), family, ports.vault(), st.recipe);
@@ -389,6 +397,10 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** A note whose Description AND Recipe were edited, and the person chose the Description: it is applied as it stands (the Recipe edit is dropped), decided on the CURRENT text inside the write. */
   async function doApplyDescriptionOver(path: string, family: Family): Promise<void> {
     let change = '', failure: string | null = null;
+    { let now = ''; try { now = await ports.read(path); } catch { /* the note went away: the write below says so */ }
+      const chosen = now === '' ? null : descriptionState(now, family, ports.vault(), 'description');
+      const loop = chosen !== null && chosen.kind === 'apply' ? await loopRefusalOf(noteId(path), chosen.params) : null;
+      if (loop !== null) { ports.trace(`[forge-description] refused ${basename(path)}: ${loop}`); const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: `Not applied: ${loop}` }); return; } }
     try {
       await proc(path, (cur) => {
         const r = applyDescriptionText(cur, basename(path), family, ports.vault(), extractDescription(cur), 'description');
@@ -403,6 +415,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   async function doApply(path: string, family: Family, st: Extract<DescriptionState, { kind: 'apply' }>): Promise<void> {
     let change = '', failure: string | null = null, stale = false;
+    { const loop = await loopRefusalOf(noteId(path), st.params); if (loop !== null) { ports.trace(`[forge-description] refused ${basename(path)}: ${loop}`); set(path, { state: st, message: `Not applied: ${loop}` }); return; } }
     try {
       await proc(path, (cur) => {
         const r = applyDescriptionText(cur, basename(path), family, ports.vault(), st.sentence);
@@ -466,12 +479,25 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   async function revert(path: string): Promise<void> {
     const family = familyOfPath(path); if (family === null) return;
+    { let now = ''; try { now = await ports.read(path); } catch { /* the write below says so */ }                  // 2026-11-19-0910: the json cache's composition may loop NOW (another composition changed since): the same check
+      const prev = now === '' ? null : cacheParams(now, family); const loop = prev !== null ? await loopRefusalOf(noteId(path), prev) : null;
+      if (loop !== null) { const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: `Revert: ${loop}` }); return; } }
     let failure: string | null = null;
     try { await proc(path, (cur) => { const r = revertDescriptionText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert: ${(e as Error)?.message ?? e}`; }
     if (failure !== null) { const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: failure }); return; }
     const was = ui.get(path)?.state.kind;
     told.delete(path); ports.trace(was === 'python-apply' || was === 'python-custom' ? pythonRevertedLine(basename(path)) : was === 'recipe-rejected' || was === 'recipe-apply' || was === 'both-edited' ? recipeRevertedLine(basename(path)) : revertedLine(basename(path))); set(path, null);
   }
+
+  /** 2026-11-19-0910 - THE loop check: asked ONCE, by every path that is about to write a composition's recipe (the grammar's preview in the box, the box's apply, a Description edited in the note, a Recipe or a Python edited by hand, the service's plan and the apply of its preview, a revert), BEFORE any preview and
+   *  before any write. Before this the service's answer was the only path that asked (askNewKind), so `Play [[comp_002]]` typed in comp_001 (comp_002 plays comp_001) was read by the GRAMMAR, previewed and applied, and the Score could not be drawn. The words are compositionLoopRefusal's: both notes and the trail.
+   *  The draw-time message of composition-core.ts stays as the second guard. A phrase, an arrangement and a vault without compositions never reach the vault read. `note` is the composition's id (`compositions/<name>`). */
+  async function loopRefusalOf(note: string, params: GrammarParams): Promise<string | null> {
+    if (params.kind !== 'composition') return null;
+    const readSections = async (id: string) => { try { const r = readCompositionNote(await ports.read(`${id}.md`)); return r.ok ? r.value.sections : null; } catch { return null; } };
+    return compositionLoopRefusal(note, params, readSections);
+  }
+  const noteId = (path: string): string => path.replace(/\.md$/, '');
 
   type Asked = { ok: true; params: GrammarParams } | { ok: false; message: string };
   /** 2026-11-12-1206: the service's answer for an ARRANGEMENT or a COMPOSITION sentence, read by the plugin's own validators and the vault's lists, gated on the service version, and (a composition) checked for loops through the vault. */
@@ -485,11 +511,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       }
       return { ok: false, message: fam.message };
     }
-    if (fam.params.kind === 'composition') {
-      const readSections = async (id: string) => { try { const r = readCompositionNote(await ports.read(`${id}.md`)); return r.ok ? r.value.sections : null; } catch { return null; } };
-      const loop = await compositionLoopRefusal(payload.note ?? '', fam.params, readSections);
-      if (loop !== null) return { ok: false, message: loop };
-    }
+    const loop = await loopRefusalOf(payload.note ?? '', fam.params);
+    if (loop !== null) return { ok: false, message: loop };
     return { ok: true, params: fam.params };
   }
 
@@ -551,6 +574,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     if (family === null || !u?.preview) return { ok: false, message: 'There is nothing to apply.' };                // never without a preview
     const { params, forSentence } = u.preview;
     let failure: string | null = null, change = '';
+    { const loop = await loopRefusalOf(noteId(path), params as GrammarParams);                                // the vault may have moved since the preview was made (another composition edited): asked once more, the same words
+      if (loop !== null) { set(path, { state: u.state, message: loop, ...(u.fromBox ? { fromBox: true, base: u.base } : {}) }); if (u.fromBox) { endSuggestion(path, 'expired'); say(path, { type: 'refused', message: loop, by: 'plugin' }); } return { ok: false, message: loop }; } }
     // a suggestion for a sentence typed in the BOX: nothing was written for it, so the Description on disk must be what it was when the sentence was sent, and the box must still hold that sentence
     if (u.fromBox && boxText(path) !== undefined && boxText(path) !== forSentence) { set(path, { state: u.state, message: 'The text in the box changed after the suggestion; ask again.', fromBox: true, base: u.base }); endSuggestion(path, 'expired'); say(path, { type: 'notice', message: 'The text in the box changed after the suggestion; ask again.' }); return { ok: false, message: 'The text in the box changed after the suggestion; ask again.' }; }
     try {
@@ -592,6 +617,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const st = descriptionState(edited, family, ports.vault());
     if (st.kind === 'apply') {
       if (st.unchanged) { const m = 'Nothing changed: the note already says this.'; say(path, { type: 'notice', message: m }); return { ok: false, message: m }; }
+      const loop = await loopRefusalOf(noteId(path), st.params);                                           // 2026-11-19-0910: the grammar read it, but a LOOP is refused before any preview, in the same words as the service path
+      if (loop !== null) { pb(`grammar verdict: accepted, then refused: ${loop}`); say(path, { type: 'refused', message: loop, by: 'plugin' }); setBoxNote(path, `Refused: ${loop}`); return { ok: false, message: `Refused: ${loop}` }; }
       const description = describe(st.params as never);
       pb('grammar verdict: accepted (preview, nothing written)');
       say(path, { type: 'suggestion', description, recipe: '', via: 'grammar' });
@@ -634,7 +661,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       const r = await applyFromBoxCore(path, text, true);
       const fail = ui.get(path)?.message;
       if (r.ok) endSuggestion(path, 'applied');
-      return r.ok ? r : { ok: false, message: fail ?? 'It did not go through.' };
+      return r.ok ? r : { ok: false, message: r.message ?? fail ?? 'It did not go through.' };
     } catch (e) {                                                                                         // never silent (2026-11-13-1211): the console, the dialog and the line under the card say it
       const why = (e as Error)?.message ?? String(e);
       pbWarn(`apply failed: ${why}`); console.error('[forge-promptbox] apply failed', e);

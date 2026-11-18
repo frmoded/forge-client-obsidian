@@ -105,3 +105,9 @@ test('2026-11-18: the real time of each entry survives the store round trip (a r
   const again = settingsStore(JSON.parse(JSON.stringify(settings)), () => {});
   assert.deepEqual(again.entries('a.md').map((e) => e.at), [1_700_000_000_000, 1_700_000_090_000]);
 });
+
+test('2026-11-19-0910: a refusal made by the plugin\'s own check (a composition loop) says "Refused:", not "The service refused:" (the service was never asked); the service\'s own refusal keeps its words', () => {
+  assert.equal(fromOutcome({ type: 'refused', message: 'The composition song_2 loops back to this composition: song_1 → song_2 → song_1.', by: 'plugin' }).text, 'Refused: The composition song_2 loops back to this composition: song_1 → song_2 → song_1.');
+  assert.equal(fromOutcome({ type: 'refused', message: 'no bars yet' }).text, 'The service refused: no bars yet');
+  assert.equal(fromOutcome({ type: 'refused', message: 'x', by: 'plugin' }).kind, 'refused', 'it is still an error line (the neutral "!" glyph, no red)');
+});
