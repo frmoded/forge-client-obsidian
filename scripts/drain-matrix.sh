@@ -40,10 +40,18 @@
 # Output: one summary table at the end; full logs under $LOGDIR (default: <worktrees>/logs).
 set -euo pipefail
 
+# 2026-11-19-0915: THE MATRIX RUNS A COPY OF ITSELF. bash reads a script as it goes, so an edit of this file while a matrix is running it moves the bytes under the shell and the run dies with a syntax error (it did, 2026-11-19, when comments of this file were edited mid-run).
+# The first thing it does is copy itself to a temp file and run THAT; FORGE_MATRIX_SCRIPT_DIR keeps the original directory (where dev/ lives), FORGE_MATRIX_COPY names the copy, which cleanup removes at the end. FORGE_MATRIX_SELF_COPY=off: run the file itself (the old behaviour; the control of the test).
+if [ -z "${FORGE_MATRIX_COPY:-}" ] && [ "${FORGE_MATRIX_SELF_COPY:-}" != "off" ]; then
+  SELF_DIR="$(cd "$(dirname "$0")" && pwd)"; SELF_COPY="$(mktemp "${TMPDIR:-/tmp}/drain-matrix-copy.XXXXXX")"
+  cp "$0" "$SELF_COPY" && FORGE_MATRIX_COPY="$SELF_COPY" FORGE_MATRIX_SCRIPT_DIR="$SELF_DIR" exec bash "$SELF_COPY" "$@"
+fi
+SCRIPT_DIR="${FORGE_MATRIX_SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+
 # 2026-10-31-1125: ONE HEAVY THING AT A TIME. The first thing this script does is take $TMPDIR/forge-heavy.lock (scripts/dev/heavy-lock.mjs): when a mutation pass, a real-Chrome measure or another matrix holds it, this one WAITS and
 # says who holds it; a stale lock (its holder gone, kill -9 included) is taken over. Whatever the lock starts is told so (FORGE_HEAVY_LOCK_HELD), so a heavy tool inside the matrix does not wait for the matrix. FORGE_HEAVY_LOCK=off: no lock.
 if [ -z "${FORGE_HEAVY_LOCK_HELD:-}" ] && [ "${FORGE_HEAVY_LOCK:-}" != "off" ]; then
-  exec node "$(cd "$(dirname "$0")" && pwd)/dev/heavy-lock.mjs" run --what drain-matrix -- bash "$0" "$@"
+  exec node "$SCRIPT_DIR/dev/heavy-lock.mjs" run --what drain-matrix -- bash "$0" "$@"
 fi
 
 PROJECTS="${PROJECTS:-$HOME/projects}"
@@ -91,6 +99,7 @@ FAILED=0
 fail()  { red "FAIL: $*"; FAILED=1; }
 die()   { red "FAIL: $*"; cleanup; exit 1; }
 cleanup() {
+  [ -n "${FORGE_MATRIX_COPY:-}" ] && [ -f "$FORGE_MATRIX_COPY" ] && unlink "$FORGE_MATRIX_COPY" 2>/dev/null || true       # the temp copy of this script (a file, never a tree)
   [ -n "$CAFF" ] && kill "$CAFF" 2>/dev/null || true
   [ "${KEEP:-0}" = "1" ] && { echo "worktrees kept in $WORK"; return; }
   rm -f "$LEAN/forge-client-obsidian/node_modules" "$LEAN/forge-client-obsidian/assets/wheels" 2>/dev/null || true
@@ -119,10 +128,10 @@ on_signal() {
   exit 130
 }
 trap on_signal INT TERM HUP
-REAP="$(cd "$(dirname "$0")" && pwd)/dev/reap.sh"
+REAP="$SCRIPT_DIR/dev/reap.sh"
 # 2026-11-04-1174 (R): the narrow reaper (scripts/dev/reap-fixtures.mjs): kills only ORPHANED test processes whose command line carries a mutation runner's scratch directory (a leaked fixture mutant spins at 100 % CPU for ever). It runs
 # after the legs and again at the cleanup; it never fails a run and never touches an unrelated node.
-REAP_FIXTURES="$(cd "$(dirname "$0")" && pwd)/dev/reap-fixtures.mjs"
+REAP_FIXTURES="$SCRIPT_DIR/dev/reap-fixtures.mjs"
 reap_fixtures() { [ -f "$REAP_FIXTURES" ] && node "$REAP_FIXTURES" --quiet 2>/dev/null || true; }
 # The broom is OPT-IN here (FORGE_REAP=1): it sweeps shared temp space by name, which nothing should do unasked. Run it by hand: bash scripts/dev/reap.sh --dry-run
 reap_leftovers() { [ "${FORGE_REAP:-0}" = "1" ] && [ -f "$REAP" ] && bash "$REAP" --quiet 2>/dev/null || true; }
@@ -131,7 +140,7 @@ step() { echo; echo "== $* ($(( $(date +%s) - T0 ))s)"; }
 
 # ---- 0. preconditions: loud, before anything is built --------------------------------------------------------------------------------------------------------------
 # 2026-11-18-1200 (rule changed by the driver 2026-11-18): the power guard (see the header): refuse only on battery below 20 % charge, hold the Mac awake, and say how many worktrees an earlier KILLED matrix left registered.
-set +e; power_out="$(node "$(cd "$(dirname "$0")" && pwd)/dev/power-check.mjs" 2>&1)"; power_rc=$?; set -e
+set +e; power_out="$(node "$SCRIPT_DIR/dev/power-check.mjs" 2>&1)"; power_rc=$?; set -e
 case "$power_rc" in 0) echo "$power_out" ;; 1) die "$power_out" ;; *) echo "power: the check could not run (exit $power_rc), not checked" ;; esac
 if [ "${FORGE_CAFFEINATE:-}" != "off" ] && command -v caffeinate >/dev/null 2>&1; then caffeinate -i -s -w $$ >/dev/null 2>&1 & CAFF=$!; fi
 stale=0; for r in "${REPOS[@]}"; do [ -e "$PROJECTS/$r/.git" ] && stale=$(( stale + $(matrix_worktrees "$r" | grep -c . || true) )); done
@@ -172,19 +181,19 @@ if [ "$FORGE_ONLY" = "0" ]; then
 fi
 
 declare -a SUMMARY
-LEANSCAN="$(cd "$(dirname "$0")" && pwd)/dev/lean-leg-files.mjs"
+LEANSCAN="$SCRIPT_DIR/dev/lean-leg-files.mjs"
 
 # 2026-10-31-1125: the memory budget. Node's own default is every core minus one test files at once PER LEG, and two legs run together (measured 2026-10-31: 34 files at once, 11.5 GB of tooling); the files one leg runs at once are
 # capped so that (files x the assumed size of one) fits FORGE_MEM_BUDGET_MB (default half the RAM) - scripts/dev/mem-plan.mjs. FORGE_MATRIX_FILE_MB (default 400) is that size.
 # 2026-11-05-1176: the machine first. Its load, swap and free memory are printed at the start of every run; when swap is over 85 % used or the 1-minute load is over 4 per core (two matrix reds on 2026-11-03/04 were that machine, not the tree) the legs are not run at once
 # (the sentence says so and the run goes on --serial). Never a failure: a machine that cannot be read, or the check erroring, is silence and the run goes on as asked. FORGE_MACHINE_READ_FILE stands in for the machine in the tests.
-STRAIN="$(node "$(cd "$(dirname "$0")" && pwd)/dev/mem-plan.mjs" strain 2>/dev/null || true)"
+STRAIN="$(node "$SCRIPT_DIR/dev/mem-plan.mjs" strain 2>/dev/null || true)"
 [ -n "$STRAIN" ] && printf '%s\n' "$STRAIN"
 if printf '%s\n' "$STRAIN" | grep -q '^the machine is thrashing'; then SERIAL=1; fi
 LEGS_AT_ONCE=2; [ "$SERIAL" = "1" ] && LEGS_AT_ONCE=1
-FILE_CONC="$(node "$(cd "$(dirname "$0")" && pwd)/dev/mem-plan.mjs" matrix-files --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 8)"
+FILE_CONC="$(node "$SCRIPT_DIR/dev/mem-plan.mjs" matrix-files --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 8)"
 export FILE_CONC
-echo "memory: $(node "$(cd "$(dirname "$0")" && pwd)/dev/mem-plan.mjs" --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 'budget unknown')"
+echo "memory: $(node "$SCRIPT_DIR/dev/mem-plan.mjs" --legs "$LEGS_AT_ONCE" 2>/dev/null || echo 'budget unknown')"
 
 # ---- 2. the legs --------------------------------------------------------------------------------------------------------------------------------------------------------
 edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and bump check in the music leg) + build + npm test; a failed step leaves $LOGDIR/leg-<ed>.failed naming it
