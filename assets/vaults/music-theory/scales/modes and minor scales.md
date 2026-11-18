@@ -39,6 +39,7 @@ Exercise: pick a home note or press Random, choose a mode or a minor scale from 
 scales/resources/html/scale_build_modes_and_minor.html
 406
 ```
+*Exercise: choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play.*
 
 <div style="
   display:flex;

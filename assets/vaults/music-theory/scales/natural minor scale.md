@@ -16,20 +16,23 @@ Same recipe, different home: W to D, H to E♭, W to F, W to G, H to A♭, W to 
 
 A minor and C major use exactly the same seven notes. C major sits a minor third, three half steps, above A. Change the home note and you change the mood without moving a single key.
 
-## Check your work
+## Time to work
 
-Count the half steps between neighbouring notes and hold them against the recipe: a whole step is two, a half step is one. Then read the letters: each of the seven notes gets its own letter, none twice, none skipped. C D E♭ F G A♭ B♭ passes. C D D♯ F G G♯ A♯ sounds identical and fails: two Ds, two Gs, no E, no B.
+Two checks, every time. Count the half steps against the recipe, then read the letters: seven notes, seven different letters, none twice, none skipped. C D E♭ F G A♭ B♭ passes. C D D♯ F G G♯ A♯ sounds identical and fails: two Ds, two Gs, no E, no B.
+
+Don't stop at A and C. Build all twelve natural minor scales, one per home note, in the exercise below. It keeps count of how many of the twelve you've finished.
 
 Harmonic and melodic minor change one or two of these notes; they're on [[modes and minor scales]].
 
 To see any scale on a keyboard and a staff, use the player on [[Scales]].
 
-Exercise: pick a home note or press Random, then find the natural minor scale on the keys. The staff fills in as you go. Easy, medium and hard allow 5, 3 or 1 wrong taps, so count your steps first. When it ends you get the whole scale, its letters and its steps, and Play lets you hear it.
+**W – H – W – W – H – W – W**
 
 ```html-embed
 scales/resources/html/scale_build_natural_minor.html
 406
 ```
+*Exercise: choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play.*
 
 <div style="
   display:flex;

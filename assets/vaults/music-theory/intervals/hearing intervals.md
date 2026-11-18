@@ -12,6 +12,7 @@ One after the other: you hear two notes in turn, the first is lit, and you find 
 music_instruments/resources/html/interval_ear_one_after_the_other.html
 194
 ```
+*Ear exercise: two notes sound one after the other and the first is lit. Find the second on the keyboard. Choose easy, medium or hard; the score stays on the page until you reload.*
 
 Both at once: two notes sound together, the lower is lit, and you find the higher.
 
@@ -19,6 +20,7 @@ Both at once: two notes sound together, the lower is lit, and you find the highe
 music_instruments/resources/html/interval_ear_both_at_once.html
 194
 ```
+*Ear exercise: two notes sound together and the lower one is lit. Find the higher one.*
 
 Three at once: a triad sounds, the lowest note is lit, and you find the other two.
 
@@ -26,6 +28,7 @@ Three at once: a triad sounds, the lowest note is lit, and you find the other tw
 music_instruments/resources/html/interval_ear_triads.html
 181
 ```
+*Ear exercise: a three-note chord sounds and the lowest note is lit. Find the other two.*
 
 You're done when you can land on the second note within a try or two, up or down, most of the time.
 

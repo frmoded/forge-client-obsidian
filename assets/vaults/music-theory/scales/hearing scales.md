@@ -8,6 +8,7 @@ Name the scale: you hear one, you pick which it is. Words like bright or dark ar
 scales/resources/html/scale_ear_name_the_scale.html
 286
 ```
+*Ear exercise: you hear a scale; name it. Choose easy, medium or hard.*
 
 You're done when you can tell major from minor by ear. Ready to build them all? [[building scales]] is next.
 

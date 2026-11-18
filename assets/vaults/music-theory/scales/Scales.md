@@ -16,6 +16,7 @@ Try it: pick a home note and a scale, press Play, and hear the recipe.
 scales/resources/html/scale_player.html
 371
 ```
+*Scale player: pick a home note and a scale, press Play, and see and hear it on the keys and the staff.*
 
 **Practice:**
 
