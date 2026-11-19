@@ -2,7 +2,8 @@
 // APPENDED (the preview says what it replaces), the note is rewritten from the whole list in ONE write (commitList), a hand edit of the list is re-read on save (an unreadable line is kept and named in the dialog, the replay stops before it),
 // and Cmd/Ctrl+Z (in an empty composer) and the "+" menu undo and redo the last sentence.
 // 2026-11-19-0980 (stage 2): a PHRASE is a list too - line 1 is its HEAD (Extend, Mix, Morph or Take), later lines are modifier lines, structure steps, transforms and forks (sentence-list-core.ts, kind 'phrase'); a head replaces line 1; a random line
-// draws its seed once (at the preview, the apply writes the SAME one); the composer shows nothing of the list; the bar-selection menu APPENDS its sentence (`appendLine`). A bar and every other note are untouched (P3).
+// draws its seed once (at the preview, the apply writes the SAME one); the composer shows nothing of the list; the bar-selection menu APPENDS its sentence (`appendLine`). Every other note is untouched (P3).
+// 2026-11-19-0993 (stage 3: BARS): a bar note (`bars/bar_NNN.md`) is a list too, in its front matter (`lines:`); the Beat Box's gestures and the composer's typed sentences go through `appendLine` (one `process`, one write, undoable); see bar-list-controller.ts.
 // 2026-10-31-1140 (M16a): the same controller also hears a hand-edited RECIPE (the Recipe is a source too): it parses (applied by ONE `process`, the Description, Python, json cache and stamps made again from it), it does not parse (nothing is
 // written; the bar says the line and the column; Revert), or the Description was edited too (nothing is applied; the bar offers Update from Description / Update from Recipe). One controller and one bar per pane, so a note with two
 // things to say is said once. The service is NOT offered for a Recipe (no LLM): a Recipe that does not parse is the person's to fix.
@@ -26,7 +27,8 @@ import { readCompositionNote } from './composition-core.ts';
 import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import { extractDescription } from './v2-note-core.ts';
-import type { PhraseParams } from './phrase-core.ts';
+import { isBarPath, type PhraseParams } from './phrase-core.ts';
+import { createBarList, type BarAppendOpts, type BarAppendResult } from './bar-list-controller.ts';
 import type { PromptBoxHandle } from './prompt-box-dom.ts';
 import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
 import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
@@ -82,7 +84,7 @@ export interface DescriptionPorts {
 
 interface Ui { state: DescriptionState; message?: string; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
 const basename = (path: string): string => path.replace(/^.*\//, '').replace(/\.md$/, '');
-/** 2026-11-19-0970 and 2026-11-19-0980: the three kinds whose Description is a list of canonical sentences (a phrase, an arrangement, a composition; a bar is not sentence-driven yet: stage 3). */
+/** 2026-11-19-0970 and 2026-11-19-0980: the three kinds whose Description is a list of canonical sentences (a phrase, an arrangement, a composition). 2026-11-19-0993 (stage 3): a BAR is a list too (front matter `lines:`), but it is not a `Family` (no grammar of the three, no Recipe, no Python, no stamps): it is routed by its PATH (`isBarPath`) to bar-list-controller.ts, which shares this controller's dialog, tracked write and box. */
 type ListFamily = Family;
 const isList = (f: Family | null): f is ListFamily => f !== null;
 
@@ -111,7 +113,7 @@ export interface DescriptionController {
   /** 2026-11-17-2001: write what the person saw (the second Enter). */
   applyProposal(path: string, text: string, proposal: Proposal): Promise<{ ok: boolean; disk?: string; message?: string }>;
   /** 2026-11-19-0980: APPEND one canonical sentence to the note's list now (the bar-selection menu's Keep, Delete, Copy and Move; stage 3's grid clicks): one write, undoable, the composer's text left alone. `message` says what was added, or why not (in words). */
-  appendLine(path: string, sentence: string): Promise<{ ok: boolean; message: string }>;
+  appendLine(path: string, sentence: string, opts?: BarAppendOpts): Promise<{ ok: boolean; message: string } & Partial<Pick<BarAppendResult, 'data' | 'reason' | 'unchanged'>>>;
   /** 2026-11-19-0992: is the NEXT click on a bar of this note's Score a copy click? True in a PHRASE tab whose composer's text (trimmed, any case) is exactly "Duplicate" or ends with the word. */
   duplicateArmed(path: string): boolean;
   /** 2026-11-19-0992: the copy click: append ` [[name]].` (the name of the note `noteId` - a lineage id like `bars/bar_007` - names) to the composer's text, return focus to the field and show the usual preview. `null` = the Score could not tell which note made the bar. */
@@ -213,12 +215,13 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const descriptionOf = async (path: string): Promise<string | null> => { try { return extractDescription(await ports.read(path)); } catch { return null; } };
   /** 2026-11-19-0970 and 2026-11-19-0980: what the composer's text area shows of the note: NOTHING of a phrase's, an arrangement's or a composition's list (the list is in the note and the dialog, the prompt line is for the next sentence). */
   const boxDisk = (family: Family | null, text: string): string => (isList(family) ? '' : extractDescription(text));
-  const boxDescriptionOf = async (path: string): Promise<string | null> => { try { return boxDisk(familyOfPath(path), await ports.read(path)); } catch { return null; } };
+  const boxDescriptionOf = async (path: string): Promise<string | null> => { if (isBarPath(path)) return ''; try { return boxDisk(familyOfPath(path), await ports.read(path)); } catch { return null; } };        // 2026-11-19-0993: a bar's composer shows nothing of its list either
   const syncBoxes = (): void => {
     if (disposed) return;
     const live = new Set<HTMLElement>();
     for (const { path, contentEl, tab } of ports.panes()) {
-      if (tab !== true || familyOfPath(path) === null) continue;
+      const barPane = isBarPath(path);                                                                       // 2026-11-19-0993: the Beat Box tab of a bar carries the composer too (its sentences are the bar grammar's)
+      if (tab !== true || (familyOfPath(path) === null && !barPane)) continue;
       if (ui.get(path)?.state.kind === 'custom-note') continue;                                              // a custom note: its Python is the source, the Description is not applied: no box
       live.add(contentEl);
       const have = boxes.get(contentEl);
@@ -227,7 +230,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
       void (async () => {
         let note = ''; try { note = await ports.read(path); } catch { return; }
         if (disposed || boxes.has(contentEl)) return;
-        const family = familyOfPath(path)!;
+        const family = barPane ? null : familyOfPath(path)!;
         if (!lastText.has(path)) lastText.set(path, note);                                                // 2026-11-13-1214: the text the first control change is compared with
         const chat = mountChatPanel(contentEl, {
           box: {
@@ -236,18 +239,18 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
             cancel: () => { cancelledAsk.add(path); },
             discard: () => { discardPreview(path); },
             autoApply: () => ports.composerAutoApply?.() === true,
-            menu: isList(family) ? withListMenu(path, ports.composerMenu?.()) : ports.composerMenu?.(),
+            menu: barPane || isList(family) ? withListMenu(path, ports.composerMenu?.()) : ports.composerMenu?.(),
             history: { get: () => sentHistory.get(path) ?? [], set: (next) => { sentHistory.set(path, [...next]); } },
-            ...(isList(family) ? { undo: () => { void undoLast(path); }, redo: () => { void redoLast(path); } } : {}),         // 2026-11-19-0970: Cmd/Ctrl+Z in an EMPTY composer
+            ...(barPane || isList(family) ? { undo: () => { void undoLast(path); }, redo: () => { void redoLast(path); } } : {}),         // 2026-11-19-0970: Cmd/Ctrl+Z in an EMPTY composer
           },
           store,
           ...(ports.openNote ? { openNote: ports.openNote } : {}),
-        }, boxDisk(family, note));
+        }, barPane ? '' : boxDisk(family, note));
         const handle = chat.box;
         boxes.set(contentEl, { path, handle, chat });
         drawDialog(path);
-        if (isEmptyNote(note)) handle.focus();                                                                // 2026-11-19-0960: a NEW note is empty: the tab opens with the composer focused and nothing else to do
-        pb(`box mounted: ${basename(path)} family=${family} askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`);       // 2026-11-13-1211: the first line the driver sees on opening a tab: this build is live and the service gate says what it will do before Apply is pressed
+        if (!barPane && isEmptyNote(note)) handle.focus();                                                                // 2026-11-19-0960: a NEW note is empty: the tab opens with the composer focused and nothing else to do
+        pb(`box mounted: ${basename(path)} family=${family ?? 'bar'} askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`);       // 2026-11-13-1211: the first line the driver sees on opening a tab: this build is live and the service gate says what it will do before Apply is pressed
       })();
     }
     for (const [el, b] of [...boxes]) if (!live.has(el)) { b.chat.dispose(); boxes.delete(el); }
@@ -255,6 +258,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const boxText = (path: string): string | undefined => { for (const b of boxes.values()) if (b.path === path) return b.handle.state().text; return undefined; };
   const setBoxBusy = (path: string, message: string | null): void => { for (const b of boxes.values()) if (b.path === path) b.handle.setBusy(message); };
   const setBoxNote = (path: string, message: string | null): void => { if (message !== null && ports.showBoxStatus && !ports.showBoxStatus()) return; for (const b of boxes.values()) if (b.path === path) b.handle.setNote(message); };        // 2026-11-15-1217: the status line is the legacy view; a clear (null) always goes through
+  /** 2026-11-19-0993 (THE LIST MODEL, stage 3: BARS): a bar note is a list too (`lines:`); its half of this controller (bar-list-controller.ts) shares the dialog, the tracked write, the box and the trace lines. A bar is routed to it by its PATH (`isBarPath`), never by `familyOfPath`. */
+  const bar = createBarList({ proc: (path, fn) => proc(path, fn), say: (path, ev) => say(path, ev), pb: (line) => pb(line), pbWarn: (line) => pbWarn(line), trace: (line) => ports.trace(line), setBoxNote: (path, m) => setBoxNote(path, m), endSuggestion: (path, state) => endSuggestion(path, state), basename });
   /** The Description on disk, again, into every box of this note (a control wrote it, a hand edit, an apply): unapplied typing is never overwritten (the box offers the choice). */
   const refreshBoxes = async (path: string): Promise<void> => {
     if (disposed) return;
@@ -292,6 +297,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
   }
   async function applyFromBoxCore(path: string, text: string, said = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
+    if (isBarPath(path)) { if (!said) say(path, { type: 'you', text }); return bar.applyBar(path, text); }       // 2026-11-19-0993: the typed sentences in the bar grammar, appended to the bar's list
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
     if (family === 'phrase') { const act = readActionText(text); if (act.kind !== 'none') return applyAction(path, act); }          // 2026-11-19-0992: an action never touches the list: no process call, no write of this note
@@ -301,6 +307,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   async function evaluate(path: string, auto: boolean): Promise<void> {
     if (disposed) return;
+    if (isBarPath(path)) { let t = ''; try { t = await ports.read(path); } catch { return; } await bar.evaluateBar(path, t, auto); syncBoxes(); return; }       // 2026-11-19-0993: a hand edit of a bar's `lines:` (opening only LOOKS)
     const family = familyOfPath(path);
     if (family === null) return;
     let text: string;
@@ -636,7 +643,8 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   }
 
   /** 2026-11-19-0980 - one canonical sentence APPENDED now (the bar-selection menu's steps; stage 3's grid clicks): the same plan as a typed sentence, written in one go and recorded for undo; the composer's text is not touched. */
-  async function appendLine(path: string, sentence: string): Promise<{ ok: boolean; message: string }> {
+  async function appendLine(path: string, sentence: string, opts?: BarAppendOpts): Promise<{ ok: boolean; message: string } & Partial<Pick<BarAppendResult, 'data' | 'reason' | 'unchanged'>>> {
+    if (isBarPath(path)) return bar.appendBar(path, sentence, opts);                                         // 2026-11-19-0993: a Beat Box gesture: one `process`, one write, undoable
     const family = familyOfPath(path);
     if (!isList(family)) return { ok: false, message: 'This note is not a phrase, an arrangement or a composition.' };
     let cur = ''; try { cur = await ports.read(path); } catch (e) { console.error('[forge-promptbox] appendLine: could not read the note', e); const message = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message }); return { ok: false, message }; }
@@ -689,6 +697,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   /** Undo (Cmd/Ctrl+Z in an empty composer, the "+" menu): the last sentence comes off the list and the note is recomputed, ONE write. */
   async function stepList(path: string, which: 'undo' | 'redo'): Promise<{ ok: boolean; message: string }> {
+    if (isBarPath(path)) return bar.stepBar(path, which);
     const family = familyOfPath(path);
     if (!isList(family)) return { ok: false, message: 'Only an arrangement or a composition keeps a list of sentences.' };
     let cur = ''; try { cur = await ports.read(path); } catch (e) { console.error('[forge-promptbox] stepList: could not read the note', e); const message = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message }); return { ok: false, message }; }
@@ -706,6 +715,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   const undoLast = (path: string) => stepList(path, 'undo');
   const redoLast = (path: string) => stepList(path, 'redo');
   const canStep = (path: string, which: 'undo' | 'redo'): boolean => {
+    if (isBarPath(path)) return bar.canStepBar(path, which, lastText.get(path));
     const family = familyOfPath(path), text = lastText.get(path);
     if (!isList(family) || text === undefined) return false;
     const list = listOf(text, family);
@@ -834,6 +844,12 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     }
   }
   async function previewFromBoxCore(path: string, text: string): Promise<PreviewResult> {
+    if (isBarPath(path)) {                                                                                   // 2026-11-19-0993: a bar's composer reads the bar grammar locally (no model call)
+      pb(`preview asked: ${basename(path)} family=bar text=${text.length} chars`);
+      say(path, { type: 'you', text });
+      let cur = ''; try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
+      return bar.previewBar(path, text, cur);
+    }
     const family = familyOfPath(path);
     if (family === null) { pbWarn(`preview skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false, message: 'This note is not a phrase, arrangement or composition.' }; }
     pb(`preview asked: ${basename(path)} family=${family} text=${text.length} chars`);
@@ -884,14 +900,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
 
   return {
     modified(path) {
-      if (disposed || familyOfPath(path) === null) return;
+      if (disposed || (familyOfPath(path) === null && !isBarPath(path))) return;
       void refreshBoxes(path);                                                                         // a control wrote the Description (or a hand edit): the box follows at once, not after the debounce
       const prior = timers.get(path); if (prior !== undefined) ports.clearTimer(prior);
       timers.set(path, ports.setTimer(() => { timers.delete(path); void evaluate(path, true); }, DESCRIPTION_DEBOUNCE_MS));       // a second edit inside the wait replaces the first: the first is never written
     },
     inspect: (path) => evaluate(path, false),
     drop(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } },
-    async reset(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } ui.delete(path); told.delete(path); notices.delete(path); stacks.delete(path); previewed.delete(path); syncBars(); await evaluate(path, false); },
+    async reset(path) { const t = timers.get(path); if (t !== undefined) { ports.clearTimer(t); timers.delete(path); } ui.delete(path); told.delete(path); notices.delete(path); stacks.delete(path); bar.reset(path); previewed.delete(path); syncBars(); await evaluate(path, false); },
     async inspectOpen() {
       if (disposed) return;
       const todo = new Set<string>();
@@ -906,6 +922,6 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     appendLine, undoLast, redoLast, canUndo: (path) => canStep(path, 'undo'), canRedo: (path) => canStep(path, 'redo'),
     update, revert, ask, syncBars,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },
-    dispose() { disposed = true; notices.clear(); stacks.clear(); previewed.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },
+    dispose() { disposed = true; bar.dispose(); notices.clear(); stacks.clear(); previewed.clear(); for (const t of timers.values()) ports.clearTimer(t); timers.clear(); for (const h of bars.values()) h.dispose(); bars.clear(); for (const b of boxes.values()) b.handle.dispose(); boxes.clear(); ui.clear(); },
   };
 }

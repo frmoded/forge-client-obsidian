@@ -48,7 +48,8 @@ test('trust: a malformed widget message is dropped with a warning and never reac
   const body = code(view);
   assert.match(body, /msg\.kind === 'malformed'[\s\S]*?console\.warn[\s\S]*?return;/);
   assert.match(body, /this\.pipeline\?\.submit\(msg\.data\)/);
-  assert.equal([...body.matchAll(/\.submit\(/g)].length, 1, 'the pipeline has exactly one producer: the widget message handler');
+  // 2026-11-19-0993 (deliberate): 2, not 1 - the second is the FALLBACK of a bar's list (`legacySave`): a bar the list cannot say is written by the autosave with the very payload the widget message carried; the autosave is still fed by the widget's messages only
+  assert.equal([...body.matchAll(/\.submit\(/g)].length, 2, 'the pipeline has two producers: the widget message handler, and the list tab\'s fallback for a bar it cannot say (the same payload)');
   assert.equal([...body.matchAll(/this\.writeNote\(/g)].length, 1, 'writeNote is called from one place — the pipeline\'s write dep');
 });
 
@@ -78,7 +79,8 @@ test('autosave: the pipeline is the 600 ms core with real timers injected; there
 
 test('flush: pending edits are written on view close, when the view moves off a note, when switching mode, on restore, and on plugin unload', () => {
   const body = code(view);
-  assert.match(body, /async onClose\(\): Promise<void> \{\s*window\.removeEventListener\('message', this\.onMessage\);\s*await this\.flush\(\);\s*await super\.onClose\(\);/);
+  // 2026-11-19-0993 (deliberate): onClose also takes away the tab's keydown listener (a bar's Cmd/Ctrl+Z), between the message listener and the flush
+  assert.match(body, /async onClose\(\): Promise<void> \{\s*window\.removeEventListener\('message', this\.onMessage\);\s*this\.contentEl\.removeEventListener\('keydown', this\.onKey\);\s*await this\.flush\(\);\s*await super\.onClose\(\);/);
   assert.match(body, /async onUnloadFile\(file: TFile\): Promise<void> \{\s*await this\.flush\(\);\s*this\.pipeline\?\.dispose\(\);/);
   assert.match(body, /private async switchMode\(to: RhythmMode\): Promise<void> \{[\s\S]*?await this\.flush\(\);\s*await switchLeafToMode\(/);
   assert.match(body, /async holdForRestore\(\): Promise<void> \{\s*await this\.flush\(\);\s*this\.pipeline\?\.pause\(\);/);
@@ -96,7 +98,8 @@ test('external changes: the view listens to vault modify for ITS note, classifie
 test('messages to the widget are built only by the core\'s builders', () => {
   const body = code(view);
   const posts = [...body.matchAll(/postMessage\(([^,)]+)/g)].map((m) => m[1].trim());
-  assert.deepEqual(posts.sort(), ['buildHighlightMessage(target', 'buildLoadMessage(note.value.data', 'buildStatusMessage(s'].sort());
+  // 2026-11-19-0993 (deliberate): a second load site - the redraw of a bar's widget from the list's replay (`buildLoadMessage(d`) - and a second status site (a list write's "Saved" or its error), each built by the same core builder
+  assert.deepEqual(posts.sort(), ['buildHighlightMessage(target', 'buildLoadMessage(d', 'buildLoadMessage(note.value.data', 'buildStatusMessage(s', 'buildStatusMessage(s'].sort());
 });
 
 test('a note that stops matching shows the refusal message with an "Open as JSON" button — the pane is never left stuck or silently closed', () => {

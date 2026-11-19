@@ -52,7 +52,8 @@ test('description-apply 533: a NEW preview of the same text draws the seed AGAIN
 
 test('description-apply 576: appendLine on a note that is not a phrase, an arrangement or a composition says so in these words and writes nothing', async () => {
   const r = rig(); await r.ready();
-  assert.deepEqual(await r.ctl.appendLine('bars/bar_001.md', 'Keep bars 1 to 2.'), { ok: false, message: 'This note is not a phrase, an arrangement or a composition.' });
+  // 2026-11-19-0993 (deliberate): a bar is a list note now (appendLine writes its list), so the note that is none of the four is a kit
+  assert.deepEqual(await r.ctl.appendLine('kits/rock.md', 'Keep bars 1 to 2.'), { ok: false, message: 'This note is not a phrase, an arrangement or a composition.' });
   assert.deepEqual(r.writes, []);
 });
 

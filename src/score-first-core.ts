@@ -5,6 +5,7 @@
 
 import { RHYTHM_CHOICE, RHYTHM_STARTER, dataNoteContent } from './new-note-core.ts';
 import { withBarProvenance } from './bar-provenance-core.ts';
+import { withBarLines } from './bar-list-note-core.ts';
 
 export const BAR_FOLDER = 'bars';
 const BAR_NAME = /^bar_(\d+)$/;
@@ -40,7 +41,7 @@ export function planNewBar(input: { existingBasenames: Iterable<string>; exists:
   for (let i = 0; i < attempts; i++) {
     const name = nextBarName(taken);
     const path = barPath(name);
-    if (!input.exists(path)) return { ok: true, name, path, content: withBarProvenance(dataNoteContent(name, RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER) };
+    if (!input.exists(path)) return { ok: true, name, path, content: withBarLines(withBarProvenance(dataNoteContent(name, RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER), []) };      // 2026-11-19-0993: a new bar starts with an EMPTY list (`lines: []`) and the groove it has always had
     taken.add(name);
   }
   return { ok: false, message: `Could not find a free bar name in ${BAR_FOLDER}/ — try again.` };

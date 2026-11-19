@@ -138,8 +138,11 @@ test('inspect (a note opened): the bar shows an unparsable sentence or the Updat
 
 test('modify of a note that is not a phrase, arrangement or composition costs nothing: no timer, no read', async () => {
   const r = rig();
-  r.ctl.modified('notes/x.md'); r.ctl.modified('bars/bar_007.md');
+  r.ctl.modified('notes/x.md'); r.ctl.modified('kits/rock.md');
   assert.equal(r.timers.length, 0);
+  // 2026-11-19-0993 (deliberate): a BAR is a list note now (its `lines:` can be edited by hand), so a heard change of one waits out the same debounce as the other three families (one timer, nothing read until it fires)
+  r.ctl.modified('bars/bar_007.md');
+  assert.equal(r.timers.length, 1);
 });
 
 const PLAN_OK = (plan: unknown) => async () => ({ status: 200, json: { ok: true, parsed_ok: true, plan, error: null } });
@@ -502,13 +505,16 @@ test('a note that is fixed by hand loses its bar (and a synced note costs no wri
   assert.equal(r.calls.length, calls, 'a synced note is looked at, never written (not even a write that changes nothing)');
 });
 
-test('a note that is not ours costs nothing: no read and no write for a bar, a README or another folder, whichever way the controller is asked', async () => {
+test('a note that is not ours costs nothing: no read and no write for a README, a kit or another folder, whichever way the controller is asked (a bar is looked at since 2026-11-19-0993: reads only)', async () => {
   const r = rig({ extra: { 'bars/bar_001.md': 'x', 'notes/x.md': 'x' } });
-  for (const path of ['bars/bar_001.md', 'notes/x.md', 'phrases/README.md']) {
+  for (const path of ['notes/x.md', 'phrases/README.md', 'kits/rock.md']) {            // 2026-11-19-0993 (deliberate): 'bars/bar_001.md' left this list - a bar is a list note now (below)
     await r.ctl.inspect(path); r.ctl.modified(path); await r.ctl.update(path); await r.ctl.revert(path); await r.ctl.ask(path);
     await r.advance(DESCRIPTION_DEBOUNCE_MS);
   }
   assert.deepEqual(r.reads, []); assert.deepEqual(r.calls, []); assert.deepEqual(r.writes, []); assert.deepEqual(r.lines, []);
+  // a bar IS looked at now (its `lines:` may be edited by hand), but looking only READS: no write, no process call, nothing said
+  await r.ctl.inspect('bars/bar_001.md'); r.ctl.modified('bars/bar_001.md'); await r.ctl.update('bars/bar_001.md'); await r.ctl.revert('bars/bar_001.md'); await r.ctl.ask('bars/bar_001.md'); await r.advance(DESCRIPTION_DEBOUNCE_MS);
+  assert.deepEqual(r.calls, []); assert.deepEqual(r.writes, []); assert.deepEqual(r.lines, []);
 });
 
 test('a write that FAILS says so and keeps what it can still do: Update from Description fails -> its sentence with Update and Revert; Update from Recipe likewise; the failure is logged to the console', async () => {

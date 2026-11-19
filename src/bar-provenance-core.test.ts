@@ -177,7 +177,8 @@ test('New bar writes the sections in the same write as the json: made in the Bea
   const plan = planNewBar({ existingBasenames: [], exists: () => false });
   assert.ok(plan.ok);
   if (!plan.ok) return;
-  assert.equal(plan.content, withBarProvenance(rhythmNoteTemplate('bar_001'), { kind: 'beatbox' }, RHYTHM_STARTER));
+  // 2026-11-19-0993 (deliberate): a new bar starts with an EMPTY list, `lines: []` (the list model, stage 3: 11d.2); everything else is the note it always was
+  assert.equal(plan.content, withBarProvenance(rhythmNoteTemplate('bar_001'), { kind: 'beatbox' }, RHYTHM_STARTER).replace('\n---\n\n', '\nlines: []\n---\n\n'));
   assert.ok(readRhythmNote(plan.content).ok, 'it opens in the Beat Box');
   assert.deepEqual(barOriginOf(plan.content), { kind: 'beatbox' });
   assert.ok(!/^links:/m.test(plan.content));

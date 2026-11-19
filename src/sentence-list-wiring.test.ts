@@ -378,8 +378,8 @@ test('2026-11-19-0980 (stage 2, deliberate; it was "P3, a PHRASE: the composer s
   r.type(''); const w = r.writes.length; assert.equal(await r.undoKey(), true); assert.equal(r.writes.length, w + 1);
 });
 
-test('P3, a note that is not a phrase, arrangement or composition (a bar, a plain note) is neither read nor written: no composer, no process call', async () => {
-  const notes: Record<string, string> = { 'bars/bar_007.md': '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind":"rhythm"}\n```\n', 'notes/plain.md': '# Plain\n\n1. a list\n' };
+test('P3, a note that is not a phrase, arrangement or composition (a kit, a plain note) is neither read nor written: no composer, no process call (2026-11-19-0993, deliberate: a bar is a list note now and was taken out of this list; bar-list-wiring.test.ts pins it)', async () => {
+  const notes: Record<string, string> = { 'kits/rock.md': '---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind":"rhythm"}\n```\n', 'notes/plain.md': '# Plain\n\n1. a list\n' };
   for (const [p, text] of Object.entries(notes)) {
     const r = rig({ path: p, note: text }); await r.ready(); r.ctl.modified(p); await r.runTimers();
     assert.equal(r.calls(), 0); assert.deepEqual(r.writes, []); assert.equal(r.el.querySelector('.forge-prompt-box'), null, 'no composer');

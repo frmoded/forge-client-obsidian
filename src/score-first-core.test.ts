@@ -49,8 +49,10 @@ test('planNewBar: the next free name, its path, and exactly the starter "New For
   assert.equal(plan.name, 'bar_002');
   assert.equal(plan.path, 'bars/bar_002.md');
   // M17a (2026-11-05-1182): the starter is still ONE decision function's note (the same frontmatter and the same json fence, byte for byte); a New bar also says where it came from, above the fence
-  assert.equal(plan.content, withBarProvenance(dataNoteContent('bar_002', RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER));
-  assert.equal(plan.content, withBarProvenance(rhythmNoteTemplate('bar_002'), { kind: 'beatbox' }, RHYTHM_STARTER));
+  // 2026-11-19-0993 (deliberate): a new bar starts with an EMPTY list, `lines: []` (the list model, stage 3); everything else is what it was
+  const withList = (t: string): string => t.replace('\n---\n\n', '\nlines: []\n---\n\n');
+  assert.equal(plan.content, withList(withBarProvenance(dataNoteContent('bar_002', RHYTHM_CHOICE), { kind: 'beatbox' }, RHYTHM_STARTER)));
+  assert.equal(plan.content, withList(withBarProvenance(rhythmNoteTemplate('bar_002'), { kind: 'beatbox' }, RHYTHM_STARTER)));
   assert.equal(plan.content.slice(plan.content.indexOf('```json')), rhythmNoteTemplate('bar_002').slice(rhythmNoteTemplate('bar_002').indexOf('```json')), 'the json fence and what follows it are the starter\'s own');
   assert.match(plan.content, /\n# Description\n\nBar made in the Beat Box; 4 hits in 16 steps, tempo 100\.\n\n# Recipe\n\nDraw the bar in the Beat Box\.\n\n```json/);
 });
@@ -167,7 +169,7 @@ test('createNewBar: the starter content is the Rhythm (Beat Box) note, written e
   const orig = r.ports.create;
   r.ports.create = async (p, c) => { contents.push(c); return orig(p, c); };
   await createNewBar(r.ports);
-  assert.deepEqual(contents, [withBarProvenance(rhythmNoteTemplate('bar_001'), { kind: 'beatbox' }, RHYTHM_STARTER)], 'the Rhythm (Beat Box) starter with its provenance, written once');
+  assert.deepEqual(contents, [withBarProvenance(rhythmNoteTemplate('bar_001'), { kind: 'beatbox' }, RHYTHM_STARTER).replace('\n---\n\n', '\nlines: []\n---\n\n')], 'the Rhythm (Beat Box) starter with its provenance and its empty list (2026-11-19-0993, deliberate), written once');
 });
 
 test('createNewBar: a name taken in the same instant ("File already exists.") tries the NEXT number, with no notice', async () => {

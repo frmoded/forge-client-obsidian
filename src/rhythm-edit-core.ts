@@ -45,6 +45,10 @@ export const MSG_SAVE_RESULT = 'forge-rhythm-save-result'; // plugin -> widget (
 // Phase 5b (autosave). Backward compatible: nothing above changed.
 export const MSG_RELOAD = 'forge-rhythm-reload';           // widget -> plugin: the user clicked "Reload from note"
 export const MSG_STATUS = 'forge-rhythm-status';           // plugin -> widget: the autosave indicator (saving | saved | error | conflict | idle)
+// 2026-11-19-0993 (THE LIST MODEL, stage 3: BARS): Cmd/Ctrl+Z inside the widget's grid. The widget (a vault file) does not send these today; the HOST understands them, so the day it does (a keydown handler posting one of the two), a bar's undo works from the grid
+// with no change here. Ignored by a tab that does not keep a list.
+export const MSG_UNDO = 'forge-rhythm-undo';               // widget -> plugin: undo the last gesture of the bar's list
+export const MSG_REDO = 'forge-rhythm-redo';               // widget -> plugin: put it back
 
 // Phase 8 (the embed). Nothing above changed. The first three are widget -> plugin and are only ever sent in playground mode (except
 // `current-data`, which answers a request); `request-data` / `stop` are plugin -> widget.
@@ -61,6 +65,8 @@ export const MSG_RESET = 'forge-rhythm-reset';                 // widget -> plug
 export type WidgetMessage =
   | { kind: 'ready' }
   | { kind: 'reload' }
+  | { kind: 'undo' }
+  | { kind: 'redo' }
   | { kind: 'save'; data: unknown }
   | { kind: 'hover'; channel: string | null; step: number | null }   // hover-link: only ever sent by a widget whose load said `hoverLink: true`
   | { kind: 'malformed'; reason: string }   // claims to be ours but unusable: dropped with a console warning, never written
@@ -75,6 +81,8 @@ export function parseWidgetMessage(raw: unknown): WidgetMessage {
   if (!isPlainObject(raw)) return { kind: 'ignored' };
   if (raw.type === MSG_READY) return { kind: 'ready' };
   if (raw.type === MSG_RELOAD) return { kind: 'reload' };
+  if (raw.type === MSG_UNDO) return { kind: 'undo' };
+  if (raw.type === MSG_REDO) return { kind: 'redo' };
   if (raw.type === MSG_HOVER) {
     if (raw.channel === null) return { kind: 'hover', channel: null, step: null };
     if (typeof raw.channel === 'string' && typeof raw.step === 'number' && Number.isInteger(raw.step) && raw.step >= 0) return { kind: 'hover', channel: raw.channel, step: raw.step };

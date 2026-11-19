@@ -7,6 +7,7 @@
 //                    note with a line nobody can read are refused in words (a copy of them would be a guess).
 // Nothing is opened (the dialog's link opens the copy) and nothing is claimed about undo: a copy is a new note, so the words say how to delete it.
 import { withBarProvenance } from './bar-provenance-core.ts';
+import { barLinesBlock } from './bar-list-note-core.ts';
 import { extractJsonBlock, readRhythmNote } from './rhythm-edit-core.ts';
 import { nextBarName } from './phrase-fork-core.ts';
 import { nextPhraseName } from './phrase-core.ts';
@@ -45,7 +46,8 @@ export function copyBarNote(source: string, newName: string, sourceName: string)
   if (read.ok === false) return { ok: false, message: `[[${sourceName}]] is not a bar I can read (${read.message.replace(/\.$/, '')}), so it was not copied.` };
   const block = extractJsonBlock(source);
   if (block.ok === false) return { ok: false, message: `[[${sourceName}]] is not a bar I can read (${block.message.replace(/\.$/, '')}), so it was not copied.` };
-  const head = ['---', 'type: data', 'content_type: json', `description: ${JSON.stringify(`${newName} — a copy of [[${sourceName}]]; edit it in the Beat Box. The original is untouched.`)}`, `copied_from: ${JSON.stringify(`[[${sourceName}]]`)}`, '---', '', ''].join('\n');
+  const list = barLinesBlock(source);                                                          // 2026-11-19-0993: a listed bar's `lines:` travel with its json, byte for byte (a bar with none gets none)
+  const head = ['---', 'type: data', 'content_type: json', `description: ${JSON.stringify(`${newName} — a copy of [[${sourceName}]]; edit it in the Beat Box. The original is untouched.`)}`, `copied_from: ${JSON.stringify(`[[${sourceName}]]`)}`, ...(list === null ? [] : [list]), '---', '', ''].join('\n');
   return { ok: true, text: withBarProvenance(head + source.slice(block.fenceStart), { kind: 'copy', of: sourceName }, read.value.data) };
 }
 

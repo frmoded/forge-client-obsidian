@@ -29,6 +29,7 @@ import { CompositionView, openCompositionInLeaf, registerCompositions } from './
 import { ConfirmModal } from './confirm-modal.ts';
 import { createDescriptionController } from './description-apply.ts';
 import { registerBarSelectionHost } from './bar-selection-bus.ts';
+import { registerBarListHost } from './bar-list-bus.ts';
 import { offerRenameWatched } from './rename-offer.ts';
 import { openNewNoteNameDialog } from './new-note-name-modal.ts';
 import { onTitleClosed, type WrittenNote } from './new-note-cancel-core.ts';
@@ -537,7 +538,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         warn: (line) => { console.warn(line); },
         panes: () => {
           const out: Array<{ path: string; contentEl: HTMLElement; tab?: boolean }> = [];
-          app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && familyOfPath(v.file.path) !== null) out.push({ path: v.file.path, contentEl: v.contentEl, tab: plan === 'score' && SCORE_VIEW_TYPES.includes(leaf.view.getViewType()) }); });   // 2026-11-12-1203: the docked prompt box lives on a score tab of the music edition only (the lean edition's tabs are as they were: P3)
+          app.workspace.iterateAllLeaves((leaf) => { const v = leaf.view as unknown as { file?: TFile | null; contentEl?: HTMLElement }; if (v?.file && v.contentEl && (familyOfPath(v.file.path) !== null || isBarPath(v.file.path))) out.push({ path: v.file.path, contentEl: v.contentEl, tab: plan === 'score' && SCORE_VIEW_TYPES.includes(leaf.view.getViewType()) || plan === 'score' && isBarPath(v.file.path) && leaf.view.getViewType() === RHYTHM_EDIT_VIEW_TYPE }); });   // 2026-11-12-1203: the docked prompt box lives on a score tab of the music edition only (the lean edition's tabs are as they were: P3). 2026-11-19-0993: and on a bar's Beat Box tab (its list is the bar grammar's)
           return out;
         },
         confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
@@ -555,6 +556,12 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           run: (id) => { const item = newMenuItems().find((i) => i.commandId === id); if (item) runNewMenuItem(item, ribbonRunDeps); },
           pickNote: () => pickNoteLink(app),
         }),
+      }));
+      // 2026-11-19-0993 (THE LIST MODEL, stage 3: BARS): what a bar's Beat Box tab needs from the plugin: its gestures APPENDED to the bar's list through the controller (one write each, undoable), and the controller's undo and redo. Only a score-first vault gets here (P3).
+      plugin.register(registerBarListHost({
+        appendLine: (path, sentence, opts) => descriptions.appendLine(path, sentence, opts),
+        undoLast: (path) => descriptions.undoLast(path),
+        redoLast: (path) => descriptions.redoLast(path),
       }));
       // 2026-11-16-1000: what the Score's selection menu needs from the plugin: a sentence APPENDED to the note's list (2026-11-19-0980; it was shown in the prompt box as a preview), and a new transform phrase (the next free phrase_NNN, no dialog, opened, its title offered for renaming)
       plugin.register(registerBarSelectionHost({

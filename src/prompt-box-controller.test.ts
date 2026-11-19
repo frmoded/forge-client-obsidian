@@ -63,8 +63,9 @@ test('a score tab gets the box, LAST in the tab and under the Score; it shows ex
 test('P3: no box on a pane that is not a score tab (the notes pane, the text view), on a custom note, or on a note that is not a phrase, arrangement or composition', async () => {
   const r = rig();
   const text = r.pane(PATH, false);
-  r.store.set('bars/bar_007.md', '---\ntype: data\n---\n');
-  const other = r.pane('bars/bar_007.md');
+  // 2026-11-19-0993 (deliberate): a BAR's Beat Box tab carries the composer now (its list is the bar grammar's; bar-list-wiring.test.ts), so the note that is none of ours here is a kit
+  r.store.set('kits/rock.md', '---\ntype: data\n---\n');
+  const other = r.pane('kits/rock.md');
   const tab = r.pane();
   await r.ctl.inspect(PATH); await r.flush();
   assert.ok(r.box(tab), 'the same note on a score tab has one');

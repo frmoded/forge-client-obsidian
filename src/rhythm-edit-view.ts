@@ -41,6 +41,9 @@ import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { isKitPath } from './kit-core.ts';
 import { keepBarProvenance } from './bar-provenance-core.ts';
+import { barListHost } from './bar-list-bus.ts';
+import { createBarBoxHost, type BarBoxHost } from './bar-box-host-core.ts';
+import { isBarPath } from './phrase-core.ts';
 import { kitChoices, type KitChoice } from './kit-picker-core.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { rhythmHeaderApplies, wantsPhraseHeader } from './phrase-header-core.ts';
@@ -59,6 +62,8 @@ import {
   isRhythmEditCandidate,
   parseWidgetMessage,
   readRhythmNote,
+  rhythmDataEqual,
+  type RhythmData,
 } from './rhythm-edit-core.ts';
 
 export { RHYTHM_EDIT_VIEW_TYPE };
@@ -93,6 +98,12 @@ export class RhythmEditView extends EditableFileView {
   private hoverLink = false;
   /** score_first M10c (drain 2026-11-05-1181): this tab is a score-first vault's Beat Box, so its widget is given the vault's kits (kit-picker-core.ts) on every load and draws the kit dropdown. False everywhere else: no `kits` key, the widget is what it always was. */
   private offerKits = false;
+  /** 2026-11-19-0993 (THE LIST MODEL, stage 3): present ONLY for a bar (`bars/bar_NNN.md`) in a score-first vault whose plugin registered the list host: every data edit of the widget goes through `controller.appendLine` (one write per gesture, undoable), not through the autosave below.
+   *  Null everywhere else: the tab writes exactly as it always did (P3). */
+  private barBox: BarBoxHost | null = null;
+  /** The bar the widget was last given (a load): what a list host created later (the plugin's profile answer can come after the tab opened) starts from. */
+  private shownBar: RhythmData | null = null;
+  private kits: KitChoice[] = [];
 
   private readonly onMessage = (ev: MessageEvent): void => {
     // Only OUR iframe may talk to us. (The widget makes the mirror check: it accepts only its embedding window.)
@@ -117,6 +128,9 @@ export class RhythmEditView extends EditableFileView {
       this.scoreArea?.gridHover(msg.channel === null || msg.step === null ? null : { channel: msg.channel, step: msg.step });
       return;
     }
+    if (msg.kind === 'undo' || msg.kind === 'redo') { void this.stepList(msg.kind); return; }   // 2026-11-19-0993: a bar's undo from the grid (the widget does not send these yet; a tab that keeps no list ignores them)
+    if (this.file && this.shownBar) this.barBox ??= this.makeBarBox(this.file, this.shownBar);      // 2026-11-19-0993: the list host may have been registered after this tab opened (the vault's profile answer is asynchronous): the first edit looks again
+    if (this.barBox) { this.barBox.save(msg.data); return; }                                      // a bar's gesture: said in sentences, appended through the controller (one write), never the autosave
     this.pipeline?.submit(msg.data);
     this.scoreArea?.update(msg.data);           // the score follows the widget's data (debounced), not the saved note
   };
@@ -153,6 +167,7 @@ export class RhythmEditView extends EditableFileView {
     await super.onOpen();                       // EditableFileView wires the editable title (rename from the tab header)
     this.contentEl.addClass('forge-rhythm-edit-view');
     window.addEventListener('message', this.onMessage);
+    this.contentEl.addEventListener('keydown', this.onKey);
     // The vault `modify` event for the open note: our own writes are recognised and ignored; an external change reloads the widget
     // (nothing pending) or halts autosave with a "Reload from note" prompt (a save pending). Never written over.
     this.registerEvent(this.app.vault.on('modify', (f) => {
@@ -162,6 +177,7 @@ export class RhythmEditView extends EditableFileView {
 
   async onClose(): Promise<void> {
     window.removeEventListener('message', this.onMessage);
+    this.contentEl.removeEventListener('keydown', this.onKey);
     await this.flush();
     await super.onClose();                      // FileView.onClose unloads the file → onUnloadFile below
   }
@@ -177,6 +193,8 @@ export class RhythmEditView extends EditableFileView {
     await this.flush();
     this.pipeline?.dispose();
     this.pipeline = null;
+    this.barBox = null;
+    this.shownBar = null;
     this.session = null;
     this.releaseIframe();
     await super.onUnloadFile(file);
@@ -184,6 +202,7 @@ export class RhythmEditView extends EditableFileView {
 
   /** Write any pending edit now (close, switch back to JSON, navigation, restore, plugin unload). */
   async flush(): Promise<void> {
+    await this.barBox?.flush();
     await this.pipeline?.flush();
   }
 
@@ -250,6 +269,8 @@ export class RhythmEditView extends EditableFileView {
     this.autoHeight = attachAutoHeight(iframe, { initial: 0, paneHeight: () => this.contentEl.clientHeight || window.innerHeight });
     this.hoverLink = plan === 'score';
     this.offerKits = plan !== 'none';                 // both editions: the lean edition's score-first vault has the same Beat Box
+    this.shownBar = note.value.data;
+    this.barBox = this.makeBarBox(file, note.value.data);
     this.mountScore(plan, file, note.value.data);
   }
 
@@ -284,6 +305,39 @@ export class RhythmEditView extends EditableFileView {
     this.scoreArea?.showNow(data);
   }
 
+  /** 2026-11-19-0993: the state machine that turns the widget's messages into the bar's list (bar-box-host-core.ts), or null: not a bar, or no list host (a lean edition, another vault): the tab then writes as it always did. */
+  private makeBarBox(file: TFile, initial: RhythmData): BarBoxHost | null {
+    const host = isBarPath(file.path) ? barListHost() : null;
+    if (host === null) return null;
+    return createBarBoxHost(initial, {
+      appendLine: (sentence) => host.appendLine(file.path, sentence),
+      load: (d) => { this.iframe?.contentWindow?.postMessage(buildLoadMessage(d, file.basename, 'edit', null, true, false, this.hoverLink, this.kits), '*'); this.scoreArea?.showNow(d); },
+      reload: () => this.sendLoad(),
+      legacySave: (payload) => { this.pipeline?.submit(payload); },
+      shown: (d) => { this.shownBar = d; this.scoreArea?.update(d); },
+      status: (s) => { this.iframe?.contentWindow?.postMessage(buildStatusMessage(s), '*'); },                 // the widget's own indicator (Saved / the error): a list write is a save too
+      setTimer: (fn, ms) => window.setTimeout(fn, ms), clearTimer: (h) => window.clearTimeout(h as number),
+      warn: (m) => { console.warn(m); },
+    });
+  }
+
+  /** Cmd/Ctrl+Z (and Shift) on the tab, outside a text field (the composer takes its own): the last gesture of the bar's list comes off, or goes back. The widget's own grid is an iframe: a key pressed INSIDE it never reaches this listener (the widget would have to post forge-rhythm-undo). */
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (!this.barBox || !this.file) return;
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || String(e.key).toLowerCase() !== 'z') return;
+    const t = e.target as HTMLElement | null;
+    if (t && typeof t.closest === 'function' && t.closest('textarea, input, select, [contenteditable="true"]')) return;
+    e.preventDefault();
+    void this.stepList(e.shiftKey ? 'redo' : 'undo');
+  };
+
+  private async stepList(which: 'undo' | 'redo'): Promise<void> {
+    const host = barListHost(); const file = this.file;
+    if (!host || !file || !this.barBox) return;
+    await this.barBox.flush();
+    if (which === 'undo') await host.undoLast(file.path); else await host.redoLast(file.path);
+  }
+
   /** Answer the widget's `ready` (and a reload): re-read the note fresh, take its text as the new baseline, and send the pattern. */
   private async sendLoad(): Promise<void> {
     if (!this.file) return;
@@ -303,8 +357,11 @@ export class RhythmEditView extends EditableFileView {
     const kits = this.offerKits ? await this.readKits() : [];
     if (!this.iframe) return;
     this.session.rebaseline(text);
+    this.kits = kits;
     this.iframe.contentWindow?.postMessage(buildLoadMessage(note.value.data, this.file.basename, 'edit', null, true, false, this.hoverLink, kits), '*');
     this.scoreArea?.showNow(note.value.data);   // a (re)load from the note: the score shows the same data the widget was just given
+    this.shownBar = note.value.data;
+    this.barBox?.loaded(note.value.data);       // 2026-11-19-0993: and what the widget shows now is the note's bar (a bar's list host forgets what it held for the old one)
   }
 
   /** M10c: the vault's kit notes as the widget's dropdown lists them. Read at every load, so a kit made since the tab opened is offered on the next one. A kit that cannot be read leaves the dropdown out (never the Beat Box). */
@@ -334,6 +391,14 @@ export class RhythmEditView extends EditableFileView {
       return;
     }
     if (!session || !pipeline) return;
+    if (this.barBox) {                                                                                  // 2026-11-19-0993: a bar written through its list: the note says what the widget shows (its own write, a hand edit that changed nothing): nothing to do; anything else is shown
+      const box = this.barBox;
+      const now = readRhythmNote(await this.app.vault.read(file));
+      if (now.ok === true && rhythmDataEqual(now.value.data, box.current())) return;
+      if (box.busy()) return;                                                                           // a gesture is being written: its own result redraws the widget if it must
+      await this.sendLoad();
+      return;
+    }
     const verdict = session.classifyModify(await this.app.vault.read(file), pipeline.busy());
     if (verdict === 'reload') await this.sendLoad();
     else if (verdict === 'conflict') pipeline.halt(EXTERNAL_CHANGE_MESSAGE);

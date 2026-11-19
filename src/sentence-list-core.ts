@@ -397,15 +397,20 @@ export interface UndoStack {
   redo(current: SentenceList): Redone | null;
   canUndo(current: SentenceList): boolean;
   canRedo(current: SentenceList): boolean;
+  /** 2026-11-19-0993 (a bar's gesture): the newest entry is made again (one pointer gesture whose cells came in one by one is ONE undo). With no entry it is a push. */
+  replaceTop(entry: UndoEntry): void;
   clear(): void;
 }
 export const UNDO_CAP = 100;
 
-export function createUndoStack(): UndoStack {
+/** `protects` (2026-11-19-0993): a line the "no memory" fallback must never take off the list (a bar's head: it IS the bar as it was; taking it off would give the starter groove back); with it a list of nothing but protected lines has nothing to undo. */
+export function createUndoStack(opts: { protects?: (line: string) => boolean } = {}): UndoStack {
   let undos: UndoEntry[] = [], redos: UndoEntry[] = [];
+  const takes = (current: SentenceList): boolean => current.length > 0 && !(opts.protects?.(current[current.length - 1]) ?? false);
   return {
     push(entry) { undos = [...undos, { ...entry }].slice(-UNDO_CAP); redos = []; },
-    canUndo: (current) => current.length > 0,
+    replaceTop(entry) { undos = undos.length === 0 ? [{ ...entry }] : [...undos.slice(0, -1), { ...entry }]; redos = []; },
+    canUndo: (current) => current.length > 0 && ((undos.length > 0 && same(undos[undos.length - 1].after, current)) || takes(current)),
     canRedo: (current) => redos.length > 0 && same(redos[redos.length - 1].before, current),
     undo(current) {
       if (current.length === 0) return null;
@@ -414,6 +419,7 @@ export function createUndoStack(): UndoStack {
         undos = undos.slice(0, -1); redos = [...redos, top];
         return { list: [...top.before], removed: [...top.added], restored: top.replaced.map((r) => r.sentence) };
       }
+      if (!takes(current)) return null;
       const last = current[current.length - 1], rest = current.slice(0, -1);
       redos = [...redos, { before: rest, after: [...current], added: [last], replaced: [] }];
       return { list: rest, removed: [last], restored: [] };
