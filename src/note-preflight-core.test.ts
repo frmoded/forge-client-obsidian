@@ -1,13 +1,11 @@
 // 2026-10-31-1135 (CCQA smoke 10, B5 and B5x) - EVERY note-creating command asks the engine before it writes. One row per command x one invalid source, through the REAL flows (createNewPhrase / Mix / Morph, a sentence's phrase,
-// a transform, the notebook's Run, createArrangement, createComposition) with host-faithful recording ports (card 12) and an engine stand-in that raises the engine's own ValueError as a Python traceback, exactly as Pyodide hands
+// a transform, the notebook's Run; 2026-11-19-0960: New arrangement and New composition make EMPTY notes now and ask no check, new-notes-start-empty.test.ts) with host-faithful recording ports (card 12) and an engine stand-in that raises the engine's own ValueError as a Python traceback, exactly as Pyodide hands
 // it over (the real engine's texts are proven in note-preflight-engine.test.ts). Each row: the person gets ONE plain sentence, `create` and `createFolder` were never called, no traceback anywhere. The control row: the same
 // command on a VALID source writes (so the rows above are not passing for want of a working write path).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createArrangement, type CreatePorts } from './kit-arrangement-flow-core.ts';
 import { newArrangementNote, type ArrangementParams } from './arrangement-core.ts';
-import { createComposition } from './composition-flow-core.ts';
 import { createNotebook, type NotebookPorts } from './notebook-core.ts';
 import { createNewMix, createNewMorph, createNewPhrase, createNewPhraseFromParams, noteContentFor, type NewMixPorts, type PhraseParams } from './phrase-core.ts';
 import { makeNotePreflight, installNotePreflight, type NotePreflight } from './note-preflight-core.ts';
@@ -36,8 +34,6 @@ const EXTEND_12 = 'extend_rhythm: every style needs a 16-step grid (steps == 16,
 const MIX_BAD = 'mix_rhythm: bars a and b are on different grids (a has 16 steps, b has 12)';
 const MORPH_BAD = 'morph_rhythm: bars a and b are on different grids (a has 16 steps, b has 12)';
 const REGION_BAD = 'thin_out_bars: bar 2 has no row "tom"';
-const ARR_BAD = 'combine_tracks: track 2 (latin) is on another grid than track 1 (rock)';
-const COMPOSE_BAD = "compose_sections: section 2 bar 1 has time_signature '3/4' but section 1 has '4/4'; all sections must share the same meter and steps";
 
 function vaultFiles(): Map<string, string> {
   const files = new Map<string, string>([
@@ -88,10 +84,6 @@ const ROWS: Row[] = [
         create: async (p, c) => { if (p.startsWith('notebook/')) cells.push(p); return rec.base.create(p, c); } };
       const r = await createNotebook(ports).run({ bars: [1, 2], row: 'tom' }, 'thin_out', 0.5); return { ...r, rec };
     } },
-  { command: 'New arrangement', invalid: { arrangement: ARR_BAD }, expected: ARR_BAD,
-    run: async (files, pf) => { const rec = recorder(files); const r = await createArrangement({ ...rec.base, preflight: pf } as CreatePorts<string>, [{ kit: 'rock', phrase: 'phrase_001' }]); return { ...r, rec }; } },
-  { command: 'New composition (two sections of another meter)', invalid: { composition: COMPOSE_BAD }, expected: 'phrase_013 (section 2) is 3/4 but phrase_001 (section 1) is 4/4; all sections of a composition must share the same meter and steps.',
-    run: async (files, pf) => { const rec = recorder(files); const r = await createComposition({ ...rec.base, preflight: pf } as CreatePorts<string>, { sections: [{ source: 'phrases/phrase_001' }, { source: 'phrases/phrase_013' }] }); return { ...r, rec }; } },
 ];
 
 for (const row of ROWS) {
@@ -189,22 +181,6 @@ test('an error thrown out of the check itself: the engine\'s own refusal is one 
   assert.match(String(said), /12 steps|16-step/);
   assert.doesNotMatch(String(said), /Traceback|ValueError:|\n/);
   assert.strictEqual(await throwing('Pyodide is not ready yet')('phrases/phrase_020.md', noteContentFor('phrase_020', EXTEND_FROM_9)), null);
-});
-
-test('createComposition asks the check for the path and the text it WILL write: the named path, or the next free name; and "root: true" only for a root', async () => {
-  const files = vaultFiles();
-  const seen: Array<[string, string]> = [];
-  const pf: NotePreflight = async (p, c) => { seen.push([p, c]); return null; };
-  const rec = recorder(files);
-  await createComposition({ ...rec.base, preflight: pf } as CreatePorts<string>, { sections: [{ source: 'phrases/phrase_001' }], name: 'verse' });
-  await createComposition({ ...rec.base, preflight: pf } as CreatePorts<string>, { sections: [{ source: 'phrases/phrase_001' }], root: true });
-  await createComposition({ ...rec.base, preflight: pf } as CreatePorts<string>, { sections: [{ source: 'phrases/phrase_001' }] });
-  assert.equal(seen[0][0], 'compositions/verse.md', 'the named path');
-  assert.equal(seen[1][0], 'compositions/comp_001.md', 'no name: the next free one');
-  assert.match(seen[1][1], /root: true/);
-  assert.doesNotMatch(seen[0][1], /root: true/);
-  assert.doesNotMatch(seen[2][1], /root: true/);
-  assert.equal(rec.writes[0], 'compositions/verse.md');
 });
 
 test('an engine refusal INSIDE a source of a composition (the wrapped "could not build the score (<engine line>)") is a refusal that carries the engine\'s line; an unavailable engine in the same place is not', async () => {

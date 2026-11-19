@@ -1,9 +1,9 @@
 // 2026-11-03-1155-93 (score_first polish R6): "in Score mode the Score is always the first thing in the tab". Every score-first tab kind in real headless Chrome under Obsidian's own app.css, BEFORE (the commit this change
-// starts from) and AFTER, at 640 and 300 px wide: the Beat Box tab (the real RhythmEditView, the real Beat Box in its iframe), a phrase tab (extend, with its bracket, chips and notebook; and a mix) via the real mountPhrase,
+// starts from) and AFTER, at 640 and 300 px wide: the Beat Box tab (the real RhythmEditView, the real Beat Box in its iframe), a phrase tab (extend, chips and notebook; and a mix) via the real mountPhrase,
 // and the real ArrangementView and CompositionView over an in-memory vault. The real engine runs behind /compute and /phrase (answers are delayed so the EMPTY tab can be measured before the first Score arrives).
 // Per tab it records the order of the pane's direct children by ROLE and the top of each, empty, filled and (phrase) while a redraw is in flight. The verdicts, each of which can fail (the CONTROL feeds the same comparator
 // the BEFORE build, whose order is the old one: it must say "not first"):
-//   * the Score is above the controls, the Beat Box, the bracket, the chips, the notebook, the header and the pin line, and nothing but the description bar (a banner that appears only when the note needs saying) may sit above it;
+//   * the Score is above the controls, the Beat Box, the chips, the notebook, the header and the pin line, and nothing but the description bar (a banner that appears only when the note needs saying) may sit above it;
 //   * the Score is visible without scrolling at 640 x 700 (its top, and the first 60 px of it, are inside the pane);
 //   * the Score's own top does not move between the empty tab and the filled one, nor while a redraw is in flight; the controls under it move by the Score's height ONLY (no extra gap, no collapse while it redraws);
 //   * nothing overflows the pane's width at 640 or at 300.
@@ -78,7 +78,7 @@ ${KINDS.map((k) => `<div class="workspace-leaf-content" id="leaf-${k.kind}" styl
 const SNAP = `((id) => {
   const pane = document.getElementById(id); const pr = pane.getBoundingClientRect();
   const box = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); if (r.width === 0 && r.height === 0) return null; return { top: +(r.top - pr.top + pane.scrollTop).toFixed(1), height: +r.height.toFixed(1), left: +(r.left - pr.left).toFixed(1), width: +r.width.toFixed(1) }; };
-  const ROLES = [['banner', '.forge-description-bar'], ['score', '.forge-rhythm-edit-score, .forge-rhythm-edit-score-lean'], ['bracket', '.forge-phrase-bracket'], ['controls', '.forge-phrase-controls, .forge-arr-controls'], ['beatbox', 'iframe'],
+  const ROLES = [['banner', '.forge-description-bar'], ['score', '.forge-rhythm-edit-score, .forge-rhythm-edit-score-lean'], ['controls', '.forge-phrase-controls, .forge-arr-controls'], ['beatbox', 'iframe'],
     ['notebook', '.forge-notebook'], ['strip', '.forge-structure-strip, .forge-composition-tree, [class*="forge-arrangement-strip"]'], ['header', '.forge-arrangement-header, .forge-composition-header'], ['pin', '.forge-arrangement-pin'], ['status', '.forge-phrase-status']];
   const roleOf = (c) => { const hit = ROLES.find(([, sel]) => c.matches(sel)); return hit ? hit[0] : 'other:' + String(c.className).split(' ')[0]; };
   const out = { order: [...pane.children].map(roleOf), paneH: pane.clientHeight, overflowX: pane.scrollWidth - pane.clientWidth };
@@ -130,7 +130,7 @@ const after = await studyBuild('after');
 const before = fs.existsSync(path.join(root, 'before', 'harness-order.js')) ? await studyBuild('before') : null;
 
 const near = (a: number, b: number) => Math.abs(a - b) < 0.6;
-const LOWER = ['bracket', 'controls', 'beatbox', 'notebook', 'strip', 'header', 'pin', 'status'];
+const LOWER = ['controls', 'beatbox', 'notebook', 'strip', 'header', 'pin', 'status'];
 /** The comparator: the Score panel is above every other part of the tab, and only the description banner may stand above it. */
 const scoreFirst = (s: any): boolean => !!s.score && LOWER.every((r) => !s[r] || s.score.top < s[r].top) && s.order.slice(0, s.order.indexOf('score')).every((r: string) => r === 'banner');
 const scoreVisible = (s: any): boolean => !!s.host && s.host.top + Math.min(60, s.host.height) <= s.paneH && s.score.top < s.paneH;
@@ -140,7 +140,7 @@ const verdicts: Record<string, boolean> = {};
 for (const W of [640, 300]) for (const k of KINDS) {
   const a = after[W][k.kind];
   const tag = `${k.kind} @${W}`;
-  verdicts[`${tag}: the Score is the first thing (above the controls, Beat Box, bracket, chips, notebook, header, pin line; only the banner may sit above it): ${a.filled.order.join(' > ')}`] = scoreFirst(a.filled) && scoreFirst(a.empty);
+  verdicts[`${tag}: the Score is the first thing (above the controls, Beat Box, chips, notebook, header, pin line; only the banner may sit above it): ${a.filled.order.join(' > ')}`] = scoreFirst(a.filled) && scoreFirst(a.empty);
   verdicts[`${tag}: nothing overflows the pane's width`] = a.filled.overflowX <= 0 && a.empty.overflowX <= 0;
   verdicts[`${tag}: the Score's own top does not move from the empty tab to the filled one (${a.empty.score.top} -> ${a.filled.score.top}), and the host sits at ${a.filled.host?.top}`] = near(a.empty.score.top, a.filled.score.top) && !!a.filled.host;
   if (W === 640) verdicts[`${tag}: the Score is visible without scrolling at 640 x ${PANE_H} (host top ${a.filled.host?.top}, svg top ${a.filled.svg?.top})`] = scoreVisible(a.filled);

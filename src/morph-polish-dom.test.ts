@@ -51,7 +51,6 @@ test('an extend phrase with a fork past Bars: the refusal names the way out, the
   assert.equal(r.computes.length, 0, 'the engine was not asked for a phrase that is refused');
   for (const sel of ['.forge-phrase-bars', '.forge-phrase-style', '.forge-phrase-pct']) assert.equal(r.q(sel).disabled, false, `${sel} stays enabled`);
   assert.equal(r.q('.forge-phrase-bars').value, '4');
-  assert.equal(r.q('.forge-phrase-bracket').style.display, 'none', 'the bracket over the bars is not shown for a refused phrase');
   await r.change('.forge-phrase-bars', '9');
   assert.equal(status(r), '', 'the refusal is gone');
   assert.match(r.files.get(PATH)!, /"bars": 9/);

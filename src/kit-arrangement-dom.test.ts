@@ -1,4 +1,4 @@
-// 2026-10-29-0820 (M10 slice 1): the dialogs of "New kit" and "New arrangement" (plain DOM, no obsidian import) in happy-dom, with the real EVENT ORDER of a person: click a preset (or type a name and tick boxes), press Create; a refusal is one sentence
+// 2026-10-29-0820 (M10 slice 1): the dialog of "New kit" (2026-11-19-0960: "New arrangement" has no dialog any more, it makes an empty note; plain DOM, no obsidian import) in happy-dom, with the real EVENT ORDER of a person: click a preset (or type a name and tick boxes), press Create; a refusal is one sentence
 // and the dialog stays open; success closes it; a second click while the first is pending does nothing. The channel boxes are the engine's vocabulary; the kit lists of the track rows follow "a kit plays one phrase".
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -6,7 +6,6 @@ import { Window } from 'happy-dom';
 
 import { RHYTHM_CHANNELS } from './rhythm-edit-core.ts';
 import { mountKitDialog } from './kit-dom.ts';
-import { mountArrangementDialog } from './arrangement-dom.ts';
 import type { CreateResult } from './kit-arrangement-flow-core.ts';
 import { accessibleName, visibleText } from './test-support/accessible-name.ts';
 
@@ -78,59 +77,5 @@ test('New kit: Create while the first is still pending asks once; a flow that th
   click(boom.create()); await flush();
   assert.equal(boom.msg(), 'New kit failed: vault gone');
   const c = kitRig(); click(c.q('.forge-kit-cancel'));
-  assert.equal(c.closed(), 1); assert.equal(c.asked.length, 0);
-});
-
-// ---- New arrangement ----------------------------------------------------------------------------------------------------------------------------------------------------------
-
-function arrRig(opts: { kits?: string[]; phrases?: string[]; answer?: () => Promise<CreateResult> } = {}) {
-  const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
-  const asked: Array<Array<{ kit: string; phrase: string }>> = [];
-  let closed = 0;
-  mountArrangementDialog(parent, { kits: opts.kits ?? ['latin', 'rock'], phrases: opts.phrases ?? ['phrase_001', 'phrase_003'], create: (t) => { asked.push(t); return (opts.answer ?? (async () => ({ ok: true, path: 'arrangements/arr_001.md' })))(); }, close: () => { closed++; } });
-  const q = (s: string) => parent.querySelector(s) as any;
-  const qa = (s: string): any[] => [...parent.querySelectorAll(s)];
-  const rows = () => qa('.forge-arr-track').map((r) => ({ kit: r.querySelector('.forge-arr-kit'), phrase: r.querySelector('.forge-arr-phrase'), remove: r.querySelector('.forge-arr-remove') }));
-  return { asked, q, qa, rows, closed: () => closed };
-}
-
-test('New arrangement: one row to start, a phrase and a kit from the vault\'s own lists, Add track, Create and Cancel', () => {
-  const r = arrRig();
-  assert.equal(r.q('h3').textContent, 'New arrangement');
-  assert.equal(r.rows().length, 1);
-  assert.deepEqual([...r.rows()[0].phrase.options].map((o: any) => o.value), ['phrase_001', 'phrase_003']);
-  assert.deepEqual([...r.rows()[0].kit.options].map((o: any) => o.value), ['latin', 'rock']);
-  assert.equal(r.q('.forge-arr-add').textContent, 'Add track');
-  assert.equal(r.rows()[0].remove.hidden, true, 'a single row cannot be removed');
-});
-
-test('New arrangement: a kit plays one phrase - a second row offers only the unused kit, Add track goes when every kit is used, and removing a row gives its kit back', () => {
-  const r = arrRig();
-  click(r.q('.forge-arr-add'));
-  assert.equal(r.rows().length, 2);
-  assert.deepEqual([...r.rows()[1].kit.options].map((o: any) => o.value), ['rock'], 'the second row: only the kit the first does not use');
-  assert.deepEqual([...r.rows()[0].kit.options].map((o: any) => o.value), ['latin'], 'and the first can no longer take it');
-  assert.equal(r.q('.forge-arr-add').disabled, true, 'two kits, two rows: no more');
-  assert.equal(r.rows()[0].remove.hidden, false);
-  click(r.rows()[1].remove);
-  assert.equal(r.rows().length, 1);
-  assert.deepEqual([...r.rows()[0].kit.options].map((o: any) => o.value), ['latin', 'rock'], 'the kit is back');
-  assert.equal(r.q('.forge-arr-add').disabled, false);
-});
-
-test('New arrangement: Create hands every row\'s kit and phrase, in order, to the flow; success closes; a refusal is one sentence, the dialog stays open', async () => {
-  const answers: CreateResult[] = [{ ok: false, message: 'New arrangement: nothing to arrange.' }, { ok: true, path: 'arrangements/arr_001.md' }];
-  const r = arrRig({ answer: async () => answers.shift()! });
-  click(r.q('.forge-arr-add'));
-  r.rows()[0].phrase.value = 'phrase_003'; change(r.rows()[0].phrase);
-  r.rows()[1].phrase.value = 'phrase_001';
-  click(r.q('.forge-arr-create')); await flush();
-  assert.deepEqual(r.asked[0], [{ kit: 'latin', phrase: 'phrase_003' }, { kit: 'rock', phrase: 'phrase_001' }]);
-  assert.equal(r.q('.forge-arr-message').textContent, 'New arrangement: nothing to arrange.');
-  assert.equal(r.closed(), 0);
-  click(r.q('.forge-arr-create')); await flush();
-  assert.equal(r.closed(), 1);
-  assert.equal(r.q('.forge-arr-message').textContent, '');
-  const c = arrRig(); click(c.q('.forge-arr-cancel'));
   assert.equal(c.closed(), 1); assert.equal(c.asked.length, 0);
 });

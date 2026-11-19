@@ -2,7 +2,7 @@
 // mounted into a tab-shaped host (a stand-in Score body, the real styles.css) against Obsidian's CSS variables for a light and a dark theme (their default values). The ports are stand-ins: the preview answers at once,
 // the apply records what it was asked to write (nothing else is stubbed: the state machine, the DOM, the CSS and the keys are the shipped ones).
 //   node scripts/dev/measure-composer.mjs [--out <dir>]        exit 0 = every verdict true
-// Measures at 1000, 600 and 360 px, light and dark: the card fits the pane (no horizontal overflow), radius 16 and a 1 px border, the "+" bottom left and the return glyph bottom right inside the card, the field grows with
+// Measures at 1000, 600 and 360 px, light and dark: the card fits the pane (no horizontal overflow), radius 16 and a 1 px border, the "+" and the return glyph side by side at the bottom right inside the card (2026-11-19-0950), the field grows with
 // its text up to 8 lines and then scrolls inside, the card never overflows vertically; real Enter = preview (nothing applied), second Enter = apply, Shift+Enter = a new line, Esc = discard, Up recalls, Cmd+K focuses,
 // the "+" menu opens inside the pane; the contrast of the muted glyph and the hint in both themes; no "Apply" button text anywhere in the card.
 import fs from 'node:fs';
@@ -29,7 +29,6 @@ const page = `<!doctype html><meta charset=utf-8><style>${VARS}${css}</style><bo
 <script>${bundle}</script><script>
 window.events = []; var entries = []; var store = cp.memoryStore(); var hist = []; var n = 0;
 var h = cp.mountChatPanel(document.getElementById('host'), { store: store, box: {
-  placeholder: 'Describe it in a sentence…',
   preview: function (t) { entries = cp.append(entries, cp.fromOutcome({ type: 'you', text: t }), Date.now()); entries = cp.append(entries, cp.fromOutcome({ type: 'suggestion', description: 'Would write: ' + t, recipe: '', via: 'grammar' }), Date.now()); h.render(entries, ''); window.events.push('preview ' + t); return Promise.resolve({ ok: true, proposal: { description: 'Would write: ' + t, via: 'grammar' } }); },
   apply: function (t) { var s = entries[entries.length - 1]; if (s && s.suggestion) s.suggestion.state = 'applied'; entries = cp.append(entries, cp.fromOutcome({ type: 'applied', change: 'x', description: t }), Date.now()); h.render(entries, ''); window.events.push('apply ' + t); return Promise.resolve({ ok: true, disk: t }); },
   cancel: function () { window.events.push('cancel'); },
@@ -62,11 +61,11 @@ for (const w of [1000, 600, 360]) for (const theme of ['light', 'dark']) {
   await ev(`theme('${theme}')`); await setWidth(w);
   const tag = `${w}_${theme}`;
   const m = await ev(`(function () { var c = document.querySelector('.forge-prompt-box'); var cs = getComputedStyle(c); var f = box('#host'); var cb = box('.forge-prompt-box'), pl = box('.forge-composer-plus'), sd = box('.forge-composer-send'), tx = box('.forge-prompt-box-text');
-    return { cardLeft: cb.left, cardRight: cb.right, hostLeft: f.left, hostRight: f.right, cardH: cb.h, radius: cs.borderTopLeftRadius, border: cs.borderTopWidth, plusLeft: pl.left, plusBottom: pl.bottom, sendRight: sd.right, sendBottom: sd.bottom, cardBottom: cb.bottom, textTop: tx.top, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, hostScrollH: document.getElementById('host').scrollHeight, hostH: f.h }; })()`);
+    return { cardLeft: cb.left, cardRight: cb.right, hostLeft: f.left, hostRight: f.right, cardH: cb.h, radius: cs.borderTopLeftRadius, border: cs.borderTopWidth, plusRight: pl.right, plusBottom: pl.bottom, sendLeft: sd.left, sendRight: sd.right, sendBottom: sd.bottom, cardBottom: cb.bottom, textTop: tx.top, scrollW: document.documentElement.scrollWidth, innerW: window.innerWidth, hostScrollH: document.getElementById('host').scrollHeight, hostH: f.h }; })()`);
   numbers[`card@${tag}`] = { w: Math.round(m.cardRight - m.cardLeft), h: Math.round(m.cardH) };
   verdict[`cardFitsPane_${tag}`] = m.cardLeft >= m.hostLeft - 0.5 && m.cardRight <= m.hostRight + 0.5 && m.scrollW <= m.innerW;
   verdict[`radius16Border1_${tag}`] = m.radius === '16px' && m.border === '1px';
-  verdict[`plusBottomLeftSendBottomRight_${tag}`] = m.plusLeft - m.cardLeft < 24 && m.cardRight - m.sendRight < 24 && m.cardBottom - m.plusBottom < 24 && m.cardBottom - m.sendBottom < 24 && m.textTop < m.plusBottom;
+  verdict[`plusAndSendSideBySideBottomRight_${tag}`] = m.cardRight - m.sendRight < 24 && m.sendLeft - m.plusRight >= 0 && m.sendLeft - m.plusRight < 12 && m.cardBottom - m.plusBottom < 24 && m.cardBottom - m.sendBottom < 24 && m.textTop < m.plusBottom;   // 2026-11-19-0950: the "+" moved to the right, immediately left of Send (the full set of checks: measure-composer-plus-right.mjs)
   verdict[`noTextCutOff_${tag}`] = await ev(`${field}.scrollHeight <= ${field}.clientHeight + 1`);
   verdict[`noVerticalOverflow_${tag}`] = m.hostScrollH <= m.hostH + 1;
   await p.shot(path.join(OUT, `composer-${w}-${theme}.png`), { x: 0, y: 330, width: w, height: 230 });

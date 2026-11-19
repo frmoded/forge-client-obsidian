@@ -136,9 +136,7 @@ import { chipsFor } from './structure-strip-core.ts';
 import { mountNotebook } from './notebook-dom.ts';
 import { mountTransformStrip } from './phrase-transform-dom.ts';
 import { mountChatPanel } from './chat-panel-dom.ts';
-import { mountArrangementDialog } from './arrangement-dom.ts';
 import { mountKitDialog } from './kit-dom.ts';
-import { mountCompositionDialog } from './composition-dialog-dom.ts';
 import { mountSentencePlan } from './sentence-plan-dom.ts';
 import { mountCompositionStrip } from './composition-strip-dom.ts';
 import { mountPhraseControls, mountMixControls, mountMorphControls } from './phrase-dom.ts';
@@ -173,7 +171,7 @@ test('the bar-selection menu: the clear button (×) is named by a hidden span, t
 });
 test('the composer: plus, send, the field, the region, the menu and the live region are named by hidden spans', () => {
   const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
-  mountPromptBox(parent, { placeholder: 'Describe it', preview: async () => ({ ok: false, message: 'x' }) as any, apply: async () => ({ ok: true, disk: '' }) as any, cancel: noop, discard: noop, history: { get: () => [], set: noop } } as any, 'A sentence.');
+  mountPromptBox(parent, { preview: async () => ({ ok: false, message: 'x' }) as any, apply: async () => ({ ok: true, disk: '' }) as any, cancel: noop, discard: noop, history: { get: () => [], set: noop } } as any, 'A sentence.');
   check('composer', parent, ['Composer']);
   assert.ok(accessibleName(parent.querySelector('.forge-composer-plus')).length > 2); assert.ok(accessibleName(parent.querySelector('.forge-composer-send')).length > 2);
 });

@@ -14,6 +14,7 @@
 
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
 import { extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
+import { EMPTY_SOURCE, emptyPhraseNote, isEmptyNote } from './empty-note-core.ts';
 import { produceCustomScore, type CustomDeps, type CustomRun } from './custom-note-core.ts';
 import { extendGridSentence } from './engine-refusal-core.ts';
 import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
@@ -604,6 +605,7 @@ export function applyPhraseWrite(currentText: string, p: PhraseParams, name?: st
 
 /** "Refresh note links" on one phrase note: its derived parts regenerated from its json (the fence and its trailing bytes untouched). Idempotent: `changed` is false when nothing differs. Refuses a note it cannot read, with the reason. */
 export function refreshPhraseNoteText(text: string, name: string): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+  if (isEmptyNote(text)) return { ok: true, text, changed: false };          // 2026-11-19-0960: a new note with no sentence yet has nothing to refresh
   const read = readPhraseNote(text);
   if (read.ok === false) return { ok: false, message: read.message };
   const block = extractPhraseJsonBlock(text);
@@ -714,6 +716,11 @@ export function planNewPhrase(input: { activePath: string | null | undefined; ex
   return planPhraseNote(input, (name) => phraseNoteContent(name, source));
 }
 
+/** 2026-11-19-0960: "New phrase" (the palette entry, the ribbon button, the "+ New" menu): an EMPTY phrase - no source bar, no kind, no sentence; its first sentence makes the kind. Needs nothing from the vault (not a bar, not a phrase). */
+export function planNewEmptyPhrase(input: { existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewPhrasePlan {
+  return planPhraseNote(input, (name) => emptyPhraseNote(name));
+}
+
 /** Is "New mix from this bar" offered? Under exactly the conditions of "New phrase from this bar": a score-first vault, and the active file is a bar. */
 export function newMixAvailable(input: { scoreFirst: boolean; activePath: string | null | undefined }): boolean {
   return newPhraseAvailable(input);
@@ -817,6 +824,11 @@ export function createNewPhraseFromParams<F>(ports: NewPhrasePorts<F>, params: P
 /** The whole "New phrase from this bar" action with the vault and the UI injected (same shape as `createNewBar`). */
 export function createNewPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewPhraseResult> {
   return createPhraseNote(ports, { fn: 'createNewPhrase', noun: 'phrase', plan: (existingBasenames, exists) => planNewPhrase({ activePath: ports.activePath(), existingBasenames, exists }) });
+}
+
+/** The whole "New phrase" action (2026-11-19-0960): the same create-and-open loop, the note is EMPTY. There is nothing for the engine to draw, so the preflight (which draws the prospective note) is not asked. */
+export function createNewEmptyPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewPhraseResult> {
+  return createPhraseNote({ ...ports, preflight: async () => null }, { fn: 'createNewEmptyPhrase', noun: 'phrase', plan: (existingBasenames, exists) => planNewEmptyPhrase({ existingBasenames, exists }) });
 }
 
 /** The whole "New morph from this bar" action: the same loop, the note is a morph from this bar to the first other one. */
@@ -1096,7 +1108,7 @@ async function produceTransform(deps: PhraseScoreDeps, params: TransformPhrase, 
     if (source.ok === false) return { kind: 'refusal', message: `Phrase: the source phrase ${name} is not usable: ${source.message}` };
     made = await produceValidated(deps, source.value, name, [...chain, params.source]);
   }
-  if (made.kind !== 'score') return { kind: 'refusal', message: `Phrase: the source ${what} ${name} could not be drawn: ${made.message}` };
+  if (made.kind !== 'score') return { kind: 'refusal', message: `Phrase: the source ${what} ${name} could not be drawn: ${made.message === '' ? EMPTY_SOURCE : made.message}` };
   const bars = barsOfPayload(made.payload);
   if (bars === null) return { kind: 'refusal', message: `Phrase: the source ${what} ${name} gave no bars to change.` };
   // 2026-11-16-1000: the steps that change WHICH bars there are (keep, delete, copy, move) run here, in TypeScript, on the bars the source made; the engine gets the bars that are left and only the density ops (it never sees a structure step)
@@ -1231,6 +1243,7 @@ async function produceMix(deps: PhraseScoreDeps, params: MixPhrase, title: strin
  *  refusal line as a missing source — one path, one place that says why. The source bar is read only for a phrase that is valid. */
 export async function producePhraseNote(deps: PhraseScoreDeps, note: string | { unreadable: string }, title: string): Promise<ScoreOutcome> {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Phrase: the phrase note could not be read (${note.unreadable}).` };
+  if (isEmptyNote(note)) return { kind: 'refusal', message: '' };            // 2026-11-19-0960: a new note has no sentence yet: nothing to draw, nothing to say, nothing to ask the engine
   if (isCustomNote(note)) return produceCustomScore({ readNote: deps.readNote, runCustom: deps.runCustom, compute: deps.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
   const read = readPhraseNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Phrase: ${read.message}` };

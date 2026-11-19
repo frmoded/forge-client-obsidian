@@ -1,11 +1,10 @@
 // 2026-11-12-1203 - the docked prompt box, the pure part (prompt-box-core.ts): the state machine that keeps the box an EDITOR VIEW of the Description on disk (it never overwrites typing), the Description section writer, and the
-// placeholder examples (each one must parse as the sentence it claims to be).
+// (2026-11-19-0960: the placeholder examples, and their test that each one parses, are gone: the prompt line is empty before the person types).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { applied, diskChanged, initBox, isEdited, keepMine, placeholderFor, replaceDescriptionSection, typed, useNew } from './prompt-box-core.ts';
+import { applied, diskChanged, initBox, isEdited, keepMine, replaceDescriptionSection, typed, useNew } from './prompt-box-core.ts';
 import { PHRASE_DEFAULTS, noteContentFor } from './phrase-core.ts';
-import { parse } from './phrase-grammar-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 
 test('a fresh box shows the Description and is not edited; typing makes it edited, and typing it back makes it not edited again', () => {
@@ -59,15 +58,4 @@ test('replaceDescriptionSection: only the # Description body changes, byte for b
   assert.equal(replaceDescriptionSection('no headings here', 'x'), null);
   assert.equal(extractDescription(replaceDescriptionSection('# Description\n\nold\n\n# Recipe\n\nTake [[a]].\n', '  new  \n\n')!), 'new');
   assert.equal(replaceDescriptionSection('# Description\n\nold\n\n# Recipe\n\nTake [[a]].\n', 'new'), '# Description\n\nnew\n\n# Recipe\n\nTake [[a]].\n');
-});
-
-test('every placeholder is a Description the grammar accepts, one per kind of note', () => {
-  const vault = { bars: ['bar_005', 'bar_006'], phrases: ['phrase_001'], arrangements: [], compositions: [], kits: ['kit_001'] };
-  for (const kind of ['extend', 'mix', 'morph', 'transform', 'arrangement', 'composition']) {
-    const sentence = placeholderFor(kind).replace(/^Describe it in a sentence, for example: /, '');
-    const r = parse(sentence, vault as never);
-    assert.equal(r.ok, true, `${kind}: ${sentence} -> ${JSON.stringify((r as any).error)}`);
-    assert.equal((r as any).params.kind, kind, `${kind} parses as that kind`);
-  }
-  assert.match(placeholderFor('nonsense'), /^Describe it in a sentence, for example: Mix /, 'an unknown kind gets the mix example');
 });

@@ -186,7 +186,6 @@ test('a transform tab: the read-only strip, no controls, the Score drawn from it
     assert.equal(r.parent.querySelectorAll('.forge-phrase-controls input, .forge-phrase-controls select').length, 0);
     assert.equal(r.qa('g.measure').length, 8, 'drawn from the source\'s eight bars');
     assert.ok(r.computes.includes('transform') && r.computes.includes('extend'), r.computes.join(','));
-    assert.equal(r.parent.querySelector('.forge-phrase-bracket'), null, 'no bracket');
     assert.equal(r.qa('.forge-artifact-pinned').length, 0);
     assert.equal(r.qa('.forge-notebook-cell')[0].getAttribute('data-role'), 'result');
     assert.equal(r.q('.forge-notebook-cell .forge-notebook-cell-head').textContent, 'cell 1 · made this phrase from:');

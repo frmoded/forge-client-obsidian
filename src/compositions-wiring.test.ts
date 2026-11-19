@@ -15,6 +15,7 @@ import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/h
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { COMPOSITION_VIEW_TYPE, newCompositionNote, readCompositionNote } from './composition-core.ts';
 import { isRootNote } from './composition-root-core.ts';
+import { emptyCompositionNote, isEmptyNote } from './empty-note-core.ts';
 import { noteContentFor, type PhraseParams } from './phrase-core.ts';
 
 /** 2026-11-02-1155 (M16b, deliberate): a STALE derived Python that nobody edited (what an older plugin version wrote): the text changed AND `python_hash` re-stamped to it, so the note does not read as a hand edit (a hand-edited Python is a source now and a refresh refuses it). */
@@ -103,7 +104,7 @@ for (const edition of ['lean', 'music'] as const) {
   const EXTEND = (source: string): PhraseParams => ({ kind: 'extend', source, bars: 4, style: 'repeat_with_fills', tempo_change_pct: 0 } as PhraseParams);
   const PHRASES = { 'bars/bar_005.md': BAR, 'phrases/phrase_003.md': noteContentFor('phrase_003', EXTEND('bar_005')), 'phrases/phrase_004.md': noteContentFor('phrase_004', EXTEND('bar_005')) };
 
-  test(`[${edition}] a score-first vault: the four commands and the composition view are registered; "New composition" needs a phrase or an arrangement, "Open composition as Score" and "Make ... the root" only on a composition note, "Open the piece" only when the vault has a composition`, async () => {
+  test(`[${edition}] a score-first vault: the four commands and the composition view are registered; "New composition" is offered in every music vault (an empty note needs nothing first), "Open composition as Score" and "Make ... the root" only on a composition note, "Open the piece" only when the vault has a composition`, async () => {
     const w = await world(SCORE_FIRST_TOML);
     try {
       assert.equal(w.plugin.commands.get(NEW_COMP)?.name, 'New composition');
@@ -111,11 +112,11 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(w.plugin.commands.get(OPEN_PIECE)?.name, 'Open the piece');
       assert.equal(w.plugin.commands.get(MAKE_ROOT)?.name, 'Make this composition the root of the piece');
       assert.ok(w.plugin.views.has(COMPOSITION_VIEW_TYPE), 'the composition view type is registered');
-      for (const id of COMMANDS) assert.equal(w.offered(id), false, `${id}: nothing to play and no composition yet`);
+      for (const id of COMMANDS) assert.equal(w.offered(id), id === NEW_COMP, `${id}: nothing to play and no composition yet (2026-11-19-0960: only New composition is offered: it makes an EMPTY note)`);
     } finally { w.done(); }
     const some = await world(SCORE_FIRST_TOML, { ...PHRASES, 'compositions/comp_001.md': newCompositionNote('comp_001', P('phrases/phrase_003')) }, 'compositions/comp_001.md');
     try {
-      assert.equal(some.offered(NEW_COMP), true, 'a phrase: offered');
+      assert.equal(some.offered(NEW_COMP), true, 'offered');
       assert.equal(some.offered(OPEN_COMP), true); assert.equal(some.offered(MAKE_ROOT), true); assert.equal(some.offered(OPEN_PIECE), true);
       for (const p of ['compositions/README.md', 'phrases/phrase_003.md', null]) { some.setActive(p); assert.equal(some.offered(OPEN_COMP), false, String(p)); assert.equal(some.offered(MAKE_ROOT), false, String(p)); }
     } finally { some.done(); }
@@ -134,36 +135,23 @@ for (const edition of ['lean', 'music'] as const) {
     });
   }
 
-  test(`[${edition}] "New composition": the dialog lists the vault's phrases, Create makes compositions/comp_001.md in the Forge shape (the first composition is marked the root), prints the evidence line, opens it in the composition tab and closes the dialog`, async () => {
+  test(`[${edition}] "New composition" (2026-11-19-0960): NO dialog; compositions/comp_001.md is made EMPTY at once (the first composition of a vault is the root of its piece), the evidence line is printed, it opens in the composition tab with its notes pane`, async () => {
     const w = await world(SCORE_FIRST_TOML, PHRASES);
     try {
       await w.run(NEW_COMP);
-      assert.equal(w.modals.length, 1);
-      const options = [...w.modals[0].contentEl.querySelectorAll('.forge-comp-note option')].map((o: any) => o.value);
-      assert.deepEqual(options, ['phrases/phrase_003', 'phrases/phrase_004']);
-      assert.equal(w.q('.forge-comp-root').checked, true, 'no root yet: this one is the root by default');
-      w.q('.forge-comp-length').value = '8';
-      w.click(w.q('.forge-comp-add'));
-      const rows = w.modals[0].contentEl.querySelectorAll('.forge-comp-section');
-      assert.equal(rows.length, 2);
-      rows[1].querySelector('.forge-comp-note').value = 'phrases/phrase_004';
-      rows[1].querySelector('.forge-comp-repeat').value = '2';
-      w.click(w.q('.forge-comp-create'));
       await w.flush(); await w.flush();
+      assert.equal(w.modals.length, 0, 'no dialog opened');
       assert.deepEqual(w.madeFolders, ['compositions']);
       assert.equal(w.created.length, 1);
       const [created, text] = w.created[0];
       assert.equal(created, 'compositions/comp_001.md');
-      const read = readCompositionNote(text);
-      assert.ok(read.ok);
-      if (read.ok) assert.deepEqual(read.value.sections, [{ source: 'phrases/phrase_003', length: 8 }, { source: 'phrases/phrase_004', repeat: 2 }]);
-      assert.ok(isRootNote(text), 'marked as the root');
-      assert.match(text, /# Description\n\nPlay \[\[phrase_003\]\] for 8 bars\. Then play \[\[phrase_004\]\]\. Repeat that 2 more times\.\n/);
-      assert.deepEqual(w.lines.filter((l) => l.startsWith('[forge-composition]')), ['[forge-composition] created compositions/comp_001.md sections=phrase_003:8,phrase_004x3']);
-      // 2026-10-31-1135 (CCQA smoke 10, B1): the composition is the root of the piece, so it opens WITH its notes: the Score, and the notes pane beside it showing the new note (it was the Score alone, 'Open Score with notes' needed)
+      assert.equal(text, emptyCompositionNote('comp_001', ['root: true']), 'an empty note, marked as the root of the piece');
+      assert.ok(isEmptyNote(text)); assert.ok(isRootNote(text), 'marked as the root');
+      assert.equal(readCompositionNote(text).ok, false, 'no sections yet: its first sentence makes them');
+      assert.deepEqual(w.lines.filter((l) => l.startsWith('[forge-composition]')), ['[forge-composition] created compositions/comp_001.md (empty, the root of the piece)']);
+      // 2026-10-31-1135 (CCQA smoke 10, B1): the composition is the root of the piece, so it opens WITH its notes: the Score, and the notes pane beside it showing the new note
       assert.deepEqual(w.leaves.flatMap((l) => l.states).map((s: any) => [s.type, s.state.file]), [[COMPOSITION_VIEW_TYPE, 'compositions/comp_001.md'], ['markdown', 'compositions/comp_001.md']]);
       assert.equal(w.leaves.length, 2, 'two panes: the Score and its notes');
-      assert.equal(w.modals[0].closed, true);
     } finally { w.done(); }
   });
 
@@ -181,8 +169,6 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(panes().length, 1, 'the pair is open');
       const before = w.leaves.length;
       await w.run(NEW_COMP);
-      w.q('.forge-comp-root').checked = false;
-      w.click(w.q('.forge-comp-create'));
       await w.flush(); await w.flush();
       assert.equal(w.created.length, 1); assert.equal(w.created[0][0], 'compositions/comp_002.md');
       assert.equal(w.leaves.length, before, `no third pane: ${JSON.stringify(w.leaves.map((l: any) => l.states.map((s: any) => [s.type, s.state?.file])))}`);
@@ -192,18 +178,16 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { delete (Object.prototype as any).addAction; w.done(); }
   });
 
-  test(`[${edition}] a second composition is not the root by default, and ticking the root box moves the mark: the first one loses it`, async () => {
+  test(`[${edition}] a second composition is an EMPTY note and not the root (there is one already): the first keeps the mark; "Make this composition the root" is how the mark moves`, async () => {
     const first = newCompositionNote('comp_001', P('phrases/phrase_003'), ['root: true']);
     const w = await world(SCORE_FIRST_TOML, { ...PHRASES, 'compositions/comp_001.md': first });
     try {
       await w.run(NEW_COMP);
-      assert.equal(w.q('.forge-comp-root').checked, false, 'there is a root already');
-      w.q('.forge-comp-root').checked = true;
-      w.click(w.q('.forge-comp-create'));
       await w.flush(); await w.flush();
       assert.equal(w.created[0][0], 'compositions/comp_002.md');
-      assert.ok(isRootNote(w.store.get('compositions/comp_002.md')!));
-      assert.ok(!isRootNote(w.store.get('compositions/comp_001.md')!), 'the first composition lost the mark');
+      assert.equal(w.store.get('compositions/comp_002.md'), emptyCompositionNote('comp_002'));
+      assert.ok(!isRootNote(w.store.get('compositions/comp_002.md')!), 'not the root: there is one');
+      assert.ok(isRootNote(w.store.get('compositions/comp_001.md')!), 'the first composition keeps the mark');
     } finally { w.done(); }
   });
 

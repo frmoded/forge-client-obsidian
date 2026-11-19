@@ -6,7 +6,7 @@ import { addQuietAction } from './sr-label-core.ts';
 import { uiFlags } from './ui-flags-core.ts';
 import { ICON_COMPOSITION } from './music-ribbon-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
-import { EditableFileView, MarkdownView, Modal, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
+import { EditableFileView, MarkdownView, Notice, TFile, type App, type Plugin, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
@@ -15,9 +15,9 @@ import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
 import { isFileExistsError, type ScorePanelPlan } from './score-first-core.ts';
-import { PHRASE_FOLDER, barsOfPayload, isPhrasePath } from './phrase-core.ts';
-import { ARRANGEMENT_FOLDER, isArrangementPath } from './arrangement-core.ts';
-import { COMPOSITION_FOLDER, COMPOSITION_VIEW_TYPE, compositionHeader, isCompositionPath, nextCompositionName, phraseDepsWithSources, produceComposition, readCompositionNote, FORGE_COMPOSITION_KEY, type CompositionParams, type CompositionShape } from './composition-core.ts';
+import { barsOfPayload, isPhrasePath } from './phrase-core.ts';
+import { isArrangementPath } from './arrangement-core.ts';
+import { COMPOSITION_VIEW_TYPE, compositionHeader, isCompositionPath, phraseDepsWithSources, produceComposition, readCompositionNote, FORGE_COMPOSITION_KEY, type CompositionParams, type CompositionShape } from './composition-core.ts';
 import { COMPOSITION_INSPECTOR_HINT, COMPOSITION_BAR_ROLE, annotateCompositionPayload, barIdsPlayedFrom, barsPlayedFrom, compositionLineageOf, readCompositionLineage, type CompositionLineageBar } from './composition-nav-core.ts';
 import { treeRows, treeText } from './composition-strip-core.ts';
 import { mountNotebook, type NotebookDomPorts, type NotebookHandle } from './notebook-dom.ts';
@@ -26,11 +26,11 @@ import { compositionSelectionChip } from './composition-notebook-core.ts';
 import { paintSelectionTint } from './selection-tint-dom.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
 import { mountCompositionStrip, type CompositionStrip } from './composition-strip-dom.ts';
-import { mountCompositionDialog } from './composition-dialog-dom.ts';
-import { NEW_COMPOSITION_COMMAND_ID, NEW_COMPOSITION_COMMAND_NAME, OPEN_COMPOSITION_COMMAND_ID, OPEN_COMPOSITION_COMMAND_NAME, createComposition, moveRoot, newCompositionAvailable, openCompositionAvailable } from './composition-flow-core.ts';
+import { NEW_COMPOSITION_COMMAND_ID, NEW_COMPOSITION_COMMAND_NAME, OPEN_COMPOSITION_COMMAND_ID, OPEN_COMPOSITION_COMMAND_NAME, createEmptyComposition, moveRoot, newCompositionAvailable, openCompositionAvailable } from './composition-flow-core.ts';
 import { MAKE_ROOT_COMMAND_ID, MAKE_ROOT_COMMAND_NAME, OPEN_PIECE_COMMAND_ID, OPEN_PIECE_COMMAND_NAME, makeRootAvailable, manyRootsMessage, noRootMessage, openPieceAvailable, rootOf, withRoot } from './composition-root-core.ts';
 import type { CreatePorts } from './kit-arrangement-flow-core.ts';
 import { litEvidence } from './structure-strip-core.ts';
+import { isEmptyNote } from './empty-note-core.ts';
 import { phraseNoteId } from './phrase-lineage-core.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import type { PhraseStructureHooks } from './phrase-view.ts';
@@ -198,6 +198,7 @@ export class CompositionView extends EditableFileView {
 
   private headerText(file: TFile, text: string | { unreadable: string }, bars: ReturnType<typeof barsOfPayload>): string {
     if (typeof text !== 'string') return `${file.basename}: the note could not be read (${text.unreadable}).`;
+    if (isEmptyNote(text)) return '';                       // 2026-11-19-0960: a new note has no sentence yet: the header says nothing
     const read = readCompositionNote(text);
     return read.ok === false ? `${file.basename}: ${read.message}` : `${file.basename} — ${compositionHeader(read.value, bars)}`;
   }
@@ -286,13 +287,6 @@ export async function openComposition(app: App, file: TFile): Promise<WorkspaceL
   return leaf;
 }
 
-class DialogModal extends Modal {
-  constructor(app: App, private readonly mount: (parent: HTMLElement, close: () => void) => { dispose(): void }) { super(app); }
-  private handle: { dispose(): void } | null = null;
-  onOpen(): void { this.handle = this.mount(this.contentEl, () => { this.close(); }); }
-  onClose(): void { this.handle?.dispose(); this.contentEl.empty(); }
-}
-
 export interface CompositionsOptions {
   plan: ScorePanelPlan;
   /** The live answer to "is this vault score-first": asked each time a command is offered, so a forge.toml that stops declaring the profile turns the commands off at once. */
@@ -321,7 +315,6 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
   const app = plugin.app;
   plugin.registerView(COMPOSITION_VIEW_TYPE, (leaf) => new CompositionView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin, opts.notebookFor));
 
-  const names = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && f.extension === 'md' && f.basename !== 'README').map((f) => `${folder}/${f.basename}`).sort();
   const compositionFiles = (): TFile[] => app.vault.getFiles().filter((f) => isCompositionPath(f.path));
   const readAll = async (): Promise<Array<{ path: string; text: string }>> => Promise.all(compositionFiles().map(async (f) => ({ path: f.path, text: await app.vault.read(f) })));
 
@@ -349,8 +342,7 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
     name: NEW_COMPOSITION_COMMAND_NAME,
     icon: ICON_COMPOSITION,
     checkCallback: (checking: boolean) => {
-      const phrases = names(PHRASE_FOLDER), arrangements = names(ARRANGEMENT_FOLDER);
-      if (!newCompositionAvailable({ scoreFirst: opts.scoreFirst(), phraseCount: phrases.length, arrangementCount: arrangements.length })) return false;
+      if (!newCompositionAvailable({ scoreFirst: opts.scoreFirst() })) return false;
       if (!checking) {
         // 2026-10-31-1135 (smoke 10, B1/B4): the composition is the root of the piece, so it is always opened WITH its notes: the pair the person started from follows to the new note (the Score takes its leaf), and with no pair
         // the notes pane opens beside the new Score ('Open Score with notes'). `origin` is read now, before any await.
@@ -364,13 +356,8 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
           const leaf = await openComposition(app, file);
           try { await opts.pair?.(leaf, file); } catch (e) { console.error('New composition: the notes pane could not be opened', e); }          // the composition is made and open: a pane that will not open is not a failure of Create
         });
-        void readAll().then((all) => {
-          new DialogModal(app, (parent, close) => mountCompositionDialog(parent, {
-            phrases, arrangements, compositions: names(COMPOSITION_FOLDER), hasRoot: rootOf(all).kind !== 'none', nextName: nextCompositionName((p) => app.vault.getAbstractFileByPath(p) !== null),
-            create: (choice) => createComposition(compPorts, choice, (path) => makeRoot(path)),
-            close,
-          })).open();
-        });
+        // 2026-11-19-0960: an EMPTY composition, opened at once (no dialog): its first sentence makes the sections. The first composition of a vault is the root of its piece, as the dialog's box was ticked for it.
+        void readAll().then((all) => createEmptyComposition(compPorts, { root: rootOf(all).kind === 'none' })).catch((e) => { console.error('New composition failed', e); loggedNotice(`New composition failed: ${(e as Error)?.message ?? e}`); });
       }
       return true;
     },

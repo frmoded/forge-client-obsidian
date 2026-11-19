@@ -96,7 +96,7 @@ export function step(s: ComposerState, ev: ComposerEvent): { state: ComposerStat
 export const PREVIEW_HINT = 'Press Enter to apply, Esc to discard';
 export const WORKING_TEXT = 'Working... Esc cancels';
 export const COMPOSER_LABELS = {
-  region: 'Composer', field: 'Describe what you want, in a sentence', send: 'Send, Enter', plus: 'More actions', menu: 'More actions', sr: 'Composer status',
+  region: 'Composer', field: 'Describe the next step in a sentence', send: 'Send, Enter', plus: 'More actions', menu: 'More actions', sr: 'Composer status',
 } as const;
 /** One muted line under the card: an error, said once, never a modal. Empty when there is none. */
 export function errorLine(s: ComposerState): string { return s.phase === 'error' ? s.message : ''; }

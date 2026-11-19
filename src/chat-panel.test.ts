@@ -20,7 +20,7 @@ const PATH = 'phrases/phrase_001.md';
 const EXTEND: PhraseParams = { kind: 'extend', source: 'bar_007', ...PHRASE_DEFAULTS, bars: 8 };
 const FREE = 'make bar_007 twelve bars long, a bit slower';
 const PLAN = { kind: 'extend', bar: 'bar_007', bars: 12, tempo_change_pct: -10 };
-const BOX = { placeholder: 'x', preview: async () => ({ ok: false as const, message: 'x' }), apply: async () => ({ ok: false }) };
+const BOX = { preview: async () => ({ ok: false as const, message: 'x' }), apply: async () => ({ ok: false }) };
 const settle = async (n = 40) => { for (let i = 0; i < n; i++) await Promise.resolve(); };
 type Factory = typeof createDescriptionController;
 

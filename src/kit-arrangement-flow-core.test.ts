@@ -3,10 +3,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { readArrangementNote } from './arrangement-core.ts';
+import { emptyArrangementNote, isEmptyNote } from './empty-note-core.ts';
 import { readKitNote } from './kit-core.ts';
 import {
-  NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMAND_ID, NEW_KIT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_ID, OPEN_ARRANGEMENT_COMMAND_NAME, createArrangement, createKit, newArrangementAvailable, newKitAvailable, openArrangementAvailable, type CreatePorts,
+  NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMAND_ID, NEW_KIT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_ID, OPEN_ARRANGEMENT_COMMAND_NAME, createEmptyArrangement, createKit, newArrangementAvailable, newKitAvailable, openArrangementAvailable, type CreatePorts,
 } from './kit-arrangement-flow-core.ts';
 
 function vault(opts: { files?: string[]; folders?: string[]; failCreate?: string; raceOnce?: string; noFolder?: boolean; folderRace?: boolean; alwaysTaken?: boolean } = {}) {
@@ -79,47 +79,36 @@ test('New kit: every refusal is one sentence, nothing is written, nothing opens,
   assert.deepEqual(await createKit(ro.ports, { name: 'rock', channels: ['kick'] }), { ok: false, message: 'New kit failed: read-only vault' });
 });
 
-test('New arrangement: arrangements/arr_001.md in a vault that had no such folder, the note reads back to the tracks, the evidence line and the open happen once, then arr_002 ...', async () => {
+test('New arrangement (2026-11-19-0960: an EMPTY note): arrangements/arr_001.md in a vault that had no such folder, the note is empty (no tracks, no kit, no phrase), the evidence line and the open happen once, then arr_002 ...', async () => {
   const v = vault();
-  const tracks = [{ kit: 'rock', phrase: 'phrase_003' }, { kit: 'latin', phrase: 'phrase_009' }];
-  assert.deepEqual(await createArrangement(v.ports, tracks), { ok: true, path: 'arrangements/arr_001.md' });
+  assert.deepEqual(await createEmptyArrangement(v.ports), { ok: true, path: 'arrangements/arr_001.md' });
   assert.deepEqual(v.log.folders, ['arrangements']);
-  const read = readArrangementNote(v.store.get('arrangements/arr_001.md')!);
-  assert.ok(read.ok);
-  if (read.ok) assert.deepEqual(read.value.tracks, tracks);
-  assert.deepEqual(v.log.lines, ['[forge-arrangement] created arrangements/arr_001.md tracks=phrase_003@rock,phrase_009@latin']);
+  assert.equal(v.store.get('arrangements/arr_001.md'), emptyArrangementNote('arr_001'));
+  assert.ok(isEmptyNote(v.store.get('arrangements/arr_001.md')!));
+  assert.deepEqual(v.log.lines, ['[forge-arrangement] created arrangements/arr_001.md (empty)']);
   assert.deepEqual(v.log.opened, ['arrangements/arr_001.md']);
   assert.deepEqual(v.log.notices, ['Created arrangements/arr_001.md.']);
-  assert.deepEqual(await createArrangement(v.ports, tracks), { ok: true, path: 'arrangements/arr_002.md' });
+  assert.deepEqual(await createEmptyArrangement(v.ports), { ok: true, path: 'arrangements/arr_002.md' });
   const raced = vault({ folders: ['arrangements'], raceOnce: 'arrangements/arr_001.md' });
-  assert.deepEqual(await createArrangement(raced.ports, tracks), { ok: true, path: 'arrangements/arr_002.md' });
+  assert.deepEqual(await createEmptyArrangement(raced.ports), { ok: true, path: 'arrangements/arr_002.md' });
   assert.equal(raced.store.get('arrangements/arr_001.md'), 'someone else\'s');
 });
 
-test('New arrangement: no tracks, a kit twice, an unsafe name, a failing write: one sentence each, nothing written, nothing thrown', async () => {
-  const cases: Array<[Array<{ kit: string; phrase: string }>, RegExp]> = [
-    [[], /^New arrangement: An arrangement needs at least one track/], [[{ kit: 'rock', phrase: 'a' }, { kit: 'rock', phrase: 'b' }], /^New arrangement: The kit "rock" plays two tracks/],
-    [[{ kit: '../x', phrase: 'a' }], /^New arrangement: tracks\[0\]: the kit "\.\.\/x" is not a kit name/],
-  ];
-  for (const [tracks, re] of cases) {
-    const v = vault();
-    const r = await createArrangement(v.ports, tracks);
-    assert.equal(r.ok, false);
-    if (r.ok === false) assert.match(r.message, re);
-    assert.deepEqual([v.log.created, v.log.opened, v.log.lines, v.log.folders], [[], [], [], []]);
-  }
-  const w = vault({ folders: ['arrangements'], failCreate: 'arrangements/arr_001.md' });
-  assert.deepEqual(await createArrangement(w.ports, [{ kit: 'rock', phrase: 'a' }]), { ok: false, message: 'New arrangement failed: disk full' });
+test('New arrangement: a failing write is one sentence, nothing is written or opened, nothing is thrown', async () => {
+  const saved = console.error; console.error = () => {};
+  try {
+    const w = vault({ folders: ['arrangements'], failCreate: 'arrangements/arr_001.md' });
+    assert.deepEqual(await createEmptyArrangement(w.ports), { ok: false, message: 'New arrangement failed: disk full' });
+    assert.deepEqual([w.log.created, w.log.opened, w.log.lines], [[], [], []]);
+  } finally { console.error = saved; }
 });
 
-test('when the commands are offered: score-first vaults only; New arrangement needs a kit and a phrase; Open arrangement as Score is for an arrangement note (not README.md, not a note elsewhere)', () => {
+test('when the commands are offered: score-first vaults only; New arrangement is offered in every music vault (it makes an empty note: no kit and no phrase needed first); Open arrangement as Score is for an arrangement note (not README.md, not a note elsewhere)', () => {
   assert.deepEqual([NEW_KIT_COMMAND_NAME, NEW_ARRANGEMENT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_NAME], ['New kit', 'New arrangement', 'Open arrangement as Score']);
   assert.equal(newKitAvailable({ scoreFirst: true }), true);
   assert.equal(newKitAvailable({ scoreFirst: false }), false);
-  assert.equal(newArrangementAvailable({ scoreFirst: true, kitCount: 1, phraseCount: 1 }), true);
-  assert.equal(newArrangementAvailable({ scoreFirst: true, kitCount: 0, phraseCount: 3 }), false);
-  assert.equal(newArrangementAvailable({ scoreFirst: true, kitCount: 2, phraseCount: 0 }), false);
-  assert.equal(newArrangementAvailable({ scoreFirst: false, kitCount: 2, phraseCount: 3 }), false);
+  assert.equal(newArrangementAvailable({ scoreFirst: true }), true);
+  assert.equal(newArrangementAvailable({ scoreFirst: false }), false);
   assert.equal(openArrangementAvailable({ scoreFirst: true, activePath: 'arrangements/arr_001.md' }), true);
   for (const activePath of [null, 'arrangements/README.md', 'phrases/phrase_001.md', 'arrangements/deep/arr_001.md', 'kits/rock.md']) assert.equal(openArrangementAvailable({ scoreFirst: true, activePath }), false, String(activePath));
   assert.equal(openArrangementAvailable({ scoreFirst: false, activePath: 'arrangements/arr_001.md' }), false);
@@ -129,7 +118,7 @@ test('a folder another writer made at the last moment is not a failure; a folder
   const k = vault({ folderRace: true });
   assert.deepEqual(await createKit(k.ports, { name: 'rock', channels: ['kick'] }), { ok: true, path: 'kits/rock.md' });
   const a = vault({ folderRace: true });
-  assert.deepEqual(await createArrangement(a.ports, [{ kit: 'rock', phrase: 'p' }]), { ok: true, path: 'arrangements/arr_001.md' });
+  assert.deepEqual(await createEmptyArrangement(a.ports), { ok: true, path: 'arrangements/arr_001.md' });
 });
 
 test('a name that can never be had gives up after 20 tries with one sentence, asking for a different name each time, and never overwrites or opens anything', async () => {
@@ -139,7 +128,7 @@ test('a name that can never be had gives up after 20 tries with one sentence, as
   assert.equal(new Set(k.log.attempts).size, 20, 'a different name each time: the name that was just refused is not asked for again');
   assert.deepEqual([k.log.opened, k.log.lines, k.log.notices], [[], [], ['New kit: could not find a free kit name.']]);
   const a = vault({ folders: ['arrangements'], alwaysTaken: true });
-  assert.deepEqual(await createArrangement(a.ports, [{ kit: 'rock', phrase: 'p' }]), { ok: false, message: 'New arrangement: could not find a free arrangement name.' });
+  assert.deepEqual(await createEmptyArrangement(a.ports), { ok: false, message: 'New arrangement: could not find a free arrangement name.' });
   assert.equal(a.log.attempts.length, 20);
   assert.equal(new Set(a.log.attempts).size, 20, 'the arrangement asks for a new number each time too');
   assert.deepEqual([a.log.opened, a.log.lines, a.log.notices], [[], [], ['New arrangement: could not find a free arrangement name.']]);

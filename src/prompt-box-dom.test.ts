@@ -14,7 +14,6 @@ function rig(over: Partial<PromptBoxPorts> = {}) {
   const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
   const previews: string[] = []; const applies: string[] = []; const events: string[] = []; let hist: string[] = [];
   const ports: PromptBoxPorts = {
-    placeholder: 'Describe it…',
     preview: async (t): Promise<PreviewResult> => { previews.push(t); return { ok: true, proposal: { description: `Would write: ${t}.`, via: 'grammar' } }; },
     apply: async (t) => { applies.push(t); return { ok: true, disk: t }; },
     cancel: () => { events.push('cancel'); },
@@ -30,13 +29,14 @@ function rig(over: Partial<PromptBoxPorts> = {}) {
   return { win, parent, handle, previews, applies, events, history: () => hist, q, type, key, flush };
 }
 
-test('on mount the field is exactly the Description, the card is not edited, nothing can be sent, the placeholder and labels are set', () => {
+test('on mount the field is exactly the Description, the card is not edited, nothing can be sent, there is NO placeholder and the labels are set', () => {
   const r = rig();
   assert.equal(r.q('.forge-prompt-box-text').value, SENTENCE);
   assert.equal(r.q('.forge-prompt-box').classList.contains('is-edited'), false);
   assert.equal(r.q('.forge-composer-send').getAttribute('aria-disabled'), 'true');
   assert.equal(r.q('.forge-prompt-box-state').textContent, '');
-  assert.equal(r.q('.forge-prompt-box-text').placeholder, 'Describe it…');
+  assert.equal(r.q('.forge-prompt-box-text').placeholder, '', '2026-11-19-0960: the prompt line is empty: no placeholder');
+  assert.equal(accessibleName(r.q('.forge-prompt-box-text')), 'Describe the next step in a sentence');
   assert.ok(accessibleName(r.q('.forge-prompt-box-text')));
   assert.equal(r.q('.forge-prompt-box').getAttribute('role'), 'group');
   assert.ok(accessibleName(r.q('.forge-prompt-box')));

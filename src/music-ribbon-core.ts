@@ -50,8 +50,8 @@ export interface RibbonItem { commandId: string; icon: string; title: string; un
 /** The four buttons, in the order of the ribbon. `commandId` is the id the PLUGIN registered the command under (the palette entry and the ribbon button are the same command). */
 export const MUSIC_RIBBON: readonly RibbonItem[] = [
   { commandId: 'new-phrase', icon: ICON_PHRASE, title: 'New phrase', unavailable: 'New phrase is not available right now.' },
-  { commandId: 'new-arrangement', icon: ICON_ARRANGEMENT, title: 'New arrangement', unavailable: 'New arrangement needs at least one kit and one phrase. Make them first (New kit, New phrase).' },
-  { commandId: 'new-composition', icon: ICON_COMPOSITION, title: 'New composition', unavailable: 'New composition needs at least one phrase or arrangement. Make one first (New phrase, New arrangement).' },
+  { commandId: 'new-arrangement', icon: ICON_ARRANGEMENT, title: 'New arrangement', unavailable: 'New arrangement is not available right now.' },
+  { commandId: 'new-composition', icon: ICON_COMPOSITION, title: 'New composition', unavailable: 'New composition is not available right now.' },
   { commandId: 'new-bar', icon: ICON_BAR, title: 'New bar', unavailable: 'New bar is not available right now.' },
 ];
 export interface RibbonDeps {

@@ -87,7 +87,7 @@ const out: any = {};
   const h = await open('morph', morphText());
   try {
     out.strip = await h.q.ev(`(() => { const g = (s) => document.querySelector(s); return { a: g('.forge-morph-a')?.value, b: g('.forge-morph-b')?.value, bars: g('.forge-morph-bars')?.value, order: g('.forge-morph-order')?.value, seedDisabled: g('.forge-morph-seed')?.disabled,
-      positionShown: g('.forge-morph-position')?.closest('label')?.style.display !== 'none', sentence: g('.forge-morph-sentence')?.textContent, inspector: !!g('.forge-inspector'), bracket: !!g('.forge-phrase-bracket'), mixStrip: !!g('.forge-mix-weight'), extendStrip: !!g('.forge-phrase-bars') }; })()`);
+      positionShown: g('.forge-morph-position')?.closest('label')?.style.display !== 'none', sentence: g('.forge-morph-sentence')?.textContent, inspector: !!g('.forge-inspector'), mixStrip: !!g('.forge-mix-weight'), extendStrip: !!g('.forge-phrase-bars') }; })()`);
     out.atomic = await h.q.ev(`(() => { const svg = document.querySelector('.forge-rhythm-score-host svg'); const ms = [...svg.querySelectorAll('g.measure')]; return { measures: ms.length, noteheads: ms.map((m) => m.querySelectorAll('g.notehead').length), tempi: [...svg.querySelectorAll('g.tempo')].map((g) => g.textContent.replace(/\\s+/g, ' ').trim()) }; })()`);
     await h.q.shot(path.join(SHOTS, 'morph-atomic-5.png'), { x: 0, y: 0, width: 800, height: 560 });
     // Atomic from 2 bars: the button reads the two bars and sets Bars to d + 1
@@ -238,8 +238,8 @@ const distinct = (xs: string[]) => new Set(xs).size;
 out.verdicts = {
   morph_theStripIsThere: out.strip.a === 'bar_005' && out.strip.b === 'bar_006' && out.strip.bars === '5' && out.strip.order === 'musical' && out.strip.seedDisabled === true && out.strip.positionShown === false
     && out.strip.sentence === 'Morph from bar_005 to bar_006 in 5 bars: 4 single-hit changes (musical order).',
-  // Phase B REVERSES Phase A's "no Inspector": a morph has one now; it still has no bracket and no other strip
-  morph_hasAnInspectorButNoBracketOrOtherStrip: out.strip.inspector === true && out.strip.bracket === false && out.strip.mixStrip === false && out.strip.extendStrip === false,
+  // Phase B REVERSES Phase A's "no Inspector": a morph has one now; it still has no other strip
+  morph_hasAnInspectorButNoOtherStrip: out.strip.inspector === true && out.strip.mixStrip === false && out.strip.extendStrip === false,
   morph_atomicScoreIsFiveBarsEachOneNoteheadFewer: out.atomic.measures === 5 && JSON.stringify(out.atomic.noteheads) === JSON.stringify([8, 7, 6, 5, 4]),
   morph_atomicButtonSetsBarsToDPlusOne: out.atomicButton.barsAfter === '5' && out.atomicButton.written === 5 && out.atomicButton.measures === 5,
   morph_positionHasFiveStopsAndEachIsADifferentScoreByPixels: out.position.max === '4' && out.position.stops.length === 5 && distinct(out.position.stops.map((s: any) => s.hash)) === 5

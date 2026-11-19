@@ -5,7 +5,6 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import { ICON_ARRANGEMENT, ICON_BAR, ICON_COMPOSITION, ICON_PHRASE, MUSIC_ICONS, MUSIC_RIBBON, iconIssues, registerMusicIcons, registerMusicRibbon } from './music-ribbon-core.ts';
-import { createPhraseAnywhere, pickSourceBar } from './new-phrase-anywhere-core.ts';
 import { NEW_COMPOSITION_COMMAND_ID } from './composition-flow-core.ts';
 import { NEW_ARRANGEMENT_COMMAND_ID } from './kit-arrangement-flow-core.ts';
 
@@ -43,7 +42,7 @@ test('the ribbon: four buttons in order New phrase, New arrangement, New composi
   registerMusicRibbon({ pluginId: 'forge', addRibbonIcon: (icon, title, click) => { items.push({ icon, title, click }); }, runCommand: (id) => { ran.push(id); return offered; }, notify: (m) => { said.push(m); } });
   assert.deepEqual(items.map((i) => [i.title, i.icon]), [['New phrase', ICON_PHRASE], ['New arrangement', ICON_ARRANGEMENT], ['New composition', ICON_COMPOSITION], ['New bar', ICON_BAR]]);
   items.forEach((i) => i.click()); assert.deepEqual(ran, ['forge:new-phrase', 'forge:new-arrangement', 'forge:new-composition', 'forge:new-bar']); assert.deepEqual(said, []);
-  offered = false; items[1].click(); items[2].click(); assert.equal(said.length, 2); assert.match(said[0], /New arrangement needs at least one kit and one phrase/); assert.match(said[1], /New composition needs/);
+  offered = false; items[1].click(); items[2].click(); assert.equal(said.length, 2); assert.deepEqual(said, ['New arrangement is not available right now.', 'New composition is not available right now.'], '2026-11-19-0960: no prerequisite is told: an empty note needs nothing first');
 });
 test('"the same as the palette entry": every ribbon command id is the id of a command the plugin registers, with the same name as the tooltip, and the command carries the same icon', () => {
   const sf = src('score-first.ts'), ka = src('kits-arrangements.ts'), co = src('compositions.ts');
@@ -64,23 +63,15 @@ test('WIRING (P3): the icons, the ribbon and the "New phrase" command are regist
 });
 
 // ---- "New phrase" from any note
-test('pickSourceBar: the bar you are on; else the FIRST bar by number (a numeric order: bar_2 before bar_10); else nothing', () => {
-  assert.deepEqual(pickSourceBar('bars/bar_007.md', ['bar_001']), { kind: 'from-active', bar: 'bars/bar_007.md' });
-  assert.deepEqual(pickSourceBar('notes/x.md', ['bar_010', 'bar_002', 'bar_003']), { kind: 'from-first', bar: 'bars/bar_002.md' });
-  assert.deepEqual(pickSourceBar(null, ['bar_005']), { kind: 'from-first', bar: 'bars/bar_005.md' });
-  assert.deepEqual(pickSourceBar('phrases/phrase_001.md', ['README', 'other']), null); assert.equal(pickSourceBar(null, []), null);
+test('"New phrase" (2026-11-19-0960) makes an EMPTY phrase from any note: the command is the empty flow, it never looks at the note you are on, never asks for a bar and never makes one first (the bar-first flow, pickSourceBar and createPhraseAnywhere, is gone)', () => {
+  const sf = src('score-first.ts');
+  assert.match(sf, /const createEmptyPhraseNote = \(\): Promise<unknown> => createNewEmptyPhrase<TFile>\(\{/);
+  assert.match(sf, /if \(!checking\) void createEmptyPhraseNote\(\);/);
+  assert.doesNotMatch(sf, /createPhraseAnywhere|pickSourceBar|createBar: \(\) => createBar\(\)/);
 });
-test('"New phrase" from any note: on a bar it starts from that bar; on another note from the first bar; with no bar at all it makes a bar FIRST (New bar) and a phrase from it; if the bar cannot be made nothing else is made', async () => {
-  const calls: string[] = [];
-  const ports = (active: string | null, bars: string[], bar: { ok: true; path: string } | { ok: false; message: string } = { ok: true, path: 'bars/bar_001.md' }) => ({ activePath: () => active, barBasenames: () => bars, createBar: async () => { calls.push('bar'); return bar; }, createPhraseFrom: async (p: string) => { calls.push(`phrase:${p}`); } });
-  assert.deepEqual(await createPhraseAnywhere(ports('bars/bar_004.md', ['bar_001', 'bar_004'])), { kind: 'from-active', bar: 'bars/bar_004.md' }); assert.deepEqual(calls.splice(0), ['phrase:bars/bar_004.md']);
-  assert.deepEqual(await createPhraseAnywhere(ports('notes/a.md', ['bar_003', 'bar_001'])), { kind: 'from-first', bar: 'bars/bar_001.md' }); assert.deepEqual(calls.splice(0), ['phrase:bars/bar_001.md']);
-  assert.deepEqual(await createPhraseAnywhere(ports(null, [])), { kind: 'from-new-bar', bar: 'bars/bar_001.md' }); assert.deepEqual(calls.splice(0), ['bar', 'phrase:bars/bar_001.md']);
-  assert.deepEqual(await createPhraseAnywhere(ports(null, [], { ok: false, message: 'no room' })), { kind: 'failed', message: 'no room' }); assert.deepEqual(calls.splice(0), ['bar'], 'no phrase after a failed bar');
-});
-test('"New phrase from this bar" is untouched: still asks for a bar (its availability and its message), and the flow behind both commands is the same createNewPhrase', () => {
+test('"New phrase from this bar" is untouched: still asks for a bar (its availability and its message), and the flow behind it is createNewPhrase', () => {
   const sf = src('score-first.ts');
   assert.match(sf, /if \(!newPhraseAvailable\(\{ scoreFirst, activePath: activePath\(\) \}\)\) return false;\s*if \(!checking\) void createPhrase\(\);/);
-  assert.match(sf, /const createPhrase = \(\): Promise<unknown> => phraseFrom\(activePath\);/); assert.match(sf, /createPhraseFrom: \(barPath\) => phraseFrom\(\(\) => barPath\)/);
+  assert.match(sf, /const createPhrase = \(\): Promise<unknown> => phraseFrom\(activePath\);/);
   assert.match(fs.readFileSync(path.join(ROOT, 'src/phrase-core.ts'), 'utf8'), /New phrase: open a bar from \$\{BAR_FOLDER\}\/ first/);
 });

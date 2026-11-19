@@ -1,8 +1,8 @@
-// 2026-10-31-1100 (M17b, item 3) - what "New composition" DOES once the person has chosen: validate, make the folder if the vault lacks it, pick a free name, write the note through the one writer path, mark it as the root if asked,
-// print the evidence line, open it, say so. The vault is injected (the Obsidian glue is compositions.ts; the choosing is composition-dialog-dom.ts). Nothing here throws: every trouble is one sentence returned and shown. Score-first vaults only (P3).
-import { COMPOSITION_FOLDER, COMPOSITION_NAME_PATTERN, compositionCreatedLine, compositionPath, newCompositionNote, nextCompositionName, validateComposition, type CompositionSection } from './composition-core.ts';
+// 2026-10-31-1100 (M17b, item 3); 2026-11-19-0960 made it an EMPTY note - what "New composition" DOES: make the folder if the vault lacks it, pick a free name, write the empty note, mark it as the root if asked,
+// print the evidence line, open it, say so. The vault is injected (the Obsidian glue is compositions.ts). Nothing here throws: every trouble is one sentence returned and shown. Score-first vaults only (P3).
+import { COMPOSITION_FOLDER, compositionPath, nextCompositionName } from './composition-core.ts';
 import { withRoot } from './composition-root-core.ts';
-import { installedNotePreflight } from './note-preflight-seam.ts';
+import { emptyCompositionNote } from './empty-note-core.ts';
 import type { CreatePorts, CreateResult } from './kit-arrangement-flow-core.ts';
 
 const msg = (e: unknown): string => (e as Error)?.message ?? String(e);
@@ -10,49 +10,34 @@ const NAME_TRIES = 20;
 const fail = (ports: CreatePorts, message: string): CreateResult => { ports.notify(message); return { ok: false, message }; };
 
 export interface NewCompositionChoice {
-  /** A name the person typed; empty or absent = the next free `comp_NNN`. */
-  name?: string;
-  sections: readonly CompositionSection[];
-  /** Mark this composition as the ROOT of the piece. The caller clears the mark on the others (compositions.ts `moveRoot`) when it is told this one is the root. */
+  /** Mark this composition as the ROOT of the piece (`root: true`). The caller says so only when no composition is the root yet (the old dialog ticked the box in exactly that case). */
   root?: boolean;
 }
 export type NewCompositionResult = CreateResult & { name?: string };
 
-export async function createComposition<F>(ports: CreatePorts<F>, choice: NewCompositionChoice, afterRoot?: (path: string) => Promise<void>): Promise<NewCompositionResult> {
-  const valid = validateComposition({ kind: 'composition', sections: choice.sections.map((s) => ({ source: s.source, ...(s.length !== undefined ? { length: s.length } : {}), ...(s.repeat !== undefined ? { repeat: s.repeat } : {}) })) });
-  if (valid.ok === false) return fail(ports, `New composition: ${valid.message}`);
-  const wanted = (choice.name ?? '').trim();
-  if (wanted !== '' && !COMPOSITION_NAME_PATTERN.test(wanted)) return fail(ports, `New composition: the name "${wanted}" can only have letters, digits, _ and -.`);
-  if (wanted !== '' && ports.exists(compositionPath(wanted))) return fail(ports, `New composition: a composition called ${wanted} already exists (${compositionPath(wanted)}). Pick another name.`);
+/** 2026-11-19-0960: "New composition" makes an EMPTY composition (no sections yet: its first sentence makes them) and opens it. Nothing to choose, nothing for the engine to draw; the first composition of a vault is the root of its piece. */
+export async function createEmptyComposition<F>(ports: CreatePorts<F>, choice: NewCompositionChoice = {}): Promise<NewCompositionResult> {
   try {
-    // 2026-10-31-1135 (CCQA smoke 10, B5): the engine draws the prospective composition BEFORE anything is written (the same compose_sections that draws its Score); sections of another meter are one sentence naming both, no folder, no note
-    const check = ports.preflight ?? installedNotePreflight();
-    if (check !== null) {
-      const first = wanted !== '' ? wanted : nextCompositionName((p) => ports.exists(p));
-      const refusal = await check(compositionPath(first), newCompositionNote(first, valid.value, choice.root === true ? ['root: true'] : []));
-      if (refusal !== null) return fail(ports, refusal);
-    }
     if (!ports.folderExists(COMPOSITION_FOLDER)) {
       try { await ports.createFolder(COMPOSITION_FOLDER); } catch (e) { if (!ports.isAlreadyExists(e)) throw e; }
     }
     const refused = new Set<string>();
     for (let tries = 0; tries < NAME_TRIES; tries++) {
-      const name = wanted !== '' ? wanted : nextCompositionName((p) => ports.exists(p) || refused.has(p));
+      const name = nextCompositionName((p) => ports.exists(p) || refused.has(p));
       try {
-        const file = await ports.create(compositionPath(name), newCompositionNote(name, valid.value, choice.root === true ? ['root: true'] : []));
-        ports.trace(compositionCreatedLine(name, valid.value));
-        if (choice.root === true && afterRoot) await afterRoot(compositionPath(name));
+        const file = await ports.create(compositionPath(name), emptyCompositionNote(name, choice.root === true ? ['root: true'] : []));
+        ports.trace(`[forge-composition] created ${compositionPath(name)} (empty${choice.root === true ? ', the root of the piece' : ''})`);
         await ports.open(file);
         ports.notify(`Created ${compositionPath(name)}.`);
         return { ok: true, path: compositionPath(name), name };
       } catch (e) {
         if (!ports.isAlreadyExists(e)) throw e;
-        if (wanted !== '') return fail(ports, `New composition: a composition called ${wanted} already exists (${compositionPath(wanted)}). Pick another name.`);
         refused.add(compositionPath(name));                    // taken between the check and the write: the next number is free
       }
     }
     return fail(ports, 'New composition: could not find a free composition name.');
   } catch (e) {
+    console.error('createEmptyComposition failed', e);
     return fail(ports, `New composition failed: ${msg(e)}`);
   }
 }
@@ -64,8 +49,8 @@ export function moveRoot(notes: ReadonlyArray<{ path: string; text: string }>, t
 
 // ---- when the commands are offered ---------------------------------------------------------------------------------------------------------------------------------------------
 
-/** "New composition" needs something to play: at least one phrase or arrangement. */
-export const newCompositionAvailable = (i: { scoreFirst: boolean; phraseCount: number; arrangementCount: number }): boolean => i.scoreFirst && i.phraseCount + i.arrangementCount > 0;
+/** "New composition" is offered in every score-first vault (2026-11-19-0960: it makes an EMPTY note, so it needs no phrase and no arrangement first). */
+export const newCompositionAvailable = (i: { scoreFirst: boolean }): boolean => i.scoreFirst;
 /** "Open composition as Score" is offered on a composition note in a score-first vault. */
 export const openCompositionAvailable = (i: { scoreFirst: boolean; activePath: string | null }): boolean => i.scoreFirst && i.activePath !== null && /^compositions\/[^/]+\.md$/.test(i.activePath) && i.activePath !== `${COMPOSITION_FOLDER}/README.md`;
 

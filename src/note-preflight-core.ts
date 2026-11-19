@@ -31,6 +31,7 @@ export function makeNotePreflight(engine: PreflightEngine): NotePreflight {
       else if (path.startsWith('compositions/')) out = await produceComposition({ phrases: phrases(), compute: engine.computeComposition, computeArrangement: engine.computeArrangement }, content, name);
       else return null;
       if (out.kind === 'score') return null;
+      if (out.message === '') return null;                     // 2026-11-19-0960: an EMPTY note answers with nothing to say: that is not a refusal
       // "the engine could not build the score (<why>)" is either the engine REFUSING the note (a Python exception, one of its own lines) or the engine being unavailable (not hydrated, still loading): only the first is a reason to
       // refuse. The wrapper reaches us inside a source's refusal too ("the phrase phrase_003 could not be drawn: Score: the engine could not build the score (...)"), so the reason is looked at wherever it sits.
       const why = /the engine could not build the score \(([\s\S]*)\)\s*$/.exec(out.message);

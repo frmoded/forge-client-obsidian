@@ -269,7 +269,7 @@ export class ForgeSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Show source chips')
       .setDesc(
-        'The row of chips under the Score that says where the note came from (the notes behind what is drawn). Off by default (hovering and clicking a bar still show it). Takes effect when a tab is reopened.'
+        'The row of chips under the Score that says where the note came from (the notes behind what is drawn). Off by default (clicking a bar still shows it). Takes effect when a tab is reopened.'
       )
       .addToggle(toggle =>
         toggle

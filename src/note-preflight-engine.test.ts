@@ -5,7 +5,8 @@ import { test as baseTest } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { WHEELS_PRESENT, engine, computePhrase } from './test-support/real-rhythm-engine.ts';
-import { createComposition } from './composition-flow-core.ts';
+import { newCompositionNote } from './composition-core.ts';
+import { newArrangementNote } from './arrangement-core.ts';
 import { makeNotePreflight } from './note-preflight-core.ts';
 import { createNewPhraseFromParams, noteContentFor, type PhraseParams } from './phrase-core.ts';
 
@@ -36,17 +37,16 @@ function world(py: any) {
     isAlreadyExists: () => false, trace: () => {}, preflight,
     activePath: () => 'bars/bar_009.md', listPhraseBasenames: () => [...files.keys()].filter((p) => p.startsWith('phrases/')).map((p) => p.slice(8, -3)),
   };
-  return { files, writes, folders, notices, ports };
+  return { files, writes, folders, notices, ports, preflight };
 }
 
-test('New composition: a 4/4 phrase and a 3/4 phrase are refused by the engine\'s compose_sections BEFORE any note is written, in one sentence naming both sections', async () => {
+// 2026-11-19-0960: New composition and New arrangement make EMPTY notes now (nothing to draw, no check at creation); the check itself still draws a prospective composition / arrangement note through the producers, and this
+// is the engine's real sentence for it (the same sentence the Score of such a note says once a first sentence has put the sections in it).
+test('the check of a composition note: a 4/4 phrase and a 3/4 phrase are refused by the engine\'s compose_sections in one sentence naming both sections; two 4/4 sections pass', async () => {
   const w = world(await engine());
-  const r = await createComposition(w.ports, { sections: [{ source: 'phrases/phrase_001' }, { source: 'phrases/phrase_013' }] });
-  assert.deepEqual(r, { ok: false, message: 'phrase_013 (section 2) is 3/4 but phrase_001 (section 1) is 4/4; all sections of a composition must share the same meter and steps.' });
-  assert.deepEqual([w.writes, w.folders, w.notices], [[], [], [r.message]]);
-  // the control on the SAME engine: two 4/4 sections are written
-  const ok = await createComposition(w.ports, { sections: [{ source: 'phrases/phrase_001' }, { source: 'phrases/phrase_001', length: 2 }] });
-  assert.equal(ok.ok, true, JSON.stringify(ok)); assert.deepEqual(w.writes, ['compositions/comp_001.md']);
+  const said = await w.preflight('compositions/comp_001.md', newCompositionNote('comp_001', { kind: 'composition', sections: [{ source: 'phrases/phrase_001' }, { source: 'phrases/phrase_013' }] } as never));
+  assert.equal(said, 'phrase_013 (section 2) is 3/4 but phrase_001 (section 1) is 4/4; all sections of a composition must share the same meter and steps.');
+  assert.equal(await w.preflight('compositions/comp_001.md', newCompositionNote('comp_001', { kind: 'composition', sections: [{ source: 'phrases/phrase_001' }, { source: 'phrases/phrase_001', length: 2 }] } as never)), null);
 });
 
 test('New phrase (extend) of a 12-step bar: the engine\'s extend_rhythm refuses it BEFORE a note is written, in one sentence naming the bar and the grid it needs, and the Score of an extend that is already there says the same, not a traceback', async () => {
@@ -65,20 +65,15 @@ test('New phrase (extend) of a 12-step bar: the engine\'s extend_rhythm refuses 
 });
 
 // ---- 2026-11-05 (smoke 13 E, drain 1178): New arrangement of a phrase on a kit it shares no channel with, on the REAL engine -----------------------------------------------------------------
-import { createArrangement } from './kit-arrangement-flow-core.ts';
 import { KIT_FOLDER, newKitNote } from './kit-core.ts';
 
-test('New arrangement: phrase_001 (kick, snare) on the latin kit is refused BEFORE a note is written, in the plugin\'s sentence naming the phrase, the kit and both channel lists - not in the engine\'s words about rhythm_data_to_stream; on the rock kit it is written', async () => {
+test('the check of an arrangement note: phrase_001 (kick, snare) on the latin kit is refused in the plugin\'s sentence naming the phrase, the kit and both channel lists - not in the engine\'s words about rhythm_data_to_stream; on the rock kit it passes (2026-11-19-0960: New arrangement makes an empty note now; this is what the Score of a note with those tracks says)', async () => {
   const py = await engine();
   const w = world(py);
   w.files.set(`${KIT_FOLDER}/latin.md`, newKitNote({ kind: 'kit', name: 'latin', channels: ['bell', 'claves', 'conga_high', 'conga_low'] } as never));
   w.files.set(`${KIT_FOLDER}/rock.md`, newKitNote({ kind: 'kit', name: 'rock', channels: ['kick', 'snare', 'hihat'] } as never));
-  const r = await createArrangement(w.ports as never, [{ kit: 'latin', phrase: 'phrase_001' }]);
-  // (the preflight drops the "Arrangement: " lead of the Score's refusal: the dialog already says which command refused)
-  assert.deepEqual(r, { ok: false, message: 'nothing of phrase_001 can play on the kit latin: the phrase uses kick, snare and the kit has bell, claves, conga_high, conga_low. Choose a kit that has one of them.' });
-  assert.doesNotMatch(JSON.stringify(r), /rhythm_data_to_stream|non-empty dict/);
-  assert.deepEqual([w.writes, w.folders], [[], []], 'nothing written, not even the folder');
-  assert.equal(w.notices.length, 1);
-  const ok = await createArrangement(w.ports as never, [{ kit: 'rock', phrase: 'phrase_001' }]);
-  assert.equal(ok.ok, true, JSON.stringify(ok)); assert.deepEqual(w.writes, ['arrangements/arr_001.md']);
+  const said = await w.preflight('arrangements/arr_001.md', newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'latin', phrase: 'phrase_001' }] } as never));
+  assert.equal(said, 'nothing of phrase_001 can play on the kit latin: the phrase uses kick, snare and the kit has bell, claves, conga_high, conga_low. Choose a kit that has one of them.');
+  assert.doesNotMatch(String(said), /rhythm_data_to_stream|non-empty dict/);
+  assert.equal(await w.preflight('arrangements/arr_001.md', newArrangementNote('arr_001', { kind: 'arrangement', tracks: [{ kit: 'rock', phrase: 'phrase_001' }] } as never)), null);
 });

@@ -1,6 +1,6 @@
 // 2026-11-06-1190 (CCQA smokes 14 to 16): three small wording fixes, tests first.
 //  (a) a notebook refusal the service wrote that names the engine's operations (`thin_out`, `double_up`) says them in the op picker's words ("thin out", "double up"), mapped in ONE pure function;
-//  (b) the New composition dialog's Name placeholder is the name the note will get (the next free one), not always `comp_001`;
+//  (b) [removed 2026-11-19-0960 with the dialog] the New composition dialog's Name placeholder;
 //  (c) a note that already IS a custom note is told "this note stays a custom note", not "the note becomes a custom note".
 // The three wiring tests at the end pin the MECHANISM (X calls Y); if the design moves they SHOULD go red - reassess, don't just rewrite.
 import assert from 'node:assert/strict';
@@ -10,8 +10,6 @@ import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { interpretTransformResponse, opWordsIn } from './notebook-request-core.ts';
-import { nextCompositionName } from './composition-core.ts';
-import { mountCompositionDialog } from './composition-dialog-dom.ts';
 import { pythonCustomBarMessage } from './description-apply-core.ts';
 import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
 import { DESCRIPTION_DEBOUNCE_MS } from './description-apply-core.ts';
@@ -49,28 +47,9 @@ test('(a) MECHANISM PIN: the mapping lives in notebook-request-core.ts only and 
   assert.doesNotMatch(read('sentence-plan-core.ts'), /opWordsIn|thin out/, 'P3: the shared planner text is as it was');
 });
 
-// ---- (b) -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+// ---- (b) removed 2026-11-19-0960: the New composition dialog (and its Name placeholder) is gone; "New composition" makes an empty note, new-notes-start-empty.test.ts -------------------------------------------------
 
 const win: any = new Window({ url: 'http://localhost/' });
-function dialog(nextName: string) {
-  const parent = win.document.createElement('div'); win.document.body.appendChild(parent);
-  mountCompositionDialog(parent, { phrases: ['phrases/phrase_003'], arrangements: [], compositions: [], hasRoot: false, nextName, create: async () => ({ ok: true, path: 'compositions/x.md' }), close: () => {} });
-  return parent.querySelector('.forge-comp-name') as any;
-}
-
-test('(b) the Name placeholder is the name the note will get: comp_002 when comp_001 exists, comp_004 when 1 to 3 do', () => {
-  assert.equal(dialog('comp_002').placeholder, 'comp_002');
-  assert.equal(dialog('comp_004').placeholder, 'comp_004');
-  assert.equal(dialog('comp_001').placeholder, 'comp_001', 'the first note of a vault is still comp_001');
-  assert.equal(dialog('comp_002').value, '', 'a placeholder, not a value: an empty Name still means "the next free one"');
-});
-
-test('(b) MECHANISM PIN: the placeholder\'s name is the one nextCompositionName picks, from the vault\'s files at the moment the dialog opens (the same function Create uses)', () => {
-  const comps = read('compositions.ts');
-  assert.match(comps, /nextName: nextCompositionName\(\(p\) => app\.vault\.getAbstractFileByPath\(p\) !== null\)/);
-  assert.match(read('composition-dialog-dom.ts'), /name\.placeholder = ports\.nextName;/);
-  assert.equal(nextCompositionName((p) => p === 'compositions/comp_001.md'), 'comp_002', 'CONTROL: the function does skip a taken name');
-});
 
 // ---- (c) -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 

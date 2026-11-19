@@ -12,7 +12,7 @@ import { memoryStore, settingsStore } from './dialog-core.ts';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 const win: any = new Window({ url: 'http://localhost/' });
-const BOX = { placeholder: 'x', preview: async () => ({ ok: false as const, message: 'x' }), apply: async () => ({ ok: false }) };
+const BOX = { preview: async () => ({ ok: false as const, message: 'x' }), apply: async () => ({ ok: false }) };
 const mk = (width = 0): HTMLElement => { const h = win.document.createElement('div'); win.document.body.appendChild(h); if (width) Object.defineProperty(h, 'clientWidth', { configurable: true, get: () => width }); return h; };
 const handleOf = (host: HTMLElement): HTMLElement | null => host.querySelector('.forge-chat-resizer');
 const key = (el: HTMLElement, k: string): KeyboardEvent => { const e = new win.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); el.dispatchEvent(e); return e; };

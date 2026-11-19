@@ -91,12 +91,11 @@ test('a morph phrase shows the morph strip: Bar a, Bar b, Bars + Atomic, Order, 
 });
 
 // M7c Phase B (drain 2026-10-24-1230) REVERSES the Phase A pin "a morph has no Inspector": it has one now (the pure half is in morph-lineage-core.test.ts, the DOM half in morph-inspector.test.ts, real engine and real
-// Chrome beyond them). It still has no bracket, no source link and no other strip. This rig's fake engine returns no bars, so the Inspector says it cannot map the Score.
-test('a morph has an Inspector (Phase B) but no bracket, no source link and no other strip; no stray open', async () => {
+// Chrome beyond them). It still has no source link and no other strip (and, since 2026-11-19-0950, nobody has a bracket). This rig's fake engine returns no bars, so the Inspector says it cannot map the Score.
+test('a morph has an Inspector (Phase B) but no source link and no other strip; no stray open', async () => {
   const r = rig();
   await r.loaded();
   assert.ok(r.q('.forge-inspector') !== null, 'the morph tab has the Inspector');
-  assert.ok(r.q('.forge-phrase-bracket') === null);
   assert.ok(r.q('.forge-phrase-source') === null);
   assert.ok(r.q('.forge-mix-weight') === null && r.q('.forge-phrase-bars') === null);
   assert.equal(r.parent.querySelectorAll('.forge-phrase-controls').length, 1);

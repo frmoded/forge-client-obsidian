@@ -1,14 +1,14 @@
 // score_first M5 (drain 2026-10-22-1850; M7 Phase A 2026-10-22-2330 adds the mix strip) — the phrase surface, plain DOM (no obsidian import, so a happy-dom test mounts the very code the tab runs): a small control strip under the live Score (2026-11-03-1155-93: the Score is the first thing in the tab).
 //
-//   <div class="forge-rhythm-edit-score">…the live Score, the same panel the Beat Box tab has… (2026-11-03-1155-93: FIRST in the tab, then the bracket under it)</div>
+//   <div class="forge-rhythm-edit-score">…the live Score, the same panel the Beat Box tab has… (2026-11-03-1155-93: FIRST in the tab; 2026-11-19-0950: the purple bracket that stood under it is gone)</div>
 //   <div class="forge-phrase-controls" role="group" aria-labelledby=(hidden name: Phrase)>
 //     Source <span class="forge-phrase-source">bar_005</span>
 //     Bars <input class="forge-phrase-bars">   Style <select class="forge-phrase-style">   Tempo change (%) <input class="forge-phrase-pct">
 //     <span class="forge-phrase-status" role="status">…</span>                                  a write the note refused ('' = nothing to say)
 //   </div>
 //
-// A MIX phrase (M7) has its own strip in the same place — two bar dropdowns, a Weight slider, a Threshold slider, a Ghost notes checkbox and one plain-words sentence — and NO inspector, bracket or
-// source link (navigation through a mix is M8). The strip, the bracket and the Score area are rebuilt when the note's `kind` changes (a hand edit), so the tab always shows the surface of what the note says.
+// A MIX phrase (M7) has its own strip in the same place — two bar dropdowns, a Weight slider, a Threshold slider, a Ghost notes checkbox and one plain-words sentence — and NO inspector or
+// source link (navigation through a mix is M8). The strip and the Score area are rebuilt when the note's `kind` changes (a hand edit), so the tab always shows the surface of what the note says.
 //
 // Editing a control is an explicit user edit through a plugin UI (constitution D5, clarification v30 — the same posture as the Beat Box autosave): it writes the phrase's json block, and
 // the Score redraws when the vault's modify event for that note arrives (ONE path: a hand edit of the JSON, a sync and a control all redraw the same way). The Score is the live Score
@@ -26,7 +26,7 @@ import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import { barsContributedBy, chipsFor, customChips, litBarIds, litEvidence, type Chip } from './structure-strip-core.ts';
 import { mountStructureStrip, type StripHandle } from './structure-strip-dom.ts';
 import type { ProvenanceMap, ProvenanceResult } from './provenance-core.ts';
-import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseBarId, phraseLineageOf, phraseNoteId, phraseProvenance, transformProvenance } from './phrase-lineage-core.ts';
+import { PHRASE_BAR_ROLE, PHRASE_BAR_SCOPE, annotatePhraseXml, phraseLineageOf, phraseNoteId, phraseProvenance, transformProvenance } from './phrase-lineage-core.ts';
 import {
   NO_SELECTION, SELECTION_MENU, disabledReason, extendSelection, limitTo, menuRun, planAction, sameSelection, selectRange as barsRange, selectionOf, selectionText, toggleSelection, type BarSelection, type SelectionAction,
 } from './bar-selection-core.ts';
@@ -52,6 +52,7 @@ import {
   type ExtendPhrase, type MixPhrase, type MorphPhrase, type PhraseParams, type PhraseScoreDeps,
 } from './phrase-core.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
+import { isEmptyNote } from './empty-note-core.ts';
 
 export const PHRASE_CONTROLS_CLASS = 'forge-phrase-controls';
 /** The mix tab is dragged, not clicked, so its Score does not wait for the person to stop (a trailing debounce restarts on every input: nothing would redraw until the drag paused). 0 = the first change draws
@@ -526,7 +527,7 @@ export function mountMorphControls(parent: HTMLElement, ports: { onChange(patch:
   };
 }
 
-/** M6: present = the phrase's Score is inspectable (click a bar: its lineage; the phrase bracket; the source link). Absent = exactly the M5 tab. */
+/** M6: present = the phrase's Score is inspectable (click a bar: its lineage; the source link). Absent = exactly the M5 tab. */
 export interface PhraseInspectorPorts {
   /** Open a note by its lineage id (`phrases/phrase_001`, `bars/bar_005`): the plugin's own openers. */
   openNote(noteId: string): void;
@@ -543,7 +544,6 @@ export interface PhraseStructurePorts {
   trace?(line: string): void;
 }
 
-export const PHRASE_BRACKET_CLASS = 'forge-phrase-bracket';
 /** M8: a mix has one bar, so there is nothing to walk between with the arrow keys; Esc lets go. */
 export const MIX_INSPECTOR_HINT = 'Click the bar or a note to see where it came from. Esc lets go.';
 export const PHRASE_INSPECTOR_HINT = 'Click a bar to see where it came from. Arrow keys move between bars; Esc lets go.';
@@ -552,7 +552,7 @@ export const MORPH_INSPECTOR_HINT = 'Click a bar or a note to see where it came 
 
 export interface PhraseMountPorts extends Omit<ScoreAreaPorts, 'compute' | 'produce' | 'inspector'> {
   inspector?: PhraseInspectorPorts;
-  /** 2026-11-15-1217 (SHOW_LEGACY_CONTROLLERS): `false` = the strips that INPUT a value (the extend, mix, morph and transform strips) and the notebook are built, wired and kept up to date but never put on the page (they live in a detached holder), so every code path is the one that always ran and the tab shows the Score, the bracket and what the shell adds. Absent or `true` = on the page, as before (every older test). */
+  /** 2026-11-15-1217 (SHOW_LEGACY_CONTROLLERS): `false` = the strips that INPUT a value (the extend, mix, morph and transform strips) and the notebook are built, wired and kept up to date but never put on the page (they live in a detached holder), so every code path is the one that always ran and the tab shows the Score and what the shell adds. Absent or `true` = on the page, as before (every older test). */
   legacyControllers?: boolean;
   /** 2026-11-15-2101: put the source chips row on the page (absent = yes, as every older test); false = it is built and wired in a detached holder, never in the document. */
   sourceChips?: boolean;
@@ -594,8 +594,8 @@ export interface PhraseHandle {
   load(): Promise<void>;
   /** The phrase on screen right now (what its note says; `null` = not readable or not read yet): the tab's title is made from it (phrase-tab-title-core.ts). */
   params(): PhraseParams | null;
-  /** The kind of phrase on screen right now (what the strip and the Score are for). The "Turn this mix into a morph" command asks it, synchronously, to know whether it is offered. */
-  kind(): PhraseParams['kind'];
+  /** The kind of phrase on screen right now (what the strip and the Score are for). The "Turn this mix into a morph" command asks it, synchronously, to know whether it is offered. `null` = the note has no kind yet (2026-11-19-0960: a NEW note is empty; its first sentence makes the kind): the tab has no strip. */
+  kind(): PhraseParams['kind'] | null;
   /** The vault's `modify` event for any note: the phrase note reloads; its source bar redraws; anything else is ignored. */
   noteModified(path: string): void;
   /** The notes in notebook/ (or the phrases a cell made) changed: read the cells again. A no-op without a notebook. */
@@ -671,15 +671,6 @@ function annotateForMorph(path: string, note: NoteText, payload: Record<string, 
   return result;
 }
 
-/** The bracket: focusing it lights every bar the phrase made; leaving (blur) clears; a click (or Enter / Space) opens the phrase note. */
-function wireBracket(el: HTMLElement, current: () => ExtendPhrase | null, area: () => ScoreArea | null, open: () => void): void {
-  const ids = () => { const p = current(); return p ? Array.from({ length: p.bars }, (_, i) => phraseBarId(PHRASE_BAR_SCOPE, i + 1)) : []; };
-  el.addEventListener('focus', () => area()?.lightAll(ids()));
-  el.addEventListener('blur', () => area()?.lightAll([]));
-  el.addEventListener('click', open);
-  el.addEventListener('keydown', (e) => { const k = (e as KeyboardEvent).key; if (k === 'Enter' || k === ' ') { e.preventDefault(); open(); } });
-}
-
 /** The strip the tab shows, whichever kind of phrase it is: the ONE thing mountPhrase needs from either. `set` takes the parsed phrase (or null for one that is not valid). */
 interface Strip {
   readonly el: HTMLElement;
@@ -716,9 +707,9 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   const insp = ports.inspector;
   const { legacyControllers, sourceChips, path: _path, titleChanged: _titleChanged, plan, readNote: _read, writePhrase: _write, compute: _compute, inspector: _insp, structure: _structure, listBars: _list, initial: _initial, fork: _fork, turnIntoMorph: _turn, notebook: _notebook, canWritePhrase: _canWrite, ...areaPorts } = ports;   // what the Score area itself takes (the rest is the phrase's)
 
-  let kind: PhraseParams['kind'] = (ports.initial !== undefined ? readPhraseKind(ports.initial) : null) ?? 'extend';
+  // 2026-11-19-0960: a note that is EMPTY (its json cache is `{}`) has no kind until its first sentence: the tab builds no strip for it. Any other note without a kind keeps what it always had (the extend surface, disabled, with the Score saying why).
+  let kind: PhraseParams['kind'] | null = ports.initial !== undefined ? (readPhraseKind(ports.initial) ?? (isEmptyNote(ports.initial) ? null : 'extend')) : 'extend';
   let strip!: Strip;
-  let bracket: HTMLElement | null = null;
   let area: ScoreArea | null = null;
   // 2026-10-26-1270 (M13): the strip, and the bars the notes pane's note lit (kept across a chip hover coming and going, until the next navigation)
   const phraseName = (ports.path.split('/').pop() ?? ports.path).replace(/\.md$/, '');
@@ -735,7 +726,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     ports.structure?.trace?.(litEvidence(path, notesLit));
   });
 
-  /** Build the surface of one kind. 2026-11-03-1155-93 (R6) the order, top to bottom: the live Score (it takes the first place itself: `first`), (extend only) its bracket, the controls strip, the chips, the notebook. Everything else is appended in that order,
+  /** Build the surface of one kind. 2026-11-03-1155-93 (R6) the order, top to bottom: the live Score (it takes the first place itself: `first`), the controls strip, the chips, the notebook. Everything else is appended in that order,
    *  so after `teardown()` a rebuild lands in the same places. */
   /** How many single-hit changes lie between two bars, read FRESH from the vault; null = a bar could not be read or is not rhythm data (the Score says why). */
   const morphChanges = async (x: string, y: string): Promise<number | null> => {
@@ -839,10 +830,12 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   // 2026-11-15-1217: with `legacyControllers: false` the input strips and the notebook are mounted into a detached holder: all the code runs, none of it is in the document.
   const holder = legacyControllers === false ? parent.ownerDocument.createElement('div') : null;
   const stripParent: HTMLElement = holder ?? parent;
-  const build = (k: PhraseParams['kind']): void => {
+  const build = (k: PhraseParams['kind'] | null): void => {
     kind = k;
     tintRole = k === 'morph' ? MORPH_BAR_ROLE : k === 'mix' ? MIX_BAR_ROLE : PHRASE_BAR_ROLE;
-    if (k === 'morph') {
+    if (k === null) {
+      strip = { el: parent.ownerDocument.createElement('div'), set() { /* no strip: the note has no kind yet */ }, setStatus() { /* nothing to say */ }, dispose() { /* nothing mounted */ } };
+    } else if (k === 'morph') {
       const morph = mountMorphControls(stripParent, { onChange: (patch) => { void commit(patch); }, listBars: () => ports.listBars?.() ?? [], changes: morphChanges });
       strip = { el: morph.el, set: (params) => morph.set(params && params.kind === 'morph' ? params : null), setStatus: (t) => morph.setStatus(t), dispose: () => morph.dispose() };
     } else if (k === 'mix') {
@@ -855,7 +848,6 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       const controls = mountPhraseControls(stripParent, { onChange: (patch) => { void commit(patch); }, openSource: insp ? (source) => insp.openNote(phraseSourceNote(source)) : undefined });
       strip = { el: controls.el, set: (params) => controls.set(params && params.kind === 'extend' ? params : null), setStatus: (t) => controls.setStatus(t), dispose: () => controls.dispose() };
     }
-    bracket = null;
     const inspectorPorts: ScoreInspectorPorts | undefined = insp && (k === 'extend' || k === 'transform') ? {
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
@@ -878,7 +870,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       selectBars: selectBarsPort(),                  // 2026-10-30-1020: a drag across bars selects them in the notebook, a Shift-click extends (phrase surfaces with a notebook only: P3)
     } : insp && k === 'mix' ? {
       // M8: the mix's one bar and each of its hits, tied to the two bars they came from. Clicking a notehead pins THAT hit, clicking the staff the bar; a redraw (the Weight slider) keeps the pin; the
-      // pinned bar's noteheads are painted by parent. No bracket and no source link (they are the extend's); arrows have nowhere to go.
+      // pinned bar's noteheads are painted by parent. No source link (the extend's); arrows have nowhere to go.
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
       onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
@@ -900,7 +892,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       kitNote: 'Kit view: not mapped for this mix (use the multi-staff view to inspect).',
     } : insp && k === 'morph' ? {
       // M7c Phase B: every bar of the path and each of its hits, tied to the two bars and the single-hit changes between them. Clicking a notehead pins THAT hit, a click anywhere else in a bar pins the BAR; arrows walk the
-      // bars; a redraw (a control moved) keeps the pin; the pinned bar's noteheads are painted by where the hit came from. "Edit this bar" forks a bar exactly as an extend's. No bracket, no source link.
+      // bars; a redraw (a control moved) keeps the pin; the pinned bar's noteheads are painted by where the hit came from. "Edit this bar" forks a bar exactly as an extend's. No source link.
       noteId: phraseNoteId(ports.path),
       openNote: insp.openNote,
       onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
@@ -923,7 +915,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       kitNote: 'Kit view: not mapped for this morph (use the multi-staff view to inspect).',
     } : undefined;
     // 2026-11-15-2101: with the source chips off the strip is built and wired in a detached holder (hover, click and the two-way highlight all run), never put on the page
-    structureStrip = ports.structure ? mountStructureStrip(sourceChips === false ? parent.ownerDocument.createElement('div') : parent, {
+    structureStrip = ports.structure && k !== null ? mountStructureStrip(sourceChips === false ? parent.ownerDocument.createElement('div') : parent, {
       onHover: (chip) => { showLit(chip ? barsOfChip(chip) : notesLit); },
       onClick: (chip) => { void ports.structure!.goto(chip.noteId).catch(() => false).then((handled) => { if (!handled) insp?.openNote(chip.noteId); }); },
     }) : null;
@@ -952,17 +944,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       if (RO) { const ro = new RO(() => { paintSelectionMenu(); }); ro.observe(area.el); selResize = ro; }
       paintSelectionMenu();
     }
-    // The bracket under every bar made by this phrase note (hover lights them all, a click opens the phrase), directly under the Score it brackets (2026-11-03-1155-93: it used to sit over it, between the strip and the engraving). A mix has none (M8).
-    if (insp && k === 'extend') {
-      const doc = parent.ownerDocument;
-      bracket = doc.createElement('div');
-      bracket.className = PHRASE_BRACKET_CLASS;
-      bracket.setAttribute('role', 'button');
-      bracket.setAttribute('tabindex', '0');
-      bracket.style.display = 'none';
-      parent.insertBefore(bracket, area ? area.el.nextSibling : null);
-    }
-    if (ports.notebook) {
+    if (ports.notebook && k !== null) {
       const told = ports.notebook;
       notebookHandle = mountNotebook(stripParent, {
         ...told,
@@ -970,15 +952,12 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       });
       void notebookHandle.refresh();
     }
-    if (bracket) wireBracket(bracket, () => (current && current.kind === 'extend' ? current : null), () => area, () => insp!.openNote(phraseNoteId(ports.path)));
   };
   const teardown = (): void => {
     structureStrip?.dispose();
     structureStrip = null;
     area?.dispose();
     area = null;
-    bracket?.remove();
-    bracket = null;
     notebookHandle?.dispose();
     notebookHandle = null;
     selResize?.disconnect(); selResize = null;
@@ -1012,15 +991,6 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     if (!writing && want === null) strip.set(custom ? null : salvage ? salvage.shown : current);                  // while a drag's writes are in flight the sliders stay where the person has them
     setControlsOff(strip.el, custom);                                      // 2026-11-03-1160 (c): the strip is off for a custom note, and says why in its tooltip (one helper for every tab)
     structureStrip?.set(custom ? customChips(phraseName, pythonTextOf(text as string) ?? '', extractRecipeSection(text as string) ?? '') : current ? chipsFor(phraseName, current) : []);
-    if (bracket) {
-      const ext = current && current.kind === 'extend' && !salvage ? current : null;
-      bracket.style.display = ext ? '' : 'none';
-      if (ext) {
-        const name = phraseNoteId(ports.path).split('/').pop() ?? '';
-        bracket.textContent = `${name} · ${ext.bars} bar${ext.bars === 1 ? '' : 's'}`;
-        setSrLabel(bracket, `Open ${name}: its ${ext.bars} bar${ext.bars === 1 ? '' : 's'}`);   // re-put after the textContent above (no 'hover to light': 2026-11-19-0800 took the hover away)
-      }
-    }
   };
 
   /** M9: "Edit this bar" / "Revert to generated" pressed on the pinned bar of an extend phrase (M7c Phase B: or of a morph). The vault is the `fork` port; the phrase write and the opener are the tab's own. */

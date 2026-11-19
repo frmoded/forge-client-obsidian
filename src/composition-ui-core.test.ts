@@ -1,19 +1,15 @@
-// 2026-10-31-1100 (score_first M17b) - the pure cores and plain-DOM pieces around the composition tab, without Obsidian: the root mark (composition-root-core), what "New composition" does with a vault (composition-flow-core, ports stood
-// in), how a bar of the Score is tied to its section and its note (composition-nav-core, on a MusicXML made for the purpose and on the real pin rule), the tree of the strip (composition-strip-core + the DOM a happy-dom test mounts) and the
-// dialog (composition-dialog-dom). The connection to the real plugin is proven in compositions-wiring.test.ts, the engine in composition-engine.test.ts.
+// 2026-10-31-1100 (score_first M17b) - the pure cores and plain-DOM pieces around the composition tab, without Obsidian: the root mark (composition-root-core), where the root mark moves (composition-flow-core; what "New composition" does is in new-notes-start-empty.test.ts, 2026-11-19-0960: it makes an EMPTY note), how a bar of the Score is tied to its section and its note (composition-nav-core, on a MusicXML made for the purpose and on the real pin rule), the tree of the strip (composition-strip-core + the DOM a happy-dom test mounts). The connection to the real plugin is proven in compositions-wiring.test.ts, the engine in composition-engine.test.ts.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { isRootNote, makeRootAvailable, manyRootsMessage, noRootMessage, openPieceAvailable, rootOf, withRoot } from './composition-root-core.ts';
-import { createComposition, moveRoot, newCompositionAvailable, openCompositionAvailable } from './composition-flow-core.ts';
+import { moveRoot, newCompositionAvailable, openCompositionAvailable } from './composition-flow-core.ts';
 import { FORGE_COMPOSITION_KEY, compositionHeader, expandSections, newCompositionNote, readCompositionNote, type CompositionParams, type CompositionShape } from './composition-core.ts';
 import { COMPOSITION_BAR_ROLE, annotateCompositionPayload, barIdsPlayedFrom, barsPlayedFrom, compositionLineageOf, compositionPinnedNote, readCompositionLineage } from './composition-nav-core.ts';
 import { treeRows, treeText } from './composition-strip-core.ts';
 import { COMPOSITION_INDENT_PX, mountCompositionStrip } from './composition-strip-dom.ts';
-import { mountCompositionDialog } from './composition-dialog-dom.ts';
 import { pinnedNoteFor } from './linked-panes-core.ts';
-import type { CreatePorts } from './kit-arrangement-flow-core.ts';
 
 const P = (...sections: CompositionParams['sections']): CompositionParams => ({ kind: 'composition', sections });
 const note = (name: string, p: CompositionParams, root = false): string => newCompositionNote(name, p, root ? ['root: true'] : []);
@@ -54,9 +50,8 @@ test('the root of a vault: none, one, or many; the messages say which; the comma
   assert.equal(makeRootAvailable({ scoreFirst: true, activePath: 'compositions/a.md' }), true);
   for (const activePath of ['compositions/README.md', 'compositions/x/y.md', 'phrases/phrase_001.md', null]) assert.equal(makeRootAvailable({ scoreFirst: true, activePath }), false, String(activePath));
   assert.equal(makeRootAvailable({ scoreFirst: false, activePath: 'compositions/a.md' }), false);
-  assert.equal(newCompositionAvailable({ scoreFirst: true, phraseCount: 0, arrangementCount: 0 }), false);
-  assert.equal(newCompositionAvailable({ scoreFirst: true, phraseCount: 0, arrangementCount: 1 }), true);
-  assert.equal(newCompositionAvailable({ scoreFirst: false, phraseCount: 5, arrangementCount: 1 }), false);
+  assert.equal(newCompositionAvailable({ scoreFirst: true }), true, '2026-11-19-0960: offered in every music vault, even with nothing to play yet (it makes an empty note)');
+  assert.equal(newCompositionAvailable({ scoreFirst: false }), false);
   assert.equal(openCompositionAvailable({ scoreFirst: true, activePath: 'compositions/a.md' }), true);
   assert.equal(openCompositionAvailable({ scoreFirst: true, activePath: 'compositions/README.md' }), false);
 });
@@ -67,68 +62,6 @@ test('moveRoot: the mark goes to the target and leaves every other note; only no
   assert.deepEqual(moved.map((n) => n.path), ['compositions/a.md', 'compositions/b.md']);
   assert.ok(!isRootNote(moved[0].text) && isRootNote(moved[1].text));
   assert.deepEqual(moveRoot([{ path: 'compositions/a.md', text: a }, { path: 'compositions/b.md', text: b }], 'compositions/a.md'), [], 'already the root: nothing changes');
-});
-
-// ---- New composition's flow -------------------------------------------------------------------------------------------------------------------------------------------
-
-function ports(over: Partial<CreatePorts<string>> & { existing?: string[]; failFirst?: string } = {}) {
-  const made: Array<[string, string]> = [], folders: string[] = [], notices: string[] = [], traces: string[] = [], opened: string[] = [];
-  const existing = new Set(over.existing ?? []);
-  let failed = false;
-  const p: CreatePorts<string> = {
-    folderExists: (f) => existing.has(f), createFolder: async (f) => { folders.push(f); existing.add(f); }, exists: (path) => existing.has(path),
-    create: async (path, content) => { if (over.failFirst === path && !failed) { failed = true; existing.add(path); throw new Error('File already exists.'); } if (existing.has(path)) throw new Error('File already exists.'); existing.add(path); made.push([path, content]); return path; },
-    open: async (f) => { opened.push(f); }, notify: (m) => { notices.push(m); }, trace: (l) => { traces.push(l); }, isAlreadyExists: (e) => /already exists/.test((e as Error).message), ...over,
-  };
-  return { p, made, folders, notices, traces, opened };
-}
-
-test('createComposition: validates, makes the folder, picks the next free comp_NNN, writes the note through the one writer, prints the evidence line, opens it, says so', async () => {
-  const r = ports();
-  const out = await createComposition(r.p, { sections: [{ source: 'phrases/phrase_003', length: 8 }, { source: 'arrangements/arr_001', repeat: 2 }] });
-  assert.deepEqual(out, { ok: true, path: 'compositions/comp_001.md', name: 'comp_001' });
-  assert.deepEqual(r.folders, ['compositions']);
-  assert.equal(r.made[0][1], newCompositionNote('comp_001', { kind: 'composition', sections: [{ source: 'phrases/phrase_003', length: 8 }, { source: 'arrangements/arr_001', repeat: 2 }] }));
-  assert.deepEqual(r.traces, ['[forge-composition] created compositions/comp_001.md sections=phrase_003:8,arr_001x3']);
-  assert.deepEqual(r.opened, ['compositions/comp_001.md']);
-  assert.deepEqual(r.notices, ['Created compositions/comp_001.md.']);
-  const second = ports({ existing: ['compositions', 'compositions/comp_001.md'] });
-  assert.equal((await createComposition(second.p, { sections: [{ source: 'phrases/phrase_003' }] })).ok && second.made[0][0], 'compositions/comp_002.md');
-  assert.deepEqual(second.folders, [], 'the folder was there');
-});
-
-test('createComposition: a name the person chose (letters, digits, _ and -), refused when taken or malformed; a name taken between the check and the write is the next number; the root mark and the hook that moves it', async () => {
-  const named = ports();
-  const out = await createComposition(named.p, { name: ' intro ', sections: [{ source: 'phrases/phrase_003' }] });
-  assert.deepEqual(out, { ok: true, path: 'compositions/intro.md', name: 'intro' });
-  const taken = ports({ existing: ['compositions', 'compositions/intro.md'] });
-  const refused = await createComposition(taken.p, { name: 'intro', sections: [{ source: 'phrases/phrase_003' }] });
-  assert.deepEqual(refused, { ok: false, message: 'New composition: a composition called intro already exists (compositions/intro.md). Pick another name.' });
-  assert.deepEqual(taken.notices, [refused.ok === false ? refused.message : '']);
-  const bad = await createComposition(ports().p, { name: 'a/b', sections: [{ source: 'phrases/phrase_003' }] });
-  assert.deepEqual(bad, { ok: false, message: 'New composition: the name "a/b" can only have letters, digits, _ and -.' });
-  const race = ports({ existing: ['compositions'], failFirst: 'compositions/comp_001.md' });
-  assert.equal((await createComposition(race.p, { sections: [{ source: 'phrases/phrase_003' }] })).ok && race.made[0][0], 'compositions/comp_002.md');
-  const racedName = ports({ existing: ['compositions'], failFirst: 'compositions/intro.md' });
-  assert.deepEqual(await createComposition(racedName.p, { name: 'intro', sections: [{ source: 'phrases/phrase_003' }] }), { ok: false, message: 'New composition: a composition called intro already exists (compositions/intro.md). Pick another name.' });
-  const rooted = ports();
-  const hook: string[] = [];
-  await createComposition(rooted.p, { sections: [{ source: 'phrases/phrase_003' }], root: true }, async (path) => { hook.push(path); });
-  assert.ok(isRootNote(rooted.made[0][1]), 'the note is born marked');
-  assert.deepEqual(hook, ['compositions/comp_001.md']);
-  const unrooted = ports();
-  await createComposition(unrooted.p, { sections: [{ source: 'phrases/phrase_003' }] }, async (path) => { hook.push(path); });
-  assert.ok(!isRootNote(unrooted.made[0][1]));
-  assert.equal(hook.length, 1, 'the hook is not called without the mark');
-  for (const sections of [[], [{ source: 'bars/bar_001' }], [{ source: 'phrases/phrase_003', length: 0 }]]) {
-    const r = ports();
-    const o = await createComposition(r.p, { sections });
-    assert.equal(o.ok, false);
-    assert.equal(r.made.length, 0);
-    assert.match(r.notices[0], /^New composition: /);
-  }
-  const boom = await createComposition(ports({ create: async () => { throw new Error('disk full'); } }).p, { sections: [{ source: 'phrases/phrase_003' }] });
-  assert.deepEqual(boom, { ok: false, message: 'New composition failed: disk full' });
 });
 
 // ---- tying a bar to its section ---------------------------------------------------------------------------------------------------------------------------------------
@@ -253,74 +186,6 @@ function dialog(over: { hasRoot?: boolean; create?: (c: any) => Promise<any> } =
   return { parent, handle, seen, closed: () => closed, q, rows, click, settle };
 }
 
-test('the dialog: rows for sections (a phrase, an arrangement or a composition of the vault), reorder and remove, the lead words follow the order, empty bars mean all, the root box starts ticked only when there is no root', async () => {
-  const d = dialog();
-  assert.equal(d.rows().length, 1);
-  assert.deepEqual([...d.parent.querySelectorAll('optgroup')].map((g: any) => g.label), ['Phrases', 'Arrangements', 'Compositions']);
-  assert.deepEqual([...d.rows()[0].querySelectorAll('option')].map((o: any) => o.value), ['phrases/phrase_003', 'phrases/phrase_004', 'arrangements/arr_001', 'compositions/intro']);
-  assert.equal(d.q('.forge-comp-root').checked, true);
-  assert.equal(dialog({ hasRoot: true }).q('.forge-comp-root').checked, false);
-  assert.equal(d.rows()[0].querySelector('.forge-comp-remove').hidden, true, 'the only section cannot be removed');
-  d.click(d.q('.forge-comp-add')); d.click(d.q('.forge-comp-add'));
-  const rows = d.rows();
-  assert.deepEqual(rows.map((r: any) => r.querySelector('.forge-comp-lead').textContent), ['Play ', 'Then play ', 'Then play ']);
-  rows[0].querySelector('.forge-comp-note').value = 'phrases/phrase_004'; rows[1].querySelector('.forge-comp-note').value = 'arrangements/arr_001'; rows[2].querySelector('.forge-comp-note').value = 'compositions/intro';
-  rows[1].querySelector('.forge-comp-length').value = '4'; rows[2].querySelector('.forge-comp-repeat').value = '3';
-  assert.equal(rows[0].querySelector('.forge-comp-up').disabled, true); assert.equal(rows[2].querySelector('.forge-comp-down').disabled, true);
-  d.click(rows[2].querySelector('.forge-comp-up'));                          // intro moves above the arrangement
-  assert.deepEqual(d.rows().map((r: any) => r.querySelector('.forge-comp-note').value), ['phrases/phrase_004', 'compositions/intro', 'arrangements/arr_001']);
-  d.click(d.rows()[0].querySelector('.forge-comp-down'));
-  assert.deepEqual(d.rows().map((r: any) => r.querySelector('.forge-comp-note').value), ['compositions/intro', 'phrases/phrase_004', 'arrangements/arr_001']);
-  d.click(d.rows()[1].querySelector('.forge-comp-remove'));
-  d.q('.forge-comp-name').value = ' intro_2 ';
-  d.click(d.q('.forge-comp-create'));
-  await d.settle();
-  assert.deepEqual(d.seen, [{ name: 'intro_2', sections: [{ source: 'compositions/intro', repeat: 3 }, { source: 'arrangements/arr_001', length: 4 }], root: true }]);
-  assert.equal(d.closed(), 1, 'success closes the dialog');
-  d.handle.dispose();
-  assert.equal(d.parent.children.length, 0);
-});
-
-test('the dialog: a bar count that is not a whole number is said before anything is created; a refusal of the flow is shown and the dialog stays; a throw is shown; Cancel closes; Create cannot be pressed twice', async () => {
-  const d = dialog();
-  d.rows()[0].querySelector('.forge-comp-length').value = '2.5';
-  d.click(d.q('.forge-comp-create'));
-  assert.equal(d.q('.forge-comp-message').textContent, 'Section 1: the bars must be a whole number, 1 or more.');
-  assert.deepEqual(d.seen, []);
-  d.rows()[0].querySelector('.forge-comp-length').value = '';
-  d.rows()[0].querySelector('.forge-comp-repeat').value = '0';
-  d.click(d.q('.forge-comp-create'));
-  assert.equal(d.q('.forge-comp-message').textContent, 'Section 1: the number of more times must be a whole number, 1 or more.');
-  const refused = dialog({ create: async () => ({ ok: false, message: 'New composition: a composition called x already exists.' }) });
-  refused.click(refused.q('.forge-comp-create')); await refused.settle();
-  assert.equal(refused.q('.forge-comp-message').textContent, 'New composition: a composition called x already exists.');
-  assert.equal(refused.closed(), 0);
-  const threw = dialog({ create: async () => { throw new Error('boom'); } });
-  threw.click(threw.q('.forge-comp-create')); await threw.settle();
-  assert.equal(threw.q('.forge-comp-message').textContent, 'New composition failed: boom');
-  let calls = 0; let release: () => void = () => {};
-  const slow = dialog({ create: () => { calls++; return new Promise((resolve) => { release = () => resolve({ ok: true, path: 'x' }); }); } });
-  slow.click(slow.q('.forge-comp-create')); slow.click(slow.q('.forge-comp-create'));
-  assert.equal(calls, 1); assert.equal(slow.q('.forge-comp-create').disabled, true);
-  release(); await slow.settle();
-  assert.equal(slow.q('.forge-comp-create').disabled, false);
-  const cancelled = dialog(); cancelled.click(cancelled.q('.forge-comp-cancel'));
-  assert.equal(cancelled.closed(), 1);
-});
-
-test('what the dialog hands over makes the note the writer makes: through createComposition, the sections read back from the note are the rows', async () => {
-  const r = ports();
-  const d = dialog({ create: (choice) => createComposition(r.p, choice) });
-  d.rows()[0].querySelector('.forge-comp-length').value = '8';
-  d.click(d.q('.forge-comp-add'));
-  d.rows()[1].querySelector('.forge-comp-note').value = 'arrangements/arr_001';
-  d.rows()[1].querySelector('.forge-comp-repeat').value = '2';
-  d.click(d.q('.forge-comp-create')); await d.settle();
-  const read = readCompositionNote(r.made[0][1]);
-  assert.ok(read.ok && JSON.stringify(read.value.sections) === JSON.stringify([{ source: 'phrases/phrase_003', length: 8 }, { source: 'arrangements/arr_001', repeat: 2 }]));
-  assert.equal(d.closed(), 1);
-});
-
 // ---- 2026-10-31-1100 mutation pass A: the branches the first tests did not pin --------------------------------------------------------------------------------------------
 
 import { NEW_COMPOSITION_COMMAND_ID, NEW_COMPOSITION_COMMAND_NAME, OPEN_COMPOSITION_COMMAND_ID, OPEN_COMPOSITION_COMMAND_NAME } from './composition-flow-core.ts';
@@ -330,29 +195,6 @@ import { accessibleName, auditLabels, visibleText } from './test-support/accessi
 test('the root mark goes right after content_type even when content_type is the first line', () => {
   assert.equal(withRoot('---\ncontent_type: json\ndescription: x\n---\nbody', true), '---\ncontent_type: json\nroot: true\ndescription: x\n---\nbody');
   assert.equal(withRoot('---\ntype: data\ncontent_type: json\ndescription: x\n---\nbody', true), '---\ntype: data\ncontent_type: json\nroot: true\ndescription: x\n---\nbody');
-});
-
-test('createComposition: a chosen name that is taken is refused BEFORE any write; the folder race and a real folder failure are told apart; twenty refused names end in a sentence, each number tried once', async () => {
-  const taken = ports({ existing: ['compositions', 'compositions/intro.md'] });
-  const attempts: string[] = [];
-  const spy = { ...taken.p, create: async (path: string) => { attempts.push(path); return path; } };
-  assert.equal((await createComposition(spy, { name: 'intro', sections: [{ source: 'phrases/phrase_003' }] })).ok, false);
-  assert.deepEqual(attempts, [], 'nothing was written');
-  const skipped = ports({ existing: ['compositions', 'compositions/comp_001.md'] });
-  const tried: string[] = [];
-  await createComposition({ ...skipped.p, create: async (path: string) => { tried.push(path); return path; } }, { sections: [{ source: 'phrases/phrase_003' }] });
-  assert.deepEqual(tried, ['compositions/comp_002.md'], 'a name the vault has is never tried');
-  const folderRace = ports({ createFolder: async () => { throw new Error('Folder already exists.'); } });
-  assert.equal((await createComposition(folderRace.p, { sections: [{ source: 'phrases/phrase_003' }] })).ok, true, 'someone made the folder first: carry on');
-  const folderBroken = ports({ createFolder: async () => { throw new Error('disk full'); } });
-  assert.deepEqual(await createComposition(folderBroken.p, { sections: [{ source: 'phrases/phrase_003' }] }), { ok: false, message: 'New composition failed: disk full' });
-  assert.equal(folderBroken.made.length, 0);
-  const crowded = ports({ existing: ['compositions'] });
-  const names: string[] = [];
-  const out = await createComposition({ ...crowded.p, create: async (path: string) => { names.push(path); throw new Error('File already exists.'); } }, { sections: [{ source: 'phrases/phrase_003' }] });
-  assert.deepEqual(out, { ok: false, message: 'New composition: could not find a free composition name.' });
-  assert.deepEqual(names, Array.from({ length: 20 }, (_, i) => `compositions/comp_${String(i + 1).padStart(3, '0')}.md`), 'twenty tries, each a new number');
-  assert.deepEqual(crowded.notices, ['New composition: could not find a free composition name.']);
 });
 
 test('the command ids and names are the ones the palette and the tests of the real plugin use', () => {

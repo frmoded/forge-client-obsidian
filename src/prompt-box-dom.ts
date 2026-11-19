@@ -1,15 +1,18 @@
 // 2026-11-17-2001 - the music tab's chat-style composer (design doc checklists/music_tabs_chat_ui_design.md sections 3 and 7). Plain DOM, no obsidian import (a happy-dom test mounts the very code the tab runs). It replaces
-// the docked prompt box of 2026-11-12-1203 (same file, same handle surface: the controller's calls did not change) - a soft rounded card: the text area on top (it grows), a quiet "+" at the bottom left (the New actions
-// and "Insert a link to a note"), a muted return glyph at the bottom right that is the Enter hint AND a button. NO Apply button. The submit state machine is composer-core.ts:
+// the docked prompt box of 2026-11-12-1203 (same file, same handle surface: the controller's calls did not change) - a soft rounded card: the text area on top (it grows), the status text at the bottom left, and at the
+// bottom RIGHT a quiet "+" (the New actions and "Insert a link to a note") immediately left of the muted return glyph that is the Enter hint AND a button (2026-11-19-0950: the "+" used to be at the left). NO Apply button. The submit state machine is composer-core.ts:
 //   Enter = a PREVIEW (the reply shows in the dialog above: "Press Enter to apply, Esc to discard"), a second Enter applies, Esc discards or cancels, typing replaces the preview, Shift+Enter is a new line, Enter in an
 //   IME composition only confirms it, Up in an empty composer recalls the previous sentence (per note), Cmd/Ctrl+K focuses the composer (the tab's own handler: `focusComposer`). Nothing is written before the second Enter.
 //
 //   <div class="forge-prompt-box forge-composer [is-edited] [is-previewing] [is-busy] [has-conflict]" role="group" aria-labelledby=(hidden name: Composer)>
-//     <textarea class="forge-prompt-box-text" aria-labelledby=(hidden name: Describe what you want, in a sentence)>…</textarea>
+//     <textarea class="forge-prompt-box-text" aria-labelledby=(hidden name: Describe the next step in a sentence)>…</textarea>
 //     <div class="forge-composer-bar">
-//       <button class="forge-composer-plus" aria-haspopup="menu">+</button><div class="forge-composer-menu" role="menu" hidden>…</div>
 //       <span class="forge-prompt-box-state" aria-live="polite">Working... Esc cancels</span>
+//       <span class="forge-composer-plus-wrap">                   the menu's containing block: it is anchored to the "+" and right-aligned to it
+//         <button class="forge-composer-plus" aria-haspopup="menu">+</button><div class="forge-composer-menu" role="menu" hidden>…</div>
+//       </span>
 //       <button class="forge-composer-send" aria-labelledby=(hidden name: Send, Enter)>↵</button>
+//     (the DOM order IS the visual order and the Tab order: text area, "+", Send)
 //     </div>
 //     <div class="forge-prompt-box-conflict">The controls changed the Description. <button data-choice="keep">Keep my text</button> <button data-choice="use">Use the new one</button></div>
 //   </div>
@@ -36,7 +39,6 @@ export interface PromptBoxPorts {
   cancel?(): void;
   /** Esc on a preview, or typing over it: the proposal is dropped (nothing was written). */
   discard?(): void;
-  placeholder: string;
   /** MUSIC_COMPOSER_AUTO_APPLY: a sentence the grammar reads exactly skips the preview. Default off. */
   autoApply?(): boolean;
   /** The "+" menu: the four New actions and "Insert a link to a note" (the tab says what is in it). */
@@ -82,14 +84,15 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
   const text = doc.createElement('textarea');
   text.className = 'forge-prompt-box-text'; text.rows = 1; text.spellcheck = false;
   setSrLabel(text, COMPOSER_LABELS.field, { host: el, key: 'field' });
-  text.placeholder = ports.placeholder;
   const bar = doc.createElement('div'); bar.className = 'forge-composer-bar';
   const plus = doc.createElement('button'); plus.type = 'button'; plus.className = 'forge-composer-plus'; setSrLabel(plus, COMPOSER_LABELS.plus, { host: el, key: 'plus' });
   plus.setAttribute('aria-haspopup', 'menu'); plus.setAttribute('aria-expanded', 'false'); plus.appendChild(icon(doc, ICON_PLUS));
+  const plusWrap = doc.createElement('span'); plusWrap.className = 'forge-composer-plus-wrap';
   const menu = doc.createElement('div'); menu.className = 'forge-composer-menu'; menu.setAttribute('role', 'menu'); setSrLabel(menu, COMPOSER_LABELS.menu, { host: el, key: 'menu' }); menu.hidden = true;
   const state = doc.createElement('span'); state.className = 'forge-prompt-box-state'; state.setAttribute('aria-live', 'polite');
   const send = doc.createElement('button'); send.type = 'button'; send.className = 'forge-composer-send'; setSrLabel(send, COMPOSER_LABELS.send, { host: el, key: 'send' }); send.appendChild(icon(doc, ICON_RETURN));
-  bar.append(plus, menu, state, send);
+  plusWrap.append(plus, menu);
+  bar.append(state, plusWrap, send);                              // 2026-11-19-0950: the status text on the left, then the "+" and Send side by side at the right
   const conflict = doc.createElement('div');
   conflict.className = 'forge-prompt-box-conflict'; conflict.setAttribute('role', 'status');
   const msg = doc.createElement('span'); msg.textContent = 'The controls changed the Description while you were typing. ';
@@ -221,7 +224,7 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     }
     plus.addEventListener('click', (e) => { e.stopPropagation(); setMenu(!menuOpen); if (menuOpen) items[0]?.focus(); });
     doc.body?.addEventListener('click', onBodyClick);
-  } else { plus.hidden = true; }
+  } else { plusWrap.hidden = true; plus.hidden = true; }
   function onBodyClick(): void { if (menuOpen) setMenu(false); }
   function insertAtCaret(insert: string): void {
     const a = text.selectionStart ?? text.value.length, b = text.selectionEnd ?? a;

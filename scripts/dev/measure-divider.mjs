@@ -53,7 +53,7 @@ window.mount = function () {
     setTimer: function (fn, ms) { return setTimeout(fn, ms); }, clearTimer: function (h) { clearTimeout(h); } });
   area.showNow(cp.RHYTHM_STARTER);
   window.store = cp.settingsStore(data, function () { localStorage.setItem('dataJson', JSON.stringify(data)); });
-  window.h = cp.mountChatPanel(host, { store: store, box: { placeholder: 'Describe what you want, in a sentence', preview: async function () { return { ok: false, message: 'x' }; }, apply: async function () { return { ok: false }; } } }, 'Mix [[bar_005]] and [[bar_006]].');
+  window.h = cp.mountChatPanel(host, { store: store, box: { preview: async function () { return { ok: false, message: 'x' }; }, apply: async function () { return { ok: false }; } } }, 'Mix [[bar_005]] and [[bar_006]].');
 };
 window.box = function (sel) { var e = document.querySelector(sel); if (!e) return null; var r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }; };
 window.geo = function () { var host = document.getElementById('host'), body = document.querySelector('.forge-chat-body'), sc = document.querySelector('.forge-rhythm-score-host'), svg = sc && sc.querySelector('svg'), hd = document.querySelector('.forge-chat-resizer');

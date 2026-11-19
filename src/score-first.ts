@@ -20,7 +20,7 @@ import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-core.ts';
 import { descriptionPortsFor } from './description-wiring.ts';
-import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewPhrase, createNewPhraseFromParams, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
+import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewEmptyPhrase, createNewPhrase, createNewPhraseFromParams, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, morphChangesViaEngine } from './phrase-engine.ts';
 import { installNotePreflight, makeNotePreflight } from './note-preflight-core.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
@@ -48,7 +48,6 @@ import { ICON_BAR, ICON_PHRASE, MUSIC_RIBBON, NOT_MUSIC_VAULT_REASON, registerMu
 import { registerMusicRibbonStatus } from './music-ribbon-status.ts';
 import { NEW_MENU_VIEW_TYPES, createNewMenuSync, newMenuItems, runNewMenuItem, type NewMenuView } from './new-menu-core.ts';
 import { pickNoteLink } from './note-picker-modal.ts';
-import { createPhraseAnywhere } from './new-phrase-anywhere-core.ts';
 
 export const NEW_BAR_COMMAND_ID = 'new-bar';
 export const NEW_BAR_COMMAND_NAME = 'New bar';
@@ -141,13 +140,18 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
     isAlreadyExists: isFileExistsError,
   });
   const createPhrase = (): Promise<unknown> => phraseFrom(activePath);
-  // "New phrase": the bar you are on, else the first bar, else a new bar first; never a refusal (the palette entry and the ribbon button are this command)
-  const createPhraseAnyNote = (): Promise<unknown> => createPhraseAnywhere({
+  // "New phrase" (2026-11-19-0960): an EMPTY phrase (no source bar, no kind, no sentence), opened with the composer ready: the palette entry and the ribbon button are this command. Nothing is needed from the vault, so it never refuses and never makes a bar first.
+  const createEmptyPhraseNote = (): Promise<unknown> => createNewEmptyPhrase<TFile>({
     activePath,
-    barBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${BAR_FOLDER}/`)).map((f) => f.basename),
-    createBar: () => createBar() as Promise<{ ok: true; path: string } | { ok: false; message: string }>,
-    createPhraseFrom: (barPath) => phraseFrom(() => barPath),
-  }).then((r) => { if (r.kind === 'failed') loggedNotice(`New phrase: ${r.message}`); return r; });
+    folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
+    createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
+    listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
+    exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
+    create: (p, content) => app.vault.create(p, content),
+    open: (file) => openPhrase(app, file),
+    notify: (message) => { loggedNotice(message); },
+    isAlreadyExists: isFileExistsError,
+  });
 
   const createMix = (): Promise<unknown> => createNewMix<TFile>({
     activePath,
@@ -275,7 +279,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         icon: ICON_PHRASE,
         checkCallback: (checking: boolean) => {
           if (!newBarAvailable(scoreFirst)) return false;
-          if (!checking) void createPhraseAnyNote();
+          if (!checking) void createEmptyPhraseNote();
           return true;
         },
       });

@@ -11,6 +11,7 @@ import { describe } from './phrase-describe-core.ts';
 import { RHYTHM_CHANNELS, type RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { KIT_NAME_PATTERN, kitPath, readKitNote, type KitParams } from './kit-core.ts';
+import { EMPTY_SOURCE, isEmptyNote } from './empty-note-core.ts';
 import { FORGE_PHRASES_KEY } from './arrangement-nav-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 
@@ -116,6 +117,7 @@ export function readArrangementNote(text: string): Validation<ArrangementParams>
 
 /** "Refresh note links" on one arrangement note: derived parts regenerated from the json (fence and the person's own frontmatter lines untouched). Idempotent. */
 export function refreshArrangementNoteText(text: string, name: string): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+  if (isEmptyNote(text)) return { ok: true, text, changed: false };          // 2026-11-19-0960: a new note with no sentence yet has nothing to refresh
   const read = readArrangementNote(text);
   if (read.ok === false) return { ok: false, message: read.message };
   const block = extractPhraseJsonBlock(text);
@@ -168,7 +170,6 @@ export function tempoRangeOf(bars: readonly RhythmData[]): { from: number; to: n
 export function nextArrangementName(taken: (path: string) => boolean): string {
   for (let n = 1; ; n++) { const name = `arr_${String(n).padStart(3, '0')}`; if (!taken(arrangementPath(name))) return name; }
 }
-export const arrangementCreatedLine = (name: string, p: ArrangementParams): string => `[forge-arrangement] created ${arrangementPath(name)} tracks=${p.tracks.map((t) => `${t.phrase}@${t.kit}`).join(',')}`;
 
 // ---- the Score ----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -228,6 +229,7 @@ export function noSharedChannelRefusal(tracks: ArrangementInput['tracks']): stri
  *  phrase that is missing or unusable, or two tracks the engine refuses to play together, is a refusal naming which and why. */
 export async function produceArrangement(deps: ArrangementDeps, note: string | { unreadable: string }, title: string): Promise<ScoreOutcome> {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Arrangement: the arrangement note could not be read (${note.unreadable}).` };
+  if (isEmptyNote(note)) return { kind: 'refusal', message: '' };            // 2026-11-19-0960: a new note has no sentence yet: nothing to draw, nothing to say, nothing to ask the engine
   if (isCustomNote(note)) return produceCustomScore({ readNote: deps.phrases.readNote, runCustom: deps.phrases.runCustom, compute: deps.phrases.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
   const read = readArrangementNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Arrangement: ${read.message}` };
@@ -285,7 +287,7 @@ async function drawPhraseBars(deps: PhraseScoreDeps, phrase: string): Promise<{ 
   const parsed = readPhraseNote(text);
   if (parsed.ok === false) return `the phrase ${phrase} is not usable: ${parsed.message}`;
   const made = await producePhrase(deps, parsed.value, phrase);
-  if (made.kind !== 'score') return `the phrase ${phrase} could not be drawn: ${made.message}`;
+  if (made.kind !== 'score') return `the phrase ${phrase} could not be drawn: ${made.message === '' ? EMPTY_SOURCE : made.message}`;
   const bars = barsOfPayload(made.payload);
   return bars === null ? `the phrase ${phrase} gave no bars to play.` : { bars, params: parsed.value };
 }

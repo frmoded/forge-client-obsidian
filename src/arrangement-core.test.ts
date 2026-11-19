@@ -14,7 +14,7 @@ import { readRhythmNote } from './rhythm-edit-core.ts';
 import { newKitNote, type KitParams } from './kit-core.ts';
 import {
   applyArrangementWrite, setTrackSetting, trackSettingsSteps,
-  arrangementCreatedLine, arrangementDescription, arrangementLinks, arrangementPath, arrangementPython, arrangementRecipeSteps, combineRefusal, formatArrangementJson, isArrangementPath, newArrangementNote, nextArrangementName,
+  arrangementDescription, arrangementLinks, arrangementPath, arrangementPython, arrangementRecipeSteps, combineRefusal, formatArrangementJson, isArrangementPath, newArrangementNote, nextArrangementName,
   ALL_MUTED, ARRANGEMENT_VIEW_TYPE, nothingPlays, produceArrangement, readArrangementNote, refreshArrangementNoteText, validateArrangement, type ArrangementInput, type ArrangementParams,
 } from './arrangement-core.ts';
 
@@ -97,7 +97,7 @@ test('the round trip, the links, and "Refresh note links": json -> note -> json 
   assert.equal(readArrangementNote('---\ntype: data\ncontent_type: json\n---\n\n```json\n{"kind": "kit"}\n```\n').ok, false);
 });
 
-test('paths, names and the evidence line: arrangements/<name>.md, README is not one, the next name is arr_001, arr_002 ...', () => {
+test('paths and names: arrangements/<name>.md, README is not one, the next name is arr_001, arr_002 ...', () => {
   assert.equal(arrangementPath('arr_001'), 'arrangements/arr_001.md');
   assert.equal(isArrangementPath('arrangements/arr_001.md'), true);
   assert.equal(isArrangementPath('arrangements/README.md'), false);
@@ -105,7 +105,6 @@ test('paths, names and the evidence line: arrangements/<name>.md, README is not 
   assert.equal(nextArrangementName(() => false), 'arr_001');
   const taken = new Set(['arrangements/arr_001.md', 'arrangements/arr_002.md']);
   assert.equal(nextArrangementName((p) => taken.has(p)), 'arr_003');
-  assert.equal(arrangementCreatedLine('arr_001', ARR), '[forge-arrangement] created arrangements/arr_001.md tracks=phrase_003@rock,phrase_009@latin');
 });
 
 // ---- the Score producer, engine and vault stood in ---------------------------------------------------------------------------------------------------------------------------

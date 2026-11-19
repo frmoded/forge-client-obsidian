@@ -83,12 +83,9 @@ try {
   out.m6.hotOnBarEntry = await hot();
   await p.hover(5, 690); await sleep(150);
   out.m6.hotAfterLeave = (await hot()).length;
-  const br = await rect('.forge-phrase-bracket'); await p.hover(br.x, br.y); await sleep(200);
-  out.m6.hotOnBracket = (await hot()).length;
-  out.m6.bracketText = await p.ev(`document.querySelector('.forge-phrase-bracket').textContent`);
-  await p.click(br.x, br.y); await sleep(150);
+  out.m6.noBracket = await p.ev(`document.querySelector('.forge-phrase-bracket') === null`);          // 2026-11-19-0950: the purple bracket is gone
   const src = await rect('.forge-phrase-source'); await p.click(src.x, src.y); await sleep(150);
-  out.m6.openedAfterBracketAndSource = await p.ev('window.__opened.slice()');
+  out.m6.openedAfterSource = await p.ev('window.__opened.slice()');
   // hover a bar with nothing pinned shows its stack as a preview
   await p.ev(`document.querySelector('#ph_bar_5').dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }))`);
   await p.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host'); e.focus(); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`);
@@ -144,8 +141,7 @@ async function renderedStudy(withStyles: boolean) {
     await p_shot(q, `rendered-${withStyles ? 'with' : 'without'}-styles-pinned.png`);
     await q.ev(`(() => { const e = document.querySelector('.forge-rhythm-score-host'); e.focus(); e.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); })()`); await sleep(250);
     res.afterEsc = await state();
-    const br = await q.ev(`(() => { const r = document.querySelector('.forge-phrase-bracket').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
-    await q.hover(br.x, br.y); await sleep(250);
+    await q.ev(`(() => { document.querySelector('#ph_bar_3').dispatchEvent(new MouseEvent('click', { bubbles: true })); document.querySelector('.forge-inspector-lineage > li:nth-child(2)')?.focus(); })()`); await sleep(250);   // 2026-11-19-0950: the fan by keyboard focus of a lineage entry (the bracket that used to do it is gone)
     res.fan = await state();
     res.bandsInFan = await q.ev(`document.querySelectorAll('.forge-artifact-band').length`);
     await p_shot(q, `rendered-${withStyles ? 'with' : 'without'}-styles-fan.png`);
@@ -173,7 +169,7 @@ async function mixStudy() {
       a: g('.forge-mix-a')?.value, b: g('.forge-mix-b')?.value, aOptions: o('.forge-mix-a'), bOptions: o('.forge-mix-b'),
       weight: g('.forge-mix-weight')?.value, weightShown: g('.forge-mix-weight-value')?.textContent, weightType: g('.forge-mix-weight')?.type, weightStep: g('.forge-mix-weight')?.step,
       threshold: g('.forge-mix-threshold')?.value, ghost: g('.forge-mix-ghost')?.checked, sentence: g('.forge-mix-sentence')?.textContent,
-      inspector: !!g('.forge-inspector'), bracket: !!g('.forge-phrase-bracket'), sourceLink: !!g('.forge-phrase-source'), extendBars: !!g('.forge-phrase-bars'),
+      inspector: !!g('.forge-inspector'), sourceLink: !!g('.forge-phrase-source'), extendBars: !!g('.forge-phrase-bars'),
       measureGroups: document.querySelector('.forge-rhythm-score-host svg')?.querySelectorAll('g.measure').length }; })()`);
     await q.shot(path.join(SHOTS, 'mix-initial.png'), { x: 0, y: 0, width: 800, height: 520 });
     // a swap = the OLD engraving host leaves the panel (the new one was revealed in the same tick): the moment the person SEES the new Score
@@ -297,7 +293,7 @@ async function mixNavStudy() {
     const stack = () => q.ev(`[...document.querySelectorAll('.forge-inspector-lineage > li > span')].map((s) => s.textContent)`);
     const pinned = () => q.ev(`[...document.querySelectorAll('.forge-rhythm-score-host g.forge-artifact-pinned')].map((g) => g.id)`);
     const away = async () => { await q.hover(5, 880); await sleep(150); };
-    res.dom = await q.ev(`({ inspector: !!document.querySelector('.forge-inspector'), body: document.querySelector('.forge-inspector-body')?.textContent, bracket: !!document.querySelector('.forge-phrase-bracket'), source: !!document.querySelector('.forge-phrase-source'), measureId: !!document.querySelector('#ph_bar_1'), hitIds: [...document.querySelectorAll('.forge-rhythm-score-host g.note[id^=mx_]')].map((g) => g.id) })`);
+    res.dom = await q.ev(`({ inspector: !!document.querySelector('.forge-inspector'), body: document.querySelector('.forge-inspector-body')?.textContent, source: !!document.querySelector('.forge-phrase-source'), measureId: !!document.querySelector('#ph_bar_1'), hitIds: [...document.querySelectorAll('.forge-rhythm-score-host g.note[id^=mx_]')].map((g) => g.id) })`);
     const mark = (m: string) => console.log('[m8]', new Date().toISOString().slice(11, 19), m);
     mark('mounted'); await q.ev(`window.__edit('phrases/phrase_002.md', ${JSON.stringify(mixText({ weight: 0.7 }))})`); await settle(); await sleep(400);   // one identical re-render: the very first render after mount differs from every later one by a few anti-aliased pixels (measured: 89 px, max channel difference 31), so every comparison below is between re-renders
     await away(); res.u1 = await hash('m8-u1-clip.png'); mark('u1 hashed');
@@ -424,11 +420,11 @@ out.verdicts = {
   m6_clickingANoteheadSelectsItsBarAndShowsTheStack: out.m6?.pinned === true && JSON.stringify(out.m6?.stackBar5) === JSON.stringify(['bar 5 of 8', 'made by phrase_001 (extend, slowing 20 %, style repeat_with_fills)', 'from bar_005', 'tempo 89']),
   m6_theLinksOpenThePhraseAndTheBar: JSON.stringify(out.m6?.opened) === JSON.stringify(['phrases/phrase_001', 'bars/bar_005']) && JSON.stringify(out.m6?.linkLabels) === JSON.stringify(['Open phrase_001', 'Open bar_005']),
   m6_theFanLightsAllBarsOrOne: out.m6?.hotOnSourceEntry === 8 && JSON.stringify(out.m6?.hotOnBarEntry) === JSON.stringify(['ph_bar_5']) && out.m6?.hotAfterLeave === 0,
-  m6_theBracketLightsAllBarsAndOpensThePhraseAndTheSourceLinkOpensTheBar: out.m6?.hotOnBracket === 8 && out.m6?.bracketText === 'phrase_001 · 8 bars' && JSON.stringify(out.m6?.openedAfterBracketAndSource) === JSON.stringify(['phrases/phrase_001', 'bars/bar_005', 'phrases/phrase_001', 'bars/bar_005']),
+  m6_thereIsNoBracketAndTheSourceLinkOpensTheBar: out.m6?.noBracket === true && JSON.stringify(out.m6?.openedAfterSource) === JSON.stringify(['phrases/phrase_001', 'bars/bar_005', 'bars/bar_005']),   // 2026-11-19-0950: the bracket (and its click that reopened this very phrase) is gone
   m6_hoveringABarWithNothingPinnedPreviewsItsStack: out.m6?.previewIsMarked === true && out.m6?.previewBar2?.[0] === 'bar 2 of 8',
   mix_theStripIsTheMixStripWithTwoBarListsAndTheValuesOfTheNote: out.mix?.dom?.a === 'bar_005' && out.mix.dom.b === 'bar_006' && JSON.stringify(out.mix.dom.aOptions) === JSON.stringify(['bar_005', 'bar_006']) && out.mix.dom.weight === '0.5' && out.mix.dom.weightShown === '0.50' && out.mix.dom.weightType === 'range' && out.mix.dom.weightStep === '0.05' && out.mix.dom.threshold === '0.5' && out.mix.dom.ghost === false && /^Mix of bar_005 and bar_006: 50 % bar_005;/.test(out.mix.dom.sentence ?? ''),
   mix_oneBarEngraved: out.mix?.dom?.measureGroups === 1,
-  mix_hasTheInspectorButNoBracketNoSourceLinkNoExtendStrip: out.mix?.dom?.inspector === true && out.mix.dom.bracket === false && out.mix.dom.sourceLink === false && out.mix.dom.extendBars === false,   // M8 reversed the M7 "no inspector"
+  mix_hasTheInspectorButNoSourceLinkNoExtendStrip: out.mix?.dom?.inspector === true && out.mix.dom.sourceLink === false && out.mix.dom.extendBars === false,   // M8 reversed the M7 "no inspector"
   mix_rendered_weight1AndWeight0LookDifferent: !!out.mix?.hash?.w1 && out.mix.hash.w1 !== out.mix.hash.w0,
   mix_rendered_atTheTieTheUnionOfTheseTwoBarsLooksLikeBar005: out.mix?.hash?.['w0.5'] === out.mix?.hash?.w1,
   mix_rendered_justUnderTheThresholdLooksLikeBar006: !!out.mix?.hash?.w0 && out.mix.hash['w0.45'] === out.mix.hash.w0,

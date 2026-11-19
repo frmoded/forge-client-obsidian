@@ -2394,24 +2394,6 @@
 .forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-hot *,
 .forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-pinned * { fill: var(--interactive-accent); stroke: var(--interactive-accent); }
 .forge-phrase-view .forge-rhythm-score-host g.measure.forge-artifact-pinned { filter: drop-shadow(0 0 3px var(--interactive-accent)); }
-/* the bracket under every bar made by the phrase note (2026-11-03-1155-93: the Score is the first thing in the tab, so the bracket sits right under it, open upward) */
-.forge-phrase-bracket {
-  display: block;
-  margin: 0 4px 8px;
-  padding: 0 8px 1px;
-  text-align: center;
-  border: 2px solid var(--interactive-accent);
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  cursor: pointer;
-}
-.forge-phrase-bracket:focus-visible  {
-  color: var(--text-normal);
-  background: var(--background-modifier-hover);
-  outline: none;
-}
 button.forge-phrase-source { cursor: pointer; background: none; border: none; box-shadow: none; padding: 0 2px; color: var(--text-accent); text-decoration: underline; }
 .forge-inspector-preview { opacity: 0.75; font-style: italic; }
 
@@ -2728,7 +2710,12 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 }
 .forge-prompt-box .forge-composer-plus:focus-visible, .forge-prompt-box .forge-composer-send:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--background-modifier-border-focus, var(--interactive-accent)); }
 .forge-prompt-box .forge-composer-plus svg, .forge-prompt-box .forge-composer-send svg { display: block; width: 16px; height: 16px; }
-.forge-prompt-box .forge-composer-send { margin-left: auto; opacity: 0.55; }
+.forge-prompt-box .forge-composer-send { opacity: 0.55; }
+/* 2026-11-19-0950: the "+" and Send sit side by side at the RIGHT end of the row ("+" immediately left of Send); the status text takes the left. The wrapper of the "+" is what pushes them right (margin-left: auto) and it is the
+   containing block of the menu, so the menu is anchored to the "+". With no menu there is no "+": Send pushes itself. The DOM order is the visual order (no `order` anywhere), so it is also the Tab order: field, "+", Send. */
+.forge-prompt-box .forge-composer-plus-wrap { position: relative; display: inline-flex; flex: 0 0 auto; margin-left: auto; }
+.forge-prompt-box .forge-composer-plus-wrap[hidden] { display: none; }
+.forge-prompt-box .forge-composer-plus-wrap[hidden] + .forge-composer-send { margin-left: auto; }
 .forge-prompt-box.can-send .forge-composer-send { opacity: 1; color: var(--interactive-accent); }
 .forge-prompt-box.is-previewing .forge-composer-send { opacity: 1; color: var(--interactive-accent); }
 .forge-prompt-box.is-busy .forge-composer-send svg { animation: forge-composer-spin 1s linear infinite; }
@@ -2739,10 +2726,11 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-composer-menu {
   position: absolute;
   bottom: calc(100% + 6px);
-  left: 0;
+  right: 0;                                    /* 2026-11-19-0950: right-aligned to the "+" (it used to open to the right of a "+" at the left); it grows to the LEFT, away from the tab edge and the divider */
   z-index: 30;
   width: max-content;
   min-width: 11em;
+  max-width: calc(100cqw - 74px);              /* never wider than the room left of the "+" in the panel (the container): 12 + 1 + 14 padding and border, the 28 px "+" and Send and the 6 px gap, and 12 px to spare */
   padding: 4px;
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m, 8px);
@@ -2752,7 +2740,7 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-composer-menu[hidden] { display: none; }
 .forge-prompt-box .forge-composer-menuitem {
   display: block; width: 100%; height: auto; margin: 0; padding: 5px 8px; border: none; border-radius: var(--radius-s, 6px); box-shadow: none; background: transparent;
-  color: var(--text-normal); font: inherit; font-size: var(--font-ui-small, 13px); text-align: left; white-space: nowrap; cursor: pointer;
+  color: var(--text-normal); font: inherit; font-size: var(--font-ui-small, 13px); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
 }
 .forge-prompt-box .forge-composer-menuitem:focus-visible  { outline: none; background: var(--background-modifier-hover); }
 .forge-prompt-box-conflict { font-size: var(--font-ui-smaller); color: var(--text-muted); }

@@ -12,6 +12,7 @@ import { describe, compositionSentences } from './phrase-describe-core.ts';
 import { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 export { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 import { composeMismatchSentence } from './engine-refusal-core.ts';
+import { EMPTY_SOURCE, isEmptyNote } from './empty-note-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { produceArrangement, type ArrangementDeps } from './arrangement-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
@@ -32,8 +33,6 @@ type Validation<T> = { ok: true; value: T } | { ok: false; message: string };
 
 export const compositionPath = (name: string): string => `${COMPOSITION_FOLDER}/${name}.md`;
 export const isCompositionPath = (path: string): boolean => /^compositions\/[^/]+\.md$/.test(path) && path !== `${COMPOSITION_FOLDER}/README.md`;
-/** The name a composition note is given when the person does not choose one, and the pattern a chosen one must match (a file in a flat folder: letters, digits, _ and -). */
-export const COMPOSITION_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 const SECTION_SOURCE = new RegExp(`^(?:phrases/(?!README$)${NOTE_NAME_PART}|arrangements/arr_\\d+|compositions/[A-Za-z0-9_-]+)$`, 'u');       // 2026-11-16-1102: any note of phrases/ (a renamed phrase), as a transform's source since 1100; it was phrase_N only
 const baseName = (id: string): string => id.split('/').pop() ?? id;
 
@@ -117,6 +116,7 @@ export function readCompositionNote(text: string): Validation<CompositionParams>
 
 /** "Refresh note links" on one composition note: derived parts regenerated from the json. Idempotent; refuses a Description edited by hand. */
 export function refreshCompositionNoteText(text: string, name: string): { ok: true; text: string; changed: boolean } | { ok: false; message: string } {
+  if (isEmptyNote(text)) return { ok: true, text, changed: false };          // 2026-11-19-0960: a new note with no sentence yet has nothing to refresh
   const block = extractPhraseJsonBlock(text);
   if (block.ok === false) return { ok: false, message: block.message };
   const read = readCompositionNote(text);
@@ -142,7 +142,6 @@ export function applyCompositionWrite(text: string, name: string, p: Composition
 export function nextCompositionName(taken: (path: string) => boolean): string {
   for (let n = 1; ; n++) { const name = `comp_${String(n).padStart(3, '0')}`; if (!taken(compositionPath(name))) return name; }
 }
-export const compositionCreatedLine = (name: string, p: CompositionParams): string => `[forge-composition] created ${compositionPath(name)} sections=${p.sections.map((s) => `${baseName(s.source)}${s.length !== undefined ? `:${s.length}` : ''}${s.repeat !== undefined ? `x${s.repeat + 1}` : ''}`).join(',')}`;
 
 // ---- the Score ----------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -197,7 +196,7 @@ async function barsOfSource(deps: CompositionDeps, source: string, chain: readon
     made = await producePhrase(inner, parsed.value, name);
   } else if (what === 'arrangement') made = await produceArrangement({ phrases: inner, compute: deps.computeArrangement }, text, name);
   else made = await produceComposition({ ...deps, phrases: inner, chain: next }, text, name);
-  if (made.kind !== 'score') return `the ${what} ${name} could not be drawn: ${made.message}`;
+  if (made.kind !== 'score') return `the ${what} ${name} could not be drawn: ${made.message === '' ? EMPTY_SOURCE : made.message}`;
   const bars = barsOfPayload(made.payload);
   return bars === null ? `the ${what} ${name} gave no bars to play.` : bars;
 }
@@ -206,6 +205,7 @@ async function barsOfSource(deps: CompositionDeps, source: string, chain: readon
  *  too deep, or two sections the engine refuses to join (another meter), is a refusal naming which and why. The sources of the payload ride along (`forge_composition`) for the tab. */
 export async function produceComposition(deps: CompositionDeps, note: string | { unreadable: string }, title: string): Promise<ScoreOutcome> {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Composition: the composition note could not be read (${note.unreadable}).` };
+  if (isEmptyNote(note)) return { kind: 'refusal', message: '' };            // 2026-11-19-0960: a new note has no sentence yet: nothing to draw, nothing to say, nothing to ask the engine
   if (isCustomNote(note)) return produceCustomScore({ readNote: deps.phrases.readNote, runCustom: deps.phrases.runCustom, compute: deps.phrases.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
   const read = readCompositionNote(note);
   if (read.ok === false) return { kind: 'refusal', message: `Composition: ${read.message}` };

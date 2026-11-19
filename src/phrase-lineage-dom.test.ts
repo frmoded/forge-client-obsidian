@@ -1,6 +1,6 @@
 // score_first M6 (drain 2026-10-22-1950) — the phrase tab's inspector, on the surface a person uses: happy-dom, the real mountPhrase + live Score area + the REUSED bar inspector (score-inspector.ts),
 // a fake renderer that draws `g.measure` elements with the ids found in the annotated MusicXML (as Verovio does, measured in real Chrome), a fake vault. Click a bar -> the stack; click the links ->
-// the notes open; focus (never the pointer resting, 2026-11-19-0800) -> the fan; the bracket; the source link. Without the `inspector` port the tab is exactly the M5 tab (phrase-dom.test.ts).
+// the notes open; focus (never the pointer resting, 2026-11-19-0800) -> the fan; the source link (the purple bracket under the Score was removed, 2026-11-19-0950). Without the `inspector` port the tab is exactly the M5 tab (phrase-dom.test.ts).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
@@ -128,35 +128,20 @@ test('THE FAN (2026-11-19-0800: by keyboard focus, not by the pointer resting): 
   assert.deepEqual(hot(), []);
 });
 
-test('THE BRACKET over the bars: labelled with the phrase and its bar count; focus (not the pointer resting, 2026-11-19-0800) lights all bars; a click or Enter opens the phrase note', async () => {
-  const r = rig();
-  await r.handle.load(); await flush();
-  const b = r.q('.forge-phrase-bracket');
-  assert.equal(visibleText(b), 'phrase_001 · 8 bars');
-  assert.equal(b.getAttribute('role'), 'button'); assert.equal(b.getAttribute('tabindex'), '0');
-  assert.ok(accessibleName(b));
-  r.fire(b, 'mouseenter'); r.fire(b, 'mouseover');
-  assert.equal(r.qa('g.measure.forge-artifact-hot').length, 0, 'the pointer resting on the bracket lights nothing');
-  r.fire(b, 'mouseleave');
-  assert.equal(r.qa('g.measure.forge-artifact-hot').length, 0);
-  b.dispatchEvent(new r.win.Event('focus')); assert.equal(r.qa('g.measure.forge-artifact-hot').length, 8);
-  b.dispatchEvent(new r.win.Event('blur')); assert.equal(r.qa('g.measure.forge-artifact-hot').length, 0);
-  r.fire(b, 'click');
-  b.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  b.dispatchEvent(new r.win.KeyboardEvent('keydown', { key: 'x', bubbles: true }));
-  assert.deepEqual(r.opened, ['phrases/phrase_001', 'phrases/phrase_001']);
-  // pins the MECHANISM (the Score slot is first; the bracket is mounted right after it); if the design moves this SHOULD go red - reassess, don't just rewrite (2026-11-03-1155-93: the Score is the first thing in the tab, the bracket sits directly under it)
-  assert.equal(b.previousElementSibling.className, 'forge-rhythm-edit-score', 'the bracket sits directly under the Score');
-  assert.equal(b.nextElementSibling.className, 'forge-phrase-controls', 'and the controls strip comes after it');
-});
-
-test('a one-bar phrase says "1 bar"; a phrase the tab cannot read has no bracket', async () => {
-  const r = rig({ phrase: phraseText({ bars: 1 }) });
-  await r.handle.load(); await flush();
-  assert.equal(visibleText(r.q('.forge-phrase-bracket')), 'phrase_001 · 1 bar');
+test('2026-11-19-0950: THERE IS NO PURPLE BRACKET under the Score: an extend phrase tab has nothing between the Score and the controls strip, no "phrase_001 · N bars" box and no "Open phrase_001: its N bars" name anywhere; a focused lineage entry still lights the bars it covers (the Score\'s own lighting is not the bracket)', async () => {
+  for (const bars of [8, 1]) {
+    const r = rig({ phrase: phraseText({ bars }) });
+    await r.handle.load(); await flush();
+    assert.ok(r.q('.forge-phrase-bracket') === null, `${bars} bars: no bracket element`);
+    const score = r.q('.forge-rhythm-edit-score');
+    assert.equal(score.nextElementSibling.className, 'forge-phrase-controls', `${bars} bars: the controls strip follows the Score directly`);
+    assert.equal(r.qa('button, [role="button"]').filter((b) => /^Open phrase_001: its \d+ bars?$/.test(accessibleName(b) ?? '')).length, 0, 'no control is named "Open phrase_001: its N bars"');
+    assert.doesNotMatch(visibleText(r.parent), /phrase_001 · \d+ bars?/, 'the "name · N bars" text is not on the page');
+    assert.doesNotMatch(r.parent.textContent ?? '', /Open phrase_001: its/, 'nor in a hidden name');
+  }
   const bad = rig({ phrase: phraseText({ bars: 99 }) });
   await bad.handle.load(); await flush();
-  assert.equal(bad.q('.forge-phrase-bracket').style.display, 'none');
+  assert.ok(bad.q('.forge-phrase-bracket') === null, 'a refused phrase has no bracket either');
 });
 
 test('FROM THE PHRASE BACK: the source in the strip is a link to bar_005 with its own accessible name; invalid phrase: the link is disabled', async () => {
@@ -203,19 +188,17 @@ test('FRESHNESS: a changed parameter redraws and the stack follows the NEW phras
   assert.deepEqual(r.qa('g.measure').map((g) => g.id), ['ph_bar_1', 'ph_bar_2', 'ph_bar_3', 'ph_bar_4']);
   r.fire(r.q('#ph_bar_2'), 'click');
   assert.deepEqual(r.stack().slice(0, 2), ['bar 2 of 4', 'made by phrase_001 (extend, speeding up 30 %, style repeat_with_fills)']);
-  assert.equal(visibleText(r.q('.forge-phrase-bracket')), 'phrase_001 · 4 bars');
 });
 
-test('WITHOUT the inspector port the tab is exactly the M5 tab: no bracket, no inspector, the source is plain text, bars carry no ids', async () => {
+test('WITHOUT the inspector port the tab is exactly the M5 tab: no inspector, the source is plain text, bars carry no ids', async () => {
   const r = rig({ inspector: false });
   await r.handle.load(); await flush();
-  assert.equal(r.q('.forge-phrase-bracket'), null);
   assert.equal(r.q('.forge-inspector'), null);
   assert.equal(r.q('.forge-phrase-source').tagName, 'SPAN');
   assert.deepEqual(r.qa('g.measure').map((g) => g.id), ['', '', '', '', '', '', '', '']);
 });
 
-test('dispose removes the bracket and the inspector with the rest', async () => {
+test('dispose removes the inspector with the rest', async () => {
   const r = rig();
   await r.handle.load(); await flush();
   r.handle.dispose();
@@ -250,7 +233,7 @@ test('P3: the BAR inspector (no phrase options) is exactly what it was: its hint
 });
 
 
-test('2300: the phrase tab lights bars with the BAND (visible whatever the stylesheet or theme does): a pin, the fan and the bracket (by focus) each put a band in the right bars, the pointer resting puts none, and the others are dimmed while one is pinned', async () => {
+test('2300: the phrase tab lights bars with the BAND (visible whatever the stylesheet or theme does): a pin and the fan (by focus) each put a band in the right bars, the pointer resting puts none, and the others are dimmed while one is pinned', async () => {
   const r = rig();
   await r.handle.load(); await flush();
   const bands = () => r.qa('.forge-artifact-band').map((b: any) => b.parentElement.id);
@@ -267,10 +250,6 @@ test('2300: the phrase tab lights bars with the BAND (visible whatever the style
   assert.equal(bands().length, 8, 'the fan: every bar');
   lis[2].dispatchEvent(new r.win.Event('blur'));
   assert.deepEqual(bands(), ['ph_bar_3']);
-  const b = r.q('.forge-phrase-bracket'); r.fire(b, 'mouseenter');
-  assert.deepEqual(bands(), ['ph_bar_3'], 'the pointer on the bracket puts no band');
-  b.dispatchEvent(new r.win.Event('focus'));
-  assert.equal(bands().length, 8, 'the bracket');
 });
 
 test('2300 P3: the BAR inspector (no band option) inserts no band and dims nothing', async () => {

@@ -15,6 +15,7 @@ import { installHostClock, iterateAllLeavesLikeObsidian } from './test-support/h
 import { loadRealOnload } from './test-support/real-onload.ts';
 import { realNoteAt } from './test-support/score-first-notes.ts';
 import { ARRANGEMENT_VIEW_TYPE, newArrangementNote, readArrangementNote } from './arrangement-core.ts';
+import { emptyArrangementNote, isEmptyNote } from './empty-note-core.ts';
 import { newKitNote, readKitNote } from './kit-core.ts';
 
 /** 2026-11-02-1155 (M16b, deliberate): a STALE derived Python that nobody edited (what an older plugin version wrote): the text changed AND `python_hash` re-stamped to it, so the note does not read as a hand edit (a hand-edited Python is a source now and a refresh refuses it). */
@@ -94,7 +95,7 @@ for (const edition of ['lean', 'music'] as const) {
     };
   }
 
-  test(`[${edition}] a score-first vault: the three commands and the arrangement view are registered; "New kit" is offered, "New arrangement" only when there is a kit AND a phrase, "Open arrangement as Score" only on an arrangement note`, async () => {
+  test(`[${edition}] a score-first vault: the three commands and the arrangement view are registered; "New kit" is offered, "New arrangement" in every music vault (an empty note needs no kit and no phrase first), "Open arrangement as Score" only on an arrangement note`, async () => {
     const w = await world(SCORE_FIRST_TOML);
     try {
       assert.equal(w.plugin.commands.get(NEW_KIT)?.name, 'New kit');
@@ -102,14 +103,14 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(w.plugin.commands.get(OPEN_ARR)?.name, 'Open arrangement as Score');
       assert.ok(w.plugin.views.has(ARRANGEMENT_VIEW_TYPE), 'the arrangement view type is registered');
       assert.equal(w.offered(NEW_KIT), true);
-      assert.equal(w.offered(NEW_ARR), false, 'no kit and no phrase yet: nothing to arrange');
+      assert.equal(w.offered(NEW_ARR), true, 'no kit and no phrase yet: still offered (2026-11-19-0960: it makes an EMPTY note)');
       assert.equal(w.offered(OPEN_ARR), false);
       w.setActive('arrangements/arr_001.md');
       assert.equal(w.offered(OPEN_ARR), true, 'on an arrangement note');
       for (const p of ['arrangements/README.md', 'phrases/phrase_001.md', 'kits/rock.md', null]) { w.setActive(p); assert.equal(w.offered(OPEN_ARR), false, String(p)); }
     } finally { w.done(); }
     const some = await world(SCORE_FIRST_TOML, { 'kits/rock.md': newKitNote({ kind: 'kit', name: 'rock', channels: ['kick'] }), 'phrases/phrase_001.md': realNoteAt('phrases/phrase_001.md') });
-    try { assert.equal(some.offered(NEW_ARR), true, 'a kit and a phrase: offered'); } finally { some.done(); }
+    try { assert.equal(some.offered(NEW_ARR), true, 'offered'); } finally { some.done(); }
   });
 
   for (const [label, toml] of [['the tutorial vault (no profile)', TUTORIAL_TOML], ['music-theory (no profile)', MUSIC_THEORY_TOML], ['a vault with no forge.toml', null]] as const) {
@@ -158,28 +159,17 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
-  test(`[${edition}] "New arrangement" on the real wiring: arrangements/ is made, arr_001 reads back to the two tracks, the evidence line is printed and the note opens in the ARRANGEMENT tab`, async () => {
-    const rock = newKitNote({ kind: 'kit', name: 'rock', channels: ['kick', 'snare', 'hihat'] });
-    const latin = newKitNote({ kind: 'kit', name: 'latin', channels: ['bell', 'claves', 'conga_high', 'conga_low'] });
-    const w = await world(SCORE_FIRST_TOML, { 'kits/rock.md': rock, 'kits/latin.md': latin, 'bars/bar_005.md': realNoteAt('bars/bar_005.md'), 'phrases/phrase_003.md': realNoteAt('phrases/phrase_003.md'), 'phrases/phrase_009.md': realNoteAt('phrases/phrase_009.md'), 'phrases/README.md': 'x' });
+  test(`[${edition}] "New arrangement" on the real wiring (2026-11-19-0960): NO dialog; arrangements/ is made and arr_001 is written EMPTY at once (no kit, no phrase, no tracks), the evidence line is printed and the note opens in the ARRANGEMENT tab`, async () => {
+    const w = await world(SCORE_FIRST_TOML, { 'bars/bar_005.md': realNoteAt('bars/bar_005.md'), 'phrases/README.md': 'x' });
     try {
-      await w.run(NEW_ARR);
-      assert.equal(w.q('h3').textContent, 'New arrangement');
-      const phraseOptions = [...w.q('.forge-arr-phrase').options].map((o: any) => o.value);
-      assert.deepEqual(phraseOptions, ['phrase_003', 'phrase_009'], 'the vault\'s phrases, never README');
-      w.click(w.q('.forge-arr-add'));
-      const rows = [...w.modals[0].contentEl.querySelectorAll('.forge-arr-track')];
-      rows[0].querySelector('.forge-arr-phrase').value = 'phrase_003';
-      rows[1].querySelector('.forge-arr-phrase').value = 'phrase_009';
-      w.click(w.q('.forge-arr-create')); await w.flush();
+      await w.run(NEW_ARR); await w.flush();
+      assert.equal(w.modals.length, 0, 'no dialog opened');
       assert.deepEqual(w.madeFolders, ['arrangements']);
       assert.deepEqual(w.created.map(([p]) => p), ['arrangements/arr_001.md']);
-      const read = readArrangementNote(w.created[0][1]);
-      assert.ok(read.ok);
-      if (read.ok) assert.deepEqual(read.value.tracks, [{ kit: 'latin', phrase: 'phrase_003' }, { kit: 'rock', phrase: 'phrase_009' }]);
-      assert.deepEqual(w.lines.filter((l) => l.startsWith('[forge-arrangement]')), ['[forge-arrangement] created arrangements/arr_001.md tracks=phrase_003@latin,phrase_009@rock']);
+      assert.equal(w.created[0][1], emptyArrangementNote('arr_001'));
+      assert.ok(isEmptyNote(w.created[0][1])); assert.equal(readArrangementNote(w.created[0][1]).ok, false, 'no tracks yet: its first sentence makes them');
+      assert.deepEqual(w.lines.filter((l) => l.startsWith('[forge-arrangement]')), ['[forge-arrangement] created arrangements/arr_001.md (empty)']);
       assert.deepEqual(w.leaves.flatMap((l) => l.states).map((s: any) => [s.type, s.state.file]), [[ARRANGEMENT_VIEW_TYPE, 'arrangements/arr_001.md']]);
-      assert.equal(w.modals[0].closed, true);
     } finally { w.done(); }
   });
 

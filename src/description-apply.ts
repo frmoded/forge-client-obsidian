@@ -21,11 +21,12 @@ import { readCompositionNote } from './composition-core.ts';
 import { phraseDescription, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { describe } from './phrase-describe-core.ts';
 import { extractDescription } from './v2-note-core.ts';
-import { readPhraseKind, type PhraseParams } from './phrase-core.ts';
+import type { PhraseParams } from './phrase-core.ts';
 import type { PromptBoxHandle } from './prompt-box-dom.ts';
 import { mountChatPanel, type ChatPanelHandle } from './chat-panel-dom.ts';
 import { append, expireOpen, fromOutcome, memoryStore, openSuggestion, resolveSuggestion, type DialogEntry, type DialogEvent, type DialogStore } from './dialog-core.ts';
-import { placeholderFor, replaceDescriptionSection } from './prompt-box-core.ts';
+import { replaceDescriptionSection } from './prompt-box-core.ts';
+import { isEmptyNote } from './empty-note-core.ts';
 import type { ComposerMenuItem, PreviewResult } from './prompt-box-dom.ts';
 import type { Proposal } from './composer-core.ts';
 
@@ -181,7 +182,6 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   // ---- 2026-11-12-1203: the docked prompt box. An EDITOR VIEW of the Description facet on a score tab (the note on disk stays the only source of truth); the controls' writes reach it through the vault's `modify`.
   const boxes = new Map<HTMLElement, { path: string; handle: PromptBoxHandle; chat: ChatPanelHandle }>();
   const descriptionOf = async (path: string): Promise<string | null> => { try { return extractDescription(await ports.read(path)); } catch { return null; } };
-  const boxKind = (text: string, family: Family): string => (family === 'phrase' ? readPhraseKind(text) ?? 'mix' : family);
   const syncBoxes = (): void => {
     if (disposed) return;
     const live = new Set<HTMLElement>();
@@ -199,7 +199,6 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         if (!lastText.has(path)) lastText.set(path, note);                                                // 2026-11-13-1214: the text the first control change is compared with
         const chat = mountChatPanel(contentEl, {
           box: {
-            placeholder: placeholderFor(boxKind(note, family)),
             preview: (text) => previewFromBox(path, text),
             apply: (text, proposal) => applyProposal(path, text, proposal),
             cancel: () => { cancelledAsk.add(path); },
@@ -213,6 +212,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
         const handle = chat.box;
         boxes.set(contentEl, { path, handle, chat });
         drawDialog(path);
+        if (isEmptyNote(note)) handle.focus();                                                                // 2026-11-19-0960: a NEW note is empty: the tab opens with the composer focused and nothing else to do
         pb(`box mounted: ${basename(path)} family=${family} askPlan=${ports.askPlan === undefined ? 'absent' : 'present'} configured=${ports.configured === undefined ? 'unset' : String(ports.configured())}`);       // 2026-11-13-1211: the first line the driver sees on opening a tab: this build is live and the service gate says what it will do before Apply is pressed
       })();
     }

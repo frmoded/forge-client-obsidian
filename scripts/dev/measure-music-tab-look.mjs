@@ -55,7 +55,7 @@ window.events = []; var playing = false, ls = [];
 var player = { get playing() { return playing; }, start() { playing = true; ls.forEach(function (l) { l(true); }); }, stop() { playing = false; ls.forEach(function (l) { l(false); }); }, reset() { playing = false; }, setTempo(p) {}, onStateChange(fn) { ls.push(fn); return function () {}; } };
 cp.mountScoreTransport(document.getElementById('tb'), { player: player, exportItems: [{ id: 'musicxml', label: 'MusicXML' }, { id: 'midi', label: 'MIDI' }], runExport: function () {} });
 window.entries = []; window.store = cp.memoryStore();
-window.h = cp.mountChatPanel(document.getElementById('host'), { store: store, box: { placeholder: 'Describe what you want, in a sentence', preview: async function () { return { ok: false, message: 'x' }; }, apply: async function () { return { ok: false }; },
+window.h = cp.mountChatPanel(document.getElementById('host'), { store: store, box: { preview: async function () { return { ok: false, message: 'x' }; }, apply: async function () { return { ok: false }; },
   menu: { items: [{ id: 'new-bar', label: 'New bar' }], run: function () {} } } }, 'Mix [[bar_005]] and [[bar_006]].');
 window.say = function (ev, ageMs) { entries = cp.append(entries, cp.fromOutcome(ev), Date.now() - ageMs); h.render(entries, ''); };
 window.box = function (sel) { var e = document.querySelector(sel); if (!e) return null; var r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, left: r.left, right: r.right, top: r.top, bottom: r.bottom, w: r.width, h: r.height }; };

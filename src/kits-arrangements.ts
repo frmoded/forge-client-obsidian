@@ -12,7 +12,7 @@ import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, runCustomPythonViaEngine } from './phrase-engine.ts';
 import { phraseDepsWithSources } from './composition-core.ts';
-import { PHRASE_FOLDER, isPhrasePath } from './phrase-core.ts';
+import { isPhrasePath } from './phrase-core.ts';
 import { attachScoreArea, type ScoreArea } from './live-score-dom.ts';
 import { messageDelivery } from './score-first-messages-core.ts';
 import { SCORE_ZOOM_LEVELS, createZoomMemory } from './zoom-memory-core.ts';
@@ -25,13 +25,13 @@ import { phraseNoteId } from './phrase-lineage-core.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
 import { barsOfPayload } from './phrase-core.ts';
-import { KIT_FOLDER, isKitPath } from './kit-core.ts';
-import { NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMAND_ID, NEW_KIT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_ID, OPEN_ARRANGEMENT_COMMAND_NAME, createArrangement, createKit, newArrangementAvailable, newKitAvailable, openArrangementAvailable, type CreatePorts } from './kit-arrangement-flow-core.ts';
+import { isKitPath } from './kit-core.ts';
+import { NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMAND_ID, NEW_KIT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_ID, OPEN_ARRANGEMENT_COMMAND_NAME, createEmptyArrangement, createKit, newArrangementAvailable, newKitAvailable, openArrangementAvailable, type CreatePorts } from './kit-arrangement-flow-core.ts';
 import { mountKitDialog } from './kit-dom.ts';
-import { mountArrangementDialog } from './arrangement-dom.ts';
 import { mountArrangementStrip, type ArrangementStrip } from './arrangement-strip-dom.ts';
 import { setControlsOff } from './custom-controls-off-dom.ts';
 import { isCustomNote } from './phrase-notes-core.ts';
+import { isEmptyNote } from './empty-note-core.ts';
 import { mountArrangementControls, type ArrangementControls } from './arrangement-controls-dom.ts';
 import type { PhraseStructureHooks } from './phrase-view.ts';
 
@@ -180,6 +180,7 @@ export class ArrangementView extends EditableFileView {
 
   private headerText(file: TFile, text: string | { unreadable: string }, tempo?: { from: number; to: number }): string {
     if (typeof text !== 'string') return `${file.basename}: the note could not be read (${text.unreadable}).`;
+    if (isEmptyNote(text)) return '';                       // 2026-11-19-0960: a new note has no sentence yet: the header says nothing
     const read = readArrangementNote(text);
     return read.ok === false ? `${file.basename}: ${read.message}` : stripLinks(arrangementDescription(file.basename, read.value, tempo));
   }
@@ -337,7 +338,6 @@ export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangemen
     trace: (line) => { console.info(line); },
     isAlreadyExists: isFileExistsError,
   });
-  const names = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`) && f.extension === 'md' && f.basename !== 'README').map((f) => f.basename).sort();
 
   plugin.addCommand({
     id: NEW_KIT_COMMAND_ID,
@@ -357,13 +357,8 @@ export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangemen
     name: NEW_ARRANGEMENT_COMMAND_NAME,
     icon: ICON_ARRANGEMENT,
     checkCallback: (checking: boolean) => {
-      const kits = names(KIT_FOLDER);
-      const phrases = names(PHRASE_FOLDER);
-      if (!newArrangementAvailable({ scoreFirst: opts.scoreFirst(), kitCount: kits.length, phraseCount: phrases.length })) return false;
-      if (!checking) {
-        const arrPorts = ports((file) => openArrangement(app, file));
-        new DialogModal(app, (parent, close) => mountArrangementDialog(parent, { kits, phrases, create: (tracks) => createArrangement(arrPorts, tracks), close })).open();
-      }
+      if (!newArrangementAvailable({ scoreFirst: opts.scoreFirst() })) return false;
+      if (!checking) void createEmptyArrangement(ports((file) => openArrangement(app, file)));          // 2026-11-19-0960: an EMPTY arrangement, opened at once (no dialog): its first sentence makes the tracks
       return true;
     },
   });

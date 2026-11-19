@@ -1,6 +1,6 @@
 // 2026-11-03-1155-93 (score_first polish R6) - "in Score mode the Score is always the first thing in the tab", on the REAL wiring, both editions: the real ForgePlugin.onload from the real bundle, the real PhraseView, ArrangementView and
 // CompositionView built by the factories it registered, over an in-memory vault, with an engine that NEVER answers (so what is measured is the tab as it is built, before any Score exists). What this proves: in every score-first tab kind the Score
-// panel (the lean edition's one line in its place) is the first child, the parts that used to be above it (the controls, the chips, the header, the tree, the bracket, the notebook) come after it; the description banner is the one thing that may
+// panel (the lean edition's one line in its place) is the first child, the parts that used to be above it (the controls, the chips, the header, the tree, the notebook) come after it; the description banner is the one thing that may
 // stand above it, and stays above it when it comes and goes and when a phrase rebuilds itself for a new kind; a comparator that said "first" for the old order would fail its CONTROL. It pins the MECHANISM (every attachScoreArea call asks for `first`;
 // the Score slot is found by the banner's class); if the design moves this SHOULD go red - reassess, do not just rewrite. The Beat Box tab is built by RhythmEditView (not buildable under happy-dom: a blob-URL iframe); its order is pinned at the
 // slot (live-score-dom.test.ts: a parent that already holds the iframe gets the Score before it) and measured in real Chrome (scripts/dev/measure-score-order.ts).
@@ -40,7 +40,7 @@ const FILES: Record<string, string> = {
 
 /** The role of one direct child of a tab's pane. Anything that is none of these is reported as `other:<class>` so a new part cannot hide. */
 const ROLES: Array<[string, string]> = [
-  ['banner', 'forge-description-bar'], ['score', 'forge-rhythm-edit-score'], ['bracket', 'forge-phrase-bracket'], ['controls', 'forge-phrase-controls'], ['arrangement-controls', 'forge-arr-controls'],
+  ['banner', 'forge-description-bar'], ['score', 'forge-rhythm-edit-score'], ['controls', 'forge-phrase-controls'], ['arrangement-controls', 'forge-arr-controls'],
   ['chips', 'forge-structure-strip'], ['tree', 'forge-composition-tree'], ['notebook', 'forge-notebook'], ['arrangement-header', 'forge-arrangement-header'], ['composition-header', 'forge-composition-header'], ['pin', 'forge-arrangement-pin'],
 ];
 // 2026-11-13-1214 (rewritten: it read the tab's direct children): the tab's content is now the chat body (everything the tab drew, in its order) and the panel (the dialog and the box, a sibling below, not a part of the order); the roles are read through the body
@@ -50,11 +50,11 @@ const rolesOf = (el: any): string[] => partsOf(el).map((c: any) => ROLES.find(([
 const scoreFirst = (roles: string[]): boolean => roles.includes('score') && roles.slice(0, roles.indexOf('score')).every((r) => r === 'banner');
 
 test('the comparator: the OLD order of every tab kind is "not first", and a banner above the Score is allowed (the CONTROL: it can say no)', () => {
-  assert.equal(scoreFirst(['controls', 'bracket', 'chips', 'score', 'notebook']), false, 'phrase, old');
+  assert.equal(scoreFirst(['controls', 'chips', 'score', 'notebook']), false, 'phrase, old');
   assert.equal(scoreFirst(['arrangement-header', 'pin', 'chips', 'arrangement-controls', 'score']), false, 'arrangement, old');
   assert.equal(scoreFirst(['composition-header', 'tree', 'score']), false, 'composition, old');
   assert.equal(scoreFirst(['banner', 'controls', 'score']), false, 'a banner does not excuse the controls above');
-  assert.equal(scoreFirst(['score', 'bracket', 'controls', 'chips', 'notebook']), true);
+  assert.equal(scoreFirst(['score', 'controls', 'chips', 'notebook']), true);
   assert.equal(scoreFirst(['banner', 'score', 'controls']), true, 'the banner may stand above the Score');
   assert.equal(scoreFirst(['controls']), false, 'no Score at all is not "first"');
 });
@@ -122,16 +122,16 @@ for (const edition of ['lean', 'music'] as const) {
     };
   }
 
-  test(`[${edition}] the phrase tab: the Score is the first child, then its bracket, the controls and the rest (nothing the tab had above the Score is above it any more)`, async () => {
+  test(`[${edition}] the phrase tab: the Score is the first child, then the controls and the rest (no bracket since 2026-11-19-0950; nothing the tab had above the Score is above it any more)`, async () => {
     const w = await world();
     try {
       const { el } = await w.open(PHRASE_VIEW_TYPE, PHRASE);
       const roles = rolesOf(el);
       assert.ok(scoreFirst(roles), roles.join(' > '));
       assert.equal(roles[0], 'score');
-      assert.equal(roles[1], 'bracket', 'the bracket sits directly under the Score it brackets');
-      assert.equal(roles[2], 'controls');
-      assert.ok(roles.length >= 3, 'non-vacuity: the tab has parts besides the Score, so "first" says something: ' + roles.join(' > '));
+      assert.equal(roles[1], 'controls', 'the controls strip sits directly under the Score (2026-11-19-0950: no purple bracket between them)');
+      assert.ok(el.querySelector('.forge-phrase-bracket') === null, 'no bracket element');
+      assert.ok(roles.length >= 2, 'non-vacuity: the tab has parts besides the Score, so "first" says something: ' + roles.join(' > '));
       assert.deepEqual(roles.filter((r) => r.startsWith('other:')), [], 'every part of the tab is a known role');
       if (edition === 'lean') assert.ok(el.children[0].classList.contains('forge-rhythm-edit-score-lean'), 'the lean edition\'s one line is what stands first');
     } finally { w.done(); }
@@ -178,17 +178,16 @@ for (const edition of ['lean', 'music'] as const) {
       assert.equal(roles[0], 'banner', 'the banner is still on top after the rebuild: ' + roles.join(' > '));
       assert.equal(roles[1], 'score', 'and the Score is first under it, not last: ' + roles.join(' > '));
       assert.equal(roles[2], 'controls', 'then the mix strip');
-      assert.equal(roles.includes('bracket'), false, 'a mix has no bracket');
       bar.dispose();
       roles = rolesOf(el);
       assert.equal(roles[0], 'score', 'the banner goes: the Score is first: ' + roles.join(' > '));
     } finally { w.done(); }
   });
 
-  // ---- 2026-11-15-1217: the two switches, at their DEFAULT (both off) on the real wiring: a music tab shows the Score (and what points: the bracket, the chips, the tree), none of the strips that input a value, no notebook, no inspector box ----
+  // ---- 2026-11-15-1217: the two switches, at their DEFAULT (both off) on the real wiring: a music tab shows the Score (and what points: the chips, the tree), none of the strips that input a value, no notebook, no inspector box ----
   const INPUTS = '.forge-phrase-controls, .forge-mix-controls, .forge-morph-controls, .forge-arr-controls, .forge-notebook, .forge-phrase-bars, .forge-phrase-style, .forge-phrase-pct';
   const INSPECTOR_BOX = '.forge-inspector-title, .forge-inspector-body, .forge-inspector-notes';
-  test(`[${edition}] DEFAULT (both switches off): the phrase tab is the Score and its bracket - no strip that inputs a value is in the DOM, for an extend, a mix and a morph`, async () => {
+  test(`[${edition}] DEFAULT (both switches off): the phrase tab is the Score alone - no strip that inputs a value is in the DOM, for an extend, a mix and a morph`, async () => {
     const w = await world(false);
     try {
       for (const [path, text] of [[PHRASE, noteContentFor('phrase_003', extend('bar_007', 4))], ['phrases/phrase_010.md', noteContentFor('phrase_010', MIX)], ['phrases/phrase_011.md', noteContentFor('phrase_011', { kind: 'morph', a: 'bar_007', b: 'bar_008', bars: 4, order: 'musical', seed: 0 })]] as const) {

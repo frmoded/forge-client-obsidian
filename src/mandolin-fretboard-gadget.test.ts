@@ -481,11 +481,13 @@ test('CONTROL: the clef and row checks can fail - the old stroke clef, a clef of
 
 // ---- 2026-11-11-1197 (band re-measured by 1199): the mandolin page embeds the gadget tall enough for the score ----------------------------------------------------------------------------
 const PAGE = path.join(ROOT, 'assets/vaults/music-theory/music_instruments/mandolin.md');
-test('the mandolin page embeds the gadget at a height that holds the tallest score (pins a MEASURED value, real Chrome 2026-11-12: 405 with G3 and G6 held at a 800-wide mount, one control row; allowed band 405..465; if the gadget changes height this SHOULD go red - re-measure, do not just rewrite)', () => {
+test('the mandolin page embeds the gadget at a height that holds the tallest score (pins a MEASURED value, real Chrome 2026-11-12: 405 with G3 and G6 held at a 800-wide mount, one control row; allowed band 405..465 bare, 484..544 with the caption block of 2026-11-19-0955; if the gadget changes height this SHOULD go red - re-measure, do not just rewrite)', () => {
   const m = /```html-embed\n(\S+mandolin_fretboard\.html)\n(\d+)\n```/.exec(fs.readFileSync(PAGE, 'utf8'));
   assert.ok(m, 'the page embeds mandolin_fretboard.html with a height line');
-  assert.ok(+m![2] >= 405, `embed height ${m![2]} would clip the staff (tallest measured: 405)`);
-  assert.ok(+m![2] <= 465, `embed height ${m![2]} leaves a large blank (tallest measured: 405)`);
+  // 2026-11-19-0955: the gadget now carries its caption (a 79 px block at 800 px, 96 px at 360, measured in real Chrome by scripts/dev/measure-captions.mjs): the tallest state is the 405 measured on 2026-11-12 PLUS that block (484; the state itself was not re-measured with the caption), and the band keeps its 60 px of slack
+  const TALLEST = 405 + 79;
+  assert.ok(+m![2] >= TALLEST, `embed height ${m![2]} would clip the staff or the caption (tallest: ${TALLEST} = 405 + the 79 px caption block)`);
+  assert.ok(+m![2] <= TALLEST + 60, `embed height ${m![2]} leaves a large blank (tallest: ${TALLEST})`);
 });
 
 // ---- P3: the other gadgets are untouched --------------------------------------------------------------------------------------------------------------------

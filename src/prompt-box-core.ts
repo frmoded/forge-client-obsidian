@@ -1,8 +1,6 @@
 // 2026-11-12-1203 - the docked prompt box: the pure part (no Obsidian, no DOM). The box is an EDITOR VIEW of a note's Description facet; the Description on disk stays the only source of truth, so the box holds three things and
 // nothing else: `disk` (the Description as the note says it now), `text` (what the field shows), and `base` (the disk text the person's typing started from, to tell "the controls changed the Description while I was typing" from
 // "nothing happened"). `conflict` is true while the person has unapplied typing AND the Description on disk changed under it: nothing is overwritten, the box offers "Keep my text" / "Use the new one".
-import { describe } from './phrase-describe-core.ts';
-
 export interface BoxState { disk: string; text: string; base: string; conflict: boolean }
 
 export const initBox = (disk: string): BoxState => ({ disk, text: disk, base: disk, conflict: false });
@@ -40,18 +38,4 @@ export function replaceDescriptionSection(body: string, sentence: string): strin
   const after = next ? tail.slice(next.index) : '';
   const text = sentence.replace(/^\s+/, '').replace(/\s+$/, '');
   return body.slice(0, headEnd) + '\n\n' + text + '\n' + (after.length > 0 ? '\n' + after : '');
-}
-
-/** One example Description per kind of note (the sentences the grammar itself writes, from `describe`), shown as the placeholder when the field is empty. */
-const EXAMPLES: Record<string, Parameters<typeof describe>[0]> = {
-  extend: { kind: 'extend', source: 'bar_005', bars: 8, style: 'repeat_with_fills', tempo_change_pct: 0 },
-  mix: { kind: 'mix', a: 'bar_005', b: 'bar_006', weight: 0.5, threshold: 0.5, ghost: false },
-  morph: { kind: 'morph', a: 'bar_005', b: 'bar_006', bars: 5, order: 'musical', seed: 0 },
-  transform: { kind: 'transform', source: 'phrase_001', ops: [{ op: 'thin_out', first: 3, last: 5, amount: 0.5 }] } as never,
-  arrangement: { kind: 'arrangement', tracks: [{ kit: 'kit_001', phrase: 'phrase_001' }] },
-  composition: { kind: 'composition', sections: [{ source: 'phrases/phrase_001' }] },
-};
-export function placeholderFor(kind: string): string {
-  const p = EXAMPLES[kind];
-  return `Describe it in a sentence, for example: ${p ? describe(p) : 'Mix [[bar_005]] and [[bar_006]], 50 percent [[bar_005]], as a vote.'}`;
 }

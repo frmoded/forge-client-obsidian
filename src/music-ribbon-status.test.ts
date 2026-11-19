@@ -87,7 +87,7 @@ test('THE "+ NEW" MENU: the same four actions with the same icons, titles, comma
   runNewMenuItem(newMenuItems()[0], { pluginId: 'forge-actions', runCommand: (id) => { ran.push(id); return true; }, notify: (m) => said.push(m) });
   assert.deepEqual(ran, ['forge-actions:new-phrase']); assert.deepEqual(said, []);
   runNewMenuItem(newMenuItems()[1], { pluginId: 'forge-actions', runCommand: () => false, notify: (m) => said.push(m) });
-  assert.match(said[0], /^New arrangement needs at least one kit and one phrase/);
+  assert.equal(said[0], 'New arrangement is not available right now.', '2026-11-19-0960 (deliberate): a new arrangement needs no kit and no phrase any more (it is created EMPTY), so the notice no longer tells a prerequisite; it is the ribbon\'s own sentence');
 });
 test('THE MENU\'S TABS: the phrase, the bar (Beat Box and Score), the arrangement and the composition tab, each once', () => {
   assert.deepEqual([...NEW_MENU_VIEW_TYPES].sort(), [PHRASE_VIEW_TYPE, RHYTHM_EDIT_VIEW_TYPE, RHYTHM_SCORE_VIEW_TYPE, ARRANGEMENT_VIEW_TYPE, COMPOSITION_VIEW_TYPE].sort());

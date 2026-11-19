@@ -15,7 +15,7 @@ import { installHostClock } from './test-support/host-workspace.ts';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const CSS = fs.readFileSync(path.join(ROOT, 'styles.css'), 'utf8');
 const win: any = new Window({ url: 'http://localhost/' });
-const BOX = { placeholder: 'x', preview: async () => ({ ok: false as const, message: 'x' }), apply: async () => ({ ok: false }) };
+const BOX = { preview: async () => ({ ok: false as const, message: 'x' }), apply: async () => ({ ok: false }) };
 const T0 = 1_800_000_000_000;
 
 // Obsidian's variables for a light theme (their defaults), and the same set with the error colour as pure red, so a stray `--text-error` would be caught as red

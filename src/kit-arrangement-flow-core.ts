@@ -1,7 +1,7 @@
 // score_first M10 slice 1 (drain 2026-10-29-0820) - what "New kit" and "New arrangement" DO once the person has chosen: validate, make the folder if the vault lacks it, pick a free name, write the note, print the evidence line, open it, say so. Pure: the
 // vault is injected (the Obsidian glue is kits-arrangements.ts; the choosing is kit-dom.ts / arrangement-dom.ts). Nothing here throws: every trouble is one sentence returned and shown. Score-first vaults only (the gates below; P3).
-import { ARRANGEMENT_FOLDER, arrangementCreatedLine, arrangementPath, nextArrangementName, newArrangementNote, validateArrangement, type ArrangementTrack } from './arrangement-core.ts';
-import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
+import { ARRANGEMENT_FOLDER, arrangementPath, nextArrangementName } from './arrangement-core.ts';
+import { emptyArrangementNote } from './empty-note-core.ts';
 import { KIT_FOLDER, freeKitName, kitCreatedLine, kitFromChoice, kitPath, newKitNote } from './kit-core.ts';
 
 export interface CreatePorts<F = unknown> {
@@ -14,8 +14,6 @@ export interface CreatePorts<F = unknown> {
   /** One evidence line (`[forge-kit] created ...`), printed as Info. */
   trace(line: string): void;
   isAlreadyExists(e: unknown): boolean;
-  /** 2026-10-31-1135: the engine checks the note BEFORE it is written (note-preflight-seam.ts). Absent = the installed one, if any. */
-  preflight?: NotePreflight;
 }
 export type CreateResult = { ok: true; path: string } | { ok: false; message: string };
 
@@ -56,24 +54,16 @@ export async function createKit<F>(ports: CreatePorts<F>, choice: { name: string
   }
 }
 
-export async function createArrangement<F>(ports: CreatePorts<F>, tracks: readonly ArrangementTrack[]): Promise<CreateResult> {
-  const valid = validateArrangement({ kind: 'arrangement', tracks: tracks.map((t) => ({ kit: t.kit, phrase: t.phrase })) });
-  if (valid.ok === false) return fail(ports, `New arrangement: ${valid.message}`);
+/** 2026-11-19-0960: "New arrangement" makes an EMPTY arrangement (no kit, no phrase, no tracks: its first sentence makes them) and opens it. Nothing to choose, nothing for the engine to draw. */
+export async function createEmptyArrangement<F>(ports: CreatePorts<F>): Promise<CreateResult> {
   try {
-    // 2026-10-31-1135 (CCQA smoke 10, B5): the engine draws the prospective note first; a refusal is one sentence and nothing is written (not the folder either)
-    const check = ports.preflight ?? installedNotePreflight();
-    if (check !== null) {
-      const first = nextArrangementName((p) => ports.exists(p));
-      const refusal = await check(arrangementPath(first), newArrangementNote(first, valid.value));
-      if (refusal !== null) return fail(ports, refusal);
-    }
     await ensureFolder(ports, ARRANGEMENT_FOLDER);
     const refused = new Set<string>();
     for (let tries = 0; tries < NAME_TRIES; tries++) {
       const name = nextArrangementName((p) => ports.exists(p) || refused.has(p));
       try {
-        const file = await ports.create(arrangementPath(name), newArrangementNote(name, valid.value));
-        ports.trace(arrangementCreatedLine(name, valid.value));
+        const file = await ports.create(arrangementPath(name), emptyArrangementNote(name));
+        ports.trace(`[forge-arrangement] created ${arrangementPath(name)} (empty)`);
         await ports.open(file);
         ports.notify(`Created ${arrangementPath(name)}.`);
         return { ok: true, path: arrangementPath(name) };
@@ -84,6 +74,7 @@ export async function createArrangement<F>(ports: CreatePorts<F>, tracks: readon
     }
     return fail(ports, 'New arrangement: could not find a free arrangement name.');
   } catch (e) {
+    console.error('createEmptyArrangement failed', e);
     return fail(ports, `New arrangement failed: ${msg(e)}`);
   }
 }
@@ -92,8 +83,8 @@ export async function createArrangement<F>(ports: CreatePorts<F>, tracks: readon
 
 /** "New kit" is offered in a score-first vault, nowhere else (P3). */
 export const newKitAvailable = (i: { scoreFirst: boolean }): boolean => i.scoreFirst;
-/** "New arrangement" needs something to arrange: at least one kit and one phrase. */
-export const newArrangementAvailable = (i: { scoreFirst: boolean; kitCount: number; phraseCount: number }): boolean => i.scoreFirst && i.kitCount > 0 && i.phraseCount > 0;
+/** "New arrangement" is offered in every score-first vault (2026-11-19-0960: it makes an EMPTY note, so it needs no kit and no phrase first). */
+export const newArrangementAvailable = (i: { scoreFirst: boolean }): boolean => i.scoreFirst;
 /** "Open arrangement as Score" is offered on an arrangement note in a score-first vault. */
 export const openArrangementAvailable = (i: { scoreFirst: boolean; activePath: string | null }): boolean => i.scoreFirst && i.activePath !== null && /^arrangements\/[^/]+\.md$/.test(i.activePath) && i.activePath !== `${ARRANGEMENT_FOLDER}/README.md`;
 
