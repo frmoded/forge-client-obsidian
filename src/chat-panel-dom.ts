@@ -164,6 +164,15 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
   const Observer = (doc.defaultView as unknown as { MutationObserver?: typeof MutationObserver } | null)?.MutationObserver;
   const watch = Observer ? new Observer(() => {
     if (disposed) return;
+    // 2026-11-19-0992c (P1: a bar's Beat Box tab showed the composer and NOTHING else): a tab that REBUILDS its content does `contentEl.empty()` (RhythmEditView.mount: when it opens, and again when it is asked to build a second time). With the panel already mounted
+    // that took the BODY and the PANEL out of the host, and everything the tab then drew (the Score, the Beat Box iframe) was moved by the loop below into the DETACHED body: the tab showed nothing, and the controller's next sync mounted a fresh, empty panel.
+    // So: when the body or the panel is no longer in the host, the tab has emptied its content. What the body still holds is the OLD render (the tab tore it down before it emptied: its iframe's blob is revoked, its Score disposed): it is dropped, the (now
+    // empty) body and the panel, with the composer's text and history, go back into the host, and the loop below adopts what the tab drew after the empty.
+    if (body.parentElement !== host || panel.parentElement !== host) {
+      while (body.firstChild) body.removeChild(body.firstChild);
+      host.insertBefore(body, host.firstChild);
+      host.appendChild(panel);
+    }
     for (const n of Array.from(host.childNodes)) {
       if (n === body || n === panel) continue;
       const kids = Array.from(host.childNodes);
