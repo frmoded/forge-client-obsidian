@@ -13,6 +13,7 @@ import { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 export { FORGE_COMPOSITION_KEY } from './composition-nav-core.ts';
 import { composeMismatchSentence } from './engine-refusal-core.ts';
 import { EMPTY_SOURCE, isEmptyNote } from './empty-note-core.ts';
+import { cacheWords, hasNoCacheFence } from './cache-fence-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { listDescriptionOf, produceArrangement, type ArrangementDeps } from './arrangement-core.ts';
 import type { RhythmData } from './rhythm-edit-core.ts';
@@ -208,8 +209,9 @@ export async function produceComposition(deps: CompositionDeps, note: string | {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Composition: the composition note could not be read (${note.unreadable}).` };
   if (isEmptyNote(note)) return { kind: 'refusal', message: '' };            // 2026-11-19-0960: a new note has no sentence yet: nothing to draw, nothing to say, nothing to ask the engine
   if (isCustomNote(note)) return produceCustomScore({ readNote: deps.phrases.readNote, runCustom: deps.phrases.runCustom, compute: deps.phrases.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
+  if (hasNoCacheFence(note)) return { kind: 'refusal', message: '' };         // 2026-11-19-0990: no json fence is a valid, empty note (its first sentence writes the cache)
   const read = readCompositionNote(note);
-  if (read.ok === false) return { kind: 'refusal', message: `Composition: ${read.message}` };
+  if (read.ok === false) { const words = cacheWords(read.message); return { kind: 'refusal', message: words === read.message ? `Composition: ${read.message}` : words }; }       // 2026-11-19-0990: a fence refusal is said in plain words
   const chain = deps.chain && deps.chain.length > 0 ? deps.chain : [`${COMPOSITION_FOLDER}/${title}`];
   const expanded = expandSections(read.value);
   const drawn = new Map<string, RhythmData[]>();

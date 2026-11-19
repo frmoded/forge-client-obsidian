@@ -7,6 +7,7 @@ import { Notice, type App, type TFile, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { readRhythmNote } from './rhythm-edit-core.ts';
+import { rhythmRefusalWords } from './note-score-core.ts';
 import { VIEW_TYPE_BY_MODE, transition, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
 
 export interface ModeSwitchHooks {
@@ -24,7 +25,7 @@ export async function switchLeafToMode(
   if (to !== 'json') {
     const note = readRhythmNote(await app.vault.read(file));
     if (note.ok === false) {
-      loggedNotice(`${to === 'score' ? 'Score' : 'Edit rhythm'}: ${note.message}`, 8000);
+      loggedNotice(rhythmRefusalWords(file.path, to === 'score' ? 'Score' : 'Edit rhythm', note.message), 8000);        // 2026-11-19-0990: a phrase, an arrangement or a composition is told what it is, never the bar gate's json-block sentence
       return;
     }
   }

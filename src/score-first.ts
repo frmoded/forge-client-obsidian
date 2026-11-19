@@ -24,7 +24,7 @@ import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPa
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, morphChangesViaEngine } from './phrase-engine.ts';
 import { installNotePreflight, makeNotePreflight } from './note-preflight-core.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
-import { ArrangementView, registerKitsAndArrangements } from './kits-arrangements.ts';
+import { ArrangementView, openArrangementInLeaf, registerKitsAndArrangements } from './kits-arrangements.ts';
 import { CompositionView, openCompositionInLeaf, registerCompositions } from './compositions.ts';
 import { ConfirmModal } from './confirm-modal.ts';
 import { createDescriptionController } from './description-apply.ts';
@@ -32,6 +32,9 @@ import { registerBarSelectionHost } from './bar-selection-bus.ts';
 import { offerRenameWatched } from './rename-offer.ts';
 import { onTitleClosed, type WrittenNote } from './new-note-cancel-core.ts';
 import { familyOfPath } from './description-apply-core.ts';
+import { SCORE_VIEW_TYPES, isScoreNotePath, scoreViewTypeOf } from './note-score-core.ts';
+import { hasNoCacheFence } from './cache-fence-core.ts';
+import { repairForOpen } from './note-open-repair-core.ts';
 import { isCompositionPath } from './composition-core.ts';
 import { isKitPath } from './kit-core.ts';
 import { isArrangementPath } from './arrangement-core.ts';
@@ -330,14 +333,14 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           const root = leaf.getRoot();
           const location = root === app.workspace.rootSplit ? 'main' : root === app.workspace.leftSplit || root === app.workspace.rightSplit ? 'sidebar' : 'other';
           const isPlainMarkdownView = leaf.view instanceof MarkdownView;
-          return { location, isPlainMarkdownView, filePath: isPlainMarkdownView ? (leaf.view as MarkdownView).file?.path ?? null : null };
+          return { location, isPlainMarkdownView, filePath: isPlainMarkdownView ? (leaf.view as MarkdownView).file?.path ?? null : null, reading: (leaf.getViewState().state as { mode?: unknown } | undefined)?.mode === 'preview' };
         },
         // popstate (an internal flag of setViewState, as in the Beat Box swap) keeps the swap out of the leaf's history, so Back does not land on text that is swapped again
         swapTo: async (leaf, path) => {
           const active = app.workspace.getActiveViewOfType(MarkdownView)?.leaf === leaf;
-          await leaf.setViewState({ type: PHRASE_VIEW_TYPE, active, state: { file: path }, popstate: true } as ViewState);
+          await leaf.setViewState({ type: scoreViewTypeOf(path) ?? PHRASE_VIEW_TYPE, active, state: { file: path }, popstate: true } as ViewState);        // 2026-11-19-0990: the Score of the note's own family (phrase, arrangement, composition)
         },
-        isSwapped: (leaf) => leaf.view.getViewType() === PHRASE_VIEW_TYPE,
+        isSwapped: (leaf) => SCORE_VIEW_TYPES.includes(leaf.view.getViewType()),
         sleep: (ms) => new Promise<void>((resolve) => { window.setTimeout(resolve, ms); }),
         trace: (line) => { console.info(line); },
         // one tab per phrase (2026-10-24-0900). Obsidian's explorer / link / quick switcher open a file with getLeaf(false).openFile(): they navigate the current tab and never look for a tab that already shows the note.
@@ -347,7 +350,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           app.workspace.iterateAllLeaves((l) => {
             if (found || l === self) return;
             const s = l.getViewState();
-            if ((s.type === PHRASE_VIEW_TYPE || s.type === 'markdown') && (s.state as { file?: unknown } | undefined)?.file === path) found = l;
+            if ((SCORE_VIEW_TYPES.includes(s.type) || s.type === 'markdown') && (s.state as { file?: unknown } | undefined)?.file === path) found = l;
           });
           return found;
         },
@@ -365,7 +368,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
             return null;
           }
           const file = (before.state as { file?: unknown } | undefined)?.file;
-          if (before.type === 'markdown' && typeof file === 'string' && isPhrasePath(file)) router.setMark(leaf, file, 'markdown');   // a phrase that was showing as text stays text (the choice was dropped when the leaf moved on)
+          if (before.type === 'markdown' && typeof file === 'string' && isScoreNotePath(file)) router.setMark(leaf, file, 'markdown');   // a phrase that was showing as text stays text (the choice was dropped when the leaf moved on)
           for (let attempt = 0; attempt < 4; attempt++) {
             await leaf.setViewState({ type: before.type, state: before.state, active: false, popstate: true } as ViewState);
             if (stateKey(leaf.getViewState()) === stateKey(before)) return { kind: 'restored' as const, other: typeof file === 'string' ? file : null };
@@ -423,7 +426,6 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         }
         if (!onNote()) throw new Error(`the notes pane did not move to ${path}`);
       };
-      const SCORE_VIEW_TYPES: readonly string[] = [PHRASE_VIEW_TYPE, ARRANGEMENT_VIEW_TYPE, COMPOSITION_VIEW_TYPE];
       const savedLeaves = (keep: (vs: ViewState) => boolean): Array<{ leaf: WorkspaceLeaf; path: string }> => {
         const out: Array<{ leaf: WorkspaceLeaf; path: string }> = [];
         for (const leaf of liveLeaves()) {
@@ -503,11 +505,21 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         trace: (line: string) => { console.info(line); },
         openPhrase: (path: string) => { const f = app.vault.getAbstractFileByPath(path); if (f instanceof TFile) void openPhrase(app, f); },
       });
+      // 2026-11-19-0990: a note with NO json cache is valid and empty; when it already says something (a Description list, a Recipe) its cache is computed before its Score is drawn, by the writers the controls use (note-open-repair-core.ts).
+      // Written only when there is something to repair (a note that has its cache is never touched by an open).
+      const prepareScoreNote = async (file: TFile): Promise<void> => {
+        const family = familyOfPath(file.path);
+        if (family === null || !hasNoCacheFence(await app.vault.read(file))) return;
+        const names = (folder: string): string[] => app.vault.getFiles().filter((f) => f.path.startsWith(`${folder}/`)).map((f) => f.basename).filter((n) => n !== 'README');
+        const vault = { bars: names(BAR_FOLDER_NAME), phrases: names(PHRASE_FOLDER), arrangements: names('arrangements'), compositions: names('compositions'), kits: names('kits') };
+        await app.vault.process(file, (current) => repairForOpen(current, file.basename, family, vault));
+        console.info(`[forge-open] computed the cache of ${file.path} (it had no json block)`);
+      };
       plugin.registerView(PHRASE_VIEW_TYPE, (leaf) => new PhraseView(leaf, plan, openNote, (l, path) => router.setMark(l, path, 'markdown'), (file) => { void turnMix(file); }, (l, pin) => { void linker.pinned(l, pin); }, structureHooks, notebookFor));
       // 2026-10-29-0820 (M10 slice 1): kits and arrangements. Registered here, inside the score-first gate, so no other vault gets a view, a command or a byte of it (P3).
-      registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, onPin: (l, pin) => { void linker.pinned(l, pin); } });
+      registerKitsAndArrangements(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, onPin: (l, pin) => { void linker.pinned(l, pin); }, onJson: (l, path) => router.setMark(l, path, 'markdown'), prepare: prepareScoreNote });
       // 2026-10-31-1100 (M17b): compositions, the root note of a piece. Registered here too, inside the score-first gate (P3). `pair` opens the notes pane beside a composition's Score (the pair machinery is defined below; it is called later).
-      registerCompositions(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, newCompositionPair: compositionBridge, notebookFor, onPin: (l, pin) => { void linker.pinned(l, pin); }, pair: (leaf, file) => openPair({ kind: 'composition', leaf, file }) });
+      registerCompositions(plugin, { plan, scoreFirst: () => scoreFirst, structure: structureHooks, openNote, newCompositionPair: compositionBridge, notebookFor, onPin: (l, pin) => { void linker.pinned(l, pin); }, pair: (leaf, file) => openPair({ kind: 'composition', leaf, file }), onJson: (l, path) => router.setMark(l, path, 'markdown'), prepare: prepareScoreNote });
       // 2026-11-05-1189: a bar's tab (its Beat Box or its Score) no longer shows the "used by:" chips above it (they were mounted here from the vault's resolved links, 2026-10-26-1270). The phrase, arrangement and composition tabs keep
       // their own strips: they are mounted by phrase-dom.ts and arrangement-strip-dom.ts, not from this file.
       // 2026-10-31-1120 (M15c, "Update from Description"): the person edits the Description of a phrase, arrangement or composition by hand; once they stop typing the note is updated from it (or the bar says where the sentence is wrong).
@@ -663,7 +675,12 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         },
       });
       // Open as Score is the person asking for the Score again: forget an earlier Open as JSON on that leaf
-      const openScore = (leaf: WorkspaceLeaf, file: TFile) => { router.setMark(leaf, file.path, null); return openPhraseInLeaf(app, leaf, file); };
+      // 2026-11-19-0990: the Score of the note's own family, in THIS leaf (a text tab of an arrangement or a composition has its "Open as Score" too)
+      const openScore = (leaf: WorkspaceLeaf, file: TFile) => {
+        router.setMark(leaf, file.path, null);
+        const family = familyOfPath(file.path);
+        return family === 'composition' ? openCompositionInLeaf(app, leaf, file) : family === 'arrangement' ? openArrangementInLeaf(app, leaf, file) : openPhraseInLeaf(app, leaf, file);
+      };
       // The tab the command acts on comes from the ACTIVE VIEW (never a leaf lookup), as the other palette commands do. A bar's tab is its Beat Box (or its Score): the most recent leaf, which is the one the palette was opened from.
       const pairTarget = (): { kind: PairSource; leaf: WorkspaceLeaf; file: TFile } | null => {
         const tab = app.workspace.getActiveViewOfType(PhraseView);

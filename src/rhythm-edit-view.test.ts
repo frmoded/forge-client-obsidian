@@ -148,7 +148,7 @@ test('no per-file memory: nothing in the view persists a view preference', () =>
 });
 
 test('the mode switch refuses (with a Notice naming why) before any pane switches: read_only, wrong type, wrong body', () => {
-  assert.match(switchSrc, /if \(to !== 'json'\) \{\s*const note = readRhythmNote\(await app\.vault\.read\(file\)\);\s*if \(note\.ok === false\) \{\s*loggedNotice\(`\$\{to === 'score' \? 'Score' : 'Edit rhythm'\}: \$\{note\.message\}`, 8000\);\s*return;/);
+  assert.match(switchSrc, /if \(to !== 'json'\) \{\s*const note = readRhythmNote\(await app\.vault\.read\(file\)\);\s*if \(note\.ok === false\) \{\s*loggedNotice\(rhythmRefusalWords\(file\.path, to === 'score' \? 'Score' : 'Edit rhythm', note\.message\), 8000\);[^\n]*\n\s*return;/);       // 2026-11-19-0990 (deliberate): a phrase, an arrangement or a composition is told what it is (note-score-core.ts rhythmRefusalWords); a bar keeps `Score: <the gate's words>` byte for byte
 });
 
 test('registration: main.ts registers the view, command and menus once, via registerRhythmEdit, lending it the setting and two vault-level actions', () => {

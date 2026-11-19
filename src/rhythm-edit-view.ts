@@ -34,6 +34,7 @@ import { musicEdition } from './music-edition-selected.ts';
 import { scoreClickPlays } from './score-click-policy.ts';
 import { RhythmScoreView } from './rhythm-score-view.ts';
 import { switchLeafToMode, type ModeSwitchHooks } from './rhythm-mode-switch.ts';
+import { rhythmRefusalWords } from './note-score-core.ts';
 import { MODE_ACTIONS, RHYTHM_SCORE_VIEW_TYPE, VIEW_TYPE_BY_MODE, headerActionsFor, type ModeMark, type RhythmMode } from './rhythm-mode-core.ts';
 import { headerActionShown } from './header-actions-core.ts';
 import { restoreNoteToLastCommit } from './restore-note-to-git.ts';
@@ -532,7 +533,7 @@ export function registerRhythmEdit(plugin: Plugin, base: Pick<RhythmEditHooks, '
           const file = view.file;
           // 2200: a button that outlived the profile answer (it was added while the answer was still unknown) must not send a phrase down the rhythm path and fail with "missing time signature":
           // in a score-first vault a phrase is not a bar, and it says so by name.
-          if (file && wantsPhraseHeader(messageDelivery.hasBeenScoreFirst(), file.path)) { loggedNotice('This is a phrase, not a bar: the Beat Box cannot open it. Use the "Open as Score" button of the phrase (or Cmd+P, "Open phrase as Score").'); return; }
+          if (file && wantsPhraseHeader(messageDelivery.hasBeenScoreFirst(), file.path)) { loggedNotice(rhythmRefusalWords(file.path, 'Beat Box', '')); return; }       // 2026-11-19-0990: said for the family the note is (a phrase, an arrangement, a composition)
           if (isCandidateFile(app, file)) void switchLeafToMode(app, view.leaf, file, 'json', a.mode, hooks);
         }));
         headerActions.set(view, els);

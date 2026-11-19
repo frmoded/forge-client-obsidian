@@ -438,7 +438,8 @@ for (const edition of ['lean', 'music'] as const) {
 test('MECHANISM PIN: the router is created after the profile gate; Open as Score forgets the JSON choice; Open as JSON tells the router before it switches the tab', () => {
   const sf = fs.readFileSync(path.join(ROOT, 'src/score-first.ts'), 'utf8');
   assert.ok(sf.indexOf('createPhraseRouter<') > sf.indexOf('const plan = scorePanelPlan') && sf.indexOf('createPhraseRouter<') < sf.indexOf('plugin.registerView(PHRASE_VIEW_TYPE'), 'created inside the gate, before the view factory that uses it');
-  assert.match(sf, /const openScore = \(leaf: WorkspaceLeaf, file: TFile\) => \{ router\.setMark\(leaf, file\.path, null\); return openPhraseInLeaf\(app, leaf, file\); \}/);
+  // 2026-11-19-0990 (deliberate, was: openScore = setMark(null) + openPhraseInLeaf): Open as Score forgets the JSON choice FIRST and then opens the Score of the note's own family (a composition and an arrangement have theirs too); the phrase's is still openPhraseInLeaf, still the only caller
+  assert.match(sf, /const openScore = \(leaf: WorkspaceLeaf, file: TFile\) => \{\s*router\.setMark\(leaf, file\.path, null\);\s*const family = familyOfPath\(file\.path\);\s*return family === 'composition' \? openCompositionInLeaf\(app, leaf, file\) : family === 'arrangement' \? openArrangementInLeaf\(app, leaf, file\) : openPhraseInLeaf\(app, leaf, file\);/);
   assert.equal((sf.match(/openPhraseInLeaf\(/g) ?? []).length, 1, 'the only caller is openScore');
   const pv = fs.readFileSync(path.join(ROOT, 'src/phrase-view.ts'), 'utf8');
   assert.ok(pv.indexOf('this.chooseJson?.(this.leaf, file.path)') > 0 && pv.indexOf('this.chooseJson?.(this.leaf, file.path)') < pv.indexOf("this.leaf.setViewState({ type: 'markdown'"), 'the mark is set BEFORE the switch');

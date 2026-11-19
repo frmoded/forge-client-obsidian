@@ -1,9 +1,12 @@
 // 2026-10-23-0630 — a phrase note opens as its Score by default in a score-first vault. The sibling of the Beat Box's default-view controller (rhythm-default-view-core.ts), kept apart because the
 // rules differ: only phrase notes, only a score-first vault, and a tab restored with the layout keeps its text. Pure: every Obsidian touch (the leaf's view, the swap, the clock) is injected.
 //
+// 2026-11-19-0990: the arrangement and the composition are routed the same way (the driver reopened a composition from the file list and got a plain note): `decidePhraseRoute` knows the three families (note-family-core.ts). The ONE difference: a tab
+// RESTORED with the layout that shows a PHRASE's text keeps it (unchanged, 2026-10-23-0630); a restored text tab of an arrangement or a composition comes up as its Score (the person's Open as Forge note is a mark in memory: a reload ends it).
+//
 // The person's choices are marks on a leaf, scoped to the file it shows ("Open as JSON" => markdown, until that leaf navigates to another file). The swap itself is a navigation the person did not
 // ask for, so it must never loop: a swapped leaf is no longer a markdown view, and a swap in progress is not entered twice.
-import { isPhrasePath } from './phrase-core.ts';
+import { familyOfPath } from './note-family-core.ts';
 
 export type PhraseLeafLocation = 'main' | 'sidebar' | 'other';
 
@@ -12,6 +15,8 @@ export interface PhraseLeafInfo {
   /** The leaf shows a plain markdown view (not a Score, not a canvas card, not a reading-mode embed). */
   isPlainMarkdownView: boolean;
   filePath: string | null;
+  /** 2026-11-19-0990: the leaf shows the note in READING mode (the notes pane of a pair is one). */
+  reading?: boolean;
 }
 
 export interface PhraseRouteInput {
@@ -26,6 +31,8 @@ export interface PhraseRouteInput {
   markBy?: 'person' | 'plugin';
   /** The file this leaf showed when the router was registered (a tab restored with the layout), if it still shows it. */
   restoredPath: string | null;
+  /** 2026-11-19-0990: the leaf shows the note in READING mode: a restored one is the notes pane of a pair (its Score is beside it), never a second Score. */
+  reading?: boolean;
 }
 
 export type PhraseRouteReason =
@@ -38,9 +45,10 @@ export function decidePhraseRoute(i: PhraseRouteInput): { swap: boolean; reason:
   if (i.location === 'other') return no('not-allowed-location');
   if (!i.isPlainMarkdownView) return no('not-markdown-view');
   if (i.filePath === null) return no('no-file');
-  if (!isPhrasePath(i.filePath)) return no('not-a-phrase');
+  const family = familyOfPath(i.filePath);
+  if (family === null) return no('not-a-phrase');
   if (i.mark === 'markdown') return no('chosen-json');
-  if (i.restoredPath === i.filePath) return no('layout-restore');
+  if (i.restoredPath === i.filePath && (family === 'phrase' || i.reading === true)) return no('layout-restore');
   return { swap: true, reason: 'score' };
 }
 
@@ -123,6 +131,7 @@ export function createPhraseRouter<L extends object>(ports: PhraseRouterPorts<L>
         filePath: path,
         mark: marks.get(leaf)?.mark ?? null,
         restoredPath: restored.get(leaf) ?? null,
+        ...(info.reading === true ? { reading: true } : {}),
       });
       if (!d.swap) {
         const why = d.reason === 'chosen-json' && marks.get(leaf)?.by === 'plugin' ? PLUGIN_JSON_WHY : JSON_WHY[d.reason];

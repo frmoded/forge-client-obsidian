@@ -11,6 +11,7 @@ import { extractPhraseJsonBlock, renderSourceChainNote } from './phrase-notes-co
 import { applyPhraseWrite, phraseWriteRefusal, type PhraseParams } from './phrase-core.ts';
 import { extractDescription } from './v2-note-core.ts';
 import { listAfterParams, parseList, render, type ListKind, type ParsedList } from './sentence-list-core.ts';
+import { withCacheFence } from './cache-fence-core.ts';
 
 /** The list a note's Description section holds (a numbered list, a legacy paragraph split into its sentences, or one legacy line). Reads only. */
 export function listOfNote(text: string, kind: ListKind, vault: GrammarVault): ParsedList {
@@ -23,7 +24,8 @@ export interface ListWrite { params: GrammarParams | null; list: readonly string
 const eolOf = (text: string): string => (text.includes('\r\n') ? '\r\n' : '\n');
 
 /** The note `text` with its Description, Recipe, Python, json cache, links and stamps made again from `replay`. `ok: false` says why (no json block: not one of our notes). */
-export function writeListNote(text: string, name: string, kind: ListKind, replay: ListWrite): { ok: true; text: string } | { ok: false; message: string } {
+export function writeListNote(note: string, name: string, kind: ListKind, replay: ListWrite): { ok: true; text: string } | { ok: false; message: string } {
+  const text = withCacheFence(note);                                     // 2026-11-19-0990: a note with no json fence is valid and empty: the first write gives it its (empty) cache first, then writes everything else as it always did
   const sentence = render(replay.list, eolOf(text));
   if (replay.params === null) {
     const block = extractPhraseJsonBlock(text);

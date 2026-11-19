@@ -696,9 +696,9 @@ for (const edition of ['lean', 'music'] as const) {
     assert.match(ka, /this\.strip = mountArrangementStrip\(uiFlags\(\)\.showSourceChips \? this\.contentEl : this\.contentEl\.ownerDocument\.createElement\('div'\), \{ goto: \(noteId\) => structure\.goto\(leaf, noteId\), openNote, onHover: [^\n]*\}\);\s*\n\s*this\.strip\.show\(text\);/);       // 2026-10-30-1000, deliberate: + the hover that lights the rows of a kit or phrase
     // 2026-10-31-1110 (reassessed, deliberate): the chips are redrawn with the sentence and the controls, and the Score follows: at once when nothing plays, else after the debounce
     assert.match(ka, /this\.strip\?\.show\(text\);\s*\n[^\n]*\n[^\n]*this\.area\?\.update\(text\);/, 'a change to the note redraws the chips with the Score');
-    assert.match(ka, /new ArrangementView\(leaf, opts\.plan, opts\.structure, opts\.openNote, opts\.onPin\)/);       // 2026-10-30-1000, deliberate: + the pin hook of a phrase tab as the view's last argument
+    assert.match(ka, /new ArrangementView\(leaf, opts\.plan, opts\.structure, opts\.openNote, opts\.onPin, opts\.onJson, opts\.prepare\)/);       // 2026-10-30-1000, deliberate: + the pin hook of a phrase tab; 2026-11-19-0990 (deliberate): + the "Open as Forge note" mark of the default-view router and the prepare hook (a note with no cache gets it before it is drawn): the pin hook is still the view's fifth argument
     const sf = code('score-first.ts');
-    assert.match(sf, /registerKitsAndArrangements\(plugin, \{ plan, scoreFirst: \(\) => scoreFirst, structure: structureHooks, openNote, onPin: \(l, pin\) => \{ void linker\.pinned\(l, pin\); \} \}\);/);
+    assert.match(sf, /registerKitsAndArrangements\(plugin, \{ plan, scoreFirst: \(\) => scoreFirst, structure: structureHooks, openNote, onPin: \(l, pin\) => \{ void linker\.pinned\(l, pin\); \}, onJson: \(l, path\) => router\.setMark\(l, path, 'markdown'\), prepare: prepareScoreNote \}\);/);       // 2026-11-19-0990 (deliberate): + onJson and prepare
     assert.match(sf, /const arrangement = app\.workspace\.getActiveViewOfType\(ArrangementView\);/);
     assert.match(sf, /return \{ kind: 'arrangement', leaf: arrangement\.leaf, file: arrangement\.file \};/);
   });

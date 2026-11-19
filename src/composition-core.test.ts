@@ -208,7 +208,9 @@ test('REFUSED in one sentence that names it: a missing note, an unusable note, a
   };
   assert.equal(await one('comp_001', P([{ source: 'phrases/phrase_099' }])), 'Composition: the phrase phrase_099 (phrases/phrase_099.md) was not found or could not be read (File not found).');
   assert.match(await one('comp_001', P([{ source: 'phrases/phrase_003' }]), { 'phrases/phrase_003.md': '---\ntype: data\n---\nnothing\n' }), /^Composition: the phrase phrase_003 is not usable: /);
-  assert.match(await one('comp_001', P([{ source: 'compositions/intro' }]), { 'compositions/intro.md': '---\ntype: data\n---\nnothing\n' }), /^Composition: the composition intro could not be drawn: Composition: /);
+  // 2026-11-19-0990 (deliberate): a note with NO json fence is valid and EMPTY (a composition that plays one says so as it says it of any empty source), no longer a refusal in the fence reader's words; a cache that is there and unusable is still the reader's refusal
+  assert.match(await one('comp_001', P([{ source: 'compositions/intro' }]), { 'compositions/intro.md': '---\ntype: data\n---\nnothing\n' }), /^Composition: the composition intro could not be drawn: it is empty: it has no sentence yet$/);
+  assert.match(await one('comp_001', P([{ source: 'compositions/intro' }]), { 'compositions/intro.md': '---\ntype: data\n---\n\n```json\n{"kind": "arrangement"}\n```\n' }), /^Composition: the composition intro could not be drawn: Composition: /);
   assert.equal(await one('comp_001', P([{ source: 'compositions/comp_001' }]), {}), `Composition: the composition comp_001 loops back to this composition or is nested more than ${COMPOSITION_DEPTH_MAX} deep.`);
   const a = comp('a', P([{ source: 'compositions/b' }])), b = comp('b', P([{ source: 'compositions/a' }]));
   assert.match(await one('a', P([{ source: 'compositions/b' }]), { 'compositions/b.md': b, 'compositions/a.md': a }), /loops back to this composition/);

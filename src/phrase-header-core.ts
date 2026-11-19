@@ -4,14 +4,15 @@
 //
 // Pure (the markdown views are injected): which note gets it, and the add / remove / re-add bookkeeping for views Obsidian REUSES when a tab navigates. The Obsidian half is in score-first.ts.
 import { addQuietAction } from './sr-label-core.ts';
+import { isScoreNotePath } from './note-score-core.ts';
 import { isPhrasePath } from './phrase-core.ts';
 
 export const PHRASE_HEADER_TITLE = 'Open as Score';
 export const PHRASE_HEADER_ICON = 'list-music';
 
-/** Only a phrase note, only in a score-first vault. */
+/** Only a phrase, an arrangement or a composition note (2026-11-19-0990: the last two had no way back to their Score but the palette, and the bar's own "Open as Score" refused them), only in a score-first vault. */
 export function wantsPhraseHeader(scoreFirst: boolean, path: string | null | undefined): boolean {
-  return scoreFirst === true && isPhrasePath(path);
+  return scoreFirst === true && isScoreNotePath(path);
 }
 
 /** The rhythm note buttons ("Open as Beat Box" / "Open as Score") on a markdown tab: they apply to a candidate note EXCEPT a phrase in a score-first vault, where they would refuse (a phrase is not

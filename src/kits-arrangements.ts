@@ -32,6 +32,7 @@ import { mountArrangementStrip, type ArrangementStrip } from './arrangement-stri
 import { setControlsOff } from './custom-controls-off-dom.ts';
 import { isCustomNote } from './phrase-notes-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
+import { cacheWords, hasNoCacheFence } from './cache-fence-core.ts';
 import { mountArrangementControls, type ArrangementControls } from './arrangement-controls-dom.ts';
 import type { PhraseStructureHooks } from './phrase-view.ts';
 
@@ -58,7 +59,7 @@ export class ArrangementView extends EditableFileView {
 
   /** 2026-10-29-0830: `structure` sends a chip click to the notes pane of this tab's pair (the hooks of a phrase tab), `openNote` opens the note when there is no pair. Absent = no strip. 2026-10-30-1000: `onPin` is told the note
    *  that made the row the person pinned (or null: let go), for the notes pane beside this Score, exactly as a phrase tab's. */
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void) {
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void, private readonly onJson?: (leaf: WorkspaceLeaf, path: string) => void, private readonly prepare?: (file: TFile) => Promise<void>) {
     super(leaf);
     addQuietAction(this, 'file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
     addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
@@ -73,12 +74,24 @@ export class ArrangementView extends EditableFileView {
     // An arrangement is made of kits, phrases and (through the phrases) bars: any of them changing, or the arrangement's own note, redraws the Score.
     this.registerEvent(this.app.vault.on('modify', (f) => { this.noteChanged(f.path); }));
     this.registerEvent(this.app.vault.on('delete', (f) => { this.noteChanged(f.path); }));
+    // 2026-11-19-0990: the note of THIS tab was renamed (by hand, in the file list): the Score area, the inspector and the title were made with the name the note had when the tab opened (the title of the engine's request, the id the rows' lineage names),
+    // so the tab is mounted again for the new name, as a phrase tab's `renamed` does. It writes nothing.
+    this.registerEvent(this.app.vault.on('rename', (f) => { if (this.file && f.path === this.file.path && this.mounted !== null && this.mounted !== f.path) void this.mount(this.file, false); }));
   }
+
+  /** The path this tab last mounted for (a rename moves the note under the tab without the tab being told by the host). */
+  private mounted: string | null = null;
 
   async onLoadFile(file: TFile): Promise<void> {
     await super.onLoadFile(file);
+    await this.mount(file, true);
+  }
+
+  private async mount(file: TFile, repair: boolean): Promise<void> {
     this.release();
     this.disposed = false;
+    this.mounted = file.path;
+    if (repair && this.prepare) { try { await this.prepare(file); } catch (e) { console.error('ArrangementView.onLoadFile: the note could not be prepared for its Score', e); } }       // 2026-11-19-0990: a note with no json cache gets it computed before it is drawn
     const text = await this.readText(file);
     this.headerEl = this.contentEl.createDiv({ cls: 'forge-arrangement-header' });
     this.paintHeader(text);
@@ -182,7 +195,8 @@ export class ArrangementView extends EditableFileView {
     if (typeof text !== 'string') return `${file.basename}: the note could not be read (${text.unreadable}).`;
     if (isEmptyNote(text)) return '';                       // 2026-11-19-0960: a new note has no sentence yet: the header says nothing
     const read = readArrangementNote(text);
-    return read.ok === false ? `${file.basename}: ${read.message}` : stripLinks(arrangementDescription(file.basename, read.value, tempo));
+    if (hasNoCacheFence(text)) return '';                   // 2026-11-19-0990: no json fence is a valid, empty note
+    return read.ok === false ? `${file.basename}: ${cacheWords(read.message)}` : stripLinks(arrangementDescription(file.basename, read.value, tempo));
   }
 
   /** 2026-10-31-1110 (CCQA smoke 9): THE one place the sentence above the strip is written. It is the CURRENT note's (settings, muted, solo), painted in the same step as the controls, whatever the Score is doing; the bpm range is
@@ -292,8 +306,15 @@ export class ArrangementView extends EditableFileView {
   private async openAsJson(): Promise<void> {
     const file = this.file;
     if (!file) return;
+    this.onJson?.(this.leaf, file.path);                      // 2026-11-19-0990: the person's choice is a mark on this leaf, or the router would bring the Score straight back
     await this.leaf.setViewState({ type: 'markdown', active: true, state: { file: file.path } });
   }
+}
+
+/** The arrangement tab IN this leaf (the Score replaces what the leaf showed, e.g. the note's text): the arrangement counterpart of openCompositionInLeaf. */
+export async function openArrangementInLeaf(app: App, leaf: WorkspaceLeaf, file: TFile): Promise<void> {
+  await leaf.setViewState({ type: ARRANGEMENT_VIEW_TYPE, active: true, state: { file: file.path } });
+  app.workspace.revealLeaf(leaf);
 }
 
 /** Open an arrangement note as a Score: a tab already showing it is reused, else a new tab. */
@@ -322,11 +343,15 @@ export interface KitsArrangementsOptions {
   openNote(noteId: string): void;
   /** 2026-10-30-1000: the note that made the row pinned in an arrangement's Score (null = let go), for the notes pane of its pair: the same hook a phrase tab has. */
   onPin(leaf: WorkspaceLeaf, pin: PinnedNote | null): void;
+  /** 2026-11-19-0990: "Open as Forge note" was pressed on an arrangement tab: the leaf stays on the note's text (a mark the default-view router honours). */
+  onJson?: (leaf: WorkspaceLeaf, path: string) => void;
+  /** 2026-11-19-0990: called with the note before the tab draws it (a note with no json cache gets its cache computed: note-open-repair-core.ts). */
+  prepare?: (file: TFile) => Promise<void>;
 }
 
 export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangementsOptions): void {
   const app = plugin.app;
-  plugin.registerView(ARRANGEMENT_VIEW_TYPE, (leaf) => new ArrangementView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin));
+  plugin.registerView(ARRANGEMENT_VIEW_TYPE, (leaf) => new ArrangementView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin, opts.onJson, opts.prepare));
 
   const ports = (open: (file: TFile) => Promise<void>): CreatePorts<TFile> => ({
     folderExists: (folder) => app.vault.getAbstractFileByPath(folder) !== null,

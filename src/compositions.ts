@@ -31,6 +31,7 @@ import { MAKE_ROOT_COMMAND_ID, MAKE_ROOT_COMMAND_NAME, OPEN_PIECE_COMMAND_ID, OP
 import type { CreatePorts } from './kit-arrangement-flow-core.ts';
 import { litEvidence } from './structure-strip-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
+import { cacheWords, hasNoCacheFence } from './cache-fence-core.ts';
 import { phraseNoteId } from './phrase-lineage-core.ts';
 import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import type { PhraseStructureHooks } from './phrase-view.ts';
@@ -55,7 +56,7 @@ export class CompositionView extends EditableFileView {
   private tintMap: ProvenanceMap | null = null;
 
   /** `structure` sends a chip click to the notes pane of this tab's pair (the hooks of a phrase tab), `openNote` opens the note when there is no pair; `onPin` is told the note that made the bar the person pinned (or null: let go). */
-  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void, private readonly notebookFor?: (file: TFile, chip: (selection: Selection) => string | null) => NotebookDomPorts) {
+  constructor(leaf: WorkspaceLeaf, private readonly plan: ScorePanelPlan, private readonly structure?: PhraseStructureHooks, private readonly openNote?: (noteId: string) => void, private readonly onPin?: (leaf: WorkspaceLeaf, pin: PinnedNote | null) => void, private readonly notebookFor?: (file: TFile, chip: (selection: Selection) => string | null) => NotebookDomPorts, private readonly onJson?: (leaf: WorkspaceLeaf, path: string) => void, private readonly prepare?: (file: TFile) => Promise<void>) {
     super(leaf);
     addQuietAction(this, 'file-text', 'Open as Forge note', () => { void this.openAsJson(); });        // 2026-11-03-1155-92 (R5): the note's own text, said in the product's words (the id and the marks keep their names)
     addQuietAction(this, 'history', 'Restore to last commit', () => { void restoreNoteToLastCommit(this.app, this.file); });        // 2026-11-03-1155-92 (R4): the same action, icon, title, confirm and hold as the text view and the Beat Box (added after the other: it renders to its left)
@@ -75,12 +76,24 @@ export class CompositionView extends EditableFileView {
     this.registerEvent(this.app.vault.on('create', cellsChanged));
     this.registerEvent(this.app.vault.on('delete', cellsChanged));
     this.registerEvent(this.app.vault.on('rename', cellsChanged));
+    // 2026-11-19-0990: the note of THIS tab was renamed (by hand, in the file list): the Score area, the inspector and the title were made with the name the note had when the tab opened (the title of the engine's request, the id the bars' lineage names),
+    // so the tab is mounted again for the new name, as a phrase tab's `renamed` does. It writes nothing.
+    this.registerEvent(this.app.vault.on('rename', (f) => { if (this.file && f.path === this.file.path && this.mounted !== null && this.mounted !== f.path) void this.mount(this.file, false); }));
   }
+
+  /** The path this tab last mounted for (a rename moves the note under the tab without the tab being told by the host). */
+  private mounted: string | null = null;
 
   async onLoadFile(file: TFile): Promise<void> {
     await super.onLoadFile(file);
+    await this.mount(file, true);
+  }
+
+  private async mount(file: TFile, repair: boolean): Promise<void> {
     this.release();
     this.disposed = false;
+    this.mounted = file.path;
+    if (repair && this.prepare) { try { await this.prepare(file); } catch (e) { console.error('CompositionView.onLoadFile: the note could not be prepared for its Score', e); } }       // 2026-11-19-0990: a note with no json cache gets it computed before it is drawn
     const text = await this.readText(file);
     this.headerEl = this.contentEl.createDiv({ cls: 'forge-composition-header', text: this.headerText(file, text, null) });
     if (this.structure && this.openNote) {
@@ -200,7 +213,8 @@ export class CompositionView extends EditableFileView {
     if (typeof text !== 'string') return `${file.basename}: the note could not be read (${text.unreadable}).`;
     if (isEmptyNote(text)) return '';                       // 2026-11-19-0960: a new note has no sentence yet: the header says nothing
     const read = readCompositionNote(text);
-    return read.ok === false ? `${file.basename}: ${read.message}` : `${file.basename} — ${compositionHeader(read.value, bars)}`;
+    if (hasNoCacheFence(text)) return '';                   // 2026-11-19-0990: no json fence is a valid, empty note
+    return read.ok === false ? `${file.basename}: ${cacheWords(read.message)}` : `${file.basename} — ${compositionHeader(read.value, bars)}`;
   }
 
   /** 2026-11-03-1155-92 (R4): "Restore to last commit" has put the committed text on disk: redraw from it now. */
@@ -272,6 +286,7 @@ export class CompositionView extends EditableFileView {
   private async openAsJson(): Promise<void> {
     const file = this.file;
     if (!file) return;
+    this.onJson?.(this.leaf, file.path);                      // 2026-11-19-0990: the person's choice is a mark on this leaf, or the router would bring the Score straight back
     await this.leaf.setViewState({ type: 'markdown', active: true, state: { file: file.path } });
   }
 }
@@ -303,6 +318,10 @@ export interface CompositionsOptions {
   newCompositionPair?: { origin(): WorkspaceLeaf | null; openIn(origin: WorkspaceLeaf, file: TFile): Promise<boolean> };
   /** 2026-11-05-1183 (M17c): the vault side of the notebook below a composition's Score (the ports of the phrase tabs' notebook, with the composition as the source and the composition's own chip text). Absent = the tab is exactly what it was. */
   notebookFor?: (file: TFile, chip: (selection: Selection) => string | null) => NotebookDomPorts;
+  /** 2026-11-19-0990: "Open as Forge note" was pressed on this tab: the leaf stays on the note's text (a mark the default-view router honours). */
+  onJson?: (leaf: WorkspaceLeaf, path: string) => void;
+  /** 2026-11-19-0990: called with the note before the tab draws it (a note with no json cache gets its cache computed: note-open-repair-core.ts). */
+  prepare?: (file: TFile) => Promise<void>;
 }
 
 /** The composition tab IN this leaf (the Score of a pair already open is replaced by the new piece's, never a third pane): the composition counterpart of openPhraseInLeaf. */
@@ -313,7 +332,7 @@ export async function openCompositionInLeaf(app: App, leaf: WorkspaceLeaf, file:
 
 export function registerCompositions(plugin: Plugin, opts: CompositionsOptions): void {
   const app = plugin.app;
-  plugin.registerView(COMPOSITION_VIEW_TYPE, (leaf) => new CompositionView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin, opts.notebookFor));
+  plugin.registerView(COMPOSITION_VIEW_TYPE, (leaf) => new CompositionView(leaf, opts.plan, opts.structure, opts.openNote, opts.onPin, opts.notebookFor, opts.onJson, opts.prepare));
 
   const compositionFiles = (): TFile[] => app.vault.getFiles().filter((f) => isCompositionPath(f.path));
   const readAll = async (): Promise<Array<{ path: string; text: string }>> => Promise.all(compositionFiles().map(async (f) => ({ path: f.path, text: await app.vault.read(f) })));

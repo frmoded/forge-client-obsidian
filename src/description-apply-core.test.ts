@@ -246,7 +246,11 @@ test('applying a sentence that does not parse hands back the grammar\'s own sent
     // a writer that has no read-only rule writes; one that has refuses: either way the answer is the writer's, and ok mirrors it
     assert.equal(typeof w.ok, 'boolean');
     const blocked = writeFromParams(edited.replace(/```json[\s\S]*$/, ''), family === 'arrangement' ? 'arr_001' : 'comp_001', family, (st as any).params);
-    assert.equal(blocked.ok, false, `${family}: a note with no json fence is refused`);
-    assert.ok(blocked.ok === false && blocked.message.length > 0);
+    // 2026-11-19-0990 (deliberate, was: a note with no json fence is refused): zero Cache fences is a valid, empty note, so the write gives it its cache and writes the rest as ever (sentence-list-note-core.ts writeListNote); a note that is not a data note at all is still refused
+    assert.ok(blocked.ok, `${family}: a note with no json fence is written (valid and empty until now)`);
+    assert.equal(((blocked as { text: string }).text.match(/^```json/gm) ?? []).length, 1, `${family}: and has exactly one cache after`);
+    const notData = writeFromParams(edited.replace(/^---[\s\S]*?\n---\n/, ''), family === 'arrangement' ? 'arr_001' : 'comp_001', family, (st as any).params);
+    assert.equal(notData.ok, false, `${family}: a note with no frontmatter is still refused`);
+    assert.ok(notData.ok === false && notData.message.length > 0);
   }
 });

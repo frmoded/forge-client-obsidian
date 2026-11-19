@@ -13,6 +13,7 @@ import { RHYTHM_CHANNELS, type RhythmData } from './rhythm-edit-core.ts';
 import { computeScore, type ScoreOutcome } from './rhythm-score-core.ts';
 import { KIT_NAME_PATTERN, kitPath, readKitNote, type KitParams } from './kit-core.ts';
 import { EMPTY_SOURCE, isEmptyNote } from './empty-note-core.ts';
+import { cacheWords, hasNoCacheFence } from './cache-fence-core.ts';
 import { FORGE_PHRASES_KEY } from './arrangement-nav-core.ts';
 import type { PhraseParams } from './phrase-core.ts';
 
@@ -235,8 +236,9 @@ export async function produceArrangement(deps: ArrangementDeps, note: string | {
   if (typeof note !== 'string') return { kind: 'refusal', message: `Arrangement: the arrangement note could not be read (${note.unreadable}).` };
   if (isEmptyNote(note)) return { kind: 'refusal', message: '' };            // 2026-11-19-0960: a new note has no sentence yet: nothing to draw, nothing to say, nothing to ask the engine
   if (isCustomNote(note)) return produceCustomScore({ readNote: deps.phrases.readNote, runCustom: deps.phrases.runCustom, compute: deps.phrases.compute as CustomDeps['compute'] }, note, title, title);   // 2026-11-02-1155 (M16b): its Python is the note
+  if (hasNoCacheFence(note)) return { kind: 'refusal', message: '' };         // 2026-11-19-0990: no json fence is a valid, empty note (its first sentence writes the cache)
   const read = readArrangementNote(note);
-  if (read.ok === false) return { kind: 'refusal', message: `Arrangement: ${read.message}` };
+  if (read.ok === false) { const words = cacheWords(read.message); return { kind: 'refusal', message: words === read.message ? `Arrangement: ${read.message}` : words }; }       // 2026-11-19-0990: a fence refusal is said in plain words
   if (nothingPlays(read.value)) return { kind: 'refusal', message: ALL_MUTED };         // from the note alone: no kit or phrase is read, no engine round trip
   const tracks: ArrangementInput['tracks'] = [];
   const phrasesRead: Record<string, PhraseParams> = {};
