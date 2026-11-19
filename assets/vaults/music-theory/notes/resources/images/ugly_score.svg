@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="46.33mm" height="14.23mm" viewBox="4.1906 4.1243 26.3623 8.1000">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="95.25mm" height="29.3057mm" viewBox="4.1906 4.1243 54.1983 16.6814">
 <style type="text/css">
 <![CDATA[
 tspan { white-space: pre; }
@@ -58,4 +58,11 @@ c0 -74 18 -133 36 -194c80 97 146 198 146 324z" fill="currentColor"/>
 </a>
 
 
+<!-- caption BEGIN -->
+<!-- caption-box 4.1906 4.1243 26.3623 8.1|46.33mm|14.23mm -->
+<g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<text x="4.1906" y="16.1386" font-size="2.2583" fill="#2B2B2B" text-anchor="start" font-weight="600">C and D♭</text>
+<text x="4.1906" y="18.9991" font-size="1.8066" fill="#555555" text-anchor="start">C4 and D♭4, a single semitone apart, on the staff</text>
+</g>
+<!-- caption END -->
 </svg>

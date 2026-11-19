@@ -10,7 +10,7 @@ Below, C3 to C4, naturals only, tuned to meantone. Press **Play ascending**. Not
 
 ```html-embed
 tuning/resources/html/piano_keyboard_meantone.html
-280
+392
 ```
 
 ## Do the good
@@ -21,7 +21,7 @@ Below, C4, E4 and G4 start held. Play together in meantone, then flip to Pythago
 
 ```html-embed
 tuning/resources/html/piano_keyboard_meantone_good.html
-280
+409
 ```
 
 ## Do the bad
@@ -32,7 +32,7 @@ Below, G♯3 and D♯4 start held — meantone's own wolf. Play together, then f
 
 ```html-embed
 tuning/resources/html/piano_keyboard_meantone_bad.html
-280
+392
 ```
 
 ## History

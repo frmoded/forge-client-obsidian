@@ -4,7 +4,7 @@ You can build that ratio yourself on a [[monochord]]. Frequency is inversely pro
 
 ```html-embed
 music_instruments/resources/html/monochord.html
-300
+403
 ```
 
 Try it: drag the bridge until the readout says **3 : 2**. The full string is tuned to 110 Hz, so the longer left segment (0.600 of the string) sounds 183.3 Hz and the shorter right one (0.400) sounds 275 Hz, and 183.3 × 1.5 = 275. Pluck both: two cycles of the lower against three of the higher, and nothing drifts.

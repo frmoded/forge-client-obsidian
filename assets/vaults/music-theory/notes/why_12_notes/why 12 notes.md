@@ -8,7 +8,7 @@ Stop a string at two thirds of its length and it sounds a fifth above the open s
 
 ```html-embed
 music_instruments/resources/html/monochord.html
-300
+403
 ```
 
 ## Very short strings

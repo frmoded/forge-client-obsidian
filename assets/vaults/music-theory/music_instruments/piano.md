@@ -4,7 +4,7 @@ Every key, C3 to C5, is labeled below. C3 and C4 start out held, so press **Play
 
 ```html-embed
 music_instruments/resources/html/piano_keyboard.html
-300
+392
 ```
 
 Move one key to the right and the [[pitch class]] changes by a [[semitone]]; move twelve keys (one full octave) and you land back on the same pitch class, one register up. The pattern is identical in every octave — learn where C is once, and every other note's position follows from the same seven-white/five-black shape.

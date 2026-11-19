@@ -84,8 +84,8 @@ for (const [f, n] of FILES) {
 test('scale_build_major (slots) and the FULL major page (selects and levels): building a scale completes its tonic (the line and its slot fill in); the same pair again counts once; failing it later does not uncount; another home note is another pair', () => {
   const p = open('scale_build_major.html'); p.start(7); p.finish();
   assert.equal(p.text('completed'), 'Completed 1 of 12'); assert.equal(p.done(), 1); assert.ok(p.homes()[7].classList.contains('done')); assert.equal(p.homes()[7].querySelector('.nm').textContent, 'G major');
-  p.start(7); p.finish(); assert.equal(p.text('completed'), 'Completed 1 of 12', 'built again (the slot of a completed key restarts it): still one pair');
-  p.start(7); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); assert.equal(p.text('completed'), 'Completed 1 of 12', 'a failed attempt does not uncount a completed pair'); assert.ok(p.homes()[7].classList.contains('done'), 'its slot stays filled');
+  p.start(7); assert.equal(p.text('completed'), 'Completed 1 of 12', '2026-11-19-0955: a tap on the slot of a completed key SHOWS its scale (it used to restart the build): it is not built, or counted, again'); assert.match(p.text('prompt'), /^Exercise done: you built G major/);
+  p.start(4); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); assert.equal(p.text('completed'), 'Completed 1 of 12', 'a failed attempt of another key does not uncount a completed pair'); assert.ok(p.homes()[7].classList.contains('done'), 'its slot stays filled');
   p.start(2); p.fail(); assert.equal(p.text('completed'), 'Completed 1 of 12', 'a failed pair is not counted'); assert.equal(p.done(), 1);
   p.start(2); p.finish(); assert.equal(p.text('completed'), 'Completed 2 of 12'); assert.equal(p.done(), 2);
   // the FULL page drives the same flow with its selects and levels (a FULL file whose first scale is major)

@@ -1,6 +1,6 @@
 // 2026-11-18-0930 - the two single-scale build exercises, scale_build_major.html and scale_build_natural_minor.html, are the SIMPLE variant (driver, on `scales/what a scale is`: "remove easy / medium / hard buttons; remove the New Excercise button; remove the random button").
 // No levels, no New exercise, no Random, no selects. ONE rule (the former medium): the THIRD wrong tap ends the build as failed (the answer is shown, the key is not counted); all notes found within 3 wrong taps = completed. The twelve tonic slots of the shelf are
-// the chooser: a tap on a slot starts that key at once, a FRESH build (a tap on ANY slot restarts that key: the current one, a completed one, a failed one, a new one; the answer of a finished build stays on screen until a slot is tapped). On first open nothing is
+// the chooser: a tap on a slot starts that key at once, a FRESH build (a tap on the slot of the current key, a failed one or a new one restarts it; the answer of a finished build stays on screen until a slot is tapped). 2026-11-19-0955: the slot of a COMPLETED key shows its finished scale instead (src/scale-shelf.test.ts, section 4b). On first open nothing is
 // started: "Pick a tonic (home note)." A completed slot stays filled. Reset clears the count AND the build on screen. The three FULL build files (modes and minor, other scales, ear build the scale) are pinned by hash below (a deliberate change of one updates its line).
 // 2026-11-19-0938: the twelve chips at the top became the SHELF of twelve slots under the build area (a completed build fills its slot with a mini score): the shelf itself is pinned in src/scale-shelf.test.ts, here the slots are the chooser and the fills.
 // Pinned here: the controls are gone; first open; a slot starts a build; the one rule through real clicks; fills; Reset; all twelve; Play; the words; no hover and no tooltip; the shared blocks; the pure core; the three FULL files pinned by hash; the generator.
@@ -22,11 +22,11 @@ import { pureOf } from './test-support/interval-ear-core-checks.ts';
 const ROOT = path.resolve(import.meta.dirname, '..');
 const DIR = EXERCISE_DIR;                                   // the bundled vault, or the vault source when SCALE_EXERCISE_VAULT is set
 const SIMPLE: Array<[string, string, string]> = [['scale_build_major.html', 'major', 'C major'], ['scale_build_natural_minor.html', 'natural_minor', 'C natural minor']];
-// the three FULL files must stay byte-identical (sha-256 of their committed content without the caption block; a deliberate change of one of them updates its line here, in the same commit; 2026-11-19-0938: the shelf and the word tonic)
+// the three FULL files must stay byte-identical (sha-256 of their committed content without the caption block; a deliberate change of one of them updates its line here, in the same commit; 2026-11-19-0938: the shelf and the word tonic; 2026-11-19-0955: a tap on a completed slot shows its scale)
 const FULL_SHA: Record<string, string> = {
-  'scale_build_modes_and_minor.html': '8c8057e1211f35c6df3c4461dd5a87f1752a45e94e6cf1842bcca026695a4688',
-  'scale_build_other_scales.html': 'a2e76517cd24ef3dadcc37a40a89308feaa32e182171b969658b1fe078f8b61e',
-  'scale_ear_build_the_scale.html': '4d7502b62f6d0f02d65aa7fc82146f033fb4c31f4860b2fef05d9e223231a62b',
+  'scale_build_modes_and_minor.html': '770bb11ad139590cf46b108f8dd277de451159c43d387d85cad3608c6c7438a4',
+  'scale_build_other_scales.html': 'c934141ac1c63f06587c40c0bbc238f9d55c69dc90fb610fad5390fa2fe8c73f',
+  'scale_ear_build_the_scale.html': '06d1aef6985d68e54541ee2903e7bd4f6c7f6d35ab6dd202169951cd0b839d7a',
 };
 const ALL_FIVE = [...SIMPLE.map((s) => s[0]), ...Object.keys(FULL_SHA)];
 const same = (a: unknown, b: unknown, m?: string): void => assert.equal(JSON.stringify(a), JSON.stringify(b), m);
@@ -174,14 +174,14 @@ test('a right key lights, is marked, and puts its note on the staff with the sca
 });
 
 // ---- the slots: fills, restarts, retries ------------------------------------------------------------------------------------------------------------------------------------
-test('a completed slot stays filled: while another key is built, when the same key is started again, and when it is failed later; the slot of the key being built is marked current (border colour), the filled one keeps its fill', () => {
+test('a completed slot stays filled: while another key is built, when it is tapped (it shows its finished scale: 2026-11-19-0955, it used to start a fresh build), and after another key is failed; the slot of the key on screen is marked current (border colour), the filled one keeps its fill', () => {
   const p = open('scale_build_major.html'); p.chip(0); p.finish(); same(p.done(), [0]); assert.equal(p.text('completed'), 'Completed 1 of 12');
   p.chip(4); same(p.done(), [0], 'another key is being built: C stays filled'); assert.equal(p.current(), 4); assert.equal(p.chips()[0].classList.contains('current'), false);
   p.fail(); assert.match(p.text('prompt'), /^Exercise over/); same(p.done(), [0]); assert.equal(p.text('completed'), 'Completed 1 of 12');
-  p.chip(0); same(p.done(), [0], 'the slot of a completed key keeps its fill when its key is started again'); assert.equal(p.current(), 0); assert.ok(p.chips()[0].classList.contains('done') && p.chips()[0].classList.contains('current'));
-  assert.equal(p.heads(), 1, 'a FRESH build: only the tonic is on the staff'); assert.equal(p.text('prompt').startsWith('Exercise: build C major'), true); assert.equal(p.text('wrongs'), 'Wrong taps: 0 of 3'); assert.equal(p.doc.querySelectorAll('.key.lit:not(.tonic)').length, 0);
-  p.fail(); same(p.done(), [0], 'failing a completed key later does not uncount it'); assert.equal(p.text('completed'), 'Completed 1 of 12'); assert.ok(p.chips()[0].classList.contains('done'));
-  p.chip(0); p.finish(); assert.equal(p.text('completed'), 'Completed 1 of 12', 'the same key built again counts once');
+  p.chip(0); same(p.done(), [0], 'the slot of a completed key keeps its fill when it is tapped'); assert.equal(p.current(), 0); assert.ok(p.chips()[0].classList.contains('done') && p.chips()[0].classList.contains('current'));
+  assert.equal(p.heads(), 8, 'NOT a fresh build: the finished scale is on the staff'); assert.equal(p.text('prompt').startsWith('Exercise done: you built C major'), true); assert.equal(p.text('wrongs'), 'Wrong taps: 0 of 3'); assert.equal(p.playDisabled(), false); assert.equal(p.doc.querySelectorAll('.key.lit:not(.tonic)').length, 6);
+  p.chip(0); assert.equal(p.text('completed'), 'Completed 1 of 12', 'a second tap changes nothing, and the count stays'); assert.equal(p.heads(), 8);
+  p.chip(4); assert.equal(p.heads(), 1, 'a tonic that is not completed starts afresh'); p.fail(); same(p.done(), [0], 'failing another key later leaves C filled'); assert.ok(p.chips()[0].classList.contains('done'));
 });
 
 test('a tap on the slot of the CURRENT key restarts it (a finished build: its answer leaves the screen); a failed key can be tried again by tapping its slot and then completes', () => {

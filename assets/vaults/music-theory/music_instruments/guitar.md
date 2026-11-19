@@ -6,7 +6,7 @@ Every position from the open strings to fret 12 is clickable below: click positi
 
 ```html-embed
 music_instruments/resources/html/guitar_fretboard.html
-330
+409
 ```
 
 Notice the same [[pitch class]] shows up in several places at once — e.g. the open 2nd string (B3) and fret 4 of the 3rd string are both B, just reached differently. That's the thing a guitar has that a piano doesn't: [[piano|a piano has exactly one key per pitch class per octave]]; a guitar reaches most pitch classes on more than one string.

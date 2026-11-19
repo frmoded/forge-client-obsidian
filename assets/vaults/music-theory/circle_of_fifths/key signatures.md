@@ -12,7 +12,7 @@ Try it: pick the number of sharps or flats, then tap the notes.
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_key_to_signature.html
-378
+361
 ```
 
 <div style="

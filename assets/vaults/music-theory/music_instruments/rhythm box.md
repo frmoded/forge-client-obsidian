@@ -4,7 +4,7 @@ Program a pattern by clicking steps for kick, snare and hi-hat, then press Play.
 
 ```html-embed
 music_instruments/resources/html/rhythm_box.html
-360
+439
 ```
 
 **Edit a pattern that lives in a note.** The rhythm data notes in `rhythm_data/` are just JSON, and you can drive them from the grid instead of hand-typing booleans like an animal. Open one — from the explorer, a link, anywhere — and it opens *as* this widget, loaded with the note's pattern. Click cells, change the tempo, swing or time signature, and it saves itself a moment after you stop: the little status next to the note's name says *Saving…* then *Saved*, and there's no Save button to forget. Play, mute, solo and volume never touch the note. **Open as JSON** in the tab's header flips it to the plain text and keeps it there until you navigate away; **Open as Beat Box** flips it back (so does *Edit rhythm in Rhythm Box* in the command palette). A note holds exactly one pattern, so there are no banks in here: want a variation, make another note — that's what the graph is for. Changing the time signature (or removing an instrument that has hits) asks first — a small bar appears right in the widget — because it rewrites the whole pattern in the note. Made a mess? *Restore to last commit* in the same header puts the note back.

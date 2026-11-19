@@ -36,12 +36,12 @@ async function mount(file, width) {
 const CAPTION_PROBE = `(function () {
   var c = document.querySelector('.fig-cap'); if (!c) return null;
   var t = c.querySelector('.t'), l = c.querySelector('.l'), ts = getComputedStyle(t), ls = getComputedStyle(l);
-  var cb = c.getBoundingClientRect(), bb = document.body.getBoundingClientRect();
+  var cb = c.getBoundingClientRect(), bb = document.body.getBoundingClientRect(), bs = getComputedStyle(document.body), padL = parseFloat(bs.paddingLeft) || 0, padB = parseFloat(bs.paddingBottom) || 0;
   var above = 0; var kids = Array.prototype.filter.call(document.body.children, function (e) { return e !== c && e.tagName !== 'SCRIPT' && e.tagName !== 'STYLE' && e.getBoundingClientRect().height > 0; });
   kids.forEach(function (e) { above = Math.max(above, e.getBoundingClientRect().bottom); });
   var after = Array.prototype.filter.call(document.body.children, function (e) { return e.tagName !== 'SCRIPT' && e.tagName !== 'STYLE' && e !== c && e.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_PRECEDING && e.getBoundingClientRect().height > 0; }).length;
   return { title: t.textContent, line: l.textContent, tSize: ts.fontSize, tWeight: ts.fontWeight, tColor: ts.color, lSize: ls.fontSize, lColor: ls.color, family: ts.fontFamily, align: ts.textAlign,
-    left: Math.round((cb.left - bb.left) * 10) / 10, gap: Math.round((cb.top - above) * 10) / 10, visibleAfter: after, bottom: Math.round(cb.bottom - bb.top), docEnd: Math.ceil(bb.height) };
+    left: Math.round((cb.left - bb.left - padL) * 10) / 10, padB: padB, capBlock: Math.ceil(cb.height + 12), gap: Math.round((cb.top - above) * 10) / 10, visibleAfter: after, bottom: Math.round(cb.bottom - bb.top), docEnd: Math.ceil(bb.height) };
 })()`;
 for (const [file, cap] of Object.entries(captions).filter(([f]) => f.endsWith('.html'))) {
   numbers.heights[file] = {};
@@ -51,12 +51,13 @@ for (const [file, cap] of Object.entries(captions).filter(([f]) => f.endsWith('.
     verdict[`${tag}_hasCaption`] = !!info && info.title === cap.title && info.line === cap.line;
     if (info) {
       verdict[`${tag}_type`] = info.tSize === '15px' && info.tWeight === '600' && info.tColor === 'rgb(43, 43, 43)' && info.lSize === '12px' && info.lColor === 'rgb(85, 85, 85)' && /system-ui/.test(info.family) && info.align === 'left';
-      verdict[`${tag}_leftAtBodyEdge`] = info.left === 0;
+      verdict[`${tag}_leftAtBodyEdge`] = info.left === 0;                                 // (left of the body's CONTENT box: a padded body keeps its padding, the caption lines up with the gadget's own content)
       verdict[`${tag}_twelveBelowContent`] = info.gap >= 12 && info.gap <= 13;
       verdict[`${tag}_lastInBody`] = info.visibleAfter === 0 || info.visibleAfter === undefined;
-      verdict[`${tag}_endsTheDocument`] = info.docEnd - info.bottom <= 1;
+      verdict[`${tag}_endsTheDocument`] = info.docEnd - info.bottom <= info.padB + 1;                      // 2026-11-19-0955: a gadget whose body has padding (the instruments, the keyboards) keeps it: the caption sits at the CONTENT edge, and ends where the content ends
     }
     // the BOTTOM of the body, not its height: the first row's 3 px top margin collapses through the body
+    numbers.capBlock = numbers.capBlock ?? {}; (numbers.capBlock[file] = numbers.capBlock[file] ?? {})[width] = info?.capBlock ?? null;                          // the caption block's own height (its 12 px margin included): a gadget captioned for the first time keeps its old height PLUS this
     const h = await g.probe('Math.ceil(document.body.getBoundingClientRect().bottom)'); numbers.heights[file][width] = h;
     verdict[`${tag}_noHorizontalScroll`] = (await g.probe('document.documentElement.scrollWidth - document.documentElement.clientWidth')) <= 0;
     await g.page.ev(`document.getElementById('f').style.height = '${h}px'`); await sleep(100);
@@ -91,7 +92,8 @@ const scoreFigures = [...new Set([...svgs, ...imageDirs.flatMap((d) => (fs.exist
       numbers.svg[tag].rowRightPx = Math.round(Math.max(...r.rows.map((w) => w.right)) * r.scale - r.vb[0] * r.scale);
     }
   }
-  const offsets = scoreFigures.map((f) => numbers.svg[path.basename(f, '.svg')].inkLeftOffset).filter((v) => v !== null);
+  const imageDirFigures = scoreFigures.filter((f) => imageDirs.some((d) => f.startsWith(d + '/')));                         // the rule is for the score figures of scales/ and intervals/ (0940); the engraved scores of notes/ keep their own margin and are only reported
+  const offsets = imageDirFigures.map((f) => numbers.svg[path.basename(f, '.svg')].inkLeftOffset).filter((v) => v !== null);
   numbers.inkLeftOffsets = Object.fromEntries(scoreFigures.map((f) => [path.basename(f, '.svg'), numbers.svg[path.basename(f, '.svg')].inkLeftOffset]));
   verdict.scoreFiguresStartAtTheSameLeftOffset = offsets.length >= 3 && Math.max(...offsets) - Math.min(...offsets) <= 0.5;
   page.close();

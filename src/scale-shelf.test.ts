@@ -1,7 +1,7 @@
 // 2026-11-19-0938 (driver 2026-11-18, R4 and R5) - the scale exercises say "tonic" (never "home note", except in the one first-prompt line "Pick a tonic (home note).") and show a SHELF of twelve slots instead of the row of twelve chips:
 // one slot per tonic, in a FIXED grid (4 x 3 at wide widths, 3 x 4 below 420 px: CSS only), under the build area. An unbuilt slot is a quiet dashed outline with the tonic's name; tapping it starts that tonic's build (as the chips did). A slot of a COMPLETED build
 // (all notes found within the wrong taps) fills with a MINI SCORE: a small treble staff with the scale's notes, tonic up to tonic, the right accidentals, drawn by the SAME `drawStaff` as the main staff (the shared `scale view` block, only the width of the staff and the
-// svg it draws into differ), with the name under it ("G major"). A failed build leaves its slot empty and tappable; a completed slot stays until Reset or reload (memory only) and is tappable (a fresh build of it); it survives starting another tonic. The room for the
+// svg it draws into differ), with the name under it ("G major"). A failed build leaves its slot empty and tappable; a completed slot stays until Reset or reload (memory only) and is tappable (2026-11-19-0955: it shows its finished scale in the main staff; it used to start a fresh build of it); it survives starting another tonic. The room for the
 // twelve slots is reserved from the start (a grid of twelve fixed-height slots), so the file has ONE height in every state at each width. The many-scale files show the twelve tonics of the CURRENTLY chosen scale; the completions of every scale are kept in memory.
 // Pinned here, for all five build files unless said: the words (six files, in the page text, the labels, the announcements, the code and captions.json); the shelf's structure in every state; the slot that fills, its mini score spelled as the shared Scales core spells it for all
 // twelve major and all twelve natural minor tonics (and every scale of the many-scale files); a failed build does not fill; survival; Reset; the shelf follows the scale; no hover, no tooltip, no aria-label on the new elements; the CSS that keeps one height; no second drawing code.
@@ -50,7 +50,7 @@ function open(file: string) {
   const model = () => x.exStart(tonicNow(), scale(), 'medium');
   const text = (id: string): string => doc.getElementById(id).textContent.trim();
   const p = {
-    win, doc, errors, x, simple, click, sel, key, slots, scale, tonicNow, model, text, h,
+    win, doc, errors, x, simple, click, sel, key, slots, scale, tonicNow, model, text, h, stub,
     start: (t: number) => click(slots()[t]),
     finish: () => { for (const mm of x.exTargets(model())) { const k = key(mm); if (k && !k.classList.contains('lit')) click(k); } },
     /** the wrong taps that end the build (3 in the simple files and at the default level of the full ones) */
@@ -140,7 +140,7 @@ for (const f of FIVE) {
     const p = open(f); const snap = (): string => JSON.stringify(p.slots().map((s: any) => [s.tagName, s.querySelector('.nm') ? 1 : 0, s.querySelectorAll('svg').length, s.getAttribute('aria-labelledby')]));
     const base = snap(); const states: Array<[string, () => void]> = [
       ['started', () => p.start(4)], ['half built', () => p.click(p.key(p.model().notes[3]))], ['failed', () => p.fail()], ['restarted', () => p.start(4)], ['completed', () => p.finish()],
-      ['another started', () => p.start(9)], ['another completed', () => p.finish()], ['a completed slot restarted', () => p.start(4)], ['Reset', () => p.click(p.doc.getElementById('reset'))],
+      ['another started', () => p.start(9)], ['another completed', () => p.finish()], ['a completed slot shown', () => p.start(4)], ['Reset', () => p.click(p.doc.getElementById('reset'))],
     ];
     assert.equal(p.slots().length, 12);
     for (const [name, go] of states) { go(); assert.equal(p.slots().length, 12, `${f}: twelve slots ${name}`); assert.equal(snap(), base, `${f}: the same structure ${name}`); assert.equal(p.doc.querySelectorAll('#shelf > .slot').length, 12); assert.equal(p.doc.getElementById('homes'), null); }
@@ -196,15 +196,16 @@ for (const f of FULL) {
 
 // ---- 4. failing, surviving, restarting, Reset ----------------------------------------------------------------------------------------------------------------------------------------
 for (const f of FIVE) {
-  test(`${f}: a FAILED build leaves its slot empty and tappable; a completed slot survives starting another tonic, failing another one, and is tappable (a fresh build of it that keeps its mini score); a failed key built later fills`, () => {
-    const p = open(f); const scale = p.scale();
+  test(`${f}: a FAILED build leaves its slot empty and tappable; a completed slot survives starting another tonic, failing another one, and is tappable (it shows its finished scale and keeps its mini score); a failed key built later fills`, () => {
+    const p = open(f); const scale = p.scale(); const n = p.x.exStart(0, scale, 'medium').notes.length;
     p.start(7); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); same(p.done(), [], 'a failed build fills nothing'); assert.equal(p.slots()[7].querySelector('svg').children.length, 0); assert.ok(!p.slots()[7].classList.contains('done')); assert.equal(p.slots()[7].querySelector('.nm').textContent, p.x.tonicName(7, scale), 'the slot still says only the tonic');
     assert.equal(p.slots()[7].disabled, false, 'tappable'); p.start(7); assert.equal(p.heads(), 1, 'tapping the failed slot starts it fresh'); assert.match(p.text('prompt'), /^Exercise: build /);
     p.start(2); p.finish(); same(p.done(), [2]); const before = JSON.stringify(miniNotes(p.slots()[2])); assert.ok(before.length > 10);
     p.start(9); same(p.done(), [2], 'a completed slot survives starting another tonic'); same(miniNotes(p.slots()[2]), wantNotes(2, scale)); assert.ok(!p.slots()[2].classList.contains('current')); assert.ok(p.slots()[9].classList.contains('current'));
     p.fail(); same(p.done(), [2], 'and failing another one'); same(miniNotes(p.slots()[2]), wantNotes(2, scale));
-    p.start(2); same(p.done(), [2], 'tapping a completed slot starts a FRESH build of it and keeps its fill'); assert.equal(p.heads(), 1); assert.match(p.text('prompt'), /^Exercise: build /); assert.equal(p.doc.querySelectorAll('.key.lit:not(.tonic)').length, 0); same(miniNotes(p.slots()[2]), wantNotes(2, scale), 'its mini score stays while it is built again');
-    assert.ok(p.slots()[2].classList.contains('done') && p.slots()[2].classList.contains('current')); p.fail(); same(p.done(), [2], 'failing a completed key later does not uncount it'); same(miniNotes(p.slots()[2]), wantNotes(2, scale));
+    p.start(2); same(p.done(), [2], 'tapping a completed slot keeps its fill and SHOWS its finished scale (2026-11-19-0955: it used to start a FRESH build of it)'); assert.equal(p.heads(), n); assert.match(p.text('prompt'), /^Exercise done: you built /); assert.equal(p.doc.querySelectorAll('.key.lit:not(.tonic)').length, n - 2); same(miniNotes(p.slots()[2]), wantNotes(2, scale), 'its mini score stays'); same(mainNotes(p), wantNotes(2, scale));
+    assert.ok(p.slots()[2].classList.contains('done') && p.slots()[2].classList.contains('current'));
+    if (!p.simple) { p.sel('tonic', '2'); p.fail(); same(p.done(), [2], 'failing a completed key later (the many-scale files can start it afresh with the select) does not uncount it'); same(miniNotes(p.slots()[2]), wantNotes(2, scale)); }
     p.start(7); p.finish(); same(p.done(), [2, 7], 'the failed key, built later, fills'); assert.equal(p.slots().filter((s: any) => s.querySelector('svg').children.length > 0).length, 2, 'exactly the two completed slots carry a mini score');
     same(p.errors, []);
   });
@@ -253,6 +254,82 @@ test('the two single-scale files: the shelf fills one slot at a time, in any ord
     assert.equal(p.text('completed'), 'All twelve built.'); assert.equal(p.slots().filter((s: any) => s.querySelector('svg').querySelectorAll('.head').length === 8).length, 12, 'twelve mini scores');
     p.start(0); p.fail(); assert.equal(p.text('completed'), 'All twelve built.'); assert.equal(p.done().length, 12);
   }
+});
+
+// ---- 4b. 2026-11-19-0955 (driver: "when clicking a completed scale, please show the scale in the score as well"): a tap on the slot of a COMPLETED tonic SHOWS that finished scale -----------------------------------
+// Tapping the slot of an already completed tonic (of the scale chosen, in the many-scale files) shows that finished scale in the main staff, as at the end of its build: the eight notes with their accidentals, the letters and the steps, the keys' marks (the
+// found notes and the wrong taps it took), Play on. It is a VIEW: it does not restart the build, does not change "Completed n of N", and a second tap on the same completed slot changes nothing. Starting another tonic leaves every completed one completed.
+// Chosen for a tap while another build is under way (or a failed screen is up): the slot is a view of the completed scale, so the build under way is put down (it is not counted, not failed, and its tonic can be started again by tapping its slot).
+// (The tonic select, Random and New exercise of the many-scale files still start fresh builds, of any pair.) How the shown scale looks in real Chrome (one height, a real click, a shot): the `_completedTapShowsTheScale` verdicts of the two measure scripts.
+/** What the build area shows, as text: the keys' classes and marks, the staff, the letters, the steps, the prompt, the hint, the wrong taps, whether Play is on. */
+const mainArea = (p: Page): string => JSON.stringify({ keys: [...p.doc.querySelectorAll('#strip .key')].map((k: any) => `${k.getAttribute('data-midi')} ${k.getAttribute('class')} ${k.querySelector('text.mark')?.textContent ?? ''}`), staff: p.doc.getElementById('staff')!.innerHTML, label: p.doc.getElementById('staff')!.getAttribute('aria-label'),
+  letters: p.doc.getElementById('letters')!.innerHTML, chips: p.doc.getElementById('chips')!.innerHTML, prompt: p.text('prompt'), hint: p.text('hint'), play: p.doc.getElementById('play')!.disabled, wrongs: p.doc.getElementById('wrongs')?.textContent ?? null });
+const lettersOf = (p: Page): string[] => [...p.doc.querySelectorAll('#letters .letter')].map((l: any) => l.textContent.trim());
+for (const f of FIVE) {
+  test(`${f}: a tap on the slot of a COMPLETED tonic shows its finished scale in the main staff exactly as at the end of its build (eight notes with their accidentals, letters, steps, the marks of its keys, Play on); no restart, the count unchanged`, () => {
+    const p = open(f); const scale = p.scale(); const total = p.x.SCALES.length * 12, n = p.x.exStart(0, scale, 'medium').notes.length;
+    p.start(2); const mo = p.model(); const wrong = (() => { for (let k = mo.notes[0] + 1; k < mo.notes[mo.notes.length - 1]; k++) if (mo.notes.indexOf(k) < 0) return k; throw new Error('no wrong key'); })();
+    p.click(p.key(wrong)); p.finish(); same(p.done(), [2]); const atTheEnd = mainArea(p), count = p.text('completed'); assert.match(count, new RegExp(`^Completed 1 of ${total}`)); assert.equal(p.heads(), n); assert.equal(p.doc.querySelectorAll('#staff .head.ghost').length, 0);
+    p.start(9); p.click(p.key(p.x.exStart(9, scale, 'medium').notes[2])); assert.equal(p.heads(), 2, 'a build of another tonic is under way'); assert.notEqual(mainArea(p), atTheEnd);
+    p.start(2); same(p.errors, []);
+    assert.equal(mainArea(p), atTheEnd, 'the main area is exactly what it was at the end of the build of D');
+    same(mainNotes(p), wantNotes(2, scale), 'the notes (eight for a seven-note scale), with the scale\'s accidentals, are on the main staff'); assert.equal(p.heads(), n);
+    same(lettersOf(p), playerCore.spellScale(2, scale, 'up').map((n: any) => playerCore.noteName(n)), 'the letters'); assert.equal(p.doc.querySelectorAll('#chips .chip').length, p.x.recipeOf(scale, 'up').length, 'the steps');
+    assert.equal(p.doc.getElementById('play')!.disabled, false, 'Play is on'); assert.match(p.text('prompt'), /^Exercise done: you built /); assert.equal(p.text('hint'), 'Press Play to hear it.');
+    assert.equal(p.doc.querySelectorAll('.key.idle').length, 25, 'the keys are idle: it is a finished scale'); assert.equal(p.doc.querySelectorAll('.key.wrong').length, 1, 'the one wrong tap it took is still marked');
+    assert.equal(p.text('completed'), count, 'the count did not change'); same(p.done(), [2], 'and nothing else filled (the build of the tonic left on the way is not completed)');
+    assert.ok(p.slots()[2].classList.contains('current') && p.slots()[2].classList.contains('done') && !p.slots()[9].classList.contains('current')); assert.equal(p.doc.querySelectorAll('#shelf [aria-current]').length, 1);
+    same(miniNotes(p.slots()[2]), mainNotes(p), 'the mini score and the main staff show the same scale'); if (!p.simple) assert.equal(p.tonicNow(), 2, 'the tonic select follows the slot');
+    const before = p.stub.osc.length; p.click(p.doc.getElementById('play')); assert.equal(p.stub.osc.length - before, n, 'Play plays the notes of the scale up, octave included'); assert.match(p.text('sr'), /^Playing /);
+  });
+
+  test(`${f}: a SECOND tap on the same completed slot changes nothing at all; starting another tonic leaves every completed one completed, and each one shows its own scale when tapped (the main staff and its mini score agree)`, () => {
+    const p = open(f); const scale = p.scale(); const total = p.x.SCALES.length * 12, n = p.x.exStart(0, scale, 'medium').notes.length;
+    for (const t of [2, 7, 11]) { p.start(t); p.finish(); } same(p.done(), [2, 7, 11]); p.start(5); same(p.done(), [2, 7, 11], 'starting another tonic: every completed one stays completed'); assert.equal(p.heads(), 1);
+    p.start(7); const shown = p.doc.body.innerHTML; same(mainNotes(p), wantNotes(7, scale)); assert.ok(p.slots()[7].classList.contains('current'));
+    p.start(7); assert.equal(p.doc.body.innerHTML, shown, 'a second tap on a completed tonic does nothing new (not a byte of the page)'); p.start(7); assert.equal(p.doc.body.innerHTML, shown);
+    assert.match(p.text('completed'), new RegExp(`^Completed 3 of ${total}`));
+    for (const t of [11, 2, 7, 2]) { p.start(t); same(mainNotes(p), wantNotes(t, scale), `slot ${t} shows its own scale`); same(miniNotes(p.slots()[t]), mainNotes(p), `slot ${t}: the mini score and the main staff agree`); same(p.done(), [2, 7, 11]); assert.equal(p.doc.querySelectorAll('#shelf [aria-current]').length, 1); assert.equal(p.tonicNow(), t); assert.match(p.text('completed'), new RegExp(`^Completed 3 of ${total}`)); }
+    p.start(5); same(p.done(), [2, 7, 11], 'a tonic not completed yet starts a fresh build as ever'); assert.equal(p.heads(), 1); assert.match(p.text('prompt'), /^Exercise: build /); p.finish(); same(p.done(), [2, 5, 7, 11]); assert.match(p.text('completed'), new RegExp(`^Completed 4 of ${total}`));
+    same(p.errors, []);
+  });
+
+  test(`${f}: a tap on a completed slot while ANOTHER build is under way puts that build down and shows the completed scale; from a failed screen it shows the completed one; the abandoned tonic is neither completed nor counted and starts afresh when its slot is tapped; a completed scale failed later is shown as it was built`, () => {
+    const p = open(f); const scale = p.scale(); const total = p.x.SCALES.length * 12, n = p.x.exStart(0, scale, 'medium').notes.length;
+    p.start(4); p.finish(); const four = mainArea(p); p.start(6); p.click(p.key(p.x.exStart(6, scale, 'medium').notes[1])); p.click(p.key(p.x.exStart(6, scale, 'medium').notes[2])); assert.equal(p.heads(), 3, 'a half-built G');
+    p.start(4); assert.equal(mainArea(p), four, 'the completed scale is shown, the half build of the other tonic is put down'); same(p.done(), [4]); assert.match(p.text('completed'), new RegExp(`^Completed 1 of ${total}`)); assert.ok(!p.slots()[6].classList.contains('done') && !p.slots()[6].classList.contains('current'));
+    p.start(6); assert.equal(p.heads(), 1, 'the abandoned tonic starts afresh: nothing of the half build is left'); assert.equal(p.doc.querySelectorAll('.key.lit:not(.tonic)').length, 0); assert.match(p.text('prompt'), /^Exercise: build /);
+    p.fail(); assert.match(p.text('prompt'), /^Exercise over/); assert.equal(p.heads(), n); p.start(4); assert.equal(mainArea(p), four, 'from a failed screen: the completed scale'); same(p.done(), [4]);
+    // a completed pair built again through the many-scale controls and failed: its slot still shows the scale as it was BUILT
+    if (!p.simple) { p.sel('tonic', '4'); p.fail(); assert.match(p.text('prompt'), /^Exercise over/); same(p.done(), [4], 'failing a completed pair later does not uncount it'); p.start(4); assert.equal(mainArea(p), four, 'its slot shows the scale as it was built, not the failed attempt'); }
+    same(p.errors, []);
+  });
+}
+
+test('the many-scale files: a completed slot of the CHOSEN scale shows its scale; the shelf and the tap follow the scale chosen (what Dorian built is not shown under Phrygian); the controls that start builds (New exercise, a level) still do', () => {
+  const p = open('scale_build_modes_and_minor.html'); const D = 'dorian', P = 'phrygian';
+  p.sel('scale', D); p.start(2); p.finish(); p.start(8); p.finish(); p.start(5); const dorian2 = (() => { p.start(2); return mainArea(p); })(); same(mainNotes(p), wantNotes(2, D));
+  p.sel('scale', P); same(p.done(), []); p.start(2); assert.equal(p.heads(), 1, 'under Phrygian the slot is empty: tapping it starts a build'); assert.match(p.text('prompt'), /^Exercise: build D Phrygian/); p.finish(); same(p.done(), [2]); same(mainNotes(p), wantNotes(2, P));
+  p.sel('scale', D); p.start(2); assert.equal(mainArea(p), dorian2, 'back under Dorian: its completed scale shows as it was built'); same(mainNotes(p), wantNotes(2, D)); assert.notDeepEqual(mainNotes(p), wantNotes(2, P));
+  p.start(8); same(mainNotes(p), wantNotes(8, D)); assert.equal(p.tonicNow(), 8); assert.equal(p.doc.getElementById('scale').value, D); assert.equal(p.text('completed'), 'Completed 3 of 120 (10 scales, 12 tonics each)');
+  p.click(p.doc.getElementById('again')); assert.equal(p.heads(), 1, 'New exercise still starts a fresh build (of the tonic shown)'); same(p.done(), [2, 8], 'and the slot stays filled'); assert.equal(p.text('completed'), 'Completed 3 of 120 (10 scales, 12 tonics each)');
+  p.start(2); p.click(p.doc.getElementById('level-hard')); assert.equal(p.heads(), 1, 'a level change still starts a fresh build'); assert.match(p.text('hint'), /1 wrong tap left/);
+  p.click(p.doc.getElementById('random')); assert.equal(p.heads(), 1, 'Random too'); same(p.errors, []);
+});
+
+test('the pure part: exKeepFinished keeps the finished state of a BUILT pair (the first one, never a failed one, never changing its argument); exFinishedView says what a tap on a completed slot shows; the words of the view; both cores say it the same way', () => {
+  for (const f of FIVE) {
+    const x = pureOf(scriptOf(read(f))); const sc = x.SCALES[0]; assert.equal(typeof x.exKeepFinished, 'function', `${f}: exKeepFinished`); assert.equal(typeof x.exFinishedView, 'function', `${f}: exFinishedView`);
+    const built = (t: number, wrongs: number) => { let s = x.exStart(t, sc, 'medium'); let w = 0; for (let k = s.notes[0] + 1; w < wrongs; k++) if (s.notes.indexOf(k) < 0) { s = x.exTap(s, k).state; w++; } for (const m of x.exTargets(s)) s = x.exTap(s, m).state; return s; };
+    const b2 = built(2, 1), none = {}; assert.equal(b2.outcome, 'built'); const kept = x.exKeepFinished(none, b2); assert.equal(Object.keys(none).length, 0, 'the argument is not changed'); assert.equal(x.exFinishedView(kept, 2, sc), b2, 'the finished state itself'); assert.equal(x.exFinishedView(kept, 3, sc), null); assert.equal(x.exFinishedView(kept, 2, 'no_such_scale'), null);
+    const again = x.exKeepFinished(kept, built(2, 0)); assert.equal(x.exFinishedView(again, 2, sc), b2, 'the first completion stays');
+    let failed = x.exStart(5, sc, 'medium'); for (let k = failed.notes[0] + 1, n = 0; n < 3; k++) if (failed.notes.indexOf(k) < 0) { failed = x.exTap(failed, k).state; n++; } assert.equal(failed.outcome, 'gaveup'); assert.equal(Object.keys(x.exKeepFinished(kept, failed)).length, 1, 'a failed state is not kept'); assert.equal(Object.keys(x.exKeepFinished(kept, x.exStart(5, sc, 'medium'))).length, 1, 'nor one under way');
+    assert.equal(x.exFinishedView(x.exKeepFinished({}, built(2, 0)), 2, sc).wrong.length, 0);
+    assert.equal(x.exAnnounce(b2, 'show'), `Showing the scale you built: ${x.scaleWords(2, sc)}. Press Play to hear it.`, `${f}: the words of the view`);
+  }
+  const text = (f: string): string => { const h = read(f); const a = h.indexOf('  function exKeepFinished'); assert.ok(a > 0, `${f}: exKeepFinished`); const e = h.indexOf('function exFinishedView', a); return h.slice(a, h.indexOf('\n', e)); };
+  for (const [g, h] of [[SIMPLE[0], SIMPLE[1]], [FULL[0], FULL[1]], [FULL[0], FULL[2]]]) assert.equal(text(g), text(h), `${g} and ${h}: the same two functions`);
+  assert.equal(text(SIMPLE[0]), text(FULL[0]), 'and the same in both templates');
 });
 
 // ---- 5. no hover, no tooltip, one height, no second drawing code ------------------------------------------------------------------------------------------------------------------

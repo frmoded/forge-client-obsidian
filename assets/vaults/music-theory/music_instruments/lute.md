@@ -6,7 +6,7 @@ Or try it directly on a lute below: click positions to hold them, then play them
 
 ```html-embed
 music_instruments/resources/html/lute_fretboard.html
-380
+494
 ```
 
 ## History

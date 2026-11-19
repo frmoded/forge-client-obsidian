@@ -2,10 +2,13 @@
 // a blob: URL inside <iframe sandbox="allow-scripts">, at 800 px and at 360 px wide. (scripts/dev/measure-scale-exercises.mjs drives selects and levels and cannot drive these two.) Measured, with REAL mouse clicks on the slots and the keys
 // (DevTools Input.dispatchMouseEvent at the real box of each one):
 //   - the CONTENT HEIGHT (the body's own height) in EVERY state: fresh ("Pick a tonic (home note)."), and for each of the 12 tonics: started, 3 wrong taps (failed, not counted), started again (a failed key is retried), one found, built (completed, slot filled),
-//     started again (the slot of a completed key restarts it, keeps its fill), failed again (still completed), and after Reset; that it is ONE height, that the page does not scroll vertically when the iframe is exactly that tall (checked in every state), and not horizontally;
+//     the slot of the completed key tapped (2026-11-19-0955: it SHOWS the finished scale, it no longer restarts the build; its fill and the count stay), and after Reset; that it is ONE height, that the page does not scroll vertically when the iframe is exactly that tall (checked in every state), and not horizontally;
 //   - the SHELF (2026-11-19-0938; verdicts named `<file><width>_shelf_...`): twelve slots in every state; the grid is 4 columns x 3 rows at 800 px and 3 x 4 at 360 px (real layout: the slots' boxes); every slot has the same size; nothing of a slot's name or mini score runs out of its box;
 //     the number of filled slots equals the number of completions in every state (0 ... 12), a failed build leaves its slot empty, a completed slot keeps its mini score while it is built again or another key is built; the mini score of a filled slot has the eight heads of the
 //     scale, the five staff lines, the clef and the two red tonic heads, and its name says the scale; ONE height with the shelf empty, six and twelve filled; Reset empties the shelf; real clicks on all twelve slots fill all twelve; shots with the shelf empty / six filled / twelve filled;
+//   - 2026-11-19-0955 (verdict `<file><width>_completedTapShowsTheScale`, plus `_real_completedTapShows` and `_real_secondTapChangesNothing` in the sweep): a REAL click on the slot of an ALREADY COMPLETED tonic, while another tonic is half built, shows that finished scale in the main staff
+//     exactly as at the end of its build (the same DOM of the staff, keys, letters, steps, prompt and wrong-tap line as when it ended; the eight heads and their accidentals the mini score shows too), Play on, the count unchanged, no restart, a second click changes nothing (the page's
+//     DOM hash), starting another tonic leaves the completed one completed, ONE height before, after the click and after the second click; shot `<file><width>-completedTapShows-light/dark.png`;
 //   - the chooser's behaviour in the real page (first open starts nothing and the keys ignore taps; a slot starts at once; the third wrong tap ends it; the count and the fills; "All twelve built."; Reset);
 //   - a real Play through the real Web Audio graph (the pitch of every note, completed and failed builds);
 //   - that a real pointer RESTING over every slot, key, Play and Reset changes nothing (the page's screenshot and its DOM are the same while the pointer rests on each one and after, in a fresh, a half-built, a completed and a failed state);
@@ -95,7 +98,7 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     await g.shot(`${tag}-shelf-0-empty`, h0);
     await g.press('.key[data-midi="64"]'); verdict[`${tag}_freshKeyTapIgnored`] = (await g.count('.key.lit, .key.wrong, #staff .head')) === 0 && (await g.hz()).length === 0;
     await sample('fresh');
-    let ok = { slotStarts: true, thirdWrongEnds: true, notCounted: true, retry: true, built: true, fillKept: true, restart: true, failedLeavesEmpty: true, miniKeptWhileBuilt: true, miniOfTheScale: true, survives: true };
+    let ok = { slotStarts: true, thirdWrongEnds: true, notCounted: true, retry: true, built: true, fillKept: true, completedTapShows: true, secondTapChangesNothing: true, failedLeavesEmpty: true, miniKeptWhileBuilt: true, miniOfTheScale: true, survives: true };
     for (let t = 0; t < 12; t++) {
       const ms = midisOf(f.steps, t), targets = ms.slice(1, -1), wrongs = wrongKeysOf(ms).slice(0, 3); const chip = slot(t);
       // a new key: its slot starts it at once
@@ -118,14 +121,12 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
       ok.miniOfTheScale &&= (await g.probe(`(function () { var e = document.querySelector(${JSON.stringify(chip)}), v = e.querySelector('svg'); return e.classList.contains('done') && v.querySelectorAll('.head').length === ${ms.length} && /${f.scale === 'major' ? 'major' : 'natural minor'}$/.test(e.querySelector('.nm').textContent); })()`)) === true;
       if (completedN === 6) await g.shot(`${tag}-shelf-6-six`, h0); if (completedN === 12) await g.shot(`${tag}-shelf-12-twelve`, h0);
       ok.built &&= (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`) && (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done')`)) === true && (await g.text('prompt')).startsWith('Exercise done') && (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === 0 && (await g.probe(`document.getElementById('play').disabled`)) === false;
-      // the chip of a completed key restarts it and keeps its fill; failing it again does not uncount it
-      await g.press(chip); await sample(`t${t}_restart`);
-      ok.restart &&= (await g.count('#staff .head')) === 1 && (await g.text('wrongs')) === 'Wrong taps: 0 of 3' && (await g.text('prompt')).startsWith('Exercise: build ');
+      // 2026-11-19-0955: the slot of a completed key SHOWS its finished scale in the main staff (it used to restart the build) and keeps its fill; the count does not change; a second tap changes nothing
+      await g.press(chip); await sample(`t${t}_shown`);
+      ok.completedTapShows &&= (await g.count('#staff .head')) === ms.length && (await g.count('#staff .head.ghost')) === 0 && (await g.text('prompt')).startsWith('Exercise done') && (await g.count('#letters .letter')) === ms.length - 1 && (await g.count('#chips .chip')) === ms.length - 1 && (await g.probe(`document.getElementById('play').disabled`)) === false && (await g.count('.key.idle')) === 25 && (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`);
       ok.fillKept &&= (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done') && document.querySelector(${JSON.stringify(chip)}).classList.contains('current')`)) === true;
-      ok.miniKeptWhileBuilt &&= (await g.count(`${chip} svg .head`)) === ms.length;                   // the completed slot keeps its mini score while its key is built again
-      for (const k of wrongs) await g.press(`.key[data-midi="${k}"]`);
-      await sample(`t${t}_failedAgain`);
-      ok.fillKept &&= (await g.probe(`document.querySelector(${JSON.stringify(chip)}).classList.contains('done')`)) === true && (await g.text('completed')) === (completedN === 12 ? 'All twelve built.' : `Completed ${completedN} of 12`);
+      ok.miniKeptWhileBuilt &&= (await g.count(`${chip} svg .head`)) === ms.length;                   // the completed slot keeps its mini score while it is shown
+      { const before = await g.probe(hashOf); await g.press(chip); ok.secondTapChangesNothing &&= (await g.probe(hashOf)) === before; }
       for (let u = 0; u < t; u++) ok.survives &&= (await g.count(`${slot(u)}.done svg .head`)) === ms.length;      // every slot filled before this key is still filled, with its mini score, while this one was built and failed
     }
     for (const [k, v] of Object.entries(ok)) verdict[`${tag}_real_${k}`] = v;
@@ -141,6 +142,28 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     verdict[`${tag}_shelf_theShelfWasRightInEveryState`] = shelfBad === 0;                        // twelve slots, as many filled as completions, every mini score what its state says
     verdict[`${tag}_noErrorsAfterTheSweep`] = (await g.errs()).length === 0;
     g.page.close();
+
+    // ---- 1b. 2026-11-19-0955: a REAL click on the slot of a completed tonic shows its scale in the main staff (the driver: "when clicking a completed scale, please show the scale in the score as well")
+    {
+      const c = await mount(f.file, width); const embed1b = Math.max(...hs, h0); await c.setHeight(embed1b); const tag1b = `${tag}_completedTapShowsTheScale`;
+      const D = 2, E = 9, mD = midisOf(f.steps, D), tD = mD.slice(1, -1), wD = wrongKeysOf(mD)[0], mE = midisOf(f.steps, E);
+      const area = () => c.probe(`JSON.stringify({ keys: [].map.call(document.querySelectorAll('#strip .key'), function (k) { var m = k.querySelector('text.mark'); return k.getAttribute('data-midi') + ' ' + k.getAttribute('class') + ' ' + (m ? m.textContent : ''); }), staff: document.getElementById('staff').innerHTML, letters: document.getElementById('letters').innerHTML, chips: document.getElementById('chips').innerHTML, prompt: document.getElementById('prompt').textContent, hint: document.getElementById('hint').textContent, wrongs: document.getElementById('wrongs').textContent, play: document.getElementById('play').disabled })`);
+      const accs = (sel) => c.probe(`[].map.call(document.querySelectorAll(${JSON.stringify(sel)}), function (a) { return a.textContent; }).join('')`);
+      await c.press(slot(D)); await c.press(`.key[data-midi="${wD}"]`); for (const m of tD) await c.press(`.key[data-midi="${m}"]`);
+      const atTheEnd = await area(), countEnd = await c.text('completed'), hEnd = await c.height();
+      await c.press(slot(E)); await c.press(`.key[data-midi="${mE[2]}"]`); const half = await c.height(), underWay = (await c.count('#staff .head')) === 2;
+      await c.press(slot(D)); await sleep(150);
+      const shown = await area(), h1 = await c.height(), count1 = await c.text('completed'), shownDom = await c.probe(hashOf);
+      const miniAcc = await accs(`${slot(D)} svg .acc`), mainAcc = await accs('#staff .acc'), miniHeads = await c.count(`${slot(D)} svg .head`);
+      await c.shot(`${tag}-completedTapShows`, embed1b);
+      await c.press(slot(D)); const h2 = await c.height(), sameAgain = (await c.probe(hashOf)) === shownDom;
+      await c.press(slot(E)); const restarted = (await c.count('#staff .head')) === 1 && (await c.text('prompt')).startsWith('Exercise: build ');
+      verdict[tag1b] = underWay && shown === atTheEnd && count1 === countEnd && countEnd === 'Completed 1 of 12' && sameAgain && restarted
+        && miniHeads === mD.length && miniAcc === mainAcc && (await c.count(`${slot(D)}.done`)) === 1 && (await c.count(`${slot(E)}.done`)) === 0 && (await c.count('#shelf .slot.done')) === 1
+        && hEnd === half && half === h1 && h1 === h2 && h2 === embed1b && (await c.vScroll()) <= 0 && (await c.errs()).length === 0;
+      numbers[`${tag}_completedTapShows`] = { hEnd, half, afterTap: h1, afterSecondTap: h2, count: count1, accidentals: mainAcc };
+      c.page.close();
+    }
 
     // ---- 2. a real Play (completed and failed builds), the pitches through the real Web Audio graph
     const r = await mount(f.file, width); const embed = Math.max(...hs, h0); await r.setHeight(embed);

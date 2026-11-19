@@ -10,7 +10,7 @@ See [[the problem with frets]] for why this was even a fight worth having: a fre
 
 ```html-embed
 music_instruments/resources/html/lute_fretboard.html
-380
+494
 ```
 
 ## Do the good

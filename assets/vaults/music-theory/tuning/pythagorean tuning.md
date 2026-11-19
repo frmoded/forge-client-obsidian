@@ -14,7 +14,7 @@ Below, C3 to C4, naturals only, tuned to Pythagorean. Press **Play ascending**. 
 
 ```html-embed
 tuning/resources/html/piano_keyboard_pythagorean.html
-280
+392
 ```
 
 ## Do the good
@@ -25,7 +25,7 @@ Below, C3 and G3 start held. Play them together, then flip to Equal and play the
 
 ```html-embed
 tuning/resources/html/piano_keyboard_pythagorean_good.html
-280
+392
 ```
 
 ## Do the bad
@@ -36,7 +36,7 @@ Below, G♯3 and D♯4 start held — that's the wolf. Play together, then flip 
 
 ```html-embed
 tuning/resources/html/piano_keyboard_pythagorean_bad.html
-280
+392
 ```
 
 ## History

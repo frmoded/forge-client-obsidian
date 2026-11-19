@@ -4,7 +4,7 @@ Here's the weird part. Take three C's, C3, C4 and C5, each an octave above the l
 
 ```html-embed
 music_instruments/resources/html/piano_keyboard.html
-280
+392
 ```
 
 Now the same trick with a single jump, one octave, A3 up to A4:

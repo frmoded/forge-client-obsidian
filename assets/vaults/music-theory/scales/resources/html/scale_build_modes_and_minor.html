@@ -104,7 +104,7 @@
   .fig-cap .t { font-size: 15px; line-height: 19px; font-weight: 600; color: #2B2B2B; }
   .fig-cap .l { font-size: 12px; line-height: 17px; margin-top: 2px; color: #555555; }
 </style>
-<div class="fig-cap"><div class="t">Exercise</div><div class="l">Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play</div></div>
+<div class="fig-cap"><div class="t">Exercise: modes and minor scales</div><div class="l">Pick a tonic and a scale, tap its keys and watch the staff fill in; Play lets you hear it; finished scales stay on the shelf</div></div>
 <!-- caption END -->
 <script>
 (function () {
@@ -112,7 +112,7 @@
   // ==== config BEGIN (2026-11-17-2003): the scales this exercise offers: the ONLY lines that differ between the scale exercise files (and the <title>); a test pins everything else identical ====
   var SCALES = ["ionian", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian", "natural_minor", "harmonic_minor", "melodic_minor"];
   // ==== config END ====================================================================================================================
-  // 2026-11-17-2003 - the SCALE EXERCISE: build a scale on the piano, with the staff filling in beside it. Choose a tonic (and, when the page offers more than one scale, a scale) or press Random; the tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling (one letter per degree for the seven-note scales); a wrong key is marked and puts nothing on the staff. Easy / Medium / Hard allow 5 / 3 / 1 wrong taps. 2026-11-19-0938 - the SHELF under the build area: twelve slots, one per tonic OF THE SCALE CHOSEN, in a fixed CSS grid (the room is reserved from the start, so the page has ONE height); tapping a slot starts that tonic (as the tonic select does); a COMPLETED build (all notes found within the level's wrong taps) fills its slot with a MINI SCORE of the scale (drawn by the same `drawStaff` as the main staff: see drawMini) and the name under it ("A Dorian"); a failed build leaves its slot empty and tappable; the completions of every scale are kept in memory (the shelf swaps with the scale), until Reset or reload. When the exercise ends (built, or out of wrong taps) the whole scale is on the staff (the notes you missed dashed), the letters and the whole and half steps appear (they are the answer, so only now) and Play plays the scale up.
+  // 2026-11-17-2003 - the SCALE EXERCISE: build a scale on the piano, with the staff filling in beside it. Choose a tonic (and, when the page offers more than one scale, a scale) or press Random; the tonic is marked; tap the other notes of the scale on the keys, in any order, up to the octave. Each right key lights and puts its note on the treble staff with the scale's proper spelling (one letter per degree for the seven-note scales); a wrong key is marked and puts nothing on the staff. Easy / Medium / Hard allow 5 / 3 / 1 wrong taps. 2026-11-19-0938 - the SHELF under the build area: twelve slots, one per tonic OF THE SCALE CHOSEN, in a fixed CSS grid (the room is reserved from the start, so the page has ONE height); tapping a slot starts that tonic (as the tonic select does) unless it is the slot of a COMPLETED tonic of the scale chosen, which shows its finished scale (2026-11-19-0955); a COMPLETED build (all notes found within the level's wrong taps) fills its slot with a MINI SCORE of the scale (drawn by the same `drawStaff` as the main staff: see drawMini) and the name under it ("A Dorian"); a failed build leaves its slot empty and tappable; a completed slot is tappable too (it shows its finished scale); the completions of every scale are kept in memory (the shelf swaps with the scale), until Reset or reload. When the exercise ends (built, or out of wrong taps) the whole scale is on the staff (the notes you missed dashed), the letters and the whole and half steps appear (they are the answer, so only now) and Play plays the scale up.
   // It looks like the Scales hub player (scale_player.html) and shares its blocks, byte for byte (pinned by a test): the scale core, the piano voice and the scale view (strip and staff). Memory only: the sandboxed page has no storage.
   // ---- pure functions (no DOM; the node harness exports them) ------------------------------------------------------------------------------------------
   var BASE = 60, LOW = 60, HIGH = 84, A4_HZ = 440, STEP_SECONDS = 0.45, NOTE_LEN = 0.7;                 // the strip is C4..C6; a scale sits on the tonic's pitch class in the octave from C4 (so the staff and the strip agree)
@@ -263,6 +263,7 @@
   function exAnnounce(s, event) {
     var tl = s.left + (s.left === 1 ? " wrong tap left." : " wrong taps left.");
     if (event === "start") return "New exercise: build " + scaleWords(s.tonic, s.scale) + ". The tonic is marked. " + tl;
+    if (event === "show") return "Showing the scale you built: " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
     if (event === "right") return "That note is in the scale. " + exRemaining(s) + " to find.";
     if (event === "wrong") return "Not in the scale. " + tl;
     if (event === "built") return "You built " + scaleWords(s.tonic, s.scale) + ". Press Play to hear it.";
@@ -293,6 +294,9 @@
   }
   // What a slot's mini score shows: the scale up from the tonic with its octave note, spelled by the shared core (the notes the main staff shows at the end of a build), and their midis. Pure.
   function exMiniScore(tonic, scaleId) { return { notes: exWithOctave(spellScale(tonic, scaleId, "up")), midis: scaleMidis(tonic, scaleId, "up", BASE) }; }
+  // 2026-11-19-0955 - what a tap on the slot of a COMPLETED tonic shows: the finished state of its build (the keys' marks, the wrong taps it took, the whole scale), kept when a build ends "built". The first completion of a pair stays: a later build of the same pair (many-scale files: the tonic select, Random, New exercise) that fails, or is built again, does not replace it. Pure, immutable.
+  function exKeepFinished(kept, s) { var o = {}, k; for (k in kept) o[k] = kept[k]; if (s && s.outcome === "built" && !o[exPairKey(s.tonic, s.scale)]) o[exPairKey(s.tonic, s.scale)] = s; return o; }
+  function exFinishedView(kept, tonic, scaleId) { return kept[exPairKey(tonic, scaleId)] || null; }
   // ==== exercise core END ==========================================================================================================================
   // ==== piano voice BEGIN (2026-11-16-1001) ======================================================================================================
   // The SAME block is in every gadget that plays the piano (a test walks the vault and pins them identical; each gadget is one self-contained file, so it is copied) and in piano_voice_lab.html, where it can be tried with other numbers.
@@ -395,13 +399,13 @@
   if (typeof document === "undefined") {           // node test harness
     module.exports = { LOW: LOW, HIGH: HIGH, BASE: BASE, STEP_SECONDS: STEP_SECONDS, SCALES: SCALES, SC_SCALES: SC_SCALES, scaleNotes: scaleNotes, spellScale: spellScale, scaleTitle: scaleTitle, scaleWords: scaleWords, tonicName: tonicName, recipeOf: recipeOf, noteName: noteName, noteWords: noteWords, scScale: scScale, exWithOctave: exWithOctave, scaleMidis: scaleMidis,
       EX_LEVELS: EX_LEVELS, EX_DEFAULT_LEVEL: EX_DEFAULT_LEVEL, exAttempts: exAttempts, exStart: exStart, exTargets: exTargets, exTap: exTap, exRemaining: exRemaining, exStaffNotes: exStaffNotes, exRandom: exRandom, exTitle: exTitle, exPrompt: exPrompt, exHint: exHint, exAnnounce: exAnnounce, exKeyName: exKeyName, exPlayPlan: exPlayPlan,
-      exEmptyScores: exEmptyScores, exPairKey: exPairKey, exCompletedAdd: exCompletedAdd, exCompletedCount: exCompletedCount, exTotal: exTotal, exAllDone: exAllDone, exHomesDone: exHomesDone, exCompletedText: exCompletedText, exMiniScore: exMiniScore, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
+      exEmptyScores: exEmptyScores, exPairKey: exPairKey, exCompletedAdd: exCompletedAdd, exCompletedCount: exCompletedCount, exTotal: exTotal, exAllDone: exAllDone, exHomesDone: exHomesDone, exCompletedText: exCompletedText, exMiniScore: exMiniScore, exKeepFinished: exKeepFinished, exFinishedView: exFinishedView, exTried: exTried, exBuilt: exBuilt, exCounterText: exCounterText, exBoardText: exBoardText, midiToHz: midiToHz, isBlack: isBlack, pianoVoice: pianoVoice, pianoBus: pianoBus, PIANO_OSC_PER_NOTE: PIANO_OSC_PER_NOTE };
     return;
   }
   // ---- the page ---------------------------------------------------------------------------------------------------------------------------------------
   var schedule = function (fn, ms) { return (window.__schedule || setTimeout)(fn, ms); };                 // an injected scheduler for tests; the page's own is setTimeout
   var rng = function () { return (window.__earRandom || Math.random)(); };                                   // an injected random source for tests
-  var tonic = 0, scaleId = SCALES[0], level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), completed = {}, state = null, timers = [];
+  var tonic = 0, scaleId = SCALES[0], level = EX_DEFAULT_LEVEL, scores = exEmptyScores(), completed = {}, kept = {}, state = null, timers = [];
   // ==== scale view BEGIN (2026-11-17-2003) =========================================================================================================
   // The SAME block is in scale_player.html and in the five scale exercise widgets (scale_build_major / _natural_minor / _modes_and_minor / _other_scales and scale_ear_build_the_scale; a test pins them identical): the piano strip (C4..C6) and the treble staff. A note given to drawStaff may be `hidden` (not drawn: the exercise has not found it yet) or `ghost` (drawn dashed: the exercise shows what was missed); the player never sets either.
   var NS = "http://www.w3.org/2000/svg";
@@ -448,7 +452,7 @@
   var keyEls = Object.keys(keys);
   function tap(mm) {
     var r = exTap(state, mm); if (r.event === "ignored") return;
-    state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") { scores = exBuilt(scores, level); completed = exCompletedAdd(completed, state.tonic, state.scale); }
+    state = r.state; if (r.first) scores = exTried(scores, level); if (r.event === "built") { scores = exBuilt(scores, level); completed = exCompletedAdd(completed, state.tonic, state.scale); kept = exKeepFinished(kept, state); }
     stopTimers(); render(exAnnounce(state, r.event)); sound([{ midi: mm, when: 0 }]);
   }
   keyEls.forEach(function (k) {
@@ -528,18 +532,18 @@
   $("random").addEventListener("click", function () { var r = exRandom(SCALES, rng, { tonic: tonic, scale: scaleId }); tonic = r.tonic; scaleId = r.scale; fresh(); });
   $("again").addEventListener("click", function () { fresh(); });
   $("play").addEventListener("click", function () { play(); });
-  $("reset").addEventListener("click", function () { scores = exEmptyScores(); completed = {}; render("Score cleared."); });
+  $("reset").addEventListener("click", function () { scores = exEmptyScores(); completed = {}; kept = {}; render("Score cleared."); });
   EX_LEVELS.forEach(function (l) {
     var b = document.createElement("button"); b.type = "button"; b.id = "level-" + l; b.textContent = exLevelName(l); b.setAttribute("aria-description", exLevelName(l) + ": " + EX_ATTEMPTS[l] + (EX_ATTEMPTS[l] === 1 ? " wrong tap" : " wrong taps") + " allowed");
     b.addEventListener("click", function () { if (l === level) return; level = l; fresh(); });         // a new level starts a fresh exercise; each level keeps its own score
     $("levels").appendChild(b);
   });
-  // the shelf: the twelve tonics of the scale chosen. A tap on a slot starts that tonic (as the select does); the slots are made ONCE and the render only changes their class, texts and mini scores. A slot names itself through a hidden text (aria-labelledby): no aria-label, no title.
+  // the shelf: the twelve tonics of the scale chosen. A tap on a slot starts that tonic (as the select does), EXCEPT a slot of a COMPLETED tonic of the scale chosen (2026-11-19-0955): that SHOWS its finished scale in the main staff, as at the end of its build (exFinishedView: the kept finished state), starts nothing and leaves the scores and the count alone; a second tap on it does nothing; a build under way, or a failed screen, is put down for it. The slots are made ONCE and the render only changes their class, texts and mini scores. A slot names itself through a hidden text (aria-labelledby): no aria-label, no title.
   for (var ht = 0; ht < 12; ht++) (function (t) {
     var b = document.createElement("button"); b.type = "button"; b.className = "slot"; b.setAttribute("aria-labelledby", "slot-name-" + t);
     var svg = el("svg", { "class": "mini", "aria-hidden": "true" }, b), nm = document.createElement("span"), sr = document.createElement("span");
     nm.className = "nm"; nm.setAttribute("aria-hidden", "true"); sr.className = "sr"; sr.id = "slot-name-" + t; b.appendChild(nm); b.appendChild(sr);
-    b.addEventListener("click", function () { tonic = t; fresh(); }); $("shelf").appendChild(b); slots.push({ b: b, svg: svg, nm: nm, sr: sr, made: "" });
+    b.addEventListener("click", function () { var v = exFinishedView(kept, t, scaleId); tonic = t; if (!v) { fresh(); return; } if (v === state) return; stopTimers(); state = v; render(exAnnounce(v, "show")); }); $("shelf").appendChild(b); slots.push({ b: b, svg: svg, nm: nm, sr: sr, made: "" });
   })(ht);
   fresh(false);
 })();

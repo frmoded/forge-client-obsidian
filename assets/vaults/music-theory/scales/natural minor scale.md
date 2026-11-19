@@ -30,7 +30,7 @@ To see any scale on a keyboard and a staff, use the player on [[Scales]].
 
 ```html-embed
 scales/resources/html/scale_build_natural_minor.html
-643
+626
 ```
 
 <div style="

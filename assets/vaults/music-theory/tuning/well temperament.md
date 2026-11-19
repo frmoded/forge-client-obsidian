@@ -10,7 +10,7 @@ Below, C3 to C4, naturals only, tuned to Werckmeister III. Press **Play ascendin
 
 ```html-embed
 tuning/resources/html/piano_keyboard_well.html
-280
+392
 ```
 
 <div style="
@@ -90,7 +90,7 @@ Below, E4 and B4 start held — one of the eight fifths Werckmeister never touch
 
 ```html-embed
 tuning/resources/html/piano_keyboard_well_good.html
-280
+409
 ```
 
 ## Do the bad
@@ -99,7 +99,7 @@ Below, D4 and A4 start held instead — one of the four fifths that got shaved. 
 
 ```html-embed
 tuning/resources/html/piano_keyboard_well_bad.html
-280
+409
 ```
 
 ## History

@@ -22,7 +22,7 @@ A [[monochord]] makes the beat rate easy to see in ratios. Put the bridge exactl
 
 ```html-embed
 music_instruments/resources/html/monochord.html
-300
+403
 ```
 
 Try it: drag the bridge a little to the right of the middle and pluck both segments. With the full string tuned to 110 Hz, the beat rate is $\Delta f = f_{right} - f_{left}$, and the further the readout gets from 1 : 1, the faster the throb.

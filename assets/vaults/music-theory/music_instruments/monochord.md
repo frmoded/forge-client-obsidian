@@ -6,7 +6,7 @@ Move the bridge to the exact halfway point and the shorter segment sounds an oct
 
 ```html-embed
 music_instruments/resources/html/monochord.html
-300
+403
 ```
 
 Instruments built this way — sometimes with a graduated scale marked directly under the string, sometimes with several strings so more than one ratio can sound at once — were standard equipment for music theorists for roughly two thousand years, right up through the Renaissance, precisely because they let a claim about ratios be checked by ear on the spot rather than taken on faith.

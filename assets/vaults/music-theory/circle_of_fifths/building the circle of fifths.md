@@ -13,7 +13,6 @@ Try it: press clockwise on the wheel twelve times and watch it come home.
 circle_of_fifths/resources/html/circle_of_fifths.html
 692
 ```
-*The circle of fifths: press clockwise or counter-clockwise to step one fifth and see what changed in the key.*
 
 <div style="
   display:flex;

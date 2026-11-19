@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="95.25mm" height="35.9783mm" viewBox="12.7264 3.1243 54.2048 20.4754">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" width="95.25mm" height="31.4806mm" viewBox="12.7264 3.1243 54.2048 17.9157">
 <style type="text/css">
 <![CDATA[
 tspan { white-space: pre; }
@@ -113,8 +113,7 @@ c0 -74 18 -133 36 -194c80 97 146 198 146 324z" fill="currentColor"/>
 <!-- caption-box 12.7264 3.1243 37.1495 9.3333|65.28mm|16.40mm -->
 <g font-family="system-ui, -apple-system, Segoe UI, sans-serif">
 <text x="12.7264" y="16.3724" font-size="2.2585" fill="#2B2B2B" text-anchor="start" font-weight="600">G major</text>
-<text x="12.7264" y="19.2332" font-size="1.8068" fill="#555555" text-anchor="start">The same recipe from G; the seventh note is F-sharp,</text>
-<text x="12.7264" y="21.7929" font-size="1.8068" fill="#555555" text-anchor="start">shown here as a sharp sign on the staff</text>
+<text x="12.7264" y="19.2332" font-size="1.8068" fill="#555555" text-anchor="start">The same recipe from G; the seventh note is F♯</text>
 </g>
 <!-- caption END -->
 </svg>

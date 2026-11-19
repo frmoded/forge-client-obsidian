@@ -8,7 +8,7 @@ Below, C3 to C4, naturals only, tuned to Equal. Press **Play ascending**. Sounds
 
 ```html-embed
 tuning/resources/html/piano_keyboard_equal.html
-280
+392
 ```
 
 That abandonment of rational lengths is also what makes the [[monochord]] obsolete as a construction tool: it only works because simple ratios mark clean, repeatable points on a string, and equal temperament's positions can be approximated on one but never *constructed* the way a fifth or fourth could.
@@ -23,7 +23,7 @@ Play the wolf. Actually play it — below, G♯3 and D♯4 start held, tuned to 
 
 ```html-embed
 tuning/resources/html/piano_keyboard_equal_good.html
-280
+409
 ```
 
 ## Do the bad
@@ -32,7 +32,7 @@ Here's the bill for that peace of mind. Below, C3 and G3 start held — the best
 
 ```html-embed
 tuning/resources/html/piano_keyboard_equal_bad.html
-280
+392
 ```
 
 ## History

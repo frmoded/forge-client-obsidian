@@ -12,9 +12,8 @@ Try it: you get a signature on the staff, and you say which major and which mino
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_signature_to_key.html
-655
+672
 ```
-*Exercise: you get a signature on the staff; tap its major key and its relative minor on the wheel. Easy, medium and hard allow 5, 3 or 1 wrong tries.*
 
 <div style="
   display:flex;

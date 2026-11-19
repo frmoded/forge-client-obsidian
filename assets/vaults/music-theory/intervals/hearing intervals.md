@@ -10,7 +10,7 @@ One after the other: you hear two notes in turn, the first is lit, and you find 
 
 ```html-embed
 music_instruments/resources/html/interval_ear_one_after_the_other.html
-278
+261
 ```
 
 Both at once: two notes sound together, the lower is lit, and you find the higher.

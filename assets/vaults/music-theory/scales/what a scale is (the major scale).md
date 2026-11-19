@@ -38,7 +38,7 @@ To see any scale, use the player on [[Scales]].
 
 ```html-embed
 scales/resources/html/scale_build_major.html
-643
+626
 ```
 
 Natural minor is next: [[natural minor scale]].

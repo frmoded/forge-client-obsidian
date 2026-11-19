@@ -6,6 +6,8 @@
 // the scale's heads in every filled slot and nothing in the others, the line "Completed n of N" right; the grid is 4 x 3 at 800 px and 3 x 4 at 360 px (real boxes), the twelve slots have one size, and with twelve filled the names (two lines for "G sharp diminished (half-whole)")
 // fit their slots in EVERY scale of the file; ONE height with the shelf empty, six and twelve filled (and in every other state); with REAL clicks on all twelve slots of the first scale the shelf fills to twelve mini scores, the other scale shows an empty shelf and the first
 // one twelve filled again (the memory), Reset empties it; shots (light and dark) with the shelf empty, six filled and twelve filled.
+// 2026-11-19-0955: the verdict `<file><width>_completedTapShowsTheScale`: with REAL clicks, after the twelve tonics of the first scale are built, New exercise and one right key start a build under way; a click on the slot of a COMPLETED tonic then shows that finished scale in the main staff (all its heads, the
+// letters and the steps, Play on, the keys idle, the tonic select following the slot, the mini score and the main staff agreeing on the accidentals), the count "Completed n of N" does not change, no restart; a second click changes nothing (the DOM hash); ONE height before, after the click and after the second click; a shot `<file>-<width>-completedTapShows`.
 //   node scripts/dev/measure-scale-exercises.mjs [--vault ~/projects/music-theory] [--out <dir>] [--only <file fragment>]        exit 0 = every verdict true
 import fs from 'node:fs';
 import os from 'node:os';
@@ -137,6 +139,20 @@ for (const f of FILES.filter((x) => !only || x.file.includes(only))) {
     verdict[`${name}${width}_shelf_realSixFilledAfterSixSlots`] = realSix;
     verdict[`${name}${width}_shelf_realHeightIsTheSweepsHeightWithTwelveFilled`] = (await r.height()) === embed;
     verdict[`${name}${width}_shelf_realNoVerticalScrollWithTwelveFilled`] = (await r.vScroll()) <= 0;
+    {   // 2026-11-19-0955: a REAL click on a completed slot of the scale chosen shows its scale (all twelve are completed here)
+      const T = 3, mT = midisOf(T, first), lineBefore = await r.text('completed'), hBefore = await r.height();
+      const hashDom = `(function(){ var h = 7, t = document.documentElement.outerHTML; for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return t.length + ':' + h; })()`;
+      const cur = await r.probe(`+document.getElementById('tonic').value`);
+      await r.press('#again'); await r.press(`.key[data-midi="${midisOf(cur, first)[1]}"]`); const underWay = (await r.count('#staff .head')) === 2;
+      await r.press(`#shelf .slot:nth-child(${T + 1})`); await sleep(150);
+      const domShown = await r.probe(hashDom), hShown = await r.height();
+      const accs = (sel) => r.probe(`[].map.call(document.querySelectorAll(${JSON.stringify(sel)}), function (a) { return a.textContent; }).join('')`);
+      const shownOk = underWay && (await r.count('#staff .head')) === mT.length && (await r.count('#staff .head.ghost')) === 0 && (await r.count('#letters .letter')) === mT.length - 1 && (await r.count('#chips .chip')) === mT.length - 1 && (await r.probe(`document.getElementById('play').disabled`)) === false
+        && (await r.count('.key.idle')) === 25 && (await r.probe(`+document.getElementById('tonic').value`)) === T && (await r.text('prompt')).startsWith('Exercise done') && (await r.text('completed')) === lineBefore && (await accs(`#shelf .slot:nth-child(${T + 1}) svg .acc`)) === (await accs('#staff .acc')) && (await r.count(`#shelf .slot:nth-child(${T + 1}) svg .head`)) === mT.length;
+      await r.shot(`${shelfTag}-completedTapShows`, embed);
+      await r.press(`#shelf .slot:nth-child(${T + 1})`); const hAgain = await r.height();
+      verdict[`${name}${width}_completedTapShowsTheScale`] = shownOk && (await r.probe(hashDom)) === domShown && hBefore === embed && hShown === embed && hAgain === embed && (await r.count('#shelf .slot.done')) === 12 && (await r.vScroll()) <= 0 && (await r.errs()).length === 0;
+    }
     if (f.scales.length > 1) {
       const second = f.scales[1]; await r.probe(`(function(){ var e = document.getElementById('scale'); e.value = ${JSON.stringify(second)}; e.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()`);
       verdict[`${name}${width}_shelf_otherScaleShowsAnEmptyShelf`] = (await r.shelfNow(STEPS[second].length + 1)) === '12:0:0' && (await r.text('completed')).startsWith('Completed 12 of ');

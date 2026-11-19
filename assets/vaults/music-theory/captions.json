@@ -1,63 +1,119 @@
 {
   "circle_of_fifths/resources/html/circle_exercise_key_to_signature.html": {
-    "title": "Exercise",
-    "line": "You get a key; tap how many sharps or flats it has, then tap its notes on the staff. Easy, medium and hard allow 5, 3 or 1 wrong tries"
+    "title": "Exercise: key to signature",
+    "line": "Given a key, tap how many sharps or flats it has, then tap its notes on the staff"
   },
   "circle_of_fifths/resources/html/circle_exercise_neighbours.html": {
-    "title": "Exercise",
-    "line": "The two neighbours and the opposite key of any key"
+    "title": "Exercise: neighbours",
+    "line": "Given a key, tap its two neighbours and its opposite key on the wheel"
   },
   "circle_of_fifths/resources/html/circle_exercise_signature_to_key.html": {
-    "title": "Exercise",
-    "line": "From a signature to its major key and its relative minor"
+    "title": "Exercise: signature to key",
+    "line": "Given a signature on the staff, tap its major key and its relative minor on the wheel"
   },
   "circle_of_fifths/resources/html/circle_of_fifths.html": {
     "title": "The circle of fifths",
-    "line": "Click a key to see its signature, its scale on the keys, and which keys sit next to it. Play sounds the scale"
+    "line": "Click a key to see its signature, its scale on the keys and its neighbours; Play sounds the scale"
+  },
+  "music_instruments/resources/html/guitar_fretboard.html": {
+    "title": "Guitar fretboard",
+    "line": "Click positions from the open strings to fret 12 to hold them, then play them together, up or down"
   },
   "music_instruments/resources/html/interval_ear_both_at_once.html": {
-    "title": "Ear exercise",
-    "line": "Two notes sound together and the lower one is lit. Find the higher one"
+    "title": "Ear exercise: both at once",
+    "line": "Two notes sound together and the lower one is lit; find the higher one"
   },
   "music_instruments/resources/html/interval_ear_one_after_the_other.html": {
-    "title": "Ear exercise",
-    "line": "Two notes sound one after the other and the first is lit. Find the second on the keyboard. Choose easy, medium or hard; the score stays on the page until you reload"
+    "title": "Ear exercise: one after the other",
+    "line": "Two notes sound in turn and the first is lit; find the second on the keyboard"
   },
   "music_instruments/resources/html/interval_ear_triads.html": {
-    "title": "Ear exercise",
-    "line": "A three-note chord sounds and the lowest note is lit. Find the other two"
+    "title": "Ear exercise: triads",
+    "line": "A three-note chord sounds and the lowest note is lit; find the other two"
+  },
+  "music_instruments/resources/html/lute_fretboard.html": {
+    "title": "Lute fretboard",
+    "line": "Click positions to hold them and play them together, up or down; change the tuning and watch the frets stay straight or break into a zigzag"
+  },
+  "music_instruments/resources/html/mandolin_fretboard.html": {
+    "title": "Mandolin fretboard",
+    "line": "Click positions to hold them, play them together, up or down, and switch the tuning; the held notes are also written on a staff"
+  },
+  "music_instruments/resources/html/monochord.html": {
+    "title": "Monochord",
+    "line": "Move the bridge along the string, pluck either segment or both, and read the length ratio"
+  },
+  "music_instruments/resources/html/piano_keyboard.html": {
+    "title": "Piano keyboard",
+    "line": "Click keys from C3 to C5 to hold them, then play them together, up or down; the menu changes the tuning"
+  },
+  "music_instruments/resources/html/rhythm_box.html": {
+    "title": "Rhythm box",
+    "line": "Click steps for kick, snare and hi-hat, press Play, and shape the groove with tempo, swing and the four banks"
   },
   "music_instruments/resources/html/tune_shifter.html": {
-    "title": "The same tune from different starting notes",
-    "line": "The notes change, the gaps between them stay"
+    "title": "One tune, different starting notes",
+    "line": "The notes change; the gaps between them stay"
   },
   "music_instruments/resources/html/whole_half_steps.html": {
-    "title": "Click two keys to see",
-    "line": "Click two keys to see the gap between them as whole steps and half steps"
+    "title": "Whole steps and half steps",
+    "line": "Click two keys to see the gap between them in whole steps and half steps"
+  },
+  "notes/resources/images/accidental.svg": {
+    "title": "Natural, sharp and flat",
+    "line": "Middle C, then C♯ and C♭: a sharp sign nudges the note up a semitone, a flat sign down"
+  },
+  "notes/resources/images/enharmonic.svg": {
+    "title": "C♯ and D♭",
+    "line": "Two names for the same sound, written side by side on the staff"
+  },
+  "notes/resources/images/fifths_score.svg": {
+    "title": "C and G",
+    "line": "Middle C and the G above it, a fifth apart on the staff"
+  },
+  "notes/resources/images/nice_score.svg": {
+    "title": "C and the C above",
+    "line": "Middle C and the C an octave above it on the staff"
+  },
+  "notes/resources/images/note_name.svg": {
+    "title": "The seven natural notes",
+    "line": "C D E F G A B in order from middle C on the staff"
+  },
+  "notes/resources/images/pitch_class_score.svg": {
+    "title": "Three Cs",
+    "line": "C3, C4 and C5 on the staff: three octaves, one pitch class"
+  },
+  "notes/resources/images/semitone_score.svg": {
+    "title": "C and C♯",
+    "line": "A semitone on the staff: C, then the same line with a sharp sign"
+  },
+  "notes/resources/images/ugly_score.svg": {
+    "title": "C and D♭",
+    "line": "C4 and D♭4, a single semitone apart, on the staff"
   },
   "scales/resources/html/scale_build_major.html": {
-    "title": "Exercise",
-    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
+    "title": "Exercise: major scales",
+    "line": "Pick a tonic, tap the keys of the scale and watch the staff fill in; Play lets you hear it; finished scales stay on the shelf"
   },
   "scales/resources/html/scale_build_modes_and_minor.html": {
-    "title": "Exercise",
-    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
+    "title": "Exercise: modes and minor scales",
+    "line": "Pick a tonic and a scale, tap its keys and watch the staff fill in; Play lets you hear it; finished scales stay on the shelf"
   },
   "scales/resources/html/scale_build_natural_minor.html": {
-    "title": "Exercise",
-    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
+    "title": "Exercise: natural minor",
+    "line": "Pick a tonic, tap the keys of the scale and watch the staff fill in; Play lets you hear it; finished scales stay on the shelf"
   },
   "scales/resources/html/scale_build_other_scales.html": {
-    "title": "Exercise",
-    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
+    "title": "Exercise: pentatonic, blues and more",
+    "line": "Pick a tonic and a scale, tap its keys and watch the staff fill in; Play lets you hear it; finished scales stay on the shelf"
   },
   "scales/resources/html/scale_ear_build_the_scale.html": {
-    "title": "Exercise",
-    "line": "Choose a tonic and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play. Any scale of this chapter can come up"
+    "title": "Exercise: build any scale",
+    "line": "Pick a tonic and a scale, tap its keys and watch the staff fill in; Play lets you hear it; finished scales stay on the shelf"
   },
   "scales/resources/html/scale_ear_name_the_scale.html": {
-    "title": "Ear exercise",
-    "line": "You hear a scale; name it. Choose easy, medium or hard"
+    "title": "Ear exercise: name the scale",
+    "line": "You hear a scale; name it"
   },
   "scales/resources/html/scale_player.html": {
     "title": "Scale player",
@@ -69,10 +125,58 @@
   },
   "scales/resources/images/f_major_scale.svg": {
     "title": "F major",
-    "line": "The same recipe from F; the fourth note is B-flat, shown as a flat sign on the staff"
+    "line": "The same recipe from F; the fourth note is B♭"
   },
   "scales/resources/images/g_major_scale.svg": {
     "title": "G major",
-    "line": "The same recipe from G; the seventh note is F-sharp, shown here as a sharp sign on the staff"
+    "line": "The same recipe from G; the seventh note is F♯"
+  },
+  "tuning/resources/html/piano_keyboard_equal.html": {
+    "title": "C to C in equal temperament",
+    "line": "The white keys C3 to C4 are held and tuned to Equal; press Play ascending and listen"
+  },
+  "tuning/resources/html/piano_keyboard_equal_bad.html": {
+    "title": "A fifth in equal temperament",
+    "line": "C3 and G3 are held and tuned to Equal; press Play together, then switch to Pythagorean and play the same two keys"
+  },
+  "tuning/resources/html/piano_keyboard_equal_good.html": {
+    "title": "The wolf in equal temperament",
+    "line": "G♯3 and D♯4 are held and tuned to Equal; press Play together, then switch to Pythagorean and play the same two keys"
+  },
+  "tuning/resources/html/piano_keyboard_meantone.html": {
+    "title": "C to C in meantone",
+    "line": "The white keys C3 to C4 are held and tuned to quarter-comma meantone; press Play ascending and listen"
+  },
+  "tuning/resources/html/piano_keyboard_meantone_bad.html": {
+    "title": "The wolf in meantone",
+    "line": "G♯3 and D♯4 are held and tuned to meantone; press Play together, then switch to Equal and play the same two keys"
+  },
+  "tuning/resources/html/piano_keyboard_meantone_good.html": {
+    "title": "A major chord in meantone",
+    "line": "C4, E4 and G4 are held and tuned to meantone; press Play together, then switch to Pythagorean and play the chord again"
+  },
+  "tuning/resources/html/piano_keyboard_pythagorean.html": {
+    "title": "C to C in Pythagorean tuning",
+    "line": "The white keys C3 to C4 are held and tuned to Pythagorean; press Play ascending and listen"
+  },
+  "tuning/resources/html/piano_keyboard_pythagorean_bad.html": {
+    "title": "The wolf in Pythagorean tuning",
+    "line": "G♯3 and D♯4 are held and tuned to Pythagorean; press Play together, then switch to Equal and play the same two keys"
+  },
+  "tuning/resources/html/piano_keyboard_pythagorean_good.html": {
+    "title": "A fifth in Pythagorean tuning",
+    "line": "C3 and G3 are held and tuned to Pythagorean; press Play together, then switch to Equal and play the same two keys"
+  },
+  "tuning/resources/html/piano_keyboard_well.html": {
+    "title": "C to C in well temperament",
+    "line": "The white keys C3 to C4 are held and tuned to Werckmeister III; press Play ascending and listen"
+  },
+  "tuning/resources/html/piano_keyboard_well_bad.html": {
+    "title": "D to A in well temperament",
+    "line": "D4 and A4 are held and tuned to Werckmeister III; press Play together, then hold E4 and B4 and compare the two fifths"
+  },
+  "tuning/resources/html/piano_keyboard_well_good.html": {
+    "title": "E to B in well temperament",
+    "line": "E4 and B4 are held and tuned to Werckmeister III; press Play together, then switch to Equal and play the same two keys"
   }
 }
