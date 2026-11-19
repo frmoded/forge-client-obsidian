@@ -2650,6 +2650,9 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-chat-time[hidden] { display: none; }
 .forge-chat-text { white-space: pre-wrap; min-width: 0; }
 .forge-chat-check { color: var(--text-success, var(--interactive-accent)); font-weight: 600; }
+/* 2026-11-19-0992: a note the dialog line names ("Created [[bar_010]], a copy of [[bar_007]]."): a quiet link, the wording stays the sentence's own; no box, no hover tint (no hover cue: the pointer is the cue), a focus ring for the keyboard */
+.forge-chat-link { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--text-accent, var(--interactive-accent)); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; box-shadow: none; height: auto; }
+.forge-chat-link:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: var(--radius-s, 4px); }
 .forge-chat-suggestion-description { margin-top: 2px; padding: 6px 10px; border-left: 2px solid var(--background-modifier-border); color: var(--text-normal); white-space: pre-wrap; }
 .forge-chat-msg pre { margin: 4px 0 0; padding: 4px 6px; white-space: pre-wrap; background: var(--background-secondary); color: var(--text-normal); border-radius: var(--radius-s, 4px); }
 .forge-chat-chosen { margin-top: 2px; font-size: var(--font-ui-smaller); color: var(--text-muted); }

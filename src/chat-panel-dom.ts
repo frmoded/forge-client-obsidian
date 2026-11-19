@@ -1,5 +1,5 @@
 // 2026-11-13-1214 - the chat-style panel of a score tab (phrase, arrangement, composition): ONE shared mount. The tab's own content (the Score, the strips, the controls, the notebook) goes into a body that scrolls on its own; the
-// panel (a DIALOG above, the prompt box below it) is its FLEX SIBLING, never over it. Plain DOM, no obsidian import (a happy-dom test mounts the very code the tab runs). Messages are text only (links `[[bar_007]]` stay plain text).
+// panel (a DIALOG above, the prompt box below it) is its FLEX SIBLING, never over it. Plain DOM, no obsidian import (a happy-dom test mounts the very code the tab runs). Messages are text only (links `[[bar_007]]` stay plain text), except an entry that names the notes it made (`links`, 2026-11-19-0992): its `[[name]]`s are quiet link buttons.
 //
 // 2026-11-17-2001: the chat-style composer. The dialog above is collapsed while empty (a fresh note shows only the Score and the card); there is no dock button, no resize bar and no "Current:" line any more.
 //
@@ -35,6 +35,8 @@ export interface ChatPanelPorts {
   /** The ONE recount timer of this tab (default `window.setTimeout` / `clearTimeout`); tests pass the host clock's. */
   setTimer?(fn: () => void, ms: number): unknown;
   clearTimer?(handle: unknown): void;
+  /** 2026-11-19-0992: open a note named by a link in the dialog (a copy that was just made): the plugin's own opener, by lineage id (`bars/bar_010`). Absent = the words are drawn and there are no buttons that would do nothing. */
+  openNote?(id: string): void;
 }
 export interface ChatPanelHandle {
   readonly el: HTMLElement;
@@ -95,6 +97,21 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
   let timer: unknown = null;
   const tick = (): void => { timer = null; if (disposed) return; refreshTimes(); timer = arm(tick, TICK_MS); };
   timer = arm(tick, TICK_MS);
+  /** An entry's words as nodes: `[[name]]` of a name the entry LINKS is a quiet button that opens that note (2026-11-19-0992); everything else is text, as ever. */
+  const pieces = (e: DialogEntry): Node[] => {
+    const opener = ports.openNote;
+    if (!e.links || e.links.length === 0 || opener === undefined) return [doc.createTextNode(e.text)];
+    const byName = new Map(e.links.map((l) => [l.name, l.id]));
+    const out: Node[] = [];
+    for (const part of e.text.split(/(\[\[[^\]]+\]\])/)) {
+      const id = /^\[\[([^\]]+)\]\]$/.exec(part) ? byName.get(part.slice(2, -2)) : undefined;
+      if (id === undefined) { if (part !== '') out.push(doc.createTextNode(part)); continue; }
+      const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-chat-link'; b.setAttribute('data-note', id); b.textContent = part;
+      b.addEventListener('click', () => { try { opener(id); } catch (err) { console.error('[forge-chat] could not open a note from the dialog', err); } });
+      out.push(b);
+    }
+    return out;
+  };
   const render = (entries: readonly DialogEntry[], _cur: string): void => {
     if (disposed) return;
     const atEnd = log.scrollHeight - log.scrollTop - (log.clientHeight || 0) < 40 || log.childElementCount === 0;
@@ -110,7 +127,7 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
       const line = doc.createElement('div'); line.className = 'forge-chat-line';
       if (NEUTRAL_ERROR_KINDS.has(e.kind)) { const bang = doc.createElement('span'); bang.className = 'forge-chat-bang'; bang.setAttribute('aria-hidden', 'true'); bang.textContent = '!'; line.append(bang); }     // an error is told by its wording and a small muted "!", never by colour
       const text = doc.createElement('div'); text.className = 'forge-chat-text';
-      if (e.kind === 'applied') { const check = doc.createElement('span'); check.className = 'forge-chat-check'; check.setAttribute('aria-hidden', 'true'); check.textContent = '✓'; text.append(check, doc.createTextNode(` ${e.text}`)); }
+      if (e.kind === 'applied') { const check = doc.createElement('span'); check.className = 'forge-chat-check'; check.setAttribute('aria-hidden', 'true'); check.textContent = '✓'; text.append(check, doc.createTextNode(' '), ...pieces(e)); }
       else text.textContent = e.text;
       line.append(text);
       m.append(line);

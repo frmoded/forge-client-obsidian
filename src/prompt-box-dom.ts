@@ -60,6 +60,8 @@ export interface PromptBoxHandle {
   /** The Description on disk is now this (a control wrote it, a hand edit, an apply). Never overwrites unapplied typing: it offers the choice. */
   setDisk(disk: string): void;
   focus(): void;
+  /** 2026-11-19-0992: press Enter from outside (what the key does: the first one asks for the preview; nothing typed = nothing asked). The copy click uses it to show "Copy [[bar_007]] to a new bar." at once. */
+  submit(): void;
   /** A request is running for this text (somebody else's: the sentence service asked from a bar): the card says so and Enter waits; `null` = done. */
   setBusy(message: string | null): void;
   /** A plain line under the card (an answer that was dropped, and why). Typing, a new request or a reset clears it. `null` = clear. */
@@ -278,6 +280,7 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     el,
     setDisk(disk) { s = diskChanged(s, disk); if (!isEdited(s) && c.phase !== 'working' && c.phase !== 'applying') c = { ...initComposer(s.text), seq: c.seq }; paint(); },
     focus() { try { text.focus(); } catch { /* not focusable (a hidden pane) */ } },
+    submit() { submit(); },
     setBusy(message) { remote = message; if (message !== null) note = null; paint(); },
     setNote(message) { note = message; paint(); },
     suggest(next) { note = null; walking = -1; s = typed(s, next); dispatch({ type: 'externalText', text: next }); try { text.focus(); } catch { /* a hidden pane */ } },

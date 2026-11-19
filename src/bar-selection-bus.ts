@@ -6,6 +6,10 @@ import type { NewPhraseResult, TransformPhrase } from './phrase-core.ts';
 export interface BarSelectionHost {
   /** 2026-11-19-0980: APPEND `sentence` as the next line of the note's list at `path` (one write, undoable with Cmd/Ctrl+Z). `message` says what was added, or why not, in words. (It was `previewDescription`: the sentence shown in the prompt box, applied by Apply.) */
   appendLine(path: string, sentence: string): Promise<{ ok: boolean; message: string }>;
+  /** 2026-11-19-0992 (Duplicate): is the NEXT click on a bar of the Score of the note at `path` a copy click (its composer's text is "Duplicate", or ends with the word)? Asked at the click. Absent = never. */
+  duplicateArmed?(path: string): boolean;
+  /** 2026-11-19-0992: the copy click: `noteId` is the lineage id of the note that made the bar (`bars/bar_007`; null = the Score could not tell). The composer of `path` gets ` [[bar_007]].` appended, focus, and the usual preview. `message` says what was done, or why not. */
+  duplicateClick?(path: string, noteId: string | null): Promise<{ ok: boolean; message: string }>;
   /** Make a new transform phrase note (the next free `phrase_NNN`, no dialog), open it, and start the rename of its title. The flow notifies its own failures. */
   makePhrase(params: TransformPhrase): Promise<NewPhraseResult>;
 }

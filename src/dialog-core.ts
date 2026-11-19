@@ -18,7 +18,10 @@ export interface DialogEntry {
   kind: DialogKind;
   text: string;
   suggestion?: { description: string; recipe: string; state: SuggestionState };
+  /** 2026-11-19-0992: the notes this line names (`[[bar_010]]` in its text): the panel draws each as a link that opens the note. `id` is the lineage id (`bars/bar_010`). Absent = plain text, as every older entry. */
+  links?: DialogLink[];
 }
+export interface DialogLink { name: string; id: string }
 /** What the description controller says happened (one stream feeds the console lines and this dialog). */
 export type DialogEvent =
   | { type: 'you'; text: string }
@@ -30,7 +33,9 @@ export type DialogEvent =
   | { type: 'dropped'; message: string }
   | { type: 'notice'; message: string }
   | { type: 'failed'; message: string }
-  | { type: 'control'; summary: string; description: string };
+  | { type: 'control'; summary: string; description: string }
+  /** 2026-11-19-0992: a note was made (`Created [[bar_010]], a copy of [[bar_007]].`): an applied line whose `[[name]]`s are links. */
+  | { type: 'created'; text: string; links: DialogLink[] };
 
 /** Entries never carry a token or a URL: a link is cut to a word, a long token-looking run is cut, and a text is capped. */
 export function redact(text: string): string {
@@ -45,6 +50,7 @@ const ONE = (s: string): string => s.replace(/\s+/g, ' ').trim();
 /** The entry (without id and time) an event makes. */
 export function fromOutcome(ev: DialogEvent): Omit<DialogEntry, 'id' | 'at'> {
   switch (ev.type) {
+    case 'created': return { kind: 'applied', text: redact(ev.text), links: ev.links.map((l) => ({ name: l.name, id: l.id })) };
     case 'you': return { kind: 'you', text: redact(ev.text) };
     case 'applied': return { kind: 'applied', text: redact(`Applied (${ev.change}): ${ONE(ev.description)}`) };
     case 'rejected': return { kind: 'rejected', text: redact(`The grammar did not accept this sentence (line ${ev.line}, column ${ev.column}: ${ev.message}).`) };
@@ -87,6 +93,7 @@ export function sanitizeLoaded(raw: unknown): DialogEntry[] {
     const at = typeof r.at === 'number' && Number.isFinite(r.at) && r.at > 0 ? r.at : 0;                   // 2026-11-18: an entry saved before the time was kept (or with a broken one) still restores; it shows no "minutes ago"
     const entry: DialogEntry = { id: r.id, at, kind: r.kind as DialogKind, text: redact(r.text) };
     const s = r.suggestion as Record<string, unknown> | undefined;
+    if (Array.isArray(r.links)) { const links = r.links.filter((l): l is DialogLink => typeof l === 'object' && l !== null && typeof (l as DialogLink).name === 'string' && (l as DialogLink).name !== '' && typeof (l as DialogLink).id === 'string' && (l as DialogLink).id !== '').map((l) => ({ name: l.name, id: l.id })); if (links.length > 0) entry.links = links; }
     if (s && typeof s.description === 'string' && typeof s.recipe === 'string') entry.suggestion = { description: redact(s.description), recipe: redact(s.recipe), state: s.state === 'applied' || s.state === 'cancelled' ? s.state : 'expired' };
     out.push(entry);
   }

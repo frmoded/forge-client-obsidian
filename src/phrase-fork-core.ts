@@ -13,8 +13,8 @@ export type ForkablePhrase = ExtendPhrase | MorphPhrase;
 
 const BAR_NAME = /^bar_(\d+)$/;
 
-/** The bar's name for a fork: one past the highest `bar_NNN` (not the first gap), zero-padded to three like `New bar`. */
-function nextBarName(existing: Iterable<string>): string {
+/** The bar's name for a fork: one past the highest `bar_NNN` (not the first gap), zero-padded to three like `New bar`. (Exported 2026-11-19-0992: `Duplicate [[bar_007]].` numbers its copy by the same rule, and a pure core may not import score-first-core, the profile module.) */
+export function nextBarName(existing: Iterable<string>): string {
   let max = 0;
   for (const b of existing) { const m = BAR_NAME.exec(b); if (m) max = Math.max(max, Number(m[1])); }
   return `bar_${String(max + 1).padStart(3, '0')}`;

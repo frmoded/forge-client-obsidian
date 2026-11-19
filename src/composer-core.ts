@@ -12,6 +12,8 @@ export interface Proposal {
   via: 'grammar' | 'service';
   /** 2026-11-19-0970 (the list model): the earlier sentence of the note's list that this one REPLACES (same kit, same volume target), in plain text. Absent = it replaces nothing. */
   replaces?: string;
+  /** 2026-11-19-0992: an ACTION sentence (`Duplicate [[bar_007]].`: it makes a new note, it is not a line of the list). The preview is always seen: MUSIC_COMPOSER_AUTO_APPLY never skips it. */
+  action?: boolean;
 }
 export type ComposerState =
   | { phase: 'idle'; text: string; seq: number }
@@ -76,7 +78,7 @@ export function step(s: ComposerState, ev: ComposerEvent): { state: ComposerStat
     }
     case 'resolved': {
       if (s.phase !== 'working' || ev.seq !== s.seq) return { state: s, effect: none };       // a late answer for a request that is gone
-      if (ev.autoApply === true && ev.proposal.via === 'grammar') return { state: { phase: 'applying', text: s.text, seq: s.seq, proposal: ev.proposal }, effect: { do: 'apply', text: s.text, proposal: ev.proposal, seq: s.seq } };
+      if (ev.autoApply === true && ev.proposal.via === 'grammar' && ev.proposal.action !== true) return { state: { phase: 'applying', text: s.text, seq: s.seq, proposal: ev.proposal }, effect: { do: 'apply', text: s.text, proposal: ev.proposal, seq: s.seq } };
       return { state: { phase: 'previewing', text: s.text, seq: s.seq, proposal: ev.proposal }, effect: none };
     }
     case 'failed': {

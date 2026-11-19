@@ -36,6 +36,8 @@ import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
 import { FAMILY_KINDS } from './note-family-core.ts';
 import type { ComposerMenuItem, PreviewResult, PromptBoxPorts } from './prompt-box-dom.ts';
+import { armsDuplicate, duplicatePreviewLine, idParts, readActionText, resolveDuplicateTarget, withDuplicateLink, type ActionRead, type ResolvedDuplicate } from './duplicate-sentence-core.ts';
+import { copyNoteText, copyUndoNote, createdLine, type DuplicateResult } from './duplicate-note-core.ts';
 import type { Proposal } from './composer-core.ts';
 
 export interface DescriptionPorts {
@@ -72,6 +74,10 @@ export interface DescriptionPorts {
   drawSeed?(): number;
   /** 2026-11-17-2001: the composer's "+" menu (the New actions; `pickNote` gives "Insert a link to a note"); absent = no "+". */
   composerMenu?(): { items: readonly ComposerMenuItem[]; run(id: string): void; pickNote?(): Promise<string | null> } | undefined;
+  /** 2026-11-19-0992: make the copy `Duplicate [[bar_007]].` asks for (a new note under the next free name; nothing that exists is written). Absent = this build cannot copy notes: the sentence is refused in words. */
+  duplicate?(of: ResolvedDuplicate): Promise<DuplicateResult>;
+  /** 2026-11-19-0992: open a note named by a link in the dialog (the copy that was just made), by lineage id (`bars/bar_010`): the plugin's own opener. Absent = the dialog draws no link buttons. */
+  openNote?(id: string): void;
 }
 
 interface Ui { state: DescriptionState; message?: string; preview?: { params: GrammarParams; description: string; recipe: string; forSentence: string; /** 2026-11-19-0970: for an arrangement or composition the sentence service's answer as canonical LINES to append (and the sentence they replace) */ lines?: string[]; replaces?: string }; busy?: boolean; /** the sentence was typed in the prompt box (nothing was written to the note: there is no Revert to offer) */ fromBox?: boolean; /** from the box: the Description ON DISK when the sentence was sent (a preview is applied only over that) */ base?: string }
@@ -106,6 +112,10 @@ export interface DescriptionController {
   applyProposal(path: string, text: string, proposal: Proposal): Promise<{ ok: boolean; disk?: string; message?: string }>;
   /** 2026-11-19-0980: APPEND one canonical sentence to the note's list now (the bar-selection menu's Keep, Delete, Copy and Move; stage 3's grid clicks): one write, undoable, the composer's text left alone. `message` says what was added, or why not (in words). */
   appendLine(path: string, sentence: string): Promise<{ ok: boolean; message: string }>;
+  /** 2026-11-19-0992: is the NEXT click on a bar of this note's Score a copy click? True in a PHRASE tab whose composer's text (trimmed, any case) is exactly "Duplicate" or ends with the word. */
+  duplicateArmed(path: string): boolean;
+  /** 2026-11-19-0992: the copy click: append ` [[name]].` (the name of the note `noteId` - a lineage id like `bars/bar_007` - names) to the composer's text, return focus to the field and show the usual preview. `null` = the Score could not tell which note made the bar. */
+  duplicateClick(path: string, noteId: string | null): Promise<{ ok: boolean; message: string }>;
   /** 2026-11-19-0970 (the list model): take back the last sentence of an arrangement's or composition's list (Cmd/Ctrl+Z in an empty composer, the "+" menu), and put it back. One write each; the dialog says what was removed or added again. */
   undoLast(path: string): Promise<{ ok: boolean; message: string }>;
   redoLast(path: string): Promise<{ ok: boolean; message: string }>;
@@ -231,6 +241,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
             ...(isList(family) ? { undo: () => { void undoLast(path); }, redo: () => { void redoLast(path); } } : {}),         // 2026-11-19-0970: Cmd/Ctrl+Z in an EMPTY composer
           },
           store,
+          ...(ports.openNote ? { openNote: ports.openNote } : {}),
         }, boxDisk(family, note));
         const handle = chat.box;
         boxes.set(contentEl, { path, handle, chat });
@@ -283,6 +294,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   async function applyFromBoxCore(path: string, text: string, said = false): Promise<{ ok: boolean; disk?: string; message?: string }> {
     const family = familyOfPath(path); if (family === null) { pbWarn(`ask skipped: ${path} is not a phrase, arrangement or composition note`); return { ok: false }; }
     if (!said) say(path, { type: 'you', text });                                                          // 2026-11-13-1214: the sentence as typed, when Apply is pressed (2026-11-17-2001: said already when the preview was asked for)
+    if (family === 'phrase') { const act = readActionText(text); if (act.kind !== 'none') return applyAction(path, act); }          // 2026-11-19-0992: an action never touches the list: no process call, no write of this note
     return applyList(path, family, text);                                                                 // 2026-11-19-0970 / 0980: a sentence is APPENDED to the list of a phrase, an arrangement or a composition
   }
   const set = (path: string, u: Ui | null): void => { if (u === null || u.state.kind === 'synced') ui.delete(path); else { ui.set(path, u); notices.delete(path); } syncBars(); };
@@ -526,6 +538,59 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const said = `The grammar did not accept this sentence (line ${error.line}, column ${error.column}: ${error.message}).`;
     setBoxNote(path, said); say(path, { type: 'rejected', line: error.line, column: error.column, message: error.message });
     return said;
+  }
+
+  // ================================================================================================================================================================================================================
+  // 2026-11-19-0992 - DUPLICATE: an ACTION sentence of a phrase's composer. `Duplicate [[bar_007]].` is read here (duplicate-sentence-core.ts: locally, no model call), previewed ("Copy [[bar_007]] to a new bar.": always, even with
+  // auto-apply on) and, on the second Enter, made (duplicate-note-core.ts): ONE new note under the next free name. It never enters the list, it writes nothing that exists (not this phrase: no `process` call at all), it is not on the undo stack
+  // (the dialog says how to delete a copy), and the dialog's line has links that open the copy.
+  // ================================================================================================================================================================================================================
+  /** The first Enter on an action text: the proposal ("Copy [[bar_007]] to a new bar."), or why it cannot be done, in plain words (and never to the service). */
+  async function previewAction(path: string, act: Exclude<ActionRead, { kind: 'none' }>): Promise<PreviewResult> {
+    previewed.delete(path);
+    const refuse = (message: string): PreviewResult => { pb(`action refused: ${message}`); say(path, { type: 'refused', message, by: 'plugin' }); setBoxNote(path, `Refused: ${message}`); return { ok: false, message: `Refused: ${message}` }; };
+    if (act.kind === 'refused') return refuse(act.message);
+    if (ports.duplicate === undefined) return refuse('Duplicate is not available in this build: it cannot copy notes here.');
+    const of = resolveDuplicateTarget(act.target, ports.vault());
+    if (of.ok === false) return refuse(of.message);
+    let source = ''; try { source = await ports.read(of.path); } catch (e) { console.error('[forge-duplicate] previewAction: could not read the source', e); return refuse(`Could not read [[${of.name}]]: ${(e as Error)?.message ?? e}`); }
+    const dry = copyNoteText(source, of, 'copy_preview', ports.vault());                                    // the dry run: a note that cannot be copied is said NOW, not after the second Enter
+    if (dry.ok === false) return refuse(dry.message);
+    const description = duplicatePreviewLine(of);
+    pb('grammar verdict: accepted (action, preview, nothing written)');
+    say(path, { type: 'suggestion', description, recipe: '', via: 'grammar' });
+    return { ok: true, proposal: { description, via: 'grammar', action: true } };
+  }
+  /** The second Enter on an action text: make the copy and say so, with links; nothing else is written. */
+  async function applyAction(path: string, act: Exclude<ActionRead, { kind: 'none' }>): Promise<{ ok: boolean; disk?: string; message?: string }> {
+    const fail = (message: string): { ok: boolean; message: string } => { pb(`action failed: ${message}`); setBoxNote(path, message); say(path, { type: 'failed', message }); return { ok: false, message }; };
+    if (act.kind === 'refused') { say(path, { type: 'refused', message: act.message, by: 'plugin' }); setBoxNote(path, `Refused: ${act.message}`); return { ok: false, message: `Refused: ${act.message}` }; }
+    if (ports.duplicate === undefined) return fail('Duplicate is not available in this build: it cannot copy notes here.');
+    const of = resolveDuplicateTarget(act.target, ports.vault());
+    if (of.ok === false) return fail(of.message);
+    const done = await ports.duplicate(of);
+    if (done.ok === false) return fail(done.message);
+    pb(`action done: ${done.id} is a copy of ${done.sourceId}`);
+    setBoxNote(path, 'Copied.');
+    say(path, { type: 'created', text: createdLine(done), links: [{ name: done.name, id: done.id }, { name: done.sourceName, id: done.sourceId }] });
+    say(path, { type: 'notice', message: copyUndoNote(done) });
+    return { ok: true, disk: '' };
+  }
+  const duplicateArmed = (path: string): boolean => familyOfPath(path) === 'phrase' && armsDuplicate(boxText(path) ?? '');
+  async function duplicateClick(path: string, noteId: string | null): Promise<{ ok: boolean; message: string }> {
+    const box = [...boxes.values()].find((b) => b.path === path);
+    if (box === undefined) return { ok: false, message: 'There is no composer open for this note.' };
+    if (!duplicateArmed(path)) return { ok: false, message: 'The composer does not say Duplicate: a click on a bar pins it.' };
+    const parts = idParts(noteId);
+    if (parts === null) {
+      const message = noteId === null ? 'I cannot tell which note made that bar, so I cannot copy it.' : `That bar comes from ${noteId}, which is not a bar, a phrase, an arrangement or a composition I can copy.`;
+      say(path, { type: 'notice', message }); box.handle.focus();
+      return { ok: false, message };
+    }
+    pb(`copy click: ${noteId}`);
+    box.handle.suggest(withDuplicateLink(box.handle.state().text, parts.name));                              // the text, focus back in the field ...
+    box.handle.submit();                                                                                    // ... and the usual first Enter: the preview "Copy [[bar_007]] to a new bar."
+    return { ok: true, message: `Added [[${parts.name}]] to the composer.` };
   }
 
   /** 2026-11-19-0970 - the composer's FIRST Enter in an arrangement or a composition: the typed sentence(s) APPENDED to the list (or in place of the sentence they replace), nothing written. */
@@ -776,6 +841,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     cancelledAsk.delete(path);
     let cur = '';
     try { cur = await ports.read(path); } catch (e) { const m = `Could not read the note: ${(e as Error)?.message ?? e}`; say(path, { type: 'failed', message: m }); return { ok: false, message: m }; }
+    if (family === 'phrase') { const act = readActionText(text); if (act.kind !== 'none') return previewAction(path, act); }          // 2026-11-19-0992: `Duplicate [[bar_007]].` is an ACTION sentence, read here (no model call) and never a line of the list
     return previewList(path, family, text, cur);                                                          // 2026-11-19-0970 / 0980: the typed sentence APPENDED to the list (or in place of the line it replaces), nothing written
   }
   /** The service, once, for a sentence the grammar did not accept (the same gates as ever); its answer is the proposal the composer shows, or why there is none. (2026-11-19-0970: the tail of previewFromBoxCore, shared with the list.) */
@@ -836,6 +902,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     revertGenerated,
     focusBox(path) { for (const b of boxes.values()) if (path === undefined || b.path === path) { b.handle.focus(); return true; } return false; },
     applyFromBox, previewFromBox, applyProposal,
+    duplicateArmed, duplicateClick,
     appendLine, undoLast, redoLast, canUndo: (path) => canStep(path, 'undo'), canRedo: (path) => canStep(path, 'redo'),
     update, revert, ask, syncBars,
     canUpdate: (path) => { const u = ui.get(path); return u !== undefined && (u.state.kind === 'apply' || u.state.kind === 'recipe-apply' || u.state.kind === 'python-apply' || u.state.kind === 'python-custom'); },

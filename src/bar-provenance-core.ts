@@ -8,7 +8,9 @@ import { extractJsonBlock, type RhythmData } from './rhythm-edit-core.ts';
 export type BarOrigin =
   | { kind: 'beatbox' }
   | { kind: 'hand' }
-  | { kind: 'fork'; phrase: string; bar: number | null };
+  | { kind: 'fork'; phrase: string; bar: number | null }
+  /** 2026-11-19-0992: a copy of another bar (`Duplicate [[bar_007]].`): `copied_from: "[[bar_007]]"` in the frontmatter says so, and a Beat Box save keeps it. */
+  | { kind: 'copy'; of: string };
 
 /** The one line above the sections, like the Cache comment of a phrase note: what they are and that a write replaces them. */
 export const BAR_PROVENANCE_NOTE = '<!-- where this bar came from, written by the plugin: every save rewrites it, so edit the bar in the Beat Box, not this text -->';
@@ -28,6 +30,7 @@ export function barSentence(origin: BarOrigin, data: RhythmData): string {
     case 'beatbox': return `Bar made in the Beat Box; ${barHits(data)}.`;
     case 'hand': return 'Bar made by hand.';
     case 'fork': return origin.bar === null ? `A fork of a bar of [[${origin.phrase}]], to edit by hand.` : `Bar ${origin.bar} of [[${origin.phrase}]], forked to edit by hand.`;
+    case 'copy': return `A copy of [[${origin.of}]], to edit by hand.`;
   }
 }
 
@@ -37,11 +40,12 @@ export function barRecipe(origin: BarOrigin): string[] {
     case 'beatbox': return ['Draw the bar in the Beat Box.'];
     case 'hand': return ['Write the bar by hand.'];
     case 'fork': return [origin.bar === null ? `Take a bar of [[${origin.phrase}]].` : `Take bar ${origin.bar} of [[${origin.phrase}]].`, 'Change it in the Beat Box.'];
+    case 'copy': return [`Copy [[${origin.of}]].`, 'Change it in the Beat Box.'];
   }
 }
 
 /** The names `links:` carries (what the graph and the backlinks show): the phrase a fork was taken from. */
-export const barLinks = (origin: BarOrigin): string[] => (origin.kind === 'fork' ? [origin.phrase] : []);
+export const barLinks = (origin: BarOrigin): string[] => (origin.kind === 'fork' ? [origin.phrase] : origin.kind === 'copy' ? [origin.of] : []);
 
 /** The sections between the frontmatter and the fence, one array element per line. */
 export function barProvenanceSections(origin: BarOrigin, data: RhythmData): string[] {
@@ -61,8 +65,10 @@ function front(text: string): Front | null {
 export function barOriginOf(text: string): BarOrigin {
   const f = front(text);
   if (f) {
-    let phrase: string | null = null, bar: number | null = null;
+    let phrase: string | null = null, bar: number | null = null, copied: string | null = null;
     for (const line of f.lines) {
+      const cp = /^copied_from:\s*["']?\[\[([^\]|]+)\]\]["']?\s*$/.exec(line);
+      if (cp) copied = cp[1];
       const link = /^forked_from:\s*["']?\[\[([^\]|]+)\]\]["']?\s*$/.exec(line);
       const old = /^forked_from:\s*["']?phrases\/([^"'\s]+) bar (\d+)["']?\s*$/.exec(line);
       const n = /^forked_bar:\s*(\d+)\s*$/.exec(line);
@@ -71,6 +77,7 @@ export function barOriginOf(text: string): BarOrigin {
       if (n) bar = Number(n[1]);
     }
     if (phrase !== null) return { kind: 'fork', phrase, bar };
+    if (copied !== null) return { kind: 'copy', of: copied };
   }
   const lead = /^# Description[ \t]*(?:\r?\n)+([^\r\n]*)/m.exec(text);
   return lead !== null && lead[1].startsWith('Bar made in the Beat Box') ? { kind: 'beatbox' } : { kind: 'hand' };

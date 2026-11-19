@@ -827,6 +827,16 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   };
   parent.addEventListener('keydown', onSelectionEsc);
   /** The inspector's port for selecting bars ON the Score: every phrase surface has it (2026-11-16-1000; it used to be only a tab with a notebook). */
+  /** 2026-11-19-0992: the COPY CLICK of the three phrase inspectors. While the composer of this note says "Duplicate" (asked of the host at the click), the next plain click on a bar does not pin it: the note that made THAT bar (the rule the notes pane follows: `pinnedNoteFor`) is handed to the host, which appends its name to the composer's text and shows the preview. */
+  const copyClickPort = (): ScoreInspectorPorts['copyClick'] => ({
+    armed: () => barSelectionHost()?.duplicateArmed?.(notePath) === true,
+    onBar: (e) => {
+      const pin = pinnedNoteFor(e.prov);
+      const host = barSelectionHost();
+      console.info(`[forge-duplicate] copy click on ${e.id}: ${pin ? pin.noteId : 'no source note'}`);
+      void host?.duplicateClick?.(notePath, pin ? pin.noteId : null);
+    },
+  });
   const selectBarsPort = (): ScoreInspectorPorts['selectBars'] => ({
     onRange: (a, b) => { setSelection(barsRange(a, b), 'score'); },
     onRangeEnd: () => { notebookHandle?.reveal(); },
@@ -873,6 +883,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       kitNote: 'Kit view: not mapped for this phrase (use the multi-staff view to inspect).',
       decorate: withTint(),                          // 2026-10-30-1020: the bars the notebook has selected are tinted on the Score ...
       attached: tintAttached,                        // ... from the moment a Score is shown, not from the first hover
+      copyClick: copyClickPort(),
       selectBars: selectBarsPort(),                  // 2026-10-30-1020: a drag across bars selects them in the notebook, a Shift-click extends (phrase surfaces with a notebook only: P3)
     } : insp && k === 'mix' ? {
       // M8: the mix's one bar and each of its hits, tied to the two bars they came from. Clicking a notehead pins THAT hit, clicking the staff the bar; a redraw (the Weight slider) keeps the pin; the
@@ -894,6 +905,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       pinLabel: (id, prov) => (prov.role === MIX_BAR_ROLE ? 'bar 1' : id),
       decorate: withTint(paintMixHits),
       attached: tintAttached,
+      copyClick: copyClickPort(),
       selectBars: selectBarsPort(),
       kitNote: 'Kit view: not mapped for this mix (use the multi-staff view to inspect).',
     } : insp && k === 'morph' ? {
@@ -917,6 +929,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       pinLabel: (id, prov) => (prov.role === MORPH_BAR_ROLE ? `bar ${String(prov.params.bar)}` : `bar ${String(prov.params.bar)}, ${String(prov.params.channel)} step ${Number(prov.params.step) + 1}`),
       decorate: withTint(paintMorphHits),
       attached: tintAttached,
+      copyClick: copyClickPort(),
       selectBars: selectBarsPort(),
       kitNote: 'Kit view: not mapped for this morph (use the multi-staff view to inspect).',
     } : undefined;

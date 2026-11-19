@@ -541,10 +541,15 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
           return out;
         },
         confirm: (message) => new ConfirmModal(app, { title: 'Revert to generated', message, confirmText: 'Revert', cancelText: 'Keep my Python' }).openAndWait(),        // 2026-11-02-1155 (M16b): names what is lost
+        // 2026-11-19-0992 (Duplicate [[bar_007]].): a copy is a NEW note, made by `create` (which refuses to overwrite: "File already exists." tries the next number); nothing is opened (the dialog's link opens it)
+        create: async (p, content) => { await app.vault.create(p, content); },
+        exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
+        isAlreadyExists: isFileExistsError,
       }, {
         ...hooks, showBoxStatus: hooks.showBoxStatus ?? (() => uiFlags().showLegacyControllers),
         // 2026-11-17-2001: the composer's switch and its "+" menu: the same four New actions as the header menu and the ribbon (ONE list, newMenuItems), and a note picker for "Insert a link to a note"
         composerAutoApply: () => uiFlags().composerAutoApply,
+        openNote,                                                                                          // 2026-11-19-0992: the links of the dialog ("Created [[bar_010]], a copy of [[bar_007]].") open the note the way a lineage link does (a bar in the Beat Box)
         composerMenu: () => ({
           items: newMenuItems().map((item) => ({ id: item.commandId, label: item.title })),
           run: (id) => { const item = newMenuItems().find((i) => i.commandId === id); if (item) runNewMenuItem(item, ribbonRunDeps); },
@@ -554,6 +559,8 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2026-11-16-1000: what the Score's selection menu needs from the plugin: a sentence APPENDED to the note's list (2026-11-19-0980; it was shown in the prompt box as a preview), and a new transform phrase (the next free phrase_NNN, no dialog, opened, its title offered for renaming)
       plugin.register(registerBarSelectionHost({
         appendLine: (path, sentence) => descriptions.appendLine(path, sentence),
+        duplicateArmed: (path) => descriptions.duplicateArmed(path),                                       // 2026-11-19-0992: the composer says "Duplicate": the next click on a bar copies it, it does not pin
+        duplicateClick: (path, noteId) => descriptions.duplicateClick(path, noteId),
         makePhrase: (params) => {
           // 2026-11-19-0975: what this action wrote (the text and the modification time of the new note), so a Cancel on the "Note title" dialog can take the note back (new-note-cancel-core.ts) and only an untouched one
           const wrote = new Map<TFile, WrittenNote>();

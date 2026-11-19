@@ -60,6 +60,10 @@ export interface ArtifactInspectorOptions {
     /** 2026-11-16-1000: a Ctrl-click (Cmd on a Mac) on a bar TOGGLES it in the selection (it may be apart from the others); it pins nothing. Absent = a Ctrl/Cmd-click is what it always was (a plain click). */
     onToggleClick?(bar: number): void;
   };
+  /** 2026-11-19-0992 (opt-in, like `selectBars`: this inspector is shared with the bar's Beat Box tab of EVERY vault, P3): the COPY CLICK. While `armed()` says yes (the phrase tab's composer says "Duplicate"), the next PLAIN click on a bar - on a drawn part or inside
+   *  the bar's box - does not pin it: `onBar(entry)` is told which element it was, and the pin stays where it was. Asked at the click itself. Every other click is what it was: not armed, a click on empty space (it unpins), a Shift-click and a Ctrl/Cmd-click
+   *  (the selection gestures), the click that ends a drag, a click on the player. Absent = no question is ever asked. */
+  copyClick?: { armed(): boolean; onBar(entry: InspectorEntry): void };
 }
 
 export interface ArtifactInspector {
@@ -267,6 +271,11 @@ export function attachArtifactInspector(opts: ArtifactInspectorOptions): Artifac
     if (opts.keepPinOnControls === true && isPlayerControl(e.target)) { opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ignored (a player control, the pin is kept)`); return; }
     const drawn = mappedAncestor(root, map, e.target);
     const el = drawn ?? boxAt(e);                         // the unpainted part of a bar has the svg root as its target: the point decides
+    if (el && opts.copyClick?.armed() === true) {         // 2026-11-19-0992: the composer says "Duplicate": this click names the bar to copy instead of pinning it
+      opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> copy click on ${opts.pinLabel ? opts.pinLabel(el.id) : el.id} (${drawn ? 'on the bar' : "inside the bar's box"}), the pin is kept`);
+      opts.copyClick.onBar(entry(el.id));
+      return;
+    }
     setPinned(el ? el.id : null);                          // a click on empty space inside the root (and in no bar's box) unpins
     opts.trace?.(`[forge-pin] click ${clickKind(e.target)} -> ${el ? (opts.pinLabel ? opts.pinLabel(el.id) : el.id) : 'none'} (${drawn ? 'on the bar' : el ? "inside the bar's box" : 'not on a bar'})`);
   };

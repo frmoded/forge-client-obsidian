@@ -2,6 +2,7 @@
 // stand-in, so the test runs the very mapping (settings -> askPlan / configured, folders -> bar and phrase names) the plugin runs, not a hand-built stand-in of it.
 import type { DescriptionPorts } from './description-apply.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER } from './phrase-core.ts';
+import { duplicateNote } from './duplicate-note-core.ts';
 
 /** What the plugin supplies from Obsidian (the vault, the workspace, window timers, the console, a modal). */
 export interface DescriptionEnv {
@@ -15,6 +16,10 @@ export interface DescriptionEnv {
   trace(line: string): void;
   warn(line: string): void;
   confirm?: DescriptionPorts['confirm'];
+  /** 2026-11-19-0992 (Duplicate): create a NEW note (rejects with Obsidian's "File already exists." rather than overwrite), whether a path exists, and whether an error is that refusal. All three present = the sentence can make copies; absent = it is refused in words. */
+  create?(path: string, content: string): Promise<unknown>;
+  exists?(path: string): boolean;
+  isAlreadyExists?(e: unknown): boolean;
 }
 /** What the plugin's settings give (main.ts): the sentence service call, whether it is set up, the person's own key, the service version. */
 export interface DescriptionHooks {
@@ -28,14 +33,18 @@ export interface DescriptionHooks {
   /** 2026-11-17-2001: the composer's switch (MUSIC_COMPOSER_AUTO_APPLY, default off) and its "+" menu. */
   composerAutoApply?: DescriptionPorts['composerAutoApply'];
   composerMenu?: DescriptionPorts['composerMenu'];
+  /** 2026-11-19-0992: the plugin's opener of a note by lineage id (a bar opens in the Beat Box): the links of the dialog use it. */
+  openNote?: DescriptionPorts['openNote'];
 }
 
 export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks): DescriptionPorts {
   const folderNames = (folder: string): string[] => env.basenamesIn(folder).filter((n) => n !== 'README');
+  const vault = () => ({ bars: folderNames(BAR_FOLDER_NAME), phrases: folderNames(PHRASE_FOLDER), arrangements: folderNames('arrangements'), compositions: folderNames('compositions'), kits: folderNames('kits') });
+  const { create, exists, isAlreadyExists } = env;
   return {
     read: (p) => env.read(p),
     process: (p, fn) => env.process(p, fn),
-    vault: () => ({ bars: folderNames(BAR_FOLDER_NAME), phrases: folderNames(PHRASE_FOLDER), arrangements: folderNames('arrangements'), compositions: folderNames('compositions'), kits: folderNames('kits') }),
+    vault,
     barNames: () => folderNames(BAR_FOLDER_NAME), phraseNames: () => folderNames(PHRASE_FOLDER),
     setTimer: env.setTimer, clearTimer: env.clearTimer,
     trace: env.trace, warn: env.warn,
@@ -49,5 +58,7 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     ...(hooks.composerAutoApply ? { composerAutoApply: hooks.composerAutoApply } : {}),
     ...(hooks.composerMenu ? { composerMenu: hooks.composerMenu } : {}),
     ...(env.confirm ? { confirm: env.confirm } : {}),
+    ...(create && exists && isAlreadyExists ? { duplicate: (of: Parameters<NonNullable<DescriptionPorts['duplicate']>>[0]) => duplicateNote({ read: (p) => env.read(p), listBasenames: (folder) => env.basenamesIn(folder), exists, create, isAlreadyExists, trace: (line) => env.trace(line) }, of, vault()) } : {}),
+    ...(hooks.openNote ? { openNote: hooks.openNote } : {}),
   };
 }
