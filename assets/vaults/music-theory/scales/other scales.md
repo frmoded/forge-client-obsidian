@@ -33,7 +33,7 @@ To see any scale on a keyboard and a staff, use the player on [[Scales]]. It als
 > Whole-tone: 2 2 2 2 2 2.
 > Diminished: alternating 2 1 2 1 2 1 2 1 (or starting with the half step).
 
-Exercise: pick a home note or press Random, choose one of these scales, and find its notes on the keys. The staff fills in as you go, and a wrong tap costs you a try.
+Exercise: pick a tonic (home note) or press Random, choose one of these scales, and find its notes on the keys. The staff fills in as you go, and a wrong tap costs you a try. The shelf under the exercise shows the twelve tonics of the scale you chose; each one you finish fills in.
 
 ```html-embed
 scales/resources/html/scale_build_other_scales.html

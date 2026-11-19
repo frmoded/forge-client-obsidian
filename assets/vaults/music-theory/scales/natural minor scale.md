@@ -20,7 +20,7 @@ A minor and C major use exactly the same seven notes. C major sits a minor third
 
 Two checks, every time. Count the half steps against the recipe, then read the letters: seven notes, seven different letters, none twice, none skipped. C D E♭ F G A♭ B♭ passes. C D D♯ F G G♯ A♯ sounds identical and fails: two Ds, two Gs, no E, no B.
 
-Don't stop at A and C. Build all twelve natural minor scales, one per home note, in the exercise below. It keeps count of how many of the twelve you've finished.
+Don't stop at A and C. Build all twelve natural minor scales in the exercise below, one tonic at a time. Each finished scale stays on a shelf under the exercise.
 
 Harmonic and melodic minor change one or two of these notes; they're on [[modes and minor scales]].
 

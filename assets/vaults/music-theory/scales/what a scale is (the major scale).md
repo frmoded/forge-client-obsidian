@@ -30,7 +30,7 @@ Keys a fifth up from C (G, D, A, E, B) collect sharps; keys a fourth up (F, B♭
 
 Two checks: count the half steps against the recipe, then read the letters: seven notes, seven letters, none twice. G A B C D E F♯ passes. G A B C D E G♭ fails: two Gs, no F.
 
-Don't stop at C and G. Build all twelve majors in the exercise below; it counts how many you've finished.
+Don't stop at C and G. Build all twelve majors in the exercise below, one tonic at a time. Each finished scale stays on a shelf under the exercise, so by the end you have all twelve in front of you.
 
 To see any scale, use the player on [[Scales]].
 

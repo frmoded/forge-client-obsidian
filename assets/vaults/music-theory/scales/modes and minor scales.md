@@ -33,7 +33,7 @@ To see any scale on a keyboard and a staff, use the player on [[Scales]].
 > Modes in half steps: Ionian 2 2 1 2 2 2 1, Dorian 2 1 2 2 2 1 2, Phrygian 1 2 2 2 1 2 2, Lydian 2 2 2 1 2 2 1, Mixolydian 2 2 1 2 2 1 2, Aeolian 2 1 2 2 1 2 2, Locrian 1 2 2 1 2 2 2.
 > Modes of C major, each starting on the next white key: Ionian from C, Dorian from D, Phrygian from E, Lydian from F, Mixolydian from G, Aeolian from A, Locrian from B.
 
-Exercise: pick a home note or press Random, choose a mode or a minor scale from this page, and find its notes on the keys. The staff fills in as you go, and a wrong tap costs you a try. The melodic minor is built in its ascending form, so no coming down.
+Exercise: pick a tonic (home note) or press Random, choose a mode or a minor scale from this page, and find its notes on the keys. The staff fills in as you go, and a wrong tap costs you a try. The melodic minor is built in its ascending form, so no coming down. The shelf under the exercise shows the twelve tonics of the scale you chose; each one you finish fills in.
 
 ```html-embed
 scales/resources/html/scale_build_modes_and_minor.html

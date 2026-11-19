@@ -1,6 +1,6 @@
 This is the exercise that ties the chapter together: the same build exercise, but now any scale of the chapter can come up, whether it's major, one of the three minors, any of the seven modes, pentatonic, blues, whole-tone or diminished.
 
-You get a home note and a scale name, or press Random, and you find the notes on the keys while the staff fills in. Easy, medium and hard allow 5, 3 or 1 wrong taps, and the score lives on the page until you reload. When an exercise ends you see the whole scale, its letters and its steps, and Play lets you hear it.
+You get a tonic and a scale name, or press Random, and you find the notes on the keys while the staff fills in. Easy, medium and hard allow 5, 3 or 1 wrong taps, and the score lives on the page until you reload. When an exercise ends you see the whole scale, its letters and its steps, and Play lets you hear it. Under the exercise a shelf shows the twelve tonics of the scale you got; each one you finish fills in.
 
 ```html-embed
 scales/resources/html/scale_ear_build_the_scale.html
