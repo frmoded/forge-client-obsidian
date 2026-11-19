@@ -4,15 +4,19 @@
 //   * P3: with no host (a lean edition, another vault), or a note that is not a bar (`rhythm_data/...`), the tab writes through the autosave EXACTLY as before: one process, the json only, no `lines:`;
 //   * a bar the host calls `unlistable` falls back to the autosave (nothing lost); a write whose replay is not the grid redraws the widget from the replay; a `modify` that is our own write does nothing, one that is not reloads the widget;
 //   * `forge-rhythm-undo` / `-redo` from the widget, and Cmd/Ctrl+Z on the tab (outside a text field), reach the host's undo and redo; opening writes nothing.
+// 2026-11-19-0996 (the last tests of the file): the whole chain with NOTHING stood in for - a real keydown in the real widget page, the real tab, the real controller: one Cmd+Z undoes ONE gesture, Shift+Cmd+Z and Ctrl+Y redo one, a text field keeps its key.
 import assert from 'node:assert/strict';
 import { test, before } from 'node:test';
 import { Window } from 'happy-dom';
 
 import { bundleRealPlugin, type RealPlugin } from './test-support/bundle-real-plugin.ts';
 import { loadRealOnload, type LoadedPlugin } from './test-support/real-onload.ts';
-import { RHYTHM_BOX_WIDGET_PATH, formatRhythmJson, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
+import { RHYTHM_BOX_WIDGET_PATH, formatRhythmJson, readRhythmNote, rhythmDataEqual, type RhythmData } from './rhythm-edit-core.ts';
 import { widgetHtml, skip } from './test-support/rhythm-widget-harness.ts';
 import { PLAYGROUND_BARS } from './test-support/bar-list-fixtures.ts';
+import { PHRASE_VAULT } from './test-support/phrase-list-fixtures.ts';
+import { createDescriptionController, type DescriptionPorts } from './description-apply.ts';
+import { readBarLines } from './bar-list-note-core.ts';
 
 const SCORE_FIRST_TOML = 'name = "playground"\nprofile = "score_first"\n';
 const BAR = PLAYGROUND_BARS['bar_001'];
@@ -56,7 +60,7 @@ function vaultOf(path: string, noteText: string) {
 type V = ReturnType<typeof vaultOf>;
 
 /** Open the note in a REAL Beat Box tab and play the widget's part. Returns the tab, what it posted into the widget, and how to send it a message. */
-async function openTab(v: V) {
+async function openTab(v: V, onPost?: (m: unknown) => void) {
   Object.assign(globalThis, { document: win.document, window: win, HTMLElement: win.HTMLElement });
   real.messageDelivery.resetForTests();
   plugin.target.app = v.app;
@@ -75,11 +79,11 @@ async function openTab(v: V) {
     await view.onLoadFile(v.file);
     await tick();
     const iframe = contentEl.querySelector('iframe'); assert.ok(iframe, 'the tab built the widget iframe');
-    Object.defineProperty(iframe, 'contentWindow', { value: { postMessage: (m: unknown) => { posted.push(JSON.parse(JSON.stringify(m))); } }, configurable: true });
+    Object.defineProperty(iframe, 'contentWindow', { value: { postMessage: (m: unknown) => { const c = JSON.parse(JSON.stringify(m)); posted.push(c); onPost?.(c); } }, configurable: true });
     win.dispatchEvent(new win.MessageEvent('message', { data: { type: 'forge-rhythm-ready' }, source: iframe.contentWindow }));
     await tick();
     const send = async (data: unknown) => { win.dispatchEvent(new win.MessageEvent('message', { data, source: iframe.contentWindow })); await tick(); };
-    return { view, contentEl, posted, send, loads: () => posted.filter((m) => m && m.type === 'forge-rhythm-load'), restoreConsole: () => Object.assign(console, saved) };
+    return { view, contentEl, iframe, posted, send, loads: () => posted.filter((m) => m && m.type === 'forge-rhythm-load'), restoreConsole: () => Object.assign(console, saved) };
   } catch (e) { Object.assign(console, saved); throw e; }
 }
 
@@ -234,5 +238,125 @@ test('the widget\'s own indicator hears a list write: "Saved" after one, the rea
     const statuses = t.posted.filter((m) => m && m.type === 'forge-rhythm-status');
     assert.deepEqual(statuses[statuses.length - 1], { type: 'forge-rhythm-status', state: 'error', message: 'Line 2 is not a sentence I can read.' });
     assert.equal(t.loads().length, loads + 1, 'and the grid is the note\'s again');
+  } finally { off(); t.restoreConsole(); }
+});
+
+// ---- 2026-11-19-0996: the whole chain, a REAL key in the REAL widget page -> the real tab -> the real controller ----------------------------------------------------------------------------------------------
+// The widget runs in its own happy-dom window (its `parent` is the tab's window: what it posts reaches the tab's `message` listener with the iframe's window as `source`, and what the tab posts into the iframe reaches the widget); the host is the REAL
+// controller (description-apply.ts) on the same in-memory vault; a vault `modify` is fired after each controller write, as Obsidian does, so the tab redraws the widget from the note.
+async function chain(v: V) {
+  const ports: DescriptionPorts = {
+    read: async (p) => { const t = v.text.get(p); if (t === undefined) throw new Error('gone'); return t; },
+    process: async (p, fn) => { await Promise.resolve(); const cur = v.text.get(p)!; const next = fn(cur); if (next !== cur) { v.text.set(p, next); v.processed.push(p); } },
+    vault: () => PHRASE_VAULT, barNames: () => PHRASE_VAULT.bars as string[], phraseNames: () => PHRASE_VAULT.phrases as string[],
+    setTimer: () => 0, clearTimer: () => {}, trace: () => {}, panes: () => [],
+    composerMenu: () => ({ items: [{ id: 'new_bar', label: 'New bar' }], run: () => {} }),
+  };
+  const ctl = createDescriptionController(ports);
+  const heard = async <T,>(r: T): Promise<T> => { await v.handlers.modify?.(v.file); await tick(10); return r; };      // the vault tells the tab about every write (its own, too)
+  const off = real.registerBarListHost({
+    appendLine: async (p, s, o) => heard(await ctl.appendLine(p, s, o as never)),
+    undoLast: async (p) => heard(await ctl.undoLast(p)),
+    redoLast: async (p) => heard(await ctl.redoLast(p)),
+  });
+  const bwin: any = new Window({ url: 'http://localhost/' });
+  const current: RhythmData[] = [];
+  let parentStub: object | null = null; let iframeWin: object | null = null;
+  const toTab = (m: any) => { if (m.type === 'forge-rhythm-current-data') current.push(m.data); win.dispatchEvent(new win.MessageEvent('message', { data: m, source: iframeWin })); };
+  parentStub = { postMessage: (m: unknown) => { const c = JSON.parse(JSON.stringify(m)); setTimeout(() => toTab(c), 0); } };
+  Object.defineProperty(bwin, 'parent', { value: parentStub, configurable: true });
+  const t = await openTab(v, (m) => { setTimeout(() => bwin.dispatchEvent(new bwin.MessageEvent('message', { data: m, source: parentStub })), 0); });
+  iframeWin = t.iframe.contentWindow;
+  await ctl.inspect('bars/bar_001.md');
+  const m = /<script>([\s\S]*?)<\/script>/.exec(widgetHtml)!;
+  bwin.document.write(widgetHtml.replace(m[0], ''));
+  bwin.eval(m[1]);                                                                                                           // the widget posts its `ready`; the tab answers with the bar
+  await tick(40);
+  const cell = (ch: string, s: number): any => bwin.document.querySelector(`.step[data-channel="${ch}"][data-step="${s}"]`);
+  const key = async (target: any, init: Record<string, unknown>) => { const e = new bwin.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }); target.dispatchEvent(e); await tick(40); return e.defaultPrevented as boolean; };
+  const click = async (ch: string, s: number) => { cell(ch, s).dispatchEvent(new bwin.MouseEvent('click', { bubbles: true })); await tick(40); };
+  const grid = async (): Promise<RhythmData> => { current.length = 0; await tick(0); bwin.dispatchEvent(new bwin.MessageEvent('message', { data: { type: 'forge-rhythm-request-data' }, source: parentStub })); await tick(20); return current[current.length - 1]; };
+  const lines = () => readBarLines(v.text.get('bars/bar_001.md')!)?.lines ?? [];
+  return { t, bwin, cell, key, click, grid, lines, stop: () => { off(); t.restoreConsole(); } };
+}
+const withHits = (d: RhythmData, hits: Array<[string, number]>): RhythmData => hits.reduce((acc, [ch, i]) => withClick(acc, ch, i), d);
+
+test('0996 THE WHOLE CHAIN: three clicks, then ONE real Cmd+Z in the widget undoes ONE gesture each (the grid is redrawn from the list), Shift+Cmd+Z and Ctrl+Y redo ONE each, one write per press', async () => {
+  const v = vaultOf('bars/bar_001.md', BAR); const start = dataOf(BAR);
+  const off = start.channels.kick.map((x, i) => (x === false ? i : -1)).filter((i) => i >= 0).slice(0, 3); assert.equal(off.length, 3, 'the fixture bar has three empty kick steps');
+  const hits = off.map((i) => ['kick', i] as [string, number]);
+  const c = await chain(v);
+  try {
+    assert.deepEqual(v.processed, [], 'opening writes nothing'); assert.ok(rhythmDataEqual(await c.grid(), start), 'the widget shows the bar');
+    for (const [ch, i] of hits) await c.click(ch, i);
+    assert.equal(c.lines().length, 4, 'the head and three lines: one line per click'); assert.equal(v.processed.length, 3, 'one write per click');
+    assert.ok(rhythmDataEqual(await c.grid(), withHits(start, hits)));
+    const key = { key: 'z', metaKey: true };
+    for (let n = 2; n >= 0; n--) {
+      const w = v.processed.length;
+      assert.equal(await c.key(c.cell('snare', 0), key), true, 'the page took the key');
+      assert.equal(v.processed.length, w + 1, `Cmd+Z: ONE write`); assert.equal(c.lines().length, n + 1, `Cmd+Z: one line off the list`);
+      assert.ok(rhythmDataEqual(await c.grid(), withHits(start, hits.slice(0, n))), `Cmd+Z: the grid is the list's replay, ${n} click(s) left`);
+    }
+    const w0 = v.processed.length;
+    await c.key(c.cell('snare', 0), key); assert.equal(v.processed.length, w0, 'nothing left to undo: no write'); assert.ok(rhythmDataEqual(await c.grid(), start));
+    assert.equal(await c.key(c.bwin.document.body, { key: 'Z', metaKey: true, shiftKey: true }), true);
+    assert.equal(c.lines().length, 2, 'Shift+Cmd+Z: ONE line back'); assert.equal(v.processed.length, w0 + 1);
+    assert.ok(rhythmDataEqual(await c.grid(), withHits(start, hits.slice(0, 1))));
+    assert.equal(await c.key(c.cell('snare', 0), { key: 'y', ctrlKey: true }), true);
+    assert.equal(c.lines().length, 3, 'Ctrl+Y: ONE line back'); assert.equal(v.processed.length, w0 + 2);
+    assert.ok(rhythmDataEqual(await c.grid(), withHits(start, hits.slice(0, 2))));
+    assert.equal(await c.key(c.cell('snare', 0), { key: 'Z', ctrlKey: true, shiftKey: true }), true); assert.equal(c.lines().length, 4);
+    assert.ok(rhythmDataEqual(await c.grid(), withHits(start, hits)), 'all three are back');
+    const w1 = v.processed.length; await c.key(c.cell('snare', 0), { key: 'y', ctrlKey: true }); assert.equal(v.processed.length, w1, 'nothing left to redo: no write');
+    await c.click('snare', 2); assert.equal(c.lines().length, 5, 'a new gesture after the undo and redo is one more line');
+  } finally { c.stop(); }
+});
+
+test('0996: with the list host registered, a key in a text field of the page, in a modified combination or a plain Z does nothing at all (no write, the grid untouched, the key not taken)', async () => {
+  const v = vaultOf('bars/bar_001.md', BAR); const start = dataOf(BAR);
+  const c = await chain(v);
+  try {
+    await c.click('kick', start.channels.kick.indexOf(false)); const w = v.processed.length, n = c.lines().length; const shown = await c.grid();
+    const field: any = c.bwin.document.createElement('input'); field.setAttribute('type', 'text'); c.bwin.document.body.appendChild(field);
+    const area: any = c.bwin.document.createElement('textarea'); c.bwin.document.body.appendChild(area);
+    for (const [what, target, init] of [
+      ['Cmd+Z in a text input', field, { key: 'z', metaKey: true }], ['Shift+Cmd+Z in a textarea', area, { key: 'Z', metaKey: true, shiftKey: true }], ['Ctrl+Y in a text input', field, { key: 'y', ctrlKey: true }],
+      ['plain Z on the grid', c.cell('kick', 1), { key: 'z' }], ['Cmd+Alt+Z on the grid', c.cell('kick', 1), { key: 'z', metaKey: true, altKey: true }],
+    ] as Array<[string, any, Record<string, unknown>]>) {
+      assert.equal(await c.key(target, init), false, `${what}: not taken`);
+      assert.equal(v.processed.length, w, `${what}: no write`); assert.equal(c.lines().length, n);
+    }
+    assert.ok(rhythmDataEqual(await c.grid(), shown));
+  } finally { c.stop(); }
+});
+
+test('0996: a bar tab with NO list host (a lean edition, another vault) takes the widget\'s undo message and does nothing: no write, no error, the grid untouched', async () => {
+  const v = vaultOf('bars/bar_001.md', BAR);
+  const bwin: any = new Window({ url: 'http://localhost/' });
+  let parentStub: object | null = null; let iframeWin: object | null = null;
+  parentStub = { postMessage: (m: unknown) => { const c = JSON.parse(JSON.stringify(m)); setTimeout(() => win.dispatchEvent(new win.MessageEvent('message', { data: c, source: iframeWin })), 0); } };
+  Object.defineProperty(bwin, 'parent', { value: parentStub, configurable: true });
+  const t = await openTab(v, (m) => { setTimeout(() => bwin.dispatchEvent(new bwin.MessageEvent('message', { data: m, source: parentStub })), 0); });
+  iframeWin = t.iframe.contentWindow;
+  const m = /<script>([\s\S]*?)<\/script>/.exec(widgetHtml)!;
+  bwin.document.write(widgetHtml.replace(m[0], '')); bwin.eval(m[1]); await tick(40);
+  const errors: unknown[] = []; const saved = console.error; console.error = (...a: unknown[]) => { errors.push(a); };
+  try {
+    for (const init of [{ key: 'z', metaKey: true }, { key: 'Z', metaKey: true, shiftKey: true }]) {
+      const e = new bwin.KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init }); bwin.document.querySelector('.step').dispatchEvent(e); await tick(40);
+      assert.equal(e.defaultPrevented, true, 'the page cannot know whether the tab keeps a list: it takes the key and posts');
+    }
+    assert.deepEqual(v.processed, []); assert.deepEqual(errors, []);
+  } finally { console.error = saved; t.restoreConsole(); }
+});
+
+test('0996: a rhythm note that is not a bar (a library pattern) in a Beat Box tab, with the list host registered: the widget\'s undo message reaches NO undo (its edits are autosaved, there is no list)', async () => {
+  const v = vaultOf('rhythm_data/rhythm_pattern_tresillo.md', BAR); const { host, calls } = fakeHost();
+  const off = real.registerBarListHost(host);
+  const t = await openTab(v);
+  try {
+    await t.send({ type: 'forge-rhythm-undo' }); await t.send({ type: 'forge-rhythm-redo' });
+    assert.deepEqual(calls.undo, []); assert.deepEqual(calls.redo, []); assert.deepEqual(v.processed, []);
   } finally { off(); t.restoreConsole(); }
 });

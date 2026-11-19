@@ -1430,6 +1430,26 @@ if (typeof document === "undefined") {           // node test harness
     else if (m.type === "forge-rhythm-stop") { if (playing) stop(); }
     else if (m.type === "forge-rhythm-highlight") { if (hoverLink) applyHighlight(m.channel, m.step); }   // ignored unless the load asked for hover-link
   });
+  // Undo / redo from the keyboard (2026-11-19-0996). This page is an iframe: a Cmd/Ctrl+Z pressed while the focus is HERE never reaches the host tab's own listener, so the page posts it. Cmd/Ctrl+Z posts
+  // `forge-rhythm-undo`; Shift+Cmd/Ctrl+Z and Ctrl+Y post `forge-rhythm-redo` (the host takes the bar's last gesture off its list, or puts it back; a tab that keeps no list ignores both). It posts, and
+  // calls preventDefault, ONLY when a host has loaded a note to EDIT (a standalone page, a refused load and a playground, the `forge-rhythm` embed in an ordinary note, leave the key alone) and the focus is
+  // not in a text-entry control (a text-like input, a textarea, contenteditable), which keeps its own undo. A range slider and a select have no text undo of their own, so the key posts from them too.
+  function takesTextKeys(t) {
+    if (!t || t.nodeType !== 1) return false;
+    if (t.tagName === "TEXTAREA") return true;
+    if (t.tagName === "INPUT") return !/^(range|checkbox|radio|button|submit|reset|image|file|color)$/i.test(t.getAttribute("type") || "text");
+    var ce = t.closest ? t.closest("[contenteditable]") : null;
+    return !!ce && ce.getAttribute("contenteditable") !== "false";
+  }
+  document.addEventListener("keydown", function (e) {
+    if (!hostWindow() || !hostLoaded || hostMode !== "edit" || e.isComposing || e.altKey) return;
+    var k = String(e.key).toLowerCase(), msg = null;
+    if (k === "z" && (e.metaKey || e.ctrlKey)) msg = e.shiftKey ? "forge-rhythm-redo" : "forge-rhythm-undo";
+    else if (k === "y" && e.ctrlKey && !e.metaKey && !e.shiftKey) msg = "forge-rhythm-redo";
+    if (!msg || takesTextKeys(e.target)) return;
+    e.preventDefault();
+    postToHost({ type: msg });
+  });
   $("bReset").addEventListener("click", function () {
     if (hostMode !== "playground" || !hostLoaded || !loadedData) return;
     var r = parseRhythmLoad(loadedData);

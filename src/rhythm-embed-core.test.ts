@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  MSG_CURRENT_DATA, MSG_EDITED, MSG_LOAD, MSG_OPEN_NOTE, MSG_PLAYING, MSG_READY, MSG_REQUEST_DATA, MSG_RESET, MSG_SAVE, MSG_STOP,
+  MSG_CURRENT_DATA, MSG_EDITED, MSG_LOAD, MSG_OPEN_NOTE, MSG_PLAYING, MSG_READY, MSG_REDO, MSG_REQUEST_DATA, MSG_RESET, MSG_SAVE, MSG_STOP, MSG_UNDO,
   buildLoadMessage, buildRequestDataMessage, buildStopMessage, contentFingerprint, formatRhythmJson, parseEmbedWidgetMessage,
   parseWidgetMessage, type RhythmData,
 } from './rhythm-edit-core.ts';
@@ -429,4 +429,18 @@ test('the session\'s dependency bag has no write function: nothing in it can mod
   // The contract is structural: EmbedSessionDeps lists readNote/post/openNote/onPlaying/showUpdated/showError/computeScore/timers only.
   // The source pin in rhythm-embed-wiring.test.ts additionally checks the Obsidian glue for any vault write API.
   assert.equal(contentFingerprint('a') === contentFingerprint('a'), true);
+});
+
+// 2026-11-19-0996: the Beat Box page now posts `forge-rhythm-undo` / `-redo` on Cmd/Ctrl+Z - but only to a host that loaded a note in `edit` mode (a playground, the `forge-rhythm` embed in an ordinary note, never gets them: rhythm-undo-key-widget.test.ts).
+// Belt and braces, pinned here: an embed's host would ignore them anyway - `parseEmbedWidgetMessage` knows neither kind, so they fall to `ignored`, which the session drops without a post, a timer, a toast or an error.
+test('0996: an embed (a playground in an ordinary note) IGNORES forge-rhythm-undo and forge-rhythm-redo: nothing posted, no error, no toast, no dirty flag, no timer, no Open note', async () => {
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_UNDO }), { kind: 'ignored' });
+  assert.deepEqual(parseEmbedWidgetMessage({ type: MSG_REDO }), { kind: 'ignored' });
+  assert.equal(MSG_UNDO, 'forge-rhythm-undo'); assert.equal(MSG_REDO, 'forge-rhythm-redo');
+  const { session, posted, log } = makeSession();
+  await session.onWidgetMessage({ type: MSG_READY });
+  posted.length = 0;
+  for (const m of [{ type: MSG_UNDO }, { type: MSG_REDO }, { type: MSG_UNDO, extra: 1 }]) await session.onWidgetMessage(m);
+  assert.deepEqual(posted, []); assert.deepEqual(log.errors, []); assert.equal(log.updated, 0); assert.equal(log.opened, 0); assert.deepEqual(log.playing, []);
+  assert.equal(log.timers.length, 0, 'no timer was started'); assert.equal(session.isDirty(), false);
 });
