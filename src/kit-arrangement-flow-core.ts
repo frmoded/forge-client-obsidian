@@ -2,6 +2,7 @@
 // vault is injected (the Obsidian glue is kits-arrangements.ts; the choosing is kit-dom.ts / arrangement-dom.ts). Nothing here throws: every trouble is one sentence returned and shown. Score-first vaults only (the gates below; P3).
 import { ARRANGEMENT_FOLDER, arrangementPath, nextArrangementName } from './arrangement-core.ts';
 import { emptyArrangementNote } from './empty-note-core.ts';
+import { nameTakenMessage } from './note-name-rules-core.ts';
 import { KIT_FOLDER, freeKitName, kitCreatedLine, kitFromChoice, kitPath, newKitNote } from './kit-core.ts';
 
 export interface CreatePorts<F = unknown> {
@@ -54,10 +55,25 @@ export async function createKit<F>(ports: CreatePorts<F>, choice: { name: string
   }
 }
 
-/** 2026-11-19-0960: "New arrangement" makes an EMPTY arrangement (no kit, no phrase, no tracks: its first sentence makes them) and opens it. Nothing to choose, nothing for the engine to draw. */
-export async function createEmptyArrangement<F>(ports: CreatePorts<F>): Promise<CreateResult> {
+/** 2026-11-19-0960: "New arrangement" makes an EMPTY arrangement (no kit, no phrase, no tracks: its first sentence makes them) and opens it. Nothing to choose, nothing for the engine to draw.
+ *  2026-11-19-0991: `choice.name` = the name the person typed in the name dialog: the note is made with exactly that name, and a path that is taken is said in words (no other number is tried instead). Absent = the next free arr_NNN, as before. */
+export async function createEmptyArrangement<F>(ports: CreatePorts<F>, choice: { name?: string } = {}): Promise<CreateResult> {
   try {
     await ensureFolder(ports, ARRANGEMENT_FOLDER);
+    if (choice.name !== undefined) {
+      const path = arrangementPath(choice.name);
+      if (ports.exists(path)) return fail(ports, nameTakenMessage(choice.name, path));
+      try {
+        const file = await ports.create(path, emptyArrangementNote(choice.name));
+        ports.trace(`[forge-arrangement] created ${path} (empty)`);
+        await ports.open(file);
+        ports.notify(`Created ${path}.`);
+        return { ok: true, path };
+      } catch (e) {
+        if (ports.isAlreadyExists(e)) return fail(ports, nameTakenMessage(choice.name, path));
+        throw e;
+      }
+    }
     const refused = new Set<string>();
     for (let tries = 0; tries < NAME_TRIES; tries++) {
       const name = nextArrangementName((p) => ports.exists(p) || refused.has(p));

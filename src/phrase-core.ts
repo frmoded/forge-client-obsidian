@@ -16,6 +16,7 @@ import { extractDescription } from './v2-note-core.ts';
 import { editabilityProblem, parseFrontmatter, readRhythmNote, type RhythmData, type Validation } from './rhythm-edit-core.ts';
 import { extractPhraseJsonBlock, handEditRefusalOf, isCustomNote, keepRecipeSource, newPhraseNote, renderPhraseNote } from './phrase-notes-core.ts';
 import { EMPTY_SOURCE, emptyPhraseNote, isEmptyNote } from './empty-note-core.ts';
+import { nameTakenMessage } from './note-name-rules-core.ts';
 import { produceCustomScore, type CustomDeps, type CustomRun } from './custom-note-core.ts';
 import { extendGridSentence } from './engine-refusal-core.ts';
 import { installedNotePreflight, type NotePreflight } from './note-preflight-seam.ts';
@@ -721,7 +722,12 @@ export function planNewPhrase(input: { activePath: string | null | undefined; ex
 }
 
 /** 2026-11-19-0960: "New phrase" (the palette entry, the ribbon button, the "+ New" menu): an EMPTY phrase - no source bar, no kind, no sentence; its first sentence makes the kind. Needs nothing from the vault (not a bar, not a phrase). */
-export function planNewEmptyPhrase(input: { existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number }): NewPhrasePlan {
+export function planNewEmptyPhrase(input: { existingBasenames: Iterable<string>; exists: (path: string) => boolean; attempts?: number; name?: string }): NewPhrasePlan {
+  // 2026-11-19-0991: a NAME the person typed (the dialog of "New phrase") is used as it is: no number is tried instead; a path that is taken is said in words (the dialog checks the whole vault, this is the flow's own check of the one path)
+  if (input.name !== undefined) {
+    const path = phrasePath(input.name);
+    return input.exists(path) ? { ok: false, message: nameTakenMessage(input.name, path) } : { ok: true, name: input.name, path, content: emptyPhraseNote(input.name) };
+  }
   return planPhraseNote(input, (name) => emptyPhraseNote(name));
 }
 
@@ -831,8 +837,8 @@ export function createNewPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewPhraseR
 }
 
 /** The whole "New phrase" action (2026-11-19-0960): the same create-and-open loop, the note is EMPTY. There is nothing for the engine to draw, so the preflight (which draws the prospective note) is not asked. */
-export function createNewEmptyPhrase<F>(ports: NewPhrasePorts<F>): Promise<NewPhraseResult> {
-  return createPhraseNote({ ...ports, preflight: async () => null }, { fn: 'createNewEmptyPhrase', noun: 'phrase', plan: (existingBasenames, exists) => planNewEmptyPhrase({ existingBasenames, exists }) });
+export function createNewEmptyPhrase<F>(ports: NewPhrasePorts<F>, choice: { name?: string } = {}): Promise<NewPhraseResult> {
+  return createPhraseNote({ ...ports, preflight: async () => null }, { fn: 'createNewEmptyPhrase', noun: 'phrase', plan: (existingBasenames, exists) => planNewEmptyPhrase({ existingBasenames, exists, name: choice.name }) });   // 2026-11-19-0991: `name` = what the person typed in the name dialog (absent = the next free phrase_NNN, as before)
 }
 
 /** The whole "New morph from this bar" action: the same loop, the note is a morph from this bar to the first other one. */

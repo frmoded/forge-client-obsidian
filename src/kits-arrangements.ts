@@ -26,6 +26,7 @@ import { pinnedNoteFor, type PinnedNote } from './linked-panes-core.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
 import { barsOfPayload } from './phrase-core.ts';
 import { isKitPath } from './kit-core.ts';
+import { openNewNoteNameDialog } from './new-note-name-modal.ts';
 import { NEW_ARRANGEMENT_COMMAND_ID, NEW_ARRANGEMENT_COMMAND_NAME, NEW_KIT_COMMAND_ID, NEW_KIT_COMMAND_NAME, OPEN_ARRANGEMENT_COMMAND_ID, OPEN_ARRANGEMENT_COMMAND_NAME, createEmptyArrangement, createKit, newArrangementAvailable, newKitAvailable, openArrangementAvailable, type CreatePorts } from './kit-arrangement-flow-core.ts';
 import { mountKitDialog } from './kit-dom.ts';
 import { mountArrangementStrip, type ArrangementStrip } from './arrangement-strip-dom.ts';
@@ -383,7 +384,8 @@ export function registerKitsAndArrangements(plugin: Plugin, opts: KitsArrangemen
     icon: ICON_ARRANGEMENT,
     checkCallback: (checking: boolean) => {
       if (!newArrangementAvailable({ scoreFirst: opts.scoreFirst() })) return false;
-      if (!checking) void createEmptyArrangement(ports((file) => openArrangement(app, file)));          // 2026-11-19-0960: an EMPTY arrangement, opened at once (no dialog): its first sentence makes the tracks
+      // 2026-11-19-0991: the NAME is asked first (a dialog: nothing is made until a valid name is confirmed; Esc and Cancel make nothing). Then 2026-11-19-0960's flow: an EMPTY arrangement, opened at once, its first sentence makes the tracks.
+      if (!checking) openNewNoteNameDialog(app, 'arrangement', (name, beforeOpen) => createEmptyArrangement(ports((file) => { beforeOpen(); return openArrangement(app, file); }), { name }));
       return true;
     },
   });

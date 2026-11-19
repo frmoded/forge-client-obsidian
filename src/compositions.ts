@@ -27,6 +27,7 @@ import { paintSelectionTint } from './selection-tint-dom.ts';
 import type { ProvenanceMap } from './provenance-core.ts';
 import { mountCompositionStrip, type CompositionStrip } from './composition-strip-dom.ts';
 import { NEW_COMPOSITION_COMMAND_ID, NEW_COMPOSITION_COMMAND_NAME, OPEN_COMPOSITION_COMMAND_ID, OPEN_COMPOSITION_COMMAND_NAME, createEmptyComposition, moveRoot, newCompositionAvailable, openCompositionAvailable } from './composition-flow-core.ts';
+import { openNewNoteNameDialog } from './new-note-name-modal.ts';
 import { MAKE_ROOT_COMMAND_ID, MAKE_ROOT_COMMAND_NAME, OPEN_PIECE_COMMAND_ID, OPEN_PIECE_COMMAND_NAME, makeRootAvailable, manyRootsMessage, noRootMessage, openPieceAvailable, rootOf, withRoot } from './composition-root-core.ts';
 import type { CreatePorts } from './kit-arrangement-flow-core.ts';
 import { litEvidence } from './structure-strip-core.ts';
@@ -365,18 +366,29 @@ export function registerCompositions(plugin: Plugin, opts: CompositionsOptions):
       if (!checking) {
         // 2026-10-31-1135 (smoke 10, B1/B4): the composition is the root of the piece, so it is always opened WITH its notes: the pair the person started from follows to the new note (the Score takes its leaf), and with no pair
         // the notes pane opens beside the new Score ('Open Score with notes'). `origin` is read now, before any await.
-        const origin = opts.newCompositionPair?.origin() ?? null;
-        const compPorts = ports(async (file) => {
-          let followed = false;
-          if (origin !== null && opts.newCompositionPair) {
-            try { followed = await opts.newCompositionPair.openIn(origin, file); } catch (e) { console.error('New composition: the pair could not follow the new composition', e); }
+        const origin = opts.newCompositionPair?.origin() ?? null;          // read now, before the name dialog opens (L59: the pair the person started from)
+        // 2026-11-19-0991: the NAME is asked first (a dialog: nothing is made until a valid name is confirmed; Esc and Cancel make nothing). Then 2026-11-19-0960's flow: an EMPTY composition, opened at once, its first sentence makes the sections.
+        // The first composition of a vault is the root of its piece (`root: true`, whatever it is called: the mark is a frontmatter line, not a name), decided when the name is confirmed.
+        openNewNoteNameDialog(app, 'composition', async (name, beforeOpen) => {
+          const compPorts = ports(async (file) => {
+            beforeOpen();                                                  // the dialog closes first, so it cannot take the focus back from the composer the new note opens with
+            let followed = false;
+            if (origin !== null && opts.newCompositionPair) {
+              try { followed = await opts.newCompositionPair.openIn(origin, file); } catch (e) { console.error('New composition: the pair could not follow the new composition', e); }
+            }
+            if (followed) return;
+            const leaf = await openComposition(app, file);
+            try { await opts.pair?.(leaf, file); } catch (e) { console.error('New composition: the notes pane could not be opened', e); }          // the composition is made and open: a pane that will not open is not a failure of Create
+          });
+          try {
+            return await createEmptyComposition(compPorts, { root: rootOf(await readAll()).kind === 'none', name });
+          } catch (e) {
+            console.error('New composition failed', e);
+            const message = `New composition failed: ${(e as Error)?.message ?? e}`;
+            loggedNotice(message);
+            return { ok: false, message };
           }
-          if (followed) return;
-          const leaf = await openComposition(app, file);
-          try { await opts.pair?.(leaf, file); } catch (e) { console.error('New composition: the notes pane could not be opened', e); }          // the composition is made and open: a pane that will not open is not a failure of Create
         });
-        // 2026-11-19-0960: an EMPTY composition, opened at once (no dialog): its first sentence makes the sections. The first composition of a vault is the root of its piece, as the dialog's box was ticked for it.
-        void readAll().then((all) => createEmptyComposition(compPorts, { root: rootOf(all).kind === 'none' })).catch((e) => { console.error('New composition failed', e); loggedNotice(`New composition failed: ${(e as Error)?.message ?? e}`); });
       }
       return true;
     },

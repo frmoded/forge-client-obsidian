@@ -39,8 +39,7 @@ const FAMILIES: Family[] = [
 
 /** steps 1 to 3: New <family> (an empty note, opened by the plugin), renamed to A in the file list, its content written (by hand in the Recipe, or through the composer), a second note B made and renamed. */
 async function driverSteps(w: MusicTabsWorld, f: Family, how: 'hand' | 'composer'): Promise<{ aText: string }> {
-  const cmd = w.plugin.commands.get(f.newId)!;
-  cmd.checkCallback!(false); await w.settle(800);
+  await w.newNote(f.newId);                                                      // 2026-11-19-0991 (deliberate): the command asks for the NAME first; the person presses Enter on the default (what it chose before: comp_001 / arr_001)
   assert.ok(w.store.has(f.made), `New ${f.name} made ${f.made}`);
   await w.rename(f.made, f.a);
   const tab = w.leaves.find((l) => w.typeOf(l) === f.type)!;
@@ -51,7 +50,7 @@ async function driverSteps(w: MusicTabsWorld, f: Family, how: 'hand' | 'composer
     await w.handEdit(f.a, (t) => withRecipe(t, addLine(recipeOf(t), f.second)));
   }
   const aText = w.store.get(f.a)!;
-  cmd.checkCallback!(false); await w.settle(800);                                // B
+  await w.newNote(f.newId);                                                      // B
   if (w.store.has(f.made)) await w.rename(f.made, f.b);
   return { aText };
 }
@@ -60,8 +59,7 @@ for (const f of FAMILIES) {
   test(`[music] DIAGNOSIS (${f.name}): the empty note has its Cache fence, the hand edit of the Recipe leaves ONE fence and a cache that says the new content, and the Description list is made again from the Recipe (what the person sees)`, async () => {
     const w = await musicTabsWorld(real);
     try {
-      const cmd = w.plugin.commands.get(f.newId)!;
-      cmd.checkCallback!(false); await w.settle(800);
+      await w.newNote(f.newId);                                                  // 2026-11-19-0991 (deliberate): through the name dialog, Enter on the default
       assert.equal(fences(w.store.get(f.made)!), 1, 'hypothesis (a): the new empty note has exactly ONE json fence (the Cache), so it is not the missing fence');
       await w.rename(f.made, f.a);
       const tab = w.leaves.find((l) => w.typeOf(l) === f.type)!;
@@ -156,8 +154,7 @@ for (const f of FAMILIES) {
   test(`[music] (${f.name}) the tab follows a manual rename: the next Score is asked for under the NEW title (the tab used to keep the old name it was opened with)`, async () => {
     const w = await musicTabsWorld(real);
     try {
-      const cmd = w.plugin.commands.get(f.newId)!;
-      cmd.checkCallback!(false); await w.settle(800);
+      await w.newNote(f.newId);                                                  // 2026-11-19-0991 (deliberate): through the name dialog, Enter on the default
       const tab = w.leaves.find((l) => w.typeOf(l) === f.type)!;
       await w.say(tab.view, f.first);
       await w.rename(f.made, f.a);

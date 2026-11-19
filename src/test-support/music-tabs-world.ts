@@ -187,6 +187,19 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
   const handEdit = async (p: string, fn: (text: string) => string) => {
     store.set(p, fn(store.get(p)!)); fireVault('modify', tf(p)); await settle(1500);
   };
+  // 2026-11-19-0991 (deliberate): New phrase / New arrangement / New composition ASK FOR THE NAME first (a Modal): the world gives the Modal the way Obsidian's open()/close() work, and `newNote` is the person's steps through it: run the command,
+  // optionally type a name over the default, press Enter. (Before 0991 the command made the note at once, so the tests called `checkCallback(false)` and read the vault.)
+  const modals: any[] = [];
+  const modalProto = real.Modal.prototype; const savedModal = { open: modalProto.open, close: modalProto.close };
+  modalProto.open = function () { this.contentEl = win.document.createElement('div'); this.contentEl.empty = function () { this.textContent = ''; }; win.document.body.appendChild(this.contentEl); modals.push(this); this.onOpen(); };
+  modalProto.close = function () { this.closed = true; this.onClose(); this.contentEl.remove(); };
+  const newNote = async (commandId: string, name?: string, ms = 800) => {
+    plugin.commands.get(commandId)!.checkCallback!(false); await settle(30);
+    const input = modals.at(-1)?.contentEl.querySelector('.forge-newnote-name') as HTMLInputElement | undefined;
+    if (!input) throw new Error(`${commandId}: the name dialog did not open`);
+    if (name !== undefined) { input.value = name; input.dispatchEvent(new win.Event('input', { bubbles: true })); }
+    input.dispatchEvent(new win.KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter' })); await settle(ms);
+  };
   const viewOf = (leaf: any): any => leaf.view;
   const typeOf = (leaf: any): string => leaf.view.getViewType();
   const field = (view: any) => view.contentEl.querySelector('.forge-prompt-box-text') as HTMLTextAreaElement | null;
@@ -196,11 +209,12 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
     f.value = sentence; f.dispatchEvent(new win.Event('input', { bubbles: true })); await press(view, { key: 'Enter' }); await press(view, { key: 'Enter' }); await settle(500);
   };
   return {
-    real, plugin, store, writes, asked, notices, errors, leaves, tf, clock, settle, openFromList, restoreTab, rename, handEdit, viewOf, typeOf, field, say, markdownView,
+    real, plugin, store, writes, asked, notices, errors, leaves, tf, clock, settle, newNote, modals, openFromList, restoreTab, rename, handEdit, viewOf, typeOf, field, say, markdownView,
     active: () => activeLeaf,
     fire: { vault: fireVault, ws: fireWs },
     lastAsk: (): Ask | undefined => asked[asked.length - 1],
     done: () => {
+      modalProto.open = savedModal.open; modalProto.close = savedModal.close;
       real.messageDelivery.setScoreFirst(false); real.messageDelivery.resetForTests();      // first: its listeners still use the DOM helpers below
       console.info = savedInfo; console.error = savedError; console.debug = savedDebug; console.warn = savedWarn;
       for (const [k, v] of saved) { if (v === undefined) delete HP[k]; else HP[k] = v; }

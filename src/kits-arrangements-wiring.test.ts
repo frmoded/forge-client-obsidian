@@ -91,6 +91,8 @@ for (const edition of ['lean', 'music'] as const) {
       setActive: (p: string | null) => { activeFile = p; },
       offered: (id: string) => plugin.commands.get(id)?.checkCallback?.(true) ?? false,
       run: async (id: string) => { plugin.commands.get(id)!.checkCallback!(false); await flush(); },
+      // 2026-11-19-0991 (deliberate): "New arrangement" asks for the NAME first (the dialog opens, nothing is made); `confirm` is the person pressing Enter on the field (the default name, or `name` typed over it)
+      confirm: async (name?: string) => { const f = modals.at(-1)?.contentEl.querySelector('.forge-newnote-name'); assert.ok(f, 'the name dialog is open'); if (name !== undefined) { f.value = name; f.dispatchEvent(new win.Event('input', { bubbles: true })); } f.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); await flush(); },
       done: () => { clock.restore(); proto.open = saved.open; proto.close = saved.close; console.info = savedInfo; console.error = savedError; delete (globalThis as any).__shimFns; real.messageDelivery.resetForTests(); },
     };
   }
@@ -159,11 +161,12 @@ for (const edition of ['lean', 'music'] as const) {
     } finally { w.done(); }
   });
 
-  test(`[${edition}] "New arrangement" on the real wiring (2026-11-19-0960): NO dialog; arrangements/ is made and arr_001 is written EMPTY at once (no kit, no phrase, no tracks), the evidence line is printed and the note opens in the ARRANGEMENT tab`, async () => {
+  test(`[${edition}] "New arrangement" on the real wiring (2026-11-19-0960; 2026-11-19-0991 asks the NAME first, Enter on the default): arrangements/ is made and arr_001 is written EMPTY (no kit, no phrase, no tracks), the evidence line is printed and the note opens in the ARRANGEMENT tab`, async () => {
     const w = await world(SCORE_FIRST_TOML, { 'bars/bar_005.md': realNoteAt('bars/bar_005.md'), 'phrases/README.md': 'x' });
     try {
       await w.run(NEW_ARR); await w.flush();
-      assert.equal(w.modals.length, 0, 'no dialog opened');
+      assert.equal(w.modals.length, 1, '2026-11-19-0991 (deliberate): the name dialog opens (before it, no dialog opened)'); assert.equal(w.created.length, 0, 'and nothing is made until the name is confirmed (new-note-name-wiring.test.ts has the whole of it)');
+      await w.confirm();
       assert.deepEqual(w.madeFolders, ['arrangements']);
       assert.deepEqual(w.created.map(([p]) => p), ['arrangements/arr_001.md']);
       assert.equal(w.created[0][1], emptyArrangementNote('arr_001'));

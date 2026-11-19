@@ -95,6 +95,8 @@ for (const edition of ['lean', 'music'] as const) {
       setActiveView: (v: any) => { activeView = v; },
       offered: (id: string) => plugin.commands.get(id)?.checkCallback?.(true) ?? false,
       run: async (id: string) => { plugin.commands.get(id)!.checkCallback!(false); await flush(); await flush(); },
+      // 2026-11-19-0991 (deliberate): "New composition" asks for the NAME first (the dialog opens, nothing is made); `confirm` is the person pressing Enter on the field (the default name, or `name` typed over it)
+      confirm: async (name?: string) => { const f = modals.at(-1)?.contentEl.querySelector('.forge-newnote-name'); assert.ok(f, 'the name dialog is open'); if (name !== undefined) { f.value = name; f.dispatchEvent(new win.Event('input', { bubbles: true })); } f.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await flush(); await flush(); },
       done: () => { clock.restore(); proto.open = saved.open; proto.close = saved.close; console.info = savedInfo; console.error = savedError; void savedNotice; delete (globalThis as any).__shimFns; real.messageDelivery.resetForTests(); },
     };
   }
@@ -135,12 +137,13 @@ for (const edition of ['lean', 'music'] as const) {
     });
   }
 
-  test(`[${edition}] "New composition" (2026-11-19-0960): NO dialog; compositions/comp_001.md is made EMPTY at once (the first composition of a vault is the root of its piece), the evidence line is printed, it opens in the composition tab with its notes pane`, async () => {
+  test(`[${edition}] "New composition" (2026-11-19-0960; 2026-11-19-0991 asks the NAME first, Enter on the default): compositions/comp_001.md is made EMPTY (the first composition of a vault is the root of its piece), the evidence line is printed, it opens in the composition tab with its notes pane`, async () => {
     const w = await world(SCORE_FIRST_TOML, PHRASES);
     try {
       await w.run(NEW_COMP);
+      assert.equal(w.modals.length, 1, '2026-11-19-0991 (deliberate): the name dialog opens (before it, no dialog opened)'); assert.equal(w.created.length, 0, 'and nothing is made until the name is confirmed (new-note-name-wiring.test.ts has the whole of it)');
+      await w.confirm();
       await w.flush(); await w.flush();
-      assert.equal(w.modals.length, 0, 'no dialog opened');
       assert.deepEqual(w.madeFolders, ['compositions']);
       assert.equal(w.created.length, 1);
       const [created, text] = w.created[0];
@@ -168,7 +171,7 @@ for (const edition of ['lean', 'music'] as const) {
       const panes = () => w.leaves.filter((l: any) => l !== leaf && l.states.some((s: any) => s.type === 'markdown'));
       assert.equal(panes().length, 1, 'the pair is open');
       const before = w.leaves.length;
-      await w.run(NEW_COMP);
+      await w.run(NEW_COMP); await w.confirm();                                      // 2026-11-19-0991 (deliberate): through the name dialog, Enter on the default
       await w.flush(); await w.flush();
       assert.equal(w.created.length, 1); assert.equal(w.created[0][0], 'compositions/comp_002.md');
       assert.equal(w.leaves.length, before, `no third pane: ${JSON.stringify(w.leaves.map((l: any) => l.states.map((s: any) => [s.type, s.state?.file])))}`);
@@ -182,7 +185,7 @@ for (const edition of ['lean', 'music'] as const) {
     const first = newCompositionNote('comp_001', P('phrases/phrase_003'), ['root: true']);
     const w = await world(SCORE_FIRST_TOML, { ...PHRASES, 'compositions/comp_001.md': first });
     try {
-      await w.run(NEW_COMP);
+      await w.run(NEW_COMP); await w.confirm();                                      // 2026-11-19-0991 (deliberate): through the name dialog, Enter on the default
       await w.flush(); await w.flush();
       assert.equal(w.created[0][0], 'compositions/comp_002.md');
       assert.equal(w.store.get('compositions/comp_002.md'), emptyCompositionNote('comp_002'));

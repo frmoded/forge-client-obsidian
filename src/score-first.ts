@@ -20,7 +20,7 @@ import { messageDelivery } from './score-first-messages-core.ts';
 import { musicEdition } from './music-edition-selected.ts';
 import { refreshLine, refreshNoteLinks, refreshNotice } from './refresh-notes-core.ts';
 import { descriptionPortsFor } from './description-wiring.ts';
-import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewEmptyPhrase, createNewPhrase, createNewPhraseFromParams, isPhrasePath, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
+import { BAR_FOLDER_NAME, PHRASE_FOLDER, PHRASE_VIEW_TYPE, createNewMix, isBarPath, createNewMorph, createNewEmptyPhrase, createNewPhrase, createNewPhraseFromParams, isPhrasePath, type NewPhraseResult, newMixAvailable, newMorphAvailable, newPhraseAvailable, readPhraseKind, turnMixIntoMorph, turnMixIntoMorphAvailable, type PhraseParams } from './phrase-core.ts';
 import { computeArrangementScoreViaEngine, computeCompositionScoreViaEngine, computePhraseScoreViaEngine, morphChangesViaEngine } from './phrase-engine.ts';
 import { installNotePreflight, makeNotePreflight } from './note-preflight-core.ts';
 import { PhraseView, openPhrase, openPhraseInLeaf, type PhraseStructureHooks } from './phrase-view.ts';
@@ -30,6 +30,7 @@ import { ConfirmModal } from './confirm-modal.ts';
 import { createDescriptionController } from './description-apply.ts';
 import { registerBarSelectionHost } from './bar-selection-bus.ts';
 import { offerRenameWatched } from './rename-offer.ts';
+import { openNewNoteNameDialog } from './new-note-name-modal.ts';
 import { onTitleClosed, type WrittenNote } from './new-note-cancel-core.ts';
 import { familyOfPath } from './description-apply-core.ts';
 import { SCORE_VIEW_TYPES, isScoreNotePath, scoreViewTypeOf } from './note-score-core.ts';
@@ -145,17 +146,18 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
   });
   const createPhrase = (): Promise<unknown> => phraseFrom(activePath);
   // "New phrase" (2026-11-19-0960): an EMPTY phrase (no source bar, no kind, no sentence), opened with the composer ready: the palette entry and the ribbon button are this command. Nothing is needed from the vault, so it never refuses and never makes a bar first.
-  const createEmptyPhraseNote = (): Promise<unknown> => createNewEmptyPhrase<TFile>({
+  // 2026-11-19-0991: the NAME is asked first (`askPhraseName` below opens the dialog: nothing is made until a valid name is confirmed; Esc and Cancel make nothing); `beforeOpen` closes the dialog right before the note opens.
+  const createEmptyPhraseNote = (name?: string, beforeOpen: () => void = () => {}): Promise<NewPhraseResult> => createNewEmptyPhrase<TFile>({
     activePath,
     folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
     createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
     listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
     exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
     create: (p, content) => app.vault.create(p, content),
-    open: (file) => openPhrase(app, file),
+    open: (file) => { beforeOpen(); return openPhrase(app, file); },
     notify: (message) => { loggedNotice(message); },
     isAlreadyExists: isFileExistsError,
-  });
+  }, name === undefined ? {} : { name });
 
   const createMix = (): Promise<unknown> => createNewMix<TFile>({
     activePath,
@@ -283,7 +285,7 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         icon: ICON_PHRASE,
         checkCallback: (checking: boolean) => {
           if (!newBarAvailable(scoreFirst)) return false;
-          if (!checking) void createEmptyPhraseNote();
+          if (!checking) openNewNoteNameDialog(app, 'phrase', (name, beforeOpen) => createEmptyPhraseNote(name, beforeOpen));
           return true;
         },
       });

@@ -3,6 +3,7 @@
 // opening, closing and reopening such a note writes NOTHING. Four layers: A the description controller with the composer on a pane (the placeholder, the focus, the first sentence, no write on open), B the three create flows on
 // their ports, C the phrase tab (no strip for a note with no kind, the right strip after the first sentence), D the REAL plugin (the palette commands, the real views over an in-memory vault, an engine that is counted).
 // Bars and rhythm notes are DATA notes, not sentence-driven: the "New bar" action is pinned UNCHANGED at the end of D.
+// 2026-11-19-0991 (deliberate): the three commands now ASK FOR THE NAME first (a dialog; Enter on its default makes what they made before): layer D presses Enter on it, the dialog itself is new-note-name-*.test.ts. Layers A to C are unchanged.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -213,7 +214,7 @@ test('B1 "NEW PHRASE" makes an EMPTY phrase: no bar is needed (an empty vault is
   assert.equal((await createNewEmptyPhrase(taken.ports)).ok, true, 'a name taken between the check and the write: the retry works');
 });
 
-test('B2 "NEW ARRANGEMENT" and "NEW COMPOSITION" make EMPTY notes with no dialog and no prerequisite (no kit, no phrase needed), and are offered in every music vault', async () => {
+test('B2 "NEW ARRANGEMENT" and "NEW COMPOSITION" make EMPTY notes with no prerequisite (no kit, no phrase needed), and are offered in every music vault (the FLOWS, given no name, choose the next free one and open no dialog; 2026-11-19-0991: the COMMANDS ask for the name first, then call these flows with it: new-note-name-wiring.test.ts)', async () => {
   const a = flowPorts();
   assert.deepEqual(await createEmptyArrangement(a.ports), { ok: true, path: 'arrangements/arr_001.md' });
   assert.equal(a.created[0].content, emptyArrangementNote('arr_001')); assert.deepEqual(a.opened, ['arrangements/arr_001.md']);
@@ -346,10 +347,23 @@ async function world(files: Record<string, string> = {}) {
     await view.onOpen(); await view.onLoadFile(view.file); await clock.advance(20);
     return { view, el, reload: async () => { await view.onUnloadFile(view.file); await view.onLoadFile(view.file); await clock.advance(20); } };
   };
-  const run = async (id: string) => { const c = plugin.commands.get(id); assert.ok(c, `the command ${id} is registered`); assert.equal(c!.checkCallback!(true), true, `${id} is offered`); c!.checkCallback!(false); await clock.advance(40); for (let i = 0; i < 40; i++) await Promise.resolve(); };
+  // 2026-11-19-0991 (deliberate): New phrase / New arrangement / New composition ASK FOR THE NAME first (a Modal): the stand-in Modal opens and closes the way Obsidian's does, and `run` of those three is the person's steps - the command, then Enter on the
+  // field (the default name: what the command chose before there was a dialog). New bar is not asked anything and is run as before. new-note-name-wiring.test.ts has the dialog itself.
+  const modals: any[] = [];
+  const mp = real.Modal.prototype; const savedModal = { open: mp.open, close: mp.close };
+  mp.open = function () { this.contentEl = win.document.createElement('div'); this.contentEl.empty = function () { this.textContent = ''; }; win.document.body.appendChild(this.contentEl); modals.push(this); this.onOpen(); };
+  mp.close = function () { this.closed = true; this.onClose(); this.contentEl.remove(); };
+  const run = async (id: string) => {
+    const c = plugin.commands.get(id); assert.ok(c, `the command ${id} is registered`); assert.equal(c!.checkCallback!(true), true, `${id} is offered`); c!.checkCallback!(false); await clock.advance(40); for (let i = 0; i < 40; i++) await Promise.resolve();
+    if (['new-phrase', 'new-arrangement', 'new-composition'].includes(id)) {
+      const field = modals.at(-1)?.contentEl.querySelector('.forge-newnote-name'); assert.ok(field, `${id}: the name dialog is open`);
+      field.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await clock.advance(40); for (let i = 0; i < 40; i++) await Promise.resolve();
+    }
+  };
   return {
     open, run, store, log, engine, clock, plugin,
     done: () => {
+      mp.open = savedModal.open; mp.close = savedModal.close;
       console.info = savedInfo; console.error = savedError; console.debug = savedDebug;
       for (const [k, v] of saved) { if (v === undefined) delete HP[k]; else HP[k] = v; }
       for (const list of savedBases) for (const [b, k, v] of list) { if (v === undefined) delete b[k]; }
@@ -392,7 +406,7 @@ test('D2 THE ARRANGEMENT AND COMPOSITION TABS of an empty note show NOTHING but 
   } finally { w.done(); }
 });
 
-test('D3 MECHANISM PINS: the three New commands call the empty flows (no dialog, no bar made first); the two choose-dialogs and the flows that fed them are gone from the plugin', () => {
+test('D3 MECHANISM PINS: the three New commands call the empty flows (no bar made first, no choose-dialog: 2026-11-19-0991 added a dialog that asks only for the NAME); the two choose-dialogs and the flows that fed them are gone from the plugin', () => {
   const read = (f: string) => fs.readFileSync(path.join(ROOT, 'src', f), 'utf8');
   assert.match(read('score-first.ts'), /createNewEmptyPhrase/); assert.doesNotMatch(read('score-first.ts'), /createPhraseAnywhere/);
   assert.match(read('kits-arrangements.ts'), /createEmptyArrangement/); assert.doesNotMatch(read('kits-arrangements.ts'), /mountArrangementDialog/);

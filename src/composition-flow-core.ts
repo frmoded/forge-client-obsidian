@@ -3,6 +3,7 @@
 import { COMPOSITION_FOLDER, compositionPath, nextCompositionName } from './composition-core.ts';
 import { withRoot } from './composition-root-core.ts';
 import { emptyCompositionNote } from './empty-note-core.ts';
+import { nameTakenMessage } from './note-name-rules-core.ts';
 import type { CreatePorts, CreateResult } from './kit-arrangement-flow-core.ts';
 
 const msg = (e: unknown): string => (e as Error)?.message ?? String(e);
@@ -12,6 +13,8 @@ const fail = (ports: CreatePorts, message: string): CreateResult => { ports.noti
 export interface NewCompositionChoice {
   /** Mark this composition as the ROOT of the piece (`root: true`). The caller says so only when no composition is the root yet (the old dialog ticked the box in exactly that case). */
   root?: boolean;
+  /** 2026-11-19-0991: the name the person typed in the name dialog: the note is made with exactly that name (a taken path is said in words, no other number is tried). Absent = the next free comp_NNN, as before. */
+  name?: string;
 }
 export type NewCompositionResult = CreateResult & { name?: string };
 
@@ -20,6 +23,21 @@ export async function createEmptyComposition<F>(ports: CreatePorts<F>, choice: N
   try {
     if (!ports.folderExists(COMPOSITION_FOLDER)) {
       try { await ports.createFolder(COMPOSITION_FOLDER); } catch (e) { if (!ports.isAlreadyExists(e)) throw e; }
+    }
+    const extraFront = choice.root === true ? ['root: true'] : [];
+    if (choice.name !== undefined) {
+      const name = choice.name, path = compositionPath(name);
+      if (ports.exists(path)) return fail(ports, nameTakenMessage(name, path));
+      try {
+        const file = await ports.create(path, emptyCompositionNote(name, extraFront));
+        ports.trace(`[forge-composition] created ${path} (empty${choice.root === true ? ', the root of the piece' : ''})`);
+        await ports.open(file);
+        ports.notify(`Created ${path}.`);
+        return { ok: true, path, name };
+      } catch (e) {
+        if (ports.isAlreadyExists(e)) return fail(ports, nameTakenMessage(name, path));
+        throw e;
+      }
     }
     const refused = new Set<string>();
     for (let tries = 0; tries < NAME_TRIES; tries++) {

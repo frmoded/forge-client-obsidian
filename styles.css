@@ -2850,3 +2850,12 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 .forge-bar-selection button:disabled, .forge-bar-selection button.is-disabled { opacity: 0.4; cursor: default; }
 .forge-bar-selection .forge-bar-selection-clear { padding: 2px 6px; color: var(--text-muted); }
 .forge-bar-selection .forge-bar-selection-note { flex-basis: 100%; order: 10; padding: 0 6px 2px; color: var(--text-muted); }
+
+/* 2026-11-19-0991 - the NAME dialog of New phrase / New arrangement / New composition (src/new-note-name-dom.ts): one field, one muted line under it (the words say what is wrong, never a colour: no red, no error token), Create and Cancel.
+   Nothing reacts to the pointer resting on it (no :hover); the keyboard focus ring is the host's own. It must fit a 360 px wide window: the field takes the width, the line wraps, the buttons wrap. */
+.forge-newnote-dialog { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.forge-newnote-title { margin: 0; }
+.forge-newnote-name { width: 100%; min-width: 0; box-sizing: border-box; }
+.forge-newnote-message { min-height: 1.5em; color: var(--text-muted); font-size: var(--font-ui-small, 13px); line-height: 1.5; overflow-wrap: anywhere; }
+.forge-newnote-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.forge-newnote-create:disabled { opacity: 0.5; cursor: default; }

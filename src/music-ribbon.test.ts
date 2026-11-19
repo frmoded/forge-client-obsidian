@@ -65,8 +65,11 @@ test('WIRING (P3): the icons, the ribbon and the "New phrase" command are regist
 // ---- "New phrase" from any note
 test('"New phrase" (2026-11-19-0960) makes an EMPTY phrase from any note: the command is the empty flow, it never looks at the note you are on, never asks for a bar and never makes one first (the bar-first flow, pickSourceBar and createPhraseAnywhere, is gone)', () => {
   const sf = src('score-first.ts');
-  assert.match(sf, /const createEmptyPhraseNote = \(\): Promise<unknown> => createNewEmptyPhrase<TFile>\(\{/);
-  assert.match(sf, /if \(!checking\) void createEmptyPhraseNote\(\);/);
+  // 2026-11-19-0991 (deliberate): the command now ASKS FOR THE NAME first (the name dialog); what this pin is about - the note it makes is the EMPTY phrase flow, made from any note, no bar first - is unchanged. The two lines pinned the spelling of the
+  // call (`createEmptyPhraseNote = (): Promise<unknown>`, `void createEmptyPhraseNote()`); they now pin the property: the command's only road to a note is createNewEmptyPhrase, reached through the dialog, never through phraseFrom(activePath).
+  assert.match(sf, /createNewEmptyPhrase<TFile>\(\{/);
+  assert.match(sf, /if \(!checking\) openNewNoteNameDialog\(app, 'phrase', \(name, beforeOpen\) => createEmptyPhraseNote\(name, beforeOpen\)\);/);
+  assert.doesNotMatch(sf, /if \(!checking\) void createEmptyPhraseNote\(/, 'the command no longer makes the note without asking for its name');
   assert.doesNotMatch(sf, /createPhraseAnywhere|pickSourceBar|createBar: \(\) => createBar\(\)/);
 });
 test('"New phrase from this bar" is untouched: still asks for a bar (its availability and its message), and the flow behind it is createNewPhrase', () => {
