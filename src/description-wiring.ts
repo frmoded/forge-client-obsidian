@@ -3,6 +3,7 @@
 import type { DescriptionPorts } from './description-apply.ts';
 import { BAR_FOLDER_NAME, PHRASE_FOLDER } from './phrase-core.ts';
 import { duplicateNote } from './duplicate-note-core.ts';
+import { undoCopy } from './duplicate-undo-core.ts';
 
 /** What the plugin supplies from Obsidian (the vault, the workspace, window timers, the console, a modal). */
 export interface DescriptionEnv {
@@ -20,6 +21,8 @@ export interface DescriptionEnv {
   create?(path: string, content: string): Promise<unknown>;
   exists?(path: string): boolean;
   isAlreadyExists?(e: unknown): boolean;
+  /** 2026-11-19-0992a: move a note to the system trash (the plugin closes every tab that shows it first, then `vault.trash(file, true)`; it rejects when the note is still there). Absent = a copy is not an undo entry. */
+  trash?(path: string): Promise<void>;
 }
 /** What the plugin's settings give (main.ts): the sentence service call, whether it is set up, the person's own key, the service version. */
 export interface DescriptionHooks {
@@ -59,6 +62,7 @@ export function descriptionPortsFor(env: DescriptionEnv, hooks: DescriptionHooks
     ...(hooks.composerMenu ? { composerMenu: hooks.composerMenu } : {}),
     ...(env.confirm ? { confirm: env.confirm } : {}),
     ...(create && exists && isAlreadyExists ? { duplicate: (of: Parameters<NonNullable<DescriptionPorts['duplicate']>>[0]) => duplicateNote({ read: (p) => env.read(p), listBasenames: (folder) => env.basenamesIn(folder), exists, create, isAlreadyExists, trace: (line) => env.trace(line) }, of, vault()) } : {}),
+    ...(create && exists && isAlreadyExists && env.trash ? { undoCopy: (mark: Parameters<typeof undoCopy>[1]) => undoCopy({ read: (p) => env.read(p), exists, trash: (p) => env.trash!(p) }, mark) } : {}),     // 2026-11-19-0992a: a copy is an undo entry only where the plugin can move it to the trash
     ...(hooks.openNote ? { openNote: hooks.openNote } : {}),
   };
 }

@@ -43,6 +43,7 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
     return f;
   };
   const writes: string[] = [], asked: Ask[] = [], notices: string[] = [], errors: unknown[][] = [];
+  const trashed: string[] = [], removed: string[] = [];          // 2026-11-19-0992a: what `vault.trash` was asked for, and what the adapter removed for good (a hard delete: a copy taken back must never need it)
   const vaultHandlers = new Map<string, Array<(...a: any[]) => void>>(), wsHandlers = new Map<string, Array<(...a: any[]) => void>>();
   const fireVault = (name: string, ...a: any[]) => { for (const cb of vaultHandlers.get(name) ?? []) cb(...a); };
   const fireWs = (name: string, ...a: any[]) => { for (const cb of wsHandlers.get(name) ?? []) cb(...a); };
@@ -103,7 +104,7 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
 
   const app: any = {
     vault: {
-      adapter: { exists: async (p: string) => p === 'forge.toml', read: async () => SCORE_FIRST_TOML },
+      adapter: { exists: async (p: string) => p === 'forge.toml', read: async () => SCORE_FIRST_TOML, remove: async (p: string) => { removed.push(p); store.delete(p); files.delete(p); } },
       on: (name: string, cb: (...a: any[]) => void) => { (vaultHandlers.get(name) ?? vaultHandlers.set(name, []).get(name)!).push(cb); return {}; }, configDir: '.obsidian',
       getFiles: () => [...store.keys()].map(tf), getMarkdownFiles: () => [...store.keys()].map(tf),
       getAbstractFileByPath: (p: string) => (store.has(p) ? tf(p) : null),
@@ -111,6 +112,8 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
       process: async (f: any, fn: (t: string) => string) => { const cur = store.get(f.path)!; const next = fn(cur); if (next !== cur) { store.set(f.path, next); writes.push(f.path); setTimeout(() => fireVault('modify', tf(f.path)), 0); } return next; },
       create: async (p: string, text: string) => { store.set(p, text); const f = tf(p); fireVault('create', f); return f; },
       createFolder: async () => {}, getRoot: () => ({ children: [] }),
+      // 2026-11-19-0992a: Obsidian's trash NO-OPS on a note that a leaf still shows (L12: it does not throw, the file stays); otherwise the note goes (the system trash) and `delete` is delivered
+      trash: async (f: any) => { trashed.push(f.path); if (leaves.some((l) => l.view?.file?.path === f.path)) return; store.delete(f.path); files.delete(f.path); fireVault('delete', f); },
     },
     workspace: {
       rootSplit, leftSplit, rightSplit, onLayoutReady: (cb: () => void) => { cb(); },
@@ -209,7 +212,7 @@ export async function musicTabsWorld(real: RealPlugin, extra: Record<string, str
     f.value = sentence; f.dispatchEvent(new win.Event('input', { bubbles: true })); await press(view, { key: 'Enter' }); await press(view, { key: 'Enter' }); await settle(500);
   };
   return {
-    real, plugin, store, writes, asked, notices, errors, leaves, tf, clock, settle, newNote, modals, openFromList, restoreTab, rename, handEdit, viewOf, typeOf, field, say, markdownView,
+    real, plugin, store, writes, asked, notices, errors, trashed, removed, leaves, tf, clock, settle, newNote, modals, openFromList, restoreTab, rename, handEdit, viewOf, typeOf, field, press, say, markdownView,
     active: () => activeLeaf,
     fire: { vault: fireVault, ws: fireWs },
     lastAsk: (): Ask | undefined => asked[asked.length - 1],

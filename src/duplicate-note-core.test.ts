@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { copyBarNote, copyListNote, copyNoteText, copyUndoNote, createdLine, duplicateNote, type DuplicatePorts } from './duplicate-note-core.ts';
+import { copyBarNote, copyListNote, copyNoteText, createdLine, duplicateNote, type DuplicatePorts } from './duplicate-note-core.ts';
 import { resolveDuplicateTarget, type ResolvedDuplicate } from './duplicate-sentence-core.ts';
 import { barOriginOf, hasBarProvenance, keepBarProvenance } from './bar-provenance-core.ts';
 import { applySave, extractJsonBlock, formatRhythmJson, readRhythmNote, type RhythmData } from './rhythm-edit-core.ts';
@@ -19,7 +19,7 @@ import { readCompositionNote } from './composition-core.ts';
 import { readPhraseNote } from './phrase-core.ts';
 import { PLAYGROUND_PHRASES, asListNote } from './test-support/phrase-list-fixtures.ts';
 import { ARR_001, C6_LINES, VAULT } from './test-support/sentence-list-fixtures.ts';
-import { parseFrontmatter } from './rhythm-edit-core.ts';
+import { parseFrontmatter, contentFingerprint } from './rhythm-edit-core.ts';
 
 const row = (...on: number[]) => Array.from({ length: 16 }, (_, i) => on.includes(i));
 /** A bar with everything a copy must keep: a swing, a tempo with a fraction, a velocity in a kit row, an empty row. */
@@ -123,12 +123,17 @@ test('a source that is gone, unreadable, or not a bar is refused in plain words 
   } finally { console.error = orig; }
 });
 
-test('the words: the dialog line, and how to delete a copy (undo is NOT claimed: the words say Cmd/Ctrl+Z does not take a copy back)', () => {
+// 2026-11-19-0992a (deliberate): the sentence is plain ("Created bar_010, a copy of bar_007." was "Created [[bar_010]], a copy of [[bar_007]]."), and `copyUndoNote` ("Cmd/Ctrl+Z does not take a copy back...") is GONE: a copy is an undo entry now
+// (duplicate-undo-core.test.ts, duplicate-followups-wiring.test.ts).
+test('the words: the dialog line (plain names); no undo notice any more; the result carries the fingerprint of the bytes it wrote', () => {
   const info = { family: 'bar' as const, name: 'bar_010', id: 'bars/bar_010', path: 'bars/bar_010.md', sourceName: 'bar_007', sourceId: 'bars/bar_007' };
-  assert.equal(createdLine(info), 'Created [[bar_010]], a copy of [[bar_007]].');
-  const undo = copyUndoNote(info);
-  assert.match(undo, /Cmd\/Ctrl\+Z does not take/); assert.match(undo, /delete/i); assert.ok(undo.includes('bars/bar_010'));
-  for (const t of [createdLine(info)]) assert.ok(!/undo|take.*back/i.test(t), 'the line that says it was made does not offer an undo');
+  assert.equal(createdLine(info), 'Created bar_010, a copy of bar_007.');
+  assert.ok(!/undo|take.*back/i.test(createdLine(info)), 'the line that says it was made does not offer an undo');
+});
+test('0992a: duplicateNote returns the fingerprint of the exact text it created (what Cmd/Ctrl+Z compares before it moves the copy to the trash)', async () => {
+  const w = world({ 'bars/bar_007.md': BAR_007 }); const r = await duplicateNote(w.ports, target('bar_007', BARS_VAULT), BARS_VAULT);
+  assert.equal(r.ok, true); const made = w.store.get((r as { path: string }).path)!;
+  assert.equal((r as { hash: string }).hash, contentFingerprint(made)); assert.notEqual((r as { hash: string }).hash, contentFingerprint(`${made} `));
 });
 
 // ---- a phrase, an arrangement, a composition ---------------------------------------------------------------------------------------------------------------------------------------------

@@ -38,8 +38,9 @@ import { REDO_ID, REDO_LABEL, UNDO_ID, UNDO_LABEL } from './composer-core.ts';
 import { isEmptyNote } from './empty-note-core.ts';
 import { FAMILY_KINDS } from './note-family-core.ts';
 import type { ComposerMenuItem, PreviewResult, PromptBoxPorts } from './prompt-box-dom.ts';
-import { armsDuplicate, duplicatePreviewLine, idParts, readActionText, resolveDuplicateTarget, withDuplicateLink, type ActionRead, type ResolvedDuplicate } from './duplicate-sentence-core.ts';
-import { copyNoteText, copyUndoNote, createdLine, type DuplicateResult } from './duplicate-note-core.ts';
+import { armsDuplicate, duplicatePreviewLine, idParts, linkInsertion, readActionText, resolveDuplicateTarget, withDuplicateLink, type ActionRead, type ResolvedDuplicate } from './duplicate-sentence-core.ts';
+import { copyNoteText, createdLine, type DuplicateResult } from './duplicate-note-core.ts';
+import type { CopyMark, UndoCopyResult } from './duplicate-undo-core.ts';
 import type { Proposal } from './composer-core.ts';
 
 export interface DescriptionPorts {
@@ -78,6 +79,8 @@ export interface DescriptionPorts {
   composerMenu?(): { items: readonly ComposerMenuItem[]; run(id: string): void; pickNote?(): Promise<string | null> } | undefined;
   /** 2026-11-19-0992: make the copy `Duplicate [[bar_007]].` asks for (a new note under the next free name; nothing that exists is written). Absent = this build cannot copy notes: the sentence is refused in words. */
   duplicate?(of: ResolvedDuplicate): Promise<DuplicateResult>;
+  /** 2026-11-19-0992a: take a copy back (Cmd/Ctrl+Z): move it to the trash when its bytes are still what the duplicate wrote (duplicate-undo-core.ts; the plugin's port closes the tabs that show it first). Absent = a copy is never an undo entry and nothing is ever removed. */
+  undoCopy?(mark: CopyMark): Promise<UndoCopyResult>;
   /** 2026-11-19-0992: open a note named by a link in the dialog (the copy that was just made), by lineage id (`bars/bar_010`): the plugin's own opener. Absent = the dialog draws no link buttons. */
   openNote?(id: string): void;
 }
@@ -114,9 +117,9 @@ export interface DescriptionController {
   applyProposal(path: string, text: string, proposal: Proposal): Promise<{ ok: boolean; disk?: string; message?: string }>;
   /** 2026-11-19-0980: APPEND one canonical sentence to the note's list now (the bar-selection menu's Keep, Delete, Copy and Move; stage 3's grid clicks): one write, undoable, the composer's text left alone. `message` says what was added, or why not (in words). */
   appendLine(path: string, sentence: string, opts?: BarAppendOpts): Promise<{ ok: boolean; message: string } & Partial<Pick<BarAppendResult, 'data' | 'reason' | 'unchanged'>>>;
-  /** 2026-11-19-0992: is the NEXT click on a bar of this note's Score a copy click? True in a PHRASE tab whose composer's text (trimmed, any case) is exactly "Duplicate" or ends with the word. */
+  /** 2026-11-19-0992a (R1; it was "the text is Duplicate" in 0992): is the NEXT click on a bar of this note's Score a link click? True in a PHRASE tab whose composer has ANY text (trimmed). */
   duplicateArmed(path: string): boolean;
-  /** 2026-11-19-0992: the copy click: append ` [[name]].` (the name of the note `noteId` - a lineage id like `bars/bar_007` - names) to the composer's text, return focus to the field and show the usual preview. `null` = the Score could not tell which note made the bar. */
+  /** 2026-11-19-0992: the copy click: with the composer saying "Duplicate" (or ending with the word) append ` [[name]].` (the name of the note `noteId` - a lineage id like `bars/bar_007` - names), focus, and the usual preview; 2026-11-19-0992a: with any other text, insert ` [[name]]` at the caret and focus (no preview). `null` = the Score could not tell which note made the bar. */
   duplicateClick(path: string, noteId: string | null): Promise<{ ok: boolean; message: string }>;
   /** 2026-11-19-0970 (the list model): take back the last sentence of an arrangement's or composition's list (Cmd/Ctrl+Z in an empty composer, the "+" menu), and put it back. One write each; the dialog says what was removed or added again. */
   undoLast(path: string): Promise<{ ok: boolean; message: string }>;
@@ -580,19 +583,28 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     pb(`action done: ${done.id} is a copy of ${done.sourceId}`);
     setBoxNote(path, 'Copied.');
     say(path, { type: 'created', text: createdLine(done), links: [{ name: done.name, id: done.id }, { name: done.sourceName, id: done.sourceId }] });
-    say(path, { type: 'notice', message: copyUndoNote(done) });
+    pb(`action said: ${createdLine(done)} (drawn in ${[...boxes.values()].filter((b) => b.path === path && b.chat.attached()).length} panel(s) of ${basename(path)})`);       // 2026-11-19-0992b: the console says where the line was drawn (the driver saw nothing twice)
+    if (ports.undoCopy !== undefined) {                                                                     // 2026-11-19-0992a: the copy is an UNDO ENTRY (it changes no line of the list): Cmd/Ctrl+Z in the empty composer takes it back while its bytes are what was written
+      try { const list = listOf(await ports.read(path), 'phrase'); stackOf(path).push({ before: [...list], after: [...list], added: [], replaced: [], copy: { path: done.path, name: done.name, hash: done.hash } }); }
+      catch (e) { console.error('[forge-duplicate] could not make the copy an undo entry', e); }
+    }
     return { ok: true, disk: '' };
   }
-  const duplicateArmed = (path: string): boolean => familyOfPath(path) === 'phrase' && armsDuplicate(boxText(path) ?? '');
+  const duplicateArmed = (path: string): boolean => familyOfPath(path) === 'phrase' && (boxText(path) ?? '').trim() !== '';       // 2026-11-19-0992a: ANY text (it was armsDuplicate: only the word)
   async function duplicateClick(path: string, noteId: string | null): Promise<{ ok: boolean; message: string }> {
     const box = [...boxes.values()].find((b) => b.path === path);
     if (box === undefined) return { ok: false, message: 'There is no composer open for this note.' };
-    if (!duplicateArmed(path)) return { ok: false, message: 'The composer does not say Duplicate: a click on a bar pins it.' };
+    if (!duplicateArmed(path)) return { ok: false, message: 'The composer is empty: a click on a bar pins it.' };
     const parts = idParts(noteId);
     if (parts === null) {
       const message = noteId === null ? 'I cannot tell which note made that bar, so I cannot copy it.' : `That bar comes from ${noteId}, which is not a bar, a phrase, an arrangement or a composition I can copy.`;
       say(path, { type: 'notice', message }); box.handle.focus();
       return { ok: false, message };
+    }
+    if (!armsDuplicate(box.handle.state().text)) {                                                          // 2026-11-19-0992a (R1): any other text: the link goes in at the caret, focus back, no preview, nothing else
+      pb(`link click: ${noteId}`);
+      box.handle.insertAtCaret((before) => linkInsertion(before, parts.name));
+      return { ok: true, message: `Added [[${parts.name}]] to the composer.` };
     }
     pb(`copy click: ${noteId}`);
     box.handle.suggest(withDuplicateLink(box.handle.state().text, parts.name));                              // the text, focus back in the field ...
@@ -704,6 +716,7 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     const before = listOf(cur, family), stack = stackOf(path);
     const r = which === 'undo' ? stack.undo(before) : stack.redo(before);
     if (r === null) return { ok: false, message: which === 'undo' ? 'There is no sentence to take back.' : 'There is no sentence to put back.' };
+    if ('copy' in r && r.copy !== undefined) return takeCopyBack(path, r.copy);                              // 2026-11-19-0992a: the newest thing was a COPY: the list is untouched, the phrase is not written
     const done = await commitList(path, family, r.list, extractDescription(cur));
     if (done.ok === false) { stack.clear(); pb(`${which} failed: ${done.message}`); setBoxNote(path, done.message); say(path, { type: 'failed', message: done.message }); return { ok: false, message: done.message }; }
     const message = 'removed' in r ? `Removed: ${r.removed.join(' ')}${r.restored.length > 0 ? ` Put back: ${r.restored.join(' ')}` : ''}` : `Added again: ${r.added.join(' ')}`;
@@ -711,6 +724,14 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
     say(path, { type: 'notice', message });
     if (done.stop !== null) say(path, { type: 'notice', message: stopNotice(done.stop, done.applied) });
     return { ok: true, message };
+  }
+  /** 2026-11-19-0992a: Cmd/Ctrl+Z reached a copy: it goes to the trash when its bytes are still what the duplicate wrote, and the dialog says what was done in muted words; an edited copy is left (the entry is spent: the next Cmd/Ctrl+Z reaches the phrase's own previous sentence). Nothing is written to the phrase. */
+  async function takeCopyBack(path: string, mark: CopyMark): Promise<{ ok: boolean; message: string }> {
+    if (ports.undoCopy === undefined) return { ok: false, message: 'This build cannot take a copy back.' };
+    const out = await ports.undoCopy(mark);
+    pb(`undo of a copy: ${mark.path}: ${out.state}`);
+    say(path, { type: 'notice', message: out.message });
+    return { ok: out.state === 'removed', message: out.message };
   }
   const undoLast = (path: string) => stepList(path, 'undo');
   const redoLast = (path: string) => stepList(path, 'redo');

@@ -14,18 +14,6 @@ Now start on G with the same recipe. Everything fits until the seventh note: the
 
 ![[scales/resources/images/g_major_scale.svg]]
 
-## Sharp or flat?
-
-The rule that settles every spelling fight: a scale uses each letter from A to G once, in order. Call G major's seventh note G♭ and you've got two Gs and no F. So it's F♯.
-
-That's why a key signature is all sharps or all flats, never a mix.
-
-G major has one sharp, the F♯ above. F major has one flat, and it's the fourth note: B♭, not A♯, because the letters must run F G A B C D E.
-
-Keys a fifth up from C (G, D, A, E, B) collect sharps; keys a fourth up (F, B♭, E♭, A♭) collect flats. Some keys have two spellings: D♭ major and C♯ major sound identical, and the usual pick is fewer sharps or flats, so D♭ (five flats) beats C♯ (seven sharps). A later chapter shows why the sharp keys arrive in the order they do.
-
-![[scales/resources/images/f_major_scale.svg]]
-
 ## Time to work
 
 Two checks: count the half steps against the recipe, then read the letters: seven notes, seven letters, none twice. G A B C D E F♯ passes. G A B C D E G♭ fails: two Gs, no F.
@@ -40,6 +28,16 @@ To see any scale, use the player on [[Scales]].
 scales/resources/html/scale_build_major.html
 626
 ```
+
+## Sharp or flat?
+
+Finish a scale in the exercise and some notes wear a ♯ or a ♭. Which one isn't a matter of taste. A scale uses each letter from A to G once, in order. Call the seventh note of G major G♭ and you've got two Gs and no F, so it's F♯.
+
+That's why a key signature is all sharps or all flats, never a mix. G major has one sharp: F♯. F major has one flat, its fourth note: B♭, not A♯, because the letters must run F G A B C D E.
+
+Keys a fifth up from C (G, D, A, E, B) collect sharps; keys a fourth up (F, B♭, E♭, A♭) collect flats. Some tonics on a black key have two names. D♭ major and C♯ major sound the same, and the usual pick is the one with fewer accidentals: D♭ (five flats) beats C♯ (seven sharps). F♯ major (six sharps) and G♭ major (six flats) are tied, so both are in use. A later chapter shows why the sharp keys arrive in the order they do.
+
+![[scales/resources/images/f_major_scale.svg]]
 
 Natural minor is next: [[natural minor scale]].
 

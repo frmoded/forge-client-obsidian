@@ -546,6 +546,19 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
         create: async (p, content) => { await app.vault.create(p, content); },
         exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
         isAlreadyExists: isFileExistsError,
+        // 2026-11-19-0992a (Cmd/Ctrl+Z takes a fresh copy back): L12 - Obsidian's trash NO-OPS on a note a tab still shows, so every tab that shows it is closed FIRST (a Beat Box, a Score, the text), then `vault.trash(file, true)` (the SYSTEM trash, recoverable),
+        // then it is checked to be gone; if it is not, this THROWS (the words say it was left in place) - never `adapter.remove`: a copy is never deleted for good. A tab with UNSAVED changes to it keeps the copy (its text is not the file's: it was edited).
+        trash: async (p) => {
+          const f = app.vault.getAbstractFileByPath(p);
+          if (!(f instanceof TFile)) return;
+          const disk = await app.vault.read(f);
+          const showing: WorkspaceLeaf[] = [];
+          app.workspace.iterateAllLeaves((leaf) => { if ((leaf.view as { file?: TFile | null } | undefined)?.file?.path === p) showing.push(leaf); });
+          for (const leaf of showing) { const v = leaf.view as { getViewData?: () => string }; if (typeof v.getViewData === 'function' && v.getViewData() !== disk) throw new Error('a tab shows it with changes that are not saved yet'); }
+          for (const leaf of showing) leaf.detach();
+          await app.vault.trash(f, true);
+          if (app.vault.getAbstractFileByPath(p) !== null) throw new Error('Obsidian left it in the vault');
+        },
       }, {
         ...hooks, showBoxStatus: hooks.showBoxStatus ?? (() => uiFlags().showLegacyControllers),
         // 2026-11-17-2001: the composer's switch and its "+" menu: the same four New actions as the header menu and the ribbon (ONE list, newMenuItems), and a note picker for "Insert a link to a note"

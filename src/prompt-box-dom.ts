@@ -68,6 +68,8 @@ export interface PromptBoxHandle {
   setNote(message: string | null): void;
   /** Show this text in the field as if it had been typed (a suggestion from elsewhere). Nothing is written. */
   suggest(text: string): void;
+  /** 2026-11-19-0992a: insert at the field's caret (replacing a selection) what `make` says for the text BEFORE the caret, as if typed (the caret ends after it), and put focus back in the field. A click on a bar uses it to add the bar's link. Nothing is written. */
+  insertAtCaret(make: (before: string) => string): void;
   /** The note was updated: the field shows what the note says now and drops the unapplied typing. */
   reset(disk: string): void;
   state(): BoxState;
@@ -283,6 +285,7 @@ export function mountPromptBox(parent: HTMLElement, ports: PromptBoxPorts, initi
     submit() { submit(); },
     setBusy(message) { remote = message; if (message !== null) note = null; paint(); },
     setNote(message) { note = message; paint(); },
+    insertAtCaret(make) { const a = text.selectionStart ?? text.value.length; note = null; walking = -1; insertAtCaret(make(text.value.slice(0, a))); try { text.focus(); } catch { /* a hidden pane */ } },
     suggest(next) { note = null; walking = -1; s = typed(s, next); dispatch({ type: 'externalText', text: next }); try { text.focus(); } catch { /* a hidden pane */ } },
     reset(disk) { note = null; walking = -1; s = applied(disk); c = { ...initComposer(disk), seq: c.seq }; paint(); },
     state: () => s,

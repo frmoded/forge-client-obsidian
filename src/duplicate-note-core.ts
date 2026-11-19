@@ -5,10 +5,10 @@
 //   a phrase         `phrases/phrase_NNN` (one past the highest), an arrangement `arr_NNN` and a composition `comp_NNN` (the first number not taken: each kind's own rule). A list note's copy is its OWN list: the same lines, the whole note made again
 //                    from them for the new name by the writers the controls use (sentence-list-note-core.ts); a composition copy is never the root of the piece. A note whose Description, Recipe or Python was edited by hand, a custom note, and a
 //                    note with a line nobody can read are refused in words (a copy of them would be a guess).
-// Nothing is opened (the dialog's link opens the copy) and nothing is claimed about undo: a copy is a new note, so the words say how to delete it.
+// Nothing is opened (the dialog's link opens the copy). 2026-11-19-0992a: a copy IS an undo entry (duplicate-undo-core.ts): Cmd/Ctrl+Z moves an unchanged copy to the trash.
 import { withBarProvenance } from './bar-provenance-core.ts';
 import { barLinesBlock } from './bar-list-note-core.ts';
-import { extractJsonBlock, readRhythmNote } from './rhythm-edit-core.ts';
+import { contentFingerprint, extractJsonBlock, readRhythmNote } from './rhythm-edit-core.ts';
 import { nextBarName } from './phrase-fork-core.ts';
 import { nextPhraseName } from './phrase-core.ts';
 import { nextArrangementName } from './arrangement-core.ts';
@@ -34,7 +34,8 @@ export interface DuplicatePorts {
   isAlreadyExists(e: unknown): boolean;
   trace?(line: string): void;
 }
-export interface Copied { ok: true; family: DuplicateFamily; name: string; id: string; path: string; sourceName: string; sourceId: string }
+/** `hash` (2026-11-19-0992a): the fingerprint of the exact text the copy was created with: Cmd/Ctrl+Z moves the copy to the trash only while the file still has these bytes (duplicate-undo-core.ts). */
+export interface Copied { ok: true; family: DuplicateFamily; name: string; id: string; path: string; sourceName: string; sourceId: string; hash: string }
 export type DuplicateResult = Copied | { ok: false; message: string };
 type Text = { ok: true; text: string } | { ok: false; message: string };
 
@@ -94,7 +95,7 @@ export async function duplicateNote(ports: DuplicatePorts, of: ResolvedDuplicate
       if (made.ok === false) return fail(made.message);
       try { await ports.create(path, made.text); } catch (e) { if (ports.isAlreadyExists(e)) { taken.add(name); continue; } throw e; }
       ports.trace?.(`[forge-duplicate] copied ${of.id} to ${FOLDER[of.family]}/${name} (${made.text.length} chars)`);
-      return { ok: true, family: of.family, name, id: `${FOLDER[of.family]}/${name}`, path, sourceName: of.name, sourceId: of.id };
+      return { ok: true, family: of.family, name, id: `${FOLDER[of.family]}/${name}`, path, sourceName: of.name, sourceId: of.id, hash: contentFingerprint(made.text) };
     }
     return fail(`Could not find a free ${of.family} name to copy [[${of.name}]] to: the name kept being taken. Try again.`);
   } catch (e) {
@@ -103,7 +104,5 @@ export async function duplicateNote(ports: DuplicatePorts, of: ResolvedDuplicate
   }
 }
 
-/** The dialog's line for a copy: both notes are named (the dialog draws them as links). */
-export const createdLine = (r: Pick<Copied, 'name' | 'sourceName'>): string => `Created [[${r.name}]], a copy of [[${r.sourceName}]].`;
-/** What is said about undo: it is NOT claimed. A copy is a new note: say how to delete it. */
-export const copyUndoNote = (r: Pick<Copied, 'path'>): string => `Cmd/Ctrl+Z does not take a copy back. To remove it, delete ${r.path.replace(/\.md$/, '')} in the file list (right-click it, then Delete).`;
+/** The dialog's line for a copy (2026-11-19-0992a: plain names, `Created bar_010, a copy of bar_007.`; the dialog draws each name as a link button with the name as its visible text, and the entry's text is this very sentence). */
+export const createdLine = (r: Pick<Copied, 'name' | 'sourceName'>): string => `Created ${r.name}, a copy of ${r.sourceName}.`;

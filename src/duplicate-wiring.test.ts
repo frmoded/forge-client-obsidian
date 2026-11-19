@@ -33,7 +33,7 @@ function rig(opts: RigOpts = {}) {
     process: async (p, fn) => { processCalls++; await Promise.resolve(); const cur = store.get(p)!; const next = fn(cur); if (next !== cur) { store.set(p, next); writes.push(p); } },
     basenamesIn: (folder) => [...store.keys()].filter((k) => k.startsWith(`${folder}/`)).map((k) => k.slice(folder.length + 1).replace(/\.md$/, '')),
     panes: () => panes, setTimer: (fn) => { timers.push(fn); return timers.length; }, clearTimer: () => {}, trace: () => {}, warn: () => {},
-    ...(opts.noCreate ? {} : { create: async (p: string, c: string) => { if (store.has(p)) throw new Error('File already exists.'); store.set(p, c); creates.push(p); }, exists: (p: string) => store.has(p), isAlreadyExists: (e: unknown) => /already exists/i.test((e as Error)?.message ?? '') }),
+    ...(opts.noCreate ? {} : { trash: async (p: string) => { store.delete(p); }, create: async (p: string, c: string) => { if (store.has(p)) throw new Error('File already exists.'); store.set(p, c); creates.push(p); }, exists: (p: string) => store.has(p), isAlreadyExists: (e: unknown) => /already exists/i.test((e as Error)?.message ?? '') }),
   }, {
     ...(opts.service ? { askPlan: async () => { serviceCalls++; return { status: 200, json: {} }; }, planConfigured: () => true } : {}),
     composerAutoApply: () => opts.autoApply === true,
@@ -69,12 +69,13 @@ test('"Duplicate [[bar_007]]." typed: the FIRST Enter is the usual preview "Copy
   assert.deepEqual(r.creates, []); assert.deepEqual(barFiles(r), ['bars/bar_005.md', 'bars/bar_007.md']); assert.equal(r.calls(), 0); assert.equal(r.service(), 0, 'read LOCALLY: no model call');
 });
 
-test('the SECOND Enter creates bars/bar_008 (one past the highest), the dialog logs "Created [[bar_008]], a copy of [[bar_007]]." with links that open the notes; the composer is empty', async () => {
+// 2026-11-19-0992a (deliberate): the sentence is plain ("Created bar_008, a copy of bar_007.") with each name as visible text INSIDE its link button (0992 drew "[[bar_008]]" as the button's text and stored the brackets: a selection copy skipped the buttons)
+test('the SECOND Enter creates bars/bar_008 (one past the highest), the dialog logs "Created bar_008, a copy of bar_007." with links that open the notes; the composer is empty', async () => {
   const r = rig({ service: true }); await r.ready();
   r.type('Duplicate [[bar_007]].'); await r.enter(); await r.enter();
   assert.deepEqual(r.creates, ['bars/bar_008.md']);
-  assert.ok(r.applied().includes('Created [[bar_008]], a copy of [[bar_007]].'), JSON.stringify(r.applied()));
-  assert.deepEqual(r.links().map((b) => b.textContent), ['[[bar_008]]', '[[bar_007]]']);
+  assert.ok(r.applied().includes('Created bar_008, a copy of bar_007.'), JSON.stringify(r.applied()));      // 2026-11-19-0992a (deliberate): was 'Created [[bar_008]], a copy of [[bar_007]].'
+  assert.deepEqual(r.links().map((b) => b.textContent), ['bar_008', 'bar_007']);                          // 2026-11-19-0992a (deliberate): was ['[[bar_008]]', '[[bar_007]]']
   r.links()[0].click(); assert.deepEqual(r.opened, ['bars/bar_008'], 'the link opens the COPY (the plugin opens a bar in the Beat Box)');
   r.links()[1].click(); assert.deepEqual(r.opened, ['bars/bar_008', 'bars/bar_007']);
   assert.equal(r.field().value, ''); assert.equal(r.service(), 0);
@@ -91,15 +92,17 @@ test('the PHRASE is not changed at all: no write, not one process call, byte for
   const copy = r.store.get('bars/bar_008.md')!; assert.equal(copy.slice(copy.indexOf('```json')), barBefore.slice(barBefore.indexOf('```json')), 'the data is a byte for byte copy');
 });
 
-test('UNDO is not claimed: the dialog says how to delete the copy; Cmd/Ctrl+Z does not remove it and the copy is not on the list\'s undo stack ("Undo last sentence" is as it was)', async () => {
+// 2026-11-19-0992a (deliberate): 0992 did NOT claim undo (a notice said "Cmd/Ctrl+Z does not take a copy back" and Cmd+Z undid the phrase's previous sentence). Now a copy IS an undo entry (the whole story is duplicate-followups-wiring.test.ts):
+// the notice line is gone, the copy can be undone, and the line that says it was made still does not talk about undo.
+test('UNDO (0992a): the "does not take a copy back" notice is gone; the copy is an undo entry; Cmd/Ctrl+Z in the empty composer takes an unchanged copy back', async () => {
   const r = rig(); await r.ready();
   assert.equal(r.ctl.canUndo(r.path), false);
   r.type('Duplicate [[bar_007]].'); await r.enter(); await r.enter();
   const said = r.entries().filter((e) => e.kind === 'notice').map((e) => e.text).join(' ');
-  assert.match(said, /Cmd\/Ctrl\+Z does not take a copy back/); assert.match(said, /delete/i); assert.ok(said.includes('bars/bar_008'));
+  assert.ok(!/does not take a copy back/.test(said), said);
   assert.ok(!r.applied().some((t) => /undo|take.*back/i.test(t)), 'the line that says it was made does not offer an undo');
-  assert.equal(r.ctl.canUndo(r.path), false, 'a copy is not a sentence of the list');
-  await r.undoKey(); assert.ok(r.store.has('bars/bar_008.md'), 'Cmd/Ctrl+Z in the empty composer does not remove the copy');
+  assert.equal(r.ctl.canUndo(r.path), true, 'a copy is an entry of the undo stack');
+  await r.undoKey(); assert.ok(!r.store.has('bars/bar_008.md'), 'Cmd/Ctrl+Z in the empty composer takes the unchanged copy back');
 });
 
 test('a PHRASE, an ARRANGEMENT and a COMPOSITION link: the copy is made under the next free name by that kind\'s own rule (a phrase: one past the highest; an arrangement: the first not taken); the previews say so', async () => {
@@ -107,7 +110,7 @@ test('a PHRASE, an ARRANGEMENT and a COMPOSITION link: the copy is made under th
   r.type('Duplicate [[phrase_008]].'); await r.enter(); assert.equal(r.suggestion(), 'Copy [[phrase_008]] to a new phrase.'); await r.enter();
   r.type('Duplicate [[arr_001]].'); await r.enter(); assert.equal(r.suggestion(), 'Copy [[arr_001]] to a new arrangement.'); await r.enter();
   assert.deepEqual(r.creates, ['phrases/phrase_009.md', 'arrangements/arr_002.md']);
-  assert.ok(r.applied().includes('Created [[phrase_009]], a copy of [[phrase_008]].')); assert.ok(r.applied().includes('Created [[arr_002]], a copy of [[arr_001]].'));
+  assert.ok(r.applied().includes('Created phrase_009, a copy of phrase_008.')); assert.ok(r.applied().includes('Created arr_002, a copy of arr_001.'));       // 2026-11-19-0992a (deliberate): plain names (were [[...]])
   assert.deepEqual(r.links().map((b) => b.getAttribute('data-note')), ['phrases/phrase_009', 'phrases/phrase_008', 'arrangements/arr_002', 'arrangements/arr_001']);
   assert.equal(r.store.get('phrases/phrase_008.md'), asListNote(PLAYGROUND_PHRASES.phrase_008, 'phrase_008'), 'the source phrase is untouched');
 });
@@ -164,24 +167,26 @@ test('Esc on the preview discards it: nothing is created; a build with no way to
 });
 
 // ---- the click gesture: the controller's two halves --------------------------------------------------------------------------------------------------------------------------------------------
-test('duplicateArmed: the next click is a copy click when the composer\'s text is exactly "Duplicate" or ends with the word, any case, trimmed; for a PHRASE tab only', async () => {
+// 2026-11-19-0992a (deliberate): 0992 armed the click only for the word Duplicate; now ANY text in a phrase composer arms it (the word still gives the old result: " [[bar_007]]." and the preview; any other text gets the link only).
+// The "no" list of 0992 ('Duplicate [[bar_007]].', 'Duplicates', 'Keep bars 1 to 2.', 'Duplicate it') moved to "yes"; the empty composer and every non-phrase composer stay "no".
+test('duplicateArmed: the next click is a copy click when the composer has ANY text (trimmed), any case; for a PHRASE tab only; the empty composer is never armed', async () => {
   const r = rig(); await r.ready();
   const armed = (t: string) => { r.type(t); return r.ctl.duplicateArmed(r.path); };
-  for (const yes of ['Duplicate', 'duplicate', '  DUPLICATE ', 'Keep bars 1 to 2. duplicate']) assert.equal(armed(yes), true, yes);
-  for (const no of ['', 'Duplicate [[bar_007]].', 'Duplicates', 'Keep bars 1 to 2.', 'Duplicate it']) assert.equal(armed(no), false, no);
+  for (const yes of ['Duplicate', 'duplicate', '  DUPLICATE ', 'Keep bars 1 to 2. duplicate', 'Duplicate [[bar_007]].', 'Duplicates', 'Keep bars 1 to 2.', 'Duplicate it']) assert.equal(armed(yes), true, yes);
+  for (const no of ['', '  ', '\n']) assert.equal(armed(no), false, JSON.stringify(no));
   r.type('Duplicate'); assert.equal(r.ctl.duplicateArmed('phrases/not_open.md'), false, 'a note with no composer is never armed');
   const arr = rig({ path: 'arrangements/arr_009.md', note: emptyArrangementNote('arr_009') }); await arr.ready(); arr.type('Duplicate');
   assert.equal(arr.ctl.duplicateArmed(arr.path), false, 'P3: only a phrase tab has the gesture');
 });
 
-test('duplicateClick: appends " [[bar_007]]." to the text, returns focus to the field and shows the usual preview; Enter applies; the next click is no longer a copy click', async () => {
+test('duplicateClick: appends " [[bar_007]]." to the text, returns focus to the field and shows the usual preview; Enter applies', async () => {
   const r = rig(); await r.ready(); r.type('Duplicate');
   const done = await r.ctl.duplicateClick(r.path, 'bars/bar_007'); await r.flush();
   assert.equal(done.ok, true);
   assert.equal(r.field().value, 'Duplicate [[bar_007]].');
   assert.ok(win.document.activeElement === r.field(), 'focus is back in the field');
   assert.equal(r.suggestion(), 'Copy [[bar_007]] to a new bar.'); assert.deepEqual(r.buttons(), ['apply-preview', 'cancel-preview']);
-  assert.equal(r.ctl.duplicateArmed(r.path), false, 'a normal click pins again');
+  assert.equal(r.ctl.duplicateArmed(r.path), true, 'any text arms the click now (0992a, deliberate: it was false: a normal click pinned again); the next click would add a second link');
   assert.deepEqual(r.creates, [], 'the click only previews');
   await r.enter(); assert.deepEqual(r.creates, ['bars/bar_008.md']);
 });
@@ -197,9 +202,10 @@ test('duplicateClick: a click on a note of a phrase (a transform\'s bar) copies 
   assert.equal(kit.ok, false); assert.equal(r2.field().value, 'Duplicate'); assert.deepEqual(r2.creates, []);
 });
 
-test('duplicateClick when the text is not "Duplicate" does nothing (the Score pins; defence in depth), and with no composer open it says so', async () => {
-  const r = rig(); await r.ready(); r.type('Keep bars 1 to 2.');
-  const d = await r.ctl.duplicateClick(r.path, 'bars/bar_007'); assert.equal(d.ok, false); assert.equal(r.field().value, 'Keep bars 1 to 2.');
+// 2026-11-19-0992a (deliberate): 0992 said a click with other text in the field does nothing ("Keep bars 1 to 2." stayed as it was); now it inserts the link (duplicate-followups-wiring.test.ts); an EMPTY composer still does nothing (the Score pins).
+test('duplicateClick with an EMPTY composer does nothing (the Score pins; defence in depth), and with no composer open it says so', async () => {
+  const r = rig(); await r.ready(); r.type('');
+  const d = await r.ctl.duplicateClick(r.path, 'bars/bar_007'); assert.equal(d.ok, false); assert.equal(r.field().value, '');
   const gone = await r.ctl.duplicateClick('phrases/other.md', 'bars/bar_007'); assert.equal(gone.ok, false);
 });
 

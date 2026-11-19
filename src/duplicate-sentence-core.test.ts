@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { armsDuplicate, readActionText, resolveDuplicateTarget, duplicatePreviewLine, withDuplicateLink, idParts } from './duplicate-sentence-core.ts';
+import { armsDuplicate, readActionText, resolveDuplicateTarget, duplicatePreviewLine, withDuplicateLink, idParts, linkInsertion } from './duplicate-sentence-core.ts';
 import { parse } from './phrase-grammar-core.ts';
 import type { GrammarVault } from './phrase-grammar-core.ts';
 
@@ -104,4 +104,11 @@ test('idParts: a lineage id is the folder and the name; anything else is exactly
   assert.deepEqual(idParts('bars/bar_007'), { family: 'bar', name: 'bar_007' });
   assert.deepEqual(idParts('phrases/x.md'), { family: 'phrase', name: 'x' });
   for (const bad of [null, undefined, '', 'bar_007', 'kits/rock', 'a/b/c', 'nofolder']) assert.strictEqual(idParts(bad as string | null | undefined), null, String(bad));
+});
+
+// ---- 2026-11-19-0992a (R1): the link a click inserts after ANY typed text ---------------------------------------------------------------------------------------------------------------------------------
+test('linkInsertion: " [[name]]" (one leading space, no full stop) after text that does not end in white space or an opening bracket; none at the very start, after a space, a line break or ( [ {', () => {
+  assert.equal(linkInsertion('Foo', 'bar_007'), ' [[bar_007]]');
+  for (const before of ['', 'Foo ', 'Foo\n', 'Foo\t', 'Keep (', 'Keep [', 'Keep {']) assert.equal(linkInsertion(before, 'bar_007'), '[[bar_007]]', JSON.stringify(before));
+  assert.equal(linkInsertion('Foo.', 'phrase_008'), ' [[phrase_008]]'); assert.equal(linkInsertion('Foo)', 'bar_007'), ' [[bar_007]]');
 });

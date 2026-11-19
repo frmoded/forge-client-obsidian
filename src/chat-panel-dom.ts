@@ -97,21 +97,24 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
   let timer: unknown = null;
   const tick = (): void => { timer = null; if (disposed) return; refreshTimes(); timer = arm(tick, TICK_MS); };
   timer = arm(tick, TICK_MS);
-  /** An entry's words as nodes: `[[name]]` of a name the entry LINKS is a quiet button that opens that note (2026-11-19-0992); everything else is text, as ever. */
+  /** An entry's words as nodes: a name the entry LINKS (`links`, 2026-11-19-0992) is a quiet link button that opens that note; everything else is text, as ever. 2026-11-19-0992a: the stored text is the whole PLAIN sentence ("Created bar_010, a copy of bar_007.")
+   *  and each name is drawn as a button WITH its name as its text node, so the line reads (and copies, with the stylesheet's `user-select: text`) as exactly that sentence; an entry saved by 0992 says "[[bar_010]]" and still draws its buttons as it did. */
   const pieces = (e: DialogEntry): Node[] => {
     const opener = ports.openNote;
     if (!e.links || e.links.length === 0 || opener === undefined) return [doc.createTextNode(e.text)];
     const byName = new Map(e.links.map((l) => [l.name, l.id]));
+    const alt = [...byName.keys()].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
     const out: Node[] = [];
-    for (const part of e.text.split(/(\[\[[^\]]+\]\])/)) {
-      const id = /^\[\[([^\]]+)\]\]$/.exec(part) ? byName.get(part.slice(2, -2)) : undefined;
-      if (id === undefined) { if (part !== '') out.push(doc.createTextNode(part)); continue; }
+    for (const part of e.text.split(new RegExp(`(\\[\\[(?:${alt})\\]\\]|(?<![A-Za-z0-9_])(?:${alt})(?![A-Za-z0-9_]))`))) {
+      const id = byName.get(part.replace(/^\[\[|\]\]$/g, ''));
+      if (id === undefined || part === '') { if (part !== '') out.push(doc.createTextNode(part)); continue; }
       const b = doc.createElement('button'); b.type = 'button'; b.className = 'forge-chat-link'; b.setAttribute('data-note', id); b.textContent = part;
       b.addEventListener('click', () => { try { opener(id); } catch (err) { console.error('[forge-chat] could not open a note from the dialog', err); } });
       out.push(b);
     }
     return out;
   };
+  let drawnNewest = -1;                                                                                         // 2026-11-19-0992b: the id of the newest entry the last draw showed
   const render = (entries: readonly DialogEntry[], _cur: string): void => {
     if (disposed) return;
     const atEnd = log.scrollHeight - log.scrollTop - (log.clientHeight || 0) < 40 || log.childElementCount === 0;
@@ -143,7 +146,9 @@ export function mountChatPanel(host: HTMLElement, ports: ChatPanelPorts, initial
       m.append(meta);
       log.appendChild(m);
     }
-    if (atEnd) log.scrollTop = log.scrollHeight;
+    const newest = entries.length === 0 ? -1 : entries[entries.length - 1]!.id;
+    if (atEnd || newest !== drawnNewest) log.scrollTop = log.scrollHeight;                                   // 2026-11-19-0992b: a NEW line is always scrolled into view (it used to stay below the fold when the log was not at its end); a redraw with nothing new keeps the place
+    drawnNewest = newest;
   };
 
   const box = mountPromptBox(panel, ports.box, initial);                          // the card: the LAST thing in the panel (its own observer keeps it last)

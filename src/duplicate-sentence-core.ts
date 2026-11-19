@@ -25,6 +25,9 @@ export const armsDuplicate = (text: string): boolean => /(^|\s)duplicate$/i.test
 /** The text after a copy click: the text with its trailing white space cut, then " [[name]]." (the bar's note name). */
 export const withDuplicateLink = (text: string, name: string): string => `${String(text ?? '').trimEnd()} [[${name}]].`;
 
+/** 2026-11-19-0992a (R1): what a click on a bar inserts into a composer that has ANY other text: the bar's link, ` [[bar_007]]` (no full stop). `before` is the text before the caret: one leading space unless there is nothing before the caret, or what is there already ends in white space or an opening bracket. */
+export const linkInsertion = (before: string, name: string): string => `${before === '' || /[\s(\[{]$/.test(before) ? '' : ' '}[[${name}]]`;
+
 const WHAT = 'Duplicate what? Click a bar on the Score, or write its link, for example: Duplicate [[bar_007]].';
 const ALONE = 'Duplicate is not a step of the list, so it has to be on its own: empty the box, then write Duplicate [[bar_007]]. by itself.';
 const ONE_AT_A_TIME = 'Duplicate takes one note at a time: write Duplicate [[bar_007]]. for one link.';

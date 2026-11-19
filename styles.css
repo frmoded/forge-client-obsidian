@@ -2653,6 +2653,14 @@ button.forge-phrase-source { cursor: pointer; background: none; border: none; bo
 /* 2026-11-19-0992: a note the dialog line names ("Created [[bar_010]], a copy of [[bar_007]]."): a quiet link, the wording stays the sentence's own; no box, no hover tint (no hover cue: the pointer is the cue), a focus ring for the keyboard */
 .forge-chat-link { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--text-accent, var(--interactive-accent)); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; box-shadow: none; height: auto; }
 .forge-chat-link:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: var(--radius-s, 4px); }
+button.forge-chat-link,
+button.forge-chat-link:not(.clickable-icon) {
+  /* 2026-11-19-0992a: Obsidian's own sheet says button gets user-select none (a selection copy of the dialog skipped the names: "Created , a copy of .") and `button:not(.clickable-icon)` / `button:hover` (more specific than the class above) give the grey button
+     background, the shadow and the normal text colour: this block is as specific, so the names stay selectable text, and the link stays a plain underlined word (the second selector is MORE specific than Obsidian's button:hover, so no hover tint either, and this sheet has no :hover rule of its own). */
+  user-select: text; -webkit-user-select: text;
+  background: none; background-color: transparent; box-shadow: none; border: 0; padding: 0; height: auto;
+  color: var(--text-accent, var(--interactive-accent)); text-decoration: underline; text-underline-offset: 2px;
+}
 .forge-chat-suggestion-description { margin-top: 2px; padding: 6px 10px; border-left: 2px solid var(--background-modifier-border); color: var(--text-normal); white-space: pre-wrap; }
 .forge-chat-msg pre { margin: 4px 0 0; padding: 4px 6px; white-space: pre-wrap; background: var(--background-secondary); color: var(--text-normal); border-radius: var(--radius-s, 4px); }
 .forge-chat-chosen { margin-top: 2px; font-size: var(--font-ui-smaller); color: var(--text-muted); }

@@ -13,15 +13,15 @@
 //     copyClickReturnsFocusToTheField           document.activeElement is the prompt field after each click
 //     copyClickDoesNotPin                       the inspector's pin is still null and no pin was told, after all 8 clicks
 //   nextClick_*
-//     nextClickPinsAgain                        after a copy click, a real click on another bar pins it (the inspector's pin is that bar) and the field text is unchanged
-//     clickPinsWhenTheTextIsNotDuplicate        with the field empty, and with "Keep bars 1 to 2." in it, a click pins and the field is untouched
+//     nextClickPinsAgain                        [MOVED by 0992a] after a copy click, a real click on another bar appends a second link and pins nothing (it pinned in 0992)
+//     clickPinsWhenTheTextIsNotDuplicate        [MOVED by 0992a] with the field empty a click pins; with "Keep bars 1 to 2." in it the clicked bar's link is appended and the pin stays
 //     shiftClickIsStillSelectionWhileArmed      a real Shift+click while the field says Duplicate pins nothing and appends nothing
 //   enter_*  (the preview of bar 3, then a real Enter)
 //     enterCreatesTheCopyAtTheNextFreeNumber    the vault has bars/bar_010, its json block equals bar_009's byte for byte, bar_009 is byte for byte what it was
-//     dialogSaysCreatedWithLinks                the dialog line is "Created [[bar_010]], a copy of [[bar_009]]." and has two visible link buttons (each wider than 8 px) named [[bar_010]] and [[bar_009]]
+//     dialogSaysCreatedWithLinks                [MOVED by 0992a] the dialog line is "Created bar_010, a copy of bar_009." and has two visible link buttons (each wider than 8 px) named bar_010 and bar_009
 //     clickingTheLinkOpensTheCopy               a real click on the first link told the plugin's opener "bars/bar_010"
 //     phraseNeverWritten                        the phrase note is byte for byte what it was, the controller made no `process` call, no write of the phrase
-//     undoNotClaimed                            the dialog says "Cmd/Ctrl+Z does not take a copy back" and how to delete it; a real Cmd+Z in the empty composer leaves bars/bar_010 in the vault
+//     undoNotClaimed                            [MOVED by 0992a] the "does not take a copy back" line is gone; this harness has no trash port, so Cmd+Z leaves bars/bar_010 (the real undo: measure-duplicate-followups.mjs)
 //     composerEmptyAfterApply                   the prompt line is empty again
 //   escape_*
 //     escDiscardsThePreview                     Duplicate, click a bar, a real Esc: nothing created, no live preview
@@ -188,10 +188,12 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   await typeText('Duplicate'); await clickBar(2);
   const afterCopy = await ev('fieldValue()');
   await clickBar(4);
-  verdict[`nextClickPinsAgain_${tag}`] = afterCopy === 'Duplicate [[bar_005]].' && (await ev('pinned()')) === 'ph_bar_4' && (await ev('fieldValue()')) === afterCopy;
+  // 2026-11-19-0992a (deliberate, MOVED): 0992 said the next click pins (the text no longer ended with the word); now ANY text arms the click, so it appends a second link and pins nothing (measure-duplicate-followups.mjs has the new verdicts); the name is kept, its meaning moved
+  verdict[`nextClickPinsAgain_${tag}`] = afterCopy === 'Duplicate [[bar_005]].' && (await ev('pinned()')) === null && (await ev('fieldValue()')) === 'Duplicate [[bar_005]]. [[bar_005]]';
   await clearField(); await clickBar(5); const p5 = await ev('pinned()');
   await typeText('Keep bars 1 to 2.'); await clickBar(6); const p6 = await ev('pinned()'); const f6 = await ev('fieldValue()');
-  verdict[`clickPinsWhenTheTextIsNotDuplicate_${tag}`] = p5 === 'ph_bar_5' && p6 === 'ph_bar_6' && f6 === 'Keep bars 1 to 2.';
+  // 2026-11-19-0992a (deliberate, MOVED): an EMPTY field still pins (bar 5); "Keep bars 1 to 2." now gets the link of the clicked bar (bar 6 is bars/bar_002) and the pin stays on bar 5
+  verdict[`clickPinsWhenTheTextIsNotDuplicate_${tag}`] = p5 === 'ph_bar_5' && p6 === 'ph_bar_5' && f6 === 'Keep bars 1 to 2. [[bar_002]]';
   await clearField(); await typeText('Duplicate'); const pinBefore = await ev('pinned()'); await clickBar(7, MOD.shift);
   verdict[`shiftClickIsStillSelectionWhileArmed_${tag}`] = (await ev('pinned()')) === pinBefore && (await ev('fieldValue()')) === 'Duplicate' && (await ev('window.shifted || 0')) === 1;
 
@@ -205,14 +207,16 @@ for (const w of [800, 1100]) for (const theme of ['light', 'dark']) {
   numbers[`enter@${tag}`] = { creates: made.creates, links: made.links, dialog: made.dialog.slice(-3) };
   verdict[`enterCreatesTheCopyAtTheNextFreeNumber_${tag}`] = made.creates.length === 1 && made.creates[0] === 'bars/bar_010.md' && made.copy.slice(made.copy.indexOf('{')) === srcBefore.slice(srcBefore.indexOf('{')) && made.src === srcBefore;
   const applied = made.dialog.filter((d) => d.kind === 'applied').pop();
-  verdict[`dialogSaysCreatedWithLinks_${tag}`] = !!applied && applied.text.replace(/^✓\s*/, '') === 'Created [[bar_010]], a copy of [[bar_009]].' && made.links.length === 2 && made.links[0].text === '[[bar_010]]' && made.links[1].text === '[[bar_009]]' && made.links.every((l) => l.w > 8 && l.h > 8);
+  // 2026-11-19-0992a (deliberate, MOVED): the sentence is plain and the names are the buttons' own text ("bar_010", not "[[bar_010]]")
+  verdict[`dialogSaysCreatedWithLinks_${tag}`] = !!applied && applied.text.replace(/^✓\s*/, '') === 'Created bar_010, a copy of bar_009.' && made.links.length === 2 && made.links[0].text === 'bar_010' && made.links[1].text === 'bar_009' && made.links.every((l) => l.w > 8 && l.h > 8);
   await p.shot(path.join(OUT, `duplicate-created-${w}-${theme}.png`), { x: 0, y: 0, width: Math.min(w, 1100), height: 640 });
   const linkBox = await ev(`box('.forge-chat-link')`); await p.click(linkBox.x, linkBox.y); await sleep(150);
   verdict[`clickingTheLinkOpensTheCopy_${tag}`] = JSON.stringify(await ev('opened')) === JSON.stringify(['bars/bar_010']);
   verdict[`phraseNeverWritten_${tag}`] = made.phrase === phraseBefore && made.calls === 0;
   const said = made.dialog.filter((d) => d.kind === 'notice').map((d) => d.text).join(' ');
   await focusField(); await CMD_Z();
-  verdict[`undoNotClaimed_${tag}`] = /Cmd\/Ctrl\+Z does not take a copy back/.test(said) && /delete bars\/bar_010/.test(said) && (await ev(`notes.has('bars/bar_010.md')`)) === true;
+  // 2026-11-19-0992a (deliberate, MOVED): this page has no `trash` port (it is the 0992 harness), so a copy is NOT an undo entry here: the notice is gone and a Cmd+Z removes nothing; the real removal is measured in measure-duplicate-followups.mjs
+  verdict[`undoNotClaimed_${tag}`] = !/does not take a copy back/.test(said) && (await ev(`notes.has('bars/bar_010.md')`)) === true;
   verdict[`composerEmptyAfterApply_${tag}`] = made.field === '';
 
   // ---- Esc discards -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

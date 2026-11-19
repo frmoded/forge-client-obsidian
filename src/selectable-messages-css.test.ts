@@ -20,7 +20,11 @@ test('every message the plugin draws is opted in to selection (a triple-click se
 
 test('CONTROL: a class that is not a message is not in the list, so the check can fail; buttons, chips, the engraving and the drag surface are never made selectable', () => {
   assert.equal(selectable.has('.forge-not-a-message'), false);
-  for (const s of selectable) assert.doesNotMatch(s, /button|chip|svg|forge-structure|forge-rhythm-score-host(?!\b-)|forge-arr-mute|forge-arr-solo|forge-description-button/, `${s} is a control or the engraving`);
+  // 2026-11-19-0992a (deliberate): ONE exception, moved on purpose: the name of a note inside a dialog line ("Created bar_010, a copy of bar_007.") is a button that is also a WORD OF THE SENTENCE: Obsidian's `button { user-select: none }` made a selection copy of
+  // the line skip the names ("Created , a copy of ."), so `button.forge-chat-link` (and its :not(.clickable-icon) twin, there to out-rank Obsidian's button rules) opts in. Every other button, chip and the engraving stay unselectable.
+  const NOTICE_LINK = /^button\.forge-chat-link(:not\(\.clickable-icon\))?$/;
+  assert.equal([...selectable].filter((s) => NOTICE_LINK.test(s)).length, 2, 'the exception is exactly the dialog link and its twin');
+  for (const s of selectable) if (!NOTICE_LINK.test(s)) assert.doesNotMatch(s, /button|chip|svg|forge-structure|forge-rhythm-score-host(?!\b-)|forge-arr-mute|forge-arr-solo|forge-description-button/, `${s} is a control or the engraving`);
 });
 
 test('there is no Copy button: no rule styles one and no element in the message rules is a button', () => {

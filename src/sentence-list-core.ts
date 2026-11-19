@@ -28,6 +28,7 @@ import { compositionPython, compositionRecipeSteps, formatCompositionJson, type 
 import { formatPhraseJson, type PhraseParams } from './phrase-core.ts';
 import { phrasePython, phraseRecipeSteps } from './phrase-notes-core.ts';
 import { compositionLoopRefusal } from './sentence-plan-families-core.ts';
+import type { CopyMark } from './duplicate-undo-core.ts';
 
 export type ListKind = Family;
 export type SentenceList = readonly string[];
@@ -385,8 +386,9 @@ export function listAfterParams(list: SentenceList, params: GrammarParams, kind:
 
 // ---- undo and redo (in memory, per open note) -------------------------------------------------------------------------------------------------------------------------------------------
 
-export interface UndoEntry { before: string[]; after: string[]; added: string[]; replaced: Replaced[] }
-export interface Undone { list: string[]; removed: string[]; restored: string[] }
+/** `copy` (2026-11-19-0992a): the entry of a COPY made by `Duplicate [[bar_007]].`: it changes no line (`before` and `after` are the same list); undoing it hands the copy back (the caller moves it to the trash) and leaves the list as it is. It is never put on the redo side. */
+export interface UndoEntry { before: string[]; after: string[]; added: string[]; replaced: Replaced[]; copy?: CopyMark }
+export interface Undone { list: string[]; removed: string[]; restored: string[]; copy?: CopyMark }
 export interface Redone { list: string[]; added: string[] }
 export interface UndoStack {
   /** An apply made `after` out of `before` (a new sentence: redo is gone). */
@@ -410,11 +412,12 @@ export function createUndoStack(opts: { protects?: (line: string) => boolean } =
   return {
     push(entry) { undos = [...undos, { ...entry }].slice(-UNDO_CAP); redos = []; },
     replaceTop(entry) { undos = undos.length === 0 ? [{ ...entry }] : [...undos.slice(0, -1), { ...entry }]; redos = []; },
-    canUndo: (current) => current.length > 0 && ((undos.length > 0 && same(undos[undos.length - 1].after, current)) || takes(current)),
+    canUndo: (current) => (undos.length > 0 && same(undos[undos.length - 1].after, current) && (current.length > 0 || undos[undos.length - 1].copy !== undefined)) || (current.length > 0 && takes(current)),     // 2026-11-19-0992a: a copy entry can be undone with no line at all (a fresh phrase)
     canRedo: (current) => redos.length > 0 && same(redos[redos.length - 1].before, current),
     undo(current) {
-      if (current.length === 0) return null;
       const top = undos[undos.length - 1];
+      if (top !== undefined && top.copy !== undefined && same(top.after, current)) { undos = undos.slice(0, -1); return { list: [...top.before], removed: [], restored: [], copy: top.copy }; }      // 2026-11-19-0992a: a copy is spent, never redone
+      if (current.length === 0) return null;
       if (top !== undefined && same(top.after, current)) {
         undos = undos.slice(0, -1); redos = [...redos, top];
         return { list: [...top.before], removed: [...top.added], restored: top.replaced.map((r) => r.sentence) };
