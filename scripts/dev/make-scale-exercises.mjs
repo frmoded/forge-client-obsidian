@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { readCaptions, withCaption } from './apply-captions.mjs';
 
 const args = process.argv.slice(2);
 const take = (name) => { const out = []; for (let i = 0; i < args.length; i++) if (args[i] === name) { out.push(args[i + 1]); args.splice(i, 2); i--; } return out; };
@@ -16,6 +17,7 @@ const also = take('--also').map(expand);
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
 const templates = { full: fs.readFileSync(path.join(ROOT, 'scripts/dev/templates/scale-exercise.template.html'), 'utf8'), simple: fs.readFileSync(path.join(ROOT, 'scripts/dev/templates/scale-exercise-simple.template.html'), 'utf8') };
 const dir = (root) => path.join(root, 'scales/resources/html');
+const CAPTIONS = readCaptions(vault);                                                                                  // the caption inside the figure (2026-11-19-0940): the same block the apply-captions script writes
 const player = fs.readFileSync(path.join(dir(vault), 'scale_player.html'), 'utf8');
 
 /** The lines of a marked block of the player, BEGIN line to END line inclusive (each with its newline). */
@@ -43,5 +45,5 @@ const fill = (t, f) => t
 for (const root of [vault, ...also]) {
   fs.mkdirSync(dir(root), { recursive: true });
   if (root !== vault) fs.copyFileSync(path.join(dir(vault), 'scale_player.html'), path.join(dir(root), 'scale_player.html'));      // the player carries the shared view block: the copy must match
-  for (const f of FILES) { const out = fill(templates[f.template], f); if (/@@\w+@@/.test(out)) throw new Error(`${f.file}: a placeholder is left`); fs.writeFileSync(path.join(dir(root), f.file), out); console.log(`wrote ${path.join(dir(root), f.file)} (${out.length} bytes)`); }
+  for (const f of FILES) { const out = withCaption(vault, `scales/resources/html/${f.file}`, fill(templates[f.template], f), CAPTIONS); if (/@@\w+@@/.test(out)) throw new Error(`${f.file}: a placeholder is left`); fs.writeFileSync(path.join(dir(root), f.file), out); console.log(`wrote ${path.join(dir(root), f.file)} (${out.length} bytes)`); }
 }

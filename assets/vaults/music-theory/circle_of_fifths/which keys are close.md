@@ -8,7 +8,7 @@ Try it: you get a key, and you find its two neighbours and the key directly acro
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_neighbours.html
-505
+567
 ```
 *Exercise: you get a key; tap its two neighbours and its opposite on the wheel. Easy, medium and hard allow 5, 3 or 1 wrong tries.*
 

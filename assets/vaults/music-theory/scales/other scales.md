@@ -37,9 +37,8 @@ Exercise: pick a home note or press Random, choose one of these scales, and find
 
 ```html-embed
 scales/resources/html/scale_build_other_scales.html
-427
+523
 ```
-*Exercise: choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play.*
 
 <div style="
   display:flex;

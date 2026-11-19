@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { readCaptions, withCaption } from './apply-captions.mjs';
 
 const args = process.argv.slice(2);
 const take = (name) => { const out = []; for (let i = 0; i < args.length; i++) if (args[i] === name) { out.push(args[i + 1]); args.splice(i, 2); i--; } return out; };
@@ -21,6 +22,7 @@ function block(name) {
   return player.slice(a, player.indexOf('\n', e) + 1).replace(/\n$/, '');
 }
 const prelude = (() => { const a = player.indexOf('  var BASE = 60, LOW'); const i = player.indexOf('  function isBlack', a); return player.slice(a, player.indexOf('\n', i)); })();
+const CAPTIONS = readCaptions(vault);                                                                                  // the caption inside the figure (2026-11-19-0940)
 const FILES = [
   { file: 'circle_of_fifths.html', template: 'explorer.template.html', title: 'The circle of fifths' },
   { file: 'circle_exercise_key_to_signature.html', template: 'ex1.template.html', title: 'Exercise: key to signature' },
@@ -41,5 +43,5 @@ const fill = (t, f) => t
 for (const root of [vault, ...also]) {
   const dir = path.join(root, 'circle_of_fifths/resources/html');
   fs.mkdirSync(dir, { recursive: true });
-  for (const f of FILES) { const out = fill(rd(f.template), f) + '\n'; if (/@@\w+@@/.test(out)) throw new Error(`${f.file}: a placeholder is left`); fs.writeFileSync(path.join(dir, f.file), out); console.log(`wrote ${path.join(dir, f.file)} (${out.length} bytes)`); }
+  for (const f of FILES) { const out = withCaption(vault, `circle_of_fifths/resources/html/${f.file}`, fill(rd(f.template), f) + '\n', CAPTIONS); if (/@@\w+@@/.test(out)) throw new Error(`${f.file}: a placeholder is left`); fs.writeFileSync(path.join(dir, f.file), out); console.log(`wrote ${path.join(dir, f.file)} (${out.length} bytes)`); }
 }

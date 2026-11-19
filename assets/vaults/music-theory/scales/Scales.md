@@ -14,9 +14,8 @@ Try it: pick a home note and a scale, press Play, and hear the recipe.
 
 ```html-embed
 scales/resources/html/scale_player.html
-371
+441
 ```
-*Scale player: pick a home note and a scale, press Play, and see and hear it on the keys and the staff.*
 
 **Practice:**
 

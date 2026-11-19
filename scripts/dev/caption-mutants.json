@@ -1,0 +1,254 @@
+[
+ [
+  "scripts/dev/caption-core.mjs",
+  "seed: colon found only past index 0 -> from 0",
+  "if (i > 0) return",
+  "if (i >= 0) return",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "seed: no-colon title is five words -> four",
+  ".slice(0, 5)",
+  ".slice(0, 4)",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "seed: the line is capitalised -> lowercased",
+  "s.charAt(0).toUpperCase() + s.slice(1)",
+  "s.charAt(0).toLowerCase() + s.slice(1)",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "seed: the final full stop is dropped -> kept",
+  "s.replace(/\\.$/, '').trim()",
+  "s.trim()",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "block: the gap above is 12 px -> 11",
+  "export const TITLE_PX = 15, LINE_PX = 12, TITLE_FILL = '#2B2B2B', LINE_FILL = '#555555', GAP_PX = 12;",
+  "export const TITLE_PX = 15, LINE_PX = 12, TITLE_FILL = '#2B2B2B', LINE_FILL = '#555555', GAP_PX = 11;",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "block: title size 15 -> 14",
+  "export const TITLE_PX = 15,",
+  "export const TITLE_PX = 14,",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "block: title colour",
+  "TITLE_FILL = '#2B2B2B'",
+  "TITLE_FILL = '#2B2B2C'",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "block: the line is left aligned -> centre",
+  "text-align: left; font-family",
+  "text-align: center; font-family",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "strip: the newline after END is taken with it",
+  "if (html[end] === '\\n') end++;",
+  "",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "apply: before the first script -> after the last </body>",
+  "const at = s >= 0 ? s : bare.lastIndexOf('</body>');",
+  "const at = bare.lastIndexOf('</body>');",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "apply: an empty title is refused -> accepted",
+  "if (!cap.title || !cap.line) throw new Error('a caption needs a title and a line');\n  const b =",
+  "const b =",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "apply: null removes the caption -> keeps",
+  "if (!cap) return bare;",
+  "if (!cap) return html;",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "wrap: a row may be exactly maxChars -> must be shorter",
+  "(cur + ' ' + w).length <= maxChars",
+  "(cur + ' ' + w).length < maxChars",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "layout: the title sits GAP+14 px below -> GAP",
+  "(GAP_PX + 14) / k",
+  "(GAP_PX) / k",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "layout: the line is 19 px under the title -> 18",
+  "titleY + (19 + 17 * i) / k",
+  "titleY + (18 + 17 * i) / k",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "layout: wrapped rows are 17 px apart -> 16",
+  "titleY + (19 + 17 * i) / k",
+  "titleY + (19 + 16 * i) / k",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "layout: minimum width 360 px -> 300",
+  "minWidthPx = 360",
+  "minWidthPx = 300",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "layout: the drawing wider than 360 px keeps its width -> shrinks",
+  "Math.max(vb[2], minWidthPx / k)",
+  "Math.min(vb[2], minWidthPx / k)",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "layout: bottom padding 12 px -> 0",
+  "lineY[lineY.length - 1] + 12 / k",
+  "lineY[lineY.length - 1] + 0 / k",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "svg: the caption is at the drawing left edge -> its top",
+  "const x = num(vb[0]);",
+  "const x = num(vb[1]);",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "svg: the width grows with the box -> not",
+  "if (width) nh = nh.replace(/\\swidth=\"[^\"]*\"/, ` width=\"${scaleLen(width, fW)}\"`);",
+  "if (width) nh = nh;",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "svg: the height grows with the box -> not",
+  "if (height) nh = nh.replace(/\\sheight=\"[^\"]*\"/, ` height=\"${scaleLen(height, fH)}\"`);",
+  "if (height) nh = nh;",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "svg strip: the recorded size is put back -> not",
+  "if (w) nh = nh.replace(/\\swidth=\"[^\"]*\"/, ` width=\"${w}\"`);",
+  "if (w) nh = nh;",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "svg strip: the recorded box is put back -> not",
+  "let nh = head.replace(/viewBox=\"[^\"]*\"/, `viewBox=\"${vb}\"`);",
+  "let nh = head;",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "svg: the title font weight",
+  "font-weight=\"600\">${escapeText(cap.title)}",
+  "font-weight=\"400\">${escapeText(cap.title)}",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "svg: units: mm are 96/25.4 px -> 96/25",
+  "mm: 96 / 25.4",
+  "mm: 96 / 25",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "escape: ampersand first -> not escaped",
+  ".replace(/&/g, '&amp;')",
+  "",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ],
+ [
+  "scripts/dev/caption-core.mjs",
+  "read back: the title unescape -> raw",
+  "title: unescapeText(m[1])",
+  "title: m[1]",
+  [
+   "src/captions-inside-figure.test.ts"
+  ]
+ ]
+]

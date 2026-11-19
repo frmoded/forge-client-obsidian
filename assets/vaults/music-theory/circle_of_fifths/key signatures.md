@@ -12,9 +12,8 @@ Try it: pick the number of sharps or flats, then tap the notes.
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_key_to_signature.html
-282
+378
 ```
-*Exercise: you get a key; tap how many sharps or flats it has, then tap its notes on the staff. Easy, medium and hard allow 5, 3 or 1 wrong tries.*
 
 <div style="
   display:flex;

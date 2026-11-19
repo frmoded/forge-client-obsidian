@@ -32,9 +32,8 @@ Try it: click two keys and watch the gap show up as whole and half steps. Click 
 
 ```html-embed
 music_instruments/resources/html/whole_half_steps.html
-252
+319
 ```
-*Click two keys to see the gap between them as whole steps and half steps.*
 
 ## Words you will meet
 

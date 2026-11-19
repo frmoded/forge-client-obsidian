@@ -4,7 +4,7 @@ First, from a key to its signature. A key shows up, you tell me how many sharps 
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_key_to_signature.html
-282
+378
 ```
 *Exercise: from a key to its signature. Easy, medium and hard allow 5, 3 or 1 wrong tries.*
 
@@ -12,17 +12,15 @@ Second, the other way round. A signature shows up, you name its major key and it
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_signature_to_key.html
-593
+655
 ```
-*Exercise: from a signature to its major key and its relative minor.*
 
 Third, distance. A key shows up, you find its two neighbours and the one across the wheel.
 
 ```html-embed
 circle_of_fifths/resources/html/circle_exercise_neighbours.html
-505
+567
 ```
-*Exercise: the two neighbours and the opposite key of any key.*
 
 Here's my advice, and it's not a suggestion: do each exercise at the hard level before you move on. Easy feels nice. Hard is where it sticks.
 

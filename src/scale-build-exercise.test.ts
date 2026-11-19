@@ -53,7 +53,7 @@ test('the scale core, the piano voice and the scale view (strip and staff) are b
 });
 
 test('the exercise core is identical within each group (the 3 FULL files; the 2 SIMPLE files), and the files of a group differ ONLY in the config block and the title (a copy that drifts is a failure); the two groups\' cores differ (non-vacuity)', () => {
-  const strip = (h: string): string => h.replace(/  \/\/ ==== config BEGIN[\s\S]*?  \/\/ ==== config END =+\n/, '').replace(/<title>.*<\/title>/, '<title>T</title>');
+  const strip = (h: string): string => h.replace(/  \/\/ ==== config BEGIN[\s\S]*?  \/\/ ==== config END =+\n/, '').replace(/<title>.*<\/title>/, '<title>T</title>').replace(/<!-- caption BEGIN -->[\s\S]*?<!-- caption END -->\n/, '');   // the caption inside the figure (2026-11-19-0940) is the file's own text: its block's SHAPE is pinned by captions-inside-figure.test.ts
   for (const group of [FULL, SIMPLE]) {
     const ref = strip(read(group[0][0]));
     assert.ok(ref.length > (group === FULL ? 30000 : 25000), 'non-vacuity: the whole file');
@@ -67,6 +67,7 @@ test('the generator reproduces the five files from the template and the player (
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'scale-ex-'));
   try {
     fs.mkdirSync(path.join(tmp, 'scales/resources/html'), { recursive: true }); fs.copyFileSync(path.join(DIR, 'scale_player.html'), path.join(tmp, 'scales/resources/html/scale_player.html'));
+    fs.copyFileSync(path.join(DIR, '../../../captions.json'), path.join(tmp, 'captions.json'));                                  // the caption inside the figure (2026-11-19-0940): the generator writes it
     const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts/dev/make-scale-exercises.mjs'), '--vault', tmp], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     for (const [f] of FILES) assert.equal(fs.readFileSync(path.join(tmp, 'scales/resources/html', f), 'utf8'), read(f), `${f}: the generator's output differs from the file`);

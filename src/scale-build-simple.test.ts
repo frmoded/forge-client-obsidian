@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { stripGadgetCaption } from '../scripts/dev/caption-core.mjs';
 import { test } from 'node:test';
 import { Window } from 'happy-dom';
 
@@ -309,12 +310,13 @@ test('every tonic of both SIMPLE files: the finished build puts on the staff exa
 });
 
 test('the three other build files are NOT changed (byte for byte: sha-256 of their committed content), and the generator still reproduces all five files from the two templates and the player', () => {
-  for (const [f, sha] of Object.entries(FULL_SHA)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(DIR, f))).digest('hex'), sha, `${f} changed`);
+  for (const [f, sha] of Object.entries(FULL_SHA)) assert.equal(crypto.createHash('sha256').update(stripGadgetCaption(fs.readFileSync(path.join(DIR, f), 'utf8'))).digest('hex'), sha, `${f} changed (apart from its caption block, which 2026-11-19-0940 put inside the figure)`);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'scale-simple-'));
   try {
     fs.mkdirSync(path.join(tmp, 'scales/resources/html'), { recursive: true }); fs.copyFileSync(path.join(DIR, 'scale_player.html'), path.join(tmp, 'scales/resources/html/scale_player.html'));
+    fs.copyFileSync(path.join(DIR, '../../../captions.json'), path.join(tmp, 'captions.json'));                                  // the caption inside the figure (2026-11-19-0940): the generator writes it
     const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts/dev/make-scale-exercises.mjs'), '--vault', tmp], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
     for (const f of ALL_FIVE) assert.equal(fs.readFileSync(path.join(tmp, 'scales/resources/html', f), 'utf8'), read(f), `${f}: the generator's output differs from the file`);
-    for (const [f, sha] of Object.entries(FULL_SHA)) assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(tmp, 'scales/resources/html', f))).digest('hex'), sha, `${f}: the generator's output changed`);
+    for (const [f, sha] of Object.entries(FULL_SHA)) assert.equal(crypto.createHash('sha256').update(stripGadgetCaption(fs.readFileSync(path.join(tmp, 'scales/resources/html', f), 'utf8'))).digest('hex'), sha, `${f}: the generator's output changed (apart from its caption block)`);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });

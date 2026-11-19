@@ -10,9 +10,8 @@ Press any key below and the tune starts there; watch the staff move while the ga
 
 ```html-embed
 music_instruments/resources/html/tune_shifter.html
-300
+350
 ```
-*The same tune from different starting notes: the notes change, the gaps between them stay.*
 
 ## What you really hear
 

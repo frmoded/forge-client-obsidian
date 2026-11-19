@@ -46,6 +46,7 @@ test('the generator reproduces the four files exactly (the templates and the sha
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'circle-gen-'));
   try {
     fs.mkdirSync(path.join(tmp, 'scales/resources/html'), { recursive: true }); fs.copyFileSync(path.join(VAULT, 'scales/resources/html/scale_player.html'), path.join(tmp, 'scales/resources/html/scale_player.html'));
+    fs.copyFileSync(path.join(VAULT, 'captions.json'), path.join(tmp, 'captions.json'));                                           // the caption inside the figure (2026-11-19-0940): the generator writes it
     const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts/dev/make-circle-gadgets.mjs'), '--vault', tmp], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr);
     for (const f of FILES) assert.equal(fs.readFileSync(path.join(tmp, 'circle_of_fifths/resources/html', f), 'utf8'), read(f), `${f}: the generator's output differs from the file`);
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }

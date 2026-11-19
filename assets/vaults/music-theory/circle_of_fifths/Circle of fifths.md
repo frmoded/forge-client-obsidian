@@ -12,9 +12,8 @@ Try it: click a key on the wheel.
 
 ```html-embed
 circle_of_fifths/resources/html/circle_of_fifths.html
-613
+692
 ```
-*The circle of fifths: click a key to see its signature, its scale on the keys, and which keys sit next to it. Play sounds the scale.*
 
 <div style="
   display:flex;

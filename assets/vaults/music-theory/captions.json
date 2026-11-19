@@ -1,0 +1,78 @@
+{
+  "circle_of_fifths/resources/html/circle_exercise_key_to_signature.html": {
+    "title": "Exercise",
+    "line": "You get a key; tap how many sharps or flats it has, then tap its notes on the staff. Easy, medium and hard allow 5, 3 or 1 wrong tries"
+  },
+  "circle_of_fifths/resources/html/circle_exercise_neighbours.html": {
+    "title": "Exercise",
+    "line": "The two neighbours and the opposite key of any key"
+  },
+  "circle_of_fifths/resources/html/circle_exercise_signature_to_key.html": {
+    "title": "Exercise",
+    "line": "From a signature to its major key and its relative minor"
+  },
+  "circle_of_fifths/resources/html/circle_of_fifths.html": {
+    "title": "The circle of fifths",
+    "line": "Click a key to see its signature, its scale on the keys, and which keys sit next to it. Play sounds the scale"
+  },
+  "music_instruments/resources/html/interval_ear_both_at_once.html": {
+    "title": "Ear exercise",
+    "line": "Two notes sound together and the lower one is lit. Find the higher one"
+  },
+  "music_instruments/resources/html/interval_ear_one_after_the_other.html": {
+    "title": "Ear exercise",
+    "line": "Two notes sound one after the other and the first is lit. Find the second on the keyboard. Choose easy, medium or hard; the score stays on the page until you reload"
+  },
+  "music_instruments/resources/html/interval_ear_triads.html": {
+    "title": "Ear exercise",
+    "line": "A three-note chord sounds and the lowest note is lit. Find the other two"
+  },
+  "music_instruments/resources/html/tune_shifter.html": {
+    "title": "The same tune from different starting notes",
+    "line": "The notes change, the gaps between them stay"
+  },
+  "music_instruments/resources/html/whole_half_steps.html": {
+    "title": "Click two keys to see",
+    "line": "Click two keys to see the gap between them as whole steps and half steps"
+  },
+  "scales/resources/html/scale_build_major.html": {
+    "title": "Exercise",
+    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
+  },
+  "scales/resources/html/scale_build_modes_and_minor.html": {
+    "title": "Exercise",
+    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
+  },
+  "scales/resources/html/scale_build_natural_minor.html": {
+    "title": "Exercise",
+    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. At the end you see the whole scale and can press Play"
+  },
+  "scales/resources/html/scale_build_other_scales.html": {
+    "title": "Exercise",
+    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play"
+  },
+  "scales/resources/html/scale_ear_build_the_scale.html": {
+    "title": "Exercise",
+    "line": "Choose a home note and tap the keys of the scale; the staff fills in as you find the notes. Easy, medium and hard allow 5, 3 or 1 wrong taps. At the end you see the whole scale and can press Play. Any scale of this chapter can come up"
+  },
+  "scales/resources/html/scale_ear_name_the_scale.html": {
+    "title": "Ear exercise",
+    "line": "You hear a scale; name it. Choose easy, medium or hard"
+  },
+  "scales/resources/html/scale_player.html": {
+    "title": "Scale player",
+    "line": "Pick a home note and a scale, press Play, and see and hear it on the keys and the staff"
+  },
+  "scales/resources/images/c_major_scale.svg": {
+    "title": "C major",
+    "line": "The white keys from C to C, no sharps or flats"
+  },
+  "scales/resources/images/f_major_scale.svg": {
+    "title": "F major",
+    "line": "The same recipe from F; the fourth note is B-flat, shown as a flat sign on the staff"
+  },
+  "scales/resources/images/g_major_scale.svg": {
+    "title": "G major",
+    "line": "The same recipe from G; the seventh note is F-sharp, shown here as a sharp sign on the staff"
+  }
+}
