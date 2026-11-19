@@ -12,7 +12,7 @@ import { deferredTabName } from './deferred-tab-title-core.ts';
 import { cacheFoldInfo, cacheFoldKind, shouldFoldCache, type FoldInfo } from './cache-fold-core.ts';
 import { ARRANGEMENT_VIEW_TYPE } from './arrangement-core.ts';
 import { COMPOSITION_VIEW_TYPE } from './composition-core.ts';
-import { MarkdownView, Menu, Notice, TFile, addIcon, removeIcon, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
+import { MarkdownView, Menu, Modal, Notice, TFile, addIcon, removeIcon, type Plugin, type ViewState, type WorkspaceLeaf } from 'obsidian';
 import { loggedNotice } from './logged-notice.ts';
 import { isScoreFirstVault } from './vault-profile-core.ts';
 import { BAR_FOLDER, createNewBar, isFileExistsError, newBarAvailable, scorePanelPlan } from './score-first-core.ts';
@@ -29,7 +29,8 @@ import { CompositionView, openCompositionInLeaf, registerCompositions } from './
 import { ConfirmModal } from './confirm-modal.ts';
 import { createDescriptionController } from './description-apply.ts';
 import { registerBarSelectionHost } from './bar-selection-bus.ts';
-import { offerRename } from './rename-offer.ts';
+import { offerRenameWatched } from './rename-offer.ts';
+import { onTitleClosed, type WrittenNote } from './new-note-cancel-core.ts';
 import { familyOfPath } from './description-apply-core.ts';
 import { isCompositionPath } from './composition-core.ts';
 import { isKitPath } from './kit-core.ts';
@@ -539,22 +540,39 @@ export function registerScoreFirst(plugin: Plugin, hooks: ScoreFirstHooks): void
       // 2026-11-16-1000: what the Score's selection menu needs from the plugin: a sentence shown in the note's prompt box (a preview: nothing is applied until Apply), and a new transform phrase (the next free phrase_NNN, no dialog, opened, its title offered for renaming)
       plugin.register(registerBarSelectionHost({
         previewDescription: (path, text) => descriptions.suggestInBox(path, text),
-        makePhrase: (params) => createNewPhraseFromParams<TFile>({
-          activePath,
-          folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
-          createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
-          listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
-          exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
-          create: (p, content) => app.vault.create(p, content),
-          open: async (file) => { await openPhrase(app, file); offerRename(app, file); },
-          notify: (message) => { loggedNotice(message); },
-          isAlreadyExists: isFileExistsError,
-        }, params),
+        makePhrase: (params) => {
+          // 2026-11-19-0975: what this action wrote (the text and the modification time of the new note), so a Cancel on the "Note title" dialog can take the note back (new-note-cancel-core.ts) and only an untouched one
+          const wrote = new Map<TFile, WrittenNote>();
+          return createNewPhraseFromParams<TFile>({
+            activePath,
+            folderExists: () => app.vault.getAbstractFileByPath(PHRASE_FOLDER) !== null,
+            createFolder: async () => { await app.vault.createFolder(PHRASE_FOLDER); },
+            listPhraseBasenames: () => app.vault.getFiles().filter((f) => f.path.startsWith(`${PHRASE_FOLDER}/`)).map((f) => f.basename),
+            exists: (p) => app.vault.getAbstractFileByPath(p) !== null,
+            create: async (p, content) => { const f = await app.vault.create(p, content); wrote.set(f, { path: p, content, mtime: f.stat?.mtime ?? null }); return f; },
+            open: async (file) => {
+              await openPhrase(app, file);
+              const title = offerRenameWatched(app, file, Modal);                                  // the dialog is not waited for: the Score's selection is released as before
+              const written = wrote.get(file);
+              if (written === undefined) return;
+              void title.closed.then((outcome) => onTitleClosed<TFile>({
+                current: (f) => { const now = app.vault.getAbstractFileByPath(f.path); return now === f ? { path: f.path, mtime: f.stat?.mtime ?? null } : null; },       // the TFile itself follows a rename: a note moved is a different path
+                read: (f) => app.vault.read(f),
+                remove: removeNote,
+                trace: (line) => { console.info(line); },
+              }, file, written, outcome));
+            },
+            notify: (message) => { loggedNotice(message); },
+            isAlreadyExists: isFileExistsError,
+          }, params);
+        },
       }));
       plugin.registerEvent(app.vault.on('modify', (f) => { descriptions.modified(f.path); }));
       plugin.registerEvent(app.workspace.on('file-open', (f) => { if (f) void descriptions.inspect(f.path); }));
       // 2026-11-03-1155-8 (C): the bar is computed from the note when a pane OPENS and when a restored layout settles, not only heard from a modify (a reload brought the panes back and a custom note had no banner until `touch`).
       onWorkspaceMoved(() => { void descriptions.inspectOpen().then(() => descriptions.syncBars()); });
+      // 2026-11-19-0975: a note renamed while its tab is open (the "Note title" dialog): the prompt box and the bar of that tab belong to the new path from now on; Obsidian says nothing else about it (no `modify`, no layout change)
+      plugin.registerEvent(app.vault.on('rename', () => { void descriptions.inspectOpen().then(() => descriptions.syncBars()); }));
       // 2026-11-03-1155-8 (D1): a restored tab that has not been opened yet is a deferred leaf, titled with its view type (`forge-phrase`); it is named after its note from its saved state, without loading the view.
       const nameDeferredTabs = (): void => {
         app.workspace.iterateAllLeaves((leaf) => {

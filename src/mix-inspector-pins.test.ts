@@ -15,7 +15,7 @@ test('the mix tab\'s inspector options: the pin survives a redraw, arrows have n
   assert.match(mixPorts, /decorate: withTint\(paintMixHits\),/, '2026-10-30-1020: the bar is still painted by parent; the same decorate also draws the notebook selection\'s tint (withTint wraps it, it does not replace it)');
   assert.match(mixPorts, /enlargeIds: \(map\) => Object\.keys\(map\)\.filter\(\(id\) => map\[id\]\.role === MIX_HIT_ROLE\),/);
   assert.match(mixPorts, /lineage: mixLineageOf,/);
-  assert.match(mixPorts, /annotate: \(note, payload\) => annotateForMix\(ports\.path, note as NoteText, payload\),/);
+  assert.match(mixPorts, /annotate: \(note, payload\) => annotateForMix\(notePath, note as NoteText, payload\),/);       // 2026-11-19-0975 (deliberate): `notePath` is the tab's CURRENT path (it follows a rename: handle.renamed), no longer the path the tab was mounted with (`ports.path`)
 });
 
 test('the extend tab\'s inspector does NOT get the mix options (its pin, arrows and click targets are what they were)', () => {

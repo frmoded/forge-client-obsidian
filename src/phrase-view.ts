@@ -71,7 +71,8 @@ export class PhraseView extends EditableFileView {
     const cellsChanged = (f: { path: string }) => { if (f.path.startsWith('notebook/') || f.path.startsWith('phrases/')) this.handle?.refreshNotebook(); };
     this.registerEvent(this.app.vault.on('create', cellsChanged));
     this.registerEvent(this.app.vault.on('delete', cellsChanged));
-    this.registerEvent(this.app.vault.on('rename', cellsChanged));
+    // 2026-11-19-0975: the note of THIS tab was renamed (the "Note title" dialog of a new phrase made from the Score's bars): the tab keeps the note, so it learns the new path, or it would not hear any later `modify` of it (the Score stayed as it was)
+    this.registerEvent(this.app.vault.on('rename', (f) => { cellsChanged(f); if (this.file && f.path === this.file.path) void this.handle?.renamed(f.path); }));
   }
 
   async onLoadFile(file: TFile): Promise<void> {

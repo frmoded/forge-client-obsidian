@@ -598,6 +598,8 @@ export interface PhraseHandle {
   kind(): PhraseParams['kind'] | null;
   /** The vault's `modify` event for any note: the phrase note reloads; its source bar redraws; anything else is ignored. */
   noteModified(path: string): void;
+  /** 2026-11-19-0975: the note this tab shows was RENAMED (Obsidian keeps the tab and moves the file): from now on it is `path` (its `modify` events, its Score, its ids, its title), and the surface is drawn again from it. */
+  renamed(path: string): Promise<void>;
   /** The notes in notebook/ (or the phrases a cell made) changed: read the cells again. A no-op without a notebook. */
   refreshNotebook(): void;
   dispose(): void;
@@ -712,7 +714,11 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   let strip!: Strip;
   let area: ScoreArea | null = null;
   // 2026-10-26-1270 (M13): the strip, and the bars the notes pane's note lit (kept across a chip hover coming and going, until the next navigation)
-  const phraseName = (ports.path.split('/').pop() ?? ports.path).replace(/\.md$/, '');
+  // 2026-11-19-0975: the note's path and name are NOT constants: the person renames a note while its tab is open (the "Note title" dialog a new phrase made from the Score's bars opens), and Obsidian keeps the tab and gives the note its new path.
+  // A path read once at mount made every later `modify` of the renamed note "another note" to this tab: the Score kept what it showed until the tab was reopened. `renamed()` below moves them.
+  const nameOf = (p: string): string => (p.split('/').pop() ?? p).replace(/\.md$/, '');
+  let notePath = ports.path;
+  let phraseName = nameOf(notePath);
   let structureStrip: StripHandle | null = null;
   let notesLit: number[] = [];
   let shownTitle = phraseName;                    // the tab title the view last asked for: only a change is told (titleChanged)
@@ -803,7 +809,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     if (plan.kind === 'refused') { say(plan.message); return; }
     if (host === null) { say('no prompt box here to show it in.'); return; }
     if (plan.kind === 'preview') {
-      if (!host.previewDescription(ports.path, plan.text)) say('this tab has no prompt box to show the sentence in.');
+      if (!host.previewDescription(notePath, plan.text)) say('this tab has no prompt box to show the sentence in.');
       else say(`"${plan.sentence}" is in the prompt box: press Apply to do it.`);
       return;
     }
@@ -849,10 +855,10 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
       strip = { el: controls.el, set: (params) => controls.set(params && params.kind === 'extend' ? params : null), setStatus: (t) => controls.setStatus(t), dispose: () => controls.dispose() };
     }
     const inspectorPorts: ScoreInspectorPorts | undefined = insp && (k === 'extend' || k === 'transform') ? {
-      noteId: phraseNoteId(ports.path),
+      noteId: phraseNoteId(notePath),
       openNote: insp.openNote,
       onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
-      annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForPhrase(ports.path, note as NoteText, payload); },
+      annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForPhrase(notePath, note as NoteText, payload); },
       onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
       lineage: phraseLineageOf,
       hint: PHRASE_INSPECTOR_HINT,
@@ -871,10 +877,10 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     } : insp && k === 'mix' ? {
       // M8: the mix's one bar and each of its hits, tied to the two bars they came from. Clicking a notehead pins THAT hit, clicking the staff the bar; a redraw (the Weight slider) keeps the pin; the
       // pinned bar's noteheads are painted by parent. No source link (the extend's); arrows have nowhere to go.
-      noteId: phraseNoteId(ports.path),
+      noteId: phraseNoteId(notePath),
       openNote: insp.openNote,
       onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
-      annotate: (note, payload) => annotateForMix(ports.path, note as NoteText, payload),
+      annotate: (note, payload) => annotateForMix(notePath, note as NoteText, payload),
       lineage: mixLineageOf,
       hint: MIX_INSPECTOR_HINT,
       order: () => [],
@@ -893,10 +899,10 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     } : insp && k === 'morph' ? {
       // M7c Phase B: every bar of the path and each of its hits, tied to the two bars and the single-hit changes between them. Clicking a notehead pins THAT hit, a click anywhere else in a bar pins the BAR; arrows walk the
       // bars; a redraw (a control moved) keeps the pin; the pinned bar's noteheads are painted by where the hit came from. "Edit this bar" forks a bar exactly as an extend's. No source link.
-      noteId: phraseNoteId(ports.path),
+      noteId: phraseNoteId(notePath),
       openNote: insp.openNote,
       onPinned: (e) => { const pin = e ? pinnedNoteFor(e.prov) : null; insp.onPin?.(pin); structureStrip?.emphasise(pin ? pin.noteId : null); },
-      annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForMorph(ports.path, note as NoteText, payload); },
+      annotate: (note, payload) => { barsData = Array.isArray(payload.bars_data) ? (payload.bars_data as RhythmData[]) : null; return annotateForMorph(notePath, note as NoteText, payload); },
       onAction: ports.fork ? (action) => { void runForkAction(action); } : undefined,
       lineage: morphLineageOf,
       hint: MORPH_INSPECTOR_HINT,
@@ -968,7 +974,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
   build(kind);
 
   const readText = async (): Promise<NoteText> => {
-    try { return await ports.readNote(ports.path); } catch (e) { return { unreadable: (e as Error)?.message ?? String(e) }; }
+    try { return await ports.readNote(notePath); } catch (e) { return { unreadable: (e as Error)?.message ?? String(e) }; }
   };
   let handEditStatus: string | null = null;                              // the hand-edit refusal on screen, if the status line shows one (cleared when the note stops answering with it)
   const apply = (text: NoteText): void => {
@@ -1005,7 +1011,7 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     }
     const data = barsData?.[action.barNumber - 1];
     if (!data) { f.notify(`Edit this bar: the Score has no data for bar ${action.barNumber} yet (wait for it to draw).`); return; }
-    const r = await editThisBar(forkPorts, { params: current, barNumber: action.barNumber, phraseNoteId: phraseNoteId(ports.path), barData: data });
+    const r = await editThisBar(forkPorts, { params: current, barNumber: action.barNumber, phraseNoteId: phraseNoteId(notePath), barData: data });
     if (r.ok) current = r.params;
   }
 
@@ -1037,19 +1043,26 @@ export function mountPhrase(parent: HTMLElement, ports: PhraseMountPorts): Phras
     }
   }
 
+  const load = async (): Promise<void> => {
+    const mine = ++seq;
+    const text = await readText();
+    if (disposed || mine !== seq) return;
+    apply(text);
+    area?.showNow(text);
+  };
   return {
     kind: () => kind,
     params: () => current,
-    async load() {
-      const mine = ++seq;
-      const text = await readText();
-      if (disposed || mine !== seq) return;
-      apply(text);
-      area?.showNow(text);
+    load,
+    async renamed(path) {
+      if (disposed || path === notePath) return;
+      notePath = path; phraseName = nameOf(path); shownTitle = '';          // the next read tells the tab its title again (the leaf's header is asked to read it)
+      teardown(); build(kind);                                              // the Score area, the strip and the inspector were made with the old path (the ids of the bars name the note): made again for the new one
+      await load();
     },
     noteModified(path) {
       if (disposed) return;
-      if (path === ports.path) {
+      if (path === notePath) {
         const mine = ++seq;
         void readText().then((text) => {
           if (disposed || mine !== seq) return;

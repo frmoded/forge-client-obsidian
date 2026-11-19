@@ -32,6 +32,7 @@ import type { MusicEdition, RenderOptions } from './music-edition.ts';
 import { attachClickToPlay } from './score-click-play-dom.ts';
 import { SCORE_ZOOM_LEVELS } from './zoom-memory-core.ts';
 import { followerEvidence } from './score-follower-trace-core.ts';
+import { paintTempoMarks } from './score-tempo-marks-dom.ts';
 import { mountScoreTransport, disposeScoreTransports, type TransportPlayer } from './score-transport-dom.ts';
 import { createTransportPlayer, type TransportPlayerHandle } from './score-player-adapter.ts';
 import { exportItems, scoreSecondsAt, type ExportItem } from './score-transport-core.ts';
@@ -406,6 +407,7 @@ function renderMusicXML(
       // playback rather than dropping the whole entry.
       let player: any = null;
       let transport: TransportPlayerHandle | null = null;
+      let scoreMarks: HTMLElement | null = null;                       // 2026-11-19-0975: the engraving the row's tempo control repaints the marks of (set once the Score is on the page)
       try {
         await ensureMidiPlayerLoaded();
         const noteSequence = await midiBase64ToNoteSequence(midiBase64);
@@ -434,6 +436,7 @@ function renderMusicXML(
           exportItems: exportItems({ macDesktop: isMacDesktop() }),
           runExport: (id) => { runScoreExport(id, snippetId, musicxml, midiBase64); },
           log: (line) => { opts.trace?.(line); },
+          onTempo: (pct) => { if (scoreMarks === null) return; const n = paintTempoMarks(scoreMarks, pct); opts.trace?.(`[forge-score-row] tempo marks at ${pct}%: ${n} painted`); },        // 2026-11-19-0975: the mark above a bar says the tempo that plays (118 at 105 % reads 124)
         });
       }
 
@@ -464,6 +467,7 @@ function renderMusicXML(
       setSrLabel(zoomInBtn, 'Zoom in', { host: zoomBar, key: 'zoom-in' });
       const scoreWrap = host.createDiv({ cls: 'forge-output-score' });
       scoreWrap.append(...parseSvgMarkup(svg, new DOMParser()));
+      scoreMarks = scoreWrap;
       // v0.2.153 — zoom scales the SVG elements' width/height
       // attributes directly. Pre-v0.2.153 used CSS transform: scale
       // on .forge-output-score, but I also set width: 100/z% which

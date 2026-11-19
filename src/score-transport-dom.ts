@@ -21,6 +21,8 @@ export interface TransportDeps {
   exportItems: ExportItem[];
   runExport(id: ExportItem['id']): void;
   initialTempo?: number;
+  /** 2026-11-19-0975: the tempo percent just changed (a step, a typed value): the Score's tempo marks say the effective tempo (score-tempo-marks-dom.ts). Not called for a value that is already the tempo. */
+  onTempo?(pct: number): void;
   /** False when the sound could not start (the player failed to mount): the row then shows only Export, so the downloads are never lost with the sound. Default true. */
   playable?: boolean;
   /** An evidence line (Info level): every hand-off of the row is logged as `[forge-score-row] ...`. */
@@ -73,7 +75,7 @@ export function mountScoreTransport(toolbar: HTMLElement, deps: TransportDeps): 
     const v = button(doc, 'forge-tp-tempo', TRANSPORT_LABELS.tempo, row, 'tempo'); v.textContent = formatTempo(tempo); on(v, 'click', openField); return v;
   }
   const syncEnds = (): void => { slower.disabled = tempo <= TEMPO_MIN; faster.disabled = tempo >= TEMPO_MAX; };
-  const applyTempo = (pct: number): void => { const next = clampTempo(pct); if (next === tempo) { syncEnds(); return; } tempo = next; valueEl.textContent = formatTempo(tempo); syncEnds(); player.setTempo(tempo); log(`[forge-score-row] tempo ${tempo}%`); };
+  const applyTempo = (pct: number): void => { const next = clampTempo(pct); if (next === tempo) { syncEnds(); return; } tempo = next; valueEl.textContent = formatTempo(tempo); syncEnds(); player.setTempo(tempo); deps.onTempo?.(tempo); log(`[forge-score-row] tempo ${tempo}%`); };
   on(slower, 'click', () => { if (!slower.disabled) applyTempo(stepTempo(tempo, -1)); });
   on(faster, 'click', () => { if (!faster.disabled) applyTempo(stepTempo(tempo, 1)); });
   let closing = false;                                                       // real Chrome fires `blur` while the focused field is being replaced: the inner call must not undo the outer one

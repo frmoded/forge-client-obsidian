@@ -247,3 +247,33 @@ test('the style is said in plain words next to its name: the note follows the ph
   quick.handle.noteModified(PHRASE_PATH); await flush();
   assert.equal(quick.q('.forge-phrase-style-note').textContent, '');
 });
+
+// ---- 2026-11-19-0975: the note this tab shows is RENAMED (Obsidian keeps the tab and moves the file) -------------------------------------------------------------------------------------------------------------------------------------------
+test('renamed(): the tab follows its note to the new path: the Score is drawn again from it, a later modify of the NEW path redraws, one of the old path is nobody\'s', async () => {
+  const r = rig();
+  await r.handle.load(); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await flush();
+  const NEW = 'phrases/bridge.md';
+  r.files.set(NEW, r.files.get(PHRASE_PATH)!); r.files.delete(PHRASE_PATH);
+  const n0 = r.computes.length;
+  await r.handle.renamed(NEW); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await flush();
+  assert.ok(r.computes.length > n0, 'the Score is drawn again from the renamed note');
+  const n1 = r.computes.length;
+  r.files.set(NEW, phraseText({ bars: 3 }));
+  r.handle.noteModified(NEW); await flush(); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await flush();
+  assert.ok(r.computes.length > n1, 'a modify of the new path redraws (it used to be "another note" to the tab)');
+  assert.equal(r.computes[r.computes.length - 1].params.bars, 3);
+  const n2 = r.computes.length;
+  r.handle.noteModified(PHRASE_PATH); await flush(); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await flush();
+  assert.equal(r.computes.length, n2, 'the old path is another note now: nothing is read for it');
+});
+
+test('renamed(): the same path, or a tab that is disposed, does nothing (no second draw)', async () => {
+  const r = rig();
+  await r.handle.load(); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await flush();
+  const n0 = r.computes.length;
+  await r.handle.renamed(PHRASE_PATH); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await flush();
+  assert.equal(r.computes.length, n0, 'the same path: nothing to move');
+  r.handle.dispose();
+  await r.handle.renamed('phrases/x.md'); await r.advance(LIVE_SCORE_DEBOUNCE_MS); await flush();
+  assert.equal(r.computes.length, n0, 'a disposed tab draws nothing');
+});
