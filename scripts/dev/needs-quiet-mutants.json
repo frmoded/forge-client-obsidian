@@ -1,0 +1,137 @@
+[
+ [
+  "scripts/run-tests.mjs",
+  "classify: the failure check dropped",
+  "if (!result?.failure || !isLoadSensitive(result.file, loadSensitive)) return { needsQuiet: false };",
+  "if (!isLoadSensitive(result.file, loadSensitive)) return { needsQuiet: false };",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "classify: the list check dropped (any file is excused)",
+  "if (!result?.failure || !isLoadSensitive(result.file, loadSensitive)) return { needsQuiet: false };",
+  "if (!result?.failure) return { needsQuiet: false };",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "classify: a calm machine is excused too",
+  "if (!strain.thrashing) return { needsQuiet: false };",
+  "",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "classify: the count is always one",
+  "count: Math.max(1, result.summary?.fail ?? 1)",
+  "count: 1",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "classify: only the first reason named",
+  "strained (${strain.reasons.join(' and ')})` };\n}",
+  "strained (${strain.reasons[0]})` };\n}",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "args: an unknown value is accepted silently",
+  "else bad = m[1]; continue;",
+  "else bad = null; continue;",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "args: only and skip swapped",
+  "if (m[1] === 'only' || m[1] === 'skip') loadSensitive = m[1];",
+  "if (m[1] === 'only' || m[1] === 'skip') loadSensitive = m[1] === 'only' ? 'skip' : 'only';",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "main: the exit for needs-quiet is 0",
+  "return needsQuiet > 0 ? 3 : 0;",
+  "return 0;",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "main: the exit for needs-quiet is 1",
+  "return needsQuiet > 0 ? 3 : 0;",
+  "return needsQuiet > 0 ? 1 : 0;",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "main: the failures are not re-derived after the reclassification",
+  "    group.failures = group.results.map((r) => r.failure).filter(Boolean);\n  }",
+  "  }",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "main: the state line is not printed",
+  "out.write(`\u2139 needs-quiet-machine ${needsQuiet}\\n`); }",
+  "}",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "main: fail is not moved out of the count",
+  "summary: { ...r.summary, fail: 0, needsQuiet: c.count }",
+  "summary: { ...r.summary, needsQuiet: c.count }",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/run-tests.mjs",
+  "main: the machine is read before the group, not when the file failed",
+  "const now = machine ?? readMachine(env);",
+  "const now = reading;",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/test-groups.mjs",
+  "groups: a leading ./ is a different file",
+  "String(f).replace(/^\\.\\//, '')",
+  "String(f)",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ],
+ [
+  "scripts/test-groups.mjs",
+  "groups: the orphans file is not listed",
+  "export const LOAD_SENSITIVE_FILES = ['scripts/mutate-runner-orphans.test.mjs'];",
+  "export const LOAD_SENSITIVE_FILES = [];",
+  [
+   "scripts/run-tests-needs-quiet.test.mjs"
+  ]
+ ]
+]

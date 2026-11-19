@@ -6,6 +6,9 @@
 #          KEEP=1 bash scripts/drain-matrix.sh         # leave the worktrees in place for inspection
 #          --forge | --no-forge | --auto (default)     # the forge-pytest leg: always / never / only when the drain touched forge Python (see below)
 #          --forge-only                                # run ONLY the forge-pytest leg (no client sync, build or tests): the quick check for an engine-only drain
+#          --quiet-only                                # 2026-11-19-0945: run ONLY the hygiene step (the load-sensitive test files, below): the small re-run for the day a matrix said NEEDS A QUIET MACHINE (exit 3)
+#   2026-11-19-0945: BEFORE the legs the matrix runs the load-sensitive test files (scripts/test-groups.mjs LOAD_SENSITIVE_FILES: the process-hygiene tests that wait on kill timing) with `scripts/run-tests.mjs --load-sensitive=only`, and the legs run
+#   without them (--load-sensitive=skip). When that step says `needs-quiet-machine` (a failure while the machine was thrashing) the matrix names it, still runs and reports the legs, and ends NEITHER green (exit 0) NOR red (exit 1): exit 3.
 #          --serial                                    # run the legs one after the other (the pre-2026-10-26 behaviour; for a machine that cannot take three at once)
 #          --cleanup-worktrees                         # take back the git worktrees a KILLED matrix left registered in the seven repos (`git worktree remove --force` on each one registered under a drain-matrix.* directory, then `git worktree prune`; never a recursive delete of a tree), then exit
 #          FORGE_POWER_GUARD=off / FORGE_CAFFEINATE=off  # the two switches of the power guard below
@@ -56,12 +59,13 @@ fi
 
 PROJECTS="${PROJECTS:-$HOME/projects}"
 REPOS=(forge-client-obsidian music-theory forge-tutorial forge-moda music-core forge music-playground)
-FORGE_MODE=auto; FORGE_ONLY=0; CLIENT_REF=HEAD; SERIAL=0; LEAN_FULL=0; CLEANUP_ONLY=0; CAFF=""
+FORGE_MODE=auto; FORGE_ONLY=0; QUIET_ONLY=0; NEEDQUIET=0; CLIENT_REF=HEAD; SERIAL=0; LEAN_FULL=0; CLEANUP_ONLY=0; CAFF=""
 for arg in "$@"; do
   case "$arg" in
     --forge) FORGE_MODE=on ;;
     --no-forge) FORGE_MODE=off ;;
     --forge-only) FORGE_ONLY=1; [ "$FORGE_MODE" = auto ] && FORGE_MODE=on ;;      # the quick check runs the leg; follow it with --auto to let the change decide (the test uses that)
+    --quiet-only) QUIET_ONLY=1; FORGE_MODE=off ;;                                  # the hygiene step only (no leg, no forge pytest)
     --auto) FORGE_MODE=auto ;;
     --serial) SERIAL=1 ;;
     --full-lean) LEAN_FULL=1 ;;
@@ -95,6 +99,7 @@ LEAN="$WORK/lean"
 T0=$(date +%s)
 red()   { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
+yellow() { printf '\033[33m%s\033[0m\n' "$*"; }
 FAILED=0
 fail()  { red "FAIL: $*"; FAILED=1; }
 die()   { red "FAIL: $*"; cleanup; exit 1; }
@@ -221,9 +226,9 @@ edition_leg() {   # edition_leg <edition> <client worktree>: sync (+ gates and b
   fi
   if [ -n "$subset" ]; then
     # shellcheck disable=SC2086
-    { node scripts/test-preflight.mjs && node scripts/run-tests.mjs --test-concurrency="${FILE_CONC:-8}" $subset; } >"$LOGDIR/test-$ed.log" 2>&1 || true        # 2026-11-05-1184: through the runner, so the nested-runner files run one at a time after the rest under a hard group timeout
+    { node scripts/test-preflight.mjs && node scripts/run-tests.mjs --test-concurrency="${FILE_CONC:-8}" $subset --load-sensitive=skip; } >"$LOGDIR/test-$ed.log" 2>&1 || true        # 2026-11-05-1184: through the runner, so the nested-runner files run one at a time after the rest under a hard group timeout
   else
-    npm test -- --test-concurrency="${FILE_CONC:-8}" >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
+    npm test -- --test-concurrency="${FILE_CONC:-8}" --load-sensitive=skip >"$LOGDIR/test-$ed.log" 2>&1 || true        # a failing suite is judged from its summary below, with the failing names printed
   fi
   echo $(( $(date +%s) - t0 )) >"$lg.secs"
 }
@@ -252,8 +257,31 @@ forge_leg() {      # the pytest run itself (the verdict is read from its log aft
   echo $(( $(date +%s) - t0 )) >"$LOGDIR/leg-forge.secs"
 }
 
-pids=()
+# ---- 2a. hygiene first (2026-11-19-0945) -------------------------------------------------------------------------------------------------------------------------------
+# The load-sensitive test files (scripts/test-groups.mjs LOAD_SENSITIVE_FILES) run FIRST, alone, before any leg is started (the quietest this machine will be during the run); the legs run without them. `needs-quiet-machine` = a failure while the
+# machine was thrashing: named here, counted apart, the matrix goes on and ends in exit 3 (neither green nor red); a failure on a calm machine, no summary, or any other exit is a plain failure.
+HYG_LINES=""
 if [ "$FORGE_ONLY" = "0" ]; then
+  step "hygiene first: the load-sensitive test files (LOAD_SENSITIVE_FILES in scripts/test-groups.mjs), before any leg starts"
+  set +e; ( cd "$WORK/forge-client-obsidian" && node scripts/run-tests.mjs --load-sensitive=only ) >"$LOGDIR/hygiene.log" 2>&1; hyg_rc=$?; set -e
+  h_tests=$({ grep -E '^ℹ tests ' "$LOGDIR/hygiene.log" || true; } | tail -1 | awk '{print $3}'); h_pass=$({ grep -E '^ℹ pass ' "$LOGDIR/hygiene.log" || true; } | tail -1 | awk '{print $3}'); h_fail=$({ grep -E '^ℹ fail ' "$LOGDIR/hygiene.log" || true; } | tail -1 | awk '{print $3}')
+  h_quiet=$({ grep -E '^ℹ needs-quiet-machine ' "$LOGDIR/hygiene.log" || true; } | tail -1 | awk '{print $3}'); h_quiet="${h_quiet:-0}"
+  if [ -z "$h_tests" ] || [ -z "$h_fail" ]; then
+    red "---- tail of $LOGDIR/hygiene.log"; tail -25 "$LOGDIR/hygiene.log" >&2
+    fail "hygiene: the run printed no summary (it did less than asked)"; SUMMARY+=("hygiene (before the legs): NO SUMMARY")
+  else
+    echo "  tests $h_tests / pass $h_pass / fail $h_fail / needs a quiet machine $h_quiet"
+    if [ "$h_fail" != "0" ]; then fail "hygiene: $h_fail test(s) failed (the machine was not thrashing, or the file is not a load-sensitive one: a plain failure)"; { grep -E '^✖' "$LOGDIR/hygiene.log" || true; } | sort -u | head -15 >&2; SUMMARY+=("hygiene (before the legs): tests $h_tests, pass $h_pass, FAIL $h_fail")
+    elif [ "$h_quiet" != "0" ]; then
+      NEEDQUIET="$h_quiet"; { grep -E '^⚠ NEEDS A QUIET MACHINE' "$LOGDIR/hygiene.log" || true; } | cut -c1-220 | while IFS= read -r l; do yellow "  $l"; done
+      SUMMARY+=("hygiene (before the legs): NEEDS A QUIET MACHINE ($h_quiet test(s)), not a pass and not a failure")
+    elif [ "$hyg_rc" != "0" ]; then fail "hygiene: the run exited $hyg_rc without a failure to name (see $LOGDIR/hygiene.log)"; SUMMARY+=("hygiene (before the legs): exit $hyg_rc")
+    else SUMMARY+=("hygiene (before the legs): tests $h_tests, pass $h_pass, fail $h_fail"); fi
+  fi
+fi
+
+pids=()
+if [ "$FORGE_ONLY" = "0" ] && [ "$QUIET_ONLY" = "0" ]; then
   if [ "$SERIAL" = "1" ]; then step "client legs, one after the other (--serial)"; else step "client legs: music and lean at the same time"; fi
   if [ "$SERIAL" = "1" ]; then (edition_leg music "$WORK/forge-client-obsidian"); (edition_leg lean "$LEAN/forge-client-obsidian")
   else
@@ -276,7 +304,7 @@ reap_fixtures                                    # what a fixture of the suites 
 
 # ---- 3. what the legs said ----------------------------------------------------------------------------------------------------------------------------------------
 for ed in music lean; do
-  [ "$FORGE_ONLY" = "1" ] && break
+  [ "$FORGE_ONLY" = "1" ] || [ "$QUIET_ONLY" = "1" ] && break
   step "result: $ed edition ($(cat "$LOGDIR/leg-$ed.secs" 2>/dev/null || echo '?') s in its own leg)"
   if [ -f "$LOGDIR/leg-$ed.failed" ]; then
     name="$(cat "$LOGDIR/leg-$ed.failed")"
@@ -347,6 +375,10 @@ echo "  logs: $LOGDIR"
 if [ "$FAILED" = "0" ]; then
   if [ "$FORGE_ONLY" = "1" ]; then
     if [ "$run_forge_leg" = "1" ]; then green "FORGE LEG GREEN (--forge-only: the client legs were not run)"; else echo "FORGE LEG NOT RUN ($forge_why; --forge-only: the client legs were not run either): nothing was tested"; fi
+  elif [ "$QUIET_ONLY" = "1" ]; then
+    if [ "$NEEDQUIET" != "0" ]; then yellow "STILL NEEDS A QUIET MACHINE: $NEEDQUIET hygiene test(s) failed while the machine was thrashing (--quiet-only: the legs were not run): close what you can and run it again"
+    else green "HYGIENE GREEN (--quiet-only: the legs were not run)"; fi
+  elif [ "$NEEDQUIET" != "0" ]; then yellow "MATRIX NEEDS A QUIET MACHINE: the legs are green; $NEEDQUIET hygiene test(s) must be run on a quiet machine: bash scripts/drain-matrix.sh --quiet-only   (exit 3: not green, not red)"
   else green "MATRIX GREEN: both editions, 0 failed, 0 skipped$([ "$run_forge_leg" = "1" ] && echo ", forge pytest green")"; fi
 else red "MATRIX RED"; fi
 if [ "${KEEP:-0}" != "1" ]; then
@@ -355,4 +387,5 @@ fi
 cleanup
 reap_leftovers
 reap_fixtures
+[ "$FAILED" = "0" ] && [ "$NEEDQUIET" != "0" ] && exit 3                     # 2026-11-19-0945: green legs, hygiene that needs a quiet machine: neither 0 nor 1
 exit "$FAILED"

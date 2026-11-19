@@ -47,12 +47,26 @@ export const STUBS = {
     "const ed = fs.readFileSync('.edition', 'utf8').trim();",
     "const start = Date.now();",
     "await new Promise((r) => setTimeout(r, Number(process.env.TEST_MS ?? 1500)));",
-    "fs.writeFileSync(`${process.env.MARKS}/${ed}.json`, JSON.stringify({ start, end: Date.now() }));",
+    "fs.writeFileSync(`${process.env.MARKS}/${ed}.json`, JSON.stringify({ start, end: Date.now(), argv: process.argv.slice(2) }));",
     "const fail = process.env.FAIL_TESTS === ed ? 1 : 0, skipped = process.env.SKIP_TESTS === ed ? 1 : 0;",
     "console.log(`ℹ tests 3\\nℹ suites 0\\nℹ pass ${3 - fail - skipped}\\nℹ fail ${fail}\\nℹ cancelled 0\\nℹ skipped ${skipped}`);",
     "if (fail) { console.log('✖ the test that is broken on purpose'); process.exit(1); }",
   ].join('\n'),
 };
+// 2026-11-19-0945: the stub of scripts/run-tests.mjs the matrix runs FIRST (before the legs) with --load-sensitive=only: it records when it ran and with what, and answers as HYGIENE says (pass | quiet = the real state "needs a quiet machine": the
+// lines and exit 3 of the real runner | fail = a plain failure, exit 1 | nosummary)
+STUBS['scripts/run-tests.mjs'] = [
+  "import fs from 'node:fs';",
+  "const start = Date.now();",
+  "await new Promise((r) => setTimeout(r, Number(process.env.HYGIENE_MS ?? 300)));",
+  "fs.writeFileSync(`${process.env.MARKS}/hygiene.json`, JSON.stringify({ start, end: Date.now(), argv: process.argv.slice(2) }));",
+  "const mode = process.env.HYGIENE ?? 'pass';",
+  "if (mode === 'nosummary') { console.log('it printed nothing useful'); process.exit(0); }",
+  "const quiet = mode === 'quiet' ? 1 : 0, fail = mode === 'fail' ? 1 : 0;",
+  "console.log(`ℹ tests 13\\nℹ suites 0\\nℹ pass ${13 - quiet - fail}\\nℹ fail ${fail}\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0`);",
+  "if (quiet) { console.log('⚠ NEEDS A QUIET MACHINE: scripts/mutate-runner-orphans.test.mjs: 1 test(s) failed while the machine was strained (swap); it passes on a quiet machine'); console.log('ℹ needs-quiet-machine 1'); process.exit(3); }",
+  "if (fail) { console.log('✖ the hygiene test that is broken on purpose'); process.exit(1); }",
+].join('\n') + '\n';
 export const FORGE_TEST = [
   'import json, os, time',
   'def test_a():',

@@ -7,18 +7,20 @@
 //   node scripts/run-tests.mjs [--test-concurrency=N | other node --test flags] [files...]      (no files = src/*.test.ts then scripts/*.test.mjs, as `npm test` always ran)
 //   FORGE_NESTED_TEST_TIMEOUT_S=300   the group timeout per nested file (seconds)
 //   FORGE_NESTED_CONCURRENCY=N        how many nested files at once (a whole number from 1); overrides the calm/strained choice
+//   --load-sensitive=only|skip        2026-11-19-0945: run ONLY the files of scripts/test-groups.mjs LOAD_SENSITIVE_FILES (the matrix runs them first, before the legs) or everything BUT them (the legs). A listed file that fails while the machine is
+//                                     thrashing is reported `⚠ NEEDS A QUIET MACHINE`, counted apart (`ℹ needs-quiet-machine N`, `ℹ fail` unchanged) and the run exits 3 (not 0, not 1); a failure on a calm machine, of any other file, or on a machine that cannot be read is a plain failure.
 // The output keeps node's own: the rest of the suite, then the group, then ONE final summary block (ℹ tests / suites / pass / fail / cancelled / skipped / todo / duration_ms) summing both, because the matrix reads the LAST such lines.
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { defaultTestFiles, partitionTestFiles } from './test-groups.mjs';
+import { LOAD_SENSITIVE_FILES, defaultTestFiles, isLoadSensitive, partitionTestFiles } from './test-groups.mjs';
 import { machineStrain, readMachine, readingsLine } from './dev/mem-core.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_NESTED_TIMEOUT_S = 300;
 export const CALM_NESTED_CONCURRENCY = 3;
-const FIELDS = ['tests', 'suites', 'pass', 'fail', 'cancelled', 'skipped', 'todo', 'duration_ms'];
+const FIELDS = ['tests', 'suites', 'pass', 'fail', 'cancelled', 'skipped', 'todo', 'duration_ms'];                // (the sum block; `needs-quiet-machine` is printed after it, only when there is one)
 
 /** The last summary block of a run's output: { tests, suites, pass, fail, cancelled, skipped, todo, duration_ms } (null = the run printed none). */
 export function parseSummary(output) {
@@ -78,6 +80,18 @@ export function nestedConcurrency({ env = process.env, machine = null, count = I
   return { n: cap(CALM_NESTED_CONCURRENCY), why: 'the machine is calm' };
 }
 
+/**
+ * 2026-11-19-0945: is this nested file's failure a matter of the MACHINE? Only when ALL of: the file is on the load-sensitive list (scripts/test-groups.mjs), it failed (a failing test, a timeout, or no summary), and the machine is visibly thrashing at this
+ * moment (the 1176 limits, `machineStrain`: swap over 85 % or load over 4 per core). A machine that cannot be read is not thrashing. Returns { needsQuiet: false } or { needsQuiet: true, count, why }; `count` = the tests that failed (a timeout or a missing
+ * summary counts one). Pure: the reading and the list are passed in.
+ */
+export function classifyNeedsQuiet(result, { machine, loadSensitive = LOAD_SENSITIVE_FILES } = {}) {
+  if (!result?.failure || !isLoadSensitive(result.file, loadSensitive)) return { needsQuiet: false };
+  const strain = machine ? machineStrain(machine) : { thrashing: false, reasons: [] };
+  if (!strain.thrashing) return { needsQuiet: false };
+  return { needsQuiet: true, count: Math.max(1, result.summary?.fail ?? 1), why: `the machine is strained (${strain.reasons.join(' and ')})` };
+}
+
 /** A stream that keeps what is written and hands it over in one piece. */
 const buffered = () => { let text = ''; return { write: (c) => { text += c; return true; }, flushTo: (out) => { if (text) out.write(text); text = ''; } }; };
 
@@ -115,14 +129,21 @@ export async function runNestedGroup(files, { timeoutS = DEFAULT_NESTED_TIMEOUT_
 }
 
 export function parseArgs(argv) {
-  const flags = [], files = [];
-  for (const a of argv) (a.startsWith('-') ? flags : files).push(a);
-  return { flags, files };
+  const flags = [], files = []; let loadSensitive = 'all', bad = null;
+  for (const a of argv) {
+    const m = /^--load-sensitive=(.*)$/.exec(a);
+    if (m) { if (m[1] === 'only' || m[1] === 'skip') loadSensitive = m[1]; else bad = m[1]; continue; }       // ours: never handed to node --test
+    (a.startsWith('-') ? flags : files).push(a);
+  }
+  return { flags, files, loadSensitive, bad };
 }
 
-export async function main(argv = process.argv.slice(2), { root = ROOT, out = process.stdout, err = process.stderr, env = process.env, machine } = {}) {
-  const { flags, files: asked } = parseArgs(argv);
-  const files = asked.length > 0 ? asked : defaultTestFiles(root);
+export async function main(argv = process.argv.slice(2), { root = ROOT, out = process.stdout, err = process.stderr, env = process.env, machine, loadSensitive = LOAD_SENSITIVE_FILES } = {}) {
+  const { flags, files: asked, loadSensitive: which, bad } = parseArgs(argv);
+  if (bad !== null) { out.write(`✖ --load-sensitive must be only or skip (got "${bad}")\n`); return 1; }
+  const everything = asked.length > 0 ? asked : defaultTestFiles(root);
+  const files = which === 'only' ? everything.filter((f) => isLoadSensitive(f, loadSensitive)) : which === 'skip' ? everything.filter((f) => !isLoadSensitive(f, loadSensitive)) : everything;
+  if (which !== 'all') out.write(`ℹ load-sensitive files ${which === 'only' ? 'only' : 'skipped'} (${which === 'only' ? files.length : everything.length - files.length} of ${everything.length}): scripts/test-groups.mjs LOAD_SENSITIVE_FILES\n`);
   const { rest, nested } = partitionTestFiles(files, (f) => fs.readFileSync(path.resolve(root, f), 'utf8'));
   const timeoutS = Number(env.FORGE_NESTED_TEST_TIMEOUT_S) > 0 ? Number(env.FORGE_NESTED_TEST_TIMEOUT_S) : DEFAULT_NESTED_TIMEOUT_S;
   const live = new Set();
@@ -138,16 +159,31 @@ export async function main(argv = process.argv.slice(2), { root = ROOT, out = pr
   const pick = nestedConcurrency({ env, machine: reading, count: nested.length });
   if (nested.length > 0) out.write(`ℹ nested-runner group: ${pick.n} at a time (${pick.why}); ${readingsLine(reading)}\n`);
   const group = nested.length > 0 ? await runNestedGroup(nested, { cwd: root, flags: flags.filter((f) => !/^--test-concurrency/.test(f)), timeoutS, concurrency: pick.n, out, err, onSpawn: track }) : { results: [], failures: [] };
+  // 2026-11-19-0945: a load-sensitive file that failed while the machine is thrashing "needs a quiet machine": neither a failure nor a pass; named, counted apart
+  const quiet = [];
+  if (group.failures.length > 0) {
+    const now = machine ?? readMachine(env);
+    group.results.forEach((r, i) => {
+      const c = classifyNeedsQuiet(r, { machine: now, loadSensitive });
+      if (!c.needsQuiet) return;
+      quiet.push(`${r.file}: ${c.count} test(s) failed while ${c.why.replace('the machine is', 'the machine was')}; it passes on a quiet machine`);
+      group.results[i] = { ...r, failure: null, summary: { ...r.summary, fail: 0, needsQuiet: c.count } };
+    });
+    group.failures = group.results.map((r) => r.failure).filter(Boolean);
+  }
   const summary = addUp([firstSummary, ...group.results.map((r) => r.summary)]);
   summary.duration_ms = Date.now() - t0;
-  out.write(`\nℹ nested-runner group: ${nested.length} file(s), ${pick.n === 1 ? 'one at a time' : `${pick.n} at a time`}, each under ${timeoutS} s: ${nested.length - group.failures.length} ok, ${group.failures.length} failed\n`);
+  const needsQuiet = group.results.reduce((n, r) => n + (r.summary?.needsQuiet ?? 0), 0);
+  out.write(`\nℹ nested-runner group: ${nested.length} file(s), ${pick.n === 1 ? 'one at a time' : `${pick.n} at a time`}, each under ${timeoutS} s: ${nested.length - group.failures.length - quiet.length} ok, ${group.failures.length} failed${quiet.length > 0 ? `, ${quiet.length} need a quiet machine` : ''}\n`);
   if (group.failures.length > 0) {
     out.write('✖ failing tests:\n');
     for (const line of group.failures) out.write(`✖ ${line}\n`);
   }
   if (firstSummary === null) out.write('✖ the main run printed no summary (it did less than asked)\n');
   for (const f of FIELDS) out.write(`ℹ ${f} ${f === 'duration_ms' ? summary[f].toFixed(6) : summary[f]}\n`);
-  return first.code === 0 && firstSummary !== null && group.failures.length === 0 ? 0 : 1;
+  if (needsQuiet > 0) { for (const q of quiet) out.write(`⚠ NEEDS A QUIET MACHINE: ${q}\n`); out.write(`ℹ needs-quiet-machine ${needsQuiet}\n`); }      // after the summary block the matrix reads; exit 3 = not green, not red
+  if (first.code !== 0 || firstSummary === null || group.failures.length > 0) return 1;
+  return needsQuiet > 0 ? 3 : 0;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

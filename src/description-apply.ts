@@ -370,6 +370,9 @@ export function createDescriptionController(ports: DescriptionPorts): Descriptio
   /** "Revert to generated": the grammar's Python from the json cache (after the person confirms what is lost). */
   async function revertGenerated(path: string): Promise<void> {
     const family = familyOfPath(path); if (family === null) return;
+    { let now = ''; try { now = await ports.read(path); } catch { /* the write below says so */ }                  // 2026-11-19-0945: the tenth path (0910 guarded nine): the json cache's composition may loop NOW (another composition changed since): the same check, BEFORE the confirm and the write
+      const prev = now === '' ? null : cacheParams(now, family); const loop = prev !== null ? await loopRefusalOf(noteId(path), prev) : null;
+      if (loop !== null) { ports.trace(`[forge-description] refused ${basename(path)}: ${loop}`); const keep = ui.get(path); set(path, { state: keep?.state ?? { kind: 'synced' }, message: `Revert to generated: ${loop}` }); return; } }
     if (ports.confirm && !(await ports.confirm(REVERT_GENERATED_CONFIRM))) return;
     let failure: string | null = null;
     try { await proc(path, (cur) => { const r = revertToGeneratedText(cur, basename(path), family); if (r.ok === false) { failure = r.message; return cur; } return r.text; }); } catch (e) { failure = `Revert to generated: ${(e as Error)?.message ?? e}`; }
